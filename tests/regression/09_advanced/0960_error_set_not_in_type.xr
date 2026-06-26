@@ -1,0 +1,37 @@
+// 126-P3: error_set is advisory metadata, not part of the function type
+// identity. Two functions with the same signature but different inferred error
+// sets share the same function type, so they unify in a typed function array
+// and are interchangeable as `fn(int) -> int` values.
+
+enum E { A, B }
+
+fn fa(x: int) -> int {
+    if (x < 0) {
+        throw E.A
+    }
+    return x + 1
+}
+
+fn fb(x: int) -> int {
+    if (x < 0) {
+        throw E.B
+    }
+    return x + 2
+}
+
+fn call_first(fns: Array<(int) -> int>, x: int) -> int {
+    return fns[0](x)
+}
+
+@test
+fn test_error_set_not_in_function_type() {
+    // [fa, fb] only type-checks as Array<(int) -> int> if fa and fb share the
+    // same function type despite throwing different enum errors.
+    let fns: Array<(int) -> int> = [fa, fb]
+    assert_eq(fns.length, 2)
+    assert_eq(fns[0](10), 11)
+    assert_eq(fns[1](10), 12)
+    assert_eq(call_first(fns, 5), 6)
+}
+
+test_error_set_not_in_function_type()

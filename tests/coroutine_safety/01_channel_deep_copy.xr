@@ -12,10 +12,10 @@ fn recvValue(ch) {
 }
 
 fn test_array_isolation() {
-    let ch = new Channel(1)
+    let ch = Channel(1)
     // 发送可变数组
     let original = [1, 2, 3]
-    ch.send(original)
+    ch.send(copy(original))
     // 修改原数组
     original.push(4)
     original.push(5)
@@ -32,10 +32,10 @@ fn test_array_isolation() {
 }
 
 fn test_map_isolation() {
-    let ch = new Channel(1)
+    let ch = Channel(1)
     // 发送可变 Map
     let original = { "a" => 1, "b" => 2 }
-    ch.send(original)
+    ch.send(copy(original))
     // 修改原 Map
     original.set("c", 3)
     original.set("d", 4)
@@ -52,10 +52,10 @@ fn test_map_isolation() {
 }
 
 fn test_nested_isolation() {
-    let ch = new Channel(1)
+    let ch = Channel(1)
     // 发送嵌套结构
     let original = { "items" => [1, 2, 3], "count" => 3 }
-    ch.send(original)
+    ch.send(copy(original))
     // 修改嵌套数组
     original.get("items").push(4)
     // 接收

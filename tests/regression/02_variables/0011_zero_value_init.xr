@@ -70,8 +70,8 @@ class BranchInitializedName {
 
 @test
 fn test_class_field_initialized_in_both_branches() {
-    let yes = new BranchInitializedName(true)
-    let no = new BranchInitializedName(false)
+    let yes = BranchInitializedName(true)
+    let no = BranchInitializedName(false)
     assert_eq(yes.name, "yes")
     assert_eq(no.name, "no")
 }

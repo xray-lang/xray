@@ -9,6 +9,7 @@
  */
 
 #include "xdeep_copy.h"
+#include "../runtime/object/xstring.h"
 
 XrCopyKind xr_value_copy_kind(XrValue value) {
     if (XR_IS_NUM(value) || XR_IS_BOOL(value) || XR_IS_NULL(value))
@@ -19,7 +20,7 @@ XrCopyKind xr_value_copy_kind(XrValue value) {
     uint8_t type = XR_HEAP_TYPE(value);
     switch (type) {
         case XR_TSTRING:
-            return XR_COPY_SHARED;
+            return XR_OBJ_IS_SHARED(XR_VALUE_GCPTR(value)) ? XR_COPY_SHARED_REF : XR_COPY_DEEP;
         case XR_TCHANNEL:
         case XR_TATOMIC:
         case XR_TWORKQUEUE:

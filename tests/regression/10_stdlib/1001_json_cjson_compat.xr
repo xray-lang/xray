@@ -548,7 +548,7 @@ fn test_roundtrip_primitives() {
 
 @test
 fn test_roundtrip_array() {
-    let original = [1, 2, 3, "four", true, null]
+    let original: Json = [1, 2, 3, "four", true, null]
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
     assert_eq(parsed.length, 6)
@@ -560,7 +560,7 @@ fn test_roundtrip_array() {
 
 @test
 fn test_roundtrip_object() {
-    let original = { name: "Alice", age: 30, active: true }
+    let original: Json = { name: "Alice", age: 30, active: true }
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
     assert_eq(parsed.name, "Alice")
@@ -570,7 +570,7 @@ fn test_roundtrip_object() {
 
 @test
 fn test_roundtrip_nested() {
-    let original = {
+    let original: Json = {
         users: [
             { name: "Alice", scores: [100, 95, 88] },
             { name: "Bob", scores: [85, 90, 92] }
@@ -616,7 +616,8 @@ fn test_special_number_formats() {
 @test
 fn test_empty_structures() {
     assert_eq(Json.stringify([]), "[]")
-    assert_eq(Json.stringify({}), "{}")
+    let emptyObj: Json = {}
+    assert_eq(Json.stringify(emptyObj), "{}")
 
     let emptyArr = Json.parse("[]")
     assert_eq(emptyArr.length, 0)
@@ -658,4 +659,3 @@ fn test_invalid_json_detection() {
     assert_eq(Json.isValid("undefined"), false)
     assert_eq(Json.isValid("NaN"), false)
 }
-

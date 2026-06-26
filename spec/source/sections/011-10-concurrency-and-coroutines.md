@@ -38,7 +38,7 @@ GoOption ::= 'name' ':' StringLiteral
 // 形式 1：调用一个已声明的函数
 let t1 = go worker(0, channel)
 
-// 形式 2：调用一个 lambda 字面量（用于内联逻辑+捕获参数）
+// 形式 2：调用一个 lambda 字面量（用于内联逻辑 + 显式传参）
 let t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
@@ -61,12 +61,22 @@ let task = go fn(d: Json) -> int {
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
+**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过并发捕获规则。块内不能捕获普通可变局部；可直接使用的外部状态必须是 `shared const`、全局不可变状态，或显式并发安全对象（如 Channel / Atomic）。需要把局部数据传入协程时，使用带参数的 lambda / 函数调用形式：
+
+```xray
+let n = 10
+let task = go fn(x: int) -> int {
+    return x + 1
+}(n)
+```
+
 **语义**：
 - 每个 `go` 表达式都返回一个 `Task<T>`，其中 `T` 是被调函数的返回类型；返回 `()` 的函数对应 `Task<null>`。
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
-- 普通局部变量（非 `shared`、非 `move`）传给 `go` 时**自动深拷贝**；`shared const` 零拷贝共享；`shared let` 必须 `move`。
+- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared const`，**裸传是编译错误**；标量、`string`、`shared const`、Channel / Task / Atomic 等可直接传。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，正常路径不再有隐式边界深拷贝。
+- `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
 
 ### 10.3 `await` — 等待结果
 
@@ -108,6 +118,7 @@ let firstOk = await anySuccess [t1, t2, t3]
   - `await any` 仅当**全部失败**时抛异常；只要有一个完成，返回该任务结果。
   - `await anySuccess` 类似 `await any`，但**跳过**抛异常的任务，只等成功完成的。
 - `all` / `any` / `anySuccess` 在 `await` 后面是**上下文关键字**，仅在此位置生效。
+- `await all` 的输入必须是同构任务集合：每个元素都必须是同一静态 `Task<T>` 类型，结果类型为 `Array<T>`。异构任务（如 `Task<int>` 与 `Task<string>` 混合）不会自动擦除或装箱；需要逐个 `await`，或在任务内部显式转换为统一 enum / union / Json 结果类型。
 
 ### 10.4 `Task<T>` 句柄
 
@@ -136,23 +147,25 @@ match t.poll() {
 }
 ```
 
-**取消语义**：`cancel()` 设置取消标志；协程在下一个 safepoint（GC 检查点、Channel 操作、`await`、`yield`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
+`TaskResult.Failed(err)` 保留原始失败值：业务错误是 `throw <enum>` 产生的 enum 值，运行时故障是 `PanicInfo`。payload 类型为 `unknown`，调用方按需要用 `match` / `is` 收窄；实现不得把业务 enum 错误包装成 `PanicInfo`。
 
-**看门狗强制取消**：运行时监控线程（sysmon）会强制取消**长时间不经过 safepoint**的协程——当某协程在 RUNNING 状态下心跳冻结超过阈值（默认 5 秒）时被标记取消。该阈值可经环境变量 `XRAY_SYSMON_CANCEL_MS` 配置（单位毫秒），设为 `0` 则**禁用**强制取消（仅在 ~100ms 时打印一次告警）。纯 CPU 紧循环若可能长时间运行，应在循环内插入 `yield` 以提供 safepoint，避免被看门狗误取消。
+**取消语义**：`cancel()` 设置取消标志；协程在下一个 safepoint（GC 检查点、Channel 操作、`await`、`Coro.yield()`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
+
+**看门狗策略**：运行时监控线程（sysmon）会观察 RUNNING 协程的心跳。纯 Xray 循环在后向跳转 safepoint 推进心跳，因此会被观测为持续进展；sysmon 主要用于发现长时间 native/FFI 或无 safepoint 区域卡住。如果心跳长时间冻结，默认行为是 **warn-only**：约 100ms 后打印一次 stuck warning，但不静默取消协程。强制取消是显式 opt-in：设置环境变量 `XRAY_SYSMON_CANCEL_MS=N`（`N > 0`，单位毫秒）后，心跳冻结超过该阈值的协程会被标记取消；未设置或设为 `0` 时保持仅告警。纯 CPU 长循环仍可在循环内插入 `Coro.yield()` 改善调度公平性和取消响应性，但不再是避免默认看门狗强杀的必要条件。
 
 ### 10.5 Channel
 
 ```ebnf
 ChannelType ::= 'Channel' '<' Type '>'
-ChannelNew  ::= 'new' 'Channel' ('<' Type '>')? '(' Expression ')'
+ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
 Channel 通常以 `shared const` 声明（生命周期跨协程，引用语义）：
 
 ```xray @id=channel-decl-variants
-shared const ch  = new Channel<int>(10)    // 有缓冲，capacity = 10
-shared const ch0 = new Channel<int>(0)     // 无缓冲（同步握手）
-shared const cha = new Channel(3)          // 元素类型从首次 send 推断
+shared const ch  = Channel<int>(10)    // 有缓冲，capacity = 10
+shared const ch0 = Channel<int>(0)     // 无缓冲（同步握手）
+shared const cha = Channel(3)          // 元素类型从首次 send 推断
 ```
 
 **API**（注意全部为 **camelCase**）：
@@ -161,6 +174,7 @@ shared const cha = new Channel(3)          // 元素类型从首次 send 推断
 |--|--|--|
 | `send(v)` | `(T) -> ()` | 阻塞发送；满则等待消费者；channel 已关闭时抛异常 |
 | `recv()` | `() -> Recv<T>` | 阻塞接收；关闭且缓冲为空时返回 `Recv.Closed` |
+| `recvOr(default)` | `(T) -> T` | 阻塞接收；收到值时直接返回 `T`，关闭且缓冲为空时返回 `default`，不分配 `Recv<T>` 包装 |
 | `trySend(v)` | `(T) -> SendResult` | 非阻塞发送；返回 `Sent` / `Full` / `Closed` |
 | `tryRecv()` | `() -> Recv<T>` | 非阻塞接收；空时返回 `Recv.Empty` |
 | `sendTimeout(v, ms)` | `(T, int) -> SendResult` | 带超时发送；超时返回 `SendResult.Timeout` |
@@ -169,7 +183,7 @@ shared const cha = new Channel(3)          // 元素类型从首次 send 推断
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
 ```xray @id=channel-basic-ops
-shared const ch = new Channel<int>(10)
+shared const ch = Channel<int>(10)
 ch.send(42)                             // 阻塞发送
 let v = match ch.recv() {
     Recv.Value(value) -> value
@@ -185,7 +199,13 @@ match ch.tryRecv() {
     Recv.Timeout -> print("timeout")
 }
 
+ch.send(7)
 ch.close()
+for (msg in ch) {
+    print(msg)
+}
+
+let value = ch.recvOr(-1)
 ```
 
 **send/recv 与 `move`**：发送大对象时用 `ch.send(move payload)` 转移所有权，避免拷贝；接收方独占。
@@ -202,7 +222,8 @@ fn producer(ch: Channel<int>) {
 - **MPMC**（多生产者多消费者）。
 - 有缓冲 ch：满则发送方挂起，空则接收方挂起。
 - 无缓冲 ch：发送/接收必须同时握手（rendezvous）。
-- 关闭后：`send` 抛异常；`recv` 返回剩余 buffered value 的 `Recv.Value(v)`，取完后返回 `Recv.Closed`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
+- 关闭后：`send` 抛异常；`recv` 返回剩余 buffered value 的 `Recv.Value(v)`，取完后返回 `Recv.Closed`；`recvOr(default)` 返回剩余 buffered value，取完后返回 `default`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
+- `for (msg in ch)` 等价于阻塞接收直到 channel 关闭且 drained；循环变量类型为 `T`。Channel 不支持 key-value 迭代。
 
 ### 10.6 `select`
 
@@ -218,8 +239,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray @id=coro-select
-shared const ch1 = new Channel<int>(2)
-shared const ch2 = new Channel<int>(2)
+shared const ch1 = Channel<int>(2)
+shared const ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
@@ -231,7 +252,7 @@ select {
 
 **语义**：
 - 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value(name)` 的 payload 绑定到 `name`。
-- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中。
+- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一显式 transfer 规则——裸 owned heap 值必须写成 `copy(v)` / `move v` 或 `shared const`。
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
 
@@ -245,7 +266,7 @@ select {
 ```ebnf
 ScopeStmt          ::= 'scope' Block
 LinkedScopeStmt    ::= 'linked' 'scope' Block          // 兄弟失败 → 取消所有 + 重抛
-SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // 收集所有错误，返回 Array<string>
+SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // 收集每个子协程结果，返回 Array<TaskOutcome>
 ```
 
 ```xray @id=coro-scope
@@ -271,7 +292,19 @@ scope {
 |---|---|---|
 | `scope { ... }` | 不取消兄弟；异常不向外传播（每个 task 独立） | 无（语句形式） |
 | `linked scope { ... }` | **取消所有兄弟**协程，并向外**重抛**最先抛出的异常 | 无 |
-| `supervisor scope { ... }` | **收集**所有失败子协程的异常消息，子协程之间互不影响 | `Array<string>`（错误列表；可为空表示全部成功） |
+| `supervisor scope { ... }` | **收集**每个子协程的完成结果，子协程之间互不影响 | `Array<TaskOutcome>`（每个子协程一个 outcome） |
+
+`TaskOutcome` 是 prelude 枚举：
+
+```xray
+enum TaskOutcome {
+    Success(unknown)    // 子协程正常返回；payload 为返回值
+    Failed(unknown)     // 子协程抛异常；payload 为原始错误值，不强制字符串化
+    Cancelled           // 子协程被取消
+}
+```
+
+`supervisor scope` 会等待块内所有 `go` 子协程完成，并按完成记录追加 outcome。它不会为了旧式错误列表把失败转换成字符串；调用方需要消息时可在 `TaskOutcome.Failed(err)` 分支中自行决定如何格式化。
 
 ```xray @id=coro-linked-supervisor-scope
 // linked scope：失败传播
@@ -284,13 +317,13 @@ try {
     print("caught:", e)              // 命中此分支
 }
 
-// supervisor scope：收集错误
-let errors = supervisor scope {
+// supervisor scope：收集每个子协程的 outcome
+let outcomes = supervisor scope {
     go failing("error1")
     go failing("error2")
     go ok()
 }
-print(errors.length)                 // 2（只统计失败的）
+print(outcomes.length)               // 3（每个子协程一个 outcome）
 ```
 
 **通用语义**：
@@ -306,7 +339,7 @@ MoveExpr ::= 'move' Identifier        // 仅出现在调用参数位置
 `move` 是**实参修饰前缀**（不是 `go` 的选项）。它把 `shared let` 变量的所有权从当前作用域转移到被调函数（包括 `go` 启动的协程、`ch.send()` 等）。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误。
 
 ```xray @id=coro-move-transfer
-shared let buf = new Bytes(1024 * 1024)
+shared let buf = Bytes(1024 * 1024)
 
 // 移交给协程
 let t = go fn(b: Bytes) -> int {
@@ -316,8 +349,8 @@ let t = go fn(b: Bytes) -> int {
 // print(buf.length)
 
 // 移交给 channel
-shared const ch = new Channel<Bytes>(1)
-shared let payload = new Bytes(4096)
+shared const ch = Channel<Bytes>(1)
+shared let payload = Bytes(4096)
 ch.send(move payload)
 // 编译错误：payload has been moved
 ```
@@ -386,20 +419,20 @@ let val = counter.load(Ordering.Acquire)
 ```
 
 
-### 10.10 `yield` — 让出 CPU
+### 10.10 `Coro.yield()` — 让出 CPU
 
 ```ebnf
-YieldStmt ::= 'yield'
+CoroYieldCall ::= 'Coro' '.' 'yield' '(' ')'
 ```
 
 ```xray @id=coro-yield-loop
 for (i in 0..1000) {
     do_chunk(i)
-    yield                       // 主动 safepoint，让其他协程有机会跑
+    Coro.yield()                // 主动 safepoint，让其他协程有机会跑
 }
 ```
 
-**当前实现**：作为语句使用，等价 Go 的 `runtime.Gosched()`；不支持带值 `yield`。
+`Coro.yield()` 是协作式调度让出点，等价于显式 safepoint，让调度器有机会运行其他协程并响应取消。`yield expr` 已专用于生成器产值；裸 `yield` 被拒绝。
 
 ### 10.11 并发安全模型
 
@@ -452,7 +485,7 @@ GoOption ::= 'name' ':' StringLiteral
 // Form 1: call an existing function
 let t1 = go worker(0, channel)
 
-// Form 2: call a lambda literal (inline logic + captured arguments)
+// Form 2: call a lambda literal (inline logic + explicit arguments)
 let t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
@@ -475,12 +508,22 @@ let task = go fn(d: Json) -> int {
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
 
+**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass concurrency capture rules. The block may not capture ordinary mutable locals; external state used directly inside the block must be `shared const`, immutable global state, or an explicitly concurrency-safe object such as a Channel or Atomic. To pass local data into a coroutine, use the lambda-call or function-call form:
+
+```xray
+let n = 10
+let task = go fn(x: int) -> int {
+    return x + 1
+}(n)
+```
+
 **Semantics**:
 - Every `go` expression returns a `Task<T>`, where `T` is the callee's return type; functions returning `()` correspond to `Task<null>`.
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
-- Plain locals (not `shared`, not `move`d) passed to `go` are **deep-copied automatically**; `shared const` is shared zero-copy; `shared let` must be `move`d.
+- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared const`; **passing them bare is a compile error**. Scalars, `string`, `shared const`, and Channel / Task / Atomic pass directly. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, and the normal path no longer performs an implicit boundary deep copy.
+- The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
 
 ### 10.3 `await` — wait for a result
 
@@ -515,13 +558,14 @@ let firstOk = await anySuccess [t1, t2, t3]
 
 - `await` only applies to `Task<T>`; other types are a compile error.
 - The current coroutine **yields** until the target completes (without blocking the OS thread).
-- Exception propagation:
+- PanicInfo propagation:
   - `await t` rethrows the exception thrown by `t`.
   - On success, `await t` returns `T`; if `T` is nullable, a returned `null` is the task's real result, not a cancellation or failure marker.
   - `await all` throws if any task throws (the others are cancelled).
   - `await any` throws only when **every** task fails; if any one completes, its result is returned.
   - `await anySuccess` is similar to `await any` but **skips** throwing tasks, awaiting only the first successful one.
 - `all` / `any` / `anySuccess` are **contextual keywords** after `await`; they apply only in this position.
+- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<int>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a shared enum / union / Json result type.
 
 ### 10.4 `Task<T>` handle
 
@@ -550,23 +594,25 @@ match t.poll() {
 }
 ```
 
-**Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `yield`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
+`TaskResult.Failed(err)` preserves the original failure value: business errors are enum values produced by `throw <enum>`, and runtime faults are `PanicInfo`. The payload type is `unknown`, so callers narrow it with `match` / `is` as needed; implementations must not wrap business enum errors into `PanicInfo`.
 
-**Watchdog forced cancellation**: the runtime monitor thread (sysmon) force-cancels coroutines that run **too long without crossing a safepoint**—a coroutine whose heartbeat stays frozen while RUNNING beyond a threshold (default 5 seconds) is marked for cancellation. The threshold is configurable via the `XRAY_SYSMON_CANCEL_MS` environment variable (milliseconds); setting it to `0` **disables** forced cancellation (only a one-time warning around ~100ms remains). A pure-CPU tight loop that may run long should insert `yield` inside the loop to provide a safepoint and avoid spurious watchdog cancellation.
+**Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `Coro.yield()`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
+
+**Watchdog policy**: the runtime monitor thread (sysmon) observes the heartbeat of RUNNING coroutines. Pure Xray loops advance the heartbeat at back-edge safepoints, so they are observed as making progress; sysmon is mainly for long native/FFI calls or no-safepoint regions that stop progressing. If a heartbeat stays frozen for too long, the default behavior is **warn-only**: a stuck warning is printed after roughly 100ms, but the coroutine is not silently cancelled. Forced cancellation is explicit opt-in: set `XRAY_SYSMON_CANCEL_MS=N` (`N > 0`, milliseconds) to mark a coroutine for cancellation after its heartbeat remains frozen past that threshold; unset or `0` keeps warn-only behavior. Long pure-CPU loops may still insert `Coro.yield()` for scheduling fairness and cancellation responsiveness, but it is no longer required to avoid default watchdog cancellation.
 
 ### 10.5 Channel
 
 ```ebnf
 ChannelType ::= 'Channel' '<' Type '>'
-ChannelNew  ::= 'new' 'Channel' ('<' Type '>')? '(' Expression ')'
+ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
 Channels are usually declared as `shared const` (cross-coroutine lifetime, reference semantics):
 
 ```xray @id=channel-decl-variants
-shared const ch  = new Channel<int>(10)    // buffered, capacity = 10
-shared const ch0 = new Channel<int>(0)     // unbuffered (synchronous handshake)
-shared const cha = new Channel(3)          // element type inferred from the first send
+shared const ch  = Channel<int>(10)    // buffered, capacity = 10
+shared const ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
+shared const cha = Channel(3)          // element type inferred from the first send
 ```
 
 **API** (note that all method names are **camelCase**):
@@ -575,6 +621,7 @@ shared const cha = new Channel(3)          // element type inferred from the fir
 |--|--|--|
 | `send(v)` | `(T) -> ()` | Blocking send; waits for a consumer when full; throws if the channel is closed |
 | `recv()` | `() -> Recv<T>` | Blocking receive; returns `Recv.Closed` when closed and drained |
+| `recvOr(default)` | `(T) -> T` | Blocking receive; returns the payload directly, or `default` when closed and drained, without allocating a `Recv<T>` wrapper |
 | `trySend(v)` | `(T) -> SendResult` | Non-blocking send; returns `Sent` / `Full` / `Closed` |
 | `tryRecv()` | `() -> Recv<T>` | Non-blocking receive; returns `Recv.Empty` when empty |
 | `sendTimeout(v, ms)` | `(T, int) -> SendResult` | Send with timeout; timeout returns `SendResult.Timeout` |
@@ -583,7 +630,7 @@ shared const cha = new Channel(3)          // element type inferred from the fir
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
 ```xray @id=channel-basic-ops
-shared const ch = new Channel<int>(10)
+shared const ch = Channel<int>(10)
 ch.send(42)                             // blocking send
 let v = match ch.recv() {
     Recv.Value(value) -> value
@@ -599,7 +646,13 @@ match ch.tryRecv() {
     Recv.Timeout -> print("timeout")
 }
 
+ch.send(7)
 ch.close()
+for (msg in ch) {
+    print(msg)
+}
+
+let value = ch.recvOr(-1)
 ```
 
 **send/recv with `move`**: when sending a large object, use `ch.send(move payload)` to transfer ownership and avoid copying; the receiver becomes the sole owner.
@@ -616,7 +669,8 @@ fn producer(ch: Channel<int>) {
 - **MPMC** (multi-producer, multi-consumer).
 - Buffered channel: senders suspend when full; receivers suspend when empty.
 - Unbuffered channel: send and receive must rendezvous (synchronous handshake).
-- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value(v)`, then `Recv.Closed`; `tryRecv` returns `Recv.Empty` when empty and not closed.
+- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value(v)`, then `Recv.Closed`; `recvOr(default)` returns remaining buffered values, then `default`; `tryRecv` returns `Recv.Empty` when empty and not closed.
+- `for (msg in ch)` is equivalent to blocking receive until the channel is closed and drained; the loop variable has type `T`. Channels do not support key-value iteration.
 
 ### 10.6 `select`
 
@@ -632,8 +686,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray @id=coro-select
-shared const ch1 = new Channel<int>(2)
-shared const ch2 = new Channel<int>(2)
+shared const ch1 = Channel<int>(2)
+shared const ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
@@ -645,7 +699,7 @@ select {
 
 **Semantics**:
 - Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value(name)` payload to `name`.
-- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity.
+- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same explicit-transfer rule as `ch.send` — a bare owned heap value must be written as `copy(v)`, `move v`, or `shared const`.
 - Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
 - When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
 
@@ -659,7 +713,7 @@ select {
 ```ebnf
 ScopeStmt          ::= 'scope' Block
 LinkedScopeStmt    ::= 'linked' 'scope' Block          // sibling failure → cancel all + rethrow
-SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // collect all errors, return Array<string>
+SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // collect every child result, return Array<TaskOutcome>
 ```
 
 ```xray @id=coro-scope
@@ -685,7 +739,19 @@ scope {
 |---|---|---|
 | `scope { ... }` | Siblings are not cancelled; exceptions do not propagate outward (each task is independent) | none (statement form) |
 | `linked scope { ... }` | **Cancels all siblings** and **rethrows** the first exception outward | none |
-| `supervisor scope { ... }` | **Collects** failure messages from every failing child; siblings do not affect each other | `Array<string>` (error list; empty means all succeeded) |
+| `supervisor scope { ... }` | **Collects** every child coroutine's completion result; siblings do not affect each other | `Array<TaskOutcome>` (one outcome per child) |
+
+`TaskOutcome` is a prelude enum:
+
+```xray
+enum TaskOutcome {
+    Success(unknown)    // child returned normally; payload is the return value
+    Failed(unknown)     // child threw; payload is the original error value, not a forced string
+    Cancelled           // child was cancelled
+}
+```
+
+`supervisor scope` waits for all child coroutines started by `go` inside the block and appends an outcome for each completion. It does not flatten failures into a legacy error-message list; format the error explicitly inside a `TaskOutcome.Failed(err)` branch when text is needed.
 
 ```xray @id=coro-linked-supervisor-scope
 // linked scope: failure propagation
@@ -698,13 +764,13 @@ try {
     print("caught:", e)              // hits this branch
 }
 
-// supervisor scope: collect errors
-let errors = supervisor scope {
+// supervisor scope: collect every child outcome
+let outcomes = supervisor scope {
     go failing("error1")
     go failing("error2")
     go ok()
 }
-print(errors.length)                 // 2 (only the failures are counted)
+print(outcomes.length)               // 3 (one outcome per child)
 ```
 
 **General semantics**:
@@ -720,7 +786,7 @@ MoveExpr ::= 'move' Identifier        // only at call-argument position
 `move` is an **argument-prefix modifier** (not a `go` option). It transfers ownership of a `shared let` variable from the current scope to the callee (including coroutines started by `go`, `ch.send()`, etc.). After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error.
 
 ```xray @id=coro-move-transfer
-shared let buf = new Bytes(1024 * 1024)
+shared let buf = Bytes(1024 * 1024)
 
 // hand off to a coroutine
 let t = go fn(b: Bytes) -> int {
@@ -730,8 +796,8 @@ let t = go fn(b: Bytes) -> int {
 // print(buf.length)
 
 // hand off to a channel
-shared const ch = new Channel<Bytes>(1)
-shared let payload = new Bytes(4096)
+shared const ch = Channel<Bytes>(1)
+shared let payload = Bytes(4096)
 ch.send(move payload)
 // compile error: payload has been moved
 ```
@@ -800,20 +866,20 @@ let val = counter.load(Ordering.Acquire)
 ```
 
 
-### 10.10 `yield` — yield the CPU
+### 10.10 `Coro.yield()` — yield the CPU
 
 ```ebnf
-YieldStmt ::= 'yield'
+CoroYieldCall ::= 'Coro' '.' 'yield' '(' ')'
 ```
 
 ```xray @id=coro-yield-loop
 for (i in 0..1000) {
     do_chunk(i)
-    yield                       // explicit safepoint, lets other coroutines run
+    Coro.yield()                // explicit safepoint, lets other coroutines run
 }
 ```
 
-**Current implementation**: usable as a statement, equivalent to Go's `runtime.Gosched()`; valued `yield` is not supported.
+`Coro.yield()` is a cooperative scheduling point, equivalent to an explicit safepoint where the scheduler can run other coroutines and observe cancellation. `yield expr` is reserved for generator value production; bare `yield` is rejected.
 
 ### 10.11 Concurrency safety model
 

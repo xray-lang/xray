@@ -87,6 +87,9 @@ order: 019
 | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 类未实现声明的接口 |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | 用非数字 key 访问 tuple |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段下标越界 |
+| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | `override` 未匹配父类链中的同名同签实例方法 |
+| `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | 类型用作 Map 键 / Set 元素时缺少 `operator==` / `hash` 契约 |
+| `XR_ERR_ANALYZE_CONDITION_TYPE` | 条件表达式不是 `bool` 或 nullable 存在性（`T?`, `T != bool`） |
 
 ### 18.4 运行时错误 (Runtime)
 
@@ -152,7 +155,7 @@ order: 019
 | `E0501` | `XR_ERR_MOD_NOT_FOUND` | 找不到模块 |
 | `E0502` | `XR_ERR_MOD_LOAD_FAILED` | 模块加载失败（IO / 解析错误） |
 | `E0503` | `XR_ERR_MOD_NO_EXPORT` | import 的名字未被 export |
-| `E0504` | `XR_ERR_MOD_CIRCULAR` | 循环依赖 |
+| `E0504` | `XR_ERR_MOD_CIRCULAR` | 模块依赖图包含循环依赖 |
 
 ### 18.6 禁止写法 (Rejected Syntax)
 
@@ -169,43 +172,43 @@ order: 019
 
 | 码 | 名称 | 描述 |
 |--|--|--|
-| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | 已合并到 `E0370`（见 §8.1.1）；代码仅保留以免重复分配 |
+| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | 历史名称保留以免重复分配；当前 `throw` 非 enum 错误统一由 `E0370` 表达（见 §8.1.1） |
 | `E0821` | `XR_ERR_TRY_BANG_BAD_OPERAND` | 已废弃（`try!` 已移除）；代码仅保留以免重复分配 |
 | `E0822` | `XR_ERR_TRY_BANG_NON_EXCEPTION_ERR` | 已废弃（`try!` 已移除）；代码仅保留以免重复分配 |
 | `E0823` | `XR_ERR_MATCH_NOT_EXHAUSTIVE` | 已合并到 `E0371`（见 §6.3.3）；代码仅保留以免重复分配 |
 | `E0824` | `XR_ERR_UNWRAP_NON_EXCEPTION_ERR` | 已废弃（`Result` 已移除）；代码仅保留以免重复分配 |
 
-### 18.8 错误对象结构
+### 18.8 Panic 错误对象结构
 
-VM 抛出的运行时错误使用 prelude `Exception` 类（声明：`stdlib/types/exception.xr`）：
+panic 通道的运行时故障使用 prelude `PanicInfo` 类（声明：`stdlib/types/panic_info.xr`）：
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // 人类可读消息，含错误码与上下文
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
-    cause: Exception?           // 链式 cause
+    cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
-    data: Json?                 // throw 非异常值时原始值被包装在此
+    data: Json                  // 运行时故障的结构化附加数据；无数据时为 JSON null
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-`throw` 操作数的静态类型**必须**是 `Exception` 派生（见 §8.1.1 / `E0370`）。如需结构化错误，继承 `Exception` 添加业务字段：
+用户级 `throw` 操作数**必须**是 enum 变体值（见 §8.1.1 / `E0370`）。结构化业务错误使用 ADT enum，而不是继承 `PanicInfo`：
 
 ```xray
-class HttpError extends Exception {
-    statusCode: int
-    constructor(statusCode: int, message: string, cause: Exception? = null) {
-        super(message, cause)
-        this.statusCode = statusCode
-    }
+enum HttpErr {
+    NotFound(string),
+    ServerError(int, string),
+    Timeout,
 }
+
+throw HttpErr.ServerError(500, "upstream failed")
 ```
 
-或使用 ADT enum + `throw` / `catch` 表达可枚举的失败模式（见 §8.1）。
+`PanicInfo` 只表示 panic 通道的运行时故障；业务错误通过 `throw <enum>` / `catch` 的值返回通道传播（见 §8.1）。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -292,6 +295,9 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | class does not implement a declared interface |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple accessed with a non-numeric key |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field index out of range |
+| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | `override` did not match a same-name, same-signature instance method in the parent chain |
+| `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | type used as Map key / Set element lacks `operator==` / `hash` contract |
+| `XR_ERR_ANALYZE_CONDITION_TYPE` | condition is not `bool` or nullable presence (`T?`, `T != bool`) |
 
 ### 18.4 Runtime Errors
 
@@ -318,7 +324,7 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 
 | Code | Name | Description |
 |--|--|--|
-| `E0420` | `XR_ERR_DIV_BY_ZERO` | division by zero (integer or float) |
+| `E0420` | `XR_ERR_DIV_BY_ZERO` | integer division by zero |
 | `E0421` | `XR_ERR_MOD_BY_ZERO` | integer modulo by zero |
 | `E0422` | `XR_ERR_OVERFLOW` | integer overflow |
 
@@ -357,7 +363,7 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 | `E0501` | `XR_ERR_MOD_NOT_FOUND` | module not found |
 | `E0502` | `XR_ERR_MOD_LOAD_FAILED` | module load failed (I/O / parsing error) |
 | `E0503` | `XR_ERR_MOD_NO_EXPORT` | imported name is not exported |
-| `E0504` | `XR_ERR_MOD_CIRCULAR` | circular dependency |
+| `E0504` | `XR_ERR_MOD_CIRCULAR` | module dependency graph contains a circular dependency |
 
 ### 18.6 Rejected Syntax
 
@@ -374,41 +380,41 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 
 | Code | Name | Description |
 |--|--|--|
-| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | merged into `E0370` (see §8.1.1); code preserved to avoid reuse |
+| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | historical name preserved to avoid reuse; non-enum `throw` operands are now reported as `E0370` (see §8.1.1) |
 | `E0821` | `XR_ERR_TRY_BANG_BAD_OPERAND` | deprecated (`try!` removed); code preserved to avoid reuse |
 | `E0822` | `XR_ERR_TRY_BANG_NON_EXCEPTION_ERR` | deprecated (`try!` removed); code preserved to avoid reuse |
 | `E0823` | `XR_ERR_MATCH_NOT_EXHAUSTIVE` | merged into `E0371` (see §6.3.3); code preserved to avoid reuse |
 | `E0824` | `XR_ERR_UNWRAP_NON_EXCEPTION_ERR` | deprecated (`Result` removed); code preserved to avoid reuse |
 
-### 18.8 Error-Object Layout
+### 18.8 Panic Error-Object Layout
 
-Runtime errors thrown by the VM use the prelude `Exception` class (declared in `stdlib/types/exception.xr`):
+Runtime faults in the panic channel use the prelude `PanicInfo` class (declared in `stdlib/types/panic_info.xr`):
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // human-readable message including error code and context
     stack: Array<string>        // auto-captured call stack, one formatted line per frame
-    cause: Exception?           // chained cause
+    cause: PanicInfo?           // chained cause
     code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
-    data: Json?                 // when a non-exception value is thrown, the original value is wrapped here
+    data: Json                  // structured data for a runtime fault; JSON null when absent
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-The static type of a `throw` operand **must** be a subclass of `Exception` (see §8.1.1 / `E0370`). For structured errors, inherit `Exception` and add business fields:
+The static type of a user-level `throw` operand **must** be an enum variant value (see §8.1.1 / `E0370`). Structured business errors use ADT enums rather than `PanicInfo` inheritance:
 
 ```xray
-class HttpError extends Exception {
-    statusCode: int
-    constructor(statusCode: int, message: string, cause: Exception? = null) {
-        super(message, cause)
-        this.statusCode = statusCode
-    }
+enum HttpErr {
+    NotFound(string),
+    ServerError(int, string),
+    Timeout,
 }
+
+throw HttpErr.ServerError(500, "upstream failed")
 ```
 
-Alternatively, use an ADT enum + `throw` / `catch` to express enumerable failure modes (see §8.1).
+`PanicInfo` represents panic-channel runtime faults only; business errors propagate through the `throw <enum>` / `catch` value-return channel (see §8.1).
 <!-- /xr-spec:en -->

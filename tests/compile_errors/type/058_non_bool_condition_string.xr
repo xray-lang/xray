@@ -1,0 +1,6 @@
+fn main() {
+    let s = "hello"
+    if (s) {
+        print("bad")
+    }
+}

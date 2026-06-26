@@ -45,7 +45,8 @@ XR_FUNC bool xi_value_is_channel_method_call(const XiValue *v, const char *metho
         return true;
     return xi_value_type_is_unknown(v->args[0]) &&
            ((strcmp(method, "send") == 0 && v->nargs == 2) ||
-            (strcmp(method, "recv") == 0 && v->nargs == 1));
+            (strcmp(method, "recv") == 0 && v->nargs == 1) ||
+            (strcmp(method, "recvOr") == 0 && v->nargs == 2));
 }
 
 XR_FUNC bool xi_value_is_task_method_call(const XiValue *v, const char *method, int nargs) {
@@ -79,6 +80,7 @@ static bool xi_value_is_blocking_channel_method_call(const XiValue *v) {
     return xi_value_is_channel_method_call(v, "send", 1) ||
            xi_value_is_channel_method_call(v, "sendTimeout", 2) ||
            xi_value_is_channel_method_call(v, "recv", 0) ||
+           xi_value_is_channel_method_call(v, "recvOr", 1) ||
            xi_value_is_channel_method_call(v, "recvTimeout", 1);
 }
 
@@ -107,6 +109,7 @@ static bool xi_channel_method_may_suspend(const XiValue *v) {
     if (!method)
         return false;
     bool blocking_channel_method = strcmp(method, "send") == 0 || strcmp(method, "recv") == 0 ||
+                                   strcmp(method, "recvOr") == 0 ||
                                    strcmp(method, "sendTimeout") == 0 ||
                                    strcmp(method, "recvTimeout") == 0;
     if (!blocking_channel_method)
@@ -115,7 +118,8 @@ static bool xi_channel_method_may_suspend(const XiValue *v) {
         return true;
     return xi_value_type_is_unknown(v->args[0]) &&
            ((strcmp(method, "send") == 0 && v->nargs == 2) ||
-            (strcmp(method, "recv") == 0 && v->nargs == 1));
+            (strcmp(method, "recv") == 0 && v->nargs == 1) ||
+            (strcmp(method, "recvOr") == 0 && v->nargs == 2));
 }
 
 static bool xi_work_queue_method_needs_coro(const XiValue *v) {
@@ -242,8 +246,9 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
                                       const XiCoroResolver *resolver) {
     if (!v)
         return false;
-    if (v->op == XI_YIELD || v->op == XI_GO || v->op == XI_AWAIT || v->op == XI_CHAN_SEND ||
-        v->op == XI_CHAN_RECV || v->op == XI_SELECT_BLOCK || v->op == XI_SCOPE_EXIT)
+    if (v->op == XI_YIELD || v->op == XI_GEN_YIELD || v->op == XI_GO || v->op == XI_AWAIT ||
+        v->op == XI_CHAN_SEND || v->op == XI_CHAN_RECV || v->op == XI_SELECT_BLOCK ||
+        v->op == XI_SCOPE_EXIT)
         return true;
     if (xi_value_is_blocking_channel_method_call(v) || xi_value_is_blocking_task_method_call(v) ||
         xi_value_is_blocking_work_queue_method_call(v) ||
@@ -394,6 +399,7 @@ XR_FUNC bool xi_coro_unbox_from_typed_await(const XiFunc *f, const XiValue *v) {
 XR_FUNC bool xi_coro_value_needs_runtime_slot(const XiValue *v) {
     return v && (v->op == XI_CHAN_RECV || xi_value_is_channel_method_call(v, "sendTimeout", 2) ||
                  xi_value_is_channel_method_call(v, "recv", 0) ||
+                 xi_value_is_channel_method_call(v, "recvOr", 1) ||
                  xi_value_is_channel_method_call(v, "recvTimeout", 1) ||
                  xi_value_is_blocking_work_queue_method_call(v) ||
                  xi_value_is_blocking_result_group_method_call(v) ||
@@ -610,6 +616,8 @@ XR_FUNC bool xi_coro_type_needs_boundary_clone(const XrType *type) {
         case XR_KIND_SET:
         case XR_KIND_FIXED_ARRAY:
         case XR_KIND_JSON:
+        case XR_KIND_RECORD:
+        case XR_KIND_STRING:
             return true;
         case XR_KIND_INSTANCE:
             return type->instance.class_name &&
@@ -674,6 +682,7 @@ static XiCoroSuspendKind xi_coro_suspend_kind(const XiFunc *f, const XiValue *v,
         xi_value_is_channel_method_call(v, "sendTimeout", 2))
         return XI_CORO_SUSP_CHAN_SEND;
     if (xi_value_is_channel_method_call(v, "recv", 0) ||
+        xi_value_is_channel_method_call(v, "recvOr", 1) ||
         xi_value_is_channel_method_call(v, "recvTimeout", 1))
         return XI_CORO_SUSP_CHAN_RECV;
     if (xi_value_is_blocking_task_method_call(v) ||

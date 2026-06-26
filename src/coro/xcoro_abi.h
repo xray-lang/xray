@@ -107,6 +107,12 @@ typedef XrCoroRunResult (*XrCoroResumeFn)(XrCoroutine *coro, const XrCoroEvent *
 typedef struct XrCoroBackendVTable {
     XrCoroBackendKind kind;
     XrCoroResumeFn resume;
+    /* Synchronous generator pull: run the (non-scheduled) coroutine to its next
+     * `yield expr` and report XR_CORO_RUN_YIELD with the yielded value in *out,
+     * or XR_CORO_RUN_DONE / XR_CORO_RUN_ERROR when the generator finishes. Unlike
+     * `resume`, this never enqueues onto a worker — generators are driven inline
+     * by the consuming iterator's hasNext()/next(). */
+    XrCoroRunKind (*gen_drive)(XrCoroutine *coro, XrValue *out);
     void (*trace_roots)(XrCoroutine *coro, void *visitor);
     bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
     void (*reset_reusable)(XrCoroutine *coro);

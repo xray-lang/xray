@@ -35,7 +35,7 @@
       ]
     },
     {
-      "heading": "Json object",
+      "heading": "Record / Json object",
       "fences": [
         "types-json-object",
         "expr-object-lit"

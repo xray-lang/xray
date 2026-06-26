@@ -16,6 +16,82 @@
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 
+XR_FUNC void xa_loop_scope_push(XaInferContext *ctx, XaLoopScope *scope, const char *label,
+                                AstNode *node) {
+    if (!ctx || !scope)
+        return;
+    scope->label = label;
+    scope->line = node ? node->line : 0;
+    scope->prev = ctx->loop_scope;
+
+    if (label) {
+        for (XaLoopScope *it = ctx->loop_scope; it; it = it->prev) {
+            if (it->label && strcmp(it->label, label) == 0) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node ? node->line : 0, .column = 1};
+                char msg[160];
+                snprintf(msg, sizeof(msg), "duplicate loop label '%s' in an active loop", label);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg,
+                                           &loc);
+                break;
+            }
+        }
+    }
+
+    ctx->loop_scope = scope;
+    ctx->loop_depth++;
+}
+
+XR_FUNC void xa_loop_scope_pop(XaInferContext *ctx, XaLoopScope *scope) {
+    if (!ctx || !scope)
+        return;
+    if (ctx->loop_scope == scope)
+        ctx->loop_scope = scope->prev;
+    else
+        ctx->loop_scope = scope->prev;
+    if (ctx->loop_depth > 0)
+        ctx->loop_depth--;
+}
+
+XR_FUNC void xa_validate_loop_control(XaInferContext *ctx, AstNode *node, const char *label,
+                                      bool is_continue) {
+    if (!ctx || !node)
+        return;
+
+    const char *kind = is_continue ? "continue" : "break";
+    int code = is_continue ? XR_ERR_CMP_INVALID_CONTINUE : XR_ERR_CMP_INVALID_BREAK;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+
+    if (label) {
+        for (XaLoopScope *it = ctx->loop_scope; it; it = it->prev) {
+            if (it->label && strcmp(it->label, label) == 0)
+                return;
+        }
+        char msg[160];
+        snprintf(msg, sizeof(msg), "unknown loop label '%s' for '%s'", label, kind);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, code, msg, &loc);
+        return;
+    }
+
+    if (ctx->loop_depth <= 0) {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "'%s' outside of a loop", kind);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, code, msg, &loc);
+    }
+}
+
+static bool xa_function_assignment_mismatch(XrType *target_type, XrType *value_type) {
+    if (!target_type || !value_type)
+        return true;
+    if (XR_TYPE_IS_NULL(value_type))
+        return !target_type->is_nullable;
+    if (!XR_TYPE_IS_FUNCTION(value_type))
+        return true;
+    if (target_type->is_nullable || value_type->is_nullable)
+        return !xa_typecheck_assignable(target_type, value_type);
+    return !xr_type_equals(target_type, value_type);
+}
+
 XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *target_type,
                                   XrType *value_type, const char *target_name,
                                   const char *target_kind) {
@@ -29,8 +105,7 @@ XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *ta
         xa_check_null_safety(ctx->analyzer, target_type, value_type, "Assignment", &loc);
     bool type_mismatch = false;
     if (XR_TYPE_IS_FUNCTION(target_type)) {
-        type_mismatch =
-            !XR_TYPE_IS_FUNCTION(value_type) || !xr_type_equals(target_type, value_type);
+        type_mismatch = xa_function_assignment_mismatch(target_type, value_type);
     } else {
         type_mismatch = !xa_typecheck_assignable(target_type, value_type);
     }
@@ -74,6 +149,7 @@ XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type) {
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
         case XR_KIND_JSON:
+        case XR_KIND_RECORD:
         case XR_KIND_INSTANCE:
         case XR_KIND_FUNCTION:
         case XR_KIND_TUPLE:
@@ -311,8 +387,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
             // Check assignment compatibility
             bool type_mismatch = false;
             if (XR_TYPE_IS_FUNCTION(links->declared_type)) {
-                type_mismatch = !XR_TYPE_IS_FUNCTION(init_type) ||
-                                !xr_type_equals(links->declared_type, init_type);
+                type_mismatch = xa_function_assignment_mismatch(links->declared_type, init_type);
             } else {
                 type_mismatch = !xa_typecheck_assignable(links->declared_type, init_type);
             }
@@ -387,8 +462,9 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     if (sym->is_const && var->initializer) {
         AstNodeType init_t = var->initializer->type;
         if (init_t == AST_LITERAL_INT || init_t == AST_LITERAL_FLOAT ||
-            init_t == AST_LITERAL_STRING || init_t == AST_LITERAL_TRUE ||
-            init_t == AST_LITERAL_FALSE || init_t == AST_LITERAL_NULL) {
+            init_t == AST_LITERAL_CHAR || init_t == AST_LITERAL_STRING ||
+            init_t == AST_LITERAL_TRUE || init_t == AST_LITERAL_FALSE ||
+            init_t == AST_LITERAL_NULL) {
             links->is_const_foldable = true;
         }
     }
@@ -494,7 +570,7 @@ void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
 
     // Analyze condition
     XrType *cond_type = xa_visit_infer_expr(ctx, if_stmt->condition);
-    (void) cond_type;
+    xa_check_condition_type(ctx, if_stmt->condition, cond_type);
 
     // Flow graph handles all type narrowing via TRUE_CONDITION / FALSE_CONDITION
     // nodes. apply_condition_narrowing() in xanalyzer_flow.c recognizes patterns:
@@ -556,7 +632,8 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
     }
 
     // Analyze condition
-    xa_visit_infer_expr(ctx, while_stmt->condition);
+    XrType *cond_type = xa_visit_infer_expr(ctx, while_stmt->condition);
+    xa_check_condition_type(ctx, while_stmt->condition, cond_type);
 
     if (ctx->flow) {
         xa_flow_create_condition(ctx->flow, while_stmt->condition, true);
@@ -564,8 +641,11 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
 
     /* Analyze body. A block body goes through xa_visit_block_stmt so it
      * gets its own scope keyed on the body node, matching Pass 1. */
+    XaLoopScope loop_scope;
+    xa_loop_scope_push(ctx, &loop_scope, while_stmt->label, node);
     if (while_stmt->body)
         xa_visit_infer_stmt(ctx, while_stmt->body);
+    xa_loop_scope_pop(ctx, &loop_scope);
 
     // Back edge to loop start
     if (ctx->flow && loop_start) {
@@ -599,10 +679,13 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
 
     // Analyze condition
     if (for_stmt->condition) {
-        xa_visit_infer_expr(ctx, for_stmt->condition);
+        XrType *cond_type = xa_visit_infer_expr(ctx, for_stmt->condition);
+        xa_check_condition_type(ctx, for_stmt->condition, cond_type);
     }
 
     // Analyze body - inline block to match Pass 1 scope structure
+    XaLoopScope loop_scope;
+    xa_loop_scope_push(ctx, &loop_scope, for_stmt->label, node);
     if (for_stmt->body) {
         if (for_stmt->body->type == AST_BLOCK) {
             BlockNode *blk = &for_stmt->body->as.block;
@@ -613,6 +696,7 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
             xa_visit_infer_stmt(ctx, for_stmt->body);
         }
     }
+    xa_loop_scope_pop(ctx, &loop_scope);
 
     // Analyze increment
     if (for_stmt->increment) {

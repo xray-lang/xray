@@ -32,8 +32,6 @@ XR_FUNC struct XrType *xi_lower_infer_binary_type(XiLower *l, AstNodeType ast_ty
                                                   struct XrType *left, struct XrType *right) {
     if (ast_type >= AST_BINARY_EQ && ast_type <= AST_BINARY_GE)
         return l->type_bool;
-    if (ast_type == AST_BINARY_EQ_STRICT || ast_type == AST_BINARY_NE_STRICT)
-        return l->type_bool;
     if (ast_type == AST_BINARY_AND || ast_type == AST_BINARY_OR)
         return l->type_bool;
     if (ast_type >= AST_BINARY_BAND && ast_type <= AST_BINARY_RSHIFT)
@@ -95,10 +93,6 @@ XR_FUNC uint16_t xi_lower_binary_ast_to_xi_op(AstNodeType ast_type) {
             return XI_EQ;
         case AST_BINARY_NE:
             return XI_NE;
-        case AST_BINARY_EQ_STRICT:
-            return XI_EQ_STRICT;
-        case AST_BINARY_NE_STRICT:
-            return XI_NE_STRICT;
         case AST_BINARY_LT:
             return XI_LT;
         case AST_BINARY_LE:

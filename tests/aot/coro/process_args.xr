@@ -1,5 +1,5 @@
 fn count_args() -> int {
-    yield
+    Coro.yield()
     return process.args.length
 }
 

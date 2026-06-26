@@ -1,0 +1,31 @@
+// anchor: float-ieee-arithmetic
+// Float-result division follows IEEE: /0.0 produces infinities, 0.0/0.0
+// produces NaN, and constant folding must match runtime behavior.
+import math
+
+fn runtime_div(a: float, b: float) -> float {
+    return a / b
+}
+
+fn runtime_div_f32(a: float32, b: float32) -> float32 {
+    return a / b
+}
+
+let zp = 0.0
+let pos = runtime_div(1.0, zp)
+let neg = runtime_div(-1.0, zp)
+let nan_rt = runtime_div(zp, zp)
+let nan_folded = 0.0 / 0.0
+let pos_folded = 1.0 / 0.0
+let f32_inf = runtime_div_f32(1.0, 0.0)
+
+print(math.isFinite(pos))
+print(pos > 1.0)
+print(math.isFinite(neg))
+print(neg < -1.0)
+print(math.isNaN(nan_rt))
+print(nan_rt.isNaN())
+print(math.isNaN(nan_folded))
+print(nan_folded.isNaN())
+print(math.isFinite(pos_folded))
+print(math.isFinite(f32_inf))

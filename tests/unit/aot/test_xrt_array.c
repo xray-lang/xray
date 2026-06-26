@@ -214,9 +214,14 @@ static void test_slice_marks_borrowed_storage(void) {
     XrValue slice_value = xrt_array_slice_view(value, 1, 3);
     xrt_array_t *slice = (xrt_array_t *) slice_value.ptr;
     ASSERT_TRUE(slice != NULL, "slice allocated");
-    ASSERT_EQ_INT(slice->data_storage, XR_ARRAY_DATA_BORROWED, "slice marked BORROWED");
-    ASSERT_TRUE(xrt_array_data_is_borrowed(slice), "slice data is borrowed");
-    ASSERT_EQ_INT(((XrValue *) slice->data)[0].i, 1, "slice points into source data");
+    /* `.slice()` returns an independent copy (value semantics, matching the VM),
+     * not a borrowed view, so mutating the slice never aliases the source. */
+    ASSERT_TRUE(slice->data_storage != XR_ARRAY_DATA_BORROWED, "slice owns copied storage");
+    ASSERT_TRUE(!xrt_array_data_is_borrowed(slice), "slice data is owned, not borrowed");
+    ASSERT_TRUE((uint8_t *) slice->data != (uint8_t *) a->data + a->elem_size,
+                "slice data does not alias source");
+    ASSERT_EQ_INT(slice->length, 2, "slice has expected length");
+    ASSERT_EQ_INT(((XrValue *) slice->data)[0].i, 1, "slice copies source data");
 
     free_test_array(slice);
     free_test_array(a);
@@ -234,11 +239,12 @@ static void test_slice_negative_bounds_and_aliasing(void) {
     ASSERT_TRUE(slice != NULL, "negative-bounds slice allocated");
     ASSERT_EQ_INT(slice->length, 3, "negative bounds produce expected count");
     ASSERT_EQ_INT(((XrValue *) slice->data)[0].i, 11, "negative start is from tail");
-    ASSERT_TRUE(slice->data == (uint8_t *) a->data + a->elem_size,
-                "slice data aliases source offset");
+    /* Copy semantics: the slice owns its storage and does not alias the source. */
+    ASSERT_TRUE(slice->data != (uint8_t *) a->data + a->elem_size,
+                "slice data does not alias source offset");
 
     xr_typed_set(slice->data, 1, XR_FROM_INT(77), slice->elem_type);
-    ASSERT_EQ_INT(((XrValue *) a->data)[2].i, 77, "slice write aliases source storage");
+    ASSERT_EQ_INT(((XrValue *) a->data)[2].i, 12, "slice write does not affect source");
 
     free_test_array(slice);
     free_test_array(a);
@@ -300,12 +306,13 @@ static void test_slice_resize_reserve_are_noops(void) {
     XrValue slice_value = xrt_array_slice_view(value, 1, 4);
     xrt_array_t *slice = (xrt_array_t *) slice_value.ptr;
     ASSERT_EQ_INT(slice->length, 3, "slice has expected initial length");
-    xrt_array_resize_value(slice_value, XR_FROM_INT(1), XR_FROM_INT(0));
-    ASSERT_EQ_INT(slice->length, 3, "slice resize shrink is a no-op");
+    /* The slice owns its copied storage, so resize/reserve operate on the copy
+     * and never disturb the source array. */
     xrt_array_resize_value(slice_value, XR_FROM_INT(8), XR_FROM_INT(0));
-    ASSERT_EQ_INT(slice->length, 3, "slice resize grow is a no-op");
+    ASSERT_EQ_INT(slice->length, 8, "slice resize grow updates owned copy");
+    ASSERT_EQ_INT(a->length, 5, "source length unaffected by slice resize");
     xrt_array_reserve_value(slice_value, XR_FROM_INT(12));
-    ASSERT_EQ_INT(slice->capacity, 3, "slice reserve is a no-op");
+    ASSERT_TRUE(slice->capacity >= 12, "slice reserve grows owned copy");
 
     free_test_array(slice);
     free_test_array(a);

@@ -39,6 +39,18 @@ static char *token_to_string(Parser *parser, Token *token) {
     return str;
 }
 
+static bool current_is_removed_public_modifier(Parser *parser) {
+    if (!xr_parser_check_name(parser, "public"))
+        return false;
+
+    Scanner saved = parser->scanner;
+    Token peek = xr_scanner_scan(&saved);
+    return peek.type == TK_NAME || peek.type == TK_STATIC || peek.type == TK_PRIVATE ||
+           peek.type == TK_PROTECTED || peek.type == TK_CONST || peek.type == TK_CONSTRUCTOR ||
+           peek.type == TK_OPERATOR || peek.type == TK_ABSTRACT || peek.type == TK_OVERRIDE ||
+           peek.type == TK_FINAL;
+}
+
 /* ========== Local Cleanup Helpers ========== */
 
 // All parser allocations now go through the parse arena; individual frees
@@ -219,10 +231,10 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
 
         // Skip unknown tokens to avoid infinite loop
         if (!xr_parser_check(parser, TK_NAME) && !xr_parser_check(parser, TK_PRIVATE) &&
-            !xr_parser_check(parser, TK_PUBLIC) && !xr_parser_check(parser, TK_STATIC) &&
-            !xr_parser_check(parser, TK_CONSTRUCTOR) && !xr_parser_check(parser, TK_ABSTRACT) &&
-            !xr_parser_check(parser, TK_OVERRIDE) && !xr_parser_check(parser, TK_FINAL) &&
-            !xr_parser_check(parser, TK_OPERATOR)) {
+            !xr_parser_check(parser, TK_PROTECTED) && !xr_parser_check(parser, TK_CONST) &&
+            !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_CONSTRUCTOR) &&
+            !xr_parser_check(parser, TK_ABSTRACT) && !xr_parser_check(parser, TK_OVERRIDE) &&
+            !xr_parser_check(parser, TK_FINAL) && !xr_parser_check(parser, TK_OPERATOR)) {
             xr_parser_error_expected_name(parser, "expected field or method name");
             xr_parser_advance(parser);
             continue;
@@ -431,8 +443,8 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
 
         // Skip unknown tokens
         if (!xr_parser_check(parser, TK_NAME) && !xr_parser_check(parser, TK_PRIVATE) &&
-            !xr_parser_check(parser, TK_PUBLIC) && !xr_parser_check(parser, TK_STATIC) &&
-            !xr_parser_check(parser, TK_OPERATOR)) {
+            !xr_parser_check(parser, TK_PROTECTED) && !xr_parser_check(parser, TK_CONST) &&
+            !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_OPERATOR)) {
             xr_parser_error_expected_name(parser, "expected field or method name in struct");
             xr_parser_advance(parser);
             continue;
@@ -494,6 +506,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
     // Parse access modifiers (optional)
     bool is_private = false;
+    bool is_protected = false;
     bool is_static = false;
     bool is_getter = false;
     (void) is_getter;
@@ -502,6 +515,13 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     bool is_abstract = false;
     bool is_override = false;
     bool is_final = false;
+    bool is_const = false;
+
+    if (current_is_removed_public_modifier(parser)) {
+        xr_parser_error_at_current(
+            parser, "'public' modifier was removed; members are public by default, delete it");
+        xr_parser_advance(parser);
+    }
 
     if (xr_parser_match(parser, TK_OVERRIDE)) {
         is_override = true;
@@ -513,8 +533,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
     if (xr_parser_match(parser, TK_PRIVATE)) {
         is_private = true;
-    } else if (xr_parser_match(parser, TK_PUBLIC)) {
-        is_private = false;  // explicit public
+    } else if (xr_parser_match(parser, TK_PROTECTED)) {
+        is_protected = true;
     }
 
     if (xr_parser_match(parser, TK_STATIC)) {
@@ -524,7 +544,10 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         if (xr_parser_check(parser, TK_CONSTRUCTOR)) {
             *is_method_out = true;
             xr_parser_advance(parser);  // consume 'constructor'
-            return xr_parse_static_constructor(parser, is_private);
+            AstNode *method = xr_parse_static_constructor(parser, is_private);
+            if (method)
+                method->as.method_decl.is_override = is_override;
+            return method;
         }
     }
 
@@ -532,9 +555,19 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         is_final = true;
     }
 
+    // `const` marks an immutable field (assignable only in the constructor).
+    if (xr_parser_match(parser, TK_CONST)) {
+        is_const = true;
+    }
+
     if (xr_parser_match(parser, TK_OPERATOR)) {
         *is_method_out = true;
-        return xr_parse_operator_method(parser, is_private, is_static);
+        AstNode *method = xr_parse_operator_method(parser, is_private, is_static);
+        if (method) {
+            method->as.method_decl.is_override = is_override;
+            method->as.method_decl.is_protected = is_protected;
+        }
+        return method;
     }
 
     // Parse member name (may be 'constructor' keyword)
@@ -567,10 +600,16 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         is_override) {
         // Method: has parameter list or generic type params or override modifier
         *is_method_out = true;
+        if (is_const) {
+            xr_parser_error_at_current(parser, "'const' applies to fields, not methods; remove it");
+        }
         AstNode *method = xr_parse_method_declaration(parser, name, name_line, name_column,
                                                       is_private, is_static, is_abstract);
-        if (method)
+        if (method) {
+            method->as.method_decl.is_override = is_override;
             method->as.method_decl.is_final = is_final;
+            method->as.method_decl.is_protected = is_protected;
+        }
         return method;
     } else {
         // Field: has type annotation or initializer
@@ -579,6 +618,12 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         // 'override' can only be used for methods
         if (is_override) {
             xr_parser_error_at_current(parser, "'override' modifier can only be used for methods");
+        }
+
+        // 'final' marks classes/methods as sealed; immutable fields use 'const'.
+        if (is_final) {
+            xr_parser_error_at_current(
+                parser, "'final' applies to classes/methods; use 'const' for an immutable field");
         }
 
         // Parse type annotation (optional)
@@ -608,6 +653,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
                                            is_static, initializer, name_line);
         if (field) {
             field->as.field_decl.is_final = is_final;
+            field->as.field_decl.is_protected = is_protected;
+            field->as.field_decl.is_const = is_const;
             field->column = name_column;
             // End span: to end of initializer if present, else just the name.
             if (initializer && initializer->end_line > 0) {
@@ -801,6 +848,12 @@ fail:
 AstNode *xr_parse_new_expression(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_new_expression: NULL parser");
     int line = parser->previous.line;
+
+    // The `new` keyword was removed. Construction is now `T(args)` directly.
+    // Emit a clear migration error, then keep parsing the construction so
+    // analysis can recover and report any further issues in the same pass.
+    xr_parser_error(
+        parser, "the 'new' keyword was removed; construct with 'T(...)' directly (delete 'new')");
 
     // 'new' keyword already consumed
 
@@ -1660,12 +1713,9 @@ static XrTypeRef *build_type_from_consumed_name(Parser *parser, Token *name_tok)
                 type_args[type_arg_count++] = xr_parse_type_annotation(parser);
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
         xr_parser_consume(parser, TK_GT, "expected '>' in generic type");
-        result = xr_tref_generic(parser->compiler_session, temp_name, type_args, type_arg_count);
-    } else if (parser->type_scope) {
-        XrTypeRef *alias = xr_type_scope_resolve(parser->type_scope, temp_name);
-        result = alias ? alias : xr_tref_named(parser->compiler_session, temp_name);
+        result = xr_parse_generic_type_name_ref(parser, temp_name, type_args, type_arg_count);
     } else {
-        result = xr_tref_named(parser->compiler_session, temp_name);
+        result = xr_parse_type_name_ref(parser, temp_name);
     }
 
     /* Handle trailing '?' for optional */
@@ -1741,9 +1791,9 @@ static void parse_enum_variant_payload(Parser *parser, char ***out_names, XrType
     *out_count = count;
 }
 
-/* Parse one enum method: 'fn' Name '(' params ')' ReturnType? Block.
+/* Parse one enum method: ('static')? 'fn' Name '(' params ')' ReturnType? Block.
  * Enum methods require 'fn' keyword (unlike class methods). */
-static AstNode *parse_enum_method(Parser *parser) {
+static AstNode *parse_enum_method(Parser *parser, bool is_static) {
     XR_DCHECK(parser != NULL, "parse_enum_method: NULL parser");
 
     /* 'fn' already consumed by caller */
@@ -1754,7 +1804,7 @@ static AstNode *parse_enum_method(Parser *parser) {
 
     return xr_parse_method_declaration(parser, name, name_line, name_col,
                                        /* is_private */ false,
-                                       /* is_static */ false,
+                                       /* is_static */ is_static,
                                        /* is_abstract */ false);
 }
 
@@ -1878,9 +1928,9 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         xr_parser_error(parser, "enum requires at least one variant");
     }
 
-    /* Variant phase: parse comma-separated variants until we hit 'fn' or '}'. */
+    /* Variant phase: parse comma-separated variants until we hit a method or '}'. */
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF) &&
-           !xr_parser_check(parser, TK_FN)) {
+           !xr_parser_check(parser, TK_FN) && !xr_parser_check(parser, TK_STATIC)) {
         if (parser->panic_mode) {
             xr_parser_synchronize(parser);
             if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
@@ -1930,20 +1980,22 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         XR_PARSE_PUSH(parser, members, member_count, member_capacity, member);
 
         /* Comma after variant: required between variants, optional before
-         * '}' or 'fn'. */
-        if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_FN)) {
+         * '}', 'fn', or 'static fn'. */
+        if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_FN) &&
+            !xr_parser_check(parser, TK_STATIC)) {
             if (!xr_parser_match(parser, TK_COMMA)) {
                 xr_parser_error(parser, "expected ',' between enum variants");
                 break;
             }
-            /* Allow trailing comma before '}' or 'fn' */
-            if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_FN))
+            /* Allow trailing comma before '}', 'fn', or 'static fn' */
+            if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_FN) ||
+                xr_parser_check(parser, TK_STATIC))
                 break;
         }
     }
 
-    /* Method phase: parse 'fn' methods until '}'. */
-    while (xr_parser_match(parser, TK_FN)) {
+    /* Method phase: parse 'fn' and 'static fn' methods until '}'. */
+    while (xr_parser_check(parser, TK_FN) || xr_parser_check(parser, TK_STATIC)) {
         if (parser->panic_mode) {
             xr_parser_synchronize(parser);
             if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
@@ -1951,7 +2003,18 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
             continue;
         }
 
-        AstNode *method = parse_enum_method(parser);
+        bool is_static = false;
+        if (xr_parser_match(parser, TK_STATIC)) {
+            is_static = true;
+            if (!xr_parser_match(parser, TK_FN)) {
+                xr_parser_error(parser, "expected 'fn' after 'static' in enum body");
+                break;
+            }
+        } else {
+            xr_parser_consume(parser, TK_FN, "expected 'fn' in enum method declaration");
+        }
+
+        AstNode *method = parse_enum_method(parser, is_static);
         if (method) {
             XR_PARSE_PUSH(parser, methods, method_count, method_capacity, method);
         }

@@ -246,11 +246,13 @@ fn test_concurrent_data_isolation() {
         let expected_prefix = unique_char.repeat(30)
         let expected_suffix = unique_char.repeat(30)
         
-        return #{"id": id,
-            "result": result,
-            "prefix_ok": result.startsWith(expected_prefix),
-            "suffix_ok": result.endsWith(expected_suffix),
-            "contains_id": result.includes("_" + string(id) + "_")}
+        return {
+            id: id,
+            result: result,
+            prefix_ok: result.startsWith(expected_prefix),
+            suffix_ok: result.endsWith(expected_suffix),
+            contains_id: result.includes("_" + string(id) + "_")
+        }
     }
     
     let n = 50
@@ -268,7 +270,8 @@ fn test_concurrent_data_isolation() {
         if (r["prefix_ok"] && r["suffix_ok"] && r["contains_id"]) {
             correct = correct + 1
         } else {
-            print('  错误: task ${r["id"]} 数据隔离失败')
+            let task_id = r["id"]
+            print("  错误: task " + string(task_id) + " 数据隔离失败")
         }
     }
     

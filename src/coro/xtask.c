@@ -35,6 +35,7 @@
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/object/xarray.h"
+#include "../runtime/object/xstring.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <string.h>
@@ -297,9 +298,22 @@ static bool task_cas_state(XrTask *task, uint32_t from_mask, uint8_t to) {
     return true;
 }
 
+XrValue xr_task_prepare_publish_value(XrTask *task, XrValue value) {
+    if (!task || !XR_IS_STRING(value))
+        return value;
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj || XR_OBJ_IS_SHARED(obj))
+        return value;
+    XrCoroutine *executor = atomic_load_explicit(&task->coro, memory_order_acquire);
+    XrRuntimeCore *core = executor ? executor->core : NULL;
+    XrString *shared = xr_string_clone_shared_core(core, XR_TO_STRING(value));
+    return shared ? XR_FROM_STR(shared) : value;
+}
+
 void xr_task_complete(XrTask *task, XrValue result) {
     if (!task)
         return;
+    result = xr_task_prepare_publish_value(task, result);
     task->result = result;
     /* ACTIVE/COMPLETING -> COMPLETED. Reject CANCELLING/final: a concurrent
      * cancel from a linked peer already won. */
@@ -312,6 +326,7 @@ void xr_task_complete(XrTask *task, XrValue result) {
 void xr_task_fail(XrTask *task, XrValue error) {
     if (!task)
         return;
+    error = xr_task_prepare_publish_value(task, error);
     task->error = error;
     if (!task_cas_state(task, (1u << XR_TASK_ACTIVE) | (1u << XR_TASK_COMPLETING), XR_TASK_FAILED))
         return;
@@ -378,6 +393,7 @@ void xr_task_detach_child(XrTask *parent, XrTask *child) {
 void xr_task_try_complete(XrTask *task, XrValue result) {
     if (!task)
         return;
+    result = xr_task_prepare_publish_value(task, result);
     task->result = result;
 
     child_lock_acquire(&task->child_lock);

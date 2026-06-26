@@ -1,0 +1,8 @@
+// select send arms cross a coroutine boundary, so a bare owned-heap payload
+// must use explicit copy(...) / move / shared const, just like ch.send and go.
+let ch: Channel<Array<int>> = Channel(1)
+let xs = [1, 2, 3]
+select {
+    xs to ch -> { print("sent") }
+    _ -> { print("full") }
+}

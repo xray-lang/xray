@@ -274,6 +274,8 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             // to other threads before FLG_DONE is observed.
             xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
             bool was_main = xr_coro_flags_has(coro, XR_CORO_FLG_MAIN);
+            if (done_task)
+                coro->result = xr_task_prepare_publish_value(done_task, coro->result);
 
             /* Eager executor reclaim is decided BEFORE the task state is
              * published: immediate results need no copy out of the executor

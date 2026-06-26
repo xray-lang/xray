@@ -58,11 +58,17 @@ static inline XrValue xrt_map_slot_value(xrt_map_t *m, int64_t slot) {
 /* ---- typed scalar key normalization ------------------------------------ */
 
 static inline uint64_t xrt_map_key_bits_i64(int64_t key, uint8_t key_type) {
-    return xrt_typed_scalar_bits_i64_or_abort(key, key_type, "xrt_map_key_bits_i64");
+    uint64_t bits = 0;
+    if (!xr_typed_scalar_bits_i64(key, key_type, &bits))
+        xrt_map_typed_abort("xrt_map_key_bits_i64", "unsupported integer key type");
+    return bits;
 }
 
 static inline uint64_t xrt_map_key_bits_f64(double key, uint8_t key_type) {
-    return xrt_typed_scalar_bits_f64_or_abort(key, key_type, "xrt_map_key_bits_f64");
+    uint64_t bits = 0;
+    if (!xr_typed_scalar_bits_f64(key, key_type, &bits))
+        xrt_map_typed_abort("xrt_map_key_bits_f64", "unsupported float key type");
+    return bits;
 }
 
 static inline int64_t xrt_map_slot_key_raw(const xrt_map_t *m, int64_t slot) {

@@ -27,6 +27,41 @@
 
 XrVMResult xr_vm_interpret_proto_isolate(XrVMRuntime *isolate, XrProto *proto);
 
+static bool xr_vm_bind_proto_shared_slots_recursive(XrVMRuntime *isolate, XrProto *proto,
+                                                    int offset) {
+    if (!proto)
+        return true;
+    proto->shared_offset = offset;
+    proto->shared_slots_bound = true;
+    proto->shared_slots_owner = isolate;
+    int child_count = DYNARRAY_COUNT(&proto->protos);
+    for (int i = 0; i < child_count; i++) {
+        XrProto *child = DYNARRAY_GET(&proto->protos, i, XrProto *);
+        if (!xr_vm_bind_proto_shared_slots_recursive(isolate, child, offset))
+            return false;
+    }
+    return true;
+}
+
+bool xr_vm_bind_proto_shared_slots(XrVMRuntime *isolate, XrProto *proto) {
+    if (!isolate || !proto)
+        return false;
+    if (proto->shared_slots_bound) {
+        if (proto->shared_slots_owner == isolate)
+            return true;
+        xr_log_warning("vm", "bytecode shared slots are already bound to another VM runtime");
+        return false;
+    }
+    int offset = isolate->vm.shared.count;
+    if (proto->shared_count > 0) {
+        xr_shared_array_ensure(&isolate->vm.shared, offset + proto->shared_count - 1);
+        for (int i = 0; i < proto->shared_count; i++)
+            isolate->vm.shared.data[offset + i] = XR_NULL_VAL;
+        isolate->vm.shared.count = offset + proto->shared_count;
+    }
+    return xr_vm_bind_proto_shared_slots_recursive(isolate, proto, offset);
+}
+
 /* ========== Execution API ========== */
 
 // Execute bytecode

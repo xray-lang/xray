@@ -239,7 +239,20 @@ static const char *xr_builtin_symbol_names[] = {
     "isObject",
     // Collection property aliases
     "size",
-    // DateTime append-only method aliases
+    // Float predicates
+    "isNaN",
+    // Int overflow-control methods
+    "checkedAdd",
+    "checkedSub",
+    "checkedMul",
+    "saturatingAdd",
+    "saturatingSub",
+    "saturatingMul",
+    "wrappingAdd",
+    "wrappingSub",
+    "wrappingMul",
+    // Newly added builtins append here to keep existing symbol ids stable.
+    "recvOr",
     "diff",
 };
 

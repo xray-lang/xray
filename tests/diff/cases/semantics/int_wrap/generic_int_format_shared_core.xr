@@ -6,7 +6,7 @@ print(max)
 print("left=" + min)
 print(max + "=right")
 
-let ints = new Array<int>(3, 0)
+let ints = Array<int>(3, 0)
 ints[0] = min
 ints[1] = max
 ints[2] = -42

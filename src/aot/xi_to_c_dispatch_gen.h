@@ -50,8 +50,6 @@
     X(SHR, "xi.shr", xicgen_shr) \
     X(EQ, "xi.eq", xicgen_eq) \
     X(NE, "xi.ne", xicgen_ne) \
-    X(EQ_STRICT, "xi.eq.strict", xicgen_eq_strict) \
-    X(NE_STRICT, "xi.ne.strict", xicgen_ne_strict) \
     X(LT, "xi.lt", xicgen_lt) \
     X(LE, "xi.le", xicgen_le) \
     X(GT, "xi.gt", xicgen_gt) \
@@ -80,6 +78,8 @@
     X(INDEX_GET, "xi.index.get", xicgen_index_get) \
     X(INDEX_SET, "xi.index.set", xicgen_index_set) \
     X(ARRAY_NEW, "xi.array.new", xicgen_array_new) \
+    X(ARRAY_PUSH, "xi.array.push", xicgen_array_push) \
+    X(ARRAY_EXTEND, "xi.array.extend", xicgen_array_extend) \
     X(MAP_NEW, "xi.map.new", xicgen_map_new) \
     X(SET_NEW, "xi.set.new", xicgen_set_new) \
     X(STR_CONCAT, "xi.str.concat", xicgen_str_concat) \
@@ -87,11 +87,14 @@
     X(CHECKTYPE, "xi.checktype", xicgen_checktype) \
     X(SLICE, "xi.slice", xicgen_slice) \
     X(RANGE, "xi.range", xicgen_range) \
+    X(GEN_CALL, "xi.gen.call", xicgen_gen_call) \
     X(CHAN_RECV_STATUS, "xi.chan.recv.status", xicgen_chan_recv_status) \
+    X(DEFER_MARK, "xi.defer.mark", xicgen_defer_mark) \
     X(JSON_NEW, "xi.json.new", xicgen_json_new) \
     X(JSON_INIT_F, "xi.json.init.f", xicgen_json_init_f) \
     X(JSON_GET_F, "xi.json.get.f", xicgen_json_get_f) \
     X(JSON_SET_F, "xi.json.set.f", xicgen_json_set_f) \
+    X(JSON_MERGE, "xi.json.merge", xicgen_json_merge) \
     X(JSON_DECODE, "xi.json.decode", xicgen_reject_unsupported) \
     X(STRUCT_NEW, "xi.struct.new", xicgen_struct_new) \
     X(STRUCT_GET, "xi.struct.get", xicgen_struct_get) \
@@ -140,11 +143,6 @@
     X(LE, xicgen_le) \
     X(GT, xicgen_gt) \
     X(GE, xicgen_ge)
-
-
-#define XI_TO_C_TEMPLATE_STRICT_COMPARE_DRIVERS(X) \
-    X(EQ_STRICT, xicgen_eq_strict) \
-    X(NE_STRICT, xicgen_ne_strict)
 
 
 #define XI_TO_C_TEMPLATE_WIDTH_DRIVERS(X) \
@@ -283,16 +281,6 @@ static inline bool xi_to_c_template_compare_swaps_tagged_args(uint16_t op) {
         default: return false;
     }
     return false;
-}
-
-static inline const char *xi_to_c_template_strict_compare_op(uint16_t op) {
-    switch ((XiOp) op) {
-        case XI_EQ_STRICT: return "==";
-        case XI_NE_STRICT: return "!=";
-        case XI_OP_COUNT: return "";
-        default: return "";
-    }
-    return "";
 }
 
 typedef enum {

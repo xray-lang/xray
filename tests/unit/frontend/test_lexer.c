@@ -27,6 +27,12 @@ static void assert_token(Token t, XrTokenType expected_type, const char *expecte
     }
 }
 
+static void assert_error_token(Token t, const char *expected_text, const char *expected_message) {
+    assert_token(t, TK_ERROR, expected_text);
+    ASSERT_TRUE(t.error_message != NULL);
+    ASSERT_TRUE(strcmp(t.error_message, expected_message) == 0);
+}
+
 /* ========== Single Character Token Tests ========== */
 
 TEST(lexer_single_chars) {
@@ -51,8 +57,10 @@ TEST(lexer_single_chars) {
 TEST(lexer_comparison_ops) {
     assert_token(scan_single("=="), TK_EQ, "==");
     assert_token(scan_single("!="), TK_NE, "!=");
-    assert_token(scan_single("==="), TK_EQ_STRICT, "===");
-    assert_token(scan_single("!=="), TK_NE_STRICT, "!==");
+    assert_error_token(scan_single("==="),
+                       "===", "strict equality operator '===' was removed; use '=='");
+    assert_error_token(scan_single("!=="),
+                       "!==", "strict inequality operator '!==' was removed; use '!='");
     assert_token(scan_single("<"), TK_LT, "<");
     assert_token(scan_single("<="), TK_LE, "<=");
     assert_token(scan_single(">"), TK_GT, ">");
@@ -196,11 +204,26 @@ TEST(lexer_string_literals) {
     t = scan_single("\"hello\"");
     assert_token(t, TK_LITERAL_STRING, "\"hello\"");
 
-    t = scan_single("'world'");
-    assert_token(t, TK_LITERAL_STRING, "'world'");
-
     t = scan_single("\"\"");
     assert_token(t, TK_LITERAL_STRING, "\"\"");
+}
+
+TEST(lexer_char_literals) {
+    Token t;
+
+    t = scan_single("'a'");
+    assert_token(t, TK_LITERAL_CHAR, "'a'");
+
+    t = scan_single("'\\n'");
+    assert_token(t, TK_LITERAL_CHAR, "'\\n'");
+
+    t = scan_single("'\\u{1F600}'");
+    assert_token(t, TK_LITERAL_CHAR, "'\\u{1F600}'");
+}
+
+TEST(lexer_raw_single_quote_removed) {
+    Token t = scan_single("r'abc'");
+    assert_error_token(t, "r'", "single-quoted raw strings were removed; use r\"...\"");
 }
 
 TEST(lexer_string_escapes) {
@@ -244,6 +267,7 @@ TEST(lexer_special_tokens) {
     assert_token(scan_single("?."), TK_QUESTION_DOT, "?.");
     assert_token(scan_single("??"), TK_NULLISH_COALESCE, "??");
     assert_token(scan_single(".."), TK_RANGE, "..");  // TK_RANGE is used for ".."
+    assert_token(scan_single("..="), TK_RANGE_INCLUSIVE, "..=");
     assert_token(scan_single("..."), TK_DOT_DOT_DOT, "...");
 }
 
@@ -272,6 +296,15 @@ TEST(lexer_skip_block_comment) {
     Token t;
 
     xr_scanner_init(&scanner, "/* block */ 99");
+    t = xr_scanner_scan(&scanner);
+    assert_token(t, TK_LITERAL_INT, "99");
+}
+
+TEST(lexer_skip_nested_block_comment) {
+    Scanner scanner;
+    Token t;
+
+    xr_scanner_init(&scanner, "/* outer /* inner */ still outer */ 99");
     t = xr_scanner_scan(&scanner);
     assert_token(t, TK_LITERAL_INT, "99");
 }
@@ -492,7 +525,6 @@ TEST(lexer_keyword_table_completeness) {
         {"operator", TK_OPERATOR},
         {"override", TK_OVERRIDE},
         {"private", TK_PRIVATE},
-        {"public", TK_PUBLIC},
         {"return", TK_RETURN},
         {"scope", TK_SCOPE},
         {"select", TK_SELECT},
@@ -510,7 +542,6 @@ TEST(lexer_keyword_table_completeness) {
         {"uint16", TK_UINT16},
         {"uint32", TK_UINT32},
         {"uint64", TK_UINT64},
-        {"unknown", TK_UNKNOWN},
         {"while", TK_WHILE},
         {"yield", TK_YIELD},
         // None of the uppercase native type names are lexer keywords:
@@ -527,6 +558,9 @@ TEST(lexer_keyword_table_completeness) {
         }
         ASSERT_EQ_INT(t.type, cases[i].expected);
     }
+
+    assert_token(scan_single("unknown"), TK_NAME, "unknown");
+    assert_token(scan_single("public"), TK_NAME, "public");
 }
 
 // `r` alone is an identifier; only `r` followed by a quote is a raw string.
@@ -553,11 +587,29 @@ TEST(lexer_error_token_message_field) {
                 strstr(t.error_message, "unterminated") != NULL);
 }
 
+TEST(lexer_template_string_nested_same_quote) {
+    assert_token(scan_single("\"${m[\"k\"]}\""), TK_TEMPLATE_STRING, "\"${m[\"k\"]}\"");
+    assert_token(scan_single("\"${\"a}b\"}\""), TK_TEMPLATE_STRING, "\"${\"a}b\"}\"");
+    assert_token(scan_single("\"${'}'}\""), TK_TEMPLATE_STRING, "\"${'}'}\"");
+    assert_token(scan_single("r\"${m[\"k\"]}\""), TK_RAW_TEMPLATE_STRING, "r\"${m[\"k\"]}\"");
+}
+
 TEST(lexer_error_token_unterminated_block_comment) {
     Scanner scanner;
     Token t;
 
     xr_scanner_init(&scanner, "/* never closes");
+    t = xr_scanner_scan(&scanner);
+    ASSERT_EQ_INT(t.type, TK_ERROR);
+    ASSERT_TRUE(t.error_message != NULL);
+    ASSERT_TRUE(strstr(t.error_message, "unterminated") != NULL);
+}
+
+TEST(lexer_error_token_unterminated_nested_block_comment) {
+    Scanner scanner;
+    Token t;
+
+    xr_scanner_init(&scanner, "/* outer /* inner */");
     t = xr_scanner_scan(&scanner);
     ASSERT_EQ_INT(t.type, TK_ERROR);
     ASSERT_TRUE(t.error_message != NULL);
@@ -618,6 +670,10 @@ static void run_all_tests(void) {
     RUN_TEST(lexer_string_literals);
     RUN_TEST(lexer_string_escapes);
 
+    RUN_TEST_SUITE("Char Literals");
+    RUN_TEST(lexer_char_literals);
+    RUN_TEST(lexer_raw_single_quote_removed);
+
     RUN_TEST_SUITE("Identifiers");
     RUN_TEST(lexer_identifiers);
 
@@ -628,6 +684,7 @@ static void run_all_tests(void) {
     RUN_TEST(lexer_skip_whitespace);
     RUN_TEST(lexer_skip_line_comment);
     RUN_TEST(lexer_skip_block_comment);
+    RUN_TEST(lexer_skip_nested_block_comment);
 
     RUN_TEST_SUITE("Token Sequences");
     RUN_TEST(lexer_token_sequence);
@@ -652,7 +709,9 @@ static void run_all_tests(void) {
 
     RUN_TEST_SUITE("Error Token Contract (L-03)");
     RUN_TEST(lexer_error_token_message_field);
+    RUN_TEST(lexer_template_string_nested_same_quote);
     RUN_TEST(lexer_error_token_unterminated_block_comment);
+    RUN_TEST(lexer_error_token_unterminated_nested_block_comment);
     RUN_TEST(lexer_normal_token_no_error_message);
 }
 

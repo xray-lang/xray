@@ -1,0 +1,3 @@
+let ch: Channel<Array<int>> = Channel(1)
+let xs = [1, 2, 3]
+print(ch.sendTimeout(xs, 0))

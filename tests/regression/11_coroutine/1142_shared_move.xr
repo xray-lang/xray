@@ -6,7 +6,7 @@
 **   - shared const: 全局堆，引用计数共享，并发读取
 **   - shared let: 全局堆，可通过 move 显式转移所有权
 **   - move var: 显式所有权转移（用于 go / ch.send）
-**   - 普通变量: 传递给协程时深拷贝
+**   - 普通变量: 通过 copy(...) 显式深拷贝后传递给协程
 */
 
 fn recvArray(ch: Channel<Array<int>>) -> Array<int> {
@@ -28,7 +28,7 @@ fn recvJson(ch: Channel<Json>) -> Json {
 fn test_shared_const() {
     print("=== Test shared const ===")
 
-    shared const config = {
+    shared const config: Json = {
         name: "test",
         value: 42
     }
@@ -36,11 +36,11 @@ fn test_shared_const() {
 
     // Multiple coroutines read the same shared const (zero-copy)
     let t1 = go fn(c: Json) -> int {
-        return c.value
+        return int(c.value)
     }(config)
 
     let t2 = go fn(c: Json) -> int {
-        return c.value * 2
+        return int(c.value) * 2
     }(config)
 
     let r1 = await t1
@@ -55,12 +55,12 @@ fn test_shared_const() {
 fn test_move_go() {
     print("=== Test move go ===")
 
-    shared let data = { count: 10 }
+    shared let data: Json = { count: 10 }
 
     // 'move data' transfers ownership to child coroutine (zero-copy)
     let task = go fn(d: Json) -> int {
         print("child got:", d.count)
-        return d.count + 1
+        return int(d.count) + 1
     }(move data)
 
     let result = await task
@@ -73,7 +73,7 @@ fn test_move_go() {
 fn test_move_channel_send() {
     print("=== Test move channel send ===")
 
-    shared const ch: Channel<Array<int>> = new Channel(1)
+    shared const ch: Channel<Array<int>> = Channel(1)
     shared let payload = [10, 20, 30]
 
     // send with move: transfers ownership through channel
@@ -85,18 +85,18 @@ fn test_move_channel_send() {
     ch.close()
 }
 
-// Test 4: normal variable — deep copy to coroutine (no move)
+// Test 4: normal variable — explicit copy to coroutine (no move)
 @test
 fn test_normal_copy() {
     print("=== Test normal copy ===")
 
     let arr = [1, 2, 3]
 
-    // Without move: coroutine gets a deep copy
+    // Explicit copy: coroutine gets a deep copy
     let task = go fn(data: Array<int>) {
         data.push(4)  // does not affect original
         return data.length
-    }(arr)
+    }(copy(arr))
 
     let result = await task
     print("original:", arr)        // [1, 2, 3] (unchanged)
@@ -108,14 +108,14 @@ fn test_normal_copy() {
 fn test_move_pipeline() {
     print("=== Test move pipeline ===")
 
-    shared const ch: Channel<Json> = new Channel(1)
-    shared let msg = { step: 0 }
+    shared const ch: Channel<Json> = Channel(1)
+    shared let msg: Json = { step: 0 }
 
     // Stage 1: modify and move-send
     let t1 = go fn(c: Channel<Json>, d: Json) {
-        d.step = d.step + 1
+        d.step = int(d.step) + 1
         print("stage1:", d.step)
-        c.send(d)
+        c.send(move d)
     }(ch, move msg)
 
     await t1
@@ -124,9 +124,9 @@ fn test_move_pipeline() {
     // Stage 2: receive and process
     let t2 = go fn(c: Channel<Json>) -> int {
         let d = recvJson(c)
-        d.step = d.step + 1
+        d.step = int(d.step) + 1
         print("stage2:", d.step)
-        return d.step
+        return int(d.step)
     }(ch)
 
     let final_step = await t2

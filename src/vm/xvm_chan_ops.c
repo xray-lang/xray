@@ -174,7 +174,7 @@ XR_FUNC XrDispatchAction vm_select_block(XrVMRuntime *isolate, XrVMContext *vm_c
 
 XR_FUNC XrDispatchAction vm_chan_send(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
-                                      XrInstruction *pc) {
+                                      XrInstruction *pc, uint8_t transfer_mode) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c = GETARG_C(instr);
@@ -198,7 +198,8 @@ XR_FUNC XrDispatchAction vm_chan_send(XrVMRuntime *isolate, XrVMContext *vm_ctx,
     XrChannel *ch = xr_value_to_channel(ch_val);
 
     vm_suspend_replay_yielded(frame, pc);
-    XrCoroBlockResult result = xr_coro_chan_send(current, ch, base[c], xr_slot_none(), -1);
+    XrCoroBlockResult result =
+        xr_coro_chan_send_transfer(current, ch, base[c], xr_slot_none(), -1, transfer_mode);
     if (result.kind == XR_CORO_BLOCK_READY) {
         vm_suspend_clear_yielded(frame);
         base[a] = xr_null();
@@ -285,6 +286,7 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrVMRuntime *isolate, XrVMContext 
     XrChannel *ch = xr_value_to_channel(ch_val);
     XrValue value = base[c];
     XrValue timeout_val = base[c + 1];
+    uint8_t transfer_mode = vm_channel_transfer_mode_before(frame, pc);
 
     int64_t timeout_ms = 0;
     if (XR_IS_INT(timeout_val))
@@ -303,7 +305,8 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrVMRuntime *isolate, XrVMContext 
             return XR_DISP_NEXT;
         }
         vm_suspend_replay_current(frame, pc);
-        XrCoroBlockResult result = xr_coro_chan_send(current, ch, value, result_slot, timeout_ms);
+        XrCoroBlockResult result =
+            xr_coro_chan_send_transfer(current, ch, value, result_slot, timeout_ms, transfer_mode);
         if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_TIMEOUT ||
             result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             vm_suspend_continue_from_next(frame, pc);
@@ -320,7 +323,7 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrVMRuntime *isolate, XrVMContext 
     }
 
     // Main thread: synchronous polling
-    value = xr_chan_prepare_send(isolate, value);
+    value = xr_chan_prepare_send_transfer(isolate, value, transfer_mode);
     if (xr_channel_try_send(ch, value)) {
         base[a] = xr_bool(true);
         xr_runtime_wake_channel(ch->scheduler, ch, false);

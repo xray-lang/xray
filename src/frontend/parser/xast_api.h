@@ -23,6 +23,7 @@ XR_FUNC AstNode *xr_ast_literal_int(XrCompilerSession *session, xr_Integer value
 XR_FUNC AstNode *xr_ast_literal_float(XrCompilerSession *session, xr_Number value, int line);
 XR_FUNC AstNode *xr_ast_literal_bigint(XrCompilerSession *session, const char *value, int line);
 XR_FUNC AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, int line);
+XR_FUNC AstNode *xr_ast_literal_char(XrCompilerSession *session, uint32_t value, int line);
 XR_FUNC AstNode *xr_ast_literal_regex(XrCompilerSession *session, const char *pattern,
                                       const char *flags, int line);
 XR_FUNC AstNode *xr_ast_literal_null(XrCompilerSession *session, int line);
@@ -80,28 +81,30 @@ XR_FUNC AstNode *xr_ast_if_stmt(XrCompilerSession *session, AstNode *condition,
                                 AstNode *then_branch, AstNode *else_branch, int line);
 
 // Create while loop node
-XR_FUNC AstNode *xr_ast_while_stmt(XrCompilerSession *session, AstNode *condition, AstNode *body,
-                                   int line);
+XR_FUNC AstNode *xr_ast_while_stmt(XrCompilerSession *session, const char *label,
+                                   AstNode *condition, AstNode *body, int line);
 
 // Create for loop node
-XR_FUNC AstNode *xr_ast_for_stmt(XrCompilerSession *session, AstNode *initializer,
-                                 AstNode *condition, AstNode *increment, AstNode *body, int line);
+XR_FUNC AstNode *xr_ast_for_stmt(XrCompilerSession *session, const char *label,
+                                 AstNode *initializer, AstNode *condition, AstNode *increment,
+                                 AstNode *body, int line);
 
 // Create for-in loop node
-XR_FUNC AstNode *xr_ast_for_in_stmt(XrCompilerSession *session, const char *item_name,
-                                    XrTypeRef *item_type, AstNode *collection, AstNode *body,
-                                    int line);
+XR_FUNC AstNode *xr_ast_for_in_stmt(XrCompilerSession *session, const char *label,
+                                    const char *item_name, XrTypeRef *item_type,
+                                    AstNode *collection, AstNode *body, int line);
 
 // Create for-in key-value loop node
 XR_FUNC AstNode *xr_ast_for_in_keyvalue_stmt(XrCompilerSession *session, const char *key_name,
-                                             const char *value_name, XrTypeRef *item_type,
-                                             AstNode *collection, AstNode *body, int line);
+                                             const char *value_name, const char *label,
+                                             XrTypeRef *item_type, AstNode *collection,
+                                             AstNode *body, int line);
 
 // Create break statement node
-XR_FUNC AstNode *xr_ast_break_stmt(XrCompilerSession *session, int line);
+XR_FUNC AstNode *xr_ast_break_stmt(XrCompilerSession *session, const char *label, int line);
 
 // Create continue statement node
-XR_FUNC AstNode *xr_ast_continue_stmt(XrCompilerSession *session, int line);
+XR_FUNC AstNode *xr_ast_continue_stmt(XrCompilerSession *session, const char *label, int line);
 
 // Create parameter node
 XR_FUNC XrParamNode *xr_param_node_new(XrCompilerSession *session, const char *name, int line,
@@ -308,7 +311,8 @@ XR_FUNC AstNode *xr_ast_optional_chain(XrCompilerSession *session, AstNode *obje
                                        const char *name, AstNode *index, int chain_type, int line);
 
 // Create range expression node
-XR_FUNC AstNode *xr_ast_range(XrCompilerSession *session, AstNode *start, AstNode *end, int line);
+XR_FUNC AstNode *xr_ast_range(XrCompilerSession *session, AstNode *start, AstNode *end,
+                              bool inclusive_end, int line);
 
 // Create destructure patterns (flat only)
 XR_FUNC XrDestructurePattern *xr_pattern_array(XrCompilerSession *session,
@@ -341,7 +345,7 @@ XR_FUNC AstNode *xr_ast_pattern_literal(XrCompilerSession *session, AstNode *val
 
 // Create range pattern node
 XR_FUNC AstNode *xr_ast_pattern_range(XrCompilerSession *session, AstNode *start, AstNode *end,
-                                      int line);
+                                      bool inclusive_end, int line);
 
 // Create wildcard pattern node
 XR_FUNC AstNode *xr_ast_pattern_wildcard(XrCompilerSession *session, int line);
@@ -357,6 +361,14 @@ XR_FUNC AstNode *xr_ast_pattern_tuple(XrCompilerSession *session, AstNode **patt
 // Create ADT variant destructure pattern node: Shape.Circle(r, ...)
 XR_FUNC AstNode *xr_ast_pattern_adt(XrCompilerSession *session, AstNode *variant,
                                     AstNode **patterns, int count, int line);
+
+// Create object/record match pattern node: { x, y } / { x: sub }
+XR_FUNC AstNode *xr_ast_pattern_object(XrCompilerSession *session, char **field_names,
+                                       AstNode **patterns, int count, int line);
+
+// Create array match pattern node: [a, b, ..rest]
+XR_FUNC AstNode *xr_ast_pattern_array(XrCompilerSession *session, AstNode **patterns, int count,
+                                      bool has_rest, char *rest_name, int line);
 
 // Create type pattern node: `is T` or `is T name`
 XR_FUNC AstNode *xr_ast_pattern_type(XrCompilerSession *session, XrTypeRef *type,
@@ -395,7 +407,7 @@ XR_FUNC AstNode *xr_ast_scope_block(XrCompilerSession *session, AstNode *body, u
                                     int line);
 
 // Create yield statement node (yield execution)
-XR_FUNC AstNode *xr_ast_yield_stmt(XrCompilerSession *session, int line);
+XR_FUNC AstNode *xr_ast_yield_stmt(XrCompilerSession *session, AstNode *value, int line);
 
 // Create cancelled() expression node
 XR_FUNC AstNode *xr_ast_cancelled_expr(XrCompilerSession *session, int line);

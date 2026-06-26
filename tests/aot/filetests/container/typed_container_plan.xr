@@ -10,6 +10,10 @@ let seen: Set<uint16> = #[]
 seen.add(1)
 seen.add(2)
 
+let chars: Array<char> = []
+chars.push('A')
+chars.push('中')
+
 class ArrayBag {
     values: Array<int>
 
@@ -61,7 +65,7 @@ fn local_arrays() -> int {
     let mapped = values.map(fn(x: int) -> int { return x + 10 })
     let kept = values.filter(fn(x: int) -> bool { return x > 1 })
 
-    let bytes = new Bytes(3)
+    let bytes = Bytes(3)
     bytes[0] = 4
     bytes[1] = 5
     bytes[2] = 6
@@ -87,7 +91,7 @@ fn loop_sum(n: int) -> int {
 }
 
 fn bytes_index(n: int) -> int {
-    let bytes = new Bytes(n)
+    let bytes = Bytes(n)
     let i = 0
     while (i < bytes.length) {
         bytes[i] = i * 3 + 1
@@ -101,6 +105,14 @@ fn bytes_index(n: int) -> int {
         i = i + 1
     }
     return total
+}
+
+fn char_ord_sum() -> int {
+    let chars: Array<char> = []
+    chars.push('A')
+    chars.push('中')
+    chars[0] = 'B'
+    return int(chars[0]) + int(chars[1])
 }
 
 class Bag {
@@ -123,4 +135,4 @@ class Bag {
 }
 
 let bag = Bag()
-print(bytes[0] + values.get(1) + seen.length + bag.fill() + local_arrays() + loop_sum(4) + bytes_index(4))
+print(bytes[0] + values.get(1) + seen.length + chars.length + bag.fill() + local_arrays() + loop_sum(4) + bytes_index(4) + char_ord_sum())

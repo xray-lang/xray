@@ -606,6 +606,12 @@ TEST(e2e_range) {
     assert(p != NULL);
     assert(has_opcode(p, OP_NEWRANGE) && "range expression needs OP_NEWRANGE");
     xr_vm_proto_free(p);
+
+    p = compile_source("let r = 0..=10\nprint(r)", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_NEWRANGE_INCLUSIVE) &&
+           "inclusive range expression needs OP_NEWRANGE_INCLUSIVE");
+    xr_vm_proto_free(p);
 }
 
 /* ========== Budget Stress Tests ========== */

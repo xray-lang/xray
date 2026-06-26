@@ -21,6 +21,8 @@
 
 #include "xanalyzer_visitor_internal.h"
 #include "xtype_ref_resolve.h"
+#include "xanalyzer_mono.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../../base/xchecks.h"
 
 static bool xa_object_literal_bool_field(AstNode *node, const char *field_name, bool *out_value) {
@@ -302,6 +304,20 @@ static void xa_check_borrowed_mutator_arg_escape(XaInferContext *ctx, AstNode *c
                                &loc);
 }
 
+static bool xa_is_channel_send_boundary_method(XrType *receiver_type, const char *method_name) {
+    return receiver_type && receiver_type->kind == XR_KIND_CHANNEL && method_name &&
+           (strcmp(method_name, "send") == 0 || strcmp(method_name, "trySend") == 0 ||
+            strcmp(method_name, "sendTimeout") == 0);
+}
+
+static void xa_check_channel_send_transfer_arg(XaInferContext *ctx, AstNode *call_node,
+                                               XrType *receiver_type, const char *method_name,
+                                               AstNode *arg_node, XrType *arg_type, int slot) {
+    if (slot != 0 || !xa_is_channel_send_boundary_method(receiver_type, method_name))
+        return;
+    xa_check_boundary_transfer_arg(ctx, call_node, arg_node, arg_type, "channel send argument");
+}
+
 static XaSymbolLinks *xa_method_symbol_links_for_call(XaInferContext *ctx, XrType *receiver_type,
                                                       const char *method_name) {
     if (!ctx || !receiver_type || !method_name)
@@ -373,6 +389,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
 
     CallExprNode *call = &node->as.call_expr;
+    bool optional_function_call = call->callee && call->callee->type == AST_OPTIONAL_CHAIN &&
+                                  call->callee->as.optional_chain.chain_type == 3;
 
     // Record dependency: current function depends on called function
     XaSymbol *fn_sym = NULL;
@@ -401,29 +419,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             if (ctx->current_function && ctx->analyzer->incremental) {
                 XaIncrementalCtx *incr = (XaIncrementalCtx *) ctx->analyzer->incremental;
                 xa_dep_add(incr, ctx->current_function->id, fn_sym->id, XA_DEP_CALL);
-            }
-        }
-    }
-
-    /* Builtin heap types require 'new': Map(), Array(), Set(), Bytes(),
-     * Channel(), StringBuilder(), WeakMap(), WeakSet() without 'new' is
-     * an error — use 'new T()' instead. */
-    if (call->callee && call->callee->type == AST_VARIABLE) {
-        const char *cname = call->callee->as.variable.name;
-        if (cname) {
-            static const char *const heap_types[] = {"Map",     "Array",   "Set",
-                                                     "Bytes",   "Channel", "StringBuilder",
-                                                     "WeakMap", "WeakSet", NULL};
-            for (const char *const *p = heap_types; *p; p++) {
-                if (strcmp(cname, *p) == 0) {
-                    XrLocation loc = {
-                        .file = ctx->file_path, .line = node->line, .column = node->column};
-                    char msg[128];
-                    snprintf(msg, sizeof(msg), "Use 'new %s(...)' to construct %s", cname, cname);
-                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                               XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
-                    break;
-                }
             }
         }
     }
@@ -551,14 +546,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 }
             }
 
-            // Validate: target must be sealed Json type with known fields
-            if (!target_type || !XR_TYPE_IS_JSON(target_type) || !target_type->object.is_sealed ||
+            // Validate: target must be a sealed Record type with known fields.
+            if (!target_type || !XR_TYPE_IS_RECORD(target_type) || !target_type->object.is_sealed ||
                 target_type->object.field_count == 0) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
-                    "Json.decode<T>() requires T to be an object type (type alias with fields)",
+                    "Json.decode<T>() requires T to be a sealed Record type alias with fields",
                     &loc);
                 return xr_type_new_unknown(NULL);
             }
@@ -594,6 +589,22 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         MemberAccessNode *ma = &call->callee->as.member_access;
         method_name = ma->name;
         callee_obj_type = xa_visit_infer_expr(ctx, ma->object);
+
+        // Enforce private/protected visibility on user-class method calls.
+        if (method_name && callee_obj_type && XR_TYPE_IS_INSTANCE(callee_obj_type) &&
+            callee_obj_type->instance.class_name) {
+            XaSymbol *mc_sym =
+                xa_scope_lookup(ctx->analyzer->current_scope, callee_obj_type->instance.class_name);
+            XaSymbolLinks *mc_links = mc_sym ? xa_analyzer_get_links(ctx->analyzer, mc_sym) : NULL;
+            if (mc_links && mc_links->class_info) {
+                struct XrClassInfo *m_owner = NULL;
+                XaSymbol *m_sym = xa_class_info_lookup_instance_member_owner(mc_links->class_info,
+                                                                             method_name, &m_owner);
+                if (m_sym && m_sym->kind == XA_SYM_METHOD)
+                    xa_check_member_visibility(ctx, call->callee, m_sym, m_owner);
+            }
+        }
+
         XaSymbol *in_param = xa_in_param_symbol_for_expr(ctx, ma->object);
         if (in_param && method_name) {
             // Decide whether the call mutates the `in` receiver. For user class
@@ -611,7 +622,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
                 XaSymbol *method_sym =
                     (class_links && class_links->class_info)
-                        ? xa_class_info_lookup_member(class_links->class_info, method_name)
+                        ? xa_class_info_lookup_instance_member(class_links->class_info, method_name)
                         : NULL;
                 call_mutates_receiver =
                     method_sym && method_sym->kind == XA_SYM_METHOD && method_sym->mutates_receiver;
@@ -646,6 +657,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType *callee_type = xa_visit_infer_expr(ctx, call->callee);
+    if (optional_function_call && callee_type)
+        callee_type = xr_type_non_nullable(ctx->analyzer->isolate, callee_type);
 
     /* Resolve symbol_ids in non-lambda arguments before any early-return path.
      * Skip AST_FUNCTION_EXPR args: they require expected_type context from
@@ -693,12 +706,23 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 return xr_type_new_named_instance(ctx->analyzer->isolate, "ResultGroup");
             }
 
-            XaSymbol *sym = xa_scope_lookup(ctx->analyzer->global_scope, name);
+            // Construction `T(args)`: resolve the class in any visible scope
+            // (global, enclosing function for nested classes). new-expr used to
+            // be the only path that handled non-global classes; unify here.
+            XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
+            if (!sym || sym->kind != XA_SYM_CLASS)
+                sym = xa_scope_lookup(ctx->analyzer->global_scope, name);
             if (sym && sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links && links->class_info) {
                     return xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
                 }
+            }
+
+            // Built-in primitive class Exception (and bare construction of it):
+            // `Exception(msg)` constructs the runtime exception instance.
+            if (strcmp(name, "PanicInfo") == 0) {
+                return xr_type_new_named_instance(ctx->analyzer->isolate, "PanicInfo");
             }
         }
         // Container method with callback: infer fn expr arg types even though
@@ -728,10 +752,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     // Class constructor call: ClassName(args) returns instance type
     if (callee_type->kind == XR_KIND_CLASS) {
-        // Look up class symbol to get XrClassInfo
+        // Look up class symbol to get XrClassInfo. Try the current scope first
+        // (covers function-local / nested class declarations) then global.
         if (call->callee && call->callee->type == AST_VARIABLE) {
             const char *class_name = call->callee->as.variable.name;
-            XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
+            XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->current_scope, class_name);
+            if (!class_sym || class_sym->kind != XA_SYM_CLASS)
+                class_sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
             if (class_sym && class_sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, class_sym);
                 if (links && links->class_info) {
@@ -781,6 +808,42 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     // Infer argument types
     int param_count = callee_type->function.param_count;
     bool is_variadic = callee_type->function.is_variadic;
+
+    // Caller-side default argument filling (C1): for a direct call to a named
+    // function with default parameters, complete omitted trailing arguments by
+    // appending session-cloned copies of the declared default expressions. This
+    // makes defaults evaluated at the call site instead of via a runtime null
+    // sentinel, so passing an explicit `null` is preserved (not treated as
+    // omitted). Indirect/function-value calls carry no default expressions and
+    // therefore must pass every argument.
+    if (fn_links && fn_links->param_defaults && !is_variadic &&
+        fn_links->param_count == param_count && call->arg_count < param_count) {
+        bool can_complete = true;
+        for (int i = 0; i < call->arg_count; i++) {
+            if (call->arguments[i] && call->arguments[i]->type == AST_SPREAD_EXPR) {
+                can_complete = false;
+                break;
+            }
+        }
+        for (int i = call->arg_count; can_complete && i < param_count; i++) {
+            if (!fn_links->param_defaults[i])
+                can_complete = false;  // missing required arg → real arity error below
+        }
+        if (can_complete) {
+            XrCompilerSession *sess =
+                ctx->analyzer ? xr_compiler_session_current_for_isolate(ctx->analyzer->isolate)
+                              : NULL;
+            AstNode **new_args = (AstNode **) xr_calloc((size_t) param_count, sizeof(AstNode *));
+            if (new_args) {
+                for (int i = 0; i < call->arg_count; i++)
+                    new_args[i] = call->arguments[i];
+                for (int i = call->arg_count; i < param_count; i++)
+                    new_args[i] = xr_ast_clone_session(fn_links->param_defaults[i], sess);
+                call->arguments = new_args;
+                call->arg_count = param_count;
+            }
+        }
+    }
 
     /* Spread expansion: walk arguments once, building a flat per-slot
      * view that splices each `...tuple` arg into its individual element
@@ -837,6 +900,19 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
         snprintf(msg, sizeof(msg), "Expected %d argument(s), but got %d", param_count, arg_count);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   msg, &loc);
+    } else if (!is_variadic && arg_count < param_count && min_params < param_count && !fn_links &&
+               call->callee && call->callee->type == AST_VARIABLE) {
+        // Default arguments are filled at the call site only for direct calls
+        // to a named function (C1). A call through a function-typed *value*
+        // carries no default expressions, so every argument must be passed.
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[160];
+        snprintf(msg, sizeof(msg),
+                 "Expected %d argument(s), but got %d; default arguments apply only to direct "
+                 "calls, not calls through a function value",
+                 param_count, arg_count);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
                                    msg, &loc);
     }
@@ -901,6 +977,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     effective_arg_types[slot] = arg_type;
                 if (effective_arg_modes && slot < arg_count)
                     effective_arg_modes[slot] = xa_call_param_mode(callee_type, slot);
+                xa_check_channel_send_transfer_arg(ctx, node, callee_obj_type, method_name,
+                                                   arg_node, arg_type, slot);
                 if (slot >= param_count)
                     continue;
                 XrType *param_type = param_types ? param_types[slot] : NULL;
@@ -947,6 +1025,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         ctx->expected_type = saved_expected;
         if (effective_arg_types && slot < arg_count)
             effective_arg_types[slot] = arg_type;
+        xa_check_channel_send_transfer_arg(ctx, node, callee_obj_type, method_name, arg_node,
+                                           arg_type, slot);
         uint8_t param_mode = xa_call_param_mode(callee_type, slot);
         if (effective_arg_modes && slot < arg_count)
             effective_arg_modes[slot] = param_mode;
@@ -1164,7 +1244,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
                 if (class_links && class_links->class_info) {
                     XaSymbol *method_sym =
-                        xa_class_info_lookup_member(class_links->class_info, ma->name);
+                        xa_class_info_lookup_instance_member(class_links->class_info, ma->name);
                     if (method_sym && method_sym->kind == XA_SYM_METHOD) {
                         XaSymbolLinks *method_links =
                             xa_analyzer_get_links(ctx->analyzer, method_sym);
@@ -1199,6 +1279,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType *final_type = return_type ? return_type : xr_type_new_unknown(NULL);
+    if (optional_function_call && final_type && !XR_TYPE_IS_UNKNOWN(final_type))
+        final_type = xr_type_make_nullable(ctx->analyzer->isolate,
+                                           xr_type_copy(ctx->analyzer->isolate, final_type));
     xr_free(effective_arg_types);
     xr_free(effective_arg_symbol_ids);
     xr_free(effective_arg_names);

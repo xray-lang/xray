@@ -11,7 +11,7 @@ class Box {
 fn test_crash_min() {
 
     for (let i = 0; i < 200; i++) {
-        let b = new Box(i)
+        let b = Box(i)
     }
 }
 

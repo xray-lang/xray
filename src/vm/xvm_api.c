@@ -45,43 +45,6 @@ XrVMContext *xr_vm_current_ctx(XrVMRuntime *isolate) {
     return &isolate->vm_ctx;
 }
 
-static void bind_shared_offset_recursive(XrProto *proto, XrVMRuntime *owner, int offset) {
-    if (!proto)
-        return;
-    proto->shared_offset = offset;
-    proto->shared_slots_bound = true;
-    proto->shared_slots_owner = owner;
-    int child_count = PROTO_PROTO_COUNT(proto);
-    for (int i = 0; i < child_count; i++) {
-        XrProto *child = PROTO_PROTO(proto, i);
-        bind_shared_offset_recursive(child, owner, offset);
-    }
-}
-
-bool xr_vm_bind_proto_shared_slots(XrVMRuntime *isolate, XrProto *proto) {
-    if (!isolate || !proto || proto->shared_count <= 0)
-        return true;
-    if (proto->shared_slots_bound) {
-        if (proto->shared_slots_owner == isolate)
-            return true;
-        xr_log_warning("vm", "bytecode proto shared slots already belong to another VM");
-        return false;
-    }
-
-    XrVMState *vm = xr_isolate_get_vm_state(isolate);
-    int offset = vm->shared.count;
-    int total = offset + proto->shared_count;
-    if (total < offset) {
-        xr_log_warning("vm", "shared slot count overflow");
-        return false;
-    }
-
-    xr_shared_array_ensure(&vm->shared, total - 1);
-    vm->shared.count = total;
-    bind_shared_offset_recursive(proto, isolate, offset);
-    return true;
-}
-
 /*
 ** Ensure ctx has room for one new entry frame plus extra_stack slots.
 ** See xvm_internal.h for contract.
@@ -312,8 +275,6 @@ XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto) {
     if (proto == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }
-    if (!xr_vm_bind_proto_shared_slots(isolate, proto))
-        return XR_VM_RUNTIME_ERROR;
     XrCoroutine *main_coro = (XrCoroutine *) isolate->main_coro;
     XrClosure *closure = xr_closure_new(isolate, proto, main_coro);
     if (closure == NULL) {
@@ -358,8 +319,6 @@ XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto) {
 XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_execute_module: NULL isolate");
     XR_DCHECK(proto != NULL, "vm_execute_module: NULL proto");
-    if (!xr_vm_bind_proto_shared_slots(isolate, proto))
-        return XR_VM_RUNTIME_ERROR;
 
     // Single authoritative ctx resolver.
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
@@ -442,7 +401,7 @@ XrVMResult xr_vm_interpret(const char *source) {
 */
 void xr_vm_add_stacktrace(XrVMRuntime *isolate, XrValue exception) {
     XR_DCHECK(isolate != NULL, "vm_add_stacktrace: NULL isolate");
-    if (!xr_value_is_exception(isolate, exception)) {
+    if (!xr_value_is_panic_info(isolate, exception)) {
         return;
     }
 
@@ -476,53 +435,85 @@ void xr_vm_add_stacktrace(XrVMRuntime *isolate, XrValue exception) {
     }
 
     // Add stack frame
-    xr_exception_add_frame(isolate, exception, func_name, line);
+    xr_panic_info_add_frame(isolate, exception, func_name, line);
+}
+
+/*
+** Run VM defer entries in LIFO order down to an exact stack mark.
+**
+** Marks are value indexes in ctx->defer_stack.  The bytecode lowering emits
+** OP_DEFER_MARK at lexical block ownership points and OP_DEFER_RUN_TO on every
+** block exit edge; frame return/unwind uses the same helper with the frame's
+** entry mark.  Entries are variable-width [closure, nargs, args...], so the
+** helper scans forward to discover starts and executes the last batch in
+** reverse.  Repeating that batch keeps correctness even when a stress case has
+** more defer entries than the fixed scratch array.
+*/
+XR_FUNC void xr_vm_run_defers_to_mark(XrVMRuntime *isolate, XrVMContext *ctx, int mark) {
+    if (!ctx || !ctx->defer_stack)
+        return;
+    if (mark < 0)
+        mark = 0;
+    if (mark > ctx->defer_count)
+        mark = ctx->defer_count;
+
+    while (ctx->defer_count > mark) {
+        int entries[XR_DEFER_ENTRIES_MAX];
+        int total_entries = 0;
+        int pos = mark;
+        int end = ctx->defer_count;
+
+        while (pos < end) {
+            if (pos + 1 >= end)
+                break;
+            int nargs = (int) XR_TO_INT(ctx->defer_stack[pos + 1]);
+            if (nargs < 0 || pos + 2 + nargs > end)
+                break;
+            entries[total_entries % XR_DEFER_ENTRIES_MAX] = pos;
+            total_entries++;
+            pos += 2 + nargs;
+        }
+
+        if (total_entries == 0 || pos != end) {
+            ctx->defer_count = mark;
+            return;
+        }
+
+        int batch_count =
+            total_entries < XR_DEFER_ENTRIES_MAX ? total_entries : XR_DEFER_ENTRIES_MAX;
+        int first_total_index = total_entries - batch_count;
+        int batch_starts[XR_DEFER_ENTRIES_MAX];
+        for (int i = 0; i < batch_count; i++) {
+            batch_starts[i] = entries[(first_total_index + i) % XR_DEFER_ENTRIES_MAX];
+        }
+
+        for (int e = batch_count - 1; e >= 0; e--) {
+            int start = batch_starts[e];
+            XrValue closure_val = ctx->defer_stack[start];
+            int nargs = (int) XR_TO_INT(ctx->defer_stack[start + 1]);
+            if (nargs > XR_DEFER_ARGS_MAX)
+                nargs = XR_DEFER_ARGS_MAX;
+            XrValue defer_args[XR_DEFER_ARGS_MAX];
+            for (int j = 0; j < nargs; j++) {
+                defer_args[j] = ctx->defer_stack[start + 2 + j];
+            }
+            if (xr_value_is_closure(closure_val)) {
+                XrClosure *closure = xr_value_to_closure(closure_val);
+                xr_vm_call_closure(isolate, closure, defer_args, nargs);
+            }
+        }
+
+        ctx->defer_count = batch_starts[0];
+    }
 }
 
 /*
 ** Run defer entries belonging to one frame in LIFO order.
-**
-** Frames being unwound by an exception still have to honour their
-** registered defer closures — the spec guarantees defers execute
-** whenever their scope exits, including via throw. The normal-return
-** path in xvm_dispatch_call.inc.c runs this loop inline for the
-** topmost frame; on unwind we run it here for every frame between the
-** throw site and the catch handler.
 */
 static void run_defers_for_frame(XrVMRuntime *isolate, XrVMContext *ctx, int frame_index) {
-    if (!ctx->defer_stack || !ctx->defer_frame_marks || frame_index < 0)
+    if (!ctx->defer_frame_marks || frame_index < 0)
         return;
-    int frame_defer_start = ctx->defer_frame_marks[frame_index];
-    if (ctx->defer_count <= frame_defer_start)
-        return;
-
-    int entries[XR_DEFER_ENTRIES_MAX];
-    int entry_count = 0;
-    int pos = frame_defer_start;
-    int end = ctx->defer_count;
-    while (pos < end && entry_count < XR_DEFER_ENTRIES_MAX) {
-        entries[entry_count++] = pos;
-        int nargs = (int) XR_TO_INT(ctx->defer_stack[pos + 1]);
-        pos += 2 + nargs;
-    }
-
-    for (int e = entry_count - 1; e >= 0; e--) {
-        int start = entries[e];
-        XrValue closure_val = ctx->defer_stack[start];
-        int nargs = (int) XR_TO_INT(ctx->defer_stack[start + 1]);
-        if (nargs > XR_DEFER_ARGS_MAX)
-            nargs = XR_DEFER_ARGS_MAX;
-        XrValue defer_args[XR_DEFER_ARGS_MAX];
-        for (int j = 0; j < nargs; j++) {
-            defer_args[j] = ctx->defer_stack[start + 2 + j];
-        }
-        if (xr_value_is_closure(closure_val)) {
-            XrClosure *closure = xr_value_to_closure(closure_val);
-            xr_vm_call_closure(isolate, closure, defer_args, nargs);
-        }
-    }
-
-    ctx->defer_count = frame_defer_start;
+    xr_vm_run_defers_to_mark(isolate, ctx, ctx->defer_frame_marks[frame_index]);
 }
 
 /*
@@ -557,14 +548,16 @@ void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception) {
 
         ctx->stack_top = ctx->stack + handler->stack_size;
 
-        /* Run defers for frames above the handler (LIFO). Defers on the
-         * handler's own frame stay: they fire when that frame returns
-         * after the catch block completes. */
+        /* Run defers for frames above the handler (LIFO), then run the handler
+         * frame back to the defer count recorded at OP_TRY. That same-frame
+         * cleanup is what makes block-scoped defers inside try execute before
+         * control reaches catch. */
         for (int fi = ctx->frame_count - 1; fi >= handler->frame_count; fi--) {
             run_defers_for_frame(isolate, ctx, fi);
         }
 
         ctx->frame_count = handler->frame_count;
+        xr_vm_run_defers_to_mark(isolate, ctx, handler->defer_count_mark);
 
         if (ctx->frame_count > 0 && handler->catch_offset > 0) {
             XrBcCallFrame *frame = &ctx->frames[ctx->frame_count - 1];
@@ -585,7 +578,7 @@ void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception) {
     }
     if (!is_child_coro && !(isolate && isolate->suppress_exception_print)) {
         fprintf(stderr, "\n[Uncaught Exception]\n");
-        xr_exception_print(isolate, exception);
+        xr_panic_info_print(isolate, exception);
         fprintf(stderr, "\n");
     }
 }
@@ -598,6 +591,14 @@ bool xr_vm_is_catch_reachable(XrVMRuntime *isolate) {
         return false;
     int floor = ctx->module_base_frame > 0 ? ctx->module_base_frame : 0;
     return ctx->handlers[ctx->handler_count - 1].frame_count > floor;
+}
+
+void xr_vm_set_pending_error(XrVMRuntime *isolate, XrValue error) {
+    if (!isolate)
+        return;
+    XrVMContext *ctx = xr_vm_current_ctx(isolate);
+    if (ctx)
+        ctx->pending_error = error;
 }
 
 /* ==========  Isolate API ========== */

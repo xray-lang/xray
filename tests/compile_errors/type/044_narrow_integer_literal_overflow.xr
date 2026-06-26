@@ -1,0 +1,22 @@
+fn takes_u8(x: uint8) {
+    print(x)
+}
+
+fn returns_i16() -> int16 {
+    return 32768
+}
+
+let a: int8 = 128
+let b: int8 = -129
+let c: uint8 = 256
+let d: uint8 = -1
+let e: uint32 = 4294967296
+
+let f: uint8 = 0
+f = 256
+takes_u8(256)
+
+let xs: Array<uint8> = [0, 256]
+let pair: (uint8, uint16) = (1, 65536)
+let m: Map<uint8, uint8> = #{256: 1, 1: 256}
+let s: Set<uint8> = #[256]

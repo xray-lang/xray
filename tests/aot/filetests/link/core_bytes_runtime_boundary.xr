@@ -1,4 +1,4 @@
-let bytes = new Bytes(8, 1)
+let bytes = Bytes(8, 1)
 bytes[0] = 1
 bytes[1] = 2
 bytes[2] = 3
@@ -19,7 +19,7 @@ dst.copyFrom(bytes, 1, 2, 3)
 print(dst[2])
 print(dst[4])
 
-let move = new Bytes(6)
+let move = Bytes(6)
 move[0] = 10
 move[1] = 20
 move[2] = 30
@@ -28,7 +28,7 @@ move.copyWithin(2, 0, 4)
 print(move[2])
 print(move[5])
 
-let repeated = new Bytes(9)
+let repeated = Bytes(9)
 repeated[0] = 65
 repeated[1] = 66
 repeated[2] = 67
@@ -36,7 +36,7 @@ repeated.repeatFrom(3, 3, 6)
 print(repeated[3])
 print(repeated[8])
 
-let filled = new Bytes(5, 0)
+let filled = Bytes(5, 0)
 filled.fill(7, 1, 4)
 print(filled[0])
 print(filled[1])

@@ -67,6 +67,23 @@ vmcase(OP_DEFER) {
     vmbreak;
 }
 
+vmcase(OP_DEFER_MARK) {
+    int a = GETARG_A(i);
+    R(a) = xr_int(vm_ctx->defer_count);
+    vmbreak;
+}
+
+vmcase(OP_DEFER_RUN_TO) {
+    int a = GETARG_A(i);
+    int mark = XR_IS_INT(R(a)) ? (int) XR_TO_INT(R(a)) : 0;
+    if (vm_ctx->defer_count > mark) {
+        savepc();
+        xr_vm_run_defers_to_mark(isolate, vm_ctx, mark);
+        VM_REFRESH_FRAME_CACHE();
+    }
+    vmbreak;
+}
+
 vmcase(OP_BYTES_NEW) {
     /* R[A] = Bytes(R[A+1..A+B]) - create Array<uint8>
      * A = result register
@@ -159,7 +176,7 @@ vmcase(OP_SCOPE_ENTER) {
 
 vmcase(OP_SCOPE_EXIT) {
     /* Exit structured concurrency scope.
-     * A = scope_mode, B = result_reg (supervisor: errors[]) */
+     * A = scope_mode, B = result_reg (supervisor: Array<TaskOutcome>) */
     int scope_mode = GETARG_A(i);
     int result_reg = GETARG_B(i);
     XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
@@ -188,8 +205,8 @@ vmcase(OP_SCOPE_EXIT) {
             /* Child failed via the panic channel — re-raise as a panic so the
              * parent's `catch panic` observes it. */
             XrValue exc = err;
-            if (!xr_value_is_exception(isolate, exc)) {
-                exc = xr_exception_from_value(isolate, exc);
+            if (!xr_value_is_panic_info(isolate, exc)) {
+                exc = xr_panic_info_from_value(isolate, exc);
             }
             savepc();
             xr_vm_unwind_with_trace(isolate, exc);
@@ -224,8 +241,8 @@ vmcase(OP_SCOPE_EXIT) {
                 vmbreak;
             }
             XrValue exc = err;
-            if (!xr_value_is_exception(isolate, exc)) {
-                exc = xr_exception_from_value(isolate, exc);
+            if (!xr_value_is_panic_info(isolate, exc)) {
+                exc = xr_panic_info_from_value(isolate, exc);
             }
             savepc();
             xr_vm_unwind_with_trace(isolate, exc);
@@ -234,9 +251,10 @@ vmcase(OP_SCOPE_EXIT) {
             goto startfunc;
         }
         if (scope_mode == XR_SCOPE_SUPERVISOR) {
-            // Main thread: no coro for array alloc, use null
-            if (scope->errors && scope->errors->length > 0) {
-                base[result_reg] = xr_value_from_array(scope->errors);
+            // Main thread fallback: no child coroutine owner, but return the
+            // shared outcomes array when one was allocated.
+            if (scope->outcomes) {
+                base[result_reg] = xr_value_from_array(scope->outcomes);
             } else {
                 base[result_reg] = xr_null();
             }

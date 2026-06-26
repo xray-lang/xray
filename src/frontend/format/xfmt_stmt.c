@@ -23,6 +23,14 @@
 // Control-flow statements
 // ----------------------------------------------------------------------------
 
+static void fmt_loop_prefix(XrFmtContext *ctx, const char *label) {
+    xfmt_write_indent(ctx);
+    if (label) {
+        xfmt_write_str(ctx, label);
+        xfmt_write_str(ctx, ": ");
+    }
+}
+
 static void fmt_if_stmt(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     xfmt_write_str(ctx, "if (");
@@ -44,7 +52,7 @@ static void fmt_if_stmt(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_while_stmt(XrFmtContext *ctx, AstNode *node) {
-    xfmt_write_indent(ctx);
+    fmt_loop_prefix(ctx, node->as.while_stmt.label);
     xfmt_write_str(ctx, "while (");
     xfmt_emit_expression(ctx, node->as.while_stmt.condition);
     xfmt_write_str(ctx, ") ");
@@ -53,7 +61,7 @@ static void fmt_while_stmt(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_for_stmt(XrFmtContext *ctx, AstNode *node) {
-    xfmt_write_indent(ctx);
+    fmt_loop_prefix(ctx, node->as.for_stmt.label);
     xfmt_write_str(ctx, "for (");
 
     ForStmtNode *f = &node->as.for_stmt;
@@ -88,7 +96,7 @@ static void fmt_for_stmt(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_for_in_stmt(XrFmtContext *ctx, AstNode *node) {
-    xfmt_write_indent(ctx);
+    fmt_loop_prefix(ctx, node->as.for_in_stmt.label);
     xfmt_write_str(ctx, "for (");
 
     ForInStmtNode *f = &node->as.for_in_stmt;
@@ -336,12 +344,20 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
         case AST_BREAK_STMT:
             xfmt_write_indent(ctx);
             xfmt_write_str(ctx, "break");
+            if (node->as.break_stmt.label) {
+                xfmt_write_space(ctx);
+                xfmt_write_str(ctx, node->as.break_stmt.label);
+            }
             xfmt_write_newline(ctx);
             break;
 
         case AST_CONTINUE_STMT:
             xfmt_write_indent(ctx);
             xfmt_write_str(ctx, "continue");
+            if (node->as.continue_stmt.label) {
+                xfmt_write_space(ctx);
+                xfmt_write_str(ctx, node->as.continue_stmt.label);
+            }
             xfmt_write_newline(ctx);
             break;
 
@@ -464,6 +480,10 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
         case AST_YIELD_STMT:
             xfmt_write_indent(ctx);
             xfmt_write_str(ctx, "yield");
+            if (node->as.yield_stmt.value) {
+                xfmt_write_space(ctx);
+                xfmt_emit_expression(ctx, node->as.yield_stmt.value);
+            }
             xfmt_write_newline(ctx);
             break;
 

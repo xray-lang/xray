@@ -277,3 +277,56 @@ fn test_abs_normal() {
     let max: int = 9223372036854775807
     assert_eq(max.abs(), 9223372036854775807)
 }
+
+// ===== Explicit overflow-control methods =====
+
+@test
+fn test_checked_add_sub_mul() {
+    let max: int = 9223372036854775807
+    let min: int = -9223372036854775807 - 1
+    assert_eq(max.checkedAdd(0), max)
+    assert_eq(max.checkedAdd(1), null)
+    assert_eq(min.checkedAdd(-1), null)
+    assert_eq(40.checkedAdd(2), 42)
+
+    assert_eq(min.checkedSub(0), min)
+    assert_eq(min.checkedSub(1), null)
+    assert_eq(max.checkedSub(-1), null)
+    assert_eq(10.checkedSub(3), 7)
+
+    assert_eq(max.checkedMul(1), max)
+    assert_eq(max.checkedMul(2), null)
+    assert_eq(min.checkedMul(-1), null)
+    assert_eq(7.checkedMul(6), 42)
+}
+
+@test
+fn test_saturating_add_sub_mul() {
+    let max: int = 9223372036854775807
+    let min: int = -9223372036854775807 - 1
+    assert_eq(max.saturatingAdd(1), max)
+    assert_eq(min.saturatingAdd(-1), min)
+    assert_eq(max.saturatingSub(-1), max)
+    assert_eq(min.saturatingSub(1), min)
+    assert_eq(max.saturatingMul(2), max)
+    assert_eq(min.saturatingMul(2), min)
+    assert_eq(min.saturatingMul(-1), max)
+}
+
+@test
+fn test_wrapping_add_sub_mul() {
+    let max: int = 9223372036854775807
+    let min: int = -9223372036854775807 - 1
+    assert_eq(max.wrappingAdd(1), min)
+    assert_eq(min.wrappingAdd(-1), max)
+    assert_eq(min.wrappingSub(1), max)
+    assert_eq(max.wrappingSub(-1), min)
+    assert_eq(max.wrappingMul(2), -2)
+    assert_eq(min.wrappingMul(-1), min)
+}
+
+@test
+fn test_to_hex_min_boundary() {
+    let min: int = -9223372036854775807 - 1
+    assert_eq(min.toHex(), "-0x8000000000000000")
+}

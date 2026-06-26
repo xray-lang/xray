@@ -34,6 +34,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_FLOAT;
     if (XR_TYPE_IS_STRING(type))
         return XR_TID_STRING;
+    if (XR_TYPE_IS_CHAR(type))
+        return XR_TID_CHAR;
     if (XR_TYPE_IS_BOOL(type))
         return XR_TID_BOOL;
     if (XR_TYPE_IS_ARRAY(type))
@@ -54,8 +56,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_ENUM_VALUE;
     if (xr_type_is_named_class(type, "Regex"))
         return XR_TID_REGEX;
-    if (xr_type_is_named_class(type, "Exception"))
-        return XR_TID_EXCEPTION;
+    if (xr_type_is_named_class(type, "PanicInfo"))
+        return XR_TID_PANIC_INFO;
     if (xr_type_is_named_class(type, "Task"))
         return XR_TID_COROUTINE;
     if (xr_type_is_named_class(type, "Atomic"))
@@ -116,18 +118,23 @@ XaSymbol **xa_builtin_get_members(XrType *type, int *count) {
     return symbols;
 }
 
-// Get member signature for hover
-const char *xa_builtin_get_member_signature(XrType *type, const char *member_name) {
+static const XaBuiltinMember *xa_builtin_find_instance_member(XrType *type,
+                                                              const char *member_name) {
     const XaBuiltinType *bt = xa_builtin_get_type_info(type);
     if (!bt || !member_name)
         return NULL;
-
     for (int i = 0; i < bt->member_count; i++) {
-        if (strcmp(bt->members[i].name, member_name) == 0) {
-            return bt->members[i].signature;
-        }
+        const XaBuiltinMember *m = &bt->members[i];
+        if (!m->is_static && strcmp(m->name, member_name) == 0)
+            return m;
     }
     return NULL;
+}
+
+// Get member signature for instance access and hover
+const char *xa_builtin_get_member_signature(XrType *type, const char *member_name) {
+    const XaBuiltinMember *m = xa_builtin_find_instance_member(type, member_name);
+    return m ? m->signature : NULL;
 }
 
 // Get member documentation
@@ -147,16 +154,8 @@ const char *xa_builtin_get_member_doc(XrType *type, const char *member_name) {
 // Check if member is a method
 bool xa_builtin_is_method(XrType *type, const char *member_name) {
     XR_DCHECK(member_name != NULL, "builtin_is_method: NULL member_name");
-    const XaBuiltinType *bt = xa_builtin_get_type_info(type);
-    if (!bt || !member_name)
-        return false;
-
-    for (int i = 0; i < bt->member_count; i++) {
-        if (strcmp(bt->members[i].name, member_name) == 0) {
-            return bt->members[i].is_method;
-        }
-    }
-    return false;
+    const XaBuiltinMember *m = xa_builtin_find_instance_member(type, member_name);
+    return m ? m->is_method : false;
 }
 
 // Get method return type with generic substitution
@@ -268,6 +267,23 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
         }
     }
 
+    // char methods
+    if (XR_TYPE_IS_CHAR(container_type)) {
+        switch (sym) {
+            case SYMBOL_TOSTRING:
+                return xr_type_new_string(NULL);
+            case SYMBOL_ORD:
+                return xr_type_new_int(NULL);
+            case SYMBOL_IS_LETTER:
+            case SYMBOL_IS_NUMBER:
+            case SYMBOL_IS_ALNUM:
+            case SYMBOL_IS_WHITESPACE:
+                return xr_type_new_bool(NULL);
+            default:
+                break;
+        }
+    }
+
     // Map methods
     if (XR_TYPE_IS_MAP(container_type)) {
         XrType *key_type = container_type->map.key_type;
@@ -354,6 +370,8 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
                 XrType *args[1] = {t};
                 return xr_type_new_generic_instance(X, "Recv", NULL, args, 1);
             }
+            case SYMBOL_RECVOR:
+                return elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
             case SYMBOL_LENGTH:
             case SYMBOL_CAPACITY:
                 return xr_type_new_int(NULL);
@@ -371,7 +389,21 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
             case SYMBOL_FLOOR:
             case SYMBOL_CEIL:
             case SYMBOL_ROUND:
+            case SYMBOL_SATURATING_ADD:
+            case SYMBOL_SATURATING_SUB:
+            case SYMBOL_SATURATING_MUL:
+            case SYMBOL_WRAPPING_ADD:
+            case SYMBOL_WRAPPING_SUB:
+            case SYMBOL_WRAPPING_MUL:
                 return xr_type_new_int(NULL);
+            case SYMBOL_CHECKED_ADD:
+            case SYMBOL_CHECKED_SUB:
+            case SYMBOL_CHECKED_MUL: {
+                XrType *t = xr_type_new_int(NULL);
+                if (t)
+                    t->is_nullable = true;
+                return t;
+            }
             case SYMBOL_TOSTRING:
             case SYMBOL_TOHEX:
                 return xr_type_new_string(NULL);
@@ -397,6 +429,8 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
             case SYMBOL_TOSTRING:
             case SYMBOL_TOFIXED:
                 return xr_type_new_string(NULL);
+            case SYMBOL_ISNAN:
+                return xr_type_new_bool(NULL);
             case SYMBOL_TOINT:
             case SYMBOL_FLOOR:
             case SYMBOL_CEIL:
@@ -537,6 +571,7 @@ static const int builtin_module_count = GEN_BUILTIN_MODULE_COUNT;
 // These use special opcodes (OP_CORO_CTRL etc.), not module XRS_EXPORT.
 
 static const XaBuiltinMember g_rt_coro_functions[] = {
+    {"yield", "(): ()", "Cooperative CPU yield (Gosched)", true, true},
     {"stats", "(): Json", "Get coroutine statistics", true, true},
     {"list", "(limit?: int, state?: string): Array<Json>", "List coroutines", true, true},
     {"deadlocks", "(): Array<Json>", "Detect deadlocked coroutines", true, true},
@@ -565,16 +600,16 @@ static const XaBuiltinMember g_rt_coropool_functions[] = {
     ((int) (sizeof(g_rt_coropool_functions) / sizeof(g_rt_coropool_functions[0])))
 
 static const XaBuiltinMember g_rt_reflect_functions[] = {
-    {"getType", "(obj: Json): Json", "Get type info of object", true, true},
+    {"getType", "(obj: any): Json", "Get type info of object", true, true},
     {"getTypeByName", "(name: string): Json", "Get type info by name", true, true},
     {"getAllTypes", "(): Array<Json>", "Get all registered types", true, true},
-    {"isInstance", "(obj: Json, cls: Json): bool", "Check if obj is instance of cls", true, true},
-    {"isInstanceOf", "(obj: Json, name: string): bool", "Check by class name", true, true},
-    {"fieldCount", "(obj: Json): int", "Get field count of object", true, true},
-    {"elementType", "(obj: Json): string", "Get element type of container", true, true},
-    {"keyType", "(obj: Json): string", "Get key type of map", true, true},
-    {"valueType", "(obj: Json): string", "Get value type of map", true, true},
-    {"typeOf", "(obj: Json): string", "Get type name string", true, true},
+    {"isInstance", "(obj: any, cls: any): bool", "Check if obj is instance of cls", true, true},
+    {"isInstanceOf", "(obj: any, name: string): bool", "Check by class name", true, true},
+    {"fieldCount", "(obj: any): int", "Get field count of object", true, true},
+    {"elementType", "(obj: any): string", "Get element type of container", true, true},
+    {"keyType", "(obj: any): string", "Get key type of map", true, true},
+    {"valueType", "(obj: any): string", "Get value type of map", true, true},
+    {"typeOf", "(obj: any): string", "Get type name string", true, true},
 };
 #define RT_REFLECT_FUNCTION_COUNT                                                                  \
     ((int) (sizeof(g_rt_reflect_functions) / sizeof(g_rt_reflect_functions[0])))
@@ -853,6 +888,8 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_bool(NULL);
     } else if (base_len == 6 && strncmp(s, TYPE_NAME_STRING, 6) == 0) {
         type = xr_type_new_string(NULL);
+    } else if (base_len == 4 && strncmp(s, TYPE_NAME_CHAR, 4) == 0) {
+        type = xr_type_new_char(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_VOID, 4) == 0) {
         type = xr_type_new_unit(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_JSON, 4) == 0) {
@@ -867,6 +904,8 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_enum(X, "SendResult");
     } else if (base_len == 10 && strncmp(s, "TaskResult", 10) == 0) {
         type = xr_type_new_enum(X, "TaskResult");
+    } else if (base_len == 11 && strncmp(s, "TaskOutcome", 11) == 0) {
+        type = xr_type_new_enum(X, "TaskOutcome");
     } else if (base_len == 10 && strncmp(s, "TaskStatus", 10) == 0) {
         type = xr_type_new_enum(X, "TaskStatus");
     } else if (base_len == 5 && strncmp(s, "Regex", 5) == 0) {
@@ -1115,7 +1154,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
             type = xr_type_new_unknown(X);
     }
 
-    if (type && nullable) {
+    if (type && nullable && !xr_type_intrinsically_includes_null(type)) {
         type = xr_type_make_nullable(X, type);
     }
     return type;

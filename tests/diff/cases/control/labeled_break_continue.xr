@@ -1,0 +1,42 @@
+// anchor: labeled-break-continue
+
+let break_trace = ""
+outer_break: for (i in 0..4) {
+    for (j in 0..4) {
+        if (i == 2 && j == 1) {
+            break outer_break
+        }
+        break_trace += string(i) + string(j) + ","
+    }
+}
+print(break_trace)
+
+let continue_trace = ""
+outer_continue: for (i in 0..3) {
+    for (j in 0..4) {
+        if (j == 1) {
+            continue outer_continue
+        }
+        continue_trace += string(i) + string(j) + ","
+    }
+    continue_trace += "unreachable,"
+}
+print(continue_trace)
+
+let while_count = 0
+let i = 0
+outer_while: while (i < 5) {
+    let j = 0
+    i += 1
+    while (j < 5) {
+        j += 1
+        if (i == 3) {
+            break outer_while
+        }
+        if (j == 2) {
+            continue outer_while
+        }
+        while_count += 1
+    }
+}
+print(while_count)

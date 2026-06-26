@@ -27,14 +27,14 @@ class Circle {
 
 @test
 fn test_basic_getter() {
-    let c = new Circle(5)
+    let c = Circle(5)
     assert_eq(c.radius, 5)
     assert_eq(c.diameter, 10)
 }
 
 @test
 fn test_computed_getter() {
-    let c = new Circle(2)
+    let c = Circle(2)
     let area = c.area
     assert_eq(area > 12, true)
     assert_eq(area < 13, true)
@@ -62,7 +62,7 @@ class Temperature {
 
 @test
 fn test_basic_setter() {
-    let t = new Temperature(0)
+    let t = Temperature(0)
     assert_eq(t.celsius, 0)
     
     t.celsius = 100
@@ -71,7 +71,7 @@ fn test_basic_setter() {
 
 @test
 fn test_computed_setter() {
-    let t = new Temperature(0)
+    let t = Temperature(0)
     t.fahrenheit = 212
     assert_eq(t.celsius, 100)
 }
@@ -97,7 +97,7 @@ class Age {
 
 @test
 fn test_validating_setter() {
-    let age = new Age()
+    let age = Age()
     age.value = 25
     assert_eq(age.value, 25)
     
@@ -121,7 +121,7 @@ class ReadOnly {
 
 @test
 fn test_readonly_property() {
-    let r = new ReadOnly("password")
+    let r = ReadOnly("password")
     assert_eq(r.secret, "password")
 }
 
@@ -144,7 +144,7 @@ class Box {
 
 @test
 fn test_multiple_getters() {
-    let box = new Box(3, 4)
+    let box = Box(3, 4)
     assert_eq(box.width, 3)
     assert_eq(box.height, 4)
     assert_eq(box.area, 12)

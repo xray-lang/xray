@@ -19,7 +19,7 @@
 #include "../parser/xast.h"
 
 // Forward declaration: the formatter only stores an XrVMRuntime pointer
-// in XrFmtContext (used by xtype printing). Pulling in xray_vm.h
+// in XrFmtContext (used by xtype printing). Pulling in xray_isolate.h
 // here would couple the frontend to the public API header.
 typedef struct XrVMRuntime XrVMRuntime;
 
@@ -52,15 +52,14 @@ extern XrFmtConfig xfmt_default_config;
 
 // Format context
 typedef struct XrFmtContext {
-    char *output;          // Output buffer
-    size_t capacity;       // Buffer capacity
-    size_t length;         // Current length
-    int indent_level;      // Current indent level
-    int line_start;        // At line start flag
-    int column;            // Current column (for line length tracking)
-    int in_template_expr;  // Inside ${...} interpolation — use single quotes
-    XrFmtConfig *config;   // Configuration
-    XrVMRuntime *X;        // Isolate for type printing
+    char *output;         // Output buffer
+    size_t capacity;      // Buffer capacity
+    size_t length;        // Current length
+    int indent_level;     // Current indent level
+    int line_start;       // At line start flag
+    int column;           // Current column (for line length tracking)
+    XrFmtConfig *config;  // Configuration
+    XrVMRuntime *X;       // Isolate for type printing
 } XrFmtContext;
 
 // Initialize formatter context

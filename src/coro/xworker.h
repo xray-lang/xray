@@ -335,9 +335,8 @@ typedef struct XrRuntime {
     XrNetpoll netpoll;
     xr_thread_t sysmon_thread;  // Sysmon: heartbeat monitoring + stuck detection
     /* Watchdog: a coroutine whose heartbeat is frozen this many microseconds
-     * while RUNNING is force-cancelled by sysmon (safety net for code that
-     * never reaches a safepoint). Default XR_SYSMON_CANCEL_US; overridable via
-     * XRAY_SYSMON_CANCEL_MS. <= 0 disables forced cancel (warn-only). */
+     * while RUNNING is force-cancelled by sysmon. Default 0 keeps sysmon
+     * warn-only; XRAY_SYSMON_CANCEL_MS>0 opts into forced cancellation. */
     int64_t sysmon_cancel_us;
     struct XrAsyncPool *async_pool;
     struct XrIoRuntime *io;  // DNS cache + future handle registry / deadline policy
@@ -564,6 +563,15 @@ static inline int xr_worker_total_queue_len(XrWorker *worker) {
 }
 
 XR_FUNC XrWorker *xr_current_worker(void);
+
+static inline void xr_worker_bump_heartbeat(XrWorker *worker) {
+    if (!worker || !worker->m)
+        return;
+    XrMachine *m = worker->m;
+    atomic_store_explicit(&m->heartbeat,
+                          atomic_load_explicit(&m->heartbeat, memory_order_relaxed) + 1,
+                          memory_order_relaxed);
+}
 
 // Enqueue coro to target worker's inbox with full synchronization.
 // Handles: MPSC push + Dekker fence + wake if parked.

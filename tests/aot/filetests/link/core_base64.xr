@@ -7,7 +7,7 @@ print(base64.decodeUrl("QUI"))
 print(base64.decode("A"))
 print(base64.isValid("SGVsbG8="))
 
-let bytes = new Bytes(3)
+let bytes = Bytes(3)
 bytes[0] = 72
 bytes[1] = 101
 bytes[2] = 108

@@ -7,7 +7,7 @@ import xml
 @test
 fn test_entity_decode_named() {
     let data = "<root>&lt;hello&gt; &amp; &quot;world&quot; &apos;!</root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let text = doc["children"][0]["text"]
     assert_eq(text, "<hello> & \"world\" '!")
 }
@@ -15,7 +15,7 @@ fn test_entity_decode_named() {
 @test
 fn test_entity_decode_numeric_decimal() {
     let data = "<root>&#65;&#66;&#67;</root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let text = doc["children"][0]["text"]
     assert_eq(text, "ABC")
 }
@@ -23,7 +23,7 @@ fn test_entity_decode_numeric_decimal() {
 @test
 fn test_entity_decode_numeric_hex() {
     let data = "<root>&#x41;&#x42;&#x43;</root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let text = doc["children"][0]["text"]
     assert_eq(text, "ABC")
 }
@@ -32,7 +32,7 @@ fn test_entity_decode_numeric_hex() {
 fn test_entity_decode_unicode() {
     // &#x4e2d; = 中, &#x6587; = 文
     let data = "<root>&#x4e2d;&#x6587;</root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let text = doc["children"][0]["text"]
     assert_eq(text, "中文")
 }
@@ -42,7 +42,7 @@ fn test_entity_decode_unicode() {
 @test
 fn test_attr_entity_decode() {
     let data = "<a href=\"a&amp;b\"/>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     assert_eq(doc["attrs"]["href"], "a&b")
 }
 
@@ -51,7 +51,7 @@ fn test_attr_entity_decode() {
 @test
 fn test_cdata_preserve() {
     let data = "<root><![CDATA[<not-xml>&]]></root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let child = doc["children"][0]
     assert_eq(child["type"], "cdata")
     assert_eq(child["text"], "<not-xml>&")
@@ -60,7 +60,7 @@ fn test_cdata_preserve() {
 @test
 fn test_cdata_as_text() {
     let data = "<root><![CDATA[content]]></root>"
-    let doc = xml.parse(data, { preserveCData: false }) ?? {}
+    let doc: Json = xml.parse(data, { preserveCData: false }) ?? {}
     let child = doc["children"][0]
     assert_eq(child["type"], "text")
     assert_eq(child["text"], "content")
@@ -71,7 +71,7 @@ fn test_cdata_as_text() {
 @test
 fn test_self_closing_with_attrs() {
     let data = "<root><img src=\"a.png\" alt=\"pic\"/></root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let img = doc["children"][0]
     assert_eq(img["tag"], "img")
     assert_eq(img["attrs"]["src"], "a.png")
@@ -84,7 +84,7 @@ fn test_self_closing_with_attrs() {
 @test
 fn test_skip_processing_instruction() {
     let data = "<?xml version=\"1.0\"?><root>OK</root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     assert_eq(doc["tag"], "root")
 }
 
@@ -135,7 +135,7 @@ fn test_create_document() {
 @test
 fn test_stringify_roundtrip() {
     let data = "<root><item id=\"1\">Hello</item><item id=\"2\">World</item></root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let str = xml.stringify(doc, { indent: 0, declaration: false })
     let doc2 = xml.parse(str)
     assert_eq(doc2["tag"], "root")
@@ -158,7 +158,7 @@ fn test_parse_detailed_valid() {
 @test
 fn test_whitespace_stripped_by_default() {
     let data = "<root>  \n  <item/>\n  </root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     assert_eq(doc["children"].length, 1)
     assert_eq(doc["children"][0]["tag"], "item")
 }
@@ -166,7 +166,7 @@ fn test_whitespace_stripped_by_default() {
 @test
 fn test_whitespace_preserved() {
     let data = "<root> text </root>"
-    let doc = xml.parse(data, { preserveWhitespace: true }) ?? {}
+    let doc: Json = xml.parse(data, { preserveWhitespace: true }) ?? {}
     // Should preserve whitespace-only text nodes
     assert_eq(doc["children"].length, 1)
 }
@@ -176,14 +176,14 @@ fn test_whitespace_preserved() {
 @test
 fn test_skip_doctype() {
     let data = "<!DOCTYPE html><root>OK</root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     assert_eq(doc["tag"], "root")
 }
 
 @test
 fn test_skip_doctype_with_internal_subset() {
     let data = "<!DOCTYPE root [ <!ELEMENT root (#PCDATA)> ]><root>OK</root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     assert_eq(doc["tag"], "root")
     let text = doc["children"][0]["text"]
     assert_eq(text, "OK")
@@ -196,7 +196,7 @@ fn test_stringify_escapes_text() {
     let elem = xml.element("p")
     // Manually build a node with special chars
     let data = "<p>&lt;script&gt;</p>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let str = xml.stringify(doc, { indent: 0, declaration: false })
     assert_eq(str, "<p>&lt;script&gt;</p>")
 }
@@ -206,7 +206,7 @@ fn test_stringify_escapes_text() {
 @test
 fn test_mixed_content() {
     let data = "<root>Hello<b>World</b>!</root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     assert_eq(doc["children"].length, 3)
     assert_eq(doc["children"][0]["type"], "text")
     assert_eq(doc["children"][0]["text"], "Hello")

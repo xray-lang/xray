@@ -7,10 +7,10 @@ export class Shape {
         this.side = s
     }
     static unit() -> Shape {
-        return new Shape(1)
+        return Shape(1)
     }
     static square(n: int) -> Shape {
-        return new Shape(n)
+        return Shape(n)
     }
     area() -> int {
         return this.side * this.side

@@ -70,6 +70,136 @@ static AstNode *parse_tuple_pattern(Parser *parser) {
     return xr_ast_pattern_tuple(parser->compiler_session, patterns, count, line);
 }
 
+/* Copy the identifier text of `tok` into an AST-arena string. */
+static char *pattern_copy_token(Parser *parser, const Token *tok) {
+    char *buf = (char *) ast_alloc(parser->compiler_session, (size_t) tok->length + 1);
+    if (!buf)
+        return NULL;
+    memcpy(buf, tok->start, (size_t) tok->length);
+    buf[tok->length] = '\0';
+    return buf;
+}
+
+/* Parse an object/record match pattern: `{ x, y }` or `{ x: sub }`.
+ * Shorthand `{ x }` binds field `x` to a local `x`; `{ x: sub }` matches the
+ * field value against the sub-pattern (rename, literal, nested destructure). */
+static AstNode *parse_object_pattern(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_object_pattern: NULL parser");
+    int line = parser->current.line;
+    xr_parser_consume(parser, TK_LBRACE, "expected '{' to start object pattern");
+
+    char **field_names = NULL;
+    AstNode **patterns = NULL;
+    int count = 0;
+    int capacity = 0;
+
+    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+        if (!xr_parser_check(parser, TK_NAME)) {
+            xr_parser_error(parser, "expected field name in object pattern");
+            return NULL;
+        }
+        Token name_tok = parser->current;
+        xr_parser_advance(parser);
+        char *field = pattern_copy_token(parser, &name_tok);
+
+        AstNode *sub;
+        if (xr_parser_match(parser, TK_COLON)) {
+            sub = parse_pattern_single(parser);
+            if (!sub)
+                return NULL;
+        } else {
+            /* Shorthand `{ x }`: bind field `x` to a fresh local `x`. */
+            AstNode *var = xr_ast_variable(parser->compiler_session, field, name_tok.line);
+            sub = xr_ast_pattern_literal(parser->compiler_session, var, name_tok.line);
+        }
+
+        if (count >= capacity) {
+            int old_capacity = capacity;
+            capacity = (capacity == 0) ? 4 : capacity * 2;
+            char **nf = (char **) ast_alloc_array(parser->compiler_session, sizeof(char *),
+                                                  (size_t) capacity);
+            AstNode **np = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+                                                        (size_t) capacity);
+            if (old_capacity > 0) {
+                memcpy(nf, field_names, sizeof(char *) * (size_t) old_capacity);
+                memcpy(np, patterns, sizeof(AstNode *) * (size_t) old_capacity);
+            }
+            field_names = nf;
+            patterns = np;
+        }
+        field_names[count] = field;
+        patterns[count] = sub;
+        count++;
+
+        if (!xr_parser_check(parser, TK_RBRACE)) {
+            if (!xr_parser_match(parser, TK_COMMA)) {
+                xr_parser_error(parser, "expected ',' or '}' in object pattern");
+                return NULL;
+            }
+        }
+    }
+
+    xr_parser_consume(parser, TK_RBRACE, "expected '}' to close object pattern");
+    return xr_ast_pattern_object(parser->compiler_session, field_names, patterns, count, line);
+}
+
+/* Parse an array match pattern: `[a, b, ..rest]`. Positional elements use
+ * ordinary sub-patterns; an optional trailing `..rest` (or bare `..`) binds the
+ * remaining elements as a new array. The rest element must be last. */
+static AstNode *parse_array_pattern(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_array_pattern: NULL parser");
+    int line = parser->current.line;
+    xr_parser_consume(parser, TK_LBRACKET, "expected '[' to start array pattern");
+
+    AstNode **patterns = NULL;
+    int count = 0;
+    int capacity = 0;
+    bool has_rest = false;
+    char *rest_name = NULL;
+
+    while (!xr_parser_check(parser, TK_RBRACKET) && !xr_parser_check(parser, TK_EOF)) {
+        if (xr_parser_check(parser, TK_RANGE)) {
+            xr_parser_advance(parser);  // consume '..'
+            if (xr_parser_check(parser, TK_NAME)) {
+                Token rt = parser->current;
+                xr_parser_advance(parser);
+                rest_name = pattern_copy_token(parser, &rt);
+            }
+            has_rest = true;
+            break;
+        }
+
+        AstNode *sub = parse_pattern_single(parser);
+        if (!sub)
+            return NULL;
+
+        if (count >= capacity) {
+            int old_capacity = capacity;
+            capacity = (capacity == 0) ? 4 : capacity * 2;
+            AstNode **np = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+                                                        (size_t) capacity);
+            if (old_capacity > 0)
+                memcpy(np, patterns, sizeof(AstNode *) * (size_t) old_capacity);
+            patterns = np;
+        }
+        patterns[count++] = sub;
+
+        if (!xr_parser_check(parser, TK_RBRACKET)) {
+            if (!xr_parser_match(parser, TK_COMMA)) {
+                xr_parser_error(parser, "expected ',' or ']' in array pattern");
+                return NULL;
+            }
+        }
+    }
+
+    if (has_rest && xr_parser_check(parser, TK_COMMA))
+        xr_parser_advance(parser);
+
+    xr_parser_consume(parser, TK_RBRACKET, "expected ']' to close array pattern");
+    return xr_ast_pattern_array(parser->compiler_session, patterns, count, has_rest, rest_name,
+                                line);
+}
+
 static AstNode *expr_to_adt_pattern(Parser *parser, AstNode *expr) {
     if (!parser || !expr || expr->type != AST_CALL_EXPR)
         return NULL;
@@ -135,6 +265,14 @@ static AstNode *parse_pattern_single(Parser *parser) {
         return parse_tuple_pattern(parser);
     }
 
+    if (xr_parser_check(parser, TK_LBRACE)) {
+        return parse_object_pattern(parser);
+    }
+
+    if (xr_parser_check(parser, TK_LBRACKET)) {
+        return parse_array_pattern(parser);
+    }
+
     /* Type pattern: `is T` or `is T name`.
      * Must be detected before generic expression parsing so the `is`
      * keyword is interpreted as a pattern prefix rather than an
@@ -165,13 +303,15 @@ static AstNode *parse_pattern_single(Parser *parser) {
         return NULL;
     }
 
-    if (xr_parser_match(parser, TK_RANGE)) {
+    if (xr_parser_check(parser, TK_RANGE) || xr_parser_check(parser, TK_RANGE_INCLUSIVE)) {
+        bool inclusive_end = parser->current.type == TK_RANGE_INCLUSIVE;
+        xr_parser_advance(parser);
         AstNode *end = xr_parse_precedence(parser, PREC_CALL);
         if (!end) {
             xr_parser_error(parser, "expected range end value");
             return NULL;
         }
-        return xr_ast_pattern_range(parser->compiler_session, first, end, line);
+        return xr_ast_pattern_range(parser->compiler_session, first, end, inclusive_end, line);
     }
 
     /* ADT variant destructure: Shape.Circle(r, ...)

@@ -17,7 +17,8 @@
  *     DELETED; dead entries are reclaimed when the table is resized/compacted.
  *   - Empty map allocates nothing (entries/indices NULL, DUMMY flag set); the
  *     first insertion allocates both arrays.
- *   - Short strings are force-interned, so string keys compare by pointer.
+ *   - String constants use an inline pointer fast path; dynamic string keys are
+ *     canonicalized on insertion and probed by cached hash + content equality.
  */
 
 #ifndef XMAP_H

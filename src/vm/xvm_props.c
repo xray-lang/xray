@@ -42,7 +42,7 @@
 #include "../coro/xdeep_copy.h"
 #include "../coro/xresult_group.h"
 #include "../coro/xwork_queue.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/class/xenum.h"
 #include "../base/xglobal_indices.h"
 
@@ -357,8 +357,8 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         } else if (prop_symbol == SYMBOL_ERROR) {
             if (tstate == XR_TASK_FAILED && !XR_IS_NULL(task->error)) {
                 XrValue err = task->error;
-                if (xr_value_is_exception(isolate, err)) {
-                    const char *m = xr_exception_get_message(isolate, err);
+                if (xr_value_is_panic_info(isolate, err)) {
+                    const char *m = xr_panic_info_get_message(isolate, err);
                     if (m) {
                         XrString *s = xr_string_intern(isolate, m, strlen(m), 0);
                         base[a] = xr_string_value(s);
@@ -880,7 +880,8 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
                  "Channel has no '.%s' property, available methods: send(), recv(), "
-                 "trySend(), tryRecv(), close(), isClosed()",
+                 "recvOr(), trySend(), tryRecv(), sendTimeout(), recvTimeout(), close(), "
+                 "isClosed()",
                  name ? name : "?");
     }
 

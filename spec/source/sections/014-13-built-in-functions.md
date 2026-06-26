@@ -23,11 +23,12 @@ order: 014
 
 | 函数 | 签名 | 说明 |
 |--|--|--|
-| `int(x)` | `(value) -> int` | 转为 int；字符串解析失败抛异常 |
+| `int(x)` | `(value) -> int` | 转为 int；`char` 转为 Unicode scalar code point；字符串解析失败抛异常 |
 | `float(x)` | `(value) -> float` | 转为 float |
-| `string(x)` | `(value) -> string` | 转为字符串 |
-| `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.4.1 |
-| `chr(n)` | `(int) -> string` | Unicode 码点转单字符字符串 |
+| `string(x)` | `(value) -> string` | 转为字符串；`char` 转为单 scalar 字符串 |
+| `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
+| `char(n)` | `(int) -> char` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
+| `chr(n)` | `(int) -> string` | Unicode 码点转单 scalar 字符串 |
 | `copy(x)` | `(T) -> T` | 深拷贝，保留运行时类型 |
 
 ### 13.3 类型检查
@@ -74,7 +75,7 @@ print(typeof(x) == "int")       // true
 | `Set.from(iterable)` | 从 string / Array / Set 创建 Set |
 | `Set.range(start, end)` | 创建闭区间整数 Set |
 
-BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / `Json.stringify`；DateTime 使用 `datetime` 模块工厂函数。
+BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / `Json.encode` / `Json.stringify`；DateTime 使用 `datetime` 模块工厂函数。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -97,11 +98,12 @@ These global functions and built-in constructor/static functions are usable with
 
 | Function | Signature | Description |
 |--|--|--|
-| `int(x)` | `(value) -> int` | convert to int; throws if string parsing fails |
+| `int(x)` | `(value) -> int` | convert to int; `char` converts to its Unicode scalar code point; throws if string parsing fails |
 | `float(x)` | `(value) -> float` | convert to float |
-| `string(x)` | `(value) -> string` | convert to string |
-| `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.4.1 |
-| `chr(n)` | `(int) -> string` | Unicode code point → single-character string |
+| `string(x)` | `(value) -> string` | convert to string; `char` converts to a one-scalar string |
+| `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
+| `char(n)` | `(int) -> char` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
+| `chr(n)` | `(int) -> string` | Unicode code point → one-scalar string |
 | `copy(x)` | `(T) -> T` | deep copy, preserving runtime type |
 
 ### 13.3 Type Checking
@@ -148,5 +150,5 @@ Coroutine launch and waiting are syntax, not global functions: `go`, `await`, `a
 | `Set.from(iterable)` | Set from a string / Array / Set |
 | `Set.range(start, end)` | inclusive integer Set |
 
-BigInt uses the `123n` literal or `int.toBigInt()`; Json uses `Json.parse` / `Json.stringify`; DateTime uses factory functions in the `datetime` module.
+BigInt uses the `123n` literal or `int.toBigInt()`; Json uses `Json.parse` / `Json.encode` / `Json.stringify`; DateTime uses factory functions in the `datetime` module.
 <!-- /xr-spec:en -->

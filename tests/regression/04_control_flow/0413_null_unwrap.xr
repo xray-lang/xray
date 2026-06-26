@@ -1,4 +1,4 @@
-// Null force unwrap (!) throws Exception with code 413
+// Null force unwrap (!) throws PanicInfo with code 413
 
 @test
 fn test_null_unwrap_throws_413() {

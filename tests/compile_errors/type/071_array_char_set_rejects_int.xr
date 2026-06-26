@@ -1,0 +1,2 @@
+let chars: Array<char> = ['a']
+chars[0] = 65

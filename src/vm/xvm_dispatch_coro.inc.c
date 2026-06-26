@@ -27,6 +27,14 @@ vmcase(OP_GO) {
     VM_DISPATCH(_sc_cr);
 }
 
+vmcase(OP_GEN_START) {
+    TRACE_EXECUTION();
+    ci->pc = pc;
+    XrDispatchAction _gs_cr = vm_gen_start(isolate, vm_ctx, i, base, ci);
+    pc = ci->pc;
+    VM_DISPATCH(_gs_cr);
+}
+
 vmcase(OP_AWAIT) {
     TRACE_EXECUTION();
     /* Inline fast path: task completed with immediate value.
@@ -131,6 +139,20 @@ vmcase(OP_YIELD) {
             frame->pc = pc;
             return XR_VM_YIELD;
         }
+    }
+    vmbreak;
+}
+
+vmcase(OP_GEN_YIELD) {
+    /* generator `yield expr`: hand R[A] to the driving iterator and suspend.
+     * Generator coroutines are pull-driven synchronously (never scheduled), so
+     * the value lives in coro->result until xr_vm_gen_drive reads it. */
+    XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
+    if (current != NULL) {
+        int a = GETARG_A(i);
+        current->result = R(a);
+        frame->pc = pc;
+        return XR_VM_YIELD;
     }
     vmbreak;
 }

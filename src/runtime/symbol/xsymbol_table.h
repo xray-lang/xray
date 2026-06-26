@@ -270,7 +270,22 @@ enum {
     // Collection property aliases
     SYMBOL_SIZE,
 
-    // DateTime method kept append-only to avoid renumbering existing symbols
+    // Float predicates
+    SYMBOL_ISNAN,
+
+    // Int overflow-control methods
+    SYMBOL_CHECKED_ADD,
+    SYMBOL_CHECKED_SUB,
+    SYMBOL_CHECKED_MUL,
+    SYMBOL_SATURATING_ADD,
+    SYMBOL_SATURATING_SUB,
+    SYMBOL_SATURATING_MUL,
+    SYMBOL_WRAPPING_ADD,
+    SYMBOL_WRAPPING_SUB,
+    SYMBOL_WRAPPING_MUL,
+
+    // Newly added builtins append here to keep existing symbol ids stable.
+    SYMBOL_RECVOR,
     SYMBOL_DIFF,
 
     SYMBOL_BUILTIN_COUNT  // sentinel

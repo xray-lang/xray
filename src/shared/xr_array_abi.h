@@ -11,8 +11,7 @@
  * header pulls <stdint.h>). It keeps the array field set identical across the
  * VM runtime and the standalone AOT runtime without forcing either side to
  * include the other's headers. Each side wraps these fields with its own
- * object header (VM: XrObjHeader; AOT: none) plus side-specific extras
- * (VM: data_on_region_heap; AOT: adt_*).
+ * object header plus side-specific extras (VM: data_on_region_heap).
  */
 
 #ifndef XR_ARRAY_ABI_H
@@ -36,15 +35,17 @@
  *                        (VM heap slice; released on drop).
  *   source == NULL  <=>  no ownership (stack/arena borrow; AOT slices). */
 #define XR_ARRAY_ABI_FIELDS                                                                        \
-    void *data;           /* element storage; layout depends on elem_type */                       \
-    int64_t length;       /* live element count */                                                 \
-    int64_t capacity;     /* allocated element capacity (pure capacity, never a slice flag) */     \
-    void *source;         /* optional owned backing for slices (see above) */                      \
-    uint8_t data_storage; /* XR_ARRAY_DATA_*; BORROWED == slice view (cannot grow) */              \
-    uint8_t elem_type;    /* XrArrayElemType storage layout (XR_ELEM_*) */                         \
-    uint8_t elem_size;    /* cached bytes per element */                                           \
-    uint8_t elem_tid;     /* XrTypeId for reified generics (0 = any) */                            \
-    uint8_t contains_refs /* monotonic: 1 once any object reference was stored */
+    void *data;            /* element storage; layout depends on elem_type */                      \
+    int64_t length;        /* live element count */                                                \
+    int64_t capacity;      /* allocated element capacity (pure capacity, never a slice flag) */    \
+    void *source;          /* optional owned backing for slices (see above) */                     \
+    uint8_t data_storage;  /* XR_ARRAY_DATA_*; BORROWED == slice view (cannot grow) */             \
+    uint8_t elem_type;     /* XrArrayElemType storage layout (XR_ELEM_*) */                        \
+    uint8_t elem_size;     /* cached bytes per element */                                          \
+    uint8_t elem_tid;      /* XrTypeId for reified generics (0 = any) */                           \
+    uint8_t contains_refs; /* monotonic: 1 once any object reference was stored */                 \
+    const char *adt_enum_name;  /* AOT ADT enum lowering metadata, NULL for ordinary arrays */     \
+    const char *adt_member_name /* AOT ADT enum lowering metadata, NULL for ordinary arrays */
 
 typedef struct XrArrayCore {
     XR_ARRAY_ABI_FIELDS;

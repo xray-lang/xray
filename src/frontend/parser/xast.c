@@ -19,6 +19,7 @@
 #include "xast.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xarena.h"
+#include "../../base/xutf8.h"
 #include "../../runtime/value/xtype.h"
 #include "xstring_pool.h"
 #include "../../toolchain/xcompiler_session.h"
@@ -110,6 +111,14 @@ AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, in
 
     node->as.literal.raw_value.string_val = ast_strdup(session, value);
 
+    return node;
+}
+
+// Create char literal node
+AstNode *xr_ast_literal_char(XrCompilerSession *session, uint32_t value, int line) {
+    AstNode *node = alloc_node(session, AST_LITERAL_CHAR, line);
+    node->as.literal.kind = LITERAL_KIND_CHAR;
+    node->as.literal.raw_value.char_val = value;
     return node;
 }
 
@@ -402,9 +411,10 @@ AstNode *xr_ast_if_stmt(XrCompilerSession *session, AstNode *condition, AstNode 
 // Create while loop node
 // condition: loop condition
 // body: loop body (must be block)
-AstNode *xr_ast_while_stmt(XrCompilerSession *session, AstNode *condition, AstNode *body,
-                           int line) {
+AstNode *xr_ast_while_stmt(XrCompilerSession *session, const char *label, AstNode *condition,
+                           AstNode *body, int line) {
     AstNode *node = alloc_node(session, AST_WHILE_STMT, line);
+    node->as.while_stmt.label = label ? ast_strdup(session, label) : NULL;
     node->as.while_stmt.condition = condition;
     node->as.while_stmt.body = body;
     return node;
@@ -415,9 +425,10 @@ AstNode *xr_ast_while_stmt(XrCompilerSession *session, AstNode *condition, AstNo
 // condition: condition (optional)
 // increment: update (optional)
 // body: loop body (must be block)
-AstNode *xr_ast_for_stmt(XrCompilerSession *session, AstNode *initializer, AstNode *condition,
-                         AstNode *increment, AstNode *body, int line) {
+AstNode *xr_ast_for_stmt(XrCompilerSession *session, const char *label, AstNode *initializer,
+                         AstNode *condition, AstNode *increment, AstNode *body, int line) {
     AstNode *node = alloc_node(session, AST_FOR_STMT, line);
+    node->as.for_stmt.label = label ? ast_strdup(session, label) : NULL;
     node->as.for_stmt.initializer = initializer;
     node->as.for_stmt.condition = condition;
     node->as.for_stmt.increment = increment;
@@ -430,10 +441,11 @@ AstNode *xr_ast_for_stmt(XrCompilerSession *session, AstNode *initializer, AstNo
 // item_type: optional type annotation (NULL for type inference)
 // collection: collection expression to iterate
 // body: loop body (must be block)
-AstNode *xr_ast_for_in_stmt(XrCompilerSession *session, const char *item_name, XrTypeRef *item_type,
-                            AstNode *collection, AstNode *body, int line) {
+AstNode *xr_ast_for_in_stmt(XrCompilerSession *session, const char *label, const char *item_name,
+                            XrTypeRef *item_type, AstNode *collection, AstNode *body, int line) {
     AstNode *node = alloc_node(session, AST_FOR_IN_STMT, line);
 
+    node->as.for_in_stmt.label = label ? ast_strdup(session, label) : NULL;
     node->as.for_in_stmt.item_name = ast_strdup(session, item_name);
     node->as.for_in_stmt.value_name = NULL;  // Single variable mode
     node->as.for_in_stmt.is_keyvalue = false;
@@ -446,10 +458,12 @@ AstNode *xr_ast_for_in_stmt(XrCompilerSession *session, const char *item_name, X
 // Create for-in key-value loop node
 // for (key, value in map) { body }
 AstNode *xr_ast_for_in_keyvalue_stmt(XrCompilerSession *session, const char *key_name,
-                                     const char *value_name, XrTypeRef *item_type,
-                                     AstNode *collection, AstNode *body, int line) {
+                                     const char *value_name, const char *label,
+                                     XrTypeRef *item_type, AstNode *collection, AstNode *body,
+                                     int line) {
     AstNode *node = alloc_node(session, AST_FOR_IN_STMT, line);
 
+    node->as.for_in_stmt.label = label ? ast_strdup(session, label) : NULL;
     node->as.for_in_stmt.item_name = ast_strdup(session, key_name);
     node->as.for_in_stmt.value_name = ast_strdup(session, value_name);
     node->as.for_in_stmt.is_keyvalue = true;  // Key-value pair mode
@@ -460,16 +474,16 @@ AstNode *xr_ast_for_in_keyvalue_stmt(XrCompilerSession *session, const char *key
 }
 
 // Create break statement node
-AstNode *xr_ast_break_stmt(XrCompilerSession *session, int line) {
+AstNode *xr_ast_break_stmt(XrCompilerSession *session, const char *label, int line) {
     AstNode *node = alloc_node(session, AST_BREAK_STMT, line);
-    node->as.break_stmt.placeholder = 0;
+    node->as.break_stmt.label = label ? ast_strdup(session, label) : NULL;
     return node;
 }
 
 // Create continue statement node
-AstNode *xr_ast_continue_stmt(XrCompilerSession *session, int line) {
+AstNode *xr_ast_continue_stmt(XrCompilerSession *session, const char *label, int line) {
     AstNode *node = alloc_node(session, AST_CONTINUE_STMT, line);
-    node->as.continue_stmt.placeholder = 0;
+    node->as.continue_stmt.label = label ? ast_strdup(session, label) : NULL;
     return node;
 }
 
@@ -858,10 +872,12 @@ AstNode *xr_ast_optional_chain(XrCompilerSession *session, AstNode *object, cons
 // Create range expression node
 // start: start value expression
 // end: end value expression
-AstNode *xr_ast_range(XrCompilerSession *session, AstNode *start, AstNode *end, int line) {
+AstNode *xr_ast_range(XrCompilerSession *session, AstNode *start, AstNode *end, bool inclusive_end,
+                      int line) {
     AstNode *node = alloc_node(session, AST_RANGE, line);
     node->as.range.start = start;
     node->as.range.end = end;
+    node->as.range.inclusive_end = inclusive_end;
     return node;
 }
 
@@ -1221,11 +1237,13 @@ AstNode *xr_ast_pattern_literal(XrCompilerSession *session, AstNode *value, int 
 }
 
 // Create range pattern node
-// 1..10
-AstNode *xr_ast_pattern_range(XrCompilerSession *session, AstNode *start, AstNode *end, int line) {
+// 1..10 / 1..=10
+AstNode *xr_ast_pattern_range(XrCompilerSession *session, AstNode *start, AstNode *end,
+                              bool inclusive_end, int line) {
     AstNode *node = alloc_node(session, AST_PATTERN_RANGE, line);
     node->as.pattern_range.start = start;
     node->as.pattern_range.end = end;
+    node->as.pattern_range.inclusive_end = inclusive_end;
     return node;
 }
 
@@ -1261,6 +1279,28 @@ AstNode *xr_ast_pattern_adt(XrCompilerSession *session, AstNode *variant, AstNod
     node->as.pattern_adt.variant = variant;
     node->as.pattern_adt.patterns = patterns;
     node->as.pattern_adt.count = count;
+    return node;
+}
+
+// Create object/record match pattern node: { x, y } / { x: sub }
+AstNode *xr_ast_pattern_object(XrCompilerSession *session, char **field_names, AstNode **patterns,
+                               int count, int line) {
+    AstNode *node = alloc_node(session, AST_PATTERN_OBJECT, line);
+    node->as.pattern_object.field_names = field_names;
+    node->as.pattern_object.patterns = patterns;
+    node->as.pattern_object.count = count;
+    return node;
+}
+
+// Create array match pattern node: [a, b, ..rest]
+AstNode *xr_ast_pattern_array(XrCompilerSession *session, AstNode **patterns, int count,
+                              bool has_rest, char *rest_name, int line) {
+    AstNode *node = alloc_node(session, AST_PATTERN_ARRAY, line);
+    node->as.pattern_array.patterns = patterns;
+    node->as.pattern_array.count = count;
+    node->as.pattern_array.has_rest = has_rest;
+    node->as.pattern_array.rest_name = rest_name;
+    node->as.pattern_array.rest_symbol_id = 0;
     return node;
 }
 
@@ -1305,6 +1345,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "LiteralFloat";
         case AST_LITERAL_STRING:
             return "LiteralString";
+        case AST_LITERAL_CHAR:
+            return "LiteralChar";
         case AST_LITERAL_REGEX:
             return "LiteralRegex";
         case AST_LITERAL_NULL:
@@ -1494,6 +1536,14 @@ void xr_ast_print(AstNode *node, int indent) {
         case AST_LITERAL_STRING:
             printf("(\"%s\")", node->as.literal.raw_value.string_val);  // Print C string
             break;
+        case AST_LITERAL_CHAR: {
+            char buf[5] = {0};
+            int n = xr_utf8_encode(node->as.literal.raw_value.char_val, buf);
+            if (n > 0 && n < (int) sizeof(buf))
+                buf[n] = '\0';
+            printf("('%s')", buf);
+            break;
+        }
         case AST_LITERAL_REGEX:
             printf("(/%s/%s)", node->as.literal.raw_value.regex.pattern,
                    node->as.literal.raw_value.regex.flags);
@@ -2121,9 +2171,10 @@ AstNode *xr_ast_scope_block(XrCompilerSession *session, AstNode *body, uint8_t s
 }
 
 // Create yield statement node
-// yield - yields execution
-AstNode *xr_ast_yield_stmt(XrCompilerSession *session, int line) {
+// `yield value` - generator value production
+AstNode *xr_ast_yield_stmt(XrCompilerSession *session, AstNode *value, int line) {
     AstNode *node = alloc_node(session, AST_YIELD_STMT, line);
+    node->as.yield_stmt.value = value;
     return node;
 }
 

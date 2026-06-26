@@ -17,6 +17,7 @@
 #include "xtype_scope.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
+#include "../../base/xutf8.h"
 #include "../../runtime/xisolate_api.h"
 #include "../xdiag_fmt.h"
 
@@ -55,6 +56,102 @@ static xr_Integer parse_integer_literal(const char *start, int length) {
     }
 
     return strtoll(buf, NULL, 10);  // Decimal
+}
+
+static int char_hex_value(char c) {
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+    return -1;
+}
+
+static const char *parse_char_literal_payload(const char *src, size_t len, uint32_t *out_cp) {
+    if (!src || len == 0)
+        return "char literal cannot be empty";
+
+    if (src[0] == '\\') {
+        if (len < 2)
+            return "unterminated char escape";
+        uint32_t cp = 0;
+        if (src[1] == 'u') {
+            if (len < 4 || src[2] != '{')
+                return "char unicode escape must use \\u{...}";
+            size_t p = 3;
+            uint32_t value = 0;
+            int digits = 0;
+            while (p < len && src[p] != '}') {
+                int h = char_hex_value(src[p]);
+                if (h < 0)
+                    return "invalid hex digit in char unicode escape";
+                if (digits >= 6)
+                    return "char unicode escape must contain at most 6 hex digits";
+                value = (value << 4) | (uint32_t) h;
+                digits++;
+                p++;
+            }
+            if (digits == 0)
+                return "char unicode escape requires at least one hex digit";
+            if (p >= len || src[p] != '}')
+                return "unterminated char unicode escape";
+            if (p + 1 != len)
+                return "char literal must contain exactly one Unicode scalar value";
+            cp = value;
+        } else {
+            switch (src[1]) {
+                case 'n':
+                    cp = '\n';
+                    break;
+                case 'r':
+                    cp = '\r';
+                    break;
+                case 't':
+                    cp = '\t';
+                    break;
+                case '\\':
+                    cp = '\\';
+                    break;
+                case '\'':
+                    cp = '\'';
+                    break;
+                case '"':
+                    cp = '"';
+                    break;
+                case 'b':
+                    cp = '\b';
+                    break;
+                case 'f':
+                    cp = '\f';
+                    break;
+                case '0':
+                    cp = '\0';
+                    break;
+                default:
+                    return "invalid char escape";
+            }
+            if (len != 2)
+                return "char literal must contain exactly one Unicode scalar value";
+        }
+        if (!xr_unicode_is_scalar(cp))
+            return "char literal must be a valid Unicode scalar value";
+        *out_cp = cp;
+        return NULL;
+    }
+
+    uint32_t cp = 0;
+    int consumed = xr_utf8_decode(src, len, &cp);
+    if (consumed <= 0)
+        return "invalid UTF-8 in char literal";
+    if ((unsigned char) src[0] >= 0x80 && consumed == 1 && cp == XR_UNICODE_INVALID)
+        return "invalid UTF-8 in char literal";
+    if (!xr_unicode_is_scalar(cp))
+        return "char literal must be a valid Unicode scalar value";
+    if ((size_t) consumed != len)
+        return "char literal must contain exactly one Unicode scalar value";
+    *out_cp = cp;
+    return NULL;
 }
 
 // Parse literal (number, string, bool, null)
@@ -108,8 +205,21 @@ AstNode *xr_parse_literal(Parser *parser) {
             return node;
         }
 
+        case TK_LITERAL_CHAR: {
+            const char *src = parser->previous.start + 1;
+            size_t src_len = (size_t) parser->previous.length - 2;
+            uint32_t cp = 0;
+            const char *err = parse_char_literal_payload(src, src_len, &cp);
+            if (err)
+                xr_parser_error_at_previous(parser, err);
+            AstNode *node =
+                xr_ast_literal_char(parser->compiler_session, cp, parser->previous.line);
+            node->column = column;
+            return node;
+        }
+
         case TK_RAW_STRING: {
-            // r"content" or r'content' - no escape processing
+            // r"content" - no escape processing
             const char *src = parser->previous.start + 2;
             size_t src_len = parser->previous.length - 3;
             char *str = (char *) xr_malloc(src_len + 1);
@@ -231,6 +341,9 @@ AstNode *xr_parse_type_cast(Parser *parser) {
         case TK_BOOL:
             type_name = "bool";
             break;
+        case TK_CHAR:
+            type_name = "char";
+            break;
         default:
             xr_parser_error(parser, "expected type keyword");
             return NULL;
@@ -273,6 +386,106 @@ static AstNode *make_template_part(Parser *parser, const char *src, int len, boo
     AstNode *node = xr_ast_literal_string(parser->compiler_session, buf, parser->previous.line);
     xr_free(buf);
     return node;
+}
+
+static bool template_find_expr_end(const char *src, int len, int expr_start, int *expr_end);
+
+static bool template_skip_string(const char *src, int len, int *pos, char quote, bool is_raw) {
+    while (*pos < len) {
+        char c = src[*pos];
+        if (c == quote) {
+            (*pos)++;
+            return true;
+        }
+        if (!is_raw && c == '\\') {
+            *pos += (*pos + 1 < len) ? 2 : 1;
+            continue;
+        }
+        if (c == '$' && *pos + 1 < len && src[*pos + 1] == '{') {
+            int nested_end = -1;
+            if (!template_find_expr_end(src, len, *pos, &nested_end)) {
+                return false;
+            }
+            *pos = nested_end + 1;
+            continue;
+        }
+        (*pos)++;
+    }
+    return false;
+}
+
+static void template_skip_line_comment(const char *src, int len, int *pos) {
+    while (*pos < len && src[*pos] != '\n') {
+        (*pos)++;
+    }
+}
+
+static bool template_skip_block_comment(const char *src, int len, int *pos) {
+    *pos += 2;
+    int depth = 1;
+    while (*pos < len && depth > 0) {
+        if (*pos + 1 < len && src[*pos] == '/' && src[*pos + 1] == '*') {
+            *pos += 2;
+            depth++;
+            continue;
+        }
+        if (*pos + 1 < len && src[*pos] == '*' && src[*pos + 1] == '/') {
+            *pos += 2;
+            depth--;
+            continue;
+        }
+        (*pos)++;
+    }
+    return depth == 0;
+}
+
+static bool template_find_expr_end(const char *src, int len, int expr_start, int *expr_end) {
+    int brace_count = 1;
+    int j = expr_start + 2;
+    while (j < len && brace_count > 0) {
+        char c = src[j];
+        if (c == '"' || c == '\'') {
+            j++;
+            if (!template_skip_string(src, len, &j, c, false)) {
+                return false;
+            }
+            continue;
+        }
+        if (c == 'r' && j + 1 < len && (src[j + 1] == '"' || src[j + 1] == '\'')) {
+            char raw_quote = src[j + 1];
+            j += 2;
+            if (!template_skip_string(src, len, &j, raw_quote, true)) {
+                return false;
+            }
+            continue;
+        }
+        if (c == '/' && j + 1 < len && src[j + 1] == '/') {
+            template_skip_line_comment(src, len, &j);
+            continue;
+        }
+        if (c == '/' && j + 1 < len && src[j + 1] == '*') {
+            if (!template_skip_block_comment(src, len, &j)) {
+                return false;
+            }
+            continue;
+        }
+        if (c == '{') {
+            brace_count++;
+            j++;
+            continue;
+        }
+        if (c == '}') {
+            brace_count--;
+            if (brace_count == 0) {
+                *expr_end = j;
+                return true;
+            }
+            j++;
+            continue;
+        }
+        j++;
+    }
+    return false;
 }
 
 // Parse template string: "Hello, ${name}!" or r"raw ${name}"
@@ -323,25 +536,8 @@ AstNode *xr_parse_template_string(Parser *parser) {
             XR_PARSE_PUSH(parser, parts, part_count, part_capacity, str_node);
         }
 
-        // Find matching }
         int expr_end = -1;
-        int brace_count = 1;
-        int j = expr_start + 2;  // Skip ${
-
-        while (j < tmpl_len && brace_count > 0) {
-            if (tmpl[j] == '{') {
-                brace_count++;
-            } else if (tmpl[j] == '}') {
-                brace_count--;
-                if (brace_count == 0) {
-                    expr_end = j;
-                    break;
-                }
-            }
-            j++;
-        }
-
-        if (expr_end == -1) {
+        if (!template_find_expr_end(tmpl, tmpl_len, expr_start, &expr_end)) {
             xr_parser_error(parser, "missing closing } in template string");
             return NULL;
         }
@@ -353,13 +549,18 @@ AstNode *xr_parse_template_string(Parser *parser) {
             memcpy(expr_code, tmpl + expr_start + 2, expr_len);
             expr_code[expr_len] = '\0';
 
+            Scanner expr_scanner;
+            xr_scanner_init(&expr_scanner, expr_code);
+
             Parser expr_parser;
-            xr_parser_init(&expr_parser, parser->compiler_session, expr_code, parser->source_file,
-                           parser->arena);
+            memset(&expr_parser, 0, sizeof(expr_parser));
+            expr_parser.scanner = expr_scanner;
+            expr_parser.compiler_session = parser->compiler_session;
+            expr_parser.had_error = 0;
+            expr_parser.panic_mode = 0;
 
             xr_parser_advance(&expr_parser);
             AstNode *expr_node = xr_parse_expression(&expr_parser);
-            xr_type_scope_free(expr_parser.type_scope);
 
             xr_free(expr_code);
 
@@ -773,6 +974,14 @@ static AstNode *try_parse_generic_call(Parser *parser, AstNode *callee) {
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
 
+    // `Map<K,V>()` / `Array<T>()` / `Channel<T>(n)` etc. construct built-in
+    // heap types directly (no `new`); route to the construction node so the
+    // generic type arguments drive element/key/value layout.
+    if (callee->type == AST_VARIABLE && xr_is_construct_only_type_name(callee->as.variable.name)) {
+        return xr_ast_new_expr(parser->compiler_session, NULL, callee->as.variable.name, arguments,
+                               arg_count, (XrTypeRef **) type_args, type_arg_count, line);
+    }
+
     return xr_ast_call_expr_generic(parser->compiler_session, callee, arguments, arg_count,
                                     type_args, type_arg_count, line);
 }
@@ -805,26 +1014,12 @@ AstNode *xr_parse_lt_or_generic(Parser *parser, AstNode *left) {
 
 // XrTokenType -> AstNodeType mapping for binary operators
 static const AstNodeType binary_op_map[] = {
-    [TK_PLUS] = AST_BINARY_ADD,
-    [TK_MINUS] = AST_BINARY_SUB,
-    [TK_STAR] = AST_BINARY_MUL,
-    [TK_SLASH] = AST_BINARY_DIV,
-    [TK_PERCENT] = AST_BINARY_MOD,
-    [TK_AMP] = AST_BINARY_BAND,
-    [TK_PIPE] = AST_BINARY_BOR,
-    [TK_CARET] = AST_BINARY_BXOR,
-    [TK_LSHIFT] = AST_BINARY_LSHIFT,
-    [TK_RSHIFT] = AST_BINARY_RSHIFT,
-    [TK_EQ] = AST_BINARY_EQ,
-    [TK_NE] = AST_BINARY_NE,
-    [TK_EQ_STRICT] = AST_BINARY_EQ_STRICT,
-    [TK_NE_STRICT] = AST_BINARY_NE_STRICT,
-    [TK_LT] = AST_BINARY_LT,
-    [TK_LE] = AST_BINARY_LE,
-    [TK_GT] = AST_BINARY_GT,
-    [TK_GE] = AST_BINARY_GE,
-    [TK_AND] = AST_BINARY_AND,
-    [TK_OR] = AST_BINARY_OR,
+    [TK_PLUS] = AST_BINARY_ADD,      [TK_MINUS] = AST_BINARY_SUB,   [TK_STAR] = AST_BINARY_MUL,
+    [TK_SLASH] = AST_BINARY_DIV,     [TK_PERCENT] = AST_BINARY_MOD, [TK_AMP] = AST_BINARY_BAND,
+    [TK_PIPE] = AST_BINARY_BOR,      [TK_CARET] = AST_BINARY_BXOR,  [TK_LSHIFT] = AST_BINARY_LSHIFT,
+    [TK_RSHIFT] = AST_BINARY_RSHIFT, [TK_EQ] = AST_BINARY_EQ,       [TK_NE] = AST_BINARY_NE,
+    [TK_LT] = AST_BINARY_LT,         [TK_LE] = AST_BINARY_LE,       [TK_GT] = AST_BINARY_GT,
+    [TK_GE] = AST_BINARY_GE,         [TK_AND] = AST_BINARY_AND,     [TK_OR] = AST_BINARY_OR,
 };
 
 // Parse binary operators: left op right
@@ -919,10 +1114,14 @@ AstNode *xr_parse_as_cast(Parser *parser, AstNode *left) {
     return xr_ast_as_expr(parser->compiler_session, left, (XrType *) target_type, is_safe, line);
 }
 
-// Parse optional chain: obj?.prop, obj?.method()
+// Parse optional chain: obj?.prop, obj?.method(), func?.()
 AstNode *xr_parse_optional_chain(Parser *parser, AstNode *object) {
     XR_DCHECK(parser != NULL, "parse_optional_chain: NULL parser");
     int line = parser->previous.line;
+
+    if (parser->current.type == TK_LPAREN) {
+        return xr_ast_optional_chain(parser->compiler_session, object, NULL, NULL, 3, line);
+    }
 
     if (parser->current.type == TK_NAME) {
         // Property access: obj?.prop
@@ -956,12 +1155,13 @@ AstNode *xr_parse_optional_index(Parser *parser, AstNode *object) {
     return xr_ast_optional_chain(parser->compiler_session, object, NULL, index, 1, line);
 }
 
-// Parse range expression: start..end
+// Parse range expression: start..end / start..=end
 AstNode *xr_parse_range(Parser *parser, AstNode *start) {
     XR_DCHECK(parser != NULL, "parse_range: NULL parser");
     int line = parser->previous.line;
+    bool inclusive_end = parser->previous.type == TK_RANGE_INCLUSIVE;
 
     AstNode *end = xr_parse_precedence(parser, PREC_FACTOR + 1);
 
-    return xr_ast_range(parser->compiler_session, start, end, line);
+    return xr_ast_range(parser->compiler_session, start, end, inclusive_end, line);
 }

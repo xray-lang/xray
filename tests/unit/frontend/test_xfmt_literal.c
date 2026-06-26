@@ -186,6 +186,28 @@ TEST(xfmt_template_no_backticks) {
     teardown();
 }
 
+TEST(xfmt_template_expr_string_uses_double_quotes) {
+    setup();
+    AstNode *prog = xr_parse(xr_compiler_session_current_for_isolate(X),
+                             "let s = \"${\"inner\".toUpperCase()}\"\n");
+    ASSERT_NOT_NULL(prog);
+    AstNode *init0 = first_initializer(prog);
+    ASSERT_EQ_INT(init0->type, AST_TEMPLATE_STRING);
+
+    char *formatted = format_only(prog);
+    ASSERT_NOT_NULL(formatted);
+    ASSERT(strstr(formatted, "${\"inner\".toUpperCase()}") != NULL);
+    ASSERT(strstr(formatted, "${'inner'.toUpperCase()}") == NULL);
+    xr_free(formatted);
+
+    AstNode *r = format_and_reparse(prog);
+    AstNode *init = first_initializer(r);
+    ASSERT_EQ_INT(init->type, AST_TEMPLATE_STRING);
+    xr_program_destroy(prog);
+    xr_program_destroy(r);
+    teardown();
+}
+
 /* ========== template literal `$` is escaped ========== */
 //
 // A template-string literal part containing `${` would be reparsed as
@@ -249,6 +271,35 @@ TEST(xfmt_string_control_byte_hex_escape) {
     teardown();
 }
 
+/* ========== char literals ========== */
+
+TEST(xfmt_char_literal_roundtrip) {
+    setup();
+    AstNode *prog =
+        xr_parse(xr_compiler_session_current_for_isolate(X), "let c: char = '\\u{1F600}'\n");
+    ASSERT_NOT_NULL(prog);
+    AstNode *r = format_and_reparse(prog);
+    AstNode *init = first_initializer(r);
+    ASSERT_NOT_NULL(init);
+    ASSERT_EQ_INT(init->type, AST_LITERAL_CHAR);
+    ASSERT_EQ_INT(init->as.literal.raw_value.char_val, 0x1F600);
+    xr_program_destroy(prog);
+    xr_program_destroy(r);
+    teardown();
+}
+
+TEST(xfmt_char_literal_named_escape) {
+    setup();
+    AstNode *prog = xr_parse(xr_compiler_session_current_for_isolate(X), "let c = '\\n'\n");
+    ASSERT_NOT_NULL(prog);
+    char *formatted = format_only(prog);
+    ASSERT_NOT_NULL(formatted);
+    ASSERT(strstr(formatted, "'\\n'") != NULL);
+    xr_free(formatted);
+    xr_program_destroy(prog);
+    teardown();
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -259,8 +310,13 @@ RUN_TEST(xfmt_string_embedded_quote);
 RUN_TEST(xfmt_string_backslash_and_newline);
 RUN_TEST(xfmt_string_control_byte_hex_escape);
 
+RUN_TEST_SUITE("xfmt_literal - char round-trip");
+RUN_TEST(xfmt_char_literal_roundtrip);
+RUN_TEST(xfmt_char_literal_named_escape);
+
 RUN_TEST_SUITE("xfmt_literal - template no backticks");
 RUN_TEST(xfmt_template_no_backticks);
+RUN_TEST(xfmt_template_expr_string_uses_double_quotes);
 RUN_TEST(xfmt_template_dollar_escaped);
 
 TEST_MAIN_END()

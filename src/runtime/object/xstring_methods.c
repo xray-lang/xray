@@ -30,7 +30,7 @@
 #include "../../base/xchecks.h"
 #include "../../../stdlib/regex/xregex.h"
 #include "../../../stdlib/regex/xregex_binding.h"
-#include "../../shared/xr_string_core.h"
+#include <stdlib.h>
 #include <string.h>
 
 static inline XrString *str_self(XrValue self) {
@@ -181,7 +181,7 @@ static XrValue m_pad_start(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
     XrString *str = str_self(self);
     if (argc < 1)
         return xr_string_value(str);
-    xr_Integer target_len = XR_TO_INT(args[0]);
+    int64_t target_len = XR_TO_INT(args[0]);
     XrString *pad = (argc >= 2 && XR_IS_STRING(args[1])) ? xr_value_to_string(iso, args[1]) : NULL;
     XrString *result = xr_string_pad_start(iso, str, target_len, pad);
     return result ? xr_string_value(result) : xr_string_value(str);
@@ -191,7 +191,7 @@ static XrValue m_pad_end(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
     XrString *str = str_self(self);
     if (argc < 1)
         return xr_string_value(str);
-    xr_Integer target_len = XR_TO_INT(args[0]);
+    int64_t target_len = XR_TO_INT(args[0]);
     XrString *pad = (argc >= 2 && XR_IS_STRING(args[1])) ? xr_value_to_string(iso, args[1]) : NULL;
     XrString *result = xr_string_pad_end(iso, str, target_len, pad);
     return result ? xr_string_value(result) : xr_string_value(str);
@@ -341,10 +341,14 @@ static XrValue m_to_int(XrVMRuntime *iso, XrValue self, XrValue *args, int argc)
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
-    XrStringCoreParseIntResult parsed = xr_string_core_parse_int64(str->data, str->length);
-    if (!parsed.ok)
+    const char *p = str->data;
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
+        p++;
+    char *end;
+    long long value = strtoll(p, &end, 10);
+    if (end == p)
         return xr_null();
-    return xr_int((xr_Integer) parsed.value);
+    return xr_int((xr_Integer) value);
 }
 
 static XrValue m_to_float(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -352,10 +356,14 @@ static XrValue m_to_float(XrVMRuntime *iso, XrValue self, XrValue *args, int arg
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
-    XrStringCoreParseFloatResult parsed = xr_string_core_parse_float64(str->data, str->length);
-    if (!parsed.ok)
+    const char *p = str->data;
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
+        p++;
+    char *end;
+    double value = strtod(p, &end);
+    if (end == p)
         return xr_null();
-    return xr_float(parsed.value);
+    return xr_float(value);
 }
 
 static XrValue m_ord(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -406,7 +414,7 @@ static XrValue m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
 
 /* === Iteration === */
 
-/* Character iterator: yields each character (length-1 string). */
+/* Character iterator: yields each Unicode scalar as a char value. */
 static XrValue m_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -427,7 +435,7 @@ static XrValue m_entries_iterator(XrVMRuntime *iso, XrValue self, XrValue *args,
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 
-/* Eager entries() returning Array<(int, string)>. Each element is a
+/* Eager entries() returning Array<(int, char)>. Each element is a
  * real (index, char) tuple, matching the static signature and the
  * XI_TUPLE_GET destructuring used by `for ((i, c) in s.entries())`. */
 static XrValue m_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -440,12 +448,12 @@ static XrValue m_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
     if (!out)
         return xr_null();
     for (size_t i = 0; i < n; i++) {
-        XrString *ch = xr_string_char_at_unicode(iso, s, i);
+        int32_t cp = xr_string_char_code_at(s, i);
         XrTuple *pair = xr_tuple_new(coro, 2);
         if (!pair)
             return xr_null();
         xr_tuple_set(pair, 0, xr_int((int64_t) i));
-        xr_tuple_set(pair, 1, ch ? xr_string_value(ch) : xr_null());
+        xr_tuple_set(pair, 1, cp >= 0 ? xr_char((uint32_t) cp) : xr_null());
         xr_array_set(out, (int) i, xr_value_from_tuple(pair));
     }
     out->length = (int32_t) n;

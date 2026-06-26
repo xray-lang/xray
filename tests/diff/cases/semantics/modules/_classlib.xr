@@ -13,5 +13,5 @@ export class Counter {
 }
 
 export fn make_counter(start: int) -> Counter {
-    return new Counter(start)
+    return Counter(start)
 }

@@ -17,20 +17,20 @@ order: 004
 | 级 | 运算符 | 结合性 | 说明 |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | 左 | 后缀：分组、索引、成员、可选链、调用、强制解包 |
-| 16 | 前缀 `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | 右 | 一元前缀 + 协程/FFI 边界操作（`++` / `--` 仅后缀） |
+| 16 | 前缀 `-` `+` `!` `~` `move` `await` `go` `unsafe` | 右 | 一元前缀 + 协程/FFI 边界操作 |
 | 15 | `as` `is` | 左 | 类型转换 / 检查（`as T?` 安全形式靠目标类型可空，非独立 `as?` 运算符） |
 | 14 | `*` `/` `%` | 左 | 乘除取模 |
 | 13 | `+` `-` | 左 | 加减 |
 | 12 | `<<` `>>` | 左 | 移位 |
 | 11 | `<` `<=` `>` `>=` | 左 | 关系比较 |
-| 10 | `==` `!=` `===` `!==` | 左 | 相等比较 |
+| 10 | `==` `!=` | 左 | 相等比较 |
 | 9 | `&` | 左 | 位与 |
 | 8 | `^` | 左 | 位异或 |
 | 7 | `\|` | 左 | 位或（亦用于 union 类型） |
 | 6 | `&&` | 左 | 逻辑与（短路） |
 | 5 | `\|\|` | 左 | 逻辑或（短路） |
 | 4 | `??` | 左 | 空值合并 |
-| 3 | `..` | 左 | 范围 |
+| 3 | `..` `..=` | 左 | 范围 |
 | 2 | `? :` | 右 | 三元 |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 右 | 赋值与复合赋值 |
 | 0 | `,`（仅 `match` 多值、参数列表等特定位置）| — | 不是真正运算符 |
@@ -41,7 +41,6 @@ order: 004
 
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
-            | 'new' Identifier TypeArgs? '(' ArgList? ')'
             | 'move' UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
@@ -55,14 +54,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 | `+x` | 数值 | 同 | 标识，几乎无用 |
 | `!x` | `bool` | `bool` | 逻辑非；**不接受非 bool**（不像 JS） |
 | `~x` | 整数 | 同 | 按位取反 |
-| `x++` `x--` | 整数 | 同 | 后缀自增/减；返回**修改后**的值（与 C/Java 不同，本质上是 `x = x + 1` 的赋值结果） |
-
-**自增/减语义**：
-- xray **只提供后缀** `x++` / `x--`，不支持前缀 `++x` / `--x`（编译错误："prefix ++/-- not supported, use postfix form"）。
-- 等价于赋值 `x = x + 1` / `x = x - 1`；表达式值即赋值后的新值。
-- 不能内联在二元表达式中（如 `a + x++`、`f(x++)`、`x++ + 1`）；解析器会报"++/-- must be standalone statement"。允许 `let y = x++`（赋值左侧紧邻），此时 `y` 取到的是修改后的值。
-- 仅作用于左值（变量、字段、索引）。
-- 浮点数**不支持** `++`/`--`（编译错误）。
+`++` / `--` **不是表达式**：`let y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译报错。语句级自增/自减见 §4.1。
 
 #### `unsafe { }`
 
@@ -89,7 +81,7 @@ BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
 BinOp ::= '+' | '-' | '*' | '/' | '%'
        | '&' | '|' | '^' | '<<' | '>>'
        | '<' | '<=' | '>' | '>='
-       | '==' | '!=' | '===' | '!=='
+       | '==' | '!='
        | '&&' | '||'
        | '??'
 ```
@@ -107,10 +99,11 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 **特殊语义**：
 - `int / 0` → 运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)。
 - `int % 0` → 运行时抛 `XR_ERR_MOD_BY_ZERO` (E0421)。
-- `float / 0.0`（及任何结果为 float 的除以零）→ 同样运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)；xray 算术**不产生** IEEE inf/NaN。
-- `%` 仅接受整数操作数；浮点求模（如 `5.0 % 2.0`）运行时抛 `XR_ERR_TYPE_MISMATCH` (E0404)。
+- 结果类型为 `float`/`float32` 的除法遵循 IEEE-754：`1.0 / 0.0` 产生 `+inf`，`-1.0 / 0.0` 产生 `-inf`，`0.0 / 0.0` 产生 `NaN`；可用 `x.isNaN()` 或 `math.isNaN(x)` 检测 NaN。
+- `%` 仅接受整数操作数；静态类型包含 float 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
 - 整数溢出：见 §2.3.1。
 - 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
+- `char` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `int(c)`。
 
 #### 3.3.2 位运算
 
@@ -120,6 +113,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - 移位计数取模 64（与 C 不同：xray 总是定义的）。
 - `>>` 是**算术右移**（保留符号位）。无符号类型用对应的 `uintN`。
 - bool 不参与位运算（用 `&&` `||`）。
+- `char` 不参与位运算；需要码点时显式写 `int(c)`。
 
 #### 3.3.3 比较运算符
 
@@ -127,8 +121,6 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 |--|--|
 | `==` | 值相等。`int` 与 `float` 可比较（int→float 隐式）。字符串按内容比较。class/struct 使用 `==` 重载或默认 identity。 |
 | `!=` | `==` 的反 |
-| `===` | **严格**相等：类型与值都必须相等；无任何隐式转换。 |
-| `!==` | `===` 的反 |
 | `<` `<=` `>` `>=` | 数值与字符串支持；其他类型默认不支持（可通过 `operator<` 重载启用）。 |
 
 **与 JS 的区别**：xray 的 `==` **不**做 string↔number 转换；只做数值之间的 int↔float 提升。
@@ -192,21 +184,22 @@ let max = a > b ? a : b
 #### 可选链 `?.` / `?[`
 
 ```ebnf
-OptionalChain ::= Primary ('?.' Identifier | '?[' Expr ']')+
+OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr ']')+
 ```
 
 ```xray @id=expr-optional-chain
 let len = name?.length          // null 时返回 null
 let item = arr?[0]              // 可选索引
+let value = callback?.(input)   // 可选函数调用
 ```
 
 **语义**：
 - 若 `?.` 或 `?[` 左侧为 `null`，整个表达式短路返回 `null`。
-- `?.` 用于属性访问和方法调用：`obj?.prop`、`obj?.method()`。
+- `?.` 用于属性访问、方法调用和函数调用：`obj?.prop`、`obj?.method()`、`func?.(args)`。
 - `?[` 用于索引访问：`arr?[0]`。与普通索引 `arr[0]` 对称，只需在 `[` 前加 `?`。
+- `func?.(args)` 在函数值为 `null` 时不求值实参，直接返回 `null`。
 - **传播**：`a?.b.c.d` 中，若 `a` 为 null，整个链返回 null；中间 `.` 不重新检查。
 - 结果类型：原类型加 `?`（若已经 `?` 则保持）。
-- 函数可选调用 `func?.()` 不属于当前语法。
 
 ### 3.7 强制解包 `!`
 
@@ -262,25 +255,28 @@ let n = v as int?          // 失败返回 null（"as nullable" 安全形式）
 - 父类 → 子类（运行时 instanceof）。
 - Union 成员 → 具体成员。
 
-### 3.9 范围 `..` 与展开 `...`
+### 3.9 范围 `..` / `..=` 与展开 `...`
 
-#### 范围 `a..b`
+#### 范围 `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr ('..' AddExpr)?
+RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
 ```
 
 ```xray @id=expr-range
 0..10                  // 0..10，左闭右开（包含 0，不包含 10）
+0..=10                 // 0..=10，闭区间（包含 0 和 10）
 let r = 1..100
 let n = 10
 for (i in 0..n) { print(i) }
+for (i in 0..=n) { print(i) }
 ```
 
 - 类型 `Range`（仅 int 范围）。
-- 半开区间 `[a, b)`：`a` 包含、`b` 不包含。`for-in`、`Range.includes`、`Range.length`、`Range.toArray()`、`match` 中的 `a..b` 模式全部遵循同一语义。
+- `a..b` 是半开区间 `[a, b)`：`a` 包含、`b` 不包含。
+- `a..=b` 是闭区间 `[a, b]`：两端都包含。
+- `for-in`、`Range.includes`、`Range.length`、`Range.toArray()`、`match` 中的范围模式全部遵循对应端点语义。
 - 主要用途：`for-in` 循环、模式匹配中的范围判定。
-- 当前不提供闭区间语法（`a..=b`）；如需"包含 b"，写 `a..(b+1)`。
 
 #### 展开 `...`
 
@@ -288,13 +284,25 @@ for (i in 0..n) { print(i) }
 - **函数 rest 参数声明**：`fn f(...args: int)`
 - **函数调用展开**：`f(...args)`，展开源必须是静态 arity 已知的 tuple。
 - **tuple 字面量展开**：`(head, ...tail)`，展开源必须是静态 arity 已知的 tuple。
+- **数组字面量展开**：`[...a, x, ...b]`，展开源必须是数组，运行期拼接成新数组（O(n)）。
+- **对象/record 字面量展开**：`{...base, x: 1}`，展开源必须是对象；字段合并成新对象，同名字段后者覆盖前者，结果字段集为各展开源字段与字面量字段的并集。
+
+```xray @id=expr-spread-collections
+let a = [1, 2]
+let b = [3, 4]
+let nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
+
+let base = { x: 1, y: 2 }
+let point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+```
 
 ### 3.10 字面量构造
 
 #### Array `[...]`
 
 ```ebnf
-ArrayLit ::= '[' (Expr (',' Expr)* ','?)? ']'
+ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expr | Expr
 ```
 
 ```xray @id=expr-array-lit
@@ -335,6 +343,7 @@ let empty = #[]
 ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
 ObjectField ::= Identifier ':' Expr
               | Identifier            // shorthand: `{ x }` 等价 `{ x: x }`
+              | '...' Expr            // spread: `{ ...base }` 合并字段
 ```
 
 ```xray @id=expr-object-lit
@@ -343,17 +352,18 @@ let users = "Bob"
 let obj = { users }              // shorthand
 ```
 
-- 默认推断为**可扩展**的结构化对象类型（见 §2.4.6 / §2.10 Json 行为）。
-- 用 `type` 别名固化结构：`let u: User = {...}`（编译期检查字段集，密封）。
+- 默认推断为 sealed structural `Record`（见 §2.4.6），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
+- 只有显式 `Json` 期望类型时才按动态 Json object literal 解释；typed value 进入 JSON 边界使用 `Json.encode(value)`。
+- 用 `type` 别名命名 Record：`let u: User = {...}`（编译期检查字段集，密封）。
 
-#### Bytes `new Bytes(...)`
+#### Bytes `Bytes(...)`
 
 详见 §2.4.5 与 §14.5。
 
-#### Channel `new Channel<T>(buf?)`
+#### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = new Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 详见 §10.5。
@@ -399,12 +409,12 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-str[i]                  // 返回单字符字符串
+str[i]                  // 返回 char
 ```
 
 - `Array` 索引：`int`，越界抛 `E0430`。
 - `Map` 索引：键类型；找不到键 → `E0431`。
-- `string` 索引：返回长度为 1 的字符串（**不是** char/int）。
+- `string` 索引：按 Unicode scalar 下标访问，返回 `char`。
 - 自定义类：通过 `operator[]` 重载。
 
 #### 切片
@@ -422,7 +432,7 @@ str[0:5]                // 字符串切片
 ```
 
 - 半开区间 `[start, end)`。
-- `string` 切片支持负索引，负数从末尾计数；`Array` 切片中负 `start` 夹到 `0`，负 `end` 视为数组长度。
+- `Array` 与 `string` 切片统一支持负索引：负数先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
 - 切片返回新对象，不修改原数组。
 
 ### 3.12 匿名函数与 Lambda
@@ -443,7 +453,7 @@ FnExpression ::= 'fn' GenericParams? '(' Params ')' ('->' Type)? Block
 arr.map(x -> x * 2)
 arr.filter(x -> x % 2 == 0)
 
-// ── 箭头 lambda：任意位置，支持多参数和类型注解 ──
+// ── 箭头 lambda：任意位置，支持多参数和参数类型注解 ──
 let sum = arr.reduce((acc, x) -> acc + x, 0)    // 无类型
 let double = (x: int) -> x * 2                   // 有类型
 let add = (a: int, b: int) -> a + b              // 多参数
@@ -461,12 +471,12 @@ let identity = fn<T>(x: T) -> T { return x }     // 泛型
 | 形式 | 语法 | 适用场景 |
 |------|------|----------|
 | 裸 lambda | `x -> expr` | 单参数回调，最简洁 |
-| 箭头 lambda | `(x, y) -> expr` | 多参数、需类型注解、或非调用参数位置 |
+| 箭头 lambda | `(x, y) -> expr` | 多参数、需参数类型注解、或非调用参数位置 |
 | fn 表达式 | `fn(x: T) -> R { ... }` | 多语句体、返回类型注解、泛型参数 |
 
 **关键规则**：
 - **裸 lambda**（`x -> expr`）：仅限**调用参数位置**，单参数无括号。参数类型由被调函数签名或容器元素类型推断。
-- **箭头 lambda**（`(x) -> expr`、`(x, y) -> expr`）：任意位置可用。参数类型可省略，由上下文推断；推断失败时报 E0365。
+- **箭头 lambda**（`(x) -> expr`、`(x, y) -> expr`）：任意位置可用。参数类型可省略，由上下文推断；推断失败时报 E0365。箭头 lambda **不支持返回类型注解**；需要显式返回类型时，用 `fn(x: T) -> R { ... }`，或给绑定写函数类型：`let f: (T) -> R = (x) -> ...`。
 - **fn 表达式**（`fn(x: T) { ... }`）：任意位置可用。支持泛型参数 `fn<T>(...)`、返回类型注解 `-> T`、多语句体。
 - 单表达式形式 `-> expr` 自动 `return`。
 - 块形式 `-> { ... }` 或 `{ ... }` 用显式 `return`。
@@ -494,30 +504,33 @@ let result = match (x) {
 **语义**：
 - 自上而下匹配第一个成功的分支。
 - 所有分支表达式必须返回相同类型（或 union）。
-- **穷举性**：对 enum 变量（ADT 与简单枚举）编译器强制穷举。对其他表达式不强制，运行时无匹配抛 `Exception(E0442)`。
+- **穷举性**：对 enum 变量（ADT 与简单枚举）编译器强制穷举。对其他表达式不强制，运行时无匹配抛 `PanicInfo(E0442)`。
 - 模式详见 [§6](#6-模式-patterns)。
 
-### 3.14 `new`
+### 3.14 构造表达式
 
 ```ebnf
-NewExpr ::= 'new' Identifier TypeArgs? '(' ArgList? ')'
+ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```
 
+构造与普通函数调用同形：`TypeName(args)`。没有 `new` 关键字——写出 `new`（如 `new Point(...)`）是编译错误，提示删除 `new`。
+
 ```xray @id=expr-new
-let p = new Point(1.0, 2.0)
-let arr = new Array<int>()
-let ch = new Channel<int>(10)
-let m = new Map<string, int>()
+let p = Point(1.0, 2.0)
+let arr = Array<int>()
+let ch = Channel<int>(10)
+let m = Map<string, int>()
 ```
 
 **用于**：
-- 类与 struct 实例化。
-- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Bytes`/`StringBuilder` 等）。
+- 类与 struct 实例化（`TypeName(args)`）。
+- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Bytes`/`StringBuilder` 等，同样是 `TypeName(args)`）。
+- 消歧由 analyzer 按符号种类判定：类型名构造，函数名调用（命名约定：类型大写、函数小写）。
 
 **与字面量的关系**：
 ```xray @id=expr-literal-constructor-relation
-let a = [1, 2, 3]              // 等价 new Array<int>() + push
-let m = #{}                    // 等价 new Map<...>()
+let a = [1, 2, 3]              // 等价 Array<int>() + push
+let m = #{}                    // 等价 Map<...>()
 let p = Point{x: 1, y: 2}      // struct literal
 ```
 
@@ -530,18 +543,18 @@ let p = Point{x: 1, y: 2}      // struct literal
 ```
 
 - `${...}` 内任意表达式（含函数调用、对象访问、算术）。
-- 嵌套字符串字面量需转义引号或换用单引号外层。
+- `${...}` 内的字符串字面量可使用与外层模板相同的引号；lexer 按表达式大括号深度匹配，并跳过内层字符串 / raw string / char 字面量。
 - 表达式类型必须可转为字符串（实现 `toString()` 或为基本类型）。
 
 ### 3.16 `yield` 语句
 
 ```xray @id=expr-yield
-yield                       // 让出执行权
+yield expr                  // 生成器产出一个值并挂起
 ```
 
-**当前实现**：仅支持无值语句形式，让协程让出 CPU（类似 Go 的 `runtime.Gosched()`）。
+`yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
-详见 §10.10。
+协作让出 CPU 不再使用裸 `yield`；使用 `Coro.yield()`（见 §10.10）。裸 `yield` 是语法错误。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -558,20 +571,20 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | Level | Operators | Assoc. | Description |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | left | postfix: grouping, index, member, optional chain, call, force unwrap |
-| 16 | prefix `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | right | unary prefix + coroutine/FFI boundary operators (`++` / `--` are postfix only) |
+| 16 | prefix `-` `+` `!` `~` `move` `await` `go` `unsafe` | right | unary prefix + coroutine/FFI boundary operators |
 | 15 | `as` `is` | left | type cast / check (`as T?` is the safe form via a nullable target type, not a separate `as?` operator) |
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
 | 12 | `<<` `>>` | left | shifts |
 | 11 | `<` `<=` `>` `>=` | left | relational |
-| 10 | `==` `!=` `===` `!==` | left | equality |
+| 10 | `==` `!=` | left | equality |
 | 9 | `&` | left | bitwise AND |
 | 8 | `^` | left | bitwise XOR |
 | 7 | `\|` | left | bitwise OR (also union types) |
 | 6 | `&&` | left | logical AND (short-circuit) |
 | 5 | `\|\|` | left | logical OR (short-circuit) |
 | 4 | `??` | left | null coalescing |
-| 3 | `..` | left | range |
+| 3 | `..` `..=` | left | range |
 | 2 | `? :` | right | ternary |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
 | 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
@@ -582,7 +595,6 @@ Implementation: Pratt-parser style in `src/frontend/parser/xparse_expr.c`.
 
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
-            | 'new' Identifier TypeArgs? '(' ArgList? ')'
             | 'move' UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
@@ -596,14 +608,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 | `+x` | numeric | same | identity, almost never useful |
 | `!x` | `bool` | `bool` | logical not; **rejects non-bool** (unlike JS) |
 | `~x` | integer | same | bitwise complement |
-| `x++` `x--` | integer | same | postfix inc/dec; returns the **updated** value (unlike C/Java; essentially the result of the assignment `x = x + 1`) |
-
-**Inc/dec semantics**:
-- Xray provides **only postfix** `x++` / `x--`; prefix `++x` / `--x` is a compile error ("prefix ++/-- not supported, use postfix form").
-- Equivalent to the assignment `x = x + 1` / `x = x - 1`; the expression value is the new value after assignment.
-- Cannot be inlined within a binary expression (`a + x++`, `f(x++)`, `x++ + 1` etc.); the parser reports "++/-- must be standalone statement". `let y = x++` is allowed (assignment on the immediate left), and `y` receives the post-update value.
-- Applies only to lvalues (variables, fields, indexes).
-- Floating-point values **do not support** `++`/`--` (compile error).
+`++` / `--` are **not expressions**: expression-position uses such as `let y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors. Statement-level increment/decrement is specified in §4.1.
 
 #### `unsafe { }`
 
@@ -630,7 +635,7 @@ BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
 BinOp ::= '+' | '-' | '*' | '/' | '%'
        | '&' | '|' | '^' | '<<' | '>>'
        | '<' | '<=' | '>' | '>='
-       | '==' | '!=' | '===' | '!=='
+       | '==' | '!='
        | '&&' | '||'
        | '??'
 ```
@@ -648,10 +653,11 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 **Special semantics**:
 - `int / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
 - `int % 0` → throws `XR_ERR_MOD_BY_ZERO` (E0421) at runtime.
-- `float / 0.0` (and any float-result division by zero) → also throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime; xray arithmetic produces **no** IEEE inf/NaN.
-- `%` accepts integer operands only; float modulo (e.g. `5.0 % 2.0`) throws `XR_ERR_TYPE_MISMATCH` (E0404) at runtime.
+- Division whose result type is `float`/`float32` follows IEEE-754: `1.0 / 0.0` produces `+inf`, `-1.0 / 0.0` produces `-inf`, and `0.0 / 0.0` produces `NaN`; use `x.isNaN()` or `math.isNaN(x)` to test NaN.
+- `%` accepts integer operands only; modulo with a static type that contains float (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
 - Integer overflow: see §2.3.1.
 - `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
+- `char` is an independent Unicode scalar type and does not participate in arithmetic; use `int(c)` explicitly when the code point is needed.
 
 #### 3.3.2 Bitwise Operators
 
@@ -661,6 +667,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - Shift counts are taken modulo 64 (unlike C: always defined in xray).
 - `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding `uintN`.
 - `bool` does not participate in bitwise operations (use `&&` `||`).
+- `char` does not participate in bitwise operations; use `int(c)` explicitly when the code point is needed.
 
 #### 3.3.3 Comparison Operators
 
@@ -668,8 +675,6 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 |--|--|
 | `==` | value equality. `int` and `float` are comparable (with int→float implicit promotion). Strings compare by content. class/struct uses `==` overload or default identity. |
 | `!=` | inverse of `==` |
-| `===` | **strict** equality: both type and value must match; no implicit conversion. |
-| `!==` | inverse of `===` |
 | `<` `<=` `>` `>=` | supported by numbers and strings; other types are unsupported by default (enable via `operator<` overload). |
 
 **Difference vs. JS**: xray's `==` **does not** do string↔number conversion; only the numeric int↔float promotion.
@@ -733,21 +738,22 @@ See §3.3.5 (`??`) and below (`?.` / `?[`).
 #### Optional chaining `?.` / `?[`
 
 ```ebnf
-OptionalChain ::= Primary ('?.' Identifier | '?[' Expr ']')+
+OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr ']')+
 ```
 
 ```xray @id=expr-optional-chain
 let len = name?.length          // returns null when name is null
 let item = arr?[0]              // optional index
+let value = callback?.(input)   // optional function call
 ```
 
 **Semantics**:
 - If the LHS of `?.` or `?[` is `null`, the entire expression short-circuits to `null`.
-- `?.` is for property access and method calls: `obj?.prop`, `obj?.method()`.
+- `?.` is for property access, method calls, and function calls: `obj?.prop`, `obj?.method()`, `func?.(args)`.
 - `?[` is for index access: `arr?[0]`. Symmetric with regular indexing `arr[0]` — just add `?` before `[`.
+- `func?.(args)` does not evaluate its arguments when the function value is `null`; it returns `null` directly.
 - **Propagation**: in `a?.b.c.d`, if `a` is null the whole chain returns null; intermediate `.` operations are not re-checked.
 - Result type: the original type plus `?` (already-nullable types remain unchanged).
-- Optional function call `func?.()` is not part of the current grammar.
 
 ### 3.7 Force Unwrap `!`
 
@@ -803,25 +809,28 @@ let n = v as int?          // returns null on failure (the "as nullable" safe fo
 - Parent → child (runtime `instanceof`).
 - Union member → concrete member.
 
-### 3.9 Range `..` and Spread `...`
+### 3.9 Range `..` / `..=` and Spread `...`
 
-#### Range `a..b`
+#### Range `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr ('..' AddExpr)?
+RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
 ```
 
 ```xray @id=expr-range
 0..10                  // 0..10, left-closed right-open (includes 0, excludes 10)
+0..=10                 // 0..=10, closed interval (includes both 0 and 10)
 let r = 1..100
 let n = 10
 for (i in 0..n) { print(i) }
+for (i in 0..=n) { print(i) }
 ```
 
 - Type: `Range` (int ranges only).
-- Half-open interval `[a, b)`: `a` is included, `b` is not. `for-in`, `Range.includes`, `Range.length`, `Range.toArray()`, and the `a..b` pattern in `match` all share the same semantics.
+- `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
+- `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
+- `for-in`, `Range.includes`, `Range.length`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
 - Primary uses: `for-in` loops, range checks in pattern matching.
-- The closed-interval syntax (`a..=b`) is not currently provided; to include `b`, write `a..(b+1)`.
 
 #### Spread `...`
 
@@ -829,13 +838,25 @@ Allowed in the following positions only:
 - **Function rest parameter declaration**: `fn f(...args: int)`
 - **Function call spread**: `f(...args)`; the spread source must be a tuple whose arity is statically known.
 - **Tuple literal spread**: `(head, ...tail)`; the spread source must be a tuple whose arity is statically known.
+- **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).
+- **Object/record literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
+
+```xray @id=expr-spread-collections
+let a = [1, 2]
+let b = [3, 4]
+let nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
+
+let base = { x: 1, y: 2 }
+let point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+```
 
 ### 3.10 Literal Construction
 
 #### Array `[...]`
 
 ```ebnf
-ArrayLit ::= '[' (Expr (',' Expr)* ','?)? ']'
+ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expr | Expr
 ```
 
 ```xray @id=expr-array-lit
@@ -876,6 +897,7 @@ let empty = #[]
 ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
 ObjectField ::= Identifier ':' Expr
               | Identifier            // shorthand: `{ x }` ≡ `{ x: x }`
+              | '...' Expr            // spread: `{ ...base }` merges fields
 ```
 
 ```xray @id=expr-object-lit
@@ -884,17 +906,18 @@ let users = "Bob"
 let obj = { users }              // shorthand
 ```
 
-- Defaults to an **extensible** structured object type (see §2.4.6 / §2.10 Json behavior).
-- Fix the structure with a `type` alias: `let u: User = {...}` (compile-time field check, sealed).
+- Defaults to sealed structural `Record` (see §2.4.6); the field set and offsets are fixed at compile time for AOT fast paths.
+- It is interpreted as a dynamic Json object literal only under an explicit `Json` expected type; use `Json.encode(value)` when a typed value crosses a JSON boundary.
+- Name the Record with a `type` alias: `let u: User = {...}` (compile-time field check, sealed).
 
-#### Bytes `new Bytes(...)`
+#### Bytes `Bytes(...)`
 
 See §2.4.5 and §14.5.
 
-#### Channel `new Channel<T>(buf?)`
+#### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = new Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 See §10.5.
@@ -940,12 +963,12 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-str[i]                  // returns a single-character string
+str[i]                  // returns char
 ```
 
 - `Array` indexing: `int`; out-of-bounds throws `E0430`.
 - `Map` indexing: key type; missing key → `E0431`.
-- `string` indexing: returns a length-1 string (**not** a char/int).
+- `string` indexing: addresses Unicode scalar positions and returns `char`.
 - User classes: via `operator[]` overload.
 
 #### Slice
@@ -963,7 +986,7 @@ str[0:5]                // string slice
 ```
 
 - Half-open interval `[start, end)`.
-- `string` slicing supports negative indexes (counting from the end); for `Array`, a negative `start` is clamped to `0` and a negative `end` is treated as the array length.
+- `Array` and `string` slicing share the same negative-index rule: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
 - Slicing returns a new object; the original array is not modified.
 
 ### 3.12 Anonymous Functions and Lambdas
@@ -984,7 +1007,7 @@ FnExpression ::= 'fn' GenericParams? '(' Params ')' ('->' Type)? Block
 arr.map(x -> x * 2)
 arr.filter(x -> x % 2 == 0)
 
-// ── Arrow lambda: any position, supports multi-param and type annotation ──
+// ── Arrow lambda: any position, supports multi-param and parameter type annotation ──
 let sum = arr.reduce((acc, x) -> acc + x, 0)    // no type
 let double = (x: int) -> x * 2                   // typed
 let add = (a: int, b: int) -> a + b              // multi-param
@@ -1002,12 +1025,12 @@ let identity = fn<T>(x: T) -> T { return x }     // generic
 | Form | Syntax | Suitable for |
 |------|------|----------|
 | Bare lambda | `x -> expr` | single-parameter callbacks, most concise |
-| Arrow lambda | `(x, y) -> expr` | multi-param, type annotation, or non-call positions |
+| Arrow lambda | `(x, y) -> expr` | multi-param, parameter type annotation, or non-call positions |
 | fn expression | `fn(x: T) -> R { ... }` | multi-statement body, return-type annotation, generics |
 
 **Key rules**:
 - **Bare lambda** (`x -> expr`): restricted to **call-argument position**; the single parameter is unparenthesized. The parameter type is inferred from the callee signature or the container element type.
-- **Arrow lambda** (`(x) -> expr`, `(x, y) -> expr`): usable in any position. Parameter types may be omitted and inferred from context; inference failure raises `E0365`.
+- **Arrow lambda** (`(x) -> expr`, `(x, y) -> expr`): usable in any position. Parameter types may be omitted and inferred from context; inference failure raises `E0365`. Arrow lambdas **do not support return-type annotations**; use `fn(x: T) -> R { ... }`, or annotate the binding as a function type: `let f: (T) -> R = (x) -> ...`.
 - **fn expression** (`fn(x: T) { ... }`): usable in any position. Supports generic parameters `fn<T>(...)`, return-type annotation `-> T`, and a multi-statement body.
 - Single-expression form `-> expr` implicitly `return`s.
 - Block form `-> { ... }` or `{ ... }` uses an explicit `return`.
@@ -1035,30 +1058,33 @@ let result = match (x) {
 **Semantics**:
 - Matches top-down, taking the first successful arm.
 - All arm expressions must yield the same type (or a union).
-- **Exhaustiveness**: for enum scrutinees (ADT and simple enums), the compiler enforces exhaustiveness. Otherwise it is not enforced, and an unmatched value at runtime throws `Exception(E0442)`.
+- **Exhaustiveness**: for enum scrutinees (ADT and simple enums), the compiler enforces exhaustiveness. Otherwise it is not enforced, and an unmatched value at runtime throws `PanicInfo(E0442)`.
 - For pattern details see [§6](#6-patterns).
 
-### 3.14 `new`
+### 3.14 Construction expressions
 
 ```ebnf
-NewExpr ::= 'new' Identifier TypeArgs? '(' ArgList? ')'
+ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```
 
+Construction looks just like a function call: `TypeName(args)`. There is no `new` keyword—writing `new` (e.g. `new Point(...)`) is a compile error that tells you to delete it.
+
 ```xray @id=expr-new
-let p = new Point(1.0, 2.0)
-let arr = new Array<int>()
-let ch = new Channel<int>(10)
-let m = new Map<string, int>()
+let p = Point(1.0, 2.0)
+let arr = Array<int>()
+let ch = Channel<int>(10)
+let m = Map<string, int>()
 ```
 
 **Used for**:
-- Class and struct instantiation.
-- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Bytes` / `StringBuilder`, etc.).
+- Class and struct instantiation (`TypeName(args)`).
+- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Bytes` / `StringBuilder`, etc.; also `TypeName(args)`).
+- Disambiguation is by symbol kind in the analyzer: type names construct, function names call (naming convention: types capitalized, functions lowercase).
 
 **Relation to literals**:
 ```xray @id=expr-literal-constructor-relation
-let a = [1, 2, 3]              // equivalent to new Array<int>() + push
-let m = #{}                    // equivalent to new Map<...>()
+let a = [1, 2, 3]              // equivalent to Array<int>() + push
+let m = #{}                    // equivalent to Map<...>()
 let p = Point{x: 1, y: 2}      // struct literal
 ```
 
@@ -1071,16 +1097,16 @@ See §1.6.5. In brief:
 ```
 
 - `${...}` accepts any expression (calls, object access, arithmetic).
-- Embedded string literals inside the interpolation require escaped quotes or a switch to single-quoted outer strings.
+- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings / char literals.
 - The expression's type must be convertible to a string (implement `toString()` or be a primitive).
 
 ### 3.16 `yield` Statement
 
 ```xray @id=expr-yield
-yield                       // yield execution
+yield expr                  // produce one generator value and suspend
 ```
 
-**Current implementation**: only the value-less statement form is supported, letting the coroutine relinquish the CPU (analogous to Go's `runtime.Gosched()`).
+`yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>`. `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
 
-See §10.10.
+Cooperative CPU yielding no longer uses bare `yield`; use `Coro.yield()` (see §10.10). Bare `yield` is a syntax error.
 <!-- /xr-spec:en -->

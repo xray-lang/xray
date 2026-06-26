@@ -247,7 +247,7 @@ TEST(hoist_generated_speculatable_select) {
 
 TEST(no_hoist_unspeculatable_zero_effect) {
     /*
-     * XI_EQ_STRICT has no declared effects, but it is not marked safe
+     * XI_IS has no declared effects, but it is not marked safe
      * for speculation. LICM must obey the generated policy boundary.
      */
     XiFunc *f = make_func();
@@ -277,9 +277,9 @@ TEST(no_hoist_unspeculatable_zero_effect) {
     rhs->aux_int = 11;
     header->control = cond;
 
-    XiValue *strict_eq = xi_value_new(f, body, XI_EQ_STRICT, &stub_bool, 2);
-    strict_eq->args[0] = lhs;
-    strict_eq->args[1] = rhs;
+    XiValue *type_check = xi_value_new(f, body, XI_IS, &stub_bool, 2);
+    type_check->args[0] = lhs;
+    type_check->args[1] = rhs;
 
     header->sealed = true;
     body->sealed = true;
@@ -287,7 +287,7 @@ TEST(no_hoist_unspeculatable_zero_effect) {
 
     XiPassChange chg = xi_opt_licm(f);
     ASSERT(!chg.values_changed);
-    ASSERT(strict_eq->block == body);
+    ASSERT(type_check->block == body);
 
     xi_func_free(f);
 }

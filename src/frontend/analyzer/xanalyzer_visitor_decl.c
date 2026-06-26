@@ -454,8 +454,6 @@ static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr) {
         case AST_BINARY_RSHIFT:
         case AST_BINARY_EQ:
         case AST_BINARY_NE:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_BINARY_LT:
         case AST_BINARY_LE:
         case AST_BINARY_GT:
@@ -631,8 +629,6 @@ static void xa_summary_mark_capture_refs(XaParamEscapeSummary *summary, AstNode 
         case AST_BINARY_RSHIFT:
         case AST_BINARY_EQ:
         case AST_BINARY_NE:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_BINARY_LT:
         case AST_BINARY_LE:
         case AST_BINARY_GT:
@@ -824,8 +820,6 @@ static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
         case AST_BINARY_RSHIFT:
         case AST_BINARY_EQ:
         case AST_BINARY_NE:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_BINARY_LT:
         case AST_BINARY_LE:
         case AST_BINARY_GT:
@@ -1051,8 +1045,6 @@ static bool xa_method_body_mutates_receiver(AstNode *node, XrClassInfo *receiver
         case AST_BINARY_MOD:
         case AST_BINARY_EQ:
         case AST_BINARY_NE:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_BINARY_LT:
         case AST_BINARY_LE:
         case AST_BINARY_GT:
@@ -1437,7 +1429,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         for (int i = 0; i < fn->param_count; i++) {
             XrParamNode *param = fn->params[i];
             param_types[i] = (param && param->type)
-                                 ? xr_tref_resolve(ctx->analyzer->isolate, param->type)
+                                 ? xr_tref_resolve_in_analyzer(ctx->analyzer, param->type)
                                  : xr_type_new_unknown(NULL);
             param_names[i] = param ? param->name : NULL;
             if (param && param->is_rest)
@@ -1458,8 +1450,9 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     }
 
     // Omitted return type defaults to void; error if body has 'return <expr>'
-    XrType *return_type = fn->return_type ? xr_tref_resolve(ctx->analyzer->isolate, fn->return_type)
-                                          : xr_type_new_unit(NULL);
+    XrType *return_type = fn->return_type
+                              ? xr_tref_resolve_in_analyzer(ctx->analyzer, fn->return_type)
+                              : xr_type_new_unit(NULL);
     if (!fn->return_type && fn->name && fn->body) {
         if (xa_body_has_return_expr(fn->body)) {
             char msg[256];
@@ -1540,6 +1533,17 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     xa_symbol_links_set_param_escape_summary(ctx, links, param_types, param_names, fn->param_count,
                                              return_type, fn->body, NULL);
 
+    // Record per-parameter default expressions for caller-side default filling.
+    if (fn->param_count > 0) {
+        AstNode **defs = (AstNode **) xr_calloc(fn->param_count, sizeof(AstNode *));
+        if (defs) {
+            for (int i = 0; i < fn->param_count; i++)
+                defs[i] = fn->params[i] ? fn->params[i]->default_value : NULL;
+            xa_symbol_links_set_param_defaults(links, defs, fn->param_count);
+            xr_free(defs);
+        }
+    }
+
     // Store generic type parameters and intersection-style constraint lists.
     if (fn->type_param_count > 0 && fn->type_params) {
         int n = fn->type_param_count;
@@ -1586,6 +1590,17 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         xr_free(constraint_counts);
     }
 
+    XrLocation sig_loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    for (int i = 0; i < fn->param_count; i++) {
+        XrParamNode *param = fn->params ? fn->params[i] : NULL;
+        XrLocation param_loc = {.file = ctx->file_path,
+                                .line = param ? param->line : node->line,
+                                .column = param ? param->column : node->column};
+        xa_validate_hashable_key_type(ctx, param_types ? param_types[i] : NULL, links,
+                                      "function parameter type", &param_loc);
+    }
+    xa_validate_hashable_key_type(ctx, return_type, links, "function return type", &sig_loc);
+
     if (param_types)
         xr_free(param_types);
     if (param_names)
@@ -1631,9 +1646,8 @@ static void xa_collect_returns(AstNode *node, AstNode **out, int *count, int cap
     }
 }
 
-// Infer Json return type for a function whose returns are all same-shape object literals.
-// Returns an interned XrType (XR_KIND_JSON) or NULL.
-static XrType *xa_infer_return_json_type(XrVMRuntime *X, FunctionDeclNode *fn) {
+// Infer Record return type for a function whose returns are all same-shape object literals.
+static XrType *xa_infer_return_record_type(XrVMRuntime *X, FunctionDeclNode *fn) {
     if (!fn->body || fn->return_type)
         return NULL;
 
@@ -1721,7 +1735,7 @@ static XrType *xa_infer_return_json_type(XrVMRuntime *X, FunctionDeclNode *fn) {
         }
         idx++;
     }
-    return xr_type_new_json_with_fields(X, names, types, fc, true);
+    return xr_type_new_record_with_fields(X, names, types, fc, true);
 }
 
 // Phase 2: Collect function body (parameters and body declarations).
@@ -1739,6 +1753,7 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
 
     // Enter function scope and collect body
     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, node);
+    ctx->analyzer->current_scope->function_symbol = sym;
 
     // Add parameters to scope
     for (int i = 0; i < fn->param_count; i++) {
@@ -1781,7 +1796,7 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
     // This updates the function's return type so that call-site type propagation
     // can see a concrete Json type instead of unknown.
     if (links && !fn->return_type) {
-        XrType *inferred_ret = xa_infer_return_json_type(ctx->analyzer->isolate, fn);
+        XrType *inferred_ret = xa_infer_return_record_type(ctx->analyzer->isolate, fn);
         if (inferred_ret) {
             links->return_type = inferred_ret;
             links->return_type_inferred = true;
@@ -2199,7 +2214,12 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
         if (!iface_name)
             continue;
 
-        // Built-in interfaces have no XrClassInfo* attached; skip them.
+        // Built-in interfaces have no XrClassInfo* attached. Hashable is the
+        // one builtin with a user-visible structural contract.
+        if (strcmp(iface_name, "Hashable") == 0) {
+            xa_validate_hashable_contract_for_class(ctx, cls_node, cls_info);
+            continue;
+        }
         if (xa_is_builtin_interface_name(iface_name))
             continue;
 
@@ -2375,6 +2395,8 @@ skip_interfaces:
             field_sym->location.line = field->line;
             field_sym->is_static = fd->is_static;
             field_sym->is_private = fd->is_private;
+            field_sym->is_protected = fd->is_protected;
+            field_sym->is_const = fd->is_const;
             xa_visit_add_symbol_checked(ctx, field_sym, 0);
 
             XaSymbolLinks *field_links = xa_analyzer_get_links(ctx->analyzer, field_sym);
@@ -2399,7 +2421,6 @@ skip_interfaces:
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_MISSING_TYPE, msg, &loc);
             }
-
             xa_class_info_add_field(info, field_sym);
         }
     }
@@ -2635,6 +2656,8 @@ skip_layout:
             method_sym->location.line = method->line;
             method_sym->is_static = md->is_static;
             method_sym->is_private = md->is_private;
+            method_sym->is_protected = md->is_protected;
+            method_sym->is_override = md->is_override;
             method_sym->mutates_receiver =
                 !md->is_static && xa_method_body_mutates_receiver(md->body, info);
             xa_visit_add_symbol_checked(ctx, method_sym, 0);
@@ -2654,7 +2677,7 @@ skip_layout:
                 for (int j = 0; param_types && j < md->param_count; j++) {
                     param_types[j] =
                         (md->param_types && md->param_types[j])
-                            ? xr_tref_resolve(ctx->analyzer->isolate, md->param_types[j])
+                            ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->param_types[j])
                             : xr_type_new_unknown(NULL);
                     param_names[j] = md->parameters ? md->parameters[j] : NULL;
 
@@ -2676,8 +2699,9 @@ skip_layout:
             // Skip getter/setter (set:xxx, get:xxx) - return types are implicit
             bool is_accessor = md->name && (strncmp(md->name, "set:", 4) == 0 ||
                                             strncmp(md->name, "get:", 4) == 0);
-            XrType *ret_type =
-                md->return_type ? xr_tref_resolve(ctx->analyzer->isolate, md->return_type) : NULL;
+            XrType *ret_type = md->return_type
+                                   ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->return_type)
+                                   : NULL;
             if (!ret_type && is_accessor && md->body) {
                 ret_type = xa_infer_function_return_type(ctx, md->body);
             }
@@ -2735,6 +2759,11 @@ skip_layout:
                                              md->param_count, ret_type);
             xa_symbol_links_set_param_escape_summary(ctx, method_links, param_types, param_names,
                                                      md->param_count, ret_type, md->body, info);
+            // Record method/constructor default expressions for caller-side
+            // default filling (methods store defaults in md->default_values).
+            if (md->param_count > 0)
+                xa_symbol_links_set_param_defaults(method_links, md->default_values,
+                                                   md->param_count);
 
             // Store generic type parameters for the method.  Method-level
             // constraints aren't tracked in the method-decl AST yet, so the
@@ -2753,6 +2782,17 @@ skip_layout:
 
                 xr_free(type_param_names);
             }
+
+            XrLocation sig_loc = {
+                .file = ctx->file_path, .line = method->line, .column = method->column};
+            for (int j = 0; j < md->param_count; j++) {
+                xa_validate_hashable_key_type(
+                    ctx,
+                    method_type->function.param_types ? method_type->function.param_types[j] : NULL,
+                    method_links, "method parameter type", &sig_loc);
+            }
+            xa_validate_hashable_key_type(ctx, method_type->function.return_type, method_links,
+                                          "method return type", &sig_loc);
 
             xa_class_info_add_method(info, method_sym);
 
@@ -2777,6 +2817,15 @@ skip_layout:
         }
     }
 
+    for (int i = 0; i < info->field_count; i++) {
+        XaSymbol *field = info->fields[i];
+        XaSymbolLinks *field_links = field ? xa_analyzer_get_links(ctx->analyzer, field) : NULL;
+        XrLocation loc = {
+            .file = ctx->file_path, .line = field ? field->location.line : node->line, .column = 0};
+        xa_validate_hashable_key_type(ctx, field_links ? field_links->type : NULL, links,
+                                      "field type", &loc);
+    }
+
     xa_class_propagate_receiver_mutations(info, cls);
 
     validate_class_field_default_initialization(ctx, node, cls, info);
@@ -2796,6 +2845,7 @@ skip_layout:
 
         // Look up method symbol to get resolved param types
         XaSymbol *msym = xa_scope_lookup_local(ctx->analyzer->current_scope->parent, md->name);
+        ctx->analyzer->current_scope->function_symbol = msym;
         XaSymbolLinks *mlinks = msym ? xa_analyzer_get_links(ctx->analyzer, msym) : NULL;
 
         for (int j = 0; j < md->param_count; j++) {
@@ -2889,6 +2939,10 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
     links->declared_type = var->type_annotation
                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, var->type_annotation)
                                : NULL;
+    if (links->declared_type) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_validate_hashable_key_type(ctx, links->declared_type, NULL, "type annotation", &loc);
+    }
 
     // Mark const types as immutable for concurrency safety
     if (sym->is_shared && sym->is_const && links->declared_type) {
@@ -2926,6 +2980,121 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
  * After Pass 1 collects all class symbols, this pass links inheritance chains
  * by resolving base class names to actual XrClassInfo pointers.
  * ========================================================================== */
+
+static bool method_types_equal_for_override(XaSymbol *method, XaSymbol *parent_method) {
+    if (!method || !parent_method)
+        return false;
+    XrType *method_type = method->links.type;
+    XrType *parent_type = parent_method->links.type;
+    if (!method_type || !parent_type)
+        return false;
+    if (method_type->kind != XR_KIND_FUNCTION || parent_type->kind != XR_KIND_FUNCTION)
+        return false;
+    return xr_type_equals(method_type, parent_type);
+}
+
+static XaSymbol *find_parent_override_target(XrClassInfo *info, XaSymbol *method,
+                                             bool *out_name_match) {
+    if (out_name_match)
+        *out_name_match = false;
+    if (!info || !method || !method->name)
+        return NULL;
+
+    for (XrClassInfo *base = info->base; base; base = base->base) {
+        for (int i = 0; i < base->method_count; i++) {
+            XaSymbol *candidate = base->methods[i];
+            if (!candidate || !candidate->name || candidate->is_static || candidate->is_private)
+                continue;
+            if (strcmp(candidate->name, method->name) != 0)
+                continue;
+            if (out_name_match)
+                *out_name_match = true;
+            if (method_types_equal_for_override(method, candidate))
+                return candidate;
+        }
+    }
+    return NULL;
+}
+
+static XrClassInfo *class_info_from_type(XrType *type) {
+    if (!type)
+        return NULL;
+    if (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE)
+        return NULL;
+    return type->instance.class_ref;
+}
+
+static XrClassInfo *resolve_base_class_info(XaAnalyzer *analyzer, const char *base_name,
+                                            XrType **out_base_type) {
+    if (out_base_type)
+        *out_base_type = NULL;
+    if (!analyzer || !analyzer->global_scope || !base_name)
+        return NULL;
+
+    XaSymbol *base_sym = xa_scope_lookup(analyzer->global_scope, base_name);
+    if (!base_sym)
+        return NULL;
+
+    XaSymbolLinks *base_links = xa_analyzer_get_links(analyzer, base_sym);
+    if (!base_links)
+        return NULL;
+
+    if (out_base_type)
+        *out_base_type = base_links->type;
+
+    if (base_sym->kind == XA_SYM_CLASS && base_links->class_info)
+        return base_links->class_info;
+
+    return class_info_from_type(base_links->type);
+}
+
+static void report_override_mismatch(XaAnalyzer *analyzer, XrClassInfo *info, XaSymbol *method,
+                                     const char *reason) {
+    if (!analyzer || !method)
+        return;
+    char msg[384];
+    snprintf(msg, sizeof(msg), "Method '%s.%s' is marked override but %s",
+             info && info->name ? info->name : "?", method->name ? method->name : "?", reason);
+    XrLocation loc = method->location;
+    if (!loc.file)
+        loc.file = analyzer->current_file;
+    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_OVERRIDE_MISMATCH, msg,
+                               &loc);
+}
+
+static void validate_explicit_overrides(XaAnalyzer *analyzer, XrClassInfo *info) {
+    if (!analyzer || !info)
+        return;
+
+    for (int i = 0; i < info->static_method_count; i++) {
+        XaSymbol *method = info->static_methods[i];
+        if (method && method->is_override) {
+            report_override_mismatch(analyzer, info, method,
+                                     "static methods cannot override parent instance methods");
+        }
+    }
+
+    for (int i = 0; i < info->method_count; i++) {
+        XaSymbol *method = info->methods[i];
+        if (!method || !method->is_override)
+            continue;
+        if (strcmp(method->name, "constructor") == 0) {
+            report_override_mismatch(analyzer, info, method, "constructors cannot be overridden");
+            continue;
+        }
+        if (!info->base) {
+            report_override_mismatch(analyzer, info, method, "the class has no parent class");
+            continue;
+        }
+        bool name_match = false;
+        XaSymbol *target = find_parent_override_target(info, method, &name_match);
+        if (!target) {
+            report_override_mismatch(analyzer, info, method,
+                                     name_match ? "no parent method has the same signature"
+                                                : "no matching parent method exists");
+        }
+    }
+}
 
 // Build virtual method table for a class (inherits base vtable + own methods)
 static void build_class_vtable(XaAnalyzer *analyzer, XrClassInfo *info) {
@@ -3029,23 +3198,34 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
         if (!info->base_name)
             continue;
 
-        XaSymbol *base_sym = xa_scope_lookup(analyzer->global_scope, info->base_name);
-        if (base_sym && base_sym->kind == XA_SYM_CLASS) {
-            XaSymbolLinks *base_links = xa_analyzer_get_links(analyzer, base_sym);
-            if (base_links && base_links->class_info) {
-                info->base = base_links->class_info;
-                base_links->class_info->has_subclass = true;
-                // Link XrType inheritance chain for xr_type_is_subclass_of()
-                if (links->type && base_links->type) {
-                    links->type->instance.superclass = base_links->type;
-                }
+        XrType *base_type = NULL;
+        XrClassInfo *base_info = resolve_base_class_info(analyzer, info->base_name, &base_type);
+        if (base_info) {
+            info->base = base_info;
+            base_info->has_subclass = true;
+            // Link XrType inheritance chain for xr_type_is_subclass_of().
+            if (links->type && base_type) {
+                links->type->instance.superclass = base_type;
             }
         } else {
             info->base = NULL;
         }
     }
 
-    // Pass 2: Build virtual method tables (after all inheritance is linked)
+    // Pass 2: Validate explicit override contracts now that parent links exist.
+    for (int i = 0; i < count; i++) {
+        XaSymbol *sym = symbols[i];
+        if (!sym || sym->kind != XA_SYM_CLASS)
+            continue;
+
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+        if (!links || !links->class_info)
+            continue;
+
+        validate_explicit_overrides(analyzer, links->class_info);
+    }
+
+    // Pass 3: Build virtual method tables (after all inheritance is linked)
     for (int i = 0; i < count; i++) {
         XaSymbol *sym = symbols[i];
         if (!sym || sym->kind != XA_SYM_CLASS)
@@ -3058,7 +3238,7 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
         build_class_vtable(analyzer, links->class_info);
     }
 
-    // Pass 3: Mark methods as non-final if class has subclass
+    // Pass 4: Mark methods as non-final if class has subclass
     // (A method is only truly final if no subclass exists)
     for (int i = 0; i < count; i++) {
         XaSymbol *sym = symbols[i];

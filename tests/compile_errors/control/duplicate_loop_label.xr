@@ -1,0 +1,9 @@
+fn main() {
+    outer: for (i in 0..3) {
+        outer: for (j in 0..3) {
+            print(i + j)
+        }
+    }
+}
+
+main()

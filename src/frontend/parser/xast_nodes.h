@@ -128,6 +128,8 @@ struct AstNode {
         PatternMultiNode pattern_multi;
         PatternTupleNode pattern_tuple;
         PatternAdtNode pattern_adt;
+        PatternObjectNode pattern_object;
+        PatternArrayNode pattern_array;
         PatternTypeNode pattern_type;
         TernaryNode ternary;
         OptionalChainNode optional_chain;
@@ -138,6 +140,7 @@ struct AstNode {
         ChannelNewNode channel_new;
         SelectStmtNode select_stmt;
         SelectCaseNode select_case;
+        YieldStmtNode yield_stmt;
         DeferStmtNode defer_stmt;
         ScopeBlockNode scope_block;
         CancelledExprNode cancelled_expr;

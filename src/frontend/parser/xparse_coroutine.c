@@ -276,10 +276,11 @@ static AstNode *defer_wrap_in_closure(Parser *parser, AstNode *call_expr, int li
  * The callee (free function, method receiver, or builtin) stays inside the
  * closure body so it resolves through the normal call path; only the arguments
  * are snapshotted, matching the eager argument semantics of `defer fn(args)`.
- * Each desugared defer gets its own block scope, so the fixed temp names never
- * collide across sibling defers. */
+ * Each desugared defer gets its own synthetic block for name isolation, but it
+ * must not become a semantic defer scope: the deferred call belongs to the
+ * nearest user-written block, not to this eager-capture wrapper. */
 static AstNode *defer_desugar_call(Parser *parser, AstNode *call_node, int line) {
-    XrCompilerSession *session = parser->compiler_session;
+    XrCompilerSession *X = parser->compiler_session;
     CallExprNode *call = &call_node->as.call_expr;
     int n = call->arg_count;
 
@@ -287,23 +288,23 @@ static AstNode *defer_desugar_call(Parser *parser, AstNode *call_node, int line)
         return defer_wrap_in_closure(parser, call_node, line);
 
     /* Build temp references and the rewritten call that uses them. */
-    AstNode **temp_refs = (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) n);
+    AstNode **temp_refs = (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) n);
     char name[24];
     for (int k = 0; k < n; k++) {
         snprintf(name, sizeof(name), "__xr_dtmp_%d", k);
-        temp_refs[k] = xr_ast_variable(session, name, line);
+        temp_refs[k] = xr_ast_variable(X, name, line);
     }
-    AstNode *new_call = xr_ast_call_expr_generic(session, call->callee, temp_refs, n,
-                                                 call->type_args, call->type_arg_count, line);
+    AstNode *new_call = xr_ast_call_expr_generic(X, call->callee, temp_refs, n, call->type_args,
+                                                 call->type_arg_count, line);
 
     /* Outer block: snapshot args into temps, then defer the rewritten call. */
-    AstNode *outer = xr_ast_block(session, line);
+    AstNode *outer = xr_ast_block(X, line);
+    outer->as.block.is_synthetic_defer_capture = true;
     for (int k = 0; k < n; k++) {
         snprintf(name, sizeof(name), "__xr_dtmp_%d", k);
-        xr_ast_block_add(session, outer,
-                         xr_ast_var_decl(session, name, call->arguments[k], false, line));
+        xr_ast_block_add(X, outer, xr_ast_var_decl(X, name, call->arguments[k], false, line));
     }
-    xr_ast_block_add(session, outer, defer_wrap_in_closure(parser, new_call, line));
+    xr_ast_block_add(X, outer, defer_wrap_in_closure(parser, new_call, line));
     return outer;
 }
 

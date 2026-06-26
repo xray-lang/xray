@@ -5,7 +5,7 @@ enum AppErr {
 fn worker() -> int {
     let result = 0
     try {
-        yield
+        Coro.yield()
         throw AppErr.Bad(7)
     } catch (e) {
         result = 42

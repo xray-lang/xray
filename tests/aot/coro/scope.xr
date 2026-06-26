@@ -1,14 +1,66 @@
 fn send_after_yield(ch: Channel<int>, n: int) {
-    yield
+    Coro.yield()
     ch.send(n)
 }
 
 fn linked_value() -> int {
-    yield
+    Coro.yield()
     return 41
 }
 
-let ch = new Channel<int>(2)
+enum ScopeAotErr { Msg(string) }
+
+fn supervisor_ok() -> int {
+    return 5
+}
+
+fn supervisor_fail() -> int {
+    throw ScopeAotErr.Msg("aot_fail")
+    return 0
+}
+
+fn count_success(outcomes: Array<TaskOutcome>) -> int {
+    let count = 0
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Success(_) -> { count = count + 1 }
+            _ -> {}
+        }
+    }
+    return count
+}
+
+fn count_failed(outcomes: Array<TaskOutcome>) -> int {
+    let count = 0
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Failed(_) -> { count = count + 1 }
+            _ -> {}
+        }
+    }
+    return count
+}
+
+fn has_aot_error(outcomes: Array<TaskOutcome>) -> bool {
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Failed(err) -> {
+                match (err) {
+                    ScopeAotErr.Msg(msg) -> {
+                        if (msg == "aot_fail") {
+                            return true
+                        }
+                    }
+                    _ -> {}
+                }
+            }
+            _ -> {}
+        }
+    }
+    return false
+}
+
+let ch = Channel<int>(2)
 scope {
     go send_after_yield(ch, 1)
     go send_after_yield(ch, 2)
@@ -31,6 +83,11 @@ linked scope {
     print(value + 1)
 }
 
-let errors = supervisor scope {
+let outcomes = supervisor scope {
+    go supervisor_ok()
+    go supervisor_fail()
 }
-print(errors.length)
+print(outcomes.length)
+print(count_success(outcomes))
+print(count_failed(outcomes))
+print(has_aot_error(outcomes))

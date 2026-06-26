@@ -155,6 +155,7 @@ XR_FUNC AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **para
 
 XR_FUNC AstNode *xr_parse_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_expr_statement(Parser *parser);
+XR_FUNC AstNode *xr_parse_standalone_inc_dec(Parser *parser, bool for_step);
 XR_FUNC AstNode *xr_parse_print_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_block(Parser *parser);
 XR_FUNC AstNode *xr_parse_if_statement(Parser *parser);
@@ -200,6 +201,12 @@ XR_FUNC AstNode *xr_parse_export_declaration(Parser *parser);
 
 XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser);
 
+// True for built-in heap type names constructed via `T(args)` (Map/Array/...).
+XR_FUNC bool xr_is_construct_only_type_name(const char *name);
+XR_FUNC XrTypeRef *xr_parse_type_name_ref(Parser *parser, const char *name);
+XR_FUNC XrTypeRef *xr_parse_generic_type_name_ref(Parser *parser, const char *name,
+                                                  XrTypeRef **args, int arg_count);
+
 /* Parse one or more interface constraints separated by '&', e.g.
  *   T: Comparable
  *   T: Comparable & Hashable & Stringable
@@ -241,5 +248,6 @@ XR_FUNC AstNode *xr_parse_scope_block_with_mode(Parser *parser, uint8_t scope_mo
 /* ========== Misc Helpers ========== */
 
 XR_FUNC size_t xr_process_escapes(const char *src, size_t src_len, char *out);
+XR_FUNC bool xr_lbrace_starts_destructure_assignment(Parser *parser);
 
 #endif  // XPARSE_INTERNAL_H

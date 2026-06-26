@@ -13,7 +13,7 @@ class Dog extends Animal {
     }
 }
 
-let d = new Dog("Rex")
+let d = Dog("Rex")
 print(d.describe())
 print(d.leg_count())
 print(d.name)

@@ -31,6 +31,12 @@
 #define XR_UNICODE_INVALID 0xFFFD
 #define XR_UTF8_MAX_BYTES 4
 
+// True if cp is a valid Unicode scalar value: in range and not a UTF-16
+// surrogate (U+D800..U+DFFF). This is exactly the set `char` may hold.
+static inline bool xr_unicode_is_scalar(uint32_t cp) {
+    return cp <= XR_UNICODE_MAX && !(cp >= 0xD800 && cp <= 0xDFFF);
+}
+
 /* ========== UTF-8 Decode ========== */
 
 // Get UTF-8 character byte length from first byte

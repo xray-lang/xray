@@ -33,14 +33,16 @@ static const char xr_native_def_channel[] =
     "// Built-in Channel<T> type — implementation in src/runtime/coro/xchannel_methods.c\n\nenum "
     "Recv<T> {\n    Value(T)\n    Empty\n    Timeout\n    Closed\n}\n\nenum SendResult {\n    "
     "Sent\n    Full\n    Timeout\n    Closed\n}\n\n@native\nclass Channel<T> {\n    length: int\n  "
-    "  capacity: int\n    isClosed: bool\n\n    send(value: T)\n    recv() -> Recv<T>\n\n    "
-    "trySend(value: T) -> SendResult\n    tryRecv() -> Recv<T>\n\n    sendTimeout(value: T, "
-    "timeout: int) -> SendResult\n    recvTimeout(timeout: int) -> Recv<T>\n\n    close()\n}\n";
+    "  capacity: int\n    isClosed: bool\n\n    send(value: T)\n    recv() -> Recv<T>\n    "
+    "recvOr(default: T) -> T\n\n    trySend(value: T) -> SendResult\n    tryRecv() -> Recv<T>\n\n  "
+    "  sendTimeout(value: T, timeout: int) -> SendResult\n    recvTimeout(timeout: int) -> "
+    "Recv<T>\n\n    close()\n}\n";
 
 static const char xr_native_def_coroutine[] =
     "// Built-in Task type (coroutine handle) — implementation in src/runtime/coro/\n\nenum "
-    "TaskResult<T> {\n    Success(T)\n    Failed(Exception)\n    Cancelled\n    Timeout\n    "
-    "Pending\n}\n\nenum TaskStatus {\n    Pending\n    Running\n    Success\n    Failed\n    "
+    "TaskResult<T> {\n    Success(T)\n    Failed(unknown)\n    Cancelled\n    Timeout\n    "
+    "Pending\n}\n\nenum TaskOutcome {\n    Success(unknown)\n    Failed(unknown)\n    "
+    "Cancelled\n}\n\nenum TaskStatus {\n    Pending\n    Running\n    Success\n    Failed\n    "
     "Cancelled\n}\n\n@native\nclass Task<T> {\n    done: bool\n    status: TaskStatus\n\n    "
     "cancel()\n    poll() -> TaskResult<T>\n    awaitResult() -> TaskResult<T>\n    "
     "awaitTimeout(timeout: int) -> TaskResult<T>\n}\n";
@@ -50,48 +52,62 @@ static const char xr_native_def_enum[] =
     "value: Json\n    ordinal: int\n    toString() -> string\n}\n\n@native\nclass EnumType {\n    "
     "memberCount: int\n    getMember(index: int) -> EnumValue\n}\n";
 
-static const char xr_native_def_exception[] =
-    "// Built-in Exception class.\n//\n// Field layout matches src/shared/xr_builtin_schema.h and "
-    "the XrClass built\n// by xr_register_exception_class in xexception.c. The\n// constructor and "
-    "toString bodies are PRIMITIVE on the C side; this\n// declaration exists for analyzer / LSP "
-    "awareness so user code can write\n// `class HttpError extends Exception { ... }` and "
-    "reference fields by\n// name from any module.\n\nclass Exception {\n    message: string\n    "
-    "stack: Array<string>\n    cause: Exception?\n    code: int\n    data: Json?\n    "
-    "constructor(message: string = \"\", cause: Exception? = null)\n    toString() -> string\n}\n";
-
 static const char xr_native_def_float[] =
     "// Built-in float type — implementation in "
     "src/runtime/value/xfloat_methods.c\n\n@native\nclass float {\n    abs() -> float\n    "
     "toString() -> string\n    toFixed(decimals?: int) -> string\n    toInt() -> int\n    floor() "
     "-> int\n    ceil() -> int\n    round() -> int\n    sqrt() -> float\n    pow(exp: float) -> "
-    "float\n}\n";
+    "float\n    isNaN() -> bool\n}\n";
 
 static const char xr_native_def_int[] =
     "// Built-in int type — implementation in src/runtime/value/xint_methods.c\n\n@native\nclass "
     "int {\n    abs() -> int\n    toString() -> string\n    toBigInt() -> BigInt\n    toFloat() -> "
     "float\n    toHex() -> string\n    max(other: int) -> int\n    min(other: int) -> int\n    "
     "floor() -> int\n    ceil() -> int\n    round() -> int\n    sqrt() -> float\n    pow(exp: "
-    "float) -> float\n}\n";
+    "float) -> float\n    checkedAdd(other: int) -> int?\n    checkedSub(other: int) -> int?\n    "
+    "checkedMul(other: int) -> int?\n    saturatingAdd(other: int) -> int\n    "
+    "saturatingSub(other: int) -> int\n    saturatingMul(other: int) -> int\n    "
+    "wrappingAdd(other: int) -> int\n    wrappingSub(other: int) -> int\n    wrappingMul(other: "
+    "int) -> int\n}\n";
 
 static const char xr_native_def_json[] =
     "// Built-in Json type — implementation in "
-    "src/runtime/object/xjson_methods.c\n\n@native\nclass Json {\n    keys() -> Array<string>\n    "
-    "values() -> Array<Json>\n    entries() -> Array<(string, Json)>\n    // Iteration protocol — "
-    "iterator() yields each field name (used by\n    // single-variable `for (k in jsonObj)`); "
-    "entriesIterator() yields\n    // (fieldName, value) tuples (used by `for (k, v in "
-    "jsonObj)`).\n    iterator() -> Iterator<string>\n    entriesIterator() -> Iterator<(string, "
-    "Json)>\n    has(key: string) -> bool\n    get(key: string) -> Json\n    isEmpty() -> bool\n   "
-    " delete(key: string)\n    clear()\n    toString() -> string\n}\n";
+    "src/runtime/object/xjson_methods.c\n\n@native\nclass Json {\n    static parse(text: string) "
+    "-> Json\n    static stringify(value: unknown, indent?: int) -> string\n    static "
+    "encode(value: unknown) -> Json\n    static isValid(text: string, strict?: bool) -> bool\n    "
+    "static tryParse(text: string) -> Json\n    static keys(obj: Json) -> Array<string>\n    "
+    "static values(obj: Json) -> Array<Json>\n    static entries(obj: Json) -> Array<(string, "
+    "Json)>\n    static has(obj: Json, key: string) -> bool\n    static get(obj: Json, key: "
+    "string, default?: unknown) -> Json\n    static size(obj: Json) -> int\n    static "
+    "isEmpty(obj: Json) -> bool\n\n    keys() -> Array<string>\n    values() -> Array<Json>\n    "
+    "entries() -> Array<(string, Json)>\n    // Iteration protocol — iterator() yields each field "
+    "name (used by\n    // single-variable `for (k in jsonObj)`); entriesIterator() yields\n    // "
+    "(fieldName, value) tuples (used by `for (k, v in jsonObj)`).\n    iterator() -> "
+    "Iterator<string>\n    entriesIterator() -> Iterator<(string, Json)>\n    has(key: string) -> "
+    "bool\n    get(key: string) -> Json\n    isEmpty() -> bool\n    delete(key: string)\n    "
+    "clear()\n    toString() -> string\n}\n";
 
 static const char xr_native_def_map[] =
     "// Built-in Map<K, V> type — implementation in "
-    "src/runtime/object/xmap_methods.c\n\n@native\nclass Map<K, V> {\n    length: int\n    size: "
-    "int\n    get(key: K) -> V?\n    set(key: K, value: V)\n    has(key: K) -> bool\n    "
+    "src/runtime/object/xmap_methods.c\n\n@native\nclass Map<K: Hashable, V> {\n    length: int\n  "
+    "  size: int\n    get(key: K) -> V?\n    set(key: K, value: V)\n    has(key: K) -> bool\n    "
     "delete(key: K) -> bool\n    clear()\n    keys() -> Array<K>\n    values() -> Array<V>\n    "
     "entries() -> Array<(K, V)>\n    forEach(fn: (key: K, value: V) -> ())\n    // Iteration "
     "protocol — iterator() yields each key K (used by\n    // single-variable `for (k in m)`); "
     "entriesIterator() yields each\n    // (key, value) tuple (used by `for (k, v in m)`).\n    "
     "iterator() -> Iterator<K>\n    entriesIterator() -> Iterator<(K, V)>\n}\n";
+
+static const char xr_native_def_panic_info[] =
+    "// Built-in PanicInfo class — the runtime panic diagnostic payload.\n//\n// PanicInfo belongs "
+    "to the panic channel only: the VM/AOT runtime constructs it\n// on faults (out-of-bounds, "
+    "division by zero, non-exhaustive match, etc.) and\n// `catch panic (p: PanicInfo)` reads its "
+    "fields. Business errors are enum values\n// (`throw <enum>`), never PanicInfo. Field layout "
+    "matches xclass_system.h\n// PANIC_INFO_FIELD_* indices and the XrClass built by\n// "
+    "xr_register_panic_info_class in xclass_system.c; the constructor and toString\n// bodies are "
+    "PRIMITIVE on the C side. This declaration exists for analyzer / LSP\n// awareness so the "
+    "fields are visible from any module.\n\nclass PanicInfo {\n    message: string\n    stack: "
+    "Array<string>\n    cause: PanicInfo?\n    code: int\n    data: Json\n    constructor(message: "
+    "string = \"\", cause: PanicInfo? = null)\n    toString() -> string\n}\n";
 
 static const char xr_native_def_regex[] =
     "// Built-in Regex type — implementation in stdlib/regex/xregex_binding.c\n\n@native\nclass "
@@ -110,8 +126,8 @@ static const char xr_native_def_resultgroup[] =
 
 static const char xr_native_def_set[] =
     "// Built-in Set<T> type — implementation in "
-    "src/runtime/object/xset_methods.c\n\n@native\nclass Set<T> {\n    length: int\n    size: "
-    "int\n    add(value: T)\n    has(value: T) -> bool\n    delete(value: T) -> bool\n    "
+    "src/runtime/object/xset_methods.c\n\n@native\nclass Set<T: Hashable> {\n    length: int\n    "
+    "size: int\n    add(value: T)\n    has(value: T) -> bool\n    delete(value: T) -> bool\n    "
     "clear()\n    values() -> Array<T>\n    forEach(fn: (value: T) -> ())\n    // Iteration "
     "protocol — yields each element T (used by for-in).\n    iterator() -> Iterator<T>\n}\n";
 
@@ -131,8 +147,8 @@ static const char xr_native_def_string[] =
     "string\n    match(pattern: string) -> Array<string>?\n    // Iteration protocol — iterator() "
     "yields each character, while\n    // entriesIterator() yields (charIndex, character) tuples. "
     "Both\n    // are used by for-in lowering and may be called directly.\n    iterator() -> "
-    "Iterator<string>\n    entriesIterator() -> Iterator<(int, string)>\n    entries() -> "
-    "Array<(int, string)>\n}\n";
+    "Iterator<char>\n    entriesIterator() -> Iterator<(int, char)>\n    entries() -> Array<(int, "
+    "char)>\n}\n";
 
 static const char xr_native_def_stringbuilder[] =
     "// Built-in StringBuilder type — implementation in "
@@ -152,11 +168,11 @@ static const char xr_native_def_workqueue[] =
     X("channel", xr_native_def_channel)                                                            \
     X("coroutine", xr_native_def_coroutine)                                                        \
     X("enum", xr_native_def_enum)                                                                  \
-    X("exception", xr_native_def_exception)                                                        \
     X("float", xr_native_def_float)                                                                \
     X("int", xr_native_def_int)                                                                    \
     X("json", xr_native_def_json)                                                                  \
     X("map", xr_native_def_map)                                                                    \
+    X("panic_info", xr_native_def_panic_info)                                                      \
     X("regex", xr_native_def_regex)                                                                \
     X("resultgroup", xr_native_def_resultgroup)                                                    \
     X("set", xr_native_def_set)                                                                    \

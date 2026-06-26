@@ -53,6 +53,7 @@ typedef enum XaMoveState {
 typedef struct XaSymbol XaSymbol;
 typedef struct XaScope XaScope;
 typedef struct XaSymbolLinks XaSymbolLinks;
+struct AstNode;
 
 // Reference location (for Find References)
 typedef struct XaRefLocation {
@@ -81,6 +82,11 @@ struct XaSymbolLinks {
     // For functions
     XrType **param_types;
     const char **param_names;  // Parameter names (for inlay hints)
+    // Per-parameter default-value expressions (AstNode*), or NULL when the
+    // parameter is required. Used for caller-side default argument filling:
+    // an omitted trailing argument is completed at the call site with a
+    // session-cloned copy of this expression (evaluated in the caller).
+    struct AstNode **param_defaults;
     int param_count;
     uint8_t *param_escapes;  // Per-parameter summary: value may be stored/returned/captured
     int param_escape_count;
@@ -141,10 +147,12 @@ struct XaSymbol {
     XrLocation location;  // Definition location
 
     // Modifiers
-    bool is_const;          // const declaration
+    bool is_const;          // const declaration / immutable field
     bool is_exported;       // export modifier
     bool is_static;         // static member
-    bool is_private;        // private member (starts with _)
+    bool is_private;        // private member (class-only visibility)
+    bool is_protected;      // protected member (class + subclass visibility)
+    bool is_override;       // explicit override modifier on a method
     bool is_shared;         // shared variable
     bool is_builtin;        // built-in type member (Array.push, etc.)
     bool mutates_receiver;  // method body writes through `this`
@@ -234,11 +242,27 @@ XR_FUNC void xa_class_info_free(XrClassInfo *info);
 XR_FUNC void xa_class_info_add_field(XrClassInfo *info, XaSymbol *field);
 XR_FUNC void xa_class_info_add_method(XrClassInfo *info, XaSymbol *method);
 XR_FUNC XaSymbol *xa_class_info_lookup_member(XrClassInfo *info, const char *name);
+XR_FUNC XaSymbol *xa_class_info_lookup_instance_member(XrClassInfo *info, const char *name);
+XR_FUNC XaSymbol *xa_class_info_lookup_static_member(XrClassInfo *info, const char *name);
+
+// Same as xa_class_info_lookup_member but also reports which class in the base
+// chain actually declares the member (used for private/protected visibility).
+XR_FUNC XaSymbol *xa_class_info_lookup_member_owner(XrClassInfo *info, const char *name,
+                                                    XrClassInfo **owner_out);
+XR_FUNC XaSymbol *xa_class_info_lookup_instance_member_owner(XrClassInfo *info, const char *name,
+                                                             XrClassInfo **owner_out);
+XR_FUNC XaSymbol *xa_class_info_lookup_static_member_owner(XrClassInfo *info, const char *name,
+                                                           XrClassInfo **owner_out);
 
 // API: Function signature helpers (integrated into XaSymbolLinks)
 XR_FUNC void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types,
                                               const char **param_names, int param_count,
                                               XrType *return_type);
+// Record per-parameter default-value expressions (AstNode*, or NULL when the
+// parameter is required) for caller-side default argument completion. The array
+// is copied; passing all-NULL clears any stored defaults.
+XR_FUNC void xa_symbol_links_set_param_defaults(XaSymbolLinks *links, struct AstNode **defaults,
+                                                int count);
 XR_FUNC XrType *xa_symbol_links_get_return_type(XaSymbolLinks *links);
 XR_FUNC XrType **xa_symbol_links_get_param_types(XaSymbolLinks *links, int *count);
 XR_FUNC const char **xa_symbol_links_get_param_names(XaSymbolLinks *links, int *count);

@@ -4,18 +4,18 @@ fn show(label: string, value: bool) {
 
 let emptyArray: Array<int> = []
 let fullArray: Array<int> = [1]
-if (emptyArray) { show("empty-array-if", true) } else { show("empty-array-if", false) }
-if (fullArray) { show("full-array-if", true) } else { show("full-array-if", false) }
+show("empty-array-if", bool(emptyArray))
+show("full-array-if", bool(fullArray))
 
 let emptyMap: Map<string, int> = #{}
 let fullMap: Map<string, int> = #{"x": 1}
-if (emptyMap) { show("empty-map-if", true) } else { show("empty-map-if", false) }
-if (fullMap) { show("full-map-if", true) } else { show("full-map-if", false) }
+show("empty-map-if", bool(emptyMap))
+show("full-map-if", bool(fullMap))
 
 let emptySet: Set<string> = #[]
 let fullSet: Set<string> = #["x"]
-if (emptySet) { show("empty-set-if", true) } else { show("empty-set-if", false) }
-if (fullSet) { show("full-set-if", true) } else { show("full-set-if", false) }
+show("empty-set-if", bool(emptySet))
+show("full-set-if", bool(fullSet))
 
 show("empty-string-bool", bool(""))
 show("nonempty-string-bool", bool("x"))

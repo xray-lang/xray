@@ -5,19 +5,18 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xstring.c - Immutable string implementation with interning
+ * xstring.c - Immutable string implementation with lazy sharing
  *
  * KEY CONCEPT:
- *   - Short strings (<=64B): interned in global pool
- *   - Long strings (>64B): shared on system heap
+ *   - Runtime strings: coroutine-local by default
+ *   - Canonical short strings (literals/symbols/intern/map keys): global pool
+ *   - Boundary strings: shared system-heap clones
  *   - FNV-1a hash cached at creation time
  */
 
 #include "../value/xtype.h"
 #include "../../base/xmalloc.h"
 #include "../../shared/xr_float_fmt.h"
-#include "../../shared/xr_numeric_core.h"
-#include "../../shared/xr_string_core.h"
 #include "../../base/xlog.h"
 #include "xarray.h"
 #include "xstring.h"
@@ -32,11 +31,14 @@
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
 #include "../mem/xheap.h"
+#include "../mem/xcoro_heap.h"
 #include "../mem/xsystem_heap.h"
 #include "../xshared.h"
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
+#include "../../base/xsimd.h"
 
 /* ========== String Pool Management ========== */
 
@@ -72,7 +74,20 @@ void xr_string_pool_free_internal(XrStringPool *pool) {
 
 /* ========== String Creation ========== */
 
-// Allocate string object on coroutine heap (shared by both paths)
+static inline uint32_t string_hash_nonzero(const char *chars, size_t length) {
+    uint32_t hash = xr_string_hash(chars, length);
+    return hash == 0 ? 1u : hash;
+}
+
+static inline void string_finish_runtime(XrString *str, const char *chars, size_t length,
+                                         uint32_t hash) {
+    str->hash = hash ? hash : string_hash_nonzero(chars, length);
+    if (length > XR_SHORT_STR_MAX)
+        XR_STR_SET_LONG(str);
+    XR_STR_SET_LOCAL(str);
+}
+
+// Allocate string object on coroutine heap (shared by runtime-local paths)
 static XrString *string_alloc(XrVMRuntime *iso, const char *chars, size_t length) {
     if (length > UINT32_MAX)
         return NULL;
@@ -92,14 +107,15 @@ static XrString *string_alloc(XrVMRuntime *iso, const char *chars, size_t length
     return str;
 }
 
-// Create non-interned string (lazy hash: computed on first use)
+// Create coroutine-local string. Hash is computed eagerly so equality and
+// map/set hashing never write into a string after it has been shared.
 XrString *xr_string_new(XrVMRuntime *iso, const char *chars, size_t length) {
     XR_DCHECK(iso != NULL, "string_new: NULL isolate");
     XR_DCHECK(length == 0 || chars != NULL, "string_new: NULL chars with length > 0");
     XrString *str = string_alloc(iso, chars, length);
     if (!str)
         return NULL;
-    str->hash = 0;  // Lazy: computed when needed
+    string_finish_runtime(str, str->data, length, 0);
     return str;
 }
 
@@ -118,7 +134,7 @@ XrString *xr_string_concat(XrVMRuntime *iso, XrString *a, XrString *b) {
     memcpy(str->data, a->data, a->length);
     memcpy(str->data + a->length, b->data, b->length);
     str->data[len] = '\0';
-    str->hash = 0;
+    string_finish_runtime(str, str->data, len, 0);
     return str;
 }
 
@@ -132,9 +148,8 @@ XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t l
         return NULL;
     }
 
-    if (hash == 0) {
-        hash = xr_string_hash(chars, length);
-    }
+    if (hash == 0)
+        hash = string_hash_nonzero(chars, length);
 
     if (length > XR_SHORT_STR_MAX) {
         XrSystemHeap *heap = core->sys_heap;
@@ -194,17 +209,93 @@ XrString *xr_string_intern(XrVMRuntime *iso, const char *chars, size_t length, u
         return xr_string_intern_core(core, chars, length, hash);
     }
     XrString *s = string_alloc(iso, chars, length);
-    if (s && hash)
-        s->hash = hash;
+    if (s)
+        string_finish_runtime(s, s->data, length, hash);
     return s;
+}
+
+XrString *xr_string_clone_shared_core(XrRuntimeCore *core, XrString *str) {
+    if (!str)
+        return NULL;
+    if (XR_OBJ_IS_SHARED(&str->hdr) && !XR_OBJ_GET_FLAG(&str->hdr, XR_OBJ_TRANSIT)) {
+        xr_shared_retain(&str->hdr);
+        return str;
+    }
+    if (!core || !core->sys_heap)
+        return NULL;
+    size_t length = str->length;
+    size_t total_size = sizeof(XrString) + length + 1;
+    XrString *shared = (XrString *) xr_sysheap_alloc_shared(core->sys_heap, total_size, XR_TSTRING);
+    if (!shared)
+        return NULL;
+    shared->length = str->length;
+    shared->hash = str->hash ? str->hash : string_hash_nonzero(str->data, str->length);
+    memcpy(shared->data, str->data, length);
+    shared->data[length] = '\0';
+    if (length > XR_SHORT_STR_MAX)
+        XR_STR_SET_LONG(shared);
+    return shared;
+}
+
+// Fast integer to string (without snprintf)
+static inline int fast_int_to_str(xr_Integer i, char *buffer) {
+    char *p = buffer;
+    int neg = 0;
+    uint64_t uval;
+
+    // Extract digits in the unsigned domain to avoid UB on -INT64_MIN
+    // (negating INT64_MIN as a signed value overflows and previously
+    // produced garbage like "-(" for the most-negative integer).
+    if (i < 0) {
+        neg = 1;
+        uval = (uint64_t) (-(i + 1)) + 1;
+    } else {
+        uval = (uint64_t) i;
+    }
+
+    // Write digits in reverse
+    char *start = p;
+    do {
+        *p++ = '0' + (char) (uval % 10);
+        uval /= 10;
+    } while (uval > 0);
+
+    if (neg) {
+        *p++ = '-';
+    }
+
+    int len = (int) (p - start);
+    *p = '\0';
+
+    // Reverse string
+    char *end = p - 1;
+    while (start < end) {
+        char tmp = *start;
+        *start = *end;
+        *end = tmp;
+        start++;
+        end--;
+    }
+
+    return len;
 }
 
 // Create string from integer
 XrString *xr_string_from_int(XrVMRuntime *iso, xr_Integer i) {
     XR_DCHECK(iso != NULL, "string_from_int: NULL isolate");
     char buffer[32];
-    int len = xr_numeric_core_format_i64(buffer, sizeof(buffer), i);
-    return xr_string_intern(iso, buffer, len, 0);
+    int len = fast_int_to_str(i, buffer);
+    return xr_string_new(iso, buffer, (size_t) len);
+}
+
+// Create string from unsigned 64-bit integer
+XrString *xr_string_from_uint64(XrVMRuntime *iso, uint64_t i) {
+    XR_DCHECK(iso != NULL, "string_from_uint64: NULL isolate");
+    char buffer[32];
+    int len = snprintf(buffer, sizeof(buffer), "%llu", (unsigned long long) i);
+    if (len < 0)
+        len = 0;
+    return xr_string_new(iso, buffer, (size_t) len);
 }
 
 // Create string from float
@@ -213,13 +304,13 @@ XrString *xr_string_from_float(XrVMRuntime *iso, xr_Number n) {
     XR_DCHECK(iso != NULL, "string_from_float: NULL isolate");
     char buffer[64];
     int len = xr_format_float(buffer, sizeof(buffer), n);
-    return xr_string_intern(iso, buffer, (size_t) len, 0);
+    return xr_string_new(iso, buffer, (size_t) len);
 }
 
 /* ========== String Comparison ========== */
 
 // String equality comparison (optimized)
-// Priority: pointer -> length -> hash -> pool check -> content
+// Priority: pointer -> length -> hash -> interned pointer proof -> content
 bool xr_string_equal(XrString *a, XrString *b) {
     XR_DCHECK(a != NULL && b != NULL, "string_equal: NULL argument");
     // Pointer equal (fastest path for interned strings)
@@ -233,18 +324,16 @@ bool xr_string_equal(XrString *a, XrString *b) {
     if (a->length != b->length)
         return false;
 
+    uint32_t ah = a->hash ? a->hash : string_hash_nonzero(a->data, a->length);
+    uint32_t bh = b->hash ? b->hash : string_hash_nonzero(b->data, b->length);
+
     // Hash not equal, fast reject
-    if (a->hash != b->hash)
+    if (ah != bh)
         return false;
 
-    // Same pool interned: pointer not equal means content not equal
-    if (XR_STR_IS_GLOBAL(a) && XR_STR_IS_GLOBAL(b)) {
+    // Same canonical intern pool: pointer not equal means content not equal.
+    if (XR_STR_IS_INTERNED(a) && XR_STR_IS_INTERNED(b)) {
         return false;  // Pointer not equal, content not equal
-    }
-
-    // Local pool strings: need content comparison for cross-pool
-    if (XR_STR_IS_LOCAL(a) && XR_STR_IS_LOCAL(b)) {
-        // Cannot determine if same pool, conservatively do content compare
     }
 
     // Content comparison (long strings or cross-pool)
@@ -282,13 +371,21 @@ int xr_string_compare(XrString *a, XrString *b) {
 // charAt - get character at position (supports negative index)
 XrString *xr_string_char_at(XrVMRuntime *iso, XrString *str, xr_Integer index) {
     XR_DCHECK(iso != NULL, "string_char_at: NULL isolate");
-    if (str == NULL)
+    if (str == NULL || str->length == 0)
         return NULL;
 
-    XrStringCoreSlice slice = xr_string_core_byte_slice_at(str->data, str->length, index);
-    if (slice.len == 0)
+    // Handle negative index
+    if (index < 0) {
+        index = (xr_Integer) str->length + index;
+    }
+
+    // Bounds check
+    if (index < 0 || (size_t) index >= str->length) {
         return NULL;
-    return xr_string_intern(iso, slice.data, slice.len, 0);
+    }
+
+    // Create single character string
+    return xr_string_new(iso, &str->data[index], 1);
 }
 
 // substring - extract substring
@@ -297,8 +394,20 @@ XrString *xr_string_substring(XrVMRuntime *iso, XrString *str, xr_Integer start,
     if (str == NULL)
         return NULL;
 
-    XrStringCoreSlice slice = xr_string_core_substring_slice(str->data, str->length, start, end);
-    return xr_string_intern(iso, slice.data, slice.len, 0);
+    // Handle negative index
+    if (start < 0)
+        start = 0;
+    if (end < 0 || (size_t) end > str->length)
+        end = str->length;
+
+    // Bounds check
+    if (start >= end || (size_t) start >= str->length) {
+        return xr_string_new(iso, "", 0);
+    }
+
+    // Extract substring
+    size_t len = end - start;
+    return xr_string_new(iso, &str->data[start], len);
 }
 
 // slice - slice with negative index support
@@ -306,17 +415,108 @@ XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_
     if (!iso || !str)
         return NULL;
 
-    XrStringCoreSlice slice = xr_string_core_range_slice(str->data, str->length, start, end);
-    return xr_string_intern(iso, slice.data, slice.len, 0);
+    xr_Integer len = (xr_Integer) str->length;
+
+    // Handle negative index: count from end
+    if (start < 0) {
+        start = len + start;
+        if (start < 0)
+            start = 0;
+    }
+    if (end < 0) {
+        end = len + end;
+        if (end < 0)
+            end = 0;
+    }
+
+    // Bounds check
+    if (start > len)
+        start = len;
+    if (end > len)
+        end = len;
+
+    // start > end returns empty string
+    if (start >= end) {
+        return xr_string_new(iso, "", 0);
+    }
+
+    // Extract substring
+    size_t slice_len = (size_t) (end - start);
+    return xr_string_new(iso, &str->data[start], slice_len);
 }
 
 // indexOf - find substring position
+// Tiered optimization: single char (memchr), short pattern (<=8), long pattern (Horspool)
 xr_Integer xr_string_index_of(XrVMRuntime *iso, XrString *str, XrString *substr) {
     (void) iso;
     if (str == NULL || substr == NULL)
         return -1;
-    return (xr_Integer) xr_string_core_index_of(str->data, str->length, substr->data,
-                                                substr->length);
+    if (substr->length == 0)
+        return 0;
+    if (substr->length > str->length)
+        return -1;
+
+    size_t n = str->length;
+    size_t m = substr->length;
+    const char *haystack = str->data;
+    const char *needle = substr->data;
+
+    // Strategy 1: single char - use memchr (usually SIMD optimized)
+    if (m == 1) {
+        const char *p = memchr(haystack, needle[0], n);
+        return p ? (xr_Integer) (p - haystack) : -1;
+    }
+
+    // Strategy 2: short pattern (<=8 bytes) - first char jump + memcmp
+    if (m <= 8) {
+        char first = needle[0];
+        size_t limit = n - m;
+        for (size_t i = 0; i <= limit;) {
+            // Jump to first char match
+            const char *p = memchr(haystack + i, first, limit - i + 1);
+            if (!p)
+                return -1;
+            i = (size_t) (p - haystack);
+            // Full compare
+            if (memcmp(p, needle, m) == 0) {
+                return (xr_Integer) i;
+            }
+            i++;
+        }
+        return -1;
+    }
+
+    // Strategy 3: long pattern (>8 bytes) - Horspool algorithm
+    size_t skip[256];
+
+    // Initialize skip table: default skip entire pattern length
+    for (int c = 0; c < 256; c++) {
+        skip[c] = m;
+    }
+    // Pattern chars: skip to alignment position
+    for (size_t i = 0; i < m - 1; i++) {
+        skip[(unsigned char) needle[i]] = m - 1 - i;
+    }
+
+    // Horspool search
+    size_t i = 0;
+    size_t limit = n - m;
+    while (i <= limit) {
+        // Compare from end
+        size_t j = m - 1;
+        while (j > 0 && haystack[i + j] == needle[j]) {
+            j--;
+        }
+
+        if (j == 0 && haystack[i] == needle[0]) {
+            return (xr_Integer) i;
+        }
+
+        // Bad character skip
+        i += skip[(unsigned char) haystack[i + m - 1]];
+    }
+
+    return -1;
 }
 
 // size - get string length
@@ -345,7 +545,12 @@ bool xr_string_starts_with(XrVMRuntime *iso, XrString *str, XrString *prefix) {
     (void) iso;
     if (str == NULL || prefix == NULL)
         return false;
-    return xr_string_core_starts_with(str->data, str->length, prefix->data, prefix->length);
+    if (prefix->length > str->length)
+        return false;
+    if (prefix->length == 0)
+        return true;
+
+    return memcmp(str->data, prefix->data, prefix->length) == 0;
 }
 
 // endsWith - check suffix
@@ -353,7 +558,13 @@ bool xr_string_ends_with(XrVMRuntime *iso, XrString *str, XrString *suffix) {
     (void) iso;
     if (str == NULL || suffix == NULL)
         return false;
-    return xr_string_core_ends_with(str->data, str->length, suffix->data, suffix->length);
+    if (suffix->length > str->length)
+        return false;
+    if (suffix->length == 0)
+        return true;
+
+    size_t offset = str->length - suffix->length;
+    return memcmp(&str->data[offset], suffix->data, suffix->length) == 0;
 }
 
 #define CASE_STACK_BUF 256
@@ -367,9 +578,12 @@ XrString *xr_string_to_lower_case(XrVMRuntime *iso, XrString *str) {
     char stack_buf[CASE_STACK_BUF];
     char *buffer = (str->length < CASE_STACK_BUF) ? stack_buf : (char *) xr_malloc(str->length + 1);
 
-    xr_string_core_ascii_lower_write(buffer, str->data, str->length);
+    for (size_t i = 0; i < str->length; i++) {
+        buffer[i] = tolower((unsigned char) str->data[i]);
+    }
+    buffer[str->length] = '\0';
 
-    XrString *result = xr_string_intern(iso, buffer, str->length, 0);
+    XrString *result = xr_string_new(iso, buffer, str->length);
     if (buffer != stack_buf)
         xr_free(buffer);
 
@@ -385,9 +599,12 @@ XrString *xr_string_to_upper_case(XrVMRuntime *iso, XrString *str) {
     char stack_buf[CASE_STACK_BUF];
     char *buffer = (str->length < CASE_STACK_BUF) ? stack_buf : (char *) xr_malloc(str->length + 1);
 
-    xr_string_core_ascii_upper_write(buffer, str->data, str->length);
+    for (size_t i = 0; i < str->length; i++) {
+        buffer[i] = toupper((unsigned char) str->data[i]);
+    }
+    buffer[str->length] = '\0';
 
-    XrString *result = xr_string_intern(iso, buffer, str->length, 0);
+    XrString *result = xr_string_new(iso, buffer, str->length);
     if (buffer != stack_buf)
         xr_free(buffer);
 
@@ -402,12 +619,29 @@ XrString *xr_string_trim(XrVMRuntime *iso, XrString *str) {
     if (str->length == 0)
         return str;
 
-    XrStringCoreSlice slice =
-        xr_string_core_trim_slice(str->data, str->length, XR_STRING_CORE_TRIM_BOTH);
-    return xr_string_intern(iso, slice.data, slice.len, 0);
+    // Find first non-whitespace
+    size_t start = 0;
+    while (start < str->length && xr_is_whitespace(str->data[start])) {
+        start++;
+    }
+
+    // All whitespace
+    if (start == str->length) {
+        return xr_string_new(iso, "", 0);
+    }
+
+    // Find last non-whitespace
+    size_t end = str->length - 1;
+    while (end > start && xr_is_whitespace(str->data[end])) {
+        end--;
+    }
+
+    // Extract
+    size_t len = end - start + 1;
+    return xr_string_new(iso, &str->data[start], len);
 }
 
-// trimStart - remove leading whitespace
+// trimStart - remove leading whitespace (SIMD optimized)
 XrString *xr_string_trim_start(XrVMRuntime *iso, XrString *str) {
     XR_DCHECK(iso != NULL, "string_trim_start: NULL isolate");
     if (str == NULL)
@@ -415,9 +649,18 @@ XrString *xr_string_trim_start(XrVMRuntime *iso, XrString *str) {
     if (str->length == 0)
         return str;
 
-    XrStringCoreSlice slice =
-        xr_string_core_trim_slice(str->data, str->length, XR_STRING_CORE_TRIM_START);
-    return xr_string_intern(iso, slice.data, slice.len, 0);
+    // SIMD skip whitespace
+    const char *p = xr_simd_skip_whitespace(str->data, str->length);
+    size_t start = p - str->data;
+
+    // All whitespace
+    if (start == str->length) {
+        return xr_string_new(iso, "", 0);
+    }
+
+    // Extract to end
+    size_t len = str->length - start;
+    return xr_string_new(iso, &str->data[start], len);
 }
 
 // trimEnd - remove trailing whitespace
@@ -428,53 +671,105 @@ XrString *xr_string_trim_end(XrVMRuntime *iso, XrString *str) {
     if (str->length == 0)
         return str;
 
-    XrStringCoreSlice slice =
-        xr_string_core_trim_slice(str->data, str->length, XR_STRING_CORE_TRIM_END);
-    return xr_string_intern(iso, slice.data, slice.len, 0);
+    // Find last non-whitespace
+    size_t end = str->length;
+    while (end > 0 && xr_is_whitespace(str->data[end - 1])) {
+        end--;
+    }
+
+    // All whitespace
+    if (end == 0) {
+        return xr_string_new(iso, "", 0);
+    }
+
+    return xr_string_new(iso, str->data, end);
 }
 
 // padStart - pad at start to target length
-XrString *xr_string_pad_start(XrVMRuntime *iso, XrString *str, xr_Integer target_len,
+XrString *xr_string_pad_start(XrVMRuntime *iso, XrString *str, int64_t target_len,
                               XrString *pad_str) {
     if (str == NULL)
         return NULL;
 
-    const char *pad = pad_str ? pad_str->data : NULL;
-    size_t pad_len = pad_str ? pad_str->length : 0;
-    XrStringCorePadPlan plan =
-        xr_string_core_pad_plan(str->data, str->length, target_len, pad, pad_len);
-    if (plan.kind == XR_STRING_CORE_PAD_INVALID || plan.kind == XR_STRING_CORE_PAD_ORIGINAL)
+    // Negative target or already at/over target length: no padding.
+    if (target_len < 0 || (size_t) target_len <= str->length) {
         return str;
+    }
 
-    char *result = xr_malloc(plan.len + 1);
+    // An explicit empty pad string performs no padding; default to space otherwise.
+    if (pad_str && pad_str->length == 0)
+        return str;
+    const char *pad = " ";
+    size_t pad_len = 1;
+    if (pad_str) {
+        pad = pad_str->data;
+        pad_len = pad_str->length;
+    }
+
+    size_t target = (size_t) target_len;
+    size_t fill_len = target - str->length;
+
+    char *result = xr_malloc(target + 1);
     if (!result)
         return NULL;
 
-    xr_string_core_pad_write(result, str->data, str->length, plan, XR_STRING_CORE_PAD_START);
-    XrString *ret = xr_string_intern(iso, result, plan.len, 0);
+    // Fill start
+    size_t pos = 0;
+    while (pos < fill_len) {
+        size_t copy_len = (fill_len - pos < pad_len) ? (fill_len - pos) : pad_len;
+        memcpy(result + pos, pad, copy_len);
+        pos += copy_len;
+    }
+
+    // Copy original string
+    memcpy(result + fill_len, str->data, str->length);
+    result[target] = '\0';
+
+    XrString *ret = xr_string_new(iso, result, target);
     xr_free(result);
     return ret;
 }
 
 // padEnd - pad at end to target length
-XrString *xr_string_pad_end(XrVMRuntime *iso, XrString *str, xr_Integer target_len,
+XrString *xr_string_pad_end(XrVMRuntime *iso, XrString *str, int64_t target_len,
                             XrString *pad_str) {
     if (str == NULL)
         return NULL;
 
-    const char *pad = pad_str ? pad_str->data : NULL;
-    size_t pad_len = pad_str ? pad_str->length : 0;
-    XrStringCorePadPlan plan =
-        xr_string_core_pad_plan(str->data, str->length, target_len, pad, pad_len);
-    if (plan.kind == XR_STRING_CORE_PAD_INVALID || plan.kind == XR_STRING_CORE_PAD_ORIGINAL)
+    // Negative target or already at/over target length: no padding.
+    if (target_len < 0 || (size_t) target_len <= str->length) {
         return str;
+    }
 
-    char *result = xr_malloc(plan.len + 1);
+    // An explicit empty pad string performs no padding; default to space otherwise.
+    if (pad_str && pad_str->length == 0)
+        return str;
+    const char *pad = " ";
+    size_t pad_len = 1;
+    if (pad_str) {
+        pad = pad_str->data;
+        pad_len = pad_str->length;
+    }
+
+    size_t target = (size_t) target_len;
+
+    char *result = xr_malloc(target + 1);
     if (!result)
         return NULL;
 
-    xr_string_core_pad_write(result, str->data, str->length, plan, XR_STRING_CORE_PAD_END);
-    XrString *ret = xr_string_intern(iso, result, plan.len, 0);
+    // Copy original string
+    memcpy(result, str->data, str->length);
+
+    // Fill end
+    size_t pos = str->length;
+    while (pos < target) {
+        size_t copy_len = (target - pos < pad_len) ? (target - pos) : pad_len;
+        memcpy(result + pos, pad, copy_len);
+        pos += copy_len;
+    }
+    result[target] = '\0';
+
+    XrString *ret = xr_string_new(iso, result, target);
     xr_free(result);
     return ret;
 }
@@ -484,45 +779,66 @@ xr_Integer xr_string_last_index_of(XrVMRuntime *iso, XrString *str, XrString *su
     (void) iso;
     if (str == NULL || substr == NULL)
         return -1;
-    return (xr_Integer) xr_string_core_last_index_of(str->data, str->length, substr->data,
-                                                     substr->length);
+    if (substr->length == 0)
+        return (xr_Integer) str->length;
+    if (substr->length > str->length)
+        return -1;
+
+    // Search from end
+    size_t last_pos = str->length - substr->length;
+    for (size_t i = last_pos + 1; i > 0; i--) {
+        size_t pos = i - 1;
+        if (memcmp(&str->data[pos], substr->data, substr->length) == 0) {
+            return (xr_Integer) pos;
+        }
+    }
+
+    return -1;
 }
 
 /* ========== String Advanced Methods ========== */
 
-typedef struct XrStringSplitVmCtx {
-    XrVMRuntime *iso;
-    XrArray *array;
-} XrStringSplitVmCtx;
-
-static bool xr_string_split_emit_vm(XrStringCoreSlice slice, void *user) {
-    XrStringSplitVmCtx *ctx = (XrStringSplitVmCtx *) user;
-    const char *data = slice.data ? slice.data : "";
-    XrString *part = xr_string_intern(ctx->iso, data, slice.len, 0);
-    if (!part)
-        return false;
-    xr_array_push(ctx->array, xr_string_value(part));
-    return true;
-}
-
 // split - split string into array
 XrArray *xr_string_split(XrVMRuntime *iso, XrString *str, XrString *delimiter) {
     XR_DCHECK(iso != NULL, "string_split: NULL isolate");
+    XrArray *result = xr_array_new(xr_current_coro(iso));
 
-    const char *data = str ? str->data : NULL;
-    size_t len = str ? str->length : 0;
-    const char *sep = delimiter ? delimiter->data : NULL;
-    size_t sep_len = delimiter ? delimiter->length : 0;
-    XrStringCoreSplitPlan plan = xr_string_core_split_plan(data, len, sep, sep_len);
-    int capacity = (plan.kind != XR_STRING_CORE_SPLIT_INVALID && plan.count <= (size_t) INT32_MAX)
-                       ? (int) plan.count
-                       : 0;
-    XrArray *result = xr_array_with_capacity(xr_current_coro(iso), capacity);
-    if (str == NULL || plan.kind == XR_STRING_CORE_SPLIT_INVALID)
+    if (str == NULL)
         return result;
 
-    XrStringSplitVmCtx ctx = {iso, result};
-    xr_string_core_split_each(data, len, sep, sep_len, xr_string_split_emit_vm, &ctx);
+    // Empty delimiter, split by character
+    if (delimiter == NULL || delimiter->length == 0) {
+        for (size_t i = 0; i < str->length; i++) {
+            XrString *ch = xr_string_new(iso, &str->data[i], 1);
+            xr_array_push(result, xr_string_value(ch));
+        }
+        return result;
+    }
+
+    // Split by delimiter
+    const char *start = str->data;
+    const char *end = str->data;
+    const char *str_end = str->data + str->length;
+
+    while (end <= str_end - delimiter->length) {
+        if (memcmp(end, delimiter->data, delimiter->length) == 0) {
+            // Found delimiter
+            size_t len = end - start;
+            XrString *part = xr_string_new(iso, start, len);
+            xr_array_push(result, xr_string_value(part));
+
+            end += delimiter->length;
+            start = end;
+        } else {
+            end++;
+        }
+    }
+
+    // Add last part
+    size_t len = str_end - start;
+    XrString *part = xr_string_new(iso, start, len);
+    xr_array_push(result, xr_string_value(part));
+
     return result;
 }
 
@@ -531,22 +847,26 @@ XrString *xr_string_replace(XrVMRuntime *iso, XrString *str, XrString *old_str, 
     XR_DCHECK(iso != NULL, "string_replace: NULL isolate");
     if (str == NULL || old_str == NULL || new_str == NULL)
         return str;
-
-    XrStringCoreReplacePlan plan =
-        xr_string_core_replace_plan(str->data, str->length, old_str->data, old_str->length,
-                                    new_str->data, new_str->length, false);
-    if (plan.kind == XR_STRING_CORE_REPLACE_INVALID)
-        return NULL;
-    if (plan.kind == XR_STRING_CORE_REPLACE_ORIGINAL)
+    if (old_str->length == 0)
         return str;
 
-    char *buffer = (char *) xr_malloc(plan.len + 1);
-    if (!buffer)
-        return NULL;
-    xr_string_core_replace_write(buffer, str->data, str->length, old_str->data, old_str->length,
-                                 new_str->data, new_str->length, plan, false);
+    // Find first occurrence
+    xr_Integer pos = xr_string_index_of(iso, str, old_str);
+    if (pos < 0)
+        return str;  // Not found
 
-    XrString *result = xr_string_intern(iso, buffer, plan.len, 0);
+    // Calculate new length
+    size_t new_length = str->length - old_str->length + new_str->length;
+    char *buffer = (char *) xr_malloc(new_length + 1);
+
+    // Concatenate: prefix + new_str + suffix
+    memcpy(buffer, str->data, pos);
+    memcpy(buffer + pos, new_str->data, new_str->length);
+    memcpy(buffer + pos + new_str->length, str->data + pos + old_str->length,
+           str->length - pos - old_str->length);
+    buffer[new_length] = '\0';
+
+    XrString *result = xr_string_new(iso, buffer, new_length);
     xr_free(buffer);
 
     return result;
@@ -558,22 +878,49 @@ XrString *xr_string_replace_all(XrVMRuntime *iso, XrString *str, XrString *old_s
     XR_DCHECK(iso != NULL, "string_replace_all: NULL isolate");
     if (str == NULL || old_str == NULL || new_str == NULL)
         return str;
-
-    XrStringCoreReplacePlan plan =
-        xr_string_core_replace_plan(str->data, str->length, old_str->data, old_str->length,
-                                    new_str->data, new_str->length, true);
-    if (plan.kind == XR_STRING_CORE_REPLACE_INVALID)
-        return NULL;
-    if (plan.kind == XR_STRING_CORE_REPLACE_ORIGINAL)
+    if (old_str->length == 0)
         return str;
 
-    char *buffer = (char *) xr_malloc(plan.len + 1);
-    if (!buffer)
-        return NULL;
-    xr_string_core_replace_write(buffer, str->data, str->length, old_str->data, old_str->length,
-                                 new_str->data, new_str->length, plan, true);
+    // Count replacements needed
+    int count = 0;
+    size_t pos = 0;
+    while (pos + old_str->length <= str->length) {
+        if (memcmp(&str->data[pos], old_str->data, old_str->length) == 0) {
+            count++;
+            pos += old_str->length;
+        } else {
+            pos++;
+        }
+    }
 
-    XrString *result = xr_string_intern(iso, buffer, plan.len, 0);
+    // No match, return original
+    if (count == 0)
+        return str;
+
+    // Calculate new length
+    size_t new_length = str->length + count * (new_str->length - old_str->length);
+    char *buffer = (char *) xr_malloc(new_length + 1);
+
+    // Build new string
+    size_t src_pos = 0;
+    size_t dst_pos = 0;
+
+    while (src_pos < str->length) {
+        if (src_pos + old_str->length <= str->length &&
+            memcmp(&str->data[src_pos], old_str->data, old_str->length) == 0) {
+            // Found match, copy new_str
+            memcpy(&buffer[dst_pos], new_str->data, new_str->length);
+            dst_pos += new_str->length;
+            src_pos += old_str->length;
+        } else {
+            // No match, copy single char
+            buffer[dst_pos++] = str->data[src_pos++];
+        }
+    }
+
+    buffer[new_length] = '\0';
+
+    XrString *result = xr_string_new(iso, buffer, new_length);
     xr_free(buffer);
 
     return result;
@@ -582,24 +929,21 @@ XrString *xr_string_replace_all(XrVMRuntime *iso, XrString *str, XrString *old_s
 // repeat - repeat string
 XrString *xr_string_repeat(XrVMRuntime *iso, XrString *str, xr_Integer count) {
     XR_DCHECK(iso != NULL, "string_repeat: NULL isolate");
-    if (str == NULL) {
-        return xr_string_intern(iso, "", 0, 0);
+    if (str == NULL || count <= 0) {
+        return xr_string_new(iso, "", 0);
     }
-
-    XrStringCoreRepeatPlan plan = xr_string_core_repeat_plan(str->data, str->length, count);
-    if (plan.kind == XR_STRING_CORE_REPEAT_INVALID)
-        return NULL;
-    if (plan.kind == XR_STRING_CORE_REPEAT_EMPTY)
-        return xr_string_intern(iso, "", 0, 0);
-    if (plan.kind == XR_STRING_CORE_REPEAT_ORIGINAL)
+    if (count == 1)
         return str;
 
-    char *buffer = (char *) xr_malloc(plan.len + 1);
-    if (!buffer)
-        return NULL;
-    xr_string_core_repeat_write(buffer, str->data, str->length, count);
+    size_t new_length = str->length * count;
+    char *buffer = (char *) xr_malloc(new_length + 1);
 
-    XrString *result = xr_string_intern(iso, buffer, plan.len, 0);
+    for (xr_Integer i = 0; i < count; i++) {
+        memcpy(buffer + i * str->length, str->data, str->length);
+    }
+    buffer[new_length] = '\0';
+
+    XrString *result = xr_string_new(iso, buffer, new_length);
     xr_free(buffer);
 
     return result;
@@ -618,9 +962,25 @@ XrString *xr_string_reverse(XrVMRuntime *iso, XrString *str) {
     if (!buffer)
         return NULL;
 
-    size_t dst = xr_string_core_reverse_utf8_write(buffer, str->data, len);
+    // Scan backwards: find UTF-8 char boundaries and copy forward
+    const char *src = str->data;
+    size_t dst = 0;
+    size_t end = len;
 
-    XrString *result = xr_string_intern(iso, buffer, dst, 0);
+    while (end > 0) {
+        // Walk back past continuation bytes (10xxxxxx)
+        size_t start = end - 1;
+        while (start > 0 && ((unsigned char) src[start] & 0xC0) == 0x80) {
+            start--;
+        }
+        size_t char_len = end - start;
+        memcpy(buffer + dst, src + start, char_len);
+        dst += char_len;
+        end = start;
+    }
+    buffer[dst] = '\0';
+
+    XrString *result = xr_string_new(iso, buffer, dst);
     if (buffer != stack_buf)
         xr_free(buffer);
 
@@ -629,13 +989,22 @@ XrString *xr_string_reverse(XrVMRuntime *iso, XrString *str) {
 
 // byteAt - O(1) byte index (supports negative index)
 XrString *xr_string_byte_at(XrVMRuntime *iso, XrString *str, xr_Integer index) {
-    if (!iso || !str)
+    if (!iso || !str || str->length == 0)
         return NULL;
 
-    XrStringCoreSlice slice = xr_string_core_byte_slice_at(str->data, str->length, index);
-    if (slice.len == 0)
+    // Handle negative index
+    if (index < 0) {
+        index = (xr_Integer) str->length + index;
+    }
+
+    // Bounds check
+    if (index < 0 || (size_t) index >= str->length)
         return NULL;
-    return xr_string_intern(iso, slice.data, slice.len, 0);
+
+    // Get single byte
+    char c = str->data[index];
+
+    return xr_string_new(iso, &c, 1);
 }
 
 // translate - Unicode char mapping (UTF-8 aware)
@@ -661,10 +1030,12 @@ XrString *xr_string_translate(XrVMRuntime *iso, XrString *str, XrMap *table) {
             char_len = 1;
         }
 
-        // Create current char string as key
-        XrString *key = xr_string_intern(iso, str->data + pos, char_len, 0);
+        // Create current char as a local probe key; map lookup compares by content.
+        XrString *key = xr_string_new(iso, str->data + pos, char_len);
         bool found = false;
-        XrValue val = xr_map_get(table, xr_string_value(key), &found);
+        XrValue key_value = xr_string_value(key);
+        XrValue val = xr_map_get(table, key_value, &found);
+        xr_rc_release_value(xr_current_coro_heap(), key_value);
 
         if (found && XR_IS_STRING(val)) {
             XrString *replacement = XR_TO_STRING(val);
@@ -688,18 +1059,16 @@ XrString *xr_string_translate(XrVMRuntime *iso, XrString *str, XrMap *table) {
 size_t xr_string_char_length(XrString *str) {
     if (!str)
         return 0;
-    return xr_string_core_utf8_char_count(str->data, str->length);
+    return xr_utf8_strlen(str->data, str->length);
 }
 
 // charCodeAt - get Unicode codepoint at char index
 int32_t xr_string_char_code_at(XrString *str, size_t index) {
     if (!str)
         return -1;
-    if (index > (size_t) INT64_MAX)
-        return -1;
 
     uint32_t cp;
-    if (xr_string_core_codepoint_at(str->data, str->length, (int64_t) index, &cp)) {
+    if (xr_utf8_char_at(str->data, str->length, index, &cp, NULL)) {
         return (int32_t) cp;
     }
     return -1;  // Index out of bounds
@@ -709,14 +1078,21 @@ int32_t xr_string_char_code_at(XrString *str, size_t index) {
 XrString *xr_string_char_at_unicode(XrVMRuntime *iso, XrString *str, size_t index) {
     if (!iso || !str)
         return NULL;
-    if (index > (size_t) INT64_MAX)
-        return NULL;
 
-    XrStringCoreSlice slice =
-        xr_string_core_utf8_index_slice_at(str->data, str->length, (int64_t) index);
-    if (slice.len == 0)
-        return NULL;
-    return xr_string_intern(iso, slice.data, slice.len, 0);
+    uint32_t cp;
+    size_t pos;
+    if (!xr_utf8_char_at(str->data, str->length, index, &cp, &pos)) {
+        return NULL;  // Index out of bounds
+    }
+
+    // Get byte length of this char
+    int char_size = xr_utf8_char_size((uint8_t) str->data[pos]);
+    if (pos + char_size > str->length) {
+        return NULL;  // Incomplete char
+    }
+
+    // Create single char string
+    return xr_string_new(iso, str->data + pos, (size_t) char_size);
 }
 
 /*
@@ -739,7 +1115,7 @@ XrString *xr_string_substring_by_char(XrVMRuntime *iso, XrString *str, size_t st
     if (byte_end > str->length)
         byte_end = str->length;
 
-    return xr_string_intern(iso, str->data + byte_start, byte_end - byte_start, 0);
+    return xr_string_new(iso, str->data + byte_start, byte_end - byte_start);
 }
 
 /*
@@ -757,7 +1133,7 @@ XrString *xr_string_from_codepoint(XrVMRuntime *iso, uint32_t codepoint) {
         len = xr_utf8_encode(XR_UNICODE_INVALID, buf);
     }
 
-    return xr_string_intern(iso, buf, len, 0);
+    return xr_string_new(iso, buf, (size_t) len);
 }
 
 /* ========== Helper Functions ========== */

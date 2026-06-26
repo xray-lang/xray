@@ -19,8 +19,8 @@ fn test_coro_stats() {
 
     // 测试 2：创建协程后统计变化
     print("test2: stats after creating coroutines")
-    shared const ch1 = new Channel(1)
-    shared const ch2 = new Channel(1)
+    shared const ch1 = Channel(1)
+    shared const ch2 = Channel(1)
 
     let t1 = go(name: "worker-1") {
         ch1.recv()  // 阻塞

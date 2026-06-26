@@ -43,7 +43,7 @@ static bool cg_value_type_is_bool(const XiValue *v) {
 static bool cg_type_is_json(const XrType *type) {
     if (!type)
         return false;
-    if (type->kind == XR_KIND_JSON)
+    if (XR_TYPE_HAS_OBJECT_SHAPE(type))
         return true;
     if (type->kind == XR_KIND_INSTANCE && type->instance.class_name &&
         (strcmp(type->instance.class_name, "PathInfo") == 0 ||
@@ -59,9 +59,7 @@ static bool cg_type_is_json(const XrType *type) {
 }
 
 static bool cg_value_type_is_json(const XiValue *v) {
-    while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX ||
-            (v->op == XI_COPY && !xi_copy_is_value_clone(v))) &&
+    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v)) &&
            v->nargs >= 1)
         v = v->args[0];
     return v && cg_type_is_json(v->type);

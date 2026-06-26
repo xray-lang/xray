@@ -33,8 +33,8 @@ fn test_await_any() {
     print(third)
 
     // Test 4: slow path - two blocked tasks, unblock one specifically
-    const ch1 = new Channel<int>(1)
-    const ch2 = new Channel<int>(1)
+    const ch1 = Channel<int>(1)
+    const ch2 = Channel<int>(1)
     let b1 = go blocked(ch1)
     let b2 = go blocked(ch2)
     ch2.send(999)

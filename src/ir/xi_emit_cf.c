@@ -452,6 +452,7 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 OpCode branch_op;
                 int k = 0;
                 bool swap = false;
+                bool use_unsigned = xi_emit_compare_uses_unsigned(cmp);
                 switch (cmp->op) {
                     case XI_LT:
                         branch_op = OP_LT;
@@ -477,6 +478,12 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                     default:
                         branch_op = OP_EQ;
                         break;
+                }
+                if (use_unsigned) {
+                    if (branch_op == OP_LT)
+                        branch_op = OP_LTU;
+                    else if (branch_op == OP_LE)
+                        branch_op = OP_LEU;
                 }
                 if (swap) {
                     XiEmitReg t = a;

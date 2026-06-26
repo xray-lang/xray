@@ -24,13 +24,13 @@ xray 源文件**必须**是 UTF-8 编码。所有源码处理（包括字符串�
 
 ### 1.3 注释
 
-xray 支持两种注释，**均不嵌套**：
+xray 支持两种注释：行注释不嵌套，块注释支持嵌套：
 
 ```xray
 // 行注释，从 // 到行尾
 /* 块注释，
    可跨行；
-   不支持嵌套：内部出现 /* 不开启新层级 */
+   支持 /* 嵌套 */ 到任意合理深度 */
 ```
 
 注释可出现在任何空白能出现的地方。注释会被收集为 **trivia**，供 formatter 与 LSP 使用（见 `src/frontend/parser/xtrivia.*`），但不参与语法分析。
@@ -70,7 +70,7 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `shared` | 跨协程共享修饰符（与 `const`/`let` 组合） |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
-| `yield` | 协程让出（语句形式）|
+| `yield` | 生成器产值语句 |
 | `if` `else` | 条件分支 |
 | `while` | 循环 |
 | `for` `in` | 循环（C 风格 + for-in） |
@@ -86,17 +86,18 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `interface` `implements` | 接口声明/实现 |
 | `enum` | 枚举声明 |
 | `type` | 类型别名 |
-| `new` | 实例化 |
+| `new` | 已移除——仍保留为关键字仅用于迁移期报错（构造写 `T(...)`，见 §3.14） |
 | `this` `super` | 自我/父类引用 |
 | `constructor` | 构造器 |
-| `static` `private` `public` | 可见性修饰符（`public` 是**默认**，几乎从不显式写出） |
-| `abstract` `final` `override` | 类/方法修饰符（`override` 是**可选**——重写父类方法不要求显式标注） |
+| `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
+| `const` | 不可变字段/绑定修饰符 |
+| `abstract` `final` `override` | 类/方法修饰符（`override` 是**可选**——重写父类方法不要求显式标注；`final` 仅用于封类/封方法） |
 | `operator` | 运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
 
 #### 1.5.3 错误处理
 
-`try` `catch` `panic` `throw` `defer`
+`try` `catch` `throw` `defer`
 
 #### 1.5.4 模块系统
 
@@ -104,15 +105,17 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 
 #### 1.5.5 协程与并发
 
-`go` `await` `select` `defer` `scope`
+`go` `await` `select` `defer` `scope` `unsafe`
 
 #### 1.5.6 类型名（保留）
 
 `int` `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string` `unknown`
+`float` `float32` `float64` `bool` `string` `char`
+
+`unknown` 在类型位置是内置擦除/未知值类型名（例如 `TaskOutcome.Success(unknown)`）；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `prelude` 自动引入的内置类型符号：
-> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `Exception` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
+> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
 > 它们可被用户类同名覆盖（局部 shadow），但通常无须 import 即可使用。
 
 #### 1.5.7 字面量关键字
@@ -134,6 +137,7 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `linked` | `linked go` / `linked scope` 修饰符 |
 | `supervisor` | `supervisor scope` 修饰符 |
 | `after` | `select` 的超时分支 (`after 1000 -> ...`) |
+| `panic` | `catch panic (p)` 的 panic 通道边界 |
 
 ### 1.6 字面量
 
@@ -150,6 +154,7 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 - 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
 - 字面量默认类型为 `int`（= `int64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
 - 范围：`int64` 表示范围 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
+- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `let x: int8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
 
 ```xray
 42
@@ -204,13 +209,13 @@ null
 
 #### 1.6.5 字符串字面量
 
-xray 支持两类字符串字面量：**带转义** 和 **原始字符串**。两者均使用双引号或单引号，且均支持 `${...}` 插值。反引号字符串不属于当前语法——lexer 直接报错。
+xray 支持两类字符串字面量：**带转义** 和 **原始字符串**。字符串只使用双引号；单引号专用于 `char` 字面量。反引号字符串不属于当前语法——lexer 直接报错。
 
-##### 普通字符串（双引号 / 单引号）
+##### 普通字符串（双引号）
 
 ```ebnf
-StringLiteral ::= '"' StrChar* '"' | "'" StrChar* "'"
-StrChar ::= 任何非引号、非反斜杠、非换行符
+StringLiteral ::= '"' StrChar* '"'
+StrChar ::= 任何非双引号、非反斜杠、非换行符
           | EscapeSeq
           | Interpolation
 EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
@@ -220,42 +225,61 @@ EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
 Interpolation ::= '${' Expression '}'
 ```
 
-- 双引号 / 单引号**完全等价**——都支持转义、`${...}` 插值。
 - 字符串可跨行；行结尾包含在字符串中。
 - 包含插值的字面量在 lexer 内部产出 `TK_TEMPLATE_STRING`；不含插值的产出 `TK_LITERAL_STRING`。
+- `${...}` 内按表达式模式扫描：大括号按深度配对，内部字符串 / raw string / char 字面量会被整体跳过，因此允许同种引号嵌套，例如 `"${m["k"]}"` 与 `"${"a}b"}"`。
 
 ```xray
 "hello"
-'world'
 "Hello, ${name}! ${1 + 2}"
-'tab\there\nnewline'
+"tab\there\nnewline"
 "\u4F60\u597D"        // "你好"
 "\u{1F600}"            // emoji
 ```
 
-**插值表达式内禁止再嵌套未转义的引号字符**（lexer 限制）。
+插值表达式可以继续包含嵌套插值；内层字符串中的 `}` 不会结束外层 `${...}`。
 
 ##### 原始字符串（`r` 前缀）
 
 ```ebnf
-RawString ::= 'r' ('"' RawChar* '"' | "'" RawChar* "'")
-RawChar ::= 任何非引号字符（包括 `\`，不做转义处理）
+RawString ::= 'r' '"' RawChar* '"'
+RawChar ::= 任何非双引号字符（包括 `\`，不做转义处理）
 ```
 
 - **不**处理任何转义（`\n`、`\t` 等保持原样）。
 - 仍然支持 `${...}` 插值。
-- 标识符 `r` 单独使用时仍为普通标识符（`TK_NAME`），仅当后紧接引号才识别为原始字符串前缀。
+- 标识符 `r` 单独使用时仍为普通标识符（`TK_NAME`），仅当后紧接双引号才识别为原始字符串前缀。
+- `r'...'` 已移除；单引号不参与 raw string。
 
 ```xray
 r"C:\path\to\file"          // 字面量包含两个反斜杠
-r'C:\Users\${USER}'         // 反斜杠不转义，但 ${USER} 仍插值
+r"C:\Users\${USER}"         // 反斜杠不转义，但 ${USER} 仍插值
+```
+
+#### 1.6.6 `char` 字面量
+
+```ebnf
+CharLiteral ::= "'" CharBody "'"
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
+```
+
+- `'a'` 的类型是 `char`，表示一个 Unicode scalar value。
+- 合法范围为 `U+0000..U+10FFFF`，排除 surrogate `U+D800..U+DFFF`。
+- 字面量必须恰好包含一个 scalar；`''`、`'ab'`、`'🇨🇳'`、`'é'` 均编译失败。
+- 支持 `'\n'`、`'\t'`、`'\r'`、`'\0'`、`'\''`、`'\\'`、`'\u{1F600}'` 等转义。
+- char 字面量不支持 `${...}` 插值。
+
+```xray
+let a: char = 'a'
+let zh: char = '中'
+let smile: char = '\u{1F600}'
 ```
 
 ##### 反引号字符串（非法）
 
-源码 lexer 显式拒绝反引号字符串。如需模板，使用普通双 / 单引号 + `${...}`。
+源码 lexer 显式拒绝反引号字符串。如需模板，使用普通双引号 + `${...}`。
 
-#### 1.6.6 正则字面量
+#### 1.6.7 正则字面量
 
 ```ebnf
 RegexLiteral ::= '/' RegexBody '/' RegexFlag*
@@ -299,10 +323,9 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 
 #### 1.7.4 比较
 
-`==` `!=` `===` `!==` `<` `<=` `>` `>=`
+`==` `!=` `<` `<=` `>` `>=`
 
 - `==` `!=`：值相等（隐式数值转换：int→float）
-- `===` `!==`：严格相等（类型+值；无转换）
 - `<` 等：数字、字符串支持；其他类型不支持
 
 #### 1.7.5 逻辑
@@ -319,7 +342,7 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 
 `++` `--`
 
-仅支持**后缀**形式 `x++` / `x--`；前缀 `++x` / `--x` 编译报错。详见 §3.2。
+仅支持**语句级后缀**形式 `x++` / `x--`；前缀 `++x` / `--x`、以及表达式位置的 `x++` / `x--` 均编译报错。详见 §4.1。
 
 #### 1.7.8 类型相关
 
@@ -333,7 +356,8 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 | `\|` | union 类型 (`int \| string`) / 位或 |
 | `->` | 统一箭头：函数返回类型、函数类型、闭包、`match` / `select` 分支 |
 | `...` | rest / spread |
-| `..` | 范围 (`0..10`) |
+| `..` | 半开范围 (`0..10`) |
+| `..=` | 闭区间范围 (`0..=10`) |
 | `is` | 运行时类型检查 |
 | `as` | 类型转换 |
 
@@ -385,13 +409,13 @@ Line endings recognize `\n` (Unix) and `\r\n` (Windows). A standalone `\r` is tr
 
 ### 1.3 Comments
 
-Xray supports two kinds of comments, **neither of which nests**:
+Xray supports two kinds of comments: line comments do not nest; block comments nest:
 
 ```xray
 // line comment, from // to end-of-line
 /* block comment,
    may span lines;
-   does not nest: an inner /* does not start a new layer */
+   supports /* nested */ layers to any reasonable depth */
 ```
 
 Comments may appear wherever whitespace is allowed. They are collected as **trivia** for formatters and LSP (see `src/frontend/parser/xtrivia.*`), but do not participate in syntactic analysis.
@@ -431,7 +455,7 @@ Xray has **63 reserved keywords** in total; the authoritative source-of-truth ta
 | `shared` | cross-coroutine shared modifier (combined with `const`/`let`) |
 | `fn` | function declaration |
 | `return` | function return |
-| `yield` | coroutine yield (statement form) |
+| `yield` | generator value-yield statement |
 | `if` `else` | conditional branches |
 | `while` | loop |
 | `for` `in` | loops (C-style + for-in) |
@@ -447,17 +471,18 @@ Xray has **63 reserved keywords** in total; the authoritative source-of-truth ta
 | `interface` `implements` | interface declaration / implementation |
 | `enum` | enum declaration |
 | `type` | type alias |
-| `new` | instantiation |
+| `new` | removed—kept as a keyword only for migration errors (construct with `T(...)`, see §3.14) |
 | `this` `super` | self / parent reference |
 | `constructor` | constructor |
-| `static` `private` `public` | visibility modifiers (`public` is the **default** and is almost never written explicitly) |
-| `abstract` `final` `override` | class/method modifiers (`override` is **optional** — overriding a parent method does not require an explicit annotation) |
+| `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
+| `const` | immutable field/binding modifier |
+| `abstract` `final` `override` | class/method modifiers (`override` is **optional** — overriding a parent method does not require an explicit annotation; `final` only seals classes/methods) |
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |
 
 #### 1.5.3 Error Handling
 
-`try` `catch` `panic` `throw` `defer`
+`try` `catch` `throw` `defer`
 
 #### 1.5.4 Module System
 
@@ -465,15 +490,17 @@ Xray has **63 reserved keywords** in total; the authoritative source-of-truth ta
 
 #### 1.5.5 Coroutines and Concurrency
 
-`go` `await` `select` `defer` `scope`
+`go` `await` `select` `defer` `scope` `unsafe`
 
 #### 1.5.6 Type Names (reserved)
 
 `int` `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string` `unknown`
+`float` `float32` `float64` `bool` `string` `char`
+
+In type position, `unknown` is the built-in erased/unknown-value type name (for example, `TaskOutcome.Success(unknown)`); it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
 > **Note**: the following names are **not** lexer keywords; they are built-in type symbols automatically introduced by the prelude:
-> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `Exception` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
+> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
 > They may be locally shadowed by user types of the same name, but typically need no import.
 
 #### 1.5.7 Literal Keywords
@@ -495,6 +522,7 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `linked` | `linked go` / `linked scope` modifier |
 | `supervisor` | `supervisor scope` modifier |
 | `after` | `select` timeout arm (`after 1000 -> ...`) |
+| `panic` | panic-channel boundary in `catch panic (p)` |
 
 ### 1.6 Literals
 
@@ -511,6 +539,7 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 - Digit separators `_` exist purely for readability and may appear anywhere between digits.
 - Default literal type is `int` (= `int64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
 - Range: `int64` covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
+- When an integer literal appears directly in a narrow-integer context (variable initialization, assignment, argument, return value, collection element, and similar sites), its value must fit the target type; for example, `let x: int8 = 200` is a compile-time error. Non-literal expressions written into narrow integer targets are still narrowed with target-width wrap-around; see §2.3.1.
 
 ```xray
 42
@@ -565,13 +594,13 @@ null
 
 #### 1.6.5 String Literals
 
-Xray supports two flavors of string literals: **escaped** and **raw**. Both can be quoted with single or double quotes, and both support `${...}` interpolation. Backtick strings are not part of the current grammar — the lexer rejects them.
+Xray supports two flavors of string literals: **escaped** and **raw**. Strings use double quotes only; single quotes are reserved for `char` literals. Backtick strings are not part of the current grammar — the lexer rejects them.
 
-##### Plain strings (double / single quotes)
+##### Plain strings (double quotes)
 
 ```ebnf
-StringLiteral ::= '"' StrChar* '"' | "'" StrChar* "'"
-StrChar ::= any character that is not a quote, backslash, or newline
+StringLiteral ::= '"' StrChar* '"'
+StrChar ::= any character that is not a double quote, backslash, or newline
           | EscapeSeq
           | Interpolation
 EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
@@ -581,42 +610,61 @@ EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
 Interpolation ::= '${' Expression '}'
 ```
 
-- Double and single quotes are **fully equivalent** — both support escapes and `${...}` interpolation.
 - Strings may span multiple lines; line breaks are part of the string.
 - Literals containing interpolation produce `TK_TEMPLATE_STRING` internally; literals without interpolation produce `TK_LITERAL_STRING`.
+- `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings / char literals are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`.
 
 ```xray
 "hello"
-'world'
 "Hello, ${name}! ${1 + 2}"
-'tab\there\nnewline'
+"tab\there\nnewline"
 "\u4F60\u597D"        // "你好"
 "\u{1F600}"            // emoji
 ```
 
-**Interpolation expressions cannot contain unescaped quote characters of the surrounding kind** (a lexer restriction).
+Interpolation expressions may themselves contain nested interpolation; `}` characters inside nested strings do not close the outer `${...}`.
 
 ##### Raw strings (`r` prefix)
 
 ```ebnf
-RawString ::= 'r' ('"' RawChar* '"' | "'" RawChar* "'")
-RawChar ::= any character except the closing quote (including `\`, which is not processed)
+RawString ::= 'r' '"' RawChar* '"'
+RawChar ::= any character except double quote (including `\`, which is not processed)
 ```
 
 - **No** escape processing (`\n`, `\t`, etc. are kept as-is).
 - `${...}` interpolation is still supported.
-- The identifier `r` standing alone is still a regular identifier (`TK_NAME`); it is recognized as a raw-string prefix only when immediately followed by a quote.
+- The identifier `r` standing alone is still a regular identifier (`TK_NAME`); it is recognized as a raw-string prefix only when immediately followed by a double quote.
+- `r'...'` has been removed; single quotes do not participate in raw strings.
 
 ```xray
 r"C:\path\to\file"          // literal contains two backslashes
-r'C:\Users\${USER}'         // backslash is not escaped, but ${USER} still interpolates
+r"C:\Users\${USER}"         // backslash is not escaped, but ${USER} still interpolates
+```
+
+#### 1.6.6 `char` Literals
+
+```ebnf
+CharLiteral ::= "'" CharBody "'"
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
+```
+
+- `'a'` has type `char` and represents one Unicode scalar value.
+- The valid range is `U+0000..U+10FFFF`, excluding surrogates `U+D800..U+DFFF`.
+- A literal must contain exactly one scalar; `''`, `'ab'`, `'🇨🇳'`, and `'é'` are compile errors.
+- Escapes such as `'\n'`, `'\t'`, `'\r'`, `'\0'`, `'\''`, `'\\'`, and `'\u{1F600}'` are supported.
+- Char literals do not support `${...}` interpolation.
+
+```xray
+let a: char = 'a'
+let zh: char = '中'
+let smile: char = '\u{1F600}'
 ```
 
 ##### Backtick strings (illegal)
 
-The lexer explicitly rejects backtick strings. For templates, use plain double / single quotes plus `${...}`.
+The lexer explicitly rejects backtick strings. For templates, use plain double quotes plus `${...}`.
 
-#### 1.6.6 Regex Literals
+#### 1.6.7 Regex Literals
 
 ```ebnf
 RegexLiteral ::= '/' RegexBody '/' RegexFlag*
@@ -660,10 +708,9 @@ Full token table (by category):
 
 #### 1.7.4 Comparison
 
-`==` `!=` `===` `!==` `<` `<=` `>` `>=`
+`==` `!=` `<` `<=` `>` `>=`
 
 - `==` `!=`: value equality (with implicit numeric promotion: int→float).
-- `===` `!==`: strict equality (type + value; no promotion).
 - `<` etc.: supported by numbers and strings; not supported by other types.
 
 #### 1.7.5 Logical
@@ -680,7 +727,7 @@ Short-circuit evaluation.
 
 `++` `--`
 
-Only the **postfix** form `x++` / `x--` is supported; the prefix form `++x` / `--x` is a compile error. See §3.2.
+Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++x` / `--x` and expression-position `x++` / `x--` are compile errors. See §4.1.
 
 #### 1.7.8 Type-related
 
@@ -694,7 +741,8 @@ Only the **postfix** form `x++` / `x--` is supported; the prefix form `++x` / `-
 | `\|` | union type (`int \| string`) / bitwise or |
 | `->` | unified arrow: function return type, function type, closures, `match` / `select` arms |
 | `...` | rest / spread |
-| `..` | range (`0..10`) |
+| `..` | half-open range (`0..10`) |
+| `..=` | inclusive range (`0..=10`) |
 | `is` | runtime type check |
 | `as` | type cast |
 

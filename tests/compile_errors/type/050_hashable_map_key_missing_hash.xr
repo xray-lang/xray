@@ -1,0 +1,7 @@
+class EqOnly {
+    operator==(other: EqOnly) -> bool {
+        return true
+    }
+}
+
+let m: Map<EqOnly, int> = #{}

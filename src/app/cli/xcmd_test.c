@@ -29,7 +29,6 @@
 #include "../../api/xisolate_profile.h"
 #include "xcli_output.h"
 #include "xray.h"
-#include "xray_vm.h"
 #include "../../api/xtest_runner.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../runtime/xexec_state.h"
@@ -42,7 +41,7 @@
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
-#include "../../runtime/object/xexception.h"
+#include "../../runtime/object/xpanic_info.h"
 #include <stdio.h>
 #include <string.h>
 #include "../../os/os_fs.h"
@@ -151,10 +150,10 @@ static const char *extract_coro_error(XrCoroutine *coro) {
             return s->data;
     }
     XrVMRuntime *vm_owner = xr_runtime_core_vm_owner(coro->core);
-    if (vm_owner && xr_value_is_exception(vm_owner, err)) {
+    if (vm_owner && xr_value_is_panic_info(vm_owner, err)) {
         // Coroutine errors now preserve the original Exception instance
         // (so linked-scope rethrow surfaces the right object — see F026).
-        const char *m = xr_exception_get_message(vm_owner, err);
+        const char *m = xr_panic_info_get_message(vm_owner, err);
         if (m && m[0] != '\0')
             return m;
     }

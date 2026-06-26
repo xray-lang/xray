@@ -12,7 +12,8 @@
     X(ERR_RETURN, "xi.err.return", xicgen_stmt_err_return) \
     X(ERR_CHECK, "xi.err.check", xicgen_stmt_err_check) \
     X(ERR_CATCH, "xi.err.catch", xicgen_stmt_err_catch) \
-    X(DEFER, "xi.defer", xicgen_stmt_defer)
+    X(DEFER, "xi.defer", xicgen_stmt_defer) \
+    X(DEFER_RUN_TO, "xi.defer.run.to", xicgen_stmt_defer_run_to)
 
 
 #endif  /* XI_TO_C_STMT_DISPATCH_GEN_H */

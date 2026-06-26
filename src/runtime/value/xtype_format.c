@@ -37,14 +37,39 @@ const char *xr_type_to_string(XrType *type) {
         return TYPE_NAME_NEVER;
     if (XR_TYPE_IS_UNIT(type))
         return TYPE_NAME_UNIT;
-    if (XR_TYPE_IS_INT(type) && !type->is_nullable)
-        return TYPE_NAME_INT;
-    if (XR_TYPE_IS_FLOAT(type) && !type->is_nullable)
+    if (XR_TYPE_IS_INT(type) && !type->is_nullable) {
+        switch (type->native_width) {
+            case XR_NATIVE_I8:
+                return TYPE_NAME_INT8;
+            case XR_NATIVE_U8:
+                return TYPE_NAME_UINT8;
+            case XR_NATIVE_I16:
+                return TYPE_NAME_INT16;
+            case XR_NATIVE_U16:
+                return TYPE_NAME_UINT16;
+            case XR_NATIVE_I32:
+                return TYPE_NAME_INT32;
+            case XR_NATIVE_U32:
+                return TYPE_NAME_UINT32;
+            case XR_NATIVE_U64:
+                return TYPE_NAME_UINT64;
+            default:
+                return TYPE_NAME_INT;
+        }
+    }
+    if (XR_TYPE_IS_FLOAT(type) && !type->is_nullable) {
+        if (type->native_width == XR_NATIVE_F32)
+            return TYPE_NAME_FLOAT32;
+        if (type->native_width == XR_NATIVE_F64)
+            return TYPE_NAME_FLOAT64;
         return TYPE_NAME_FLOAT;
+    }
     if (XR_TYPE_IS_STRING(type) && !type->is_nullable)
         return TYPE_NAME_STRING;
     if (XR_TYPE_IS_BOOL(type) && !type->is_nullable)
         return TYPE_NAME_BOOL;
+    if (XR_TYPE_IS_CHAR(type) && !type->is_nullable)
+        return TYPE_NAME_CHAR;
     if (XR_TYPE_IS_NULL(type))
         return TYPE_NAME_NULL;
 
@@ -125,7 +150,9 @@ const char *xr_type_to_string(XrType *type) {
         return xr_pool_strdup(pool, buf);
     }
 
-    if (type->kind == XR_KIND_JSON) {
+    if (XR_TYPE_HAS_OBJECT_SHAPE(type)) {
+        if (XR_TYPE_IS_JSON(type) && type->object.field_count == 0)
+            return TYPE_NAME_JSON;
         if (type->object.type_name) {
             return type->object.type_name;
         }
@@ -139,7 +166,7 @@ const char *xr_type_to_string(XrType *type) {
                 else
                     has_computed = true;
             }
-            /* All fields computed → fall through to plain "Json" */
+            /* All fields computed → fall through to the domain name. */
             if (named > 0) {
                 char *ptr = buf;
                 size_t remaining = TYPE_STR_BUF_SIZE;
@@ -170,7 +197,7 @@ const char *xr_type_to_string(XrType *type) {
                 return xr_pool_strdup(pool, buf);
             }
         }
-        return (type->kind == XR_KIND_JSON) ? TYPE_NAME_JSON : "{...}";
+        return XR_TYPE_IS_JSON(type) ? TYPE_NAME_JSON : TYPE_NAME_RECORD;
     }
 
     if (type->kind == XR_KIND_TYPE_PARAM) {
@@ -185,8 +212,8 @@ const char *xr_type_to_string(XrType *type) {
         return "BigInt";
     if (xr_type_is_named_class(type, "StringBuilder"))
         return "StringBuilder";
-    if (xr_type_is_named_class(type, "Exception"))
-        return "Exception";
+    if (xr_type_is_named_class(type, "PanicInfo"))
+        return "PanicInfo";
     if (type->kind == XR_KIND_ENUM) {
         return type->enum_type.enum_name ? type->enum_type.enum_name : "Enum";
     }
@@ -341,6 +368,7 @@ bool xr_type_is_inherently_immutable(XrType *type) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
+        case XR_KIND_CHAR:
         case XR_KIND_NULL:
         case XR_KIND_STRING:
         case XR_KIND_UNIT:
@@ -386,7 +414,7 @@ XrType *xr_type_make_const(XrVMRuntime *X, XrType *base) {
 XrType *xr_type_object_get_field(XrType *type, const char *field_name) {
     if (!type || !field_name)
         return NULL;
-    if (type->kind != XR_KIND_JSON)
+    if (!XR_TYPE_HAS_OBJECT_SHAPE(type))
         return NULL;
 
     for (int i = 0; i < type->object.field_count; i++) {
@@ -436,6 +464,7 @@ bool xr_type_is_default_initializable(const XrType *type) {
         case XR_KIND_FUNCTION:
         case XR_KIND_INTERFACE:
         case XR_KIND_JSON:
+        case XR_KIND_RECORD:
         case XR_KIND_ENUM:
         case XR_KIND_TUPLE:
         case XR_KIND_UNION:

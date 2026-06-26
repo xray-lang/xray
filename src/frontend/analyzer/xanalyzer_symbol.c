@@ -359,42 +359,79 @@ void xa_class_info_add_method(XrClassInfo *info, XaSymbol *method) {
     }
 }
 
-// Look up member in class (searches base classes too)
-XaSymbol *xa_class_info_lookup_member(XrClassInfo *info, const char *name) {
+static XaSymbol *xa_class_info_lookup_member_owner_filtered(XrClassInfo *info, const char *name,
+                                                            bool want_static,
+                                                            XrClassInfo **owner_out) {
+    if (owner_out)
+        *owner_out = NULL;
     if (!info || !name)
         return NULL;
 
-    // O(1) hash lookup for own members
-    if (info->members_map) {
-        XaSymbol *found = (XaSymbol *) xr_hashmap_get(info->members_map, name);
-        if (found)
-            return found;
-    } else {
-        // Fallback linear search (should not happen after xa_class_info_new)
-        for (int i = 0; i < info->field_count; i++) {
-            if (strcmp(info->fields[i]->name, name) == 0)
-                return info->fields[i];
-        }
-        for (int i = 0; i < info->method_count; i++) {
-            if (strcmp(info->methods[i]->name, name) == 0)
-                return info->methods[i];
-        }
+    if (want_static) {
         for (int i = 0; i < info->static_field_count; i++) {
-            if (strcmp(info->static_fields[i]->name, name) == 0)
+            if (strcmp(info->static_fields[i]->name, name) == 0) {
+                if (owner_out)
+                    *owner_out = info;
                 return info->static_fields[i];
+            }
         }
         for (int i = 0; i < info->static_method_count; i++) {
-            if (strcmp(info->static_methods[i]->name, name) == 0)
+            if (strcmp(info->static_methods[i]->name, name) == 0) {
+                if (owner_out)
+                    *owner_out = info;
                 return info->static_methods[i];
+            }
+        }
+    } else {
+        for (int i = 0; i < info->field_count; i++) {
+            if (strcmp(info->fields[i]->name, name) == 0) {
+                if (owner_out)
+                    *owner_out = info;
+                return info->fields[i];
+            }
+        }
+        for (int i = 0; i < info->method_count; i++) {
+            if (strcmp(info->methods[i]->name, name) == 0) {
+                if (owner_out)
+                    *owner_out = info;
+                return info->methods[i];
+            }
         }
     }
 
-    // Walk base class chain
-    if (info->base) {
-        return xa_class_info_lookup_member(info->base, name);
-    }
+    return info->base ? xa_class_info_lookup_member_owner_filtered(info->base, name, want_static,
+                                                                   owner_out)
+                      : NULL;
+}
 
-    return NULL;
+// Look up member in class (searches base classes too)
+XaSymbol *xa_class_info_lookup_instance_member(XrClassInfo *info, const char *name) {
+    return xa_class_info_lookup_member_owner_filtered(info, name, false, NULL);
+}
+
+XaSymbol *xa_class_info_lookup_static_member(XrClassInfo *info, const char *name) {
+    return xa_class_info_lookup_member_owner_filtered(info, name, true, NULL);
+}
+
+XaSymbol *xa_class_info_lookup_member(XrClassInfo *info, const char *name) {
+    XaSymbol *member = xa_class_info_lookup_instance_member(info, name);
+    return member ? member : xa_class_info_lookup_static_member(info, name);
+}
+
+XaSymbol *xa_class_info_lookup_instance_member_owner(XrClassInfo *info, const char *name,
+                                                     XrClassInfo **owner_out) {
+    return xa_class_info_lookup_member_owner_filtered(info, name, false, owner_out);
+}
+
+XaSymbol *xa_class_info_lookup_static_member_owner(XrClassInfo *info, const char *name,
+                                                   XrClassInfo **owner_out) {
+    return xa_class_info_lookup_member_owner_filtered(info, name, true, owner_out);
+}
+
+XaSymbol *xa_class_info_lookup_member_owner(XrClassInfo *info, const char *name,
+                                            XrClassInfo **owner_out) {
+    XaSymbol *member = xa_class_info_lookup_instance_member_owner(info, name, owner_out);
+    return member ? member : xa_class_info_lookup_static_member_owner(info, name, owner_out);
 }
 
 // Function signature helpers
@@ -423,6 +460,12 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
         links->param_escapes = NULL;
         links->param_escape_count = 0;
     }
+    // Default-value expressions are reset together with the signature; call
+    // xa_symbol_links_set_param_defaults afterwards to repopulate them.
+    if (links->param_defaults) {
+        xr_free(links->param_defaults);
+        links->param_defaults = NULL;
+    }
 
     // Copy param types
     if (param_count > 0 && param_types) {
@@ -444,6 +487,33 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
 
     links->param_count = param_count;
     links->return_type = return_type;
+}
+
+void xa_symbol_links_set_param_defaults(XaSymbolLinks *links, struct AstNode **defaults,
+                                        int count) {
+    if (!links)
+        return;
+    if (links->param_defaults) {
+        xr_free(links->param_defaults);
+        links->param_defaults = NULL;
+    }
+    if (!defaults || count <= 0)
+        return;
+    bool any = false;
+    for (int i = 0; i < count; i++) {
+        if (defaults[i]) {
+            any = true;
+            break;
+        }
+    }
+    if (!any)
+        return;
+    struct AstNode **copy = (struct AstNode **) xr_calloc((size_t) count, sizeof(struct AstNode *));
+    if (!copy)
+        return;
+    for (int i = 0; i < count; i++)
+        copy[i] = defaults[i];
+    links->param_defaults = copy;
 }
 
 XrType *xa_symbol_links_get_return_type(XaSymbolLinks *links) {

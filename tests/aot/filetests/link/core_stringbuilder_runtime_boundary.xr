@@ -1,4 +1,4 @@
-let sb = new StringBuilder()
+let sb = StringBuilder()
 sb.append("count=")
 sb.append(42)
 sb.append(", ok=")

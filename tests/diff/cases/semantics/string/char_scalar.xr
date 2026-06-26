@@ -1,0 +1,42 @@
+// anchor: string-char-scalar
+let a: char = 'A'
+let digit: char = '7'
+let ws: char = '\n'
+let face: char = '\u{1F600}'
+
+print(a)
+print(a.toString())
+print(a.ord())
+print(a.isLetter())
+print(a.isNumber())
+print(a.isAlphanumeric())
+print(digit.isLetter())
+print(digit.isNumber())
+print(digit.isAlphanumeric())
+print(ws.isWhitespace())
+print(face)
+print(face.ord())
+
+let s = "aé😀z"
+print(s.length)
+print(s[0])
+print(s[1])
+print(s[2])
+print(s[-1])
+
+print("-- for value --")
+for (ch in s) {
+    print(ch)
+    print(ch.ord())
+}
+
+print("-- for key value --")
+for (i, ch in s) {
+    print(i)
+    print(ch)
+}
+
+let e = s.entries()
+print(e.length)
+print(e[1].0)
+print(e[1].1)

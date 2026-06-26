@@ -54,16 +54,11 @@ print(u16be[3])
 print(encoding.utf16Decode(u16be, encoding.BE))
 print(encoding.utf16Decode(u16be, encoding.BE, false))
 
-let u16fallback = encoding.utf16Encode("A", 999)
-print(u16fallback.length)
-print(u16fallback[0])
-print(u16fallback[1])
-
-let bom = new Bytes(4)
+let bom = Bytes(4)
 bom[0] = 254
 bom[1] = 255
 bom[2] = 0
 bom[3] = 65
 print(encoding.utf16Decode(bom))
 print(encoding.utf16Decode(bom, encoding.BE, false) == "A")
-print(encoding.utf16Decode(new Bytes(1)) == null)
+print(encoding.utf16Decode(Bytes(1)) == null)

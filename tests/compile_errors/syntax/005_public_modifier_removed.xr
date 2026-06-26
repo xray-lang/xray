@@ -1,0 +1,5 @@
+// 005_public_modifier_removed.xr
+// `public` is no longer a visibility modifier. Members are public by default.
+class Box {
+    public value: int
+}

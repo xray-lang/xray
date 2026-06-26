@@ -34,7 +34,7 @@
 
 #include "../base/xglobal_indices.h"
 #include "../runtime/object/xjson.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/object/xtuple.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/object/xrange.h"
@@ -128,7 +128,7 @@ static XrValue vm_task_result_success(XrVMRuntime *isolate, XrValue value) {
 static XrValue vm_task_result_failed(XrVMRuntime *isolate, XrTask *task, XrCoroutine *dst_coro) {
     XrValue error = task ? task->error : xr_null();
     if (XR_IS_NULL(error))
-        error = xr_exception_new(isolate, XR_ERR_RUNTIME, "Task failed");
+        error = xr_panic_info_new(isolate, XR_ERR_RUNTIME, "Task failed");
     if (dst_coro && xr_value_needs_copy(error))
         error = xr_deep_copy_to_coro(isolate, error, dst_coro);
     XrValue args[1] = {error};
@@ -195,12 +195,12 @@ static XrDispatchAction vm_task_raise_terminal(XrVMRuntime *isolate, XrTask *tas
     XrValue exc;
     if (state == XR_TASK_FAILED && task && !XR_IS_NULL(task->error)) {
         exc = task->error;
-        if (!xr_value_is_exception(isolate, exc))
-            exc = xr_exception_from_value(isolate, exc);
+        if (!xr_value_is_panic_info(isolate, exc))
+            exc = xr_panic_info_from_value(isolate, exc);
     } else if (state == XR_TASK_FAILED) {
-        exc = xr_exception_new(isolate, XR_ERR_RUNTIME, "Task failed");
+        exc = xr_panic_info_new(isolate, XR_ERR_RUNTIME, "Task failed");
     } else {
-        exc = xr_exception_new(isolate, XR_ERR_CORO_CANCELLED, "Task cancelled");
+        exc = xr_panic_info_new(isolate, XR_ERR_CORO_CANCELLED, "Task cancelled");
     }
     if (frame)
         frame->pc = pc;
@@ -258,7 +258,8 @@ vm_call_yieldable_primitive_method(XrVMRuntime *isolate, XrVMContext *vm_ctx, Xr
 
 XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrChannel *ch,
                                            int method_symbol, int nargs, XrValue *base, int a,
-                                           XrBcCallFrame *frame, XrInstruction *pc) {
+                                           XrBcCallFrame *frame, XrInstruction *pc,
+                                           uint8_t transfer_mode) {
     XR_DCHECK(isolate != NULL, "vm_invoke_channel: NULL isolate");
     XR_DCHECK(ch != NULL, "vm_invoke_channel: NULL channel");
     XR_DCHECK(base != NULL, "vm_invoke_channel: NULL base");
@@ -268,7 +269,8 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
             base[a] = vm_send_result(isolate, 3);
             return XR_DISP_NEXT;
         }
-        base[a] = vm_send_result(isolate, xr_chan_try_send(isolate, ch, base[a + 2]) ? 0 : 1);
+        base[a] = vm_send_result(
+            isolate, xr_chan_try_send_transfer(isolate, ch, base[a + 2], transfer_mode) ? 0 : 1);
         return XR_DISP_NEXT;
     }
 
@@ -296,7 +298,8 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel is closed");
         }
         vm_suspend_replay_yielded(frame, pc);
-        XrCoroBlockResult result = xr_coro_chan_send(current, ch, base[a + 2], xr_slot_none(), -1);
+        XrCoroBlockResult result =
+            xr_coro_chan_send_transfer(current, ch, base[a + 2], xr_slot_none(), -1, transfer_mode);
         if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_clear_yielded(frame);
             base[a] = xr_null();
@@ -344,6 +347,38 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
         }
     }
 
+    // ch.recvOr(default) - blocking receive, returning default on close/no-coro
+    if (nargs == 1 && method_symbol == SYMBOL_RECVOR) {
+        XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
+        XrSlotRef value_slot = xr_slot_xvalue_ptr(&base[a]);
+        XrCoroBlockResult resumed = xr_coro_chan_recv_resume(current, value_slot, xr_slot_none());
+        if (resumed.kind == XR_CORO_BLOCK_READY) {
+            return XR_DISP_NEXT;
+        }
+        if (resumed.kind == XR_CORO_BLOCK_CLOSED || resumed.kind == XR_CORO_BLOCK_NO_CORO) {
+            return XR_DISP_NEXT;
+        }
+
+        vm_suspend_replay_yielded(frame, pc);
+        XrValue default_value = base[a + 2];
+        base[a] = default_value;
+        XrCoroBlockResult result =
+            xr_coro_chan_recv(current, ch, value_slot, xr_slot_none(), -1, false);
+        if (result.kind == XR_CORO_BLOCK_READY) {
+            vm_suspend_clear_yielded(frame);
+            return XR_DISP_NEXT;
+        } else if (result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
+            vm_suspend_clear_yielded(frame);
+            base[a] = default_value;
+            return XR_DISP_NEXT;
+        } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
+            return XR_DISP_BLOCKED;
+        } else {
+            vm_suspend_clear_yielded(frame);
+            VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel receive failed");
+        }
+    }
+
     // ch.close()
     if (nargs == 0 && method_symbol == SYMBOL_CLOSE) {
         xr_channel_close(ch);
@@ -378,8 +413,8 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
         }
 
         vm_suspend_replay_current(frame, pc);
-        XrCoroBlockResult result =
-            xr_coro_chan_send(current, ch, base[a + 2], result_slot, timeout_ms);
+        XrCoroBlockResult result = xr_coro_chan_send_transfer(current, ch, base[a + 2], result_slot,
+                                                              timeout_ms, transfer_mode);
         if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_continue_from_next(frame, pc);
             base[a] = vm_send_result(isolate, 0);
@@ -453,8 +488,8 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
     XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
     const char *method_name = xr_symbol_get_name_in_table(sym_table, method_symbol);
     VM_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
-             "Channel has no method '%s', available: send(), recv(), trySend(), tryRecv(), "
-             "sendTimeout(), recvTimeout(), close(), isClosed()",
+             "Channel has no method '%s', available: send(), recv(), recvOr(), trySend(), "
+             "tryRecv(), sendTimeout(), recvTimeout(), close(), isClosed()",
              method_name ? method_name : "?");
 }
 

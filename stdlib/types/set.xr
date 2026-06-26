@@ -1,7 +1,7 @@
 // Built-in Set<T> type — implementation in src/runtime/object/xset_methods.c
 
 @native
-class Set<T> {
+class Set<T: Hashable> {
     length: int
     size: int
     add(value: T)

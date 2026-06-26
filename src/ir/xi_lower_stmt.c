@@ -32,9 +32,81 @@
 /* Forward declaration */
 static void lower_stmts(XiLower *l, AstNode **stmts, int count);
 
+XiValue *xi_lower_bool_condition(XiLower *l, XiValue *cond) {
+    if (!cond || !cond->type)
+        return cond;
+    if (cond->type->kind == XR_KIND_BOOL && !cond->type->is_nullable)
+        return cond;
+    if (cond->type->is_nullable) {
+        XiValue *is_null = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
+        if (!is_null)
+            return cond;
+        is_null->args[0] = cond;
+        XiValue *not_null = xi_value_new(l->func, l->cur_block, XI_NOT, l->type_bool, 1);
+        if (!not_null)
+            return is_null;
+        not_null->args[0] = is_null;
+        return not_null;
+    }
+    return cond;
+}
+
+static XiValue *lower_guard_expr(XiLower *l, AstNode *guard_node) {
+    XiValue *guard = xi_lower_expr(l, guard_node);
+    return guard ? xi_lower_bool_condition(l, guard) : NULL;
+}
+
+static void xi_lower_loop_push(XiLower *l, XiLoopTarget *target, const char *label,
+                               XiBlock *break_target, XiBlock *continue_target) {
+    XR_DCHECK(l != NULL, "xi_lower_loop_push: NULL lowerer");
+    XR_DCHECK(target != NULL, "xi_lower_loop_push: NULL target");
+    target->label = label;
+    target->break_target = break_target;
+    target->continue_target = continue_target;
+    target->defer_scope_depth = l->defer_scope_depth;
+    target->prev = l->loop_targets;
+    l->loop_targets = target;
+    l->break_target = break_target;
+    l->continue_target = continue_target;
+}
+
+static void xi_lower_loop_pop(XiLower *l, XiLoopTarget *target) {
+    XR_DCHECK(l != NULL, "xi_lower_loop_pop: NULL lowerer");
+    XR_DCHECK(target != NULL, "xi_lower_loop_pop: NULL target");
+    l->loop_targets = target->prev;
+    l->break_target = target->prev ? target->prev->break_target : NULL;
+    l->continue_target = target->prev ? target->prev->continue_target : NULL;
+}
+
+static XiLoopTarget *xi_lower_loop_find(XiLower *l, const char *label) {
+    if (!l)
+        return NULL;
+    if (!label)
+        return l->loop_targets;
+    for (XiLoopTarget *it = l->loop_targets; it; it = it->prev) {
+        if (it->label && strcmp(it->label, label) == 0)
+            return it;
+    }
+    return NULL;
+}
+
 static void stmt_set_missing_line(XiValue *v, int line) {
     if (v && v->line == 0 && line > 0)
         v->line = (uint32_t) line;
+}
+
+static int stmt_json_field_index(struct XrType *type, const char *name) {
+    if (!XR_TYPE_HAS_OBJECT_SHAPE(type) || !type->object.field_names || !name)
+        return -1;
+    for (int i = 0; i < type->object.field_count; i++) {
+        if (!type->object.field_names[i])
+            return -1;
+    }
+    for (int i = 0; i < type->object.field_count; i++) {
+        if (type->object.field_names[i] && strcmp(type->object.field_names[i], name) == 0)
+            return i;
+    }
+    return -1;
 }
 
 static uint16_t stmt_narrow_op_for_type(struct XrType *type) {
@@ -58,6 +130,104 @@ static uint16_t stmt_narrow_op_for_type(struct XrType *type) {
     }
 }
 
+static bool stmt_type_is_unsigned_int(struct XrType *type) {
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    switch (type->native_width) {
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static int stmt_print_slot_hint_for_value(XiValue *v) {
+    if (!v || !v->type)
+        return 0;
+    // Nullable primitives must print through the tagged path so a `null`
+    // value renders as "null" rather than its raw numeric payload (0).
+    if (v->type->is_nullable)
+        return 0;
+    if (v->type->kind == XR_KIND_FLOAT)
+        return 2;
+    if (stmt_type_is_unsigned_int(v->type))
+        return 3;
+    if (v->type->kind == XR_KIND_INT)
+        return 1;
+    return 0;
+}
+
+static void lower_emit_defer_run_to_mark(XiLower *l, XiValue *mark, int line) {
+    if (!l || !l->cur_block || !mark)
+        return;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER_RUN_TO, l->type_unit, 1);
+    if (!v)
+        return;
+    v->args[0] = mark;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t) line;
+}
+
+XR_FUNC void xi_lower_defer_scope_push(XiLower *l) {
+    XR_DCHECK(l != NULL, "xi_lower_defer_scope_push: NULL lowerer");
+    XR_CHECK(l->defer_scope_depth < XI_MAX_DEFER_SCOPE_NESTING,
+             "defer scope nesting limit exceeded");
+    l->defer_scopes[l->defer_scope_depth].mark = NULL;
+    l->defer_scope_depth++;
+}
+
+XR_FUNC void xi_lower_defer_scope_pop_normal(XiLower *l, int line) {
+    XR_DCHECK(l != NULL, "xi_lower_defer_scope_pop_normal: NULL lowerer");
+    if (l->defer_scope_depth <= 0)
+        return;
+    XiDeferScope *scope = &l->defer_scopes[l->defer_scope_depth - 1];
+    if (l->cur_block && scope->mark)
+        lower_emit_defer_run_to_mark(l, scope->mark, line);
+    l->defer_scope_depth--;
+}
+
+XR_FUNC void xi_lower_defer_run_to_depth(XiLower *l, int target_depth, int line) {
+    XR_DCHECK(l != NULL, "xi_lower_defer_run_to_depth: NULL lowerer");
+    if (!l->cur_block)
+        return;
+    if (target_depth < 0)
+        target_depth = 0;
+    if (target_depth > l->defer_scope_depth)
+        target_depth = l->defer_scope_depth;
+    for (int i = l->defer_scope_depth - 1; i >= target_depth; i--) {
+        if (l->defer_scopes[i].mark)
+            lower_emit_defer_run_to_mark(l, l->defer_scopes[i].mark, line);
+    }
+}
+
+XR_FUNC bool xi_lower_defer_has_active_mark(XiLower *l) {
+    if (!l)
+        return false;
+    for (int i = l->defer_scope_depth - 1; i >= 0; i--) {
+        if (l->defer_scopes[i].mark)
+            return true;
+    }
+    return false;
+}
+
+static XiValue *lower_defer_scope_ensure_mark(XiLower *l, int line) {
+    if (l->defer_scope_depth <= 0)
+        xi_lower_defer_scope_push(l);
+    XiDeferScope *scope = &l->defer_scopes[l->defer_scope_depth - 1];
+    if (scope->mark)
+        return scope->mark;
+    XiValue *mark = xi_value_new(l->func, l->cur_block, XI_DEFER_MARK, l->type_int, 0);
+    if (!mark)
+        return NULL;
+    mark->flags |= XI_FLAG_SIDE_EFFECT;
+    mark->line = (uint32_t) line;
+    scope->mark = mark;
+    return mark;
+}
+
 static bool stmt_value_is_fresh_value_struct(XiValue *v) {
     return v && v->op == XI_STRUCT_NEW && !xi_var_id_is_valid(v->var_id);
 }
@@ -69,11 +239,40 @@ static void stmt_mark_value_clone_copy(XiValue *v) {
 
 static XiValue *stmt_narrow_for_target_type(XiLower *l, AstNode *node, XiValue *val,
                                             struct XrType *target_type) {
-    if (!val || !val->type || !XR_TYPE_IS_INT(val->type))
+    if (!val || !val->type || !target_type)
+        return val;
+    if (XR_TYPE_IS_FLOAT(val->type) && XR_TYPE_IS_FLOAT(target_type)) {
+        if (xr_type_equals(target_type, val->type))
+            return val;
+        if (target_type->native_width == XR_NATIVE_F32) {
+            XiValue *n = xi_value_new(l->func, l->cur_block, XI_NARROW_F32, target_type, 1);
+            if (!n)
+                return val;
+            n->args[0] = val;
+            n->line = (uint32_t) node->line;
+            return n;
+        }
+        XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, target_type, 1);
+        if (!copy)
+            return val;
+        copy->args[0] = val;
+        copy->line = (uint32_t) node->line;
+        return copy;
+    }
+    if (!XR_TYPE_IS_INT(val->type))
         return val;
     uint16_t narrow_op = stmt_narrow_op_for_type(target_type);
-    if (!narrow_op)
+    if (!narrow_op) {
+        if (target_type && XR_TYPE_IS_INT(target_type) && !xr_type_equals(target_type, val->type)) {
+            XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, target_type, 1);
+            if (!copy)
+                return val;
+            copy->args[0] = val;
+            copy->line = (uint32_t) node->line;
+            return copy;
+        }
         return val;
+    }
     XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, target_type, 1);
     if (!n)
         return val;
@@ -305,6 +504,7 @@ static void lower_select_emit_timer_dispose(XiLower *l, XiValue *timer_chan_val,
 typedef struct LowerSelectLists {
     XiValue **case_channels;
     XiValue **case_send_values;
+    uint8_t *case_send_modes;
     XiValue **block_channels;
     int block_channel_count;
     int cap;
@@ -322,6 +522,7 @@ static bool lower_select_validate_case_count(XiLower *l, int case_count, int lin
 
 static bool lower_select_lists_init(XiLower *l, LowerSelectLists *lists, int case_count,
                                     XiValue **stack_case_channels, XiValue **stack_case_send_values,
+                                    uint8_t *stack_case_send_modes,
                                     XiValue **stack_block_channels) {
     int cap = case_count > 0 ? case_count : 1;
     lists->block_channel_count = 0;
@@ -329,7 +530,9 @@ static bool lower_select_lists_init(XiLower *l, LowerSelectLists *lists, int cas
     if (cap <= XI_LOWER_SELECT_STACK_CAP) {
         lists->case_channels = stack_case_channels;
         lists->case_send_values = stack_case_send_values;
+        lists->case_send_modes = stack_case_send_modes;
         lists->block_channels = stack_block_channels;
+        memset(lists->case_send_modes, 0, (size_t) cap * sizeof(uint8_t));
         return true;
     }
 
@@ -337,14 +540,18 @@ static bool lower_select_lists_init(XiLower *l, LowerSelectLists *lists, int cas
         (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(XiValue *)));
     lists->case_send_values =
         (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(XiValue *)));
+    lists->case_send_modes =
+        (uint8_t *) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(uint8_t)));
     lists->block_channels =
         (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(XiValue *)));
-    if (!lists->case_channels || !lists->case_send_values || !lists->block_channels) {
+    if (!lists->case_channels || !lists->case_send_values || !lists->case_send_modes ||
+        !lists->block_channels) {
         l->had_error = true;
         return false;
     }
     memset(lists->case_channels, 0, (size_t) cap * sizeof(XiValue *));
     memset(lists->case_send_values, 0, (size_t) cap * sizeof(XiValue *));
+    memset(lists->case_send_modes, 0, (size_t) cap * sizeof(uint8_t));
     return true;
 }
 
@@ -411,11 +618,12 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
     XiBlock *try_head = NULL;
     XiValue *stack_case_channels[XI_LOWER_SELECT_STACK_CAP] = {0};
     XiValue *stack_case_send_values[XI_LOWER_SELECT_STACK_CAP] = {0};
+    uint8_t stack_case_send_modes[XI_LOWER_SELECT_STACK_CAP] = {0};
     XiValue *stack_block_channels[XI_LOWER_SELECT_STACK_CAP];
     LowerSelectLists lists;
     XiValue *timer_chan_val = NULL;  // `after` timer channel; disposed at merge (design/885)
     if (!lower_select_lists_init(l, &lists, n, stack_case_channels, stack_case_send_values,
-                                 stack_block_channels))
+                                 stack_case_send_modes, stack_block_channels))
         return;
     for (int i = 0; i < n; i++) {
         SelectCaseNode *sc = &sel->cases[i]->as.select_case;
@@ -440,7 +648,8 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
             }
             lists.case_channels[i] = xi_lower_expr(l, sc->channel);
             if (sc->is_send)
-                lists.case_send_values[i] = xi_lower_expr(l, sc->value);
+                xi_lower_boundary_transfer_arg(l, sc->value, &lists.case_send_values[i],
+                                               &lists.case_send_modes[i]);
             if (!l->cur_block)
                 return;
         }
@@ -481,8 +690,10 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
             if (sc->is_send) {
                 XiValue *chan =
                     lists.case_channels[i] ? lists.case_channels[i] : xi_lower_expr(l, sc->channel);
-                XiValue *val = lists.case_send_values[i] ? lists.case_send_values[i]
-                                                         : xi_lower_expr(l, sc->value);
+                XiValue *val = lists.case_send_values[i];
+                uint8_t send_mode = lists.case_send_modes[i];
+                if (!val)
+                    xi_lower_boundary_transfer_arg(l, sc->value, &val, &send_mode);
                 if (chan && val) {
                     XiValue *send =
                         xi_value_new(l->func, l->cur_block, XI_CHAN_TRY_SEND, l->type_bool, 2);
@@ -490,6 +701,7 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
                         send->args[0] = chan;
                         send->args[1] = val;
                         send->flags |= XI_FLAG_SIDE_EFFECT;
+                        xi_chan_send_set_transfer_mode(send, send_mode);
                         xi_block_set_if(l->cur_block, send, body_blk, next_blk);
                     }
                 }
@@ -557,7 +769,11 @@ XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, AstNode *node) {
 
     xi_lower_stmt(l, sb->body);
 
-    struct XrType *res_type = (sb->scope_mode == 2) ? l->type_any : l->type_unit;
+    struct XrType *res_type = l->type_unit;
+    if (sb->scope_mode == 2) {
+        XrType *outcome = xr_type_new_enum(l->isolate, "TaskOutcome");
+        res_type = xr_type_new_array(l->isolate, outcome);
+    }
     XiValue *exit_v = xi_value_new(l->func, l->cur_block, XI_SCOPE_EXIT, res_type, 0);
     if (exit_v) {
         exit_v->aux_int = sb->scope_mode;
@@ -592,6 +808,61 @@ static bool pattern_is_irrefutable_binding(AstNode *pattern) {
             return true;
     }
     return false;
+}
+
+/* True if the pattern is (or, for nesting, contains at top level) an array
+ * pattern. Array element reads must be deferred until after the length test
+ * passes (out-of-bounds index traps), so their bindings run in the body block. */
+static bool pattern_contains_array(AstNode *pattern) {
+    return pattern && pattern->type == AST_PATTERN_ARRAY;
+}
+
+/* Read object/Json field `fname` from `subject` (static Json index when known,
+ * else a dynamic string-keyed index get; both null-safe on a missing field). */
+static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *fname) {
+    int fidx = subject->type ? stmt_json_field_index(subject->type, fname) : -1;
+    if (fidx >= 0) {
+        struct XrType *ft =
+            subject->type->object.field_types ? subject->type->object.field_types[fidx] : NULL;
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_GET_F, ft ? ft : l->type_any, 1);
+        if (v) {
+            v->args[0] = subject;
+            v->aux_int = fidx;
+        }
+        return v;
+    }
+    XiValue *key = xi_const_str(l->func, l->cur_block, fname, l->type_string);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, l->type_any, 2);
+    if (v) {
+        v->args[0] = subject;
+        v->args[1] = key;
+    }
+    return v;
+}
+
+/* Read array element at index `idx` (caller must have verified bounds). */
+static XiValue *lower_match_elem_get(XiLower *l, XiValue *subject, int idx) {
+    struct XrType *et = (subject->type && XR_TYPE_IS_ARRAY(subject->type))
+                            ? subject->type->container.element_type
+                            : NULL;
+    XiValue *iv = xi_const_int(l->func, l->cur_block, idx, l->type_int);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, et ? et : l->type_any, 2);
+    if (v) {
+        v->args[0] = subject;
+        v->args[1] = iv;
+    }
+    return v;
+}
+
+/* Array length of `subject` (XI_LOAD_FIELD "length"). */
+static XiValue *lower_match_array_len(XiLower *l, XiValue *subject) {
+    XiValue *len = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, l->type_int, 1);
+    if (!len)
+        return NULL;
+    len->args[0] = subject;
+    len->aux = (void *) "length";
+    len->aux_int = xi_lower_method_symbol(l, "length");
+    return len;
 }
 
 /* Resolve the static element type for tuple slot `idx`. Falls back to
@@ -630,14 +901,15 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
         }
 
         case AST_PATTERN_RANGE: {
-            /* Half-open interval [start, end), consistent with for-in range. */
             XiValue *start = xi_lower_expr(l, pattern->as.pattern_range.start);
             XiValue *end = xi_lower_expr(l, pattern->as.pattern_range.end);
             if (!start || !end)
                 return NULL;
             XiValue *ge = xi_binary(l->func, l->cur_block, XI_GE, l->type_bool, subject, start);
-            XiValue *lt = xi_binary(l->func, l->cur_block, XI_LT, l->type_bool, subject, end);
-            return xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, ge, lt);
+            XiValue *upper = xi_binary(l->func, l->cur_block,
+                                       pattern->as.pattern_range.inclusive_end ? XI_LE : XI_LT,
+                                       l->type_bool, subject, end);
+            return xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, ge, upper);
         }
 
         case AST_PATTERN_MULTI: {
@@ -701,6 +973,43 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
             if (!variant_val)
                 return NULL;
             return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, tag, variant_val);
+        }
+
+        case AST_PATTERN_OBJECT: {
+            /* Object pattern: AND of refutable field sub-tests. Field reads are
+             * null-safe (missing field -> null), so they are safe in the test;
+             * irrefutable field sub-patterns (bindings/wildcards) contribute
+             * nothing and are captured by lower_pattern_bindings. */
+            PatternObjectNode *op = &pattern->as.pattern_object;
+            XiValue *result = NULL;
+            for (int i = 0; i < op->count; i++) {
+                AstNode *sub = op->patterns[i];
+                if (pattern_is_irrefutable_binding(sub))
+                    continue;
+                XiValue *fv = lower_match_field_get(l, subject, op->field_names[i]);
+                if (!fv)
+                    continue;
+                XiValue *t = xi_lower_pattern_test(l, fv, sub);
+                if (!t)
+                    continue;
+                result =
+                    result ? xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, result, t) : t;
+            }
+            return result ? result : xi_const_bool(l->func, l->cur_block, true, l->type_bool);
+        }
+
+        case AST_PATTERN_ARRAY: {
+            /* Array pattern: the test is the length check only. Element reads
+             * trap out of bounds, so element bindings are deferred to the body
+             * block (after the length test passes); element sub-patterns are
+             * restricted to bindings/wildcards by the analyzer. */
+            PatternArrayNode *ap = &pattern->as.pattern_array;
+            XiValue *len = lower_match_array_len(l, subject);
+            if (!len)
+                return NULL;
+            XiValue *cnt = xi_const_int(l->func, l->cur_block, ap->count, l->type_int);
+            return xi_binary(l->func, l->cur_block, ap->has_rest ? XI_GE : XI_EQ, l->type_bool, len,
+                             cnt);
         }
 
         case AST_PATTERN_TYPE: {
@@ -773,6 +1082,48 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
         }
     }
 
+    /* Object pattern: bind each field's sub-pattern to the field value. */
+    if (pattern->type == AST_PATTERN_OBJECT) {
+        PatternObjectNode *op = &pattern->as.pattern_object;
+        for (int i = 0; i < op->count; i++) {
+            AstNode *sub = op->patterns[i];
+            if (!sub || sub->type == AST_PATTERN_WILDCARD)
+                continue;
+            XiValue *fv = lower_match_field_get(l, subject, op->field_names[i]);
+            if (!fv)
+                continue;
+            lower_pattern_bindings(l, fv, sub);
+        }
+    }
+
+    /* Array pattern: bind positional elements (length already verified by the
+     * test) and the optional rest as a tail slice. */
+    if (pattern->type == AST_PATTERN_ARRAY) {
+        PatternArrayNode *ap = &pattern->as.pattern_array;
+        for (int i = 0; i < ap->count; i++) {
+            AstNode *sub = ap->patterns[i];
+            if (!sub || sub->type == AST_PATTERN_WILDCARD)
+                continue;
+            XiValue *ev = lower_match_elem_get(l, subject, i);
+            if (ev)
+                lower_pattern_bindings(l, ev, sub);
+        }
+        if (ap->rest_name) {
+            struct XrType *rest_type =
+                (subject->type && XR_TYPE_IS_ARRAY(subject->type)) ? subject->type : l->type_any;
+            XiValue *start = xi_const_int(l->func, l->cur_block, ap->count, l->type_int);
+            XiValue *end = lower_match_array_len(l, subject);
+            XiValue *slice = xi_value_new(l->func, l->cur_block, XI_SLICE, rest_type, 3);
+            if (slice && end) {
+                slice->args[0] = subject;
+                slice->args[1] = start;
+                slice->args[2] = end;
+                int var_id = xi_lower_var_create(l, ap->rest_symbol_id, ap->rest_name, rest_type);
+                xi_lower_braun_write(l, var_id, l->cur_block, slice);
+            }
+        }
+    }
+
     /* Type pattern: bind the narrowed name (if any) to the subject. The
      * subject's static type is the union; the binding sees only the
      * matching arm and is typed as T by the analyzer. */
@@ -792,12 +1143,12 @@ static void lower_match_no_match_throw(XiLower *l, int line) {
     if (!l || !l->cur_block)
         return;
 
-    struct XrType *exception_type = xr_type_new_class(NULL, "Exception");
+    struct XrType *exception_type = xr_type_new_class(NULL, "PanicInfo");
     XiValue *cls = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, exception_type, 0);
     if (!cls)
         return;
-    cls->aux_int = XR_GLOBAL_VAR_EXCEPTION;
-    cls->aux = (void *) "Exception";
+    cls->aux_int = XR_GLOBAL_VAR_PANIC_INFO;
+    cls->aux = (void *) "PanicInfo";
 
     XiValue *msg =
         xi_const_str(l->func, l->cur_block, "E0442: non-exhaustive match", l->type_string);
@@ -1033,12 +1384,12 @@ static bool lower_channel_recv_match(XiLower *l, AstNode *node, XiValue **out_va
             lower_pattern_bindings(l, recv, payload);
             test = recv_status;
             if (arm->guard) {
-                XiValue *guard = xi_lower_expr(l, arm->guard);
+                XiValue *guard = lower_guard_expr(l, arm->guard);
                 if (guard)
                     test = xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, test, guard);
             }
         } else if (arm->guard) {
-            test = xi_lower_expr(l, arm->guard);
+            test = lower_guard_expr(l, arm->guard);
         }
 
         if (!test) {
@@ -1091,6 +1442,26 @@ static bool lower_channel_recv_match(XiLower *l, AstNode *node, XiValue **out_va
     return true;
 }
 
+/* Lower a match arm body, record its exit value, and jump to the merge block.
+ * Returns false on allocation failure. */
+static bool lower_match_emit_arm_body(XiLower *l, MatchArmNode *arm, LowerMatchExitList *exits,
+                                      XiBlock *merge, int line) {
+    XiValue *val = NULL;
+    if (arm->body && arm->body->type == AST_BLOCK) {
+        xi_lower_stmt(l, arm->body);
+        if (l->cur_block)
+            val = xi_const_null(l->func, l->cur_block, l->type_null);
+    } else {
+        val = xi_lower_expr(l, arm->body);
+    }
+    if (l->cur_block) {
+        if (!lower_match_exit_list_add(l, exits, l->cur_block, val, line))
+            return false;
+        xi_block_set_jump(l->cur_block, merge);
+    }
+    return true;
+}
+
 XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
     MatchExprNode *m = &node->as.match_expr;
     XiValue *fast_value = NULL;
@@ -1124,8 +1495,14 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
          * the match test reduces to TRUE and selection is decided
          * entirely by the optional guard. Tuple patterns don't get
          * that shortcut: their refutable slots still need TUPLE_GET-
-         * based equality testing. */
-        lower_pattern_bindings(l, subject, arm->pattern);
+         * based equality testing.
+         *
+         * Array patterns defer their bindings (and any guard reading them) to
+         * the matched body block: element reads trap out of bounds, so they
+         * must run only after the length test has passed. */
+        bool defer_bindings = pattern_contains_array(arm->pattern);
+        if (!defer_bindings)
+            lower_pattern_bindings(l, subject, arm->pattern);
 
         bool is_top_irrefutable = !arm->guard && pattern_is_irrefutable_binding(arm->pattern);
         bool is_top_binding = false;
@@ -1141,30 +1518,21 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
             test = NULL;
         } else if (is_top_binding) {
             /* Guarded bare-name pattern narrows with the guard expression. */
-            test = arm->guard ? xi_lower_expr(l, arm->guard) : NULL;
+            test = arm->guard ? lower_guard_expr(l, arm->guard) : NULL;
         } else {
             test = xi_lower_pattern_test(l, subject, arm->pattern);
-            if (arm->guard && test) {
-                XiValue *guard = xi_lower_expr(l, arm->guard);
+            /* For deferred patterns the guard is folded in inside the body
+             * block (after binding), because it may read captured names. */
+            if (!defer_bindings && arm->guard && test) {
+                XiValue *guard = lower_guard_expr(l, arm->guard);
                 if (guard)
                     test = xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, test, guard);
             }
         }
 
         if (!test) {
-            XiValue *val = NULL;
-            if (arm->body && arm->body->type == AST_BLOCK) {
-                xi_lower_stmt(l, arm->body);
-                if (l->cur_block)
-                    val = xi_const_null(l->func, l->cur_block, l->type_null);
-            } else {
-                val = xi_lower_expr(l, arm->body);
-            }
-            if (l->cur_block) {
-                if (!lower_match_exit_list_add(l, &exits, l->cur_block, val, node->line))
-                    return NULL;
-                xi_block_set_jump(l->cur_block, merge);
-            }
+            if (!lower_match_emit_arm_body(l, arm, &exits, merge, node->line))
+                return NULL;
             l->cur_block = NULL;
             break;
         } else {
@@ -1172,22 +1540,32 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
             XiBlock *next_blk = xi_block_new(l->func);
             xi_block_set_if(l->cur_block, test, body_blk, next_blk);
             xi_lower_braun_seal(l, body_blk);
-            xi_lower_braun_seal(l, next_blk);
 
             l->cur_block = body_blk;
-            XiValue *val = NULL;
-            if (arm->body && arm->body->type == AST_BLOCK) {
-                xi_lower_stmt(l, arm->body);
-                if (l->cur_block)
-                    val = xi_const_null(l->func, l->cur_block, l->type_null);
-            } else {
-                val = xi_lower_expr(l, arm->body);
+
+            /* Deferred bindings (array patterns): the length test has passed,
+             * so element reads are now in bounds. A guard that reads the
+             * captures branches back to next_blk on failure. */
+            bool next_sealed = false;
+            if (defer_bindings) {
+                lower_pattern_bindings(l, subject, arm->pattern);
+                if (arm->guard) {
+                    XiValue *guard = lower_guard_expr(l, arm->guard);
+                    if (guard) {
+                        XiBlock *guard_body = xi_block_new(l->func);
+                        xi_block_set_if(l->cur_block, guard, guard_body, next_blk);
+                        xi_lower_braun_seal(l, guard_body);
+                        xi_lower_braun_seal(l, next_blk);
+                        next_sealed = true;
+                        l->cur_block = guard_body;
+                    }
+                }
             }
-            if (l->cur_block) {
-                if (!lower_match_exit_list_add(l, &exits, l->cur_block, val, node->line))
-                    return NULL;
-                xi_block_set_jump(l->cur_block, merge);
-            }
+            if (!next_sealed)
+                xi_lower_braun_seal(l, next_blk);
+
+            if (!lower_match_emit_arm_body(l, arm, &exits, merge, node->line))
+                return NULL;
 
             l->cur_block = next_blk;
         }
@@ -1225,7 +1603,7 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
 /* ========== For-In Loop (index-based) ========== */
 
 static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiValue *limit,
-                              XiValue *get_item_coll) {
+                              XiValue *get_item_coll, bool inclusive_limit) {
     ForInStmtNode *s = &node->as.for_in_stmt;
     (void) s;
     struct XrType *item_type = xi_lower_node_type(l, node);
@@ -1269,16 +1647,15 @@ static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiVa
     XiValue *cur_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
     XiValue *cur_lim = xi_lower_braun_read(l, lim_var, l->cur_block);
     XR_DCHECK(cur_idx != NULL, "braun_read idx must not be NULL");
-    XiValue *cond = xi_binary(l->func, l->cur_block, XI_LT, l->type_bool, cur_idx, cur_lim);
+    XiValue *cond = xi_binary(l->func, l->cur_block, inclusive_limit ? XI_LE : XI_LT, l->type_bool,
+                              cur_idx, cur_lim);
     if (cond)
         xi_block_set_if(l->cur_block, cond, body_blk, exit_blk);
 
     xi_lower_braun_seal(l, body_blk);
 
-    XiBlock *prev_break = l->break_target;
-    XiBlock *prev_cont = l->continue_target;
-    l->break_target = exit_blk;
-    l->continue_target = incr_blk;
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, incr_blk);
 
     l->cur_block = body_blk;
     XiValue *body_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
@@ -1309,18 +1686,34 @@ static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiVa
     l->cur_block = incr_blk;
     if (incr_blk->npreds > 0) {
         XiValue *inc_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
-        XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
-        XiValue *new_idx = xi_binary(l->func, l->cur_block, XI_ADD, l->type_int, inc_idx, one);
-        if (new_idx)
-            xi_lower_braun_write(l, idx_var, l->cur_block, new_idx);
+        if (inclusive_limit) {
+            XiValue *inc_lim = xi_lower_braun_read(l, lim_var, l->cur_block);
+            XiValue *at_limit =
+                xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, inc_idx, inc_lim);
+            XiBlock *step_blk = xi_block_new(l->func);
+            if (at_limit)
+                xi_block_set_if(l->cur_block, at_limit, exit_blk, step_blk);
+            xi_lower_braun_seal(l, step_blk);
+
+            l->cur_block = step_blk;
+            XiValue *step_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
+            XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
+            XiValue *new_idx = xi_binary(l->func, l->cur_block, XI_ADD, l->type_int, step_idx, one);
+            if (new_idx)
+                xi_lower_braun_write(l, idx_var, l->cur_block, new_idx);
+        } else {
+            XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
+            XiValue *new_idx = xi_binary(l->func, l->cur_block, XI_ADD, l->type_int, inc_idx, one);
+            if (new_idx)
+                xi_lower_braun_write(l, idx_var, l->cur_block, new_idx);
+        }
     }
     if (l->cur_block && incr_blk->npreds > 0)
         xi_block_set_jump(l->cur_block, cond_blk);
 
     xi_lower_braun_seal(l, cond_blk);
 
-    l->break_target = prev_break;
-    l->continue_target = prev_cont;
+    xi_lower_loop_pop(l, &loop_target);
 
     xi_lower_braun_seal(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
@@ -1374,10 +1767,8 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
 
     xi_lower_braun_seal(l, body_blk);
 
-    XiBlock *prev_break = l->break_target;
-    XiBlock *prev_cont = l->continue_target;
-    l->break_target = exit_blk;
-    l->continue_target = cond_blk;
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, cond_blk);
 
     l->cur_block = body_blk;
     XiValue *iter_body = xi_lower_braun_read(l, iter_var, l->cur_block);
@@ -1425,8 +1816,7 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
 
     xi_lower_braun_seal(l, cond_blk);
 
-    l->break_target = prev_break;
-    l->continue_target = prev_cont;
+    xi_lower_loop_pop(l, &loop_target);
 
     xi_lower_braun_seal(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
@@ -1457,6 +1847,9 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     iter->aux_int = (int64_t) xi_lower_method_symbol(l, "iterator") << 1;
     iter->flags |= XI_FLAG_SIDE_EFFECT;
     iter->line = line;
+    xi_lower_insert_err_check(l, node);
+    if (!l->cur_block)
+        return;
 
     int sid = l->synthetic_id++;
     char buf[32];
@@ -1484,14 +1877,15 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     has_next->aux_int = (int64_t) xi_lower_method_symbol(l, "hasNext") << 1;
     has_next->flags |= XI_FLAG_SIDE_EFFECT;
     has_next->line = line;
+    xi_lower_insert_err_check(l, node);
+    if (!l->cur_block)
+        return;
     xi_block_set_if(l->cur_block, has_next, body_blk, exit_blk);
 
     xi_lower_braun_seal(l, body_blk);
 
-    XiBlock *prev_break = l->break_target;
-    XiBlock *prev_cont = l->continue_target;
-    l->break_target = exit_blk;
-    l->continue_target = cond_blk;
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, cond_blk);
 
     /* Body: let item = __iter.next(); <body> */
     l->cur_block = body_blk;
@@ -1504,6 +1898,9 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     next_val->aux_int = (int64_t) xi_lower_method_symbol(l, "next") << 1;
     next_val->flags |= XI_FLAG_SIDE_EFFECT;
     next_val->line = line;
+    xi_lower_insert_err_check(l, node);
+    if (!l->cur_block)
+        return;
 
     struct XrType *item_type = xi_lower_node_type(l, node);
     int item_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, item_type);
@@ -1515,8 +1912,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
 
     xi_lower_braun_seal(l, cond_blk);
 
-    l->break_target = prev_break;
-    l->continue_target = prev_cont;
+    xi_lower_loop_pop(l, &loop_target);
 
     xi_lower_braun_seal(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
@@ -1570,10 +1966,8 @@ static void lower_for_in_enum_loop(XiLower *l, AstNode *node, XiValue *init_val,
 
     xi_lower_braun_seal(l, body_blk);
 
-    XiBlock *prev_break = l->break_target;
-    XiBlock *prev_cont = l->continue_target;
-    l->break_target = exit_blk;
-    l->continue_target = incr_blk;
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, incr_blk);
 
     l->cur_block = body_blk;
     XiValue *body_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
@@ -1613,8 +2007,7 @@ static void lower_for_in_enum_loop(XiLower *l, AstNode *node, XiValue *init_val,
 
     xi_lower_braun_seal(l, cond_blk);
 
-    l->break_target = prev_break;
-    l->continue_target = prev_cont;
+    xi_lower_loop_pop(l, &loop_target);
 
     xi_lower_braun_seal(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
@@ -1636,6 +2029,62 @@ static bool is_index_iterable_collection(XiLower *l, AstNode *coll_node) {
     return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_SET || t->kind == XR_KIND_STRING;
 }
 
+static void lower_for_in_channel_loop(XiLower *l, AstNode *node, XiValue *coll) {
+    ForInStmtNode *s = &node->as.for_in_stmt;
+    struct XrType *item_type = xi_lower_node_type(l, node);
+    if (!item_type)
+        item_type = l->type_any;
+
+    int sid = l->synthetic_id++;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "__for_ch_%d", sid);
+    char *chan_name = (char *) xi_func_arena_alloc(l->func, (uint32_t) (strlen(buf) + 1));
+    XR_DCHECK(chan_name != NULL, "arena alloc failed for chan_name");
+    memcpy(chan_name, buf, strlen(buf) + 1);
+
+    int chan_var = xi_lower_var_create(l, 0, chan_name, coll->type ? coll->type : l->type_any);
+    xi_lower_braun_write(l, chan_var, l->cur_block, coll);
+
+    XiBlock *cond_blk = xi_block_new(l->func);
+    XiBlock *body_blk = xi_block_new(l->func);
+    XiBlock *exit_blk = xi_block_new(l->func);
+
+    xi_block_set_jump(l->cur_block, cond_blk);
+
+    l->cur_block = cond_blk;
+    XiValue *body_chan = xi_lower_braun_read(l, chan_var, l->cur_block);
+    XiValue *recv = xi_value_new(l->func, l->cur_block, XI_CHAN_RECV, item_type, 1);
+    if (!recv)
+        return;
+    recv->args[0] = body_chan;
+    recv->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND;
+    recv->line = (uint32_t) node->line;
+
+    XiValue *recv_status = lower_chan_recv_status(l, recv);
+    if (!recv_status)
+        return;
+    xi_block_set_if(l->cur_block, recv_status, body_blk, exit_blk);
+
+    xi_lower_braun_seal(l, body_blk);
+
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, cond_blk);
+
+    l->cur_block = body_blk;
+    int item_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, item_type);
+    xi_lower_braun_write(l, item_var, l->cur_block, recv);
+
+    xi_lower_stmt(l, s->body);
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, cond_blk);
+
+    xi_lower_braun_seal(l, cond_blk);
+    xi_lower_loop_pop(l, &loop_target);
+
+    xi_lower_braun_seal(l, exit_blk);
+    l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
+}
+
 XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
     ForInStmtNode *s = &node->as.for_in_stmt;
 
@@ -1652,7 +2101,7 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
         XiValue *end = xi_lower_expr(l, rn->end);
         if (!end || !l->cur_block)
             return;
-        lower_for_in_loop(l, node, start, end, NULL);
+        lower_for_in_loop(l, node, start, end, NULL, rn->inclusive_end);
         return;
     }
 
@@ -1677,6 +2126,11 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
         return;
     }
 
+    if (coll_type && stmt_type_is_channel(coll_type)) {
+        lower_for_in_channel_loop(l, node, coll);
+        return;
+    }
+
     /* Anything that isn't a fast index-iterable collection (Map, Json,
      * tuple, struct, custom class) goes through the iterator() protocol.
      * The analyzer is responsible for rejecting collection types that
@@ -1695,7 +2149,7 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
     len->line = (uint32_t) node->line;
 
     XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
-    lower_for_in_loop(l, node, zero, len, coll);
+    lower_for_in_loop(l, node, zero, len, coll, false);
 }
 
 /* ========== Try-Catch ========== */
@@ -1717,6 +2171,7 @@ XR_FUNC void xi_lower_reprop_error(XiLower *l, XiValue *val, AstNode *node) {
             set->flags |= XI_FLAG_SIDE_EFFECT;
             set->line = (uint32_t) node->line;
         }
+        xi_lower_defer_run_to_depth(l, l->catch_defer_depths[l->try_depth - 1], node->line);
         XiBlock *catch_blk = l->catch_targets[l->try_depth - 1];
         xi_block_set_jump(l->cur_block, catch_blk);
         l->cur_block = NULL;
@@ -1871,6 +2326,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
      * xi_lower_insert_err_check, which consult try_depth/catch_targets). */
     if (has_err) {
         l->catch_targets[l->try_depth] = catch_blk;
+        l->catch_defer_depths[l->try_depth] = l->defer_scope_depth;
         l->try_depth++;
     }
     l->cur_block = try_blk;
@@ -1984,6 +2440,9 @@ static void lower_defer(XiLower *l, AstNode *node) {
     if (!callee || !l->cur_block)
         return;
 
+    if (!lower_defer_scope_ensure_mark(l, node->line))
+        return;
+
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_unit, 1);
     if (!v)
         return;
@@ -1993,9 +2452,17 @@ static void lower_defer(XiLower *l, AstNode *node) {
 }
 
 static void lower_yield_stmt(XiLower *l, AstNode *node) {
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_YIELD, l->type_unit, 0);
+    /* `yield expr` produces a generator value. The enclosing function is a
+     * generator (suspendable coroutine); XI_GEN_YIELD suspends and hands the
+     * value to the driving iterator. (Cooperative scheduling is Coro.yield().) */
+    AstNode *value_node = node ? node->as.yield_stmt.value : NULL;
+    XiValue *value = value_node ? xi_lower_expr(l, value_node) : NULL;
+    if (!value)
+        value = xi_const_null(l->func, l->cur_block, l->type_null);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_GEN_YIELD, l->type_unit, 1);
     if (v) {
-        v->flags |= XI_FLAG_SIDE_EFFECT;
+        v->args[0] = value;
+        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND;
         v->line = node ? (uint32_t) node->line : 0;
     }
 }
@@ -2005,7 +2472,8 @@ static void lower_yield_stmt(XiLower *l, AstNode *node) {
 /*
  * Bind destructure pattern elements to extracted values from 'src'.
  * Array patterns: INDEX_GET by position.
- * Object patterns: LOAD_FIELD by field name.
+ * Object patterns: indexed Json field read when a complete static field table
+ * is known, otherwise string-key INDEX_GET fallback.
  * Identifier patterns: bind directly.
  */
 static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValue *src) {
@@ -2055,13 +2523,24 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
                 XrDestructurePattern *sub = pat->as.object.patterns[i];
                 if (!fname)
                     continue;
-                /* Use INDEX_GET with string key — works for both JSON objects
-                 * and maps (Xi lowers object literals as NEWMAP). */
-                XiValue *key = xi_const_str(l->func, l->cur_block, fname, l->type_string);
-                XiValue *val = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, l->type_any, 2);
-                if (val) {
-                    val->args[0] = src;
-                    val->args[1] = key;
+                int fidx = stmt_json_field_index(src->type, fname);
+                XiValue *val = NULL;
+                if (fidx >= 0) {
+                    struct XrType *field_type =
+                        src->type->object.field_types ? src->type->object.field_types[fidx] : NULL;
+                    val = xi_value_new(l->func, l->cur_block, XI_JSON_GET_F,
+                                       field_type ? field_type : l->type_any, 1);
+                    if (val) {
+                        val->args[0] = src;
+                        val->aux_int = fidx;
+                    }
+                } else {
+                    XiValue *key = xi_const_str(l->func, l->cur_block, fname, l->type_string);
+                    val = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, l->type_any, 2);
+                    if (val) {
+                        val->args[0] = src;
+                        val->args[1] = key;
+                    }
                 }
                 lower_destructure_bind(l, sub, val);
             }
@@ -2162,12 +2641,148 @@ static void lower_mark_decl_captured_by_child(XiLower *l, int var_id, const char
     }
 }
 
+static bool stmt_call_is_named_builtin(AstNode *node, const char *name) {
+    if (!node || node->type != AST_CALL_EXPR || !name)
+        return false;
+    CallExprNode *call = &node->as.call_expr;
+    return call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
+           strcmp(call->callee->as.variable.name, name) == 0;
+}
+
+static bool stmt_shared_init_direct_alloc_safe(AstNode *node) {
+    if (!node)
+        return false;
+    switch (node->type) {
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_LITERAL_CHAR:
+        case AST_LITERAL_NULL:
+        case AST_LITERAL_STRING:
+            return true;
+        case AST_ARRAY_LITERAL: {
+            ArrayLiteralNode *arr = &node->as.array_literal;
+            for (int i = 0; i < arr->count; i++) {
+                AstNode *elem = arr->elements[i];
+                if (!elem || elem->type == AST_SPREAD_EXPR ||
+                    !stmt_shared_init_direct_alloc_safe(elem))
+                    return false;
+            }
+            return true;
+        }
+        case AST_OBJECT_LITERAL: {
+            ObjectLiteralNode *obj = &node->as.object_literal;
+            for (int i = 0; i < obj->count; i++) {
+                if (obj->computed && obj->computed[i] &&
+                    !stmt_shared_init_direct_alloc_safe(obj->keys[i]))
+                    return false;
+                if (!stmt_shared_init_direct_alloc_safe(obj->values[i]))
+                    return false;
+            }
+            return true;
+        }
+        case AST_MAP_LITERAL: {
+            MapLiteralNode *map = &node->as.map_literal;
+            for (int i = 0; i < map->count; i++) {
+                if (!stmt_shared_init_direct_alloc_safe(map->keys[i]) ||
+                    !stmt_shared_init_direct_alloc_safe(map->values[i]))
+                    return false;
+            }
+            return true;
+        }
+        case AST_SET_LITERAL: {
+            SetLiteralNode *set = &node->as.set_literal;
+            for (int i = 0; i < set->count; i++) {
+                if (!stmt_shared_init_direct_alloc_safe(set->elements[i]))
+                    return false;
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static bool stmt_mark_value_shared_alloc(XiValue *v) {
+    if (!v)
+        return false;
+    switch (v->op) {
+        case XI_ARRAY_NEW:
+        case XI_MAP_NEW:
+        case XI_SET_NEW:
+            v->aux_int |= 0x01;
+            return true;
+        case XI_JSON_NEW:
+            xi_json_set_storage_mode(v, XR_STORAGE_SHARED);
+            return true;
+        case XI_CHAN_NEW:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void stmt_mark_shared_allocs_in_range(XiBlock *block, uint32_t begin) {
+    if (!block || begin > block->nvalues)
+        return;
+    for (uint32_t i = begin; i < block->nvalues; i++)
+        stmt_mark_value_shared_alloc(block->values[i]);
+}
+
+static XiValue *stmt_wrap_to_shared(XiLower *l, XiValue *value, int line) {
+    if (!l || !value)
+        return value;
+    if (value->op == XI_CALL_BUILTIN && value->aux &&
+        strcmp((const char *) value->aux, "to_shared") == 0)
+        return value;
+    if (value->op == XI_CALL_BUILTIN && value->aux &&
+        strcmp((const char *) value->aux, "copy") == 0) {
+        value->aux = (void *) "to_shared";
+        return value;
+    }
+    XiValue *shared = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN,
+                                   value->type ? value->type : l->type_any, 1);
+    if (!shared)
+        return value;
+    shared->args[0] = value;
+    shared->aux = (void *) "to_shared";
+    shared->flags |= XI_FLAG_SIDE_EFFECT;
+    shared->line = (uint32_t) line;
+    return shared;
+}
+
+static XiValue *stmt_lower_shared_initializer(XiLower *l, AstNode *decl, XiValue *init_val,
+                                              XiBlock *init_block, uint32_t init_begin) {
+    if (!l || !decl || !init_val || decl->as.var_decl.storage_mode != XR_STORAGE_SHARED)
+        return init_val;
+
+    AstNode *init = decl->as.var_decl.initializer;
+    if (!init)
+        return init_val;
+
+    if (stmt_shared_init_direct_alloc_safe(init)) {
+        stmt_mark_shared_allocs_in_range(init_block, init_begin);
+        return init_val;
+    }
+
+    if (stmt_call_is_named_builtin(init, "copy"))
+        return stmt_wrap_to_shared(l, init_val, init->line);
+
+    if (init->type == AST_VARIABLE || init->type == AST_MOVE_EXPR)
+        return init_val;
+
+    return stmt_wrap_to_shared(l, init_val, init->line ? init->line : decl->line);
+}
+
 static void lower_var_decl(XiLower *l, AstNode *node) {
     const char *name = node->as.var_decl.name;
     uint32_t sid = node->as.var_decl.symbol_id;
     struct XrType *type = xi_lower_node_type(l, node);
 
     int var_id = xi_lower_var_create(l, sid, name, type);
+    XiBlock *init_block = l->cur_block;
+    uint32_t init_begin = init_block ? init_block->nvalues : 0;
 
     XiValue *init_val;
     if (node->as.var_decl.initializer) {
@@ -2216,6 +2831,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
             init_val = xi_const_bool(l->func, l->cur_block, false, l->type_bool);
         else
             init_val = xi_const_null(l->func, l->cur_block, l->type_null);
+        init_val = stmt_narrow_for_target_type(l, node, init_val, type);
     }
     stmt_set_missing_line(init_val, node->line);
 
@@ -2250,6 +2866,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
             init_val->aux_int = (int64_t) ((key_kind << 7) | ((value_tid & 0x1F) << 2) | flags);
         }
     }
+    init_val = stmt_lower_shared_initializer(l, node, init_val, init_block, init_begin);
     /* When the initializer comes from a different variable, insert an
      * explicit copy so the new variable gets its own SSA value.  Without
      * this, both variables map to the same physical register and
@@ -2326,7 +2943,8 @@ static void lower_print(XiLower *l, AstNode *node) {
 
         int add_space = (i > 0) ? 1 : 0;
         int newline = (i == nargs - 1) ? 1 : 0;
-        v->aux_int = add_space | (newline << 1) | (skip_null << 4);
+        int slot_hint = stmt_print_slot_hint_for_value(arg_vals[i]);
+        v->aux_int = add_space | (newline << 1) | (slot_hint << 2) | (skip_null << 4);
 
         v->flags = xi_op_default_effects(XI_PRINT);
         v->line = (uint32_t) node->line;
@@ -2368,7 +2986,12 @@ static void lower_return(XiLower *l, AstNode *node) {
          * Other XI_CALL (class constructors, etc.) → NOT safe; OP_TAILCALL
          * only handles closures and would fail on class objects. */
         bool is_direct_call = (ret->values[0]->type == AST_CALL_EXPR);
-        if (is_direct_call && val && val->op == XI_CALL_METHOD) {
+        /* A `T(args)` construction lowers to an XI_CALL_METHOD whose aux is
+         * "constructor". Constructors must materialize and return the new
+         * object, so they are never tail calls (and AOT has no TAIL_CALL). */
+        bool is_constructor_call = val && val->op == XI_CALL_METHOD && val->aux &&
+                                   strcmp((const char *) val->aux, "constructor") == 0;
+        if (is_direct_call && !is_constructor_call && val && val->op == XI_CALL_METHOD) {
             val->flags |= XI_FLAG_TAIL;
         } else if (is_direct_call && val && val->op == XI_CALL) {
             bool is_self = (val->aux_int & 0xFF) == 1;
@@ -2384,6 +3007,10 @@ static void lower_return(XiLower *l, AstNode *node) {
         return;
     }
 
+    if (xi_lower_defer_has_active_mark(l) && val)
+        val->flags &= (uint16_t) ~XI_FLAG_TAIL;
+    xi_lower_defer_run_to_depth(l, 0, node->line);
+
     int ret_line = node->line;
     if (ret_line <= 0 && ret->value_count == 1 && ret->values[0])
         ret_line = ret->values[0]->line;
@@ -2397,7 +3024,12 @@ static void lower_block(XiLower *l, AstNode *node) {
     /* No scope push/pop needed: the analyzer assigns unique symbol_ids
      * to variables in different scopes, so shadowed variables naturally
      * get distinct var_id slots in the Braun SSA. */
+    bool owns_defer_scope = !node->as.block.is_synthetic_defer_capture;
+    if (owns_defer_scope)
+        xi_lower_defer_scope_push(l);
     lower_stmts(l, node->as.block.statements, node->as.block.count);
+    if (owns_defer_scope)
+        xi_lower_defer_scope_pop_normal(l, node->line);
 }
 
 static void lower_if(XiLower *l, AstNode *node) {
@@ -2406,6 +3038,7 @@ static void lower_if(XiLower *l, AstNode *node) {
     XiValue *cond = xi_lower_expr(l, s->condition);
     if (!cond || !l->cur_block)
         return;
+    cond = xi_lower_bool_condition(l, cond);
 
     XiBlock *then_blk = xi_block_new(l->func);
     XiBlock *merge = xi_block_new(l->func);
@@ -2451,16 +3084,16 @@ static void lower_while(XiLower *l, AstNode *node) {
     l->cur_block = cond_blk;
     XiValue *cond = xi_lower_expr(l, s->condition);
     if (cond)
+        cond = xi_lower_bool_condition(l, cond);
+    if (cond)
         xi_block_set_if(l->cur_block, cond, body_blk, exit_blk);
 
     /* body_blk has 1 pred (cond_blk) — seal immediately */
     xi_lower_braun_seal(l, body_blk);
 
     /* Body */
-    XiBlock *prev_break = l->break_target;
-    XiBlock *prev_cont = l->continue_target;
-    l->break_target = exit_blk;
-    l->continue_target = cond_blk;
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, cond_blk);
 
     l->cur_block = body_blk;
     xi_lower_stmt(l, s->body);
@@ -2470,8 +3103,7 @@ static void lower_while(XiLower *l, AstNode *node) {
     /* All preds of cond_blk now known (entry + back edge) — seal */
     xi_lower_braun_seal(l, cond_blk);
 
-    l->break_target = prev_break;
-    l->continue_target = prev_cont;
+    xi_lower_loop_pop(l, &loop_target);
 
     xi_lower_braun_seal(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
@@ -2499,6 +3131,8 @@ static void lower_for(XiLower *l, AstNode *node) {
     if (s->condition) {
         XiValue *cond = xi_lower_expr(l, s->condition);
         if (cond)
+            cond = xi_lower_bool_condition(l, cond);
+        if (cond)
             xi_block_set_if(l->cur_block, cond, body_blk, exit_blk);
     } else {
         xi_block_set_jump(l->cur_block, body_blk);
@@ -2507,10 +3141,8 @@ static void lower_for(XiLower *l, AstNode *node) {
     xi_lower_braun_seal(l, body_blk);
 
     /* Body */
-    XiBlock *prev_break = l->break_target;
-    XiBlock *prev_cont = l->continue_target;
-    l->break_target = exit_blk;
-    l->continue_target = incr_blk;
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, incr_blk);
 
     l->cur_block = body_blk;
     xi_lower_stmt(l, s->body);
@@ -2531,8 +3163,7 @@ static void lower_for(XiLower *l, AstNode *node) {
     /* cond_blk back edge now added — seal */
     xi_lower_braun_seal(l, cond_blk);
 
-    l->break_target = prev_break;
-    l->continue_target = prev_cont;
+    xi_lower_loop_pop(l, &loop_target);
 
     xi_lower_braun_seal(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
@@ -2543,16 +3174,20 @@ static void lower_for(XiLower *l, AstNode *node) {
 /* (function bodies removed — see xi_lower_stmt.c)
  * Remaining: lower_break, lower_continue kept here as they are tiny. */
 
-static void lower_break(XiLower *l) {
-    if (l->break_target && l->cur_block) {
-        xi_block_set_jump(l->cur_block, l->break_target);
+static void lower_break(XiLower *l, AstNode *node) {
+    XiLoopTarget *target = xi_lower_loop_find(l, node ? node->as.break_stmt.label : NULL);
+    if (target && target->break_target && l->cur_block) {
+        xi_lower_defer_run_to_depth(l, target->defer_scope_depth, node ? node->line : 0);
+        xi_block_set_jump(l->cur_block, target->break_target);
         l->cur_block = NULL;
     }
 }
 
-static void lower_continue(XiLower *l) {
-    if (l->continue_target && l->cur_block) {
-        xi_block_set_jump(l->cur_block, l->continue_target);
+static void lower_continue(XiLower *l, AstNode *node) {
+    XiLoopTarget *target = xi_lower_loop_find(l, node ? node->as.continue_stmt.label : NULL);
+    if (target && target->continue_target && l->cur_block) {
+        xi_lower_defer_run_to_depth(l, target->defer_scope_depth, node ? node->line : 0);
+        xi_block_set_jump(l->cur_block, target->continue_target);
         l->cur_block = NULL;
     }
 }
@@ -2800,11 +3435,11 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
             break;
 
         case AST_BREAK_STMT:
-            lower_break(l);
+            lower_break(l, node);
             break;
 
         case AST_CONTINUE_STMT:
-            lower_continue(l);
+            lower_continue(l, node);
             break;
 
         case AST_THROW_STMT:

@@ -27,6 +27,12 @@ typedef struct {
     char error_msg[128];  // human-readable description of the offending type
 } XrJsonStringifyResult;
 
+typedef struct {
+    XrValue result;       // encoded Json value, or xr_null() on error
+    bool has_error;       // true when a non-encodable value was encountered
+    char error_msg[128];  // human-readable description of the offending type
+} XrJsonEncodeResult;
+
 /* ========== Script-callable Functions ========== */
 
 // parse(str) → XrValue
@@ -35,6 +41,10 @@ XR_FUNC XrValue xr_json_fn_parse(XrVMRuntime *X, XrValue self, XrValue *args, in
 // Core stringify: returns result + error info without throwing.
 // Callers that need exception semantics should inspect has_error and throw.
 XR_FUNC XrJsonStringifyResult xr_json_stringify_core(XrVMRuntime *X, XrValue val, int indent);
+
+// Core encode: converts typed values into a Json value tree without a
+// stringify/parse round-trip. Callers decide whether to throw on errors.
+XR_FUNC XrJsonEncodeResult xr_json_encode_core(XrVMRuntime *X, XrValue val);
 
 // isValid(str, strict?) → bool (zero-allocation validator)
 XR_FUNC XrValue xr_json_fn_is_valid(XrVMRuntime *X, XrValue self, XrValue *args, int argc);

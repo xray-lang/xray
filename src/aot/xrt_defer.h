@@ -8,18 +8,19 @@
  * xrt_defer.h - AOT deferred-cleanup runtime
  *
  * KEY CONCEPT:
- *   `defer` is function-scoped LIFO cleanup that must run on every exit:
- *   normal return, value-return error propagation, and panic unwind. The IR
- *   lowers each `defer` into a zero-argument closure that captures its operands
- *   eagerly (see the parser's defer desugar), so at runtime a pending defer is
- *   simply a closure value to invoke at scope exit.
+ *   `defer` is block-scoped LIFO cleanup that must run on every exit:
+ *   normal fallthrough, break/continue/return, value-return error propagation,
+ *   and panic unwind. The IR lowers each `defer` into a zero-argument closure
+ *   that captures its operands eagerly (see the parser's defer desugar), so at
+ *   runtime a pending defer is simply a closure value to invoke at scope exit.
  *
- *   Each generated function with defers owns a stack-local XrtDeferScope and
+ *   Each generated sync function with defers owns a stack-local XrtDeferScope and
  *   links it onto the global defer chain (xrt_defer_top) at entry. Registering a
- *   defer pushes the closure onto that scope. Every exit pops the scope off the
- *   chain and runs it LIFO. A panic (longjmp) unwinds the chain down to the
- *   catching try's recorded mark BEFORE jumping (see xrt_throw_exc), so defers
- *   in skipped frames still run — mirroring the VM's per-frame defer marks.
+ *   defer pushes the closure onto that scope. Lexical blocks record integer
+ *   count marks and run back to those marks on every block-exit edge. Function
+ *   exit is the root mark (0). A panic (longjmp) unwinds the chain down to the
+ *   catching try's recorded scope/count mark BEFORE jumping (see xrt_throw_exc),
+ *   so defers in skipped frames and in skipped blocks still run.
  *
  *   The chain is a plain global, matching xrt_exc_top / xrt_pending_error: the
  *   AOT runtime's non-local control flow is single-threaded today and all three
@@ -97,6 +98,10 @@ static inline void xrt_defer_push(XrtDeferScope *s, XrValue closure) {
     s->items[s->count++] = closure;
 }
 
+static inline int xrt_defer_mark(XrtDeferScope *s) {
+    return s ? s->count : 0;
+}
+
 /* Invoke one pending defer closure with Go-style error semantics: an error
  * thrown inside the defer replaces any in-flight value-return error; otherwise
  * the in-flight error is preserved across the call.
@@ -124,17 +129,29 @@ static inline void xrt_defer_invoke_one(XrValue closure) {
     }
 }
 
-/* Run a scope's pending defers LIFO and reset it (release any heap spill). Does
- * NOT unlink from the chain; callers handle chain maintenance. */
-static inline void xrt_defer_run(XrtDeferScope *s) {
-    for (int i = s->count - 1; i >= 0; i--)
+/* Run a scope's pending defers LIFO down to `mark`. Does NOT unlink from the
+ * chain; callers handle chain maintenance. Heap spill storage is retained while
+ * older defers remain live and released when the scope drains fully. */
+static inline void xrt_defer_run_to(XrtDeferScope *s, int mark) {
+    if (!s)
+        return;
+    if (mark < 0)
+        mark = 0;
+    if (mark > s->count)
+        mark = s->count;
+    for (int i = s->count - 1; i >= mark; i--)
         xrt_defer_invoke_one(s->items[i]);
-    s->count = 0;
-    if (s->items != s->inline_buf) {
+    s->count = mark;
+    if (s->count == 0 && s->items != s->inline_buf) {
         XRT_FREE(s->items);
         s->items = s->inline_buf;
         s->cap = XRT_DEFER_INLINE_CAP;
     }
+}
+
+/* Run a scope's pending defers LIFO and reset it (release any heap spill). */
+static inline void xrt_defer_run(XrtDeferScope *s) {
+    xrt_defer_run_to(s, 0);
 }
 
 /* Normal / value-error exit: unlink this function's scope and run it. */
@@ -143,15 +160,22 @@ static inline void xrt_defer_leave(XrtDeferScope *s) {
     xrt_defer_run(s);
 }
 
-/* Panic unwind: run and unlink every scope above `mark` (a XrtDeferScope* or
- * NULL for "run everything"), so defers in frames skipped by longjmp still
- * execute. Called by xrt_throw_exc before transferring control. */
-static inline void xrt_defer_unwind_to(void *mark) {
-    while (xrt_defer_top && xrt_defer_top != (XrtDeferScope *) mark) {
+/* Panic unwind: run and unlink every scope above `scope_mark`, then run the
+ * catching scope back to `count_mark`. This covers both skipped functions and
+ * skipped blocks inside the catching function. */
+static inline void xrt_defer_unwind_to_mark(void *scope_mark, int count_mark) {
+    XrtDeferScope *target = (XrtDeferScope *) scope_mark;
+    while (xrt_defer_top && xrt_defer_top != target) {
         XrtDeferScope *s = xrt_defer_top;
         xrt_defer_top = s->prev;
         xrt_defer_run(s);
     }
+    if (xrt_defer_top && xrt_defer_top == target)
+        xrt_defer_run_to(target, count_mark);
+}
+
+static inline void xrt_defer_unwind_to(void *mark) {
+    xrt_defer_unwind_to_mark(mark, 0);
 }
 
 #endif  // XRT_DEFER_H

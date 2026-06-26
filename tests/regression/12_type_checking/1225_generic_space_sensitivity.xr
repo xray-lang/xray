@@ -90,17 +90,17 @@ fn test_generic_space_sensitivity() {
     // =============================================================================
 
     // Nested generic - tests >> split handling
-    let nested = new Box<Array<int>>([1, 2, 3])
+    let nested = Box<Array<int>>([1, 2, 3])
     assert_eq(nested.get()[0], 1)
     // Double nested
-    let deep = new Box<Box<int>>(new Box<int>(42))
+    let deep = Box<Box<int>>(Box<int>(42))
     assert_eq(deep.get().get(), 42)
 
     // =============================================================================
     // Test 6: Generic method call
     // =============================================================================
 
-    let u = new Utils()
+    let u = Utils()
     let arr = u.wrap<int>(100)
     assert_eq(arr[0], 100)
     // =============================================================================
@@ -109,7 +109,7 @@ fn test_generic_space_sensitivity() {
     let inferred = identity(999)
     // Should infer int
     assert_eq(inferred, 999)
-    let box = new Box(123)
+    let box = Box(123)
     // Should infer Box<int>
     assert_eq(box.get(), 123)
     // =============================================================================

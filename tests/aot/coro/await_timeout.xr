@@ -6,11 +6,11 @@ fn wait_for_value(ch: Channel<int>) -> int {
 }
 
 fn quick_value(n: int) -> int {
-    yield
+    Coro.yield()
     return n * 2
 }
 
-let ch = new Channel<int>(0)
+let ch = Channel<int>(0)
 let blocked = go wait_for_value(ch)
 let timed_out = blocked.awaitTimeout(1)
 print(match (timed_out) {

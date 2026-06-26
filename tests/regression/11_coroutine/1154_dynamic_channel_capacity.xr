@@ -22,7 +22,7 @@ fn recv_ok(r: Recv<int>) -> bool {
 @test
 fn test_dynamic_channel_capacity() {
     let n = 3
-    const ch = new Channel<int>(n)
+    const ch = Channel<int>(n)
     assert_eq(ch.capacity, 3)
     assert_eq(sent(ch.trySend(1)), true)
     assert_eq(sent(ch.trySend(2)), true)

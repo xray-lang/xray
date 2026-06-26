@@ -1,0 +1,3 @@
+// D40: spreading a non-object into an object literal is a type error.
+let bad = { ...5 }
+print(bad)

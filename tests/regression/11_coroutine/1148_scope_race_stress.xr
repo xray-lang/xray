@@ -6,16 +6,16 @@
 //      XR_IS_NULL(first_error) and both write — winner non-deterministic
 //      but must be a real child error string.
 //
-//   B. supervisor errors[] lazy-init lost update: two failing children
-//      both see scope->errors == NULL, both allocate, the second store
-//      overwrites the first — errors collected into the displaced array
+//   B. supervisor outcomes[] lazy-init lost update: two failing children
+//      both see scope->outcomes == NULL, both allocate, the second store
+//      overwrites the first — outcomes collected into the displaced array
 //      are silently lost.
 //
-//   C. supervisor errors[] concurrent push: two pushes interleave on
+//   C. supervisor outcomes[] concurrent push: two pushes interleave on
 //      length / data and corrupt the array.
 //
-// Eager-allocation of errors[] at scope entry plus moving
-// record_child_error inside the scope spinlock closes B and C; A is
+// Eager-allocation of outcomes[] at scope entry plus moving
+// record_child_completion inside the scope spinlock closes B and C; A is
 // serialized as a side effect.
 //
 // This stress harness spawns many failing children per scope across
@@ -55,12 +55,53 @@ fn make_ok(id: int) -> int {
     return x + id
 }
 
-// Test 1 — supervisor: every failing child must produce one entry in
-// errors[]; total length is deterministic across all iterations.
+fn count_success(outcomes: Array<TaskOutcome>) -> int {
+    let count = 0
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Success(_) -> { count = count + 1 }
+            _ -> {}
+        }
+    }
+    return count
+}
+
+fn count_failed(outcomes: Array<TaskOutcome>) -> int {
+    let count = 0
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Failed(_) -> { count = count + 1 }
+            _ -> {}
+        }
+    }
+    return count
+}
+
+fn failed_payloads_valid(outcomes: Array<TaskOutcome>) -> bool {
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Failed(err) -> {
+                match (err) {
+                    RaceErr.Msg(msg) -> {
+                        if (!msg.includes("err_")) {
+                            return false
+                        }
+                    }
+                    _ -> { return false }
+                }
+            }
+            _ -> { return false }
+        }
+    }
+    return true
+}
+
+// Test 1 — supervisor: every child must produce one TaskOutcome; total
+// success/failure counts are deterministic across all iterations.
 @test
 fn test_supervisor_no_lost_updates() {
     for (let iter = 0; iter < ITERATIONS; iter++) {
-        let errs = supervisor scope {
+        let outcomes = supervisor scope {
             for (let i = 0; i < FAILING_PER_SCOPE; i++) {
                 go make_failing(i)
             }
@@ -68,26 +109,26 @@ fn test_supervisor_no_lost_updates() {
                 go make_ok(i)
             }
         }
-        assert_eq(errs.length, FAILING_PER_SCOPE)
+        assert_eq(outcomes.length, FAILING_PER_SCOPE + SUCCEEDING_PER_SCOPE)
+        assert_eq(count_failed(outcomes), FAILING_PER_SCOPE)
+        assert_eq(count_success(outcomes), SUCCEEDING_PER_SCOPE)
     }
 }
 
-// Test 2 — supervisor: every entry in errors[] must be a real string
+// Test 2 — supervisor: every Failed payload must be the original enum
 // produced by some failing child, with no torn / NULL slots from a
 // concurrent xr_array_push.
 @test
 fn test_supervisor_no_torn_pushes() {
     for (let iter = 0; iter < ITERATIONS; iter++) {
-        let errs = supervisor scope {
+        let outcomes = supervisor scope {
             for (let i = 0; i < FAILING_PER_SCOPE; i++) {
                 go make_failing(i)
             }
         }
-        for (let j = 0; j < errs.length; j++) {
-            let e = string(errs[j])
-            assert(e.length >= 4, "torn slot: short string")
-            assert(e.includes("err_"), "torn slot: bad prefix")
-        }
+        assert_eq(outcomes.length, FAILING_PER_SCOPE)
+        assert_eq(count_failed(outcomes), FAILING_PER_SCOPE)
+        assert(failed_payloads_valid(outcomes), "failed payloads must stay intact")
     }
 }
 
@@ -115,16 +156,17 @@ fn test_linked_first_error_deterministic() {
     }
 }
 
-// Test 4 — supervisor: empty result must stay deterministic when no
-// child fails. Verifies the "all success" path under the same load.
+// Test 4 — supervisor: all-success outcomes must stay deterministic under load.
 @test
 fn test_supervisor_all_success() {
     for (let iter = 0; iter < 5; iter++) {
-        let errs = supervisor scope {
+        let outcomes = supervisor scope {
             for (let i = 0; i < FAILING_PER_SCOPE; i++) {
                 go make_ok(i)
             }
         }
-        assert_eq(errs.length, 0)
+        assert_eq(outcomes.length, FAILING_PER_SCOPE)
+        assert_eq(count_success(outcomes), FAILING_PER_SCOPE)
+        assert_eq(count_failed(outcomes), 0)
     }
 }

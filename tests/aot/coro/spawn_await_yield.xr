@@ -1,5 +1,5 @@
 fn worker(n: int) -> int {
-    yield
+    Coro.yield()
     return n + 1
 }
 

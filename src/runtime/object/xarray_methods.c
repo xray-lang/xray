@@ -21,7 +21,6 @@
 #include "xarray_methods.h"
 #include "xarray.h"
 #include "xarray_vm.h"
-#include "xexception.h"
 #include "xstring.h"
 #include "xtuple.h"
 #include "xiterator.h"
@@ -33,16 +32,21 @@
 #include "../mem/xheap.h"
 #include "../mem/xcoro_heap.h"
 #include "../xisolate_api.h"
-#include "../xerror_codes.h"
 #include "../../coro/xcoroutine.h"
 #include "../../base/xchecks.h"
-#include "../../shared/xr_error_core.h"
-#include "../../vm/xvm.h"
 #include <string.h>
 
 static inline XrArray *array_self(XrValue self) {
     XR_DCHECK(XR_IS_ARRAY(self), "array method: receiver is not an array");
     return XR_TO_ARRAY(self);
+}
+
+static bool array_accepts_value(XrVMRuntime *iso, XrArray *arr, XrValue value) {
+    if (arr && arr->elem_type == XR_ELEM_CHAR && !XR_IS_CHAR(value)) {
+        xr_runtime_error(iso, "Array<char> element must be char\n");
+        return false;
+    }
+    return true;
 }
 
 // Build the diagnostic tag "Array.<method>" for xr_vm_closure_from_arg.
@@ -59,12 +63,8 @@ static struct XrClosure *array_callback(XrVMRuntime *iso, XrValue v, const char 
 static XrValue m_push(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrArray *arr = array_self(self);
     if (argc >= 1) {
-        if (xr_array_is_slice(arr)) {
-            XrValue exc =
-                xr_exception_new(iso, XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
-            xr_vm_throw_exception(iso, exc);
-            return xr_null();
-        }
+        if (!array_accepts_value(iso, arr, args[0]))
+            return self;
         if (arr->length >= arr->capacity) {
             xr_array_grow(arr);
             /* Defensive: if grow silently failed fall back to safe push. */
@@ -99,10 +99,11 @@ static XrValue m_shift(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) 
 }
 
 static XrValue m_unshift(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
     if (argc < 1)
         return xr_int(0);
     XrArray *arr = array_self(self);
+    if (!array_accepts_value(iso, arr, args[0]))
+        return xr_int((xr_Integer) xr_array_size(arr));
     xr_array_unshift(arr, args[0]);
     return xr_int((xr_Integer) xr_array_size(arr));
 }
@@ -125,16 +126,17 @@ static XrValue m_reverse(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
 }
 
 static XrValue m_fill(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
     if (argc < 1)
         return self;
     XrArray *arr = array_self(self);
     XrValue fill_val = args[0];
-    int64_t start = 0, end = arr->length;
+    if (!array_accepts_value(iso, arr, fill_val))
+        return self;
+    int start = 0, end = (int) arr->length;
     if (argc >= 2 && XR_IS_INT(args[1]))
-        start = XR_TO_INT(args[1]);
+        start = (int) XR_TO_INT(args[1]);
     if (argc >= 3 && XR_IS_INT(args[2]))
-        end = XR_TO_INT(args[2]);
+        end = (int) XR_TO_INT(args[2]);
     xr_array_fill(arr, fill_val, start, end);
     return self;
 }
@@ -143,19 +145,22 @@ static XrValue m_reserve(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
         return self;
-    xr_array_reserve(array_self(self), XR_TO_INT(args[0]));
+    xr_array_reserve(array_self(self), (int32_t) XR_TO_INT(args[0]));
     return self;
 }
 
 static XrValue m_resize(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
         return self;
     XrArray *arr = array_self(self);
     XrValue fill = argc >= 2 ? args[1] : xr_null();
     if (arr->elem_type == XR_ELEM_U8 && argc < 2)
         fill = xr_int(0);
-    xr_array_resize(arr, XR_TO_INT(args[0]), fill);
+    if (arr->elem_type == XR_ELEM_CHAR && argc < 2)
+        fill = XR_FROM_CHAR(0);
+    if (!array_accepts_value(iso, arr, fill))
+        return self;
+    xr_array_resize(arr, (int32_t) XR_TO_INT(args[0]), fill);
     return self;
 }
 
@@ -221,8 +226,8 @@ static XrValue m_copy_within(XrVMRuntime *iso, XrValue self, XrValue *args, int 
     (void) iso;
     if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
         return self;
-    xr_array_bytes_copy_within(array_self(self), XR_TO_INT(args[0]), XR_TO_INT(args[1]),
-                               XR_TO_INT(args[2]));
+    xr_array_bytes_copy_within(array_self(self), (int32_t) XR_TO_INT(args[0]),
+                               (int32_t) XR_TO_INT(args[1]), (int32_t) XR_TO_INT(args[2]));
     return self;
 }
 
@@ -231,8 +236,8 @@ static XrValue m_copy_from(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
     if (argc < 4 || !XR_IS_ARRAY(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) ||
         !XR_IS_INT(args[3]))
         return self;
-    xr_array_bytes_copy_from(array_self(self), XR_TO_ARRAY(args[0]), XR_TO_INT(args[1]),
-                             XR_TO_INT(args[2]), XR_TO_INT(args[3]));
+    xr_array_bytes_copy_from(array_self(self), XR_TO_ARRAY(args[0]), (int32_t) XR_TO_INT(args[1]),
+                             (int32_t) XR_TO_INT(args[2]), (int32_t) XR_TO_INT(args[3]));
     return self;
 }
 
@@ -240,8 +245,8 @@ static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
     (void) iso;
     if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
         return self;
-    xr_array_bytes_repeat_from(array_self(self), XR_TO_INT(args[0]), XR_TO_INT(args[1]),
-                               XR_TO_INT(args[2]));
+    xr_array_bytes_repeat_from(array_self(self), (int32_t) XR_TO_INT(args[0]),
+                               (int32_t) XR_TO_INT(args[1]), (int32_t) XR_TO_INT(args[2]));
     return self;
 }
 
@@ -249,9 +254,35 @@ static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
 
 static XrValue m_slice(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrArray *arr = array_self(self);
+    int64_t len = arr->length;
     int64_t start = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
-    int64_t end = (argc >= 2 && XR_IS_INT(args[1])) ? XR_TO_INT(args[1]) : arr->length;
-    XrArray *result = xr_array_slice(xr_current_coro(iso), arr, start, end);
+    int64_t end = (argc >= 2 && XR_IS_INT(args[1])) ? XR_TO_INT(args[1]) : len;
+    xr_array_normalize_slice(len, &start, &end);
+    if (start >= end || start >= len) {
+        return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
+    }
+    int count = (int) (end - start);
+    XrArray *result;
+    if (arr->elem_type != XR_ELEM_ANY) {
+        result = xr_array_with_capacity_typed(xr_current_coro(iso), count,
+                                              (XrArrayElemType) arr->elem_type);
+        if (result) {
+            result->elem_tid = arr->elem_tid;
+            memcpy(result->data, (uint8_t *) arr->data + (size_t) start * arr->elem_size,
+                   (size_t) count * arr->elem_size);
+            result->length = count;
+        }
+    } else {
+        result = xr_array_with_capacity(xr_current_coro(iso), count);
+        if (result) {
+            memcpy(result->data, (XrValue *) arr->data + start, (size_t) count * sizeof(XrValue));
+            result->length = count;
+            result->contains_refs = arr->contains_refs;
+            XrValue *data = (XrValue *) result->data;
+            for (int i = 0; i < count; i++)
+                xr_rc_retain_value(data[i]);
+        }
+    }
     return xr_value_from_array(result ? result : xr_array_new(xr_current_coro(iso)));
 }
 

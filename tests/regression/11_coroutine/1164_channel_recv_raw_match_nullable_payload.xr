@@ -4,7 +4,7 @@
 
 @test
 fn test_recv_match_keeps_payload_status() {
-    shared const ch: Channel<int?> = new Channel(2)
+    shared const ch: Channel<int?> = Channel(2)
     ch.send(0)
     ch.send(null)
 
@@ -30,7 +30,7 @@ fn test_recv_match_keeps_payload_status() {
 
 @test
 fn test_select_keeps_null_payload_ready() {
-    shared const ch: Channel<int?> = new Channel(1)
+    shared const ch: Channel<int?> = Channel(1)
     ch.send(null)
 
     let saw_null = false

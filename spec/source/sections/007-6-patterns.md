@@ -28,18 +28,19 @@ match (x) {
 - 匹配使用与 `==` 相同的语义。
 - `null` 模式只匹配 `null` 本身。
 
-### 6.2 范围模式 `a..b`
+### 6.2 范围模式 `a..b` / `a..=b`
 
 ```xray
 match (age) {
     0..13 -> "child"
     13..20 -> "teen"
-    20..65 -> "adult"
+    20..=65 -> "adult"
     _ -> "senior"
 }
 ```
 
-- 半开区间 `[a, b)`，仅整数。
+- `a..b` 为半开区间 `[a, b)`；`a..=b` 为闭区间 `[a, b]`。
+- 仅整数。
 
 ### 6.3 枚举模式
 
@@ -135,7 +136,7 @@ match (x) {
 }
 ```
 
-- 守卫表达式位于 `if (...)` 括号内，按 truthy/falsy 上下文求值（见 §2.3.3，与 `if` / `while` 一致）；推荐显式使用 `bool` 表达式以提高可读性。
+- 守卫表达式必须是 `bool` 或 `T?` 存在性检查（见 §2.3.3），与 `if` / `while` 条件规则一致。
 - 失败时继续尝试下一分支。
 
 ### 6.6 多值模式
@@ -176,12 +177,25 @@ let (q, r) = divmod(17, 5)
 let { name, age } = user
 ```
 
-详见 §5.1.5。`match` 中当前支持 tuple 与 ADT variant 解构；对象/数组结构解构不属于当前 `match` 模式语法。
+详见 §5.1.5。`match` 支持 tuple、ADT variant、对象与数组结构解构：
+
+```xray
+match (p) {
+    { x, y } -> ...           // 对象字段解构（簡寫绑定）
+    { name: n, age } -> ...   // 对象字段重命名 + 簡寫混用
+    [a, b, ..rest] -> ...     // 数组解构，`..rest` 捕获尾部为新数组
+    [_, mid, _] -> ...        // 元素位通配
+}
+```
+
+- 对象模式匹配任意带这些字段的对象/Json；字段读取对缺失字段安全（为 `null`）。字段子模式可为可反驳模式（如 `{ mode: 2 }`）。
+- 数组模式按**长度**匹配：无 `..rest` 时要求长度恰等于元素数，有 `..rest` 时要求长度 ≥ 元素数。元素子模式只能是绑定或通配（`..rest` 之外的元素不做按值测试——元素越界读取会陷入 panic）；需要按元素值判断时改用 `if` 守卫。
+- or-pattern `|` 暂不支持（逗号多值已覆盖等价能力）。
 
 ### 6.10 穷举性与匹配失败
 
 - 对 enum 表达式的 `match` 强制穷举（错误码 `E0371`，见 §6.3.3）。
-- 其他类型不强制；运行时无分支匹配 → 抛 `Exception` 错误码 `E0442`（见 §18.x）。
+- 其他类型不强制；运行时无分支匹配 → 抛 `PanicInfo` 错误码 `E0442`（见 §18.x）。
 - 建议总是提供 `_` 兜底。
 <!-- /xr-spec:cn -->
 
@@ -210,18 +224,19 @@ match (x) {
 - Matching uses the same semantics as `==`.
 - The `null` pattern matches only `null` itself.
 
-### 6.2 Range Patterns `a..b`
+### 6.2 Range Patterns `a..b` / `a..=b`
 
 ```xray
 match (age) {
     0..13 -> "child"
     13..20 -> "teen"
-    20..65 -> "adult"
+    20..=65 -> "adult"
     _ -> "senior"
 }
 ```
 
-- Half-open interval `[a, b)`; integer-only.
+- `a..b` is the half-open interval `[a, b)`; `a..=b` is the inclusive interval `[a, b]`.
+- Integer-only.
 
 ### 6.3 Enum Patterns
 
@@ -317,7 +332,7 @@ match (x) {
 }
 ```
 
-- The guard expression sits inside `if (...)` parentheses and is evaluated under truthy/falsy context (see §2.3.3, identical to `if` / `while`); explicit `bool` expressions are recommended for readability.
+- The guard must be `bool` or nullable presence `T?` (see §2.3.3), identical to `if` / `while` condition rules.
 - On guard failure, matching falls through to the next arm.
 
 ### 6.6 Multi-value Patterns
@@ -358,11 +373,24 @@ let (q, r) = divmod(17, 5)
 let { name, age } = user
 ```
 
-See §5.1.5 for details. Within `match`, tuple and ADT-variant destructuring are currently supported; structural object/array destructuring is not part of the current `match` pattern syntax.
+See §5.1.5 for details. Within `match`, tuple, ADT-variant, object, and array destructuring are supported:
+
+```xray
+match (p) {
+    { x, y } -> ...           // object field destructure (shorthand binding)
+    { name: n, age } -> ...   // field rename + shorthand mixed
+    [a, b, ..rest] -> ...     // array destructure; `..rest` captures the tail as a new array
+    [_, mid, _] -> ...        // element-position wildcards
+}
+```
+
+- An object pattern matches any object/Json carrying those fields; field reads are null-safe for a missing field. Field sub-patterns may be refutable (e.g. `{ mode: 2 }`).
+- An array pattern matches by **length**: without `..rest`, the length must equal the element count; with `..rest`, the length must be ≥ the element count. Element sub-patterns may only be bindings or wildcards (non-rest elements are not value-tested — an out-of-bounds element read traps); use an `if` guard to test element values.
+- The or-pattern `|` is not supported (comma-separated multi-values cover the equivalent need).
 
 ### 6.10 Exhaustiveness and Match Failure
 
 - `match` over an enum expression is exhaustive (error code `E0371`, see §6.3.3).
-- Other operand types are not enforced; if no arm matches at runtime, an `Exception` with code `E0442` is raised (see §18.x).
+- Other operand types are not enforced; if no arm matches at runtime, an `PanicInfo` with code `E0442` is raised (see §18.x).
 - Always providing a `_` fallback is recommended.
 <!-- /xr-spec:en -->

@@ -10,7 +10,7 @@ fn producer(id: int) -> int {
     m.set(id + 1000, id + 2)
 
     for (let i = 0; i < SENDS_PER_PRODUCER; i++) {
-        maps.send(m)
+        maps.send(copy(m))
     }
 
     done.send(SENDS_PER_PRODUCER)

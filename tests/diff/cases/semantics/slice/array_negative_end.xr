@@ -1,0 +1,7 @@
+// anchor: slice-array-negative-end
+let arr = [1, 2, 3, 4]
+
+print(arr[:-1])
+print(arr.slice(0, -1))
+print(arr[:-999])
+print(arr[3:1])

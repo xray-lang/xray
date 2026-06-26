@@ -31,8 +31,8 @@ static inline void free_generic_params(XrGenericParam **type_params, int count) 
     (void) count;
 }
 
-static inline void free_param_nodes(XrCompilerSession *session, XrParamNode **params, int count) {
-    (void) session;
+static inline void free_param_nodes(XrCompilerSession *X, XrParamNode **params, int count) {
+    (void) X;
     (void) params;
     (void) count;
 }
@@ -635,6 +635,22 @@ AstNode *xr_parse_call_argument(Parser *parser) {
 }
 
 // Parse function call: add(1, 2) or add(...t, 3)
+// Built-in heap types are constructed with `T(args)` (no `new`). These names
+// have no callable function binding, so a call on them is a construction.
+// User classes/structs already construct through the normal call path; only
+// these built-ins need to be re-targeted to the new-expr construction node.
+bool xr_is_construct_only_type_name(const char *name) {
+    if (!name)
+        return false;
+    static const char *const names[] = {"Map",   "WeakMap", "Array",         "Set", "WeakSet",
+                                        "Bytes", "Channel", "StringBuilder", NULL};
+    for (const char *const *p = names; *p; p++) {
+        if (strcmp(name, *p) == 0)
+            return true;
+    }
+    return false;
+}
+
 AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
     XR_DCHECK(parser != NULL, "parse_call_expr: NULL parser");
     int line = parser->previous.line;
@@ -652,19 +668,57 @@ AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
 
+    // `Map()` / `Array()` / `Channel(n)` etc. construct built-in heap types.
+    if (callee && callee->type == AST_VARIABLE &&
+        xr_is_construct_only_type_name(callee->as.variable.name)) {
+        return xr_ast_new_expr(parser->compiler_session, NULL, callee->as.variable.name, arguments,
+                               arg_count, NULL, 0, line);
+    }
+
     return xr_ast_call_expr(parser->compiler_session, callee, arguments, arg_count, line);
 }
 
 /* ========== Array Parsing ========== */
 
+// Parse one array-literal element: either `...spread` or a plain expression.
+// Spread elements splice an array's contents into the surrounding literal at
+// runtime (`[...a, x]`), mirroring tuple-literal spread.
+static AstNode *parse_array_element(Parser *parser) {
+    if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+        int elem_line = parser->current.line;
+        xr_parser_advance(parser);  // consume '...'
+        AstNode *inner = xr_parse_expression(parser);
+        if (!inner)
+            return NULL;
+        return xr_ast_spread_expr(parser->compiler_session, inner, elem_line);
+    }
+    return xr_parse_expression(parser);
+}
+
 // Parse array literal or Map literal (smart detection)
-// [1, 2, 3] -> array, ["key": value, ...] -> Map
+// [1, 2, 3] -> array, ["key": value, ...] -> Map, [...a, x] -> array spread
 AstNode *xr_parse_array_literal(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_array_literal: NULL parser");
     int line = parser->previous.line;
 
     if (xr_parser_match(parser, TK_RBRACKET)) {
         return xr_ast_array_literal(parser->compiler_session, NULL, 0, line);
+    }
+
+    // A leading spread `[...a` is unambiguously an array literal (a Map key
+    // can never be a spread), so commit to the array branch immediately.
+    if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+        AstNode **elements = NULL;
+        int count = 0;
+        int capacity = 0;
+        XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
+        while (xr_parser_match(parser, TK_COMMA)) {
+            if (xr_parser_check(parser, TK_RBRACKET))
+                break;
+            XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
+        }
+        xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of array");
+        return xr_ast_array_literal(parser->compiler_session, elements, count, line);
     }
 
     // Parse first expression, then check ':' for Map or ',' for array
@@ -735,7 +789,7 @@ AstNode *xr_parse_array_literal(Parser *parser) {
                 break;
             }
 
-            XR_PARSE_PUSH(parser, elements, count, capacity, xr_parse_expression(parser));
+            XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
         }
 
         xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of array");
@@ -792,6 +846,22 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             if (_old_cap_capacity > 0 && computed)
                 memcpy(_new_computed, computed, sizeof(bool) * (size_t) _old_cap_capacity);
             computed = _new_computed;
+        }
+
+        // Spread entry: `{ ...base }` splices another object's fields in.
+        // Represented as a NULL key with an AST_SPREAD_EXPR value; later
+        // entries override earlier ones at merge time.
+        if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+            int spread_line = parser->current.line;
+            xr_parser_advance(parser);  // consume '...'
+            AstNode *src = xr_parse_expression(parser);
+            if (!src)
+                return xr_ast_literal_null(parser->compiler_session, line);
+            keys[count] = NULL;
+            values[count] = xr_ast_spread_expr(parser->compiler_session, src, spread_line);
+            computed[count] = false;
+            count++;
+            continue;
         }
 
         // Parse key
@@ -1073,11 +1143,11 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
 
     XrTokenType t = parser->current.type;
 
-    // Accept identifier, any keyword (keyword range TK_AND..TK_UNKNOWN),
+    // Accept identifier, any keyword (keyword range TK_FIRST_KEYWORD..TK_LAST_KEYWORD),
     // or an integer literal for tuple field access (`tuple.0`, `tuple.1`).
     // The integer text is stored verbatim as the member name; the analyzer
     // recognises digit-only names on tuple-typed receivers.
-    if (t == TK_NAME || t == TK_LITERAL_INT || (t >= TK_AND && t <= TK_UNKNOWN)) {
+    if (t == TK_NAME || t == TK_LITERAL_INT || (t >= TK_FIRST_KEYWORD && t <= TK_LAST_KEYWORD)) {
         xr_parser_advance(parser);
         name = parser->previous.start;
         name_len = parser->previous.length;
@@ -1143,6 +1213,45 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     xr_parser_consume(parser, TK_NAME, "expected type name after 'type'");
     char *alias_name = xr_strndup(parser->previous.start, parser->previous.length);
 
+    XrGenericParam **type_params = NULL;
+    int type_param_count = 0;
+    int type_param_capacity = 0;
+
+    if (xr_parser_match(parser, TK_LT)) {
+        do {
+            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
+            Token param_token = parser->previous;
+
+            char *param_name =
+                (char *) ast_alloc(parser->compiler_session, (size_t) param_token.length + 1);
+            memcpy(param_name, param_token.start, (size_t) param_token.length);
+            param_name[param_token.length] = '\0';
+
+            for (int i = 0; i < type_param_count; i++) {
+                if (type_params[i] && type_params[i]->name &&
+                    strcmp(type_params[i]->name, param_name) == 0) {
+                    xr_parser_error(parser, "duplicate type parameter name in type alias");
+                }
+            }
+
+            XrTypeRef **constraints = NULL;
+            int constraint_count = 0;
+            if (xr_parser_match(parser, TK_COLON)) {
+                xr_parser_error(parser, "type alias type parameters do not support constraints");
+                constraints = xr_parse_constraint_list(parser, &constraint_count);
+            }
+
+            XrGenericParam *gp =
+                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
+            gp->name = param_name;
+            gp->constraints = constraints;
+            gp->constraint_count = constraint_count;
+            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
+
+        xr_parser_consume(parser, TK_GT, "expected '>' to close type alias parameters");
+    }
+
     // Expect '='
     xr_parser_consume(parser, TK_ASSIGN, "expected '=' in type alias definition");
 
@@ -1155,9 +1264,34 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
         xr_free(alias_name);
         return NULL;
     }
+    if (type_param_count > 0) {
+        const char **param_names = (const char **) ast_alloc_array(
+            parser->compiler_session, sizeof(const char *), (size_t) type_param_count);
+        for (int i = 0; i < type_param_count; i++)
+            param_names[i] = type_params[i]->name;
+        alias_entry->type_param_names = param_names;
+        alias_entry->type_param_count = type_param_count;
+    }
 
-    // Parse type definition (self-reference will resolve to NULL → named type fallback)
+    XrTypeScope *saved_scope = parser->type_scope;
+    XrTypeScope *generic_scope = NULL;
+    if (type_param_count > 0) {
+        generic_scope = xr_type_scope_new(parser->type_scope);
+        for (int i = 0; i < type_param_count; i++) {
+            XrTypeRef *type_param =
+                xr_tref_type_param(parser->compiler_session, type_params[i]->name);
+            xr_type_scope_define(generic_scope, type_params[i]->name, type_param);
+        }
+        parser->type_scope = generic_scope;
+    }
+
+    // Parse type definition; alias expansion catches recursive aliases while
+    // the placeholder is still unresolved.
     XrTypeRef *type_definition = xr_parse_type_annotation(parser);
+    if (type_param_count > 0) {
+        parser->type_scope = saved_scope;
+        xr_type_scope_free(generic_scope);
+    }
     if (!type_definition) {
         xr_parser_error(parser, "invalid type definition");
         xr_free(alias_name);
@@ -1182,6 +1316,8 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     if (!node) {
         return NULL;
     }
+    node->as.type_alias.type_params = type_params;
+    node->as.type_alias.type_param_count = type_param_count;
     node->as.type_alias.resolved_type = type_definition;
 
     return node;
@@ -1263,10 +1399,21 @@ AstNode *xr_parse_declaration(Parser *parser) {
         return xr_parse_scope_block(parser);
     }
 
-    // yield statement: cooperatively yield execution to the scheduler
+    // yield statement: `yield expr` produces a generator value. Bare `yield`
+    // (cooperative scheduling) was removed in favor of `Coro.yield()`.
     if (xr_parser_match(parser, TK_YIELD)) {
         int line = parser->previous.line;
-        return xr_ast_yield_stmt(parser->compiler_session, line);
+        if (xr_parser_check(parser, TK_SEMICOLON) || xr_parser_check(parser, TK_RBRACE) ||
+            xr_parser_check(parser, TK_EOF)) {
+            xr_parser_error_at_current(
+                parser, "`yield` requires a value (generator value production); use `Coro.yield()` "
+                        "for cooperative scheduling");
+            return NULL;
+        }
+        AstNode *value = xr_parse_expression(parser);
+        if (!value)
+            return NULL;
+        return xr_ast_yield_stmt(parser->compiler_session, value, line);
     }
 
     // Attributed declaration: @test fn ..., @native class ..., etc.
@@ -1568,6 +1715,9 @@ AstNode *xr_parse_declaration(Parser *parser) {
     }
 
     // Code block
+    if (xr_parser_check(parser, TK_LBRACE) && xr_lbrace_starts_destructure_assignment(parser)) {
+        return xr_parse_statement(parser);
+    }
     if (xr_parser_match(parser, TK_LBRACE)) {
         return xr_parse_block(parser);
     }
@@ -1582,8 +1732,8 @@ AstNode *xr_parse_declaration(Parser *parser) {
  * Parse try-catch statement.
  * Supports multiple typed catch clauses and an optional panic boundary:
  *   try { ... }
- *   catch (e: HttpError) { ... }
- *   catch (e: DbError)   { ... }
+ *   catch (e: NetErr)    { ... }
+ *   catch (e: DiskErr)   { ... }
  *   catch (e)            { ... }   // catch-all
  *   catch panic (p)      { ... }   // recoverable-fault boundary
  * There is no `finally`; use `defer` for cleanup (runs on all exits).
@@ -1632,7 +1782,7 @@ AstNode *xr_parse_try_statement(Parser *parser) {
         int var_column = parser->current.column;
         xr_parser_advance(parser);  // consume variable name
 
-        // Optional type annotation: catch (e: HttpError)
+        // Optional enum error filter annotation: catch (e: NetErr)
         XrTypeRef *type_ann = NULL;
         if (xr_parser_match(parser, TK_COLON)) {
             type_ann = xr_parse_type_annotation(parser);
@@ -1698,7 +1848,7 @@ AstNode *xr_parse_throw_statement(Parser *parser) {
  * [a, b, c] -> destructure pattern
  * Can only convert when all elements are variable references
  */
-XrDestructurePattern *convert_array_literal_to_pattern(XrCompilerSession *session,
+XrDestructurePattern *convert_array_literal_to_pattern(XrCompilerSession *X,
                                                        AstNode *array_literal) {
     if (array_literal->type != AST_ARRAY_LITERAL) {
         return NULL;
@@ -1706,7 +1856,7 @@ XrDestructurePattern *convert_array_literal_to_pattern(XrCompilerSession *sessio
 
     int count = array_literal->as.array_literal.count;
     XrDestructurePattern **elements = (XrDestructurePattern **) ast_alloc_array(
-        session, sizeof(XrDestructurePattern *), (size_t) count);
+        X, sizeof(XrDestructurePattern *), (size_t) count);
 
     for (int i = 0; i < count; i++) {
         AstNode *element = array_literal->as.array_literal.elements[i];
@@ -1714,14 +1864,14 @@ XrDestructurePattern *convert_array_literal_to_pattern(XrCompilerSession *sessio
         // Check if element is variable reference
         if (element->type == AST_VARIABLE) {
             // Create identifier pattern
-            elements[i] = xr_pattern_identifier(session, element->as.variable.name, NULL);
+            elements[i] = xr_pattern_identifier(X, element->as.variable.name, NULL);
         } else {
             // Not a variable reference, cannot convert to destructure pattern
             return NULL;
         }
     }
 
-    return xr_pattern_array(session, elements, count);
+    return xr_pattern_array(X, elements, count);
 }
 
 /*
@@ -1731,7 +1881,7 @@ XrDestructurePattern *convert_array_literal_to_pattern(XrCompilerSession *sessio
  * is a bare variable reference, since assignment targets cannot evaluate
  * sub-expressions.
  */
-XrDestructurePattern *convert_tuple_literal_to_pattern(XrCompilerSession *session,
+XrDestructurePattern *convert_tuple_literal_to_pattern(XrCompilerSession *X,
                                                        AstNode *tuple_literal) {
     if (tuple_literal->type != AST_TUPLE_LITERAL) {
         return NULL;
@@ -1739,36 +1889,37 @@ XrDestructurePattern *convert_tuple_literal_to_pattern(XrCompilerSession *sessio
 
     int count = tuple_literal->as.tuple_literal.count;
     XrDestructurePattern **elements = (XrDestructurePattern **) ast_alloc_array(
-        session, sizeof(XrDestructurePattern *), (size_t) count);
+        X, sizeof(XrDestructurePattern *), (size_t) count);
 
     for (int i = 0; i < count; i++) {
         AstNode *element = tuple_literal->as.tuple_literal.elements[i];
         if (element->type == AST_VARIABLE) {
-            elements[i] = xr_pattern_identifier(session, element->as.variable.name, NULL);
+            elements[i] = xr_pattern_identifier(X, element->as.variable.name, NULL);
         } else {
             return NULL;
         }
     }
 
-    return xr_pattern_tuple(session, elements, count);
+    return xr_pattern_tuple(X, elements, count);
 }
 
 /*
- * Convert object literal to destructure pattern (for destructuring assignment)
- * {a, b, c} -> destructure pattern
- * Can only convert when all field keys and values are variable references and key name equals
- * variable name
+ * Convert object literal to destructure pattern (for destructuring assignment).
+ * `{a, b}` and `{a: local}` both become object patterns. Field keys drive
+ * extraction; values must be bare variable references so assignment targets
+ * never evaluate arbitrary expressions.
  */
-XrDestructurePattern *convert_object_literal_to_pattern(XrCompilerSession *session,
+XrDestructurePattern *convert_object_literal_to_pattern(XrCompilerSession *X,
                                                         AstNode *object_literal) {
     if (object_literal->type != AST_OBJECT_LITERAL) {
         return NULL;
     }
 
     int count = object_literal->as.object_literal.count;
-    char **field_names = (char **) ast_alloc_array(session, sizeof(char *), (size_t) count);
+    char **field_names = (char **) ast_alloc_array(X, sizeof(char *), (size_t) count);
     XrDestructurePattern **patterns = (XrDestructurePattern **) ast_alloc_array(
-        session, sizeof(XrDestructurePattern *), (size_t) count);
+        X, sizeof(XrDestructurePattern *), (size_t) count);
+    bool all_shorthand = true;
 
     for (int i = 0; i < count; i++) {
         AstNode *key_node = object_literal->as.object_literal.keys[i];
@@ -1778,34 +1929,27 @@ XrDestructurePattern *convert_object_literal_to_pattern(XrCompilerSession *sessi
         char *field_name = NULL;
         if (key_node->type == AST_LITERAL_STRING) {
             // Key is string literal
-            field_name = ast_strdup(session, key_node->as.literal.raw_value.string_val);
+            field_name = ast_strdup(X, key_node->as.literal.raw_value.string_val);
         } else if (key_node->type == AST_VARIABLE) {
             // Key is variable reference (shorthand syntax: {x, y})
-            field_name = ast_strdup(session, key_node->as.variable.name);
+            field_name = ast_strdup(X, key_node->as.variable.name);
         } else {
             // Key is not string or variable, cannot convert
             return NULL;
         }
 
-        // Check if value is variable reference
         if (value_node->type == AST_VARIABLE) {
-            // For shorthand syntax {x, y}, key and value should be same variable
-            if (key_node->type == AST_VARIABLE &&
-                strcmp(key_node->as.variable.name, value_node->as.variable.name) != 0) {
-                // Key and value don't match, not shorthand syntax
-                return NULL;
-            }
-
+            if (strcmp(field_name, value_node->as.variable.name) != 0)
+                all_shorthand = false;
             field_names[i] = field_name;
-            // Create identifier pattern
-            patterns[i] = xr_pattern_identifier(session, value_node->as.variable.name, NULL);
+            patterns[i] = xr_pattern_identifier(X, value_node->as.variable.name, NULL);
         } else {
             // Value is not variable reference, cannot convert to destructure pattern
             return NULL;
         }
     }
 
-    return xr_pattern_object(session, field_names, patterns, count, true);
+    return xr_pattern_object(X, field_names, patterns, count, all_shorthand);
 }
 
 // Destructuring declaration/pattern parsing moved to xparse_destructure.c

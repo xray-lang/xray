@@ -564,6 +564,7 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrVMR
     l->type_float = xr_type_new_float(isolate);
     l->type_bool = xr_type_new_bool(isolate);
     l->type_string = xr_type_new_string(isolate);
+    l->type_char = xr_type_new_char(isolate);
     l->type_null = xr_type_new_null(isolate);
     l->type_unit = xr_type_new_unit(isolate);
     l->type_any = xr_type_new_unknown(isolate);
@@ -751,33 +752,11 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         xi_lower_braun_write(&l, var_id, entry, param_val);
     }
 
-    /* Emit default-value guards for optional parameters.
-     * The VM fills missing args with null; we emit:
-     *   def_val  = <lower default expression>
-     *   is_null  = (param == null)
-     *   resolved = SELECT(is_null, def_val, param)
-     * Single-block, no branching — avoids phi complexity in emitter. */
-    for (int i = 0; i < fdecl->param_count; i++) {
-        XrParamNode *p = fdecl->params[i];
-        if (!p->default_value)
-            continue;
-
-        struct XrType *ptype = xi_lower_param_type(&l, p);
-        int var_id = xi_lower_var_create(&l, p->symbol_id, p->name, ptype);
-        XR_DCHECK(var_id >= 0, "default param var not found");
-        XiValue *cur = xi_lower_braun_read(&l, var_id, l.cur_block);
-        XiValue *def_val = xi_lower_expr(&l, p->default_value);
-        if (!def_val)
-            continue;
-        XiValue *null_c = xi_const_null(l.func, l.cur_block, l.type_null);
-        XiValue *is_null = xi_binary(l.func, l.cur_block, XI_EQ, l.type_bool, cur, null_c);
-        XiValue *resolved = xi_value_new(l.func, l.cur_block, XI_SELECT, ptype, 3);
-        XR_DCHECK(resolved != NULL, "default param: SELECT alloc failed");
-        resolved->args[0] = is_null;
-        resolved->args[1] = def_val;
-        resolved->args[2] = cur;
-        xi_lower_braun_write(&l, var_id, l.cur_block, resolved);
-    }
+    /* Default parameter values are filled at the call site (C1): the analyzer
+     * completes omitted trailing arguments with cloned default expressions, so
+     * the callee never sees an omitted argument and the old "null sentinel ->
+     * default" entry guard is gone. This keeps an explicit `null` argument
+     * distinct from omission and removes a per-call branch from the AOT path. */
 
     /* For named functions, register a self-reference so the body can
      * resolve recursive calls.  lower_call detects l.self_value and
@@ -804,9 +783,11 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     }
 
     /* Lower function body (extern functions are bodyless) */
+    xi_lower_defer_scope_push(&l);
     if (fdecl->body) {
         xi_lower_stmt(&l, fdecl->body);
     }
+    xi_lower_defer_scope_pop_normal(&l, func_node->line);
 
     /* If last block not terminated, add implicit return. Extern functions
      * return a zero of the declared type so the synthesized stub type-checks;
@@ -914,6 +895,53 @@ static bool prescan_is_user_owned_decl(AstNode *s) {
     return s && s->line > 0;
 }
 
+XR_FUNC const char *xi_lower_enum_method_hidden_name(XiFunc *arena, const char *enum_name,
+                                                     const char *method_name, bool is_static) {
+    if (!arena || !enum_name || !method_name)
+        return NULL;
+    const char *kind = is_static ? "static" : "inst";
+    int needed = snprintf(NULL, 0, "__xray_enum_method$%s$%s$%s", enum_name, kind, method_name);
+    if (needed < 0)
+        return NULL;
+    char *buf = (char *) xi_func_arena_alloc(arena, (uint32_t) needed + 1u);
+    if (!buf)
+        return NULL;
+    snprintf(buf, (size_t) needed + 1u, "__xray_enum_method$%s$%s$%s", enum_name, kind,
+             method_name);
+    return buf;
+}
+
+static void prescan_enum_method_bindings(XiLower *l, EnumDeclNode *ed, uint16_t *next_shared) {
+    if (!l || !ed || !next_shared || !ed->name || ed->method_count <= 0)
+        return;
+    XaSymbol *enum_sym = xa_analyzer_lookup(l->analyzer, ed->name);
+    XaSymbolLinks *enum_links = enum_sym ? xa_analyzer_get_links(l->analyzer, enum_sym) : NULL;
+    XrClassInfo *info = enum_links ? enum_links->class_info : NULL;
+    if (!info)
+        return;
+
+    for (int i = 0; i < ed->method_count; i++) {
+        AstNode *method = ed->methods ? ed->methods[i] : NULL;
+        if (!method || method->type != AST_METHOD_DECL)
+            continue;
+        MethodDeclNode *md = &method->as.method_decl;
+        XaSymbol *method_sym = xa_class_info_lookup_member(info, md->name);
+        if (!method_sym || method_sym->kind != XA_SYM_METHOD ||
+            method_sym->is_static != md->is_static)
+            continue;
+        XaSymbolLinks *method_links = xa_analyzer_get_links(l->analyzer, method_sym);
+        const char *hidden =
+            xi_lower_enum_method_hidden_name(l->func, ed->name, md->name, md->is_static);
+        if (!hidden)
+            continue;
+        int vid = xi_lower_var_create(l, method_sym->id, hidden,
+                                      method_links ? method_links->type : l->type_any);
+        XR_DCHECK(vid >= 0 && vid < l->var_cap, "prescan_enum_method_bindings: var_id overflow");
+        l->shared_map[vid] = (int16_t) *next_shared;
+        (*next_shared)++;
+    }
+}
+
 /*
  * Top-level binding prescan: allocate a shared slot for every top-level
  * declaration (var / const / fn / class / enum / struct / import member)
@@ -1009,6 +1037,9 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
         if (is_exported && next_shared < 512)
             export_flags[next_shared] = name;
         next_shared++;
+
+        if (s && s->type == AST_ENUM_DECL)
+            prescan_enum_method_bindings(l, &s->as.enum_decl, &next_shared);
     }
     l->func->nshared = next_shared;
 
@@ -1252,6 +1283,8 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
     }
     prescan_top_level_bindings(&l, stmts, count, next_shared_start);
 
+    xi_lower_defer_scope_push(&l);
+
     /* Lower top-level declaration values before executable code so forward
      * references see initialized bindings, not shared-slot null values. */
     for (int i = 0; i < count; i++) {
@@ -1281,12 +1314,18 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
         xi_lower_stmt(&l, s);
     }
 
+    xi_lower_defer_scope_pop_normal(&l, program_node->line);
+
     if (l.cur_block) {
         xi_block_set_return(l.cur_block, NULL);
     }
 
     /* Build module metadata from lowerer tracking data (no IR scan needed) */
     if (!l.had_error) {
+        /* Rewrite generator calls before metadata/effects: every function is now
+         * lowered, so generator callees are reliably identifiable (handles
+         * forward/nested references), and this runs before escape analysis. */
+        xi_lower_rewrite_generator_calls(l.func);
         build_module_metadata(&l);
         finalize_capture_metadata(l.func);
         xi_func_compute_effects(l.func);

@@ -1,0 +1,22 @@
+// anchor: coro-inline-match-try-recv-heap
+// Regression: matching directly on ch.tryRecv() with a heap element type used a
+// specialized raw-payload AOT path that left the payload in runtime
+// representation, so indexing/releasing it crashed the native binary. The
+// payload must be bridged to xrt representation. VM and AOT must agree.
+
+shared const ch: Channel<Array<int>> = Channel(2)
+let data = [10, 20, 30]
+ch.send(copy(data))
+
+let first = match (ch.tryRecv()) {
+    Recv.Value(v) -> v[0]
+    _ -> -1
+}
+let empty = match (ch.tryRecv()) {
+    Recv.Value(v) -> v[0]
+    _ -> -1
+}
+ch.close()
+
+print(first)  // 10
+print(empty)  // -1 (channel drained)

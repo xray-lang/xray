@@ -59,7 +59,7 @@ fn test_mem_disable_prevents_gc() {
     // Allocate a bunch of objects
     let arr: Array<Json> = []
     for (let i = 0; i < 500; i++) {
-        arr.push(#{"idx": i, "data": "item_" + string(i)})
+        arr.push({"idx": i, "data": "item_" + string(i)})
     }
     // Automatic cycle collection must not have run while disabled
     let after_count = mem.info()["cycleCollections"]
@@ -105,7 +105,7 @@ fn test_mem_live_bytes_decreases_after_collect() {
     fn make_garbage() {
         let temp: Array<Json> = []
         for (let i = 0; i < 200; i++) {
-            temp.push(#{"garbage": i})
+            temp.push({"garbage": i})
         }
     }
     make_garbage()
@@ -123,7 +123,7 @@ fn test_mem_live_objects_tracks_alloc() {
     let before = mem.liveObjects()
     let arr: Array<Json> = []
     for (let i = 0; i < 10; i++) {
-        arr.push(#{"k": i})
+        arr.push({"k": i})
     }
     // Xray reclaims by reference counting: a value is freed at its LAST use, not
     // at the end of the enclosing scope. `arr` must therefore be used again

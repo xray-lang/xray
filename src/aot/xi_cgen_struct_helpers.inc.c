@@ -298,7 +298,7 @@ static XrRep cg_struct_field_rep(const XrStructLayout *sl, int64_t idx) {
 }
 
 static bool cg_is_identity_copy_or_move(const XiValue *v) {
-    return v && (v->op == XI_MOVE || (v->op == XI_COPY && !xi_copy_is_value_clone(v)));
+    return v && (v->op == XI_MOVE || xi_copy_is_identity_alias(v));
 }
 
 static const XiValue *cg_trace_struct_new_depth(const XiValue *v, int depth) {
@@ -814,7 +814,7 @@ static void emit_struct_runtime_field_get(XiCgenCtx *ctx, FILE *out, const XrStr
     const char *fname =
         (sl && sl->field_names && idx >= 0 && idx < sl->field_count) ? sl->field_names[idx] : NULL;
     const char *conv_suffix = emit_conversion_prefix(out, result_type, XR_REP_TAGGED, result_rep);
-    fprintf(out, "xrt_map_get((xrt_map_t*)");
+    fprintf(out, "xrt_map_get_owned((xrt_map_t*)");
     emit_vref(out, object);
     fprintf(out, ".ptr, ");
     cg_emit_str_value(ctx, out, fname ? fname : "?");

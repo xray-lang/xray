@@ -25,12 +25,12 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 | 类别 | 示例 |
 |--|--|
-| Primitive | `int`、`float`、`bool`、`string`、`()`（Unit，无返回值） |
+| Primitive | `int`、`float`、`bool`、`string`、`char`、`()`（Unit，无返回值） |
 | 精确整数 | `int8`、`int16`、`int32`、`int64`、`uint8`..`uint64` |
 | 精确浮点 | `float32`、`float64` |
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`、`Bytes`（即 `Array<uint8>`） |
 | 特殊 | `Json`、`BigInt`、`Range`、`DateTime`、`Regex`、`StringBuilder`、`Logger`、`NetConn`、`NetListener` |
-| 错误处理 prelude | `Exception`（见 §8） |
+| 错误处理 prelude | `PanicInfo`（见 §8） |
 | 弱引用容器 | `WeakMap`、`WeakSet` |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
@@ -39,7 +39,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | FFI / C ABI | `RawPtr<T>`、`RawMut<T>`、`CFn<(T) -> R>`、`uintsize`、`intsize` |
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
-| Type alias | `type Name = SomeType` |
+| Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
 
 ### 2.3 基本类型
 
@@ -53,8 +53,12 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
 | `uint8`..`uint64` | 无符号对应 | — |
 
-- 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量）。
-- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。
+- 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量），但直接字面量必须落在目标范围内（`let x: int8 = 200` 编译拒绝）。
+- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同宽窄整数运算保留该宽度并按该宽度环绕（`uint8 + uint8 -> uint8`）；异宽窄整数运算塌回 `int`；移位运算结果取左操作数宽度。
+- 静态类型为 `uint8`..`uint64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `uint64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
+- `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
+- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `let x: uint8 = 255 + 1` 得到 `0`。
+- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `int64` 正范围的 `uint64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
 
 #### 2.3.2 浮点类型
 
@@ -69,46 +73,60 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 `true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `let x: int = true`，也不能 `let b: bool = 1`）。
 
-**truthy / falsy 上下文**（仅作用于 `if` / `while` / `?:` / `??` / `&&` / `||` 等控制流位置，**不**改变变量类型）：
+**条件表达式规则**（`if` / `while` / `for` 条件 / 三元 `?:` / `match` 守卫）：
 
-| 值 | 视作 |
-|---|---|
-| `false`、`null`、`0`、`0.0`、`""`、`Bytes(0)`、空数组 / 空 Map | **falsy** |
-| 其他一切（包括 `0.0001`、非空字符串/集合、对象引用） | **truthy** |
+| 条件类型 | 是否允许 | 语义 |
+|---|---|---|
+| `bool` | 允许 | 直接布尔判断 |
+| `T?` 且 `T != bool` | 允许 | 仅判断是否为 `null`（不检查内容是否“空”） |
+| `bool?` | 编译错误 | 三态歧义；写 `flag == true` / `flag != null` / `flag ?? false` |
+| `int` / `float` / `string` / `char` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`!s.isEmpty()` |
 
-```xray @id=types-truthy-falsy
-let x: int? = 41
-if (x) {                  // truthy 上下文：x 既不是 null 也不是 0 时进入
-    print(x + 1)          // 此分支中 x 被窄化为 int
+`&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
+
+```xray @id=types-explicit-conditions
+let ok = true
+if (ok) { }
+
+let user: User? = findUser()
+if (user) {              // 存在性：仅检查 null
+    print(user.name)     // 此分支 user 窄化为 User
 }
 
-let s: string = ""
-if (s) {
-    print("non-empty")
-} else {
-    print("empty")             // falsy：进入 else
-}
+let flag: bool? = maybeFlag()
+if (flag == true) { }    // OK
+if (flag != null) { }    // OK
+// if (flag) { }         // 编译错误：裸 bool? 不能作条件
 
-let m: Map<string, int> = #{}
-if (m) {
-    print("non-empty map")
-} else {
-    print("empty map")         // falsy：空 Map
-}
-
-let a: int? = null
-let b = a ?? 0                  // null 合并：b = 0
+let s = ""
+if (!s.isEmpty()) { }    // OK
+// if (s) { }            // 编译错误
 ```
-
-**注意**：`x is T` 和 `x != null` 等显式比较是首选，truthy/falsy 主要用于简洁的"存在性"判断（如 `if (user)`）。
 
 #### 2.3.4 `string`
 
-不可变 UTF-8 字符串。支持 `length`、索引、切片、丰富方法集（见 §14.2）。
+不可变 UTF-8 字符串。`length` / `size`、索引和默认迭代都以 Unicode scalar value 为单位：`s[i]` 返回 `char`，切片返回 `string`。丰富方法集见 §14.5。
 
-底层使用引用计数（ARC）+ 字符串驻留（interning）优化。
+底层使用引用计数（ARC）；运行期短串默认协程本地（无锁分配），字面量/符号、显式 `intern()` 与 map/set 键走全局驻留池，跨协程边界按需提升为共享。
 
-#### 2.3.5 Unit `()`（无返回值）
+#### 2.3.5 `char`
+
+`char` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `uint32` 的别名。
+
+```xray
+let a: char = 'a'
+let zh = '中'
+let smile = '\u{1F600}'
+print(typeof(a))          // "char"
+print(int(smile))         // 128512
+```
+
+- char 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
+- `char` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`let n: uint32 = 'a'` 都会在分析期拒绝。
+- 显式转换：`int(c)` 得到 scalar code point；`char(n)` 从整数构造 char 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
+- 常用方法见 §14.4.1。
+
+#### 2.3.6 Unit `()`（无返回值）
 
 xray 用 **0-元组 `()`** 表示"无返回值"（Unit 类型）：
 
@@ -121,7 +139,7 @@ let r: () = log("hi")                        // 允许；r 是 Unit 值
 - 一个函数省略返回类型等同于 `-> ()`。
 - `void` 不是类型名：写 `fn f() -> void` 会被拒绝（`E0804`）；无返回值使用 `-> ()` 或省略返回类型。
 
-#### 2.3.6 FFI 标量与 C ABI 边界类型
+#### 2.3.7 FFI 标量与 C ABI 边界类型
 
 xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐式解释成 C 数据：
 
@@ -165,11 +183,13 @@ let c: Array<string> = []         // 显式空数组
 
 `Array<T>` 的 `T` 必须能在编译期确定。空 `[]` 在无类型标注时是编译错误：`Empty array '[]' requires a type annotation`。
 
+`Array<char>` 保留 `char` 元素身份，读出时得到 `char`，写入时只接受 `char`。实现使用紧凑的 Unicode scalar 存储（`XR_ELEM_CHAR` / `uint32_t[]`），不会退化成 `Array<uint32>`。
+
 #### 2.4.2 `Map<K, V>`
 
 哈希字典，**保持插入顺序**。详见 §14.7。
 
-**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`（与 Json 一致，靠 `#` 前缀消歧）：
+**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`（与 Record / Json 对象一致，靠 `#` 前缀消歧）：
 
 ```xray @id=types-map
 let m: Map<string, int> = #{"a": 1, "b": 2}
@@ -188,7 +208,7 @@ let v = m["a"]                                      // 取值；不存在返回 
 | `[]` | `Array<T>` | 数组 |
 | `#[]` | `Set<T>` | 集合 |
 
-`K` 必须实现 `Hashable`（详见 §14.14）：通常是 `int`、`string`、`bool`、`enum`、或自定义实现 `Hashable` 的类。
+`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `int`、`float`、`string`、`bool`、`enum`、`BigInt`，或提供 `operator==(other: Self) -> bool` 与 `hash() -> int` 的自定义类型。泛型键类型必须显式写成 `K: Hashable`。
 
 #### 2.4.3 `Set<T>`
 
@@ -203,7 +223,7 @@ let s: Set<int> = #[1, 2, 3]
 协程间通信通道。**必须**用 `const` 声明（见 §10.5）。
 
 ```xray @id=types-channel
-const ch: Channel<int> = new Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Bytes`
@@ -211,20 +231,21 @@ const ch: Channel<int> = new Channel<int>(10)
 类型化字节缓冲。语义等价 `Array<uint8>`，但底层是连续内存。
 
 ```xray
-let buf = new Bytes(1024)
-let init = new Bytes([72, 101, 108, 108, 111])
+let buf = Bytes(1024)
+let init = Bytes([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.6 `Json` 与对象字面量
+#### 2.4.6 `Record` / `Json` 与对象字面量
 
-`Json` 是 xray 的**动态结构化数据类型**——可以装载 JSON 等价的任意结构。详见 §14.10 与 §2.10。
+裸对象字面量默认推断为 sealed structural `Record`，用于普通业务对象、options 和多字段返回值。`Json` 是显式 opt-in 的 JSON 值域类型：它用于外部数据交换边界，可以装载 JSON 等价的任意结构，并且本身包含 `null`。
 
 **对象字面量** `{ field: value, ... }` 与 Map 字面量的关键区别：
 
 ```xray @id=types-json-object
-// Object/Json 字面量：标识符或字符串 key + 冒号 ':'
+// Record/Json 对象字面量：标识符或字符串 key + 冒号 ':'
 let data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-let user = { name: "Bob", age: 25 }       // 默认类型为 Json
+let user = { name: "Bob", age: 25 }       // 默认类型为 sealed Record
+typeof(user)                              // "Record"
 data.name              // 类型: Json（字段访问返回 Json）
 data["name"]           // 等价
 
@@ -241,12 +262,13 @@ let m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 
 | 写法 | 类型 | 备注 |
 |---|---|---|
-| `{ name: "x", age: 1 }` | `Json` / `Object` | 标识符或字符串 key 后跟 `:` |
-| `{ x: y }`（`x` 是字段名，`y` 是变量名） | `Json` / `Object` | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
+| `{ name: "x", age: 1 }` | sealed anonymous `Record` | 标识符或字符串 key 后跟 `:` |
+| `let j: Json = { name: "x" }` | `Json` object | 只有显式 `Json` 期望类型时按动态 Json 解释 |
+| `{ x: y }`（`x` 是字段名，`y` 是变量名） | sealed anonymous `Record` | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
 | `#{"a": 1}` | `Map<K, V>` | `#` 前缀消歧，分隔符用 `:` |
 | `Point{x: 1.0, y: 2.0}` | `Point`（struct） | 类型名 + `{...}` 字面量 |
 
-**密封（sealed）对象类型**：通过 `type` 别名为对象类型起名后，类型成为 sealed——访问/赋值未声明字段是编译错误：
+**Record 类型**：裸对象字面量和 `type T = {...}` 都是 Record。默认 Record 是 sealed——访问/赋值未声明字段是编译错误；需要 JSON 边界时显式标注 `Json` 或调用 `Json.encode(value)`。
 
 ```xray
 type User = { name: string, age: int }
@@ -255,9 +277,11 @@ let u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
 // u.extra = "x"      // 编译错误：sealed type User has no field 'extra'
 
-// 不指定类型则为动态 Json
-let u2 = { name: "Alice", age: 30 }      // Json（可动态扩展）
-u2.extra = "x"        // OK（Json 是动态的）
+let u2 = { name: "Alice", age: 30 }      // sealed Record
+// u2.extra = "x"     // 编译错误
+
+let j: Json = { name: "Alice", age: 30 } // 动态 Json object
+j.extra = "x"        // OK（Json 是动态的）
 ```
 
 #### 2.4.7 `BigInt`
@@ -285,6 +309,12 @@ let x: int? = null      // OK
 let y: int? = 42        // OK
 let z: int = null       // 编译错误：null 不是 int
 ```
+
+`Json` 本身包含 `null`，因此 `Json?` 与 `Json | null` 是语义重复并在解析阶段报错；需要表达解析失败或缺失值时应使用 `Result<T, E>`、ADT、或含显式状态字段的 Record。
+
+**可空原始类型一等公民**：`int?` / `float?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
+
+> `bool?` 是三态（`true` / `false` / `null`）。它合法，但**不能直接作条件**（裸 `if (b)` where `b: bool?` 是编译错误，见 §5 / 任务 128）；需显式写 `b == true` / `b != null` / `b ?? false`。
 
 #### 解包
 
@@ -370,9 +400,18 @@ let p2 = pair(1, "x")             // (int, string)
 type Result = int | string
 type Mapper = (int) -> int
 type Point = { x: float, y: float }
+type Pair<T> = { first: T, second: T }
+type Mapper2<T, U> = (T) -> U
 ```
 
-别名是**纯语法**等价，不产生新类型。
+别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
+
+```xray
+let p: Pair<int> = { first: 1, second: 2 }  // 等价于 { first: int, second: int }
+let f: Mapper2<int, string> = (n) -> string(n)
+```
+
+泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
 
 ### 2.9 类型推断
 
@@ -483,12 +522,12 @@ Xray is statically typed; every expression has a determined type at compile time
 
 | Category | Examples |
 |--|--|
-| Primitive | `int`, `float`, `bool`, `string`, `()` (Unit, no return value) |
+| Primitive | `int`, `float`, `bool`, `string`, `char`, `()` (Unit, no return value) |
 | Sized integers | `int8`, `int16`, `int32`, `int64`, `uint8`..`uint64` |
 | Sized floats | `float32`, `float64` |
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Bytes` (equivalent to `Array<uint8>`) |
 | Special | `Json`, `BigInt`, `Range`, `DateTime`, `Regex`, `StringBuilder`, `Logger`, `NetConn`, `NetListener` |
-| Error-handling prelude | `Exception` (see §8) |
+| Error-handling prelude | `PanicInfo` (see §8) |
 | Weak containers | `WeakMap`, `WeakSet` |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
@@ -497,7 +536,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | FFI / C ABI | `RawPtr<T>`, `RawMut<T>`, `CFn<(T) -> R>`, `uintsize`, `intsize` |
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
-| Type alias | `type Name = SomeType` |
+| Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
 
 ### 2.3 Primitive Types
 
@@ -511,8 +550,12 @@ Xray is statically typed; every expression has a determined type at compile time
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
 | `uint8`..`uint64` | unsigned counterparts | — |
 
-- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable).
-- Arithmetic: two's-complement wrap-around semantics (no debug/release distinction).
+- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable), but a direct literal must fit the target range (`let x: int8 = 200` is rejected at compile time).
+- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`uint8 + uint8 -> uint8`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
+- Values with static type `uint8`..`uint64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `uint64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
+- `int.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `int` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
+- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `let x: uint8 = 255 + 1` evaluates to `0`.
+- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `any` / Json / dynamic-container boundaries, `uint64` values above the positive `int64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
 
@@ -527,46 +570,60 @@ Literals default to `float`.
 
 `true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `let x: int = true` or `let b: bool = 1`).
 
-**Truthy / falsy context** (applies only at control-flow positions such as `if` / `while` / `?:` / `??` / `&&` / `||`; **does not** change a variable's type):
+**Condition expression rules** (`if` / `while` / `for` conditions / ternary `?:` / `match` guards):
 
-| Value | Treated as |
-|---|---|
-| `false`, `null`, `0`, `0.0`, `""`, `Bytes(0)`, empty array / empty Map | **falsy** |
-| Everything else (including `0.0001`, non-empty strings/collections, object references) | **truthy** |
+| Condition type | Allowed | Meaning |
+|---|---|---|
+| `bool` | yes | direct boolean test |
+| `T?` with `T != bool` | yes | null presence only (content emptiness is **not** checked) |
+| `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
+| `int` / `float` / `string` / `char` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `!s.isEmpty()` |
 
-```xray @id=types-truthy-falsy
-let x: int? = 41
-if (x) {                  // truthy context: enters when x is neither null nor 0
-    print(x + 1)          // x is narrowed to int in this branch
+Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
+
+```xray @id=types-explicit-conditions
+let ok = true
+if (ok) { }
+
+let user: User? = findUser()
+if (user) {              // presence: null check only
+    print(user.name)     // user is narrowed to User here
 }
 
-let s: string = ""
-if (s) {
-    print("non-empty")
-} else {
-    print("empty")             // falsy: enters else
-}
+let flag: bool? = maybeFlag()
+if (flag == true) { }    // OK
+if (flag != null) { }    // OK
+// if (flag) { }         // compile error: bare bool? cannot be a condition
 
-let m: Map<string, int> = #{}
-if (m) {
-    print("non-empty map")
-} else {
-    print("empty map")         // falsy: empty Map
-}
-
-let a: int? = null
-let b = a ?? 0                  // null coalescing: b = 0
+let s = ""
+if (!s.isEmpty()) { }    // OK
+// if (s) { }            // compile error
 ```
-
-**Note**: explicit comparisons such as `x is T` and `x != null` are preferred; truthy/falsy is mainly for concise "existence" checks (such as `if (user)`).
 
 #### 2.3.4 `string`
 
-Immutable UTF-8 strings. Supports `length`, indexing, slicing, and a rich method set (see §14.2).
+Immutable UTF-8 strings. `length` / `size`, indexing, and default iteration are expressed in Unicode scalar values: `s[i]` returns `char`, and slicing returns `string`. For the rich method set, see §14.5.
 
-Internally uses ARC + string interning optimizations.
+Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool, with strings promoted to shared on demand when crossing coroutine boundaries.
 
-#### 2.3.5 Unit `()` (no return value)
+#### 2.3.5 `char`
+
+`char` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `uint32`.
+
+```xray
+let a: char = 'a'
+let zh = '中'
+let smile = '\u{1F600}'
+print(typeof(a))          // "char"
+print(int(smile))         // 128512
+```
+
+- A char literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
+- `char` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `let n: uint32 = 'a'` are rejected by the analyzer.
+- Explicit conversions: `int(c)` returns the scalar code point; `char(n)` constructs a char from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
+- Common methods are listed in §14.4.1.
+
+#### 2.3.6 Unit `()` (no return value)
 
 Xray uses the **0-tuple `()`** to represent "no return value" (the Unit type):
 
@@ -579,7 +636,7 @@ let r: () = log("hi")                        // allowed; r is a Unit value
 - A function omitting its return type is equivalent to `-> ()`.
 - `void` is not a type name: `fn f() -> void` is rejected (`E0804`); use `-> ()` or omit the return type to indicate no return value.
 
-#### 2.3.6 FFI Scalars and C ABI Boundary Types
+#### 2.3.7 FFI Scalars and C ABI Boundary Types
 
 Xray's C FFI uses explicit boundary types so ordinary xray objects are not implicitly interpreted as C data:
 
@@ -623,6 +680,8 @@ let c: Array<string> = []         // explicit empty array
 
 The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
 
+`Array<char>` preserves the `char` element identity: reads return `char`, and writes accept only `char`. The implementation uses compact Unicode-scalar storage (`XR_ELEM_CHAR` / `uint32_t[]`) and does not degrade to `Array<uint32>`.
+
 #### 2.4.2 `Map<K, V>`
 
 Hash table that **preserves insertion order**. See §14.7.
@@ -646,7 +705,7 @@ let v = m["a"]                                      // lookup; returns null if a
 | `[]` | `Array<T>` | array |
 | `#[]` | `Set<T>` | set |
 
-`K` must implement `Hashable` (see §14.14): typically `int`, `string`, `bool`, `enum`, or a custom class implementing `Hashable`.
+`K` must satisfy `Hashable` (see §9.2): typically `int`, `float`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides `operator==(other: Self) -> bool` and `hash() -> int`. Generic key types must be explicitly constrained as `K: Hashable`.
 
 #### 2.4.3 `Set<T>`
 
@@ -661,7 +720,7 @@ let s: Set<int> = #[1, 2, 3]
 Inter-coroutine communication channel. **Must** be declared `const` (see §10.5).
 
 ```xray @id=types-channel
-const ch: Channel<int> = new Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Bytes`
@@ -669,20 +728,21 @@ const ch: Channel<int> = new Channel<int>(10)
 Typed byte buffer. Semantically equivalent to `Array<uint8>`, but stored as contiguous memory.
 
 ```xray
-let buf = new Bytes(1024)
-let init = new Bytes([72, 101, 108, 108, 111])
+let buf = Bytes(1024)
+let init = Bytes([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.6 `Json` and Object Literals
+#### 2.4.6 `Record` / `Json` and Object Literals
 
-`Json` is xray's **dynamic structured data type** — it can hold any JSON-equivalent structure. See §14.10 and §2.10.
+Bare object literals default to sealed structural `Record`, for ordinary business objects, options, and multi-field returns. `Json` is an explicit opt-in JSON value-domain type: it is used at external data-exchange boundaries, can hold any JSON-equivalent structure, and intrinsically includes `null`.
 
 The key difference between an **object literal** `{ field: value, ... }` and a Map literal:
 
 ```xray @id=types-json-object
-// Object/Json literal: identifier or string key + colon ':'
+// Record/Json object literal: identifier or string key + colon ':'
 let data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-let user = { name: "Bob", age: 25 }       // default type is Json
+let user = { name: "Bob", age: 25 }       // default type is sealed Record
+typeof(user)                              // "Record"
 data.name              // type: Json (field access returns Json)
 data["name"]           // equivalent
 
@@ -699,12 +759,13 @@ let m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 
 | Form | Type | Notes |
 |---|---|---|
-| `{ name: "x", age: 1 }` | `Json` / `Object` | identifier or string key followed by `:` |
-| `{ x: y }` (`x` is field name, `y` is variable) | `Json` / `Object` | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
+| `{ name: "x", age: 1 }` | sealed anonymous `Record` | identifier or string key followed by `:` |
+| `let j: Json = { name: "x" }` | `Json` object | interpreted as dynamic Json only with an explicit `Json` expected type |
+| `{ x: y }` (`x` is field name, `y` is variable) | sealed anonymous `Record` | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
 | `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
 | `Point{x: 1.0, y: 2.0}` | `Point` (struct) | type name + `{...}` literal |
 
-**Sealed object types**: once an object type is named via `type`, it becomes sealed — accessing or assigning an undeclared field is a compile error:
+**Record types**: bare object literals and `type T = {...}` are Records. Records are sealed by default — accessing or assigning an undeclared field is a compile error. Use an explicit `Json` annotation or `Json.encode(value)` at JSON boundaries.
 
 ```xray
 type User = { name: string, age: int }
@@ -713,9 +774,11 @@ let u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
 // u.extra = "x"      // compile error: sealed type User has no field 'extra'
 
-// Without a type annotation, the literal is dynamic Json
-let u2 = { name: "Alice", age: 30 }      // Json (dynamically extensible)
-u2.extra = "x"        // OK (Json is dynamic)
+let u2 = { name: "Alice", age: 30 }      // sealed Record
+// u2.extra = "x"     // compile error
+
+let j: Json = { name: "Alice", age: 30 } // dynamic Json object
+j.extra = "x"        // OK (Json is dynamic)
 ```
 
 #### 2.4.7 `BigInt`
@@ -743,6 +806,12 @@ let x: int? = null      // OK
 let y: int? = 42        // OK
 let z: int = null       // compile error: null is not int
 ```
+
+`Json` intrinsically includes `null`, so `Json?` and `Json | null` are redundant and rejected during parsing. Use `Result<T, E>`, an ADT, or a Record with an explicit status field for parse failure or absence.
+
+**Nullable primitives are first-class**: `int?` / `float?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
+
+> `bool?` is tri-state (`true` / `false` / `null`). It is legal but **cannot be used directly as a condition** (a bare `if (b)` where `b: bool?` is a compile error; see §5 / task 128); write `b == true` / `b != null` / `b ?? false`.
 
 #### Unwrapping
 
@@ -828,9 +897,24 @@ let p2 = pair(1, "x")             // (int, string)
 type Result = int | string
 type Mapper = (int) -> int
 type Point = { x: float, y: float }
+type Pair<T> = { first: T, second: T }
+type Mapper2<T, U> = (T) -> U
 ```
 
-Aliases are **purely syntactic** equivalences; they do not introduce new types.
+Aliases are **purely syntactic** equivalences; they do not introduce new types,
+runtime metadata, or AOT branches. A generic alias is substituted at its use
+site:
+
+```xray
+let p: Pair<int> = { first: 1, second: 2 }  // equivalent to { first: int, second: int }
+let f: Mapper2<int, string> = (n) -> string(n)
+```
+
+Generic alias parameters are a name list only (`<T, U>`); constraints are not
+part of type-alias syntax. Put constraints on the generic function, class /
+struct / enum / interface that uses the alias. Aliases may be forward
+referenced, but cyclic aliases, including recursive object aliases, are compile
+errors.
 
 ### 2.9 Type Inference
 

@@ -26,7 +26,7 @@
 #include "xchannel_ops.h"
 #include "xtimer_wheel.h"
 #include "../runtime/mem/xcoro_heap.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "xcoro_registry.h"
 #include "xtask.h"
 #include "xcoro_pool.h"
@@ -170,6 +170,7 @@ static void native_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSn
 static const XrCoroBackendVTable native_backend_vtable = {
     .kind = XR_CORO_BACKEND_NATIVE,
     .resume = native_backend_resume,
+    .gen_drive = NULL,
     .trace_roots = NULL,
     .prepare_recycle = NULL,
     .reset_reusable = NULL,

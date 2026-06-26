@@ -51,6 +51,7 @@ typedef struct LiteralNode {
         double float_val;
         const char *bigint_val;
         const char *string_val;
+        uint32_t char_val;
         bool bool_val;
         struct {
             const char *pattern;
@@ -129,6 +130,7 @@ typedef struct BlockNode {
     AstNode **statements;
     int count;
     int capacity;
+    bool is_synthetic_defer_capture;
 } BlockNode;
 
 #endif  // XAST_NODES_COMMON_H

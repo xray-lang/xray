@@ -230,8 +230,21 @@ static void write_key(TomlWriter *w, XrString *key) {
     }
 }
 
+static void write_key_cstr(TomlWriter *w, const char *key) {
+    size_t len = key ? strlen(key) : 0;
+    if (is_bare_key(key, len)) {
+        tw_append(w, key, len);
+    } else {
+        tw_char(w, '"');
+        for (size_t i = 0; i < len; i++)
+            tw_escape_byte(w, (unsigned char) key[i]);
+        tw_char(w, '"');
+    }
+}
+
 static void write_value(TomlWriter *w, XrValue val);
 static void write_table(TomlWriter *w, XrMap *map, const char *prefix);
+static void write_json_table(TomlWriter *w, XrJson *json);
 
 static void write_array(TomlWriter *w, XrArray *arr) {
     tw_char(w, '[');
@@ -445,15 +458,33 @@ static void write_table(TomlWriter *w, XrMap *map, const char *prefix) {
     }
 }
 
+static void write_json_table(TomlWriter *w, XrJson *json) {
+    if (!json || !json->klass)
+        return;
+    XrClass *cls = json->klass;
+    for (uint16_t i = 0; i < cls->field_count; i++) {
+        const char *name = cls->fields[i].name;
+        if (!name)
+            continue;
+        write_key_cstr(w, name);
+        tw_str(w, " = ");
+        write_value(w, xr_instance_get_dynamic_field(json, i));
+        tw_char(w, '\n');
+    }
+}
+
 XrValue xr_toml_stringify(XrVMRuntime *isolate, XrValue value) {
-    if (!XR_IS_MAP(value)) {
+    if (!XR_IS_MAP(value) && !xr_value_is_json(value)) {
         return xr_string_value(xr_string_intern(isolate, "", 0, 0));
     }
 
     TomlWriter writer;
     tw_init(&writer, isolate);
 
-    write_table(&writer, XR_TO_MAP(value), "");
+    if (xr_value_is_json(value))
+        write_json_table(&writer, xr_value_to_json(value));
+    else
+        write_table(&writer, XR_TO_MAP(value), "");
 
     XrString *result = xr_string_intern(isolate, writer.sw.data, writer.sw.len, 0);
     tw_free(&writer);
@@ -549,16 +580,19 @@ static XrValue toml_write_file(XrVMRuntime *X, XrValue *args, int argc) {
 
 // ========== Module Loading ==========
 
-#define XR_STDLIB_VM_BIND_MODULE_TOML 1
-#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
-#undef XR_STDLIB_VM_BIND_MODULE_TOML
+/* Declarations live in stdlib/defs/core.def (parsed by gen_stdlib_types.py);
+ * VM exports are registered explicitly below. */
 
 XR_FUNC XrModule *xr_load_module_toml(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "toml");
     if (!mod)
         return NULL;
 
-    xr_stdlib_vm_bind_toml_generated(isolate, mod);
+    XRS_EXPORT(mod, isolate, "parse", toml_parse);
+    XRS_EXPORT(mod, isolate, "parseStrict", toml_parse_strict);
+    XRS_EXPORT(mod, isolate, "stringify", toml_stringify);
+    XRS_EXPORT(mod, isolate, "parseFile", toml_parse_file);
+    XRS_EXPORT(mod, isolate, "writeFile", toml_write_file);
 
     mod->loaded = true;
     return mod;

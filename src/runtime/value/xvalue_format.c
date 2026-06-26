@@ -28,7 +28,7 @@
 #include "../closure/xclosure.h"
 #include "../object/xarray.h"
 #include "../object/xbigint.h"
-#include "../object/xexception.h"
+#include "../object/xpanic_info.h"
 #include "../object/xjson.h"
 #include "../object/xmap.h"
 #include "../object/xrange.h"
@@ -39,8 +39,8 @@
 #include "../symbol/xsymbol_table.h"
 #include "../xisolate_internal.h"
 #include "../xstdlib_bridge.h"
+#include "../../base/xutf8.h"
 #include "../../shared/xr_float_fmt.h"
-#include "../../shared/xr_value_format_core.h"
 #include "xtype_names.h"
 
 #include <inttypes.h>
@@ -48,12 +48,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* ========== Tunables ========== */
+
+#define XR_FORMAT_MAX_DEPTH 3
+#define XR_FORMAT_MAX_ELEMENTS 32
+
 /* ========== Container helpers (static) ========== */
 
 static void format_array(XrVMRuntime *isolate, XrStrBuf *sb, XrArray *arr, int depth) {
     xr_strbuf_append_cstr(sb, "[", 1);
     int len = arr->length;
-    int limit = (int) xr_value_format_limit_count(len);
+    int limit = (len > XR_FORMAT_MAX_ELEMENTS) ? XR_FORMAT_MAX_ELEMENTS : len;
     for (int i = 0; i < limit; i++) {
         if (i > 0)
             xr_strbuf_append_cstr(sb, ", ", 2);
@@ -61,9 +66,8 @@ static void format_array(XrVMRuntime *isolate, XrStrBuf *sb, XrArray *arr, int d
     }
     if (len > limit) {
         char more[32];
-        int n = xr_value_format_more_suffix(more, sizeof(more), len, limit);
-        if (n > 0)
-            xr_strbuf_append_cstr(sb, more, (size_t) n);
+        int n = snprintf(more, sizeof(more), ", ...(%d more)", len - limit);
+        xr_strbuf_append_cstr(sb, more, (size_t) n);
     }
     xr_strbuf_append_cstr(sb, "]", 1);
 }
@@ -71,7 +75,7 @@ static void format_array(XrVMRuntime *isolate, XrStrBuf *sb, XrArray *arr, int d
 static void format_tuple(XrVMRuntime *isolate, XrStrBuf *sb, XrTuple *tup, int depth) {
     xr_strbuf_append_cstr(sb, "(", 1);
     uint16_t n = xr_tuple_arity(tup);
-    uint16_t limit = (uint16_t) xr_value_format_limit_count(n);
+    uint16_t limit = (n > XR_FORMAT_MAX_ELEMENTS) ? XR_FORMAT_MAX_ELEMENTS : n;
     for (uint16_t i = 0; i < limit; i++) {
         if (i > 0)
             xr_strbuf_append_cstr(sb, ", ", 2);
@@ -79,9 +83,8 @@ static void format_tuple(XrVMRuntime *isolate, XrStrBuf *sb, XrTuple *tup, int d
     }
     if (n > limit) {
         char more[32];
-        int m = xr_value_format_more_suffix(more, sizeof(more), n, limit);
-        if (m > 0)
-            xr_strbuf_append_cstr(sb, more, (size_t) m);
+        int m = snprintf(more, sizeof(more), ", ...(%u more)", (unsigned) (n - limit));
+        xr_strbuf_append_cstr(sb, more, (size_t) m);
     }
     if (n == 1)
         xr_strbuf_append_cstr(sb, ",", 1);
@@ -93,8 +96,7 @@ static void format_map(XrVMRuntime *isolate, XrStrBuf *sb, XrMap *map, int depth
     if (!xr_map_isdummy(map)) {
         uint32_t size = map->nentries;
         int count = 0;
-        int64_t limit = xr_value_format_limit_count(map->count);
-        for (uint32_t i = 0; i < size && count < limit; i++) {
+        for (uint32_t i = 0; i < size && count < XR_FORMAT_MAX_ELEMENTS; i++) {
             XrMapEntry *node = xr_map_entry(map, i);
             if (!XR_MAP_ENTRY_EMPTY(node)) {
                 if (count > 0)
@@ -107,9 +109,8 @@ static void format_map(XrVMRuntime *isolate, XrStrBuf *sb, XrMap *map, int depth
         }
         if ((uint32_t) count < map->count) {
             char more[32];
-            int n = xr_value_format_more_suffix(more, sizeof(more), map->count, count);
-            if (n > 0)
-                xr_strbuf_append_cstr(sb, more, (size_t) n);
+            int n = snprintf(more, sizeof(more), ", ...(%u more)", map->count - (uint32_t) count);
+            xr_strbuf_append_cstr(sb, more, (size_t) n);
         }
     }
     xr_strbuf_append_cstr(sb, "}", 1);
@@ -118,8 +119,7 @@ static void format_map(XrVMRuntime *isolate, XrStrBuf *sb, XrMap *map, int depth
 static void format_set(XrVMRuntime *isolate, XrStrBuf *sb, XrSet *set, int depth) {
     xr_strbuf_append_cstr(sb, "#[", 2);
     int count = 0;
-    int64_t limit = xr_value_format_limit_count(set->count);
-    for (uint32_t i = 0; i < set->nentries && count < limit; i++) {
+    for (uint32_t i = 0; i < set->nentries && count < XR_FORMAT_MAX_ELEMENTS; i++) {
         XrSetEntry *entry = &set->entries[i];
         if (!XR_SET_ENTRY_EMPTY(entry)) {
             if (count > 0)
@@ -130,9 +130,8 @@ static void format_set(XrVMRuntime *isolate, XrStrBuf *sb, XrSet *set, int depth
     }
     if ((uint32_t) count < set->count) {
         char more[32];
-        int n = xr_value_format_more_suffix(more, sizeof(more), set->count, count);
-        if (n > 0)
-            xr_strbuf_append_cstr(sb, more, (size_t) n);
+        int n = snprintf(more, sizeof(more), ", ...(%u more)", set->count - (uint32_t) count);
+        xr_strbuf_append_cstr(sb, more, (size_t) n);
     }
     xr_strbuf_append_cstr(sb, "]", 1);
 }
@@ -144,8 +143,7 @@ static void format_json(XrVMRuntime *isolate, XrStrBuf *sb, XrJson *json, int de
         xr_strbuf_append_cstr(sb, "}", 1);
         return;
     }
-    int limit = (int) xr_value_format_limit_count(cls->field_count);
-    for (int i = 0; i < cls->field_count && i < limit; i++) {
+    for (int i = 0; i < cls->field_count && i < XR_FORMAT_MAX_ELEMENTS; i++) {
         if (i > 0)
             xr_strbuf_append_cstr(sb, ", ", 2);
         const char *fname = cls->fields[i].name;
@@ -188,6 +186,18 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
             xr_strbuf_append_cstr(sb, "false", 5);
         return;
     }
+    if (XR_IS_CHAR(val)) {
+        /* In nested/dump context wrap in single quotes so a char is visibly
+         * distinct from a one-character string ("a" vs 'a'). */
+        char buf[XR_UTF8_MAX_BYTES];
+        int n = xr_utf8_encode(XR_TO_CHAR(val), buf);
+        if (depth > 0)
+            xr_strbuf_append_cstr(sb, "'", 1);
+        xr_strbuf_append_cstr(sb, buf, (size_t) (n > 0 ? n : 0));
+        if (depth > 0)
+            xr_strbuf_append_cstr(sb, "'", 1);
+        return;
+    }
     if (XR_IS_NULL(val)) {
         xr_strbuf_append_cstr(sb, "null", 4);
         return;
@@ -199,7 +209,7 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
     }
 
     // Depth guard for recursive types
-    if (xr_value_format_depth_exceeded(depth)) {
+    if (depth > XR_FORMAT_MAX_DEPTH) {
         xr_strbuf_append_cstr(sb, "...", 3);
         return;
     }
@@ -251,8 +261,8 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
                     xr_strbuf_append_cstr(sb, et->name, strlen(et->name));
                 break;
             }
-            /* Json: recursive key-value format. */
-            if (cls && cls->builtin_kind == XR_BK_JSON) {
+            /* Json/Record: recursive key-value format. */
+            if (cls && (cls->builtin_kind == XR_BK_JSON || cls->builtin_kind == XR_BK_RECORD)) {
                 format_json(isolate, sb, (XrJson *) gc, depth);
                 break;
             }
@@ -264,8 +274,8 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
             /* Exception: keep the legacy "Error: <message>" form so
              * `string(e)` and string concatenation behave identically
              * to the pre-unified-class implementation. */
-            if (xr_value_is_exception(isolate, val)) {
-                const char *msg = xr_exception_get_message(isolate, val);
+            if (xr_value_is_panic_info(isolate, val)) {
+                const char *msg = xr_panic_info_get_message(isolate, val);
                 if (msg) {
                     xr_strbuf_append_cstr(sb, "Error: ", 7);
                     xr_strbuf_append_cstr(sb, msg, strlen(msg));
@@ -274,14 +284,17 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
                 }
                 break;
             }
-            /* Range keeps its compact "start..end" / "start..end:step"
-             * print format; users still expect the original notation. */
+            /* Range prints in the same compact notation used by source. */
             if (xr_value_is_range(isolate, val)) {
                 XrRange *rng = (XrRange *) xr_instance_native_body(inst);
                 char buf[80];
-                int n = xr_range_format_buf(rng, buf, sizeof(buf));
-                if (n > 0)
-                    xr_strbuf_append_cstr(sb, buf, (size_t) n);
+                const char *op = rng->inclusive_end ? "..=" : "..";
+                int n = (rng->step == 1)
+                            ? snprintf(buf, sizeof(buf), "%" PRId64 "%s%" PRId64, rng->start, op,
+                                       rng->end)
+                            : snprintf(buf, sizeof(buf), "%" PRId64 "%s%" PRId64 ":%" PRId64,
+                                       rng->start, op, rng->end, rng->step);
+                xr_strbuf_append_cstr(sb, buf, (size_t) n);
             } else if (xr_value_is_datetime(isolate, val)) {
                 void *dt = xr_instance_native_body(inst);
                 char buf[64];
@@ -457,6 +470,11 @@ XrString *xr_value_to_string(XrVMRuntime *isolate, XrValue val) {
     if (XR_IS_BOOL(val)) {
         return XR_TO_BOOL(val) ? xr_string_intern(isolate, "true", 4, 0)
                                : xr_string_intern(isolate, "false", 5, 0);
+    }
+    if (XR_IS_CHAR(val)) {
+        char buf[XR_UTF8_MAX_BYTES];
+        int n = xr_utf8_encode(XR_TO_CHAR(val), buf);
+        return xr_string_intern(isolate, buf, (size_t) (n > 0 ? n : 0), 0);
     }
     if (XR_IS_NULL(val)) {
         return xr_string_intern(isolate, "null", 4, 0);

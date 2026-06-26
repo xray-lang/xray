@@ -81,6 +81,9 @@ static XrProto *compile_legacy(const char *source) {
     XrCompilerContext *ctx = xr_compiler_context_new(session);
     if (!ctx)
         return NULL;
+    /* Mirror the production compile path: bind the session module graph so
+     * declaration analysis (e.g. enums) resolves the same way as the CLI. */
+    xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
 
     AstNode *program = xr_parse(session, source);
     if (!program) {
@@ -117,6 +120,9 @@ static XrProto *compile_xi(const char *source) {
     XaAnalyzer *analyzer = xa_analyzer_new(session);
     if (!analyzer)
         return NULL;
+    /* Mirror the production compile path: bind the session module graph so
+     * declaration analysis (e.g. enums) resolves the same way as the CLI. */
+    xa_analyzer_set_graph(analyzer, xr_compiler_session_module_graph(session));
 
     AstNode *program = xr_parse(session, source);
     if (!program) {
@@ -298,6 +304,11 @@ static double compare_protos(const XrProto *legacy, const XrProto *xi, bool verb
     static void test_##name(void);                                                                 \
     static void run_##name(void) {                                                                 \
         printf("--- " #name " ---\n");                                                             \
+        /* Each compare snippet is self-contained; recreate the isolate so a                       \
+         * fresh compiler session/type pool is used per test (the runtime/session                  \
+         * split makes accumulated cross-snippet state unsafe to share). */                        \
+        teardown();                                                                                \
+        setup();                                                                                   \
         test_##name();                                                                             \
         printf("  PASS\n");                                                                        \
         tests_passed++;                                                                            \
@@ -1646,7 +1657,7 @@ TEST(cmp_class_basic) {
                   "        this.y = y\n"
                   "    }\n"
                   "}\n"
-                  "let p = new Point(3, 4)\n"
+                  "let p = Point(3, 4)\n"
                   "print(p.x)\n"
                   "print(p.y)",
         .label = "class basic: constructor + field access",
@@ -1666,7 +1677,7 @@ TEST(cmp_class_method) {
                   "        this.value = v\n"
                   "    }\n"
                   "}\n"
-                  "let b = new Box(42)\n"
+                  "let b = Box(42)\n"
                   "print(b.value)\n"
                   "b.value = 99\n"
                   "print(b.value)",
@@ -1708,7 +1719,7 @@ TEST(cmp_class_inherit) {
                   "        this.breed = breed\n"
                   "    }\n"
                   "}\n"
-                  "let d = new Dog(\"Rex\", \"Labrador\")\n"
+                  "let d = Dog(\"Rex\", \"Labrador\")\n"
                   "print(d.name)\n"
                   "print(d.breed)",
         .label = "class inheritance + method override",
@@ -1741,7 +1752,7 @@ TEST(cmp_enum_basic) {
 
 TEST(cmp_for_in_map) {
     run_compare((CompareSpec) {
-        .source = "let m = { a: 1, b: 2, c: 3 }\n"
+        .source = "let m = #{ \"a\": 1, \"b\": 2, \"c\": 3 }\n"
                   "let sum = 0\n"
                   "for (k, v in m) {\n"
                   "    sum += v\n"
@@ -1936,10 +1947,10 @@ TEST(cmp_defer_lifo) {
 }
 
 TEST(cmp_yield_basic) {
-    /* yield in main should be a no-op (no other coroutines) */
+    /* Coro.yield() in main should be a no-op (no other coroutines). */
     run_compare((CompareSpec) {
-        .source = "print(\"before\")\nyield\nprint(\"after\")",
-        .label = "yield: no-op without other coroutines",
+        .source = "print(\"before\")\nCoro.yield()\nprint(\"after\")",
+        .label = "Coro.yield(): no-op without other coroutines",
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,
@@ -1949,7 +1960,7 @@ TEST(cmp_yield_basic) {
 TEST(cmp_chan_new_unbuf) {
     /* Channel() creates an unbuffered channel; just type-check */
     run_compare((CompareSpec) {
-        .source = "const ch = new Channel()\nprint(typeof(ch))",
+        .source = "const ch = Channel()\nprint(typeof(ch))",
         .label = "Channel() -> unbuffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1959,7 +1970,7 @@ TEST(cmp_chan_new_unbuf) {
 
 TEST(cmp_chan_new_buffered) {
     run_compare((CompareSpec) {
-        .source = "const ch: Channel<int> = new Channel(4)\nprint(typeof(ch))",
+        .source = "const ch: Channel<int> = Channel(4)\nprint(typeof(ch))",
         .label = "Channel(N) -> buffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1970,7 +1981,7 @@ TEST(cmp_chan_new_buffered) {
 TEST(cmp_chan_send_recv_buffered) {
     /* Buffered channel: send then recv on same coro works without scheduling */
     run_compare((CompareSpec) {
-        .source = "const ch: Channel<int> = new Channel(2)\n"
+        .source = "const ch: Channel<int> = Channel(2)\n"
                   "ch.send(10)\n"
                   "ch.send(20)\n"
                   "print(ch.recv())\n"
@@ -1983,7 +1994,7 @@ TEST(cmp_chan_send_recv_buffered) {
 }
 
 TEST(cmp_chan_recv_match_uses_raw_opcode) {
-    const char *src = "const ch: Channel<int?> = new Channel(2)\n"
+    const char *src = "const ch: Channel<int?> = Channel(2)\n"
                       "ch.send(0)\n"
                       "ch.send(null)\n"
                       "let zero = match (ch.recv()) {\n"
@@ -2028,7 +2039,7 @@ TEST(cmp_go_with_chan) {
     /* go + channel: producer/consumer pattern */
     run_compare((CompareSpec) {
         .source = "fn producer(ch: Channel<int>) { ch.send(42) }\n"
-                  "const ch: Channel<int> = new Channel(1)\n"
+                  "const ch: Channel<int> = Channel(1)\n"
                   "let task = go producer(ch)\n"
                   "print(ch.recv())\n"
                   "await task",
@@ -2070,7 +2081,7 @@ TEST(cmp_select_recv) {
         .source = "fn producer(ch: Channel<int>) {\n"
                   "  ch.send(42)\n"
                   "}\n"
-                  "const ch: Channel<int> = new Channel(1)\n"
+                  "const ch: Channel<int> = Channel(1)\n"
                   "go producer(ch)\n"
                   "select {\n"
                   "  msg from ch -> {\n"

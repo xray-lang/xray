@@ -42,7 +42,7 @@ fn show_mod_zero() {
 }
 
 fn show_bytes_load_oob() {
-    let bytes = new Bytes(4, 1)
+    let bytes = Bytes(4, 1)
     try {
         print(bytes.loadU32LE(2))
     } catch panic (p) {
@@ -52,7 +52,7 @@ fn show_bytes_load_oob() {
 }
 
 fn show_bytes_copy_within_oob() {
-    let bytes = new Bytes(4, 1)
+    let bytes = Bytes(4, 1)
     try {
         bytes.copyWithin(2, 0, 4)
         print(bytes[0])
@@ -64,7 +64,7 @@ fn show_bytes_copy_within_oob() {
 
 fn show_bytes_ctor_type_error() {
     try {
-        let bytes1 = new Bytes("bad")
+        let bytes1 = Bytes("bad")
         print(bytes1.length)
     } catch panic (p) {
         print(p.message)
@@ -72,7 +72,7 @@ fn show_bytes_ctor_type_error() {
     }
 
     try {
-        let bytes2 = new Bytes(2, "bad")
+        let bytes2 = Bytes(2, "bad")
         print(bytes2.length)
     } catch panic (p) {
         print(p.message)

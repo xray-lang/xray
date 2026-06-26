@@ -325,7 +325,8 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
                 return;
             case XR_TINSTANCE: {
                 XrInstance *inst = (XrInstance *) gc;
-                if (inst->klass && inst->klass->builtin_kind == XR_BK_JSON) {
+                if (inst->klass && (inst->klass->builtin_kind == XR_BK_JSON ||
+                                    inst->klass->builtin_kind == XR_BK_RECORD)) {
                     dump_json((XrJson *) gc, ctx);
                     return;
                 }

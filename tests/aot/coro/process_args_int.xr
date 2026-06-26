@@ -10,7 +10,7 @@ if (process.args.length > 1) {
 }
 
 fn echo_arg(value: int) -> int {
-    yield
+    Coro.yield()
     return value
 }
 

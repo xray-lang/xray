@@ -10,6 +10,17 @@
 //
 // 属性：对于任意执行上下文，xr_strbuf_tmp() 应该返回当前 vm_ctx 的缓冲区
 
+fn context_inner_task(x: string) -> string {
+    return "inner_" + string(x)
+}
+
+fn context_outer_task(x: string) -> string {
+    let prefix = "outer_" + string(x) + "_"
+    let t = go context_inner_task(x)
+    let inner_result = await t
+    return prefix + inner_result
+}
+
 // ===== 单线程模式测试 =====
 
 @test
@@ -124,19 +135,8 @@ fn test_context_switch_correctness() {
 @test
 fn test_nested_coro_context() {
     // 测试嵌套协程的上下文选择
-    
-    fn inner_task(x: string) -> string {
-        return "inner_" + string(x)
-    }
-    
-    fn outer_task(x: string, inner_fn: (string) -> string) -> string {
-        let prefix = "outer_" + string(x) + "_"
-        let t = go inner_fn(x)
-        let inner_result = await t
-        return prefix + inner_result
-    }
-    
-    let t = go outer_task("test", inner_task)
+
+    let t = go context_outer_task("test")
     let result = await t
     
     assert_eq(result, "outer_test_inner_test")
@@ -214,4 +214,3 @@ fn test_property_buffer_reuse_safety() {
         }
     }
 }
-

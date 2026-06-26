@@ -22,6 +22,7 @@
 #include "../base/xmalloc.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xvalue.h"
+#include "../runtime/value/xtype.h"
 #include <string.h>
 
 struct XrStructLayout;
@@ -38,10 +39,50 @@ typedef uint16_t XiEmitReg;
 #define XI_EMIT_STRUCT_IS_PROMOTED(v) (((v)->aux_int & XI_EMIT_STRUCT_PROMOTED_BIT) != 0)
 
 static inline XiValue *xi_emit_trace_struct_origin(XiValue *v) {
-    while (v && ((v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
-           v->nargs >= 1)
+    while (v && (xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && v->nargs >= 1)
         v = v->args[0];
     return v;
+}
+
+static inline bool xi_emit_type_is_unsigned_int(const XrType *type) {
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    switch (type->native_width) {
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static inline bool xi_emit_type_is_int_like(const XrType *type) {
+    return type && type->kind == XR_KIND_INT && !type->is_nullable;
+}
+
+static inline int xi_emit_tostring_hint_for_type(const XrType *type) {
+    if (!type || type->is_nullable)
+        return 0;
+    if (xi_emit_type_is_unsigned_int(type))
+        return 3;
+    if (type->kind == XR_KIND_INT)
+        return 1;
+    if (type->kind == XR_KIND_FLOAT)
+        return 2;
+    return 0;
+}
+
+static inline bool xi_emit_compare_uses_unsigned(const XiValue *v) {
+    if (!v || v->nargs < 2)
+        return false;
+    if (v->op != XI_LT && v->op != XI_LE && v->op != XI_GT && v->op != XI_GE)
+        return false;
+    const XrType *left = v->args[0] ? v->args[0]->type : NULL;
+    const XrType *right = v->args[1] ? v->args[1]->type : NULL;
+    return xi_emit_type_is_int_like(left) && xi_emit_type_is_int_like(right) &&
+           (xi_emit_type_is_unsigned_int(left) || xi_emit_type_is_unsigned_int(right));
 }
 
 /* ========== Emit Context ========== */
@@ -152,6 +193,7 @@ XR_FUNC XiEmitReg alloc_reg_fresh(EmitCtx *ctx, const XiValue *v);
 XR_FUNC void try_free_args(EmitCtx *ctx, const XiValue *v);
 XR_FUNC int add_const_int(EmitCtx *ctx, int64_t val);
 XR_FUNC int add_const_float(EmitCtx *ctx, double val);
+XR_FUNC int add_const_char(EmitCtx *ctx, uint32_t cp);
 XR_FUNC int add_const_string(EmitCtx *ctx, const char *str);
 XR_FUNC int add_symbol(EmitCtx *ctx, const char *name);
 
@@ -249,6 +291,8 @@ XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_index_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_index_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_array_push(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_array_extend(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_tuple_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_tuple_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_map_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
@@ -257,6 +301,7 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_json_init_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_json_get_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_json_set_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_json_merge(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_range(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_slice(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
@@ -285,9 +330,13 @@ XR_FUNC void xi_emit_try(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_catch(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_end_try(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_defer(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_defer_mark(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_defer_run_to(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_gen_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_yield(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_gen_yield(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_chan_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_chan_send(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_chan_recv(EmitCtx *ctx, XiValue *v, XiEmitReg dst);

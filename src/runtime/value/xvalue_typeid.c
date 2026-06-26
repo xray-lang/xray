@@ -15,9 +15,9 @@
 #include "../class/xinstance.h"
 
 static const XrTypeId tag_to_typeid[8] = {
-    [XR_TAG_NULL] = XR_TID_NULL,     [XR_TAG_BOOL] = XR_TID_BOOL, [XR_TAG_I64] = XR_TID_INT,
-    [XR_TAG_F64] = XR_TID_FLOAT,     [XR_TAG_PTR] = XR_TID_NULL,  [XR_TAG_STRUCT_REF] = XR_TID_NULL,
-    [XR_TAG_NOTFOUND] = XR_TID_NULL,
+    [XR_TAG_NULL] = XR_TID_NULL,       [XR_TAG_BOOL] = XR_TID_BOOL,     [XR_TAG_CHAR] = XR_TID_CHAR,
+    [XR_TAG_I64] = XR_TID_INT,         [XR_TAG_F64] = XR_TID_FLOAT,     [XR_TAG_PTR] = XR_TID_NULL,
+    [XR_TAG_STRUCT_REF] = XR_TID_NULL, [XR_TAG_NOTFOUND] = XR_TID_NULL,
 };
 
 static const XrTypeId gctype_to_typeid[XR_TRESULTGROUP + 1] = {
@@ -34,7 +34,7 @@ static const XrTypeId gctype_to_typeid[XR_TRESULTGROUP + 1] = {
     [XR_TCLASS] = XR_TID_FUNCTION,
     [XR_TINSTANCE] = XR_TID_INSTANCE,
     [XR_TBOUND_METHOD] = XR_TID_BOUND_METHOD,
-    [XR_TERROR] = XR_TID_EXCEPTION,
+    [XR_TERROR] = XR_TID_PANIC_INFO,
     [XR_TMODULE] = XR_TID_MODULE,
     [XR_TCOROUTINE] = XR_TID_COROUTINE,
     [XR_TCHANNEL] = XR_TID_CHANNEL,
@@ -59,6 +59,8 @@ XrTypeId xr_value_typeid(XrValue v) {
                     switch (inst->klass->builtin_kind) {
                         case XR_BK_JSON:
                             return XR_TID_JSON;
+                        case XR_BK_RECORD:
+                            return XR_TID_RECORD;
                         case XR_BK_STRINGBUILDER:
                             return XR_TID_STRINGBUILDER;
                         case XR_BK_ENUM_VALUE:
@@ -75,8 +77,8 @@ XrTypeId xr_value_typeid(XrValue v) {
                             return XR_TID_NETLISTENER;
                         case XR_BK_BIGINT:
                             return XR_TID_BIGINT;
-                        case XR_BK_EXCEPTION:
-                            return XR_TID_EXCEPTION;
+                        case XR_BK_PANIC_INFO:
+                            return XR_TID_PANIC_INFO;
                         case XR_BK_RANGE:
                             return XR_TID_RANGE;
                         case XR_BK_DATETIME:
@@ -106,6 +108,8 @@ XR_DATADEF const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_FLOAT32] = TYPE_NAME_FLOAT32,
     [XR_TID_FLOAT] = TYPE_NAME_FLOAT,
     [XR_TID_STRING] = TYPE_NAME_STRING,
+    [XR_TID_CHAR] = TYPE_NAME_CHAR,
+    [XR_TID_RECORD] = TYPE_NAME_RECORD,
     [XR_TID_FUNCTION] = TYPE_NAME_FUNCTION,
     [XR_TID_ARRAY] = TYPE_NAME_ARRAY,
     [XR_TID_SET] = TYPE_NAME_SET,
@@ -117,7 +121,7 @@ XR_DATADEF const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_CHANNEL] = TYPE_NAME_CHANNEL,
     [XR_TID_REGEX] = TYPE_NAME_REGEX,
     [XR_TID_DATETIME] = TYPE_NAME_DATETIME,
-    [XR_TID_EXCEPTION] = TYPE_NAME_EXCEPTION,
+    [XR_TID_PANIC_INFO] = TYPE_NAME_PANIC_INFO,
     [XR_TID_ENUM_VALUE] = TYPE_NAME_ENUM_VALUE,
     [XR_TID_ENUM_TYPE] = TYPE_NAME_ENUM_TYPE,
     [XR_TID_BOUND_METHOD] = TYPE_NAME_FUNCTION,
@@ -174,6 +178,8 @@ uint8_t xr_type_to_tid(const XrType *type) {
             return XR_TID_STRING;
         case XR_KIND_BOOL:
             return XR_TID_BOOL;
+        case XR_KIND_CHAR:
+            return XR_TID_CHAR;
         case XR_KIND_ARRAY:
             return XR_TID_ARRAY;
         case XR_KIND_MAP:
@@ -184,6 +190,8 @@ uint8_t xr_type_to_tid(const XrType *type) {
             return XR_TID_CHANNEL;
         case XR_KIND_JSON:
             return XR_TID_JSON;
+        case XR_KIND_RECORD:
+            return XR_TID_RECORD;
         case XR_KIND_INSTANCE:
             return XR_TID_INSTANCE;
         case XR_KIND_FUNCTION:

@@ -213,22 +213,25 @@ bool xr_instance_is_a(XrInstance *inst, XrClass *cls) {
 
 /* ========== Class Transition ========== */
 
-XrClass *xr_class_transition_get_or_create(XrVMRuntime *X, XrClass *klass, int symbol,
-                                           const char *field_name) {
+static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *klass, int symbol,
+                                                       const char *field_name,
+                                                       bool allow_sealed_source) {
     XR_DCHECK(X != NULL, "transition: NULL isolate");
     XR_DCHECK(klass != NULL, "transition: NULL klass");
     XR_DCHECK(klass->flags & XR_CLASS_DYNAMIC_LAYOUT, "transition: not dynamic");
     (void) X;
 
+    // Runtime field additions must reject sealed classes before consulting the
+    // transition cache. Compile-time class-chain construction intentionally
+    // bypasses this so wider sealed Record shapes can reuse sealed prefixes.
+    if (!allow_sealed_source && (klass->flags & XR_CLASS_DYNAMIC_SEALED)) {
+        return NULL;
+    }
+
     // Search existing transitions
     for (XrClassTransition *t = klass->transitions; t; t = t->next) {
         if (t->symbol == symbol)
             return t->target;
-    }
-
-    // Sealed dynamic class rejects new field additions
-    if (klass->flags & XR_CLASS_DYNAMIC_SEALED) {
-        return NULL;
     }
 
     // Create child class: inherits all parent fields + one new field
@@ -306,21 +309,26 @@ XrClass *xr_class_transition_get_or_create(XrVMRuntime *X, XrClass *klass, int s
     return child;
 }
 
-XrClass *xr_class_build_json_chain(XrVMRuntime *X, const char *const *names, int count,
-                                   bool sealed) {
-    XR_DCHECK(X != NULL, "build_json_chain: NULL isolate");
-    XR_DCHECK(X->core != NULL && X->core->jsonRootClass != NULL,
-              "build_json_chain: jsonRootClass not initialized");
+XrClass *xr_class_transition_get_or_create(XrVMRuntime *X, XrClass *klass, int symbol,
+                                           const char *field_name) {
+    return xr_class_transition_get_or_create_impl(X, klass, symbol, field_name, false);
+}
 
-    XrClass *cur = X->core->jsonRootClass;
+static XrClass *xr_class_build_dynamic_chain(XrVMRuntime *X, XrClass *root,
+                                             const char *const *names, int count, bool sealed,
+                                             const char *label) {
+    XR_DCHECK(X != NULL, "build_dynamic_chain: NULL isolate");
+    XR_DCHECK(root != NULL, "build_dynamic_chain: NULL root");
+
+    XrClass *cur = root;
     if (count > 0 && names != NULL) {
         XrSymbolTable *st = (XrSymbolTable *) xr_isolate_get_symbol_table(X);
-        XR_DCHECK(st != NULL, "build_json_chain: NULL symbol table");
+        XR_DCHECK(st != NULL, "build_dynamic_chain: NULL symbol table");
         for (int i = 0; i < count; i++) {
             int sym = (int) xr_symbol_register_in_table(st, names[i]);
             const char *interned = xr_symbol_get_name_in_table(st, sym);
-            XrClass *next =
-                xr_class_transition_get_or_create(X, cur, sym, interned ? interned : names[i]);
+            XrClass *next = xr_class_transition_get_or_create_impl(
+                X, cur, sym, interned ? interned : names[i], true);
             if (!next)
                 return NULL;
             cur = next;
@@ -329,5 +337,24 @@ XrClass *xr_class_build_json_chain(XrVMRuntime *X, const char *const *names, int
     if (sealed) {
         cur->flags |= XR_CLASS_DYNAMIC_SEALED;
     }
+    (void) label;
     return cur;
+}
+
+XrClass *xr_class_build_json_chain(XrVMRuntime *X, const char *const *names, int count,
+                                   bool sealed) {
+    XR_DCHECK(X != NULL, "build_json_chain: NULL isolate");
+    XR_DCHECK(X->core != NULL && X->core->jsonRootClass != NULL,
+              "build_json_chain: jsonRootClass not initialized");
+    return xr_class_build_dynamic_chain(X, X->core->jsonRootClass, names, count, sealed, "Json");
+}
+
+XrClass *xr_class_build_record_chain(XrVMRuntime *X, const char *const *names, int count,
+                                     bool sealed) {
+    XR_DCHECK(X != NULL, "build_record_chain: NULL isolate");
+    XR_DCHECK(X->core != NULL && X->core->recordRootClass != NULL,
+              "build_record_chain: recordRootClass not initialized");
+    XrClass *root = sealed ? X->core->recordSealedRootClass : X->core->recordRootClass;
+    XR_DCHECK(root != NULL, "build_record_chain: selected root not initialized");
+    return xr_class_build_dynamic_chain(X, root, names, count, sealed, "Record");
 }

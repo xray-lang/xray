@@ -32,7 +32,7 @@
 #include "../runtime/object/xiterator.h"
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xenum.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/object/xbigint.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/symbol/xsymbol_table.h"
@@ -56,58 +56,24 @@ XR_FUNC int xr_vm_struct_layout_field_index(XrVMRuntime *isolate, const XrStruct
 /* ========== Inline Helper Functions ========== */
 
 /*
- * Falsy values in xray:
+ * Falsy values in control-flow / truthiness helpers:
  *   - null
  *   - false
  *   - 0 (integer)
  *   - 0.0 (float)
- *   - "" (empty string)
- *   - [] (empty array)
- *   - #{} (empty map)
- *   - #[] (empty set)
+ *
+ * Empty strings, collections, and other heap objects are not implicitly falsy.
+ * User conditions must be bool or nullable presence (T?) checked via ISNULL.
  */
 static inline bool vm_is_falsey(XrValue value) {
-    // null is falsy
     if (XR_IS_NULL(value))
         return true;
-
-    // bool: payload 0=false (falsy), 1=true (truthy)
     if (XR_IS_BOOL(value))
         return value.i == 0;
-
-    // 0 is falsy
     if (XR_IS_INT(value))
         return XR_TO_INT(value) == 0;
-
-    // 0.0 is falsy
     if (XR_IS_FLOAT(value))
         return XR_TO_FLOAT(value) == 0.0;
-
-    // Empty string is falsy
-    if (XR_IS_STRING(value)) {
-        XrString *str = XR_TO_STRING(value);
-        return str->length == 0;
-    }
-
-    // Empty array is falsy
-    if (XR_IS_ARRAY(value)) {
-        XrArray *arr = XR_TO_ARRAY(value);
-        return arr->length == 0;
-    }
-
-    // Empty map is falsy
-    if (XR_IS_MAP(value)) {
-        XrMap *map = XR_TO_MAP(value);
-        return map->count == 0;
-    }
-
-    // Empty set is falsy
-    if (XR_IS_SET(value)) {
-        XrSet *set = XR_TO_SET(value);
-        return set->count == 0;
-    }
-
-    // Everything else is truthy
     return false;
 }
 
@@ -266,10 +232,12 @@ XR_FUNC XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrV
 XR_FUNC XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto);
 XR_FUNC XrVMResult xr_vm_interpret(const char *source);
 XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(XrVMRuntime *isolate, XrProto *proto);
+XR_FUNC bool xr_vm_bind_proto_shared_slots(XrVMRuntime *isolate, XrProto *proto);
 
 // Exception handling
 XR_FUNC void xr_vm_add_stacktrace(XrVMRuntime *isolate, XrValue exception);
 XR_FUNC void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception);
+XR_FUNC void xr_vm_run_defers_to_mark(XrVMRuntime *isolate, XrVMContext *ctx, int mark);
 
 /*
  * Single-call throw helper: records the full call chain into
@@ -357,7 +325,6 @@ static inline bool vm_is_bigint_mixed(XrValue left, XrValue right) {
 
 // Comparison operations
 XR_FUNC bool vm_values_equal(XrValue a, XrValue b);
-XR_FUNC bool vm_values_strict_equal(XrValue a, XrValue b);
 XR_FUNC bool vm_values_equal_deep(XrVMRuntime *isolate, XrValue a, XrValue b);
 XR_FUNC bool vm_numeric_less(XrValue left, XrValue right);
 XR_FUNC bool vm_numeric_less_equal(XrValue left, XrValue right);
@@ -383,8 +350,8 @@ XR_FUNC void xr_coro_state_init(XrCoroState *state);
 XR_FUNC void xr_coro_state_destroy(XrCoroState *state);
 
 // Multicore runtime
-XR_FUNC void xray_vm_multicore_init(XrVMRuntime *X, int num_workers);
-XR_FUNC void xray_vm_multicore_destroy(XrVMRuntime *X);
+XR_FUNC void xr_multicore_init(XrVMRuntime *X, int num_workers);
+XR_FUNC void xr_multicore_destroy(XrVMRuntime *X);
 
 // Wake mechanism
 XR_FUNC void xr_coro_ready(XrVMRuntime *X, XrCoroutine *gp, bool next);

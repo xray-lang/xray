@@ -72,58 +72,40 @@ fn test_null_vs_value() {
     assert_eq(x != y, true)
 }
 
-// ===== 真值判断 =====
+// ===== 显式条件 =====
 @test
-fn test_truthy_values() {
-    // 非零数字为真
-    if (1) {
+fn test_explicit_bool_condition() {
+    if (true) {
         assert(true)
     } else {
         assert(false)
     }
-    if (-1) {
-        assert(true)
-    } else {
-        assert(false)
-    }
-    if (0.1) {
-        assert(true)
-    } else {
-        assert(false)
-    }
-    // 非空字符串为真
-    if ("hello") {
-        assert(true)
-    } else {
-        assert(false)
-    }
-}
-
-@test
-fn test_falsy_values() {
-    // 零为假
-    if (0) {
-        assert(false)
-    } else {
-        assert(true)
-    }
-    // false 为假
     if (false) {
         assert(false)
     } else {
         assert(true)
     }
-    // null 为假
-    if (null) {
+}
+
+@test
+fn test_nullable_presence_condition() {
+    let s: string? = null
+    if (s) {
         assert(false)
     } else {
         assert(true)
     }
-    // 空字符串为假
-    if ("") {
-        assert(false)
-    } else {
+    let empty: string? = ""
+    if (empty) {
         assert(true)
+    } else {
+        assert(false)
+    }
+    let zero: int? = 0
+    if (zero) {
+        assert(true)
+    } else {
+        assert(false)
     }
 }
 

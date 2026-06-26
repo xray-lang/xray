@@ -22,6 +22,7 @@
 #include "../runtime/xvm_call.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xray_debug_hooks.h"
+#include "../runtime/xshared.h"
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/value/xtype.h"
@@ -60,6 +61,7 @@ static XrVMResult try_recover_via_closure_continuation(XrVMRuntime *isolate, XrW
 static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *coro);
 static XrCoroRunResult vm_backend_resume(XrCoroutine *coro, const XrCoroEvent *event,
                                          const XrCoroRunContext *run_ctx);
+static XrCoroRunKind vm_backend_gen_drive(XrCoroutine *coro, XrValue *out);
 static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result);
 static const char *vm_backend_debug_name(const XrCoroutine *coro);
 static void vm_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
@@ -72,6 +74,9 @@ static void vm_backend_clear_entry_state(XrCoroutine *coro);
 static void vm_backend_reset_entry_state_no_free(XrCoroutine *coro);
 static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrVMRuntime *X, XrClosure *closure,
                                           XrValue *args, int arg_count, bool copy_args);
+static bool vm_backend_bind_closure_entry_modes(XrCoroutine *coro, XrVMRuntime *X,
+                                                XrClosure *closure, XrValue *args,
+                                                const uint8_t *arg_modes, int arg_count);
 static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
                                         int arg_count);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
@@ -86,6 +91,7 @@ static XrCFuncResult vm_backend_call_closure(XrVMRuntime *X, XrCoroutine *coro, 
 static const XrCoroBackendVTable vm_backend_vtable = {
     .kind = XR_CORO_BACKEND_VM,
     .resume = vm_backend_resume,
+    .gen_drive = vm_backend_gen_drive,
     .trace_roots = NULL,
     .prepare_recycle = vm_backend_prepare_recycle,
     .reset_reusable = vm_backend_reset_reusable,
@@ -311,8 +317,8 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrVMRuntime *X, XrClosure *closur
 }
 
 XrCoroutine *xr_coro_create_vm_closure(XrVMRuntime *X, XrClosure *closure, XrValue *args,
-                                       int arg_count, const char *name, const char *file,
-                                       int line) {
+                                       const uint8_t *arg_modes, int arg_count, const char *name,
+                                       const char *file, int line) {
     XR_DCHECK(X != NULL, "coro_create_vm_closure: NULL isolate");
     XR_DCHECK(closure != NULL, "coro_create_vm_closure: NULL closure");
     XR_DCHECK(arg_count >= 0, "coro_create_vm_closure: negative arg_count");
@@ -328,7 +334,7 @@ XrCoroutine *xr_coro_create_vm_closure(XrVMRuntime *X, XrClosure *closure, XrVal
         return NULL;
     }
 
-    if (!vm_backend_bind_closure_entry(coro, X, closure, args, arg_count, true)) {
+    if (!vm_backend_bind_closure_entry_modes(coro, X, closure, args, arg_modes, arg_count)) {
         xr_coro_free(coro);
         xr_coro_discard_uninitialized(coro);
         return NULL;
@@ -404,8 +410,23 @@ static void vm_backend_clear_entry_state(XrCoroutine *coro) {
     vm_entry_reset_no_free(state);
 }
 
+static XrValue vm_entry_transfer_arg(XrCoroutine *coro, XrVMRuntime *X, XrValue value, uint8_t mode,
+                                     bool copy_args) {
+    if (mode == XR_TRANSFER_COPY || (copy_args && mode == XR_TRANSFER_SHARE))
+        return (X && XR_IS_PTR(value)) ? xr_deep_copy_to_coro(X, value, coro) : value;
+    if (mode == XR_TRANSFER_SHARE && XR_IS_PTR(value) && xr_value_needs_copy(value))
+        return X ? xr_deep_copy_to_coro(X, value, coro) : value;
+    if (mode == XR_TRANSFER_SHARE && XR_IS_PTR(value)) {
+        XrObjHeader *obj = XR_VALUE_GCPTR(value);
+        if (obj && XR_OBJ_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
+            xr_shared_retain(obj);
+    }
+    return value;
+}
+
 static bool vm_entry_copy_args(XrCoroutine *coro, XrVMRuntime *X, XrVmCoroState *state,
-                               XrValue *args, int arg_count, bool copy_args) {
+                               XrValue *args, const uint8_t *arg_modes, int arg_count,
+                               bool copy_args) {
     if (!state || arg_count < 0 || (arg_count > 0 && !args))
         return false;
     state->arg_count = arg_count;
@@ -428,8 +449,8 @@ static bool vm_entry_copy_args(XrCoroutine *coro, XrVMRuntime *X, XrVmCoroState 
     }
     state->args = dst;
     for (int i = 0; i < arg_count; i++) {
-        dst[i] =
-            (copy_args && XR_IS_PTR(args[i])) ? xr_deep_copy_to_coro(X, args[i], coro) : args[i];
+        uint8_t mode = arg_modes ? arg_modes[i] : XR_TRANSFER_SHARE;
+        dst[i] = vm_entry_transfer_arg(coro, X, args[i], mode, copy_args);
     }
     return true;
 }
@@ -454,7 +475,29 @@ static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrVMRuntime *X, XrC
      * return it to the owner's heap, not its own). */
     xr_rc_retain((XrObjHeader *) closure);
     state->entry_closure_owner = xr_current_coro_heap();
-    if (!vm_entry_copy_args(coro, X, state, args, arg_count, copy_args)) {
+    if (!vm_entry_copy_args(coro, X, state, args, NULL, arg_count, copy_args)) {
+        vm_backend_clear_entry_state(coro);
+        return false;
+    }
+    return true;
+}
+
+static bool vm_backend_bind_closure_entry_modes(XrCoroutine *coro, XrVMRuntime *X,
+                                                XrClosure *closure, XrValue *args,
+                                                const uint8_t *arg_modes, int arg_count) {
+    if (!coro || !closure)
+        return false;
+    if (!vm_backend_ensure_state(coro))
+        return false;
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    if (!state)
+        return false;
+    vm_backend_clear_entry_state(coro);
+    state->entry_type = XR_CORO_ENTRY_CLOSURE;
+    state->entry.closure = closure;
+    xr_rc_retain((XrObjHeader *) closure);
+    state->entry_closure_owner = xr_current_coro_heap();
+    if (!vm_entry_copy_args(coro, X, state, args, arg_modes, arg_count, false)) {
         vm_backend_clear_entry_state(coro);
         return false;
     }
@@ -473,7 +516,7 @@ static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfun
     vm_backend_clear_entry_state(coro);
     state->entry_type = XR_CORO_ENTRY_CFUNC;
     state->entry.cfunc = cfunc;
-    if (!vm_entry_copy_args(coro, NULL, state, args, arg_count, false)) {
+    if (!vm_entry_copy_args(coro, NULL, state, args, NULL, arg_count, false)) {
         vm_backend_clear_entry_state(coro);
         return false;
     }
@@ -1209,17 +1252,14 @@ static XrVMResult run_finalize(XrVMRuntime *isolate, XrWorker *worker, XrCorouti
          * Two cases ARE printed because their error would otherwise vanish
          * with no observer:
          *   - the main coroutine (top-level program), and
-         *   - a statement-form fire-and-forget `go f()`. The codegen only
-         *     allocates an XrTask when the result/Task state is user-visible
-         *     (awaited handle, or a linked/scoped child whose error propagates
-         *     to a parent), so coro->task == NULL is exactly the case where no
-         *     observer exists. Silently swallowing such an error once disguised
-         *     a deterministic compiler miscompile as a scheduler "lost wakeup",
-         *     so surfacing it is worth a line on stderr. */
+         *   - a statement-form fire-and-forget `go f()`. Scoped children may
+         *     also have no Task handle, but their parent scope observes the
+         *     terminal state via first_error/outcomes at OP_SCOPE_EXIT. */
         if (coro->error_is_value && !(isolate && isolate->suppress_exception_print) &&
             !XR_IS_NULL(coro->error)) {
             bool is_main = xr_coro_flags_has(coro, XR_CORO_FLG_MAIN);
-            bool dropped_fire_and_forget = !is_main && coro->task == NULL;
+            bool dropped_fire_and_forget =
+                !is_main && coro->task == NULL && !xr_coro_parent_scope(coro);
             if (is_main || dropped_fire_and_forget) {
                 XrString *msg = xr_value_to_string(isolate, coro->error);
                 fprintf(stderr, "\n[Uncaught Error%s] %s\n", is_main ? "" : " in go coroutine",
@@ -1424,9 +1464,11 @@ XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrVMRuntime *isolate, XrVMContext *
 // Precondition: caller has already set RUNNING|STARTED on coro->flags and
 // bound current_coro on both ctx and coro_ctx. VM state must carry a
 // non-NULL closure with a non-NULL proto (validated upstream).
-static XrVMResult run_first_exec(XrVMRuntime *isolate, XrWorker *worker, XrCoroutine *coro,
-                                 XrVMContext *ctx, XrVMContext *coro_ctx) {
-    (void) worker;
+// Build the coroutine's first bytecode frame (stack/frame/args) without running
+// the interpreter. Shared by the scheduled first-exec path and the synchronous
+// generator drive. Returns XR_VM_OK once the frame is set up, or
+// XR_VM_RUNTIME_ERROR on a missing closure / stack-grow failure.
+static XrVMResult vm_setup_first_frame(XrCoroutine *coro, XrVMContext *coro_ctx) {
     XrVmCoroState *vm_state = vm_state_for_coro(coro);
     if (!vm_state || vm_state->entry_type != XR_CORO_ENTRY_CLOSURE)
         return XR_VM_RUNTIME_ERROR;
@@ -1470,8 +1512,83 @@ static XrVMResult run_first_exec(XrVMRuntime *isolate, XrWorker *worker, XrCorou
 
     coro_ctx->stack_top = coro_ctx->stack + frame->base_offset + proto->maxstacksize;
     coro_ctx->module_base_frame = 0;
+    return XR_VM_OK;
+}
 
+static XrVMResult run_first_exec(XrVMRuntime *isolate, XrWorker *worker, XrCoroutine *coro,
+                                 XrVMContext *ctx, XrVMContext *coro_ctx) {
+    (void) worker;
+    XrVMResult setup = vm_setup_first_frame(coro, coro_ctx);
+    if (setup != XR_VM_OK)
+        return setup;
     return run_dispatch_and_finalize(isolate, worker, coro, ctx, coro_ctx);
+}
+
+// ========== Generator Drive (synchronous pull) ==========
+//
+// Runs a generator coroutine — created but never scheduled — to its next
+// `yield expr` (OP_GEN_YIELD) or to completion, directly on its own VM context.
+// Called from the consuming iterator's hasNext()/next(); it does NOT touch the
+// worker run queue or arm direct-switch admission, so the generator executes in
+// isolation and returns control to the caller at each yield.
+static XrCoroRunKind vm_backend_gen_drive(XrCoroutine *coro, XrValue *out) {
+    if (out)
+        *out = xr_null();
+    if (!coro)
+        return XR_CORO_RUN_ERROR;
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE))
+        return XR_CORO_RUN_DONE;
+
+    XrVMRuntime *isolate = xr_coro_vm_owner(coro);
+    XrVmCoroState *vm_state = vm_state_for_coro(coro);
+    if (!isolate || !vm_state)
+        return XR_CORO_RUN_ERROR;
+    XrVMContext *gctx = &vm_state->ctx;
+    gctx->current_coro = coro;
+    if (gctx->isolate != isolate)
+        gctx->isolate = isolate;
+
+    XrVMResult res;
+    uint32_t flags = xr_coro_flags_load(coro);
+    if (!(flags & XR_CORO_FLG_STARTED)) {
+        xr_coro_flags_swap(coro, XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED,
+                           XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED);
+        res = vm_setup_first_frame(coro, gctx);
+        if (res == XR_VM_OK)
+            res = run(isolate, gctx);
+    } else {
+        xr_coro_transition_to_running(coro);
+        res = run(isolate, gctx);
+    }
+
+    if (res == XR_VM_YIELD) {
+        xr_coro_transition_to_ready(coro);
+        if (out)
+            *out = coro->result;
+        return XR_CORO_RUN_YIELD;
+    }
+    if (res == XR_VM_OK && XR_IS_NULL(gctx->pending_error)) {
+        coro->result = gctx->stack_capacity > 0 ? gctx->stack[0] : xr_null();
+        xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
+        if (out)
+            *out = coro->result;
+        return XR_CORO_RUN_DONE;
+    }
+
+    // Error / unexpected suspend (block): generators are pure value producers.
+    xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
+    XrValue err = xr_null();
+    coro->error_is_value = !XR_IS_NULL(gctx->pending_error);
+    if (!XR_IS_NULL(gctx->pending_error))
+        err = gctx->pending_error;
+    else if (!XR_IS_NULL(gctx->current_exception))
+        err = gctx->current_exception;
+    coro->error = err;
+    if (out)
+        *out = err;
+    gctx->pending_error = xr_null();
+    gctx->current_exception = xr_null();
+    return XR_CORO_RUN_ERROR;
 }
 
 // ========== run_resume_path: Continuation + Unroll ==========

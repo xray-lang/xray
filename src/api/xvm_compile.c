@@ -77,6 +77,7 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
             xr_compiler_session_pop_arena(&ast_scope);
         return NULL;
     }
+    xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
 
     ctx->source_file = source_file;
 
@@ -111,6 +112,7 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
         xr_log_warning("vm", "failed to create compiler context");
         return NULL;
     }
+    xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
 
     ctx->source_file = source_file;
 

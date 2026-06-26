@@ -40,7 +40,7 @@ print(ints.has(5))
 
 let bytes: Set<uint8> = #[]
 bytes.add(255)
-bytes.add(256)
+bytes.add(0)
 print(bytes.length)
 print(bytes.has(0))
 print(bytes.delete(255))

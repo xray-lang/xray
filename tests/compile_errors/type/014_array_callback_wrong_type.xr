@@ -15,5 +15,5 @@ let bad5 = xs.every(0)
 let bad6 = xs.some(0)
 xs.forEach(0)
 
-let m: Map<string, int> = new Map()
+let m: Map<string, int> = Map()
 m.forEach(0)

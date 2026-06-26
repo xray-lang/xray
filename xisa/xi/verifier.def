@@ -25,12 +25,6 @@
 (verify-xi-op xi.ge
   :checks (bool-result))
 
-(verify-xi-op xi.eq.strict
-  :checks (bool-result))
-
-(verify-xi-op xi.ne.strict
-  :checks (bool-result))
-
 (verify-xi-op xi.not
   :checks (bool-result))
 

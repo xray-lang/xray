@@ -11,7 +11,7 @@
 #include "xresult_group.h"
 
 #include "../base/xchecks.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/object/xnative_type.h"
 #include "../runtime/object/xtuple.h"
 #include "../runtime/xisolate_api.h"
@@ -128,7 +128,7 @@ static XrValue result_group_construct(XrVMRuntime *isolate, XrValue receiver, Xr
                                            xr_isolate_get_scheduler_runtime(isolate), batch_size);
     if (!g) {
         XrValue exc =
-            xr_exception_newf(isolate, XR_ERR_OUT_OF_MEMORY, "ResultGroup allocation failed");
+            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "ResultGroup allocation failed");
         xr_vm_throw_exception(isolate, exc);
         return xr_null();
     }

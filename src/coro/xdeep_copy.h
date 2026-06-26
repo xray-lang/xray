@@ -170,6 +170,7 @@ XR_FUNC XrValue xr_to_shared(struct XrVMRuntime *X, XrValue value);
 #include "../runtime/mem/xobj_header.h"
 
 XR_FUNC XrValue xr_deep_copy_array_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_deep_copy_string_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_deep_copy_map_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_deep_copy_set_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_deep_copy_instance_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);

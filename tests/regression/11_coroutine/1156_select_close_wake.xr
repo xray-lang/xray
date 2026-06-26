@@ -15,15 +15,15 @@ fn recv_int(ch: Channel<int>) -> int {
 
 @test
 fn test_select_wakes_on_channel_close() {
-    shared const ch = new Channel<int>(0)
-    shared const ready = new Channel<int>(0)
-    shared const done = new Channel<int>(1)
+    shared const ch = Channel<int>(0)
+    shared const ready = Channel<int>(0)
+    shared const done = Channel<int>(1)
 
     go wait_select_close(ch, ready, done)
     assert_eq(recv_int(ready), 1)
 
     for (let i = 0; i < 16; i++) {
-        yield
+        Coro.yield()
     }
 
     ch.close()

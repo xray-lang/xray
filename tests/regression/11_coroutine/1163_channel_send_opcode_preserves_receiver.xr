@@ -18,7 +18,7 @@ fn send_twice(ch: Channel<int>, a: int, b: int) -> int {
 
 @test
 fn test_chan_send_preserves_receiver() {
-    shared const ch = new Channel<int>(0)
+    shared const ch = Channel<int>(0)
     let task = go send_twice(ch, 21, 34)
 
     assert_eq(recv_int(ch), 21)

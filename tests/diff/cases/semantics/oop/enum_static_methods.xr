@@ -1,0 +1,50 @@
+// Enum user methods lower to direct calls in both VM and AOT.
+// Covers static factory/helper methods, instance methods, typed enum values,
+// chained calls, and a function declared before the enum.
+
+fn forwardLabel() -> string {
+    return Color.describe(Color.Green)
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue
+
+    static fn fromInt(v: int) -> Color {
+        if (v == 1) {
+            return Color.Red
+        }
+        if (v == 2) {
+            return Color.Green
+        }
+        return Color.Blue
+    }
+
+    static fn describe(c: Color) -> string {
+        return c.label()
+    }
+
+    fn label() -> string {
+        return this.name
+    }
+}
+
+enum Code : int {
+    Ok = 200,
+    Err = 500
+
+    static fn ok() -> Code {
+        return Code.Ok
+    }
+
+    fn code() -> int {
+        return this.value
+    }
+}
+
+let c: Color = Color.fromInt(2)
+print(c.label())
+print(Color.describe(Color.Blue))
+print(forwardLabel())
+print(Code.ok().code())

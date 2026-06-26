@@ -14,15 +14,15 @@ class Vector2 {
     }
     
     operator+(other: Vector2) -> Vector2 {
-        return new Vector2(this.x + other.x, this.y + other.y)
+        return Vector2(this.x + other.x, this.y + other.y)
     }
     
     operator-(other: Vector2) -> Vector2 {
-        return new Vector2(this.x - other.x, this.y - other.y)
+        return Vector2(this.x - other.x, this.y - other.y)
     }
     
     operator*(scalar: float) -> Vector2 {
-        return new Vector2(this.x * scalar, this.y * scalar)
+        return Vector2(this.x * scalar, this.y * scalar)
     }
     
     operator==(other: Vector2) -> bool {
@@ -32,8 +32,8 @@ class Vector2 {
 
 @test
 fn test_operator_add() {
-    let a = new Vector2(1, 2)
-    let b = new Vector2(3, 4)
+    let a = Vector2(1, 2)
+    let b = Vector2(3, 4)
     let c = a + b
     assert_eq(c.x, 4)
     assert_eq(c.y, 6)
@@ -41,8 +41,8 @@ fn test_operator_add() {
 
 @test
 fn test_operator_sub() {
-    let a = new Vector2(5, 7)
-    let b = new Vector2(2, 3)
+    let a = Vector2(5, 7)
+    let b = Vector2(2, 3)
     let c = a - b
     assert_eq(c.x, 3)
     assert_eq(c.y, 4)
@@ -50,7 +50,7 @@ fn test_operator_sub() {
 
 @test
 fn test_operator_mul() {
-    let v = new Vector2(2, 3)
+    let v = Vector2(2, 3)
     let scaled = v * 2
     assert_eq(scaled.x, 4)
     assert_eq(scaled.y, 6)
@@ -58,9 +58,9 @@ fn test_operator_mul() {
 
 @test
 fn test_operator_eq() {
-    let a = new Vector2(1, 2)
-    let b = new Vector2(1, 2)
-    let c = new Vector2(3, 4)
+    let a = Vector2(1, 2)
+    let b = Vector2(1, 2)
+    let c = Vector2(3, 4)
     assert_eq(a == b, true)
     assert_eq(a == c, false)
 }
@@ -85,7 +85,7 @@ class Matrix {
 
 @test
 fn test_subscript_get() {
-    let m = new Matrix()
+    let m = Matrix()
     m.data[0] = 10
     m.data[1] = 20
     assert_eq(m[0], 10)
@@ -94,7 +94,7 @@ fn test_subscript_get() {
 
 @test
 fn test_subscript_set() {
-    let m = new Matrix()
+    let m = Matrix()
     m[0] = 100
     m[1] = 200
     assert_eq(m.data[0], 100)
@@ -129,8 +129,8 @@ class Money {
 
 @test
 fn test_comparison_operators() {
-    let a = new Money(100)
-    let b = new Money(200)
+    let a = Money(100)
+    let b = Money(200)
     
     assert_eq(a < b, true)
     assert_eq(a <= b, true)
@@ -142,9 +142,9 @@ fn test_comparison_operators() {
 
 @test
 fn test_chained_operations() {
-    let a = new Vector2(1, 1)
-    let b = new Vector2(2, 2)
-    let c = new Vector2(3, 3)
+    let a = Vector2(1, 1)
+    let b = Vector2(2, 2)
+    let c = Vector2(3, 3)
     
     let result = a + b + c
     assert_eq(result.x, 6)

@@ -1,18 +1,18 @@
 fn send_after_yield(ch: Channel<int>, value: int) -> int {
-    yield
+    Coro.yield()
     ch.send(value)
     return value
 }
 
 fn recv_after_yield(ch: Channel<int>) -> int {
-    yield
+    Coro.yield()
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> -1
     }
 }
 
-let buffered = new Channel<int>(1)
+let buffered = Channel<int>(1)
 print(buffered.sendTimeout(11, 0))
 let r1 = buffered.recvTimeout(0)
 print(match (r1) {
@@ -25,7 +25,7 @@ print(match (r1) {
 })
 buffered.close()
 
-let empty = new Channel<int>(0)
+let empty = Channel<int>(0)
 let r2 = empty.recvTimeout(5)
 print(match (r2) {
     Recv.Value(_) -> true
@@ -33,7 +33,7 @@ print(match (r2) {
 })
 empty.close()
 
-let rendezvous_recv = new Channel<int>(0)
+let rendezvous_recv = Channel<int>(0)
 let sender = go send_after_yield(rendezvous_recv, 33)
 let r3 = rendezvous_recv.recvTimeout(2000)
 print(match (r3) {
@@ -47,17 +47,17 @@ print(match (r3) {
 print(await sender)
 rendezvous_recv.close()
 
-let no_receiver = new Channel<int>(0)
+let no_receiver = Channel<int>(0)
 print(no_receiver.sendTimeout(44, 5))
 no_receiver.close()
 
-let rendezvous_send = new Channel<int>(0)
+let rendezvous_send = Channel<int>(0)
 let receiver = go recv_after_yield(rendezvous_send)
 print(rendezvous_send.sendTimeout(55, 2000))
 print(await receiver)
 rendezvous_send.close()
 
-let closed = new Channel<int>(0)
+let closed = Channel<int>(0)
 closed.close()
 let r4 = closed.recvTimeout(0)
 print(match (r4) {

@@ -32,7 +32,7 @@ fn test_config_management() {
 @test
 fn test_data_transformation() {
     // 原始数据
-    let rawData = {
+    let rawData: Json = {
         user_name: "alice",
         user_age: 25,
         user_email: "alice@test.com"
@@ -40,7 +40,7 @@ fn test_data_transformation() {
     
     // 转换为新格式
     let fields = ["name", "age", "email"]
-    let result = {}
+    let result: Json = {}
     
     for (field in fields) {
         let srcKey = "user_" + field
@@ -57,7 +57,7 @@ fn test_data_transformation() {
 @test
 fn test_dynamic_form() {
     fn createFormData<T>(fields: Array<string>, values: Array<T>) -> Json {
-        let form = {}
+        let form: Json = {}
         for (i in 0..fields.length) {
             form[fields[i]] = values[i]
         }
@@ -79,7 +79,7 @@ fn test_dynamic_form() {
 @test
 fn test_api_response() {
     // 模拟 API 响应
-    let response = {
+    let response: Json = {
         status: 200,
         data: {
             users: [
@@ -132,13 +132,13 @@ fn test_object_factory() {
 @test
 fn test_word_count() {
     let words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
-    let counts = {}
+    let counts: Json = {}
     
     for (word in words) {
         if (counts[word] == null) {
             counts[word] = 1
         } else {
-            counts[word] = counts[word] + 1
+            counts[word] = int(counts[word]) + 1
         }
     }
     
@@ -151,7 +151,7 @@ fn test_word_count() {
 
 @test
 fn test_deep_nesting() {
-    let data = {
+    let data: Json = {
         level1: {
             level2: {
                 level3: {

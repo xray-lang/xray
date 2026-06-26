@@ -115,6 +115,7 @@ XR_FUNC bool xi_own_type_may_be_ref(const struct XrType *type);
  * rewrite so dup/drop placement uses the same owned/borrow split as the
  * ownership analysis. */
 XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx);
+XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx);
 
 /* Dump ownership annotations to stderr for debugging (see --expandArc in Nim).
  * Prints, per value: id, op, ownership, rc_managed, drop point. */

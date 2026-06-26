@@ -21,6 +21,12 @@
 #include "xanalyzer_flow.h"
 #include "../../base/xdefs.h"
 
+typedef struct XaLoopScope {
+    const char *label;
+    int line;
+    struct XaLoopScope *prev;
+} XaLoopScope;
+
 // Inference context (for a single file/function)
 typedef struct XaInferContext {
     XaAnalyzer *analyzer;
@@ -30,6 +36,15 @@ typedef struct XaInferContext {
     // Current function being analyzed
     XaSymbol *current_function;
     XrType *expected_return_type;
+    // Generator detection: set true when a `yield expr` is seen in the current
+    // function body; the function-decl handler then marks it as a generator.
+    bool current_fn_has_yield;
+
+    // Current class context (set while inferring a class/struct method body).
+    // Used to enforce private/protected member visibility and const-field writes.
+    struct XrClassInfo *current_class_info;
+    const char *current_class_name;
+    bool current_method_is_constructor;
 
     // Collected return types (for inference)
     XrType **return_types;
@@ -53,6 +68,10 @@ typedef struct XaInferContext {
     // Nonzero inside an `unsafe { }` region. Gates raw-pointer dereference and
     // extern-function calls: those are errors at depth 0 (Rust model).
     int unsafe_depth;
+
+    // Active loop stack for validating break/continue and resolving labels.
+    XaLoopScope *loop_scope;
+    int loop_depth;
 } XaInferContext;
 
 // API: Context lifecycle

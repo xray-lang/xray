@@ -122,6 +122,17 @@
   :native-type XR_NATIVE_BOOL
   :storage-rep XR_REP_I64)
 
+(define-aot-rep char
+  :c-type "uint32_t"
+  :size 4
+  :align 4
+  :signed no
+  :integer no
+  :boxed no
+  :dynamic-kind scalar
+  :native-type none
+  :storage-rep XR_REP_I64)
+
 (define-aot-rep tagged
   :c-type "XrValue"
   :size 16

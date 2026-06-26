@@ -139,7 +139,7 @@ static void test_xrt_weak_predicate_accepts_aot_object_tags(void) {
     ASSERT_WEAK_ACCEPTS(XR_NULL_VAL, false, "null is not a weak key object");
     ASSERT_WEAK_ACCEPTS(XR_FROM_INT(1), false, "int is not a weak key object");
     ASSERT_WEAK_ACCEPTS(XR_TRUE_VAL, false, "bool is not a weak key object");
-    ASSERT_WEAK_ACCEPTS(xrt_range_from_i64(1, 4), true, "Range is an object-like weak key");
+    ASSERT_WEAK_ACCEPTS(xrt_range_from_i64(1, 4, false), true, "Range is an object-like weak key");
     ASSERT_WEAK_ACCEPTS(xr_mkptr(&enum_view, XR_TAG_ENUM), true,
                         "Enum value view is an object-like weak key");
     ASSERT_WEAK_ACCEPTS(xr_mkptr(&dummy, XR_TAG_ITERATOR), true,

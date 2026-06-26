@@ -191,6 +191,7 @@ typedef struct OptionalChainNode {
 typedef struct RangeNode {
     AstNode *start;
     AstNode *end;
+    bool inclusive_end;
 } RangeNode;
 
 #endif  // XAST_NODES_EXPR_H

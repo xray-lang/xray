@@ -1,0 +1,5 @@
+class EqOnlyImpl implements Hashable {
+    operator==(other: EqOnlyImpl) -> bool {
+        return true
+    }
+}

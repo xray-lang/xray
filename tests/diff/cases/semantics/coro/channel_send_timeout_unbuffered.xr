@@ -1,0 +1,8 @@
+let ch = Channel<int>(0)
+let sent = ch.sendTimeout(7, 10)
+print(match (sent) {
+    SendResult.Sent -> "sent"
+    SendResult.Timeout -> "timeout"
+    _ -> "closed"
+})
+ch.close()

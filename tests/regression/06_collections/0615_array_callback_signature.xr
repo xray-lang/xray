@@ -87,7 +87,7 @@ fn test_reduce_chain_with_typed_acc() {
 // runtime never sees a bogus pointer.
 @test
 fn test_map_foreach_callback() {
-    let m: Map<string, int> = new Map()
+    let m: Map<string, int> = Map()
     m.set("a", 1)
     m.set("b", 2)
     m.set("c", 3)

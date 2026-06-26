@@ -19,7 +19,7 @@ fn idBox(box: Box) -> Box {
     return alias
 }
 
-let box = new Box(7)
+let box = Box(7)
 let alias = idBox(box)
 alias.set(9)
 

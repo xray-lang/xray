@@ -1,0 +1,43 @@
+// anchor: int-safe-methods
+// Explicit int overflow-control methods must match between VM and AOT.
+
+let max: int = 9223372036854775807
+let min: int = -9223372036854775807 - 1
+
+print(max.checkedAdd(0))
+print(max.checkedAdd(1) == null)
+print(min.checkedAdd(-1) == null)
+print(40.checkedAdd(2))
+
+print(min.checkedSub(0))
+print(min.checkedSub(1) == null)
+print(max.checkedSub(-1) == null)
+print(10.checkedSub(3))
+
+print(max.checkedMul(1))
+print(max.checkedMul(2) == null)
+print(min.checkedMul(-1) == null)
+print(7.checkedMul(6))
+
+print(max.saturatingAdd(1))
+print(min.saturatingAdd(-1))
+print(max.saturatingSub(-1))
+print(min.saturatingSub(1))
+print(max.saturatingMul(2))
+print(min.saturatingMul(2))
+print(min.saturatingMul(-1))
+
+print(max.wrappingAdd(1))
+print(min.wrappingAdd(-1))
+print(min.wrappingSub(1))
+print(max.wrappingSub(-1))
+print(max.wrappingMul(2))
+print(min.wrappingMul(-1))
+
+print(max + 1)
+print(min - 1)
+print(max * 2)
+
+print(min.abs())
+print(min.toString())
+print(min.toHex())

@@ -213,7 +213,7 @@ class CharIterator {
     next() -> string {
         let ch = this.str[this.index]
         this.index = this.index + 1
-        return ch
+        return string(ch)
     }
 }
 

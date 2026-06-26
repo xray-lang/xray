@@ -68,6 +68,7 @@ typedef struct XrExceptionHandler {
     uint32_t catch_offset;  // absolute PC of the catch block
     int stack_size;         // stack size when entering try
     int frame_count;        // frame count when entering try
+    int defer_count_mark;   // defer stack count when entering try
     XrValue exception;      // caught exception value
     bool caught;            // exception was caught
 } XrExceptionHandler;

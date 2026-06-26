@@ -1,5 +1,6 @@
 contains=container 0
 contains=kind=array flags=0x5 elem=XR_ELEM_U8/u8/uint8_t
+contains=kind=array flags=0x5 elem=XR_ELEM_CHAR/char/uint32_t
 contains=kind=array flags=0x5 elem=XR_ELEM_I64/i64/int64_t
 contains=kind=map flags=0x3 key=XR_ELEM_U8/u8/uint8_t value=XR_ELEM_I32/i32/int32_t
 contains=kind=set flags=0x3 elem=XR_ELEM_U16/u16/uint16_t
@@ -15,15 +16,21 @@ regex=array-cache [0-9]+ func=refill value=v[0-9]+ storage=v[0-9]+ flags=0x27 el
 regex=array-class-field-alloc [0-9]+ func=refill origin=v[0-9]+ store=v[0-9]+ class=ArrayBag field=0 elem=XR_ELEM_I64/i64/int64_t
 regex=array-cache [0-9]+ func=loop_sum value=v[0-9]+ storage=v[0-9]+ flags=0x27 elem=XR_ELEM_I64/i64/int64_t
 regex=array-cache [0-9]+ func=bytes_index value=v[0-9]+ storage=v[0-9]+ flags=0x47 elem=XR_ELEM_U8/u8/uint8_t
-contains=container-stats array=2 map=1 set=1 direct=2
-contains=array-storage-stats total=12 read=12 mutable=11
+regex=array-storage [0-9]+ func=char_ord_sum value=v[0-9]+ origin=v[0-9]+ flags=0x3 elem=XR_ELEM_CHAR/char/uint32_t
+contains=container-stats array=3 map=1 set=1 direct=2
+contains=array-storage-stats total=14 read=14 mutable=13
 contains=array-cache-stats total=7 read=7 mutable=5
-c_contains=xrt_array_new_typed_len(0, XR_ELEM_U8)
-c_contains=xrt_array_new_typed_len(0, XR_ELEM_I64)
+c_contains=xrt_array_new_typed(0, XR_ELEM_U8)
+c_contains=xrt_array_new_typed(0, XR_ELEM_CHAR)
+c_contains=xrt_array_new_typed(0, XR_ELEM_I64)
+c_contains=xrt_array_new_typed_ptr(0, XR_ELEM_CHAR)
 c_contains=xrt_array_new_typed_uninit_ptr
 c_regex=\(p0\)->f0 = \(xrt_array_t\*\)xrt_array_new_typed_uninit
 c_contains=xrt_array_new_typed_ptr(_n, XR_ELEM_U8)
+c_contains=XR_FROM_CHAR((uint32_t)
+c_contains=XR_TO_CHAR(
 c_regex=int64_t \*_ad[0-9]+ = \(int64_t\*\)
+c_regex=\(\(uint32_t\*\)_a->data\)
 c_regex=uint8_t \*(XRT_RESTRICT )?_ad[0-9]+ = \(uint8_t\*\)
 c_contains=XR_AOT_HOT_REGION_BEGIN typed_array_raw_access
 c_contains=xrt_map_new_typed(0, XR_ELEM_U8, XR_ELEM_I32)

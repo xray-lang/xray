@@ -27,11 +27,17 @@ static inline void xrt_set_direct_unsupported(uint8_t elem_type, const char *who
 /* ---- canonical bit patterns --------------------------------------------- */
 
 static inline uint64_t xrt_set_item_bits_i64(int64_t value, uint8_t elem_type) {
-    return xrt_typed_scalar_bits_i64_or_abort(value, elem_type, "xrt_set_item_bits_i64");
+    uint64_t bits = 0;
+    if (!xr_typed_scalar_bits_i64(value, elem_type, &bits))
+        xrt_set_direct_unsupported(elem_type, "xrt_set_item_bits_i64");
+    return bits;
 }
 
 static inline uint64_t xrt_set_item_bits_f64(double value, uint8_t elem_type) {
-    return xrt_typed_scalar_bits_f64_or_abort(value, elem_type, "xrt_set_item_bits_f64");
+    uint64_t bits = 0;
+    if (!xr_typed_scalar_bits_f64(value, elem_type, &bits))
+        xrt_set_direct_unsupported(elem_type, "xrt_set_item_bits_f64");
+    return bits;
 }
 
 static inline int64_t xrt_set_slot_raw_i64(const xrt_set_t *s, int64_t slot) {

@@ -22,6 +22,7 @@ static bool is_simple_literal(AstNode *init) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
+        case AST_LITERAL_CHAR:
         case AST_LITERAL_STRING:
             return true;
         default:
@@ -135,8 +136,8 @@ static XrStructLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNo
  * Instance methods get an implicit 'this' parameter at index 0.
  * For constructors, cd provides field declarations so complex
  * default values can be lowered as IR before the user body. */
-static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
-                                    ClassDeclNode *cd) {
+XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
+                                        ClassDeclNode *cd, struct XrType *receiver_type) {
     XiLower ml;
     xi_lower_init(&ml, l->analyzer, l->isolate);
     ml.parent = l;
@@ -147,7 +148,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
      * mixing the two struct layouts produces garbage downstream when
      * lowering reads bool fields like is_value_type / is_nullable. */
     struct XrType *m_ret =
-        m->return_type ? xr_tref_resolve(l->isolate, m->return_type) : ml.type_unit;
+        m->return_type ? xr_tref_resolve_in_analyzer(l->analyzer, m->return_type) : ml.type_unit;
     if (!m_ret)
         m_ret = ml.type_unit;
     ml.func = xi_func_new(m->name, m_ret);
@@ -172,8 +173,8 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
         }
     }
 
-    struct XrType *this_type = ml.type_any;
-    if (is_inst && cd && cd->name) {
+    struct XrType *this_type = receiver_type ? receiver_type : ml.type_any;
+    if (is_inst && !receiver_type && cd && cd->name) {
         struct XrType *named_this = xr_type_new_named_instance(l->isolate, cd->name);
         if (named_this)
             this_type = named_this;
@@ -194,7 +195,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
     for (int i = 0; i < m->param_count; i++) {
         struct XrType *pt = ml.type_any;
         if (m->param_types && m->param_types[i]) {
-            struct XrType *resolved = xr_tref_resolve(l->isolate, m->param_types[i]);
+            struct XrType *resolved = xr_tref_resolve_in_analyzer(l->analyzer, m->param_types[i]);
             if (resolved)
                 pt = resolved;
         }
@@ -310,10 +311,10 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (m->is_static_constructor || m->is_static)
             continue;
 
-        XiFunc *mf = lower_method_as_func(l, m, true, cd);
+        XiFunc *mf = xi_lower_method_as_func(l, m, true, cd, NULL);
         if (!mf)
             continue;
-        func_add_child(l->func, mf);
+        xi_lower_func_add_child(l->func, mf);
         if (cidx)
             cidx[ci] = (uint16_t) (l->func->nchildren - 1);
         ci++;
@@ -324,9 +325,9 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         synth.name = "constructor";
         synth.is_constructor = true;
 
-        XiFunc *mf = lower_method_as_func(l, &synth, true, cd);
+        XiFunc *mf = xi_lower_method_as_func(l, &synth, true, cd, NULL);
         if (mf) {
-            func_add_child(l->func, mf);
+            xi_lower_func_add_child(l->func, mf);
             if (cidx)
                 cidx[ci] = (uint16_t) (l->func->nchildren - 1);
             ci++;
@@ -341,10 +342,10 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (m->is_static_constructor || !m->is_static)
             continue;
 
-        XiFunc *mf = lower_method_as_func(l, m, false, cd);
+        XiFunc *mf = xi_lower_method_as_func(l, m, false, cd, NULL);
         if (!mf)
             continue;
-        func_add_child(l->func, mf);
+        xi_lower_func_add_child(l->func, mf);
         if (cidx)
             cidx[ci] = (uint16_t) (l->func->nchildren - 1);
         ci++;
@@ -396,9 +397,9 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         MethodDeclNode *m = &cd->methods[i]->as.method_decl;
         if (!m->is_static_constructor)
             continue;
-        XiFunc *cf = lower_method_as_func(l, m, false, cd);
+        XiFunc *cf = xi_lower_method_as_func(l, m, false, cd, NULL);
         if (cf) {
-            func_add_child(l->func, cf);
+            xi_lower_func_add_child(l->func, cf);
             clinit_idx = (int) (l->func->nchildren - 1);
         }
         break;

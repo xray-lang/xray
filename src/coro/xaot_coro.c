@@ -29,7 +29,7 @@
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/object/xarray.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/object/xmap.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xtuple.h"
@@ -78,9 +78,11 @@ static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
     char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
     char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
     char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout", "Pending"};
+    char *task_outcome_members[] = {"Success", "Failed", "Cancelled"};
     char *task_status_members[] = {"Pending", "Running", "Success", "Failed", "Cancelled"};
     const int recv_payloads[] = {1, 0, 0, 0};
     const int task_result_payloads[] = {1, 1, 0, 0, 0};
+    const int task_outcome_payloads[] = {1, 1, 0};
 
     return aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_ORDERING, "Ordering",
                                              ordering_members, 5, NULL) &&
@@ -90,6 +92,8 @@ static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
                                              send_result_members, 4, NULL) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_RESULT, "TaskResult",
                                              task_result_members, 5, task_result_payloads) &&
+           aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_OUTCOME, "TaskOutcome",
+                                             task_outcome_members, 3, task_outcome_payloads) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_STATUS, "TaskStatus",
                                              task_status_members, 5, NULL);
 }
@@ -115,7 +119,7 @@ static bool aot_value_is_runtime_instance(XrValue value);
 static bool aot_builtin_index_is_prelude_enum(int32_t index) {
     return index == XR_GLOBAL_VAR_ORDERING || index == XR_GLOBAL_VAR_RECV ||
            index == XR_GLOBAL_VAR_SEND_RESULT || index == XR_GLOBAL_VAR_TASK_RESULT ||
-           index == XR_GLOBAL_VAR_TASK_STATUS;
+           index == XR_GLOBAL_VAR_TASK_OUTCOME || index == XR_GLOBAL_VAR_TASK_STATUS;
 }
 
 static XrValue aot_runtime_script_builtin_lazy(XrAotRuntime *runtime, int32_t index) {
@@ -142,7 +146,7 @@ static XrValue aot_runtime_script_builtin_lazy(XrAotRuntime *runtime, int32_t in
     return value;
 }
 
-static XrValue aot_runtime_builtin_lazy(XrAotRuntime *runtime, int32_t index) {
+static XrValue aot_runtime_builtin_lazy_inner(XrAotRuntime *runtime, int32_t index) {
     XrValue value = xr_aot_runtime_builtin(runtime, index);
     if (!XR_IS_NULL(value))
         return value;
@@ -153,6 +157,12 @@ static XrValue aot_runtime_builtin_lazy(XrAotRuntime *runtime, int32_t index) {
     if (!aot_runtime_register_prelude_enums(runtime))
         return XR_NULL_VAL;
     return xr_aot_runtime_builtin(runtime, index);
+}
+
+XrValue xr_aot_runtime_builtin_lazy(XrAotRuntime *runtime, int32_t index) {
+    if (!runtime || index < 0 || index >= XR_USER_GLOBALS_START)
+        return XR_NULL_VAL;
+    return aot_runtime_builtin_lazy_inner(runtime, index);
 }
 
 static XrValue aot_runtime_process_field(const XrAotContext *ctx, const char *field) {
@@ -211,7 +221,7 @@ XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index) {
     if (!ctx || index < 0)
         return XR_NULL_VAL;
     if (ctx->runtime && index < XR_USER_GLOBALS_START)
-        return aot_runtime_builtin_lazy(ctx->runtime, index);
+        return aot_runtime_builtin_lazy_inner(ctx->runtime, index);
     if (!ctx->vm_host || !ctx->vm_host_ops || !ctx->vm_host_ops->get_builtin ||
         index >= XR_GLOBALS_MAX) {
         return XR_NULL_VAL;
@@ -1220,7 +1230,7 @@ static XrValue aot_task_result_success(const XrAotContext *ctx, XrValue value) {
     return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, 0, args, 1);
 }
 
-static XrValue aot_task_failure_exception(const XrAotContext *ctx, XrTask *task) {
+static XrValue aot_task_failure_value(const XrAotContext *ctx, XrTask *task) {
     XrAotVmHost vm_host = aot_context_vm_host(ctx, task);
     XrCoroutine *coro = aot_context_coro(ctx, vm_host, task);
     XrRuntimeCore *core = aot_context_runtime_core(ctx);
@@ -1233,15 +1243,11 @@ static XrValue aot_task_failure_exception(const XrAotContext *ctx, XrTask *task)
     }
     if (coro && xr_value_needs_copy(error))
         error = xr_deep_copy_to_coro_core(core, error, coro);
-    if (aot_vm_host_available(vm_host) && vm_host.ops->is_exception &&
-        vm_host.ops->exception_from_value && !vm_host.ops->is_exception(vm_host.host, error)) {
-        error = vm_host.ops->exception_from_value(vm_host.host, error);
-    }
     return error;
 }
 
 static XrValue aot_task_result_failed(const XrAotContext *ctx, XrTask *task) {
-    XrValue error = aot_task_failure_exception(ctx, task);
+    XrValue error = aot_task_failure_value(ctx, task);
     XrValue args[1] = {error};
     return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
 }
@@ -1285,7 +1291,7 @@ static XrAotResult aot_task_terminal_error(const XrAotContext *ctx, XrTask *task
         task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
     XrValue error;
     if (state == XR_TASK_FAILED) {
-        error = aot_task_failure_exception(ctx, task);
+        error = aot_task_failure_value(ctx, task);
     } else {
         XrAotVmHost vm_host = aot_context_vm_host(ctx, task);
         if (aot_vm_host_available(vm_host) && vm_host.ops->exception_new) {
@@ -1842,7 +1848,8 @@ XrValue xr_aot_channel_new(const XrAotContext *ctx, int64_t buffer_size) {
     return ch ? xr_value_from_channel(ch) : XR_NULL_VAL;
 }
 
-XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_value, XrValue send_value) {
+XrValue xr_aot_chan_try_send_transfer(const XrAotContext *ctx, XrValue channel_value,
+                                      XrValue send_value, uint8_t transfer_mode) {
     if (!ctx || !xr_value_is_channel(channel_value))
         return aot_send_result(ctx, 3);
     XrChannel *ch = xr_value_to_channel(channel_value);
@@ -1851,20 +1858,30 @@ XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_value, XrV
     XrRuntimeCore *core = aot_context_runtime_core(ctx);
     if (!core)
         core = ch->core;
-    return aot_send_result(ctx, xr_chan_try_send_core(core, ch, send_value) ? 0 : 1);
+    return aot_send_result(
+        ctx, xr_chan_try_send_transfer_core(core, ch, send_value, transfer_mode) ? 0 : 1);
+}
+
+XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_value, XrValue send_value) {
+    return xr_aot_chan_try_send_transfer(ctx, channel_value, send_value, XR_TRANSFER_MOVE);
+}
+
+XrValue xr_aot_chan_try_send_ready_transfer(const XrAotContext *ctx, XrValue channel_value,
+                                            XrValue send_value, uint8_t transfer_mode) {
+    if (!ctx || !xr_value_is_channel(channel_value))
+        return xr_bool(false);
+    XrChannel *ch = xr_value_to_channel(channel_value);
+    if (xr_channel_is_closed(ch))
+        return xr_bool(false);
+    XrRuntimeCore *core = aot_context_runtime_core(ctx);
+    if (!core)
+        core = ch->core;
+    return xr_bool(xr_chan_try_send_transfer_core(core, ch, send_value, transfer_mode));
 }
 
 XrValue xr_aot_chan_try_send_ready(const XrAotContext *ctx, XrValue channel_value,
                                    XrValue send_value) {
-    if (!ctx || !xr_value_is_channel(channel_value))
-        return xr_bool(false);
-    XrChannel *ch = xr_value_to_channel(channel_value);
-    if (xr_channel_is_closed(ch))
-        return xr_bool(false);
-    XrRuntimeCore *core = aot_context_runtime_core(ctx);
-    if (!core)
-        core = ch->core;
-    return xr_bool(xr_chan_try_send_core(core, ch, send_value));
+    return xr_aot_chan_try_send_ready_transfer(ctx, channel_value, send_value, XR_TRANSFER_MOVE);
 }
 
 static bool aot_context_from_channel_value(XrValue channel_value, XrAotContext *out) {
@@ -1911,6 +1928,7 @@ XrValue xr_aot_chan_try_recv_sync(XrValue channel_value) {
 XrAotResult xr_aot_poll_yield(const XrAotContext *ctx) {
     if (!ctx || !ctx->coro)
         return xr_aot_done(XR_NULL_VAL);
+    xr_worker_bump_heartbeat(ctx->worker ? (XrWorker *) ctx->worker : xr_current_worker());
     if (xr_coro_consume_reds(ctx->coro, 1) > 0)
         return xr_aot_done(XR_NULL_VAL);
     if (xr_coro_flags_has(ctx->coro, XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_CANCELLED))
@@ -2354,13 +2372,15 @@ XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t 
     return xr_tuple_get(xr_value_to_tuple(tuple_value), index);
 }
 
-XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value, XrValue send_value,
-                             XrSlotRef result_slot, int64_t timeout_ms) {
+XrAotResult xr_aot_chan_send_transfer(const XrAotContext *ctx, XrValue channel_value,
+                                      XrValue send_value, XrSlotRef result_slot, int64_t timeout_ms,
+                                      uint8_t transfer_mode) {
     if (!ctx || !ctx->coro || !xr_value_is_channel(channel_value))
         return xr_aot_error(XR_NULL_VAL, false);
 
     XrChannel *ch = xr_value_to_channel(channel_value);
-    XrCoroBlockResult block = xr_coro_chan_send(ctx->coro, ch, send_value, result_slot, timeout_ms);
+    XrCoroBlockResult block = xr_coro_chan_send_transfer(ctx->coro, ch, send_value, result_slot,
+                                                         timeout_ms, transfer_mode);
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
         return xr_aot_blocked();
     if (block.kind == XR_CORO_BLOCK_READY || block.kind == XR_CORO_BLOCK_TIMEOUT ||
@@ -2375,6 +2395,12 @@ XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value, XrV
             return aot_channel_closed_error(ctx);
     }
     return xr_aot_error(XR_NULL_VAL, false);
+}
+
+XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value, XrValue send_value,
+                             XrSlotRef result_slot, int64_t timeout_ms) {
+    return xr_aot_chan_send_transfer(ctx, channel_value, send_value, result_slot, timeout_ms,
+                                     XR_TRANSFER_MOVE);
 }
 
 static XrAotResult aot_chan_send_scalar(const XrAotContext *ctx, XrValue channel_value,
@@ -2456,6 +2482,45 @@ XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx, XrSlotRef out_
         XrSlotRef result_slot = out_slot.kind == XR_SLOT_NONE ? value_slot : out_slot;
         XrValue result = aot_recv_result_from_block(ctx, block);
         return aot_store_slot_result(result_slot, result);
+    }
+    return xr_aot_error(XR_NULL_VAL, false);
+}
+
+XrAotResult xr_aot_chan_recv_or_slot(const XrAotContext *ctx, XrValue channel_value,
+                                     XrSlotRef out_slot, XrValue default_value) {
+    if (!ctx || !ctx->coro || !xr_value_is_channel(channel_value))
+        return xr_aot_error(XR_NULL_VAL, false);
+    if (!xr_slot_store_value(out_slot, default_value))
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    XrChannel *ch = xr_value_to_channel(channel_value);
+    XrCoroBlockResult block = xr_coro_chan_recv(ctx->coro, ch, out_slot, xr_slot_none(), -1, false);
+    if (block.kind == XR_CORO_BLOCK_BLOCKED)
+        return xr_aot_blocked();
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return xr_aot_done(block.value);
+    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO ||
+        block.kind == XR_CORO_BLOCK_TIMEOUT) {
+        if (!xr_slot_store_value(out_slot, default_value))
+            return xr_aot_error(XR_NULL_VAL, false);
+        return xr_aot_done(default_value);
+    }
+    return xr_aot_error(XR_NULL_VAL, false);
+}
+
+XrAotResult xr_aot_chan_recv_or_slot_resume(const XrAotContext *ctx, XrSlotRef out_slot) {
+    if (!ctx || !ctx->coro)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    XrCoroBlockResult block = xr_coro_chan_recv_resume(ctx->coro, out_slot, xr_slot_none());
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return xr_aot_done(block.value);
+    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO ||
+        block.kind == XR_CORO_BLOCK_TIMEOUT) {
+        XrValue default_value = XR_NULL_VAL;
+        if (!xr_slot_load_value(out_slot, &default_value))
+            return xr_aot_error(XR_NULL_VAL, false);
+        return xr_aot_done(default_value);
     }
     return xr_aot_error(XR_NULL_VAL, false);
 }

@@ -46,9 +46,88 @@ static int prelude_enum_builtin_index(const char *enum_name) {
         return XR_GLOBAL_VAR_SEND_RESULT;
     if (strcmp(enum_name, "TaskResult") == 0)
         return XR_GLOBAL_VAR_TASK_RESULT;
+    if (strcmp(enum_name, "TaskOutcome") == 0)
+        return XR_GLOBAL_VAR_TASK_OUTCOME;
     if (strcmp(enum_name, "TaskStatus") == 0)
         return XR_GLOBAL_VAR_TASK_STATUS;
     return -1;
+}
+
+static XiValue *lower_enum_method_closure(XiLower *l, XiFunc *child, uint16_t child_idx,
+                                          struct XrType *fn_type, int line) {
+    if (!l || !child)
+        return NULL;
+    uint16_t ncap = child->ncaptures;
+    XiValue *closure =
+        xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, fn_type ? fn_type : l->type_any, ncap);
+    if (!closure)
+        return NULL;
+    for (uint16_t ci = 0; ci < ncap; ci++) {
+        XiCapture *cap = &child->captures[ci];
+        closure->args[ci] = (cap->source == XI_CAPTURE_SRC_REG && cap->value) ? cap->value : NULL;
+    }
+    closure->aux = (void *) child;
+    closure->aux_int = child_idx;
+    closure->line = (uint32_t) line;
+    return closure;
+}
+
+static void lower_enum_methods(XiLower *l, EnumDeclNode *ed) {
+    if (!l || !ed || !ed->name || ed->method_count <= 0 || !l->analyzer)
+        return;
+    XaSymbol *enum_sym = xa_analyzer_lookup(l->analyzer, ed->name);
+    XaSymbolLinks *enum_links = enum_sym ? xa_analyzer_get_links(l->analyzer, enum_sym) : NULL;
+    XrClassInfo *info = enum_links ? enum_links->class_info : NULL;
+    if (!info)
+        return;
+
+    for (int i = 0; i < ed->method_count; i++) {
+        AstNode *method = ed->methods ? ed->methods[i] : NULL;
+        if (!method || method->type != AST_METHOD_DECL)
+            continue;
+        MethodDeclNode *md = &method->as.method_decl;
+        XaSymbol *method_sym = xa_class_info_lookup_member(info, md->name);
+        if (!method_sym || method_sym->kind != XA_SYM_METHOD ||
+            method_sym->is_static != md->is_static)
+            continue;
+        XaSymbolLinks *method_links = xa_analyzer_get_links(l->analyzer, method_sym);
+        struct XrType *receiver_type =
+            md->is_static ? NULL : xr_type_new_enum(l->isolate, ed->name);
+        XiFunc *mf = xi_lower_method_as_func(l, md, !md->is_static, NULL, receiver_type);
+        if (!mf) {
+            l->had_error = true;
+            continue;
+        }
+        xi_lower_func_add_child(l->func, mf);
+        uint16_t child_idx = (uint16_t) (l->func->nchildren - 1);
+        XiValue *closure = lower_enum_method_closure(
+            l, mf, child_idx, method_links ? method_links->type : l->type_any, method->line);
+        if (!closure) {
+            l->had_error = true;
+            continue;
+        }
+
+        const char *hidden =
+            xi_lower_enum_method_hidden_name(l->func, ed->name, md->name, md->is_static);
+        int var_id = xi_lower_var_find(l, method_sym->id, hidden);
+        if (var_id < 0)
+            var_id = xi_lower_var_create(l, method_sym->id, hidden, closure->type);
+        xi_lower_braun_write(l, var_id, l->cur_block, closure);
+
+        if (l->is_program && var_id < l->var_count && l->shared_map[var_id] >= 0) {
+            int slot = l->shared_map[var_id];
+            XiTopBinding b;
+            b.slot = slot;
+            b.name = l->vars[var_id].name;
+            b.type = l->vars[var_id].type;
+            xi_lower_emit_top_store(l, b, closure);
+            if (slot >= 0 && slot < l->var_cap) {
+                l->shared_slot_funcs[slot] = mf;
+                if (l->func->shared_slot_funcs && slot < (int) l->func->shared_slot_func_count)
+                    l->func->shared_slot_funcs[slot] = mf;
+            }
+        }
+    }
 }
 
 XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, AstNode *node) {
@@ -282,6 +361,8 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
         if (binding.slot < l->var_cap)
             l->shared_slot_enums[binding.slot] = enum_data;
     }
+
+    lower_enum_methods(l, ed);
 }
 
 /* ========== Enum Convert ========== */
@@ -323,19 +404,123 @@ XR_FUNC XiValue *xi_lower_move_expr(XiLower *l, AstNode *node) {
     if (!val)
         return NULL;
     struct XrType *result_type = xi_lower_node_type(l, node);
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_MOVE, result_type, 1);
     if (!v)
         return val;
     v->args[0] = val;
-    v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
     return v;
 }
 
 /* ========== Object Literal ========== */
 
+/* Object literal with `...spread` entries: `{...base, x: 1}`.
+ * The result Json is created pre-sized with the statically-known union shape
+ * (from the analyzer's inferred type), then each part is applied in order:
+ * spread sources are merged field-by-field (XI_JSON_MERGE), literal fields are
+ * written by key (XI_INDEX_SET). Later writes override earlier ones, matching
+ * the union semantics. Dynamic source fields not in the static shape are added
+ * at runtime via overflow. */
+static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
+                                               struct XrType *result_type) {
+    ObjectLiteralNode *obj = &node->as.object_literal;
+
+    /* Pre-size the result with the union of statically-known field names. */
+    int static_count = 0;
+    const char **key_names = NULL;
+    if (XR_TYPE_HAS_OBJECT_SHAPE(result_type) && result_type->object.field_count > 0 &&
+        result_type->object.field_names) {
+        static_count = result_type->object.field_count;
+        key_names = (const char **) xi_func_arena_alloc(
+            l->func, (uint32_t) (sizeof(const char *) * (size_t) static_count));
+        if (!key_names)
+            return NULL;
+        for (int i = 0; i < static_count; i++) {
+            const char *nm = result_type->object.field_names[i];
+            key_names[i] = nm ? arena_strdup(l->func, nm) : "?";
+        }
+    }
+
+    XiValue *obj_val = xi_value_new(l->func, l->cur_block, XI_JSON_NEW, result_type, 0);
+    if (!obj_val)
+        return NULL;
+    obj_val->aux_int = static_count;
+    obj_val->aux = (void *) key_names;
+    obj_val->line = (uint32_t) node->line;
+
+    for (int i = 0; i < obj->count; i++) {
+        AstNode *val = obj->values[i];
+        if (val && val->type == AST_SPREAD_EXPR) {
+            XiValue *src = xi_lower_expr(l, val->as.spread_expr.expr);
+            if (!src)
+                return NULL;
+            XiValue *mg = xi_value_new(l->func, l->cur_block, XI_JSON_MERGE, l->type_unit, 2);
+            if (!mg)
+                return NULL;
+            mg->args[0] = obj_val;
+            mg->args[1] = src;
+            mg->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+            mg->line = (uint32_t) node->line;
+            continue;
+        }
+
+        XiValue *v = xi_lower_expr(l, obj->values[i]);
+        if (!v)
+            return NULL;
+        bool is_computed = obj->computed && obj->computed[i];
+
+        /* Static literal key: write the field by its index in the union shape
+         * (XI_JSON_SET_F), matching how spread merges and member reads address
+         * the same slots. Computed keys are not part of the static shape and
+         * fall back to a dynamic key set. */
+        int field_idx = -1;
+        if (!is_computed && obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING &&
+            static_count > 0 && key_names) {
+            const char *kn = obj->keys[i]->as.literal.raw_value.string_val;
+            for (int k = 0; kn && k < static_count; k++) {
+                if (key_names[k] && strcmp(key_names[k], kn) == 0) {
+                    field_idx = k;
+                    break;
+                }
+            }
+        }
+
+        if (field_idx >= 0) {
+            XiValue *set = xi_value_new(l->func, l->cur_block, XI_JSON_SET_F, l->type_unit, 2);
+            if (!set)
+                return NULL;
+            set->args[0] = obj_val;
+            set->args[1] = v;
+            set->aux_int = field_idx;
+            set->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+            set->line = (uint32_t) node->line;
+        } else {
+            XiValue *key = is_computed ? xi_lower_expr(l, obj->keys[i])
+                                       : xi_const_str(l->func, l->cur_block, "?", l->type_string);
+            if (!key)
+                return NULL;
+            XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
+            if (!set)
+                return NULL;
+            set->args[0] = obj_val;
+            set->args[1] = key;
+            set->args[2] = v;
+            set->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+            set->line = (uint32_t) node->line;
+        }
+    }
+    return obj_val;
+}
+
 XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
     ObjectLiteralNode *obj = &node->as.object_literal;
+
+    /* Spread entries force the dynamic merge path. */
+    for (int i = 0; i < obj->count; i++) {
+        if (obj->values[i] && obj->values[i]->type == AST_SPREAD_EXPR)
+            return xi_lower_object_literal_spread(l, node, xi_lower_node_type(l, node));
+    }
+
     int count = obj->count;
     if (count < 0 || count > (int) UINT16_MAX) {
         fprintf(stderr, "[LOWER] object literal field count exceeds %u at line %d\n",
@@ -442,9 +627,16 @@ XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node) {
         check->line = node ? (uint32_t) node->line : 0;
 
         XiBlock *catch_blk = l->catch_targets[l->try_depth - 1];
+        XiBlock *err_blk = xi_block_new(l->func);
         XiBlock *cont = xi_block_new(l->func);
 
-        xi_block_set_if(l->cur_block, check, catch_blk, cont);
+        xi_block_set_if(l->cur_block, check, err_blk, cont);
+        xi_lower_braun_seal(l, err_blk);
+        l->cur_block = err_blk;
+        xi_lower_defer_run_to_depth(l, l->catch_defer_depths[l->try_depth - 1],
+                                    node ? node->line : 0);
+        xi_block_set_jump(l->cur_block, catch_blk);
+
         xi_lower_braun_seal(l, cont);
         l->cur_block = cont;
     } else {

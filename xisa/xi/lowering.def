@@ -308,18 +308,6 @@
   :vm-bytecode (driver xi_emit_cmp)
   :aot-c (driver xicgen_ne))
 
-(lower xi.eq.strict
-  :match (compare)
-  :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_cmp)
-  :aot-c (driver xicgen_eq_strict))
-
-(lower xi.ne.strict
-  :match (compare)
-  :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_cmp)
-  :aot-c (driver xicgen_ne_strict))
-
 (lower xi.lt
   :match (compare)
   :required-targets (vm-bytecode aot-c)
@@ -488,6 +476,18 @@
   :vm-bytecode (driver xi_emit_array_new)
   :aot-c (driver xicgen_array_new))
 
+(lower xi.array.push
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_array_push)
+  :aot-c (driver xicgen_array_push))
+
+(lower xi.array.extend
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_array_extend)
+  :aot-c (driver xicgen_array_extend))
+
 (lower xi.map.new
   :match ()
   :required-targets (vm-bytecode aot-c)
@@ -550,6 +550,12 @@
   :required-targets (vm-bytecode)
   :vm-bytecode (driver xi_emit_go :fresh-dst yes))
 
+(lower xi.gen.call
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_gen_call :fresh-dst yes)
+  :aot-c (driver xicgen_gen_call))
+
 (lower xi.await
   :match ()
   :required-targets (vm-bytecode)
@@ -606,6 +612,11 @@
   :required-targets (vm-bytecode)
   :vm-bytecode (driver xi_emit_yield))
 
+(lower xi.gen.yield
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_gen_yield))
+
 (lower xi.coro.op
   :match ()
   :required-targets (vm-bytecode)
@@ -621,6 +632,18 @@
   :required-targets (vm-bytecode aot-c-stmt)
   :vm-bytecode (driver xi_emit_defer)
   :aot-c-stmt (driver xicgen_stmt_defer))
+
+(lower xi.defer.mark
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_defer_mark)
+  :aot-c (driver xicgen_defer_mark))
+
+(lower xi.defer.run.to
+  :match ()
+  :required-targets (vm-bytecode aot-c-stmt)
+  :vm-bytecode (driver xi_emit_defer_run_to)
+  :aot-c-stmt (driver xicgen_stmt_defer_run_to))
 
 (lower xi.json.new
   :match ()
@@ -645,6 +668,12 @@
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_json_set_f)
   :aot-c (driver xicgen_json_set_f))
+
+(lower xi.json.merge
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_json_merge)
+  :aot-c (driver xicgen_json_merge))
 
 (lower xi.json.decode
   :match ()

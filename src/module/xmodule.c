@@ -624,24 +624,14 @@ ModuleType xr_module_detect_type(const char *path) {
 **
 ** After Native module is loaded, find and execute stdlib/<name>/<name>.xr script extension.
 ** Exports in the script will be added to the module's export table, can override C module exports.
+** The native module is already registered as "loading"; importing it from the extension is a
+** circular dependency and fails instead of exposing a partially initialized module.
 */
 static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const char *module_name) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     if (!registry) {
         XR_DBG_MODULE("load_script_extension: no registry");
         return true;
-    }
-
-    /*
-     * Temporarily register module to cache, so import <module_name> in extension script
-     * can get the module being loaded (containing C layer exports).
-     * On OOM the extension could re-enter the loader and recurse, so skip
-     * the extension layer entirely (C exports remain usable).
-     */
-    if (!xr_hashmap_set(registry->loaded_modules, module_name, module)) {
-        xr_log_warning("module", "out of memory caching module '%s'; skipping script extension",
-                       module_name);
-        return false;
     }
 
     // Set current module context (export will be added to this module)
@@ -777,20 +767,24 @@ static XrModule *load_native_module(XrVMRuntime *isolate, const char *module_nam
         return NULL;
     }
 
-    // 2. Add to cache BEFORE loading script extension
-    //    This prevents circular dependency when extension imports itself (e.g., "import ws as
-    //    _native"). An uncached module would break module identity (later
-    //    imports would re-run the loader), so treat OOM here as load failure.
+    // 2. Add to cache BEFORE loading script extension as an in-progress marker.
+    //    Recursive imports hit module->loading and fail with E0504 instead of
+    //    observing a partially initialized C layer.
     module->loading = true;
     if (!xr_hashmap_set(registry->loaded_modules, module_name, module)) {
         xr_log_warning("module", "out of memory caching native module '%s'", module_name);
+        module->loading = false;
+        xr_module_free(module);
         return NULL;
     }
 
     // 3. Load xray script extension layer (optional)
     if (!load_script_extension(isolate, module, module_name)) {
         xr_log_warning("module", "failed to load extension for '%s'", module_name);
-        // Extension loading failure doesn't affect C module, continue
+        xr_hashmap_delete(registry->loaded_modules, module_name);
+        module->loading = false;
+        xr_module_free(module);
+        return NULL;
     }
 
     // Build sparse index and mark as loaded
@@ -817,8 +811,6 @@ static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, cons
     if (!isolate || !module || !path) {
         return NULL;
     }
-
-    const char *module_name = module->name;
 
     // 1. Read file contents
     char *source = xr_file_read_all(path, "r", NULL);
@@ -1062,16 +1054,9 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
     // 1. Check cache (by module name or absolute path)
     XrModule *module = (XrModule *) xr_hashmap_get(registry->loaded_modules, module_name);
     if (module) {
-        // For native modules with script extension: allow "import X as _native" pattern
-        // The C layer is already loaded and exports are available
-        bool is_native_module =
-            (module->module_type == MODULE_TYPE_NATIVE || module->module_type == MODULE_TYPE_MIXED);
-        if (module->loading && is_native_module) {
-            // Native module loading extension - return C layer exports
-            return xr_value_from_module(module);
-        }
         if (module->loading) {
-            xr_log_warning("module", "circular dependency detected: '%s'", module_name);
+            xr_log_warning("module", "E0504: circular dependency: %s -> %s", module_name,
+                           module_name);
             return xr_null();
         }
         return xr_value_from_module(module);
@@ -1126,7 +1111,7 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
     if (module) {
         xr_free(path);
         if (module->loading) {
-            xr_log_warning("module", "circular dependency detected: '%s'", module_name);
+            xr_log_warning("module", "E0504: circular dependency: %s", module_name);
             return xr_null();
         }
         return xr_value_from_module(module);
@@ -1140,8 +1125,8 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
          * Use absolute path as cache key
          * Note: hashmap doesn't copy key, so path ownership transfers to hashmap
          * Don't free path, it will be freed with hashmap when module system is destroyed.
-         * The cache entry is the circular-import breaker: without it a
-         * self-import would recurse forever, so OOM fails the import.
+         * The cache entry is an in-progress marker: recursive imports fail
+         * with E0504 instead of observing a partially initialized module.
          */
         if (!xr_hashmap_set(registry->loaded_modules, path, module)) {
             xr_log_warning("module", "out of memory caching module '%s'", module_name);

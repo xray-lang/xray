@@ -45,6 +45,7 @@ typedef enum {
     XR_ITERATOR_JSON = 2,
     XR_ITERATOR_ARRAY = 3,
     XR_ITERATOR_STRING = 4,
+    XR_ITERATOR_GENERATOR = 5,
 } XrIteratorType;
 
 /* Yield mode. PAIRS is used by `for (k, v in coll)` (entriesIterator);
@@ -86,11 +87,12 @@ typedef struct XrIterator {
         struct XrInstance *json;  // Json iterator (XrJson is alias for XrInstance)
         struct XrArray *array;    // Array iterator
         struct XrString *string;  // String iterator
+        struct XrCoroutine *gen;  // Generator: owned, pull-driven producer coroutine
     } source;                     // source object (union, selected by type)
-    uint32_t scan_index;          // internal scan position
-    uint32_t total_count;         // total field count (Json fast mode only)
-    struct XrCoroutine *coro;     // coroutine (for creating temp arrays)
-    void *context;                // extra context (Json: XrSymbolTable*)
+    uint32_t scan_index;       // internal scan position; generator phase (0=idle,1=buffered,2=done)
+    uint32_t total_count;      // total field count (Json fast mode only)
+    struct XrCoroutine *coro;  // coroutine (for creating temp arrays)
+    void *context;             // extra context (Json: XrSymbolTable*)
 } XrIterator;
 
 /* ========== Iterator API ========== */
@@ -122,6 +124,13 @@ XR_FUNC XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct 
 // `isolate` is needed so we can intern the per-rune single-character strings.
 XR_FUNC XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrString *s,
                                                 struct XrVMRuntime *isolate);
+
+// Create iterator over a generator coroutine. `owner` is the consuming
+// coroutine (heap for the iterator allocation and yielded-value promotion);
+// `gen` is the generator producer coroutine (created but not scheduled), owned
+// by the iterator and destroyed when the iterator is reclaimed.
+XR_FUNC XrIterator *xr_iterator_new_from_generator(struct XrCoroutine *owner,
+                                                   struct XrCoroutine *gen);
 
 // Check if more elements available
 XR_FUNC bool xr_iterator_has_next(XrIterator *iter);
