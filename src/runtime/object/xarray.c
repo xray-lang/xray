@@ -502,35 +502,49 @@ bool xr_array_reserve(XrArray *arr, int32_t capacity) {
     return arr->capacity >= capacity;
 }
 
-bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill) {
-    if (!arr || length < 0 || xr_array_is_slice(arr))
+bool xr_array_resize(XrArray *arr, int64_t length, XrValue fill) {
+    if (!arr)
         return false;
+    /* Plan through the runtime-neutral core so the VM and the AOT
+     * (src/aot/xrt_array_bytes.inc.c) agree exactly: negative lengths clamp to
+     * 0, slices (borrowed storage) keep their length, and only > INT32_MAX is
+     * rejected as XR_ARRAY_CORE_RESIZE_INVALID. */
+    bool can_resize = !xr_array_is_slice(arr);
+    XrArrayCoreResizePlan plan =
+        xr_array_core_resize_plan(arr->length, arr->capacity, length, can_resize);
+    if (plan.kind == XR_ARRAY_CORE_RESIZE_INVALID)
+        return false;
+    if (plan.kind == XR_ARRAY_CORE_RESIZE_KEEP)
+        return true;
+
     int32_t old_length = arr->length;
-    if (length < old_length) {
+    int32_t new_length = (int32_t) plan.length;
+
+    if (plan.kind == XR_ARRAY_CORE_RESIZE_SHRINK) {
         if (arr->elem_type == XR_ELEM_ANY) {
             XrValue *data = (XrValue *) arr->data;
             XrCoroHeap *heap = xr_current_coro_heap();
-            for (int32_t i = length; i < old_length; i++) {
+            for (int32_t i = new_length; i < old_length; i++) {
                 xr_rc_release_value(heap, data[i]);
                 data[i] = xr_null();
             }
         }
-        arr->length = length;
+        arr->length = new_length;
         return true;
     }
-    if (length == old_length)
-        return true;
 
-    xr_array_ensure_capacity(arr, length);
-    if (arr->capacity < length || !arr->data)
-        return false;
-
-    int32_t added = length - old_length;
+    /* XR_ARRAY_CORE_RESIZE_GROW */
+    if (plan.reserve_capacity > arr->capacity) {
+        xr_array_ensure_capacity(arr, (int) plan.reserve_capacity);
+        if (arr->capacity < new_length || !arr->data)
+            return false;
+    }
+    int32_t added = new_length - old_length;
     if (arr->elem_type == XR_ELEM_ANY)
         xr_array_retain_extra_fill_refs(fill, added);
-    for (int32_t i = old_length; i < length; i++)
+    for (int32_t i = old_length; i < new_length; i++)
         xr_array_set_element(arr, i, fill);
-    arr->length = length;
+    arr->length = new_length;
     if (XR_ARRAY_MAY_CONTAIN_REFS(arr)) {
         XR_ARRAY_MARK_REFS(arr, fill);
     }

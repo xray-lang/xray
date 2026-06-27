@@ -956,6 +956,10 @@ XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, 
     XaScope *scope = ctx->analyzer->current_scope;
     if (!scope)
         return;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
+    if (links && !links->file_path)
+        links->file_path = ctx->file_path;
+
     XaSymbol *existing = symbol->name ? xa_scope_lookup_local(scope, symbol->name) : NULL;
     if (existing) {
         bool same_source_symbol = existing->kind == symbol->kind &&
@@ -1101,18 +1105,6 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
     if (import->member_count == 0) {
         const char *var_name = import->alias ? import->alias : import->module_name;
 
-        /* In graph-driven multi-file mode the analyzer reuses a single
-         * global scope across all modules. The same `import time` (or any
-         * shared alias) appearing in two files would otherwise emit a
-         * spurious "Symbol redefined" diagnostic. Selective imports below
-         * already follow the same reuse pattern. */
-        XaScope *scope = ctx->analyzer->current_scope;
-        XaSymbol *existing = scope ? xa_scope_lookup_local(scope, var_name) : NULL;
-        if (existing) {
-            import->symbol_id = existing->id;
-            return;
-        }
-
         XaSymbol *sym = xa_symbol_new(var_name, XA_SYM_MODULE);
         if (sym) {
             sym->location.line = node->line;
@@ -1135,16 +1127,6 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
         for (int i = 0; i < import->member_count; i++) {
             ImportMember *member = &import->members[i];
             const char *local_name = member->alias ? member->alias : member->name;
-
-            /* In graph-driven multi-file mode, the symbol may already exist
-             * in scope from analyzing the dependency module. Reuse it. */
-            XaScope *scope = ctx->analyzer->current_scope;
-            XaSymbol *existing =
-                (graph_exports && scope) ? xa_scope_lookup_local(scope, local_name) : NULL;
-            if (existing) {
-                member->symbol_id = existing->id;
-                continue;
-            }
 
             // Register each imported member as a variable
             XaSymbol *sym = xa_symbol_new(local_name, XA_SYM_IMPORT);

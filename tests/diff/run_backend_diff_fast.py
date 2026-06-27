@@ -219,6 +219,20 @@ def read_args(path: Path) -> list[str]:
     return first.split()
 
 
+def read_stdin(path: Path) -> bytes:
+    """Bytes fed to both VM and AOT stdin (matches run_backend_diff.sh's
+    <case>.stdin sidecar). Absent sidecar means an empty, immediately-closed
+    stdin so stdin-reading cases get EOF instead of inheriting the harness's
+    stdin (which would hang the gate)."""
+    sidecar = path.with_suffix(".stdin")
+    if not sidecar.is_file():
+        return b""
+    try:
+        return sidecar.read_bytes()
+    except OSError:
+        return b""
+
+
 def head_text(data: bytes, lines: int = 3) -> str:
     text = data.decode("utf-8", "replace")
     return "|".join(text.splitlines()[:lines])
@@ -283,7 +297,9 @@ def build_aot_binary(config: RunnerConfig, case: Path, rel: str, case_key: str) 
         ]
         env = os.environ.copy()
         env.setdefault("XRAY_AOT_FAST_TEST_BUILD", "1")
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+        proc = subprocess.run(
+            cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env
+        )
         if proc.returncode != 0:
             try:
                 tmp.unlink()
@@ -296,12 +312,14 @@ def build_aot_binary(config: RunnerConfig, case: Path, rel: str, case_key: str) 
         unlock_dir(lock)
 
 
-def run_backend(config: RunnerConfig, kind: str, case: Path, args: list[str]) -> BackendResult:
+def run_backend(
+    config: RunnerConfig, kind: str, case: Path, args: list[str], stdin_bytes: bytes
+) -> BackendResult:
     if kind == "vm":
         cmd = [str(config.xray), "run", str(case)]
         if args:
             cmd.extend(["--", *args])
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.run(cmd, input=stdin_bytes, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return BackendResult(proc.returncode, proc.stdout, proc.stderr)
 
     if kind == "aot":
@@ -310,7 +328,9 @@ def run_backend(config: RunnerConfig, kind: str, case: Path, args: list[str]) ->
         binary, buildlog = build_aot_binary(config, case, rel, key)
         if binary is None:
             return BackendResult(200, b"BUILDFAIL\n", b"", buildlog)
-        proc = subprocess.run([str(binary), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.run(
+            [str(binary), *args], input=stdin_bytes, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
         return BackendResult(proc.returncode, proc.stdout, proc.stderr, buildlog)
 
     return BackendResult(201, b"BADBACKEND\n", f"unknown backend: {kind}".encode())
@@ -337,9 +357,10 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
         return CaseResult(order, "skip", prefix + f"SKIP (need >=2 backends; case={case_backends_raw or 'all'} global={','.join(config.backends)})")
 
     args = read_args(case)
+    stdin_bytes = read_stdin(case)
     results: dict[str, BackendResult] = {}
     for backend in enabled:
-        results[backend] = run_backend(config, backend, case, args)
+        results[backend] = run_backend(config, backend, case, args, stdin_bytes)
 
     ref = enabled[0]
     ref_result = results[ref]

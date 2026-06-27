@@ -1,0 +1,13 @@
+// anchor: slice-array-expression-view
+let arr = [10, 20, 30, 40]
+let view = arr[1:3]
+arr[1] = 21
+print(view[0])
+view[1] = 31
+print(arr[2])
+
+let copy = copy(arr[1:3])
+arr[1] = 22
+print(copy[0])
+copy[1] = 32
+print(arr[2])

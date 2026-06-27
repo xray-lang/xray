@@ -114,7 +114,7 @@ XR_FUNC bool xr_array_is_empty(XrArray *arr);
 
 XR_FUNC void xr_array_fill(XrArray *arr, XrValue value, int start, int end);
 XR_FUNC bool xr_array_reserve(XrArray *arr, int32_t capacity);
-XR_FUNC bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill);
+XR_FUNC bool xr_array_resize(XrArray *arr, int64_t length, XrValue fill);
 
 /* ====== Utility Methods ====== */
 

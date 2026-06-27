@@ -25,6 +25,7 @@
 #include <string.h>
 #include <limits.h>
 #include "../../src/os/os_fs.h"
+#include "../../src/shared/xr_os_core.h"
 
 #include <signal.h>
 #include <time.h>
@@ -78,6 +79,19 @@ extern XrValue xr_value_from_array(XrArray *arr);
 #define os_setenv_impl(name, value) setenv(name, value, 1)
 #define os_unsetenv_impl(name) unsetenv(name)
 #define os_getpid_impl() getpid()
+#endif
+
+static const char *os_core_getenv(void *ctx, const char *name) {
+    (void) ctx;
+    return getenv(name);
+}
+
+#ifndef XR_OS_WINDOWS
+static const char *os_core_system_homedir(void *ctx) {
+    (void) ctx;
+    struct passwd *pw = getpwuid(getuid());
+    return pw ? pw->pw_dir : NULL;
+}
 #endif
 
 /* ========== Environment Variables ========== */
@@ -249,22 +263,7 @@ static XrValue os_hostname(XrVMRuntime *X, XrValue *args, int argc) {
 static XrValue os_tmpdir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-
-    // Try to get from environment variables
-    const char *tmpdir = getenv("TMPDIR");
-    if (!tmpdir)
-        tmpdir = getenv("TMP");
-    if (!tmpdir)
-        tmpdir = getenv("TEMP");
-    if (!tmpdir) {
-#ifdef XR_OS_WINDOWS
-        tmpdir = "C:\\Windows\\Temp";
-#else
-        tmpdir = "/tmp";
-#endif
-    }
-
-    return xrs_string_value_c(X, tmpdir);
+    return xrs_string_value_c(X, xr_os_core_tmpdir(os_core_getenv, NULL));
 }
 
 /* ========== User Information (P1) ========== */
@@ -292,22 +291,12 @@ static XrValue os_username(XrVMRuntime *X, XrValue *args, int argc) {
 static XrValue os_homedir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-
-    const char *home = getenv("HOME");
 #ifdef XR_OS_WINDOWS
-    if (!home)
-        home = getenv("USERPROFILE");
-    if (home)
-        return xrs_string_value_c(X, home);
-    return xr_null();
+    const char *home = xr_os_core_homedir(os_core_getenv, NULL, NULL, NULL);
 #else
-    if (home)
-        return xrs_string_value_c(X, home);
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw)
-        return xr_null();
-    return xrs_string_value_c(X, pw->pw_dir);
+    const char *home = xr_os_core_homedir(os_core_getenv, NULL, os_core_system_homedir, NULL);
 #endif
+    return home ? xrs_string_value_c(X, home) : xr_null();
 }
 
 // uid() - Get user ID

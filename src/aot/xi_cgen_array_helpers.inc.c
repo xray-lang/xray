@@ -580,7 +580,7 @@ static bool cg_array_value_mutates_origin_directly(const XiValue *v, const XiVal
         cg_array_single_origin(v->args[0], 0) == origin) {
         const char *method = (const char *) v->aux;
         if (method && (strcmp(method, "map") == 0 || strcmp(method, "filter") == 0 ||
-                       strcmp(method, "reduce") == 0 || strcmp(method, "slice") == 0))
+                       strcmp(method, "reduce") == 0))
             return false;
         if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM))
             return true;
@@ -1638,8 +1638,8 @@ static bool cg_array_class_field_value_is_elided(XiCgenCtx *ctx, const XiFunc *f
                         const char *method = (const char *) v->aux;
                         if (ai == 0 && method &&
                             (strcmp(method, "length") == 0 || strcmp(method, "push") == 0 ||
-                             strcmp(method, "slice") == 0 || strcmp(method, "map") == 0 ||
-                             strcmp(method, "filter") == 0 || strcmp(method, "reduce") == 0))
+                             strcmp(method, "map") == 0 || strcmp(method, "filter") == 0 ||
+                             strcmp(method, "reduce") == 0))
                             continue;
                         return false;
                     }

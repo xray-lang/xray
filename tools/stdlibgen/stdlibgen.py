@@ -209,36 +209,48 @@ def parse_scalar(raw: str):
 
 
 HANDLE_FIELD_RE = re.compile(
-    r"(const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*"
-    r"([A-Za-z_][A-Za-z0-9_]*(?:<[^,{}]+>)?\??)"
+    r"^(const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)$"
 )
+
+
+def split_top_level_csv(raw: str) -> list[str]:
+    parts: list[str] = []
+    start = 0
+    depth = 0
+    for i, ch in enumerate(raw):
+        if ch in "<([":
+            depth += 1
+        elif ch in ">)]":
+            depth = max(depth - 1, 0)
+        elif ch == "," and depth == 0:
+            part = raw[start:i].strip()
+            if part:
+                parts.append(part)
+            start = i + 1
+    tail = raw[start:].strip()
+    if tail:
+        parts.append(tail)
+    return parts
 
 
 def parse_handle_fields(raw: str, context: str) -> tuple[StdlibHandleFieldEntry, ...]:
     fields: list[StdlibHandleFieldEntry] = []
-    covered: list[tuple[int, int]] = []
-    for match in HANDLE_FIELD_RE.finditer(raw):
+    for fragment in split_top_level_csv(raw):
+        match = HANDLE_FIELD_RE.fullmatch(fragment)
+        if not match:
+            raise SystemExit(f"{context}: malformed handle field fragment: {fragment!r}")
+        type_str = match.group(3).strip()
+        if not type_str:
+            raise SystemExit(f"{context}: handle field {match.group(2)!r} requires a type")
         fields.append(
             StdlibHandleFieldEntry(
                 name=match.group(2),
-                type=match.group(3),
+                type=type_str,
                 is_const=match.group(1) is not None,
             )
         )
-        covered.append(match.span())
     if not fields:
         raise SystemExit(f"{context}: handle requires at least one field")
-
-    # Validate that the regex did not silently skip malformed fragments.
-    cursor = 0
-    for start, end in covered:
-        skipped = raw[cursor:start].strip()
-        if skipped and skipped != ",":
-            raise SystemExit(f"{context}: malformed handle field fragment: {skipped!r}")
-        cursor = end
-    tail = raw[cursor:].strip()
-    if tail and tail != ",":
-        raise SystemExit(f"{context}: malformed handle field fragment: {tail!r}")
     return tuple(fields)
 
 

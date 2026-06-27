@@ -320,6 +320,10 @@ XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_execute_module: NULL isolate");
     XR_DCHECK(proto != NULL, "vm_execute_module: NULL proto");
 
+    if (!xr_vm_bind_proto_shared_slots(isolate, proto)) {
+        return XR_VM_RUNTIME_ERROR;
+    }
+
     // Single authoritative ctx resolver.
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
 

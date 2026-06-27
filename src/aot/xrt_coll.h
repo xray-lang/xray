@@ -44,9 +44,9 @@
  * views alias a sub-range of another array's storage at an arbitrary element
  * offset — no alignment promise.
  *
- * `source` and `contains_refs`/`elem_tid` are part of the shared ABI; the AOT
- * runtime keeps `source` NULL (slices borrow via arena lifetime) and does not
- * consult the GC-tracking fields. */
+ * `source` and `contains_refs`/`elem_tid` are part of the shared ABI; AOT slice
+ * views retain `source` when they borrow another array's element storage, while
+ * the GC-tracking fields remain VM-owned metadata. */
 typedef struct {
     XrObjHeader hdr; /* embedded-at-0 header: same placement as the VM XrArray so
                       * the two layouts line up (C0 object-header unification) */
@@ -280,8 +280,7 @@ static inline void xrt_array_push(XrValue arr, XrValue val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     xrt_array_check_store_or_abort(a, val, "xrt_array_push");
     if (XR_UNLIKELY(a->data_storage == XR_ARRAY_DATA_BORROWED)) {
-        fprintf(stderr, "xrt_array_push: cannot push to array slice\n");
-        abort();
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
     }
     if (XR_UNLIKELY(a->length >= a->capacity))
         xrt_array_data_grow(a, a->capacity == 0 ? 4 : a->capacity * 2);
@@ -300,8 +299,7 @@ static inline void xrt_array_extend(XrValue dst_val, XrValue src_val) {
     if (n <= 0)
         return;
     if (XR_UNLIKELY(dst->data_storage == XR_ARRAY_DATA_BORROWED)) {
-        fprintf(stderr, "xrt_array_extend: cannot extend array slice\n");
-        abort();
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
     }
     if (dst->elem_type == src->elem_type && dst->elem_type != XR_ELEM_ANY) {
         /* Packed primitive storage: bulk memcpy, no refcount work. */
@@ -345,8 +343,8 @@ static inline void xrt_array_normalize_slice(int64_t len, int64_t *start, int64_
         *start = *end;
 }
 
-/* `.slice()` / `[a:b]` return an independent copy (value semantics), matching the VM.
- * A borrowed view would alias the source on write; copying keeps slices safe. */
+/* Array expression slices (`a[b:c]`) are zero-copy views. Use copy(a[b:c])
+ * when an independent array is required. */
 static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t end) {
     if (!XR_IS_ARRAY(arr) || !arr.ptr)
         return XR_NULL_VAL;
@@ -356,20 +354,28 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
     if (count < 0)
         count = 0;
 
-    xrt_array_t *slice = xrt_array_new_typed_uninit_ptr(count, src->elem_type);
+    xrt_array_t *slice = (xrt_array_t *) XRT_MALLOC(sizeof(xrt_array_t));
+    if (XR_UNLIKELY(!slice)) {
+        fprintf(stderr, "xrt_array_slice_view: out of memory\n");
+        abort();
+    }
+    xrt_array_init_header(slice, count, src->elem_type, src->elem_size);
+    xrt_coll_make_deterministic(&slice->hdr);
+    slice->data = (count > 0 && src->data)
+                      ? (void *) ((uint8_t *) src->data + (size_t) start * (size_t) src->elem_size)
+                      : src->data;
     slice->length = count;
+    slice->capacity = count;
+    slice->data_storage = XR_ARRAY_DATA_BORROWED;
+    slice->source = src->source ? src->source : (void *) src;
+    if (slice->source)
+        xrt_retain(xr_mkptr(slice->source, XR_TAG_ARRAY));
+    slice->elem_type = src->elem_type;
+    slice->elem_size = src->elem_size;
     slice->elem_tid = src->elem_tid;
     slice->contains_refs = src->contains_refs;
     slice->adt_enum_name = src->adt_enum_name;
     slice->adt_member_name = src->adt_member_name;
-    if (count > 0)
-        memcpy(slice->data, (uint8_t *) src->data + (size_t) start * (size_t) src->elem_size,
-               (size_t) count * (size_t) src->elem_size);
-    if (src->contains_refs) {
-        XrValue *data = (XrValue *) slice->data;
-        for (int64_t i = 0; i < count; i++)
-            xrt_retain(data[i]);
-    }
     return xr_mkptr(slice, XR_TAG_ARRAY);
 }
 
@@ -1399,8 +1405,15 @@ static inline int xrt_set_is_typed(const xrt_set_t *s);
 static inline void xrt_array_destroy(xrt_array_t *a) {
     if (!a)
         return;
-    if (a->elem_type == XR_ELEM_ANY && a->data_storage != XR_ARRAY_DATA_BORROWED && a->data &&
-        a->length > 0) {
+    if (a->data_storage == XR_ARRAY_DATA_BORROWED) {
+        if (a->source) {
+            xrt_release(xr_mkptr(a->source, XR_TAG_ARRAY));
+            a->source = NULL;
+        }
+        XRT_FREE(a);
+        return;
+    }
+    if (a->elem_type == XR_ELEM_ANY && a->data && a->length > 0) {
         XrValue *items = (XrValue *) a->data;
         for (int64_t i = 0; i < a->length; i++)
             xrt_release(items[i]);
@@ -2255,8 +2268,15 @@ static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
         if (strcmp(name, "ordinal") == 0)
             return xrt_enum_value_ordinal(obj);
     }
-    if (XR_IS_MAP(obj))
+    if (XR_IS_MAP(obj)) {
+        /* An enum type lowers to a name->member map; its static `memberCount`
+         * is the number of members (the map length), matching the VM. Regular
+         * maps never reach here for `memberCount` (the type checker forbids the
+         * property), so this stays enum-only in practice. */
+        if (name && strcmp(name, "memberCount") == 0)
+            return XR_FROM_INT(xrt_map_len((xrt_map_t *) obj.ptr));
         return xrt_map_get_owned((xrt_map_t *) obj.ptr, xr_box_str(name));
+    }
     if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0)
         return xrt_json_get_name_owned(obj, name);
     return XR_NULL_VAL;

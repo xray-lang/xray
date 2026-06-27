@@ -11,7 +11,6 @@ class Array<T> {
     unshift(value: T)
     reserve(capacity: int) -> Array<T>
     resize(length: int, fill: T) -> Array<T>
-    slice(start?: int, end?: int) -> Array<T>
     splice(start: int, deleteCount?: int, ...items: T) -> Array<T>
     concat(...arrays: Array<T>) -> Array<T>
     indexOf(value: T) -> int

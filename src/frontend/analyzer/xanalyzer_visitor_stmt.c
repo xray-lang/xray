@@ -371,7 +371,10 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         if (links->declared_type && !XR_TYPE_IS_UNKNOWN(links->declared_type)) {
             ctx->expected_type = links->declared_type;
         }
+        uint32_t saved_initializing_symbol_id = ctx->initializing_symbol_id;
+        ctx->initializing_symbol_id = sym->id;
         XrType *init_type = xa_visit_infer_expr(ctx, var->initializer);
+        ctx->initializing_symbol_id = saved_initializing_symbol_id;
         ctx->expected_type = saved_expected;
 
         // Store inferred initializer type in the analyzer side table

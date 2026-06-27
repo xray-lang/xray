@@ -920,14 +920,10 @@ static bool sr_value_has_static_typed_array_storage_depth(const XiValue *value, 
         const char *name = (const char *) v->aux;
         if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "Bytes") == 0))
             return true;
-        if (name && strcmp(name, "slice") == 0 && v->nargs >= 1)
-            return sr_value_has_static_typed_array_storage_depth(v->args[0], depth + 1);
         return false;
     }
     if (v->op == XI_CALL_METHOD && v->nargs >= 1) {
         const char *method = (const char *) v->aux;
-        if (method && strcmp(method, "slice") == 0)
-            return sr_value_has_static_typed_array_storage_depth(v->args[0], depth + 1);
         if (method && strcmp(method, "filter") == 0)
             return sr_value_has_static_typed_array_storage_depth(v->args[0], depth + 1);
         if (method && strcmp(method, "map") == 0)

@@ -669,6 +669,28 @@ static const XiFunc *cg_lookup_class_ctor(XiCgenCtx *ctx, const char *class_name
 
 static const XiClassData *cg_class_native_data_by_name(const XiCgenCtx *ctx, const char *name);
 
+static bool cg_class_data_name_matches(const XiClassData *cd, const char *name) {
+    if (!cd || !name)
+        return false;
+    if (cd->class_name && strcmp(cd->class_name, name) == 0)
+        return true;
+    if (cd->display_name && strcmp(cd->display_name, name) == 0)
+        return true;
+    return cd->generic_origin_name && strcmp(cd->generic_origin_name, name) == 0;
+}
+
+static const XiFunc *cg_lookup_method_in_class_data(const XiClassData *cd, const XiFunc *owner,
+                                                    int method_idx) {
+    if (!cd || !owner || method_idx < 0 || !cd->child_idx)
+        return NULL;
+    if ((uint16_t) method_idx >= cd->ninst || (uint16_t) method_idx >= cd->nmethod)
+        return NULL;
+    uint16_t child_idx = cd->child_idx[method_idx];
+    if (child_idx >= owner->nchildren)
+        return NULL;
+    return owner->children[child_idx];
+}
+
 /* Lookup a class instance method by name and receiver class.
  * Builtin receivers must never fall through to a class method with the
  * same source-level name.
@@ -705,16 +727,26 @@ static const XiFunc *cg_lookup_method_by_index(XiCgenCtx *ctx, const char *class
         return NULL;
     for (uint16_t s = 0; ctx->module && s < ctx->module->nslots; s++) {
         const XiClassData *cd = ctx->module->slot_classes ? ctx->module->slot_classes[s] : NULL;
-        if (!cd || !cd->class_name || strcmp(cd->class_name, class_name) != 0)
+        if (!cg_class_data_name_matches(cd, class_name))
             continue;
-        if ((uint16_t) method_idx >= cd->ninst || !cd->child_idx)
-            return NULL;
-        uint16_t child_idx = cd->child_idx[method_idx];
-        if (child_idx >= ctx->module->init->nchildren)
+        const XiFunc *method = cg_lookup_method_in_class_data(cd, ctx->module->init, method_idx);
+        if (!method)
             return NULL;
         if (out_prefix)
             *out_prefix = NULL;
-        return ctx->module->init->children[child_idx];
+        return method;
+    }
+    for (int i = 0; i < ctx->nimports; i++) {
+        const CgImportEntry *imp = &ctx->imports[i];
+        if (!cg_class_data_name_matches(imp->target_class, class_name) || !imp->exporter_func)
+            continue;
+        const XiFunc *method =
+            cg_lookup_method_in_class_data(imp->target_class, imp->exporter_func, method_idx);
+        if (!method)
+            return NULL;
+        if (out_prefix)
+            *out_prefix = imp->target_mod_name;
+        return method;
     }
     return NULL;
 }

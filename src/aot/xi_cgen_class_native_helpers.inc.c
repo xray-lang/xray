@@ -1336,9 +1336,178 @@ static const XiClassData *cg_class_native_value_type_data(XiCgenCtx *ctx, const 
     return cd;
 }
 
+static const XiClassData *cg_class_data_for_type_name(XiCgenCtx *ctx, const XrType *type) {
+    const char *class_name = type ? xr_type_get_class_name((XrType *) (uintptr_t) type) : NULL;
+    return cg_class_native_data_by_name(ctx, class_name);
+}
+
 static bool cg_class_native_value_has_ptr_storage(XiCgenCtx *ctx, const XiValue *v) {
     return cg_class_native_value_type_data(ctx, v) &&
            cg_value_plan_storage_rep(ctx, v) == XR_REP_PTR;
+}
+
+static const XiClassData *cg_class_native_call_result_data(XiCgenCtx *ctx, const XiFunc *f,
+                                                           const XiValue *v) {
+    if (!ctx || !v || v->op != XI_CALL || v->nargs < 1)
+        return NULL;
+    CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, v->args[0]);
+    if (call.is_class_constructor && call.class_data && call.class_data->instance_layout)
+        return call.class_data;
+    if (!call.func)
+        return NULL;
+    return cg_class_native_data_for_abi_type(ctx, call.func->return_type);
+}
+
+static const XiClassData *
+cg_class_native_imported_class_callee_data(XiCgenCtx *ctx, const XiFunc *f, const XiValue *call) {
+    if (!ctx || !call || call->op != XI_CALL || call->nargs < 1)
+        return NULL;
+    const XiValue *callee = cg_unwrap_identity_value(call->args[0]);
+    const XiImportRef *ref = cg_value_import_ref(callee);
+    if (!ref && callee && callee->op == XI_GET_SHARED) {
+        ref = cg_shared_slot_import_ref(f, (int) callee->aux_int);
+        if (!ref && f && f->module && f->module->init != f)
+            ref = cg_shared_slot_import_ref(f->module->init, (int) callee->aux_int);
+        if (!ref && ctx->module && ctx->module->init)
+            ref = cg_shared_slot_import_ref(ctx->module->init, (int) callee->aux_int);
+    }
+    if (!ref || !ref->member_name)
+        return NULL;
+    for (int i = 0; i < ctx->nimports; i++) {
+        const CgImportEntry *imp = &ctx->imports[i];
+        if (!imp->target_class || !cg_import_entry_matches_ref(ctx, imp, ref, ref->member_name))
+            continue;
+        return imp->target_class;
+    }
+    return NULL;
+}
+
+static const XiClassData *cg_class_native_class_value_data(XiCgenCtx *ctx, const XiFunc *f,
+                                                           const XiValue *v) {
+    const XiClassData *typed = cg_class_data_for_type_name(ctx, v ? v->type : NULL);
+    if (typed)
+        return typed;
+    v = cg_unwrap_identity_value(v);
+    if (!v)
+        return NULL;
+    if (v->op == XI_IMPORT_REF) {
+        const XiImportRef *ref = (const XiImportRef *) v->aux;
+        if (!ref || !ref->member_name)
+            return NULL;
+        for (int i = 0; i < ctx->nimports; i++) {
+            const CgImportEntry *imp = &ctx->imports[i];
+            if (imp->target_class && cg_import_entry_matches_ref(ctx, imp, ref, ref->member_name))
+                return imp->target_class;
+        }
+        return NULL;
+    }
+    if (v->op != XI_GET_SHARED)
+        return NULL;
+    int slot = (int) v->aux_int;
+    if (slot >= 0 && slot < ctx->shared_cap && ctx->shared_class[slot])
+        return ctx->shared_class[slot];
+    const XiImportRef *ref = cg_shared_slot_import_ref(f, slot);
+    if (!ref && f && f->module && f->module->init != f)
+        ref = cg_shared_slot_import_ref(f->module->init, slot);
+    if (!ref && ctx->module && ctx->module->init)
+        ref = cg_shared_slot_import_ref(ctx->module->init, slot);
+    if (!ref || !ref->member_name)
+        return NULL;
+    for (int i = 0; i < ctx->nimports; i++) {
+        const CgImportEntry *imp = &ctx->imports[i];
+        if (imp->target_class && cg_import_entry_matches_ref(ctx, imp, ref, ref->member_name))
+            return imp->target_class;
+    }
+    return NULL;
+}
+
+static const XiClassData *cg_class_static_method_result_data(XiCgenCtx *ctx, const XiFunc *f,
+                                                             const XiValue *v) {
+    if (!ctx || !v || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux)
+        return NULL;
+    const XiClassData *cd = cg_class_native_class_value_data(ctx, f, v->args[0]);
+    if (!cd || !cd->methods || !cd->child_idx)
+        return NULL;
+    const char *method = (const char *) v->aux;
+    const XiModule *mod = cg_class_native_module_for_data(ctx, cd);
+    if (!mod || !mod->init)
+        return NULL;
+    for (uint16_t mi = 0; mi < cd->nmethod; mi++) {
+        const XiClassMethod *m = &cd->methods[mi];
+        if (!m->is_static || m->is_static_constructor || !m->name || strcmp(m->name, method) != 0)
+            continue;
+        uint16_t child_idx = cd->child_idx[mi];
+        if (child_idx >= mod->init->nchildren)
+            return NULL;
+        const XiFunc *target = mod->init->children[child_idx];
+        return cg_class_data_for_type_name(ctx, target ? target->return_type : NULL);
+    }
+    return NULL;
+}
+
+static bool cg_class_native_call_result_has_ptr_storage(XiCgenCtx *ctx, const XiFunc *f,
+                                                        const XiValue *v) {
+    const XiClassData *cd = cg_class_native_call_result_data(ctx, f, v);
+    if (!cd)
+        cd = cg_class_native_imported_class_callee_data(ctx, f, v);
+    return cd && cd->instance_layout && cg_value_plan_storage_rep(ctx, v) == XR_REP_PTR;
+}
+
+static const XiValue *cg_class_native_trace_ctor_origin(XiCgenCtx *ctx, const XiFunc *f,
+                                                        const XiValue *v, int depth);
+static const XiClassData *cg_class_native_ctor_call_data(XiCgenCtx *ctx, const XiFunc *f,
+                                                         const XiValue *call,
+                                                         const XiFunc **out_target,
+                                                         const char **out_prefix);
+
+typedef struct {
+    uint16_t set_count;
+    bool invalid;
+    const XiClassData *class_data;
+} CgSharedSlotClassInit;
+
+static void cg_class_native_scan_slot_class_init(XiCgenCtx *ctx, const XiFunc *f, int slot,
+                                                 CgSharedSlotClassInit *out) {
+    if (!ctx || !f || !out || out->invalid)
+        return;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_SET_SHARED || (int) v->aux_int != slot || v->nargs < 1)
+                continue;
+            out->set_count++;
+            if (out->set_count > 1) {
+                out->invalid = true;
+                return;
+            }
+            const XiValue *origin = cg_class_native_trace_ctor_origin(ctx, f, v->args[0], 0);
+            const XiClassData *cd = cg_class_native_ctor_call_data(ctx, f, origin, NULL, NULL);
+            if (!cd) {
+                cd = cg_class_native_imported_class_callee_data(ctx, f, v->args[0]);
+                if (cd)
+                    origin = v->args[0];
+            }
+            if (!origin || !cd) {
+                out->invalid = true;
+                return;
+            }
+            out->class_data = cd;
+        }
+    }
+    for (uint16_t ci = 0; ci < f->nchildren; ci++)
+        cg_class_native_scan_slot_class_init(ctx, f->children[ci], slot, out);
+}
+
+static const XiClassData *cg_class_native_shared_slot_init_data(XiCgenCtx *ctx, int slot) {
+    if (!ctx || !ctx->module || !ctx->module->init || slot < 0 || slot >= ctx->nshared)
+        return NULL;
+    CgSharedSlotClassInit init;
+    memset(&init, 0, sizeof(init));
+    cg_class_native_scan_slot_class_init(ctx, ctx->module->init, slot, &init);
+    return !init.invalid && init.set_count == 1 ? init.class_data : NULL;
 }
 
 static void emit_class_native_instance_guard(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
@@ -2153,6 +2322,8 @@ static const XiValue *cg_class_native_instance_origin(XiCgenCtx *ctx, const XiFu
         return v;
     if (cg_class_native_value_has_ptr_storage(ctx, v))
         return v;
+    if (cg_class_native_call_result_has_ptr_storage(ctx, f, v))
+        return v;
     if (cg_class_shared_native_slot_for_value(ctx, v, NULL))
         return v;
     if (cg_class_imported_shared_native_export_for_value(ctx, f, v, NULL))
@@ -2170,9 +2341,22 @@ static const XiClassData *cg_class_native_instance_data(XiCgenCtx *ctx, const Xi
     const XiClassData *typed_ptr = cg_class_native_value_type_data(ctx, v);
     if (typed_ptr && cg_value_plan_storage_rep(ctx, v) == XR_REP_PTR)
         return typed_ptr;
+    const XiClassData *call_ptr = cg_class_native_call_result_data(ctx, f, v);
+    if (!call_ptr)
+        call_ptr = cg_class_native_imported_class_callee_data(ctx, f, v);
+    if (!call_ptr)
+        call_ptr = cg_class_static_method_result_data(ctx, f, v);
+    if (call_ptr)
+        return call_ptr;
     int slot = -1;
     if (cg_class_shared_native_slot_for_value(ctx, v, &slot))
         return ctx->shared_native_instances[slot].class_data;
+    v = cg_unwrap_identity_value(v);
+    if (v && v->op == XI_GET_SHARED) {
+        const XiClassData *slot_init = cg_class_native_shared_slot_init_data(ctx, (int) v->aux_int);
+        if (slot_init)
+            return slot_init;
+    }
     const CgSharedNativeExport *exp = NULL;
     if (cg_class_imported_shared_native_export_for_value(ctx, f, v, &exp))
         return exp->class_data;
@@ -2202,6 +2386,15 @@ static void emit_class_native_instance_base_ref(XiCgenCtx *ctx, FILE *out, const
     const XiClassData *typed_ptr = cg_class_native_value_type_data(ctx, v);
     if (typed_ptr && cg_value_plan_storage_rep(ctx, v) == XR_REP_PTR) {
         emit_class_native_ptr_value(ctx, out, typed_ptr, NULL, v);
+        return;
+    }
+    const XiClassData *call_ptr = cg_class_native_call_result_data(ctx, f, v);
+    if (!call_ptr)
+        call_ptr = cg_class_native_imported_class_callee_data(ctx, f, v);
+    if (!call_ptr)
+        call_ptr = cg_class_static_method_result_data(ctx, f, v);
+    if (call_ptr && cg_value_plan_storage_rep(ctx, v) == XR_REP_PTR) {
+        emit_class_native_ptr_value(ctx, out, call_ptr, NULL, v);
         return;
     }
     int slot = -1;

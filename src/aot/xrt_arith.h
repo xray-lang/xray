@@ -12,10 +12,11 @@
 #define XRT_ARITH_H
 
 #include "xrt_value.h"
-#include "xrt_arc.h"        // xrt_str_concat used by xrt_add
-#include "xrt_exception.h"  // xrt_throw_exc for div/mod by zero
+#include "xrt_arc.h"  // xrt_str_concat used by xrt_add
 #include "xrt_range.h"
-#include "xrt_coll.h"
+#include "xrt_coll.h"  // forward-declares xrt_throw_exc (div/mod by zero); the
+                       // definition is provided by xrt_exception.h in the full
+                       // xrt.h build and by the host TU in standalone unit tests
 #include "../shared/xr_int_arith.h"
 
 /* =========================================================================

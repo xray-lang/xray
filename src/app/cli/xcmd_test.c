@@ -51,6 +51,7 @@
 #include <stdatomic.h>
 
 #define TEST_FILE_TIMEOUT_SEC 120
+#define TEST_WORKER_STACK_SIZE (8u * 1024u * 1024u)
 
 /* ========== Per-File Result (thread-safe, no shared state) ========== */
 
@@ -807,7 +808,7 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
 
         xr_thread_t *threads = xr_calloc(nworkers, sizeof(xr_thread_t));
         for (int i = 0; i < nworkers; i++)
-            xr_thread_create(&threads[i], test_worker_thread, &pctx);
+            xr_thread_create_ex(&threads[i], test_worker_thread, &pctx, TEST_WORKER_STACK_SIZE);
         for (int i = 0; i < nworkers; i++)
             xr_thread_join(threads[i], NULL);
         xr_free(threads);
@@ -823,12 +824,9 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
     /* Aggregate stats */
     int file_count = 0, total_passed = 0, total_failed = 0;
     int total_errors = 0, total_skipped = 0, total_timeout = 0;
-    int empty_file_count = 0;
     for (int i = 0; i < fl.count; i++) {
         if (results[i].test_count > 0 || results[i].has_error)
             file_count++;
-        else
-            empty_file_count++;
         total_passed += results[i].passed;
         total_failed += results[i].failed;
         total_errors += results[i].errors;

@@ -862,7 +862,7 @@ vmcase(OP_ARRAY_RESIZE) {
     }
     XrArray *_resize_arr = XR_TO_ARRAY(R(a));
     VM_ARRAY_CHECK_STORABLE(_resize_arr, R(c));
-    if (!xr_array_resize(_resize_arr, (int32_t) XR_TO_INT(R(b)), R(c))) {
+    if (!xr_array_resize(_resize_arr, XR_TO_INT(R(b)), R(c))) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array.resize failed");
     }
     vmbreak;

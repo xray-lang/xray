@@ -68,9 +68,9 @@ static bool xa_c_callback_arg_is_top_level_function(XaInferContext *ctx, AstNode
     if (!ctx || !ctx->analyzer || !arg_node || arg_node->type != AST_VARIABLE)
         return false;
     const char *name = arg_node->as.variable.name;
-    XaSymbol *sym = name ? xa_scope_lookup(ctx->analyzer->current_scope, name) : NULL;
-    if (!sym || sym->kind != XA_SYM_FUNCTION || sym->scope != ctx->analyzer->global_scope ||
-        sym->is_builtin)
+    XaSymbol *sym = name ? xa_lookup_visible_symbol(ctx, name) : NULL;
+    if (!sym || sym->kind != XA_SYM_FUNCTION || !sym->scope ||
+        sym->scope->kind != XA_SCOPE_GLOBAL || sym->is_builtin)
         return false;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     return !links || !links->is_extern;
@@ -187,7 +187,7 @@ static const char *xa_call_param_mode_label(uint8_t mode) {
 static XaSymbol *xa_call_variable_symbol(XaInferContext *ctx, AstNode *expr) {
     if (!ctx || !ctx->analyzer || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
         return NULL;
-    return xa_scope_lookup(ctx->analyzer->current_scope, expr->as.variable.name);
+    return xa_lookup_visible_symbol(ctx, expr->as.variable.name);
 }
 
 static XaSymbol *xa_call_root_variable_symbol(XaInferContext *ctx, AstNode *expr) {
@@ -310,6 +310,18 @@ static bool xa_is_channel_send_boundary_method(XrType *receiver_type, const char
             strcmp(method_name, "sendTimeout") == 0);
 }
 
+static XaSymbol *xa_lookup_visible_class_symbol(XaInferContext *ctx, const char *class_name) {
+    if (!ctx || !ctx->analyzer || !class_name)
+        return NULL;
+
+    XaSymbol *sym = xa_lookup_visible_symbol(ctx, class_name);
+    if (sym && sym->kind == XA_SYM_CLASS)
+        return sym;
+
+    sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
+    return sym && sym->kind == XA_SYM_CLASS ? sym : NULL;
+}
+
 static void xa_check_channel_send_transfer_arg(XaInferContext *ctx, AstNode *call_node,
                                                XrType *receiver_type, const char *method_name,
                                                AstNode *arg_node, XrType *arg_type, int slot) {
@@ -325,7 +337,7 @@ static XaSymbolLinks *xa_method_symbol_links_for_call(XaInferContext *ctx, XrTyp
     const char *class_name = xr_type_get_class_name(receiver_type);
     if (!class_name)
         return NULL;
-    XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
+    XaSymbol *class_sym = xa_lookup_visible_class_symbol(ctx, class_name);
     XaSymbolLinks *class_links = class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
     XaSymbol *method_sym = (class_links && class_links->class_info)
                                ? xa_class_info_lookup_member(class_links->class_info, method_name)
@@ -398,7 +410,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     if (call->callee && call->callee->type == AST_VARIABLE) {
         const char *fn_name = call->callee->as.variable.name;
-        fn_sym = xa_scope_lookup(ctx->analyzer->current_scope, fn_name);
+        fn_sym = xa_lookup_visible_symbol(ctx, fn_name);
         if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION) {
             fn_links = xa_analyzer_get_links(ctx->analyzer, fn_sym);
 
@@ -478,8 +490,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // For each parameter typed as a bare T, infer T = type(arg) and
         // verify constraints on T.  This mirrors the explicit branch above
         // but does its own simple inference per type parameter.
-        XaSymbol *fn_sym =
-            xa_scope_lookup(ctx->analyzer->current_scope, call->callee->as.variable.name);
+        XaSymbol *fn_sym = xa_lookup_visible_symbol(ctx, call->callee->as.variable.name);
         if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION) {
             XaSymbolLinks *fl = xa_analyzer_get_links(ctx->analyzer, fn_sym);
             int tp_count = xa_symbol_links_get_type_param_count(fl);
@@ -617,7 +628,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             const char *recv_class_name =
                 callee_obj_type ? xr_type_get_class_name(callee_obj_type) : NULL;
             if (recv_class_name) {
-                XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->global_scope, recv_class_name);
+                XaSymbol *class_sym = xa_lookup_visible_class_symbol(ctx, recv_class_name);
                 XaSymbolLinks *class_links =
                     class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
                 XaSymbol *method_sym =
@@ -709,7 +720,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             // Construction `T(args)`: resolve the class in any visible scope
             // (global, enclosing function for nested classes). new-expr used to
             // be the only path that handled non-global classes; unify here.
-            XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
+            XaSymbol *sym = xa_lookup_visible_symbol(ctx, name);
             if (!sym || sym->kind != XA_SYM_CLASS)
                 sym = xa_scope_lookup(ctx->analyzer->global_scope, name);
             if (sym && sym->kind == XA_SYM_CLASS) {
@@ -756,7 +767,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // (covers function-local / nested class declarations) then global.
         if (call->callee && call->callee->type == AST_VARIABLE) {
             const char *class_name = call->callee->as.variable.name;
-            XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->current_scope, class_name);
+            XaSymbol *class_sym = xa_lookup_visible_symbol(ctx, class_name);
             if (!class_sym || class_sym->kind != XA_SYM_CLASS)
                 class_sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
             if (class_sym && class_sym->kind == XA_SYM_CLASS) {
@@ -1239,7 +1250,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // Look up method in class
         if (XR_TYPE_IS_INSTANCE(callee_obj_type) && callee_obj_type->instance.class_name) {
             XaSymbol *class_sym =
-                xa_scope_lookup(ctx->analyzer->global_scope, callee_obj_type->instance.class_name);
+                xa_lookup_visible_class_symbol(ctx, callee_obj_type->instance.class_name);
             if (class_sym && class_sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
                 if (class_links && class_links->class_info) {

@@ -19,11 +19,15 @@ fn startEchoServer(port: int) {
     ws.serve(port, fn(conn) {
         while (ws.isOpen(conn)) {
             let msg = ws.recv(conn, null)
-            if (msg == null || msg.error) {
+            if (msg == null) {
                 break
             }
-            if (msg.data) {
-                ws.send(conn, msg.data, null)
+            if (msg!.error != null) {
+                break
+            }
+            let data = msg!.data
+            if (data != null) {
+                ws.send(conn, data, msg!.binary)
             }
         }
     })

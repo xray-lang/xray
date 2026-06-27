@@ -506,7 +506,7 @@ static void emit_param(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 }
 
 static XrStructLayout *emit_value_struct_layout(const XrType *type) {
-    if (!type || !type->is_value_type)
+    if (!type)
         return NULL;
     if (type->kind != XR_KIND_INSTANCE && type->kind != XR_KIND_CLASS)
         return NULL;
@@ -532,20 +532,16 @@ static void emit_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     XrType *src_type = v->type ? v->type : v->args[0]->type;
-    if (src_type && src_type->is_value_type) {
-        XrStructLayout *layout = emit_value_struct_layout(src_type);
-        XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
-        if (layout && origin && origin->op == XI_STRUCT_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin)) {
-            uint16_t slot = 0;
-            if (!xi_emit_alloc_struct_area_slot(ctx, layout, &slot))
-                return;
-            emit_inst(ctx, CREATE_ABC(OP_STRUCT_COPY, dst, src, slot));
+    XrStructLayout *layout = emit_value_struct_layout(src_type);
+    XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
+    if (layout && origin && origin->op == XI_STRUCT_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin)) {
+        uint16_t slot = 0;
+        if (!xi_emit_alloc_struct_area_slot(ctx, layout, &slot))
             return;
-        }
-        emit_inst(ctx, CREATE_ABC(OP_COPY, dst, src, 0));
-    } else if (dst != src) {
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
+        emit_inst(ctx, CREATE_ABC(OP_STRUCT_COPY, dst, src, slot));
+        return;
     }
+    emit_inst(ctx, CREATE_ABC(OP_COPY, dst, src, 0));
 }
 
 /* Conditional select: dst = cond ? true_val : false_val.
