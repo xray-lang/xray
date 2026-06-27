@@ -384,14 +384,14 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "publish", "(topic: string, value: Json): bool", "Publish to topic", "cluster_publish_fn", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"cluster", "subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", "cluster_subscribe_fn", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"ws", "connect", "(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", "ws_connect_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
-    {"ws", "send", "(conn: WsConn, data: string, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"ws", "send", "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 3, false},
     {"ws", "recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", "ws_recv_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"ws", "close", "(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", "ws_close", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
     {"ws", "ping", "(conn: WsConn): bool", "Send a ping frame", "ws_ping", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"ws", "state", "(conn: WsConn): string", "Get connection state", "ws_state", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"ws", "isOpen", "(conn: WsConn): bool", "Check if connection is open", "ws_is_open", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"ws", "recvData", "(conn: WsConn, timeout?: int?): string?", "High-performance recv returning data string directly (no Json wrapper)", "ws_recvdata", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
-    {"ws", "sendData", "(conn: WsConn, data: string, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"ws", "sendData", "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 3, false},
     {"ws", "serve", "(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", "ws_serve_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"ws", "echoServe", "(port: int): bool", "Pure C echo server with zero VM allocation overhead per message", "ws_echo_serve_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"ws", "stopServer", "(): ()", "Stop the WebSocket server", "ws_stop_server", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
@@ -559,9 +559,9 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsConn[] = {
 };
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsMessage[] = {
-    {"ws", "WsMessage", "data", "string", true},
+    {"ws", "WsMessage", "data", "string | Array<uint8> | null", true},
     {"ws", "WsMessage", "binary", "bool", true},
-    {"ws", "WsMessage", "error", "string", true},
+    {"ws", "WsMessage", "error", "string?", true},
 };
 
 static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {

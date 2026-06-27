@@ -313,6 +313,27 @@ XR_FUNC void xa_check_logical_operand_type(XaInferContext *ctx, AstNode *node, X
 XrType *xa_visit_nullish_coalesce(XaInferContext *ctx, AstNode *node);
 XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node);
 
+XaSymbol *xa_lookup_visible_symbol(XaInferContext *ctx, const char *name) {
+    if (!ctx || !ctx->analyzer || !name)
+        return NULL;
+
+    XaScope *scope = ctx->analyzer->current_scope;
+    while (scope) {
+        XaSymbol *sym = xa_scope_lookup_local(scope, name);
+        if (sym && sym->id != ctx->initializing_symbol_id)
+            return sym;
+        scope = scope->parent;
+    }
+
+    XaScope *global = ctx->analyzer->global_scope;
+    if (global) {
+        XaSymbol *sym = xa_scope_lookup_local(global, name);
+        if (sym && sym->id != ctx->initializing_symbol_id)
+            return sym;
+    }
+    return NULL;
+}
+
 // Check if an AST node is a typeof() call, return the argument variable name
 const char *get_typeof_arg_name(AstNode *node) {
     if (!node || node->type != AST_CALL_EXPR)
@@ -334,12 +355,7 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
 
     const char *name = node->as.variable.name;
-    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
-
-    // Also check global scope for classes (needed when called from compile phase)
-    if (!sym && ctx->analyzer->global_scope) {
-        sym = xa_scope_lookup(ctx->analyzer->global_scope, name);
-    }
+    XaSymbol *sym = xa_lookup_visible_symbol(ctx, name);
 
     if (!sym) {
         /* Prelude type names used as constructors (e.g. Atomic(0)) are not
@@ -2392,8 +2408,14 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             ctx->expected_return_type = NULL;
         }
 
-        // Unified body visitor: idempotent collect + direct traversal
+        // Unified body visitor: idempotent collect + direct traversal.
+        // A variable is hidden from its own initializer, but nested closure
+        // bodies are analyzed after the binding exists and may capture it
+        // (e.g. `let f = fn() { return f() }`).
+        uint32_t saved_initializing_symbol_id = ctx->initializing_symbol_id;
+        ctx->initializing_symbol_id = 0;
         xa_visit_function_body_unified(ctx, fn->body);
+        ctx->initializing_symbol_id = saved_initializing_symbol_id;
 
         ctx->expected_return_type = saved_expected_ret;
 

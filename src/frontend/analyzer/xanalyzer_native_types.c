@@ -24,6 +24,7 @@
 #include "../../runtime/class/xclass.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../os/os_thread.h"
 #include "../../base/xlog.h"
 #include <string.h>
 #include <ctype.h>
@@ -299,6 +300,7 @@ static bool class_name_is_generated_plain_class(const char *name) {
 
 /* Runtime-populated builtin type table (indexed by XrTypeId). */
 static XaBuiltinType native_builtin_types[XR_TID_COUNT];
+static xr_once_t native_types_once = XR_ONCE_INITIALIZER;
 static bool native_types_initialized = false;
 
 /* Parse one .xr source; may contain multiple @native classes (e.g. enum.xr). */
@@ -371,10 +373,7 @@ static void load_one_source(const char *source) {
 /* Generated member tables for stdlib definition files rather than .xr declarations. */
 #include "xanalyzer_builtins_generated.h"
 
-XR_FUNC void xa_native_types_init(void) {
-    if (native_types_initialized)
-        return;
-
+static void xa_native_types_init_once(void) {
     memset(native_builtin_types, 0, sizeof(native_builtin_types));
 
     /* Load each embedded .xr source */
@@ -390,6 +389,10 @@ XR_FUNC void xa_native_types_init(void) {
 #endif
 
     native_types_initialized = true;
+}
+
+XR_FUNC void xa_native_types_init(void) {
+    xr_once_call(&native_types_once, xa_native_types_init_once);
 }
 
 XR_FUNC bool xa_native_types_ready(void) {

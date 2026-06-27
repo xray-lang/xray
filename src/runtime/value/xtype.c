@@ -14,8 +14,8 @@
 #include "xtype_pool.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../os/os_thread.h"
 #include "xtype_names.h"
-#include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,7 +25,7 @@
 
 // ========== Process-level static singletons (early init) ==========
 // Basic types are immutable and globally shared. No allocation needed.
-static _Atomic bool g_types_initialized = false;
+static xr_once_t g_types_once = XR_ONCE_INITIALIZER;
 
 // Non-nullable singletons
 static XrType g_type_int;
@@ -58,11 +58,7 @@ static void init_singleton(XrType *t, XrTypeKind kind, uint32_t id, bool nullabl
     t->native_width = native_width;
 }
 
-void xr_type_global_init(void) {
-    bool expected = false;
-    if (!atomic_compare_exchange_strong(&g_types_initialized, &expected, true))
-        return;
-
+static void xr_type_global_init_once(void) {
     uint32_t id = 1;
     init_singleton(&g_type_int, XR_KIND_INT, id++, false, 0);
     init_singleton(&g_type_float, XR_KIND_FLOAT, id++, false, 0);
@@ -83,6 +79,10 @@ void xr_type_global_init(void) {
     init_singleton(&g_type_string_nullable, XR_KIND_STRING, id++, true, 0);
     init_singleton(&g_type_bool_nullable, XR_KIND_BOOL, id++, true, 0);
     init_singleton(&g_type_char_nullable, XR_KIND_CHAR, id++, true, 0);
+}
+
+void xr_type_global_init(void) {
+    xr_once_call(&g_types_once, xr_type_global_init_once);
 }
 
 // Set the analyzer/current type pool for no-isolate type helpers.
@@ -255,6 +255,7 @@ XrType *xr_type_new_task(XrVMRuntime *X, XrType *result_type) {
 
 // Object types
 XrType *xr_type_new_json(XrVMRuntime *X) {
+    (void) X;
     return &g_type_json;  // Process-level singleton (plain Json without fields)
 }
 

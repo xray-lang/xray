@@ -1944,12 +1944,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "WsMessage.data",
-        .signature = "const string",
+        .signature = "const string | Array<uint8> | null",
         .summary = "Handle field",
     },
     {
         .name = "WsMessage.error",
-        .signature = "const string",
+        .signature = "const string?",
         .summary = "Handle field",
     },
     {
@@ -1994,12 +1994,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "send",
-        .signature = "(conn: WsConn, data: string, binary?: bool?): bool",
+        .signature = "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool",
         .summary = "Send data over WebSocket connection",
     },
     {
         .name = "sendData",
-        .signature = "(conn: WsConn, data: string, binary?: bool?): bool",
+        .signature = "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool",
         .summary = "Send data over WebSocket connection",
     },
     {
@@ -4257,8 +4257,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `WsConn.wsid` | `const int` | Handle field |\n"
             "| `ws.WsMessage` | `WsMessage` | Handle type |\n"
             "| `WsMessage.binary` | `const bool` | Handle field |\n"
-            "| `WsMessage.data` | `const string` | Handle field |\n"
-            "| `WsMessage.error` | `const string` | Handle field |\n"
+            "| `WsMessage.data` | `const string \\| Array<uint8> \\| null` | Handle field |\n"
+            "| `WsMessage.error` | `const string?` | Handle field |\n"
             "| `ws.close` | `(conn: WsConn, code?: int?, reason?: string?): bool` | Close a WebSocket connection |\n"
             "| `ws.connect` | `(url: string, options?: Json): WsConn?` | Connect to a WebSocket server |\n"
             "| `ws.echoServe` | `(port: int): bool` | Pure C echo server with zero VM allocation overhead per message |\n"
@@ -4267,8 +4267,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.ping` | `(conn: WsConn): bool` | Send a ping frame |\n"
             "| `ws.recv` | `(conn: WsConn, timeout?: int?): WsMessage?` | Receive data from WebSocket connection |\n"
             "| `ws.recvData` | `(conn: WsConn, timeout?: int?): string?` | High-performance recv returning data string directly (no Json wrapper) |\n"
-            "| `ws.send` | `(conn: WsConn, data: string, binary?: bool?): bool` | Send data over WebSocket connection |\n"
-            "| `ws.sendData` | `(conn: WsConn, data: string, binary?: bool?): bool` | Send data over WebSocket connection |\n"
+            "| `ws.send` | `(conn: WsConn, data: string \\| Array<uint8>, binary?: bool?): bool` | Send data over WebSocket connection |\n"
+            "| `ws.sendData` | `(conn: WsConn, data: string \\| Array<uint8>, binary?: bool?): bool` | Send data over WebSocket connection |\n"
             "| `ws.serve` | `(port: int, handler: fn(conn: WsConn): ()): bool` | Start WebSocket server |\n"
             "| `ws.state` | `(conn: WsConn): string` | Get connection state |\n"
             "| `ws.stopServer` | `(): ()` | Stop the WebSocket server |\n"

@@ -15,6 +15,7 @@
 #include "xrt_coll.h"
 #include "xrt_value.h"
 #include "../base/xplatform.h"
+#include "../shared/xr_os_core.h"
 #ifndef _WIN32
 #include <errno.h>
 #endif
@@ -50,6 +51,19 @@ extern char **environ;
 static inline XrValue xrt_os_cstr_value(const char *s) {
     return s ? xrt_str_from_cstr(s) : XR_NULL_VAL;
 }
+
+static inline const char *xrt_os_core_getenv(void *ctx, const char *name) {
+    (void) ctx;
+    return getenv(name);
+}
+
+#ifndef _WIN32
+static inline const char *xrt_os_core_system_homedir(void *ctx) {
+    (void) ctx;
+    struct passwd *pw = getpwuid(getuid());
+    return pw ? pw->pw_dir : NULL;
+}
+#endif
 
 static inline const char *xrt_os_platform_cstr(void) {
 #if defined(XR_OS_WINDOWS) || defined(_WIN64)
@@ -289,19 +303,7 @@ static inline XrValue xrt_os_hostname(void) {
 }
 
 static inline XrValue xrt_os_tmpdir(void) {
-    const char *tmpdir = getenv("TMPDIR");
-    if (!tmpdir)
-        tmpdir = getenv("TMP");
-    if (!tmpdir)
-        tmpdir = getenv("TEMP");
-    if (!tmpdir) {
-#ifdef _WIN32
-        tmpdir = "C:\\Windows\\Temp";
-#else
-        tmpdir = "/tmp";
-#endif
-    }
-    return xrt_os_cstr_value(tmpdir);
+    return xrt_os_cstr_value(xr_os_core_tmpdir(xrt_os_core_getenv, NULL));
 }
 
 static inline XrValue xrt_os_username(void) {
@@ -324,17 +326,13 @@ static inline XrValue xrt_os_username(void) {
 }
 
 static inline XrValue xrt_os_homedir(void) {
-    const char *home = getenv("HOME");
 #ifdef _WIN32
-    if (!home)
-        home = getenv("USERPROFILE");
-    return xrt_os_cstr_value(home);
+    const char *home = xr_os_core_homedir(xrt_os_core_getenv, NULL, NULL, NULL);
 #else
-    if (home)
-        return xrt_os_cstr_value(home);
-    struct passwd *pw = getpwuid(getuid());
-    return pw ? xrt_os_cstr_value(pw->pw_dir) : XR_NULL_VAL;
+    const char *home =
+        xr_os_core_homedir(xrt_os_core_getenv, NULL, xrt_os_core_system_homedir, NULL);
 #endif
+    return xrt_os_cstr_value(home);
 }
 
 static inline XrValue xrt_os_ppid(void) {

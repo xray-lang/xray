@@ -473,7 +473,9 @@ XrHashMap *xa_analyzer_collect_exports(XaAnalyzer *analyzer, XrAstNode *ast) {
         if (exp->declaration) {
             const char *name = get_export_decl_name(exp->declaration);
             if (name) {
-                XaSymbol *sym = xa_scope_lookup(analyzer->global_scope, name);
+                XaScope *export_scope =
+                    analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
+                XaSymbol *sym = xa_scope_lookup(export_scope, name);
                 if (sym && sym->links.type) {
                     if (!exports)
                         exports = xr_hashmap_new();
@@ -491,7 +493,9 @@ XrHashMap *xa_analyzer_collect_exports(XaAnalyzer *analyzer, XrAstNode *ast) {
             const char *name = exp->export_names[j];
             if (!name)
                 continue;
-            XaSymbol *sym = xa_scope_lookup(analyzer->global_scope, name);
+            XaScope *export_scope =
+                analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
+            XaSymbol *sym = xa_scope_lookup(export_scope, name);
             if (sym && sym->links.type) {
                 if (!exports)
                     exports = xr_hashmap_new();
@@ -885,6 +889,13 @@ static XaFileEntry *find_or_create_file(XaAnalyzer *analyzer, const char *file) 
         return NULL;
     }
 
+    entry->file_scope = xa_scope_new(XA_SCOPE_GLOBAL, analyzer->global_scope);
+    if (!entry->file_scope) {
+        xr_free(entry->path);
+        xr_free(entry);
+        return NULL;
+    }
+
     // Register in hash map first: an entry on the list but absent from the
     // map would make the next lookup miss and create a duplicate entry.
     if (fmap && !xr_hashmap_set(fmap, entry->path, entry)) {
@@ -977,13 +988,19 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
         entry->dirty = false;
     }
 
-    // Set current file for symbol ownership tracking
+    XaScope *file_scope = entry && entry->file_scope ? entry->file_scope : analyzer->global_scope;
+
+    // Set current file/scope for symbol ownership tracking. The root global
+    // scope is reserved for builtins/prelude; source modules live in their
+    // own top-level scopes so private names cannot collide across modules.
     analyzer->current_file = file;
+    analyzer->current_scope = file_scope;
 
     // Use the visitor-based analysis
     xa_analyze_ast(analyzer, ast);
 
     analyzer->current_file = NULL;
+    analyzer->current_scope = file_scope;
 
     // Keep pool set - type_check may call xa_analyzer_infer_expr_type after analyze
     // Pool will be cleared when analyzer is freed

@@ -269,24 +269,6 @@ static bool array_builtin_forwards_storage(const XiValue *value) {
     return strcmp(name, "array_reserve") == 0 || strcmp(name, "array_resize") == 0;
 }
 
-static bool array_builtin_is_slice(const XiValue *value) {
-    const char *name;
-
-    if (!value || value->op != XI_CALL_BUILTIN || !value->aux || value->nargs < 1)
-        return false;
-    name = (const char *) value->aux;
-    return strcmp(name, "slice") == 0;
-}
-
-static bool array_method_is_slice(const XiValue *value) {
-    const char *method;
-
-    if (!value || value->op != XI_CALL_METHOD || !value->aux || value->nargs < 1)
-        return false;
-    method = (const char *) value->aux;
-    return strcmp(method, "slice") == 0;
-}
-
 static bool array_method_is_hof_result(const XiValue *value) {
     const char *method;
 
@@ -324,8 +306,7 @@ static bool derive_array_storage_plan(const XaotBundle *bundle, const XiValue *a
                                          out_origin, (uint8_t) (depth + 1));
     }
 
-    if ((required_flag & XAOT_ARRAY_STORAGE_READ) != 0 &&
-        (value->op == XI_SLICE || array_builtin_is_slice(value) || array_method_is_slice(value))) {
+    if ((required_flag & XAOT_ARRAY_STORAGE_READ) != 0 && value->op == XI_SLICE) {
         return value->nargs >= 1 &&
                derive_array_storage_plan(bundle, value->args[0], XAOT_ARRAY_STORAGE_READ, out_elem,
                                          out_origin, (uint8_t) (depth + 1));
@@ -491,8 +472,7 @@ static bool array_value_has_uncacheable_use(const XiValue *value) {
 static bool array_value_is_cacheable_view(const XiValue *value) {
     const XiValue *target = unwrap_identity_value(value);
 
-    return target && (target->op == XI_SLICE || array_builtin_is_slice(target) ||
-                      array_method_is_slice(target));
+    return target && target->op == XI_SLICE;
 }
 
 typedef struct PrepareArrayFillLoop {
@@ -1008,7 +988,7 @@ static bool prepare_array_value_mutates_origin_directly(const XiValue *value,
         prepare_array_single_origin(value->args[0], 0) == origin) {
         const char *method = (const char *) value->aux;
         if (method && (strcmp(method, "map") == 0 || strcmp(method, "filter") == 0 ||
-                       strcmp(method, "reduce") == 0 || strcmp(method, "slice") == 0))
+                       strcmp(method, "reduce") == 0))
             return false;
         if (value->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM))
             return true;

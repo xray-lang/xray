@@ -915,6 +915,8 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_bytes(X);
     } else if (base_len == 5 && strncmp(s, TYPE_NAME_NEVER, 5) == 0) {
         type = xr_type_new_never(NULL);
+    } else if (base_len == 4 && strncmp(s, TYPE_NAME_NULL, 4) == 0) {
+        type = xr_type_new_null(NULL);
         // Native-width integer types
     } else if (base_len == 5 && strncmp(s, "uint8", 5) == 0) {
         type = xr_type_new_int_width(X, XR_NATIVE_U8);

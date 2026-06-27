@@ -58,6 +58,11 @@ typedef struct XaInferContext {
     // Propagated from declaration to initializer expression
     XrType *expected_type;
 
+    // The variable being declared is not visible inside its own initializer.
+    // This lets `let copy = copy(x)` call the outer/builtin `copy` while still
+    // reporting `let x = x` as an unresolved self-reference when no outer x exists.
+    uint32_t initializing_symbol_id;
+
     // Generic type inference context (for callback parameters)
     // e.g., arr.map(x => x+1) - element_type is int, so x: int
     XrType *callback_element_type;      // Element type for callback first param

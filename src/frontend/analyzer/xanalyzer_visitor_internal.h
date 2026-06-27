@@ -24,6 +24,7 @@
 // Main dispatch (defined in xanalyzer_visitor.c)
 XR_FUNC XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node);
+XR_FUNC XaSymbol *xa_lookup_visible_symbol(XaInferContext *ctx, const char *name);
 
 // Utility functions (defined in xanalyzer_visitor.c)
 XR_FUNC bool xa_check_null_safety(XaAnalyzer *analyzer, XrType *target, XrType *source,

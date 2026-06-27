@@ -143,13 +143,13 @@ static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
     }
 }
 
-static void xa_validate_c_export_unique_symbol(XaInferContext *ctx, AstNode *node, XaSymbol *sym,
-                                               XrAttribute *attr) {
-    if (!ctx || !ctx->analyzer || !attr || !xa_c_symbol_is_identifier(attr->str_arg))
-        return;
-
+static bool xa_validate_c_export_unique_symbol_in_scope(XaInferContext *ctx, AstNode *node,
+                                                        XaSymbol *sym, XrAttribute *attr,
+                                                        XaScope *scope) {
+    if (!scope)
+        return false;
     int count = 0;
-    XaSymbol **symbols = xa_scope_get_all_symbols(ctx->analyzer->global_scope, &count);
+    XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
     for (int i = 0; i < count; i++) {
         XaSymbol *other = symbols[i];
         if (!other || other == sym || other->kind != XA_SYM_FUNCTION)
@@ -168,10 +168,29 @@ static void xa_validate_c_export_unique_symbol(XaInferContext *ctx, AstNode *nod
                  attr->str_arg, other->name ? other->name : "?");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
-        break;
+        if (symbols)
+            xr_free(symbols);
+        return true;
     }
     if (symbols)
         xr_free(symbols);
+
+    for (int i = 0; i < scope->child_count; i++) {
+        XaScope *child = scope->children ? scope->children[i] : NULL;
+        if (!child || child->kind != XA_SCOPE_GLOBAL)
+            continue;
+        if (xa_validate_c_export_unique_symbol_in_scope(ctx, node, sym, attr, child))
+            return true;
+    }
+    return false;
+}
+
+static void xa_validate_c_export_unique_symbol(XaInferContext *ctx, AstNode *node, XaSymbol *sym,
+                                               XrAttribute *attr) {
+    if (!ctx || !ctx->analyzer || !attr || !xa_c_symbol_is_identifier(attr->str_arg))
+        return;
+
+    xa_validate_c_export_unique_symbol_in_scope(ctx, node, sym, attr, ctx->analyzer->global_scope);
 }
 
 static void xa_validate_c_export_function_abi(XaInferContext *ctx, AstNode *node,
@@ -337,7 +356,9 @@ static XrClassInfo *xa_summary_type_class_info(XaParamEscapeSummary *summary, Xr
     const char *class_name = xr_type_get_class_name(type);
     if (!class_name)
         return NULL;
-    XaSymbol *sym = xa_scope_lookup(summary->ctx->analyzer->global_scope, class_name);
+    XaSymbol *sym = xa_scope_lookup(summary->ctx->analyzer->current_scope, class_name);
+    if (!sym)
+        sym = xa_scope_lookup(summary->ctx->analyzer->global_scope, class_name);
     XaSymbolLinks *links = sym ? xa_analyzer_get_links(summary->ctx->analyzer, sym) : NULL;
     return links ? links->class_info : NULL;
 }
@@ -1137,7 +1158,11 @@ XR_FUNC bool xa_propagate_receiver_mutations_for_ast(XaAnalyzer *analyzer, AstNo
                 (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl : &node->as.class_decl;
             if (!cls->name)
                 return false;
-            XaSymbol *class_sym = xa_scope_lookup(analyzer->global_scope, cls->name);
+            XaSymbol *class_sym =
+                cls->symbol_id ? xa_scope_lookup_by_id(analyzer->global_scope, cls->symbol_id)
+                               : NULL;
+            if (!class_sym)
+                class_sym = xa_scope_lookup(analyzer->global_scope, cls->name);
             XaSymbolLinks *links = class_sym ? xa_analyzer_get_links(analyzer, class_sym) : NULL;
             return links && links->class_info
                        ? xa_class_propagate_receiver_mutations(links->class_info, cls)
@@ -1173,7 +1198,12 @@ static bool xa_propagate_class_param_escape_summaries(XaInferContext *ctx, AstNo
     if (!cls->name)
         return false;
 
-    XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->global_scope, cls->name);
+    XaSymbol *class_sym =
+        cls->symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, cls->symbol_id) : NULL;
+    if (!class_sym)
+        class_sym = xa_scope_lookup(ctx->analyzer->current_scope, cls->name);
+    if (!class_sym)
+        class_sym = xa_scope_lookup(ctx->analyzer->global_scope, cls->name);
     XaSymbolLinks *class_links = class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
     XrClassInfo *info = class_links ? class_links->class_info : NULL;
     if (!info)
@@ -3024,14 +3054,59 @@ static XrClassInfo *class_info_from_type(XrType *type) {
     return type->instance.class_ref;
 }
 
-static XrClassInfo *resolve_base_class_info(XaAnalyzer *analyzer, const char *base_name,
-                                            XrType **out_base_type) {
+static int xa_class_symbol_count_recursive(XaScope *scope) {
+    if (!scope)
+        return 0;
+
+    int total = 0;
+    int count = 0;
+    XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
+    for (int i = 0; i < count; i++) {
+        XaSymbol *sym = symbols[i];
+        if (sym && sym->kind == XA_SYM_CLASS)
+            total++;
+    }
+    if (symbols)
+        xr_free(symbols);
+
+    for (int i = 0; i < scope->child_count; i++)
+        total += xa_class_symbol_count_recursive(scope->children ? scope->children[i] : NULL);
+
+    return total;
+}
+
+static int xa_collect_class_symbols_recursive(XaScope *scope, XaSymbol **out, int max) {
+    if (!scope || !out || max <= 0)
+        return 0;
+
+    int written = 0;
+    int count = 0;
+    XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
+    for (int i = 0; i < count && written < max; i++) {
+        XaSymbol *sym = symbols[i];
+        if (sym && sym->kind == XA_SYM_CLASS)
+            out[written++] = sym;
+    }
+    if (symbols)
+        xr_free(symbols);
+
+    for (int i = 0; i < scope->child_count && written < max; i++) {
+        written += xa_collect_class_symbols_recursive(scope->children ? scope->children[i] : NULL,
+                                                      out + written, max - written);
+    }
+    return written;
+}
+
+static XrClassInfo *resolve_base_class_info(XaAnalyzer *analyzer, XaScope *scope,
+                                            const char *base_name, XrType **out_base_type) {
     if (out_base_type)
         *out_base_type = NULL;
-    if (!analyzer || !analyzer->global_scope || !base_name)
+    if (!analyzer || !base_name)
         return NULL;
 
-    XaSymbol *base_sym = xa_scope_lookup(analyzer->global_scope, base_name);
+    XaSymbol *base_sym = scope ? xa_scope_lookup(scope, base_name) : NULL;
+    if (!base_sym)
+        base_sym = xa_scope_lookup(analyzer->global_scope, base_name);
     if (!base_sym)
         return NULL;
 
@@ -3178,16 +3253,16 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
     if (!analyzer || !analyzer->global_scope)
         return;
 
-    // Get all symbols from global scope
-    int count = 0;
-    XaSymbol **symbols = xa_scope_get_all_symbols(analyzer->global_scope, &count);
+    int count = xa_class_symbol_count_recursive(analyzer->global_scope);
+    XaSymbol **symbols = count > 0 ? xr_malloc(sizeof(XaSymbol *) * (size_t) count) : NULL;
     if (!symbols)
         return;
+    count = xa_collect_class_symbols_recursive(analyzer->global_scope, symbols, count);
 
-    // Pass 1: Link all class inheritance chains
+    // Pass 1: Link all class inheritance chains.
     for (int i = 0; i < count; i++) {
         XaSymbol *sym = symbols[i];
-        if (!sym || sym->kind != XA_SYM_CLASS)
+        if (!sym)
             continue;
 
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
@@ -3199,7 +3274,8 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
             continue;
 
         XrType *base_type = NULL;
-        XrClassInfo *base_info = resolve_base_class_info(analyzer, info->base_name, &base_type);
+        XrClassInfo *base_info =
+            resolve_base_class_info(analyzer, sym->scope, info->base_name, &base_type);
         if (base_info) {
             info->base = base_info;
             base_info->has_subclass = true;
@@ -3215,7 +3291,7 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
     // Pass 2: Validate explicit override contracts now that parent links exist.
     for (int i = 0; i < count; i++) {
         XaSymbol *sym = symbols[i];
-        if (!sym || sym->kind != XA_SYM_CLASS)
+        if (!sym)
             continue;
 
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
@@ -3228,7 +3304,7 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
     // Pass 3: Build virtual method tables (after all inheritance is linked)
     for (int i = 0; i < count; i++) {
         XaSymbol *sym = symbols[i];
-        if (!sym || sym->kind != XA_SYM_CLASS)
+        if (!sym)
             continue;
 
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
@@ -3242,7 +3318,7 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
     // (A method is only truly final if no subclass exists)
     for (int i = 0; i < count; i++) {
         XaSymbol *sym = symbols[i];
-        if (!sym || sym->kind != XA_SYM_CLASS)
+        if (!sym)
             continue;
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         if (!links || !links->class_info)
@@ -3366,10 +3442,15 @@ void xa_mark_cycle_candidates(XaAnalyzer *analyzer) {
     if (!analyzer || !analyzer->global_scope)
         return;
 
-    int sym_count = 0;
-    XaSymbol **all_syms = xa_scope_get_all_symbols(analyzer->global_scope, &sym_count);
-    if (!all_syms || sym_count == 0)
+    int sym_count = xa_class_symbol_count_recursive(analyzer->global_scope);
+    XaSymbol **all_syms = sym_count > 0 ? xr_malloc(sizeof(XaSymbol *) * (size_t) sym_count) : NULL;
+    if (!all_syms)
         return;
+    sym_count = xa_collect_class_symbols_recursive(analyzer->global_scope, all_syms, sym_count);
+    if (sym_count == 0) {
+        xr_free(all_syms);
+        return;
+    }
 
     /* Collect only class symbols (skip structs — value types are copied). */
     int class_count = 0;

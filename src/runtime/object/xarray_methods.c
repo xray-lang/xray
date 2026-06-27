@@ -24,6 +24,7 @@
 #include "xstring.h"
 #include "xtuple.h"
 #include "xiterator.h"
+#include "xpanic_info.h"
 #include "../closure/xclosure.h"
 #include "../../vm/xvm_closure.h"
 #include "../value/xvalue.h"
@@ -32,8 +33,11 @@
 #include "../mem/xheap.h"
 #include "../mem/xcoro_heap.h"
 #include "../xisolate_api.h"
+#include "../xerror_codes.h"
+#include "../../vm/xvm.h"
 #include "../../coro/xcoroutine.h"
 #include "../../base/xchecks.h"
+#include "../../shared/xr_error_core.h"
 #include <string.h>
 
 static inline XrArray *array_self(XrValue self) {
@@ -63,6 +67,12 @@ static struct XrClosure *array_callback(XrVMRuntime *iso, XrValue v, const char 
 static XrValue m_push(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrArray *arr = array_self(self);
     if (argc >= 1) {
+        if (xr_array_is_slice(arr)) {
+            XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                             XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
+            xr_vm_unwind_with_trace(iso, exc);
+            return xr_null();
+        }
         if (!array_accepts_value(iso, arr, args[0]))
             return self;
         if (arr->length >= arr->capacity) {
@@ -160,7 +170,7 @@ static XrValue m_resize(XrVMRuntime *iso, XrValue self, XrValue *args, int argc)
         fill = XR_FROM_CHAR(0);
     if (!array_accepts_value(iso, arr, fill))
         return self;
-    xr_array_resize(arr, (int32_t) XR_TO_INT(args[0]), fill);
+    xr_array_resize(arr, XR_TO_INT(args[0]), fill);
     return self;
 }
 
@@ -251,40 +261,6 @@ static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
 }
 
 /* === Construction (returns new array) === */
-
-static XrValue m_slice(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    XrArray *arr = array_self(self);
-    int64_t len = arr->length;
-    int64_t start = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
-    int64_t end = (argc >= 2 && XR_IS_INT(args[1])) ? XR_TO_INT(args[1]) : len;
-    xr_array_normalize_slice(len, &start, &end);
-    if (start >= end || start >= len) {
-        return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
-    }
-    int count = (int) (end - start);
-    XrArray *result;
-    if (arr->elem_type != XR_ELEM_ANY) {
-        result = xr_array_with_capacity_typed(xr_current_coro(iso), count,
-                                              (XrArrayElemType) arr->elem_type);
-        if (result) {
-            result->elem_tid = arr->elem_tid;
-            memcpy(result->data, (uint8_t *) arr->data + (size_t) start * arr->elem_size,
-                   (size_t) count * arr->elem_size);
-            result->length = count;
-        }
-    } else {
-        result = xr_array_with_capacity(xr_current_coro(iso), count);
-        if (result) {
-            memcpy(result->data, (XrValue *) arr->data + start, (size_t) count * sizeof(XrValue));
-            result->length = count;
-            result->contains_refs = arr->contains_refs;
-            XrValue *data = (XrValue *) result->data;
-            for (int i = 0; i < count; i++)
-                xr_rc_retain_value(data[i]);
-        }
-    }
-    return xr_value_from_array(result ? result : xr_array_new(xr_current_coro(iso)));
-}
 
 static XrValue m_concat(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrArray *arr = array_self(self);
@@ -499,7 +475,6 @@ void xr_array_register_native_type(XrVMRuntime *isolate) {
         {"copyFrom", m_copy_from, 4},
         {"repeatFrom", m_repeat_from, 3},
         /* Construction */
-        {"slice", m_slice, 0},
         {"concat", m_concat, 0},
         {"join", m_join, 0},
         /* Higher-order */

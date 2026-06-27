@@ -18,7 +18,7 @@ print(ints[2])
 print(ints[3])
 
 let source = [10, 20, 30, 40, 50]
-let view = source.slice(1, 4)
+let view = source[1:4]
 view.reserve(20)
 view.resize(1, 99)
 print(view.length)

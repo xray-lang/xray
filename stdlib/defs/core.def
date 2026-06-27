@@ -3741,7 +3741,7 @@ module ws {
   }
 
   handle WsMessage {
-    fields: "const data: string, const binary: bool, const error: string"
+    fields: "const data: string | Array<uint8> | null, const binary: bool, const error: string?"
   }
 
   fn connect {
@@ -3757,7 +3757,7 @@ module ws {
   }
 
   fn send {
-    signature: "(conn: WsConn, data: string, binary?: bool?): bool"
+    signature: "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool"
     doc: "Send data over WebSocket connection"
     vm: "ws_send_yieldable"
     vm_binding: "yieldable"
@@ -3837,7 +3837,7 @@ module ws {
   }
 
   fn sendData {
-    signature: "(conn: WsConn, data: string, binary?: bool?): bool"
+    signature: "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool"
     doc: "Send data over WebSocket connection"
     vm: "ws_send_yieldable"
     vm_binding: "yieldable"

@@ -21,6 +21,7 @@
 #include "xrt_array_hof.h"
 #include "xrt_range.h"
 #include "xrt_datetime.h"
+#include "xrt_arith.h"  // xrt_value_to_string for container/tuple toString
 #include "../shared/xr_int_arith.h"
 #include "../shared/xr_range_core.h"
 #include "../shared/xr_string_core.h"
@@ -440,6 +441,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     }
     if (recv.tag == XR_TAG_RANGE)
         return xrt_range_method_0(recv, sym);
+    if (recv.tag == XR_TAG_DATETIME)
+        return xrt_datetime_method_0(recv, sym);
     if (recv.tag == XR_TAG_I64) {
         if (sym == XRT_SYM_ABS)
             return XR_FROM_INT(xr_i64_abs_wrap(recv.i));
@@ -747,9 +750,6 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             r[total] = 0;
             return result;
         }
-        if (sym == XRT_SYM_SLICE && arg0.tag == XR_TAG_I64) {
-            return xrt_array_slice_view(recv, arg0.i, a->length);
-        }
         /* Higher-order callbacks are AOT closures. */
         if (arg0.tag == XR_TAG_CLOSURE) {
             xrt_closure_t *cl = (xrt_closure_t *) arg0.ptr;
@@ -794,6 +794,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     }
     if (recv.tag == XR_TAG_RANGE)
         return xrt_range_method_1(recv, sym, arg0);
+    if (recv.tag == XR_TAG_DATETIME)
+        return xrt_datetime_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_POW) {
         double exp = (arg0.tag == XR_TAG_F64) ? arg0.f : (double) arg0.i;
         return XR_FROM_FLOAT(pow(recv.f, exp));
@@ -902,12 +904,6 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
                                      false);
         return sv;
     }
-    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_SLICE) {
-        xrt_array_t *a = (xrt_array_t *) recv.ptr;
-        int64_t start = (arg0.tag == XR_TAG_I64) ? arg0.i : 0;
-        int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : a->length;
-        return xrt_array_slice_view(recv, start, end);
-    }
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REDUCE && arg0.tag == XR_TAG_CLOSURE)
         return xrt_array_reduce_typed(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_RESIZE)
@@ -923,6 +919,8 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         xrt_map_set(m, arg0, arg1);
         return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
     }
+    if (recv.tag == XR_TAG_DATETIME)
+        return xrt_datetime_method_2(recv, sym, arg0, arg1);
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
