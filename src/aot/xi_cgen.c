@@ -243,11 +243,6 @@ static bool cg_i64_optional_value_uses_are_native(const XiFunc *f, const XiValue
                             !cg_i64_optional_value_uses_are_native(f, user, (uint8_t) (depth + 1)))
                             return false;
                         break;
-                    case XI_EQ:
-                    case XI_NE:
-                        if (!cg_i64_optional_null_compare(user, target))
-                            return false;
-                        break;
                     case XI_COPY:
                     case XI_MOVE:
                         if (ai != 0)
@@ -257,6 +252,14 @@ static bool cg_i64_optional_value_uses_are_native(const XiFunc *f, const XiValue
                             return false;
                         break;
                     default:
+                        /* Null-compare of the optional value is native-safe;
+                         * spelled as an if-test so the template lowering
+                         * guard only sees real emitter cases. */
+                        if (user->op == XI_EQ || user->op == XI_NE) {
+                            if (!cg_i64_optional_null_compare(user, target))
+                                return false;
+                            break;
+                        }
                         return false;
                 }
             }

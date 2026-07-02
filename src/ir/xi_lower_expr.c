@@ -4545,6 +4545,95 @@ static XiFunc *lower_parallel_reduce_combine_func(XiLower *parent, AstNode *comb
     return result;
 }
 
+/* Register `fn` as a child of the current function and wrap it in a
+ * XI_CLOSURE_NEW value carrying its captures. Frees `fn` and flags the
+ * lowering error on failure. */
+static XiValue *lower_par_child_closure(XiLower *l, XiFunc *fn, int line) {
+    uint16_t before_children = l->func->nchildren;
+    xi_lower_func_add_child(l->func, fn);
+    if (l->func->nchildren == before_children) {
+        xi_func_free(fn);
+        l->had_error = true;
+        return NULL;
+    }
+    uint16_t child_idx = (uint16_t) (l->func->nchildren - 1);
+    uint16_t ncap = fn->ncaptures;
+    XiValue *closure = xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, l->type_any, ncap);
+    if (!closure) {
+        l->had_error = true;
+        return NULL;
+    }
+    for (uint16_t ci = 0; ci < ncap; ci++) {
+        XiCapture *cap = &fn->captures[ci];
+        closure->args[ci] = (cap->source == XI_CAPTURE_SRC_REG && cap->value) ? cap->value : NULL;
+    }
+    closure->aux = (void *) fn;
+    closure->aux_int = child_idx;
+    closure->line = (uint32_t) line;
+    return closure;
+}
+
+/* Arena-allocated XiParallelCollectData with the fields every collect
+ * shape shares; callers override the per-shape lane/into fields. */
+static XiParallelCollectData *par_collect_make_data(XiLower *l, ParallelCollectExprNode *pc,
+                                                    XiValue *body_closure, bool inclusive_end) {
+    XiParallelCollectData *data = (XiParallelCollectData *) xi_func_arena_alloc(
+        l->func, (uint32_t) sizeof(XiParallelCollectData));
+    if (!data) {
+        l->had_error = true;
+        return NULL;
+    }
+    memset(data, 0, sizeof(*data));
+    data->body_func = (XiFunc *) body_closure->aux;
+    data->item_name = pc->item_name ? arena_strdup(l->func, pc->item_name) : NULL;
+    data->worker_name = pc->worker_name ? arena_strdup(l->func, pc->worker_name) : NULL;
+    data->item_symbol_id = pc->item_symbol_id;
+    data->worker_symbol_id = pc->worker_symbol_id;
+    data->body_child_index = (uint16_t) body_closure->aux_int;
+    data->lane_count = 1;
+    data->inclusive_end = inclusive_end;
+    return data;
+}
+
+/* XI_PAR_COLLECT with the fixed start/end/workers/closure prefix, `extra`
+ * values at args[4..], and the closure captures appended for liveness. */
+typedef struct {
+    struct XrType *op_type;
+    XiValue *start;
+    XiValue *end;
+    XiValue *workers;
+    XiValue *closure;
+    XiValue **extra;
+    uint16_t extra_count;
+    XiParallelCollectData *data;
+    int line;
+} ParCollectOpSpec;
+
+static XiValue *par_collect_make_op(XiLower *l, const ParCollectOpSpec *spec) {
+    uint16_t ncap = ((const XiFunc *) spec->closure->aux)->ncaptures;
+    uint16_t capture_arg_base = (uint16_t) (4u + spec->extra_count);
+    XiValue *par = xi_value_new(l->func, l->cur_block, XI_PAR_COLLECT, spec->op_type,
+                                (uint16_t) (capture_arg_base + ncap));
+    if (!par) {
+        l->had_error = true;
+        return NULL;
+    }
+    par->args[0] = spec->start;
+    par->args[1] = spec->end;
+    par->args[2] = spec->workers;
+    par->args[3] = spec->closure;
+    for (uint16_t i = 0; i < spec->extra_count; i++)
+        par->args[4 + i] = spec->extra[i];
+    for (uint16_t ci = 0; ci < ncap; ci++)
+        par->args[capture_arg_base + ci] = spec->closure->args[ci];
+    par->aux = spec->data;
+    par->aux_kind = XI_AUX_KIND_PAR_COLLECT;
+    par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
+                  XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+    par->line = (uint32_t) spec->line;
+    return par;
+}
+
 static XiValue *lower_parallel_reduce_expr(XiLower *l, AstNode *node) {
     ParallelReduceExprNode *pr = &node->as.parallel_reduce_expr;
     AstNode *range = expr_unwrap_grouping(pr->range);
@@ -4611,56 +4700,19 @@ static XiValue *lower_parallel_reduce_expr(XiLower *l, AstNode *node) {
         return NULL;
     }
 
-    uint16_t before_children = l->func->nchildren;
-    xi_lower_func_add_child(l->func, body);
-    if (l->func->nchildren == before_children) {
-        xi_func_free(body);
-        xi_func_free(combine);
-        l->had_error = true;
-        return NULL;
-    }
-    uint16_t body_child_idx = (uint16_t) (l->func->nchildren - 1);
-
-    before_children = l->func->nchildren;
-    xi_lower_func_add_child(l->func, combine);
-    if (l->func->nchildren == before_children) {
-        xi_func_free(combine);
-        l->had_error = true;
-        return NULL;
-    }
-    uint16_t combine_child_idx = (uint16_t) (l->func->nchildren - 1);
-
-    uint16_t body_ncap = body->ncaptures;
-    XiValue *body_closure =
-        xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, l->type_any, body_ncap);
+    XiValue *body_closure = lower_par_child_closure(l, body, node->line);
     if (!body_closure) {
-        l->had_error = true;
+        xi_func_free(combine);
         return NULL;
     }
-    for (uint16_t ci = 0; ci < body_ncap; ci++) {
-        XiCapture *cap = &body->captures[ci];
-        body_closure->args[ci] =
-            (cap->source == XI_CAPTURE_SRC_REG && cap->value) ? cap->value : NULL;
-    }
-    body_closure->aux = (void *) body;
-    body_closure->aux_int = body_child_idx;
-    body_closure->line = (uint32_t) node->line;
+    uint16_t body_child_idx = (uint16_t) body_closure->aux_int;
+    uint16_t body_ncap = body->ncaptures;
 
-    uint16_t combine_ncap = combine->ncaptures;
-    XiValue *combine_closure =
-        xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, l->type_any, combine_ncap);
-    if (!combine_closure) {
-        l->had_error = true;
+    XiValue *combine_closure = lower_par_child_closure(l, combine, node->line);
+    if (!combine_closure)
         return NULL;
-    }
-    for (uint16_t ci = 0; ci < combine_ncap; ci++) {
-        XiCapture *cap = &combine->captures[ci];
-        combine_closure->args[ci] =
-            (cap->source == XI_CAPTURE_SRC_REG && cap->value) ? cap->value : NULL;
-    }
-    combine_closure->aux = (void *) combine;
-    combine_closure->aux_int = combine_child_idx;
-    combine_closure->line = (uint32_t) node->line;
+    uint16_t combine_child_idx = (uint16_t) combine_closure->aux_int;
+    uint16_t combine_ncap = combine->ncaptures;
 
     XiParallelReduceData *data = (XiParallelReduceData *) xi_func_arena_alloc(
         l->func, (uint32_t) sizeof(XiParallelReduceData));
@@ -4711,6 +4763,171 @@ static bool xi_type_can_use_parallel_collect_scalar_callback(const struct XrType
             XR_TYPE_IS_CHAR(type));
 }
 
+/* Shared lowering inputs for the parallel-collect shapes. */
+typedef struct {
+    ParallelCollectExprNode *pc;
+    AstNode *node;
+    AstNode *range;
+    XiValue *start;
+    XiValue *end;
+    XiValue *workers;
+    XiValue **local_sources;
+} ParCollectLowerCtx;
+
+/* `collect into (a, b, ...)` tuple form: every lane array is a direct
+ * write target of the body. */
+static XiValue *lower_parallel_collect_tuple_expr(XiLower *l, const ParCollectLowerCtx *cc,
+                                                  TupleLiteralNode *into_tuple) {
+    ParallelCollectExprNode *pc = cc->pc;
+    if (into_tuple->count > 16) {
+        l->had_error = true;
+        return NULL;
+    }
+    TupleLiteralNode *body_tuple = parallel_collect_body_tuple(pc);
+    if (!body_tuple || body_tuple->count != into_tuple->count) {
+        l->had_error = true;
+        return NULL;
+    }
+
+    uint16_t lane_count = (uint16_t) into_tuple->count;
+    XiValue *outputs[16];
+    struct XrType *lane_types[16];
+    memset(outputs, 0, sizeof(outputs));
+    memset(lane_types, 0, sizeof(lane_types));
+    for (uint16_t i = 0; i < lane_count; i++) {
+        outputs[i] = xi_lower_expr(l, into_tuple->elements ? into_tuple->elements[i] : NULL);
+        if (!outputs[i] || !outputs[i]->type || !XR_TYPE_IS_ARRAY(outputs[i]->type)) {
+            l->had_error = true;
+            return NULL;
+        }
+        lane_types[i] = xi_get_container_elem_type(outputs[i]->type);
+        if (!lane_types[i])
+            lane_types[i] = l->type_any;
+    }
+
+    XiFunc *body = lower_parallel_collect_multi_body_func(
+        l, pc, lane_count, outputs, lane_types, cc->start, cc->local_sources, cc->node->line);
+    if (!body) {
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *closure = lower_par_child_closure(l, body, cc->node->line);
+    if (!closure)
+        return NULL;
+
+    XiParallelCollectData *data =
+        par_collect_make_data(l, pc, closure, cc->range->as.range.inclusive_end);
+    if (!data)
+        return NULL;
+    data->start_capture_index = lane_count;
+    data->lane_count = lane_count;
+    data->direct_lane_writes = true;
+    data->into_result = true;
+
+    ParCollectOpSpec spec = {
+        .op_type = xr_type_new_unit(l->isolate),
+        .start = cc->start,
+        .end = cc->end,
+        .workers = cc->workers,
+        .closure = closure,
+        .extra = outputs,
+        .extra_count = lane_count,
+        .data = data,
+        .line = (int) cc->node->line,
+    };
+    return par_collect_make_op(l, &spec);
+}
+
+/* `collect into arr` with a statically array-typed target: the body writes
+ * the single lane directly (no per-item collect store). */
+static XiValue *lower_parallel_collect_into_array_expr(XiLower *l, const ParCollectLowerCtx *cc,
+                                                       XiValue *into, struct XrType *elem_type) {
+    ParallelCollectExprNode *pc = cc->pc;
+    XiValue *outputs[1] = {into};
+    struct XrType *lane_types[1] = {elem_type};
+    XiFunc *body = lower_parallel_collect_multi_body_func(l, pc, 1, outputs, lane_types, cc->start,
+                                                          cc->local_sources, cc->node->line);
+    if (!body) {
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *closure = lower_par_child_closure(l, body, cc->node->line);
+    if (!closure)
+        return NULL;
+
+    XiParallelCollectData *data =
+        par_collect_make_data(l, pc, closure, cc->range->as.range.inclusive_end);
+    if (!data)
+        return NULL;
+    data->element_type = elem_type;
+    data->start_capture_index = 1;
+    data->direct_lane_writes = true;
+    data->into_result = true;
+
+    ParCollectOpSpec spec = {
+        .op_type = xr_type_new_unit(l->isolate),
+        .start = cc->start,
+        .end = cc->end,
+        .workers = cc->workers,
+        .closure = closure,
+        .extra = outputs,
+        .extra_count = 1,
+        .data = data,
+        .line = (int) cc->node->line,
+    };
+    return par_collect_make_op(l, &spec);
+}
+
+/* Fresh-result collect whose body writes the lane directly (final body or
+ * per-lane local initializers): allocate an empty result array up front and
+ * let the lane loop resize + fill it. */
+static XiValue *lower_parallel_collect_fresh_array_expr(XiLower *l, const ParCollectLowerCtx *cc,
+                                                        struct XrType *result_type,
+                                                        struct XrType *elem_type) {
+    ParallelCollectExprNode *pc = cc->pc;
+    XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+    XiValue *result_array = xi_value_new(l->func, l->cur_block, XI_ARRAY_NEW, result_type, 1);
+    if (!zero || !result_array) {
+        l->had_error = true;
+        return NULL;
+    }
+    result_array->args[0] = zero;
+    result_array->line = (uint32_t) cc->node->line;
+
+    XiValue *outputs[1] = {result_array};
+    struct XrType *lane_types[1] = {elem_type};
+    XiFunc *body = lower_parallel_collect_multi_body_func(l, pc, 1, outputs, lane_types, cc->start,
+                                                          cc->local_sources, cc->node->line);
+    if (!body) {
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *closure = lower_par_child_closure(l, body, cc->node->line);
+    if (!closure)
+        return NULL;
+
+    XiParallelCollectData *data =
+        par_collect_make_data(l, pc, closure, cc->range->as.range.inclusive_end);
+    if (!data)
+        return NULL;
+    data->element_type = elem_type;
+    data->start_capture_index = 1;
+    data->direct_lane_writes = true;
+
+    ParCollectOpSpec spec = {
+        .op_type = result_type,
+        .start = cc->start,
+        .end = cc->end,
+        .workers = cc->workers,
+        .closure = closure,
+        .extra = outputs,
+        .extra_count = 1,
+        .data = data,
+        .line = (int) cc->node->line,
+    };
+    return par_collect_make_op(l, &spec);
+}
+
 static XiValue *lower_parallel_collect_expr(XiLower *l, AstNode *node) {
     ParallelCollectExprNode *pc = &node->as.parallel_collect_expr;
     AstNode *range = expr_unwrap_grouping(pc->range);
@@ -4744,108 +4961,18 @@ static XiValue *lower_parallel_collect_expr(XiLower *l, AstNode *node) {
         }
     }
 
+    ParCollectLowerCtx cc = {
+        .pc = pc,
+        .node = node,
+        .range = range,
+        .start = start,
+        .end = end,
+        .workers = workers,
+        .local_sources = local_sources,
+    };
     TupleLiteralNode *into_tuple = parallel_collect_into_tuple(pc);
-    if (into_tuple) {
-        if (into_tuple->count > 16) {
-            l->had_error = true;
-            return NULL;
-        }
-        TupleLiteralNode *body_tuple = parallel_collect_body_tuple(pc);
-        if (!body_tuple || body_tuple->count != into_tuple->count) {
-            l->had_error = true;
-            return NULL;
-        }
-
-        uint16_t lane_count = (uint16_t) into_tuple->count;
-        XiValue *outputs[16];
-        struct XrType *lane_types[16];
-        memset(outputs, 0, sizeof(outputs));
-        memset(lane_types, 0, sizeof(lane_types));
-        for (uint16_t i = 0; i < lane_count; i++) {
-            outputs[i] = xi_lower_expr(l, into_tuple->elements ? into_tuple->elements[i] : NULL);
-            if (!outputs[i] || !outputs[i]->type || !XR_TYPE_IS_ARRAY(outputs[i]->type)) {
-                l->had_error = true;
-                return NULL;
-            }
-            lane_types[i] = xi_get_container_elem_type(outputs[i]->type);
-            if (!lane_types[i])
-                lane_types[i] = l->type_any;
-        }
-
-        XiFunc *body = lower_parallel_collect_multi_body_func(
-            l, pc, lane_count, outputs, lane_types, start, local_sources, node->line);
-        if (!body) {
-            l->had_error = true;
-            return NULL;
-        }
-
-        uint16_t before_children = l->func->nchildren;
-        xi_lower_func_add_child(l->func, body);
-        if (l->func->nchildren == before_children) {
-            xi_func_free(body);
-            l->had_error = true;
-            return NULL;
-        }
-        uint16_t body_child_idx = (uint16_t) (l->func->nchildren - 1);
-
-        uint16_t ncap = body->ncaptures;
-        XiValue *closure = xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, l->type_any, ncap);
-        if (!closure) {
-            l->had_error = true;
-            return NULL;
-        }
-        for (uint16_t ci = 0; ci < ncap; ci++) {
-            XiCapture *cap = &body->captures[ci];
-            closure->args[ci] =
-                (cap->source == XI_CAPTURE_SRC_REG && cap->value) ? cap->value : NULL;
-        }
-        closure->aux = (void *) body;
-        closure->aux_int = body_child_idx;
-        closure->line = (uint32_t) node->line;
-
-        XiParallelCollectData *data = (XiParallelCollectData *) xi_func_arena_alloc(
-            l->func, (uint32_t) sizeof(XiParallelCollectData));
-        if (!data) {
-            l->had_error = true;
-            return NULL;
-        }
-        data->body_func = body;
-        data->element_type = NULL;
-        data->item_name = pc->item_name ? arena_strdup(l->func, pc->item_name) : NULL;
-        data->worker_name = pc->worker_name ? arena_strdup(l->func, pc->worker_name) : NULL;
-        data->item_symbol_id = pc->item_symbol_id;
-        data->worker_symbol_id = pc->worker_symbol_id;
-        data->body_child_index = body_child_idx;
-        data->result_capture_index = 0;
-        data->start_capture_index = lane_count;
-        data->lane_count = lane_count;
-        data->direct_lane_writes = true;
-        data->inclusive_end = range->as.range.inclusive_end;
-        data->into_result = true;
-
-        uint16_t capture_arg_base = (uint16_t) (4u + lane_count);
-        XiValue *par =
-            xi_value_new(l->func, l->cur_block, XI_PAR_COLLECT, xr_type_new_unit(l->isolate),
-                         (uint16_t) (capture_arg_base + ncap));
-        if (!par) {
-            l->had_error = true;
-            return NULL;
-        }
-        par->args[0] = start;
-        par->args[1] = end;
-        par->args[2] = workers;
-        par->args[3] = closure;
-        for (uint16_t i = 0; i < lane_count; i++)
-            par->args[4 + i] = outputs[i];
-        for (uint16_t ci = 0; ci < ncap; ci++)
-            par->args[capture_arg_base + ci] = closure->args[ci];
-        par->aux = data;
-        par->aux_kind = XI_AUX_KIND_PAR_COLLECT;
-        par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
-                      XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
-        par->line = (uint32_t) node->line;
-        return par;
-    }
+    if (into_tuple)
+        return lower_parallel_collect_tuple_expr(l, &cc, into_tuple);
 
     XiValue *into = pc->into ? xi_lower_expr(l, pc->into) : NULL;
     if (pc->into && !into) {
@@ -4870,168 +4997,12 @@ static XiValue *lower_parallel_collect_expr(XiLower *l, AstNode *node) {
     if (!elem_type)
         elem_type = xr_type_new_unknown(NULL);
 
-    if (pc->into && into && into->type && XR_TYPE_IS_ARRAY(into->type)) {
-        XiValue *outputs[1] = {into};
-        struct XrType *lane_types[1] = {elem_type};
-        XiFunc *body = lower_parallel_collect_multi_body_func(l, pc, 1, outputs, lane_types, start,
-                                                              local_sources, node->line);
-        if (!body) {
-            l->had_error = true;
-            return NULL;
-        }
-
-        uint16_t before_children = l->func->nchildren;
-        xi_lower_func_add_child(l->func, body);
-        if (l->func->nchildren == before_children) {
-            xi_func_free(body);
-            l->had_error = true;
-            return NULL;
-        }
-        uint16_t body_child_idx = (uint16_t) (l->func->nchildren - 1);
-
-        uint16_t ncap = body->ncaptures;
-        XiValue *closure = xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, l->type_any, ncap);
-        if (!closure) {
-            l->had_error = true;
-            return NULL;
-        }
-        for (uint16_t ci = 0; ci < ncap; ci++) {
-            XiCapture *cap = &body->captures[ci];
-            closure->args[ci] =
-                (cap->source == XI_CAPTURE_SRC_REG && cap->value) ? cap->value : NULL;
-        }
-        closure->aux = (void *) body;
-        closure->aux_int = body_child_idx;
-        closure->line = (uint32_t) node->line;
-
-        XiParallelCollectData *data = (XiParallelCollectData *) xi_func_arena_alloc(
-            l->func, (uint32_t) sizeof(XiParallelCollectData));
-        if (!data) {
-            l->had_error = true;
-            return NULL;
-        }
-        data->body_func = body;
-        data->element_type = elem_type;
-        data->item_name = pc->item_name ? arena_strdup(l->func, pc->item_name) : NULL;
-        data->worker_name = pc->worker_name ? arena_strdup(l->func, pc->worker_name) : NULL;
-        data->item_symbol_id = pc->item_symbol_id;
-        data->worker_symbol_id = pc->worker_symbol_id;
-        data->body_child_index = body_child_idx;
-        data->result_capture_index = 0;
-        data->start_capture_index = 1;
-        data->lane_count = 1;
-        data->direct_lane_writes = true;
-        data->inclusive_end = range->as.range.inclusive_end;
-        data->into_result = true;
-
-        uint16_t capture_arg_base = 5;
-        XiValue *par =
-            xi_value_new(l->func, l->cur_block, XI_PAR_COLLECT, xr_type_new_unit(l->isolate),
-                         (uint16_t) (capture_arg_base + ncap));
-        if (!par) {
-            l->had_error = true;
-            return NULL;
-        }
-        par->args[0] = start;
-        par->args[1] = end;
-        par->args[2] = workers;
-        par->args[3] = closure;
-        par->args[4] = into;
-        for (uint16_t ci = 0; ci < ncap; ci++)
-            par->args[capture_arg_base + ci] = closure->args[ci];
-        par->aux = data;
-        par->aux_kind = XI_AUX_KIND_PAR_COLLECT;
-        par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
-                      XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
-        par->line = (uint32_t) node->line;
-        return par;
-    }
+    if (pc->into && into && into->type && XR_TYPE_IS_ARRAY(into->type))
+        return lower_parallel_collect_into_array_expr(l, &cc, into, elem_type);
 
     if (!pc->into &&
-        (pc->final_body || parallel_expr_has_local_initializers(pc->locals, pc->local_count))) {
-        XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
-        XiValue *result_array = xi_value_new(l->func, l->cur_block, XI_ARRAY_NEW, result_type, 1);
-        if (!zero || !result_array) {
-            l->had_error = true;
-            return NULL;
-        }
-        result_array->args[0] = zero;
-        result_array->line = (uint32_t) node->line;
-
-        XiValue *outputs[1] = {result_array};
-        struct XrType *lane_types[1] = {elem_type};
-        XiFunc *body = lower_parallel_collect_multi_body_func(l, pc, 1, outputs, lane_types, start,
-                                                              local_sources, node->line);
-        if (!body) {
-            l->had_error = true;
-            return NULL;
-        }
-
-        uint16_t before_children = l->func->nchildren;
-        xi_lower_func_add_child(l->func, body);
-        if (l->func->nchildren == before_children) {
-            xi_func_free(body);
-            l->had_error = true;
-            return NULL;
-        }
-        uint16_t body_child_idx = (uint16_t) (l->func->nchildren - 1);
-
-        uint16_t ncap = body->ncaptures;
-        XiValue *closure = xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, l->type_any, ncap);
-        if (!closure) {
-            l->had_error = true;
-            return NULL;
-        }
-        for (uint16_t ci = 0; ci < ncap; ci++) {
-            XiCapture *cap = &body->captures[ci];
-            closure->args[ci] =
-                (cap->source == XI_CAPTURE_SRC_REG && cap->value) ? cap->value : NULL;
-        }
-        closure->aux = (void *) body;
-        closure->aux_int = body_child_idx;
-        closure->line = (uint32_t) node->line;
-
-        XiParallelCollectData *data = (XiParallelCollectData *) xi_func_arena_alloc(
-            l->func, (uint32_t) sizeof(XiParallelCollectData));
-        if (!data) {
-            l->had_error = true;
-            return NULL;
-        }
-        data->body_func = body;
-        data->element_type = elem_type;
-        data->item_name = pc->item_name ? arena_strdup(l->func, pc->item_name) : NULL;
-        data->worker_name = pc->worker_name ? arena_strdup(l->func, pc->worker_name) : NULL;
-        data->item_symbol_id = pc->item_symbol_id;
-        data->worker_symbol_id = pc->worker_symbol_id;
-        data->body_child_index = body_child_idx;
-        data->result_capture_index = 0;
-        data->start_capture_index = 1;
-        data->lane_count = 1;
-        data->direct_lane_writes = true;
-        data->inclusive_end = range->as.range.inclusive_end;
-        data->into_result = false;
-
-        uint16_t capture_arg_base = 5;
-        XiValue *par = xi_value_new(l->func, l->cur_block, XI_PAR_COLLECT, result_type,
-                                    (uint16_t) (capture_arg_base + ncap));
-        if (!par) {
-            l->had_error = true;
-            return NULL;
-        }
-        par->args[0] = start;
-        par->args[1] = end;
-        par->args[2] = workers;
-        par->args[3] = closure;
-        par->args[4] = result_array;
-        for (uint16_t ci = 0; ci < ncap; ci++)
-            par->args[capture_arg_base + ci] = closure->args[ci];
-        par->aux = data;
-        par->aux_kind = XI_AUX_KIND_PAR_COLLECT;
-        par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
-                      XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
-        par->line = (uint32_t) node->line;
-        return par;
-    }
+        (pc->final_body || parallel_expr_has_local_initializers(pc->locals, pc->local_count)))
+        return lower_parallel_collect_fresh_array_expr(l, &cc, result_type, elem_type);
 
     XiNativeCallbackKind body_callback = xi_type_can_use_parallel_collect_scalar_callback(elem_type)
                                              ? XI_NATIVE_CALLBACK_PAR_COLLECT_SCALAR_BODY
@@ -5042,71 +5013,32 @@ static XiValue *lower_parallel_collect_expr(XiLower *l, AstNode *node) {
         l->had_error = true;
         return NULL;
     }
-
-    uint16_t before_children = l->func->nchildren;
-    xi_lower_func_add_child(l->func, body);
-    if (l->func->nchildren == before_children) {
-        xi_func_free(body);
-        l->had_error = true;
+    XiValue *closure = lower_par_child_closure(l, body, node->line);
+    if (!closure)
         return NULL;
-    }
-    uint16_t body_child_idx = (uint16_t) (l->func->nchildren - 1);
-
     uint16_t ncap = body->ncaptures;
-    XiValue *closure = xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, l->type_any, ncap);
-    if (!closure) {
-        l->had_error = true;
-        return NULL;
-    }
-    for (uint16_t ci = 0; ci < ncap; ci++) {
-        XiCapture *cap = &body->captures[ci];
-        closure->args[ci] = (cap->source == XI_CAPTURE_SRC_REG && cap->value) ? cap->value : NULL;
-    }
-    closure->aux = (void *) body;
-    closure->aux_int = body_child_idx;
-    closure->line = (uint32_t) node->line;
 
-    XiParallelCollectData *data = (XiParallelCollectData *) xi_func_arena_alloc(
-        l->func, (uint32_t) sizeof(XiParallelCollectData));
-    if (!data) {
-        l->had_error = true;
+    XiParallelCollectData *data =
+        par_collect_make_data(l, pc, closure, range->as.range.inclusive_end);
+    if (!data)
         return NULL;
-    }
-    data->body_func = body;
     data->element_type = elem_type;
-    data->item_name = pc->item_name ? arena_strdup(l->func, pc->item_name) : NULL;
-    data->worker_name = pc->worker_name ? arena_strdup(l->func, pc->worker_name) : NULL;
-    data->item_symbol_id = pc->item_symbol_id;
-    data->worker_symbol_id = pc->worker_symbol_id;
-    data->body_child_index = body_child_idx;
     data->result_capture_index = ncap;
     data->start_capture_index = (uint16_t) (ncap + 1);
-    data->lane_count = 1;
-    data->direct_lane_writes = false;
-    data->inclusive_end = range->as.range.inclusive_end;
     data->into_result = pc->into != NULL;
 
-    uint16_t capture_arg_base = (uint16_t) (4u + (pc->into ? 1u : 0u));
-    XiValue *par = xi_value_new(l->func, l->cur_block, XI_PAR_COLLECT, result_type,
-                                (uint16_t) (capture_arg_base + ncap));
-    if (!par) {
-        l->had_error = true;
-        return NULL;
-    }
-    par->args[0] = start;
-    par->args[1] = end;
-    par->args[2] = workers;
-    par->args[3] = closure;
-    if (pc->into)
-        par->args[4] = into;
-    for (uint16_t ci = 0; ci < ncap; ci++)
-        par->args[capture_arg_base + ci] = closure->args[ci];
-    par->aux = data;
-    par->aux_kind = XI_AUX_KIND_PAR_COLLECT;
-    par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
-                  XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
-    par->line = (uint32_t) node->line;
-    return par;
+    ParCollectOpSpec spec = {
+        .op_type = result_type,
+        .start = start,
+        .end = end,
+        .workers = workers,
+        .closure = closure,
+        .extra = pc->into ? &into : NULL,
+        .extra_count = (uint16_t) (pc->into ? 1u : 0u),
+        .data = data,
+        .line = (int) node->line,
+    };
+    return par_collect_make_op(l, &spec);
 }
 
 static XiValue *lower_go_expr(XiLower *l, AstNode *node) {

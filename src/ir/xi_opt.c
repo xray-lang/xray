@@ -2238,7 +2238,122 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
  * Determine what representation an instruction needs at a given arg position.
  * Arithmetic and comparisons prefer unboxed; everything else wants tagged.
  */
+/* Memory-access argument reps (index/bytes/pointer/field/container-new ops),
+ * split from sr_use_rep. Returns true when `user` is one of them and writes
+ * the rep to *out. */
+static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const XiRepPolicy *policy,
+                                 XrRep *out) {
+    switch (user->op) {
+        case XI_INDEX_GET:
+            if (user->nargs >= 2 && user->args[0] &&
+                sr_value_has_static_index_storage(user->args[0])) {
+                if (arg_idx == 0) {
+                    *out = sr_type_native_boundary_rep(user->args[0]->type);
+                    return true;
+                }
+                if (arg_idx == 1) {
+                    *out = XR_REP_I64;
+                    return true;
+                }
+            }
+            *out = XR_REP_TAGGED;
+            return true;
+        case XI_INDEX_SET:
+            if (user->nargs >= 3 && user->args[0] &&
+                (sr_value_has_static_index_storage(user->args[0]) ||
+                 sr_value_has_static_unboxed_array_elem_type(user->args[0]))) {
+                if (arg_idx == 0) {
+                    *out = sr_type_native_boundary_rep(user->args[0]->type);
+                    return true;
+                }
+                if (arg_idx == 1) {
+                    *out = XR_REP_I64;
+                    return true;
+                }
+                if (arg_idx == 2) {
+                    *out = sr_typed_array_elem_rep(user->args[0]->type);
+                    return true;
+                }
+            }
+            *out = XR_REP_TAGGED;
+            return true;
+        case XI_BYTES_LOAD_U16_LE:
+        case XI_BYTES_LOAD_U32_LE:
+        case XI_BYTES_LOAD_U64_LE:
+            if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
+                sr_value_has_static_typed_array_storage(user->args[0])) {
+                *out = sr_type_native_boundary_rep(user->args[0]->type);
+                return true;
+            }
+            *out = arg_idx == 1 ? XR_REP_I64 : XR_REP_TAGGED;
+            return true;
+        case XI_BYTES_COPY_WITHIN:
+        case XI_BYTES_REPEAT_FROM:
+            *out = arg_idx == 0 ? XR_REP_TAGGED : XR_REP_I64;
+            return true;
+        case XI_BYTES_COPY_FROM:
+            *out = arg_idx <= 1 ? XR_REP_TAGGED : XR_REP_I64;
+            return true;
+        case XI_ARRAY_DATA_PTR:
+            *out = arg_idx == 0 && user->nargs >= 1 && user->args[0]
+                       ? sr_type_native_boundary_rep(user->args[0]->type)
+                       : XR_REP_TAGGED;
+            return true;
+        case XI_PTR_LOAD:
+            *out = arg_idx == 0 ? XR_REP_RAWPTR : XR_REP_TAGGED;
+            return true;
+        case XI_PTR_STORE:
+            if (arg_idx == 0) {
+                *out = XR_REP_RAWPTR;
+                return true;
+            }
+            if (arg_idx == 1 && user->nargs >= 2 && user->args[1]) {
+                *out = sr_type_native_boundary_rep(user->args[1]->type);
+                return true;
+            }
+            *out = XR_REP_TAGGED;
+            return true;
+        case XI_PTR_COPY_NONOVERLAP:
+            *out = arg_idx <= 1 ? XR_REP_RAWPTR : (arg_idx == 2 ? XR_REP_I64 : XR_REP_TAGGED);
+            return true;
+        case XI_STRUCT_SET:
+            if (arg_idx == 1 && user->nargs >= 2 && user->args[1]) {
+                *out = sr_type_scalar_rep(user->args[1]->type);
+                return true;
+            }
+            *out = XR_REP_TAGGED;
+            return true;
+        case XI_LOAD_FIELD:
+            if (arg_idx == 0 && user->nargs >= 1 &&
+                (sr_is_typed_array_length_field(user) ||
+                 sr_is_static_collection_length_field(user))) {
+                *out = sr_type_native_boundary_rep(user->args[0]->type);
+                return true;
+            }
+            *out = XR_REP_TAGGED;
+            return true;
+        case XI_STORE_FIELD:
+            if (arg_idx == 1 && policy && policy->prefer_call_args_native && user->nargs >= 2 &&
+                sr_field_receiver_uses_native_rep(user->args[0]) && user->args[1]) {
+                *out = sr_type_scalar_rep(user->args[1]->type);
+                return true;
+            }
+            *out = XR_REP_TAGGED;
+            return true;
+        case XI_ARRAY_NEW:
+        case XI_MAP_NEW:
+        case XI_SET_NEW:
+            *out = arg_idx == 0 ? XR_REP_I64 : XR_REP_TAGGED;
+            return true;
+        default:
+            return false;
+    }
+}
+
 static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy *policy) {
+    XrRep mem_rep = XR_REP_TAGGED;
+    if (sr_use_rep_memory_op(user, arg_idx, policy, &mem_rep))
+        return mem_rep;
     switch (user->op) {
         case XI_ADD:
         case XI_SUB:
@@ -2325,72 +2440,6 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_COPY:
         case XI_MOVE:
             return arg_idx == 0 ? sr_def_rep(user, policy) : XR_REP_TAGGED;
-        case XI_INDEX_GET:
-            if (user->nargs >= 2 && user->args[0] &&
-                sr_value_has_static_index_storage(user->args[0])) {
-                if (arg_idx == 0)
-                    return sr_type_native_boundary_rep(user->args[0]->type);
-                if (arg_idx == 1)
-                    return XR_REP_I64;
-            }
-            return XR_REP_TAGGED;
-        case XI_INDEX_SET:
-            if (user->nargs >= 3 && user->args[0] &&
-                (sr_value_has_static_index_storage(user->args[0]) ||
-                 sr_value_has_static_unboxed_array_elem_type(user->args[0]))) {
-                if (arg_idx == 0)
-                    return sr_type_native_boundary_rep(user->args[0]->type);
-                if (arg_idx == 1)
-                    return XR_REP_I64;
-                if (arg_idx == 2)
-                    return sr_typed_array_elem_rep(user->args[0]->type);
-            }
-            return XR_REP_TAGGED;
-        case XI_BYTES_LOAD_U16_LE:
-        case XI_BYTES_LOAD_U32_LE:
-        case XI_BYTES_LOAD_U64_LE:
-            if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
-                sr_value_has_static_typed_array_storage(user->args[0]))
-                return sr_type_native_boundary_rep(user->args[0]->type);
-            return arg_idx == 1 ? XR_REP_I64 : XR_REP_TAGGED;
-        case XI_BYTES_COPY_WITHIN:
-        case XI_BYTES_REPEAT_FROM:
-            return arg_idx == 0 ? XR_REP_TAGGED : XR_REP_I64;
-        case XI_BYTES_COPY_FROM:
-            return arg_idx <= 1 ? XR_REP_TAGGED : XR_REP_I64;
-        case XI_ARRAY_DATA_PTR:
-            return arg_idx == 0 && user->nargs >= 1 && user->args[0]
-                       ? sr_type_native_boundary_rep(user->args[0]->type)
-                       : XR_REP_TAGGED;
-        case XI_PTR_LOAD:
-            return arg_idx == 0 ? XR_REP_RAWPTR : XR_REP_TAGGED;
-        case XI_PTR_STORE:
-            if (arg_idx == 0)
-                return XR_REP_RAWPTR;
-            if (arg_idx == 1 && user->nargs >= 2 && user->args[1])
-                return sr_type_native_boundary_rep(user->args[1]->type);
-            return XR_REP_TAGGED;
-        case XI_PTR_COPY_NONOVERLAP:
-            return arg_idx <= 1 ? XR_REP_RAWPTR : (arg_idx == 2 ? XR_REP_I64 : XR_REP_TAGGED);
-        case XI_STRUCT_SET:
-            if (arg_idx == 1 && user->nargs >= 2 && user->args[1])
-                return sr_type_scalar_rep(user->args[1]->type);
-            return XR_REP_TAGGED;
-        case XI_LOAD_FIELD:
-            if (arg_idx == 0 && user->nargs >= 1 &&
-                (sr_is_typed_array_length_field(user) ||
-                 sr_is_static_collection_length_field(user)))
-                return sr_type_native_boundary_rep(user->args[0]->type);
-            return XR_REP_TAGGED;
-        case XI_STORE_FIELD:
-            if (arg_idx == 1 && policy && policy->prefer_call_args_native && user->nargs >= 2 &&
-                sr_field_receiver_uses_native_rep(user->args[0]) && user->args[1])
-                return sr_type_scalar_rep(user->args[1]->type);
-            return XR_REP_TAGGED;
-        case XI_ARRAY_NEW:
-        case XI_MAP_NEW:
-        case XI_SET_NEW:
-            return arg_idx == 0 ? XR_REP_I64 : XR_REP_TAGGED;
         case XI_BOX:
             if (user->args[0] && user->args[0]->type) {
                 return sr_type_native_boundary_rep(user->args[0]->type);

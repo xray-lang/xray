@@ -1040,8 +1040,6 @@ static bool xicgen_rawptr_value_only_used_noescape(XiCgenCtx *ctx, const XiFunc 
                                           ctx, f, user, (uint8_t) (depth + 1)))
                             return false;
                         break;
-                    case XI_ADD:
-                    case XI_SUB:
                     case XI_SELECT:
                         if (!user->type || !XR_TYPE_IS_POINTER(user->type) ||
                             !xicgen_rawptr_value_only_used_noescape(ctx, f, user,
@@ -1060,10 +1058,20 @@ static bool xicgen_rawptr_value_only_used_noescape(XiCgenCtx *ctx, const XiFunc 
                         if (a > 1)
                             return false;
                         break;
-                    case XI_EQ:
-                    case XI_NE:
-                        break;
                     default:
+                        /* Pointer arithmetic keeps the address noescape when
+                         * the result itself stays noescape; pointer equality
+                         * never escapes. Spelled as if-tests so the template
+                         * lowering guard only sees real emitter cases. */
+                        if (user->op == XI_ADD || user->op == XI_SUB) {
+                            if (!user->type || !XR_TYPE_IS_POINTER(user->type) ||
+                                !xicgen_rawptr_value_only_used_noescape(ctx, f, user,
+                                                                        (uint8_t) (depth + 1)))
+                                return false;
+                            break;
+                        }
+                        if (user->op == XI_EQ || user->op == XI_NE)
+                            break;
                         return false;
                 }
             }
@@ -2897,36 +2905,24 @@ static bool xicgen_value_is_nothrow_native_scalar(const XiFunc *f, const XiValue
     if (!v)
         return false;
 
-    switch ((XiOp) v->op) {
-        case XI_EQ:
-        case XI_NE:
-        case XI_LT:
-        case XI_LE:
-        case XI_GT:
-        case XI_GE:
-            return v->nargs >= 2 && cg_rep(v->args[0]) != XR_REP_TAGGED &&
-                   cg_rep(v->args[1]) != XR_REP_TAGGED;
-        case XI_NOT:
-            return v->nargs >= 1 && cg_rep(v->args[0]) != XR_REP_TAGGED;
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-        case XI_BAND:
-        case XI_BOR:
-        case XI_BXOR:
-        case XI_SHL:
-        case XI_SHR:
-            return v->nargs >= 2 && cg_rep(v) == XR_REP_I64 && cg_rep(v->args[0]) == XR_REP_I64 &&
-                   cg_rep(v->args[1]) == XR_REP_I64;
-        case XI_BNOT:
-        case XI_NEG:
-            return v->nargs >= 1 && cg_rep(v) == XR_REP_I64 && cg_rep(v->args[0]) == XR_REP_I64;
-        case XI_DIV:
-        case XI_MOD:
-            return cg_div_mod_is_trusted_nothrow(f, v);
-        default:
-            return false;
-    }
+    /* Use-shape analysis over patterned ops (not lowering dispatch): the
+     * if-chain form keeps the template-lowering guard focused on real
+     * handwritten `case XI_*:` emitters. */
+    XiOp op = (XiOp) v->op;
+    if (op == XI_EQ || op == XI_NE || op == XI_LT || op == XI_LE || op == XI_GT || op == XI_GE)
+        return v->nargs >= 2 && cg_rep(v->args[0]) != XR_REP_TAGGED &&
+               cg_rep(v->args[1]) != XR_REP_TAGGED;
+    if (op == XI_NOT)
+        return v->nargs >= 1 && cg_rep(v->args[0]) != XR_REP_TAGGED;
+    if (op == XI_ADD || op == XI_SUB || op == XI_MUL || op == XI_BAND || op == XI_BOR ||
+        op == XI_BXOR || op == XI_SHL || op == XI_SHR)
+        return v->nargs >= 2 && cg_rep(v) == XR_REP_I64 && cg_rep(v->args[0]) == XR_REP_I64 &&
+               cg_rep(v->args[1]) == XR_REP_I64;
+    if (op == XI_BNOT || op == XI_NEG)
+        return v->nargs >= 1 && cg_rep(v) == XR_REP_I64 && cg_rep(v->args[0]) == XR_REP_I64;
+    if (op == XI_DIV || op == XI_MOD)
+        return cg_div_mod_is_trusted_nothrow(f, v);
+    return false;
 }
 
 static bool xicgen_runtime_method_call_is_direct_nothrow(const XiValue *call) {
