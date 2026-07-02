@@ -266,6 +266,10 @@ static const char *xr_builtin_symbol_names[] = {
     "lock",
     "unlock",
     "tryLock",
+    "rdlock",
+    "rdunlock",
+    "wrlock",
+    "wrunlock",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

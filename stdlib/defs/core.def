@@ -948,6 +948,14 @@ module sys {
     builtin_kind: "XR_BK_SYSMUTEX"
   }
 
+  native_class RwLock {
+    super_slot: "objectClass"
+    core_slot: "sysRwLockClass"
+    native_body: "g_sys_rwlock_body_desc"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: "XR_BK_SYSRWLOCK"
+  }
+
   class_method Mutex.lock {
     vm: "sys_mutex_lock"
     argc: 0
@@ -963,11 +971,43 @@ module sys {
     argc: 0
   }
 
+  class_method RwLock.rdlock {
+    vm: "sys_rwlock_rdlock"
+    argc: 0
+  }
+
+  class_method RwLock.rdunlock {
+    vm: "sys_rwlock_rdunlock"
+    argc: 0
+  }
+
+  class_method RwLock.wrlock {
+    vm: "sys_rwlock_wrlock"
+    argc: 0
+  }
+
+  class_method RwLock.wrunlock {
+    vm: "sys_rwlock_wrunlock"
+    argc: 0
+  }
+
   fn Mutex {
     signature: "(): Mutex"
     doc: "Create an OS-domain mutex"
     vm: "sys_mutex_new"
     aot: "xrt_sys_mutex_new"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn RwLock {
+    signature: "(): RwLock"
+    doc: "Create an OS-domain read-write lock"
+    vm: "sys_rwlock_new"
+    aot: "xrt_sys_rwlock_new"
     argc: 0
     arg_spec: ""
     aot_direct: true
@@ -991,6 +1031,30 @@ module sys {
     signature: "(): bool"
     receiver: "Mutex"
     doc: "Try to lock the mutex"
+  }
+
+  type_method RwLock.rdlock {
+    signature: "(): ()"
+    receiver: "RwLock"
+    doc: "Acquire the read side of the read-write lock"
+  }
+
+  type_method RwLock.rdunlock {
+    signature: "(): ()"
+    receiver: "RwLock"
+    doc: "Release the read side of the read-write lock"
+  }
+
+  type_method RwLock.wrlock {
+    signature: "(): ()"
+    receiver: "RwLock"
+    doc: "Acquire the write side of the read-write lock"
+  }
+
+  type_method RwLock.wrunlock {
+    signature: "(): ()"
+    receiver: "RwLock"
+    doc: "Release the write side of the read-write lock"
   }
 }
 
