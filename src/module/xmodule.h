@@ -69,6 +69,11 @@ typedef struct XrModule {
     bool loaded;
     bool loading;
 
+    /* Pure-Xray stdlib module: the stdlib/<name>/<name>.xr script layer
+     * provides all exports, so a missing script file is a hard load
+     * error instead of a silently empty module. Set by the C loader. */
+    bool requires_script;
+
     void *native_handle;
     struct XrClosure *init_fn;
     void *compiled_code;

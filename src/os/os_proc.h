@@ -34,6 +34,7 @@
 #define XR_OS_OS_PROC_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "../base/xdefs.h"
@@ -75,6 +76,14 @@ XR_FUNC int xr_proc_wait(XrProcId pid, int *exit_code);
 
 // Current process id. Always succeeds.
 XR_FUNC int64_t xr_proc_self_pid(void);
+
+// Absolute filesystem path of the running executable. Writes a
+// NUL-terminated path into `buf` and returns 0 on success; returns -1
+// when the platform query fails or `buf` is too small. Symlinks are
+// resolved where the platform allows (macOS realpath, Linux
+// /proc/self/exe). Callers use this to locate resources shipped
+// alongside the binary (e.g. the stdlib directory).
+XR_FUNC int xr_proc_self_exe_path(char *buf, size_t size);
 
 // Returns true if a debugger (lldb / gdb / Visual Studio) is
 // attached to the current process at the time of the call. Best

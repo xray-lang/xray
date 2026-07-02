@@ -27,11 +27,13 @@ XR_FUNC XrModule *xr_load_module_sync(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_sync: NULL isolate");
 
     /* Pure-Xray module: no C exports. The script extension
-     * (stdlib/sync/sync.xr) provides all classes. */
+     * (stdlib/sync/sync.xr) provides all classes, so a missing script
+     * layer must fail the load instead of yielding an empty module. */
     XrModule *module = xr_module_create_native(isolate, "sync");
     if (!module)
         return NULL;
 
+    module->requires_script = true;
     module->loaded = true;
     return module;
 }
