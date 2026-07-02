@@ -2157,10 +2157,27 @@ static inline XrValue xrt_set_value_at_owned(xrt_set_t *s, int64_t index) {
 }
 
 /* =========================================================================
- * Iterator runtime — backs the for-in iterator protocol over Map / Set / string.
+ * Json object runtime header (flat field array, O(1) indexed access)
+ * ========================================================================= */
+
+enum {
+    XRT_OBJECT_JSON = 0,
+    XRT_OBJECT_RECORD = 1,
+};
+
+typedef struct {
+    int64_t field_count;
+    uint8_t object_kind;
+    const char **field_names;
+    xrt_map_t *dynamic_fields;
+    XrValue fields[]; /* flexible array of field values */
+} xrt_json_t;
+
+/* =========================================================================
+ * Iterator runtime — backs the for-in iterator protocol over Map / Set / Json / string.
  * The iterator borrows its source by value (no extra RC: AOT collections are
- * not individually reclaimed) and walks dense entries, typed order[], or UTF-8
- * scalar boundaries.
+ * not individually reclaimed) and walks dense entries, typed order[], Json
+ * field slots, or UTF-8 scalar boundaries.
  * ========================================================================= */
 
 #define XRT_ITER_KEYS 0      /* map: yield key */
@@ -2249,6 +2266,79 @@ invalid:
     return 0;
 }
 
+static inline int xrt_is_json_object_value(XrValue v) {
+    return v.tag == XR_TAG_PTR && v.ptr && v.heap_type == 0;
+}
+
+static inline int64_t xrt_json_dynamic_len(const xrt_json_t *j) {
+    return (j && j->dynamic_fields) ? xrt_map_len(j->dynamic_fields) : 0;
+}
+
+static inline int64_t xrt_json_iter_count(const xrt_json_t *j) {
+    return j ? j->field_count + xrt_json_dynamic_len(j) : 0;
+}
+
+static inline int xrt_json_dynamic_iter_has_next(xrt_map_t *m, int64_t *cursor) {
+    if (!m || !cursor)
+        return 0;
+    while ((uint32_t) *cursor < m->nentries) {
+        if (xrt_map_slot_is_full(m, *cursor))
+            return 1;
+        (*cursor)++;
+    }
+    return 0;
+}
+
+static inline int xrt_json_iterator_has_next(xrt_iterator_t *it) {
+    xrt_json_t *j = (xrt_json_t *) it->coll.ptr;
+    while (it->cursor < j->field_count) {
+        if (!j->field_names || !j->field_names[it->cursor]) {
+            it->cursor++;
+            continue;
+        }
+        return 1;
+    }
+    if (!j->dynamic_fields)
+        return 0;
+    int64_t dyn_cursor = it->cursor - j->field_count;
+    if (!xrt_json_dynamic_iter_has_next(j->dynamic_fields, &dyn_cursor))
+        return 0;
+    it->cursor = j->field_count + dyn_cursor;
+    return 1;
+}
+
+static inline XrValue xrt_json_iterator_next(xrt_iterator_t *it) {
+    xrt_json_t *j = (xrt_json_t *) it->coll.ptr;
+    if (it->cursor < j->field_count) {
+        int64_t idx = it->cursor++;
+        XrValue key = xr_box_str(j->field_names && j->field_names[idx] ? j->field_names[idx] : "");
+        XrValue value = j->fields[idx];
+        if (it->kind == XRT_ITER_PAIRS) {
+            XrValue kv[2] = {key, value};
+            return xrt_tuple_make(2, kv);
+        }
+        if (it->kind == XRT_ITER_VALUES)
+            return value;
+        return key;
+    }
+    if (!j->dynamic_fields)
+        return XR_NULL_VAL;
+    int64_t dyn_cursor = it->cursor - j->field_count;
+    if (!xrt_json_dynamic_iter_has_next(j->dynamic_fields, &dyn_cursor))
+        return XR_NULL_VAL;
+    int64_t slot = dyn_cursor;
+    it->cursor = j->field_count + dyn_cursor + 1;
+    XrValue key = xrt_map_slot_key(j->dynamic_fields, slot);
+    XrValue value = xrt_map_slot_value(j->dynamic_fields, slot);
+    if (it->kind == XRT_ITER_PAIRS) {
+        XrValue kv[2] = {key, value};
+        return xrt_tuple_make(2, kv);
+    }
+    if (it->kind == XRT_ITER_VALUES)
+        return value;
+    return key;
+}
+
 // Park cursor at the next live entry/order[] slot; return 1 if one exists.
 static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
     if (it->kind == XRT_ITER_GENERATOR) {
@@ -2277,6 +2367,8 @@ static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
         }
         return 0;
     }
+    if (xrt_is_json_object_value(it->coll))
+        return xrt_json_iterator_has_next(it);
     if (XR_IS_SET(it->coll)) {
         xrt_set_t *s = (xrt_set_t *) it->coll.ptr;
         if (xrt_set_is_typed(s)) {
@@ -2337,6 +2429,8 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
         int64_t slot = xrt_set_is_typed(s) ? s->order[it->cursor++] : it->cursor++;
         return xrt_set_slot_item(s, slot);
     }
+    if (xrt_is_json_object_value(it->coll))
+        return xrt_json_iterator_next(it);
     if (XR_IS_STR(it->coll)) {
         int64_t char_index = it->index++;
         uint32_t cp = 0;
@@ -2368,23 +2462,6 @@ static inline XrValue xrt_process_new(const char *file, int argc, char **argv, c
     xrt_map_set(m, xr_box_str("dir"), dir ? xr_box_str(dir) : XR_NULL_VAL);
     return process;
 }
-
-/* =========================================================================
- * Json object runtime (flat field array, O(1) indexed access)
- * ========================================================================= */
-
-enum {
-    XRT_OBJECT_JSON = 0,
-    XRT_OBJECT_RECORD = 1,
-};
-
-typedef struct {
-    int64_t field_count;
-    uint8_t object_kind;
-    const char **field_names;
-    xrt_map_t *dynamic_fields;
-    XrValue fields[]; /* flexible array of field values */
-} xrt_json_t;
 
 static inline XrValue xrt_value_clone_for_coro(XrValue val);
 

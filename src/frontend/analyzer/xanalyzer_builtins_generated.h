@@ -499,41 +499,6 @@ static const XaBuiltinMember g_gen_toml_functions[] = {
 };
 #define GEN_TOML_FUNCTION_COUNT 5
 
-// url.URL handle fields
-static const XaBuiltinHandleField g_gen_url_url_fields[] = {
-    {"protocol", "string", true},
-    {"hostname", "string", true},
-    {"port", "string", true},
-    {"pathname", "string", true},
-    {"search", "string", true},
-    {"hash", "string", true},
-    {"username", "string", true},
-    {"password", "string", true},
-    {"host", "string", true},
-    {"origin", "string", true},
-    {"href", "string", true},
-};
-
-static const XaBuiltinHandle g_gen_url_handles[] = {
-    {"URL", g_gen_url_url_fields, 11, NULL, 0},
-};
-#define GEN_URL_HANDLE_COUNT 1
-
-// url module functions
-static const XaBuiltinMember g_gen_url_functions[] = {
-    {"encode", "(s: string): string", "RFC 3986 percent-encode", true, false},
-    {"decode", "(s: string): string", "RFC 3986 percent-decode", true, false},
-    {"encodeForm", "(s: string): string", "Form URL encode (space as +)", true, false},
-    {"decodeForm", "(s: string): string", "Form URL decode (+ as space)", true, false},
-    {"parse", "(url: string): URL", "Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, username, password, host, origin, href)", true, false},
-    {"format", "(obj: URL): string", "Build URL string from URL components", true, false},
-    {"parseQuery", "(qs: string): Json", "Parse query string to Json", true, false},
-    {"buildQuery", "(obj: Json): string", "Build query string from Json", true, false},
-    {"resolve", "(base: string, relative: string): string", "Resolve relative URL", true, false},
-    {"join", "(...parts: string): string", "Join URL path segments", true, false},
-};
-#define GEN_URL_FUNCTION_COUNT 10
-
 // ws.WsConn handle fields
 static const XaBuiltinHandleField g_gen_ws_wsconn_fields[] = {
     {"wsid", "int", true},
@@ -615,12 +580,11 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0},
     {"toml", g_gen_toml_functions, GEN_TOML_FUNCTION_COUNT, NULL, 0},
-    {"url", g_gen_url_functions, GEN_URL_FUNCTION_COUNT, g_gen_url_handles, GEN_URL_HANDLE_COUNT},
     {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT},
     {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
     {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 19
+#define GEN_BUILTIN_MODULE_COUNT 18
 
 /* clang-format on */
 

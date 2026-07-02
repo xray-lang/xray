@@ -9,44 +9,6 @@
 
 // clang-format off
 
-static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
-    {
-        .name = "decode",
-        .signature = "(data: string): string?",
-        .summary = "Base64 decode",
-    },
-    {
-        .name = "decodeToBytes",
-        .signature = "(data: string): Array<uint8>?",
-        .summary = "Base64 decode to bytes",
-    },
-    {
-        .name = "decodeUrl",
-        .signature = "(data: string): string?",
-        .summary = "URL-safe base64 decode",
-    },
-    {
-        .name = "encode",
-        .signature = "(data: string): string",
-        .summary = "Base64 encode",
-    },
-    {
-        .name = "encodeBytes",
-        .signature = "(data: Array<uint8>): string",
-        .summary = "Base64 encode bytes",
-    },
-    {
-        .name = "encodeUrl",
-        .signature = "(data: string): string",
-        .summary = "URL-safe base64 encode",
-    },
-    {
-        .name = "isValid",
-        .signature = "(data: string): bool",
-        .summary = "Check if valid base64",
-    },
-};
-
 static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "call",
@@ -304,64 +266,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
         .name = "utc",
         .signature = "(): DateTime",
         .summary = "Get current UTC datetime",
-    },
-};
-
-static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
-    {
-        .name = "BE",
-        .signature = ": int",
-        .summary = "Big-endian UTF-16 byte order",
-    },
-    {
-        .name = "LE",
-        .signature = ": int",
-        .summary = "Little-endian UTF-16 byte order",
-    },
-    {
-        .name = "hexDecode",
-        .signature = "(hex: string): Array<uint8>?",
-        .summary = "Hex decode to bytes",
-    },
-    {
-        .name = "hexDecodeString",
-        .signature = "(hex: string): string?",
-        .summary = "Hex decode to string",
-    },
-    {
-        .name = "hexEncode",
-        .signature = "(data: string): string",
-        .summary = "Hex encode string to hex",
-    },
-    {
-        .name = "hexValid",
-        .signature = "(hex: string): bool",
-        .summary = "Check if valid hex string",
-    },
-    {
-        .name = "utf16Decode",
-        .signature = "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?",
-        .summary = "UTF-16 decode to string (auto-detects BOM)",
-    },
-    {
-        .name = "utf16Encode",
-        .signature = "(data: string, endian?: int): Array<uint8>",
-        .summary = "UTF-16 encode to bytes",
-    },
-    {
-        .name = "utf8ByteLength",
-        .signature = "(data: string): int",
-        .summary = "Get UTF-8 byte length",
-    },
-    {
-        .name = "utf8Count",
-        .signature = "(data: string): int",
-        .summary = "Count UTF-8 characters",
-    },
-    {
-        .name = "utf8Valid",
-        .signature = "(data: string): bool",
-        .summary = "Check if valid UTF-8",
     },
 };
 
@@ -1229,6 +1133,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Two's-complement wrapping addition (wraps mod 2^64)",
     },
     {
+        .name = "addressOf",
+        .signature = "(ptr: RawPtr<uint8>): int",
+        .summary = "Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)",
+    },
+    {
         .name = "alloc",
         .signature = "(n: int): RawMut<uint8>",
         .summary = "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free",
@@ -1282,6 +1191,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "free",
         .signature = "(ptr: RawMut<uint8>): ()",
         .summary = "Free a buffer from mem.alloc/allocAligned/realloc",
+    },
+    {
+        .name = "fromAddress",
+        .signature = "(addr: int): RawMut<uint8>",
+        .summary = "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe",
     },
     {
         .name = "info",
@@ -1701,99 +1615,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
 };
 
-static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
-    {
-        .name = "PathInfo",
-        .signature = "PathInfo",
-        .summary = "Handle type",
-    },
-    {
-        .name = "PathInfo.base",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "PathInfo.dir",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "PathInfo.ext",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "PathInfo.name",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "PathInfo.root",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "basename",
-        .signature = "(path: string): string",
-        .summary = "Get base name",
-    },
-    {
-        .name = "delimiter",
-        .signature = ": string",
-        .summary = "Platform path-list delimiter",
-    },
-    {
-        .name = "dirname",
-        .signature = "(path: string): string",
-        .summary = "Get directory name",
-    },
-    {
-        .name = "extname",
-        .signature = "(path: string): string",
-        .summary = "Get file extension",
-    },
-    {
-        .name = "format",
-        .signature = "(obj: PathInfo): string",
-        .summary = "Format path from components",
-    },
-    {
-        .name = "isAbsolute",
-        .signature = "(path: string): bool",
-        .summary = "Check if path is absolute",
-    },
-    {
-        .name = "join",
-        .signature = "(...parts: string): string",
-        .summary = "Join path segments",
-    },
-    {
-        .name = "normalize",
-        .signature = "(path: string): string",
-        .summary = "Normalize path",
-    },
-    {
-        .name = "parse",
-        .signature = "(path: string): PathInfo",
-        .summary = "Parse path into components",
-    },
-    {
-        .name = "relative",
-        .signature = "(from: string, to: string): string",
-        .summary = "Get relative path",
-    },
-    {
-        .name = "resolve",
-        .signature = "(...parts: string): string",
-        .summary = "Resolve to absolute path",
-    },
-    {
-        .name = "sep",
-        .signature = ": string",
-        .summary = "Platform path separator",
-    },
-};
-
 static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     {
         .name = "compile",
@@ -1920,119 +1741,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
         .name = "writeFile",
         .signature = "(path: string, value: Json): bool",
         .summary = "Write TOML file",
-    },
-};
-
-static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
-    {
-        .name = "URL",
-        .signature = "URL",
-        .summary = "Handle type",
-    },
-    {
-        .name = "URL.hash",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "URL.host",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "URL.hostname",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "URL.href",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "URL.origin",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "URL.password",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "URL.pathname",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "URL.port",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "URL.protocol",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "URL.search",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "URL.username",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "buildQuery",
-        .signature = "(obj: Json): string",
-        .summary = "Build query string from Json",
-    },
-    {
-        .name = "decode",
-        .signature = "(s: string): string",
-        .summary = "RFC 3986 percent-decode",
-    },
-    {
-        .name = "decodeForm",
-        .signature = "(s: string): string",
-        .summary = "Form URL decode (+ as space)",
-    },
-    {
-        .name = "encode",
-        .signature = "(s: string): string",
-        .summary = "RFC 3986 percent-encode",
-    },
-    {
-        .name = "encodeForm",
-        .signature = "(s: string): string",
-        .summary = "Form URL encode (space as +)",
-    },
-    {
-        .name = "format",
-        .signature = "(obj: URL): string",
-        .summary = "Build URL string from URL components",
-    },
-    {
-        .name = "join",
-        .signature = "(...parts: string): string",
-        .summary = "Join URL path segments",
-    },
-    {
-        .name = "parse",
-        .signature = "(url: string): URL",
-        .summary = "Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, username, password, host, origin, href)",
-    },
-    {
-        .name = "parseQuery",
-        .signature = "(qs: string): Json",
-        .summary = "Parse query string to Json",
-    },
-    {
-        .name = "resolve",
-        .signature = "(base: string, relative: string): string",
-        .summary = "Resolve relative URL",
     },
 };
 
@@ -3605,21 +3313,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "Base64 encoding/decoding.\n"
             "\n"
             "Usage: `import base64` then call `base64.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `base64.decode` | `(data: string): string?` | Base64 decode |\n"
-            "| `base64.decodeToBytes` | `(data: string): Array<uint8>?` | Base64 decode to bytes |\n"
-            "| `base64.decodeUrl` | `(data: string): string?` | URL-safe base64 decode |\n"
-            "| `base64.encode` | `(data: string): string` | Base64 encode |\n"
-            "| `base64.encodeBytes` | `(data: Array<uint8>): string` | Base64 encode bytes |\n"
-            "| `base64.encodeUrl` | `(data: string): string` | URL-safe base64 encode |\n"
-            "| `base64.isValid` | `(data: string): bool` | Check if valid base64 |\n"
             "",
-        .symbols = _symbols_base64,
-        .symbol_count = (int)(sizeof(_symbols_base64) / sizeof(_symbols_base64[0])),
+        .symbols = NULL,
+        .symbol_count = 0,
     },
     {
         .module = "cluster",
@@ -3769,25 +3465,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "Character encoding conversion.\n"
             "\n"
             "Usage: `import encoding` then call `encoding.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `encoding.BE` | `: int` | Big-endian UTF-16 byte order |\n"
-            "| `encoding.LE` | `: int` | Little-endian UTF-16 byte order |\n"
-            "| `encoding.hexDecode` | `(hex: string): Array<uint8>?` | Hex decode to bytes |\n"
-            "| `encoding.hexDecodeString` | `(hex: string): string?` | Hex decode to string |\n"
-            "| `encoding.hexEncode` | `(data: string): string` | Hex encode string to hex |\n"
-            "| `encoding.hexValid` | `(hex: string): bool` | Check if valid hex string |\n"
-            "| `encoding.utf16Decode` | `(data: string \\| Array<uint8>, endian?: int, stripBom?: bool): string?` | UTF-16 decode to string (auto-detects BOM) |\n"
-            "| `encoding.utf16Encode` | `(data: string, endian?: int): Array<uint8>` | UTF-16 encode to bytes |\n"
-            "| `encoding.utf8ByteLength` | `(data: string): int` | Get UTF-8 byte length |\n"
-            "| `encoding.utf8Count` | `(data: string): int` | Count UTF-8 characters |\n"
-            "| `encoding.utf8Valid` | `(data: string): bool` | Check if valid UTF-8 |\n"
             "",
-        .symbols = _symbols_encoding,
-        .symbol_count = (int)(sizeof(_symbols_encoding) / sizeof(_symbols_encoding[0])),
+        .symbols = NULL,
+        .symbol_count = 0,
     },
     {
         .module = "http",
@@ -4067,6 +3747,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `mem.addOverflows` | `(a: int, b: int): bool` | Whether signed 64-bit addition of a and b overflows |\n"
             "| `mem.addWrapping` | `(a: int, b: int): int` | Two's-complement wrapping addition (wraps mod 2^64) |\n"
+            "| `mem.addressOf` | `(ptr: RawPtr<uint8>): int` | Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress) |\n"
             "| `mem.alloc` | `(n: int): RawMut<uint8>` | Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free |\n"
             "| `mem.allocAligned` | `(n: int, align: int): RawMut<uint8>` | Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure |\n"
             "| `mem.byteswap` | `(x: int): int` | Reverse the byte order of the 64-bit value |\n"
@@ -4078,6 +3759,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.enableCycleCollection` | `(): ()` | Resume the automatic cycle collector |\n"
             "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
             "| `mem.free` | `(ptr: RawMut<uint8>): ()` | Free a buffer from mem.alloc/allocAligned/realloc |\n"
+            "| `mem.fromAddress` | `(addr: int): RawMut<uint8>` | Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.info` | `(): Map` | Get memory-model runtime info as Map |\n"
             "| `mem.isCycleCollectionEnabled` | `(): bool` | Check if automatic cycle collection is enabled |\n"
             "| `mem.leadingZeros` | `(x: int): int` | Count of leading zero bits (0 -> 64) |\n"
@@ -4242,32 +3924,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "File path manipulation.\n"
             "\n"
             "Usage: `import path` then call `path.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `path.PathInfo` | `PathInfo` | Handle type |\n"
-            "| `PathInfo.base` | `const string` | Handle field |\n"
-            "| `PathInfo.dir` | `const string` | Handle field |\n"
-            "| `PathInfo.ext` | `const string` | Handle field |\n"
-            "| `PathInfo.name` | `const string` | Handle field |\n"
-            "| `PathInfo.root` | `const string` | Handle field |\n"
-            "| `path.basename` | `(path: string): string` | Get base name |\n"
-            "| `path.delimiter` | `: string` | Platform path-list delimiter |\n"
-            "| `path.dirname` | `(path: string): string` | Get directory name |\n"
-            "| `path.extname` | `(path: string): string` | Get file extension |\n"
-            "| `path.format` | `(obj: PathInfo): string` | Format path from components |\n"
-            "| `path.isAbsolute` | `(path: string): bool` | Check if path is absolute |\n"
-            "| `path.join` | `(...parts: string): string` | Join path segments |\n"
-            "| `path.normalize` | `(path: string): string` | Normalize path |\n"
-            "| `path.parse` | `(path: string): PathInfo` | Parse path into components |\n"
-            "| `path.relative` | `(from: string, to: string): string` | Get relative path |\n"
-            "| `path.resolve` | `(...parts: string): string` | Resolve to absolute path |\n"
-            "| `path.sep` | `: string` | Platform path separator |\n"
             "",
-        .symbols = _symbols_path,
-        .symbol_count = (int)(sizeof(_symbols_path) / sizeof(_symbols_path[0])),
+        .symbols = NULL,
+        .symbol_count = 0,
     },
     {
         .module = "regex",
@@ -4356,36 +4015,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "URL parsing and construction.\n"
             "\n"
             "Usage: `import url` then call `url.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `url.URL` | `URL` | Handle type |\n"
-            "| `URL.hash` | `const string` | Handle field |\n"
-            "| `URL.host` | `const string` | Handle field |\n"
-            "| `URL.hostname` | `const string` | Handle field |\n"
-            "| `URL.href` | `const string` | Handle field |\n"
-            "| `URL.origin` | `const string` | Handle field |\n"
-            "| `URL.password` | `const string` | Handle field |\n"
-            "| `URL.pathname` | `const string` | Handle field |\n"
-            "| `URL.port` | `const string` | Handle field |\n"
-            "| `URL.protocol` | `const string` | Handle field |\n"
-            "| `URL.search` | `const string` | Handle field |\n"
-            "| `URL.username` | `const string` | Handle field |\n"
-            "| `url.buildQuery` | `(obj: Json): string` | Build query string from Json |\n"
-            "| `url.decode` | `(s: string): string` | RFC 3986 percent-decode |\n"
-            "| `url.decodeForm` | `(s: string): string` | Form URL decode (+ as space) |\n"
-            "| `url.encode` | `(s: string): string` | RFC 3986 percent-encode |\n"
-            "| `url.encodeForm` | `(s: string): string` | Form URL encode (space as +) |\n"
-            "| `url.format` | `(obj: URL): string` | Build URL string from URL components |\n"
-            "| `url.join` | `(...parts: string): string` | Join URL path segments |\n"
-            "| `url.parse` | `(url: string): URL` | Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, username, password, host, origin, href) |\n"
-            "| `url.parseQuery` | `(qs: string): Json` | Parse query string to Json |\n"
-            "| `url.resolve` | `(base: string, relative: string): string` | Resolve relative URL |\n"
             "",
-        .symbols = _symbols_url,
-        .symbol_count = (int)(sizeof(_symbols_url) / sizeof(_symbols_url[0])),
+        .symbols = NULL,
+        .symbol_count = 0,
     },
     {
         .module = "ws",

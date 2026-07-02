@@ -13,6 +13,7 @@
 #include "xarray.h"
 #include "xiterator.h"
 #include "xstring.h"
+#include "xtuple.h"
 #include "../class/xinstance.h"
 #include "../mem/xheap.h"
 #include "../mem/xcoro_heap.h"  // xr_rc_retain_value (unified RC primitive)
@@ -95,6 +96,34 @@ static XrValue xr_json_method_values(XrVMRuntime *iso, XrValue self, XrValue *ar
         XrValue value = xr_instance_get_dynamic_field(json, i);
         xr_rc_retain_value(value);
         xr_array_push(result, value);
+    }
+    return xr_value_from_array(result);
+}
+
+/* entries() -> Array<(string, Json)>: return all field key/value pairs. */
+static XrValue xr_json_method_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrCoroutine *coro = xr_current_coro(iso);
+    XrArray *result = xr_array_new(coro);
+    XR_DCHECK(result != NULL, "json.entries: array alloc failed");
+
+    XrJson *json = json_self(self);
+    XrClass *cls = json->klass;
+    if (!cls)
+        return xr_value_from_array(result);
+
+    for (uint16_t i = 0; i < cls->field_count; i++) {
+        const char *name = cls->fields[i].name;
+        if (!name)
+            continue;
+        XrValue key = xr_string_value(xr_string_intern(iso, name, strlen(name), 0));
+        XrValue value = xr_instance_get_dynamic_field(json, i);
+        XrValue pair_values[2] = {key, value};
+        XrTuple *pair = xr_tuple_from_values(coro, pair_values, 2);
+        if (!pair)
+            return xr_null();
+        xr_array_push(result, xr_value_from_tuple(pair));
     }
     return xr_value_from_array(result);
 }
@@ -191,6 +220,7 @@ void xr_json_register_instance_methods(XrVMRuntime *isolate) {
     xr_class_builder_add_method(b, "toString", xr_json_method_to_string, 0, 0);
     xr_class_builder_add_method(b, "keys", xr_json_method_keys, 0, 0);
     xr_class_builder_add_method(b, "values", xr_json_method_values, 0, 0);
+    xr_class_builder_add_method(b, "entries", xr_json_method_entries, 0, 0);
     xr_class_builder_add_method(b, "has", xr_json_method_has, 1, 0);
     xr_class_builder_add_method(b, "isNull", xr_json_method_is_null, 0, 0);
     xr_class_builder_add_method(b, "isInt", xr_json_method_is_int, 0, 0);

@@ -9,10 +9,12 @@ Licensed under the MIT License
 gen_stdlib_types.py - Generate analyzer builtin type declarations
 
 KEY CONCEPT:
-  Uses stdlib/defs/*.def as the declaration source for in-tree stdlib module
-  functions, constants, handles, and type methods. C annotations are kept only
-  for --xrd mode, where third-party native modules can generate declarations
-  from their own C source.
+  Uses stdlib/defs/*.def as the analyzer source for in-tree native stdlib
+  modules. Exported declarations in pure-Xray stdlib modules are merged only
+  into the LSP stdlib table so editor metadata follows migrated modules without
+  reintroducing analyzer-level native handles. C annotations are kept only for
+  --xrd mode, where third-party native modules can generate declarations from
+  their own C source.
 
   Supports two output modes:
     --embed (default): Generate xanalyzer_builtins_generated.h (for stdlib)
@@ -27,6 +29,7 @@ This ensures type declarations stay in sync with runtime implementations.
 """
 
 import argparse
+import copy
 import difflib
 import re
 import sys
@@ -39,6 +42,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 OUTPUT_FILE = PROJECT_ROOT / "src" / "frontend" / "analyzer" / "xanalyzer_builtins_generated.h"
 LSP_OUTPUT_FILE = PROJECT_ROOT / "src" / "app" / "lsp" / "xlsp_stdlib_generated.inc"
 STDLIBGEN_TOOL_DIR = PROJECT_ROOT / "tools" / "stdlibgen"
+STDLIB_DIR = PROJECT_ROOT / "stdlib"
 
 # Pattern to match method/function definitions in C
 # e.g., XR_DEFINE_BUILTIN(array_push, "push", "(item: T): int", "Push item to end")
@@ -106,6 +110,29 @@ HANDLE_FIELD_PATTERN = re.compile(
     r'([A-Za-z_][A-Za-z0-9_]*(?:<[^,{}]+>)?\??)'
 )
 
+PURE_EXPORT_PATTERN = re.compile(r'export\s*\{(?P<body>.*?)\}', re.S)
+PURE_DOC_PATTERN = re.compile(
+    r'^\s*//\s*([A-Za-z_][A-Za-z0-9_]*)(?:<[^>]+>)?\s*(?:-|—|:)\s*(.+)$',
+    re.M,
+)
+PURE_FN_PATTERN = re.compile(
+    r'^fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*(\([^)]*\))\s*'
+    r'(?:->\s*([^{\n]+))?\s*\{',
+    re.M,
+)
+PURE_CLASS_PATTERN = re.compile(
+    r'^class\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\{',
+    re.M,
+)
+PURE_CLASS_FIELD_PATTERN = re.compile(
+    r'^\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^=\n]+)$',
+    re.M,
+)
+PURE_LET_PATTERN = re.compile(
+    r'^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([^=\n]+))?\s*=\s*([^\n]+)',
+    re.M,
+)
+
 
 def parse_handle_fields(fields_str):
     """Parse handle field declarations."""
@@ -120,6 +147,231 @@ def parse_handle_fields(fields_str):
             'is_const': is_const,
         })
     return fields
+
+
+def split_top_level_commas(text):
+    parts = []
+    start = 0
+    angle = 0
+    paren = 0
+    for i, ch in enumerate(text):
+        if ch == '<':
+            angle += 1
+        elif ch == '>' and angle > 0:
+            angle -= 1
+        elif ch == '(':
+            paren += 1
+        elif ch == ')' and paren > 0:
+            paren -= 1
+        elif ch == ',' and angle == 0 and paren == 0:
+            parts.append(text[start:i].strip())
+            start = i + 1
+    tail = text[start:].strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def normalize_type(type_str):
+    t = (type_str or "").strip()
+    t = re.sub(r'\bBytes\b', 'Array<uint8>', t)
+    return t
+
+
+def normalize_params(params):
+    inner = params.strip()
+    if inner.startswith('(') and inner.endswith(')'):
+        inner = inner[1:-1].strip()
+    if not inner:
+        return ""
+
+    normalized = []
+    for raw in split_top_level_commas(inner):
+        if '=' not in raw:
+            if ':' in raw:
+                name, type_name = raw.split(':', 1)
+                normalized.append(f"{name.strip()}: {normalize_type(type_name)}")
+            else:
+                normalized.append(raw)
+            continue
+        before_default = raw.split('=', 1)[0].strip()
+        if ':' not in before_default:
+            normalized.append(before_default)
+            continue
+        name, type_name = before_default.split(':', 1)
+        normalized.append(f"{name.strip()}?: {normalize_type(type_name)}")
+    return ", ".join(normalized)
+
+
+def normalize_function_signature(params, ret_type):
+    ret = normalize_type(ret_type) if ret_type else "()"
+    return f"({normalize_params(params)}): {ret}"
+
+
+def infer_pure_const_type(annotation, value):
+    if annotation:
+        return normalize_type(annotation)
+    v = (value or "").strip()
+    if v.startswith('"'):
+        return "string"
+    if re.fullmatch(r'-?(?:0x[0-9A-Fa-f]+|\d+)', v):
+        return "int"
+    if v in ("true", "false"):
+        return "bool"
+    return "unknown"
+
+
+def exported_names_from_xray(content):
+    match = PURE_EXPORT_PATTERN.search(content)
+    if not match:
+        return []
+    body = re.sub(r'//.*', '', match.group('body'))
+    names = []
+    for part in split_top_level_commas(body):
+        name = part.strip()
+        if name:
+            names.append(name)
+    return names
+
+
+def doc_map_from_xray(content):
+    docs = {}
+    for match in PURE_DOC_PATTERN.finditer(content):
+        docs.setdefault(match.group(1), match.group(2).strip())
+    return docs
+
+
+def matching_brace_index(content, open_index):
+    depth = 0
+    for i in range(open_index, len(content)):
+        ch = content[i]
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def parse_pure_class_fields(content, class_match):
+    open_index = content.find('{', class_match.end() - 1)
+    if open_index < 0:
+        return []
+    close_index = matching_brace_index(content, open_index)
+    if close_index < 0:
+        return []
+    body = content[open_index + 1:close_index]
+    fields = []
+    for match in PURE_CLASS_FIELD_PATTERN.finditer(body):
+        name = match.group(1)
+        if name.startswith('_'):
+            continue
+        fields.append({
+            'name': name,
+            'type': normalize_type(match.group(2)),
+            'is_const': False,
+        })
+    return fields
+
+
+def scan_pure_xray_module(filepath, module_name):
+    content = filepath.read_text(encoding='utf-8')
+    exports = exported_names_from_xray(content)
+    if not exports:
+        return None
+    exported = set(exports)
+    docs = doc_map_from_xray(content)
+
+    functions = {}
+    for match in PURE_FN_PATTERN.finditer(content):
+        name = match.group(1)
+        if name not in exported:
+            continue
+        functions[name] = {
+            'func': name,
+            'name': name,
+            'signature': normalize_function_signature(match.group(2), match.group(3)),
+            'doc': docs.get(name, ''),
+        }
+
+    constants = {}
+    for match in PURE_LET_PATTERN.finditer(content):
+        name = match.group(1)
+        if name not in exported:
+            continue
+        constants[name] = {
+            'name': name,
+            'signature': f": {infer_pure_const_type(match.group(2), match.group(3))}",
+            'doc': docs.get(name, ''),
+        }
+
+    classes = {}
+    for match in PURE_CLASS_PATTERN.finditer(content):
+        name = match.group(1)
+        if name not in exported:
+            continue
+        classes[name] = {
+            'name': name,
+            'fields': parse_pure_class_fields(content, match),
+            'doc': docs.get(name, 'Class type'),
+        }
+
+    ordered = {
+        'module': module_name,
+        'handles': [],
+        'methods': [],
+        'handle_methods': {},
+        'constants': [],
+    }
+    for name in exports:
+        if name in classes:
+            ordered['handles'].append(classes[name])
+        elif name in functions:
+            ordered['methods'].append(functions[name])
+        elif name in constants:
+            ordered['constants'].append(constants[name])
+
+    if not ordered['handles'] and not ordered['methods'] and not ordered['constants']:
+        return None
+    return ordered
+
+
+def load_pure_xray_modules():
+    """Load exported declarations from pure-Xray stdlib modules."""
+    modules = {}
+    if not STDLIB_DIR.exists():
+        return modules
+    for filepath in sorted(STDLIB_DIR.glob("*/*.xr")):
+        module_name = filepath.parent.name
+        if module_name == "types" or module_name.startswith("_"):
+            continue
+        if filepath.stem != module_name:
+            continue
+        mod_data = scan_pure_xray_module(filepath, module_name)
+        if mod_data:
+            modules[module_name] = mod_data
+    return modules
+
+
+def merge_pure_xray_modules(module_results, pure_modules):
+    added = 0
+    for mod_name, pure_data in sorted(pure_modules.items()):
+        mod_data = module_results.setdefault(mod_name, {
+            'handles': [],
+            'methods': [],
+            'handle_methods': {},
+            'constants': [],
+        })
+        for key, name_key in (('methods', 'name'), ('constants', 'name'), ('handles', 'name')):
+            existing = {item[name_key] for item in mod_data.get(key, [])}
+            for item in pure_data.get(key, []):
+                if item[name_key] in existing:
+                    continue
+                mod_data.setdefault(key, []).append(item)
+                existing.add(item[name_key])
+                added += 1
+    return added
 
 
 def scan_file(filepath):
@@ -502,7 +754,9 @@ def generate_header(type_results, module_results):
             lines.append(f"static const XaBuiltinMember g_gen_{type_name.lower()}_members[] = {{")
             for m in methods:
                 is_method = "true" if '(' in m['signature'] else "false"
-                lines.append(f'    {{"{m["name"]}", "{m["signature"]}", "{m["doc"]}", {is_method}, false}},')
+                lines.append(
+                    f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
+                    f'"{c_string(m["doc"])}", {is_method}, false}},')
             lines.append("};")
             lines.append(f"#define GEN_{type_name.upper()}_MEMBER_COUNT {len(methods)}")
             lines.append("")
@@ -520,7 +774,9 @@ def generate_header(type_results, module_results):
                 lines.append(f"static const XaBuiltinHandleField {var_name}[] = {{")
                 for f in handle['fields']:
                     is_const = "true" if f['is_const'] else "false"
-                    lines.append(f'    {{"{f["name"]}", "{f["type"]}", {is_const}}},')
+                    lines.append(
+                        f'    {{"{c_string(f["name"])}", "{c_string(f["type"])}", '
+                        f'{is_const}}},')
                 lines.append("};")
                 lines.append("")
 
@@ -529,7 +785,9 @@ def generate_header(type_results, module_results):
                 lines.append(f"static const XaBuiltinHandle g_gen_{mod_name}_handles[] = {{")
                 for handle in mod_data['handles']:
                     var_name = f"g_gen_{mod_name}_{handle['name'].lower()}_fields"
-                    lines.append(f'    {{"{handle["name"]}", {var_name}, {len(handle["fields"])}, NULL, 0}},')
+                    lines.append(
+                        f'    {{"{c_string(handle["name"])}", {var_name}, '
+                        f'{len(handle["fields"])}, NULL, 0}},')
                 lines.append("};")
                 lines.append(f"#define GEN_{mod_name.upper()}_HANDLE_COUNT {len(mod_data['handles'])}")
                 lines.append("")
@@ -550,11 +808,15 @@ def generate_header(type_results, module_results):
                 lines.append(f"static const XaBuiltinMember g_gen_{mod_name}_functions[] = {{")
                 for m in method_entries:
                     is_method = "true" if '(' in m['signature'] else "false"
-                    lines.append(f'    {{"{m["name"]}", "{m["signature"]}", "{m["doc"]}", {is_method}, false}},')
+                    lines.append(
+                        f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
+                        f'"{c_string(m["doc"])}", {is_method}, false}},')
                 if constant_entries:
                     lines.append(f"    // Module constants (is_method=false)")
                     for c in constant_entries:
-                        lines.append(f'    {{"{c["name"]}", "{c["signature"]}", "{c["doc"]}", false, false}},')
+                        lines.append(
+                            f'    {{"{c_string(c["name"])}", "{c_string(c["signature"])}", '
+                            f'"{c_string(c["doc"])}", false, false}},')
                 lines.append("};")
                 lines.append(f"#define GEN_{mod_name.upper()}_FUNCTION_COUNT {total}")
                 lines.append("")
@@ -571,7 +833,9 @@ def generate_header(type_results, module_results):
             func_count = f"GEN_{mod_name.upper()}_FUNCTION_COUNT" if has_function_slot else "0"
             handle_ref = f"g_gen_{mod_name}_handles" if mod_data.get('handles') else "NULL"
             handle_count = f"GEN_{mod_name.upper()}_HANDLE_COUNT" if mod_data.get('handles') else "0"
-            lines.append(f'    {{"{mod_name}", {func_ref}, {func_count}, {handle_ref}, {handle_count}}},')
+            lines.append(
+                f'    {{"{c_string(mod_name)}", {func_ref}, {func_count}, '
+                f'{handle_ref}, {handle_count}}},')
         lines.append("};")
         lines.append(f"#define GEN_BUILTIN_MODULE_COUNT {len(module_results)}")
         lines.append("")
@@ -614,7 +878,7 @@ def generate_lsp_include(module_results):
             symbols.append({
                 'name': handle['name'],
                 'signature': f"type {handle['name']}",
-                'doc': "Native handle type",
+                'doc': handle.get('doc') or "Native handle type",
                 'lsp_kind': "XLSP_SYM_CLASS",
             })
 
@@ -759,7 +1023,7 @@ def main():
     print("Loading stdlib definitions from stdlib/defs/*.def...", file=sys.stderr)
 
     type_results = {}    # type_name -> [methods]
-    module_results = {}  # module_name -> {handles, methods}
+    module_results = {}  # .def-backed module_name -> {handles, methods}
 
     def_methods = load_def_module_methods()
     replaced, added = merge_def_module_methods(module_results, def_methods)
@@ -771,6 +1035,10 @@ def main():
     type_method_replaced, type_method_added = merge_def_type_methods(
         type_results, def_type_methods
     )
+
+    lsp_module_results = copy.deepcopy(module_results)
+    pure_modules = load_pure_xray_modules()
+    pure_added = merge_pure_xray_modules(lsp_module_results, pure_modules)
 
     total_types = len(type_results)
     total_modules = len(module_results)
@@ -789,10 +1057,12 @@ def main():
           f"({handle_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)
     print(f"Def type methods: {type_method_added} methods loaded "
           f"({type_method_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)
+    print(f"Pure-Xray modules: {pure_added} exported symbols loaded "
+          f"from stdlib/*/*.xr", file=sys.stderr)
 
     # Generate embed outputs
     analyzer_content = generate_header(type_results, module_results)
-    lsp_content = generate_lsp_include(module_results)
+    lsp_content = generate_lsp_include(lsp_module_results)
 
     if args.check:
         return check_outputs(analyzer_content, lsp_content)
