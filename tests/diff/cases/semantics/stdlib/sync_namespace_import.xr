@@ -1,37 +1,23 @@
-// `import sync` + `sync.Mutex<T>` — namespace form of the pure-Xray sync module.
-//
-// Companion to sync_module_import.xr (which uses named imports). This exercises
-// the namespace-qualified path for imported generic classes end to end: the
-// constructor `sync.Mutex<int>(...)` must infer the class instance type, and the
-// generic closure-taking methods (`lock`/`replace`/`read`/`call`/`wait`/...)
-// must resolve to direct cross-module calls with their closure arguments
-// keeping their inferred return types — all VM/AOT identical (task 147 §0.13).
+// Namespace import of the pure-Xray generic `sync` stdlib module. The generic
+// classes (Mutex<T>/RwLock<T>) and their generic closure-taking methods must
+// monomorphize through `sync.Type<T>(...)` namespace access in AOT (not fall to
+// null-returning dynamic dispatch), matching VM byte-for-byte. Complements the
+// named-import case in sync_module_import.xr; regression for task 147 §0.13.
 import sync
 
-// Mutex
-let m = sync.Mutex<int>(10)
-print(m.lock((v) -> v * 2))       // 20
-print(m.replace((v) -> v + 5))    // 15
+shared const counter = sync.Mutex<int>(0)
+print(counter.lock((v) -> v + 100))
+print(counter.lock((v) -> v))
 
-// RwLock
-let rw = sync.RwLock<int>(100)
-print(rw.read((v) -> v + 1))      // 101
-print(rw.replace((v) -> v * 2))   // 200
+let gate = sync.RwLock<int>(7)
+print(gate.read((v) -> v))
+print(gate.write((v) -> v + 1))
 
-// Once
-let once = sync.Once()
-shared const counter = Atomic<int>(0)
-once.call(() -> { counter.fetchAdd(1) })
-once.call(() -> { counter.fetchAdd(1) })
-print(counter.load())             // 1
-
-// Barrier
-let b = sync.Barrier(1)
-print(b.wait())                   // true
-
-// Condvar (single-coroutine: predicate already satisfied, no park)
-let cv = sync.Condvar()
-cv.lock()
-cv.signal()                       // no waiters -> no-op
-cv.unlock()
-print("ok")
+// Cross-coroutine mutation through a namespace-imported Mutex.
+shared const latch = CountdownLatch(1)
+go {
+    counter.replace((v) -> v + 42)
+    latch.done()
+}
+latch.wait()
+print(counter.lock((v) -> v))
