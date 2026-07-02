@@ -298,6 +298,47 @@ else
     sed 's/^/      /' "$CORE_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_EXPORT_SRC="$WORK/freestanding_export.xr"
+cat > "$FREESTANDING_EXPORT_SRC" <<'XR'
+@c_export("xray_add")
+fn xray_add(a: int, b: int) -> int {
+    return a + b
+}
+XR
+FREESTANDING_EXPORT_BIN="$WORK/freestanding_export"
+FREESTANDING_EXPORT_LOG="$WORK/freestanding_export.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_EXPORT_BIN" \
+        "$FREESTANDING_EXPORT_SRC" >"$FREESTANDING_EXPORT_LOG" 2>&1; then
+    expect_log_contains "$FREESTANDING_EXPORT_LOG" "Link command:" \
+        "freestanding-profile: emitted link command"
+    expect_log_contains "$FREESTANDING_EXPORT_LOG" "-DXRAY_PROFILE_FREESTANDING=1" \
+        "freestanding-profile: defines profile macro"
+    expect_log_contains "$FREESTANDING_EXPORT_LOG" "-ffreestanding" \
+        "freestanding-profile: passes freestanding compile flag"
+    expect_log_contains "$FREESTANDING_EXPORT_LOG" "-nostdlib" \
+        "freestanding-profile: passes nostdlib link flag"
+    expect_log_not_contains "$FREESTANDING_EXPORT_LOG" "-lm" \
+        "freestanding-profile: strips hosted math library"
+    expect_log_not_contains "$FREESTANDING_EXPORT_LOG" "-lpthread" \
+        "freestanding-profile: strips hosted pthread library"
+    expect_log_not_contains "$FREESTANDING_EXPORT_LOG" "-lxray_aot_core" \
+        "freestanding-profile: does not link AOT core stdlib"
+else
+    record_fail "freestanding-profile: build failed"
+    sed 's/^/      /' "$FREESTANDING_EXPORT_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_NON_NATIVE_LOG="$WORK/freestanding_non_native.log"
+if "$XRAY" build --profile freestanding -o "$WORK/freestanding_non_native" \
+        "$FREESTANDING_EXPORT_SRC" >"$FREESTANDING_NON_NATIVE_LOG" 2>&1; then
+    record_fail "freestanding-profile: requires native backend"
+    sed 's/^/      /' "$FREESTANDING_NON_NATIVE_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_NON_NATIVE_LOG" "--profile freestanding requires --native" \
+        "freestanding-profile: requires native backend"
+fi
+
 CORE_FAST_BIN="$WORK/core_math_fast"
 CORE_FAST_LOG="$WORK/core_math_fast.log"
 case "$(uname -m 2>/dev/null)" in
@@ -572,6 +613,18 @@ else
     sed 's/^/      /' "$COMPRESS_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_STDLIB_LOG="$WORK/freestanding_stdlib_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_stdlib_reject" \
+        "$COMPRESS_SRC" >"$FREESTANDING_STDLIB_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects hosted stdlib objects"
+    sed 's/^/      /' "$FREESTANDING_STDLIB_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_STDLIB_LOG" \
+        "freestanding profile rejects hosted stdlib objects" \
+        "freestanding-profile: rejects hosted stdlib objects"
+fi
+
 CRYPTO_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_crypto.xr"
 CRYPTO_BIN="$WORK/core_crypto"
 CRYPTO_LOG="$WORK/core_crypto.log"
@@ -624,6 +677,18 @@ if build_native "$RUNTIME_SRC" "$RUNTIME_BIN" "$RUNTIME_LOG"; then
 else
     record_fail "runtime-time: build failed"
     sed 's/^/      /' "$RUNTIME_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_RUNTIME_LOG="$WORK/freestanding_runtime_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_runtime_reject" \
+        "$RUNTIME_SRC" >"$FREESTANDING_RUNTIME_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects runtime-backed features"
+    sed 's/^/      /' "$FREESTANDING_RUNTIME_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_RUNTIME_LOG" \
+        "freestanding profile rejects runtime-backed features" \
+        "freestanding-profile: rejects runtime-backed features"
 fi
 
 if [ "${XRAY_LINK_COMMAND_REAL_BUILDS:-0}" != "1" ]; then
