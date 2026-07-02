@@ -964,6 +964,14 @@ module sys {
     builtin_kind: "XR_BK_SYSCONDVAR"
   }
 
+  native_class Barrier {
+    super_slot: "objectClass"
+    core_slot: "sysBarrierClass"
+    native_body: "g_sys_barrier_body_desc"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: "XR_BK_SYSBARRIER"
+  }
+
   class_method Mutex.lock {
     vm: "sys_mutex_lock"
     argc: 0
@@ -1019,6 +1027,11 @@ module sys {
     argc: 0
   }
 
+  class_method Barrier.wait {
+    vm: "sys_barrier_wait"
+    argc: 0
+  }
+
   fn Mutex {
     signature: "(): Mutex"
     doc: "Create an OS-domain mutex"
@@ -1050,6 +1063,18 @@ module sys {
     aot: "xrt_sys_condvar_new"
     argc: 0
     arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn Barrier {
+    signature: "(parties: int): Barrier"
+    doc: "Create a reusable OS-domain barrier"
+    vm: "sys_barrier_new"
+    aot: "xrt_sys_barrier_new"
+    argc: 1
+    arg_spec: "v"
     aot_direct: true
     link_object: false
     layer: "system"
@@ -1119,6 +1144,12 @@ module sys {
     signature: "(): ()"
     receiver: "Condvar"
     doc: "Wake all waiters"
+  }
+
+  type_method Barrier.wait {
+    signature: "(): bool"
+    receiver: "Barrier"
+    doc: "Wait until all parties have arrived"
   }
 }
 

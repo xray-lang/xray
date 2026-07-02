@@ -1,0 +1,8 @@
+// sys.Barrier is cyclic. parties=1 keeps VM/AOT output deterministic while
+// still exercising reuse across generations.
+
+import sys
+
+let b = sys.Barrier(1)
+print(b.wait())
+print(b.wait())
