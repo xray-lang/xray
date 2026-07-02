@@ -2155,12 +2155,12 @@ static void prepare_mark_direct_call_aggregate_args(XaotBundle *bundle, XiValue 
         return;
 
     const XiFunc *current = call->block ? call->block->func : NULL;
-    const XiFunc *target = xaot_boundary_resolve_direct_call_target(bundle, current, call);
+    uint16_t first_arg = 0;
+    const XiFunc *target =
+        xaot_boundary_resolve_direct_call_target(bundle, current, call, &first_arg);
     const XaotFuncPlan *target_plan = target ? xaot_bundle_find_func_plan(bundle, target) : NULL;
     if (!target_plan || !target_plan->abi.params)
         return;
-
-    uint16_t first_arg = call->op == XI_CALL ? 1 : 0;
     for (uint16_t a = first_arg; a < call->nargs; a++) {
         uint16_t param_idx = (uint16_t) (a - first_arg);
         if (param_idx >= target_plan->abi.nparams)
@@ -2350,7 +2350,7 @@ static bool prepare_direct_call_boundaries(XaotBundle *bundle, const XaotFuncPla
         return true;
     if (call->op != XI_CALL && call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT)
         return true;
-    target = xaot_boundary_resolve_direct_call_target(bundle, caller_plan->func, call);
+    target = xaot_boundary_resolve_direct_call_target(bundle, caller_plan->func, call, &first_arg);
     if (!target)
         return true;
     target_plan = xaot_bundle_find_func_plan(bundle, target);
@@ -2358,7 +2358,6 @@ static bool prepare_direct_call_boundaries(XaotBundle *bundle, const XaotFuncPla
         bundle->error_msg = "AOT direct call target has no function plan";
         return false;
     }
-    first_arg = call->op == XI_CALL ? 1 : 0;
     call_arg_count = call->nargs > first_arg ? (uint16_t) (call->nargs - first_arg) : 0;
     if (call_arg_count > target_plan->abi.nparams) {
         bundle->error_msg = "AOT direct call has more arguments than target ABI";
