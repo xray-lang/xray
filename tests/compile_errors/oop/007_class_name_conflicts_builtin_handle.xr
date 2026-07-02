@@ -1,0 +1,18 @@
+// A user class whose name matches a builtin native handle type (core.def
+// `handle`, here path.PathInfo) must be rejected: the handle would silently
+// shadow the class and AOT lowers field access through the handle path
+// against a class-instance layout — a guaranteed crash (known_bugs 2026-07-02
+// gap C'). Until handle names become module-scoped (148 §1.1 T3.3), the
+// analyzer rejects the collision outright.
+class PathInfo {
+    root: string
+    dir: string
+
+    constructor(root: string, dir: string) {
+        this.root = root
+        this.dir = dir
+    }
+}
+
+let pi = PathInfo("/", "/a")
+print(pi.dir)

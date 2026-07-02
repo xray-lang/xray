@@ -1279,12 +1279,21 @@ static const StdlibEntry stdlib_core[] = {
     /* prelude is auto-loaded during isolate init by xisolate_full.c so users
      * never need `import prelude`. Listed here so an explicit import is a
      * harmless no-op that resolves through the same registry. */
-    {"prelude", xr_load_module_prelude}, {"time", xr_load_module_time},
-    {"math", xr_load_module_math},       {"path", xr_load_module_path},
-    {"base64", xr_load_module_base64},   {"regex", xr_load_module_regex},
-    {"mem", xr_load_module_mem},         {"sync", xr_load_module_sync},
-    {"url", xr_load_module_url},         {"datetime", xr_load_module_datetime},
-    {"log", xr_load_module_log},         {"encoding", xr_load_module_encoding},
+    {"prelude", xr_load_module_prelude},
+    {"time", xr_load_module_time},
+    {"math", xr_load_module_math},
+    {"path", xr_load_module_path},
+    {"base64", xr_load_module_base64},
+    {"regex", xr_load_module_regex},
+    {"mem", xr_load_module_mem},
+    {"sync", xr_load_module_sync},
+    {"url", xr_load_module_url},
+    {"datetime", xr_load_module_datetime},
+    {"log", xr_load_module_log},
+    {"encoding", xr_load_module_encoding},
+    /* Pure-Xray stdlib capability probe (task 148 phase 0 item 5): pins the
+     * export shapes migrated modules rely on. Tiny and permanent. */
+    {"_probe", xr_load_module_probe},
 };
 
 #if defined(XR_HAS_FILESYSTEM)

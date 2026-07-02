@@ -595,6 +595,7 @@ file(GLOB NEW_CLI_SRC CONFIGURE_DEPENDS "src/app/cli/*.c")
 file(GLOB STDLIB_CORE_SRC
     "stdlib/prelude/*.c"
     "stdlib/stdlib_cache.c"
+    "stdlib/_probe/*.c"
     "stdlib/time/*.c"
     "stdlib/math/*.c"
     "stdlib/log/*.c"

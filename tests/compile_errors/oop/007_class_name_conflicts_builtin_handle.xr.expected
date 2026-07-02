@@ -1,0 +1,1 @@
+class 'PathInfo' conflicts with the builtin native handle type 'path.PathInfo'
