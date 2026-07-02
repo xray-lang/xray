@@ -82,22 +82,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_datetime_symbols[] = {
 };
 #define GEN_XLSP_STDLIB_DATETIME_SYMBOL_COUNT 8
 
-// encoding module symbols
-static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
-    {"hexEncode", XLSP_SYM_FUNCTION, "fn(data: string): string", "Hex encode string to hex", NULL, 0},
-    {"hexDecode", XLSP_SYM_FUNCTION, "fn(hex: string): Array<uint8>?", "Hex decode to bytes", NULL, 0},
-    {"hexDecodeString", XLSP_SYM_FUNCTION, "fn(hex: string): string?", "Hex decode to string", NULL, 0},
-    {"hexValid", XLSP_SYM_FUNCTION, "fn(hex: string): bool", "Check if valid hex string", NULL, 0},
-    {"utf8Valid", XLSP_SYM_FUNCTION, "fn(data: string): bool", "Check if valid UTF-8", NULL, 0},
-    {"utf8Count", XLSP_SYM_FUNCTION, "fn(data: string): int", "Count UTF-8 characters", NULL, 0},
-    {"utf8ByteLength", XLSP_SYM_FUNCTION, "fn(data: string): int", "Get UTF-8 byte length", NULL, 0},
-    {"utf16Encode", XLSP_SYM_FUNCTION, "fn(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes", NULL, 0},
-    {"utf16Decode", XLSP_SYM_FUNCTION, "fn(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?", "UTF-16 decode to string (auto-detects BOM)", NULL, 0},
-    {"LE", XLSP_SYM_CONSTANT, "int", "Little-endian UTF-16 byte order", NULL, 0},
-    {"BE", XLSP_SYM_CONSTANT, "int", "Big-endian UTF-16 byte order", NULL, 0},
-};
-#define GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT 11
-
 // http module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"get", XLSP_SYM_FUNCTION, "fn(url: string): HttpResponse", "HTTP GET request", NULL, 0},
@@ -470,7 +454,6 @@ static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
     {"crypto", "crypto standard library module", g_xlsp_stdlib_crypto_symbols, GEN_XLSP_STDLIB_CRYPTO_SYMBOL_COUNT},
     {"csv", "csv standard library module", g_xlsp_stdlib_csv_symbols, GEN_XLSP_STDLIB_CSV_SYMBOL_COUNT},
     {"datetime", "datetime standard library module", g_xlsp_stdlib_datetime_symbols, GEN_XLSP_STDLIB_DATETIME_SYMBOL_COUNT},
-    {"encoding", "encoding standard library module", g_xlsp_stdlib_encoding_symbols, GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT},
     {"http", "http standard library module", g_xlsp_stdlib_http_symbols, GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT},
     {"io", "io standard library module", g_xlsp_stdlib_io_symbols, GEN_XLSP_STDLIB_IO_SYMBOL_COUNT},
     {"log", "log standard library module", g_xlsp_stdlib_log_symbols, GEN_XLSP_STDLIB_LOG_SYMBOL_COUNT},

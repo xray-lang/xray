@@ -245,10 +245,6 @@ static bool xaot_stdlib_generated_symbol_is_constant(const char *symbol) {
         return true;
     if (strcmp(symbol, "math.NAN") == 0)
         return true;
-    if (strcmp(symbol, "encoding.LE") == 0)
-        return true;
-    if (strcmp(symbol, "encoding.BE") == 0)
-        return true;
     if (strcmp(symbol, "os.platform") == 0)
         return true;
     if (strcmp(symbol, "os.arch") == 0)

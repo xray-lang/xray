@@ -43,7 +43,6 @@
 #include "xrt_coll.h"       // L2: Array, Map, Json, StringBuilder, Closure, index ops
 #include "xrt_url.h"        // L2: freestanding URL helpers
 #include "xrt_arith.h"      // L2: add/sub/mul/div/mod/neg, eq/lt/le, print
-#include "xrt_encoding.h"   // L2: freestanding encoding string/Bytes helpers
 #include "xrt_compress.h"   // L2: freestanding checksum helpers
 #include "xrt_crypto.h"     // L2: freestanding crypto helpers
 #include "xrt_regex.h"      // L2: freestanding regex helpers
