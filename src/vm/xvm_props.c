@@ -526,7 +526,17 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
             }
             XrEnumValue *found = xr_enum_get_member_by_symbol(enum_type, prop_symbol);
             if (found) {
-                base[a] = XR_FROM_PTR(found);
+                /* A bare non-payload variant of an ADT enum is a tagged instance
+                 * (field[0] = ordinal), matching payload variants and the
+                 * pattern matcher; a singleton here would break ordinal reads. */
+                if (enum_type->is_adt && enum_type->payload_counts &&
+                    enum_type->payload_counts[found->member_index] == 0) {
+                    XrInstance *inst =
+                        xr_enum_adt_construct(isolate, enum_type, found->member_index, NULL, 0);
+                    base[a] = inst ? XR_FROM_PTR(inst) : xr_null();
+                } else {
+                    base[a] = XR_FROM_PTR(found);
+                }
                 return XR_DISP_NEXT;
             }
             base[a] = xr_null();

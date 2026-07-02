@@ -4405,6 +4405,22 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             return;
         }
     }
+    /* Bare ADT-enum variant access (e.g. `Recv.Empty`) builds a tagged instance,
+     * not the enum singleton. ADT-enum values are always tagged instances
+     * (field[0] = ordinal), so a bare non-payload variant must match that
+     * representation; otherwise the array-based pattern-match tag read would
+     * dereference an enum singleton and crash. */
+    if (field) {
+        const XiEnumData *adt = xicgen_adt_enum_for_type(ctx, v->type);
+        if (adt && adt->members) {
+            int midx = cg_enum_member_index(adt, field);
+            if (midx >= 0 && (uint32_t) midx < adt->member_count &&
+                adt->members[midx].payload_count == 0) {
+                emit_adt_enum_construct_expr(ctx, out, adt, midx, v);
+                return;
+            }
+        }
+    }
     if (emit_class_cached_field_load_expr(ctx, out, v))
         return;
     if (emit_class_native_receiver_field_load_expr(ctx, out, f, v))

@@ -1,0 +1,53 @@
+// anchor: adt-enum-nonpayload-variant
+//
+// ADT enums (an enum with at least one payload-carrying variant) must
+// represent EVERY variant, including the non-payload ones, as a tagged
+// instance (field[0] = ordinal). Pattern matching reads that ordinal
+// uniformly for both payload arms (`E.A(v)`) and bare-variant arms
+// (`E.B`), so VM and AOT must agree. A bare non-payload variant sitting
+// next to a payload arm previously matched the enum singleton on VM but
+// crashed on AOT (array-tag read of a singleton).
+
+enum Shape {
+    Circle(int),
+    Square(int),
+    Point,
+    Unknown,
+}
+
+fn describe(s: Shape) -> string {
+    return match (s) {
+        Shape.Circle(r) -> "circle:" + string(r)
+        Shape.Square(side) -> "square:" + string(side)
+        Shape.Point -> "point"
+        Shape.Unknown -> "unknown"
+    }
+}
+
+// Bare non-payload variant construction flows through getprop; payload
+// variants flow through the call/construct path. Both must yield a tagged
+// instance that describe() can discriminate.
+let shapes = [Shape.Circle(3), Shape.Square(4), Shape.Point, Shape.Unknown]
+for (sh in shapes) {
+    print(describe(sh))
+}
+
+// Non-payload variant matched alongside a payload arm, then falling to a
+// wildcard — exercises the ordinal read on a bare variant value.
+fn radius_or(s: Shape) -> int {
+    return match (s) {
+        Shape.Circle(r) -> r
+        Shape.Point -> -1
+        _ -> -2
+    }
+}
+
+print(radius_or(Shape.Circle(9)))
+print(radius_or(Shape.Point))
+print(radius_or(Shape.Square(2)))
+print(radius_or(Shape.Unknown))
+
+// Direct equality of two bare non-payload variants.
+let a = Shape.Point
+let b = Shape.Point
+print(describe(a) == describe(b))
