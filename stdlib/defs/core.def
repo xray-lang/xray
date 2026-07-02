@@ -956,6 +956,14 @@ module sys {
     builtin_kind: "XR_BK_SYSRWLOCK"
   }
 
+  native_class Condvar {
+    super_slot: "objectClass"
+    core_slot: "sysCondvarClass"
+    native_body: "g_sys_condvar_body_desc"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: "XR_BK_SYSCONDVAR"
+  }
+
   class_method Mutex.lock {
     vm: "sys_mutex_lock"
     argc: 0
@@ -991,6 +999,26 @@ module sys {
     argc: 0
   }
 
+  class_method Condvar.wait {
+    vm: "sys_condvar_wait"
+    argc: 1
+  }
+
+  class_method Condvar.waitFor {
+    vm: "sys_condvar_wait_for"
+    argc: 2
+  }
+
+  class_method Condvar.signal {
+    vm: "sys_condvar_signal"
+    argc: 0
+  }
+
+  class_method Condvar.broadcast {
+    vm: "sys_condvar_broadcast"
+    argc: 0
+  }
+
   fn Mutex {
     signature: "(): Mutex"
     doc: "Create an OS-domain mutex"
@@ -1008,6 +1036,18 @@ module sys {
     doc: "Create an OS-domain read-write lock"
     vm: "sys_rwlock_new"
     aot: "xrt_sys_rwlock_new"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn Condvar {
+    signature: "(): Condvar"
+    doc: "Create an OS-domain condition variable"
+    vm: "sys_condvar_new"
+    aot: "xrt_sys_condvar_new"
     argc: 0
     arg_spec: ""
     aot_direct: true
@@ -1055,6 +1095,30 @@ module sys {
     signature: "(): ()"
     receiver: "RwLock"
     doc: "Release the write side of the read-write lock"
+  }
+
+  type_method Condvar.wait {
+    signature: "(m: Mutex): ()"
+    receiver: "Condvar"
+    doc: "Wait on the condition variable with an already-locked mutex"
+  }
+
+  type_method Condvar.waitFor {
+    signature: "(m: Mutex, timeoutNs: int): bool"
+    receiver: "Condvar"
+    doc: "Wait on the condition variable until signalled or timeout elapses"
+  }
+
+  type_method Condvar.signal {
+    signature: "(): ()"
+    receiver: "Condvar"
+    doc: "Wake one waiter"
+  }
+
+  type_method Condvar.broadcast {
+    signature: "(): ()"
+    receiver: "Condvar"
+    doc: "Wake all waiters"
   }
 }
 

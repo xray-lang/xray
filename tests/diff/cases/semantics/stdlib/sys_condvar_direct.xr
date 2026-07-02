@@ -1,0 +1,15 @@
+// sys.Condvar uses a pthread-style external sys.Mutex. The timed wait keeps
+// this differential case deterministic and avoids blocking the test runner.
+
+import sys
+
+let m = sys.Mutex()
+let cv = sys.Condvar()
+
+m.lock()
+print(cv.waitFor(m, 1000000))
+m.unlock()
+
+cv.signal()
+cv.broadcast()
+print(true)

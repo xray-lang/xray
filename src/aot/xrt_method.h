@@ -50,6 +50,7 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
         case XR_TAG_REGEX:
         case XR_TAG_SYS_MUTEX:
         case XR_TAG_SYS_RWLOCK:
+        case XR_TAG_SYS_CONDVAR:
         case XR_TAG_RANGE:
         case XR_TAG_ENUM:
         case XR_TAG_ITERATOR:
@@ -527,6 +528,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         return xrt_sys_mutex_method_0(recv, sym);
     if (recv.tag == XR_TAG_SYS_RWLOCK)
         return xrt_sys_rwlock_method_0(recv, sym);
+    if (recv.tag == XR_TAG_SYS_CONDVAR)
+        return xrt_sys_condvar_method_0(recv, sym);
     if (recv.tag == XR_TAG_I64) {
         if (sym == XRT_SYM_ABS)
             return XR_FROM_INT(xr_i64_abs_wrap(recv.i));
@@ -883,6 +886,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         return xrt_range_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_DATETIME)
         return xrt_datetime_method_1(recv, sym, arg0);
+    if (recv.tag == XR_TAG_SYS_CONDVAR)
+        return xrt_sys_condvar_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_POW) {
         double exp = (arg0.tag == XR_TAG_F64) ? arg0.f : (double) arg0.i;
         return XR_FROM_FLOAT(pow(recv.f, exp));
@@ -1001,6 +1006,8 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         return xrt_array_fill_value(recv, arg0, arg1, XR_FROM_INT(a->length));
     }
+    if (recv.tag == XR_TAG_SYS_CONDVAR)
+        return xrt_sys_condvar_method_2(recv, sym, arg0, arg1);
     if (XR_IS_MAP(recv) && sym == XRT_SYM_SET) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
         if ((m->flags & XR_MAP_FLAG_WEAK) && !xrt_weak_value_is_heap_object(arg0))

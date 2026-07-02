@@ -83,6 +83,7 @@ typedef struct XrayCoreClasses {
     XrClass *regexMatchClass;
     XrClass *sysMutexClass;
     XrClass *sysRwLockClass;
+    XrClass *sysCondvarClass;
     XrClass *netConnClass;
     XrClass *netListenerClass;
 
