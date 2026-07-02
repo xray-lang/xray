@@ -2420,6 +2420,27 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         return;
     }
 
+    // A user class/struct whose name matches a builtin native handle type
+    // (core.def `handle`, e.g. path.PathInfo) would silently shadow it: type
+    // references resolve to the handle, and AOT lowers field access through
+    // the handle/Json path against a class-instance layout — a guaranteed
+    // crash (known_bugs 2026-07-02 gap C'). Reject the collision outright;
+    // the long-term fix is module-scoped handle names (148 §1.1 T3.3).
+    if (cls->name && !cls->is_native) {
+        const char *handle_module = xa_builtin_find_handle_module(cls->name);
+        if (handle_module) {
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "%s '%s' conflicts with the builtin native handle type '%s.%s' — "
+                     "choose a different name",
+                     node->type == AST_STRUCT_DECL ? "struct" : "class", cls->name, handle_module,
+                     cls->name);
+            XrLocation loc = {.file = ctx->file_path, .line = node->line};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg, &loc);
+            return;
+        }
+    }
+
     // Create class symbol
     XaSymbol *sym = xa_symbol_new(cls->name, XA_SYM_CLASS);
     sym->location.line = node->line;

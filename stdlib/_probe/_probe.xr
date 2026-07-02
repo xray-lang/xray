@@ -1,0 +1,69 @@
+// _probe — pure-Xray stdlib module capability matrix (task 148 phase 0 item 5).
+//
+// This module intentionally exercises every export shape a migrated stdlib
+// module can use, so tests/diff can pin VM/AOT parity for each of them:
+//   * module-level functions (named import + namespace call)
+//   * variadic functions
+//   * a plain class, and functions constructing/consuming that class
+//   * a generic class with closure-taking methods
+// Keep it tiny: it ships in every binary as the permanent compiler gate.
+
+// --- module-level functions (gap B: slot_funcs direct call) ---
+
+fn probeAdd(a: int, b: int) -> int {
+    return a + b
+}
+
+fn probeConcat(a: string, b: string) -> string {
+    return a + "|" + b
+}
+
+// --- variadic function (gap A: rest-parameter ABI) ---
+// TEMPORARILY DISABLED while gap A is being fixed.
+// fn probeSum(...nums: int) -> int {
+//     let total = 0
+//     for (let i = 0; i < nums.length; i++) {
+//         total = total + nums[i]
+//     }
+//     return total
+// }
+
+// --- class + functions using it (gap C: intra-module class/function mix) ---
+
+class ProbeBox {
+    label: string
+    count: int
+
+    constructor(label: string, count: int) {
+        this.label = label
+        this.count = count
+    }
+
+    describe() -> string {
+        return this.label + ":" + this.count.toString()
+    }
+}
+
+fn probeMakeBox(label: string, count: int) -> ProbeBox {
+    return ProbeBox(label, count)
+}
+
+fn probeReadBox(box: ProbeBox) -> string {
+    return box.describe()
+}
+
+// --- generic class with closure-taking method (sync-shape regression) ---
+
+class ProbeCell<T> {
+    value: T
+
+    constructor(v: T) {
+        this.value = v
+    }
+
+    map<U>(body: (T) -> U) -> U {
+        return body(this.value)
+    }
+}
+
+export { probeAdd, probeConcat, ProbeBox, probeMakeBox, probeReadBox, ProbeCell }
