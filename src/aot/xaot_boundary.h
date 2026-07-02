@@ -58,8 +58,14 @@ XR_FUNC const char *xaot_boundary_reason_name(XaotBoundaryReason reason);
 XR_FUNC const char *xaot_boundary_step_kind_name(XaotBoundaryStepKind kind);
 
 struct XaotBundle;
+/* Resolves the statically-known callee of a direct call, when there is one.
+ * `*first_arg_out` receives the index of the first call operand that maps to
+ * a target ABI parameter: 1 for XI_CALL (args[0] is the callee) and for
+ * module-member calls (args[0] is the namespace object, which the target
+ * function never receives), 0 for real method calls (args[0] is `this`). */
 XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const struct XaotBundle *bundle,
                                                                const XiFunc *current,
-                                                               const XiValue *call);
+                                                               const XiValue *call,
+                                                               uint16_t *first_arg_out);
 
 #endif  // XAOT_BOUNDARY_H

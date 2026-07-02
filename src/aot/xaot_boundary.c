@@ -330,19 +330,30 @@ static const XiFunc *resolve_method_target(const XaotBundle *bundle, const XiVal
 
 XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle *bundle,
                                                                const XiFunc *current,
-                                                               const XiValue *call) {
+                                                               const XiValue *call,
+                                                               uint16_t *first_arg_out) {
     const XiValue *callee;
 
+    if (first_arg_out)
+        *first_arg_out = 0;
     if (!bundle || !current || !call)
         return NULL;
     if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) {
         const XiFunc *target = resolve_method_target(bundle, call);
         if (target)
             return target;
-        return resolve_module_member_target(bundle, current, call);
+        /* Module-member call: args[0] is the imported namespace object, not a
+         * receiver. The target is a plain function whose ABI has no `this`
+         * slot, so argument mapping starts at args[1]. */
+        target = resolve_module_member_target(bundle, current, call);
+        if (target && first_arg_out)
+            *first_arg_out = 1;
+        return target;
     }
     if (call->op != XI_CALL || call->nargs < 1)
         return NULL;
+    if (first_arg_out)
+        *first_arg_out = 1;
 
     callee = unwrap_identity_value(call->args[0]);
     if (!callee)

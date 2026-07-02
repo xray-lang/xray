@@ -507,13 +507,12 @@ static bool verify_direct_call_boundaries(const XaotBundle *bundle, const XiFunc
         return true;
     if (call->op != XI_CALL && call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT)
         return true;
-    target = xaot_boundary_resolve_direct_call_target(bundle, func, call);
+    target = xaot_boundary_resolve_direct_call_target(bundle, func, call, &first_arg);
     if (!target)
         return true;
     target_plan = xaot_bundle_find_func_plan(bundle, target);
     if (!target_plan)
         return set_error(errbuf, errbuf_len, "AOT direct call target has no function plan");
-    first_arg = call->op == XI_CALL ? 1 : 0;
     call_arg_count = call->nargs > first_arg ? (uint16_t) (call->nargs - first_arg) : 0;
     if (call_arg_count > target_plan->abi.nparams)
         return set_error(errbuf, errbuf_len, "AOT direct call has more args than target ABI");
