@@ -5204,8 +5204,11 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     }
 
     /* Function signature.  Closure children with captures receive a hidden
-     * first parameter xrt_closure_t *_cl for per-closure upvalue access. */
+     * first parameter xrt_closure_t *_cl for per-closure upvalue access. A
+     * vararg function carries one extra trailing Array<T> parameter (the rest
+     * slot); direct call sites collect the variadic arguments into it. */
     bool has_cl = (f->ncaptures > 0);
+    uint16_t sig_nparams = (uint16_t) (f->nparams + (f->is_vararg ? 1 : 0));
     fprintf(out, "%s", cg_func_linkage(ctx, f, prefix));
     emit_func_attr_qualifier(ctx, out, f);
     if (!emit_class_native_return_type(ctx, out, prefix, f))
@@ -5213,17 +5216,9 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     fprintf(out, " ");
     emit_fname(ctx, out, prefix, f);
     fprintf(out, "(");
-    if (has_cl) {
-        fprintf(out, "xrt_closure_t *_cl");
-        for (uint16_t i = 0; i < f->nparams; i++)
-            fprintf(out, ", "), emit_class_native_param_decl(ctx, out, prefix, f, i);
-    } else if (f->nparams == 0) {
-        fprintf(out, "xrt_closure_t *_cl");
-    } else {
-        fprintf(out, "xrt_closure_t *_cl");
-        for (uint16_t i = 0; i < f->nparams; i++)
-            fprintf(out, ", "), emit_class_native_param_decl(ctx, out, prefix, f, i);
-    }
+    fprintf(out, "xrt_closure_t *_cl");
+    for (uint16_t i = 0; i < sig_nparams; i++)
+        fprintf(out, ", "), emit_class_native_param_decl(ctx, out, prefix, f, i);
     fprintf(out, ") {\n");
     if (!has_cl)
         fprintf(out, "    (void)_cl;\n");
@@ -5270,7 +5265,8 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
             fprintf(out, "%sXrValue ", cg_linkage(ctx));
             emit_typed_abi_fname(ctx, out, prefix, f);
             fprintf(out, "(xrt_closure_t *_cl");
-            for (uint16_t i = 0; i < f->nparams; i++)
+            uint16_t boxed_total = (uint16_t) (f->nparams + (f->is_vararg ? 1 : 0));
+            for (uint16_t i = 0; i < boxed_total; i++)
                 fprintf(out, ", XrValue p%u", i);
             fprintf(out, ") {\n");
             bool ret_is_aggregate = cg_func_return_abi_is_aggregate(ctx, f);
@@ -5297,7 +5293,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
                 conv_suffix = emit_conversion_prefix(out, f->return_type, ret_rep, XR_REP_TAGGED);
             emit_fname(ctx, out, prefix, f);
             fprintf(out, "(_cl");
-            for (uint16_t i = 0; i < f->nparams; i++) {
+            for (uint16_t i = 0; i < boxed_total; i++) {
                 fprintf(out, ", ");
                 XrRep param_rep = cg_func_param_abi_rep(ctx, f, i);
                 const XrType *param_type = f->params && f->params[i] ? f->params[i]->type : NULL;
@@ -5381,7 +5377,8 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     emit_fname(ctx, out, prefix, f);
     fprintf(out, "(");
     fprintf(out, "xrt_closure_t *_cl");
-    for (uint16_t i = 0; i < f->nparams; i++) {
+    uint16_t fwd_nparams = (uint16_t) (f->nparams + (f->is_vararg ? 1 : 0));
+    for (uint16_t i = 0; i < fwd_nparams; i++) {
         if (needs_aot_coro) {
             fprintf(out, ", XrValue p%u", i);
         } else {
@@ -5407,7 +5404,8 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, "%sXrValue ", cg_linkage(ctx));
         emit_typed_abi_fname(ctx, out, prefix, f);
         fprintf(out, "(xrt_closure_t *_cl");
-        for (uint16_t i = 0; i < f->nparams; i++)
+        uint16_t boxed_total = (uint16_t) (f->nparams + (f->is_vararg ? 1 : 0));
+        for (uint16_t i = 0; i < boxed_total; i++)
             fprintf(out, ", XrValue p%u", i);
         fprintf(out, ");\n");
     }

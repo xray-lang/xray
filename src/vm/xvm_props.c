@@ -1170,10 +1170,31 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrVMRuntime *isolate, XrVMContext *vm_
         }
     } else if (xr_value_is_closure(fn_val)) {
         XrClosure *closure = xr_value_to_closure(fn_val);
+        XrProto *proto = closure->proto;
 
         // Argument shift: from R[a+2..] to R[a+1..] (module functions have no receiver)
         for (int idx = 0; idx < nargs; idx++) {
             base[a + 1 + idx] = base[a + 2 + idx];
+        }
+
+        // A variadic module export packs its trailing arguments into the rest
+        // array at the numparams slot, just like a direct OP_CALL. Without this
+        // a namespace call `mod.fn(...)` would leave a scalar where the callee
+        // expects the rest array.
+        if (proto->is_vararg) {
+            if (XR_UNLIKELY(nargs < proto->numparams && nargs < proto->min_params)) {
+                VM_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT,
+                         "expected at least %d arguments, got %d", proto->min_params, nargs);
+            }
+            for (int j = nargs; j < proto->numparams; j++) {
+                base[a + 1 + j] = xr_null();
+            }
+            int extra_args = nargs > proto->numparams ? nargs - proto->numparams : 0;
+            XrArray *rest_array = xr_array_new((XrCoroutine *) vm_ctx->current_coro);
+            for (int j = 0; j < extra_args; j++) {
+                xr_array_push(rest_array, base[a + 1 + proto->numparams + j]);
+            }
+            base[a + 1 + proto->numparams] = xr_value_from_array(rest_array);
         }
 
         if (vm_push_bc_frame(vm_ctx, closure, a + 1, &base, &frame, pc) == NULL) {

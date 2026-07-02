@@ -431,9 +431,29 @@ vmcase(OP_CALL_KEEP) {
 
     VM_STACK_CHECK(a + 1 + proto->maxstacksize);
 
-    // Fill missing optional arguments with null
-    for (int j = effective_nargs; j < proto->numparams; j++) {
-        R(a + 1 + j) = xr_null();
+    if (proto->is_vararg) {
+        // Fill missing optional fixed params, then collect the trailing args
+        // into the rest array at the numparams slot (mirrors OP_CALL). Without
+        // this a variadic callee reached through OP_CALL_KEEP (e.g. a namespace
+        // member call `mod.fn(...)`) would read a scalar where it expects the
+        // rest array.
+        for (int j = nargs; j < proto->numparams; j++) {
+            R(a + 1 + j) = xr_null();
+        }
+        int extra_args = nargs > proto->numparams ? nargs - proto->numparams : 0;
+        XrArray *rest_array = xr_array_new(VM_CURRENT_CORO);
+        if (extra_args > 0) {
+            XrValue *arg_base = &R(a + 1 + proto->numparams);
+            for (int j = 0; j < extra_args; j++) {
+                xr_array_push(rest_array, arg_base[j]);
+            }
+        }
+        R(a + 1 + proto->numparams) = xr_value_from_array(rest_array);
+    } else {
+        // Fill missing optional arguments with null
+        for (int j = effective_nargs; j < proto->numparams; j++) {
+            R(a + 1 + j) = xr_null();
+        }
     }
 
     savepc();

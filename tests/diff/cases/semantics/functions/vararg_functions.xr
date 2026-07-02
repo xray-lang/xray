@@ -1,0 +1,47 @@
+// Variadic (rest-parameter) functions must observe identical results on VM and
+// AOT. The VM packs the trailing arguments into the rest array at the callee;
+// AOT collects them at the direct call site into a typed array (scalar elements)
+// or a tagged array (reference elements), matching the callee's element reads.
+
+fn sumInts(...n: int) -> int {
+    let t = 0
+    for (let i = 0; i < n.length; i++) { t = t + n[i] }
+    return t
+}
+
+fn sumFloats(...x: float) -> float {
+    let t = 0.0
+    for (let i = 0; i < x.length; i++) { t = t + x[i] }
+    return t
+}
+
+fn countTrue(...b: bool) -> int {
+    let t = 0
+    for (let i = 0; i < b.length; i++) { if (b[i]) { t = t + 1 } }
+    return t
+}
+
+fn joinStrings(sep: string, ...p: string) -> string {
+    let s = ""
+    for (let i = 0; i < p.length; i++) {
+        if (i > 0) { s = s + sep }
+        s = s + p[i]
+    }
+    return s
+}
+
+// Nested variadic: a fixed-arg function forwarding into another variadic.
+fn wrapSum(base: int, a: int, b: int) -> int {
+    return base + sumInts(a, b, base)
+}
+
+print(sumInts())
+print(sumInts(7))
+print(sumInts(1, 2, 3, 4, 5))
+print(sumFloats())
+print(sumFloats(1.5, 2.5, 3.0))
+print(countTrue(true, false, true, true, false))
+print(joinStrings("-"))
+print(joinStrings("-", "only"))
+print(joinStrings(", ", "a", "b", "c"))
+print(wrapSum(10, 1, 2))

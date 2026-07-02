@@ -373,9 +373,15 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
         return false;
 
     memset(abi, 0, sizeof(*abi));
-    abi->nparams = func->nparams;
-    if (func->nparams > 0) {
-        abi->params = (XaotAbiSlot *) xr_calloc(func->nparams, sizeof(XaotAbiSlot));
+    /* A vararg function's rest parameter is materialized as a real trailing
+     * Array<T> ABI slot. The VM packs varargs at the callee; AOT instead
+     * collects the trailing arguments into an array at each direct call site
+     * and passes it as this extra parameter. func->nparams excludes the rest
+     * slot, so the ABI carries one more parameter than the fixed-arg count. */
+    uint16_t abi_nparams = (uint16_t) (func->nparams + (func->is_vararg ? 1 : 0));
+    abi->nparams = abi_nparams;
+    if (abi_nparams > 0) {
+        abi->params = (XaotAbiSlot *) xr_calloc(abi_nparams, sizeof(XaotAbiSlot));
         if (!abi->params)
             return false;
     }
@@ -394,7 +400,7 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
             func_has_op_class(func, XI_GEN_CLASS_COROUTINE) ? XAOT_ABI_CORO : XAOT_ABI_TAGGED;
         abi->boundary_reason = tagged_reason_for_func(func, is_module_init);
         abi->ret = tagged_slot(func->return_type);
-        for (i = 0; i < func->nparams; i++) {
+        for (i = 0; i < abi_nparams; i++) {
             const XiValue *param = func->params ? func->params[i] : NULL;
             abi->params[i] = tagged_slot(param ? param->type : NULL);
         }
@@ -407,7 +413,7 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
         abi->ret = compact_adt_return_slot(func->return_type);
     else
         abi->ret = native_slot_for_type(bundle, func, func->return_type, NULL, true);
-    for (i = 0; i < func->nparams; i++) {
+    for (i = 0; i < abi_nparams; i++) {
         const XiValue *param = func->params ? func->params[i] : NULL;
         abi->params[i] =
             native_slot_for_type(bundle, func, param ? param->type : NULL, param, false);

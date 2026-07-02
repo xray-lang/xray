@@ -1399,6 +1399,74 @@ static bool xicgen_slice_value_only_used_by_stack_slice_direct_call(XiCgenCtx *c
     return saw_stack_call;
 }
 
+/* Collects a variadic direct call's trailing arguments (beyond target->nparams)
+ * into the rest Array<T> parameter and emits ", <rest_array>" in the target's
+ * rest-slot ABI rep. Scalar-element arrays use typed storage (so the callee's
+ * typed lane reads match); reference elements use a tagged array. The fixed
+ * arguments must already have been emitted by the caller. Mirrors the VM's
+ * callee-side packing (OP_CALL / vm_invoke_module). */
+static void emit_vararg_rest_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                 const XiFunc *target) {
+    uint16_t fixed = target->nparams;
+    const XrType *rest_type =
+        (target->params && target->params[fixed]) ? target->params[fixed]->type : NULL;
+    XrRep rest_rep = cg_func_param_abi_rep(ctx, target, fixed);
+    CgArrayElemInfo rest_elem;
+    bool rest_typed = cg_array_elem_info_from_type_ctx(ctx, rest_type, &rest_elem) &&
+                      rest_elem.rep != XR_REP_TAGGED && rest_elem.ctype;
+    if (rest_typed) {
+        int64_t rest_count = (int64_t) v->nargs - 1 - (int64_t) fixed;
+        if (rest_count < 0)
+            rest_count = 0;
+        fprintf(out, ", ({ xrt_array_t *_va%u = xrt_array_new_typed_ptr(%" PRId64 ", %s); ", v->id,
+                rest_count, rest_elem.elem_name);
+        int64_t idx = 0;
+        for (uint16_t a = (uint16_t) (fixed + 1); a < v->nargs; a++, idx++) {
+            fprintf(out, "((%s*)_va%u->data)[%" PRId64 "] = (%s)", rest_elem.ctype, v->id, idx,
+                    rest_elem.ctype);
+            emit_value_as_rep(out, v->args[a], rest_elem.rep);
+            fprintf(out, "; ");
+        }
+        const char *rest_suffix = emit_conversion_prefix(out, rest_type, XR_REP_PTR, rest_rep);
+        fprintf(out, "_va%u", v->id);
+        emit_conversion_suffix(out, rest_suffix);
+        fprintf(out, "; })");
+    } else {
+        fprintf(out, ", ({ XrValue _va%u = xrt_array_new(0); ", v->id);
+        for (uint16_t a = (uint16_t) (fixed + 1); a < v->nargs; a++) {
+            fprintf(out, "xrt_array_push(_va%u, ", v->id);
+            emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
+            fprintf(out, "); ");
+        }
+        const char *rest_suffix = emit_conversion_prefix(out, rest_type, XR_REP_TAGGED, rest_rep);
+        fprintf(out, "_va%u", v->id);
+        emit_conversion_suffix(out, rest_suffix);
+        fprintf(out, "; })");
+    }
+}
+
+/* Emits the argument list of a direct call (leading ", " before each), starting
+ * at v->args[1] and mapping to the target's parameters. Variadic targets get
+ * their trailing arguments packed into the rest Array via emit_vararg_rest_arg.
+ * The caller has already emitted the callee name, "(", and the hidden closure
+ * or NULL first operand. */
+static void emit_direct_call_arg_list(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      const XiFunc *target) {
+    if (target->is_vararg) {
+        uint16_t fixed = target->nparams;
+        for (uint16_t a = 1; a <= fixed && a < v->nargs; a++) {
+            fprintf(out, ", ");
+            emit_value_as_direct_call_arg(ctx, out, f, v, target, (uint16_t) (a - 1), v->args[a]);
+        }
+        emit_vararg_rest_arg(ctx, out, f, v, target);
+    } else {
+        for (uint16_t a = 1; a < v->nargs; a++) {
+            fprintf(out, ", ");
+            emit_value_as_direct_call_arg(ctx, out, f, v, target, (uint16_t) (a - 1), v->args[a]);
+        }
+    }
+}
+
 static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call: need callee");
@@ -1603,10 +1671,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         emit_fname(ctx, out, call_prefix ? call_prefix : prefix, target);
         fprintf(out, "(");
         emit_call_hidden_closure(out, f, target, callee);
-        for (uint16_t a = 1; a < v->nargs; a++) {
-            fprintf(out, ", ");
-            emit_value_as_direct_call_arg(ctx, out, f, v, target, (uint16_t) (a - 1), v->args[a]);
-        }
+        emit_direct_call_arg_list(ctx, out, f, v, target);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return;
@@ -3937,10 +4002,7 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
     }
     emit_fname(ctx, out, call.prefix ? call.prefix : prefix, target);
     fprintf(out, "(NULL");
-    for (uint16_t a = 1; a < v->nargs; a++) {
-        fprintf(out, ", ");
-        emit_value_as_direct_call_arg(ctx, out, f, v, target, (uint16_t) (a - 1), v->args[a]);
-    }
+    emit_direct_call_arg_list(ctx, out, f, v, target);
     fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
     return true;
