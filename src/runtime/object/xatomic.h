@@ -61,9 +61,12 @@ typedef struct XrAtomic {
 /* ========== Constructor ========== */
 
 struct XrVMRuntime;
+struct XrRuntimeCore;
 
 /* Allocate Atomic on system heap with initial value. */
 XR_FUNC XrAtomic *xr_atomic_new(struct XrVMRuntime *X, XrAtomicKind kind, int64_t initial);
+XR_FUNC XrAtomic *xr_atomic_new_core(struct XrRuntimeCore *core, XrAtomicKind kind,
+                                     int64_t initial);
 
 /* ========== Value Conversion Helpers ========== */
 
@@ -116,6 +119,40 @@ static inline memory_order xr_to_c11_order(XrAtomicOrdering ord) {
             return memory_order_seq_cst;
     }
     return memory_order_seq_cst;
+}
+
+static inline memory_order xr_to_c11_load_order(XrAtomicOrdering ord) {
+    switch (ord) {
+        case XR_ORDERING_RELAXED:
+            return memory_order_relaxed;
+        case XR_ORDERING_ACQUIRE:
+        case XR_ORDERING_ACQUIRE_RELEASE:
+            return memory_order_acquire;
+        case XR_ORDERING_SEQ_CST:
+            return memory_order_seq_cst;
+        case XR_ORDERING_RELEASE:
+            return memory_order_relaxed;
+    }
+    return memory_order_seq_cst;
+}
+
+static inline memory_order xr_to_c11_store_order(XrAtomicOrdering ord) {
+    switch (ord) {
+        case XR_ORDERING_RELAXED:
+            return memory_order_relaxed;
+        case XR_ORDERING_RELEASE:
+        case XR_ORDERING_ACQUIRE_RELEASE:
+            return memory_order_release;
+        case XR_ORDERING_SEQ_CST:
+            return memory_order_seq_cst;
+        case XR_ORDERING_ACQUIRE:
+            return memory_order_relaxed;
+    }
+    return memory_order_seq_cst;
+}
+
+static inline memory_order xr_to_c11_rmw_order(XrAtomicOrdering ord) {
+    return xr_to_c11_order(ord);
 }
 
 /* ========== Atomic Operations ========== */

@@ -64,20 +64,47 @@ static bool xa_type_is_bytes(XrType *type) {
     return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
 }
 
+static bool xa_type_is_bytespan(XrType *type) {
+    if (!type || !XR_TYPE_IS_SPAN(type) || !type->container.element_type)
+        return false;
+    XrType *elem = type->container.element_type;
+    return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+}
+
+static bool xa_type_is_raw_u8_ptr(XrType *type) {
+    if (!type || !XR_TYPE_IS_POINTER(type) || !type->container.element_type)
+        return false;
+    XrType *elem = type->container.element_type;
+    return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+}
+
 static bool xa_type_has_collection_size_alias(XrType *type) {
-    return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET);
+    return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SPAN(type) || XR_TYPE_IS_MAP(type) ||
+                    type->kind == XR_KIND_SET);
 }
 
 static bool xa_symbol_is_collection_length(SymbolId sym, XrType *type) {
     if (!type)
         return false;
     if (sym == SYMBOL_LENGTH) {
-        return XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_STRING(type) || XR_TYPE_IS_MAP(type) ||
-               type->kind == XR_KIND_SET;
+        return XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SPAN(type) || XR_TYPE_IS_STRING(type) ||
+               XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET;
     }
     if (sym == SYMBOL_SIZE)
         return xa_type_has_collection_size_alias(type);
     return false;
+}
+
+static void xa_report_span_member_error(XaInferContext *ctx, AstNode *node, XrType *type,
+                                        const char *name) {
+    if (!ctx || !ctx->analyzer || !node || !type || !XR_TYPE_IS_SPAN(type) || !name)
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[192];
+    snprintf(msg, sizeof(msg), "Span view has no member '%s'; use length/size or indexed access",
+             name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
 }
 
 static bool member_object_is_enum_namespace(XaInferContext *ctx, AstNode *object,
@@ -102,17 +129,34 @@ static XrType *xa_bytes_method_type(XaInferContext *ctx, XrType *receiver, const
     XrVMRuntime *X = ctx->analyzer->isolate;
     XrType *t_int = xr_type_new_int(X);
     XrType *t_bytes = xr_type_new_bytes(X);
-    if (strcmp(name, "loadU32LE") == 0)
-        return xa_function_type1(ctx, t_int, xr_type_new_int_width(X, XR_NATIVE_U32));
-    if (strcmp(name, "loadU64LE") == 0)
-        return xa_function_type1(ctx, t_int, xr_type_new_int_width(X, XR_NATIVE_U64));
-    if (strcmp(name, "copyWithin") == 0 || strcmp(name, "repeatFrom") == 0) {
+    XrType *t_bytespan = xr_type_new_bytespan(X);
+    if (strcmp(name, "appendFromUnchecked") == 0) {
+        XrType *params[3] = {t_bytespan, t_int, t_int};
+        return xr_type_new_function(X, params, 3, t_bytes, false);
+    }
+    if (strcmp(name, "repeatFromUnchecked") == 0) {
+        XrType *params[2] = {t_int, t_int};
+        return xr_type_new_function(X, params, 2, t_bytes, false);
+    }
+    if (strcmp(name, "writeFromUnchecked") == 0) {
+        XrType *params[4] = {t_int, t_bytespan, t_int, t_int};
+        return xr_type_new_function(X, params, 4, t_bytes, false);
+    }
+    if (strcmp(name, "repeatAtUnchecked") == 0) {
         XrType *params[3] = {t_int, t_int, t_int};
         return xr_type_new_function(X, params, 3, t_bytes, false);
     }
-    if (strcmp(name, "copyFrom") == 0) {
-        XrType *params[4] = {t_bytes, t_int, t_int, t_int};
+    if (strcmp(name, "wildCopyFromNonOverlappingUnchecked") == 0) {
+        XrType *params[4] = {t_int, t_bytespan, t_int, t_int};
         return xr_type_new_function(X, params, 4, t_bytes, false);
+    }
+    if (strcmp(name, "wildRepeatAtUnchecked") == 0) {
+        XrType *params[3] = {t_int, t_int, t_int};
+        return xr_type_new_function(X, params, 3, t_bytes, false);
+    }
+    if (strcmp(name, "setLengthUnchecked") == 0) {
+        XrType *params[1] = {t_int};
+        return xr_type_new_function(X, params, 1, t_bytes, false);
     }
     if (strcmp(name, "resize") == 0) {
         XrType *params[2] = {t_int, xr_type_new_int_width(X, XR_NATIVE_U8)};
@@ -122,6 +166,58 @@ static XrType *xa_bytes_method_type(XaInferContext *ctx, XrType *receiver, const
         return fn;
     }
     return NULL;
+}
+
+static XrType *xa_bytespan_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
+    if (!xa_type_is_bytespan(receiver) || !name)
+        return NULL;
+
+    XrVMRuntime *X = ctx->analyzer->isolate;
+    if (strcmp(name, "loadLE") == 0 || strcmp(name, "loadLEUnchecked") == 0) {
+        XrType *params[1] = {xr_type_new_int(X)};
+        XrType *ret = xr_type_new_type_param(X, "T", 0);
+        XrType *fn = xr_type_new_function(X, params, 1, ret, false);
+        if (fn) {
+            const char *names[1] = {"T"};
+            xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
+        }
+        return fn;
+    }
+    if (strcmp(name, "commonPrefixUnchecked") == 0) {
+        XrType *params[3] = {xr_type_new_int(X), xr_type_new_int(X), xr_type_new_int(X)};
+        return xr_type_new_function(X, params, 3, xr_type_new_int(X), false);
+    }
+    return NULL;
+}
+
+static XrType *xa_span_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
+    if (!receiver || !XR_TYPE_IS_SPAN(receiver) || !receiver->container.element_type || !name)
+        return NULL;
+    if (strcmp(name, "getUnchecked") != 0)
+        return NULL;
+    XrVMRuntime *X = ctx->analyzer->isolate;
+    XrType *params[1] = {xr_type_new_int(X)};
+    return xr_type_new_function(X, params, 1, receiver->container.element_type, false);
+}
+
+static XrType *xa_array_data_ptr_method_type(XaInferContext *ctx, XrType *receiver,
+                                             const char *name) {
+    if (!receiver || !name || (!XR_TYPE_IS_ARRAY(receiver) && !XR_TYPE_IS_SPAN(receiver)))
+        return NULL;
+    bool mut = false;
+    if (strcmp(name, "dataPtrUnchecked") == 0) {
+        mut = false;
+    } else if (strcmp(name, "dataMutPtrUnchecked") == 0) {
+        mut = true;
+    } else {
+        return NULL;
+    }
+    XrVMRuntime *X = ctx->analyzer->isolate;
+    XrType *elem = receiver->container.element_type;
+    if (!elem)
+        elem = xr_type_new_unknown(X);
+    XrType *ret = xr_type_new_pointer(X, elem, mut);
+    return xr_type_new_function(X, NULL, 0, ret, false);
 }
 
 // FFI raw pointer (RawPtr<T>/RawMut<T>) instance methods. Returns the method's
@@ -146,6 +242,39 @@ static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, con
                 "raw pointer `deref()` must be inside an `unsafe { }` block", &loc);
         }
         return xr_type_new_function(X, NULL, 0, pointee, false);
+    }
+    if (strcmp(name, "copyFromNonOverlappingUnchecked") == 0) {
+        if (node) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            if (ctx->unsafe_depth == 0) {
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                    "raw pointer copy must be inside an `unsafe { }` block", &loc);
+            }
+            if (!receiver->ptr_is_mut) {
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
+                    "cannot copy into a const `RawPtr<T>` (use `RawMut<T>`)", &loc);
+            }
+        }
+        XrType *params[2] = {xr_type_new_pointer(X, pointee, false), xr_type_new_int(X)};
+        return xr_type_new_function(X, params, 2, xr_type_new_unit(X), false);
+    }
+    if (strcmp(name, "loadLEUnchecked") == 0 && xa_type_is_raw_u8_ptr(receiver)) {
+        if (ctx->unsafe_depth == 0 && node) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                "RawPtr.loadLEUnchecked() must be inside an unsafe block", &loc);
+        }
+        XrType *params[1] = {xr_type_new_int(X)};
+        XrType *ret = xr_type_new_type_param(X, "T", 0);
+        XrType *fn = xr_type_new_function(X, params, 1, ret, false);
+        if (fn) {
+            const char *names[1] = {"T"};
+            xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
+        }
+        return fn;
     }
     if (strcmp(name, "offset") == 0)
         return xa_function_type1(ctx, xr_type_new_int(X), receiver);
@@ -398,6 +527,7 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
 
     /* Write back resolved symbol ID for Xi lowering (Braun SSA key). */
     node->as.variable.symbol_id = sym->id;
+    xa_parallel_capture_check(ctx, node, sym, false);
 
     // Record dependency: current function depends on this symbol
     if (ctx->current_function && ctx->analyzer->incremental) {
@@ -792,9 +922,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             /* User module namespace: resolve member from graph exports.
              * Relative paths (starting with ".") indicate a user module. */
             bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
-            XrHashMap *exports = resolve_graph_exports(ctx->analyzer, mod_name, is_quoted);
+            XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
             if (exports) {
-                XrType *member_type = (XrType *) xr_hashmap_get(exports, ma->name);
+                XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+                XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
+                XrType *member_type = member_links ? member_links->type : NULL;
                 if (member_type) {
                     record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
                                      member_type, false);
@@ -965,6 +1097,35 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (prop_sym == SYMBOL_CAPACITY && XR_TYPE_IS_ARRAY(obj_type)) {
         return xr_type_new_int(NULL);
     }
+    if (XR_TYPE_IS_ARRAY(obj_type) && ma->name && ctx->unsafe_depth == 0 &&
+        (strcmp(ma->name, "pushUnchecked") == 0 || strcmp(ma->name, "getUnchecked") == 0 ||
+         strcmp(ma->name, "setUnchecked") == 0 || strcmp(ma->name, "appendFromUnchecked") == 0 ||
+         strcmp(ma->name, "repeatFromUnchecked") == 0 ||
+         strcmp(ma->name, "writeFromUnchecked") == 0 ||
+         strcmp(ma->name, "repeatAtUnchecked") == 0 ||
+         strcmp(ma->name, "wildCopyFromNonOverlappingUnchecked") == 0 ||
+         strcmp(ma->name, "wildRepeatAtUnchecked") == 0 ||
+         strcmp(ma->name, "setLengthUnchecked") == 0 || strcmp(ma->name, "dataPtrUnchecked") == 0 ||
+         strcmp(ma->name, "dataMutPtrUnchecked") == 0)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[128];
+        snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",
+                 xa_type_is_bytes(obj_type) ? "Bytes" : "Array", ma->name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+    }
+    if (XR_TYPE_IS_SPAN(obj_type) && ma->name && ctx->unsafe_depth == 0 &&
+        (strcmp(ma->name, "loadLEUnchecked") == 0 || strcmp(ma->name, "getUnchecked") == 0 ||
+         strcmp(ma->name, "commonPrefixUnchecked") == 0 ||
+         strcmp(ma->name, "dataPtrUnchecked") == 0 ||
+         strcmp(ma->name, "dataMutPtrUnchecked") == 0)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[128];
+        snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",
+                 xa_type_is_bytespan(obj_type) ? "ByteSpan" : "Span", ma->name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+    }
     if (obj_type->kind == XR_KIND_CHANNEL) {
         if (prop_sym == SYMBOL_CANCELLED)
             return xr_type_new_bool(NULL);
@@ -974,9 +1135,26 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (bytes_method)
         return bytes_method;
 
+    XrType *bytespan_method = xa_bytespan_method_type(ctx, obj_type, ma->name);
+    if (bytespan_method)
+        return bytespan_method;
+
+    XrType *span_method = xa_span_method_type(ctx, obj_type, ma->name);
+    if (span_method)
+        return span_method;
+
+    XrType *data_ptr_method = xa_array_data_ptr_method_type(ctx, obj_type, ma->name);
+    if (data_ptr_method)
+        return data_ptr_method;
+
     XrType *ptr_method = xa_pointer_method_type(ctx, obj_type, ma->name, node);
     if (ptr_method)
         return ptr_method;
+
+    if (XR_TYPE_IS_SPAN(obj_type)) {
+        xa_report_span_member_error(ctx, node, obj_type, ma->name);
+        return xr_type_new_unknown(NULL);
+    }
 
     // Handle built-in methods (return function type for method access)
     if (xa_builtin_is_method(obj_type, ma->name)) {
@@ -985,6 +1163,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             XrType *fn_type = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
             // Substitute generic type parameters with actual container types:
             //   Array<T>/Set<T>/Channel<T>: T -> element_type
+            //   Task<T>/WorkQueue<T>/Atomic<T>: T -> instance type argument
             //   Map<K,V>: K -> key_type, V -> value_type
             if (fn_type) {
                 XrType *single_type_arg = NULL;
@@ -992,7 +1171,9 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                      obj_type->kind == XR_KIND_CHANNEL) &&
                     obj_type->container.element_type) {
                     single_type_arg = obj_type->container.element_type;
-                } else if (xr_type_is_named_class(obj_type, "Task") &&
+                } else if ((xr_type_is_named_class(obj_type, "Task") ||
+                            xr_type_is_named_class(obj_type, "WorkQueue") ||
+                            xr_type_is_named_class(obj_type, "Atomic")) &&
                            obj_type->instance.type_arg_count > 0 && obj_type->instance.type_args) {
                     single_type_arg = obj_type->instance.type_args[0];
                 }
@@ -1036,41 +1217,60 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    if (XR_TYPE_IS_ARRAY(obj_type)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[160];
+        snprintf(msg, sizeof(msg), "%s has no member '%s'",
+                 xa_type_is_bytes(obj_type) ? "Bytes" : "Array", ma->name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_unknown(NULL);
+    }
+
     // Handle class instance members
     if (XR_TYPE_IS_INSTANCE(obj_type) && obj_type->instance.class_name) {
         XaSymbol *class_sym =
             xa_scope_lookup(ctx->analyzer->current_scope, obj_type->instance.class_name);
-        if (class_sym) {
-            XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
-            if (class_links && class_links->class_info) {
-                struct XrClassInfo *member_owner = NULL;
-                XaSymbol *member = xa_class_info_lookup_instance_member_owner(
-                    class_links->class_info, ma->name, &member_owner);
-                if (member) {
-                    xa_check_member_visibility(ctx, node, member, member_owner);
-                    XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member);
-                    if (member_links && member_links->type) {
-                        XrType *member_type = member_links->type;
+        XaSymbolLinks *class_links =
+            class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+        /* Namespace-imported classes have no local symbol under their bare name
+         * (only the module alias is in scope), so the by-name lookup misses.
+         * Fall back to the class_info the instance type itself carries so
+         * cross-module instance methods/fields resolve to their real signatures
+         * — required to give closure arguments their expected `(T) -> U` type
+         * (otherwise a lambda passed to e.g. `ns.Box<int>().map(f)` loses its
+         * return type and lowers to a value-discarding `void` body). */
+        XrClassInfo *class_info = (class_links && class_links->class_info)
+                                      ? class_links->class_info
+                                      : obj_type->instance.class_ref;
+        if (class_info) {
+            struct XrClassInfo *member_owner = NULL;
+            XaSymbol *member =
+                xa_class_info_lookup_instance_member_owner(class_info, ma->name, &member_owner);
+            if (member) {
+                xa_check_member_visibility(ctx, node, member, member_owner);
+                XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member);
+                if (member_links && member_links->type) {
+                    XrType *member_type = member_links->type;
 
-                        // Apply type substitution for generic instances
-                        int type_param_count = xa_symbol_links_get_type_param_count(class_links);
-                        if (type_param_count > 0 && obj_type->instance.type_arg_count > 0) {
-                            const char **param_names =
-                                xr_malloc(sizeof(const char *) * type_param_count);
-                            for (int i = 0; i < type_param_count; i++) {
-                                param_names[i] =
-                                    xa_symbol_links_get_type_param_name(class_links, i);
-                            }
-                            member_type = xr_type_substitute(
-                                ctx->analyzer->isolate, member_type, param_names,
-                                obj_type->instance.type_args, obj_type->instance.type_arg_count);
-                            xr_free(param_names);
+                    // Apply type substitution for generic instances
+                    int type_param_count =
+                        class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
+                    if (type_param_count > 0 && obj_type->instance.type_arg_count > 0) {
+                        const char **param_names =
+                            xr_malloc(sizeof(const char *) * type_param_count);
+                        for (int i = 0; i < type_param_count; i++) {
+                            param_names[i] = xa_symbol_links_get_type_param_name(class_links, i);
                         }
-                        XaSelectionKind sk =
-                            (member->kind == XA_SYM_METHOD) ? XA_SEL_METHOD : XA_SEL_FIELD;
-                        record_selection(ctx, node, sk, obj_type, member, -1, member_type, false);
-                        return member_type;
+                        member_type = xr_type_substitute(ctx->analyzer->isolate, member_type,
+                                                         param_names, obj_type->instance.type_args,
+                                                         obj_type->instance.type_arg_count);
+                        xr_free(param_names);
                     }
+                    XaSelectionKind sk =
+                        (member->kind == XA_SYM_METHOD) ? XA_SEL_METHOD : XA_SEL_FIELD;
+                    record_selection(ctx, node, sk, obj_type, member, -1, member_type, false);
+                    return member_type;
                 }
             }
         }
@@ -1162,7 +1362,8 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
         return pointee ? pointee : xr_type_new_unknown(NULL);
     }
 
-    if (XR_TYPE_IS_ARRAY(container) && container->container.element_type) {
+    if ((XR_TYPE_IS_ARRAY(container) || XR_TYPE_IS_SPAN(container)) &&
+        container->container.element_type) {
         if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
             add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
         return container->container.element_type;
@@ -1390,7 +1591,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
     XrType *target_elem_type = NULL;
     if (arr->count == 0) {
         // Empty array: use expected type if available
-        if (ctx->expected_type && XR_TYPE_IS_ARRAY(ctx->expected_type) &&
+        if (ctx->expected_type &&
+            (XR_TYPE_IS_ARRAY(ctx->expected_type) || XR_TYPE_IS_SPAN(ctx->expected_type)) &&
             ctx->expected_type->container.element_type) {
             return xr_type_new_array(ctx->analyzer->isolate,
                                      ctx->expected_type->container.element_type);
@@ -1403,10 +1605,14 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
     // type (T[]); plain elements are checked against the element type (T).
     XrType *saved_expected = ctx->expected_type;
     XrType *expected_array = NULL;
-    if (ctx->expected_type && XR_TYPE_IS_ARRAY(ctx->expected_type) &&
+    if (ctx->expected_type &&
+        (XR_TYPE_IS_ARRAY(ctx->expected_type) || XR_TYPE_IS_SPAN(ctx->expected_type)) &&
         ctx->expected_type->container.element_type) {
         target_elem_type = ctx->expected_type->container.element_type;
-        expected_array = ctx->expected_type;
+        expected_array = XR_TYPE_IS_ARRAY(ctx->expected_type)
+                             ? ctx->expected_type
+                             : xr_type_new_array(ctx->analyzer->isolate,
+                                                 ctx->expected_type->container.element_type);
     }
 
     bool use_target_elem_type = (target_elem_type != NULL);
@@ -1419,7 +1625,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             // Spread source must be an array; splice its element type in.
             ctx->expected_type = expected_array;
             XrType *src = xa_visit_infer_expr(ctx, child->as.spread_expr.expr);
-            if (src && XR_TYPE_IS_ARRAY(src) && src->container.element_type) {
+            if (src && (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_SPAN(src)) &&
+                src->container.element_type) {
                 contributed = src->container.element_type;
             } else {
                 if (src && !XR_TYPE_IS_UNKNOWN(src)) {
@@ -2172,7 +2379,8 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
     if (node->as.optional_chain.index) {
         xa_visit_infer_expr(ctx, node->as.optional_chain.index);
 
-        if (XR_TYPE_IS_ARRAY(base_type) && base_type->container.element_type) {
+        if ((XR_TYPE_IS_ARRAY(base_type) || XR_TYPE_IS_SPAN(base_type)) &&
+            base_type->container.element_type) {
             XrType *result =
                 xr_type_copy(ctx->analyzer->isolate, base_type->container.element_type);
             if (result)
@@ -2525,6 +2733,7 @@ bool xa_boundary_transfer_type_needs_explicit(const XrType *type) {
         return false;
     switch (type->kind) {
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_FIXED_ARRAY:
@@ -2625,7 +2834,7 @@ void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
         case AST_VARIABLE: {
             const char *name = node->as.variable.name;
             XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
-            if (!sym || sym->is_builtin || sym->kind == XA_SYM_FUNCTION ||
+            if (!sym || sym->is_builtin || sym->is_imported || sym->kind == XA_SYM_FUNCTION ||
                 sym->kind == XA_SYM_CLASS || sym->kind == XA_SYM_MODULE ||
                 sym->kind == XA_SYM_IMPORT)
                 break;
@@ -2745,6 +2954,30 @@ void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
             }
             check_closure_capture(ctx, node->as.for_stmt.body, line);
             break;
+        case AST_FOR_IN_STMT:
+            check_closure_capture(ctx, node->as.for_in_stmt.collection, line);
+            check_closure_capture(ctx, node->as.for_in_stmt.body, line);
+            break;
+        case AST_PARALLEL_FOR_STMT:
+            check_closure_capture(ctx, node->as.parallel_for_stmt.range, line);
+            check_closure_capture(ctx, node->as.parallel_for_stmt.worker_count, line);
+            check_closure_capture(ctx, node->as.parallel_for_stmt.final_body, line);
+            check_closure_capture(ctx, node->as.parallel_for_stmt.body, line);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            check_closure_capture(ctx, node->as.parallel_reduce_expr.range, line);
+            check_closure_capture(ctx, node->as.parallel_reduce_expr.worker_count, line);
+            check_closure_capture(ctx, node->as.parallel_reduce_expr.initial, line);
+            check_closure_capture(ctx, node->as.parallel_reduce_expr.combine, line);
+            check_closure_capture(ctx, node->as.parallel_reduce_expr.body, line);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            check_closure_capture(ctx, node->as.parallel_collect_expr.range, line);
+            check_closure_capture(ctx, node->as.parallel_collect_expr.worker_count, line);
+            check_closure_capture(ctx, node->as.parallel_collect_expr.into, line);
+            check_closure_capture(ctx, node->as.parallel_collect_expr.final_body, line);
+            check_closure_capture(ctx, node->as.parallel_collect_expr.body, line);
+            break;
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++) {
                 check_closure_capture(ctx, node->as.return_stmt.values[i], line);
@@ -2838,7 +3071,44 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
                     result_elem = elem->instance.type_args[0];
                 }
                 if (await->is_all) {
+                    if (await->into) {
+                        XrType *into_type = xa_visit_infer_expr(ctx, await->into);
+                        if (into_type && !XR_TYPE_IS_UNKNOWN(into_type)) {
+                            if (!XR_TYPE_IS_ARRAY(into_type)) {
+                                XrLocation loc = {.file = ctx->file_path,
+                                                  .line = await->into->line,
+                                                  .column = await->into->column};
+                                xa_analyzer_add_diagnostic(
+                                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_AWAIT_TYPE,
+                                    "await all into expects an Array result buffer", &loc);
+                            } else if (result_elem && !XR_TYPE_IS_UNKNOWN(result_elem) &&
+                                       into_type->container.element_type &&
+                                       !xr_type_equals(into_type->container.element_type,
+                                                       result_elem)) {
+                                XrLocation loc = {.file = ctx->file_path,
+                                                  .line = await->into->line,
+                                                  .column = await->into->column};
+                                char msg[256];
+                                snprintf(msg, sizeof(msg),
+                                         "await all into result buffer type mismatch: expected "
+                                         "Array<%s>, got %s",
+                                         xr_type_to_string(result_elem),
+                                         xr_type_to_string(into_type));
+                                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                           XR_ERR_ANALYZE_AWAIT_TYPE, msg, &loc);
+                            }
+                        }
+                        return xr_type_new_unit(ctx->analyzer->isolate);
+                    }
                     return xr_type_new_array(ctx->analyzer->isolate, result_elem);
+                }
+                if (await->into) {
+                    XrLocation loc = {.file = ctx->file_path,
+                                      .line = await->into->line,
+                                      .column = await->into->column};
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_AWAIT_TYPE,
+                                               "await into is only supported for await all", &loc);
                 }
                 // await any / anySuccess returns single element
                 return result_elem;
@@ -2977,22 +3247,12 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     }
 
     // Check: cannot move thread-safe shared runtime primitives.
-    if (var_type && var_type->kind == XR_KIND_CHANNEL) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "cannot move Channel (thread-safe, shared by reference)", &loc);
-    }
-    if (var_type && xr_type_is_named_class(var_type, "Atomic")) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "cannot move Atomic (thread-safe, shared by reference)", &loc);
-    }
-    if (var_type && xr_type_is_named_class(var_type, "WorkQueue")) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "cannot move WorkQueue (thread-safe, shared by reference)",
-                                   &loc);
-    }
-    if (var_type && xr_type_is_named_class(var_type, "ResultGroup")) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "cannot move ResultGroup (thread-safe, shared by reference)",
+    const char *shared_ref_label = xa_threadsafe_shared_ref_label(var_type);
+    if (shared_ref_label) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "cannot move %s (thread-safe, shared by reference)",
+                 shared_ref_label);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
     }
 

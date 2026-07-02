@@ -1,0 +1,28 @@
+// Once as a pure-Xray class composing the coroutine-aware Semaphore(1): the
+// body runs exactly once even across repeated calls. Constructing the Semaphore
+// in a sync constructor must not force coroutine codegen (task 147 §0.10); the
+// unit-returning closure and defer-based release must be VM/AOT identical.
+
+class Once {
+    _sem: Semaphore
+    _done: bool
+    constructor() {
+        this._sem = Semaphore(1)
+        this._done = false
+    }
+    call(body: () -> ()) {
+        this._sem.acquire()
+        defer { this._sem.release() }
+        if (!this._done) {
+            body()
+            this._done = true
+        }
+    }
+}
+
+shared const counter = Atomic<int>(0)
+let once = Once()
+once.call(() -> { counter.fetchAdd(1) })
+once.call(() -> { counter.fetchAdd(1) })
+once.call(() -> { counter.fetchAdd(1) })
+print(counter.load())   // 1 — body ran exactly once

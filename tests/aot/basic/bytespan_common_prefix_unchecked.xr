@@ -1,0 +1,32 @@
+fn common(src: ByteSpan, left: int, right: int, maxCount: int) -> int {
+    let n = 0
+    unsafe {
+        n = src.commonPrefixUnchecked(left, right, maxCount)
+    }
+    return n
+}
+
+let bytes = Bytes.withCapacity(24)
+unsafe {
+    bytes.pushUnchecked(65)
+    bytes.pushUnchecked(66)
+    bytes.pushUnchecked(67)
+    bytes.pushUnchecked(68)
+    bytes.pushUnchecked(65)
+    bytes.pushUnchecked(66)
+    bytes.pushUnchecked(67)
+    bytes.pushUnchecked(88)
+    bytes.pushUnchecked(65)
+    bytes.pushUnchecked(66)
+    bytes.pushUnchecked(67)
+    bytes.pushUnchecked(68)
+    bytes.pushUnchecked(69)
+    bytes.pushUnchecked(70)
+    bytes.pushUnchecked(71)
+    bytes.pushUnchecked(72)
+}
+
+let view: ByteSpan = bytes
+print(common(view, 0, 4, 4))
+print(common(view, 0, 8, 8))
+print(common(view, 2, 6, 2))

@@ -186,14 +186,14 @@ static inline void xrt_boolmap_set_v(xrt_boolmap_t *b, XrValue key, XrValue val)
 }
 
 static inline XrValue xrt_boolmap_keys(xrt_boolmap_t *b) {
-    XrValue arr = xrt_array_new(b->order_len);
+    XrValue arr = xrt_array_with_capacity(b->order_len);
     for (int o = 0; o < b->order_len; o++)
         xrt_array_push(arr, XR_FROM_BOOL(b->order[o] != 0));
     return arr;
 }
 
 static inline XrValue xrt_boolmap_values(xrt_boolmap_t *b) {
-    XrValue arr = xrt_array_new(b->order_len);
+    XrValue arr = xrt_array_with_capacity(b->order_len);
     for (int o = 0; o < b->order_len; o++)
         xrt_array_push(arr, xrt_boolmap_box_value(b, b->order[o]));
     return arr;

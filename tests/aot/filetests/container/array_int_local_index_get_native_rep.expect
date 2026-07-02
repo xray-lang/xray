@@ -1,0 +1,5 @@
+regex=function [0-9]+ name=readLocal .* abi=native
+regex=value v[0-9]+ op=INDEX_GET kind=scalar rep=i64 c_type=int64_t
+regex=array-storage [0-9]+ func=readLocal value=v[0-9]+ origin=v[0-9]+ flags=0x3 elem=XR_ELEM_I64/i64/int64_t
+c_contains=((int64_t*)_a->data)[_idx]
+c_not_contains=XR_FROM_INT(({ xrt_array_t *_a = ((xrt_array_t*)

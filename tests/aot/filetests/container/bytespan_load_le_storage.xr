@@ -1,0 +1,30 @@
+fn read16(src: ByteSpan, pos: int) -> int {
+    let value: uint16 = src.loadLE<uint16>(pos)
+    return int(value)
+}
+
+fn read32(src: ByteSpan, pos: int) -> int {
+    let value: uint32 = src.loadLE<uint32>(pos)
+    return int(value)
+}
+
+fn read64(src: ByteSpan, pos: int) -> int {
+    let value: uint64 = src.loadLE<uint64>(pos)
+    return int(value)
+}
+
+fn read32Unchecked(src: ByteSpan, pos: int) -> int {
+    let value: uint32 = 0
+    unsafe {
+        value = src.loadLEUnchecked<uint32>(pos)
+    }
+    return int(value)
+}
+
+fn read16Unchecked(src: ByteSpan, pos: int) -> int {
+    let value: uint16 = 0
+    unsafe {
+        value = src.loadLEUnchecked<uint16>(pos)
+    }
+    return int(value)
+}

@@ -1,0 +1,12 @@
+c_contains=xr_aot_await_all_task_values_to_slots(ctx,
+c_contains=xr_aot_await_all_task_values_to_slots_resume(ctx,
+c_contains=_await_tasks_
+c_contains=_await_result_slots_
+c_contains=XR_ELEM_I64, true
+c_contains= = XR_NULL_VAL;
+c_not_contains=xr_aot_await_all_tasks(ctx,
+c_not_contains=xr_aot_await_all_task_values(ctx,
+c_not_contains=xrt_array_new_typed(4, XR_ELEM_ANY)
+c_not_contains=xrt_array_stack_new(4)
+c_not_contains=xrt_index_get(
+c_not_contains=xr_aot_bridge_value_to_xrt(

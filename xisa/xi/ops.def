@@ -478,9 +478,19 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.bytes.load.u16.le
+  :class memory-read
+  :arity 2
+  :own-use borrow
+  :effects (may-throw memory-read)
+  :requires (bytes bounds little-endian)
+  :observable (u16-wrap)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.bytes.load.u32.le
   :class memory-read
   :arity 2
+  :own-use borrow
   :effects (may-throw memory-read)
   :requires (bytes bounds little-endian)
   :observable (u32-wrap)
@@ -489,6 +499,7 @@
 (define-xi-op xi.bytes.load.u64.le
   :class memory-read
   :arity 2
+  :own-use borrow
   :effects (may-throw memory-read)
   :requires (bytes bounds little-endian)
   :observable (u64-wrap)
@@ -524,6 +535,19 @@
   :observable (lz-match-copy)
   :targets (vm-bytecode aot-c aot-verify))
 
+; Unsafe container data-pointer borrow. Returns the current element-storage
+; address as a RawPtr<T>/RawMut<T> address-width scalar. The caller must uphold
+; lifetime, capacity, bounds and aliasing rules.
+(define-xi-op xi.array.data.ptr
+  :class memory-read
+  :arity 1
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (memory-read)
+  :requires (array-like)
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 ; FFI raw-pointer load/store. The address is an address-width int; aux_int holds
 ; the XrFFIType width of the pointee. No bounds check (unsafe-only). Modeled on
 ; the bytes primitives: implicit TBAA-NONE keeps them out of value numbering and
@@ -545,6 +569,17 @@
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.ptr.copy.nonoverlap
+  :class memory-write
+  :arity 3
+  :result-kind void
+  :result-ownership none
+  :own-use borrow
+  :effects (side-effect memory-read memory-write)
+  :requires (raw-pointer non-overlap)
+  :observable (raw-memory-copy)
   :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.struct.new
@@ -912,10 +947,94 @@
 (define-xi-op xi.await
   :class coroutine
   :arity variadic
+  :own-use borrow
   :effects (side-effect may-suspend may-throw)
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify))
+
+; High-level batch-parallel semantics. These ops stay special even after the
+; first backend implementations because they are scheduling boundaries, not
+; ordinary value-level lowering patterns. They must not be desugared to xi.go /
+; xi.await before the backend has a chance to select persistent workers, epoch
+; broadcast, worker-local context, and native result/reduce buffers.
+(define-xi-op xi.par.for
+  :class parallel
+  :arity variadic
+  :result-kind void
+  :result-ownership none
+  :own-use borrow
+  :effects (side-effect may-suspend may-throw memory-read memory-write)
+  :requires ()
+  :observable (batch-parallel)
+  :targets (vm-bytecode aot-c aot-verify)
+  :lowering-policy special)
+
+(define-xi-op xi.par.collect
+  :class parallel
+  :arity variadic
+  :result-kind value
+  :result-ownership owned
+  :own-use borrow
+  :effects (side-effect may-suspend may-throw memory-read memory-write)
+  :requires ()
+  :observable (batch-parallel native-collect)
+  :targets (vm-bytecode aot-c aot-verify)
+  :lowering-policy special)
+
+(define-xi-op xi.par.reduce
+  :class parallel
+  :arity variadic
+  :own-use borrow
+  :effects (side-effect may-suspend may-throw memory-read memory-write)
+  :requires ()
+  :observable (batch-parallel native-reduce)
+  :targets (vm-bytecode aot-c aot-verify)
+  :lowering-policy special)
+
+(define-xi-op xi.task.group.new
+  :class parallel
+  :arity variadic
+  :own-use borrow
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable (task-group-state)
+  :targets (aot-verify)
+  :lowering-policy special)
+
+(define-xi-op xi.task.group.spawn.range
+  :class parallel
+  :arity variadic
+  :result-kind void
+  :result-ownership none
+  :own-use borrow
+  :effects (side-effect may-throw memory-read memory-write)
+  :requires ()
+  :observable (task-group-state)
+  :targets (aot-verify)
+  :lowering-policy special)
+
+(define-xi-op xi.task.group.await.reduce
+  :class parallel
+  :arity variadic
+  :own-use borrow
+  :effects (side-effect may-suspend may-throw memory-read memory-write)
+  :requires ()
+  :observable (task-group-state native-reduce consuming-join)
+  :targets (aot-verify)
+  :lowering-policy special)
+
+(define-xi-op xi.task.group.join
+  :class parallel
+  :arity variadic
+  :result-kind void
+  :result-ownership none
+  :own-use borrow
+  :effects (side-effect may-suspend may-throw memory-read memory-write)
+  :requires ()
+  :observable (task-group-state consuming-join)
+  :targets (aot-verify)
+  :lowering-policy special)
 
 (define-xi-op xi.chan.send
   :class coroutine

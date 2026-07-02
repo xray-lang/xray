@@ -151,6 +151,7 @@ static void test_small_array_uses_inline_storage(void) {
     xrt_array_t *a = (xrt_array_t *) value.ptr;
 
     ASSERT_TRUE(a != NULL, "array allocated");
+    ASSERT_EQ_INT(a->length, 2, "plain array constructor sets logical length");
     ASSERT_EQ_INT(a->capacity, 4, "plain array minimum cap is 4");
     ASSERT_TRUE(xrt_array_data_is_inline(a), "plain array starts with inline data");
     ASSERT_TRUE(ptr_is_aligned(a->data), "inline plain array data is XRT_DATA_ALIGN-aligned");
@@ -178,7 +179,7 @@ static void test_typed_exact_zero_uses_header_only(void) {
 
 static void test_growth_spills_inline_to_heap_and_preserves_values(void) {
     reset_alloc_counts();
-    XrValue value = xrt_array_new(4);
+    XrValue value = xrt_array_new(0);
     xrt_array_t *a = (xrt_array_t *) value.ptr;
 
     for (int64_t i = 0; i < 5; i++)
@@ -206,7 +207,7 @@ static void test_growth_spills_inline_to_heap_and_preserves_values(void) {
 
 static void test_slice_marks_borrowed_storage(void) {
     reset_alloc_counts();
-    XrValue value = xrt_array_new(4);
+    XrValue value = xrt_array_new(0);
     xrt_array_t *a = (xrt_array_t *) value.ptr;
     for (int64_t i = 0; i < 4; i++)
         xrt_array_push(value, XR_FROM_INT(i));
@@ -229,7 +230,7 @@ static void test_slice_marks_borrowed_storage(void) {
 
 static void test_slice_negative_bounds_and_aliasing(void) {
     reset_alloc_counts();
-    XrValue value = xrt_array_new(5);
+    XrValue value = xrt_array_new(0);
     xrt_array_t *a = (xrt_array_t *) value.ptr;
     for (int64_t i = 0; i < 5; i++)
         xrt_array_push(value, XR_FROM_INT(i + 10));
@@ -268,6 +269,36 @@ static void test_fill_range_typed_fast_path(void) {
     ASSERT_EQ_INT(((int64_t *) a->data)[5], 6, "empty fill leaves end untouched");
 
     free_test_array(a);
+}
+
+static void test_typed_filled_constructor_uses_pod_storage_rules(void) {
+    reset_alloc_counts();
+    XrValue zeros_value = xrt_array_new_filled_value(XR_FROM_INT(5), XR_FROM_INT(0), XR_ELEM_U32);
+    xrt_array_t *zeros = (xrt_array_t *) zeros_value.ptr;
+
+    ASSERT_EQ_INT(zeros->length, 5, "zero-filled u32 constructor sets logical length");
+    ASSERT_EQ_INT(zeros->capacity, 5, "zero-filled u32 constructor keeps requested capacity");
+    ASSERT_EQ_INT(((uint32_t *) zeros->data)[0], 0, "zero-filled u32 first slot is zero");
+    ASSERT_EQ_INT(((uint32_t *) zeros->data)[4], 0, "zero-filled u32 last slot is zero");
+
+    XrValue fill_value =
+        xrt_array_new_filled_value(XR_FROM_INT(3), XR_FROM_INT(0x12345678), XR_ELEM_U32);
+    xrt_array_t *filled = (xrt_array_t *) fill_value.ptr;
+    ASSERT_EQ_INT(filled->length, 3, "non-zero u32 filled constructor sets logical length");
+    ASSERT_EQ_INT(((uint32_t *) filled->data)[0], 0x12345678,
+                  "non-zero u32 filled constructor writes first slot");
+    ASSERT_EQ_INT(((uint32_t *) filled->data)[2], 0x12345678,
+                  "non-zero u32 filled constructor writes last slot");
+
+    XrValue flags_value = xrt_array_new_filled_value(XR_FROM_INT(4), XR_TRUE_VAL, XR_ELEM_BOOL);
+    xrt_array_t *flags = (xrt_array_t *) flags_value.ptr;
+    ASSERT_EQ_INT(flags->length, 4, "bool filled constructor sets logical length");
+    ASSERT_EQ_INT(((uint8_t *) flags->data)[0], 1, "bool filled constructor writes first slot");
+    ASSERT_EQ_INT(((uint8_t *) flags->data)[3], 1, "bool filled constructor writes last slot");
+
+    free_test_array(zeros);
+    free_test_array(filled);
+    free_test_array(flags);
 }
 
 static void test_resize_reserve_use_shared_capacity_plan(void) {
@@ -386,9 +417,17 @@ static void test_bytes_raw_helpers_share_core_rules(void) {
     for (int64_t i = 1; i <= 8; i++)
         xrt_array_push(value, XR_FROM_INT(i));
 
+    ASSERT_EQ_INT(xrt_bytes_load_u16_le_raw(a, 0), 513, "u16 load is little-endian");
     ASSERT_EQ_INT(xrt_bytes_load_u32_le_raw(a, 0), 67305985, "u32 load is little-endian");
     ASSERT_EQ_INT((int64_t) xrt_bytes_load_u64_le_raw(a, 0), 578437695752307201LL,
                   "u64 load is little-endian");
+    const uint8_t *raw = (const uint8_t *) a->data;
+    ASSERT_EQ_INT(xrt_ptr_load_u16_le_unchecked_raw(raw + 1), 770,
+                  "raw pointer u16 load is little-endian");
+    ASSERT_EQ_INT(xrt_ptr_load_u32_le_unchecked_raw(raw + 1), 84148994,
+                  "raw pointer u32 load is little-endian");
+    ASSERT_EQ_INT((int64_t) xrt_ptr_load_u64_le_unchecked_raw(raw), 578437695752307201LL,
+                  "raw pointer u64 load is little-endian");
     xrt_bytes_copy_within_raw(a, 2, 0, 4);
     ASSERT_EQ_INT(((uint8_t *) a->data)[2], 1, "copyWithin writes first overlap byte");
     ASSERT_EQ_INT(((uint8_t *) a->data)[3], 2, "copyWithin writes second overlap byte");
@@ -412,9 +451,77 @@ static void test_bytes_raw_helpers_share_core_rules(void) {
     ASSERT_EQ_INT(((uint8_t *) rep->data)[4], 66, "repeatFrom writes second repeat byte");
     ASSERT_EQ_INT(((uint8_t *) rep->data)[5], 67, "repeatFrom writes third repeat byte");
     ASSERT_EQ_INT(((uint8_t *) rep->data)[8], 67, "repeatFrom repeats through overlap");
+
+    XrValue single_value = xrt_array_new_typed_exact(16, XR_ELEM_U8);
+    xrt_array_t *single = (xrt_array_t *) single_value.ptr;
+    xrt_array_push(single_value, XR_FROM_INT(90));
+    xrt_bytes_repeat_from_unchecked_raw(single, 1, 8);
+    ASSERT_EQ_INT(single->length, 9, "repeatFromUnchecked appends repeated bytes");
+    for (int64_t i = 0; i < 9; i++)
+        ASSERT_EQ_INT(((uint8_t *) single->data)[i], 90,
+                      "repeatFromUnchecked handles distance-one expansion");
+
+    XrValue writer_value = xrt_array_new_typed_exact(16, XR_ELEM_U8);
+    xrt_array_t *writer = (xrt_array_t *) writer_value.ptr;
+    XrValue writer_src_value = xrt_array_new_typed_exact(8, XR_ELEM_U8);
+    xrt_array_t *writer_src = (xrt_array_t *) writer_src_value.ptr;
+    for (int64_t i = 0; i < 4; i++)
+        xrt_array_push(writer_src_value, XR_FROM_INT(65 + i));
+    xrt_bytes_write_from_unchecked_raw(writer, 0, writer_src, 0, 4);
+    xrt_bytes_repeat_at_unchecked_raw(writer, 4, 4, 4);
+    xrt_bytes_set_length_unchecked_raw(writer, 8);
+    ASSERT_EQ_INT(writer->length, 8, "setLengthUnchecked commits logical length");
+    ASSERT_EQ_INT(((uint8_t *) writer->data)[0], 65, "writeFromUnchecked writes first byte");
+    ASSERT_EQ_INT(((uint8_t *) writer->data)[4], 65, "repeatAtUnchecked repeats from offset");
+    ASSERT_EQ_INT(((uint8_t *) writer->data)[7], 68, "repeatAtUnchecked writes last byte");
+
+    XrValue wild_value = xrt_array_new_typed_exact(20, XR_ELEM_U8);
+    xrt_array_t *wild = (xrt_array_t *) wild_value.ptr;
+    for (int64_t i = 0; i < 4; i++)
+        xrt_array_push(wild_value, XR_FROM_INT(65 + i));
+    xrt_bytes_wild_repeat_at_unchecked_raw(wild, 4, 4, 8);
+    xrt_bytes_wild_copy_from_nonoverlapping_unchecked_raw(wild, 12, wild, 4, 8);
+    ASSERT_EQ_INT(wild->length, 4, "wild cursor writes do not commit logical length");
+    xrt_bytes_set_length_unchecked_raw(wild, 20);
+    ASSERT_EQ_INT(((uint8_t *) wild->data)[12], 65,
+                  "wildCopyFromNonOverlappingUnchecked reads physical tail");
+    ASSERT_EQ_INT(((uint8_t *) wild->data)[19], 68,
+                  "wildCopyFromNonOverlappingUnchecked copies the final byte");
+
+    XrValue fixed_src_value = xrt_array_new_typed_exact(112, XR_ELEM_U8);
+    xrt_array_t *fixed_src = (xrt_array_t *) fixed_src_value.ptr;
+    for (int64_t i = 0; i < 112; i++)
+        xrt_array_push(fixed_src_value, XR_FROM_INT(i));
+    XrValue fixed_dst_value = xrt_array_new_typed_exact(344, XR_ELEM_U8);
+    xrt_array_t *fixed_dst = (xrt_array_t *) fixed_dst_value.ptr;
+    xrt_bytes_wild_copy_16_nonoverlap_trusted_raw(fixed_dst, 0, fixed_src, 0);
+    xrt_bytes_wild_copy_96_nonoverlap_trusted_raw(fixed_dst, 16, fixed_src, 0);
+    xrt_bytes_wild_copy_104_nonoverlap_trusted_raw(fixed_dst, 112, fixed_src, 0);
+    xrt_bytes_wild_copy_112_nonoverlap_trusted_raw(fixed_dst, 216, fixed_src, 0);
+    xrt_array_t borrowed_src;
+    xrt_array_stack_borrow_slice_view_init(&borrowed_src, fixed_src_value, 0, 16);
+    xrt_bytes_wild_copy_from_nonoverlapping_unchecked_raw(fixed_dst, 328, &borrowed_src, 0, 16);
+    xrt_bytes_set_length_unchecked_raw(fixed_dst, 344);
+    ASSERT_EQ_INT(((uint8_t *) fixed_dst->data)[15], 15,
+                  "fixed 16-byte wild copy writes the final byte");
+    ASSERT_EQ_INT(((uint8_t *) fixed_dst->data)[111], 95,
+                  "fixed 96-byte wild copy writes the final byte");
+    ASSERT_EQ_INT(((uint8_t *) fixed_dst->data)[215], 103,
+                  "fixed 104-byte wild copy writes the final byte");
+    ASSERT_EQ_INT(((uint8_t *) fixed_dst->data)[327], 111,
+                  "fixed 112-byte wild copy writes the final byte");
+    ASSERT_EQ_INT(((uint8_t *) fixed_dst->data)[343], 15,
+                  "wildCopyFromNonOverlappingUnchecked accepts borrowed readable source");
+
     free_test_array(a);
     free_test_array(dst);
     free_test_array(rep);
+    free_test_array(single);
+    free_test_array(writer);
+    free_test_array(writer_src);
+    free_test_array(wild);
+    free_test_array(fixed_src);
+    free_test_array(fixed_dst);
 }
 
 static XrValue dummy_closure_body(xrt_closure_t *cl) {
@@ -448,6 +555,7 @@ int main(void) {
     test_slice_marks_borrowed_storage();
     test_slice_negative_bounds_and_aliasing();
     test_fill_range_typed_fast_path();
+    test_typed_filled_constructor_uses_pod_storage_rules();
     test_resize_reserve_use_shared_capacity_plan();
     test_slice_resize_reserve_are_noops();
     test_resize_reserve_type_errors_are_structured();

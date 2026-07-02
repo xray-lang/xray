@@ -5,10 +5,17 @@ class Array<T> {
     length: int
     size: int
     capacity: int
+    isEmpty: bool
     push(value: T)
+    pushUnchecked(value: T)
+    getUnchecked(index: int) -> T
+    setUnchecked(index: int, value: T)
+    dataPtrUnchecked() -> RawPtr<T>
+    dataMutPtrUnchecked() -> RawMut<T>
     pop() -> T?
     shift() -> T?
     unshift(value: T)
+    clear()
     reserve(capacity: int) -> Array<T>
     resize(length: int, fill: T) -> Array<T>
     splice(start: int, deleteCount?: int, ...items: T) -> Array<T>

@@ -98,6 +98,27 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             visit_node(node->as.for_in_stmt.body, v);
             break;
 
+        case AST_PARALLEL_FOR_STMT:
+            visit_node(node->as.parallel_for_stmt.range, v);
+            visit_node(node->as.parallel_for_stmt.worker_count, v);
+            visit_node(node->as.parallel_for_stmt.final_body, v);
+            visit_node(node->as.parallel_for_stmt.body, v);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            visit_node(node->as.parallel_reduce_expr.range, v);
+            visit_node(node->as.parallel_reduce_expr.worker_count, v);
+            visit_node(node->as.parallel_reduce_expr.initial, v);
+            visit_node(node->as.parallel_reduce_expr.combine, v);
+            visit_node(node->as.parallel_reduce_expr.body, v);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            visit_node(node->as.parallel_collect_expr.range, v);
+            visit_node(node->as.parallel_collect_expr.worker_count, v);
+            visit_node(node->as.parallel_collect_expr.into, v);
+            visit_node(node->as.parallel_collect_expr.final_body, v);
+            visit_node(node->as.parallel_collect_expr.body, v);
+            break;
+
         case AST_WHILE_STMT:
             visit_node(node->as.while_stmt.condition, v);
             visit_node(node->as.while_stmt.body, v);
@@ -220,6 +241,7 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             break;
         case AST_AWAIT_EXPR:
             visit_node(node->as.await_expr.expr, v);
+            visit_node(node->as.await_expr.into, v);
             break;
 
         case AST_SELECT_STMT:
@@ -312,6 +334,26 @@ static void visit_node(AstNode *node, XaAstVisitor *v) {
             break;
         case AST_FOR_IN_STMT:
             call_callback(v->visit_for_in_stmt, node, v);
+            break;
+        case AST_PARALLEL_FOR_STMT:
+            visit_node(node->as.parallel_for_stmt.range, v);
+            visit_node(node->as.parallel_for_stmt.worker_count, v);
+            visit_node(node->as.parallel_for_stmt.final_body, v);
+            visit_node(node->as.parallel_for_stmt.body, v);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            visit_node(node->as.parallel_reduce_expr.range, v);
+            visit_node(node->as.parallel_reduce_expr.worker_count, v);
+            visit_node(node->as.parallel_reduce_expr.initial, v);
+            visit_node(node->as.parallel_reduce_expr.combine, v);
+            visit_node(node->as.parallel_reduce_expr.body, v);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            visit_node(node->as.parallel_collect_expr.range, v);
+            visit_node(node->as.parallel_collect_expr.worker_count, v);
+            visit_node(node->as.parallel_collect_expr.into, v);
+            visit_node(node->as.parallel_collect_expr.final_body, v);
+            visit_node(node->as.parallel_collect_expr.body, v);
             break;
         case AST_WHILE_STMT:
             call_callback(v->visit_while_stmt, node, v);

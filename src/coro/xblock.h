@@ -80,7 +80,24 @@ XR_FUNC XrCoroBlockResult xr_coro_await_task_resume_slot(struct XrCoroutine *cor
 XR_FUNC XrCoroBlockResult xr_coro_await_task_slot(struct XrCoroutine *coro, struct XrTask *task,
                                                   XrSlotRef result_slot, int64_t timeout_ms,
                                                   bool discard_result);
+XR_FUNC XrCoroBlockResult xr_coro_await_submitted_task_slot(struct XrCoroutine *coro,
+                                                            struct XrTask *task,
+                                                            XrSlotRef result_slot,
+                                                            int64_t timeout_ms,
+                                                            bool discard_result);
+XR_FUNC void xr_coro_submit_deferred_array_tasks(struct XrCoroutine *coro, struct XrArray *tasks);
+XR_FUNC void xr_coro_submit_deferred_array_tasks_cached(struct XrCoroutine *coro,
+                                                        struct XrArray *tasks);
+XR_FUNC void xr_coro_submit_deferred_task_values(struct XrCoroutine *coro,
+                                                 const XrValue *task_values, int task_count);
 XR_FUNC XrCoroBlockResult xr_coro_await_all_tasks(struct XrCoroutine *coro, struct XrArray *tasks);
+XR_FUNC XrCoroBlockResult xr_coro_await_all_tasks_resume(struct XrCoroutine *coro,
+                                                         struct XrArray *tasks);
+XR_FUNC XrCoroBlockResult xr_coro_await_all_task_values(struct XrCoroutine *coro,
+                                                        const XrValue *task_values, int task_count);
+XR_FUNC XrCoroBlockResult xr_coro_await_all_task_values_resume(struct XrCoroutine *coro,
+                                                               const XrValue *task_values,
+                                                               int task_count);
 XR_FUNC XrCoroBlockResult xr_coro_await_any_task(struct XrCoroutine *coro, struct XrArray *tasks,
                                                  bool success_only);
 

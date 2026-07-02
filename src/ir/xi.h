@@ -116,6 +116,14 @@ typedef uint32_t XiInvariantMask;
 
 typedef uint16_t XiVarId;
 
+typedef enum {
+    XI_AUX_KIND_NONE = 0,
+    XI_AUX_KIND_ADT_FIELD = 1,
+    XI_AUX_KIND_PAR_FOR = 2,
+    XI_AUX_KIND_PAR_REDUCE = 3,
+    XI_AUX_KIND_PAR_COLLECT = 4,
+} XiAuxKind;
+
 /* Source-variable IDs are carried on XiValue for backend register/cell
  * coalescing.  0xffff is reserved as the "no source variable" sentinel, so
  * real variables occupy the closed range [0, 65534]. */
@@ -164,7 +172,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_PARAM         —                    parameter index
  *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
  *  XI_STORE_FIELD   field name or NULL   symbol id or field index
- *  XI_PTR_LOAD      —                    XrFFIType width of pointee
+ *  XI_PTR_LOAD      —                    XrFFIType width of pointee | optional ptr-load flags
  *  XI_PTR_STORE     —                    XrFFIType width of pointee
  *  XI_JSON_NEW      char** field_names   field count
  *  XI_JSON_INIT_F   —                    field index
@@ -189,6 +197,9 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_ASSERT        loc string (char*)   0=assert_true, 1=assert_false
  *  XI_GET_BUILTIN   name string (char*)  global index
  *  XI_IMPORT_REF    XiImportRef*         resolved shared slot (-1=unresolved)
+ *  XI_PAR_FOR       XiParallelForData*   —
+ *  XI_PAR_COLLECT   XiParallelCollectData* —
+ *  XI_PAR_REDUCE    XiParallelReduceData* —
  *
  *  Consumers: xi_emit.c (VM bytecode), xi_cgen.c (AOT).
  *  XI_CALL_METHOD.aux_int carries SymbolId (resolved at lowering time).
@@ -266,22 +277,26 @@ typedef enum {
      * COPY_FROM args: args[0]=dst, args[1]=src, args[2]=src_offset,
      *                 args[3]=dst_offset, args[4]=count.
      * REPEAT_FROM args: args[0]=bytes, args[1]=dst, args[2]=distance, args[3]=count. */
+    XI_BYTES_LOAD_U16_LE,
     XI_BYTES_LOAD_U32_LE,
     XI_BYTES_LOAD_U64_LE,
     XI_BYTES_COPY_WITHIN,
     XI_BYTES_COPY_FROM,
     XI_BYTES_REPEAT_FROM,
+    XI_ARRAY_DATA_PTR, /* args[0]=Array<T>/Span<T>; result RawPtr<T>/RawMut<T> address */
 
     /* FFI raw-pointer memory access. The address is an address-width int
-     * (RawPtr<T>/RawMut<T> value). aux_int carries the XrFFIType width code of
-     * the pointee so both backends pick the exact C scalar type without re-
-     * deriving it from operand types. No bounds check: only valid inside
-     * `unsafe` (analyzer-enforced). The pointee group aliases everything (C may
-     * mutate it), so these ops are never value-numbered or hoisted.
+     * (RawPtr<T>/RawMut<T> value). aux_int carries an XrFFIType width code in
+     * the low bits plus optional pointer-load flags (see xffi_sig.h) so both
+     * backends pick the exact scalar access semantics without re-deriving them
+     * from operand types. No bounds check: only valid inside `unsafe`
+     * (analyzer-enforced). The pointee group aliases everything (C may mutate
+     * it), so these ops are never value-numbered or hoisted.
      * LOAD args: args[0]=address; result type = pointee T.
      * STORE args: args[0]=address, args[1]=value; result void. */
     XI_PTR_LOAD,
     XI_PTR_STORE,
+    XI_PTR_COPY_NONOVERLAP, /* args[0]=dst RawMut<T>, args[1]=src RawPtr<T>, args[2]=count */
 
     /* Struct native storage: typed field access with compile-time layout.
      * args[0]=class_val for NEW; args[0]=struct for GET/SET.
@@ -343,8 +358,22 @@ typedef enum {
     XI_PRINT, /* print: args[0..n]=values, aux_int=flags */
 
     /* Coroutine */
-    XI_GO,                 /* go expr: args[0]=callee, args[1..n]=params */
-    XI_AWAIT,              /* await task: args[0]=task */
+    XI_GO,    /* go expr: args[0]=callee, args[1..n]=params */
+    XI_AWAIT, /* await task: args[0]=task */
+
+    /* Batch-parallel high-level ops.
+     * These are semantic placeholders for TaskGroup / parallelFor lowering:
+     * they must survive long enough for VM/AOT to choose persistent worker,
+     * epoch broadcast, worker-local context, native result buffer and
+     * consuming join/reduce strategies. */
+    XI_PAR_FOR,
+    XI_PAR_COLLECT,
+    XI_PAR_REDUCE,
+    XI_TASK_GROUP_NEW,
+    XI_TASK_GROUP_SPAWN_RANGE,
+    XI_TASK_GROUP_AWAIT_REDUCE,
+    XI_TASK_GROUP_JOIN,
+
     XI_CHAN_SEND,          /* ch.send(v): args[0]=chan, args[1]=val */
     XI_CHAN_RECV,          /* raw recv payload: args[0]=chan; status in adjacent VM slot */
     XI_CHAN_RECV_STATUS,   /* bool status for XI_CHAN_RECV / XI_CHAN_TRY_RECV */
@@ -564,11 +593,18 @@ typedef enum {
 #define XI_AWAIT_AUX_ANY (1 << 0)
 #define XI_AWAIT_AUX_ALL (1 << 1)
 #define XI_AWAIT_AUX_ANY_SUCCESS (1 << 2)
-#define XI_AWAIT_AUX_ONE_SHOT_GO (1 << 3) /* await operand is a non-escaping XI_GO */
+#define XI_AWAIT_AUX_ONE_SHOT_GO (1 << 3)        /* await operand is a non-escaping XI_GO */
+#define XI_AWAIT_AUX_AGGREGATE_ONE_SHOT (1 << 4) /* await all consumes a fresh task array literal  \
+                                                  */
+#define XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH                                                         \
+    (1 << 5) /* plain await should submit its producer array as a deferred batch first */
+#define XI_AWAIT_AUX_INTO_RESULT                                                                   \
+    (1 << 6) /* await all writes results into the provided result array and returns unit */
 
 /* XI_GO aux_int bits. Low 8 bits carry link mode. */
 #define XI_GO_AUX_LINK_MASK 0xff
 #define XI_GO_AUX_ONE_SHOT_AWAIT (1 << 8)
+#define XI_GO_AUX_DEFER_BATCH (1 << 9) /* defer child submission until aggregate await batch */
 
 /* XI_YIELD aux_int values. */
 #define XI_YIELD_AUX_IMMEDIATE 0
@@ -638,6 +674,7 @@ typedef struct XiValue {
                             * default XR_REP_TAGGED until STAGE_REPPED) */
     uint8_t transfer_mode; /* XrTransferMode for single-value coroutine boundaries.
                             * Default 0 = SHARE. GO uses its per-arg aux table. */
+    uint8_t aux_kind;      /* XiAuxKind: disambiguates aux/aux_int layouts */
     uint8_t escape;        /* XiEscapeLevel (2-bit): escape analysis result
                             * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
     uint8_t mem_group;     /* XiMemGroup (TBAA): memory group for alias analysis
@@ -651,6 +688,10 @@ typedef struct XiValue {
     uint32_t line;         /* source line number (0 = unknown) */
     struct XiBlock *block; /* containing block */
 } XiValue;
+
+static inline bool xi_load_field_is_adt(const XiValue *v) {
+    return v && v->op == XI_LOAD_FIELD && v->aux_kind == XI_AUX_KIND_ADT_FIELD;
+}
 
 static inline uint8_t xi_go_arg_transfer_mode(const XiValue *go, uint16_t arg_index) {
     if (!go || go->op != XI_GO || arg_index + 1 >= go->nargs)
@@ -701,6 +742,8 @@ static inline void xi_json_set_storage_mode(XiValue *v, uint8_t storage_mode) {
 #define XI_COPY_KIND_IDENTITY 0
 #define XI_COPY_KIND_VALUE_CLONE INT64_C(0x58434F5059434C4E)
 #define XI_COPY_KIND_CELL_READ INT64_C(0x5843454C4C524541)
+#define XI_COPY_KIND_LIKELY INT64_C(0x584C494B454C5901)
+#define XI_COPY_KIND_UNLIKELY INT64_C(0x58554E4C494B5901)
 
 static inline bool xi_copy_is_value_clone(const XiValue *v) {
     return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE;
@@ -712,6 +755,11 @@ static inline bool xi_copy_is_cell_read(const XiValue *v) {
 
 static inline bool xi_copy_is_identity_alias(const XiValue *v) {
     return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_IDENTITY;
+}
+
+static inline bool xi_copy_is_branch_hint(const XiValue *v) {
+    return v && v->op == XI_COPY &&
+           (v->aux_int == XI_COPY_KIND_LIKELY || v->aux_int == XI_COPY_KIND_UNLIKELY);
 }
 
 /*
@@ -782,6 +830,81 @@ typedef union {
     void *ptr;
 } XiAux;
 
+typedef enum XiConstLiteralKind {
+    XI_CONST_LITERAL_NONE = 0,
+    XI_CONST_LITERAL_NULL,
+    XI_CONST_LITERAL_INT,
+    XI_CONST_LITERAL_FLOAT,
+    XI_CONST_LITERAL_BOOL,
+    XI_CONST_LITERAL_CHAR,
+    XI_CONST_LITERAL_STRING,
+} XiConstLiteralKind;
+
+typedef struct XiConstLiteral {
+    XiConstLiteralKind kind;
+    struct XrType *type;
+    int64_t int_value;
+    double float_value;
+    bool bool_value;
+    const char *string_value;
+} XiConstLiteral;
+
+typedef struct XiParallelForData {
+    struct XiFunc *body_func;
+    const char *item_name;
+    const char *end_name;
+    const char *worker_name;
+    uint32_t item_symbol_id;
+    uint32_t end_symbol_id;
+    uint32_t worker_symbol_id;
+    uint16_t body_child_index;
+    bool inclusive_end;
+    bool range_body;
+} XiParallelForData;
+
+typedef struct XiParallelCollectData {
+    struct XiFunc *body_func;
+    struct XrType *element_type;
+    const char *item_name;
+    const char *worker_name;
+    uint32_t item_symbol_id;
+    uint32_t worker_symbol_id;
+    uint16_t body_child_index;
+    uint16_t result_capture_index;
+    uint16_t start_capture_index;
+    uint16_t lane_count;
+    bool direct_lane_writes;
+    bool inclusive_end;
+    bool into_result;
+} XiParallelCollectData;
+
+typedef struct XiParallelReduceData {
+    struct XiFunc *body_func;
+    struct XiFunc *combine_func;
+    struct XrType *accumulator_type;
+    const char *item_name;
+    const char *end_name;
+    const char *worker_name;
+    uint32_t item_symbol_id;
+    uint32_t end_symbol_id;
+    uint32_t worker_symbol_id;
+    uint16_t body_child_index;
+    uint16_t combine_child_index;
+    bool inclusive_end;
+    bool range_body;
+} XiParallelReduceData;
+
+typedef enum XiNativeCallbackKind {
+    XI_NATIVE_CALLBACK_NONE = 0,
+    XI_NATIVE_CALLBACK_PAR_FOR_I64 = 1,
+    XI_NATIVE_CALLBACK_PAR_REDUCE_I64_BODY = 2,
+    XI_NATIVE_CALLBACK_PAR_REDUCE_I64_COMBINE = 3,
+    XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_BODY = 4,
+    XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_COMBINE = 5,
+    XI_NATIVE_CALLBACK_PAR_COLLECT_SCALAR_BODY = 6,
+    XI_NATIVE_CALLBACK_PAR_RANGE_I64 = 7,
+} XiNativeCallbackKind;
+
 /* Defined in xi_own.h; XiFunc caches a pointer to one (arena-allocated). */
 struct XiBorrowSig;
 
@@ -800,6 +923,7 @@ typedef struct XiFunc {
 
     /* Function parameters as SSA values (in entry block) */
     XiValue **params;
+    uint8_t *param_passing_modes; /* NULL means every parameter uses XR_PARAM_VALUE */
     uint16_t nparams;
 
     /* Source variable metadata captured during lowering.  XiValue::var_id
@@ -855,6 +979,13 @@ typedef struct XiFunc {
     /* Per-slot const flag, parallel to slot_owned_names. */
     uint8_t *slot_owned_consts; /* array of nshared bytes (arena-alloc'd) */
 
+    /* Per-slot scalar literal metadata for top-level const bindings.  The
+     * slot still exists and is initialized normally; optimization can replace
+     * GET_SHARED(slot) with XI_CONST when the slot is known immutable and the
+     * initializer has folded to a scalar literal. */
+    XiConstLiteral *shared_const_literals; /* array of nshared entries (arena-alloc'd) */
+    uint16_t shared_const_literal_count;
+
     /* Program-level shared slot -> function mapping, populated during
      * lowering before XiModule is assembled so optimization passes can
      * resolve top-level function closures loaded through XI_GET_SHARED. */
@@ -902,6 +1033,12 @@ typedef struct XiFunc {
     uint16_t min_params; /* required parameter count (no defaults) */
     uint8_t test_attr;   /* AttributeKind: @test / @before_each / etc. */
     int test_timeout;    /* @test(timeout: N) seconds, 0 = no timeout */
+
+    /* Runtime callback ABI classification.  These functions are compiler-
+     * synthesized and called by native runtime helpers with a fixed C
+     * signature; captures are passed through the hidden closure parameter, so
+     * they must not be forced back to the generic tagged closure ABI. */
+    XiNativeCallbackKind native_callback_kind;
 
     /* FFI: foreign function declared with @extern("C"). When set, this XiFunc
      * has no real body — the implementation is a C symbol. The AOT backend

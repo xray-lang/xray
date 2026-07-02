@@ -1,0 +1,5 @@
+regex=array-storage [0-9]+ func=sum_bytes value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
+c_contains=({ xrt_array_t *_a = ((xrt_array_t*)
+c_contains=((uint8_t*)_a->data)[
+c_contains=->length
+c_not_contains=xrt_index_get(

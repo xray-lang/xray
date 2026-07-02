@@ -1,0 +1,10 @@
+let bytes = Bytes.withCapacity(4)
+unsafe {
+    bytes.pushUnchecked(7)
+    bytes.pushUnchecked(9)
+    bytes.pushUnchecked(11)
+}
+
+print(bytes.length)
+print(bytes.capacity)
+print(bytes[0] + bytes[1] + bytes[2])

@@ -1,0 +1,15 @@
+fn patchFirst(outputs: Array<Bytes>) {
+    unsafe {
+        let block = outputs.getUnchecked(0)
+        block.setUnchecked(0, 0x2A)
+    }
+}
+
+let block = Bytes.withCapacity(1)
+unsafe {
+    block.pushUnchecked(0)
+}
+let outputs: Array<Bytes> = []
+outputs.push(block)
+patchFirst(outputs)
+print(outputs[0][0])

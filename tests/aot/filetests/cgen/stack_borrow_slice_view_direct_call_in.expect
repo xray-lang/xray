@@ -1,0 +1,2 @@
+c_regex=_xr_stack_slice_[0-9]+_[0-9]+ = xrt_array_stack_borrow_slice_view\(
+c_not_regex=xrt_array_stack_slice_view_release\(_xr_stack_slice_[0-9]+_[0-9]+\)

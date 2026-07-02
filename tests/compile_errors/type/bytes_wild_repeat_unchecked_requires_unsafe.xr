@@ -1,0 +1,2 @@
+let out = Bytes.withCapacity(8)
+out.wildRepeatAtUnchecked(0, 1, 1)

@@ -1,0 +1,5 @@
+parallel for i in 0..4 workers 2 {
+    let x = i + 1
+}
+
+print(1)

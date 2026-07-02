@@ -56,6 +56,7 @@ void xr_coro_rollback_reversible_block(XrCoroutine *coro, XrCoroBlockSnapshot sn
 bool xr_coro_finalize_blocked_suspend(XrCoroutine *coro) {
     if (!coro)
         return false;
+    xr_coro_submit_deferred_spawns(coro);
     return xr_coro_try_transition_to_blocked(coro);
 }
 

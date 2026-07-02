@@ -1,0 +1,21 @@
+// Barrier as a pure-Xray class composing the coroutine-aware CountdownLatch.
+//
+// The constructor takes the party count as a native `int` and constructs the
+// CountdownLatch in its body. This exercises the AOT constructor-arg ABI fix
+// (task 147 §0.11): a non-suspendable constructor with a native scalar param
+// whose body constructs a coroutine-aware primitive must pass that param in the
+// native ABI at the call site, not an unconditional tagged box.
+
+class Barrier {
+    _latch: CountdownLatch
+    constructor(parties: int) {
+        this._latch = CountdownLatch(parties)
+    }
+    wait() -> bool {
+        this._latch.done()
+        return this._latch.wait()
+    }
+}
+
+let b = Barrier(1)
+print(b.wait())   // true — sole party arrives, latch reaches zero

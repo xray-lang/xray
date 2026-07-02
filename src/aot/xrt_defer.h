@@ -15,16 +15,16 @@
  *   runtime a pending defer is simply a closure value to invoke at scope exit.
  *
  *   Each generated sync function with defers owns a stack-local XrtDeferScope and
- *   links it onto the global defer chain (xrt_defer_top) at entry. Registering a
+ *   links it onto the thread-local defer chain (xrt_defer_top) at entry. Registering a
  *   defer pushes the closure onto that scope. Lexical blocks record integer
  *   count marks and run back to those marks on every block-exit edge. Function
  *   exit is the root mark (0). A panic (longjmp) unwinds the chain down to the
  *   catching try's recorded scope/count mark BEFORE jumping (see xrt_throw_exc),
  *   so defers in skipped frames and in skipped blocks still run.
  *
- *   The chain is a plain global, matching xrt_exc_top / xrt_pending_error: the
- *   AOT runtime's non-local control flow is single-threaded today and all three
- *   move to _Thread_local together when concurrency lands.
+ *   The chain is thread-local, matching xrt_exc_top / xrt_pending_error. AOT
+ *   scheduler workers may run generated sync code concurrently; one worker's
+ *   defer stack must never be visible to another worker.
  */
 
 #ifndef XRT_DEFER_H
@@ -48,9 +48,9 @@ typedef struct XrtDeferScope {
 } XrtDeferScope;
 
 #ifdef XRT_IMPL
-XrtDeferScope *xrt_defer_top = NULL;
+XR_THREAD_LOCAL XrtDeferScope *xrt_defer_top = NULL;
 #else
-extern XrtDeferScope *xrt_defer_top;
+extern XR_THREAD_LOCAL XrtDeferScope *xrt_defer_top;
 #endif
 
 /* Initialize a scope WITHOUT linking it onto the global chain. Used by AOT

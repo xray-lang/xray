@@ -1,0 +1,2 @@
+let values = Array<int>(2, 0)
+print(values.getUnchecked(0))

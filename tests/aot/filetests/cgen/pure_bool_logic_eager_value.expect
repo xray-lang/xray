@@ -1,0 +1,3 @@
+contains=name=hotGuard
+c_contains= & 
+c_not_contains=phi

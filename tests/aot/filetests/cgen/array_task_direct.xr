@@ -1,0 +1,12 @@
+fn worker() -> int {
+    return 7
+}
+
+fn taskArrayOps() -> int {
+    let tasks: Array<Task<int>> = []
+    tasks.push(go worker())
+    let result = await tasks[0]
+    return result + tasks.length
+}
+
+print(taskArrayOps())

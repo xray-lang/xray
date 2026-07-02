@@ -133,6 +133,9 @@ typedef struct XrCoroExt {
     bool wait_send;
     XrValue send_value;
     struct XrCoroutine *pending_spawn;
+    struct XrCoroutine **deferred_spawns;
+    int deferred_spawn_count;
+    int deferred_spawn_capacity;
 
     /* === Timer (only allocated on first sleep/timeout use) === */
     XrTWheelTimer timer;
@@ -471,6 +474,7 @@ struct XrClosure;
 XR_FUNC XrCoroutine *xr_coro_create_empty(struct XrVMRuntime *X, const char *name);
 XR_FUNC XrCoroutine *xr_coro_create_runtime_empty(struct XrRuntimeCore *core,
                                                   struct XrRuntime *runtime, const char *name);
+XR_FUNC void xr_coro_discard_runtime_empty(struct XrRuntime *runtime, XrCoroutine *coro);
 XR_FUNC XrCoroutine *xr_coro_create_native(struct XrVMRuntime *X, void (*func)(void *), void *arg,
                                            const char *name);
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
@@ -480,10 +484,14 @@ XR_FUNC struct XrScopeContext *xr_coro_parent_scope(const XrCoroutine *coro);
 XR_FUNC bool xr_coro_set_parent_scope(XrCoroutine *coro, struct XrScopeContext *scope);
 XR_FUNC XrCoroutine *xr_coro_scope_sibling(const XrCoroutine *coro);
 XR_FUNC bool xr_coro_set_scope_sibling(XrCoroutine *coro, XrCoroutine *sibling);
+XR_FUNC void xr_coro_detach_scope_child(XrCoroutine *coro);
 XR_FUNC XrSelectWait *xr_coro_select_wait(XrCoroutine *coro);
 XR_FUNC void xr_coro_clear_select_wait(XrCoroutine *coro);
 XR_FUNC bool xr_coro_set_pending_spawn(XrCoroutine *coro, XrCoroutine *child);
 XR_FUNC XrCoroutine *xr_coro_take_pending_spawn(XrCoroutine *coro);
+XR_FUNC bool xr_coro_add_deferred_spawn(XrCoroutine *coro, XrCoroutine *child);
+XR_FUNC void xr_coro_submit_deferred_spawns(XrCoroutine *coro);
+XR_FUNC void xr_coro_discard_deferred_spawns(XrCoroutine *coro);
 
 // Isolate-level coroutine bookkeeping
 XR_FUNC void xr_coro_state_init(XrCoroState *state);

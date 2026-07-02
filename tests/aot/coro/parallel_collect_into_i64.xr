@@ -1,0 +1,19 @@
+let out: Array<int> = []
+out.reserve(16)
+out.push(999)
+
+parallel for i in 0..8 workers 4 worker wid collect into out {
+    i * 10 + wid
+}
+
+print(out.length)
+print(out[0])
+print(out[3])
+print(out[4])
+print(out[7])
+
+parallel for i in 5..5 workers 4 collect into out {
+    i
+}
+
+print(out.length)

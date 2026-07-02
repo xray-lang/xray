@@ -47,6 +47,8 @@
 
 #define VM_AWAIT_FLAG_DISCARD_RESULT 0x01
 #define VM_AWAIT_FLAG_ONE_SHOT_GO 0x02
+#define VM_AWAIT_ALL_FLAG_ONE_SHOT 0x80
+#define VM_AWAIT_ALL_ELEM_MASK 0x7f
 
 /* ========== Helper: Collect all coroutines from the runtime ========== */
 
@@ -58,37 +60,6 @@ static XrValue vm_coro_name_value(XrVMRuntime *isolate, const XrCoroutine *coro)
         return xr_null();
     XrString *s = xr_string_intern(isolate, name, strlen(name), 0);
     return s ? xr_string_value(s) : xr_null();
-}
-
-static void vm_go_detach_scope_child(XrCoroutine *coro) {
-    XrScopeContext *scope = xr_coro_parent_scope(coro);
-    if (!scope)
-        return;
-
-    while (atomic_exchange_explicit(&scope->child_lock, true, memory_order_acquire)) {
-    }
-    XrCoroutine *prev = NULL;
-    XrCoroutine *cur = scope->first_child;
-    bool removed = false;
-    while (cur) {
-        XrCoroutine *next = xr_coro_scope_sibling(cur);
-        if (cur == coro) {
-            if (prev) {
-                (void) xr_coro_set_scope_sibling(prev, next);
-            } else {
-                scope->first_child = next;
-            }
-            (void) xr_coro_set_scope_sibling(coro, NULL);
-            removed = true;
-            break;
-        }
-        prev = cur;
-        cur = next;
-    }
-    atomic_store_explicit(&scope->child_lock, false, memory_order_release);
-    if (removed)
-        atomic_fetch_sub_explicit(&scope->count, 1, memory_order_relaxed);
-    (void) xr_coro_set_parent_scope(coro, NULL);
 }
 
 static void vm_coro_set_source_field(XrVMRuntime *isolate, XrMap *info, const XrCoroutine *coro) {
@@ -686,6 +657,7 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
     XrInstruction next_inst = *pc;
     int link_mode = 0;
     bool one_shot_await = false;
+    bool defer_batch = false;
     uint8_t arg_modes[128];
     for (int i = 0; i < c; i++)
         arg_modes[i] = XR_TRANSFER_SHARE;
@@ -709,6 +681,8 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
                 arg_modes[mode_base + (int) slot] = xr_transfer_unpack_mode(packed, slot);
             }
             mode_base += (int) XR_TRANSFER_MODES_PER_U32;
+        } else if (ann == 6) {
+            defer_batch = GETARG_Bx(next_inst) != 0;
         } else {
             break;
         }
@@ -737,7 +711,7 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
     if (fire_and_forget)
         coro->gc_flags |= XR_CORO_GC_RECYCLABLE;
 
-    if (parent && !xr_coro_set_pending_spawn(parent, coro)) {
+    if (!defer_batch && parent && !xr_coro_set_pending_spawn(parent, coro)) {
         xr_coro_destroy(coro);
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to record spawned coroutine");
     }
@@ -750,7 +724,8 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
             _scope = runtime->current_scope;
         if (_scope && parent) {
             if (!xr_coro_set_parent_scope(coro, _scope)) {
-                (void) xr_coro_set_pending_spawn(parent, NULL);
+                if (!defer_batch)
+                    (void) xr_coro_set_pending_spawn(parent, NULL);
                 xr_coro_destroy(coro);
                 VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to attach coroutine to scope");
             }
@@ -759,7 +734,8 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
             }
             if (!xr_coro_set_scope_sibling(coro, _scope->first_child)) {
                 atomic_store_explicit(&_scope->child_lock, false, memory_order_release);
-                (void) xr_coro_set_pending_spawn(parent, NULL);
+                if (!defer_batch)
+                    (void) xr_coro_set_pending_spawn(parent, NULL);
                 xr_coro_destroy(coro);
                 VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to attach coroutine to scope");
             }
@@ -783,8 +759,9 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
     if (needs_task) {
         task = xr_task_create(runtime, parent, coro);
         if (!task) {
-            (void) xr_coro_set_pending_spawn(parent, NULL);
-            vm_go_detach_scope_child(coro);
+            if (!defer_batch)
+                (void) xr_coro_set_pending_spawn(parent, NULL);
+            xr_coro_detach_scope_child(coro);
             xr_coro_destroy(coro);
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create task");
         }
@@ -809,6 +786,15 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
     frame->pc = pc;
 
     // xr_coro_init_shell already sets XR_CORO_FLG_READY.
+    if (parent && defer_batch) {
+        xr_coro_flags_set(coro, XR_CORO_FLG_DEFERRED_SUBMIT);
+        if (!xr_coro_add_deferred_spawn(parent, coro)) {
+            atomic_fetch_and_explicit(&coro->flags, ~(uint32_t) XR_CORO_FLG_DEFERRED_SUBMIT,
+                                      memory_order_acq_rel);
+            xr_runtime_spawn(runtime, coro);
+        }
+        return XR_DISP_NEXT;
+    }
     if (!parent) {
         xr_runtime_spawn(runtime, coro);
         return XR_DISP_NEXT;
@@ -898,6 +884,27 @@ static inline void vm_task_detach_completed_executor(XrTask *task) {
         return;
 
     vm_task_finish_completed_executor(task, false);
+}
+
+static inline XrValue vm_task_consume_await_all_result(XrVMRuntime *isolate, XrArray *tasks,
+                                                       int index, XrCoroutine *caller,
+                                                       bool one_shot) {
+    XrValue cv = xr_array_get(tasks, index);
+    if (!xr_value_is_task(cv))
+        return xr_null();
+
+    XrTask *task = xr_value_to_task(cv);
+    if (one_shot) {
+        XrRuntime *rt = isolate ? (XrRuntime *) isolate->vm.scheduler : NULL;
+        if (rt)
+            xr_sched_metric_inc(rt, &rt->sched_stats.task_one_shot_await_count);
+    }
+    XrValue result = vm_task_consume_result(isolate, task, caller, 0);
+    vm_task_finish_completed_executor(task, one_shot);
+    vm_task_destroy_one_shot_success(isolate, task, one_shot);
+    if (one_shot)
+        xr_array_set_element(tasks, index, xr_null());
+    return result;
 }
 
 XR_FUNC XrDispatchAction vm_await(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInstruction instr,
@@ -1143,6 +1150,11 @@ XR_FUNC XrDispatchAction vm_await_all(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
+    int c = GETARG_C(instr);
+    bool aggregate_one_shot = (c & VM_AWAIT_ALL_FLAG_ONE_SHOT) != 0;
+    int elem_code = c & VM_AWAIT_ALL_ELEM_MASK;
+    XrArrayElemType result_elem_type =
+        (elem_code >= 0 && elem_code < XR_ELEM_COUNT) ? (XrArrayElemType) elem_code : XR_ELEM_ANY;
 
     XrValue arr_val = base[b];
     if (!xr_value_is_array(arr_val)) {
@@ -1167,16 +1179,11 @@ XR_FUNC XrDispatchAction vm_await_all(XrVMRuntime *isolate, XrVMContext *vm_ctx,
 
     if (all_done) {
         xr_task_finish_await_waiters(caller);
-        XrArray *results = xr_array_with_capacity(vm_get_coro(vm_ctx), count);
-        results->length = count;
-        XrValue *rdata = (XrValue *) results->data;
+        XrArray *results =
+            xr_array_with_capacity_typed(vm_get_coro(vm_ctx), count, result_elem_type);
         for (int j = 0; j < count; j++) {
-            XrValue cv = xr_array_get(tasks, j);
-            if (!xr_value_is_task(cv)) {
-                rdata[j] = xr_null();
-                continue;
-            }
-            rdata[j] = vm_task_consume_result(isolate, xr_value_to_task(cv), caller, 0);
+            xr_array_push(results, vm_task_consume_await_all_result(isolate, tasks, j, caller,
+                                                                    aggregate_one_shot));
         }
         base[a] = xr_value_from_array(results);
         return XR_DISP_NEXT;
@@ -1206,6 +1213,110 @@ XR_FUNC XrDispatchAction vm_await_all(XrVMRuntime *isolate, XrVMContext *vm_ctx,
     for (;;) {
         if (++total_spins > AWAIT_TIMEOUT_SPINS) {
             fprintf(stderr, "[xray] warn: await all: timeout\n");
+            break;
+        }
+        if (!atomic_load(&rt->running))
+            break;
+        bool ad = true;
+        for (int j = 0; j < count; j++) {
+            XrValue cv = xr_array_get(tasks, j);
+            if (!xr_value_is_task(cv))
+                continue;
+            if (!xr_task_is_done(xr_value_to_task(cv))) {
+                ad = false;
+                break;
+            }
+        }
+        if (ad)
+            break;
+        if (++spin_count > 1000) {
+            spin_count = 0;
+            xr_thread_yield();
+        }
+    }
+    return XR_DISP_RESTART;
+}
+
+XR_FUNC XrDispatchAction vm_await_all_into(XrVMRuntime *isolate, XrVMContext *vm_ctx,
+                                           XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
+                                           XrInstruction *pc) {
+    int a = GETARG_A(instr);
+    int b = GETARG_B(instr);
+    int c = GETARG_C(instr);
+    bool aggregate_one_shot = (c & VM_AWAIT_ALL_FLAG_ONE_SHOT) != 0;
+    int elem_code = c & VM_AWAIT_ALL_ELEM_MASK;
+    XrArrayElemType result_elem_type =
+        (elem_code >= 0 && elem_code < XR_ELEM_COUNT) ? (XrArrayElemType) elem_code : XR_ELEM_ANY;
+
+    XrValue out_val = base[a];
+    if (!xr_value_is_array(out_val)) {
+        VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await all into: expected result array");
+    }
+    XrArray *results = xr_value_to_array(out_val);
+    if (xr_array_is_slice(results)) {
+        VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
+                 "await all into: result buffer must be a growable array");
+    }
+    if (result_elem_type != XR_ELEM_ANY && results->elem_type != result_elem_type) {
+        VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
+                 "await all into: result buffer element type mismatch");
+    }
+
+    XrValue arr_val = base[b];
+    if (!xr_value_is_array(arr_val)) {
+        VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await all into: expected task array");
+    }
+
+    XrArray *tasks = xr_value_to_array(arr_val);
+    int count = xr_array_size(tasks);
+    XrCoroutine *caller = xr_current_coro(isolate);
+
+    bool all_done = true;
+    for (int j = 0; j < count; j++) {
+        XrValue cv = xr_array_get(tasks, j);
+        if (!xr_value_is_task(cv))
+            continue;
+        if (!xr_task_is_done(xr_value_to_task(cv))) {
+            all_done = false;
+            break;
+        }
+    }
+
+    if (all_done) {
+        xr_task_finish_await_waiters(caller);
+        xr_array_clear(results);
+        xr_array_ensure_capacity(results, count);
+        for (int j = 0; j < count; j++) {
+            xr_array_push(results, vm_task_consume_await_all_result(isolate, tasks, j, caller,
+                                                                    aggregate_one_shot));
+        }
+        base[a] = out_val;
+        return XR_DISP_NEXT;
+    }
+
+    vm_suspend_replay_current(frame, pc);
+    vm_ctx->stack_top = base + frame->closure->proto->maxstacksize;
+
+    XrRuntime *rt = (XrRuntime *) isolate->vm.scheduler;
+    if (!rt) {
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await all into: runtime not initialized");
+    }
+
+    if (caller) {
+        XrCoroBlockResult block = xr_coro_await_all_tasks(caller, tasks);
+        if (block.kind == XR_CORO_BLOCK_READY) {
+            return XR_DISP_RESTART;
+        }
+        if (block.kind == XR_CORO_BLOCK_BLOCKED) {
+            return XR_DISP_BLOCKED;
+        }
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await all into: unable to block");
+    }
+
+    int total_spins = 0, spin_count = 0;
+    for (;;) {
+        if (++total_spins > AWAIT_TIMEOUT_SPINS) {
+            fprintf(stderr, "[xray] warn: await all into: timeout\n");
             break;
         }
         if (!atomic_load(&rt->running))

@@ -775,7 +775,7 @@ XR_FUNC XrDispatchAction vm_invoke_enum(XrVMRuntime *isolate, XrValue receiver, 
 /*
  * Handles method calls on ADT enum instances.
  * ADT instances have builtin_kind == XR_BK_ADT_ENUM with layout:
- *   fields[0] = XrEnumValue* (variant tag)
+ *   fields[0] = int tag (variant member_index)
  *   fields[1] = payload (single-payload variants)
  *
  * General ADT methods: name, toString.
@@ -791,16 +791,21 @@ XR_FUNC XrDispatchAction vm_invoke_adt_instance(XrVMRuntime *isolate, XrValue re
     if (!inst || !inst->klass)
         return XR_DISP_FALLTHROUGH;
 
-    /* Extract variant tag from fields[0] */
-    XrValue tag_val = inst->fields[0];
-    if (!XR_IS_PTR(tag_val))
-        return XR_DISP_FALLTHROUGH;
-    XrEnumValue *variant = (XrEnumValue *) XR_TO_PTR(tag_val);
-    if (!variant || !variant->parent_type)
+    XrEnumType *enum_type = inst->klass ? (XrEnumType *) inst->klass->builtin_data : NULL;
+    if (!enum_type || !enum_type->members)
         return XR_DISP_FALLTHROUGH;
 
-    XrEnumType *enum_type = variant->parent_type;
-    uint32_t tag_index = variant->member_index;
+    /* Extract variant tag from fields[0] */
+    XrValue tag_val = inst->fields[0];
+    if (!XR_IS_INT(tag_val))
+        return XR_DISP_FALLTHROUGH;
+    int64_t tag_index_i64 = XR_TO_INT(tag_val);
+    if (tag_index_i64 < 0 || (uint64_t) tag_index_i64 >= enum_type->member_count)
+        return XR_DISP_FALLTHROUGH;
+    uint32_t tag_index = (uint32_t) tag_index_i64;
+    XrEnumValue *variant = enum_type->members[tag_index].instance;
+    if (!variant)
+        return XR_DISP_FALLTHROUGH;
 
     /* General ADT methods */
     if (nargs == 0 && method_symbol == SYMBOL_NAME) {

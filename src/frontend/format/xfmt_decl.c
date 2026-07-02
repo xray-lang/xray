@@ -15,8 +15,80 @@
  */
 
 #include "xfmt_internal.h"
+#include "xfmt_literal.h"
 #include "../../runtime/value/xtype_names.h"
 #include <string.h>
+
+static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
+    if (!ctx || !attr)
+        return;
+    switch (attr->kind) {
+        case ATTR_TEST:
+            xfmt_write_str(ctx, "@test");
+            break;
+        case ATTR_TEST_SKIP:
+            xfmt_write_str(ctx, "@test(skip)");
+            break;
+        case ATTR_TEST_TIMEOUT:
+            xfmt_write_fmt(ctx, "@test(timeout: %d)", attr->timeout);
+            break;
+        case ATTR_BEFORE_EACH:
+            xfmt_write_str(ctx, "@before_each");
+            break;
+        case ATTR_AFTER_EACH:
+            xfmt_write_str(ctx, "@after_each");
+            break;
+        case ATTR_BEFORE_ALL:
+            xfmt_write_str(ctx, "@before_all");
+            break;
+        case ATTR_AFTER_ALL:
+            xfmt_write_str(ctx, "@after_all");
+            break;
+        case ATTR_NATIVE:
+            xfmt_write_str(ctx, "@native");
+            break;
+        case ATTR_DEPRECATED:
+            xfmt_write_str(ctx, "@deprecated");
+            break;
+        case ATTR_EXTERN:
+            xfmt_write_str(ctx, "@extern(");
+            xfmt_emit_string(ctx, attr->str_arg ? attr->str_arg : "C",
+                             attr->str_arg ? (int) strlen(attr->str_arg) : 1);
+            xfmt_write_char(ctx, ')');
+            break;
+        case ATTR_DYLIB:
+            xfmt_write_str(ctx, "@dylib(");
+            xfmt_emit_string(ctx, attr->str_arg ? attr->str_arg : "",
+                             attr->str_arg ? (int) strlen(attr->str_arg) : 0);
+            xfmt_write_char(ctx, ')');
+            break;
+        case ATTR_C_EXPORT:
+            xfmt_write_str(ctx, "@c_export(");
+            xfmt_emit_string(ctx, attr->str_arg ? attr->str_arg : "",
+                             attr->str_arg ? (int) strlen(attr->str_arg) : 0);
+            xfmt_write_char(ctx, ')');
+            break;
+        case ATTR_REPR_C:
+            xfmt_write_str(ctx, "@repr(C)");
+            break;
+        case ATTR_REPR_PACKED:
+            xfmt_write_str(ctx, "@repr(packed)");
+            break;
+        case ATTR_ALIGN:
+            xfmt_write_fmt(ctx, "@align(%d)", attr->timeout);
+            break;
+        default:
+            break;
+    }
+}
+
+static void xfmt_emit_attributes(XrFmtContext *ctx, XrAttribute **attrs, int count) {
+    for (int i = 0; i < count; i++) {
+        xfmt_write_indent(ctx);
+        xfmt_emit_attribute(ctx, attrs[i]);
+        xfmt_write_newline(ctx);
+    }
+}
 
 void xfmt_emit_var_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
@@ -51,8 +123,9 @@ void xfmt_emit_destructure_decl(XrFmtContext *ctx, AstNode *node) {
 }
 
 void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
-    xfmt_write_indent(ctx);
     FunctionDeclNode *fn = &node->as.function_decl;
+    xfmt_emit_attributes(ctx, fn->attributes, fn->attr_count);
+    xfmt_write_indent(ctx);
 
     xfmt_write_str(ctx, "fn ");
     xfmt_write_str(ctx, fn->name);
@@ -86,8 +159,9 @@ void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
 }
 
 void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
-    xfmt_write_indent(ctx);
     ClassDeclNode *cls = &node->as.class_decl;
+    xfmt_emit_attributes(ctx, cls->attributes, cls->attr_count);
+    xfmt_write_indent(ctx);
 
     if (cls->is_abstract)
         xfmt_write_str(ctx, "abstract ");

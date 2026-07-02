@@ -38,9 +38,12 @@
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
 #include "../../frontend/parser/xparse.h"
+#include "../../frontend/analyzer/xanalyzer.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../module/xmodule_graph.h"
+#include "../../module/xmodule_resolver.h"
 #include "../../runtime/object/xpanic_info.h"
 #include <stdio.h>
 #include <string.h>
@@ -242,6 +245,113 @@ static int run_hooks(XrVMRuntime *X, XrTestFunc *hooks, int count) {
     return 0;
 }
 
+static int prepare_test_module_graph(XrVMRuntime *X, XrCompilerSession *session,
+                                     const char *filepath, XrModuleGraph **out_graph,
+                                     XaAnalyzer **out_analyzer, char *err_buf, size_t err_buf_sz) {
+    if (out_graph)
+        *out_graph = NULL;
+    if (out_analyzer)
+        *out_analyzer = NULL;
+
+    XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
+    XrModuleResolver *resolver = registry ? xr_module_registry_get_resolver(registry) : NULL;
+    if (!resolver)
+        return 0;
+
+    XrModuleGraph *graph = xr_module_graph_new(session, resolver);
+    if (!graph) {
+        snprintf(err_buf, err_buf_sz, "cannot create module graph");
+        return 1;
+    }
+
+    char *graph_err = NULL;
+    if (xr_module_graph_build(graph, filepath, &graph_err) != 0) {
+        snprintf(err_buf, err_buf_sz, "%s", graph_err ? graph_err : "module graph build failed");
+        xr_free(graph_err);
+        xr_module_graph_free(graph);
+        return 1;
+    }
+    xr_free(graph_err);
+
+    xr_module_graph_topological_sort(graph);
+    if (graph->has_cycle) {
+        snprintf(err_buf, err_buf_sz, "%s",
+                 graph->cycle_desc ? graph->cycle_desc : "circular dependency detected");
+        xr_module_graph_free(graph);
+        return 1;
+    }
+
+    if (graph->topo_count <= 1) {
+        xr_module_graph_free(graph);
+        return 0;
+    }
+
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
+    if (!analyzer) {
+        snprintf(err_buf, err_buf_sz, "cannot create analyzer for module graph");
+        xr_module_graph_free(graph);
+        return 1;
+    }
+
+    xa_analyzer_set_graph(analyzer, graph);
+    int graph_errors = 0;
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        int idx = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[idx];
+        if (!spec->ast || !spec->source_path)
+            continue;
+
+        xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
+        spec->export_symbols =
+            xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
+
+        int diag_count = 0;
+        XaDiagnostic *diags = xa_analyzer_get_diagnostics(analyzer, &diag_count);
+        for (XaDiagnostic *d = diags; d; d = d->next) {
+            if (d->severity != XR_DIAG_SEV_ERROR)
+                continue;
+            graph_errors++;
+            fprintf(stderr, "%s:%d:%d: error: %s\n", spec->source_path, d->location.line,
+                    d->location.column, d->message);
+        }
+        xa_analyzer_clear_diagnostics(analyzer);
+    }
+
+    if (graph_errors > 0) {
+        snprintf(err_buf, err_buf_sz, "module graph analysis failed");
+        xa_analyzer_set_graph(analyzer, NULL);
+        xa_analyzer_free(analyzer);
+        xr_module_graph_free(graph);
+        return 1;
+    }
+
+    xr_compiler_session_set_module_graph(session, graph);
+
+    int nmod = graph->topo_count;
+    XrModule **mod_table = (XrModule **) xr_calloc((size_t) nmod, sizeof(XrModule *));
+    if (mod_table) {
+        for (int ti = 0; ti < nmod; ti++) {
+            int idx = graph->topo_order[ti];
+            if (idx == graph->entry_index)
+                continue;
+            XrModuleSpec *spec = &graph->specs[idx];
+            if (!spec->source_path)
+                continue;
+            XrValue val = xr_module_import(X, spec->source_path);
+            if (!XR_IS_NULL(val))
+                mod_table[ti] = xr_value_to_module(val);
+        }
+        registry->module_table = mod_table;
+        registry->module_table_count = nmod;
+    }
+
+    if (out_graph)
+        *out_graph = graph;
+    if (out_analyzer)
+        *out_analyzer = analyzer;
+    return 0;
+}
+
 /* ========== Run Single Test File ========== */
 
 static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFileResult *result) {
@@ -263,16 +373,28 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
     xray_vm_set_script_info(X, filepath, 0, NULL);
     xr_module_system_init_with_script(X, filepath);
 
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+    XrModuleGraph *active_graph = NULL;
+    XaAnalyzer *active_graph_analyzer = NULL;
+    char graph_error[256] = "";
+    if (prepare_test_module_graph(X, session, filepath, &active_graph, &active_graph_analyzer,
+                                  graph_error, sizeof(graph_error)) != 0) {
+        result->has_error = true;
+        snprintf(result->error_msg, sizeof(result->error_msg), "%s",
+                 graph_error[0] ? graph_error : "module graph preparation failed");
+        result->errors = 1;
+        goto cleanup_graph;
+    }
+
     // Read + Parse + Compile
     char *source = xr_cli_read_file(filepath);
     if (!source) {
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "cannot read file");
         result->errors = 1;
-        goto cleanup_isolate;
+        goto cleanup_graph;
     }
 
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
     AstNode *ast = xr_parse_with_source(session, source, filepath);
     if (!ast) {
         result->has_error = true;
@@ -407,7 +529,14 @@ cleanup_ast:
     xr_program_destroy(ast);
 cleanup_source:
     xr_free(source);
-cleanup_isolate:
+cleanup_graph:
+    xr_compiler_session_set_module_graph(session, NULL);
+    if (active_graph_analyzer) {
+        xa_analyzer_set_graph(active_graph_analyzer, NULL);
+        xa_analyzer_free(active_graph_analyzer);
+    }
+    if (active_graph)
+        xr_module_graph_free(active_graph);
     xray_vm_multicore_destroy(X);
     xray_vm_delete(X);
 }

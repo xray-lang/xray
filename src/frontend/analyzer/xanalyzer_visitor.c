@@ -30,10 +30,632 @@ static const char *object_shape_type_label_local(XrType *type) {
     return xr_type_to_string(type);
 }
 
+static bool xa_type_is_known_non_int(XrType *type) {
+    return type && !XR_TYPE_IS_UNKNOWN(type) && !XR_TYPE_IS_INT(type);
+}
+
+static bool xa_type_is_known_unassignable(XrType *target, XrType *source) {
+    if (!target || !source || XR_TYPE_IS_UNKNOWN(target) || XR_TYPE_IS_UNKNOWN(source))
+        return false;
+    return !xr_type_assignable(target, source);
+}
+
+XR_FUNC const char *xa_threadsafe_shared_ref_label(const XrType *type) {
+    if (!type)
+        return NULL;
+    if (type->kind == XR_KIND_CHANNEL)
+        return "Channel";
+    if (xr_type_is_named_class(type, "Atomic"))
+        return "Atomic";
+    if (xr_type_is_named_class(type, "WorkQueue"))
+        return "WorkQueue";
+    if (xr_type_is_named_class(type, "ResultGroup"))
+        return "ResultGroup";
+    if (xr_type_is_named_class(type, "CountdownLatch"))
+        return "CountdownLatch";
+    if (xr_type_is_named_class(type, "Semaphore"))
+        return "Semaphore";
+    if (xr_type_is_named_class(type, "EventCount"))
+        return "EventCount";
+    return NULL;
+}
+
+XR_FUNC bool xa_type_is_threadsafe_shared_ref(const XrType *type) {
+    return xa_threadsafe_shared_ref_label(type) != NULL;
+}
+
+XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, XaSymbol *sym,
+                                       bool is_write) {
+    if (!ctx || !ctx->in_parallel_for_body || !ctx->parallel_for_scope || !loc_node || !sym)
+        return;
+    if (sym->scope == ctx->parallel_for_scope ||
+        xa_scope_is_descendant(sym->scope, ctx->parallel_for_scope)) {
+        return;
+    }
+    if (sym->kind != XA_SYM_VARIABLE && sym->kind != XA_SYM_PARAMETER)
+        return;
+
+    const char *name = sym->name ? sym->name : "?";
+    XrLocation loc = {.file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
+    char msg[256];
+    XrType *sym_type = xa_analyzer_get_type(ctx->analyzer, sym);
+
+    if (is_write) {
+        snprintf(msg, sizeof(msg),
+                 "parallel for body cannot assign to captured variable '%s'; use Atomic<T>, "
+                 "worker-local context, or parallel reduce",
+                 name);
+    } else if (xa_type_is_threadsafe_shared_ref(sym_type)) {
+        return;
+    } else if (sym->kind == XA_SYM_PARAMETER) {
+        snprintf(msg, sizeof(msg),
+                 "parallel for body cannot capture parameter '%s'; pass immutable data through "
+                 "shared const or future TaskGroup context",
+                 name);
+    } else if (sym->is_const) {
+        return;
+    } else if (sym->is_shared) {
+        snprintf(msg, sizeof(msg),
+                 "parallel for body cannot capture mutable 'shared let' variable '%s'; use "
+                 "Atomic<T> or shared const",
+                 name);
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "parallel for body cannot capture mutable variable '%s'; copy it to a const, "
+                 "use Atomic<T>, or pass worker-local context",
+                 name);
+    }
+
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                               msg, &loc);
+}
+
+static XrType *xa_infer_expected_int_expr(XaInferContext *ctx, AstNode *expr, const char *what) {
+    if (!ctx || !expr)
+        return xr_type_new_unknown(NULL);
+
+    XrType *saved_expected = ctx->expected_type;
+    ctx->expected_type = xr_type_new_int(ctx->analyzer ? ctx->analyzer->isolate : NULL);
+    XrType *type = xa_visit_infer_expr(ctx, expr);
+    ctx->expected_type = saved_expected;
+
+    if (xa_type_is_known_non_int(type)) {
+        XrLocation loc = {.file = ctx->file_path, .line = expr->line, .column = expr->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg), "%s must be int, got '%s'", what, xr_type_to_string(type));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+    }
+
+    return type ? type : xr_type_new_unknown(NULL);
+}
+
 static AstNode *unwrap_grouping(AstNode *node) {
     while (node && node->type == AST_GROUPING)
         node = node->as.grouping;
     return node;
+}
+
+static AstNode *parallel_collect_body_last_expr(AstNode *body) {
+    body = unwrap_grouping(body);
+    if (!body || body->type != AST_BLOCK)
+        return NULL;
+    BlockNode *blk = &body->as.block;
+    if (blk->count <= 0)
+        return NULL;
+    AstNode *last = blk->statements[blk->count - 1];
+    if (!last || last->type != AST_EXPR_STMT)
+        return NULL;
+    return unwrap_grouping(last->as.expr_stmt);
+}
+
+static void xa_parallel_reduce_add_type_error(XaInferContext *ctx, AstNode *node,
+                                              const char *message) {
+    if (!ctx || !ctx->analyzer || !node || !message)
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                               message, &loc);
+}
+
+static XrType *xa_parallel_local_source_element_type(XaInferContext *ctx,
+                                                     XrParallelLocalBinding *local,
+                                                     const char *owner_label) {
+    if (!ctx || !local || !local->source)
+        return xr_type_new_unknown(NULL);
+
+    XrType *source_type = xa_visit_infer_expr(ctx, local->source);
+    if (source_type && (XR_TYPE_IS_ARRAY(source_type) || XR_TYPE_IS_SPAN(source_type)) &&
+        source_type->container.element_type) {
+        return source_type->container.element_type;
+    }
+
+    XrLocation loc = {
+        .file = ctx->file_path, .line = local->source->line, .column = local->source->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg), "%s local '%s' source must be Array<T> or Span<T>, got '%s'",
+             owner_label ? owner_label : "parallel", local->name ? local->name : "?",
+             xr_type_to_string(source_type));
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+    return xr_type_new_unknown(ctx->analyzer ? ctx->analyzer->isolate : NULL);
+}
+
+static XrType **xa_parallel_infer_local_sources(XaInferContext *ctx, XrParallelLocalBinding *locals,
+                                                int local_count, const char *owner_label) {
+    if (!locals || local_count <= 0)
+        return NULL;
+    XrType **types = (XrType **) xr_calloc((size_t) local_count, sizeof(XrType *));
+    if (!types)
+        return NULL;
+    for (int i = 0; i < local_count; i++) {
+        if (locals[i].is_initializer) {
+            types[i] = xr_type_new_unknown(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL);
+            continue;
+        }
+        types[i] = xa_parallel_local_source_element_type(ctx, &locals[i], owner_label);
+    }
+    return types;
+}
+
+static void xa_parallel_set_one_local_symbol(XaInferContext *ctx, XrParallelLocalBinding *local,
+                                             XrType *type, bool definitely_assigned) {
+    if (!ctx || !ctx->analyzer || !local || !local->name)
+        return;
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, local->name);
+    if (!sym)
+        return;
+    if (local->symbol_id == 0)
+        local->symbol_id = sym->id;
+    if (!type)
+        type = xr_type_new_unknown(ctx->analyzer->isolate);
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (links) {
+        links->type = type;
+        links->declared_type = type;
+        links->is_definitely_assigned = definitely_assigned;
+    }
+}
+
+static void xa_parallel_set_local_symbols(XaInferContext *ctx, XrParallelLocalBinding *locals,
+                                          int local_count, XrType **types) {
+    if (!ctx || !ctx->analyzer || !locals || local_count <= 0)
+        return;
+    for (int i = 0; i < local_count; i++) {
+        XrType *type = types && types[i] ? types[i] : xr_type_new_unknown(ctx->analyzer->isolate);
+        xa_parallel_set_one_local_symbol(ctx, &locals[i], type, !locals[i].is_initializer);
+    }
+}
+
+static void xa_parallel_infer_local_initializers(XaInferContext *ctx,
+                                                 XrParallelLocalBinding *locals, int local_count,
+                                                 XrType **types, const char *owner_label,
+                                                 bool allow_initializers) {
+    if (!ctx || !locals || local_count <= 0)
+        return;
+    for (int i = 0; i < local_count; i++) {
+        if (!locals[i].is_initializer)
+            continue;
+        if (!allow_initializers && ctx->analyzer) {
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = locals[i].source ? locals[i].source->line : 0,
+                              .column = locals[i].source ? locals[i].source->column : 0};
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "%s local '%s = ...' is only supported for worker-range bodies; use "
+                     "'parallel range' / 'parallel range reduce', or bind an existing lane with "
+                     "'local %s in lanes'",
+                     owner_label ? owner_label : "parallel", locals[i].name ? locals[i].name : "?",
+                     locals[i].name ? locals[i].name : "?");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+        }
+        XrType *type = locals[i].source ? xa_visit_infer_expr(ctx, locals[i].source)
+                                        : xr_type_new_unknown(NULL);
+        if (!type)
+            type = xr_type_new_unknown(ctx->analyzer ? ctx->analyzer->isolate : NULL);
+        if (types)
+            types[i] = type;
+        xa_parallel_set_one_local_symbol(ctx, &locals[i], type, true);
+    }
+}
+
+static XrType *xa_visit_parallel_reduce_expr(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node)
+        return xr_type_new_int(NULL);
+
+    ParallelReduceExprNode *pr = &node->as.parallel_reduce_expr;
+    XrType *int_type = xr_type_new_int(ctx->analyzer->isolate);
+
+    AstNode *range = unwrap_grouping(pr->range);
+    if (!range || range->type != AST_RANGE) {
+        if (pr->range)
+            xa_visit_infer_expr(ctx, pr->range);
+        xa_parallel_reduce_add_type_error(
+            ctx, pr->range ? pr->range : node,
+            "parallel reduce currently requires an integer range expression such as 0..n");
+    } else {
+        xa_infer_expected_int_expr(ctx, range->as.range.start, "parallel reduce range start");
+        xa_infer_expected_int_expr(ctx, range->as.range.end, "parallel reduce range end");
+        bool has_local_initializers = false;
+        for (int i = 0; i < pr->local_count; i++) {
+            if (pr->locals[i].is_initializer) {
+                has_local_initializers = true;
+                break;
+            }
+        }
+        if (pr->range_body && range->as.range.inclusive_end) {
+            xa_parallel_reduce_add_type_error(
+                ctx, range,
+                "parallel range reduce currently requires an exclusive integer range such as "
+                "0..n");
+        } else if (has_local_initializers && range->as.range.inclusive_end) {
+            xa_parallel_reduce_add_type_error(
+                ctx, range,
+                "parallel reduce local initializer currently requires an exclusive integer range "
+                "such as 0..n");
+        }
+    }
+
+    if (pr->worker_count)
+        xa_infer_expected_int_expr(ctx, pr->worker_count, "parallel reduce workers count");
+    XrType **local_types =
+        xa_parallel_infer_local_sources(ctx, pr->locals, pr->local_count, "parallel reduce");
+    XrType *acc_type =
+        pr->initial ? xa_visit_infer_expr(ctx, pr->initial) : xr_type_new_unknown(NULL);
+    if (!acc_type || XR_TYPE_IS_UNKNOWN(acc_type))
+        acc_type = int_type;
+
+    XrType *params[2] = {acc_type, acc_type};
+    XrType *combine_type = xr_type_new_function(ctx->analyzer->isolate, params, 2, acc_type, false);
+    XrType *saved_expected = ctx->expected_type;
+    ctx->expected_type = combine_type;
+    XrType *actual_combine =
+        pr->combine ? xa_visit_infer_expr(ctx, pr->combine) : xr_type_new_unknown(NULL);
+    ctx->expected_type = saved_expected;
+    if (!actual_combine || !XR_TYPE_IS_FUNCTION(actual_combine) ||
+        actual_combine->function.param_count != 2) {
+        xa_parallel_reduce_add_type_error(
+            ctx, pr->combine ? pr->combine : node,
+            "parallel reduce combine must be a two-parameter function");
+    } else {
+        if (xa_type_is_known_unassignable(acc_type, actual_combine->function.return_type)) {
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "parallel reduce combine must return accumulator type '%s', got '%s'",
+                     xr_type_to_string(acc_type),
+                     xr_type_to_string(actual_combine->function.return_type));
+            xa_parallel_reduce_add_type_error(ctx, pr->combine ? pr->combine : node, msg);
+        }
+        for (uint8_t pi = 0; pi < 2; pi++) {
+            XrType *param_type = actual_combine->function.param_types
+                                     ? actual_combine->function.param_types[pi]
+                                     : NULL;
+            if (xa_type_is_known_unassignable(param_type, acc_type)) {
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "parallel reduce combine parameter %u must accept accumulator type '%s', "
+                         "got '%s'",
+                         (unsigned) pi + 1, xr_type_to_string(acc_type),
+                         xr_type_to_string(param_type));
+                xa_parallel_reduce_add_type_error(ctx, pr->combine ? pr->combine : node, msg);
+            }
+        }
+    }
+
+    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+    if (pr->item_name) {
+        XaSymbol *item_sym = xa_scope_lookup(ctx->analyzer->current_scope, pr->item_name);
+        if (item_sym) {
+            if (pr->item_symbol_id == 0)
+                pr->item_symbol_id = item_sym->id;
+            XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, item_sym);
+            if (item_links) {
+                item_links->type = int_type;
+                item_links->declared_type = int_type;
+            }
+        }
+    }
+    if (pr->range_body && pr->end_name) {
+        XaSymbol *end_sym = xa_scope_lookup(ctx->analyzer->current_scope, pr->end_name);
+        if (end_sym) {
+            if (pr->end_symbol_id == 0)
+                pr->end_symbol_id = end_sym->id;
+            XaSymbolLinks *end_links = xa_analyzer_get_links(ctx->analyzer, end_sym);
+            if (end_links) {
+                end_links->type = int_type;
+                end_links->declared_type = int_type;
+            }
+        }
+    }
+    if (pr->worker_name) {
+        XaSymbol *worker_sym = xa_scope_lookup(ctx->analyzer->current_scope, pr->worker_name);
+        if (worker_sym) {
+            if (pr->worker_symbol_id == 0)
+                pr->worker_symbol_id = worker_sym->id;
+            XaSymbolLinks *worker_links = xa_analyzer_get_links(ctx->analyzer, worker_sym);
+            if (worker_links) {
+                worker_links->type = int_type;
+                worker_links->declared_type = int_type;
+            }
+        }
+    }
+    xa_parallel_set_local_symbols(ctx, pr->locals, pr->local_count, local_types);
+    xa_parallel_infer_local_initializers(
+        ctx, pr->locals, pr->local_count, local_types,
+        pr->range_body ? "parallel range reduce" : "parallel reduce", true);
+
+    bool old_in_parallel = ctx->in_parallel_for_body;
+    XaScope *old_parallel_scope = ctx->parallel_for_scope;
+    ctx->in_parallel_for_body = true;
+    ctx->parallel_for_scope = ctx->analyzer->current_scope;
+    if (pr->body) {
+        if (pr->body->type == AST_BLOCK) {
+            BlockNode *blk = &pr->body->as.block;
+            if (blk->count == 0) {
+                xa_parallel_reduce_add_type_error(
+                    ctx, pr->body, "parallel reduce body must end with an int expression");
+            }
+            for (int si = 0; si < blk->count; si++) {
+                AstNode *stmt = blk->statements[si];
+                bool is_last = (si == blk->count - 1);
+                if (is_last && stmt && stmt->type == AST_EXPR_STMT && stmt->as.expr_stmt) {
+                    XrType *saved_body_expected = ctx->expected_type;
+                    ctx->expected_type = acc_type;
+                    XrType *body_type = xa_visit_infer_expr(ctx, stmt->as.expr_stmt);
+                    ctx->expected_type = saved_body_expected;
+                    if (xa_type_is_known_unassignable(acc_type, body_type)) {
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                                 "parallel reduce body must end with accumulator type '%s', got "
+                                 "'%s'",
+                                 xr_type_to_string(acc_type), xr_type_to_string(body_type));
+                        xa_parallel_reduce_add_type_error(ctx, stmt->as.expr_stmt, msg);
+                    }
+                } else {
+                    xa_visit_infer_stmt(ctx, stmt);
+                    if (is_last) {
+                        xa_parallel_reduce_add_type_error(
+                            ctx, stmt ? stmt : pr->body,
+                            "parallel reduce body must end with an accumulator expression");
+                    }
+                }
+            }
+        } else {
+            xa_visit_infer_stmt(ctx, pr->body);
+            xa_parallel_reduce_add_type_error(
+                ctx, pr->body, "parallel reduce body must end with an accumulator expression");
+        }
+    }
+    ctx->in_parallel_for_body = old_in_parallel;
+    ctx->parallel_for_scope = old_parallel_scope;
+    xa_analyzer_exit_scope(ctx->analyzer);
+    xr_free(local_types);
+
+    return acc_type;
+}
+
+static XrType *xa_visit_parallel_collect_expr(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node)
+        return xr_type_new_array(NULL, xr_type_new_unknown(NULL));
+
+    ParallelCollectExprNode *pc = &node->as.parallel_collect_expr;
+    XrType *int_type = xr_type_new_int(ctx->analyzer->isolate);
+
+    AstNode *range = unwrap_grouping(pc->range);
+    if (!range || range->type != AST_RANGE) {
+        if (pc->range)
+            xa_visit_infer_expr(ctx, pc->range);
+        xa_parallel_reduce_add_type_error(
+            ctx, pc->range ? pc->range : node,
+            "parallel collect currently requires an integer range expression such as 0..n");
+    } else {
+        xa_infer_expected_int_expr(ctx, range->as.range.start, "parallel collect range start");
+        xa_infer_expected_int_expr(ctx, range->as.range.end, "parallel collect range end");
+    }
+
+    if (pc->worker_count)
+        xa_infer_expected_int_expr(ctx, pc->worker_count, "parallel collect workers count");
+    XrType **local_types =
+        xa_parallel_infer_local_sources(ctx, pc->locals, pc->local_count, "parallel collect");
+    bool has_local_initializers = false;
+    for (int i = 0; i < pc->local_count; i++) {
+        if (pc->locals[i].is_initializer) {
+            has_local_initializers = true;
+            break;
+        }
+    }
+
+    XrType *elem_type = xr_type_new_unknown(NULL);
+    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+    if (pc->item_name) {
+        XaSymbol *item_sym = xa_scope_lookup(ctx->analyzer->current_scope, pc->item_name);
+        if (item_sym) {
+            if (pc->item_symbol_id == 0)
+                pc->item_symbol_id = item_sym->id;
+            XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, item_sym);
+            if (item_links) {
+                item_links->type = int_type;
+                item_links->declared_type = int_type;
+            }
+        }
+    }
+    if (pc->worker_name) {
+        XaSymbol *worker_sym = xa_scope_lookup(ctx->analyzer->current_scope, pc->worker_name);
+        if (worker_sym) {
+            if (pc->worker_symbol_id == 0)
+                pc->worker_symbol_id = worker_sym->id;
+            XaSymbolLinks *worker_links = xa_analyzer_get_links(ctx->analyzer, worker_sym);
+            if (worker_links) {
+                worker_links->type = int_type;
+                worker_links->declared_type = int_type;
+            }
+        }
+    }
+    xa_parallel_set_local_symbols(ctx, pc->locals, pc->local_count, local_types);
+    bool collect_into = pc->into != NULL;
+    xa_parallel_infer_local_initializers(
+        ctx, pc->locals, pc->local_count, local_types,
+        collect_into ? "parallel collect into" : "parallel collect", true);
+    if ((has_local_initializers || pc->final_body) && range && range->type == AST_RANGE &&
+        range->as.range.inclusive_end) {
+        XrLocation loc = {.file = ctx->file_path, .line = range->line, .column = range->column};
+        const char *msg = NULL;
+        if (has_local_initializers && pc->final_body) {
+            msg = collect_into
+                      ? "parallel collect into local initializer/final currently requires an "
+                        "exclusive integer range such as 0..n"
+                      : "parallel collect local initializer/final currently requires an "
+                        "exclusive integer range such as 0..n";
+        } else if (pc->final_body) {
+            msg = collect_into
+                      ? "parallel collect into final currently requires an exclusive integer "
+                        "range such as 0..n"
+                      : "parallel collect final currently requires an exclusive integer range "
+                        "such as 0..n";
+        } else {
+            msg = collect_into
+                      ? "parallel collect into local initializer currently requires an "
+                        "exclusive integer range such as 0..n"
+                      : "parallel collect local initializer currently requires an exclusive "
+                        "integer range such as 0..n";
+        }
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+    }
+
+    bool old_in_parallel = ctx->in_parallel_for_body;
+    XaScope *old_parallel_scope = ctx->parallel_for_scope;
+    ctx->in_parallel_for_body = true;
+    ctx->parallel_for_scope = ctx->analyzer->current_scope;
+    if (pc->body) {
+        if (pc->body->type == AST_BLOCK) {
+            BlockNode *blk = &pc->body->as.block;
+            if (blk->count == 0) {
+                xa_parallel_reduce_add_type_error(
+                    ctx, pc->body, "parallel collect body must end with a value expression");
+            }
+            for (int si = 0; si < blk->count; si++) {
+                AstNode *stmt = blk->statements[si];
+                bool is_last = (si == blk->count - 1);
+                if (is_last && stmt && stmt->type == AST_EXPR_STMT && stmt->as.expr_stmt) {
+                    elem_type = xa_visit_infer_expr(ctx, stmt->as.expr_stmt);
+                    if (!elem_type || XR_TYPE_IS_UNKNOWN(elem_type))
+                        elem_type = xr_type_new_unknown(NULL);
+                } else {
+                    xa_visit_infer_stmt(ctx, stmt);
+                    if (is_last) {
+                        xa_parallel_reduce_add_type_error(
+                            ctx, stmt ? stmt : pc->body,
+                            "parallel collect body must end with a value expression");
+                    }
+                }
+            }
+        } else {
+            xa_visit_infer_stmt(ctx, pc->body);
+            xa_parallel_reduce_add_type_error(
+                ctx, pc->body, "parallel collect body must end with a value expression");
+        }
+    }
+    if (pc->final_body)
+        xa_visit_infer_stmt(ctx, pc->final_body);
+    ctx->in_parallel_for_body = old_in_parallel;
+    ctx->parallel_for_scope = old_parallel_scope;
+    xa_analyzer_exit_scope(ctx->analyzer);
+    xr_free(local_types);
+    local_types = NULL;
+
+    if (pc->into) {
+        AstNode *into_node = unwrap_grouping(pc->into);
+        if (into_node && into_node->type == AST_TUPLE_LITERAL &&
+            into_node->as.tuple_literal.count > 1) {
+            TupleLiteralNode *targets = &into_node->as.tuple_literal;
+            AstNode *last_expr = parallel_collect_body_last_expr(pc->body);
+            AstNode *body_tuple_node = unwrap_grouping(last_expr);
+            int lane_count = targets->count;
+            if (!body_tuple_node || body_tuple_node->type != AST_TUPLE_LITERAL) {
+                XrLocation loc = {.file = ctx->file_path,
+                                  .line = pc->body ? pc->body->line : node->line,
+                                  .column = pc->body ? pc->body->column : node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                    "parallel collect into multiple result buffers requires the body to end "
+                    "with a tuple literal",
+                    &loc);
+            } else if (body_tuple_node->as.tuple_literal.count != lane_count) {
+                XrLocation loc = {.file = ctx->file_path,
+                                  .line = body_tuple_node->line,
+                                  .column = body_tuple_node->column};
+                char msg[192];
+                snprintf(msg, sizeof(msg),
+                         "parallel collect lane count mismatch: into has %d lane(s), body "
+                         "returns %d value(s)",
+                         lane_count, body_tuple_node->as.tuple_literal.count);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+            }
+
+            bool body_is_tuple_type = elem_type && XR_TYPE_IS_TUPLE(elem_type);
+            for (int i = 0; i < lane_count; i++) {
+                AstNode *target = targets->elements ? targets->elements[i] : NULL;
+                XrType *target_type = xa_visit_infer_expr(ctx, target);
+                if (!target_type || XR_TYPE_IS_UNKNOWN(target_type))
+                    continue;
+                XrLocation loc = {.file = ctx->file_path,
+                                  .line = target ? target->line : into_node->line,
+                                  .column = target ? target->column : into_node->column};
+                if (!XR_TYPE_IS_ARRAY(target_type)) {
+                    xa_analyzer_add_diagnostic(
+                        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                        "parallel collect into multiple result buffers expects Array targets",
+                        &loc);
+                    continue;
+                }
+                XrType *slot_type = (body_is_tuple_type && i < elem_type->tuple.element_count)
+                                        ? elem_type->tuple.element_types[i]
+                                        : NULL;
+                if (slot_type && !XR_TYPE_IS_UNKNOWN(slot_type) &&
+                    target_type->container.element_type &&
+                    !xr_type_equals(target_type->container.element_type, slot_type)) {
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                             "parallel collect lane %d buffer type mismatch: expected Array<%s>, "
+                             "got %s",
+                             i, xr_type_to_string(slot_type), xr_type_to_string(target_type));
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                }
+            }
+            return xr_type_new_unit(ctx->analyzer->isolate);
+        } else {
+            XrType *into_type = xa_visit_infer_expr(ctx, pc->into);
+            if (into_type && !XR_TYPE_IS_UNKNOWN(into_type)) {
+                if (!XR_TYPE_IS_ARRAY(into_type)) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = pc->into->line, .column = pc->into->column};
+                    xa_analyzer_add_diagnostic(
+                        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                        "parallel collect into expects an Array result buffer", &loc);
+                } else if (elem_type && !XR_TYPE_IS_UNKNOWN(elem_type) &&
+                           into_type->container.element_type &&
+                           !xr_type_equals(into_type->container.element_type, elem_type)) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = pc->into->line, .column = pc->into->column};
+                    char msg[256];
+                    snprintf(
+                        msg, sizeof(msg),
+                        "parallel collect into result buffer type mismatch: expected Array<%s>, "
+                        "got %s",
+                        xr_type_to_string(elem_type), xr_type_to_string(into_type));
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                }
+            }
+            return xr_type_new_unit(ctx->analyzer->isolate);
+        }
+    }
+
+    return xr_type_new_array(ctx->analyzer->isolate, elem_type);
 }
 
 static bool extract_contextual_int_literal(AstNode *node, int64_t *out_value) {
@@ -407,6 +1029,7 @@ XR_FUNC void xa_validate_hashable_key_type(XaInferContext *ctx, XrType *type,
                                       "Set element", loc);
             break;
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
         case XR_KIND_CHANNEL:
             xa_validate_hashable_key_type(ctx, type->container.element_type, generic_links, context,
                                           loc);
@@ -518,13 +1141,45 @@ XR_FUNC XaSymbol *xa_in_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr
 XR_FUNC bool xa_method_name_mutates_receiver(const char *name) {
     if (!name)
         return false;
-    static const char *const mutators[] = {
-        "push",     "pop",     "shift",   "unshift",     "reserve",      "resize",
-        "splice",   "reverse", "sort",    "fill",        "copyWithin",   "repeatFrom",
-        "copyFrom", "set",     "delete",  "clear",       "add",          "send",
-        "recv",     "recvOr",  "trySend", "tryRecv",     "sendTimeout",  "recvTimeout",
-        "close",    "cancel",  "poll",    "awaitResult", "awaitTimeout", "append",
-        "flush",    "tryPop",  NULL};
+    static const char *const mutators[] = {"push",
+                                           "pushUnchecked",
+                                           "setUnchecked",
+                                           "appendFromUnchecked",
+                                           "repeatFromUnchecked",
+                                           "writeFromUnchecked",
+                                           "repeatAtUnchecked",
+                                           "wildCopyFromNonOverlappingUnchecked",
+                                           "wildRepeatAtUnchecked",
+                                           "setLengthUnchecked",
+                                           "pop",
+                                           "shift",
+                                           "unshift",
+                                           "reserve",
+                                           "resize",
+                                           "splice",
+                                           "reverse",
+                                           "sort",
+                                           "fill",
+                                           "set",
+                                           "delete",
+                                           "clear",
+                                           "add",
+                                           "send",
+                                           "recv",
+                                           "recvOr",
+                                           "trySend",
+                                           "tryRecv",
+                                           "sendTimeout",
+                                           "recvTimeout",
+                                           "close",
+                                           "cancel",
+                                           "poll",
+                                           "awaitResult",
+                                           "awaitTimeout",
+                                           "append",
+                                           "flush",
+                                           "tryPop",
+                                           NULL};
     for (const char *const *p = mutators; *p; p++) {
         if (strcmp(name, *p) == 0)
             return true;
@@ -578,11 +1233,13 @@ XrType *resolve_class_to_type_param(XrVMRuntime *X, XrType *type, const char **t
     }
 
     // Recurse into containers
-    if (type->kind == XR_KIND_ARRAY && type->container.element_type) {
+    if ((type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SPAN) &&
+        type->container.element_type) {
         XrType *e =
             resolve_class_to_type_param(X, type->container.element_type, tp_names, tp_count);
-        if (e != type->container.element_type)
-            return xr_type_new_array(X, e);
+        if (e != type->container.element_type) {
+            return type->kind == XR_KIND_SPAN ? xr_type_new_span(X, e) : xr_type_new_array(X, e);
+        }
     }
     if (type->kind == XR_KIND_MAP) {
         XrType *k = resolve_class_to_type_param(X, type->map.key_type, tp_names, tp_count);
@@ -763,6 +1420,12 @@ XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_type, const
                                             arg_type->container.element_type, tp_name, depth + 1);
     }
 
+    // Span<T> vs Span<int>/Array<int> -> T = int
+    if (XR_TYPE_IS_SPAN(param_type) && (XR_TYPE_IS_SPAN(arg_type) || XR_TYPE_IS_ARRAY(arg_type))) {
+        return xa_infer_type_param_from_arg(param_type->container.element_type,
+                                            arg_type->container.element_type, tp_name, depth + 1);
+    }
+
     // Set<T> vs Set<int> -> T = int
     if ((param_type->kind == XR_KIND_SET) && (arg_type->kind == XR_KIND_SET)) {
         return xa_infer_type_param_from_arg(param_type->container.element_type,
@@ -921,6 +1584,8 @@ XR_FUNC bool xa_body_has_return_expr(AstNode *node) {
             return xa_body_has_return_expr(node->as.for_stmt.body);
         case AST_FOR_IN_STMT:
             return xa_body_has_return_expr(node->as.for_in_stmt.body);
+        case AST_PARALLEL_FOR_STMT:
+            return xa_body_has_return_expr(node->as.parallel_for_stmt.body);
         case AST_TRY_CATCH: {
             if (xa_body_has_return_expr(node->as.try_catch.try_body))
                 return true;
@@ -1068,10 +1733,10 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
     }
 }
 
-/* Try to resolve an import target's type from the module graph.
- * Returns the target module's exports hashmap, or NULL if unavailable. */
-XR_FUNC XrHashMap *resolve_graph_exports(XaAnalyzer *analyzer, const char *module_name,
-                                         bool is_quoted) {
+/* Try to resolve an import target's exported semantic symbols from the module graph.
+ * Returns the target module's export-symbol hashmap, or NULL if unavailable. */
+XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char *module_name,
+                                                bool is_quoted) {
     XrModuleGraph *graph = (XrModuleGraph *) analyzer->graph;
     if (!graph || !analyzer->current_file)
         return NULL;
@@ -1091,7 +1756,7 @@ XR_FUNC XrHashMap *resolve_graph_exports(XaAnalyzer *analyzer, const char *modul
     if (idx < 0)
         return NULL;
 
-    return graph->specs[idx].exports;
+    return graph->specs[idx].export_symbols;
 }
 
 // Helper: collect import statement (register module variable in symbol table)
@@ -1122,15 +1787,31 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
     } else {
         // For selective import: import { a, b } from "module"
         XrHashMap *graph_exports =
-            resolve_graph_exports(ctx->analyzer, import->module_name, import->is_quoted);
+            resolve_graph_export_symbols(ctx->analyzer, import->module_name, import->is_quoted);
 
         for (int i = 0; i < import->member_count; i++) {
             ImportMember *member = &import->members[i];
             const char *local_name = member->alias ? member->alias : member->name;
+            XaSymbol *export_sym =
+                graph_exports ? (XaSymbol *) xr_hashmap_get(graph_exports, member->name) : NULL;
 
-            // Register each imported member as a variable
-            XaSymbol *sym = xa_symbol_new(local_name, XA_SYM_IMPORT);
+            // Register each imported member as its exported semantic kind.
+            XaSymbol *sym =
+                xa_symbol_new(local_name, export_sym ? export_sym->kind : XA_SYM_IMPORT);
             if (sym) {
+                sym->is_imported = true;
+                sym->is_const = true;
+                if (export_sym) {
+                    sym->is_static = export_sym->is_static;
+                    sym->is_private = export_sym->is_private;
+                    sym->is_protected = export_sym->is_protected;
+                    sym->is_override = export_sym->is_override;
+                    sym->is_shared = export_sym->is_shared;
+                    sym->is_builtin = export_sym->is_builtin;
+                    sym->mutates_receiver = export_sym->mutates_receiver;
+                    sym->passing_mode = export_sym->passing_mode;
+                    sym->alias_type = export_sym->alias_type;
+                }
                 sym->location.line = node->line;
                 xa_visit_add_symbol_checked(ctx, sym, 0);
                 member->symbol_id = sym->id;
@@ -1140,8 +1821,9 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                     XrType *member_type = NULL;
 
                     // Priority 1: resolve from graph exports (user modules)
-                    if (graph_exports) {
-                        member_type = (XrType *) xr_hashmap_get(graph_exports, member->name);
+                    if (export_sym) {
+                        xa_symbol_links_copy_export_metadata(links, &export_sym->links);
+                        member_type = links->type;
                     }
 
                     // Priority 2: resolve from builtin module signatures (stdlib)
@@ -1154,8 +1836,10 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                         }
                     }
 
-                    links->type = member_type ? member_type : xr_type_new_unknown(NULL);
-                    links->declared_type = links->type;
+                    if (!export_sym) {
+                        links->type = member_type ? member_type : xr_type_new_unknown(NULL);
+                        links->declared_type = links->type;
+                    }
                 }
             }
         }
@@ -1500,6 +2184,176 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             xa_analyzer_exit_scope(ctx->analyzer);
             break;
         }
+        case AST_PARALLEL_FOR_STMT: {
+            ParallelForStmtNode *pf = &node->as.parallel_for_stmt;
+            for (int i = 0; i < pf->local_count; i++) {
+                if (!pf->locals[i].is_initializer)
+                    xa_visit_collect(ctx, pf->locals[i].source);
+            }
+            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+            if (pf->item_name) {
+                XaSymbol *sym = xa_symbol_new(pf->item_name, XA_SYM_VARIABLE);
+                sym->location.line = node->line;
+                sym->is_const = true;
+                xa_visit_add_symbol_checked(ctx, sym, 0);
+                pf->item_symbol_id = sym->id;
+                XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, sym);
+                if (item_links)
+                    item_links->is_definitely_assigned = true;
+            }
+            if (pf->range_body && pf->end_name) {
+                XaSymbol *sym = xa_symbol_new(pf->end_name, XA_SYM_VARIABLE);
+                sym->location.line = node->line;
+                sym->is_const = true;
+                xa_visit_add_symbol_checked(ctx, sym, 0);
+                pf->end_symbol_id = sym->id;
+                XaSymbolLinks *end_links = xa_analyzer_get_links(ctx->analyzer, sym);
+                if (end_links)
+                    end_links->is_definitely_assigned = true;
+            }
+            if (pf->worker_name) {
+                XaSymbol *sym = xa_symbol_new(pf->worker_name, XA_SYM_VARIABLE);
+                sym->location.line = node->line;
+                sym->is_const = true;
+                xa_visit_add_symbol_checked(ctx, sym, 0);
+                pf->worker_symbol_id = sym->id;
+                XaSymbolLinks *worker_links = xa_analyzer_get_links(ctx->analyzer, sym);
+                if (worker_links)
+                    worker_links->is_definitely_assigned = true;
+            }
+            for (int i = 0; i < pf->local_count; i++) {
+                if (pf->locals[i].is_initializer)
+                    xa_visit_collect(ctx, pf->locals[i].source);
+            }
+            for (int i = 0; i < pf->local_count; i++) {
+                XaSymbol *sym = xa_symbol_new(pf->locals[i].name, XA_SYM_VARIABLE);
+                sym->location.line = node->line;
+                sym->is_const = false;
+                xa_visit_add_symbol_checked(ctx, sym, 0);
+                pf->locals[i].symbol_id = sym->id;
+                XaSymbolLinks *local_links = xa_analyzer_get_links(ctx->analyzer, sym);
+                if (local_links)
+                    local_links->is_definitely_assigned = !pf->locals[i].is_initializer;
+            }
+            if (pf->body)
+                xa_visit_collect(ctx, pf->body);
+            if (pf->final_body)
+                xa_visit_collect(ctx, pf->final_body);
+            xa_analyzer_exit_scope(ctx->analyzer);
+            break;
+        }
+        case AST_PARALLEL_REDUCE_EXPR: {
+            ParallelReduceExprNode *pr = &node->as.parallel_reduce_expr;
+            xa_visit_collect(ctx, pr->range);
+            xa_visit_collect(ctx, pr->worker_count);
+            for (int i = 0; i < pr->local_count; i++) {
+                if (!pr->locals[i].is_initializer)
+                    xa_visit_collect(ctx, pr->locals[i].source);
+            }
+            xa_visit_collect(ctx, pr->initial);
+            xa_visit_collect(ctx, pr->combine);
+
+            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+            if (pr->item_name) {
+                XaSymbol *sym = xa_symbol_new(pr->item_name, XA_SYM_VARIABLE);
+                sym->location.line = node->line;
+                sym->is_const = true;
+                xa_visit_add_symbol_checked(ctx, sym, 0);
+                pr->item_symbol_id = sym->id;
+                XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, sym);
+                if (item_links)
+                    item_links->is_definitely_assigned = true;
+            }
+            if (pr->range_body && pr->end_name) {
+                XaSymbol *sym = xa_symbol_new(pr->end_name, XA_SYM_VARIABLE);
+                sym->location.line = node->line;
+                sym->is_const = true;
+                xa_visit_add_symbol_checked(ctx, sym, 0);
+                pr->end_symbol_id = sym->id;
+                XaSymbolLinks *end_links = xa_analyzer_get_links(ctx->analyzer, sym);
+                if (end_links)
+                    end_links->is_definitely_assigned = true;
+            }
+            if (pr->worker_name) {
+                XaSymbol *sym = xa_symbol_new(pr->worker_name, XA_SYM_VARIABLE);
+                sym->location.line = node->line;
+                sym->is_const = true;
+                xa_visit_add_symbol_checked(ctx, sym, 0);
+                pr->worker_symbol_id = sym->id;
+                XaSymbolLinks *worker_links = xa_analyzer_get_links(ctx->analyzer, sym);
+                if (worker_links)
+                    worker_links->is_definitely_assigned = true;
+            }
+            for (int i = 0; i < pr->local_count; i++) {
+                if (pr->locals[i].is_initializer)
+                    xa_visit_collect(ctx, pr->locals[i].source);
+            }
+            for (int i = 0; i < pr->local_count; i++) {
+                XaSymbol *sym = xa_symbol_new(pr->locals[i].name, XA_SYM_VARIABLE);
+                sym->location.line = node->line;
+                sym->is_const = false;
+                xa_visit_add_symbol_checked(ctx, sym, 0);
+                pr->locals[i].symbol_id = sym->id;
+                XaSymbolLinks *local_links = xa_analyzer_get_links(ctx->analyzer, sym);
+                if (local_links)
+                    local_links->is_definitely_assigned = !pr->locals[i].is_initializer;
+            }
+            if (pr->body)
+                xa_visit_collect(ctx, pr->body);
+            xa_analyzer_exit_scope(ctx->analyzer);
+            break;
+        }
+        case AST_PARALLEL_COLLECT_EXPR: {
+            ParallelCollectExprNode *pc = &node->as.parallel_collect_expr;
+            xa_visit_collect(ctx, pc->range);
+            xa_visit_collect(ctx, pc->worker_count);
+            for (int i = 0; i < pc->local_count; i++) {
+                if (!pc->locals[i].is_initializer)
+                    xa_visit_collect(ctx, pc->locals[i].source);
+            }
+
+            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+            if (pc->item_name) {
+                XaSymbol *sym = xa_symbol_new(pc->item_name, XA_SYM_VARIABLE);
+                sym->location.line = node->line;
+                sym->is_const = true;
+                xa_visit_add_symbol_checked(ctx, sym, 0);
+                pc->item_symbol_id = sym->id;
+                XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, sym);
+                if (item_links)
+                    item_links->is_definitely_assigned = true;
+            }
+            if (pc->worker_name) {
+                XaSymbol *sym = xa_symbol_new(pc->worker_name, XA_SYM_VARIABLE);
+                sym->location.line = node->line;
+                sym->is_const = true;
+                xa_visit_add_symbol_checked(ctx, sym, 0);
+                pc->worker_symbol_id = sym->id;
+                XaSymbolLinks *worker_links = xa_analyzer_get_links(ctx->analyzer, sym);
+                if (worker_links)
+                    worker_links->is_definitely_assigned = true;
+            }
+            for (int i = 0; i < pc->local_count; i++) {
+                if (pc->locals[i].is_initializer)
+                    xa_visit_collect(ctx, pc->locals[i].source);
+            }
+            for (int i = 0; i < pc->local_count; i++) {
+                XaSymbol *sym = xa_symbol_new(pc->locals[i].name, XA_SYM_VARIABLE);
+                sym->location.line = node->line;
+                sym->is_const = false;
+                xa_visit_add_symbol_checked(ctx, sym, 0);
+                pc->locals[i].symbol_id = sym->id;
+                XaSymbolLinks *local_links = xa_analyzer_get_links(ctx->analyzer, sym);
+                if (local_links)
+                    local_links->is_definitely_assigned = !pc->locals[i].is_initializer;
+            }
+            if (pc->body)
+                xa_visit_collect(ctx, pc->body);
+            if (pc->final_body)
+                xa_visit_collect(ctx, pc->final_body);
+            xa_analyzer_exit_scope(ctx->analyzer);
+            break;
+        }
         case AST_BLOCK:
             /* Bare block statements (standalone { ... }) get a scope from
              * xa_visit_collect_statements_with_hoisting which wraps them.
@@ -1641,7 +2495,12 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             }
             break;
         case AST_EXPR_STMT:
-            // Recurse into expression statements (may contain function expressions etc.)
+            if (node->as.expr_stmt)
+                xa_visit_collect(ctx, node->as.expr_stmt);
+            break;
+        case AST_UNSAFE_EXPR:
+            if (node->as.unsafe_expr.operand)
+                xa_visit_collect(ctx, node->as.unsafe_expr.operand);
             break;
 
         // Collect destructuring and multi-var declarations
@@ -1729,6 +2588,8 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
         case AST_NEW_EXPR:
         case AST_TERNARY:
         case AST_FUNCTION_EXPR:
+        case AST_PARALLEL_REDUCE_EXPR:
+        case AST_PARALLEL_COLLECT_EXPR:
             return xa_visit_infer_expr(ctx, node);
 
         // Statements
@@ -1838,6 +2699,12 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_FUNCTION_EXPR:
             result = xa_visit_function_expr(ctx, node);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            result = xa_visit_parallel_reduce_expr(ctx, node);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            result = xa_visit_parallel_collect_expr(ctx, node);
             break;
         case AST_GROUPING:
             result = xa_visit_infer_expr(ctx, node->as.grouping);
@@ -1988,9 +2855,15 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_expr(ctx, sl->start);
             if (sl->end)
                 xa_visit_infer_expr(ctx, sl->end);
-            /* Slice of array/string returns same container type. */
+            /* Slice of Array<T>/Span<T> returns Span<T>; string slices stay string. */
             if (src && XR_TYPE_IS_ARRAY(src)) {
-                result = src;
+                XrType *elem = src->container.element_type ? src->container.element_type
+                                                           : xr_type_new_unknown(NULL);
+                result = xr_type_new_span(ctx->analyzer->isolate, elem);
+            } else if (src && XR_TYPE_IS_SPAN(src)) {
+                XrType *elem = src->container.element_type ? src->container.element_type
+                                                           : xr_type_new_unknown(NULL);
+                result = xr_type_new_span(ctx->analyzer->isolate, elem);
             } else if (src && XR_TYPE_IS_STRING(src)) {
                 result = xr_type_new_string(NULL);
             } else {
@@ -2134,6 +3007,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XaSymbol *id_sym = xa_scope_lookup(ctx->analyzer->current_scope, id->name);
             if (id_sym)
                 id->symbol_id = id_sym->id;
+            xa_parallel_capture_check(ctx, node, id_sym, true);
             if (id_sym && id_sym->is_const) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
@@ -2169,6 +3043,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 ca->object ? NULL : xa_scope_lookup(ctx->analyzer->current_scope, ca->name);
             if (ca_sym)
                 ca->symbol_id = ca_sym->id;
+            xa_parallel_capture_check(ctx, node, ca_sym, true);
             XrType *ca_target_type = NULL;
             if (!ca->object && ca_sym)
                 ca_target_type = xa_analyzer_get_type(ctx->analyzer, ca_sym);
@@ -2638,6 +3513,123 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_TYPE_ALIAS:
             // Type alias is compile-time concept, already registered in pass 1
             break;
+        case AST_PARALLEL_FOR_STMT: {
+            ParallelForStmtNode *pf = &node->as.parallel_for_stmt;
+            XrType **local_types =
+                xa_parallel_infer_local_sources(ctx, pf->locals, pf->local_count,
+                                                pf->range_body ? "parallel range" : "parallel for");
+
+            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+
+            XrType *item_type = xr_type_new_int(ctx->analyzer ? ctx->analyzer->isolate : NULL);
+            if (pf->item_name) {
+                XaSymbol *item_sym = xa_scope_lookup(ctx->analyzer->current_scope, pf->item_name);
+                if (item_sym) {
+                    if (pf->item_symbol_id == 0)
+                        pf->item_symbol_id = item_sym->id;
+                    XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, item_sym);
+                    if (item_links) {
+                        item_links->type = item_type;
+                        item_links->declared_type = item_type;
+                    }
+                }
+            }
+            if (pf->range_body && pf->end_name) {
+                XaSymbol *end_sym = xa_scope_lookup(ctx->analyzer->current_scope, pf->end_name);
+                if (end_sym) {
+                    if (pf->end_symbol_id == 0)
+                        pf->end_symbol_id = end_sym->id;
+                    XaSymbolLinks *end_links = xa_analyzer_get_links(ctx->analyzer, end_sym);
+                    if (end_links) {
+                        end_links->type = item_type;
+                        end_links->declared_type = item_type;
+                    }
+                }
+            }
+            if (pf->worker_name) {
+                XaSymbol *worker_sym =
+                    xa_scope_lookup(ctx->analyzer->current_scope, pf->worker_name);
+                if (worker_sym) {
+                    if (pf->worker_symbol_id == 0)
+                        pf->worker_symbol_id = worker_sym->id;
+                    XaSymbolLinks *worker_links = xa_analyzer_get_links(ctx->analyzer, worker_sym);
+                    if (worker_links) {
+                        worker_links->type = item_type;
+                        worker_links->declared_type = item_type;
+                    }
+                }
+            }
+            xa_parallel_set_local_symbols(ctx, pf->locals, pf->local_count, local_types);
+            xa_parallel_infer_local_initializers(ctx, pf->locals, pf->local_count, local_types,
+                                                 pf->range_body ? "parallel range" : "parallel for",
+                                                 true);
+            xa_analyzer_set_node_type(ctx->analyzer, node, item_type);
+
+            AstNode *range = unwrap_grouping(pf->range);
+            if (!range || range->type != AST_RANGE) {
+                if (pf->range)
+                    xa_visit_infer_expr(ctx, pf->range);
+                XrLocation loc = {.file = ctx->file_path,
+                                  .line = pf->range ? pf->range->line : node->line,
+                                  .column = pf->range ? pf->range->column : node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                    "parallel for currently requires an integer range expression such as 0..n",
+                    &loc);
+            } else {
+                xa_infer_expected_int_expr(ctx, range->as.range.start, "parallel for range start");
+                xa_infer_expected_int_expr(ctx, range->as.range.end, "parallel for range end");
+                if (pf->range_body && range->as.range.inclusive_end) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = range->line, .column = range->column};
+                    xa_analyzer_add_diagnostic(
+                        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                        "parallel range currently requires an exclusive integer range such as "
+                        "0..n",
+                        &loc);
+                }
+            }
+
+            if (pf->worker_count) {
+                xa_infer_expected_int_expr(ctx, pf->worker_count, "parallel for workers count");
+            }
+
+            if (pf->body) {
+                bool old_in_parallel = ctx->in_parallel_for_body;
+                XaScope *old_parallel_scope = ctx->parallel_for_scope;
+                ctx->in_parallel_for_body = true;
+                ctx->parallel_for_scope = ctx->analyzer->current_scope;
+                if (pf->body->type == AST_BLOCK) {
+                    BlockNode *blk = &pf->body->as.block;
+                    for (int si = 0; si < blk->count; si++) {
+                        xa_visit_infer_stmt(ctx, blk->statements[si]);
+                    }
+                } else {
+                    xa_visit_infer_stmt(ctx, pf->body);
+                }
+                ctx->in_parallel_for_body = old_in_parallel;
+                ctx->parallel_for_scope = old_parallel_scope;
+            }
+            if (pf->final_body) {
+                bool old_in_parallel = ctx->in_parallel_for_body;
+                XaScope *old_parallel_scope = ctx->parallel_for_scope;
+                ctx->in_parallel_for_body = true;
+                ctx->parallel_for_scope = ctx->analyzer->current_scope;
+                if (pf->final_body->type == AST_BLOCK) {
+                    BlockNode *blk = &pf->final_body->as.block;
+                    for (int si = 0; si < blk->count; si++)
+                        xa_visit_infer_stmt(ctx, blk->statements[si]);
+                } else {
+                    xa_visit_infer_stmt(ctx, pf->final_body);
+                }
+                ctx->in_parallel_for_body = old_in_parallel;
+                ctx->parallel_for_scope = old_parallel_scope;
+            }
+
+            xa_analyzer_exit_scope(ctx->analyzer);
+            xr_free(local_types);
+            break;
+        }
         case AST_FOR_IN_STMT: {
             ForInStmtNode *fi = &node->as.for_in_stmt;
 
@@ -2680,6 +3672,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             /*
              * Unified for-in type inference rules:
              *   Array<T>   → item: T
+             *   Span<T>    → item: T
              *   Map<K,V>   → item: Json (entry), or k: K, v: V
              *   Set<T>     → item: T
              *   Enum       → item: EnumValue
@@ -2696,7 +3689,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             } else if (fi->collection && fi->collection->type == AST_RANGE) {
                 item_type = xr_type_new_int(NULL);
             } else if (coll_type) {
-                if (XR_TYPE_IS_ARRAY(coll_type)) {
+                if (XR_TYPE_IS_ARRAY(coll_type) || XR_TYPE_IS_SPAN(coll_type)) {
                     if (coll_type->container.element_type) {
                         item_type = coll_type->container.element_type;
                     }
@@ -2968,7 +3961,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 index_type = xa_visit_infer_expr(ctx, is->index);
             XrType *value_expected = NULL;
             if (array_type) {
-                if (XR_TYPE_IS_ARRAY(array_type) && array_type->container.element_type) {
+                if ((XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_SPAN(array_type)) &&
+                    array_type->container.element_type) {
                     value_expected = array_type->container.element_type;
                 } else if (XR_TYPE_IS_MAP(array_type) && array_type->map.value_type) {
                     value_expected = array_type->map.value_type;
@@ -3087,7 +4081,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                            "sealed Record index assignment requires a string "
                                            "literal key",
                                            &loc);
-            } else if (array_type && XR_TYPE_IS_ARRAY(array_type)) {
+            } else if (array_type &&
+                       (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_SPAN(array_type))) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type)) {

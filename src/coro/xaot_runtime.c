@@ -10,6 +10,8 @@
 
 #include "xaot_runtime_internal.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "../base/xglobal_indices.h"
@@ -19,6 +21,7 @@
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xobj_destroy_ops.h"
 #include "xblock.h"
+#include "xcoro_pool.h"
 #include "xcoroutine.h"
 #include "xscope_transfer.h"
 #include "xworker.h"
@@ -54,6 +57,51 @@ static void aot_release_state(XrCoroutine *coro) {
     xr_free(state);
     coro->backend_state = NULL;
     coro->backend = NULL;
+    coro->gc_flags &= ~XR_CORO_GC_BACKEND_STATE_OWNED;
+}
+
+static void aot_clear_reusable_state(XrCoroutine *coro, XrAotCoroState *state) {
+    if (!state)
+        return;
+
+    aot_release_frame(state->desc, state->frame, coro ? coro->heap : NULL);
+    state->desc = NULL;
+    state->frame = NULL;
+    state->runtime = NULL;
+}
+
+static bool aot_prepare_recycle(XrCoroutine *coro, XrWorker *worker) {
+    (void) worker;
+    XrAotCoroState *state = aot_state_from_coro(coro);
+    if (!state)
+        return false;
+
+    bool trim_backend_storage = (coro->gc_flags & XR_CORO_GC_TRIM_BACKEND_STORAGE) != 0;
+    coro->gc_flags &= ~XR_CORO_GC_TRIM_BACKEND_STORAGE;
+    aot_clear_reusable_state(coro, state);
+    if (trim_backend_storage) {
+        xr_free(state);
+        coro->backend_state = NULL;
+        coro->backend = NULL;
+        coro->gc_flags &= ~XR_CORO_GC_BACKEND_STATE_OWNED;
+    }
+    return true;
+}
+
+static void aot_reset_reusable(XrCoroutine *coro) {
+    XrAotCoroState *state = aot_state_from_coro(coro);
+    if (!state)
+        return;
+
+    bool trim_backend_storage = (coro->gc_flags & XR_CORO_GC_TRIM_BACKEND_STORAGE) != 0;
+    coro->gc_flags &= ~XR_CORO_GC_TRIM_BACKEND_STORAGE;
+    aot_clear_reusable_state(coro, state);
+    if (trim_backend_storage) {
+        xr_free(state);
+        coro->backend_state = NULL;
+        coro->backend = NULL;
+        coro->gc_flags &= ~XR_CORO_GC_BACKEND_STATE_OWNED;
+    }
 }
 
 static const char *aot_backend_debug_name(const XrCoroutine *coro) {
@@ -85,7 +133,8 @@ static void aot_mark_running(XrCoroutine *coro) {
 
 static bool aot_caps_need_scheduler(uint32_t caps) {
     return (caps & (XR_AOT_CAP_CORO | XR_AOT_CAP_TIMER | XR_AOT_CAP_CHANNEL |
-                    XR_AOT_CAP_WORK_QUEUE | XR_AOT_CAP_RESULT_GROUP)) != 0;
+                    XR_AOT_CAP_WORK_QUEUE | XR_AOT_CAP_RESULT_GROUP | XR_AOT_CAP_COUNTDOWN_LATCH |
+                    XR_AOT_CAP_SEMAPHORE | XR_AOT_CAP_EVENT_COUNT)) != 0;
 }
 
 static void *aot_host_backend_context(void *ctx) {
@@ -260,8 +309,8 @@ static const XrCoroBackendVTable aot_runtime_backend_vtable = {
     .resume = aot_runtime_backend_resume,
     .gen_drive = aot_backend_gen_drive,
     .trace_roots = aot_backend_trace_roots,
-    .prepare_recycle = NULL,
-    .reset_reusable = NULL,
+    .prepare_recycle = aot_prepare_recycle,
+    .reset_reusable = aot_reset_reusable,
     .setup_yield_continuation = NULL,
     .has_continuation = NULL,
     .call_closure = NULL,
@@ -278,14 +327,98 @@ static const XrCoroBackendVTable aot_runtime_backend_vtable = {
     .debug_snapshot = aot_backend_debug_snapshot,
 };
 
+/*
+ * AOT frames are extremely short-lived in hot `go` fan-out/fan-in code. A
+ * process-global cache was measured and rejected because the shared lock
+ * becomes a cross-worker contention point. Keep the cache strictly
+ * thread-local and record the size class in a small header so generated
+ * release functions can keep the stable xr_aot_frame_free(frame) ABI.
+ */
+#define XR_AOT_FRAME_CACHE_BUCKETS 9u
+#define XR_AOT_FRAME_CACHE_MAX_PER_BUCKET 64u
+#define XR_AOT_FRAME_CACHE_MAX_SIZE 4096u
+
+typedef union XrAotFrameHeader {
+    struct {
+        union XrAotFrameHeader *next;
+        size_t size_class;
+        uintptr_t owner_token;
+        uint32_t bucket;
+    } h;
+    max_align_t align;
+} XrAotFrameHeader;
+
+static _Thread_local XrAotFrameHeader *tls_aot_frame_cache[XR_AOT_FRAME_CACHE_BUCKETS];
+static _Thread_local uint16_t tls_aot_frame_cache_count[XR_AOT_FRAME_CACHE_BUCKETS];
+static _Thread_local unsigned char tls_aot_frame_owner_marker;
+
+static uintptr_t aot_frame_owner_token(void) {
+    return (uintptr_t) &tls_aot_frame_owner_marker;
+}
+
+static bool aot_frame_size_class(size_t size, size_t *out_size_class, uint32_t *out_bucket) {
+    if (!out_size_class || !out_bucket || size == 0 || size > XR_AOT_FRAME_CACHE_MAX_SIZE)
+        return false;
+    size_t size_class = 16;
+    uint32_t bucket = 0;
+    while (size_class < size && bucket + 1 < XR_AOT_FRAME_CACHE_BUCKETS) {
+        size_class <<= 1;
+        bucket++;
+    }
+    if (size > size_class || size_class > XR_AOT_FRAME_CACHE_MAX_SIZE)
+        return false;
+    *out_size_class = size_class;
+    *out_bucket = bucket;
+    return true;
+}
+
 void *xr_aot_frame_alloc(size_t size) {
     if (size == 0)
         size = 1;
-    return xr_malloc(size);
+
+    uintptr_t owner_token = aot_frame_owner_token();
+    size_t size_class = 0;
+    uint32_t bucket = UINT32_MAX;
+    bool cacheable = aot_frame_size_class(size, &size_class, &bucket);
+    if (cacheable) {
+        XrAotFrameHeader *header = tls_aot_frame_cache[bucket];
+        if (header) {
+            tls_aot_frame_cache[bucket] = header->h.next;
+            tls_aot_frame_cache_count[bucket]--;
+            header->h.next = NULL;
+            header->h.owner_token = owner_token;
+            return (void *) (header + 1);
+        }
+    } else {
+        size_class = size;
+    }
+
+    if (size_class > SIZE_MAX - sizeof(XrAotFrameHeader))
+        return NULL;
+    XrAotFrameHeader *header =
+        (XrAotFrameHeader *) xr_malloc(sizeof(XrAotFrameHeader) + size_class);
+    if (!header)
+        return NULL;
+    header->h.next = NULL;
+    header->h.size_class = size_class;
+    header->h.owner_token = owner_token;
+    header->h.bucket = cacheable ? bucket : UINT32_MAX;
+    return (void *) (header + 1);
 }
 
 void xr_aot_frame_free(void *frame) {
-    xr_free(frame);
+    if (!frame)
+        return;
+    XrAotFrameHeader *header = ((XrAotFrameHeader *) frame) - 1;
+    uint32_t bucket = header->h.bucket;
+    if (header->h.owner_token == aot_frame_owner_token() && bucket < XR_AOT_FRAME_CACHE_BUCKETS &&
+        tls_aot_frame_cache_count[bucket] < XR_AOT_FRAME_CACHE_MAX_PER_BUCKET) {
+        header->h.next = tls_aot_frame_cache[bucket];
+        tls_aot_frame_cache[bucket] = header;
+        tls_aot_frame_cache_count[bucket]++;
+        return;
+    }
+    xr_free(header);
 }
 
 void xr_aot_runtime_config_init(XrAotRuntimeConfig *cfg) {
@@ -394,23 +527,39 @@ XrCoroutine *xr_coro_create_aot(XrAotRuntime *runtime, const XrAotCoroDesc *desc
         return NULL;
     }
 
-    XrAotCoroState *state = (XrAotCoroState *) xr_calloc(1, sizeof(XrAotCoroState));
-    if (!state) {
+    XrCoroutine *coro = xr_coro_create_runtime_empty(core, scheduler, name ? name : desc->name);
+    if (!coro) {
         aot_release_frame(desc, frame, NULL);
         return NULL;
+    }
+
+    if (coro->backend && coro->backend != &aot_runtime_backend_vtable) {
+        if (coro->backend->destroy) {
+            coro->backend->destroy(coro);
+        } else {
+            coro->backend = NULL;
+            coro->backend_state = NULL;
+            coro->gc_flags &= ~XR_CORO_GC_BACKEND_STATE_OWNED;
+        }
+    }
+
+    XrAotCoroState *state = NULL;
+    if (coro->backend == &aot_runtime_backend_vtable)
+        state = aot_state_from_coro(coro);
+    if (!state) {
+        state = (XrAotCoroState *) xr_calloc(1, sizeof(XrAotCoroState));
+        if (!state) {
+            xr_coro_discard_runtime_empty(scheduler, coro);
+            aot_release_frame(desc, frame, NULL);
+            return NULL;
+        }
     }
     state->desc = desc;
     state->frame = frame;
     state->runtime = runtime;
 
-    XrCoroutine *coro = xr_coro_create_runtime_empty(core, scheduler, name ? name : desc->name);
-    if (!coro) {
-        aot_release_frame(desc, frame, NULL);
-        xr_free(state);
-        return NULL;
-    }
-
     xr_coro_attach_backend(coro, &aot_runtime_backend_vtable, state);
+    coro->gc_flags |= XR_CORO_GC_BACKEND_STATE_OWNED;
     return coro;
 }
 

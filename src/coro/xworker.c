@@ -787,6 +787,81 @@ void xr_runtime_spawn(XrRuntime *runtime, XrCoroutine *coro) {
     XR_DBG_CORO("spawn: coro id=%d injected with affinity Worker %d", coro->id, target->p.id);
 }
 
+typedef struct XrSpawnBatch {
+    XrCoroutine *first;
+    XrCoroutine *last;
+    int count;
+} XrSpawnBatch;
+
+static void spawn_batch_append(XrSpawnBatch *batch, XrCoroutine *coro) {
+    if (!batch || !coro)
+        return;
+    coro->sched_link = NULL;
+    if (batch->last) {
+        batch->last->sched_link = coro;
+    } else {
+        batch->first = coro;
+    }
+    batch->last = coro;
+    batch->count++;
+}
+
+void xr_runtime_spawn_batch(XrRuntime *runtime, XrCoroutine **coros, int count) {
+    XR_DCHECK(runtime != NULL, "runtime_spawn_batch: NULL runtime");
+    if (!runtime || !coros || count <= 0)
+        return;
+    xr_runtime_ensure_workers(runtime);
+
+    XrWorker *current = xr_current_worker();
+    if (!current || current->p.runtime != runtime || runtime->worker_count <= 1) {
+        for (int i = 0; i < count; i++) {
+            if (coros[i]) {
+                xr_coro_flags_clear(coros[i], XR_CORO_FLG_DEFERRED_SUBMIT);
+                xr_runtime_spawn(runtime, coros[i]);
+            }
+        }
+        return;
+    }
+
+    XrSpawnBatch batches[XR_MAX_WORKERS];
+    int touched_targets[XR_MAX_WORKERS];
+    int touched_count = 0;
+    memset(batches, 0, sizeof(batches));
+
+    int valid_count = 0;
+    for (int i = 0; i < count; i++) {
+        XrCoroutine *coro = coros[i];
+        if (!coro)
+            continue;
+        xr_coro_flags_clear(coro, XR_CORO_FLG_DEFERRED_SUBMIT);
+        int target_id = (current->p.id + 1 + valid_count) % runtime->worker_count;
+        atomic_store_explicit(&coro->affinity_p, target_id, memory_order_relaxed);
+        if (batches[target_id].count == 0)
+            touched_targets[touched_count++] = target_id;
+        spawn_batch_append(&batches[target_id], coro);
+        valid_count++;
+    }
+
+    int remote_ready_count = 0;
+    current->p.stats.spawned_count += (uint64_t) valid_count;
+    for (int ti = 0; ti < touched_count; ti++) {
+        int target_id = touched_targets[ti];
+        XrSpawnBatch *batch = &batches[target_id];
+        if (target_id == current->p.id) {
+            (void) xr_worker_push_lifo_batch(current, batch->first);
+        } else {
+            xr_worker_inbox_enqueue_batch(runtime, target_id, batch->first, batch->last,
+                                          batch->count);
+            remote_ready_count += batch->count;
+        }
+    }
+
+    if (remote_ready_count > 0 &&
+        atomic_load_explicit(&runtime->spinning_count, memory_order_relaxed) == 0) {
+        xr_runtime_wake_idle_worker(runtime);
+    }
+}
+
 // Spawn coroutine into specified Worker's local queue
 void xr_runtime_spawn_local(XrWorker *worker, XrCoroutine *coro) {
     XR_DCHECK(worker != NULL, "runtime_spawn_local: NULL worker");

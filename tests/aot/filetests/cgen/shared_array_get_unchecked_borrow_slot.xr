@@ -1,0 +1,15 @@
+fn readSlot(outputs: Array<Bytes>, index: int) -> int {
+    shared const sharedOutputs = outputs
+    unsafe {
+        let block = sharedOutputs.getUnchecked(index)
+        return block.length
+    }
+}
+
+let block = Bytes.withCapacity(1)
+unsafe {
+    block.pushUnchecked(7)
+}
+let outputs: Array<Bytes> = []
+outputs.push(block)
+print(readSlot(outputs, 0))

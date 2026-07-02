@@ -1,0 +1,26 @@
+shared const latch = CountdownLatch(2)
+shared const counter = Atomic(0)
+
+go fn() {
+    counter.add(10)
+    latch.done()
+}()
+
+go fn() {
+    counter.add(20)
+    latch.done()
+}()
+
+print(latch.wait())
+print(counter.load())
+print(latch.remaining)
+
+print(latch.reset(1))
+
+go fn() {
+    counter.add(5)
+    latch.done()
+}()
+
+print(latch.wait())
+print(counter.load())

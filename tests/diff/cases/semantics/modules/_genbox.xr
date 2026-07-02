@@ -1,0 +1,17 @@
+// Generic library imported by xmod_namespace_generic.xr (skipped as a
+// standalone diff case because its basename starts with '_'). A generic class
+// with a plain method and a generic method taking a closure exercises
+// cross-module generic method resolution plus closure expected-type
+// propagation through a namespace import (`ns.Box<T>(...)`).
+export class Box<T> {
+    value: T
+    constructor(v: T) {
+        this.value = v
+    }
+    get() -> T {
+        return this.value
+    }
+    map<U>(f: (T) -> U) -> U {
+        return f(this.value)
+    }
+}

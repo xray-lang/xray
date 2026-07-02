@@ -100,6 +100,39 @@ XR_FUNC AstNode *xr_ast_for_in_keyvalue_stmt(XrCompilerSession *session, const c
                                              XrTypeRef *item_type, AstNode *collection,
                                              AstNode *body, int line);
 
+// Create parallel-for loop node
+XR_FUNC AstNode *xr_ast_parallel_for_stmt(XrCompilerSession *session, const char *label,
+                                          const char *item_name, AstNode *range,
+                                          AstNode *worker_count, const char *worker_name,
+                                          XrParallelLocalBinding *locals, int local_count,
+                                          AstNode *final_body, AstNode *body, int line);
+XR_FUNC AstNode *xr_ast_parallel_range_stmt(XrCompilerSession *session, const char *label,
+                                            const char *begin_name, const char *end_name,
+                                            AstNode *range, AstNode *worker_count,
+                                            const char *worker_name, XrParallelLocalBinding *locals,
+                                            int local_count, AstNode *final_body, AstNode *body,
+                                            int line);
+
+// Create parallel-reduce expression node
+XR_FUNC AstNode *xr_ast_parallel_reduce_expr(XrCompilerSession *session, const char *item_name,
+                                             AstNode *range, AstNode *worker_count,
+                                             const char *worker_name,
+                                             XrParallelLocalBinding *locals, int local_count,
+                                             AstNode *initial, AstNode *combine, AstNode *body,
+                                             int line);
+XR_FUNC AstNode *xr_ast_parallel_range_reduce_expr(
+    XrCompilerSession *session, const char *begin_name, const char *end_name, AstNode *range,
+    AstNode *worker_count, const char *worker_name, XrParallelLocalBinding *locals, int local_count,
+    AstNode *initial, AstNode *combine, AstNode *body, int line);
+
+// Create parallel-collect expression node
+XR_FUNC AstNode *xr_ast_parallel_collect_expr(XrCompilerSession *session, const char *item_name,
+                                              AstNode *range, AstNode *worker_count,
+                                              const char *worker_name,
+                                              XrParallelLocalBinding *locals, int local_count,
+                                              AstNode *into, AstNode *final_body, AstNode *body,
+                                              int line);
+
 // Create break statement node
 XR_FUNC AstNode *xr_ast_break_stmt(XrCompilerSession *session, const char *label, int line);
 
@@ -385,7 +418,8 @@ XR_FUNC AstNode *xr_ast_go_expr(XrCompilerSession *session, AstNode *expr, const
 
 // Create await expression node
 XR_FUNC AstNode *xr_ast_await_expr(XrCompilerSession *session, AstNode *expr, AstNode *timeout,
-                                   bool is_any, bool is_all, bool is_any_success, int line);
+                                   AstNode *into, bool is_any, bool is_all, bool is_any_success,
+                                   int line);
 
 // Create Channel creation node
 XR_FUNC AstNode *xr_ast_channel_new(XrCompilerSession *session, AstNode *buffer_size, int line);

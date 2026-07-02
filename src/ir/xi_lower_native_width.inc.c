@@ -176,11 +176,11 @@ static uint16_t xi_widen_op_for_elem(struct XrType *elem_type) {
     }
 }
 
-/* Get element type from a container type (Array<T> or [N]T). */
+/* Get element type from a contiguous container type (Array<T>, Span<T>, or [N]T). */
 static struct XrType *xi_get_container_elem_type(struct XrType *container_type) {
     if (!container_type)
         return NULL;
-    if (container_type->kind == XR_KIND_ARRAY)
+    if (container_type->kind == XR_KIND_ARRAY || container_type->kind == XR_KIND_SPAN)
         return container_type->container.element_type;
     if (container_type->kind == XR_KIND_FIXED_ARRAY)
         return container_type->fixed_array.element_type;
@@ -193,7 +193,8 @@ static bool xi_type_is_bytes(struct XrType *type) {
 }
 
 static int64_t xi_array_cfield_from_type(struct XrType *type) {
-    if (!type || !XR_TYPE_IS_ARRAY(type) || !type->container.element_type)
+    if (!type || !(XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SPAN(type)) ||
+        !type->container.element_type)
         return 0;
     uint8_t tid = xr_type_to_tid(type->container.element_type);
     return (int64_t) (tid << 2);

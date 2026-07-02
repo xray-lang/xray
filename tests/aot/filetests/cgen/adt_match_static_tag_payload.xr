@@ -1,0 +1,26 @@
+enum FastResult<T> {
+    Ok(T),
+    Err(int)
+}
+
+fn pick(ok: bool) -> FastResult<int> {
+    if (ok) {
+        return FastResult.Ok(41)
+    }
+    return FastResult.Err(9)
+}
+
+fn score(ok: bool) -> int {
+    let result = pick(ok)
+    match (result) {
+        FastResult.Ok(value) -> {
+            return value + 1
+        }
+        FastResult.Err(code) -> {
+            return 0 - code
+        }
+    }
+}
+
+print(score(true))
+print(score(false))

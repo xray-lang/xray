@@ -2788,6 +2788,78 @@ module mem {
     link_object: false
     layer: "runtime"
   }
+
+  fn popcount {
+    signature: "(x: int): int"
+    doc: "Number of set bits in the 64-bit value"
+    vm: "mem_popcount"
+    aot: "xrt_mem_popcount"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn leadingZeros {
+    signature: "(x: int): int"
+    doc: "Count of leading zero bits (0 -> 64)"
+    vm: "mem_leading_zeros"
+    aot: "xrt_mem_leading_zeros"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn trailingZeros {
+    signature: "(x: int): int"
+    doc: "Count of trailing zero bits (0 -> 64)"
+    vm: "mem_trailing_zeros"
+    aot: "xrt_mem_trailing_zeros"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn byteswap {
+    signature: "(x: int): int"
+    doc: "Reverse the byte order of the 64-bit value"
+    vm: "mem_byteswap"
+    aot: "xrt_mem_byteswap"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn rotateLeft {
+    signature: "(x: int, n: int): int"
+    doc: "Rotate the 64-bit value left by n bits (n mod 64)"
+    vm: "mem_rotate_left"
+    aot: "xrt_mem_rotate_left"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn rotateRight {
+    signature: "(x: int, n: int): int"
+    doc: "Rotate the 64-bit value right by n bits (n mod 64)"
+    vm: "mem_rotate_right"
+    aot: "xrt_mem_rotate_right"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
 }
 
 module net {

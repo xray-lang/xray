@@ -16,6 +16,7 @@
 
 #include "xatomic.h"
 #include "xnative_type.h"
+#include "../core/xr_runtime_core.h"
 #include "../mem/xsystem_heap.h"
 #include "../mem/xheap.h"
 #include "../xshared.h"
@@ -32,11 +33,11 @@
 
 /* ========== Constructor ========== */
 
-XrAtomic *xr_atomic_new(XrVMRuntime *X, XrAtomicKind kind, int64_t initial) {
-    XR_DCHECK(X != NULL, "xr_atomic_new: NULL isolate");
-    XR_DCHECK(kind <= XR_ATOMIC_BOOL, "xr_atomic_new: invalid kind");
+XrAtomic *xr_atomic_new_core(XrRuntimeCore *core, XrAtomicKind kind, int64_t initial) {
+    XR_DCHECK(core != NULL, "xr_atomic_new_core: NULL runtime core");
+    XR_DCHECK(kind <= XR_ATOMIC_BOOL, "xr_atomic_new_core: invalid kind");
 
-    XrSystemHeap *heap = xr_isolate_get_sys_heap(X);
+    XrSystemHeap *heap = core ? core->sys_heap : NULL;
     if (!heap)
         return NULL;
 
@@ -54,31 +55,36 @@ XrAtomic *xr_atomic_new(XrVMRuntime *X, XrAtomicKind kind, int64_t initial) {
     return a;
 }
 
+XrAtomic *xr_atomic_new(XrVMRuntime *X, XrAtomicKind kind, int64_t initial) {
+    XR_DCHECK(X != NULL, "xr_atomic_new: NULL isolate");
+    return xr_atomic_new_core(xr_isolate_get_runtime_core(X), kind, initial);
+}
+
 /* ========== Core Atomic Operations ========== */
 
 int64_t xr_atomic_load(XrAtomic *a, XrAtomicOrdering ord) {
     XR_DCHECK(a != NULL, "xr_atomic_load: NULL atomic");
-    return atomic_load_explicit(&a->value, xr_to_c11_order(ord));
+    return atomic_load_explicit(&a->value, xr_to_c11_load_order(ord));
 }
 
 void xr_atomic_store(XrAtomic *a, int64_t val, XrAtomicOrdering ord) {
     XR_DCHECK(a != NULL, "xr_atomic_store: NULL atomic");
-    atomic_store_explicit(&a->value, val, xr_to_c11_order(ord));
+    atomic_store_explicit(&a->value, val, xr_to_c11_store_order(ord));
 }
 
 int64_t xr_atomic_fetch_add(XrAtomic *a, int64_t delta, XrAtomicOrdering ord) {
     XR_DCHECK(a != NULL, "xr_atomic_fetch_add: NULL atomic");
-    return atomic_fetch_add_explicit(&a->value, delta, xr_to_c11_order(ord));
+    return atomic_fetch_add_explicit(&a->value, delta, xr_to_c11_rmw_order(ord));
 }
 
 int64_t xr_atomic_fetch_sub(XrAtomic *a, int64_t delta, XrAtomicOrdering ord) {
     XR_DCHECK(a != NULL, "xr_atomic_fetch_sub: NULL atomic");
-    return atomic_fetch_sub_explicit(&a->value, delta, xr_to_c11_order(ord));
+    return atomic_fetch_sub_explicit(&a->value, delta, xr_to_c11_rmw_order(ord));
 }
 
 int64_t xr_atomic_swap(XrAtomic *a, int64_t desired, XrAtomicOrdering ord) {
     XR_DCHECK(a != NULL, "xr_atomic_swap: NULL atomic");
-    return atomic_exchange_explicit(&a->value, desired, xr_to_c11_order(ord));
+    return atomic_exchange_explicit(&a->value, desired, xr_to_c11_rmw_order(ord));
 }
 
 bool xr_atomic_compare_exchange(XrAtomic *a, int64_t *expected, int64_t desired,
@@ -88,7 +94,7 @@ bool xr_atomic_compare_exchange(XrAtomic *a, int64_t *expected, int64_t desired,
     /* Strong CAS: no spurious failures. On failure, *expected is
      * updated to the current value (standard C11 behaviour). */
     return atomic_compare_exchange_strong_explicit(&a->value, expected, desired,
-                                                   xr_to_c11_order(ord), memory_order_relaxed);
+                                                   xr_to_c11_rmw_order(ord), memory_order_relaxed);
 }
 
 /* ========== Ordering Argument Parser ========== */
@@ -156,15 +162,17 @@ static XrValue m_add(XrVMRuntime *isolate, XrValue self, XrValue *args, int narg
         xr_atomic_fetch_add(a, XR_TO_INT(args[0]), ord);
     } else if (a->kind == XR_ATOMIC_FLOAT) {
         /* Float add: CAS loop (no hardware atomic float add) */
+        XrAtomicOrdering ord = parse_ordering(args, nargs, 1);
         double delta = XR_TO_FLOAT(args[0]);
-        int64_t cur = atomic_load(&a->value);
+        int64_t cur = atomic_load_explicit(&a->value, xr_to_c11_load_order(ord));
         for (;;) {
             double dval;
             memcpy(&dval, &cur, sizeof(dval));
             dval += delta;
             int64_t desired;
             memcpy(&desired, &dval, sizeof(desired));
-            if (atomic_compare_exchange_weak(&a->value, &cur, desired))
+            if (atomic_compare_exchange_weak_explicit(
+                    &a->value, &cur, desired, xr_to_c11_rmw_order(ord), memory_order_relaxed))
                 break;
         }
     }
@@ -182,15 +190,17 @@ static XrValue m_sub(XrVMRuntime *isolate, XrValue self, XrValue *args, int narg
         XrAtomicOrdering ord = parse_ordering(args, nargs, 1);
         xr_atomic_fetch_sub(a, XR_TO_INT(args[0]), ord);
     } else if (a->kind == XR_ATOMIC_FLOAT) {
+        XrAtomicOrdering ord = parse_ordering(args, nargs, 1);
         double delta = XR_TO_FLOAT(args[0]);
-        int64_t cur = atomic_load(&a->value);
+        int64_t cur = atomic_load_explicit(&a->value, xr_to_c11_load_order(ord));
         for (;;) {
             double dval;
             memcpy(&dval, &cur, sizeof(dval));
             dval -= delta;
             int64_t desired;
             memcpy(&desired, &dval, sizeof(desired));
-            if (atomic_compare_exchange_weak(&a->value, &cur, desired))
+            if (atomic_compare_exchange_weak_explicit(
+                    &a->value, &cur, desired, xr_to_c11_rmw_order(ord), memory_order_relaxed))
                 break;
         }
     }
@@ -210,8 +220,9 @@ static XrValue m_fetch_add(XrVMRuntime *isolate, XrValue self, XrValue *args, in
         return xr_int(old);
     }
     if (a->kind == XR_ATOMIC_FLOAT) {
+        XrAtomicOrdering ord = parse_ordering(args, nargs, 1);
         double delta = XR_TO_FLOAT(args[0]);
-        int64_t cur = atomic_load(&a->value);
+        int64_t cur = atomic_load_explicit(&a->value, xr_to_c11_load_order(ord));
         for (;;) {
             double dval;
             memcpy(&dval, &cur, sizeof(dval));
@@ -219,7 +230,8 @@ static XrValue m_fetch_add(XrVMRuntime *isolate, XrValue self, XrValue *args, in
             dval += delta;
             int64_t desired;
             memcpy(&desired, &dval, sizeof(desired));
-            if (atomic_compare_exchange_weak(&a->value, &cur, desired))
+            if (atomic_compare_exchange_weak_explicit(
+                    &a->value, &cur, desired, xr_to_c11_rmw_order(ord), memory_order_relaxed))
                 return xr_float(old_val);
         }
     }
@@ -239,8 +251,9 @@ static XrValue m_fetch_sub(XrVMRuntime *isolate, XrValue self, XrValue *args, in
         return xr_int(old);
     }
     if (a->kind == XR_ATOMIC_FLOAT) {
+        XrAtomicOrdering ord = parse_ordering(args, nargs, 1);
         double delta = XR_TO_FLOAT(args[0]);
-        int64_t cur = atomic_load(&a->value);
+        int64_t cur = atomic_load_explicit(&a->value, xr_to_c11_load_order(ord));
         for (;;) {
             double dval;
             memcpy(&dval, &cur, sizeof(dval));
@@ -248,7 +261,8 @@ static XrValue m_fetch_sub(XrVMRuntime *isolate, XrValue self, XrValue *args, in
             dval -= delta;
             int64_t desired;
             memcpy(&desired, &dval, sizeof(desired));
-            if (atomic_compare_exchange_weak(&a->value, &cur, desired))
+            if (atomic_compare_exchange_weak_explicit(
+                    &a->value, &cur, desired, xr_to_c11_rmw_order(ord), memory_order_relaxed))
                 return xr_float(old_val);
         }
     }
@@ -299,7 +313,7 @@ static XrValue m_toggle(XrVMRuntime *isolate, XrValue self, XrValue *args, int n
 
     XrAtomicOrdering ord = parse_ordering(args, nargs, 0);
     /* XOR 1 toggles the bool bit */
-    int64_t old = atomic_fetch_xor_explicit(&a->value, 1, xr_to_c11_order(ord));
+    int64_t old = atomic_fetch_xor_explicit(&a->value, 1, xr_to_c11_rmw_order(ord));
     return xr_bool(old != 0);
 }
 
@@ -310,7 +324,7 @@ static XrValue m_to_string(XrVMRuntime *isolate, XrValue self, XrValue *args, in
     XrAtomic *a = xr_value_to_atomic(self);
     XR_DCHECK(a != NULL, "Atomic.toString: NULL atomic");
 
-    int64_t raw = atomic_load(&a->value);
+    int64_t raw = atomic_load_explicit(&a->value, memory_order_seq_cst);
     XrValue inner = xr_atomic_unpack(raw, (XrAtomicKind) a->kind);
     XrString *s = xr_value_to_string(isolate, inner);
     return xr_string_value(s);
@@ -322,6 +336,7 @@ static XrValue m_to_string(XrVMRuntime *isolate, XrValue self, XrValue *args, in
 static XrValue xr_builtin_atomic_construct(XrVMRuntime *isolate, XrValue receiver, XrValue *args,
                                            int nargs) {
     (void) receiver;
+    (void) nargs;
     XR_DCHECK(nargs >= 1, "Atomic constructor requires initial value");
 
     XrAtomicKind kind;

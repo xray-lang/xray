@@ -1,0 +1,2 @@
+contains=function 1 name=uncheckedDiv module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
+c_contains=xrt_int_div(

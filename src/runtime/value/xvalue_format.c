@@ -331,29 +331,36 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
                     xr_strbuf_append_cstr(sb, "StringBuilder()", 14);
                 }
             } else if (cls && cls->builtin_kind == XR_BK_ADT_ENUM) {
-                /* ADT enum instance: fields[0]=XrEnumValue*, fields[1..N]=payload.
+                /* ADT enum instance: fields[0]=int tag, fields[1..N]=payload.
                  * Format as "EnumName.Variant(p1, p2, ...)" */
                 XrValue tag_val = inst->fields[0];
-                if (XR_IS_PTR(tag_val) && XR_IS_ENUM_VALUE(tag_val)) {
-                    XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(tag_val);
-                    if (ev->enum_name)
-                        xr_strbuf_append_cstr(sb, ev->enum_name, strlen(ev->enum_name));
-                    xr_strbuf_append_cstr(sb, ".", 1);
-                    if (ev->member_name)
-                        xr_strbuf_append_cstr(sb, ev->member_name, strlen(ev->member_name));
-                    /* Append payload if any */
-                    XrEnumType *etype = ev->parent_type;
-                    int pc = (etype && etype->payload_counts)
-                                 ? etype->payload_counts[ev->member_index]
-                                 : 0;
-                    if (pc > 0) {
-                        xr_strbuf_append_cstr(sb, "(", 1);
-                        for (int fi = 0; fi < pc; fi++) {
-                            if (fi > 0)
-                                xr_strbuf_append_cstr(sb, ", ", 2);
-                            xr_value_to_strbuf(isolate, sb, inst->fields[1 + fi], depth + 1);
+                XrEnumType *etype = (XrEnumType *) cls->builtin_data;
+                if (XR_IS_INT(tag_val) && etype && etype->members) {
+                    int64_t tag_index = XR_TO_INT(tag_val);
+                    XrEnumValue *ev = (tag_index >= 0 && (uint64_t) tag_index < etype->member_count)
+                                          ? etype->members[tag_index].instance
+                                          : NULL;
+                    if (!ev) {
+                        xr_strbuf_append_cstr(sb, cls->name ? cls->name : "<adt>",
+                                              cls->name ? strlen(cls->name) : 5);
+                        xr_strbuf_append_cstr(sb, "{...}", 5);
+                    } else {
+                        if (ev->enum_name)
+                            xr_strbuf_append_cstr(sb, ev->enum_name, strlen(ev->enum_name));
+                        xr_strbuf_append_cstr(sb, ".", 1);
+                        if (ev->member_name)
+                            xr_strbuf_append_cstr(sb, ev->member_name, strlen(ev->member_name));
+                        int pc =
+                            (etype && etype->payload_counts) ? etype->payload_counts[tag_index] : 0;
+                        if (pc > 0) {
+                            xr_strbuf_append_cstr(sb, "(", 1);
+                            for (int fi = 0; fi < pc; fi++) {
+                                if (fi > 0)
+                                    xr_strbuf_append_cstr(sb, ", ", 2);
+                                xr_value_to_strbuf(isolate, sb, inst->fields[1 + fi], depth + 1);
+                            }
+                            xr_strbuf_append_cstr(sb, ")", 1);
                         }
-                        xr_strbuf_append_cstr(sb, ")", 1);
                     }
                 } else {
                     xr_strbuf_append_cstr(sb, cls->name ? cls->name : "<adt>",

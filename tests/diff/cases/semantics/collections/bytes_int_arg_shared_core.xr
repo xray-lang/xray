@@ -8,10 +8,12 @@ let dyn: Json = {
 
 let bytes = Bytes(8, 1)
 let src = Bytes(8, 2)
+let view: ByteSpan = bytes
 
 fn show_load_u32() {
     try {
-        print(bytes.loadU32LE(dyn.badOffset))
+        let value: uint32 = view.loadLE<uint32>(dyn.badOffset)
+        print(int(value))
     } catch panic (p) {
         print(p.message)
         print(p.code)
@@ -20,16 +22,19 @@ fn show_load_u32() {
 
 fn show_load_u64() {
     try {
-        print(bytes.loadU64LE(dyn.badOffset))
+        let value: uint64 = view.loadLE<uint64>(dyn.badOffset)
+        print(int(value))
     } catch panic (p) {
         print(p.message)
         print(p.code)
     }
 }
 
-fn show_copy_within() {
+fn show_append_from() {
     try {
-        bytes.copyWithin(dyn.badDst, 0, 1)
+        unsafe {
+            bytes.appendFromUnchecked(src, dyn.badOffset, 1)
+        }
         print(bytes[0])
     } catch panic (p) {
         print(p.message)
@@ -37,9 +42,11 @@ fn show_copy_within() {
     }
 }
 
-fn show_copy_from() {
+fn show_repeat_distance() {
     try {
-        bytes.copyFrom(src, dyn.badOffset, 0, 1)
+        unsafe {
+            bytes.repeatFromUnchecked(dyn.badDst, 1)
+        }
         print(bytes[0])
     } catch panic (p) {
         print(p.message)
@@ -49,7 +56,9 @@ fn show_copy_from() {
 
 fn show_repeat_from() {
     try {
-        bytes.repeatFrom(2, 1, dyn.badCount)
+        unsafe {
+            bytes.repeatFromUnchecked(1, dyn.badCount)
+        }
         print(bytes[0])
     } catch panic (p) {
         print(p.message)
@@ -59,6 +68,6 @@ fn show_repeat_from() {
 
 show_load_u32()
 show_load_u64()
-show_copy_within()
-show_copy_from()
+show_append_from()
+show_repeat_distance()
 show_repeat_from()

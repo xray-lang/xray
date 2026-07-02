@@ -127,10 +127,50 @@ TEST(close_without_workers_keeps_waiter_blocked) {
     work_queue_fixture_cleanup(&f);
 }
 
+TEST(push_int_range_distributes_values_by_shard) {
+    WorkQueueFixture f;
+    ASSERT_TRUE(work_queue_fixture_init(&f));
+
+    XrWorkQueue *q = xr_work_queue_new(&f.core, &f.runtime, 4, 1);
+    ASSERT_NOT_NULL(q);
+
+    ASSERT_EQ_INT((int) xr_work_queue_push_int_range_core(&f.core, q, 10, 6, 0), 6);
+    ASSERT_EQ_INT((int) xr_work_queue_length(q), 6);
+
+    bool ok = false;
+    XrValue value = xr_work_queue_try_pop_for_coro_core(&f.core, q, 0, NULL, &ok);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(XR_TO_INT(value), 14);
+    value = xr_work_queue_try_pop_for_coro_core(&f.core, q, 1, NULL, &ok);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(XR_TO_INT(value), 15);
+    value = xr_work_queue_try_pop_for_coro_core(&f.core, q, 2, NULL, &ok);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(XR_TO_INT(value), 12);
+    value = xr_work_queue_try_pop_for_coro_core(&f.core, q, 3, NULL, &ok);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(XR_TO_INT(value), 13);
+    value = xr_work_queue_try_pop_for_coro_core(&f.core, q, 0, NULL, &ok);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(XR_TO_INT(value), 10);
+    value = xr_work_queue_try_pop_for_coro_core(&f.core, q, 1, NULL, &ok);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(XR_TO_INT(value), 11);
+
+    value = xr_work_queue_try_pop_for_coro_core(&f.core, q, 0, NULL, &ok);
+    ASSERT_FALSE(ok);
+    ASSERT_TRUE(XR_IS_NULL(value));
+    ASSERT_EQ_INT((int) xr_work_queue_length(q), 0);
+
+    xr_obj_destroy_work_queue(&q->hdr, NULL);
+    work_queue_fixture_cleanup(&f);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("WorkQueue Wait");
 RUN_TEST(cancel_waiter_unlinks_coroutine_from_work_queue);
 RUN_TEST(close_without_workers_keeps_waiter_blocked);
+RUN_TEST(push_int_range_distributes_values_by_shard);
 
 TEST_MAIN_END()

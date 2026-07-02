@@ -86,7 +86,7 @@ static const XrCliOptionSpec build_options[] = {
     {"c-only", 'c', XR_CLI_VALUE_NONE, false, false, NULL, "Output C source only"},
     {"cc", 'C', XR_CLI_VALUE_STRING, false, false, "CC", "C compiler to use"},
     {"opt", 'O', XR_CLI_VALUE_STRING, false, false, "LEVEL",
-     "Optimization (0,1,2,3,s,fast; default 3)"},
+     "Optimization (0,1,2,3,s,fast; fast keeps O3 and enables native LTO/CPU tuning)"},
     {"debug", 'g', XR_CLI_VALUE_NONE, false, false, NULL, "Emit native debug information"},
     {"cpu", 0, XR_CLI_VALUE_STRING, false, false, "CPU",
      "Tune for CPU via -march (e.g. native); host --native builds only"},

@@ -1,0 +1,61 @@
+fn makeLane(fill: int) -> Array<int> {
+    return Array<int>(2, fill)
+}
+
+fn main() {
+    shared const partials: Array<int> = []
+    let w = 0
+    while (w < 4) {
+        partials.push(0)
+        w = w + 1
+    }
+
+    parallel range begin, end in 0..16 workers 4 worker wid
+        local acc = wid
+        local buf = Bytes.withCapacity(4)
+        local table = makeLane(wid) {
+        unsafe {
+            buf.pushUnchecked(wid)
+        }
+        acc = acc + buf.length + table.length
+        let i = begin
+        while (i < end) {
+            acc = acc + 1
+            i = i + 1
+        }
+        unsafe {
+            partials.setUnchecked(wid, acc)
+        }
+    }
+
+    let total = 0
+    w = 0
+    while (w < 4) {
+        unsafe {
+            total = total + partials.getUnchecked(w)
+        }
+        w = w + 1
+    }
+    print(total)
+
+    let reduced = parallel range reduce begin, end in 0..16 workers 4 worker wid
+        local acc = wid
+        local buf = Bytes.withCapacity(4)
+        local table = makeLane(wid)
+        init 0
+        combine (a: int, b: int) -> a + b {
+        unsafe {
+            buf.pushUnchecked(wid)
+        }
+        acc = acc + buf.length + table.length
+        let i = begin
+        while (i < end) {
+            acc = acc + 1
+            i = i + 1
+        }
+        acc
+    }
+    print(reduced)
+}
+
+main()

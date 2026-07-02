@@ -1,0 +1,11 @@
+// Built-in Semaphore type; implemented by the runtime.
+
+@native
+class Semaphore {
+    available: int
+    isClosed: bool
+    release(count?: int) -> int
+    tryAcquire() -> bool
+    acquire() -> bool
+    close()
+}

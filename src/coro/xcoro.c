@@ -31,7 +31,10 @@
 #include "xtask.h"
 #include "xcoro_pool.h"
 #include "xyieldable.h"
+#include "xcountdown_latch.h"
+#include "xevent_count.h"
 #include "xresult_group.h"
+#include "xsemaphore.h"
 #include "xwork_queue.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xstring.h"
@@ -229,6 +232,9 @@ static void coro_wait_state_reset(XrCoroExt *ext) {
     xr_io_wait_token_reset(&ext->wait.io_token);
     xr_work_queue_wait_token_reset(&ext->wait.work_queue_token);
     xr_result_group_wait_token_reset(&ext->wait.result_group_token);
+    xr_countdown_latch_wait_token_reset(&ext->wait.countdown_latch_token);
+    xr_semaphore_wait_token_reset(&ext->wait.semaphore_token);
+    xr_event_count_wait_token_reset(&ext->wait.event_count_token);
 }
 
 static void coro_wait_state_free(XrCoroExt *ext) {
@@ -350,6 +356,77 @@ XrCoroutine *xr_coro_take_pending_spawn(XrCoroutine *coro) {
     XrCoroutine *child = coro->ext->pending_spawn;
     coro->ext->pending_spawn = NULL;
     return child;
+}
+
+bool xr_coro_add_deferred_spawn(XrCoroutine *coro, XrCoroutine *child) {
+    if (!coro || !child)
+        return false;
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext)
+        return false;
+    if (ext->deferred_spawn_count >= ext->deferred_spawn_capacity) {
+        int next_cap = ext->deferred_spawn_capacity > 0 ? ext->deferred_spawn_capacity * 2 : 8;
+        XrCoroutine **next =
+            (XrCoroutine **) xr_realloc(ext->deferred_spawns, sizeof(XrCoroutine *) * next_cap);
+        if (!next)
+            return false;
+        ext->deferred_spawns = next;
+        ext->deferred_spawn_capacity = next_cap;
+    }
+    ext->deferred_spawns[ext->deferred_spawn_count++] = child;
+    return true;
+}
+
+void xr_coro_submit_deferred_spawns(XrCoroutine *coro) {
+    if (!coro || !coro->ext || coro->ext->deferred_spawn_count <= 0)
+        return;
+    XrCoroExt *ext = coro->ext;
+    int count = ext->deferred_spawn_count;
+    XrCoroutine **children = ext->deferred_spawns;
+    ext->deferred_spawn_count = 0;
+    XrRuntime *runtime = coro->scheduler;
+    if (!runtime) {
+        for (int i = 0; i < count; i++) {
+            xr_coro_detach_scope_child(children[i]);
+            xr_coro_destroy(children[i]);
+        }
+        return;
+    }
+    XrTask *inline_registry_tasks[64];
+    XrTask **registry_tasks = inline_registry_tasks;
+    if (count > (int) (sizeof(inline_registry_tasks) / sizeof(inline_registry_tasks[0]))) {
+        registry_tasks = (XrTask **) xr_malloc((size_t) count * sizeof(XrTask *));
+    }
+    int submit_count = 0;
+    for (int i = 0; i < count; i++) {
+        XrCoroutine *child = children[i];
+        uint32_t old_flags = atomic_fetch_and_explicit(
+            &child->flags, ~(uint32_t) XR_CORO_FLG_DEFERRED_SUBMIT, memory_order_acq_rel);
+        if ((old_flags & XR_CORO_FLG_DEFERRED_SUBMIT) != 0) {
+            children[submit_count] = child;
+            if (registry_tasks)
+                registry_tasks[submit_count] = child->task;
+            submit_count++;
+        }
+    }
+    if (registry_tasks)
+        xr_task_runtime_register_deferred_tasks(runtime, registry_tasks, submit_count);
+    else
+        xr_task_runtime_register_deferred_batch(runtime, children, submit_count);
+    if (registry_tasks && registry_tasks != inline_registry_tasks)
+        xr_free(registry_tasks);
+    xr_runtime_spawn_batch(runtime, children, submit_count);
+}
+
+void xr_coro_discard_deferred_spawns(XrCoroutine *coro) {
+    if (!coro || !coro->ext || coro->ext->deferred_spawn_count <= 0)
+        return;
+    XrCoroExt *ext = coro->ext;
+    for (int i = 0; i < ext->deferred_spawn_count; i++) {
+        xr_coro_detach_scope_child(ext->deferred_spawns[i]);
+        xr_coro_destroy(ext->deferred_spawns[i]);
+    }
+    ext->deferred_spawn_count = 0;
 }
 
 static void coro_clear_scope_membership(XrCoroutine *coro) {
@@ -518,17 +595,34 @@ XrCoroutine *xr_coro_create_runtime_empty(XrRuntimeCore *core, XrRuntime *runtim
     if (!core)
         return NULL;
 
-    XrCoroutine *coro = coro_alloc_lightweight_shell();
+    XrCoroutine *coro = runtime ? xr_coro_pool_get(runtime) : NULL;
+    if (!coro)
+        coro = coro_alloc_lightweight_shell();
     if (!coro)
         return NULL;
 
     if (!xr_coro_init_shell_owner(coro, NULL, core, runtime, NULL, name, false)) {
-        xr_coro_free(coro);
-        xr_coro_discard_uninitialized(coro);
+        xr_coro_discard_runtime_empty(runtime, coro);
         return NULL;
     }
 
     return coro;
+}
+
+void xr_coro_discard_runtime_empty(XrRuntime *runtime, XrCoroutine *coro) {
+    if (!coro)
+        return;
+
+    if ((coro->gc_flags & XR_CORO_GC_FROM_POOL) != 0 && runtime) {
+        XrCoroStructPool *pool = xr_runtime_get_coro_pool(runtime);
+        if (pool && pool->initialized) {
+            xr_coro_free(coro);
+            xr_coro_struct_pool_free(pool, coro);
+            return;
+        }
+    }
+
+    xr_coro_discard_uninitialized(coro);
 }
 
 // Create Native coroutine (C function callback, no Yieldable support)
@@ -578,6 +672,8 @@ void xr_coro_free(XrCoroutine *coro) {
     xr_task_cancel_await_waiters(coro);
     if (coro->ext)
         xr_io_wait_token_cancel(&coro->ext->wait.io_token);
+    if (coro->task && (coro->task->flags & XR_TASK_FLG_DEFERRED_REGISTRY))
+        (void) xr_task_destroy_deferred_unregistered(coro->task);
     coro_release_backend_state(coro, true);
 
     // Free coroutine heap — atomic exchange to prevent double-free race
@@ -590,10 +686,13 @@ void xr_coro_free(XrCoroutine *coro) {
 
     // Cold extension (io_buf, locals, watched_by)
     if (coro->ext) {
+        xr_coro_discard_deferred_spawns(coro);
         if (coro->ext->io_buf)
             xr_free(coro->ext->io_buf);
         coro_wait_state_free(coro->ext);
         coro_select_storage_free(coro->ext);
+        if (coro->ext->deferred_spawns)
+            xr_free(coro->ext->deferred_spawns);
         xr_free(coro->ext);
         coro->ext = NULL;
     }
@@ -657,6 +756,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro_timer_state_reset(coro->ext);
     coro_clear_scope_membership(coro);
     (void) xr_coro_set_pending_spawn(coro, NULL);
+    xr_coro_discard_deferred_spawns(coro);
     // Recycled shells take the clean path in xr_coro_init_shell, which skips
     // the dirty-path ext resets — so the per-lifetime ext fields must be
     // dropped here. locals lives in this coroutine's heap, which
@@ -965,6 +1065,9 @@ void xr_coro_cancel(XrCoroutine *coro) {
         xr_io_wait_token_cancel(&cancel_ext->wait.io_token);
         xr_work_queue_cancel_waiter(coro);
         xr_result_group_cancel_waiter(coro);
+        xr_countdown_latch_cancel_waiter(coro);
+        xr_semaphore_cancel_waiter(coro);
+        xr_event_count_cancel_waiter(coro);
         xr_channel_wait_token_cancel(&cancel_ext->chan_wait_token);
         /* Plain-field surgery requires full ownership: if either detach
          * handed the coro to its owner worker (inbox), that worker finishes

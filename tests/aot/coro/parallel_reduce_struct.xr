@@ -1,0 +1,14 @@
+struct Totals {
+    bytes: int
+    checksum: int
+}
+
+fn reduceTotals(n: int) -> int {
+    let zero = Totals{bytes: 0, checksum: 0}
+    let total = parallel reduce i in 0..n workers 4 worker wid init zero combine (a: Totals, b: Totals) -> Totals{bytes: a.bytes + b.bytes, checksum: a.checksum + b.checksum} {
+        Totals{bytes: i, checksum: wid}
+    }
+    return total.bytes + total.checksum
+}
+
+print(reduceTotals(8))

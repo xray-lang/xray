@@ -1,0 +1,23 @@
+fn recvInt(ch: Channel<int>) -> int {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
+
+fn worker(ch: Channel<int>, value: int) -> int {
+    ch.send(value)
+    return value + 1
+}
+
+fn run() -> int {
+    shared const ch: Channel<int> = Channel(1)
+    let tasks: Array<Task<int>> = []
+    tasks.push(go worker(ch, 41))
+    let received = recvInt(ch)
+    let results = await all tasks
+    ch.close()
+    return received + results[0]
+}
+
+print(run())

@@ -1,0 +1,6 @@
+fn hashStep(seq: uint64) -> uint64 {
+    let mixed = seq << 24
+    return mixed >> 52
+}
+
+print(hashStep(889523592379))

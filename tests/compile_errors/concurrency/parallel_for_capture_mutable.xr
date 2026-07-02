@@ -1,0 +1,7 @@
+fn main() {
+    let n = 4
+    let scale = 2
+    parallel for i in 0..n workers 2 {
+        print(i * scale)
+    }
+}

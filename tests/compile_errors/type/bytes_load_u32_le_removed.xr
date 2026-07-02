@@ -1,0 +1,2 @@
+let bytes = Bytes(8)
+print(bytes.loadU32LE(0))

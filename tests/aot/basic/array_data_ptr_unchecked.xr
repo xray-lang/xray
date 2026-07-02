@@ -1,0 +1,24 @@
+fn fill(out: Bytes, src: Bytes) -> int {
+    unsafe {
+        let p = out.dataMutPtrUnchecked()
+        let sp = src.dataPtrUnchecked()
+        p.copyFromNonOverlappingUnchecked(sp, 4)
+        out.setLengthUnchecked(4)
+    }
+    return out[2]
+}
+
+let src = Bytes(4)
+src[0] = 10
+src[1] = 20
+src[2] = 30
+src[3] = 40
+
+let bytes = Bytes.withCapacity(4)
+print(fill(bytes, src))
+
+let view: ByteSpan = bytes
+unsafe {
+    let p = view.dataPtrUnchecked()
+    print(p[1])
+}

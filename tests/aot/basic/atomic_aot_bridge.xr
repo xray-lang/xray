@@ -1,0 +1,36 @@
+fn bump(counter: Atomic<int>, times: int) -> int {
+    let seen = 0
+    while (seen < times) {
+        counter.fetchAdd(1, Ordering.Relaxed)
+        seen = seen + 1
+    }
+    return seen
+}
+
+shared const counter = Atomic(0)
+counter.store(10, Ordering.Relaxed)
+print(counter.load(Ordering.Relaxed))
+print(counter.fetchAdd(5, Ordering.Relaxed))
+print(counter.load(Ordering.Relaxed))
+
+let (prev, ok) = counter.compareExchange(15, 21, Ordering.SeqCst)
+print(prev)
+print(ok)
+print(counter.swap(7))
+print(counter.load())
+
+shared const flag = Atomic(false)
+print(flag.toggle())
+print(flag.load())
+
+shared const rate = Atomic(1.0)
+rate.add(0.5)
+print(rate.fetchSub(0.25))
+print(rate.load())
+
+scope {
+    go bump(counter, 3)
+    go bump(counter, 4)
+}
+print(counter.load(Ordering.Relaxed))
+print(counter.toString())

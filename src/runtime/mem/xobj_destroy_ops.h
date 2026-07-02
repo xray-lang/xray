@@ -21,6 +21,9 @@ XR_FUNC void xr_runtime_core_enable_task_destroy_ops(struct XrRuntimeCore *core)
 XR_FUNC void xr_runtime_core_enable_channel_destroy_ops(struct XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_enable_work_queue_destroy_ops(struct XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_enable_result_group_destroy_ops(struct XrRuntimeCore *core);
+XR_FUNC void xr_runtime_core_enable_countdown_latch_destroy_ops(struct XrRuntimeCore *core);
+XR_FUNC void xr_runtime_core_enable_semaphore_destroy_ops(struct XrRuntimeCore *core);
+XR_FUNC void xr_runtime_core_enable_event_count_destroy_ops(struct XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_enable_full_destroy_ops(struct XrRuntimeCore *core);
 
 #endif  // XOBJ_DESTROY_OPS_H

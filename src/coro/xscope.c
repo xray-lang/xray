@@ -52,6 +52,37 @@ bool xr_coro_set_scope_sibling(XrCoroutine *coro, XrCoroutine *sibling) {
     return true;
 }
 
+void xr_coro_detach_scope_child(XrCoroutine *coro) {
+    XrScopeContext *scope = xr_coro_parent_scope(coro);
+    if (!scope)
+        return;
+
+    while (atomic_exchange_explicit(&scope->child_lock, true, memory_order_acquire)) {
+    }
+    XrCoroutine *prev = NULL;
+    XrCoroutine *cur = scope->first_child;
+    bool removed = false;
+    while (cur) {
+        XrCoroutine *next = xr_coro_scope_sibling(cur);
+        if (cur == coro) {
+            if (prev) {
+                (void) xr_coro_set_scope_sibling(prev, next);
+            } else {
+                scope->first_child = next;
+            }
+            (void) xr_coro_set_scope_sibling(coro, NULL);
+            removed = true;
+            break;
+        }
+        prev = cur;
+        cur = next;
+    }
+    atomic_store_explicit(&scope->child_lock, false, memory_order_release);
+    if (removed)
+        atomic_fetch_sub_explicit(&scope->count, 1, memory_order_relaxed);
+    (void) xr_coro_set_parent_scope(coro, NULL);
+}
+
 // Add coroutine to current scope.
 //
 // Per-coroutine scope tracking: prefer parent->current_scope, fallback to

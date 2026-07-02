@@ -1,0 +1,49 @@
+fn main() {
+    shared const partials: Array<int> = []
+    let w = 0
+    while (w < 4) {
+        partials.push(0)
+        w = w + 1
+    }
+
+    parallel for i in 0..16 workers 4 worker wid
+        local acc = wid
+        final {
+            unsafe {
+                partials.setUnchecked(wid, acc)
+            }
+        } {
+        acc = acc + 1
+    }
+
+    let total = 0
+    w = 0
+    while (w < 4) {
+        unsafe {
+            total = total + partials.getUnchecked(w)
+        }
+        w = w + 1
+    }
+    print(total)
+
+    shared const ranges: Array<int> = []
+    w = 0
+    while (w < 2) {
+        ranges.push(0)
+        w = w + 1
+    }
+
+    parallel range begin, end in 0..8 workers 2 worker wid
+        local count = 0
+        final {
+            unsafe {
+                ranges.setUnchecked(wid, count)
+            }
+        } {
+        count = end - begin
+    }
+
+    print(ranges[0] + ranges[1])
+}
+
+main()

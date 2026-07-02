@@ -83,7 +83,7 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
     snprintf(include_flag, sizeof(include_flag), "-I%s", xray_include);
     snprintf(lib_flag, sizeof(lib_flag), "-L%s", xray_lib);
 
-    const char *spawn_argv[32];
+    const char *spawn_argv[40];
     int ai = 0;
     spawn_argv[ai++] = cc;
     spawn_argv[ai++] = opt_flag;
@@ -94,6 +94,29 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
         spawn_argv[ai++] = "-g";
         spawn_argv[ai++] = "-fno-omit-frame-pointer";
     }
+    /* Propagate sanitizer flags to this combined compile+link invocation when the
+     * linked libxray_core was built with sanitizers. Without this, a sanitizer
+     * build links the instrumented runtime archive but omits the sanitizer
+     * runtime, leaving the sanitizer interceptor symbols undefined at link time.
+     * The native (-N) path already does this via
+     * xaot_cli_add_build_sanitizer_flags; this is the matching fix for the
+     * default bytecode-embedding path. */
+#if defined(XR_BUILD_ASAN) && XR_BUILD_ASAN
+    spawn_argv[ai++] = "-fsanitize=address";
+    spawn_argv[ai++] = "-fno-omit-frame-pointer";
+#endif
+#if defined(XR_BUILD_UBSAN) && XR_BUILD_UBSAN
+    spawn_argv[ai++] = "-fsanitize=undefined";
+    spawn_argv[ai++] = "-fno-sanitize=function";
+#endif
+#if defined(XR_BUILD_TSAN) && XR_BUILD_TSAN
+    spawn_argv[ai++] = "-fsanitize=thread";
+    spawn_argv[ai++] = "-fno-omit-frame-pointer";
+#endif
+#if defined(XR_BUILD_MSAN) && XR_BUILD_MSAN
+    spawn_argv[ai++] = "-fsanitize=memory";
+    spawn_argv[ai++] = "-fno-omit-frame-pointer";
+#endif
     spawn_argv[ai++] = "-o";
     spawn_argv[ai++] = output_file;
     spawn_argv[ai++] = c_file;
@@ -284,6 +307,10 @@ static bool xaot_cli_manifest_needs_aot_core(const XaotLinkManifest *manifest) {
         return false;
     for (uint32_t i = 0; i < manifest->n_stdlib_objects; i++) {
         if (xaot_cli_stdlib_object_needs_aot_core(manifest->stdlib_objects[i]))
+            return true;
+    }
+    for (uint32_t i = 0; i < manifest->n_stdlib_symbols; i++) {
+        if (xaot_cli_stdlib_object_needs_aot_core(manifest->stdlib_symbols[i]))
             return true;
     }
     return false;
@@ -806,10 +833,16 @@ static const char *make_opt_flag(const char *level, bool debug_symbols) {
         return "-O3";
     if (strcmp(level, "s") == 0)
         return "-Os";
+    /* Xray's fast tier is a whole-program build strategy, not unsafe fast-math:
+     * keep NaN/float semantics intact and let native AOT add LTO/CPU tuning. */
     if (strcmp(level, "fast") == 0)
-        return "-Ofast";
+        return "-O3";
     fprintf(stderr, "Warning: unknown optimization level '%s', using -O3\n", level);
     return "-O3";
+}
+
+static bool build_opt_level_is_fast(const char *level) {
+    return level && strcmp(level, "fast") == 0;
 }
 
 static const char *default_shared_library_output(void) {
@@ -864,6 +897,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     bool rebuild = xr_cli_opt_bool(&inv->options, "rebuild");
     bool lto = xr_cli_opt_bool(&inv->options, "lto");
     bool verbose = xr_cli_opt_bool(&inv->options, "verbose") || (inv->ctx && inv->ctx->verbose);
+    bool opt_fast = build_opt_level_is_fast(opt_level);
     XrCliBuildTarget target;
     XrCliToolchainKind toolchain_kind;
     XrCliToolchainPlan toolchain_plan;
@@ -967,12 +1001,20 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
                                                : xr_cli_build_target_default_output(&target));
 
     const char *opt_flag = make_opt_flag(opt_level, debug_symbols);
+    const char *effective_cpu = cpu;
+    bool effective_lto = lto;
+    if (native_mode && target.is_native && opt_fast) {
+        effective_lto = true;
+        if (!effective_cpu || !effective_cpu[0])
+            effective_cpu = "native";
+    }
 
     if (native_mode) {
-        return cmd_build_native(input_file, output_file, cc, opt_flag, cpu, c_only, strip_symbols,
-                                debug_symbols, shared_library, sysroot, verbose, dump_xaot_plan,
-                                dump_link_manifest, dump_link_command, dry_run_link, c_header,
-                                keep_c, cache_dir_arg, rebuild, lto, &target, &toolchain_plan);
+        return cmd_build_native(input_file, output_file, cc, opt_flag, effective_cpu, c_only,
+                                strip_symbols, debug_symbols, shared_library, sysroot, verbose,
+                                dump_xaot_plan, dump_link_manifest, dump_link_command, dry_run_link,
+                                c_header, keep_c, cache_dir_arg, rebuild, effective_lto, &target,
+                                &toolchain_plan);
     }
     return cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
                               debug_symbols, sysroot);

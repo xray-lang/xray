@@ -155,6 +155,17 @@
   :native-type none
   :storage-rep XR_REP_PTR)
 
+(define-aot-rep rawptr
+  :c-type "void *"
+  :size 8
+  :align 8
+  :signed no
+  :integer no
+  :boxed no
+  :dynamic-kind pointer
+  :native-type none
+  :storage-rep XR_REP_RAWPTR)
+
 (define-aot-rep void
   :c-type "void"
   :size 0

@@ -29,6 +29,18 @@
 
 /* ====== Creation and Destruction ====== */
 
+static atomic_flag xr_array_storage_promotion_lock = ATOMIC_FLAG_INIT;
+
+static void xr_array_storage_promotion_lock_acquire(void) {
+    while (
+        atomic_flag_test_and_set_explicit(&xr_array_storage_promotion_lock, memory_order_acquire)) {
+    }
+}
+
+static void xr_array_storage_promotion_lock_release(void) {
+    atomic_flag_clear_explicit(&xr_array_storage_promotion_lock, memory_order_release);
+}
+
 static void xr_array_retain_elements(XrArray *arr) {
     if (!arr || arr->elem_type != XR_ELEM_ANY || arr->length <= 0)
         return;
@@ -44,6 +56,10 @@ static void xr_array_release_elements(XrArray *arr, XrCoroHeap *heap) {
         xr_rc_release_value(heap, XR_FROM_PTR(arr->source));
         return;
     }
+    /* Storage-backed arrays: the refcounted block owns the ANY element refs and
+     * releases them when the buffer is freed (xr_array_storage_release). */
+    if (arr->storage)
+        return;
     if (arr->elem_type != XR_ELEM_ANY || arr->length <= 0)
         return;
     XrValue *data = (XrValue *) arr->data;
@@ -51,6 +67,184 @@ static void xr_array_release_elements(XrArray *arr, XrCoroHeap *heap) {
         xr_rc_release_value(heap, data[i]);
         data[i] = xr_null();
     }
+}
+
+/* ===== Refcounted array storage block (task 143/144 M2) =====
+ *
+ * A zero-copy slice used to cache `source->data + offset` while only retaining
+ * the source handle, so a source grow that realloc'd the buffer left the slice
+ * dangling. The buffer is now a refcounted system-heap block shared by the
+ * array and its slices; grow forks it when shared, so views keep a stable
+ * snapshot. Covers POD and ANY arrays; ANY element refs are owned by the
+ * storage block and released when its refcount reaches zero. */
+
+static XrArrayStorage *xr_array_storage_alloc(void *data, int64_t bytes, uint8_t is_any) {
+    XrArrayStorage *s = (XrArrayStorage *) xr_malloc(sizeof(XrArrayStorage));
+    if (!s)
+        return NULL;
+    atomic_store_explicit(&s->refcount, 1, memory_order_relaxed);
+    s->data = data;
+    s->byte_capacity = bytes;
+    s->account_heap = NULL;
+    s->accounted_bytes = 0;
+    s->elem_count = 0;
+    s->elem_is_any = is_any;
+    return s;
+}
+
+static void xr_array_storage_account_attach(XrArrayStorage *s, XrCoroHeap *heap, int64_t bytes,
+                                            bool add_now) {
+    if (!s || !heap || bytes <= 0)
+        return;
+    s->account_heap = heap;
+    s->accounted_bytes = bytes;
+    if (add_now)
+        xr_coro_heap_add_external(heap, bytes);
+}
+
+static void xr_array_storage_account_resize(XrArrayStorage *s, int64_t new_bytes) {
+    if (!s || !s->account_heap)
+        return;
+    int64_t old_bytes = s->accounted_bytes;
+    if (new_bytes > old_bytes)
+        xr_coro_heap_add_external((XrCoroHeap *) s->account_heap, new_bytes - old_bytes);
+    else if (new_bytes < old_bytes)
+        xr_coro_heap_sub_external((XrCoroHeap *) s->account_heap, old_bytes - new_bytes);
+    s->accounted_bytes = new_bytes;
+}
+
+/* Promote a non-slice array's buffer to a shared refcounted system-heap storage
+ * block so slices keep it alive across a source grow. Covers POD and ANY
+ * elements; for ANY the storage owns the XrValue refs (released at refcount 0).
+ * No-op for slices or arrays that already have one. Returns false on OOM so
+ * callers do not create an unsafe view with no storage owner. */
+static bool xr_array_ensure_storage(XrArray *arr) {
+    if (!arr || arr->storage || xr_array_is_slice(arr))
+        return true;
+    xr_array_storage_promotion_lock_acquire();
+    if (arr->storage) {
+        xr_array_storage_promotion_lock_release();
+        return true;
+    }
+    uint8_t is_any = (arr->elem_type == XR_ELEM_ANY) ? 1 : 0;
+    int64_t bytes = (int64_t) arr->elem_size * arr->capacity;
+    void *buf = NULL;
+    if (bytes > 0) {
+        buf = xr_malloc((size_t) bytes);
+        if (!buf) {
+            xr_array_storage_promotion_lock_release();
+            return false; /* OOM: leave the array on its current buffer */
+        }
+        if (arr->data)
+            memcpy(buf, arr->data, (size_t) bytes);
+    }
+    XrArrayStorage *s = xr_array_storage_alloc(buf, bytes, is_any);
+    if (!s) {
+        if (buf)
+            xr_free(buf);
+        xr_array_storage_promotion_lock_release();
+        return false;
+    }
+    /* ANY elements are MOVED (not dup'd): ownership transfers from the old buffer
+     * to the storage block. elem_count tracks the owning refs for release. */
+    s->elem_count = is_any ? arr->length : 0;
+    if (!XR_OBJ_IS_SHARED(&arr->hdr)) {
+        /* Existing malloc-backed local arrays already charged their owner heap;
+         * region-backed arrays did not. After promotion, storage owns a system
+         * heap buffer, so charge it exactly once to the source heap. */
+        XrCoroHeap *heap = xr_current_coro_heap();
+        bool add_now = arr->data_on_region_heap;
+        xr_array_storage_account_attach(s, heap, bytes, add_now);
+    }
+    /* Release the old buffer per its current storage mode now that it is copied.
+     * For ANY this frees the raw buffer only — the element refs moved to storage. */
+    if (arr->data) {
+        if (arr->data_on_region_heap)
+            xr_coro_free_blob(xr_current_coro_heap(), arr->data);
+        else if (arr->data_storage == XR_ARRAY_DATA_HEAP)
+            xr_free(arr->data);
+    }
+    arr->storage = s;
+    arr->data = buf;
+    arr->data_on_region_heap = 0;
+    arr->data_storage = XR_ARRAY_DATA_HEAP;
+    xr_array_storage_promotion_lock_release();
+    return true;
+}
+
+/* Grow a storage-backed array. Forks a private copy when the storage is shared
+ * with slices (snapshot semantics). Returns false on OOM (array unchanged). */
+static bool xr_array_storage_grow(XrArray *arr, size_t old_bytes, size_t new_bytes,
+                                  int64_t new_capacity) {
+    XrArrayStorage *s = (XrArrayStorage *) arr->storage;
+    if (atomic_load_explicit(&s->refcount, memory_order_acquire) == 1) {
+        /* Sole owner: realloc in place. Elements move with the buffer (no RC
+         * change); keep elem_count in sync for the eventual release. */
+        void *nd = xr_realloc(s->data, new_bytes);
+        if (!nd)
+            return false;
+        s->data = nd;
+        s->byte_capacity = (int64_t) new_bytes;
+        xr_array_storage_account_resize(s, (int64_t) new_bytes);
+        if (s->elem_is_any)
+            s->elem_count = arr->length;
+        arr->data = nd;
+    } else {
+        void *nd = xr_malloc(new_bytes);
+        if (!nd)
+            return false;
+        if (arr->data && old_bytes > 0)
+            memcpy(nd, arr->data, old_bytes);
+        XrArrayStorage *ns = xr_array_storage_alloc(nd, (int64_t) new_bytes, s->elem_is_any);
+        if (!ns) {
+            xr_free(nd);
+            return false;
+        }
+        /* Fork: both old and new buffers now reference the same ANY elements, so
+         * retain each for the new copy. Freeze the old storage's owning count so
+         * it can release its refs when its last slice goes away. */
+        if (s->elem_is_any) {
+            XrValue *src = (XrValue *) arr->data;
+            for (int64_t i = 0; i < arr->length; i++)
+                xr_rc_retain_value(src[i]);
+            ns->elem_count = arr->length;
+            s->elem_count = arr->length;
+        }
+        if (s->account_heap)
+            xr_array_storage_account_attach(ns, (XrCoroHeap *) s->account_heap, (int64_t) new_bytes,
+                                            true);
+        atomic_fetch_sub_explicit(&s->refcount, 1, memory_order_acq_rel);
+        /* This array leaves the shared (old) storage. */
+        arr->storage = ns;
+        arr->data = nd;
+    }
+    /* External byte accounting is owned by the storage block itself. Do not
+     * also charge the array/grow path here, or local VM arrays double-count. */
+    arr->capacity = new_capacity;
+    return true;
+}
+
+/* Drop one reference to a storage-backed array's buffer, freeing at zero. For ANY
+ * storage the owning XrValue refs (data[0..elem_count)) are released here, so
+ * element lifetime follows the buffer rather than any single array/slice handle. */
+static void xr_array_storage_release(XrArray *arr, XrCoroHeap *owner_heap) {
+    XrArrayStorage *s = (XrArrayStorage *) arr->storage;
+    if (!s)
+        return;
+    if (atomic_fetch_sub_explicit(&s->refcount, 1, memory_order_acq_rel) == 1) {
+        if (s->elem_is_any && s->data) {
+            XrValue *items = (XrValue *) s->data;
+            for (int64_t i = 0; i < s->elem_count; i++)
+                xr_rc_release_value(owner_heap, items[i]);
+        }
+        if (s->data)
+            xr_free(s->data);
+        if (s->account_heap && s->accounted_bytes > 0)
+            xr_coro_heap_sub_external((XrCoroHeap *) s->account_heap, s->accounted_bytes);
+        xr_free(s);
+    }
+    arr->storage = NULL;
+    arr->data = NULL;
 }
 
 static bool xr_array_same_gc_object(XrValue a, XrValue b) {
@@ -91,11 +285,14 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
     arr->length = 0;
     arr->capacity = capacity;
     arr->source = NULL;
+    arr->storage = NULL;
     arr->data_storage = XR_ARRAY_DATA_HEAP;
     arr->elem_type = (uint8_t) elem_type;
     arr->elem_size = esz;
     arr->elem_tid = 0;
     arr->contains_refs = 0;
+    arr->content_version = XR_ARRAY_CONTENT_VERSION_INIT;
+    arr->deferred_submit_version = 0;
     arr->adt_enum_name = NULL;
     arr->adt_member_name = NULL;
     arr->data_on_region_heap = 0;
@@ -132,11 +329,14 @@ void xr_array_init_inplace(XrArray *arr, int capacity, uint8_t elem_type) {
     arr->length = 0;
     arr->capacity = capacity;
     arr->source = NULL;
+    arr->storage = NULL;
     arr->data_storage = XR_ARRAY_DATA_HEAP;
     arr->elem_type = elem_type;
     arr->elem_size = esz;
     arr->elem_tid = 0;
     arr->contains_refs = 0;
+    arr->content_version = XR_ARRAY_CONTENT_VERSION_INIT;
+    arr->deferred_submit_version = 0;
     arr->adt_enum_name = NULL;
     arr->adt_member_name = NULL;
     arr->data_on_region_heap = 0;  // always 0 for inplace arrays
@@ -216,6 +416,7 @@ void xr_array_set_direct(XrArray *arr, int index, XrValue value) {
     xr_array_set_element(arr, index, value);
     if (replacing)
         xr_rc_release_value(xr_current_coro_heap(), old);
+    XR_ARRAY_MARK_MUTATED(arr);
 }
 
 void xr_array_set(XrArray *arr, int index, XrValue value) {
@@ -258,6 +459,7 @@ void xr_array_set(XrArray *arr, int index, XrValue value) {
     xr_array_set_element(arr, index, value);
     if (replacing)
         xr_rc_release_value(xr_current_coro_heap(), old);
+    XR_ARRAY_MARK_MUTATED(arr);
 }
 
 int xr_array_size(XrArray *arr) {
@@ -280,6 +482,7 @@ void xr_array_push(XrArray *arr, XrValue value) {
     }
 
     xr_array_set_element(arr, arr->length++, value);
+    XR_ARRAY_MARK_MUTATED(arr);
     XR_DCHECK(arr->length <= arr->capacity, "array_push: length > capacity after push");
 }
 
@@ -295,6 +498,7 @@ XrValue xr_array_pop(XrArray *arr) {
     }
 
     arr->length--;
+    XR_ARRAY_MARK_MUTATED(arr);
     return xr_array_get_element(arr, arr->length);
 }
 
@@ -315,6 +519,7 @@ void xr_array_unshift(XrArray *arr, XrValue value) {
 
     xr_array_set_element(arr, 0, value);
     arr->length++;
+    XR_ARRAY_MARK_MUTATED(arr);
 }
 
 XrValue xr_array_shift(XrArray *arr) {
@@ -337,6 +542,7 @@ XrValue xr_array_shift(XrArray *arr) {
     }
 
     arr->length--;
+    XR_ARRAY_MARK_MUTATED(arr);
     return first;
 }
 
@@ -344,6 +550,7 @@ void xr_array_clear(XrArray *arr) {
     XR_DCHECK(arr != NULL, "array_clear: NULL array");
     xr_array_release_elements(arr, xr_current_coro_heap());
     arr->length = 0;
+    XR_ARRAY_MARK_MUTATED(arr);
 }
 
 /* ====== Query Methods ====== */
@@ -530,6 +737,7 @@ bool xr_array_resize(XrArray *arr, int64_t length, XrValue fill) {
             }
         }
         arr->length = new_length;
+        XR_ARRAY_MARK_MUTATED(arr);
         return true;
     }
 
@@ -545,6 +753,7 @@ bool xr_array_resize(XrArray *arr, int64_t length, XrValue fill) {
     for (int32_t i = old_length; i < new_length; i++)
         xr_array_set_element(arr, i, fill);
     arr->length = new_length;
+    XR_ARRAY_MARK_MUTATED(arr);
     if (XR_ARRAY_MAY_CONTAIN_REFS(arr)) {
         XR_ARRAY_MARK_REFS(arr, fill);
     }
@@ -609,6 +818,13 @@ void xr_array_grow(XrArray *arr) {
     size_t old_bytes = (size_t) arr->elem_size * old_capacity;
     size_t new_bytes = (size_t) arr->elem_size * new_capacity;
 
+    if (arr->storage) {
+        /* Sliced array: grow via the refcounted storage block (forks when
+         * shared so existing slices keep a stable snapshot). */
+        xr_array_storage_grow(arr, old_bytes, new_bytes, new_capacity);
+        return;
+    }
+
     if (arr->data_on_region_heap) {
         /* Force malloc during grow to avoid Region blob overlap.
          * GC blob allocation may return memory overlapping with
@@ -667,6 +883,12 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
     size_t old_bytes = (size_t) arr->elem_size * old_capacity;
     size_t new_bytes = (size_t) arr->elem_size * new_capacity;
 
+    if (arr->storage) {
+        /* Sliced array: grow via the refcounted storage block. */
+        xr_array_storage_grow(arr, old_bytes, new_bytes, new_capacity);
+        return;
+    }
+
     if (arr->data_on_region_heap) {
         // Force malloc during ensure_capacity to avoid Region blob overlap.
         void *new_data = xr_malloc(new_bytes);
@@ -708,6 +930,13 @@ XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int64_t start, i
     int64_t len = arr->length;
     xr_array_normalize_slice(len, &start, &end);
 
+    // Promote the source buffer to a shared refcounted storage block so the
+    // slice stays valid (snapshot) across a later source grow. May move
+    // arr->data, so do this before computing the slice's data pointer. No-op for
+    // slices (the latter already carry inherited storage).
+    if (!xr_array_ensure_storage(arr))
+        return NULL;
+
     // Allocate slice as XR_TARRAY — slices share Array layout, distinguished by
     // data_storage == XR_ARRAY_DATA_BORROWED.
     XrArray *slice = (XrArray *) xr_alloc(coro, sizeof(XrArray), XR_TARRAY);
@@ -723,6 +952,13 @@ XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int64_t start, i
     // Track source for GC (chase to original if source is also a slice)
     slice->source = arr->source ? arr->source : (void *) arr;
     xr_rc_retain_value(XR_FROM_PTR(slice->source));
+
+    // Share the refcounted storage block. Keeps the backing buffer alive
+    // independently of the source handle's grow/realloc.
+    slice->storage = arr->storage;
+    if (arr->storage)
+        atomic_fetch_add_explicit(&((XrArrayStorage *) arr->storage)->refcount, 1,
+                                  memory_order_acq_rel);
 
     // Inherit elem_type, elem_tid, and contains_refs from source
     slice->elem_type = arr->elem_type;
@@ -766,6 +1002,17 @@ XrArray *xr_array_slice_to_array(struct XrCoroutine *coro, XrArray *slice) {
 void xr_obj_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     XrArray *arr = (XrArray *) obj;
     xr_array_release_elements(arr, owner_heap);
+    // Refcounted storage block (arrays and slices both hold a reference): drop our
+    // reference; the buffer (and, for ANY, its element refs) is freed when the
+    // last view releases it. The owner snapshots its length into elem_count so an
+    // orphaned storage (kept alive only by slices) knows how many refs to release.
+    if (arr->storage) {
+        XrArrayStorage *s = (XrArrayStorage *) arr->storage;
+        if (s->elem_is_any && !xr_array_is_slice(arr))
+            s->elem_count = arr->length;
+        xr_array_storage_release(arr, owner_heap);
+        return;
+    }
     // Only free data if this array owns its buffer (slices borrow it)
     if (arr->data && !xr_array_is_slice(arr)) {
         if (arr->data_on_region_heap) {
@@ -792,28 +1039,31 @@ static bool xr_array_bytes_range_ok(XrArray *arr, int64_t offset, int64_t count)
     return offset + count <= (int64_t) arr->length;
 }
 
-uint32_t xr_array_load_u32_le(XrArray *arr, int64_t offset, bool *ok) {
-    bool valid = xr_array_bytes_range_ok(arr, offset, 4);
-    if (ok)
-        *ok = valid;
-    if (!valid)
+uint16_t xr_array_load_u16_le(XrArray *arr, int64_t offset, bool *ok) {
+    if (!arr) {
+        if (ok)
+            *ok = false;
         return 0;
-    const uint8_t *p = (const uint8_t *) arr->data + offset;
-    return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) |
-           ((uint32_t) p[3] << 24);
+    }
+    return xr_array_core_bytes_load_u16_le(arr->data, arr->length, arr->elem_type, offset, ok);
+}
+
+uint32_t xr_array_load_u32_le(XrArray *arr, int64_t offset, bool *ok) {
+    if (!arr) {
+        if (ok)
+            *ok = false;
+        return 0;
+    }
+    return xr_array_core_bytes_load_u32_le(arr->data, arr->length, arr->elem_type, offset, ok);
 }
 
 uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok) {
-    bool valid = xr_array_bytes_range_ok(arr, offset, 8);
-    if (ok)
-        *ok = valid;
-    if (!valid)
+    if (!arr) {
+        if (ok)
+            *ok = false;
         return 0;
-    const uint8_t *p = (const uint8_t *) arr->data + offset;
-    uint64_t lo = (uint64_t) xr_array_load_u32_le(arr, offset, NULL);
-    uint64_t hi = (uint64_t) p[4] | ((uint64_t) p[5] << 8) | ((uint64_t) p[6] << 16) |
-                  ((uint64_t) p[7] << 24);
-    return lo | (hi << 32);
+    }
+    return xr_array_core_bytes_load_u64_le(arr->data, arr->length, arr->elem_type, offset, ok);
 }
 
 bool xr_array_bytes_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_offset,
@@ -836,25 +1086,123 @@ bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int32_t src_offset, in
     if (count > 0) {
         uint8_t *dst_data = (uint8_t *) dst->data + dst_offset;
         uint8_t *src_data = (uint8_t *) src->data + src_offset;
-        if (dst == src)
-            memmove(dst_data, src_data, (size_t) count);
-        else
-            memcpy(dst_data, src_data, (size_t) count);
+        xr_array_core_copy_or_move_bytes(dst_data, src_data, count);
     }
     return true;
 }
 
 bool xr_array_bytes_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance, int32_t count) {
-    if (!arr || arr->elem_type != XR_ELEM_U8 || distance <= 0 || count < 0 || dst_offset < 0)
+    if (!arr)
         return false;
-    int64_t src_offset = (int64_t) dst_offset - (int64_t) distance;
-    if (src_offset < 0)
+    return xr_array_core_bytes_repeat_from(arr->data, arr->length, arr->elem_type, dst_offset,
+                                           distance, count);
+}
+
+bool xr_array_bytes_append_from_unchecked(XrArray *dst, XrArray *src, int64_t src_offset,
+                                          int64_t count) {
+    if (!dst || !src || dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
         return false;
-    if ((int64_t) dst_offset + (int64_t) count > (int64_t) arr->length)
+    if (xr_array_is_slice(dst))
         return false;
-    uint8_t *data = (uint8_t *) arr->data;
-    for (int32_t i = 0; i < count; i++)
-        data[dst_offset + i] = data[dst_offset - distance + i];
+    if (!xr_array_bytes_range_ok(src, src_offset, count))
+        return false;
+    if (count < 0 || count > dst->capacity - dst->length)
+        return false;
+    if (count > 0) {
+        uint8_t *dst_data = (uint8_t *) dst->data + dst->length;
+        const uint8_t *src_data = (const uint8_t *) src->data + src_offset;
+        if (dst != src && dst->data_storage != XR_ARRAY_DATA_BORROWED &&
+            src->data_storage != XR_ARRAY_DATA_BORROWED)
+            xr_array_core_copy_nonoverlap_bytes(dst_data, src_data, count);
+        else
+            xr_array_core_copy_or_move_bytes(dst_data, src_data, count);
+    }
+    dst->length += count;
+    return true;
+}
+
+bool xr_array_bytes_repeat_from_unchecked(XrArray *arr, int64_t distance, int64_t count) {
+    if (!arr || arr->elem_type != XR_ELEM_U8 || xr_array_is_slice(arr))
+        return false;
+    if (distance <= 0 || count < 0 || distance > arr->length)
+        return false;
+    if (count > arr->capacity - arr->length)
+        return false;
+    int64_t dst = arr->length;
+    xr_array_core_bytes_repeat_copy(arr->data, dst, distance, count);
+    arr->length += count;
+    return true;
+}
+
+bool xr_array_bytes_write_from_unchecked(XrArray *dst, int64_t dst_offset, XrArray *src,
+                                         int64_t src_offset, int64_t count) {
+    if (!dst || !src || dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
+        return false;
+    if (xr_array_is_slice(dst))
+        return false;
+    if (!xr_array_bytes_range_ok(src, src_offset, count))
+        return false;
+    if (dst_offset < 0 || count < 0 || count > dst->capacity - dst_offset)
+        return false;
+    if (count > 0) {
+        uint8_t *dst_data = (uint8_t *) dst->data + dst_offset;
+        const uint8_t *src_data = (const uint8_t *) src->data + src_offset;
+        if (dst != src && dst->data_storage != XR_ARRAY_DATA_BORROWED &&
+            src->data_storage != XR_ARRAY_DATA_BORROWED)
+            xr_array_core_copy_nonoverlap_bytes(dst_data, src_data, count);
+        else
+            xr_array_core_copy_or_move_bytes(dst_data, src_data, count);
+    }
+    return true;
+}
+
+bool xr_array_bytes_repeat_at_unchecked(XrArray *arr, int64_t dst_offset, int64_t distance,
+                                        int64_t count) {
+    if (!arr || arr->elem_type != XR_ELEM_U8 || xr_array_is_slice(arr))
+        return false;
+    if (dst_offset < 0 || distance <= 0 || count < 0 || dst_offset - distance < 0 ||
+        count > arr->capacity - dst_offset)
+        return false;
+    xr_array_core_bytes_repeat_copy(arr->data, dst_offset, distance, count);
+    return true;
+}
+
+bool xr_array_bytes_wild_copy_from_nonoverlapping_unchecked(XrArray *dst, int64_t dst_offset,
+                                                            XrArray *src, int64_t src_offset,
+                                                            int64_t count) {
+    if (!dst || !src || dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
+        return false;
+    if (xr_array_is_slice(dst))
+        return false;
+    int64_t src_limit = xr_array_is_slice(src) ? src->length : src->capacity;
+    if (dst_offset < 0 || src_offset < 0 || count < 0 || count > dst->capacity - dst_offset ||
+        count > src_limit - src_offset)
+        return false;
+    if (count > 0) {
+        uint8_t *dst_data = (uint8_t *) dst->data + dst_offset;
+        const uint8_t *src_data = (const uint8_t *) src->data + src_offset;
+        xr_array_core_copy_nonoverlap_bytes(dst_data, src_data, count);
+    }
+    return true;
+}
+
+bool xr_array_bytes_wild_repeat_at_unchecked(XrArray *arr, int64_t dst_offset, int64_t distance,
+                                             int64_t count) {
+    if (!arr || arr->elem_type != XR_ELEM_U8 || xr_array_is_slice(arr))
+        return false;
+    if (dst_offset < 0 || distance <= 0 || count < 0 || dst_offset - distance < 0 ||
+        count > arr->capacity - dst_offset)
+        return false;
+    xr_array_core_bytes_repeat_copy(arr->data, dst_offset, distance, count);
+    return true;
+}
+
+bool xr_array_bytes_set_length_unchecked(XrArray *arr, int64_t length) {
+    if (!arr || arr->elem_type != XR_ELEM_U8 || xr_array_is_slice(arr))
+        return false;
+    if (length < 0 || length > arr->capacity)
+        return false;
+    arr->length = (int32_t) length;
     return true;
 }
 

@@ -1,0 +1,8 @@
+fn guardedMod(n: int, d: int) -> int {
+    if (d <= 0) {
+        return -1
+    }
+    return n % d
+}
+
+print(guardedMod(17, 5))

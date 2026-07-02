@@ -30,11 +30,102 @@
 #include "xi_opt_inline.h"
 #include "xi_cfg_edit.h"
 #include "xi_tbaa.h"
+#include "xi_ops_gen.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 
 /* ========== Cost Model ========== */
+
+static XiFunc *resolve_callee(const XiFunc *caller, const XiValue *callee_val);
+static bool inline_func_has_error_flow(const XiFunc *f, uint8_t depth);
+
+static bool inline_error_source_passthrough(const XiValue *v) {
+    return v && v->nargs >= 1 &&
+           (v->op == XI_MOVE || xi_copy_is_identity_alias(v) ||
+            xi_generated_op_class(v->op) == XI_GEN_CLASS_CONVERSION);
+}
+
+static const XiValue *inline_prev_block_value(const XiValue *site) {
+    if (!site || !site->block)
+        return NULL;
+    const XiValue *prev = NULL;
+    for (uint32_t i = 0; i < site->block->nvalues; i++) {
+        const XiValue *cur = site->block->values[i];
+        if (cur == site)
+            break;
+        if (cur)
+            prev = cur;
+    }
+    return prev;
+}
+
+static const XiValue *inline_prev_error_source_value(const XiValue *site) {
+    const XiValue *prev = inline_prev_block_value(site);
+    for (uint8_t depth = 0; inline_error_source_passthrough(prev) && depth < 8; depth++)
+        prev = prev->args[0];
+    return prev;
+}
+
+static bool inline_value_is_nothrow_lowlevel(const XiValue *v) {
+    while (inline_error_source_passthrough(v))
+        v = v->args[0];
+    if (!v)
+        return false;
+    switch (v->op) {
+        case XI_BYTES_LOAD_U16_LE:
+        case XI_BYTES_LOAD_U32_LE:
+        case XI_BYTES_LOAD_U64_LE:
+            return (v->aux_int & 1) != 0;
+        default:
+            return false;
+    }
+}
+
+static bool inline_call_is_nothrow_direct(const XiFunc *current, const XiValue *call,
+                                          uint8_t depth) {
+    if (!current || !call || call->op != XI_CALL || call->nargs < 1 || depth > 8)
+        return false;
+    XiFunc *target = resolve_callee(current, call->args[0]);
+    if (!target || target == current || target->is_extern)
+        return false;
+    return !inline_func_has_error_flow(target, (uint8_t) (depth + 1));
+}
+
+static bool inline_err_check_is_dead(const XiFunc *current, const XiValue *check, uint8_t depth) {
+    if (!check || check->op != XI_ERR_CHECK)
+        return false;
+    const XiValue *source = inline_prev_error_source_value(check);
+    return inline_value_is_nothrow_lowlevel(source) ||
+           inline_call_is_nothrow_direct(current, source, (uint8_t) (depth + 1));
+}
+
+static bool inline_func_has_error_flow(const XiFunc *f, uint8_t depth) {
+    if (!f || depth > 8)
+        return true;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            if (v->op == XI_ERR_CHECK && inline_err_check_is_dead(f, v, depth))
+                continue;
+            if (v->op == XI_THROW || v->op == XI_ERR_SET || v->op == XI_ERR_RETURN ||
+                v->op == XI_ERR_CHECK || v->op == XI_ERR_CATCH || v->op == XI_TRY ||
+                v->op == XI_CATCH || v->op == XI_END_TRY || v->op == XI_DEFER)
+                return true;
+            if (v->flags & XI_FLAG_MAY_SUSPEND)
+                return true;
+            if ((v->flags & XI_FLAG_MAY_THROW) && !inline_value_is_nothrow_lowlevel(v) &&
+                !inline_call_is_nothrow_direct(f, v, (uint8_t) (depth + 1)))
+                return true;
+        }
+    }
+    return false;
+}
 
 /* Analyze callee to build a detailed cost model. */
 static XiInlineCostModel analyze_callee(const XiFunc *callee) {
@@ -55,6 +146,8 @@ static XiInlineCostModel analyze_callee(const XiFunc *callee) {
             if (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
                 v->op == XI_CALL_BUILTIN)
                 m.call_count++;
+            if (v->op == XI_ERR_CHECK && inline_err_check_is_dead(callee, v, 0))
+                continue;
             if (v->op == XI_THROW || v->op == XI_ERR_SET || v->op == XI_ERR_RETURN ||
                 v->op == XI_ERR_CHECK || v->op == XI_ERR_CATCH || v->op == XI_TRY ||
                 v->op == XI_CATCH || v->op == XI_END_TRY || v->op == XI_DEFER)
@@ -91,15 +184,22 @@ static bool all_args_are_const(const XiValue *call_val) {
     return true;
 }
 
+static bool inline_is_leaf_straightline(const XiInlineCostModel *cost) {
+    return cost->call_count == 0 && cost->branch_count == 0 && !cost->has_loop;
+}
+
 /* Benefit scoring:
- *   base = THRESHOLD - value_count   (bigger callee = lower base)
- *   + all_args_const * 15             (constant args enable specialization)
- *   + single_call_site * 10           (no code duplication)
- *   - call_count * 3                  (nested calls reduce benefit)
- *   - branch_count * 2                (complex control flow)
- *   - has_loop * 20                   (loop body expansion)
- *   - exception/error flow            (requires call-boundary aware rewrites)
- *   - (caller_size > 300) * 15        (cap growth in large functions) */
+ *   leaf straight-line helper:
+ *     MAX_COST - value_count + 1       (call overhead dominates, even in large callers)
+ *   general helper:
+ *     base = THRESHOLD - value_count   (bigger callee = lower base)
+ *     + all_args_const * 15            (constant args enable specialization)
+ *     + single_call_site * 10          (no code duplication)
+ *     - call_count * 3                 (nested calls reduce benefit)
+ *     - branch_count * 2               (complex control flow)
+ *     - has_loop * 20                  (loop body expansion)
+ *     - (caller_size > 300) * 15       (cap growth in large functions)
+ *   exception/error flow is rejected because it is call-boundary scoped. */
 XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallSiteInfo *site) {
     XR_DCHECK(cost != NULL && site != NULL, "inline_benefit: NULL arg");
 
@@ -107,6 +207,15 @@ XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallS
         return -1000; /* never inline recursion */
     if (cost->has_throw)
         return -1000; /* error flow and defers are call-boundary scoped */
+
+    if (inline_is_leaf_straightline(cost)) {
+        int score = (int) XI_INLINE_MAX_COST - (int) cost->value_count + 1;
+        if (site->all_args_const)
+            score += 15;
+        if (site->single_call_site)
+            score += 10;
+        return score;
+    }
 
     int score = (int) XI_INLINE_BASE_THRESHOLD - (int) cost->value_count;
 
@@ -170,6 +279,8 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
     cloned->flags = src->flags;
     cloned->var_id = src->var_id;
     cloned->rep = src->rep;
+    cloned->transfer_mode = src->transfer_mode;
+    cloned->aux_kind = src->aux_kind;
     cloned->escape = src->escape;
     cloned->mem_group = src->mem_group;
     cloned->aux_int = src->aux_int;

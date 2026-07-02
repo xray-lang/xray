@@ -76,8 +76,8 @@ XR_FUNC void xr_module_graph_free(XrModuleGraph *g) {
         if (s->ast)
             xr_program_destroy(s->ast);
         xr_free(s->dep_indices);
-        if (s->exports)
-            xr_hashmap_free(s->exports);
+        if (s->export_symbols)
+            xr_hashmap_free(s->export_symbols);
     }
     xr_free(g->specs);
     xr_hashmap_free(g->id_index);

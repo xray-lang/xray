@@ -1,0 +1,22 @@
+let src = Bytes.withCapacity(4)
+unsafe {
+    src.pushUnchecked(65)
+    src.pushUnchecked(66)
+    src.pushUnchecked(67)
+    src.pushUnchecked(68)
+}
+
+let out = Bytes.withCapacity(8)
+unsafe {
+    out.writeFromUnchecked(0, src, 0, 4)
+    out.repeatAtUnchecked(4, 4, 4)
+}
+
+print(out.length)
+
+unsafe {
+    out.setLengthUnchecked(8)
+}
+
+print(out.length)
+print(string(out[0]) + "," + string(out[3]) + "," + string(out[4]) + "," + string(out[7]))

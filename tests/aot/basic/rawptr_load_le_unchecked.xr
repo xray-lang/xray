@@ -1,0 +1,27 @@
+fn readRaw(src: ByteSpan) -> int {
+    let value16: uint16 = 0
+    let value32: uint32 = 0
+    let value64: uint64 = 0
+    unsafe {
+        let p = src.dataPtrUnchecked()
+        value16 = p.loadLEUnchecked<uint16>(1)
+        value32 = p.loadLEUnchecked<uint32>(0)
+        value64 = p.loadLEUnchecked<uint64>(0)
+    }
+    return int(value16) + int(value32) + int(value64)
+}
+
+let bytes = Bytes.withCapacity(8)
+unsafe {
+    bytes.pushUnchecked(1)
+    bytes.pushUnchecked(2)
+    bytes.pushUnchecked(3)
+    bytes.pushUnchecked(4)
+    bytes.pushUnchecked(5)
+    bytes.pushUnchecked(6)
+    bytes.pushUnchecked(7)
+    bytes.pushUnchecked(8)
+}
+
+let view: ByteSpan = bytes
+print(readRaw(view))

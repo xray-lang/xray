@@ -113,18 +113,21 @@ typedef enum {
     AST_DEC,                  // --x or x--
 
     // Control flow
-    AST_IF_STMT,        // if (cond) {...} else {...}
-    AST_WHILE_STMT,     // while (cond) {...}
-    AST_FOR_STMT,       // for (init; cond; update) {...}
-    AST_FOR_IN_STMT,    // for (item in collection) {...}
-    AST_BREAK_STMT,     // break
-    AST_CONTINUE_STMT,  // continue
+    AST_IF_STMT,            // if (cond) {...} else {...}
+    AST_WHILE_STMT,         // while (cond) {...}
+    AST_FOR_STMT,           // for (init; cond; update) {...}
+    AST_FOR_IN_STMT,        // for (item in collection) {...}
+    AST_PARALLEL_FOR_STMT,  // parallel for item in range workers n {...}
+    AST_BREAK_STMT,         // break
+    AST_CONTINUE_STMT,      // continue
 
     // Function nodes
-    AST_FUNCTION_DECL,  // fn add(a, b) {...}
-    AST_FUNCTION_EXPR,  // (a, b) => a + b
-    AST_CALL_EXPR,      // add(1, 2)
-    AST_RETURN_STMT,    // return expr
+    AST_FUNCTION_DECL,          // fn add(a, b) {...}
+    AST_FUNCTION_EXPR,          // (a, b) => a + b
+    AST_CALL_EXPR,              // add(1, 2)
+    AST_PARALLEL_REDUCE_EXPR,   // parallel reduce item in range init x combine fn { ... }
+    AST_PARALLEL_COLLECT_EXPR,  // parallel for item in range collect { expr }
+    AST_RETURN_STMT,            // return expr
 
     // Array nodes
     AST_ARRAY_LITERAL,  // [1, 2, 3]

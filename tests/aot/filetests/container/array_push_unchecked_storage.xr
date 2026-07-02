@@ -1,0 +1,10 @@
+fn write_bytes(out: Bytes) {
+    unsafe {
+        out.pushUnchecked(7)
+        out.pushUnchecked(9)
+    }
+}
+
+let out = Bytes.withCapacity(2)
+write_bytes(out)
+print(out.length + out[0] + out[1])

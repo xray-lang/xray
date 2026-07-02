@@ -46,6 +46,16 @@ static XrValue m_flush(XrVMRuntime *isolate, XrValue self, XrValue *args, int na
     return xr_null();
 }
 
+static XrValue m_reset(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) isolate;
+    XrResultGroup *g = xr_value_to_result_group(self);
+    XR_DCHECK(g != NULL, "ResultGroup.reset: NULL group");
+    uint32_t batch_size = g->batch_size;
+    if (nargs >= 1 && XR_IS_INT(args[0]))
+        batch_size = sanitize_batch_size(XR_TO_INT(args[0]));
+    return xr_bool(xr_result_group_reset(g, batch_size));
+}
+
 static XrValue m_try_recv(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
@@ -68,8 +78,10 @@ static XrCFuncResult ym_recv(XrVMRuntime *isolate, XrValue self, XrValue *args, 
     XrResultGroup *g = xr_value_to_result_group(self);
     XR_DCHECK(g != NULL, "ResultGroup.recv: NULL group");
     XR_DCHECK(result != NULL, "ResultGroup.recv: NULL result");
+    XrCoroutine *coro = xr_current_coro(isolate);
+    xr_coro_submit_deferred_spawns(coro);
 
-    switch (xr_result_group_recv_for_coro(g, xr_current_coro(isolate), result)) {
+    switch (xr_result_group_recv_for_coro(g, coro, result)) {
         case XR_RESULT_GROUP_RECV_DONE:
             return XR_CFUNC_DONE;
         case XR_RESULT_GROUP_RECV_BLOCKED:
@@ -137,8 +149,8 @@ static XrValue result_group_construct(XrVMRuntime *isolate, XrValue receiver, Xr
 
 void xr_result_group_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod result_group_methods[] = {
-        {"add", m_add, 1},     {"flush", m_flush, 0}, {"tryRecv", m_try_recv, 0},
-        {"close", m_close, 0}, {NULL, NULL, 0},
+        {"add", m_add, 1},          {"flush", m_flush, 0}, {"reset", m_reset, 1},
+        {"tryRecv", m_try_recv, 0}, {"close", m_close, 0}, {NULL, NULL, 0},
     };
     static const XrNativeYieldableMethod result_group_yieldable_methods[] = {
         {"recv", ym_recv, 0},

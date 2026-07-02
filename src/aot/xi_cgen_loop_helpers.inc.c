@@ -283,6 +283,7 @@ static bool emit_structured_counted_loop_stmt(XiCgenCtx *ctx, FILE *out, const X
             emit_value_stmt(ctx, out, f, v, prefix);
     }
     emit_phi_copies(ctx, out, f, loop.guard, body_idx);
+    emit_sync_backedge_heartbeat_if_edge(ctx, out, f, loop.body, loop.guard, "        ");
     fprintf(out, "    }\n");
     fprintf(out, "    goto L%u;\n", loop.exit->id);
     return true;
@@ -309,6 +310,7 @@ static bool emit_structured_array_fill_loop_stmt(XiCgenCtx *ctx, FILE *out, cons
             emit_value_stmt(ctx, out, f, v, prefix);
     }
     emit_phi_copies(ctx, out, f, loop.body, body_idx);
+    emit_sync_backedge_heartbeat_if_edge(ctx, out, f, loop.body, loop.body, "        ");
     fprintf(out, "    }\n");
     fprintf(out, "    goto L%u;\n", loop.exit->id);
     return true;

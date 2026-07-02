@@ -1,0 +1,12 @@
+shared const total = Atomic(0)
+
+parallel for i in 0..1000 workers 8 {
+    total.fetchAdd(i, Ordering.Relaxed)
+}
+print(total.load(Ordering.Relaxed))
+
+total.store(0, Ordering.Relaxed)
+parallel for i in 10..14 workers 1 {
+    total.fetchAdd(i, Ordering.Relaxed)
+}
+print(total.load(Ordering.Relaxed))

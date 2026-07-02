@@ -83,6 +83,10 @@ XR_FUNC uint16_t xi_lower_binary_ast_to_xi_op(AstNodeType ast_type) {
             return XI_BAND;
         case AST_BINARY_BOR:
             return XI_BOR;
+        case AST_BINARY_AND:
+            return XI_BAND;
+        case AST_BINARY_OR:
+            return XI_BOR;
         case AST_BINARY_BXOR:
             return XI_BXOR;
         case AST_BINARY_LSHIFT:

@@ -1,0 +1,29 @@
+fn main() {
+    shared const finals: Array<int> = []
+    let w = 0
+    while (w < 2) {
+        finals.push(0)
+        w = w + 1
+    }
+
+    let values = parallel for i in 0..4 workers 2 worker wid
+        local acc = wid
+        final {
+            unsafe {
+                finals.setUnchecked(wid, acc)
+            }
+        }
+        collect {
+        acc = acc + 1
+        i + acc
+    }
+
+    print(values.length)
+    print(values[0])
+    print(values[1])
+    print(values[2])
+    print(values[3])
+    print(finals[0] + finals[1])
+}
+
+main()

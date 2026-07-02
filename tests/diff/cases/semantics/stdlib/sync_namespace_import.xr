@@ -1,0 +1,37 @@
+// `import sync` + `sync.Mutex<T>` — namespace form of the pure-Xray sync module.
+//
+// Companion to sync_module_import.xr (which uses named imports). This exercises
+// the namespace-qualified path for imported generic classes end to end: the
+// constructor `sync.Mutex<int>(...)` must infer the class instance type, and the
+// generic closure-taking methods (`lock`/`replace`/`read`/`call`/`wait`/...)
+// must resolve to direct cross-module calls with their closure arguments
+// keeping their inferred return types — all VM/AOT identical (task 147 §0.13).
+import sync
+
+// Mutex
+let m = sync.Mutex<int>(10)
+print(m.lock((v) -> v * 2))       // 20
+print(m.replace((v) -> v + 5))    // 15
+
+// RwLock
+let rw = sync.RwLock<int>(100)
+print(rw.read((v) -> v + 1))      // 101
+print(rw.replace((v) -> v * 2))   // 200
+
+// Once
+let once = sync.Once()
+shared const counter = Atomic<int>(0)
+once.call(() -> { counter.fetchAdd(1) })
+once.call(() -> { counter.fetchAdd(1) })
+print(counter.load())             // 1
+
+// Barrier
+let b = sync.Barrier(1)
+print(b.wait())                   // true
+
+// Condvar (single-coroutine: predicate already satisfied, no park)
+let cv = sync.Condvar()
+cv.lock()
+cv.signal()                       // no waiters -> no-op
+cv.unlock()
+print("ok")

@@ -1,0 +1,18 @@
+fn sum_bytes(src: ByteSpan) -> int {
+    let total = 0
+    let i = 0
+    while (i < src.length) {
+        total = total + int(src[i])
+        i = i + 1
+    }
+    return total
+}
+
+let bytes = Bytes(4)
+bytes[0] = 1
+bytes[1] = 2
+bytes[2] = 3
+bytes[3] = 4
+
+let view: ByteSpan = bytes[1:4]
+print(sum_bytes(view))

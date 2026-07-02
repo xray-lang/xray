@@ -1,0 +1,18 @@
+fn patchHeader(out: Bytes) {
+    unsafe {
+        out.setUnchecked(0, 0x04)
+        out.setUnchecked(1, 0x22)
+        out.setUnchecked(2, 0x4D)
+        out.setUnchecked(3, 0x18)
+    }
+}
+
+let out = Bytes.withCapacity(4)
+unsafe {
+    out.pushUnchecked(0)
+    out.pushUnchecked(0)
+    out.pushUnchecked(0)
+    out.pushUnchecked(0)
+}
+patchHeader(out)
+print(out[0] + out[1] + out[2] + out[3])

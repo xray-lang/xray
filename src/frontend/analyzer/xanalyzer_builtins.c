@@ -66,6 +66,12 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_WORKQUEUE;
     if (xr_type_is_named_class(type, "ResultGroup"))
         return XR_TID_RESULTGROUP;
+    if (xr_type_is_named_class(type, "CountdownLatch"))
+        return XR_TID_COUNTDOWNLATCH;
+    if (xr_type_is_named_class(type, "Semaphore"))
+        return XR_TID_SEMAPHORE;
+    if (xr_type_is_named_class(type, "EventCount"))
+        return XR_TID_EVENTCOUNT;
     if (xr_type_is_named_class(type, "DateTime"))
         return XR_TID_DATETIME;
     return XR_TID_NULL;
@@ -93,6 +99,18 @@ const XaBuiltinType *xa_builtin_get_by_name(const char *name) {
     return NULL;
 }
 
+static bool xa_builtin_member_available_for_type(XrType *type, const char *member_name) {
+    if (!type || !member_name)
+        return false;
+    if (xr_type_is_named_class(type, "WorkQueue") && strcmp(member_name, "pushRange") == 0) {
+        XrType *elem = (type->instance.type_arg_count > 0 && type->instance.type_args)
+                           ? type->instance.type_args[0]
+                           : NULL;
+        return elem && elem->kind == XR_KIND_INT;
+    }
+    return true;
+}
+
 // Create fake symbols for built-in members
 XaSymbol **xa_builtin_get_members(XrType *type, int *count) {
     XR_DCHECK(count != NULL, "builtin_get_members: NULL count");
@@ -108,13 +126,15 @@ XaSymbol **xa_builtin_get_members(XrType *type, int *count) {
 
     for (int i = 0; i < bt->member_count; i++) {
         const XaBuiltinMember *m = &bt->members[i];
+        if (!xa_builtin_member_available_for_type(type, m->name))
+            continue;
         XaSymbolKind kind = m->is_method ? XA_SYM_METHOD : XA_SYM_FIELD;
         XaSymbol *sym = xa_symbol_new(m->name, kind);
         sym->is_builtin = true;
-        symbols[i] = sym;
+        symbols[*count] = sym;
+        (*count)++;
     }
 
-    *count = bt->member_count;
     return symbols;
 }
 
@@ -122,6 +142,8 @@ static const XaBuiltinMember *xa_builtin_find_instance_member(XrType *type,
                                                               const char *member_name) {
     const XaBuiltinType *bt = xa_builtin_get_type_info(type);
     if (!bt || !member_name)
+        return NULL;
+    if (!xa_builtin_member_available_for_type(type, member_name))
         return NULL;
     for (int i = 0; i < bt->member_count; i++) {
         const XaBuiltinMember *m = &bt->members[i];
@@ -175,6 +197,46 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
         elem_type = container_type->container.element_type;
     } else if (container_type->kind == XR_KIND_CHANNEL) {
         elem_type = container_type->container.element_type;
+    } else if ((xr_type_is_named_class(container_type, "WorkQueue") ||
+                xr_type_is_named_class(container_type, "Atomic")) &&
+               container_type->instance.type_arg_count > 0) {
+        elem_type = container_type->instance.type_args[0];
+    }
+
+    if (xr_type_is_named_class(container_type, "WorkQueue")) {
+        if (sym == SYMBOL_PUSH)
+            return xr_type_new_bool(NULL);
+        if (sym == SYMBOL_POP) {
+            XrType *t = elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
+            if (t)
+                t->is_nullable = true;
+            return t;
+        }
+        if (strcmp(method_name, "tryPop") == 0) {
+            XrType *item = elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
+            if (item)
+                item->is_nullable = true;
+            XrType *elems[2] = {item, xr_type_new_bool(NULL)};
+            return xr_type_new_tuple(X, elems, 2);
+        }
+        if (sym == SYMBOL_CLOSE)
+            return xr_type_new_unit(NULL);
+    }
+
+    if (xr_type_is_named_class(container_type, "Semaphore")) {
+        if (strcmp(method_name, "release") == 0)
+            return xr_type_new_int(NULL);
+        if (strcmp(method_name, "tryAcquire") == 0 || strcmp(method_name, "acquire") == 0)
+            return xr_type_new_bool(NULL);
+        if (sym == SYMBOL_CLOSE)
+            return xr_type_new_unit(NULL);
+    }
+
+    if (xr_type_is_named_class(container_type, "EventCount")) {
+        if (strcmp(method_name, "advance") == 0 || strcmp(method_name, "wait") == 0)
+            return xr_type_new_int(NULL);
+        if (sym == SYMBOL_CLOSE)
+            return xr_type_new_unit(NULL);
     }
 
     // Array methods
@@ -913,6 +975,9 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type->instance.class_name = "Regex";
     } else if (base_len == 5 && strncmp(s, "Bytes", 5) == 0) {
         type = xr_type_new_bytes(X);
+    } else if (base_len == strlen(TYPE_NAME_BYTESPAN) &&
+               strncmp(s, TYPE_NAME_BYTESPAN, strlen(TYPE_NAME_BYTESPAN)) == 0) {
+        type = xr_type_new_bytespan(X);
     } else if (base_len == 5 && strncmp(s, TYPE_NAME_NEVER, 5) == 0) {
         type = xr_type_new_never(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_NULL, 4) == 0) {
@@ -944,6 +1009,11 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         const char *inner = s + 6;
         size_t inner_len = base_len - 7;  // strip "Array<" and ">"
         type = xr_type_new_array(X, parse_type_str(X, inner, inner_len));
+    } else if (base_len >= strlen(TYPE_NAME_SPAN) + 2 &&
+               strncmp(s, TYPE_NAME_SPAN "<", strlen(TYPE_NAME_SPAN) + 1) == 0) {
+        const char *inner = s + strlen(TYPE_NAME_SPAN) + 1;
+        size_t inner_len = base_len - strlen(TYPE_NAME_SPAN) - 2;
+        type = xr_type_new_span(X, parse_type_str(X, inner, inner_len));
     } else if (base_len >= 4 && strncmp(s, TYPE_NAME_MAP "<", 4) == 0) {
         // Map<K, V>: find comma separator at depth 0
         const char *inner = s + 4;

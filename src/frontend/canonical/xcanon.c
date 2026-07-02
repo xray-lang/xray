@@ -13,7 +13,8 @@
  *     - Compound assignment desugaring (variable and member targets)
  *     - Increment/decrement expansion (x++ → x += 1 → x = x + 1)
  *     - Index-set receiver extraction (statement context only)
- *     - Short-circuit logic expansion (&& / || → ternary)
+ *     - Short-circuit logic expansion (&& / || → ternary), except proven
+ *       speculation-safe bool chains that can stay as value expressions
  *     - Nullish coalesce expansion (?? → null-check ternary)
  */
 
@@ -24,6 +25,7 @@
 #include "../parser/xast_api.h"
 #include "../parser/xparse_internal.h"
 #include "../analyzer/xanalyzer.h"
+#include "../../runtime/value/xtype.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -73,6 +75,112 @@ static bool is_simple_expr(const AstNode *node) {
         default:
             return false;
     }
+}
+
+static bool canon_type_is_eager_scalar(const XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_CHAR:
+        case XR_KIND_NULL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool canon_node_type_is_bool(XrCanonCtx *ctx, const AstNode *node) {
+    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, node);
+    return type && type->kind == XR_KIND_BOOL && !type->is_nullable;
+}
+
+static bool canon_expr_is_eager_value_safe(XrCanonCtx *ctx, const AstNode *node, int depth);
+
+static bool canon_expr_is_eager_bool_safe(XrCanonCtx *ctx, const AstNode *node, int depth) {
+    if (!node || depth > 24 || !canon_node_type_is_bool(ctx, node))
+        return false;
+
+    switch (node->type) {
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_VARIABLE:
+        case AST_THIS_EXPR:
+            return true;
+        case AST_GROUPING:
+            return canon_expr_is_eager_bool_safe(ctx, node->as.grouping, depth + 1);
+        case AST_UNARY_NOT:
+            return canon_expr_is_eager_bool_safe(ctx, node->as.unary.operand, depth + 1);
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+            return canon_expr_is_eager_bool_safe(ctx, node->as.binary.left, depth + 1) &&
+                   canon_expr_is_eager_bool_safe(ctx, node->as.binary.right, depth + 1);
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+            return canon_expr_is_eager_value_safe(ctx, node->as.binary.left, depth + 1) &&
+                   canon_expr_is_eager_value_safe(ctx, node->as.binary.right, depth + 1);
+        default:
+            return false;
+    }
+}
+
+static bool canon_expr_is_eager_value_safe(XrCanonCtx *ctx, const AstNode *node, int depth) {
+    if (!node || depth > 24)
+        return false;
+
+    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, node);
+    if (!canon_type_is_eager_scalar(type))
+        return false;
+
+    switch (node->type) {
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_CHAR:
+        case AST_LITERAL_NULL:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_VARIABLE:
+        case AST_THIS_EXPR:
+            return true;
+        case AST_GROUPING:
+            return canon_expr_is_eager_value_safe(ctx, node->as.grouping, depth + 1);
+        case AST_UNARY_NEG:
+        case AST_UNARY_BNOT:
+            return canon_expr_is_eager_value_safe(ctx, node->as.unary.operand, depth + 1);
+        case AST_UNARY_NOT:
+            return canon_expr_is_eager_bool_safe(ctx, node->as.unary.operand, depth + 1);
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+            return canon_expr_is_eager_value_safe(ctx, node->as.binary.left, depth + 1) &&
+                   canon_expr_is_eager_value_safe(ctx, node->as.binary.right, depth + 1);
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+            return canon_expr_is_eager_bool_safe(ctx, node, depth + 1);
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+            return canon_expr_is_eager_bool_safe(ctx, node, depth + 1);
+        default:
+            return false;
+    }
+}
+
+static bool canon_should_keep_eager_bool_logic(XrCanonCtx *ctx, AstNode *node) {
+    return node && (node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) &&
+           canon_expr_is_eager_bool_safe(ctx, node, 0);
 }
 
 /* ========== Operator mapping ========== */
@@ -447,7 +555,8 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
     /* AST_INDEX_SET canonicalization is applied in canon_block() (statement
      * context only) — expanding to AST_BLOCK in expression position would
      * break the lowerer. */
-    if (node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) {
+    if ((node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) &&
+        !canon_should_keep_eager_bool_logic(ctx, node)) {
         canon_short_circuit(ctx, node);
         /* Node type has changed to AST_TERNARY; fall through. */
     }
@@ -487,6 +596,27 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_FOR_IN_STMT:
             canon_node(ctx, node->as.for_in_stmt.collection);
             canon_node(ctx, node->as.for_in_stmt.body);
+            break;
+
+        case AST_PARALLEL_FOR_STMT:
+            canon_node(ctx, node->as.parallel_for_stmt.range);
+            canon_node(ctx, node->as.parallel_for_stmt.worker_count);
+            canon_node(ctx, node->as.parallel_for_stmt.final_body);
+            canon_node(ctx, node->as.parallel_for_stmt.body);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            canon_node(ctx, node->as.parallel_reduce_expr.range);
+            canon_node(ctx, node->as.parallel_reduce_expr.worker_count);
+            canon_node(ctx, node->as.parallel_reduce_expr.initial);
+            canon_node(ctx, node->as.parallel_reduce_expr.combine);
+            canon_node(ctx, node->as.parallel_reduce_expr.body);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            canon_node(ctx, node->as.parallel_collect_expr.range);
+            canon_node(ctx, node->as.parallel_collect_expr.worker_count);
+            canon_node(ctx, node->as.parallel_collect_expr.into);
+            canon_node(ctx, node->as.parallel_collect_expr.final_body);
+            canon_node(ctx, node->as.parallel_collect_expr.body);
             break;
 
         case AST_FUNCTION_DECL:
@@ -691,6 +821,8 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             canon_node(ctx, node->as.await_expr.expr);
             if (node->as.await_expr.timeout)
                 canon_node(ctx, node->as.await_expr.timeout);
+            if (node->as.await_expr.into)
+                canon_node(ctx, node->as.await_expr.into);
             break;
 
         case AST_CHANNEL_NEW:

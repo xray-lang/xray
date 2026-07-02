@@ -148,6 +148,60 @@ static uint64_t hash_ast_node(AstNode *node, uint64_t hash) {
             hash = hash_ast_node(node->as.for_stmt.increment, hash);
             hash = hash_ast_node(node->as.for_stmt.body, hash);
             break;
+        case AST_FOR_IN_STMT:
+            hash = hash_string_into(node->as.for_in_stmt.item_name, hash);
+            hash = hash_string_into(node->as.for_in_stmt.value_name, hash);
+            hash = hash_ast_node(node->as.for_in_stmt.collection, hash);
+            hash = hash_ast_node(node->as.for_in_stmt.body, hash);
+            break;
+        case AST_PARALLEL_FOR_STMT:
+            hash = hash_string_into(node->as.parallel_for_stmt.item_name, hash);
+            hash = hash_string_into(node->as.parallel_for_stmt.end_name, hash);
+            hash = hash_string_into(node->as.parallel_for_stmt.worker_name, hash);
+            for (int i = 0; i < node->as.parallel_for_stmt.local_count; i++) {
+                hash = hash_string_into(node->as.parallel_for_stmt.locals[i].name, hash);
+                hash = hash_int_into(node->as.parallel_for_stmt.locals[i].is_initializer ? 1 : 0,
+                                     hash);
+                hash = hash_ast_node(node->as.parallel_for_stmt.locals[i].source, hash);
+            }
+            hash = hash_int_into(node->as.parallel_for_stmt.range_body ? 1 : 0, hash);
+            hash = hash_ast_node(node->as.parallel_for_stmt.range, hash);
+            hash = hash_ast_node(node->as.parallel_for_stmt.worker_count, hash);
+            hash = hash_ast_node(node->as.parallel_for_stmt.final_body, hash);
+            hash = hash_ast_node(node->as.parallel_for_stmt.body, hash);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            hash = hash_string_into(node->as.parallel_reduce_expr.item_name, hash);
+            hash = hash_string_into(node->as.parallel_reduce_expr.end_name, hash);
+            hash = hash_string_into(node->as.parallel_reduce_expr.worker_name, hash);
+            for (int i = 0; i < node->as.parallel_reduce_expr.local_count; i++) {
+                hash = hash_string_into(node->as.parallel_reduce_expr.locals[i].name, hash);
+                hash = hash_int_into(node->as.parallel_reduce_expr.locals[i].is_initializer ? 1 : 0,
+                                     hash);
+                hash = hash_ast_node(node->as.parallel_reduce_expr.locals[i].source, hash);
+            }
+            hash = hash_int_into(node->as.parallel_reduce_expr.range_body ? 1 : 0, hash);
+            hash = hash_ast_node(node->as.parallel_reduce_expr.range, hash);
+            hash = hash_ast_node(node->as.parallel_reduce_expr.worker_count, hash);
+            hash = hash_ast_node(node->as.parallel_reduce_expr.initial, hash);
+            hash = hash_ast_node(node->as.parallel_reduce_expr.combine, hash);
+            hash = hash_ast_node(node->as.parallel_reduce_expr.body, hash);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            hash = hash_string_into(node->as.parallel_collect_expr.item_name, hash);
+            hash = hash_string_into(node->as.parallel_collect_expr.worker_name, hash);
+            for (int i = 0; i < node->as.parallel_collect_expr.local_count; i++) {
+                hash = hash_string_into(node->as.parallel_collect_expr.locals[i].name, hash);
+                hash = hash_int_into(
+                    node->as.parallel_collect_expr.locals[i].is_initializer ? 1 : 0, hash);
+                hash = hash_ast_node(node->as.parallel_collect_expr.locals[i].source, hash);
+            }
+            hash = hash_ast_node(node->as.parallel_collect_expr.range, hash);
+            hash = hash_ast_node(node->as.parallel_collect_expr.worker_count, hash);
+            hash = hash_ast_node(node->as.parallel_collect_expr.into, hash);
+            hash = hash_ast_node(node->as.parallel_collect_expr.final_body, hash);
+            hash = hash_ast_node(node->as.parallel_collect_expr.body, hash);
+            break;
         case AST_RETURN_STMT:
             hash =
                 hash_node_list(node->as.return_stmt.values, node->as.return_stmt.value_count, hash);

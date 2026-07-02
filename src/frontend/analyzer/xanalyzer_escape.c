@@ -481,6 +481,70 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             ea_pop_scope(ctx);
             break;
 
+        case AST_PARALLEL_FOR_STMT:
+            ea_push_scope(ctx);
+            if (node->as.parallel_for_stmt.item_name) {
+                ea_register_var(ctx, node->as.parallel_for_stmt.item_name, NULL);
+            }
+            if (node->as.parallel_for_stmt.range_body && node->as.parallel_for_stmt.end_name) {
+                ea_register_var(ctx, node->as.parallel_for_stmt.end_name, NULL);
+            }
+            if (node->as.parallel_for_stmt.worker_name) {
+                ea_register_var(ctx, node->as.parallel_for_stmt.worker_name, NULL);
+            }
+            ea_walk(ctx, node->as.parallel_for_stmt.range);
+            ea_walk(ctx, node->as.parallel_for_stmt.worker_count);
+            for (int i = 0; i < node->as.parallel_for_stmt.local_count; i++)
+                ea_walk(ctx, node->as.parallel_for_stmt.locals[i].source);
+            for (int i = 0; i < node->as.parallel_for_stmt.local_count; i++)
+                ea_register_var(ctx, node->as.parallel_for_stmt.locals[i].name, NULL);
+            ea_walk(ctx, node->as.parallel_for_stmt.body);
+            ea_walk(ctx, node->as.parallel_for_stmt.final_body);
+            ea_pop_scope(ctx);
+            break;
+
+        case AST_PARALLEL_REDUCE_EXPR:
+            ea_push_scope(ctx);
+            if (node->as.parallel_reduce_expr.item_name) {
+                ea_register_var(ctx, node->as.parallel_reduce_expr.item_name, NULL);
+            }
+            if (node->as.parallel_reduce_expr.range_body &&
+                node->as.parallel_reduce_expr.end_name) {
+                ea_register_var(ctx, node->as.parallel_reduce_expr.end_name, NULL);
+            }
+            if (node->as.parallel_reduce_expr.worker_name) {
+                ea_register_var(ctx, node->as.parallel_reduce_expr.worker_name, NULL);
+            }
+            ea_walk(ctx, node->as.parallel_reduce_expr.range);
+            ea_walk(ctx, node->as.parallel_reduce_expr.worker_count);
+            for (int i = 0; i < node->as.parallel_reduce_expr.local_count; i++)
+                ea_walk(ctx, node->as.parallel_reduce_expr.locals[i].source);
+            for (int i = 0; i < node->as.parallel_reduce_expr.local_count; i++)
+                ea_register_var(ctx, node->as.parallel_reduce_expr.locals[i].name, NULL);
+            ea_walk(ctx, node->as.parallel_reduce_expr.initial);
+            ea_walk(ctx, node->as.parallel_reduce_expr.combine);
+            ea_walk(ctx, node->as.parallel_reduce_expr.body);
+            ea_pop_scope(ctx);
+            break;
+
+        case AST_PARALLEL_COLLECT_EXPR:
+            ea_push_scope(ctx);
+            if (node->as.parallel_collect_expr.item_name)
+                ea_register_var(ctx, node->as.parallel_collect_expr.item_name, NULL);
+            if (node->as.parallel_collect_expr.worker_name)
+                ea_register_var(ctx, node->as.parallel_collect_expr.worker_name, NULL);
+            ea_walk(ctx, node->as.parallel_collect_expr.range);
+            ea_walk(ctx, node->as.parallel_collect_expr.worker_count);
+            for (int i = 0; i < node->as.parallel_collect_expr.local_count; i++)
+                ea_walk(ctx, node->as.parallel_collect_expr.locals[i].source);
+            for (int i = 0; i < node->as.parallel_collect_expr.local_count; i++)
+                ea_register_var(ctx, node->as.parallel_collect_expr.locals[i].name, NULL);
+            ea_walk(ctx, node->as.parallel_collect_expr.into);
+            ea_walk(ctx, node->as.parallel_collect_expr.final_body);
+            ea_walk(ctx, node->as.parallel_collect_expr.body);
+            ea_pop_scope(ctx);
+            break;
+
         case AST_TRY_CATCH:
             ea_walk(ctx, node->as.try_catch.try_body);
             for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
@@ -593,6 +657,7 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             break;
         case AST_AWAIT_EXPR:
             ea_walk(ctx, node->as.await_expr.expr);
+            ea_walk(ctx, node->as.await_expr.into);
             break;
 
         case AST_SCOPE_BLOCK:

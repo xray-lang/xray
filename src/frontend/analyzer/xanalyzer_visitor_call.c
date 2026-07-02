@@ -24,6 +24,7 @@
 #include "xanalyzer_mono.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xchecks.h"
+#include "../../base/xhashmap.h"
 
 static bool xa_object_literal_bool_field(AstNode *node, const char *field_name, bool *out_value) {
     if (!node || node->type != AST_OBJECT_LITERAL || !field_name || !out_value)
@@ -118,6 +119,67 @@ static bool xa_is_module_call(CallExprNode *call, const char *module_name, const
         ma->object->type != AST_VARIABLE)
         return false;
     return strcmp(ma->object->as.variable.name, module_name) == 0;
+}
+
+static bool xa_type_is_bytespan_view(XrType *type) {
+    if (!type || !XR_TYPE_IS_SPAN(type) || !type->container.element_type)
+        return false;
+    XrType *elem = type->container.element_type;
+    return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+}
+
+static bool xa_type_is_raw_u8_ptr_view(XrType *type) {
+    if (!type || !XR_TYPE_IS_POINTER(type) || !type->container.element_type)
+        return false;
+    XrType *elem = type->container.element_type;
+    return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+}
+
+static bool xa_call_is_bytespan_load_le(CallExprNode *call, XrType *receiver_type) {
+    if (!call || !receiver_type || !xa_type_is_bytespan_view(receiver_type) || !call->callee ||
+        call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    return ma->name &&
+           (strcmp(ma->name, "loadLE") == 0 || strcmp(ma->name, "loadLEUnchecked") == 0);
+}
+
+static bool xa_call_is_rawptr_load_le_unchecked(CallExprNode *call, XrType *receiver_type) {
+    if (!call || !receiver_type || !xa_type_is_raw_u8_ptr_view(receiver_type) || !call->callee ||
+        call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    return ma->name && strcmp(ma->name, "loadLEUnchecked") == 0;
+}
+
+static bool xa_type_is_supported_load_le_result(XrType *type) {
+    return type && XR_TYPE_IS_INT(type) &&
+           (type->native_width == XR_NATIVE_U16 || type->native_width == XR_NATIVE_U32 ||
+            type->native_width == XR_NATIVE_U64);
+}
+
+static XrType *xa_load_le_return_type(XaInferContext *ctx, AstNode *node, CallExprNode *call,
+                                      const char *label) {
+    if (!ctx || !call)
+        return xr_type_new_unknown(NULL);
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
+        char msg[160];
+        snprintf(msg, sizeof(msg), "%s expects exactly one type argument", label);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   msg, &loc);
+        return xr_type_new_unknown(NULL);
+    }
+    XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+    if (!xa_type_is_supported_load_le_result(target)) {
+        char msg[192];
+        snprintf(msg, sizeof(msg), "%s currently supports T = uint16, uint32 or uint64", label);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+        return xr_type_new_unknown(NULL);
+    }
+    return target;
 }
 
 static XrType *xa_csv_parse_return_type(XaInferContext *ctx, CallExprNode *call) {
@@ -320,6 +382,48 @@ static XaSymbol *xa_lookup_visible_class_symbol(XaInferContext *ctx, const char 
 
     sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
     return sym && sym->kind == XA_SYM_CLASS ? sym : NULL;
+}
+
+/* Namespace-imported class construction: for a callee shaped as
+ * `moduleAlias.ClassName` where `moduleAlias` is an imported module, resolve
+ * the exported class from the module graph and return its instance type.
+ *
+ * This mirrors the bare `ClassName(...)` construction path (which returns
+ * xr_type_new_instance from the class symbol's class_info) so a value built via
+ * `ns.Class(...)` / `ns.Class<T>(...)` carries its class identity. Without it
+ * the call inferred `unknown`, erasing the receiver class for every later
+ * `value.method(...)`: generic (map-backed) classes then fell back to dynamic
+ * dispatch returning null, and native-struct classes hit a missing boxed-
+ * adapter link error in AOT. Returns NULL when the callee is not a module-
+ * member class reference, so every other call falls through unchanged. */
+static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, AstNode *callee) {
+    if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE ||
+        !ma->object->as.variable.name)
+        return NULL;
+
+    XaSymbol *mod_sym = xa_scope_lookup(ctx->analyzer->current_scope, ma->object->as.variable.name);
+    if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
+        return NULL;
+
+    XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
+    const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
+                                                                 : ma->object->as.variable.name;
+    bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+    if (!exports)
+        return NULL;
+
+    XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+    if (!member_sym || member_sym->kind != XA_SYM_CLASS)
+        return NULL;
+
+    XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
+    if (member_links && member_links->class_info)
+        return xr_type_new_instance(ctx->analyzer->isolate, member_links->class_info);
+    return NULL;
 }
 
 static void xa_check_channel_send_transfer_arg(XaInferContext *ctx, AstNode *call_node,
@@ -680,6 +784,17 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_visit_infer_expr(ctx, call->arguments[i]);
     }
 
+    /* Namespace-imported class construction (`ns.Class(...)` / `ns.Class<T>(...)`)
+     * resolves to the class instance type, exactly like the bare `Class(...)`
+     * path. Done before the unknown-callee/class-callee branches below, which
+     * only recognise AST_VARIABLE callees, so the receiver keeps its class
+     * identity for cross-module method resolution and AOT codegen. */
+    if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+        XrType *ns_instance = xa_module_member_class_instance_type(ctx, call->callee);
+        if (ns_instance)
+            return ns_instance;
+    }
+
     // Unknown callee type preserves error recovery after imprecise analysis.
     if (XR_TYPE_IS_UNKNOWN(callee_type)) {
         // Check if callee is a class name - if so, return instance type
@@ -715,6 +830,15 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
             if (strcmp(name, "ResultGroup") == 0) {
                 return xr_type_new_named_instance(ctx->analyzer->isolate, "ResultGroup");
+            }
+            if (strcmp(name, "CountdownLatch") == 0) {
+                return xr_type_new_named_instance(ctx->analyzer->isolate, "CountdownLatch");
+            }
+            if (strcmp(name, "Semaphore") == 0) {
+                return xr_type_new_named_instance(ctx->analyzer->isolate, "Semaphore");
+            }
+            if (strcmp(name, "EventCount") == 0) {
+                return xr_type_new_named_instance(ctx->analyzer->isolate, "EventCount");
             }
 
             // Construction `T(args)`: resolve the class in any visible scope
@@ -1242,6 +1366,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         (!return_type || XR_TYPE_IS_UNKNOWN(return_type))) {
         return_type = effective_arg_types[0];
     }
+
+    if (xa_call_is_bytespan_load_le(call, callee_obj_type))
+        return_type = xa_load_le_return_type(ctx, node, call, "ByteSpan.loadLE<T>()");
+
+    if (xa_call_is_rawptr_load_le_unchecked(call, callee_obj_type))
+        return_type = xa_load_le_return_type(ctx, node, call, "RawPtr.loadLEUnchecked<T>()");
 
     // Apply type substitution for generic method calls: obj.method<T>()
     if (callee_obj_type && call->callee->type == AST_MEMBER_ACCESS) {

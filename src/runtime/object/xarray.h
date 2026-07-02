@@ -195,6 +195,7 @@ static inline uint8_t *xr_array_raw_u8(XrArray *arr) {
 }
 
 XR_FUNC void xr_array_append_data(XrArray *arr, const uint8_t *data, int32_t len);
+XR_FUNC uint16_t xr_array_load_u16_le(XrArray *arr, int64_t offset, bool *ok);
 XR_FUNC uint32_t xr_array_load_u32_le(XrArray *arr, int64_t offset, bool *ok);
 XR_FUNC uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok);
 XR_FUNC bool xr_array_bytes_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_offset,
@@ -203,5 +204,17 @@ XR_FUNC bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int32_t src_of
                                       int32_t dst_offset, int32_t count);
 XR_FUNC bool xr_array_bytes_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance,
                                         int32_t count);
+XR_FUNC bool xr_array_bytes_append_from_unchecked(XrArray *dst, XrArray *src, int64_t src_offset,
+                                                  int64_t count);
+XR_FUNC bool xr_array_bytes_repeat_from_unchecked(XrArray *arr, int64_t distance, int64_t count);
+XR_FUNC bool xr_array_bytes_write_from_unchecked(XrArray *dst, int64_t dst_offset, XrArray *src,
+                                                 int64_t src_offset, int64_t count);
+XR_FUNC bool xr_array_bytes_repeat_at_unchecked(XrArray *arr, int64_t dst_offset, int64_t distance,
+                                                int64_t count);
+XR_FUNC bool xr_array_bytes_wild_copy_from_nonoverlapping_unchecked(
+    XrArray *dst, int64_t dst_offset, XrArray *src, int64_t src_offset, int64_t count);
+XR_FUNC bool xr_array_bytes_wild_repeat_at_unchecked(XrArray *arr, int64_t dst_offset,
+                                                     int64_t distance, int64_t count);
+XR_FUNC bool xr_array_bytes_set_length_unchecked(XrArray *arr, int64_t length);
 
 #endif  // XARRAY_H

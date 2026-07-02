@@ -1,0 +1,5 @@
+c_contains=, 0, false, true, "worker");
+c_contains=, -1, false, true);
+c_contains=, false, true);
+c_contains= = XR_NULL_VAL;
+c_not_contains=, 0, false, false, "worker");

@@ -1,0 +1,61 @@
+let WORKERS = process.args.length > 0 ? (int(process.args[0]) ?? 8) : 8
+let TASKS = process.args.length > 1 ? (int(process.args[1]) ?? 320) : 320
+let ITERS = process.args.length > 2 ? (int(process.args[2]) ?? 10) : 10
+
+if (WORKERS < 1) {
+    WORKERS = 1
+}
+if (TASKS < 0) {
+    TASKS = 0
+}
+if (ITERS < 0) {
+    ITERS = 0
+}
+
+shared const queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 64)
+
+fn worker(id: int) -> int {
+    let sum = 0
+    while (true) {
+        let item = queue.pop(id)
+        if (item == null) {
+            return sum
+        }
+        let value = item
+        sum = sum + value
+    }
+    return sum
+}
+
+let workers: Array<Task> = []
+let w = 0
+while (w < WORKERS) {
+    workers.push(go worker(w))
+    w = w + 1
+}
+
+let expected = 0
+let i = 0
+while (i < ITERS) {
+    let task = 0
+    while (task < TASKS) {
+        let value = i * TASKS + task
+        expected = expected + value
+        assert_true(queue.push(value, task % WORKERS))
+        task = task + 1
+    }
+    i = i + 1
+}
+queue.close()
+
+let actual = 0
+w = 0
+while (w < workers.length) {
+    let subtotal: int = await workers[w]
+    actual = actual + subtotal
+    w = w + 1
+}
+
+print(actual)
+print(expected)
+print(actual == expected)

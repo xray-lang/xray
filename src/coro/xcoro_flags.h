@@ -44,7 +44,8 @@
  *   bit  20:    STACK_SCANNED
  *   bit  21:    CANCEL_REQUESTED (sysmon → worker)
  *   bit  22:    SLAB_STACK (arena slab allocation)
- *   bits 23-31: Reserved
+ *   bit  23:    DEFERRED_SUBMIT (executor waits for aggregate batch submission)
+ *   bits 24-31: Reserved
  *
  * INVARIANT (one-hot state): at most one of READY/RUNNING/BLOCKED/DONE is
  * set at any time. Every primitive that sets a state bit clears the whole
@@ -88,6 +89,9 @@
 #define XR_CORO_WAIT_AWAIT_ANY (9 << XR_CORO_WAIT_SHIFT)
 #define XR_CORO_WAIT_WORKQUEUE (10 << XR_CORO_WAIT_SHIFT)
 #define XR_CORO_WAIT_RESULTGROUP (11 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_COUNTDOWN_LATCH (12 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_SEMAPHORE (13 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_EVENT_COUNT (14 << XR_CORO_WAIT_SHIFT)
 
 /* ========== State Flags (shadow bits 8-11, mark bits 12+) ========== */
 
@@ -105,6 +109,7 @@
 #define XR_CORO_FLG_NO_AUTO_FREE (1 << 19)
 #define XR_CORO_FLG_STACK_SCANNED (1 << 20)
 #define XR_CORO_FLG_CANCEL_REQUESTED (1 << 21)  // sysmon requests cancellation
+#define XR_CORO_FLG_DEFERRED_SUBMIT (1u << 23)
 
 // Mask for state shadow bits (READY|RUNNING|BLOCKED|DONE)
 #define XR_CORO_STATE_FLAG_MASK                                                                    \

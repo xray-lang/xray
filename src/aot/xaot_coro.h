@@ -51,6 +51,19 @@ typedef struct XrAotRuntimeSetView {
     XR_SET_ABI_FIELDS;
 } XrAotRuntimeSetView;
 
+/* Byte-compatible mirror of VM XrAtomic (see src/runtime/object/xatomic.h).
+ * Generated AOT code uses this narrow view for statically typed Atomic<int>
+ * fast paths without pulling the VM's full xvalue.h into the AOT prelude. */
+typedef struct XrAotRuntimeAtomicView {
+    XrObjHeader hdr;
+    _Atomic(int64_t) value;
+    uint8_t kind;
+} XrAotRuntimeAtomicView;
+
+static inline XrAotRuntimeAtomicView *xr_aot_atomic_view(XrValue value) {
+    return (XrAotRuntimeAtomicView *) value.ptr;
+}
+
 static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value);
 
 static inline XrValue xr_aot_bridge_enum_key_to_xrt(XrValue value, uint32_t member_index) {
@@ -83,7 +96,7 @@ static inline XrValue xr_aot_bridge_runtime_adt_to_xrt(XrValue value) {
         return value;
     }
 
-    XrValue out = xrt_array_new((int64_t) payload_count + 1);
+    XrValue out = xrt_array_with_capacity((int64_t) payload_count + 1);
     xrt_array_t *arr = (xrt_array_t *) out.ptr;
     arr->adt_enum_name = enum_name;
     arr->adt_member_name = member_name;

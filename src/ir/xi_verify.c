@@ -761,7 +761,7 @@ static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
                 continue;
 
             /* Rep must be a known value */
-            if (v->rep > XR_REP_STR) {
+            if (v->rep >= XR_REP_COUNT) {
                 verr(ctx, "func '%s': v%u %s in b%u has invalid rep %u", f->name, v->id,
                      xi_op_name(v->op), blk->id, v->rep);
                 return;
@@ -776,7 +776,7 @@ static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
 
             /* UNBOX must produce a native boundary rep or remain tagged if no unbox exists. */
             if (v->op == XI_UNBOX && v->rep != XR_REP_I64 && v->rep != XR_REP_F64 &&
-                v->rep != XR_REP_PTR && v->rep != XR_REP_TAGGED) {
+                v->rep != XR_REP_PTR && v->rep != XR_REP_RAWPTR && v->rep != XR_REP_TAGGED) {
                 verr(ctx, "func '%s': v%u UNBOX in b%u has invalid rep %u", f->name, v->id, blk->id,
                      v->rep);
                 return;
@@ -786,7 +786,7 @@ static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
         /* Phi nodes follow backend policy: VM-style pipelines can keep them
          * tagged, while AOT can keep scalar phis native. */
         for (XiPhi *phi = blk->phis; phi && !ctx->failed; phi = phi->next) {
-            if (phi->value.rep > XR_REP_STR) {
+            if (phi->value.rep >= XR_REP_COUNT) {
                 verr(ctx, "func '%s': phi v%u in b%u has invalid rep %u", f->name, phi->value.id,
                      blk->id, phi->value.rep);
                 return;
@@ -1013,7 +1013,7 @@ static void verify_narrow_before_typed_store(VerifyCtx *ctx, const XiFunc *f) {
 
             /* Check if the collection is a typed array */
             struct XrType *coll_type = v->args[0]->type;
-            if (!coll_type || coll_type->kind != XR_KIND_ARRAY)
+            if (!coll_type || (coll_type->kind != XR_KIND_ARRAY && coll_type->kind != XR_KIND_SPAN))
                 continue;
 
             struct XrType *elem = coll_type->container.element_type;
@@ -1181,7 +1181,7 @@ static void verify_coro_plan(VerifyCtx *ctx, const XiFunc *f) {
                  slot->value->id);
             return;
         }
-        if (slot->logical_rep > XR_REP_STR) {
+        if (slot->logical_rep >= XR_REP_COUNT) {
             verr(ctx, "func '%s': coro slot[%u] v%u has invalid logical_rep %u", f->name, i,
                  slot->value->id, (unsigned) slot->logical_rep);
             return;
@@ -1350,9 +1350,12 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
                 if (is_mem && v->mem_group == XI_MEM_NONE) {
                     verr(&ctx, "v%u (%s): memory op has XI_MEM_NONE after TBAA annotation", v->id,
                          xi_op_name(v->op));
-                } else if (!is_mem && v->op != XI_CALL && v->op != XI_CALL_METHOD &&
-                           v->op != XI_CALL_METHOD_DIRECT && v->op != XI_CALL_BUILTIN &&
-                           v->mem_group != XI_MEM_NONE) {
+                } else if (!is_mem && !xi_is_memory_clobber(v->op) && v->op != XI_CALL &&
+                           v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT &&
+                           v->op != XI_CALL_BUILTIN && v->mem_group != XI_MEM_NONE) {
+                    /* Memory-clobber ops (e.g. GEN_CALL, channel sends) and the
+                     * call family legitimately carry a TOP mem_group for alias
+                     * analysis even though they are not direct load/store ops. */
                     verr(&ctx, "v%u (%s): non-memory op has mem_group=%u (expected XI_MEM_NONE)",
                          v->id, xi_op_name(v->op), v->mem_group);
                 }

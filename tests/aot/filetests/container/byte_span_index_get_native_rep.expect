@@ -1,0 +1,15 @@
+contains=function 1 name=readByteAsInt module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
+contains=  param 0 class=ptr kind=ptr rep=ptr c_type=void *
+contains=  param 1 class=scalar kind=scalar rep=i64 c_type=int64_t
+contains=  value v3 op=INDEX_GET kind=scalar rep=u8 c_type=uint8_t
+contains=  value v4 op=WIDEN_U8 kind=scalar rep=i64 c_type=int64_t
+contains=  value v5 op=CONVERT kind=scalar rep=i64 c_type=int64_t
+regex=array-storage [0-9]+ func=readByteAsInt value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
+not_contains=reason=box target=?
+not_contains=reason=unbox target=?
+c_contains=uint8_t v3 =
+c_contains=((uint8_t*)_a->data)[_idx]
+c_contains=int64_t v4 = (int64_t)v3;
+c_not_contains=XR_FROM_INT(
+c_not_contains=xrt_to_int(
+c_not_contains=xrt_index_get(

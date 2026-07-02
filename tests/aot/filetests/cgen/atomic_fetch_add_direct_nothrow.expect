@@ -1,0 +1,6 @@
+contains=name=bump
+regex=value v[0-9]+ op=CALL_METHOD kind=scalar rep=i64 c_type=int64_t
+c_contains=atomic_fetch_add_explicit(
+c_contains=memory_order_relaxed
+c_not_contains=xr_aot_atomic_fetch_add_i64(
+c_not_contains=xrt_has_pending_error()

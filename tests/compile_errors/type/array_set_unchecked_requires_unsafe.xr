@@ -1,0 +1,2 @@
+let values = Array<int>(2, 0)
+values.setUnchecked(0, 1)

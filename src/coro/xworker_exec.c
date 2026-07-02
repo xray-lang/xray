@@ -268,6 +268,7 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
     switch (result.kind) {
         case XR_CORO_RUN_DONE: {
             worker->p.yield_streak = 0;
+            xr_coro_submit_deferred_spawns(coro);
             XrTask *done_task = coro->task;
             // Result already saved in the backend resume path (coro->result).
             // flags_set uses release ordering, ensuring coro->result is visible
@@ -369,6 +370,7 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
 
         case XR_CORO_RUN_CANCELLED:
             worker->p.yield_streak = 0;
+            xr_coro_submit_deferred_spawns(coro);
             /* A coroutine cancelled while parked in select (woken by the
              * cooperative-cancel xr_coro_ready, not by a ready case) returns
              * CANCELLED straight from the resume entry without passing through
@@ -409,6 +411,7 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
 
         case XR_CORO_RUN_ERROR:
         default:
+            xr_coro_submit_deferred_spawns(coro);
             if (!XR_IS_NULL(result.error)) {
                 coro->error = result.error;
                 coro->error_is_value = result.error_is_value;

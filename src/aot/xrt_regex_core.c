@@ -167,7 +167,7 @@ static XrValue xrt_regex_make_match_object(const char *text_data, const XrMatch 
                 XR_FROM_INT(end_offset));
 
     int group_count = match && match->group_count > 0 ? match->group_count : 0;
-    XrValue groups = xrt_array_new(group_count);
+    XrValue groups = xrt_array_with_capacity(group_count);
     for (int i = 0; i < group_count; i++)
         xrt_array_push(groups, xrt_regex_match_group_to_string(match, i));
     xrt_map_set((xrt_map_t *) obj.ptr,

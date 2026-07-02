@@ -49,6 +49,14 @@
   :native-width no
   :typed-boundary yes)
 
+(define-aot-abi span
+  :type-kind XR_KIND_SPAN
+  :nullable no
+  :abi-class pointer
+  :default-rep ptr
+  :native-width no
+  :typed-boundary yes)
+
 (define-aot-abi map
   :type-kind XR_KIND_MAP
   :nullable no
@@ -81,13 +89,13 @@
   :native-width no
   :typed-boundary yes)
 
-; FFI raw pointer (RawPtr<T> / RawMut<T>). Carried as an address-width integer
-; so the GC never traces it; the FFI boundary casts int64 <-> the real C pointer
-; type. Native (non-tagged) boundary, exactly like the other scalars.
+; FFI raw pointer (RawPtr<T> / RawMut<T>). Carried as a native C pointer in AOT
+; hot code, but never treated as an owning/GC-traced pointer. Tagged/VM boundaries
+; still encode it as an address-width integer so VM and AOT value semantics align.
 (define-aot-abi pointer
   :type-kind XR_KIND_POINTER
   :nullable no
   :abi-class scalar
-  :default-rep i64
+  :default-rep rawptr
   :native-width no
   :typed-boundary yes)

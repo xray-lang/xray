@@ -56,6 +56,10 @@ bool xr_slot_store_value(XrSlotRef slot, XrValue value) {
                 *(double *) slot.base = XR_TO_FLOAT(value);
                 return true;
             }
+            if (slot.type_id == XR_REP_RAWPTR) {
+                *(void **) slot.base = (void *) (uintptr_t) XR_TO_INT(value);
+                return true;
+            }
             *(XrValue *) slot.base = value;
             return true;
         }
@@ -69,6 +73,10 @@ bool xr_slot_store_value(XrSlotRef slot, XrValue value) {
             }
             if (slot.type_id == XR_REP_F64) {
                 *(double *) addr = XR_TO_FLOAT(value);
+                return true;
+            }
+            if (slot.type_id == XR_REP_RAWPTR) {
+                *(void **) addr = (void *) (uintptr_t) XR_TO_INT(value);
                 return true;
             }
             *(XrValue *) addr = value;
@@ -102,6 +110,10 @@ bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value) {
                 *out_value = xr_float(*(double *) slot.base);
                 return true;
             }
+            if (slot.type_id == XR_REP_RAWPTR) {
+                *out_value = xr_int((int64_t) (uintptr_t) *(void **) slot.base);
+                return true;
+            }
             *out_value = *(XrValue *) slot.base;
             return true;
         case XR_SLOT_AOT_FRAME_OFFSET: {
@@ -114,6 +126,10 @@ bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value) {
             }
             if (slot.type_id == XR_REP_F64) {
                 *out_value = xr_float(*(double *) addr);
+                return true;
+            }
+            if (slot.type_id == XR_REP_RAWPTR) {
+                *out_value = xr_int((int64_t) (uintptr_t) *(void **) addr);
                 return true;
             }
             *out_value = *(XrValue *) addr;

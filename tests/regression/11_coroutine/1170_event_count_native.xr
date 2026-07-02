@@ -1,0 +1,35 @@
+@test
+fn test_event_count_epoch_wait_and_close() {
+    shared const event = EventCount(0)
+
+    assert_eq(event.epoch, 0)
+    assert_false(event.isClosed)
+
+    assert_eq(event.advance(), 1)
+    assert_eq(event.epoch, 1)
+    assert_eq(event.wait(0), 1)
+
+    shared const ready = CountdownLatch(1)
+    let t = go fn() -> int {
+        ready.done()
+        return event.wait(1, 0)
+    }()
+
+    assert_true(ready.wait())
+    assert_eq(event.advance(), 2)
+    assert_eq(await t, 2)
+
+    shared const closed = EventCount(7)
+    shared const closeReady = CountdownLatch(1)
+    let closeTask = go fn() -> int {
+        closeReady.done()
+        return closed.wait(7)
+    }()
+
+    assert_true(closeReady.wait())
+    closed.close()
+    assert_true(closed.isClosed)
+    assert_eq(await closeTask, -1)
+    assert_eq(closed.advance(), -1)
+    assert_eq(closed.wait(7), -1)
+}

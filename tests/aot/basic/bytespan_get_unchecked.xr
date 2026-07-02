@@ -1,0 +1,14 @@
+fn pair(src: ByteSpan) -> int {
+    unsafe {
+        return int(src.getUnchecked(1)) + int(src.getUnchecked(2))
+    }
+}
+
+let bytes = Bytes.withCapacity(4)
+unsafe {
+    bytes.pushUnchecked(3)
+    bytes.pushUnchecked(7)
+    bytes.pushUnchecked(11)
+}
+let view: ByteSpan = bytes
+print(pair(view))

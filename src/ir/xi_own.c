@@ -55,6 +55,7 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
         case XR_KIND_NULL:
         case XR_KIND_UNIT:
         case XR_KIND_NEVER:
+        case XR_KIND_POINTER:
         case XR_KIND_TYPE_PARAM: /* erased; concrete rep decided after mono */
             return false;
         default:
@@ -80,6 +81,7 @@ XR_FUNC bool xi_own_type_may_be_ref(const XrType *type) {
         case XR_KIND_CHAR:
         case XR_KIND_UNIT:
         case XR_KIND_NEVER:
+        case XR_KIND_POINTER:
             return false;
         default:
             return true;
@@ -116,8 +118,70 @@ static bool channel_send_method_payload_arg(const XiValue *user, uint16_t arg_id
                       strcmp(method, "sendTimeout") == 0);
 }
 
+static bool type_is_u8_contiguous_view(const XrType *type) {
+    if (!type)
+        return false;
+    if (type->kind == XR_KIND_UNION) {
+        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            if (type_is_u8_contiguous_view(type->union_type.members[i]))
+                return true;
+        }
+        return false;
+    }
+    if (type->kind != XR_KIND_ARRAY && type->kind != XR_KIND_SPAN)
+        return false;
+    const XrType *elem = type->container.element_type;
+    return elem && elem->kind == XR_KIND_INT && elem->native_width == XR_NATIVE_U8 &&
+           !elem->is_nullable;
+}
+
+static bool low_level_byte_method_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) {
+    if (!user || (user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT) ||
+        user->nargs < 1 || !user->aux)
+        return false;
+    const char *method = (const char *) user->aux;
+    if (!type_is_u8_contiguous_view(user->args[0] ? user->args[0]->type : NULL))
+        return false;
+
+    /* Bytes append/write cursor methods copy from src during the call and
+     * never store it. Treat the source buffer as a borrowed argument so ARC
+     * does not retain/release it inside hot copy loops. */
+    if (strcmp(method, "appendFromUnchecked") == 0)
+        return arg_idx == 1 && user->nargs > 1 &&
+               type_is_u8_contiguous_view(user->args[1] ? user->args[1]->type : NULL);
+    if (strcmp(method, "writeFromUnchecked") == 0)
+        return arg_idx == 2 && user->nargs > 2 &&
+               type_is_u8_contiguous_view(user->args[2] ? user->args[2]->type : NULL);
+    if (strcmp(method, "wildCopyFromNonOverlappingUnchecked") == 0)
+        return arg_idx == 2 && user->nargs > 2 &&
+               type_is_u8_contiguous_view(user->args[2] ? user->args[2]->type : NULL);
+
+    return false;
+}
+
+static bool builtin_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) {
+    if (!user || user->op != XI_CALL_BUILTIN || !user->aux)
+        return false;
+    const char *name = (const char *) user->aux;
+
+    if (strcmp(name, "array_clear") == 0 || strcmp(name, "array_reserve") == 0 ||
+        strcmp(name, "array_resize") == 0) {
+        return arg_idx == 0;
+    }
+
+    return false;
+}
+
 static bool use_is_consuming(const XiValue *user, uint16_t arg_idx) {
     return xi_own_value_arg_is_consuming(user, arg_idx);
+}
+
+static bool par_collect_arg_transfers_return_result(const XiValue *user, uint16_t arg_idx) {
+    if (!user || user->op != XI_PAR_COLLECT || user->aux_kind != XI_AUX_KIND_PAR_COLLECT ||
+        !user->aux || arg_idx != 4)
+        return false;
+    const XiParallelCollectData *data = (const XiParallelCollectData *) user->aux;
+    return data && data->direct_lane_writes && !data->into_result && data->lane_count == 1;
 }
 
 XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
@@ -143,8 +207,14 @@ XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
 XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx) {
     if (!user)
         return true;
+    if (low_level_byte_method_arg_is_borrowed(user, arg_idx))
+        return false;
+    if (builtin_call_arg_is_borrowed(user, arg_idx))
+        return false;
     if (channel_send_method_payload_arg(user, arg_idx))
         return xi_chan_send_transfer_mode(user) == XR_TRANSFER_MOVE;
+    if (par_collect_arg_transfers_return_result(user, arg_idx))
+        return true;
     return xi_own_use_is_consuming(user->op, arg_idx);
 }
 

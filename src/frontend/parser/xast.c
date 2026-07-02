@@ -473,6 +473,98 @@ AstNode *xr_ast_for_in_keyvalue_stmt(XrCompilerSession *session, const char *key
     return node;
 }
 
+AstNode *xr_ast_parallel_for_stmt(XrCompilerSession *session, const char *label,
+                                  const char *item_name, AstNode *range, AstNode *worker_count,
+                                  const char *worker_name, XrParallelLocalBinding *locals,
+                                  int local_count, AstNode *final_body, AstNode *body, int line) {
+    AstNode *node = alloc_node(session, AST_PARALLEL_FOR_STMT, line);
+    node->as.parallel_for_stmt.label = label ? ast_strdup(session, label) : NULL;
+    node->as.parallel_for_stmt.item_name = ast_strdup(session, item_name);
+    node->as.parallel_for_stmt.end_name = NULL;
+    node->as.parallel_for_stmt.worker_name = worker_name ? ast_strdup(session, worker_name) : NULL;
+    node->as.parallel_for_stmt.locals = locals;
+    node->as.parallel_for_stmt.local_count = local_count;
+    node->as.parallel_for_stmt.range = range;
+    node->as.parallel_for_stmt.worker_count = worker_count;
+    node->as.parallel_for_stmt.final_body = final_body;
+    node->as.parallel_for_stmt.body = body;
+    node->as.parallel_for_stmt.range_body = false;
+    return node;
+}
+
+AstNode *xr_ast_parallel_range_stmt(XrCompilerSession *session, const char *label,
+                                    const char *begin_name, const char *end_name, AstNode *range,
+                                    AstNode *worker_count, const char *worker_name,
+                                    XrParallelLocalBinding *locals, int local_count,
+                                    AstNode *final_body, AstNode *body, int line) {
+    AstNode *node = alloc_node(session, AST_PARALLEL_FOR_STMT, line);
+    node->as.parallel_for_stmt.label = label ? ast_strdup(session, label) : NULL;
+    node->as.parallel_for_stmt.item_name = ast_strdup(session, begin_name);
+    node->as.parallel_for_stmt.end_name = ast_strdup(session, end_name);
+    node->as.parallel_for_stmt.worker_name = worker_name ? ast_strdup(session, worker_name) : NULL;
+    node->as.parallel_for_stmt.locals = locals;
+    node->as.parallel_for_stmt.local_count = local_count;
+    node->as.parallel_for_stmt.range = range;
+    node->as.parallel_for_stmt.worker_count = worker_count;
+    node->as.parallel_for_stmt.final_body = final_body;
+    node->as.parallel_for_stmt.body = body;
+    node->as.parallel_for_stmt.range_body = true;
+    return node;
+}
+
+AstNode *xr_ast_parallel_reduce_expr(XrCompilerSession *session, const char *item_name,
+                                     AstNode *range, AstNode *worker_count, const char *worker_name,
+                                     XrParallelLocalBinding *locals, int local_count,
+                                     AstNode *initial, AstNode *combine, AstNode *body, int line) {
+    AstNode *node = alloc_node(session, AST_PARALLEL_REDUCE_EXPR, line);
+    node->as.parallel_reduce_expr.item_name = ast_strdup(session, item_name);
+    node->as.parallel_reduce_expr.end_name = NULL;
+    node->as.parallel_reduce_expr.worker_name =
+        worker_name ? ast_strdup(session, worker_name) : NULL;
+    node->as.parallel_reduce_expr.locals = locals;
+    node->as.parallel_reduce_expr.local_count = local_count;
+    node->as.parallel_reduce_expr.range = range;
+    node->as.parallel_reduce_expr.worker_count = worker_count;
+    node->as.parallel_reduce_expr.initial = initial;
+    node->as.parallel_reduce_expr.combine = combine;
+    node->as.parallel_reduce_expr.body = body;
+    node->as.parallel_reduce_expr.range_body = false;
+    return node;
+}
+
+AstNode *xr_ast_parallel_range_reduce_expr(XrCompilerSession *session, const char *begin_name,
+                                           const char *end_name, AstNode *range,
+                                           AstNode *worker_count, const char *worker_name,
+                                           XrParallelLocalBinding *locals, int local_count,
+                                           AstNode *initial, AstNode *combine, AstNode *body,
+                                           int line) {
+    AstNode *node =
+        xr_ast_parallel_reduce_expr(session, begin_name, range, worker_count, worker_name, locals,
+                                    local_count, initial, combine, body, line);
+    node->as.parallel_reduce_expr.end_name = ast_strdup(session, end_name);
+    node->as.parallel_reduce_expr.range_body = true;
+    return node;
+}
+
+AstNode *xr_ast_parallel_collect_expr(XrCompilerSession *session, const char *item_name,
+                                      AstNode *range, AstNode *worker_count,
+                                      const char *worker_name, XrParallelLocalBinding *locals,
+                                      int local_count, AstNode *into, AstNode *final_body,
+                                      AstNode *body, int line) {
+    AstNode *node = alloc_node(session, AST_PARALLEL_COLLECT_EXPR, line);
+    node->as.parallel_collect_expr.item_name = ast_strdup(session, item_name);
+    node->as.parallel_collect_expr.worker_name =
+        worker_name ? ast_strdup(session, worker_name) : NULL;
+    node->as.parallel_collect_expr.locals = locals;
+    node->as.parallel_collect_expr.local_count = local_count;
+    node->as.parallel_collect_expr.range = range;
+    node->as.parallel_collect_expr.worker_count = worker_count;
+    node->as.parallel_collect_expr.into = into;
+    node->as.parallel_collect_expr.final_body = final_body;
+    node->as.parallel_collect_expr.body = body;
+    return node;
+}
+
 // Create break statement node
 AstNode *xr_ast_break_stmt(XrCompilerSession *session, const char *label, int line) {
     AstNode *node = alloc_node(session, AST_BREAK_STMT, line);
@@ -1414,6 +1506,14 @@ const char *xr_ast_typename(AstNodeType type) {
             return "WhileStmt";
         case AST_FOR_STMT:
             return "ForStmt";
+        case AST_FOR_IN_STMT:
+            return "ForInStmt";
+        case AST_PARALLEL_FOR_STMT:
+            return "ParallelForStmt";
+        case AST_PARALLEL_REDUCE_EXPR:
+            return "ParallelReduceExpr";
+        case AST_PARALLEL_COLLECT_EXPR:
+            return "ParallelCollectExpr";
         case AST_BREAK_STMT:
             return "BreakStmt";
         case AST_CONTINUE_STMT:
@@ -1676,6 +1776,104 @@ void xr_ast_print(AstNode *node, int indent) {
             }
             printf("%*s  body:\n", indent * 2, "");
             xr_ast_print(node->as.for_stmt.body, indent + 2);
+            break;
+
+        case AST_FOR_IN_STMT:
+            printf("%*s  item: %s\n", indent * 2, "", node->as.for_in_stmt.item_name);
+            if (node->as.for_in_stmt.value_name)
+                printf("%*s  value: %s\n", indent * 2, "", node->as.for_in_stmt.value_name);
+            printf("%*s  collection:\n", indent * 2, "");
+            xr_ast_print(node->as.for_in_stmt.collection, indent + 2);
+            printf("%*s  body:\n", indent * 2, "");
+            xr_ast_print(node->as.for_in_stmt.body, indent + 2);
+            break;
+
+        case AST_PARALLEL_FOR_STMT:
+            if (node->as.parallel_for_stmt.range_body) {
+                printf("%*s  begin: %s\n", indent * 2, "", node->as.parallel_for_stmt.item_name);
+                printf("%*s  end: %s\n", indent * 2, "", node->as.parallel_for_stmt.end_name);
+            } else {
+                printf("%*s  item: %s\n", indent * 2, "", node->as.parallel_for_stmt.item_name);
+            }
+            if (node->as.parallel_for_stmt.worker_name)
+                printf("%*s  worker: %s\n", indent * 2, "", node->as.parallel_for_stmt.worker_name);
+            for (int i = 0; i < node->as.parallel_for_stmt.local_count; i++) {
+                XrParallelLocalBinding *local = &node->as.parallel_for_stmt.locals[i];
+                printf("%*s  local %s: %s\n", indent * 2, "",
+                       local->is_initializer ? "init" : "lane", local->name);
+                xr_ast_print(local->source, indent + 2);
+            }
+            printf("%*s  range:\n", indent * 2, "");
+            xr_ast_print(node->as.parallel_for_stmt.range, indent + 2);
+            if (node->as.parallel_for_stmt.worker_count) {
+                printf("%*s  workers:\n", indent * 2, "");
+                xr_ast_print(node->as.parallel_for_stmt.worker_count, indent + 2);
+            }
+            if (node->as.parallel_for_stmt.final_body) {
+                printf("%*s  final:\n", indent * 2, "");
+                xr_ast_print(node->as.parallel_for_stmt.final_body, indent + 2);
+            }
+            printf("%*s  body:\n", indent * 2, "");
+            xr_ast_print(node->as.parallel_for_stmt.body, indent + 2);
+            break;
+
+        case AST_PARALLEL_REDUCE_EXPR:
+            if (node->as.parallel_reduce_expr.range_body) {
+                printf("%*s  begin: %s\n", indent * 2, "", node->as.parallel_reduce_expr.item_name);
+                printf("%*s  end: %s\n", indent * 2, "", node->as.parallel_reduce_expr.end_name);
+            } else {
+                printf("%*s  item: %s\n", indent * 2, "", node->as.parallel_reduce_expr.item_name);
+            }
+            if (node->as.parallel_reduce_expr.worker_name)
+                printf("%*s  worker: %s\n", indent * 2, "",
+                       node->as.parallel_reduce_expr.worker_name);
+            for (int i = 0; i < node->as.parallel_reduce_expr.local_count; i++) {
+                XrParallelLocalBinding *local = &node->as.parallel_reduce_expr.locals[i];
+                printf("%*s  local %s: %s\n", indent * 2, "",
+                       local->is_initializer ? "init" : "lane", local->name);
+                xr_ast_print(local->source, indent + 2);
+            }
+            printf("%*s  range:\n", indent * 2, "");
+            xr_ast_print(node->as.parallel_reduce_expr.range, indent + 2);
+            if (node->as.parallel_reduce_expr.worker_count) {
+                printf("%*s  workers:\n", indent * 2, "");
+                xr_ast_print(node->as.parallel_reduce_expr.worker_count, indent + 2);
+            }
+            printf("%*s  init:\n", indent * 2, "");
+            xr_ast_print(node->as.parallel_reduce_expr.initial, indent + 2);
+            printf("%*s  combine:\n", indent * 2, "");
+            xr_ast_print(node->as.parallel_reduce_expr.combine, indent + 2);
+            printf("%*s  body:\n", indent * 2, "");
+            xr_ast_print(node->as.parallel_reduce_expr.body, indent + 2);
+            break;
+
+        case AST_PARALLEL_COLLECT_EXPR:
+            printf("%*s  item: %s\n", indent * 2, "", node->as.parallel_collect_expr.item_name);
+            if (node->as.parallel_collect_expr.worker_name)
+                printf("%*s  worker: %s\n", indent * 2, "",
+                       node->as.parallel_collect_expr.worker_name);
+            for (int i = 0; i < node->as.parallel_collect_expr.local_count; i++) {
+                XrParallelLocalBinding *local = &node->as.parallel_collect_expr.locals[i];
+                printf("%*s  local %s: %s\n", indent * 2, "",
+                       local->is_initializer ? "init" : "lane", local->name);
+                xr_ast_print(local->source, indent + 2);
+            }
+            printf("%*s  range:\n", indent * 2, "");
+            xr_ast_print(node->as.parallel_collect_expr.range, indent + 2);
+            if (node->as.parallel_collect_expr.worker_count) {
+                printf("%*s  workers:\n", indent * 2, "");
+                xr_ast_print(node->as.parallel_collect_expr.worker_count, indent + 2);
+            }
+            if (node->as.parallel_collect_expr.into) {
+                printf("%*s  into:\n", indent * 2, "");
+                xr_ast_print(node->as.parallel_collect_expr.into, indent + 2);
+            }
+            if (node->as.parallel_collect_expr.final_body) {
+                printf("%*s  final:\n", indent * 2, "");
+                xr_ast_print(node->as.parallel_collect_expr.final_body, indent + 2);
+            }
+            printf("%*s  body:\n", indent * 2, "");
+            xr_ast_print(node->as.parallel_collect_expr.body, indent + 2);
             break;
 
         case AST_BREAK_STMT:
@@ -2100,11 +2298,12 @@ AstNode *xr_ast_go_expr(XrCompilerSession *session, AstNode *expr, const char *n
 
 // Create await expression node
 // await task, await(timeout: N) task, await all/await any/await anySuccess [tasks]
-AstNode *xr_ast_await_expr(XrCompilerSession *session, AstNode *expr, AstNode *timeout, bool is_any,
-                           bool is_all, bool is_any_success, int line) {
+AstNode *xr_ast_await_expr(XrCompilerSession *session, AstNode *expr, AstNode *timeout,
+                           AstNode *into, bool is_any, bool is_all, bool is_any_success, int line) {
     AstNode *node = alloc_node(session, AST_AWAIT_EXPR, line);
     node->as.await_expr.expr = expr;
     node->as.await_expr.timeout = timeout;
+    node->as.await_expr.into = into;
     node->as.await_expr.is_any = is_any;
     node->as.await_expr.is_all = is_all;
     node->as.await_expr.is_any_success = is_any_success;

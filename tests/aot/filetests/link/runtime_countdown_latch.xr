@@ -1,0 +1,11 @@
+shared const latch = CountdownLatch(1)
+shared const counter = Atomic(0)
+
+go fn() {
+    counter.add(7)
+    latch.done()
+}()
+
+print(latch.wait())
+print(counter.load())
+print(latch.remaining)

@@ -1,0 +1,4 @@
+regex=function [0-9]+ name=mayThrow .* abi=native boundary=none
+c_regex=int64_t .*mayThrow_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
+c_contains=xrt_pending_error =
+c_contains=return 0;

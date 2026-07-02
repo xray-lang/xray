@@ -76,8 +76,12 @@ typedef struct {
     bool need_timer;
     bool need_netpoll;
     bool need_task;
+    bool need_atomic;
     bool need_work_queue;
     bool need_result_group;
+    bool need_countdown_latch;
+    bool need_semaphore;
+    bool need_event_count;
     bool need_generator;
     bool need_objects;
     bool need_deep_copy;

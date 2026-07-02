@@ -1,0 +1,5 @@
+fn uncheckedDiv(n: int, d: int) -> int {
+    return n / d
+}
+
+print(uncheckedDiv(17, 5))

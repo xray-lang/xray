@@ -514,6 +514,64 @@ TEST(aot_poll_yield_bumps_backedge_heartbeat) {
     scheduler_fixture_cleanup(&f);
 }
 
+TEST(aot_poll_yield_kind_bumps_backedge_heartbeat) {
+    SchedulerFixture f;
+    ASSERT_TRUE(scheduler_fixture_init(&f));
+
+    XrCoroutine coro;
+    memset(&coro, 0, sizeof(coro));
+    xr_coro_set_reds(&coro, XR_CORO_REDUCTIONS);
+
+    XrAotContext ctx = {
+        .coro = &coro,
+        .worker = &f.worker,
+    };
+    uint64_t before = atomic_load_explicit(&f.machine.heartbeat, memory_order_relaxed);
+    XrAotRunKind kind = xr_aot_poll_yield_kind(&ctx);
+    uint64_t after = atomic_load_explicit(&f.machine.heartbeat, memory_order_relaxed);
+
+    ASSERT_EQ_INT((int) kind, (int) XR_AOT_RUN_DONE);
+    ASSERT(after == before + 1);
+    ASSERT_EQ_INT(xr_coro_reds(&coro), XR_CORO_REDUCTIONS - 1);
+
+    scheduler_fixture_cleanup(&f);
+}
+
+TEST(aot_poll_yield_kind_cost_batches_reductions) {
+    SchedulerFixture f;
+    ASSERT_TRUE(scheduler_fixture_init(&f));
+
+    XrCoroutine coro;
+    memset(&coro, 0, sizeof(coro));
+    xr_coro_set_reds(&coro, XR_CORO_REDUCTIONS);
+
+    XrAotContext ctx = {
+        .coro = &coro,
+        .worker = &f.worker,
+    };
+    uint64_t before = atomic_load_explicit(&f.machine.heartbeat, memory_order_relaxed);
+    XrAotRunKind kind = xr_aot_poll_yield_kind_cost(&ctx, XR_AOT_LOOP_POLL_INTERVAL);
+    uint64_t after = atomic_load_explicit(&f.machine.heartbeat, memory_order_relaxed);
+
+    ASSERT_EQ_INT((int) kind, (int) XR_AOT_RUN_DONE);
+    ASSERT(after == before + 1);
+    ASSERT_EQ_INT(xr_coro_reds(&coro), XR_CORO_REDUCTIONS - XR_AOT_LOOP_POLL_INTERVAL);
+
+    scheduler_fixture_cleanup(&f);
+}
+
+TEST(aot_sync_backedge_heartbeat_uses_current_worker) {
+    SchedulerFixture f;
+    ASSERT_TRUE(scheduler_fixture_init(&f));
+
+    uint64_t before = atomic_load_explicit(&f.machine.heartbeat, memory_order_relaxed);
+    xr_aot_sync_backedge_heartbeat();
+    uint64_t after = atomic_load_explicit(&f.machine.heartbeat, memory_order_relaxed);
+    ASSERT(after == before + 1);
+
+    scheduler_fixture_cleanup(&f);
+}
+
 TEST(deterministic_runtime_forces_single_worker_and_virtual_clock) {
     char *old_det = dup_env_value(getenv("XRAY_CORO_DETERMINISTIC"));
     char *old_workers = dup_env_value(getenv("XRAY_WORKERS"));
@@ -748,6 +806,9 @@ RUN_TEST(sysmon_forced_cancel_defaults_to_warn_only);
 RUN_TEST(sysmon_forced_cancel_env_opt_in);
 RUN_TEST(worker_heartbeat_bump_advances_sysmon_signal);
 RUN_TEST(aot_poll_yield_bumps_backedge_heartbeat);
+RUN_TEST(aot_poll_yield_kind_bumps_backedge_heartbeat);
+RUN_TEST(aot_poll_yield_kind_cost_batches_reductions);
+RUN_TEST(aot_sync_backedge_heartbeat_uses_current_worker);
 RUN_TEST(deterministic_runtime_forces_single_worker_and_virtual_clock);
 RUN_TEST(current_monotonic_uses_virtual_time_in_deterministic_runtime);
 RUN_TEST(work_stealing_moves_batch_and_returns_direct_item);

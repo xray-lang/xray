@@ -1,0 +1,17 @@
+fn worker(n: int) -> int {
+    return n + 1
+}
+
+let total = 0
+for (let i = 0; i < 20000; i++) {
+    let t1 = go worker(1)
+    let t2 = go worker(2)
+    let t3 = go worker(3)
+    let t4 = go worker(4)
+    total = total + await t1
+    total = total + await t2
+    total = total + await t3
+    total = total + await t4
+}
+
+print(total)

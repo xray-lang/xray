@@ -1,0 +1,40 @@
+fn main() {
+    shared const partials: Array<int> = []
+    let w = 0
+    while (w < 2) {
+        partials.push(0)
+        w = w + 1
+    }
+
+    parallel for i in 0..8 workers 2 worker wid
+        local table = Array<int>(2, wid) {
+        unsafe {
+            table.setUnchecked(0, table.getUnchecked(0) + 1)
+            partials.setUnchecked(wid, table.getUnchecked(0) + table.getUnchecked(1))
+        }
+    }
+
+    let total = 0
+    w = 0
+    while (w < 2) {
+        unsafe {
+            total = total + partials.getUnchecked(w)
+        }
+        w = w + 1
+    }
+    print(total)
+
+    let reduced = parallel range reduce begin, end in 0..8 workers 2 worker wid
+        local table = Array<int>(2, wid)
+        init 0
+        combine (a: int, b: int) -> a + b {
+        let n = 0
+        unsafe {
+            n = table.getUnchecked(0) + table.getUnchecked(1)
+        }
+        n + (end - begin)
+    }
+    print(reduced)
+}
+
+main()

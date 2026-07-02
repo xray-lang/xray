@@ -6,6 +6,8 @@ class WorkQueue<T> {
     shardCount: int
     isClosed: bool
     push(value: T, shard?: int) -> bool
+    // WorkQueue<int> only: enqueue count consecutive integer jobs and return the accepted count.
+    pushRange(start: int, count: int, shardStart?: int) -> int
     pop(workerId?: int): T?
     tryPop(workerId?: int): (T?, bool)
     close()

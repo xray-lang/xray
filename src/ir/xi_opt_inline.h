@@ -54,9 +54,10 @@ XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallS
  *   100..300     -> XI_INLINE_MAX_PER_PASS      (default)
  *   > 300        -> XI_INLINE_MAX_PER_PASS - 2  (large caller, cap growth)
  *
- * The xi_inline_benefit() function additionally penalises callers >300
- * by -15, so the two mechanisms compose: large callers see both fewer
- * call sites considered per pass and stricter benefit thresholds. */
+ * The xi_inline_benefit() function additionally penalises callers >300 for
+ * general callees. Leaf straight-line helpers are scored by callee size only:
+ * they are the hot-loop shape where call overhead is usually more expensive
+ * than controlled code growth, while this per-pass budget still caps growth. */
 XR_FUNC uint32_t xi_inline_budget(uint32_t caller_size);
 
 /* Absolute upper bound on callee size (never inline above this). */

@@ -1856,41 +1856,77 @@ TEST(multi_await_token_cancels_registered_task_waiters) {
     atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
 
-    XrTask first;
-    XrTask second;
-    init_stack_task(&first, XR_TASK_ACTIVE, xr_null(), xr_null());
-    init_stack_task(&second, XR_TASK_ACTIVE, xr_null(), xr_null());
+    XrTask task_storage[2];
+    for (int i = 0; i < 2; i++)
+        init_stack_task(&task_storage[i], XR_TASK_ACTIVE, xr_null(), xr_null());
 
     XrArray tasks;
     ASSERT_TRUE(init_task_array(&tasks, 2));
-    xr_array_push(&tasks, xr_value_from_task(&first));
-    xr_array_push(&tasks, xr_value_from_task(&second));
+    for (int i = 0; i < 2; i++)
+        xr_array_push(&tasks, xr_value_from_task(&task_storage[i]));
 
     XrCoroBlockResult result = xr_coro_await_all_tasks(&waiter, &tasks);
     ASSERT_EQ_INT((int) result.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.multi_await_token.state),
                   XR_MULTI_AWAIT_WAIT_REGISTERED);
-    ASSERT_EQ_PTR(first.await_waiters, &waiter_ext.wait.multi_await_token.nodes[0]);
-    ASSERT_EQ_PTR(second.await_waiters, &waiter_ext.wait.multi_await_token.nodes[1]);
+    ASSERT_EQ_PTR(task_storage[0].await_waiters, &waiter_ext.wait.multi_await_token.nodes[0]);
+    ASSERT_EQ_PTR(task_storage[1].await_waiters, &waiter_ext.wait.multi_await_token.nodes[1]);
     ASSERT_EQ_PTR(waiter_ext.wait.multi_await_token.nodes[0].waiter, &waiter);
     ASSERT_EQ_PTR(waiter_ext.wait.multi_await_token.nodes[1].waiter, &waiter);
 
     xr_coro_cancel(&waiter);
 
-    ASSERT_NULL(first.await_waiters);
-    ASSERT_NULL(second.await_waiters);
-    ASSERT_NULL(
-        atomic_load_explicit((_Atomic(XrCoroutine *) *) &first.waiter, memory_order_acquire));
-    ASSERT_NULL(
-        atomic_load_explicit((_Atomic(XrCoroutine *) *) &second.waiter, memory_order_acquire));
-    ASSERT_EQ_INT(atomic_load_explicit((_Atomic int *) &first.waiter_index, memory_order_acquire),
-                  -1);
-    ASSERT_EQ_INT(atomic_load_explicit((_Atomic int *) &second.waiter_index, memory_order_acquire),
-                  -1);
+    for (int i = 0; i < 2; i++) {
+        ASSERT_NULL(task_storage[i].await_waiters);
+        ASSERT_NULL(atomic_load_explicit((_Atomic(XrCoroutine *) *) &task_storage[i].waiter,
+                                         memory_order_acquire));
+        ASSERT_EQ_INT(atomic_load_explicit((_Atomic int *) &task_storage[i].waiter_index,
+                                           memory_order_acquire),
+                      -1);
+    }
     ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.multi_await_token.state),
                   XR_MULTI_AWAIT_WAIT_CANCELLED);
     ASSERT_NULL(atomic_load(&waiter_ext.wait.multi_await_token.tasks));
     ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.wait_count), 0);
+
+    destroy_task_array(&tasks);
+}
+
+TEST(await_all_resume_only_uses_resolved_multi_token) {
+    XrCoroutine waiter;
+    XrCoroExt waiter_ext;
+    memset(&waiter, 0, sizeof(waiter));
+    memset(&waiter_ext, 0, sizeof(waiter_ext));
+    waiter.id = 605;
+    waiter.ext = &waiter_ext;
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
+    atomic_store(&waiter.resume_status, XR_RESUME_OK);
+
+    XrTask task_storage[2];
+    for (int i = 0; i < 2; i++)
+        init_stack_task(&task_storage[i], XR_TASK_ACTIVE, xr_null(), xr_null());
+
+    XrArray tasks;
+    ASSERT_TRUE(init_task_array(&tasks, 2));
+    for (int i = 0; i < 2; i++)
+        xr_array_push(&tasks, xr_value_from_task(&task_storage[i]));
+
+    XrCoroBlockResult blocked = xr_coro_await_all_tasks(&waiter, &tasks);
+    ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.multi_await_token.state),
+                  XR_MULTI_AWAIT_WAIT_REGISTERED);
+
+    XrCoroBlockResult early = xr_coro_await_all_tasks_resume(&waiter, &tasks);
+    ASSERT_EQ_INT((int) early.kind, (int) XR_CORO_BLOCK_NOT_RESUMED);
+
+    xr_multi_await_wait_token_resolve(&waiter_ext.wait.multi_await_token);
+    XrCoroBlockResult ready = xr_coro_await_all_tasks_resume(&waiter, &tasks);
+    ASSERT_EQ_INT((int) ready.kind, (int) XR_CORO_BLOCK_READY);
+
+    xr_task_finish_await_waiters(&waiter);
+    for (int i = 0; i < 2; i++)
+        ASSERT_NULL(task_storage[i].await_waiters);
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.multi_await_token.state), XR_MULTI_AWAIT_WAIT_IDLE);
 
     destroy_task_array(&tasks);
 }
@@ -2062,6 +2098,7 @@ RUN_TEST(timer_wait_token_cancels_select_timer_on_channel_wake);
 RUN_TEST(backend_resume_finishes_sleep_timer_token);
 RUN_TEST(multi_await_token_clears_pending_waiters_on_await_any_ready);
 RUN_TEST(multi_await_token_cancels_registered_task_waiters);
+RUN_TEST(await_all_resume_only_uses_resolved_multi_token);
 RUN_TEST(multi_await_node_list_wakes_overlapping_any_waiters);
 RUN_TEST(io_wait_token_tracks_netpoll_ready_and_cancel);
 RUN_TEST(io_wait_token_tracks_netpoll_deadline_timeout);

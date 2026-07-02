@@ -462,6 +462,7 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     new_arr->capacity = length > 0 ? length : XR_ARRAY_INIT_CAPACITY;
     XR_DCHECK(new_arr->length <= new_arr->capacity, "deep_copy_array: length > capacity");
     new_arr->source = NULL;
+    new_arr->storage = NULL;  // fresh system-heap buffer; not a shared storage block
     new_arr->data_storage = XR_ARRAY_DATA_HEAP;
     new_arr->elem_type = array->elem_type;
     new_arr->elem_size = array->elem_size;
@@ -821,8 +822,8 @@ XrValue xr_deep_copy_to_transit(struct XrVMRuntime *X, XrValue value) {
  */
 static bool array_is_movable_scalar(const XrArray *a) {
     return a && a->elem_type != XR_ELEM_ANY && !a->contains_refs &&
-           a->data_storage == XR_ARRAY_DATA_HEAP && a->source == NULL && a->capacity > 0 &&
-           !a->data_on_region_heap && a->data != NULL && a->length > 0;
+           a->data_storage == XR_ARRAY_DATA_HEAP && a->source == NULL && a->storage == NULL &&
+           a->capacity > 0 && !a->data_on_region_heap && a->data != NULL && a->length > 0;
 }
 
 bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, XrValue *out) {
@@ -850,6 +851,7 @@ bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, 
     t->length = src->length;
     t->capacity = src->capacity;
     t->source = NULL;
+    t->storage = NULL; /* movable scalars never carry a shared storage block */
     t->data_storage = XR_ARRAY_DATA_HEAP;
     t->elem_type = src->elem_type;
     t->elem_size = src->elem_size;
@@ -907,6 +909,7 @@ bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine
     r->length = t->length;
     r->capacity = t->capacity;
     r->source = NULL;
+    r->storage = NULL; /* movable scalars never carry a shared storage block */
     r->data_storage = XR_ARRAY_DATA_HEAP;
     r->elem_type = t->elem_type;
     r->elem_size = t->elem_size;

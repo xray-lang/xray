@@ -1,0 +1,23 @@
+let lengths: Array<int> = []
+let checksums: Array<int> = []
+lengths.reserve(8)
+checksums.reserve(8)
+
+parallel for i in 0..6 workers 3 worker wid collect into (lengths, checksums) {
+    let v = i + wid
+    (v, v * 10)
+}
+
+print(lengths.length)
+print(checksums.length)
+print(lengths[0])
+print(lengths[2])
+print(lengths[5])
+print(checksums[5])
+
+parallel for i in 4..4 workers 2 collect into (lengths, checksums) {
+    (i, i)
+}
+
+print(lengths.length)
+print(checksums.length)

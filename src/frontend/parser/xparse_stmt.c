@@ -32,6 +32,52 @@ static char *token_to_ast_string(Parser *parser, Token tok) {
     return s;
 }
 
+static XrParallelLocalBinding *parse_stmt_parallel_locals(Parser *parser, int *out_count) {
+    XrParallelLocalBinding *locals = NULL;
+    int count = 0;
+    int capacity = 0;
+    while (xr_parser_match_name(parser, "local")) {
+        if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+            xr_parser_error_expected_name(parser, "expected parallel local variable name");
+            *out_count = 0;
+            return NULL;
+        }
+        XrParallelLocalBinding binding;
+        memset(&binding, 0, sizeof(binding));
+        binding.name = token_to_ast_string(parser, parser->current);
+        xr_parser_advance(parser);
+        if (xr_parser_match(parser, TK_IN)) {
+            binding.is_initializer = false;
+        } else if (xr_parser_match(parser, TK_ASSIGN)) {
+            binding.is_initializer = true;
+        } else {
+            xr_parser_error_at_current(parser,
+                                       "expected 'in' or '=' after parallel local variable name");
+            *out_count = 0;
+            return NULL;
+        }
+        binding.source = xr_parse_expression(parser);
+        if (!binding.source) {
+            *out_count = 0;
+            return NULL;
+        }
+        XR_PARSE_PUSH(parser, locals, count, capacity, binding);
+    }
+    *out_count = count;
+    return locals;
+}
+
+static AstNode *parse_stmt_parallel_final(Parser *parser) {
+    if (!xr_parser_match(parser, TK_FINAL))
+        return NULL;
+    if (!xr_parser_check(parser, TK_LBRACE)) {
+        xr_parser_error_at_current(parser, "parallel final block requires braces { }");
+        return NULL;
+    }
+    xr_parser_advance(parser);
+    return xr_parse_block(parser);
+}
+
 // Parse if statement
 AstNode *xr_parse_if_statement(Parser *parser) {
     int line = parser->previous.line;
@@ -255,6 +301,157 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
                                                   NULL, item_type, collection, body, line)
                     : xr_ast_for_in_stmt(parser->compiler_session, NULL, first_name, item_type,
                                          collection, body, line);
+    inherit_block_end(stmt, body);
+    return stmt;
+}
+
+// Parse parallel for loop:
+// parallel for i in 0..n workers workers worker workerId { ... }
+AstNode *xr_parse_parallel_for_statement(Parser *parser) {
+    int line = parser->current.line;
+    xr_parser_advance(parser);  // parallel
+    xr_parser_consume(parser, TK_FOR, "expected 'for' after parallel");
+
+    if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+        xr_parser_error_expected_name(parser, "expected parallel loop variable name");
+        return NULL;
+    }
+    char *item_name = token_to_ast_string(parser, parser->current);
+    xr_parser_advance(parser);
+
+    xr_parser_consume(parser, TK_IN, "expected 'in' after parallel loop variable");
+    AstNode *range = xr_parse_expression(parser);
+    if (!range)
+        return NULL;
+
+    AstNode *worker_count = NULL;
+    if (xr_parser_match_name(parser, "workers")) {
+        worker_count = xr_parse_expression(parser);
+        if (!worker_count)
+            return NULL;
+    }
+
+    char *worker_name = NULL;
+    if (xr_parser_match_name(parser, "worker")) {
+        if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+            xr_parser_error_expected_name(parser, "expected parallel worker variable name");
+            return NULL;
+        }
+        worker_name = token_to_ast_string(parser, parser->current);
+        xr_parser_advance(parser);
+    }
+
+    int local_count = 0;
+    XrParallelLocalBinding *locals = parse_stmt_parallel_locals(parser, &local_count);
+    if (parser->panic_mode)
+        return NULL;
+    AstNode *final_body = parse_stmt_parallel_final(parser);
+    if (parser->panic_mode)
+        return NULL;
+
+    if (xr_parser_match_name(parser, "collect")) {
+        AstNode *into = NULL;
+        if (xr_parser_match_name(parser, "into")) {
+            into = xr_parse_precedence(parser, PREC_UNARY);
+            if (!into) {
+                xr_parser_error(parser, "expected result array expression after 'into'");
+                return NULL;
+            }
+        }
+        if (!xr_parser_check(parser, TK_LBRACE)) {
+            xr_parser_error_at_current(parser, "parallel collect expression requires braces { }");
+            return NULL;
+        }
+        xr_parser_advance(parser);
+        AstNode *body = xr_parse_block(parser);
+        AstNode *expr = xr_ast_parallel_collect_expr(parser->compiler_session, item_name, range,
+                                                     worker_count, worker_name, locals, local_count,
+                                                     into, final_body, body, line);
+        AstNode *stmt = xr_ast_expr_stmt(parser->compiler_session, expr, line);
+        inherit_block_end(stmt, body);
+        return stmt;
+    }
+
+    if (!xr_parser_check(parser, TK_LBRACE)) {
+        xr_parser_error_at_current(parser, "parallel for statement requires braces { }");
+        return NULL;
+    }
+    xr_parser_advance(parser);
+    AstNode *body = xr_parse_block(parser);
+
+    AstNode *stmt =
+        xr_ast_parallel_for_stmt(parser->compiler_session, NULL, item_name, range, worker_count,
+                                 worker_name, locals, local_count, final_body, body, line);
+    inherit_block_end(stmt, body);
+    return stmt;
+}
+
+// Parse parallel range loop:
+// parallel range begin, end in 0..n workers workers worker workerId { ... }
+AstNode *xr_parse_parallel_range_statement(Parser *parser) {
+    int line = parser->current.line;
+    xr_parser_advance(parser);  // parallel
+    if (!xr_parser_match_name(parser, "range")) {
+        xr_parser_error_at_current(parser, "expected 'range' after parallel");
+        return NULL;
+    }
+
+    if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+        xr_parser_error_expected_name(parser, "expected parallel range begin variable name");
+        return NULL;
+    }
+    char *begin_name = token_to_ast_string(parser, parser->current);
+    xr_parser_advance(parser);
+
+    xr_parser_consume(parser, TK_COMMA, "expected ',' after parallel range begin variable");
+
+    if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+        xr_parser_error_expected_name(parser, "expected parallel range end variable name");
+        return NULL;
+    }
+    char *end_name = token_to_ast_string(parser, parser->current);
+    xr_parser_advance(parser);
+
+    xr_parser_consume(parser, TK_IN, "expected 'in' after parallel range variables");
+    AstNode *range = xr_parse_expression(parser);
+    if (!range)
+        return NULL;
+
+    AstNode *worker_count = NULL;
+    if (xr_parser_match_name(parser, "workers")) {
+        worker_count = xr_parse_expression(parser);
+        if (!worker_count)
+            return NULL;
+    }
+
+    char *worker_name = NULL;
+    if (xr_parser_match_name(parser, "worker")) {
+        if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+            xr_parser_error_expected_name(parser, "expected parallel worker variable name");
+            return NULL;
+        }
+        worker_name = token_to_ast_string(parser, parser->current);
+        xr_parser_advance(parser);
+    }
+
+    int local_count = 0;
+    XrParallelLocalBinding *locals = parse_stmt_parallel_locals(parser, &local_count);
+    if (parser->panic_mode)
+        return NULL;
+    AstNode *final_body = parse_stmt_parallel_final(parser);
+    if (parser->panic_mode)
+        return NULL;
+
+    if (!xr_parser_check(parser, TK_LBRACE)) {
+        xr_parser_error_at_current(parser, "parallel range statement requires braces { }");
+        return NULL;
+    }
+    xr_parser_advance(parser);
+    AstNode *body = xr_parse_block(parser);
+
+    AstNode *stmt = xr_ast_parallel_range_stmt(parser->compiler_session, NULL, begin_name, end_name,
+                                               range, worker_count, worker_name, locals,
+                                               local_count, final_body, body, line);
     inherit_block_end(stmt, body);
     return stmt;
 }

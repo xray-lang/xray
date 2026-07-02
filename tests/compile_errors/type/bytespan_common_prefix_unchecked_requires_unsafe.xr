@@ -1,0 +1,3 @@
+fn bad(src: ByteSpan) -> int {
+    return src.commonPrefixUnchecked(0, 4, 8)
+}

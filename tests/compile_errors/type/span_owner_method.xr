@@ -1,0 +1,7 @@
+fn main() {
+    let a = [1, 2, 3]
+    let s: Span<int> = a[0:2]
+    s.push(4)
+}
+
+main()

@@ -78,6 +78,9 @@ static XiBlock *find_invariant_branch(const XiLoop *loop) {
             continue;
         if (blk->kind != XI_BLOCK_IF || !blk->control)
             continue;
+        if (!blk->succs[0] || !blk->succs[1] || !xi_loop_contains_block(loop, blk->succs[0]) ||
+            !xi_loop_contains_block(loop, blk->succs[1]))
+            continue;
 
         XiValue *cond = blk->control;
 
@@ -135,6 +138,14 @@ static bool hoist_invariant_condition(XiFunc *f, XiLoop *loop, XiBlock *branch_b
     if (!hoisted)
         return false;
     hoisted->flags = cond->flags;
+    hoisted->var_id = cond->var_id;
+    hoisted->rep = cond->rep;
+    hoisted->transfer_mode = cond->transfer_mode;
+    hoisted->aux_kind = cond->aux_kind;
+    hoisted->escape = cond->escape;
+    hoisted->mem_group = cond->mem_group;
+    hoisted->aux_int = cond->aux_int;
+    hoisted->aux = cond->aux;
     hoisted->line = cond->line;
     for (uint16_t a = 0; a < cond->nargs; a++) {
         hoisted->args[a] = cond->args[a];

@@ -21,6 +21,8 @@
 #define XR_REP_TAGGED 3
 #define XR_REP_VOID 4
 #define XR_REP_STR 5
+#define XR_REP_RAWPTR 6
+#define XR_REP_COUNT 7
 #endif
 #else
 #include "../runtime/value/xtype.h"

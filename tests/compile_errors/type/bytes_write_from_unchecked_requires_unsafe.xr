@@ -1,0 +1,3 @@
+let out = Bytes.withCapacity(4)
+let src = Bytes(4)
+out.writeFromUnchecked(0, src, 0, 1)

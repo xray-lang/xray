@@ -40,7 +40,10 @@
 #include "../coro/xworker.h"
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
+#include "../coro/xcountdown_latch.h"
+#include "../coro/xevent_count.h"
 #include "../coro/xresult_group.h"
+#include "../coro/xsemaphore.h"
 #include "../coro/xwork_queue.h"
 #include "../runtime/object/xpanic_info.h"
 #include "../runtime/class/xenum.h"
@@ -448,6 +451,48 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         return XR_DISP_NEXT;
     }
 
+    if (xr_value_is_countdown_latch(obj)) {
+        XrCountdownLatch *latch = xr_value_to_countdown_latch(obj);
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
+        const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
+        if (prop_symbol == SYMBOL_IS_CLOSED) {
+            base[a] = xr_bool(xr_countdown_latch_is_closed(latch));
+        } else if (prop_name && strcmp(prop_name, "remaining") == 0) {
+            base[a] = xr_int((xr_Integer) xr_countdown_latch_remaining(latch));
+        } else {
+            base[a] = xr_null();
+        }
+        return XR_DISP_NEXT;
+    }
+
+    if (xr_value_is_semaphore(obj)) {
+        XrSemaphore *sem = xr_value_to_semaphore(obj);
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
+        const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
+        if (prop_symbol == SYMBOL_IS_CLOSED) {
+            base[a] = xr_bool(xr_semaphore_is_closed(sem));
+        } else if (prop_name && strcmp(prop_name, "available") == 0) {
+            base[a] = xr_int((xr_Integer) xr_semaphore_available(sem));
+        } else {
+            base[a] = xr_null();
+        }
+        return XR_DISP_NEXT;
+    }
+
+    if (xr_value_is_event_count(obj)) {
+        XrEventCount *event = xr_value_to_event_count(obj);
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
+        const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
+        if (prop_symbol == SYMBOL_IS_CLOSED) {
+            base[a] = xr_bool(xr_event_count_is_closed(event));
+        } else if (prop_name && strcmp(prop_name, "epoch") == 0) {
+            base[a] = xr_int((xr_Integer) xr_event_count_epoch(event));
+        } else {
+            base[a] = xr_null();
+        }
+        return XR_DISP_NEXT;
+    }
+
     // Enum property access
     if (XR_IS_PTR(obj)) {
         XrObjHeader *gc = (XrObjHeader *) XR_TO_PTR(obj);
@@ -761,6 +806,18 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_PUSH));
             base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_PUSH_UNCHECKED) {
+            XrBoundMethod *bm = xr_bound_method_new(
+                isolate, obj, xr_array_get_handler(isolate, SYMBOL_PUSH_UNCHECKED));
+            base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_APPEND_FROM_UNCHECKED) {
+            XrBoundMethod *bm = xr_bound_method_new(
+                isolate, obj, xr_array_get_handler(isolate, SYMBOL_APPEND_FROM_UNCHECKED));
+            base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_REPEAT_FROM_UNCHECKED) {
+            XrBoundMethod *bm = xr_bound_method_new(
+                isolate, obj, xr_array_get_handler(isolate, SYMBOL_REPEAT_FROM_UNCHECKED));
+            base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_POP) {
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_POP));
@@ -800,26 +857,6 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         } else if (prop_symbol == SYMBOL_RESIZE) {
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_RESIZE));
-            base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_LOADU32LE) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_LOADU32LE));
-            base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_LOADU64LE) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_LOADU64LE));
-            base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_COPYWITHIN) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_COPYWITHIN));
-            base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_COPYFROM) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_COPYFROM));
-            base[a] = xr_value_from_bound_method(bm);
-        } else if (prop_symbol == SYMBOL_REPEATFROM) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_REPEATFROM));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_ITERATOR) {
             XrBoundMethod *bm =

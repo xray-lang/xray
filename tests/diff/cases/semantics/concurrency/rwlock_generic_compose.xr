@@ -1,0 +1,62 @@
+// RwLock<T> as a pure-Xray generic class: a coroutine-aware write/read gate
+// (Semaphore) plus a short non-suspendable Atomic spinlock guarding the reader
+// count. The reader-release cleanup runs in a `defer`, so it must stay
+// non-suspendable (only Atomic ops + Semaphore.release, which does not yield);
+// Semaphore.acquire (which may yield) is used only in the method body, never in
+// defer. All read/write/replace paths must be VM/AOT identical.
+
+class RwLock<T> {
+    _gate: Semaphore
+    _rflag: Atomic<bool>
+    _readers: int
+    value: T
+
+    constructor(v: T) {
+        this._gate = Semaphore(1)
+        this._rflag = Atomic<bool>(false)
+        this._readers = 0
+        this.value = v
+    }
+
+    _lockCounter() {
+        while (true) {
+            let (_, ok) = this._rflag.compareExchange(false, true, Ordering.AcquireRelease)
+            if (ok) { break }
+        }
+    }
+
+    read<U>(body: (T) -> U) -> U {
+        this._lockCounter()
+        this._readers = this._readers + 1
+        let first = this._readers == 1
+        this._rflag.store(false, Ordering.Release)
+        if (first) { this._gate.acquire() }
+        defer {
+            this._lockCounter()
+            this._readers = this._readers - 1
+            let last = this._readers == 0
+            this._rflag.store(false, Ordering.Release)
+            if (last) { this._gate.release() }
+        }
+        return body(this.value)
+    }
+
+    write<U>(body: (T) -> U) -> U {
+        this._gate.acquire()
+        defer { this._gate.release() }
+        return body(this.value)
+    }
+
+    replace(body: (T) -> T) -> T {
+        this._gate.acquire()
+        defer { this._gate.release() }
+        this.value = body(this.value)
+        return this.value
+    }
+}
+
+let rw = RwLock<int>(100)
+print(rw.read((v) -> v + 1))     // 101 (shared read)
+print(rw.replace((v) -> v * 2))  // 200 (exclusive mutate)
+print(rw.write((v) -> v - 50))   // 150 (exclusive read via write gate)
+print(rw.read((v) -> v))         // 200 (value after replace)

@@ -1,0 +1,4 @@
+c_contains=(void)(atomic_store_explicit(
+c_contains=memory_order_relaxed
+c_not_regex=atomic_store_explicit.*XR_NULL_VAL
+c_not_contains=xr_aot_atomic_store_i64(

@@ -299,8 +299,12 @@ static inline const char *xr_obj_type_name(XrObjType type) {
                                   TYPE_NAME_TASK,
                                   TYPE_NAME_ATOMIC,
                                   TYPE_NAME_WORKQUEUE,
-                                  TYPE_NAME_RESULTGROUP};
-    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TRESULTGROUP + 1,
+                                  TYPE_NAME_RESULTGROUP,
+                                  "BoolMap",
+                                  TYPE_NAME_COUNTDOWNLATCH,
+                                  TYPE_NAME_SEMAPHORE,
+                                  TYPE_NAME_EVENTCOUNT};
+    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TEVENTCOUNT + 1,
                    "xr_obj_type_name: names array out of sync with XrObjType enum");
     if (type < sizeof(names) / sizeof(names[0])) {
         return names[type];

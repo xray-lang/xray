@@ -129,9 +129,7 @@ static bool xicgen_stmt_err_return(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     emit_class_field_cache_flush(ctx, out);
     emit_deferred_calls(ctx, out, f, prefix);
     emit_cell_var_releases(ctx, out);
-    fprintf(out, "    return ");
-    emit_default_return_for_abi(ctx, out, f);
-    fprintf(out, ";\n");
+    emit_default_return_stmt_for_abi(ctx, out, f);
     return true;
 }
 
@@ -155,9 +153,12 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         return true;
     }
 
-    if (cg_array_err_check_after_unchecked_fill_push(ctx, f, v) ||
+    if (xicgen_err_check_after_proven_nothrow(ctx, f, v) ||
+        cg_array_err_check_after_unchecked_fill_push(ctx, f, v) ||
+        cg_array_err_check_after_unchecked_bytes_trusted(ctx, f, v) ||
         cg_array_err_check_after_typed_push(ctx, f, v) ||
         cg_array_err_check_after_inline_hof(ctx, f, prefix, v) ||
+        xicgen_atomic_err_check_after_direct_nothrow(v) ||
         cg_class_native_err_check_after_nothrow_call(ctx, f, v))
         return true;
 
@@ -165,9 +166,13 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     emit_class_field_cache_flush(ctx, out);
     emit_deferred_calls(ctx, out, f, prefix);
     emit_cell_var_releases(ctx, out);
-    fprintf(out, "        return ");
-    emit_default_return_for_abi(ctx, out, f);
-    fprintf(out, ";\n");
+    if (cg_func_return_abi_rep(ctx, f) == XR_REP_VOID) {
+        fprintf(out, "        return;\n");
+    } else {
+        fprintf(out, "        return ");
+        emit_default_return_for_abi(ctx, out, f);
+        fprintf(out, ";\n");
+    }
     fprintf(out, "    }\n");
     return true;
 }

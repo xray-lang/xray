@@ -1,0 +1,8 @@
+shared const sem = Semaphore(1)
+
+print(sem.tryAcquire())
+print(sem.available)
+print(sem.release())
+print(sem.available)
+sem.close()
+print(sem.isClosed)

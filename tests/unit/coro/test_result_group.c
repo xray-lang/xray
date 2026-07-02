@@ -113,6 +113,69 @@ TEST(close_flushes_partial_batch) {
     result_group_fixture_cleanup(&f);
 }
 
+TEST(ready_batches_keep_fifo_order_after_inline_slot) {
+    ResultGroupFixture f;
+    ASSERT_TRUE(result_group_fixture_init(&f));
+
+    XrResultGroup *g = xr_result_group_new(&f.core, &f.runtime, 2);
+    ASSERT_NOT_NULL(g);
+
+    ASSERT_TRUE(xr_result_group_add(g, 1));
+    ASSERT_TRUE(xr_result_group_add(g, 2));
+    ASSERT_TRUE(xr_result_group_add(g, 3));
+    ASSERT_TRUE(xr_result_group_add(g, 4));
+    ASSERT_EQ_INT((int) xr_result_group_length(g), 2);
+    ASSERT_EQ_INT((int) xr_result_group_pending_count(g), 4);
+
+    int64_t value = 0;
+    ASSERT_TRUE(xr_result_group_try_recv(g, &value));
+    ASSERT_EQ_INT(value, 3);
+    ASSERT_TRUE(xr_result_group_try_recv(g, &value));
+    ASSERT_EQ_INT(value, 7);
+    ASSERT_FALSE(xr_result_group_try_recv(g, &value));
+    ASSERT_EQ_INT((int) xr_result_group_length(g), 0);
+    ASSERT_EQ_INT((int) xr_result_group_pending_count(g), 0);
+
+    xr_obj_destroy_result_group(&g->hdr, NULL);
+    result_group_fixture_cleanup(&f);
+}
+
+TEST(reset_reuses_empty_group_and_reopens_closed_group) {
+    ResultGroupFixture f;
+    ASSERT_TRUE(result_group_fixture_init(&f));
+
+    XrResultGroup *g = xr_result_group_new(&f.core, &f.runtime, 2);
+    ASSERT_NOT_NULL(g);
+
+    ASSERT_TRUE(xr_result_group_add(g, 10));
+    ASSERT_FALSE(xr_result_group_reset(g, 4));
+
+    ASSERT_TRUE(xr_result_group_add(g, 5));
+    int64_t value = 0;
+    ASSERT_TRUE(xr_result_group_try_recv(g, &value));
+    ASSERT_EQ_INT(value, 15);
+    ASSERT_TRUE(xr_result_group_reset(g, 4));
+    ASSERT_FALSE(xr_result_group_is_closed(g));
+    ASSERT_EQ_INT((int) g->batch_size, 4);
+
+    ASSERT_TRUE(xr_result_group_add(g, 1));
+    ASSERT_TRUE(xr_result_group_add(g, 2));
+    ASSERT_TRUE(xr_result_group_add(g, 3));
+    ASSERT_EQ_INT((int) xr_result_group_length(g), 0);
+    ASSERT_TRUE(xr_result_group_add(g, 4));
+    ASSERT_TRUE(xr_result_group_try_recv(g, &value));
+    ASSERT_EQ_INT(value, 10);
+
+    xr_result_group_close(g);
+    ASSERT_TRUE(xr_result_group_is_closed(g));
+    ASSERT_TRUE(xr_result_group_reset(g, 3));
+    ASSERT_FALSE(xr_result_group_is_closed(g));
+    ASSERT_EQ_INT((int) g->batch_size, 3);
+
+    xr_obj_destroy_result_group(&g->hdr, NULL);
+    result_group_fixture_cleanup(&f);
+}
+
 TEST(sched_stats_track_batch_lifecycle) {
     ResultGroupFixture f;
     ASSERT_TRUE(result_group_fixture_init(&f));
@@ -217,6 +280,8 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("ResultGroup");
 RUN_TEST(batch_add_flush_and_recv_tracks_counts);
 RUN_TEST(close_flushes_partial_batch);
+RUN_TEST(ready_batches_keep_fifo_order_after_inline_slot);
+RUN_TEST(reset_reuses_empty_group_and_reopens_closed_group);
 RUN_TEST(sched_stats_track_batch_lifecycle);
 RUN_TEST(cancel_waiter_unlinks_coroutine_from_result_group);
 RUN_TEST(close_without_workers_keeps_waiter_blocked);

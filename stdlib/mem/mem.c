@@ -32,6 +32,7 @@
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/runtime/mem/xalloc_unified.h"
+#include "../../src/shared/xr_bits_core.h"
 #include "../../src/base/xchecks.h"
 
 /* ========== Helper ========== */
@@ -162,6 +163,57 @@ static XrValue mem_info(XrVMRuntime *isolate, XrValue *args, int argc) {
 }
 
 #undef MAP_SET
+
+/* ========== Bit intrinsics (mem.popcount / leadingZeros / ...) ========== */
+
+/*
+ * Pure 64-bit bit-manipulation intrinsics. Semantics live in the shared
+ * core (src/shared/xr_bits_core.h) so the VM bindings here and the AOT
+ * wrappers in src/aot/xrt_mem.h stay bit-identical. No heap / coroutine
+ * state is touched, so these are safe on any thread.
+ */
+
+static XrValue mem_popcount(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_int(0);
+    return xr_int(xr_bits_core_popcount(XR_TO_INT(args[0])));
+}
+
+static XrValue mem_leading_zeros(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_int(64);
+    return xr_int(xr_bits_core_leading_zeros(XR_TO_INT(args[0])));
+}
+
+static XrValue mem_trailing_zeros(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_int(64);
+    return xr_int(xr_bits_core_trailing_zeros(XR_TO_INT(args[0])));
+}
+
+static XrValue mem_byteswap(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_int(0);
+    return xr_int(xr_bits_core_byteswap(XR_TO_INT(args[0])));
+}
+
+static XrValue mem_rotate_left(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+        return xr_int(0);
+    return xr_int(xr_bits_core_rotate_left(XR_TO_INT(args[0]), XR_TO_INT(args[1])));
+}
+
+static XrValue mem_rotate_right(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+        return xr_int(0);
+    return xr_int(xr_bits_core_rotate_right(XR_TO_INT(args[0]), XR_TO_INT(args[1])));
+}
 
 /* ========== Module Loading ========== */
 

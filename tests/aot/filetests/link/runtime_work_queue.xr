@@ -4,4 +4,11 @@ assert_true(queue.push(1, 0))
 let (value, ok) = queue.tryPop(0)
 print(ok)
 print(value)
+assert_eq(queue.pushRange(10, 3, 0), 3)
+let (a, a_ok) = queue.tryPop(0)
+let (b, b_ok) = queue.tryPop(1)
+let (c, c_ok) = queue.tryPop(2)
+if (a_ok && b_ok && c_ok) {
+    print((a ?? 0) + (b ?? 0) + (c ?? 0))
+}
 queue.close()

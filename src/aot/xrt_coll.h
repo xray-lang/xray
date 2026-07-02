@@ -53,6 +53,22 @@ typedef struct {
     XR_ARRAY_ABI_FIELDS;
 } xrt_array_t;
 
+#ifdef XRT_IMPL
+atomic_flag xrt_array_storage_promotion_lock = ATOMIC_FLAG_INIT;
+#else
+extern atomic_flag xrt_array_storage_promotion_lock;
+#endif
+
+static inline void xrt_array_storage_promotion_lock_acquire(void) {
+    while (atomic_flag_test_and_set_explicit(&xrt_array_storage_promotion_lock,
+                                             memory_order_acquire)) {
+    }
+}
+
+static inline void xrt_array_storage_promotion_lock_release(void) {
+    atomic_flag_clear_explicit(&xrt_array_storage_promotion_lock, memory_order_release);
+}
+
 static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_size,
                                                    const char *where) {
     if (cap < 0)
@@ -84,13 +100,94 @@ static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t et
     a->length = 0;
     a->capacity = cap;
     a->source = NULL;
+    a->storage = NULL;
     a->elem_type = etype;
     a->elem_size = elem_size;
     a->elem_tid = 0;
     a->contains_refs = 0;
+    a->content_version = XR_ARRAY_CONTENT_VERSION_INIT;
+    a->deferred_submit_version = 0;
     a->data_storage = XR_ARRAY_DATA_INLINE;
     a->adt_enum_name = NULL;
     a->adt_member_name = NULL;
+}
+
+/* ===== Refcounted array storage block (task 143/144 M2), AOT side =====
+ * Mirrors the VM logic in xarray.c: a sliced array's buffer becomes a
+ * refcounted system-heap block shared by the array and its slices, so a later
+ * grow forks the buffer (snapshot) instead of freeing it under live views.
+ * Covers POD and ANY elements; for ANY the storage owns the XrValue refs and
+ * releases them at refcount 0. Buffers stay XRT_DATA_ALIGN-aligned so generated
+ * XR_ASSUME_ALIGNED caches remain valid. */
+static inline XrArrayStorage *xrt_array_storage_alloc(void *data, int64_t bytes, uint8_t is_any) {
+    XrArrayStorage *s = (XrArrayStorage *) XRT_MALLOC(sizeof(XrArrayStorage));
+    if (XR_UNLIKELY(!s)) {
+        fprintf(stderr, "xrt_array_storage_alloc: out of memory\n");
+        abort();
+    }
+    atomic_store_explicit(&s->refcount, 1, memory_order_relaxed);
+    s->data = data;
+    s->byte_capacity = bytes;
+    s->account_heap = NULL;
+    s->accounted_bytes = 0;
+    s->elem_count = 0;
+    s->elem_is_any = is_any;
+    return s;
+}
+
+static inline void xrt_array_storage_retain_block(XrArrayStorage *s) {
+    if (s)
+        atomic_fetch_add_explicit(&s->refcount, 1, memory_order_acq_rel);
+}
+
+static inline void xrt_array_storage_release_block(XrArrayStorage *s) {
+    if (!s)
+        return;
+    if (atomic_fetch_sub_explicit(&s->refcount, 1, memory_order_acq_rel) == 1) {
+        if (s->elem_is_any && s->data) {
+            XrValue *items = (XrValue *) s->data;
+            for (int64_t i = 0; i < s->elem_count; i++)
+                xrt_release(items[i]);
+        }
+        if (s->data)
+            XRT_FREE_ALIGNED(s->data);
+        XRT_FREE(s);
+    }
+}
+
+static inline void xrt_array_ensure_storage(xrt_array_t *a) {
+    if (!a || a->storage || a->data_storage == XR_ARRAY_DATA_BORROWED)
+        return;
+    if (a->data_storage == XR_ARRAY_DATA_STACK)
+        return;
+    xrt_array_storage_promotion_lock_acquire();
+    if (a->storage) {
+        xrt_array_storage_promotion_lock_release();
+        return;
+    }
+    uint8_t is_any = (a->elem_type == XR_ELEM_ANY) ? 1 : 0;
+    int64_t bytes = (int64_t) a->elem_size * a->capacity;
+    void *buf = NULL;
+    if (bytes > 0) {
+        buf = XRT_ALLOC_ALIGNED((size_t) bytes);
+        if (XR_UNLIKELY(!buf)) {
+            fprintf(stderr, "xrt_array_ensure_storage: out of memory\n");
+            abort();
+        }
+        if (a->data)
+            memcpy(buf, a->data, (size_t) bytes); /* ANY: moves the XrValue refs */
+    }
+    XrArrayStorage *s = xrt_array_storage_alloc(buf, bytes, is_any);
+    s->elem_count = is_any ? a->length : 0;
+    /* Free the old buffer only if it was a separately allocated heap buffer;
+     * INLINE buffers live inside the header allocation and are reclaimed with it.
+     * For ANY this frees the raw buffer only — the element refs moved to storage. */
+    if (a->data && a->data_storage == XR_ARRAY_DATA_HEAP)
+        XRT_FREE_ALIGNED(a->data);
+    a->storage = s;
+    a->data = buf;
+    a->data_storage = XR_ARRAY_DATA_HEAP;
+    xrt_array_storage_promotion_lock_release();
 }
 
 static inline void xrt_array_check_store_or_abort(const xrt_array_t *a, XrValue val,
@@ -144,6 +241,45 @@ static inline void xrt_array_data_grow(xrt_array_t *a, int64_t new_cap) {
     size_t old_bytes =
         xrt_array_data_bytes_or_abort(a->capacity, a->elem_size, "xrt_array_data_grow");
     size_t new_bytes = xrt_array_data_bytes_or_abort(new_cap, a->elem_size, "xrt_array_data_grow");
+
+    if (a->storage) {
+        /* Sliced array: grow via the refcounted storage block. Fork a private
+         * copy when shared with slices so existing views keep a stable snapshot. */
+        XrArrayStorage *s = (XrArrayStorage *) a->storage;
+        void *tmp = XRT_ALLOC_ALIGNED(new_bytes);
+        if (XR_UNLIKELY(!tmp)) {
+            fprintf(stderr, "xrt_array_data_grow: out of memory\n");
+            abort();
+        }
+        if (a->data && old_bytes > 0)
+            memcpy(tmp, a->data, old_bytes);
+        if (new_bytes > old_bytes)
+            memset((uint8_t *) tmp + old_bytes, 0, new_bytes - old_bytes);
+        if (atomic_load_explicit(&s->refcount, memory_order_acquire) == 1) {
+            XRT_FREE_ALIGNED(s->data);
+            s->data = tmp;
+            s->byte_capacity = (int64_t) new_bytes;
+            if (s->elem_is_any)
+                s->elem_count = a->length;
+        } else {
+            /* Fork: both buffers now reference the same ANY elements, so retain
+             * each for the new copy and freeze the old storage's owning count. */
+            XrArrayStorage *ns = xrt_array_storage_alloc(tmp, (int64_t) new_bytes, s->elem_is_any);
+            if (s->elem_is_any) {
+                XrValue *src = (XrValue *) a->data;
+                for (int64_t i = 0; i < a->length; i++)
+                    xrt_retain(src[i]);
+                ns->elem_count = a->length;
+                s->elem_count = a->length;
+            }
+            atomic_fetch_sub_explicit(&s->refcount, 1, memory_order_acq_rel);
+            /* This array leaves the shared (old) storage. */
+            a->storage = ns;
+        }
+        a->data = tmp;
+        a->capacity = new_cap;
+        return;
+    }
     void *tmp = XRT_ALLOC_ALIGNED(new_bytes);
     if (XR_UNLIKELY(!tmp)) {
         fprintf(stderr, "xrt_array_data_grow: out of memory\n");
@@ -177,21 +313,40 @@ static inline int xrt_array_data_is_borrowed(const xrt_array_t *a) {
     return a && a->data_storage == XR_ARRAY_DATA_BORROWED;
 }
 
-static inline XrValue xrt_array_new(int64_t cap) {
-    if (cap < 4)
-        cap = 4;
+static inline XrValue xrt_array_new(int64_t len) {
+    if (len < 0)
+        len = 0;
+    int64_t cap = len < 4 ? 4 : len;
     xrt_array_t *a = xrt_array_alloc_inline(cap, XR_ELEM_ANY, 1, "xrt_array_new");
+    a->length = len;
     return xr_mkptr(a, XR_TAG_ARRAY);
 }
 
-static inline xrt_array_t *xrt_array_new_typed_ptr(int64_t cap, uint8_t etype) {
+static inline XrValue xrt_array_with_capacity(int64_t cap) {
     if (cap < 4)
         cap = 4;
-    return xrt_array_alloc_inline(cap, etype, 1, "xrt_array_new_typed");
+    xrt_array_t *a = xrt_array_alloc_inline(cap, XR_ELEM_ANY, 1, "xrt_array_with_capacity");
+    return xr_mkptr(a, XR_TAG_ARRAY);
 }
 
-static inline XrValue xrt_array_new_typed(int64_t cap, uint8_t etype) {
-    return xr_mkptr(xrt_array_new_typed_ptr(cap, etype), XR_TAG_ARRAY);
+static inline xrt_array_t *xrt_array_new_typed_ptr(int64_t len, uint8_t etype) {
+    if (len < 0)
+        len = 0;
+    int64_t cap = len < 4 ? 4 : len;
+    xrt_array_t *a = xrt_array_alloc_inline(cap, etype, 1, "xrt_array_new_typed");
+    a->length = len;
+    return a;
+}
+
+static inline XrValue xrt_array_new_typed(int64_t len, uint8_t etype) {
+    return xr_mkptr(xrt_array_new_typed_ptr(len, etype), XR_TAG_ARRAY);
+}
+
+static inline XrValue xrt_array_with_capacity_typed(int64_t cap, uint8_t etype) {
+    if (cap < 4)
+        cap = 4;
+    xrt_array_t *a = xrt_array_alloc_inline(cap, etype, 1, "xrt_array_with_capacity_typed");
+    return xr_mkptr(a, XR_TAG_ARRAY);
 }
 
 static inline xrt_array_t *xrt_array_new_typed_uninit_ptr(int64_t cap, uint8_t etype) {
@@ -286,6 +441,74 @@ static inline void xrt_array_push(XrValue arr, XrValue val) {
         xrt_array_data_grow(a, a->capacity == 0 ? 4 : a->capacity * 2);
     xr_typed_set(a->data, (int32_t) a->length, val, a->elem_type);
     a->length++;
+    XR_ARRAY_MARK_MUTATED(a);
+}
+
+static inline void xrt_array_push_unchecked(XrValue arr, XrValue val) {
+    xrt_array_t *a = (xrt_array_t *) arr.ptr;
+    xrt_array_check_store_or_abort(a, val, "xrt_array_push_unchecked");
+    if (XR_UNLIKELY(a->data_storage == XR_ARRAY_DATA_BORROWED))
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
+    if (XR_UNLIKELY(a->length >= a->capacity))
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Array.pushUnchecked capacity exceeded");
+    xr_typed_set(a->data, (int32_t) a->length, val, a->elem_type);
+    a->length++;
+    XR_ARRAY_MARK_MUTATED(a);
+}
+
+static inline XrValue xrt_array_clear_value(XrValue arr) {
+    if (!XR_IS_ARRAY(arr) || !arr.ptr)
+        return XR_NULL_VAL;
+    xrt_array_t *a = (xrt_array_t *) arr.ptr;
+    if (a->elem_type == XR_ELEM_ANY && a->data && a->length > 0 && !a->storage &&
+        a->data_storage != XR_ARRAY_DATA_BORROWED) {
+        XrValue *items = (XrValue *) a->data;
+        for (int64_t i = 0; i < a->length; i++) {
+            xrt_release(items[i]);
+            items[i] = XR_NULL_VAL;
+        }
+    }
+    a->length = 0;
+    XR_ARRAY_MARK_MUTATED(a);
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_adt_value_box(XrAotAdtValue value) {
+    uint32_t payload_count = value.payload_count > 1 ? 1 : value.payload_count;
+    XrValue out = xrt_array_with_capacity((int64_t) payload_count + 1);
+    xrt_array_t *arr = (xrt_array_t *) out.ptr;
+    arr->adt_enum_name = value.enum_name;
+    arr->adt_member_name = value.member_name;
+    xrt_array_push(out, XR_FROM_INT(value.tag));
+    if (payload_count > 0)
+        xrt_array_push(out, value.payload0);
+    return out;
+}
+
+static inline XrAotAdtValue xrt_adt_value_from_boxed(XrValue boxed) {
+    if (!XR_IS_ARRAY(boxed))
+        return xrt_adt_value_zero();
+    xrt_array_t *arr = (xrt_array_t *) boxed.ptr;
+    XrAotAdtValue out = xrt_adt_value_zero();
+    out.enum_name = arr->adt_enum_name;
+    out.member_name = arr->adt_member_name;
+    if (arr->length > 0) {
+        XrValue *items = (XrValue *) arr->data;
+        out.tag = XR_TO_INT(items[0]);
+        if (arr->length > 1) {
+            out.payload_count = 1;
+            out.payload0 = items[1];
+        }
+    }
+    return out;
+}
+
+static inline XrValue xrt_adt_value_field(XrAotAdtValue value, int64_t index) {
+    if (index == 0)
+        return XR_FROM_INT(value.tag);
+    if (index == 1 && value.payload_count > 0)
+        return value.payload0;
+    return XR_NULL_VAL;
 }
 
 /* Splice every element of `src_val` onto the end of `dst_val` (array spread
@@ -354,6 +577,10 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
     if (count < 0)
         count = 0;
 
+    /* Promote the source buffer to a shared refcounted storage block first so
+     * the slice survives a later source grow (may move src->data). */
+    xrt_array_ensure_storage(src);
+
     xrt_array_t *slice = (xrt_array_t *) XRT_MALLOC(sizeof(xrt_array_t));
     if (XR_UNLIKELY(!slice)) {
         fprintf(stderr, "xrt_array_slice_view: out of memory\n");
@@ -370,6 +597,10 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
     slice->source = src->source ? src->source : (void *) src;
     if (slice->source)
         xrt_retain(xr_mkptr(slice->source, XR_TAG_ARRAY));
+    /* Share the refcounted storage block. */
+    slice->storage = src->storage;
+    if (src->storage)
+        xrt_array_storage_retain_block((XrArrayStorage *) src->storage);
     slice->elem_type = src->elem_type;
     slice->elem_size = src->elem_size;
     slice->elem_tid = src->elem_tid;
@@ -377,6 +608,93 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
     slice->adt_enum_name = src->adt_enum_name;
     slice->adt_member_name = src->adt_member_name;
     return xr_mkptr(slice, XR_TAG_ARRAY);
+}
+
+static inline void xrt_array_stack_slice_view_init(xrt_array_t *slice, XrValue arr, int64_t start,
+                                                   int64_t end) {
+    if (XR_UNLIKELY(!slice)) {
+        fprintf(stderr, "xrt_array_stack_slice_view_init: NULL slice\n");
+        abort();
+    }
+    if (!XR_IS_ARRAY(arr) || !arr.ptr) {
+        xrt_array_init_header(slice, 0, XR_ELEM_ANY, (uint8_t) sizeof(XrValue));
+        slice->data = NULL;
+        slice->data_storage = XR_ARRAY_DATA_BORROWED;
+        return;
+    }
+
+    xrt_array_t *src = (xrt_array_t *) arr.ptr;
+    xrt_array_normalize_slice(src->length, &start, &end);
+    int64_t count = end - start;
+    if (count < 0)
+        count = 0;
+
+    xrt_array_ensure_storage(src);
+    xrt_array_init_header(slice, count, src->elem_type, src->elem_size);
+    slice->data = (count > 0 && src->data)
+                      ? (void *) ((uint8_t *) src->data + (size_t) start * (size_t) src->elem_size)
+                      : src->data;
+    slice->length = count;
+    slice->capacity = count;
+    slice->data_storage = XR_ARRAY_DATA_BORROWED;
+    slice->source = NULL;
+    slice->storage = src->storage;
+    if (slice->storage)
+        xrt_array_storage_retain_block((XrArrayStorage *) slice->storage);
+    slice->elem_type = src->elem_type;
+    slice->elem_size = src->elem_size;
+    slice->elem_tid = src->elem_tid;
+    slice->contains_refs = src->contains_refs;
+    slice->adt_enum_name = src->adt_enum_name;
+    slice->adt_member_name = src->adt_member_name;
+}
+
+static inline void xrt_array_stack_borrow_slice_view_init(xrt_array_t *slice, XrValue arr,
+                                                          int64_t start, int64_t end) {
+    if (XR_UNLIKELY(!slice)) {
+        fprintf(stderr, "xrt_array_stack_borrow_slice_view_init: NULL slice\n");
+        abort();
+    }
+    if (!XR_IS_ARRAY(arr) || !arr.ptr) {
+        xrt_array_init_header(slice, 0, XR_ELEM_ANY, (uint8_t) sizeof(XrValue));
+        slice->data = NULL;
+        slice->data_storage = XR_ARRAY_DATA_BORROWED;
+        slice->source = NULL;
+        slice->storage = NULL;
+        return;
+    }
+
+    xrt_array_t *src = (xrt_array_t *) arr.ptr;
+    xrt_array_normalize_slice(src->length, &start, &end);
+    int64_t count = end - start;
+    if (count < 0)
+        count = 0;
+
+    xrt_array_init_header(slice, count, src->elem_type, src->elem_size);
+    slice->data = (count > 0 && src->data)
+                      ? (void *) ((uint8_t *) src->data + (size_t) start * (size_t) src->elem_size)
+                      : src->data;
+    slice->length = count;
+    slice->capacity = count;
+    slice->data_storage = XR_ARRAY_DATA_BORROWED;
+    slice->source = NULL;
+    slice->storage = NULL;
+    slice->elem_type = src->elem_type;
+    slice->elem_size = src->elem_size;
+    slice->elem_tid = src->elem_tid;
+    slice->contains_refs = src->contains_refs;
+    slice->adt_enum_name = src->adt_enum_name;
+    slice->adt_member_name = src->adt_member_name;
+}
+
+static inline void xrt_array_stack_slice_view_release(XrValue view) {
+    if (!XR_IS_ARRAY(view) || !view.ptr)
+        return;
+    xrt_array_t *slice = (xrt_array_t *) view.ptr;
+    if (slice->storage) {
+        xrt_array_storage_release_block((XrArrayStorage *) slice->storage);
+        slice->storage = NULL;
+    }
 }
 
 #include "xrt_array_bytes.inc.c"
@@ -467,10 +785,13 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
         _a->length = 0;                                                                            \
         _a->capacity = _cap;                                                                       \
         _a->source = NULL;                                                                         \
+        _a->storage = NULL;                                                                        \
         _a->elem_type = XR_ELEM_ANY;                                                               \
         _a->elem_size = (uint8_t) sizeof(XrValue);                                                 \
         _a->elem_tid = 0;                                                                          \
         _a->contains_refs = 0;                                                                     \
+        _a->content_version = XR_ARRAY_CONTENT_VERSION_INIT;                                       \
+        _a->deferred_submit_version = 0;                                                           \
         _a->data_storage = XR_ARRAY_DATA_STACK;                                                    \
         _a->adt_enum_name = NULL;                                                                  \
         _a->adt_member_name = NULL;                                                                \
@@ -479,6 +800,30 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
                       ~(uintptr_t) (XRT_DATA_ALIGN - 1));                                          \
         memset(_a->data, 0, (size_t) _cap * sizeof(XrValue));                                      \
         xr_mkptr(_a, XR_TAG_ARRAY);                                                                \
+    })
+#endif
+
+#ifndef xrt_array_stack_slice_view
+#define xrt_array_stack_slice_view(source_expr, start_expr, end_expr)                              \
+    ({                                                                                             \
+        XrValue _srcv = (source_expr);                                                             \
+        int64_t _start = (start_expr);                                                             \
+        int64_t _end = (end_expr);                                                                 \
+        xrt_array_t *_slice = (xrt_array_t *) __builtin_alloca(sizeof(xrt_array_t));               \
+        xrt_array_stack_slice_view_init(_slice, _srcv, _start, _end);                              \
+        xr_mkptr(_slice, XR_TAG_ARRAY);                                                            \
+    })
+#endif
+
+#ifndef xrt_array_stack_borrow_slice_view
+#define xrt_array_stack_borrow_slice_view(source_expr, start_expr, end_expr)                       \
+    ({                                                                                             \
+        XrValue _srcv = (source_expr);                                                             \
+        int64_t _start = (start_expr);                                                             \
+        int64_t _end = (end_expr);                                                                 \
+        xrt_array_t *_slice = (xrt_array_t *) __builtin_alloca(sizeof(xrt_array_t));               \
+        xrt_array_stack_borrow_slice_view_init(_slice, _srcv, _start, _end);                       \
+        xr_mkptr(_slice, XR_TAG_ARRAY);                                                            \
     })
 #endif
 
@@ -545,6 +890,15 @@ static inline void xrt_strbuf_append(XrValue sbv, XrValue val) {
         memcpy(sb->buf + sb->len, tmp, (size_t) n);
         sb->len += n;
         sb->buf[sb->len] = 0;
+    } else if (val.tag == XR_TAG_CHAR) {
+        char tmp[4];
+        int n = xrt_char_utf8_encode(XR_TO_CHAR(val), tmp);
+        if (n > 0) {
+            xrt_strbuf_grow(sb, n);
+            memcpy(sb->buf + sb->len, tmp, (size_t) n);
+            sb->len += n;
+            sb->buf[sb->len] = 0;
+        }
     } else if (val.tag == XR_TAG_BOOL) {
         const char *bs = val.i ? "true" : "false";
         int blen = val.i ? 4 : 5;
@@ -1402,6 +1756,14 @@ static inline XrValue xrt_set_new_flags(int64_t cap, uint8_t flags) {
 
 static inline int xrt_set_is_typed(const xrt_set_t *s);
 
+/* Drop one reference to a storage-backed array's buffer (AOT). Releases ANY
+ * element refs (data[0..elem_count)) when the buffer's refcount reaches zero. */
+static inline void xrt_array_storage_release(xrt_array_t *a) {
+    XrArrayStorage *s = (XrArrayStorage *) a->storage;
+    xrt_array_storage_release_block(s);
+    a->storage = NULL;
+}
+
 static inline void xrt_array_destroy(xrt_array_t *a) {
     if (!a)
         return;
@@ -1410,6 +1772,20 @@ static inline void xrt_array_destroy(xrt_array_t *a) {
             xrt_release(xr_mkptr(a->source, XR_TAG_ARRAY));
             a->source = NULL;
         }
+        /* Slice never freezes elem_count (the owner does); storage releases its
+         * frozen ANY element refs at refcount 0. */
+        if (a->storage)
+            xrt_array_storage_release(a);
+        XRT_FREE(a);
+        return;
+    }
+    if (a->storage) {
+        /* Storage owns the buffer and (for ANY) the element refs. Snapshot the
+         * owner's length so an orphaned storage can release the right count. */
+        XrArrayStorage *s = (XrArrayStorage *) a->storage;
+        if (s->elem_is_any)
+            s->elem_count = a->length;
+        xrt_array_storage_release(a);
         XRT_FREE(a);
         return;
     }
@@ -1472,13 +1848,8 @@ static inline void xrt_coll_retain(XrValue v) {
 
 static inline void xrt_coll_release(XrValue v) {
     XrObjHeader *h = (XrObjHeader *) v.ptr;
-    if (!h || (h->extra & XR_OBJ_STORAGE_BUMP))
+    if (!xrt_rc_claim_release_last(h))
         return;
-    int32_t rc = atomic_load_explicit(&h->refcount, memory_order_relaxed);
-    if (rc != 0) {
-        atomic_store_explicit(&h->refcount, rc - 1, memory_order_relaxed);
-        return;
-    }
     switch (h->type) {
         case XR_TARRAY:
             xrt_array_destroy((xrt_array_t *) v.ptr);
@@ -1647,8 +2018,9 @@ static inline void xrt_set_clear(xrt_set_t *s) {
 }
 
 static inline XrValue xrt_set_values(xrt_set_t *s) {
-    XrValue arr = s->elem_type == XR_ELEM_ANY ? xrt_array_new(xrt_set_len(s))
-                                              : xrt_array_new_typed(xrt_set_len(s), s->elem_type);
+    XrValue arr = s->elem_type == XR_ELEM_ANY
+                      ? xrt_array_with_capacity(xrt_set_len(s))
+                      : xrt_array_with_capacity_typed(xrt_set_len(s), s->elem_type);
     if (!xrt_set_is_typed(s)) {
         for (uint32_t i = 0; i < s->nentries; i++) {
             if (s->entries[i].val_tt != XR_SET_ENTRY_NIL)
@@ -1667,7 +2039,7 @@ static inline XrValue xrt_set_values(xrt_set_t *s) {
 static inline XrValue xrt_map_keys(xrt_map_t *m) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_keys((xrt_boolmap_t *) m);
-    XrValue arr = xrt_array_new(xrt_map_len(m));
+    XrValue arr = xrt_array_with_capacity(xrt_map_len(m));
     if (!xrt_map_is_typed(m)) {
         for (uint32_t i = 0; i < m->nentries; i++) {
             if (m->entries[i].key_tt != XR_MAP_ENTRY_NIL_KEY)
@@ -1686,7 +2058,7 @@ static inline XrValue xrt_map_keys(xrt_map_t *m) {
 static inline XrValue xrt_map_values(xrt_map_t *m) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_values((xrt_boolmap_t *) m);
-    XrValue arr = xrt_array_new(xrt_map_len(m));
+    XrValue arr = xrt_array_with_capacity(xrt_map_len(m));
     if (!xrt_map_is_typed(m)) {
         for (uint32_t i = 0; i < m->nentries; i++) {
             if (m->entries[i].key_tt != XR_MAP_ENTRY_NIL_KEY)
@@ -1963,7 +2335,7 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
 static inline XrValue xrt_process_new(const char *file, int argc, char **argv, const char *dir) {
     if (argc < 0)
         argc = 0;
-    XrValue args = xrt_array_new(argc);
+    XrValue args = xrt_array_with_capacity(argc);
     for (int i = 0; argv && i < argc; i++)
         xrt_array_push(args, xr_box_str(argv[i] ? argv[i] : ""));
 
@@ -2136,7 +2508,7 @@ static inline XrValue xrt_json_encode_map_key(XrValue key) {
 }
 
 static inline XrValue xrt_json_encode_array_value(xrt_array_t *src, int depth) {
-    XrValue dst = xrt_array_new(src ? src->length : 0);
+    XrValue dst = xrt_array_with_capacity(src ? src->length : 0);
     if (!src)
         return dst;
     for (int64_t i = 0; i < src->length; i++) {
@@ -2194,7 +2566,7 @@ static inline XrValue xrt_json_encode_map_value(xrt_map_t *src, int depth) {
 }
 
 static inline XrValue xrt_json_encode_set_value(xrt_set_t *src, int depth) {
-    XrValue dst = xrt_array_new(src ? xrt_set_len(src) : 0);
+    XrValue dst = xrt_array_with_capacity(src ? xrt_set_len(src) : 0);
     if (!src)
         return dst;
     if (!xrt_set_is_typed(src)) {

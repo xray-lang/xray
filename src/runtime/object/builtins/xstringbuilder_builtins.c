@@ -21,6 +21,7 @@
 #include "xisolate_api.h"
 #include "xclass_builder.h"
 #include "xclass_system.h"
+#include "../../../base/xutf8.h"
 #include "../../../shared/xr_strbuf_core.h"
 
 /* ========== Helpers ========== */
@@ -34,6 +35,11 @@ static void append_value(XrStringBuilder *sb, XrVMRuntime *iso, XrValue value) {
         xr_stringbuilder_append_int(sb, XR_TO_INT(value));
     } else if (XR_IS_FLOAT(value)) {
         xr_stringbuilder_append_float(sb, XR_TO_FLOAT(value));
+    } else if (XR_IS_CHAR(value)) {
+        char buf[XR_UTF8_MAX_BYTES];
+        int n = xr_utf8_encode(XR_TO_CHAR(value), buf);
+        if (n > 0)
+            xr_stringbuilder_append_cstr(sb, buf, (size_t) n);
     } else if (XR_IS_BOOL(value)) {
         XrStrbufCoreSlice s =
             xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_BOOL, XR_TO_BOOL(value));

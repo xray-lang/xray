@@ -1,0 +1,2 @@
+let bytes = Bytes(8)
+bytes.copyWithin(0, 0, 1)

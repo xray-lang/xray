@@ -1,0 +1,17 @@
+shared const counter: Atomic<int> = Atomic<int>(0)
+
+fn next() -> int {
+    return counter.fetchAdd(1, Ordering.Relaxed)
+}
+
+fn nextSlot(width: int) -> int {
+    let index = counter.fetchAdd(1, Ordering.Relaxed)
+    if (index >= 64) {
+        return index
+    }
+    let slot = index % width
+    return slot * width
+}
+
+print(next())
+print(nextSlot(8))

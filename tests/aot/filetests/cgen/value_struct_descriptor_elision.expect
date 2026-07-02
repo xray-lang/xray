@@ -1,0 +1,3 @@
+c_contains=typedef struct xrt_struct_value_struct_descriptor_elision_
+c_contains=xr_aot_parallel_reduce_agg
+c_not_contains=xrt_retain(xrt_shared_value_struct_descriptor_elision

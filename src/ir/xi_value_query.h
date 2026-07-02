@@ -32,8 +32,21 @@ XR_FUNC bool xi_type_is_task(const struct XrType *type);
 /* Value-level predicates: unwrap BOX/UNBOX/COPY, then test the carried type. */
 XR_FUNC bool xi_value_type_is_channel(const XiValue *v);
 XR_FUNC bool xi_value_type_is_task(const XiValue *v);
+XR_FUNC bool xi_value_type_is_atomic(const XiValue *v);
 XR_FUNC bool xi_value_type_is_work_queue(const XiValue *v);
 XR_FUNC bool xi_value_type_is_result_group(const XiValue *v);
+XR_FUNC bool xi_value_type_is_countdown_latch(const XiValue *v);
+XR_FUNC bool xi_value_type_is_semaphore(const XiValue *v);
+XR_FUNC bool xi_value_type_is_event_count(const XiValue *v);
 XR_FUNC bool xi_value_type_is_unknown(const XiValue *v);
+
+/* Numeric facts at a use site.
+ * Uses existing range annotations when available and, if needed, dominating
+ * branch guards on the path to 'site'. */
+XR_FUNC bool xi_value_known_positive_at(const XiFunc *f, const XiValue *value, const XiBlock *site);
+XR_FUNC bool xi_value_known_nonnegative_at(const XiFunc *f, const XiValue *value,
+                                           const XiBlock *site);
+XR_FUNC bool xi_value_known_ge_at(const XiFunc *f, const XiValue *value, const XiBlock *site,
+                                  int64_t lower_bound);
 
 #endif  // XI_VALUE_QUERY_H

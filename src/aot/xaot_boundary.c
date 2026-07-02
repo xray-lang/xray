@@ -104,6 +104,26 @@ static const XiImportRef *shared_slot_import_ref(const XiFunc *f, int slot) {
     return NULL;
 }
 
+static const XiImportRef *module_slot_import_ref(const XiModule *mod, int slot) {
+    if (!mod || slot < 0 || slot >= mod->nslots || !mod->slot_imports)
+        return NULL;
+    return mod->slot_imports[slot];
+}
+
+static const XiModule *bundle_module_for_func(const XaotBundle *bundle, const XiFunc *func) {
+    const XaotFuncPlan *plan;
+    if (!bundle || !func)
+        return NULL;
+    plan = xaot_bundle_find_func_plan(bundle, func);
+    if (plan && plan->module_index < bundle->nmodules)
+        return bundle->modules[plan->module_index];
+    for (const XiFunc *f = func; f; f = f->parent_func) {
+        if (f->module)
+            return f->module;
+    }
+    return NULL;
+}
+
 static bool module_matches_import(const XiModule *mod, const XiImportRef *ref) {
     if (!mod || !ref || !ref->module_path)
         return false;
@@ -165,6 +185,50 @@ static const XiFunc *resolve_import_ref(const XaotBundle *bundle, const XiImport
     return NULL;
 }
 
+static const XiImportRef *module_import_ref_for_value(const XaotBundle *bundle,
+                                                      const XiFunc *current, const XiValue *value) {
+    const XiModule *mod;
+    const XiValue *v = unwrap_identity_value(value);
+    const XiImportRef *ref = value_import_ref(v);
+
+    if (ref && !ref->member_name)
+        return ref;
+    if (!v || v->op != XI_GET_SHARED)
+        return NULL;
+
+    int slot = (int) v->aux_int;
+    mod = bundle_module_for_func(bundle, current);
+    ref = module_slot_import_ref(mod, slot);
+    if (ref && !ref->member_name)
+        return ref;
+    ref = shared_slot_import_ref(current, slot);
+    if (!ref && current && current->module && current->module->init != current)
+        ref = shared_slot_import_ref(current->module->init, slot);
+    return ref && !ref->member_name ? ref : NULL;
+}
+
+static const XiFunc *resolve_module_member_target(const XaotBundle *bundle, const XiFunc *current,
+                                                  const XiValue *call) {
+    const char *member_name;
+    const XiImportRef *module_ref;
+    XiImportRef member_ref;
+
+    if (!bundle || !call || call->op != XI_CALL_METHOD || call->nargs < 1 || !call->aux)
+        return NULL;
+    if ((call->aux_int & 1) != 0)
+        return NULL;
+
+    member_name = (const char *) call->aux;
+    module_ref = module_import_ref_for_value(bundle, current, call->args[0]);
+    if (!module_ref)
+        return NULL;
+
+    member_ref = *module_ref;
+    member_ref.member_name = member_name;
+    member_ref.resolved_shared_slot = -1;
+    return resolve_import_ref(bundle, &member_ref);
+}
+
 static const XiFunc *resolve_shared_function(const XaotBundle *bundle, const XiFunc *current,
                                              int slot) {
     const XiModule *mod = NULL;
@@ -173,16 +237,19 @@ static const XiFunc *resolve_shared_function(const XaotBundle *bundle, const XiF
 
     if (!current || slot < 0)
         return NULL;
+    mod = bundle_module_for_func(bundle, current);
     /* Slot metadata lives on the module init function; walk the lexical
      * parent chain so calls made inside nested functions resolve too. */
     for (f = current; f; f = f->parent_func) {
         if (f->shared_slot_funcs && slot < f->shared_slot_func_count && f->shared_slot_funcs[slot])
             return f->shared_slot_funcs[slot];
-        if (!mod && f->module)
-            mod = f->module;
     }
     if (mod && slot < mod->nslots && mod->slot_funcs && mod->slot_funcs[slot])
         return mod->slot_funcs[slot];
+
+    ref = module_slot_import_ref(mod, slot);
+    if (ref)
+        return resolve_import_ref(bundle, ref);
 
     ref = shared_slot_import_ref(current, slot);
     if (!ref && mod && mod->init && mod->init != current)
@@ -268,8 +335,12 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle 
 
     if (!bundle || !current || !call)
         return NULL;
-    if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT)
-        return resolve_method_target(bundle, call);
+    if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) {
+        const XiFunc *target = resolve_method_target(bundle, call);
+        if (target)
+            return target;
+        return resolve_module_member_target(bundle, current, call);
+    }
     if (call->op != XI_CALL || call->nargs < 1)
         return NULL;
 

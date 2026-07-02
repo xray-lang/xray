@@ -375,7 +375,7 @@ static inline int64_t xrt_typeof_id(XrValue v) {
         case XR_TAG_BOOL:
             return 1; /* XR_TID_BOOL */
         case XR_TAG_CHAR:
-            return 40; /* XR_TID_CHAR */
+            return 41; /* XR_TID_CHAR */
         case XR_TAG_NULL:
             return 0; /* XR_TID_NULL */
         case XR_TAG_STR:

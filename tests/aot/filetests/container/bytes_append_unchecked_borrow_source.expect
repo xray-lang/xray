@@ -1,0 +1,5 @@
+contains=function 1 name=appendThenRead module=0 depth=1 abi=native boundary=none
+c_contains=xrt_bytes_append_from_unchecked_trusted_raw(
+c_not_contains=xrt_bytes_append_from_unchecked_raw(
+c_contains=((uint8_t*)_a->data)
+c_not_contains=xrt_retain(v0)

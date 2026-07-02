@@ -1,5 +1,8 @@
 // anchor: bytes-range-arg-shared-core
 let bytes = Bytes(8, 1)
+let view: ByteSpan = bytes
+let offset = 4294967296
 print("before-range")
-print(bytes.loadU32LE(4294967296))
+let value: uint32 = view.loadLE<uint32>(offset)
+print(int(value))
 print("unreachable")

@@ -313,6 +313,27 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             es_walk_block(ctx, node->as.for_in_stmt.body);
             break;
 
+        case AST_PARALLEL_FOR_STMT:
+            es_walk_expr(ctx, node->as.parallel_for_stmt.range);
+            es_walk_expr(ctx, node->as.parallel_for_stmt.worker_count);
+            es_walk_block(ctx, node->as.parallel_for_stmt.final_body);
+            es_walk_block(ctx, node->as.parallel_for_stmt.body);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            es_walk_expr(ctx, node->as.parallel_reduce_expr.range);
+            es_walk_expr(ctx, node->as.parallel_reduce_expr.worker_count);
+            es_walk_expr(ctx, node->as.parallel_reduce_expr.initial);
+            es_walk_expr(ctx, node->as.parallel_reduce_expr.combine);
+            es_walk_block(ctx, node->as.parallel_reduce_expr.body);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            es_walk_expr(ctx, node->as.parallel_collect_expr.range);
+            es_walk_expr(ctx, node->as.parallel_collect_expr.worker_count);
+            es_walk_expr(ctx, node->as.parallel_collect_expr.into);
+            es_walk_block(ctx, node->as.parallel_collect_expr.final_body);
+            es_walk_block(ctx, node->as.parallel_collect_expr.body);
+            break;
+
         case AST_BLOCK:
             es_walk_block(ctx, node);
             break;

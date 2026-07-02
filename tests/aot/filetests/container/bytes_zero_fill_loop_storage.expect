@@ -1,0 +1,3 @@
+c_contains=xrt_array_new_typed_uninit_ptr(
+c_contains=XR_AOT_HOT_REGION_BEGIN typed_array_raw_access
+c_not_contains=xrt_array_new_typed_ptr(_n, XR_ELEM_U8)

@@ -1,0 +1,21 @@
+struct Totals {
+    count: int
+    sum: int
+}
+
+let total = parallel range reduce begin, end in 0..10 workers 3 worker wid
+    init Totals{count: 0, sum: 0}
+    combine (a: Totals, b: Totals) -> Totals{count: a.count + b.count, sum: a.sum + b.sum} {
+    let count = 0
+    let sum = 0
+    let i = begin
+    while (i < end) {
+        count = count + 1
+        sum = sum + i
+        i = i + 1
+    }
+    Totals{count: count + (wid * 0), sum: sum}
+}
+
+print(total.count)
+print(total.sum)

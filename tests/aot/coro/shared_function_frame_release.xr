@@ -1,0 +1,15 @@
+fn worker(n: int) -> int {
+    return n + 1
+}
+
+fn run_many(iter: int) -> int {
+    let sum = 0
+    for (let i = 0; i < iter; i++) {
+        let task = go worker(i)
+        sum = sum + await task
+    }
+    return sum
+}
+
+print(run_many(1000))
+print(run_many(1000))

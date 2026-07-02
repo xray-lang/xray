@@ -509,6 +509,7 @@ XR_FUNC void xr_runtime_advance_virtual_time(XrRuntime *runtime, int64_t target_
 XR_FUNC int64_t xr_runtime_current_monotonic_ms(void);
 XR_FUNC int64_t xr_runtime_current_monotonic_ns(void);
 XR_FUNC void xr_runtime_spawn(XrRuntime *runtime, XrCoroutine *coro);
+XR_FUNC void xr_runtime_spawn_batch(XrRuntime *runtime, XrCoroutine **coros, int count);
 XR_FUNC void xr_runtime_spawn_local(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime);
 XR_FUNC void xr_worker_destroy(XrWorker *worker);
@@ -568,9 +569,7 @@ static inline void xr_worker_bump_heartbeat(XrWorker *worker) {
     if (!worker || !worker->m)
         return;
     XrMachine *m = worker->m;
-    atomic_store_explicit(&m->heartbeat,
-                          atomic_load_explicit(&m->heartbeat, memory_order_relaxed) + 1,
-                          memory_order_relaxed);
+    atomic_fetch_add_explicit(&m->heartbeat, 1, memory_order_relaxed);
 }
 
 // Enqueue coro to target worker's inbox with full synchronization.

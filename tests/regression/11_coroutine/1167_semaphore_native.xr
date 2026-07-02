@@ -1,0 +1,46 @@
+@test
+fn test_semaphore_permits_and_close() {
+    shared const sem = Semaphore(0)
+    shared const ready = CountdownLatch(2)
+    shared const counter = Atomic(0)
+
+    fn worker(id: int) -> int {
+        ready.done()
+        if (!sem.acquire()) {
+            return -id
+        }
+        counter.add(id)
+        return id
+    }
+
+    let t1 = go worker(7)
+    let t2 = go worker(11)
+
+    assert_true(ready.wait())
+    sem.release(2)
+
+    let r1: int = await t1
+    let r2: int = await t2
+    assert_eq(r1 + r2, 18)
+    assert_eq(counter.load(), 18)
+    assert_eq(sem.available, 0)
+    assert_false(sem.isClosed)
+
+    sem.release()
+    assert_eq(sem.available, 1)
+    assert_true(sem.tryAcquire())
+    assert_eq(sem.available, 0)
+
+    shared const closedSem = Semaphore(0)
+    shared const closeReady = CountdownLatch(1)
+    let closedTask = go fn() -> int {
+        closeReady.done()
+        return closedSem.acquire() ? 1 : -1
+    }()
+
+    assert_true(closeReady.wait())
+    closedSem.close()
+    assert_true(closedSem.isClosed)
+    assert_eq(await closedTask, -1)
+    assert_false(closedSem.acquire())
+}

@@ -653,6 +653,18 @@ static inline bool xr_array_core_bytes_range_ok(int64_t length, uint8_t elem_typ
     return count <= length && offset <= length - count;
 }
 
+static inline uint16_t xr_array_core_bytes_load_u16_le(const void *data, int64_t length,
+                                                       uint8_t elem_type, int64_t offset,
+                                                       bool *ok) {
+    bool valid = data && xr_array_core_bytes_range_ok(length, elem_type, offset, 2);
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return 0;
+    const uint8_t *p = (const uint8_t *) data + offset;
+    return (uint16_t) p[0] | (uint16_t) ((uint16_t) p[1] << 8);
+}
+
 static inline uint32_t xr_array_core_bytes_load_u32_le(const void *data, int64_t length,
                                                        uint8_t elem_type, int64_t offset,
                                                        bool *ok) {
@@ -694,6 +706,9 @@ static inline bool xr_array_core_bytes_copy_within(void *data, int64_t length, u
     return true;
 }
 
+static inline void xr_array_core_copy_nonoverlap_bytes(void *dst, const void *src, int64_t count);
+static inline void xr_array_core_copy_or_move_bytes(void *dst, const void *src, int64_t count);
+
 static inline bool xr_array_core_bytes_copy_from(void *dst_data, int64_t dst_length,
                                                  uint8_t dst_elem_type, const void *src_data,
                                                  int64_t src_length, uint8_t src_elem_type,
@@ -708,11 +723,121 @@ static inline bool xr_array_core_bytes_copy_from(void *dst_data, int64_t dst_len
         return false;
     uint8_t *dp = (uint8_t *) dst_data + dst_offset;
     const uint8_t *sp = (const uint8_t *) src_data + src_offset;
-    if (same_array)
-        memmove(dp, sp, (size_t) count);
-    else
-        memcpy(dp, sp, (size_t) count);
+    (void) same_array;
+    xr_array_core_copy_or_move_bytes(dp, sp, count);
     return true;
+}
+
+static inline bool xr_array_core_memory_ranges_overlap(const void *a, int64_t a_len, const void *b,
+                                                       int64_t b_len) {
+    if (!a || !b || a_len <= 0 || b_len <= 0)
+        return false;
+    uintptr_t a_begin = (uintptr_t) a;
+    uintptr_t b_begin = (uintptr_t) b;
+    uintptr_t a_end = a_begin + (uintptr_t) a_len;
+    uintptr_t b_end = b_begin + (uintptr_t) b_len;
+    if (a_end < a_begin || b_end < b_begin)
+        return true;
+    return a_begin < b_end && b_begin < a_end;
+}
+
+static inline void xr_array_core_copy_nonoverlap_bytes(void *dst, const void *src, int64_t count) {
+    if (count <= 0)
+        return;
+    if (count <= 16) {
+        uint8_t *dp = (uint8_t *) dst;
+        const uint8_t *sp = (const uint8_t *) src;
+        for (int64_t i = 0; i < count; i++)
+            dp[i] = sp[i];
+        return;
+    }
+    memcpy(dst, src, (size_t) count);
+}
+
+static inline void xr_array_core_copy_or_move_bytes(void *dst, const void *src, int64_t count) {
+    if (count <= 0)
+        return;
+    if (xr_array_core_memory_ranges_overlap(dst, count, src, count))
+        memmove(dst, src, (size_t) count);
+    else
+        xr_array_core_copy_nonoverlap_bytes(dst, src, count);
+}
+
+static inline uint64_t xr_array_core_repeat_pattern64(const uint8_t *sp, int64_t distance) {
+    uint8_t pattern[8];
+    switch (distance) {
+        case 2:
+            pattern[0] = sp[0];
+            pattern[1] = sp[1];
+            pattern[2] = sp[0];
+            pattern[3] = sp[1];
+            pattern[4] = sp[0];
+            pattern[5] = sp[1];
+            pattern[6] = sp[0];
+            pattern[7] = sp[1];
+            break;
+        case 4:
+            pattern[0] = sp[0];
+            pattern[1] = sp[1];
+            pattern[2] = sp[2];
+            pattern[3] = sp[3];
+            pattern[4] = sp[0];
+            pattern[5] = sp[1];
+            pattern[6] = sp[2];
+            pattern[7] = sp[3];
+            break;
+        default:
+            memcpy(pattern, sp, sizeof(pattern));
+            break;
+    }
+    uint64_t value;
+    memcpy(&value, pattern, sizeof(value));
+    return value;
+}
+
+static inline void xr_array_core_bytes_repeat_copy(void *data, int64_t dst_offset, int64_t distance,
+                                                   int64_t count) {
+    if (count <= 0)
+        return;
+    uint8_t *dp = (uint8_t *) data + dst_offset;
+    const uint8_t *sp = dp - distance;
+    if (distance == 1) {
+        memset(dp, sp[0], (size_t) count);
+        return;
+    }
+    if (count <= distance) {
+        xr_array_core_copy_nonoverlap_bytes(dp, sp, count);
+        return;
+    }
+    if (distance == 2 || distance == 4 || distance == 8) {
+        uint64_t pattern = xr_array_core_repeat_pattern64(sp, distance);
+        int64_t copied = 0;
+        for (; copied + 8 <= count; copied += 8)
+            memcpy(dp + copied, &pattern, sizeof(pattern));
+        if (copied < count)
+            memcpy(dp + copied, &pattern, (size_t) (count - copied));
+        return;
+    }
+    if (distance < 8) {
+        for (int64_t i = 0; i < count; i++)
+            dp[i] = sp[i % distance];
+        return;
+    }
+    if (count <= 16) {
+        xr_array_core_copy_nonoverlap_bytes(dp, sp, count);
+        return;
+    }
+
+    xr_array_core_copy_nonoverlap_bytes(dp, sp, distance);
+    int64_t copied = distance;
+    while (copied < count) {
+        int64_t chunk = copied;
+        int64_t remaining = count - copied;
+        if (chunk > remaining)
+            chunk = remaining;
+        xr_array_core_copy_nonoverlap_bytes(dp + copied, dp, chunk);
+        copied += chunk;
+    }
 }
 
 static inline bool xr_array_core_bytes_repeat_from(void *data, int64_t length, uint8_t elem_type,
@@ -728,9 +853,7 @@ static inline bool xr_array_core_bytes_repeat_from(void *data, int64_t length, u
         return true;
     if (!data)
         return false;
-    uint8_t *bytes = (uint8_t *) data;
-    for (int64_t i = 0; i < count; i++)
-        bytes[dst_offset + i] = bytes[dst_offset - distance + i];
+    xr_array_core_bytes_repeat_copy(data, dst_offset, distance, count);
     return true;
 }
 

@@ -746,6 +746,8 @@ static bool rewrite_function(SccpCtx *ctx) {
                 case SCCP_CONST_INT:
                     v->op = XI_CONST;
                     v->aux_int = cell.ival;
+                    v->aux = NULL;
+                    v->aux_kind = XI_AUX_KIND_NONE;
                     v->nargs = 0;
                     any = true;
                     break;
@@ -753,6 +755,8 @@ static bool rewrite_function(SccpCtx *ctx) {
                     v->op = XI_CONST;
                     double d = cell.fval;
                     memcpy(&v->aux_int, &d, sizeof(double));
+                    v->aux = NULL;
+                    v->aux_kind = XI_AUX_KIND_NONE;
                     v->nargs = 0;
                     any = true;
                     break;
@@ -760,6 +764,8 @@ static bool rewrite_function(SccpCtx *ctx) {
                 case SCCP_CONST_BOOL:
                     v->op = XI_CONST;
                     v->aux_int = cell.ival;
+                    v->aux = NULL;
+                    v->aux_kind = XI_AUX_KIND_NONE;
                     v->nargs = 0;
                     any = true;
                     break;

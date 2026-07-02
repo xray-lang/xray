@@ -3,21 +3,32 @@
 static const char xr_native_def_array[] =
     "// Built-in Array<T> type — implementation in "
     "src/runtime/object/xarray_methods.c\n\n@native\nclass Array<T> {\n    length: int\n    size: "
-    "int\n    capacity: int\n    push(value: T)\n    pop() -> T?\n    shift() -> T?\n    "
-    "unshift(value: T)\n    reserve(capacity: int) -> Array<T>\n    resize(length: int, fill: T) "
-    "-> Array<T>\n    splice(start: int, deleteCount?: int, ...items: T) -> Array<T>\n    "
-    "concat(...arrays: Array<T>) -> Array<T>\n    indexOf(value: T) -> int\n    includes(value: T) "
-    "-> bool\n    join(separator?: string) -> string\n    reverse() -> Array<T>\n    "
-    "sort(compareFn?: (a: T, b: T) -> int) -> Array<T>\n    map(fn: (item: T, index: int) -> U) -> "
-    "Array<U>\n    filter(fn: (item: T, index: int) -> bool) -> Array<T>\n    reduce(fn: (acc: U, "
-    "item: T) -> U, initial: U) -> U\n    forEach(fn: (item: T, index: int) -> ())\n    find(fn: "
-    "(item: T) -> bool) -> T?\n    findIndex(fn: (item: T) -> bool) -> int\n    every(fn: (item: "
-    "T) -> bool) -> bool\n    some(fn: (item: T) -> bool) -> bool\n    flat(depth?: int) -> "
-    "Array<T>\n    fill(value: T, start?: int, end?: int) -> Array<T>\n    // Iteration protocol — "
-    "used by for-in lowering. Users can also\n    // call them directly; iterator()/next() yields "
-    "elements, while\n    // entriesIterator()/next() yields (index, element) tuples.\n    "
-    "iterator() -> Iterator<T>\n    entriesIterator() -> Iterator<(int, T)>\n    entries() -> "
-    "Array<(int, T)>\n}\n";
+    "int\n    capacity: int\n    isEmpty: bool\n    push(value: T)\n    pushUnchecked(value: T)\n  "
+    "  getUnchecked(index: int) -> T\n    setUnchecked(index: int, value: T)\n    "
+    "dataPtrUnchecked() -> RawPtr<T>\n    dataMutPtrUnchecked() -> RawMut<T>\n    pop() -> T?\n    "
+    "shift() -> T?\n    unshift(value: T)\n    clear()\n    reserve(capacity: int) -> Array<T>\n   "
+    " resize(length: int, fill: T) -> Array<T>\n    splice(start: int, deleteCount?: int, "
+    "...items: T) -> Array<T>\n    concat(...arrays: Array<T>) -> Array<T>\n    indexOf(value: T) "
+    "-> int\n    includes(value: T) -> bool\n    join(separator?: string) -> string\n    reverse() "
+    "-> Array<T>\n    sort(compareFn?: (a: T, b: T) -> int) -> Array<T>\n    map(fn: (item: T, "
+    "index: int) -> U) -> Array<U>\n    filter(fn: (item: T, index: int) -> bool) -> Array<T>\n    "
+    "reduce(fn: (acc: U, item: T) -> U, initial: U) -> U\n    forEach(fn: (item: T, index: int) -> "
+    "())\n    find(fn: (item: T) -> bool) -> T?\n    findIndex(fn: (item: T) -> bool) -> int\n    "
+    "every(fn: (item: T) -> bool) -> bool\n    some(fn: (item: T) -> bool) -> bool\n    "
+    "flat(depth?: int) -> Array<T>\n    fill(value: T, start?: int, end?: int) -> Array<T>\n    // "
+    "Iteration protocol — used by for-in lowering. Users can also\n    // call them directly; "
+    "iterator()/next() yields elements, while\n    // entriesIterator()/next() yields (index, "
+    "element) tuples.\n    iterator() -> Iterator<T>\n    entriesIterator() -> Iterator<(int, "
+    "T)>\n    entries() -> Array<(int, T)>\n}\n";
+
+static const char xr_native_def_atomic[] =
+    "// Built-in Atomic<T> type; implemented by the runtime.\n\n@native\nclass Atomic<T> {\n    "
+    "load(ordering?: Ordering) -> T\n    store(value: T, ordering?: Ordering)\n    add(delta: T, "
+    "ordering?: Ordering)\n    sub(delta: T, ordering?: Ordering)\n    fetchAdd(delta: T, "
+    "ordering?: Ordering) -> T\n    fetchSub(delta: T, ordering?: Ordering) -> T\n    swap(value: "
+    "T, ordering?: Ordering) -> T\n    compareExchange(expected: T, desired: T, ordering?: "
+    "Ordering) -> (T, bool)\n    toggle(ordering?: Ordering) -> bool\n    toString() -> "
+    "string\n}\n";
 
 static const char xr_native_def_bigint[] =
     "// Built-in BigInt type — implementation in "
@@ -47,10 +58,20 @@ static const char xr_native_def_coroutine[] =
     "cancel()\n    poll() -> TaskResult<T>\n    awaitResult() -> TaskResult<T>\n    "
     "awaitTimeout(timeout: int) -> TaskResult<T>\n}\n";
 
+static const char xr_native_def_countdownlatch[] =
+    "// Built-in CountdownLatch type; implemented by the runtime.\n\n@native\nclass CountdownLatch "
+    "{\n    remaining: int\n    isClosed: bool\n    reset(count: int) -> bool\n    done(count?: "
+    "int) -> int\n    tryWait() -> bool\n    wait() -> bool\n    close()\n}\n";
+
 static const char xr_native_def_enum[] =
     "// Built-in enum value/type runtime info\n\n@native\nclass EnumValue {\n    name: string\n    "
     "value: Json\n    ordinal: int\n    toString() -> string\n}\n\n@native\nclass EnumType {\n    "
     "memberCount: int\n    getMember(index: int) -> EnumValue\n}\n";
+
+static const char xr_native_def_eventcount[] =
+    "// Built-in EventCount type; implemented by the runtime.\n\n@native\nclass EventCount {\n    "
+    "epoch: int\n    isClosed: bool\n    advance(step?: int) -> int\n    wait(lastEpoch: int, "
+    "workerHint?: int) -> int\n    close()\n}\n";
 
 static const char xr_native_def_float[] =
     "// Built-in float type — implementation in "
@@ -122,7 +143,13 @@ static const char xr_native_def_resultgroup[] =
     "// Built-in ResultGroup type; implemented by the runtime.\n// First VM prototype supports "
     "integer associative reduction.\n\n@native\nclass ResultGroup {\n    length: int\n    "
     "pendingCount: int\n    batchSize: int\n    isClosed: bool\n    add(value: int) -> bool\n    "
-    "flush()\n    recv(): int?\n    tryRecv(): (int?, bool)\n    close()\n}\n";
+    "flush()\n    reset(count: int) -> bool\n    recv(): int?\n    tryRecv(): (int?, bool)\n    "
+    "close()\n}\n";
+
+static const char xr_native_def_semaphore[] =
+    "// Built-in Semaphore type; implemented by the runtime.\n\n@native\nclass Semaphore {\n    "
+    "available: int\n    isClosed: bool\n    release(count?: int) -> int\n    tryAcquire() -> "
+    "bool\n    acquire() -> bool\n    close()\n}\n";
 
 static const char xr_native_def_set[] =
     "// Built-in Set<T> type — implementation in "
@@ -153,21 +180,26 @@ static const char xr_native_def_string[] =
 static const char xr_native_def_stringbuilder[] =
     "// Built-in StringBuilder type — implementation in "
     "src/runtime/object/xstringbuilder_builtins.c\n\n@native\nclass StringBuilder {\n    length: "
-    "int\n    append(value: Json) -> StringBuilder\n    toString() -> string\n    clear() -> "
-    "StringBuilder\n}\n";
+    "int\n    append(value: string | char | int | float | bool | null) -> StringBuilder\n    "
+    "toString() -> string\n    clear() -> StringBuilder\n}\n";
 
 static const char xr_native_def_workqueue[] =
     "// Built-in WorkQueue<T> type; implemented by the runtime.\n\n@native\nclass WorkQueue<T> {\n "
     "   length: int\n    shardCount: int\n    isClosed: bool\n    push(value: T, shard?: int) -> "
-    "bool\n    pop(workerId?: int): T?\n    tryPop(workerId?: int): (T?, bool)\n    close()\n}\n";
+    "bool\n    // WorkQueue<int> only: enqueue count consecutive integer jobs and return the "
+    "accepted count.\n    pushRange(start: int, count: int, shardStart?: int) -> int\n    "
+    "pop(workerId?: int): T?\n    tryPop(workerId?: int): (T?, bool)\n    close()\n}\n";
 
 #define XR_NATIVE_TYPE_DEFS(X)                                                                     \
     X("array", xr_native_def_array)                                                                \
+    X("atomic", xr_native_def_atomic)                                                              \
     X("bigint", xr_native_def_bigint)                                                              \
     X("bool", xr_native_def_bool)                                                                  \
     X("channel", xr_native_def_channel)                                                            \
     X("coroutine", xr_native_def_coroutine)                                                        \
+    X("countdownlatch", xr_native_def_countdownlatch)                                              \
     X("enum", xr_native_def_enum)                                                                  \
+    X("eventcount", xr_native_def_eventcount)                                                      \
     X("float", xr_native_def_float)                                                                \
     X("int", xr_native_def_int)                                                                    \
     X("json", xr_native_def_json)                                                                  \
@@ -175,6 +207,7 @@ static const char xr_native_def_workqueue[] =
     X("panic_info", xr_native_def_panic_info)                                                      \
     X("regex", xr_native_def_regex)                                                                \
     X("resultgroup", xr_native_def_resultgroup)                                                    \
+    X("semaphore", xr_native_def_semaphore)                                                        \
     X("set", xr_native_def_set)                                                                    \
     X("string", xr_native_def_string)                                                              \
     X("stringbuilder", xr_native_def_stringbuilder)                                                \

@@ -9,6 +9,7 @@
  */
 
 #include "xaot_prepare.h"
+#include "xaot_boundary.h"
 #include "xaot_class_native.h"
 #include "../base/xmalloc.h"
 #include "../ir/xi_analysis.h"
@@ -17,8 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-static XrRep storage_rep_for_value(XaotValueRep rep) {
-    return xaot_value_storage_rep(rep);
+static bool value_reps_equal(XaotValueRep a, XaotValueRep b) {
+    return xaot_value_reps_equal(a, b);
 }
 
 static XaotValueRep ptr_value_rep_for_type(const XrType *type) {
@@ -57,6 +58,7 @@ static bool native_ref_field_type(const XrType *type, uint8_t *out_native) {
                 *out_native = XR_NATIVE_STRING;
             return true;
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
             if (out_native)
                 *out_native = XR_NATIVE_ARRAY_REF;
             return true;
@@ -299,6 +301,47 @@ static bool derive_array_storage_plan(const XaotBundle *bundle, const XiValue *a
         if (out_origin)
             *out_origin = value;
         return true;
+    }
+
+    if ((required_flag & XAOT_ARRAY_STORAGE_READ) != 0 && value->op == XI_PARAM) {
+        if (out_elem)
+            *out_elem = self_elem;
+        if (out_origin)
+            *out_origin = value;
+        return true;
+    }
+
+    if ((required_flag & XAOT_ARRAY_STORAGE_MUTABLE) != 0 && value->op == XI_PARAM && value->type &&
+        value->type->kind == XR_KIND_ARRAY) {
+        if (out_elem)
+            *out_elem = self_elem;
+        if (out_origin)
+            *out_origin = value;
+        return true;
+    }
+
+    if (value->op == XI_LOAD_UPVAL && value->type && value->type->kind == XR_KIND_ARRAY) {
+        bool wants_read = (required_flag & XAOT_ARRAY_STORAGE_READ) != 0;
+        bool wants_mutable = (required_flag & XAOT_ARRAY_STORAGE_MUTABLE) != 0;
+        if (wants_read || (wants_mutable && self_elem.storage_rep != XR_REP_TAGGED)) {
+            if (out_elem)
+                *out_elem = self_elem;
+            if (out_origin)
+                *out_origin = value;
+            return true;
+        }
+    }
+
+    if (value->op == XI_AWAIT && value->type && value->type->kind == XR_KIND_ARRAY) {
+        bool wants_read = (required_flag & XAOT_ARRAY_STORAGE_READ) != 0;
+        bool wants_mutable = (required_flag & XAOT_ARRAY_STORAGE_MUTABLE) != 0;
+        if (wants_read || (wants_mutable && self_elem.storage_rep != XR_REP_TAGGED)) {
+            if (out_elem)
+                *out_elem = self_elem;
+            if (out_origin)
+                *out_origin = value;
+            return true;
+        }
     }
 
     if (array_builtin_forwards_storage(value)) {
@@ -1145,6 +1188,8 @@ static bool prepare_array_is_native_local_alloc(const XaotBundle *bundle, const 
     const char *name = (const char *) target->aux;
     if (strcmp(name, "array_new") == 0)
         return true;
+    if (strcmp(name, "array_with_capacity") == 0)
+        return true;
     if (strcmp(name, "Bytes") != 0)
         return false;
     if (target->nargs == 0)
@@ -1160,8 +1205,10 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
         case XI_INDEX_GET:
         case XI_INDEX_SET:
             return arg_index == 0;
+        case XI_BYTES_LOAD_U16_LE:
         case XI_BYTES_LOAD_U32_LE:
         case XI_BYTES_LOAD_U64_LE:
+        case XI_ARRAY_DATA_PTR:
         case XI_BYTES_COPY_WITHIN:
         case XI_BYTES_REPEAT_FROM:
             return arg_index == 0;
@@ -1174,7 +1221,21 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
         }
         case XI_CALL_METHOD: {
             const char *method = (const char *) user->aux;
-            return arg_index == 0 && method && strcmp(method, "push") == 0;
+            if (!method)
+                return false;
+            if (arg_index == 0 && (strcmp(method, "push") == 0 || strcmp(method, "reserve") == 0 ||
+                                   strcmp(method, "commonPrefixUnchecked") == 0 ||
+                                   strcmp(method, "writeFromUnchecked") == 0 ||
+                                   strcmp(method, "repeatAtUnchecked") == 0 ||
+                                   strcmp(method, "wildCopyFromNonOverlappingUnchecked") == 0 ||
+                                   strcmp(method, "wildRepeatAtUnchecked") == 0 ||
+                                   strcmp(method, "setLengthUnchecked") == 0))
+                return true;
+            if (arg_index == 2 && strcmp(method, "writeFromUnchecked") == 0)
+                return true;
+            if (arg_index == 2 && strcmp(method, "wildCopyFromNonOverlappingUnchecked") == 0)
+                return true;
+            return false;
         }
         case XI_RETAIN:
         case XI_RELEASE:
@@ -2013,6 +2074,192 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
     return true;
 }
 
+static bool prepare_apply_return_abi_value_plans(XaotBundle *bundle,
+                                                 const XaotFuncPlan *func_plan) {
+    XaotValueRep ret_rep;
+
+    if (!bundle || !func_plan || !func_plan->func)
+        return false;
+    ret_rep = xaot_abi_slot_value_rep(&func_plan->abi.ret);
+    if (ret_rep.kind != XAOT_VALUE_AGGREGATE)
+        return true;
+    for (uint32_t bi = 0; bi < func_plan->func->nblocks; bi++) {
+        XiBlock *blk = func_plan->func->blocks[bi];
+        if (!blk || blk->kind != XI_BLOCK_RETURN || !blk->control)
+            continue;
+        XaotValuePlan *vp = xaot_bundle_find_value_plan_mut(bundle, blk->control);
+        if (!vp) {
+            bundle->error_msg = "AOT aggregate return control has no value plan";
+            return false;
+        }
+        vp->rep = ret_rep;
+    }
+    return true;
+}
+
+static bool value_rep_is_struct_aggregate(XaotValueRep rep) {
+    return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_STRUCT) != 0;
+}
+
+static bool prepare_parallel_reduce_aggregate_rep(XaotBundle *bundle, const XiValue *value,
+                                                  XaotValueRep *out_rep) {
+    if (!bundle || !value || value->op != XI_PAR_REDUCE ||
+        value->aux_kind != XI_AUX_KIND_PAR_REDUCE || !value->aux || !out_rep)
+        return false;
+    const XiParallelReduceData *data = (const XiParallelReduceData *) value->aux;
+    const XaotFuncPlan *body_plan =
+        data->body_func ? xaot_bundle_find_func_plan(bundle, data->body_func) : NULL;
+    const XaotFuncPlan *combine_plan =
+        data->combine_func ? xaot_bundle_find_func_plan(bundle, data->combine_func) : NULL;
+    if (!body_plan || !combine_plan || combine_plan->abi.nparams < 2 || !combine_plan->abi.params)
+        return false;
+
+    XaotValueRep body_ret = xaot_abi_slot_value_rep(&body_plan->abi.ret);
+    XaotValueRep combine_ret = xaot_abi_slot_value_rep(&combine_plan->abi.ret);
+    XaotValueRep combine_arg0 = xaot_abi_slot_value_rep(&combine_plan->abi.params[0]);
+    XaotValueRep combine_arg1 = xaot_abi_slot_value_rep(&combine_plan->abi.params[1]);
+    if (!value_rep_is_struct_aggregate(body_ret) || !value_reps_equal(body_ret, combine_ret) ||
+        !value_reps_equal(body_ret, combine_arg0) || !value_reps_equal(body_ret, combine_arg1))
+        return false;
+    *out_rep = body_ret;
+    return true;
+}
+
+static bool prepare_identity_aggregate_rep(XaotBundle *bundle, const XiValue *value,
+                                           XaotValueRep *out_rep) {
+    if (!bundle || !value || !out_rep || value->nargs < 1)
+        return false;
+    switch (value->op) {
+        case XI_COPY:
+        case XI_MOVE:
+        case XI_CHECKTYPE:
+            break;
+        default:
+            return false;
+    }
+    const XaotValuePlan *arg_plan = xaot_bundle_find_value_plan(bundle, value->args[0]);
+    if (!arg_plan || !value_rep_is_struct_aggregate(arg_plan->rep))
+        return false;
+    *out_rep = arg_plan->rep;
+    return true;
+}
+
+static void prepare_mark_aggregate_value_rep(XaotBundle *bundle, XiValue *value, XaotValueRep rep,
+                                             bool *changed, int depth);
+
+static void prepare_mark_direct_call_aggregate_args(XaotBundle *bundle, XiValue *call,
+                                                    XaotValueRep rep, bool *changed, int depth) {
+    if (!bundle || !call || !changed || depth > 8)
+        return;
+    if (call->op != XI_CALL && call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT)
+        return;
+
+    const XiFunc *current = call->block ? call->block->func : NULL;
+    const XiFunc *target = xaot_boundary_resolve_direct_call_target(bundle, current, call);
+    const XaotFuncPlan *target_plan = target ? xaot_bundle_find_func_plan(bundle, target) : NULL;
+    if (!target_plan || !target_plan->abi.params)
+        return;
+
+    uint16_t first_arg = call->op == XI_CALL ? 1 : 0;
+    for (uint16_t a = first_arg; a < call->nargs; a++) {
+        uint16_t param_idx = (uint16_t) (a - first_arg);
+        if (param_idx >= target_plan->abi.nparams)
+            break;
+        XaotValueRep slot_rep = xaot_abi_slot_value_rep(&target_plan->abi.params[param_idx]);
+        if (!value_rep_is_struct_aggregate(slot_rep) || !value_reps_equal(slot_rep, rep))
+            continue;
+        if (call->args[a])
+            prepare_mark_aggregate_value_rep(bundle, call->args[a], rep, changed, depth + 1);
+    }
+}
+
+static void prepare_mark_aggregate_value_rep(XaotBundle *bundle, XiValue *value, XaotValueRep rep,
+                                             bool *changed, int depth) {
+    if (!bundle || !value || !changed || depth > 8)
+        return;
+    XaotValuePlan *vp = xaot_bundle_find_value_plan_mut(bundle, value);
+    if (vp && !value_reps_equal(vp->rep, rep)) {
+        vp->rep = rep;
+        *changed = true;
+    }
+    switch (value->op) {
+        case XI_COPY:
+        case XI_MOVE:
+        case XI_CHECKTYPE:
+            if (value->nargs >= 1)
+                prepare_mark_aggregate_value_rep(bundle, value->args[0], rep, changed, depth + 1);
+            break;
+        case XI_PHI:
+            for (uint16_t i = 0; i < value->nargs; i++) {
+                if (value->args[i] && value->args[i] != value)
+                    prepare_mark_aggregate_value_rep(bundle, value->args[i], rep, changed,
+                                                     depth + 1);
+            }
+            break;
+        case XI_PAR_REDUCE:
+            if (value->nargs >= 4)
+                prepare_mark_aggregate_value_rep(bundle, value->args[3], rep, changed, depth + 1);
+            break;
+        case XI_CALL:
+        case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
+            prepare_mark_direct_call_aggregate_args(bundle, value, rep, changed, depth + 1);
+            break;
+        default:
+            break;
+    }
+}
+
+static bool prepare_apply_aggregate_value_plans_once(XaotBundle *bundle, XiFunc *func,
+                                                     bool *changed) {
+    if (!bundle || !func || !changed)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *blk = func->blocks ? func->blocks[bi] : NULL;
+        if (!blk)
+            continue;
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            XiValue *value = &phi->value;
+            XaotValuePlan *vp = xaot_bundle_find_value_plan_mut(bundle, value);
+            if (vp && value_rep_is_struct_aggregate(vp->rep))
+                prepare_mark_aggregate_value_rep(bundle, value, vp->rep, changed, 0);
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *value = blk->values ? blk->values[vi] : NULL;
+            XaotValuePlan *vp = xaot_bundle_find_value_plan_mut(bundle, value);
+            XaotValueRep rep;
+            memset(&rep, 0, sizeof(rep));
+            if (!value || !vp)
+                continue;
+            if (value_rep_is_struct_aggregate(vp->rep)) {
+                prepare_mark_aggregate_value_rep(bundle, value, vp->rep, changed, 0);
+                continue;
+            }
+            if (!prepare_parallel_reduce_aggregate_rep(bundle, value, &rep) &&
+                !prepare_identity_aggregate_rep(bundle, value, &rep))
+                continue;
+            if (!value_reps_equal(vp->rep, rep)) {
+                vp->rep = rep;
+                *changed = true;
+            }
+            prepare_mark_aggregate_value_rep(bundle, value, rep, changed, 0);
+        }
+    }
+    return true;
+}
+
+static bool prepare_apply_aggregate_value_plans(XaotBundle *bundle, XiFunc *func) {
+    bool changed = false;
+    for (int pass = 0; pass < 8; pass++) {
+        changed = false;
+        if (!prepare_apply_aggregate_value_plans_once(bundle, func, &changed))
+            return false;
+        if (!changed)
+            return true;
+    }
+    return true;
+}
+
 static bool prepare_direct_call_arg_boundary(XaotBundle *bundle, const XaotFuncPlan *caller_plan,
                                              const XiValue *call, const XiFunc *target,
                                              const XaotFuncPlan *target_plan, uint16_t arg_index,
@@ -2036,7 +2283,7 @@ static bool prepare_direct_call_arg_boundary(XaotBundle *bundle, const XaotFuncP
     }
     slot = &target_plan->abi.params[arg_index];
     slot_rep = xaot_abi_slot_value_rep(slot);
-    if (storage_rep_for_value(arg_plan->rep) == storage_rep_for_value(slot_rep))
+    if (value_reps_equal(arg_plan->rep, slot_rep))
         return true;
 
     step = xaot_bundle_add_boundary_step(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_ARG,
@@ -2056,7 +2303,7 @@ static bool prepare_direct_call_arg_boundary(XaotBundle *bundle, const XaotFuncP
 static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncPlan *caller_plan,
                                              const XiValue *call, const XiFunc *target,
                                              const XaotFuncPlan *target_plan) {
-    const XaotValuePlan *call_plan;
+    XaotValuePlan *call_plan;
     XaotValueRep ret_rep;
     XaotBoundaryStep *step;
 
@@ -2065,13 +2312,17 @@ static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncP
     if (target_plan->abi.ret.cls == XAOT_ARG_VOID)
         return true;
 
-    call_plan = xaot_bundle_find_value_plan(bundle, call);
+    call_plan = xaot_bundle_find_value_plan_mut(bundle, call);
     if (!call_plan) {
         bundle->error_msg = "AOT direct call result has no value plan";
         return false;
     }
     ret_rep = xaot_abi_slot_value_rep(&target_plan->abi.ret);
-    if (storage_rep_for_value(ret_rep) == storage_rep_for_value(call_plan->rep))
+    if (ret_rep.kind == XAOT_VALUE_AGGREGATE) {
+        call_plan->rep = ret_rep;
+        return true;
+    }
+    if (value_reps_equal(ret_rep, call_plan->rep))
         return true;
 
     step = xaot_bundle_add_boundary_step(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_RET,
@@ -2272,6 +2523,8 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
         return false;
     if (!prepare_func_values(bundle, func))
         return false;
+    if (!prepare_apply_return_abi_value_plans(bundle, plan))
+        return false;
     if (!prepare_func_array_storage_plans(bundle, func))
         return false;
     if (!prepare_func_array_cache_plans(bundle, func))
@@ -2294,6 +2547,8 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
                                     (uint16_t) (depth + 1), false))
             return false;
     }
+    if (!prepare_apply_aggregate_value_plans(bundle, func))
+        return false;
     return true;
 }
 

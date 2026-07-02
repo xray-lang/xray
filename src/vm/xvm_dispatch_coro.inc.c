@@ -111,6 +111,11 @@ vmcase(OP_AWAIT_ALL) {
     VM_DISPATCH(vm_await_all(isolate, vm_ctx, i, base, ci, pc));
 }
 
+vmcase(OP_AWAIT_ALL_INTO) {
+    TRACE_EXECUTION();
+    VM_DISPATCH(vm_await_all_into(isolate, vm_ctx, i, base, ci, pc));
+}
+
 vmcase(OP_AWAIT_ANY) {
     TRACE_EXECUTION();
     VM_DISPATCH(vm_await_any(isolate, vm_ctx, i, base, ci, pc));

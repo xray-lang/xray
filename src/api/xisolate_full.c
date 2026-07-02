@@ -146,6 +146,15 @@ static int isolate_init_full(XrVMRuntime *isolate) {
         if (isolate->core_rt->native_type_classes[XR_TRESULTGROUP])
             isolate->vm.builtins[XR_GLOBAL_VAR_RESULTGROUP] =
                 xr_value_from_class(isolate->core_rt->native_type_classes[XR_TRESULTGROUP]);
+        if (isolate->core_rt->native_type_classes[XR_TCOUNTDOWNLATCH])
+            isolate->vm.builtins[XR_GLOBAL_VAR_COUNTDOWNLATCH] =
+                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TCOUNTDOWNLATCH]);
+        if (isolate->core_rt->native_type_classes[XR_TSEMAPHORE])
+            isolate->vm.builtins[XR_GLOBAL_VAR_SEMAPHORE] =
+                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TSEMAPHORE]);
+        if (isolate->core_rt->native_type_classes[XR_TEVENTCOUNT])
+            isolate->vm.builtins[XR_GLOBAL_VAR_EVENTCOUNT] =
+                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TEVENTCOUNT]);
         if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
             isolate->vm.builtin_count = XR_USER_GLOBALS_START;
     }

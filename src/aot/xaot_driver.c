@@ -277,13 +277,16 @@ static const XiImportRef *stdlib_shared_slot_import_ref(const XiFunc *f, int slo
 /* Resolve the module import-ref a value refers to, following shared-slot
  * indirection (e.g. `import time` stored into a shared slot then read back at
  * the `time.now()` call site). Mirrors cg_value_is_module_import resolution. */
-static const XiImportRef *stdlib_module_ref_of_value(const XiFunc *f, const XiValue *v) {
+static const XiImportRef *stdlib_module_ref_of_value(const XiFunc *f, const XiFunc *module_init,
+                                                     const XiValue *v) {
     v = stdlib_unwrap_value(v);
     const XiImportRef *ref = stdlib_value_import_ref(v);
     if (ref)
         return ref;
     if (v && v->op == XI_GET_SHARED) {
         ref = stdlib_shared_slot_import_ref(f, (int) v->aux_int);
+        if (!ref && module_init && module_init != f)
+            ref = stdlib_shared_slot_import_ref(module_init, (int) v->aux_int);
         if (!ref && f && f->module && f->module->init != f)
             ref = stdlib_shared_slot_import_ref(f->module->init, (int) v->aux_int);
     }
@@ -293,8 +296,9 @@ static const XiImportRef *stdlib_module_ref_of_value(const XiFunc *f, const XiVa
 /* If v refers to a stdlib module with symbol-level tracking (bare module
  * identifier in the stdlib table), return that module name; else NULL. Used
  * to record the referenced-symbol closure for method-form stdlib calls. */
-static const char *stdlib_symbol_module_of_value(const XiFunc *f, const XiValue *v) {
-    const XiImportRef *ref = stdlib_module_ref_of_value(f, v);
+static const char *stdlib_symbol_module_of_value(const XiFunc *f, const XiFunc *module_init,
+                                                 const XiValue *v) {
+    const XiImportRef *ref = stdlib_module_ref_of_value(f, module_init, v);
     if (!ref || !ref->module_path || ref->member_name)
         return NULL;
     XaotStdlibSet flag = stdlib_flag_for_import(ref->module_path);
@@ -304,7 +308,7 @@ static const char *stdlib_symbol_module_of_value(const XiFunc *f, const XiValue 
 }
 
 /* Scan a single XiFunc (non-recursive) for feature-indicating ops */
-static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
+static void scan_func_features(XiFunc *f, const XiFunc *module_init, XaotFeatureSet *fs) {
     XR_DCHECK(f != NULL, "scan_func_features: NULL func");
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
@@ -359,13 +363,21 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                 case XI_AWAIT:
                     fs->need_coro = true;
                     break;
+                case XI_PAR_FOR:
+                case XI_PAR_COLLECT:
+                case XI_PAR_REDUCE:
+                    fs->need_coro = true;
+                    break;
                 case XI_GET_BUILTIN:
                     /* WorkQueue lowers through a generic builtin constructor call
                      * rather than a dedicated XI op (unlike channels), so it must
                      * be detected here. Any WorkQueue use pulls in the isolate /
                      * scheduler runtime that the full VM constructor
                      * (emitted for WorkQueue-bearing entries) depends on. */
-                    if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE) {
+                    if (v->aux_int == XR_GLOBAL_VAR_ATOMIC) {
+                        fs->need_atomic = true;
+                        fs->need_objects = true;
+                    } else if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE) {
                         fs->need_work_queue = true;
                         fs->need_coro = true;
                         fs->need_objects = true;
@@ -373,14 +385,27 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                         fs->need_result_group = true;
                         fs->need_coro = true;
                         fs->need_objects = true;
+                    } else if (v->aux_int == XR_GLOBAL_VAR_COUNTDOWNLATCH) {
+                        fs->need_countdown_latch = true;
+                        fs->need_coro = true;
+                        fs->need_objects = true;
+                    } else if (v->aux_int == XR_GLOBAL_VAR_SEMAPHORE) {
+                        fs->need_semaphore = true;
+                        fs->need_coro = true;
+                        fs->need_objects = true;
+                    } else if (v->aux_int == XR_GLOBAL_VAR_EVENTCOUNT) {
+                        fs->need_event_count = true;
+                        fs->need_coro = true;
+                        fs->need_objects = true;
                     }
                     break;
                 case XI_CALL_METHOD:
+                case XI_CALL_METHOD_DIRECT:
                     /* Module-form call (e.g. `time.now()`): the receiver is an
                      * import-ref naming the stdlib module, the method name is in
                      * aux. Record the precise referenced symbol. */
                     if (v->aux && v->nargs >= 1) {
-                        const char *mod = stdlib_symbol_module_of_value(f, v->args[0]);
+                        const char *mod = stdlib_symbol_module_of_value(f, module_init, v->args[0]);
                         const char *method = (const char *) v->aux;
                         if (mod) {
                             features_add_stdlib_member(fs, mod, method);
@@ -392,7 +417,7 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                      * field loads from the whole-module import. Track only
                      * declarative constants in the symbol-level closure. */
                     if (v->aux && v->nargs >= 1) {
-                        const char *mod = stdlib_symbol_module_of_value(f, v->args[0]);
+                        const char *mod = stdlib_symbol_module_of_value(f, module_init, v->args[0]);
                         const char *member = (const char *) v->aux;
                         if (mod && stdlib_member_is_generated_constant(mod, member))
                             features_add_stdlib_member(fs, mod, member);
@@ -448,21 +473,21 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
 }
 
 /* Recursively infer features from an Xi IR function tree */
-static void infer_features_recursive(XiFunc *f, XaotFeatureSet *fs) {
+static void infer_features_recursive(XiFunc *f, const XiFunc *module_init, XaotFeatureSet *fs) {
     if (!f)
         return;
     if (f->is_extern && f->extern_dylib && f->extern_dylib[0])
         features_add_extern_dylib(fs, f->extern_dylib);
-    scan_func_features(f, fs);
+    scan_func_features(f, module_init ? module_init : f, fs);
     for (uint16_t c = 0; c < f->nchildren; c++)
-        infer_features_recursive(f->children[c], fs);
+        infer_features_recursive(f->children[c], module_init ? module_init : f, fs);
 }
 
 /* Infer XaotFeatureSet for the entire compiled bundle */
 static void infer_features(XiFunc **ir_funcs, int nmodules, XaotFeatureSet *fs) {
     memset(fs, 0, sizeof(*fs));
     for (int m = 0; m < nmodules; m++)
-        infer_features_recursive(ir_funcs[m], fs);
+        infer_features_recursive(ir_funcs[m], ir_funcs[m], fs);
 }
 
 static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSet stdlib) {
@@ -591,6 +616,11 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
             return false;
         needs_aot_runtime = true;
     }
+    if (features->need_atomic) {
+        if (!add_runtime_cap(manifest, "atomic"))
+            return false;
+        needs_aot_runtime = true;
+    }
     if (features->need_work_queue) {
         if (!add_runtime_cap(manifest, "work_queue"))
             return false;
@@ -598,6 +628,21 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
     }
     if (features->need_result_group) {
         if (!add_runtime_cap(manifest, "result_group"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (features->need_countdown_latch) {
+        if (!add_runtime_cap(manifest, "countdown_latch"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (features->need_semaphore) {
+        if (!add_runtime_cap(manifest, "semaphore"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (features->need_event_count) {
+        if (!add_runtime_cap(manifest, "event_count"))
             return false;
         needs_aot_runtime = true;
     }
@@ -647,9 +692,11 @@ static bool xaot_fast_test_build_enabled(void) {
 static bool xaot_fast_test_can_skip_size_link_flags(const XaotFeatureSet *features) {
     return features && !features->need_coro && !features->need_channel && !features->need_scope &&
            !features->need_timer && !features->need_netpoll && !features->need_deep_copy &&
-           !features->need_task && !features->need_work_queue && !features->need_result_group &&
-           !features->need_generator && !features->need_reflection && !features->need_stacktrace &&
-           !features->need_instanceof && features->stdlib == 0 && features->n_stdlib_symbols == 0 &&
+           !features->need_task && !features->need_atomic && !features->need_work_queue &&
+           !features->need_result_group && !features->need_countdown_latch &&
+           !features->need_semaphore && !features->need_event_count && !features->need_generator &&
+           !features->need_reflection && !features->need_stacktrace && !features->need_instanceof &&
+           features->stdlib == 0 && features->n_stdlib_symbols == 0 &&
            features->n_extern_dylibs == 0;
 }
 
@@ -841,7 +888,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
             fprintf(stderr, "Error: semantic analysis failed for '%s'\n", spec->source_path);
             goto fail_free_analyzer;
         }
-        spec->exports = xa_analyzer_collect_exports(shared_analyzer, (XrAstNode *) spec->ast);
+        spec->export_symbols =
+            xa_analyzer_collect_export_symbols(shared_analyzer, (XrAstNode *) spec->ast);
         xa_analyzer_clear_diagnostics(shared_analyzer);
     }
 

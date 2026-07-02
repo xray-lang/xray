@@ -1,0 +1,15 @@
+fn patch(values: Array<uint32>) {
+    unsafe {
+        values.setUnchecked(0, 11)
+        values.setUnchecked(1, 31)
+    }
+}
+
+let values: Array<uint32> = []
+values.reserve(2)
+unsafe {
+    values.pushUnchecked(0)
+    values.pushUnchecked(0)
+}
+patch(values)
+print(int(values[0]) + int(values[1]))

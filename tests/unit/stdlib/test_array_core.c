@@ -555,11 +555,15 @@ TEST(array_core_bytes_loads_little_endian_and_rejects_invalid_ranges) {
     ASSERT_FALSE(xr_array_core_bytes_range_ok(8, XR_ELEM_U8, -1, 1));
     ASSERT_FALSE(xr_array_core_bytes_range_ok(8, XR_ELEM_U8, 5, 4));
 
+    ASSERT_EQ_UINT(xr_array_core_bytes_load_u16_le(bytes, 8, XR_ELEM_U8, 0, &ok), 513u);
+    ASSERT_TRUE(ok);
     ASSERT_EQ_UINT(xr_array_core_bytes_load_u32_le(bytes, 8, XR_ELEM_U8, 0, &ok), 67305985u);
     ASSERT_TRUE(ok);
     ASSERT_EQ_UINT(xr_array_core_bytes_load_u64_le(bytes, 8, XR_ELEM_U8, 0, &ok),
                    UINT64_C(578437695752307201));
     ASSERT_TRUE(ok);
+    ASSERT_EQ_UINT(xr_array_core_bytes_load_u16_le(bytes, 8, XR_ELEM_U8, 7, &ok), 0u);
+    ASSERT_FALSE(ok);
     ASSERT_EQ_UINT(xr_array_core_bytes_load_u32_le(bytes, 8, XR_ELEM_U8, 5, &ok), 0u);
     ASSERT_FALSE(ok);
     ASSERT_EQ_UINT(xr_array_core_bytes_load_u32_le(NULL, 8, XR_ELEM_U8, 0, &ok), 0u);
@@ -603,6 +607,40 @@ TEST(array_core_bytes_repeat_from_matches_lz_style_overlap) {
     ASSERT_EQ_INT(rep[6], 65);
     ASSERT_EQ_INT(rep[7], 66);
     ASSERT_EQ_INT(rep[8], 67);
+
+    uint8_t single[9] = {90, 0, 0, 0, 0, 0, 0, 0, 0};
+    ASSERT_TRUE(xr_array_core_bytes_repeat_from(single, 9, XR_ELEM_U8, 1, 1, 8));
+    for (int i = 0; i < 9; i++)
+        ASSERT_EQ_INT(single[i], 90);
+
+    uint8_t period2[15] = {1, 2};
+    ASSERT_TRUE(xr_array_core_bytes_repeat_from(period2, 15, XR_ELEM_U8, 2, 2, 13));
+    for (int i = 0; i < 15; i++)
+        ASSERT_EQ_INT(period2[i], (i % 2) + 1);
+
+    uint8_t period4[21] = {3, 4, 5, 6};
+    ASSERT_TRUE(xr_array_core_bytes_repeat_from(period4, 21, XR_ELEM_U8, 4, 4, 17));
+    for (int i = 0; i < 21; i++)
+        ASSERT_EQ_INT(period4[i], 3 + (i % 4));
+
+    uint8_t period6[18] = {'h', 'e', 'l', 'l', 'o', ' '};
+    ASSERT_TRUE(xr_array_core_bytes_repeat_from(period6, 18, XR_ELEM_U8, 6, 6, 12));
+    for (int i = 0; i < 18; i++)
+        ASSERT_EQ_INT(period6[i], "hello "[i % 6]);
+
+    uint8_t period8[48] = {10, 11, 12, 13, 14, 15, 16, 17};
+    ASSERT_TRUE(xr_array_core_bytes_repeat_from(period8, 48, XR_ELEM_U8, 8, 8, 40));
+    for (int i = 0; i < 48; i++)
+        ASSERT_EQ_INT(period8[i], 10 + (i % 8));
+
+    uint8_t long_period2[1034] = {7, 8};
+    ASSERT_TRUE(xr_array_core_bytes_repeat_from(long_period2, 1034, XR_ELEM_U8, 2, 2, 1032));
+    ASSERT_EQ_INT(long_period2[0], 7);
+    ASSERT_EQ_INT(long_period2[1], 8);
+    ASSERT_EQ_INT(long_period2[1024], 7);
+    ASSERT_EQ_INT(long_period2[1025], 8);
+    ASSERT_EQ_INT(long_period2[1032], 7);
+    ASSERT_EQ_INT(long_period2[1033], 8);
 
     uint8_t empty_count[] = {1, 2};
     ASSERT_TRUE(xr_array_core_bytes_repeat_from(empty_count, 2, XR_ELEM_U8, 1, 1, 0));

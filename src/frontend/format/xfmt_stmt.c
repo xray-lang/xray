@@ -115,6 +115,40 @@ static void fmt_for_in_stmt(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_newline(ctx);
 }
 
+static void fmt_parallel_for_stmt(XrFmtContext *ctx, AstNode *node) {
+    fmt_loop_prefix(ctx, node->as.parallel_for_stmt.label);
+    ParallelForStmtNode *f = &node->as.parallel_for_stmt;
+    xfmt_write_str(ctx, f->range_body ? "parallel range " : "parallel for ");
+    xfmt_write_str(ctx, f->item_name);
+    if (f->range_body) {
+        xfmt_write_str(ctx, ", ");
+        xfmt_write_str(ctx, f->end_name);
+    }
+    xfmt_write_str(ctx, " in ");
+    xfmt_emit_expression(ctx, f->range);
+    if (f->worker_count) {
+        xfmt_write_str(ctx, " workers ");
+        xfmt_emit_expression(ctx, f->worker_count);
+    }
+    if (f->worker_name) {
+        xfmt_write_str(ctx, " worker ");
+        xfmt_write_str(ctx, f->worker_name);
+    }
+    for (int i = 0; i < f->local_count; i++) {
+        xfmt_write_str(ctx, " local ");
+        xfmt_write_str(ctx, f->locals[i].name);
+        xfmt_write_str(ctx, f->locals[i].is_initializer ? " = " : " in ");
+        xfmt_emit_expression(ctx, f->locals[i].source);
+    }
+    if (f->final_body) {
+        xfmt_write_str(ctx, " final ");
+        xfmt_emit_block(ctx, f->final_body);
+    }
+    xfmt_write_str(ctx, " ");
+    xfmt_emit_block(ctx, f->body);
+    xfmt_write_newline(ctx);
+}
+
 static void fmt_try_catch(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     TryCatchNode *tc = &node->as.try_catch;
@@ -323,6 +357,10 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
 
         case AST_FOR_IN_STMT:
             fmt_for_in_stmt(ctx, node);
+            break;
+
+        case AST_PARALLEL_FOR_STMT:
+            fmt_parallel_for_stmt(ctx, node);
             break;
 
         case AST_RETURN_STMT: {

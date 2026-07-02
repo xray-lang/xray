@@ -1,0 +1,7 @@
+fn common(src: ByteSpan, left: int, right: int, maxCount: int) -> int {
+    let n = 0
+    unsafe {
+        n = src.commonPrefixUnchecked(left, right, maxCount)
+    }
+    return n
+}
