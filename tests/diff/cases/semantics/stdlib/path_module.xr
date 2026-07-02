@@ -1,0 +1,31 @@
+// Pure-Xray `path` module: VM/AOT parity for every operation, including the
+// variadic namespace calls path.join(...) / path.resolve(...) and the typed
+// PathInfo returned by path.parse.
+import path
+
+print(path.sep)
+print(path.delimiter)
+print(path.join("foo", "bar", "baz"))
+print(path.join("/usr", "local", "bin"))
+print(path.join("foo/", "bar"))
+print(path.dirname("/usr/local/bin/xray"))
+print(path.dirname("file.txt"))
+print(path.basename("/home/user/file.txt"))
+print(path.extname("archive.tar.gz"))
+print(path.extname(".gitignore"))
+print(path.normalize("/usr/local/../bin/./xray"))
+print(path.normalize("foo/bar/../../baz"))
+print(path.isAbsolute("/abs"))
+print(path.isAbsolute("rel"))
+print(path.relative("/usr/local/bin", "/usr/local/lib"))
+print(path.relative("/a/b/c", "/a/x/y"))
+print(path.resolve("/foo", "/bar", "baz"))
+print(path.resolve("/tmp", "../var"))
+
+let p = path.parse("/home/user/file.txt")
+print(p.root)
+print(p.dir)
+print(p.base)
+print(p.name)
+print(p.ext)
+print(path.format(p))

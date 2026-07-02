@@ -375,24 +375,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
 };
 #define GEN_XLSP_STDLIB_OS_SYMBOL_COUNT 29
 
-// path module symbols
-static const XlspSymbolInfo g_xlsp_stdlib_path_symbols[] = {
-    {"join", XLSP_SYM_FUNCTION, "fn(...parts: string): string", "Join path segments", NULL, 0},
-    {"isAbsolute", XLSP_SYM_FUNCTION, "fn(path: string): bool", "Check if path is absolute", NULL, 0},
-    {"dirname", XLSP_SYM_FUNCTION, "fn(path: string): string", "Get directory name", NULL, 0},
-    {"basename", XLSP_SYM_FUNCTION, "fn(path: string): string", "Get base name", NULL, 0},
-    {"extname", XLSP_SYM_FUNCTION, "fn(path: string): string", "Get file extension", NULL, 0},
-    {"normalize", XLSP_SYM_FUNCTION, "fn(path: string): string", "Normalize path", NULL, 0},
-    {"relative", XLSP_SYM_FUNCTION, "fn(from: string, to: string): string", "Get relative path", NULL, 0},
-    {"resolve", XLSP_SYM_FUNCTION, "fn(...parts: string): string", "Resolve to absolute path", NULL, 0},
-    {"parse", XLSP_SYM_FUNCTION, "fn(path: string): PathInfo", "Parse path into components", NULL, 0},
-    {"format", XLSP_SYM_FUNCTION, "fn(obj: PathInfo): string", "Format path from components", NULL, 0},
-    {"sep", XLSP_SYM_CONSTANT, "string", "Platform path separator", NULL, 0},
-    {"delimiter", XLSP_SYM_CONSTANT, "string", "Platform path-list delimiter", NULL, 0},
-    {"PathInfo", XLSP_SYM_CLASS, "type PathInfo", "Native handle type", NULL, 0},
-};
-#define GEN_XLSP_STDLIB_PATH_SYMBOL_COUNT 13
-
 // regex module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {
     {"compile", XLSP_SYM_FUNCTION, "fn(pattern: string, flags?: string): Regex", "Compile regex pattern", NULL, 0},
@@ -509,7 +491,6 @@ static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
     {"mem", "mem standard library module", g_xlsp_stdlib_mem_symbols, GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT},
     {"net", "net standard library module", g_xlsp_stdlib_net_symbols, GEN_XLSP_STDLIB_NET_SYMBOL_COUNT},
     {"os", "os standard library module", g_xlsp_stdlib_os_symbols, GEN_XLSP_STDLIB_OS_SYMBOL_COUNT},
-    {"path", "path standard library module", g_xlsp_stdlib_path_symbols, GEN_XLSP_STDLIB_PATH_SYMBOL_COUNT},
     {"regex", "regex standard library module", g_xlsp_stdlib_regex_symbols, GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT},
     {"time", "time standard library module", g_xlsp_stdlib_time_symbols, GEN_XLSP_STDLIB_TIME_SYMBOL_COUNT},
     {"toml", "toml standard library module", g_xlsp_stdlib_toml_symbols, GEN_XLSP_STDLIB_TOML_SYMBOL_COUNT},

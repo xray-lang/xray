@@ -1,1 +1,1 @@
-class 'PathInfo' conflicts with the builtin native handle type 'path.PathInfo'
+class 'ExecResult' conflicts with the builtin native handle type 'os.ExecResult'
