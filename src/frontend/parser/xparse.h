@@ -98,7 +98,19 @@ struct Parser {
     // Nesting depth for module-level restriction checks.
     // 0 = top-level (import/export allowed), >0 = inside function/class body.
     int scope_depth;
+
+    // Recursion depth guard: prevents deeply nested expressions / types /
+    // patterns from exhausting the C call stack. Incremented on entry
+    // to each recursive parse entry point, decremented on exit; exceeding
+    // XR_PARSER_MAX_DEPTH reports a clean error and stops recursion instead of
+    // crashing with SIGSEGV.
+    int recursion_depth;
 };
+
+// Maximum nesting depth for expressions / types / match patterns. Chosen to
+// far exceed any realistic source while leaving ample headroom on the default
+// 8MB stack (each recursion level uses a few hundred bytes; 1000 levels < 1MB).
+#define XR_PARSER_MAX_DEPTH 1000
 
 /* ========== Public Entry Points ========== */
 

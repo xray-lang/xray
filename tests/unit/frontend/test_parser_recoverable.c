@@ -394,6 +394,54 @@ TEST(error_coordinates_in_source_bounds) {
     teardown();
 }
 
+TEST(deep_expression_reports_error_instead_of_crashing) {
+    // Deep expression nesting is user-controlled input in the CLI and LSP.
+    // The parser must turn it into a normal diagnostic instead of exhausting
+    // the host C stack.
+    setup();
+    const int depth = XR_PARSER_MAX_DEPTH + 1;
+    const char *prefix = "let x = ";
+    const char *suffix = "1;\n";
+    size_t prefix_len = strlen(prefix);
+    size_t suffix_len = strlen(suffix);
+    size_t total = prefix_len + (size_t) depth * 2 + suffix_len + 1;
+    char *src = (char *) xr_malloc(total);
+    ASSERT_NOT_NULL(src);
+
+    size_t pos = 0;
+    memcpy(src + pos, prefix, prefix_len);
+    pos += prefix_len;
+    for (int i = 0; i < depth; i++)
+        src[pos++] = '(';
+    src[pos++] = '1';
+    for (int i = 0; i < depth; i++)
+        src[pos++] = ')';
+    src[pos++] = ';';
+    src[pos++] = '\n';
+    src[pos] = '\0';
+
+    Parser parser;
+    DiagSink sink;
+    XrArena *arena = NULL;
+    AstNode *ast = parse_recoverable(src, &parser, &sink, 0, &arena);
+
+    ASSERT_NOT_NULL(ast);
+    ASSERT_TRUE(parser.had_error != 0);
+    ASSERT_TRUE(sink.count >= 1);
+    bool found = false;
+    for (int i = 0; i < sink.count; i++) {
+        if (strstr(sink.records[i].message, "expression nesting too deep") != NULL) {
+            found = true;
+            break;
+        }
+    }
+    ASSERT_TRUE(found);
+
+    release_arena(arena);
+    xr_free(src);
+    teardown();
+}
+
 TEST(null_parser_returns_null_safely) {
     // NULL-safety: xr_parse_recoverable with NULL parser must NOT
     // crash. Callers (e.g. fuzz harness) rely on this for early-
@@ -416,5 +464,6 @@ RUN_TEST(max_errors_caps_callback_count);
 RUN_TEST(broken_function_body_does_not_eat_following_decls);
 RUN_TEST(empty_and_whitespace_source_no_error);
 RUN_TEST(error_coordinates_in_source_bounds);
+RUN_TEST(deep_expression_reports_error_instead_of_crashing);
 RUN_TEST(null_parser_returns_null_safely);
 TEST_MAIN_END()

@@ -19,11 +19,30 @@
 #include <math.h>
 #include <string.h>
 
-static bool xr_json_equals_deep(XrValue a, XrValue b);
-static bool xr_array_equals_deep(XrValue a, XrValue b);
-static bool xr_map_equals_deep(XrValue a, XrValue b);
+// Cycle protection for deep equality. Deeply nested / self- or
+// mutually-referential containers (Json/Array/Map) would otherwise recurse
+// until the C stack is exhausted (SIGSEGV). We bound recursion with a depth
+// limit (matching JSON_MAX_DEPTH in xjson_serde.c) and detect cycles with a
+// stack of the container pairs currently on the recursion path: re-encountering
+// the same (a,b) pair means both sides form isomorphic cycles and are equal.
+#define DEEP_EQ_MAX_DEPTH 256
 
-bool xr_value_deep_eq(XrValue a, XrValue b) {
+typedef struct {
+    const void *a;
+    const void *b;
+} DeepEqPair;
+
+typedef struct {
+    int depth;
+    int seen_count;
+    DeepEqPair seen[DEEP_EQ_MAX_DEPTH];
+} DeepEqCtx;
+
+static bool xr_json_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b);
+static bool xr_array_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b);
+static bool xr_map_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b);
+
+static bool deep_eq_ctx(DeepEqCtx *ctx, XrValue a, XrValue b) {
     if (a.tag == b.tag && a.i == b.i) {
         if (a.tag == XR_TAG_F64 && isnan(a.f))
             return false;
@@ -66,6 +85,7 @@ deep_compare: {
     if (XR_OBJ_GET_TYPE(gc_a) != XR_OBJ_GET_TYPE(gc_b))
         return false;
 
+    // Strings do not recurse — no cycle guard needed.
     if (XR_OBJ_GET_TYPE(gc_a) == XR_TSTRING) {
         XrString *str_a = (XrString *) gc_a;
         XrString *str_b = (XrString *) gc_b;
@@ -73,21 +93,53 @@ deep_compare: {
             return false;
         return memcmp(str_a->data, str_b->data, str_a->length) == 0;
     }
+
+    // Containers: guard against cycles + unbounded depth before recursing.
+    bool is_container = (XR_OBJ_GET_TYPE(gc_a) == XR_TARRAY || XR_OBJ_GET_TYPE(gc_a) == XR_TMAP ||
+                         XR_OBJ_GET_TYPE(gc_a) == XR_TINSTANCE);
+    if (is_container) {
+        for (int i = 0; i < ctx->seen_count; i++) {
+            if (ctx->seen[i].a == gc_a && ctx->seen[i].b == gc_b)
+                return true;  // isomorphic cycle on both sides
+        }
+        if (ctx->depth >= DEEP_EQ_MAX_DEPTH || ctx->seen_count >= DEEP_EQ_MAX_DEPTH)
+            return false;  // depth/capacity bound: never overflow the C stack
+        ctx->seen[ctx->seen_count].a = gc_a;
+        ctx->seen[ctx->seen_count].b = gc_b;
+        ctx->seen_count++;
+        ctx->depth++;
+    }
+
+    bool result;
     if (XR_OBJ_GET_TYPE(gc_a) == XR_TINSTANCE) {
         XrInstance *ia = (XrInstance *) gc_a;
         if (ia->klass &&
             (ia->klass->builtin_kind == XR_BK_JSON || ia->klass->builtin_kind == XR_BK_RECORD))
-            return xr_json_equals_deep(a, b);
+            result = xr_json_equals_deep(ctx, a, b);
+        else
+            result = (gc_a == gc_b);
+    } else if (XR_OBJ_GET_TYPE(gc_a) == XR_TARRAY) {
+        result = xr_array_equals_deep(ctx, a, b);
+    } else if (XR_OBJ_GET_TYPE(gc_a) == XR_TMAP) {
+        result = xr_map_equals_deep(ctx, a, b);
+    } else {
+        result = (gc_a == gc_b);
     }
-    if (XR_OBJ_GET_TYPE(gc_a) == XR_TARRAY)
-        return xr_array_equals_deep(a, b);
-    if (XR_OBJ_GET_TYPE(gc_a) == XR_TMAP)
-        return xr_map_equals_deep(a, b);
-    return gc_a == gc_b;
+
+    if (is_container) {
+        ctx->seen_count--;
+        ctx->depth--;
+    }
+    return result;
 }
 }
 
-static bool xr_json_equals_deep(XrValue a, XrValue b) {
+bool xr_value_deep_eq(XrValue a, XrValue b) {
+    DeepEqCtx ctx = {0};
+    return deep_eq_ctx(&ctx, a, b);
+}
+
+static bool xr_json_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b) {
     XrJson *ja = xr_value_to_json(a);
     XrJson *jb = xr_value_to_json(b);
     if (!ja || !jb)
@@ -105,13 +157,13 @@ static bool xr_json_equals_deep(XrValue a, XrValue b) {
             return false;
         XrValue va = xr_instance_get_dynamic_field(ja, (uint16_t) i);
         XrValue vb = xr_instance_get_dynamic_field(jb, (uint16_t) idx_b);
-        if (!xr_value_deep_eq(va, vb))
+        if (!deep_eq_ctx(ctx, va, vb))
             return false;
     }
     return true;
 }
 
-static bool xr_array_equals_deep(XrValue a, XrValue b) {
+static bool xr_array_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b) {
     XrArray *aa = xr_value_to_array(a);
     XrArray *ab = xr_value_to_array(b);
     if (!aa || !ab)
@@ -120,13 +172,13 @@ static bool xr_array_equals_deep(XrValue a, XrValue b) {
         return false;
 
     for (int i = 0; i < aa->length; i++) {
-        if (!xr_value_deep_eq(xr_array_get_element(aa, i), xr_array_get_element(ab, i)))
+        if (!deep_eq_ctx(ctx, xr_array_get_element(aa, i), xr_array_get_element(ab, i)))
             return false;
     }
     return true;
 }
 
-static bool xr_map_equals_deep(XrValue a, XrValue b) {
+static bool xr_map_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b) {
     XrMap *ma = xr_value_to_map(a);
     XrMap *mb = xr_value_to_map(b);
     if (!ma || !mb)
@@ -143,7 +195,7 @@ static bool xr_map_equals_deep(XrValue a, XrValue b) {
         XrValue val_b = xr_map_get(mb, node->key, &found);
         if (!found)
             return false;
-        if (!xr_value_deep_eq(node->value, val_b))
+        if (!deep_eq_ctx(ctx, node->value, val_b))
             return false;
     }
     return true;

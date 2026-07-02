@@ -36,6 +36,11 @@ typedef struct {
     AstNode *decl_node;  // AST_VAR_DECL or AST_CONST_DECL node
     bool is_param;
     uint8_t param_passing_mode;
+    // If this variable was initialized with a function-expression literal
+    // (`let f = fn() {...}`), points to that FUNCTION_EXPR node. Lets
+    // `go f()` apply the same capture enforcement as an inline `go fn(){}()`
+    // instead of silently skipping the check.
+    AstNode *bound_fn_expr;
 } EaVarEntry;
 
 typedef struct {
@@ -94,11 +99,40 @@ static void ea_register_var_entry(EaContext *ctx, const char *name, AstNode *dec
     scope->vars[scope->count].decl_node = decl;
     scope->vars[scope->count].is_param = is_param;
     scope->vars[scope->count].param_passing_mode = param_passing_mode;
+    scope->vars[scope->count].bound_fn_expr = NULL;
     scope->count++;
 }
 
 static void ea_register_var(EaContext *ctx, const char *name, AstNode *decl) {
     ea_register_var_entry(ctx, name, decl, false, XR_PARAM_VALUE);
+}
+
+// Register a variable that is bound to a function-expression literal, so a
+// later `go var()` can enforce the same capture rules as an inline closure.
+static void ea_register_var_with_fn(EaContext *ctx, const char *name, AstNode *decl,
+                                    AstNode *bound_fn) {
+    ea_register_var_entry(ctx, name, decl, false, XR_PARAM_VALUE);
+    if (bound_fn) {
+        EaScope *scope = &ctx->scopes[ctx->depth];
+        if (scope->count > 0)
+            scope->vars[scope->count - 1].bound_fn_expr = bound_fn;
+    }
+}
+
+// Look up the function-expression a variable is bound to, searching outer
+// scopes (a `go f()` typically references an `f` declared in an enclosing
+// scope). Returns NULL if the variable is not found or not bound to a literal
+// closure — in which case the runtime deep-copy fallback (fix B) is the
+// safety net.
+static AstNode *ea_lookup_bound_fn(EaContext *ctx, const char *name) {
+    for (int d = ctx->depth; d >= 0; d--) {
+        EaScope *scope = &ctx->scopes[d];
+        for (int i = scope->count - 1; i >= 0; i--) {
+            if (scope->vars[i].name && strcmp(scope->vars[i].name, name) == 0)
+                return scope->vars[i].bound_fn_expr;
+        }
+    }
+    return NULL;
 }
 
 /*
@@ -379,12 +413,16 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
 
         // ---- Variable declarations: register in current scope ----
         case AST_VAR_DECL:
-        case AST_CONST_DECL:
-            ea_register_var(ctx, node->as.var_decl.name, node);
-            if (node->as.var_decl.initializer) {
-                ea_walk(ctx, node->as.var_decl.initializer);
+        case AST_CONST_DECL: {
+            AstNode *init = node->as.var_decl.initializer;
+            // Track closure literals bound to a name so `go f()` can be checked.
+            AstNode *bound_fn = (init && init->type == AST_FUNCTION_EXPR) ? init : NULL;
+            ea_register_var_with_fn(ctx, node->as.var_decl.name, node, bound_fn);
+            if (init) {
+                ea_walk(ctx, init);
             }
             break;
+        }
 
         // ---- Function declarations: new function boundary ----
         case AST_FUNCTION_DECL: {
@@ -416,6 +454,20 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
                 if (callee && callee->type == AST_FUNCTION_EXPR) {
                     /* Inline go closure: go fn() { body }() */
                     ea_walk_go_closure(ctx, &callee->as.function_decl);
+                } else if (callee && callee->type == AST_VARIABLE) {
+                    /* Variable-bound closure: go f() where f = fn() {...}.
+                     * Recover the bound closure literal and enforce the same
+                     * capture rules as the inline form. If the
+                     * binding cannot be resolved statically (closure passed in
+                     * as a parameter, stored in a container, etc.), fall back
+                     * to walking the callee — the runtime deep-copy fallback
+                     * (fix B) guarantees memory safety in that case. */
+                    AstNode *bound = ea_lookup_bound_fn(ctx, callee->as.variable.name);
+                    if (bound && bound->type == AST_FUNCTION_EXPR) {
+                        ea_walk_go_closure(ctx, &bound->as.function_decl);
+                    } else {
+                        ea_walk(ctx, callee);
+                    }
                 } else {
                     ea_walk(ctx, callee);
                 }
