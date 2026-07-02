@@ -1,0 +1,479 @@
+// url - pure-Xray URL parsing, formatting, query, and percent encoding.
+//
+// The algorithms mirror the former shared C core, but the user-facing stdlib
+// surface is now ordinary Xray code. ASCII URL delimiters are scanned by
+// character index; percent encode/decode works on UTF-8 bytes.
+
+let HEX = "0123456789ABCDEF"
+
+// URL - Parsed URL handle with normalized host, origin, and href components.
+class URL {
+    protocol: string
+    hostname: string
+    port: string
+    pathname: string
+    search: string
+    hash: string
+    username: string
+    password: string
+    host: string
+    origin: string
+    href: string
+
+    constructor(
+        protocol: string,
+        hostname: string,
+        port: string,
+        pathname: string,
+        search: string,
+        hash: string,
+        username: string,
+        password: string,
+        host: string,
+        origin: string,
+        href: string
+    ) {
+        this.protocol = protocol
+        this.hostname = hostname
+        this.port = port
+        this.pathname = pathname
+        this.search = search
+        this.hash = hash
+        this.username = username
+        this.password = password
+        this.host = host
+        this.origin = origin
+        this.href = href
+    }
+}
+
+fn hexVal(c: int) -> int {
+    if (c >= 48 && c <= 57) { return c - 48 }
+    if (c >= 97 && c <= 102) { return 10 + c - 97 }
+    if (c >= 65 && c <= 70) { return 10 + c - 65 }
+    return -1
+}
+
+fn isUnreserved(c: int) -> bool {
+    return (c >= 65 && c <= 90) ||
+           (c >= 97 && c <= 122) ||
+           (c >= 48 && c <= 57) ||
+           c == 45 || c == 95 || c == 46 || c == 126
+}
+
+fn byteString(b: int) -> string {
+    let one = Bytes(1)
+    one[0] = b
+    return one.toString()
+}
+
+fn encodeImpl(s: string, form: bool) -> string {
+    let src = s.toBytes()
+    let out = ""
+    for (let i = 0; i < src.length; i++) {
+        let b = src[i]
+        if (form && b == 32) {
+            out = out + "+"
+        } else if (isUnreserved(b)) {
+            out = out + byteString(b)
+        } else {
+            out = out + "%"
+            out = out + HEX.charAt((b >> 4) & 15)
+            out = out + HEX.charAt(b & 15)
+        }
+    }
+    return out
+}
+
+fn decodedLen(src: Bytes) -> int {
+    let n = 0
+    let i = 0
+    while (i < src.length) {
+        if (src[i] == 37 && i + 2 < src.length) {
+            let hi = hexVal(src[i + 1])
+            let lo = hexVal(src[i + 2])
+            if (hi >= 0 && lo >= 0) { i = i + 2 }
+        }
+        n = n + 1
+        i = i + 1
+    }
+    return n
+}
+
+fn decodeImpl(s: string, form: bool) -> string {
+    let src = s.toBytes()
+    let out = Bytes(decodedLen(src))
+    let oi = 0
+    let i = 0
+    while (i < src.length) {
+        if (src[i] == 37 && i + 2 < src.length) {
+            let hi = hexVal(src[i + 1])
+            let lo = hexVal(src[i + 2])
+            if (hi >= 0 && lo >= 0) {
+                out[oi] = (hi << 4) | lo
+                oi = oi + 1
+                i = i + 3
+                continue
+            }
+        }
+        if (form && src[i] == 43) {
+            out[oi] = 32
+        } else {
+            out[oi] = src[i]
+        }
+        oi = oi + 1
+        i = i + 1
+    }
+    return out.toString()
+}
+
+fn findChar(s: string, needle: string, start: int, end: int) -> int {
+    let i = start
+    while (i < end) {
+        if (s.charAt(i) == needle) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+fn findAny3(s: string, a: string, b: string, c: string, start: int, end: int) -> int {
+    let i = start
+    while (i < end) {
+        let ch = s.charAt(i)
+        if (ch == a || ch == b || ch == c) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+fn lastChar(s: string, needle: string, start: int, end: int) -> int {
+    let i = end - 1
+    while (i >= start) {
+        if (s.charAt(i) == needle) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+fn startsWithAt(s: string, pos: int, prefix: string) -> bool {
+    if (pos + prefix.length > s.length) { return false }
+    return s.slice(pos, pos + prefix.length) == prefix
+}
+
+fn portIsValid(port: string) -> bool {
+    if (port.length == 0 || port.length > 5) { return false }
+    let v = 0
+    for (let i = 0; i < port.length; i++) {
+        let c = port.charAt(i).ord()!
+        if (c < 48 || c > 57) { return false }
+        v = v * 10 + (c - 48)
+    }
+    return v <= 65535
+}
+
+// parse - Parse URL text into a URL handle.
+fn parse(url: string) -> URL {
+    let n = url.length
+    let protocol = ""
+    let username = ""
+    let password = ""
+    let hostname = ""
+    let rawPort = ""
+    let pathname = "/"
+    let search = ""
+    let hash = ""
+
+    let p = 0
+    let colon = findChar(url, ":", 0, n)
+    if (colon >= 0 && startsWithAt(url, colon, "://")) {
+        protocol = url.slice(0, colon + 1)
+        p = colon + 3
+    }
+
+    let authorityEnd = findAny3(url, "/", "?", "#", p, n)
+    if (authorityEnd < 0) { authorityEnd = n }
+
+    let at = findChar(url, "@", p, authorityEnd)
+    let hostStart = p
+    if (at >= 0) {
+        let userColon = findChar(url, ":", p, at)
+        if (userColon >= 0) {
+            username = url.slice(p, userColon)
+            password = url.slice(userColon + 1, at)
+        } else {
+            username = url.slice(p, at)
+        }
+        hostStart = at + 1
+    }
+
+    if (hostStart < authorityEnd && url.charAt(hostStart) == "[") {
+        let bracket = findChar(url, "]", hostStart, authorityEnd)
+        if (bracket >= 0) {
+            hostname = url.slice(hostStart, bracket + 1)
+            if (bracket + 1 < authorityEnd && url.charAt(bracket + 1) == ":") {
+                rawPort = url.slice(bracket + 2, authorityEnd)
+            }
+        } else {
+            hostname = url.slice(hostStart, authorityEnd)
+        }
+    } else {
+        let portColon = lastChar(url, ":", hostStart, authorityEnd)
+        if (portColon >= 0) {
+            hostname = url.slice(hostStart, portColon)
+            rawPort = url.slice(portColon + 1, authorityEnd)
+        } else {
+            hostname = url.slice(hostStart, authorityEnd)
+        }
+    }
+
+    p = authorityEnd
+    if (p < n && url.charAt(p) == "/") {
+        let pathEnd = findAny3(url, "?", "#", "\u{0}", p, n)
+        if (pathEnd < 0) { pathEnd = n }
+        pathname = url.slice(p, pathEnd)
+        p = pathEnd
+    }
+
+    if (p < n && url.charAt(p) == "?") {
+        let searchEnd = findChar(url, "#", p, n)
+        if (searchEnd < 0) { searchEnd = n }
+        search = url.slice(p, searchEnd)
+        p = searchEnd
+    }
+
+    if (p < n && url.charAt(p) == "#") {
+        hash = url.slice(p, n)
+    }
+
+    let port = ""
+    if (portIsValid(rawPort)) { port = rawPort }
+
+    let host = hostname
+    if (port.length > 0) { host = host + ":" + port }
+
+    let origin = host
+    if (protocol.length > 0) { origin = protocol + "//" + host }
+
+    return URL(protocol, hostname, port, pathname, search, hash, username, password, host, origin, url)
+}
+
+// format - Build URL text from a URL handle.
+fn format(obj: URL) -> string {
+    let out = ""
+    if (obj.protocol.length > 0) {
+        out = out + obj.protocol + "//"
+    }
+    if (obj.username.length > 0) {
+        out = out + obj.username
+        if (obj.password.length > 0) { out = out + ":" + obj.password }
+        out = out + "@"
+    }
+    out = out + obj.hostname
+    if (obj.port.length > 0) { out = out + ":" + obj.port }
+    return out + obj.pathname + obj.search + obj.hash
+}
+
+// encode - RFC 3986 percent-encode a string.
+fn encode(s: string) -> string {
+    return encodeImpl(s, false)
+}
+
+// decode - RFC 3986 percent-decode a string.
+fn decode(s: string) -> string {
+    return decodeImpl(s, false)
+}
+
+// encodeForm - Form URL encode a string, using plus for spaces.
+fn encodeForm(s: string) -> string {
+    return encodeImpl(s, true)
+}
+
+// decodeForm - Form URL decode a string, treating plus as space.
+fn decodeForm(s: string) -> string {
+    return decodeImpl(s, true)
+}
+
+// parseQuery - Parse a query string into a Json object.
+fn parseQuery(qs: string) -> Json {
+    let out: Json = {}
+    let start = 0
+    if (qs.length > 0 && qs.charAt(0) == "?") { start = 1 }
+
+    while (start < qs.length) {
+        let amp = findChar(qs, "&", start, qs.length)
+        let pairEnd = amp
+        if (pairEnd < 0) { pairEnd = qs.length }
+
+        let eq = findChar(qs, "=", start, pairEnd)
+        let keyEnd = pairEnd
+        if (eq >= 0) { keyEnd = eq }
+        let key = qs.slice(start, keyEnd)
+
+        if (key.length > 0) {
+            let value = ""
+            if (eq >= 0) {
+                value = decodeForm(qs.slice(eq + 1, pairEnd))
+            }
+            out[decodeForm(key)] = value
+        }
+
+        if (amp < 0) { break }
+        start = amp + 1
+    }
+
+    return out
+}
+
+// buildQuery - Build a query string from a Json object.
+fn buildQuery(obj: Json) -> string {
+    let out = ""
+    let hasPairs = false
+    for (key in obj) {
+        let encKey = encodeForm(key)
+        if (encKey.length == 0) { continue }
+        let value = obj[key]
+
+        if (hasPairs) { out = out + "&" }
+        out = out + encKey
+        if (value != null) {
+            out = out + "=" + encodeForm(string(value))
+        }
+        hasPairs = true
+    }
+    return out
+}
+
+fn emitBaseAuthority(parts: URL) -> string {
+    let out = ""
+    if (parts.protocol.length > 0) {
+        out = out + parts.protocol + "//"
+    }
+    out = out + parts.hostname
+    if (parts.port.length > 0) { out = out + ":" + parts.port }
+    return out
+}
+
+fn removeDotSegments(path: string) -> string {
+    if (path.length == 0) { return "" }
+    let isAbs = path.charAt(0) == "/"
+    let trailing = path.length > 1 && path.charAt(path.length - 1) == "/"
+    let segs: Array<string> = []
+    let parts = path.split("/")
+
+    for (let i = 0; i < parts.length; i++) {
+        let seg = parts[i]
+        if (seg.length == 0 || seg == ".") { continue }
+        if (seg == "..") {
+            if (segs.length > 0 && segs[segs.length - 1] != "..") {
+                segs.pop()
+            } else if (!isAbs) {
+                segs.push("..")
+            }
+        } else {
+            segs.push(seg)
+        }
+    }
+
+    let body = segs.join("/")
+    if (isAbs) {
+        if (body.length == 0) { return "/" }
+        body = "/" + body
+    }
+    if (trailing && body.length > 0 && body.charAt(body.length - 1) != "/") {
+        body = body + "/"
+    }
+    return body
+}
+
+fn splitReference(ref: string) -> (string, string, string) {
+    let hashAt = findChar(ref, "#", 0, ref.length)
+    let noHashEnd = ref.length
+    let hash = ""
+    if (hashAt >= 0) {
+        noHashEnd = hashAt
+        hash = ref.slice(hashAt, ref.length)
+    }
+
+    let queryAt = findChar(ref, "?", 0, noHashEnd)
+    let path = ref.slice(0, noHashEnd)
+    let query = ""
+    if (queryAt >= 0) {
+        path = ref.slice(0, queryAt)
+        query = ref.slice(queryAt, noHashEnd)
+    }
+    return (path, query, hash)
+}
+
+fn dirnamePrefix(path: string) -> string {
+    if (path.length == 0) { return "/" }
+    let slash = lastChar(path, "/", 0, path.length)
+    if (slash >= 0) {
+        return path.slice(0, slash + 1)
+    }
+    return "/"
+}
+
+// resolve - Resolve a relative URL reference against a base URL.
+fn resolve(base: string, relative: string) -> string {
+    let colon = findChar(relative, ":", 0, relative.length)
+    if (colon >= 0 && startsWithAt(relative, colon, "://")) {
+        return relative
+    }
+
+    let bp = parse(base)
+    let parts = splitReference(relative)
+    let relPath = parts.0
+    let relQuery = parts.1
+    let relHash = parts.2
+
+    if (relative.length > 1 && relative.charAt(0) == "/" && relative.charAt(1) == "/") {
+        let authorityEnd = findChar(relative, "/", 2, relPath.length)
+        if (authorityEnd < 0) { authorityEnd = relPath.length }
+        let out = bp.protocol + relative.slice(0, authorityEnd)
+        if (authorityEnd < relPath.length) {
+            out = out + removeDotSegments(relative.slice(authorityEnd, relPath.length))
+        }
+        return out + relQuery + relHash
+    }
+
+    if (relPath.length > 0 && relPath.charAt(0) == "/") {
+        return emitBaseAuthority(bp) + removeDotSegments(relPath) + relQuery + relHash
+    }
+
+    if (relPath.length == 0) {
+        let out = emitBaseAuthority(bp) + bp.pathname
+        if (relQuery.length > 0) {
+            out = out + relQuery
+        } else {
+            out = out + bp.search
+        }
+        return out + relHash
+    }
+
+    let merged = dirnamePrefix(bp.pathname) + relPath
+    return emitBaseAuthority(bp) + removeDotSegments(merged) + relQuery + relHash
+}
+
+// join - Join URL path segments.
+fn join(...parts: string) -> string {
+    let out = ""
+    for (let i = 0; i < parts.length; i++) {
+        let seg = parts[i]
+        if (seg.length == 0) { continue }
+
+        if (out.length > 0 && out.charAt(out.length - 1) == "/") {
+            out = out.slice(0, out.length - 1)
+        }
+        if (out.length > 0 && seg.charAt(0) != "/") {
+            out = out + "/"
+        }
+        out = out + seg
+    }
+    return out
+}
+
+export {
+    URL,
+    encode, decode, encodeForm, decodeForm,
+    parse, format, parseQuery, buildQuery, resolve, join
+}

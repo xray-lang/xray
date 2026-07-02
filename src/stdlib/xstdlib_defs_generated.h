@@ -152,16 +152,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"math", "radToDeg", "(rad: float): float", "Radians to degrees", "math_radToDeg", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
     {"math", "isNaN", "(x: float): bool", "Check if NaN", "math_isNaN", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
     {"math", "isFinite", "(x: float): bool", "Check if finite", "math_isFinite", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
-    {"url", "encode", "(s: string): string", "RFC 3986 percent-encode", "url_encode_fn", "normal", "", "xrt_url_encode", "s", "value", "", "", "core", "method", 1, true},
-    {"url", "decode", "(s: string): string", "RFC 3986 percent-decode", "url_decode_fn", "normal", "", "xrt_url_decode", "s", "value", "", "", "core", "method", 1, true},
-    {"url", "encodeForm", "(s: string): string", "Form URL encode (space as +)", "url_encode_form_fn", "normal", "", "xrt_url_encode_form", "s", "value", "", "", "core", "method", 1, true},
-    {"url", "decodeForm", "(s: string): string", "Form URL decode (+ as space)", "url_decode_form_fn", "normal", "", "xrt_url_decode_form", "s", "value", "", "", "core", "method", 1, true},
-    {"url", "parse", "(url: string): URL", "Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, username, password, host, origin, href)", "url_parse_fn", "normal", "", "xrt_url_parse", "s", "value", "", "", "alloc", "method", 1, true},
-    {"url", "format", "(obj: URL): string", "Build URL string from URL components", "url_format_fn", "normal", "", "xrt_url_format", "v", "value", "", "", "alloc", "method", 1, true},
-    {"url", "parseQuery", "(qs: string): Json", "Parse query string to Json", "url_parse_query_fn", "normal", "", "xrt_url_parse_query", "s", "value", "", "", "alloc", "method", 1, true},
-    {"url", "buildQuery", "(obj: Json): string", "Build query string from Json", "url_build_query_fn", "normal", "", "xrt_url_build_query", "v", "value", "", "", "alloc", "method", 1, true},
-    {"url", "resolve", "(base: string, relative: string): string", "Resolve relative URL", "url_resolve_fn", "normal", "", "xrt_url_resolve", "ss", "value", "", "", "core", "method", 2, true},
-    {"url", "join", "(...parts: string): string", "Join URL path segments", "url_join_fn", "normal", "", "xrt_url_join", "*", "value", "", "", "core", "method", UINT16_MAX, true},
     {"compress", "crc32", "(data: string): int", "Compute CRC-32 checksum", "compress_crc32", "normal", "", "xrt_compress_crc32", "s", "value", "", "", "core", "method", 1, true},
     {"compress", "adler32", "(data: string): int", "Compute Adler-32 checksum", "compress_adler32", "normal", "", "xrt_compress_adler32", "s", "value", "", "", "core", "method", 1, true},
     {"compress", "gzip", "(data: string, level?: int): string?", "Gzip compress", "compress_gzip", "normal", "", "xrt_compress_gzip_default", "s", "value", "compress.gzip", "", "alloc", "method", 1, true},
@@ -471,20 +461,6 @@ static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_url_URL[] = {
-    {"url", "URL", "protocol", "string", true},
-    {"url", "URL", "hostname", "string", true},
-    {"url", "URL", "port", "string", true},
-    {"url", "URL", "pathname", "string", true},
-    {"url", "URL", "search", "string", true},
-    {"url", "URL", "hash", "string", true},
-    {"url", "URL", "username", "string", true},
-    {"url", "URL", "password", "string", true},
-    {"url", "URL", "host", "string", true},
-    {"url", "URL", "origin", "string", true},
-    {"url", "URL", "href", "string", true},
-};
-
 static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_os_ExecResult[] = {
     {"os", "ExecResult", "stdout", "string", true},
     {"os", "ExecResult", "stderr", "string", true},
@@ -551,7 +527,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsMessage[] 
 };
 
 static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
-    {"url", "URL", "Native handle type", xr_stdlib_handle_fields_url_URL, 11},
     {"os", "ExecResult", "Native handle type", xr_stdlib_handle_fields_os_ExecResult, 3},
     {"io", "FileStat", "Native handle type", xr_stdlib_handle_fields_io_FileStat, 10},
     {"net", "UdpPacket", "Native handle type", xr_stdlib_handle_fields_net_UdpPacket, 3},

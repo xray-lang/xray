@@ -1,0 +1,36 @@
+let obj: Json = { name: "Alice", age: 30 }
+let staticSeen = 0
+for (k in obj) {
+    if (k == "name") { staticSeen = staticSeen + 1 }
+    if (k == "age") { staticSeen = staticSeen + 10 }
+}
+print("static keys=" + staticSeen.toString())
+
+let staticPairs = 0
+for (k, v in obj) {
+    if (k == "name" && string(v) == "Alice") { staticPairs = staticPairs + 1 }
+    if (k == "age" && string(v) == "30") { staticPairs = staticPairs + 10 }
+}
+print("static pairs=" + staticPairs.toString())
+
+let dyn: Json = {}
+dyn["msg"] = "hello world"
+dyn["key"] = "a&b"
+
+let dynSeen = 0
+for (k in dyn) {
+    if (k == "msg") { dynSeen = dynSeen + 1 }
+    if (k == "key") { dynSeen = dynSeen + 10 }
+}
+print("dynamic keys=" + dynSeen.toString())
+
+let dynPairs = 0
+for (k, v in dyn) {
+    if (k == "msg" && string(v) == "hello world") { dynPairs = dynPairs + 1 }
+    if (k == "key" && string(v) == "a&b") { dynPairs = dynPairs + 10 }
+}
+print("dynamic pairs=" + dynPairs.toString())
+
+print("keys length=" + dyn.keys().length.toString())
+print("values length=" + dyn.values().length.toString())
+print("entries length=" + dyn.entries().length.toString())

@@ -14,8 +14,6 @@
  *     L1  xrt_arc.h     - bump allocator, str_alloc/str_concat
  *     L1  xrt_range.h   - lazy Range value
  *     L2  xrt_coll.h    - Array, Map, Json, StringBuilder, Closure, index ops
- *     L2  xrt_path.h    - freestanding path helpers (parse/format use Json)
- *     L2  xrt_url.h     - freestanding URL helpers (parse/query use Json)
  *     L2  xrt_compress.h - freestanding checksum helpers
  *     L2  xrt_crypto.h  - freestanding crypto utilities
  *     L2  xrt_regex.h   - freestanding regex utilities
@@ -41,7 +39,6 @@
 #include "xrt_arc.h"        // L1: bump alloc, xrt_str_alloc, xrt_str_concat
 #include "xrt_range.h"      // L1: lazy Range value
 #include "xrt_coll.h"       // L2: Array, Map, Json, StringBuilder, Closure, index ops
-#include "xrt_url.h"        // L2: freestanding URL helpers
 #include "xrt_arith.h"      // L2: add/sub/mul/div/mod/neg, eq/lt/le, print
 #include "xrt_compress.h"   // L2: freestanding checksum helpers
 #include "xrt_crypto.h"     // L2: freestanding crypto helpers

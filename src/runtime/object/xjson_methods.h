@@ -8,10 +8,9 @@
  * xjson_methods.h - Json builtin method dispatch table.
  *
  * KEY POINTS:
- *   - Json instance methods are intentionally tiny: entriesIterator
- *     (powers `for (k, v in obj)`) and toString. All other Json
- *     facilities are exposed as the static `Json.xxx(obj)` API
- *     elsewhere; they do not go through this table.
+ *   - Json instance methods cover the runtime protocol declared by
+ *     stdlib/types/json.xr: iterator helpers plus keys/values/entries,
+ *     toString, has, and the Json value predicates.
  *   - Bodies live as `static` inside xjson_methods.c. The bound-
  *     method system does not need them by name.
  */

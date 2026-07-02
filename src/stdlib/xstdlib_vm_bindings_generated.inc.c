@@ -390,21 +390,6 @@ static void xr_stdlib_vm_bind_toml_generated(XrVMRuntime *isolate, XrModule *mod
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_TOML */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_URL
-static void xr_stdlib_vm_bind_url_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "encode", url_encode_fn);
-    XRS_EXPORT(module, isolate, "decode", url_decode_fn);
-    XRS_EXPORT(module, isolate, "encodeForm", url_encode_form_fn);
-    XRS_EXPORT(module, isolate, "decodeForm", url_decode_form_fn);
-    XRS_EXPORT(module, isolate, "parse", url_parse_fn);
-    XRS_EXPORT(module, isolate, "format", url_format_fn);
-    XRS_EXPORT(module, isolate, "parseQuery", url_parse_query_fn);
-    XRS_EXPORT(module, isolate, "buildQuery", url_build_query_fn);
-    XRS_EXPORT(module, isolate, "resolve", url_resolve_fn);
-    XRS_EXPORT(module, isolate, "join", url_join_fn);
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_URL */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_WS
 static void xr_stdlib_vm_bind_ws_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT_YIELDABLE(module, isolate, "connect", ws_connect_yieldable);

@@ -272,6 +272,21 @@ static inline XrValue xrt_string_entries(XrValue recv) {
     return arr;
 }
 
+static inline XrValue xrt_json_collect(XrValue recv, uint8_t kind) {
+    xrt_json_t *j = (xrt_json_t *) recv.ptr;
+    XrValue arr = xrt_array_with_capacity(xrt_json_iter_count(j));
+    xrt_iterator_t iter = {
+        .coll = recv,
+        .cursor = 0,
+        .index = 0,
+        .kind = kind,
+        .gen = NULL,
+    };
+    while (xrt_iterator_has_next(&iter))
+        xrt_array_push(arr, xrt_iterator_next(&iter));
+    return arr;
+}
+
 /* String 0-arg method dispatch. */
 static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv, int sym) {
     if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
@@ -439,6 +454,23 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return xrt_map_keys(m);
         if (sym == XRT_SYM_VALUES)
             return xrt_map_values(m);
+        if (sym == XRT_SYM_ITERATOR)
+            return xrt_iterator_new(recv, XRT_ITER_KEYS);
+        if (sym == XRT_SYM_ENTRIES_ITERATOR)
+            return xrt_iterator_new(recv, XRT_ITER_PAIRS);
+    }
+    if (xrt_is_json_object_value(recv)) {
+        xrt_json_t *j = (xrt_json_t *) recv.ptr;
+        if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
+            return XR_FROM_INT(xrt_json_iter_count(j));
+        if (sym == XRT_SYM_IS_EMPTY)
+            return XR_FROM_BOOL(xrt_json_iter_count(j) == 0);
+        if (sym == XRT_SYM_KEYS)
+            return xrt_json_collect(recv, XRT_ITER_KEYS);
+        if (sym == XRT_SYM_VALUES)
+            return xrt_json_collect(recv, XRT_ITER_VALUES);
+        if (sym == XRT_SYM_ENTRIES)
+            return xrt_json_collect(recv, XRT_ITER_PAIRS);
         if (sym == XRT_SYM_ITERATOR)
             return xrt_iterator_new(recv, XRT_ITER_KEYS);
         if (sym == XRT_SYM_ENTRIES_ITERATOR)

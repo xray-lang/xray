@@ -8,6 +8,18 @@
 
 /* clang-format off */
 
+// base64 module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
+    {"encode", XLSP_SYM_FUNCTION, "fn(data: string): string", "standard alphabet with padding, over the string's UTF-8 bytes.", NULL, 0},
+    {"decode", XLSP_SYM_FUNCTION, "fn(data: string): string?", "standard/URL-safe input to a UTF-8 string; null on invalid input.", NULL, 0},
+    {"encodeUrl", XLSP_SYM_FUNCTION, "fn(data: string): string", "URL-safe alphabet, no padding.", NULL, 0},
+    {"decodeUrl", XLSP_SYM_FUNCTION, "fn(data: string): string?", "the decoder already accepts both alphabets.", NULL, 0},
+    {"encodeBytes", XLSP_SYM_FUNCTION, "fn(data: Array<uint8>): string", "standard alphabet with padding, over raw bytes.", NULL, 0},
+    {"decodeToBytes", XLSP_SYM_FUNCTION, "fn(data: string): Array<uint8>?", "decode to raw bytes; null on invalid input.", NULL, 0},
+    {"isValid", XLSP_SYM_FUNCTION, "fn(data: string): bool", "whether the input is structurally valid base64.", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT 7
+
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"start", XLSP_SYM_FUNCTION, "fn(config: Json): ()", "Start cluster node", NULL, 0},
@@ -81,6 +93,22 @@ static const XlspSymbolInfo g_xlsp_stdlib_datetime_symbols[] = {
     {"offset", XLSP_SYM_FUNCTION, "fn(): int", "Get UTC offset in minutes", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_DATETIME_SYMBOL_COUNT 8
+
+// encoding module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
+    {"hexEncode", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
+    {"hexDecode", XLSP_SYM_FUNCTION, "fn(hex: string): Array<uint8>?", "", NULL, 0},
+    {"hexDecodeString", XLSP_SYM_FUNCTION, "fn(hex: string): string?", "", NULL, 0},
+    {"hexValid", XLSP_SYM_FUNCTION, "fn(hex: string): bool", "", NULL, 0},
+    {"utf8Valid", XLSP_SYM_FUNCTION, "fn(data: string): bool", "", NULL, 0},
+    {"utf8Count", XLSP_SYM_FUNCTION, "fn(data: string): int", "", NULL, 0},
+    {"utf8ByteLength", XLSP_SYM_FUNCTION, "fn(data: string): int", "", NULL, 0},
+    {"utf16Encode", XLSP_SYM_FUNCTION, "fn(data: string, endian?: int): Array<uint8>", "", NULL, 0},
+    {"utf16Decode", XLSP_SYM_FUNCTION, "fn(data: Array<uint8>, endian?: int, stripBom?: bool): string?", "", NULL, 0},
+    {"LE", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
+    {"BE", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT 11
 
 // http module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
@@ -347,6 +375,24 @@ static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
 };
 #define GEN_XLSP_STDLIB_OS_SYMBOL_COUNT 29
 
+// path module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_path_symbols[] = {
+    {"isAbsolute", XLSP_SYM_FUNCTION, "fn(p: string): bool", "POSIX: a leading '/'.", NULL, 0},
+    {"join", XLSP_SYM_FUNCTION, "fn(...parts: string): string", "variadic ergonomic form, e.g. join(\"a\", \"b\", \"c\").", NULL, 0},
+    {"dirname", XLSP_SYM_FUNCTION, "fn(p: string): string", "the directory portion, or \".\" / \"/\" for the degenerate cases.", NULL, 0},
+    {"basename", XLSP_SYM_FUNCTION, "fn(p: string): string", "the final path component, trailing separators stripped.", NULL, 0},
+    {"extname", XLSP_SYM_FUNCTION, "fn(p: string): string", "the extension including the leading dot, or \"\" when there is none.", NULL, 0},
+    {"normalize", XLSP_SYM_FUNCTION, "fn(p: string): string", "collapse '.'/'..' and redundant separators.", NULL, 0},
+    {"relative", XLSP_SYM_FUNCTION, "fn(fromRaw: string, toRaw: string): string", "the path from `fromRaw` to `toRaw`, both normalized first.", NULL, 0},
+    {"resolve", XLSP_SYM_FUNCTION, "fn(...parts: string): string", "join the inputs into an absolute, normalized path. When no input", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(p: string): PathInfo", "split a path into its structured components.", NULL, 0},
+    {"format", XLSP_SYM_FUNCTION, "fn(info: PathInfo): string", "rebuild a path from PathInfo. `base` wins over `name`+`ext`; a", NULL, 0},
+    {"sep", XLSP_SYM_CONSTANT, "string", "", NULL, 0},
+    {"delimiter", XLSP_SYM_CONSTANT, "string", "", NULL, 0},
+    {"PathInfo", XLSP_SYM_CLASS, "type PathInfo", "the structured result of `parse`: a typed class so", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_PATH_SYMBOL_COUNT 13
+
 // regex module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {
     {"compile", XLSP_SYM_FUNCTION, "fn(pattern: string, flags?: string): Regex", "Compile regex pattern", NULL, 0},
@@ -364,6 +410,17 @@ static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {
     {"isValid", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "Check if pattern is valid", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT 13
+
+// sync module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
+    {"fence", XLSP_SYM_FUNCTION, "fn(order: Ordering): ()", "standalone memory fence in Ordering-enum form (task 147 §6.5).", NULL, 0},
+    {"Mutex", XLSP_SYM_CLASS, "type Mutex", "data guarded by a coroutine-aware lock; closure-scoped access", NULL, 0},
+    {"RwLock", XLSP_SYM_CLASS, "type RwLock", "many readers XOR one writer. A `Semaphore(1)` write/read gate is", NULL, 0},
+    {"Once", XLSP_SYM_CLASS, "type Once", "run a body exactly once across repeated calls, even under contention.", NULL, 0},
+    {"Barrier", XLSP_SYM_CLASS, "type Barrier", "N parties rendezvous; every party blocks until all have arrived.", NULL, 0},
+    {"Condvar", XLSP_SYM_CLASS, "type Condvar", "a monitor condition variable. Callers hold the monitor lock, then", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_SYNC_SYMBOL_COUNT 6
 
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {
@@ -388,17 +445,17 @@ static const XlspSymbolInfo g_xlsp_stdlib_toml_symbols[] = {
 
 // url module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_url_symbols[] = {
-    {"encode", XLSP_SYM_FUNCTION, "fn(s: string): string", "RFC 3986 percent-encode", NULL, 0},
-    {"decode", XLSP_SYM_FUNCTION, "fn(s: string): string", "RFC 3986 percent-decode", NULL, 0},
-    {"encodeForm", XLSP_SYM_FUNCTION, "fn(s: string): string", "Form URL encode (space as +)", NULL, 0},
-    {"decodeForm", XLSP_SYM_FUNCTION, "fn(s: string): string", "Form URL decode (+ as space)", NULL, 0},
-    {"parse", XLSP_SYM_FUNCTION, "fn(url: string): URL", "Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, username, password, host, origin, href)", NULL, 0},
-    {"format", XLSP_SYM_FUNCTION, "fn(obj: URL): string", "Build URL string from URL components", NULL, 0},
-    {"parseQuery", XLSP_SYM_FUNCTION, "fn(qs: string): Json", "Parse query string to Json", NULL, 0},
-    {"buildQuery", XLSP_SYM_FUNCTION, "fn(obj: Json): string", "Build query string from Json", NULL, 0},
-    {"resolve", XLSP_SYM_FUNCTION, "fn(base: string, relative: string): string", "Resolve relative URL", NULL, 0},
-    {"join", XLSP_SYM_FUNCTION, "fn(...parts: string): string", "Join URL path segments", NULL, 0},
-    {"URL", XLSP_SYM_CLASS, "type URL", "Native handle type", NULL, 0},
+    {"encode", XLSP_SYM_FUNCTION, "fn(s: string): string", "RFC 3986 percent-encode a string.", NULL, 0},
+    {"decode", XLSP_SYM_FUNCTION, "fn(s: string): string", "RFC 3986 percent-decode a string.", NULL, 0},
+    {"encodeForm", XLSP_SYM_FUNCTION, "fn(s: string): string", "Form URL encode a string, using plus for spaces.", NULL, 0},
+    {"decodeForm", XLSP_SYM_FUNCTION, "fn(s: string): string", "Form URL decode a string, treating plus as space.", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(url: string): URL", "Parse URL text into a URL handle.", NULL, 0},
+    {"format", XLSP_SYM_FUNCTION, "fn(obj: URL): string", "Build URL text from a URL handle.", NULL, 0},
+    {"parseQuery", XLSP_SYM_FUNCTION, "fn(qs: string): Json", "Parse a query string into a Json object.", NULL, 0},
+    {"buildQuery", XLSP_SYM_FUNCTION, "fn(obj: Json): string", "Build a query string from a Json object.", NULL, 0},
+    {"resolve", XLSP_SYM_FUNCTION, "fn(base: string, relative: string): string", "Resolve a relative URL reference against a base URL.", NULL, 0},
+    {"join", XLSP_SYM_FUNCTION, "fn(...parts: string): string", "Join URL path segments.", NULL, 0},
+    {"URL", XLSP_SYM_CLASS, "type URL", "Parsed URL handle with normalized host, origin, and href components.", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_URL_SYMBOL_COUNT 11
 
@@ -449,11 +506,13 @@ static const XlspSymbolInfo g_xlsp_stdlib_yaml_symbols[] = {
 #define GEN_XLSP_STDLIB_YAML_SYMBOL_COUNT 6
 
 static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
+    {"base64", "base64 standard library module", g_xlsp_stdlib_base64_symbols, GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT},
     {"cluster", "cluster standard library module", g_xlsp_stdlib_cluster_symbols, GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT},
     {"compress", "compress standard library module", g_xlsp_stdlib_compress_symbols, GEN_XLSP_STDLIB_COMPRESS_SYMBOL_COUNT},
     {"crypto", "crypto standard library module", g_xlsp_stdlib_crypto_symbols, GEN_XLSP_STDLIB_CRYPTO_SYMBOL_COUNT},
     {"csv", "csv standard library module", g_xlsp_stdlib_csv_symbols, GEN_XLSP_STDLIB_CSV_SYMBOL_COUNT},
     {"datetime", "datetime standard library module", g_xlsp_stdlib_datetime_symbols, GEN_XLSP_STDLIB_DATETIME_SYMBOL_COUNT},
+    {"encoding", "encoding standard library module", g_xlsp_stdlib_encoding_symbols, GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT},
     {"http", "http standard library module", g_xlsp_stdlib_http_symbols, GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT},
     {"io", "io standard library module", g_xlsp_stdlib_io_symbols, GEN_XLSP_STDLIB_IO_SYMBOL_COUNT},
     {"log", "log standard library module", g_xlsp_stdlib_log_symbols, GEN_XLSP_STDLIB_LOG_SYMBOL_COUNT},
@@ -461,7 +520,9 @@ static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
     {"mem", "mem standard library module", g_xlsp_stdlib_mem_symbols, GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT},
     {"net", "net standard library module", g_xlsp_stdlib_net_symbols, GEN_XLSP_STDLIB_NET_SYMBOL_COUNT},
     {"os", "os standard library module", g_xlsp_stdlib_os_symbols, GEN_XLSP_STDLIB_OS_SYMBOL_COUNT},
+    {"path", "path standard library module", g_xlsp_stdlib_path_symbols, GEN_XLSP_STDLIB_PATH_SYMBOL_COUNT},
     {"regex", "regex standard library module", g_xlsp_stdlib_regex_symbols, GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT},
+    {"sync", "sync standard library module", g_xlsp_stdlib_sync_symbols, GEN_XLSP_STDLIB_SYNC_SYMBOL_COUNT},
     {"time", "time standard library module", g_xlsp_stdlib_time_symbols, GEN_XLSP_STDLIB_TIME_SYMBOL_COUNT},
     {"toml", "toml standard library module", g_xlsp_stdlib_toml_symbols, GEN_XLSP_STDLIB_TOML_SYMBOL_COUNT},
     {"url", "url standard library module", g_xlsp_stdlib_url_symbols, GEN_XLSP_STDLIB_URL_SYMBOL_COUNT},
