@@ -900,10 +900,28 @@ bool xr_aot_runtime_adt_value_info(XrValue value, const char **enum_name, const 
     if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_ADT_ENUM)
         return false;
 
-    bool is_adt = false;
-    return xr_aot_runtime_enum_value_info(inst->fields[0], enum_name, member_name, member_index,
-                                          &is_adt, payload_count) &&
-           is_adt;
+    // ADT-enum instance layout: fields[0] = int variant tag, fields[1..N] =
+    // payload. Variant/name metadata lives on the enum type, which the runtime
+    // stores on the class as builtin_data (see xr_enum_adt_construct_core and
+    // the ADT branch of xr_value_to_strbuf). Reading fields[0] as an enum-value
+    // instance is wrong for this layout — it is a plain int.
+    XrValue tag_val = inst->fields[0];
+    XrEnumType *etype = (XrEnumType *) inst->klass->builtin_data;
+    if (!XR_IS_INT(tag_val) || !etype || !etype->members)
+        return false;
+    int64_t idx = XR_TO_INT(tag_val);
+    if (idx < 0 || (uint64_t) idx >= etype->member_count)
+        return false;
+
+    if (enum_name)
+        *enum_name = etype->name ? etype->name : "";
+    if (member_name)
+        *member_name = etype->members[idx].name ? etype->members[idx].name : "";
+    if (member_index)
+        *member_index = (uint32_t) idx;
+    if (payload_count)
+        *payload_count = etype->payload_counts ? etype->payload_counts[idx] : 0;
+    return true;
 }
 
 XrValue xr_aot_runtime_adt_payload(XrValue value, int index) {
@@ -3141,24 +3159,17 @@ bool xr_aot_send_is_sent(XrValue send_value) {
 }
 
 bool xr_aot_recv_is_value(XrValue recv_value) {
-    if (!XR_IS_INSTANCE(recv_value))
+    // Recv::Value(T) is an ADT-enum instance whose inner tag variant is a
+    // runtime enum value. Inspect it through the tag-agnostic ADT helper
+    // (which validates via the GC object type, not the XrValue tag) rather
+    // than hand-poking fields[0] with XR_IS_INSTANCE: the constructed tag
+    // variant is ENUM-tagged, so an XR_IS_INSTANCE gate spuriously fails and
+    // makes a real receive look empty — deadlocking AOT select loops.
+    const char *enum_name = NULL;
+    uint32_t member_index = 0;
+    if (!xr_aot_runtime_adt_value_info(recv_value, &enum_name, NULL, &member_index, NULL))
         return false;
-    XrInstance *inst = xr_value_to_instance(recv_value);
-    if (!inst || !inst->klass)
-        return false;
-    if (inst->klass->builtin_kind == XR_BK_ENUM_VALUE) {
-        XrEnumValue *variant = (XrEnumValue *) inst;
-        return variant->parent_type && variant->parent_type->name &&
-               strcmp(variant->parent_type->name, "Recv") == 0 && variant->member_index == 0;
-    }
-    if (inst->klass->builtin_kind != XR_BK_ADT_ENUM)
-        return false;
-    XrValue tag = inst->fields[0];
-    if (!XR_IS_INSTANCE(tag))
-        return false;
-    XrEnumValue *variant = (XrEnumValue *) XR_TO_INSTANCE(tag);
-    return variant->parent_type && variant->parent_type->name &&
-           strcmp(variant->parent_type->name, "Recv") == 0 && variant->member_index == 0;
+    return enum_name && strcmp(enum_name, "Recv") == 0 && member_index == 0;
 }
 
 XrValue xr_aot_recv_payload(XrValue recv_value) {
