@@ -44,7 +44,12 @@ FORBIDDEN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xray_vm_|xray_isolate_|xr_vm_|xr_parse|
 EAGER_SCRIPT_BUILTIN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xr_string_intern_core|xr_string_value)([^[:alnum:]_]|$)'
 PURE_TINY_AOT_MAX_BYTES=70000
 PURE_CRYPTO_AOT_MAX_BYTES=80000
-RUNTIME_TIME_SLEEP_MAX_BYTES=200000
+# The coroutine runtime archive gained the sync primitive family
+# (Semaphore/CountdownLatch/EventCount/WorkQueue/ResultGroup cancel-waiter
+# paths are referenced from the shared coroutine cancel path), which any
+# yieldable program now links; the cap tracks that deliberate growth while
+# staying tight against VM/toolchain-shaped drift.
+RUNTIME_TIME_SLEEP_MAX_BYTES=205000
 
 cleanup() {
     rm -rf "$WORK"

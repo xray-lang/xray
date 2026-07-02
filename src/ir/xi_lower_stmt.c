@@ -3980,11 +3980,47 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
 }
 
 /* Main statement dispatcher */
+/* Module-system and type-declaration statements, split out of the main
+ * dispatch switch. Returns false when `node` is not one of them. */
+static bool lower_module_or_type_decl_stmt(XiLower *l, AstNode *node) {
+    switch (node->type) {
+        /* Module system: import creates XI_IMPORT_REF for selective imports.
+         * Export unwraps to lower the inner declaration. */
+        case AST_IMPORT_STMT:
+            lower_import_stmt(l, node);
+            return true;
+        case AST_EXPORT_STMT:
+            if (node->as.export_stmt.declaration) {
+                xi_lower_stmt(l, node->as.export_stmt.declaration);
+            } else if (node->as.export_stmt.from_path) {
+                lower_reexport_stmt(l, node);
+            }
+            /* export-list form (export a, b) is handled purely via
+             * prescan_shared_vars export_flags → emit_module_exports. */
+            return true;
+        case AST_CLASS_DECL:
+        case AST_STRUCT_DECL:
+            xi_lower_class_decl(l, node);
+            return true;
+        case AST_INTERFACE_DECL:
+        case AST_TYPE_ALIAS:
+            return true;
+        case AST_ENUM_DECL:
+            xi_lower_enum_decl(l, node);
+            return true;
+        default:
+            return false;
+    }
+}
+
 XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
     if (!node)
         return;
     if (!l->cur_block)
         return; /* dead code */
+
+    if (lower_module_or_type_decl_stmt(l, node))
+        return;
 
     switch (node->type) {
         case AST_VAR_DECL:
@@ -4077,34 +4113,6 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
             break;
         case AST_DESTRUCTURE_ASSIGN:
             lower_destructure_assign(l, node);
-            break;
-
-        /* Module system: import creates XI_IMPORT_REF for selective imports.
-         * Export unwraps to lower the inner declaration. */
-        case AST_IMPORT_STMT:
-            lower_import_stmt(l, node);
-            break;
-        case AST_EXPORT_STMT:
-            if (node->as.export_stmt.declaration) {
-                xi_lower_stmt(l, node->as.export_stmt.declaration);
-            } else if (node->as.export_stmt.from_path) {
-                lower_reexport_stmt(l, node);
-            }
-            /* export-list form (export a, b) is handled purely via
-             * prescan_shared_vars export_flags → emit_module_exports. */
-            break;
-
-        case AST_CLASS_DECL:
-            xi_lower_class_decl(l, node);
-            break;
-        case AST_STRUCT_DECL:
-            xi_lower_class_decl(l, node);
-            break;
-        case AST_INTERFACE_DECL:
-        case AST_TYPE_ALIAS:
-            break;
-        case AST_ENUM_DECL:
-            xi_lower_enum_decl(l, node);
             break;
 
         /* Match expression used as statement */
