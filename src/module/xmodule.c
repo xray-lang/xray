@@ -32,6 +32,7 @@
 #include <limits.h>
 #include "../os/os_fs.h"
 #include "../os/os_dylib.h"
+#include "../os/os_proc.h"
 
 /* ========== Forward Declarations ========== */
 
@@ -355,6 +356,44 @@ void xr_module_free(XrModule *module) {
 /* ========== Module System Initialization ========== */
 
 /*
+** Resolve the stdlib root directory. Pure-Xray stdlib modules
+** (stdlib/<name>/<name>.xr script layers) are loaded from disk, so the
+** path must resolve regardless of the process working directory:
+**
+**   1. XRAY_STDLIB_PATH environment override (must exist)
+**   2. <exedir>/../stdlib          — development build tree (build/xray)
+**   3. <exedir>/../lib/xray/stdlib — installed layout (bin/xray)
+**   4. "stdlib" relative to cwd    — repo-root workflows / last resort
+**
+** Returns an xr_malloc'd string; caller owns it.
+*/
+static char *resolve_stdlib_root(void) {
+    const char *env = getenv("XRAY_STDLIB_PATH");
+    if (env && env[0] && xr_fs_exists(env))
+        return xr_strdup(env);
+
+    char exe[XR_PATH_MAX];
+    if (xr_proc_self_exe_path(exe, sizeof(exe)) == 0) {
+        char *dir = xr_path_dirname(exe);
+        if (dir) {
+            static const char *const suffixes[] = {"../stdlib", "../lib/xray/stdlib"};
+            for (size_t i = 0; i < sizeof(suffixes) / sizeof(suffixes[0]); i++) {
+                char cand[XR_PATH_MAX];
+                snprintf(cand, sizeof(cand), "%s/%s", dir, suffixes[i]);
+                if (xr_fs_exists(cand)) {
+                    char *real = xr_realpath(cand);
+                    xr_free(dir);
+                    return real ? real : xr_strdup(cand);
+                }
+            }
+            xr_free(dir);
+        }
+    }
+
+    return xr_strdup("stdlib");
+}
+
+/*
 ** Create module registry
 */
 static XrModuleRegistry *create_registry(void) {
@@ -365,7 +404,7 @@ static XrModuleRegistry *create_registry(void) {
     memset(registry, 0, sizeof(*registry));
     registry->native_loaders = xr_hashmap_new();
     registry->loaded_modules = xr_hashmap_new();
-    registry->stdlib_path = xr_strdup("stdlib");
+    registry->stdlib_path = resolve_stdlib_root();
 
     return registry;
 }
@@ -645,10 +684,10 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
     char path[XR_PATH_MAX];
     char *source = NULL;
 
-    // Load script extension from file system (stdlib/<name>/<name>.xr)
-    // This mechanism is preserved for third-party hybrid modules that
-    // ship both C and xray script layers. Built-in stdlib modules are
-    // now pure C and do not use script extensions.
+    // Load script extension from file system (stdlib/<name>/<name>.xr).
+    // Pure-Xray stdlib modules (module->requires_script, e.g. sync) get
+    // all their exports from this layer; hybrid modules may use it to
+    // extend or override C exports.
     if (registry->stdlib_path) {
         snprintf(path, sizeof(path), "%s/%s/%s.xr", registry->stdlib_path, module_name,
                  module_name);
@@ -661,10 +700,19 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
         }
     }
 
-    // No extension script, return normally
+    // No extension script: fine for hybrid/pure-C modules, fatal for
+    // pure-Xray modules (an empty export table would surface later as
+    // confusing "call a non-function value" panics at use sites).
     if (!source) {
         XR_DBG_MODULE("load_script_extension: no extension for '%s'", module_name);
         xr_isolate_set_current_module(isolate, prev_module);
+        if (module->requires_script) {
+            xr_log_warning("module",
+                           "stdlib module '%s' requires its script layer but '%s' was not found; "
+                           "set XRAY_STDLIB_PATH or reinstall xray",
+                           module_name, registry->stdlib_path ? path : "<no stdlib path>");
+            return false;
+        }
         return true;
     }
 

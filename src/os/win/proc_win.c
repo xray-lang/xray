@@ -170,6 +170,18 @@ int64_t xr_proc_self_pid(void) {
     return (int64_t) GetCurrentProcessId();
 }
 
+int xr_proc_self_exe_path(char *buf, size_t size) {
+    if (buf == NULL || size == 0) {
+        return -1;
+    }
+    DWORD n = GetModuleFileNameA(NULL, buf, (DWORD) size);
+    /* n == 0 means failure; n == size means truncation. */
+    if (n == 0 || (size_t) n >= size) {
+        return -1;
+    }
+    return 0;
+}
+
 bool xr_proc_debugger_attached(void) {
     return IsDebuggerPresent() ? true : false;
 }

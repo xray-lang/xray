@@ -13,16 +13,16 @@
 #include <errno.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #if defined(XR_OS_MACOS)
-#include <string.h>
+#include <limits.h>
+#include <mach-o/dyld.h>
+#include <stdlib.h>
 #include <sys/sysctl.h>
-#elif defined(XR_OS_LINUX)
-#include <stdio.h>
-#include <string.h>
 #endif
 
 XrProcId xr_proc_spawn(const char *prog, const char *const argv[]) {
@@ -74,6 +74,39 @@ int xr_proc_wait(XrProcId pid, int *exit_code) {
 
 int64_t xr_proc_self_pid(void) {
     return (int64_t) getpid();
+}
+
+int xr_proc_self_exe_path(char *buf, size_t size) {
+    if (buf == NULL || size == 0) {
+        return -1;
+    }
+#if defined(XR_OS_MACOS)
+    char raw[PATH_MAX];
+    uint32_t raw_size = (uint32_t) sizeof(raw);
+    if (_NSGetExecutablePath(raw, &raw_size) != 0) {
+        return -1;
+    }
+    char resolved[PATH_MAX];
+    const char *src = realpath(raw, resolved) ? resolved : raw;
+    size_t len = strlen(src);
+    if (len + 1 > size) {
+        return -1;
+    }
+    memcpy(buf, src, len + 1);
+    return 0;
+#elif defined(XR_OS_LINUX)
+    ssize_t n = readlink("/proc/self/exe", buf, size - 1);
+    if (n <= 0) {
+        return -1;
+    }
+    buf[n] = '\0';
+    return 0;
+#else
+    /* BSDs vary (sysctl KERN_PROC_PATHNAME vs /proc); no in-tree
+     * caller targets them yet, so report unsupported rather than
+     * guess a wrong path. */
+    return -1;
+#endif
 }
 
 bool xr_proc_debugger_attached(void) {
