@@ -4502,17 +4502,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         const char *helper = NULL;
         int64_t int_const = 0;
         bool has_int_const = false;
-        /* path.sep / path.delimiter are pure-Xray module-level const exports
-         * (stdlib/path/path.xr). AOT has no general cross-module const-export
-         * slot resolution yet, so they resolve through the shared-core helpers,
-         * which return the same POSIX values as the .xr definitions. Remove this
-         * special case once module-level const exports resolve to shared slots. */
-        if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "path")) {
-            if (strcmp(field, "sep") == 0)
-                helper = "xrt_path_sep";
-            else if (strcmp(field, "delimiter") == 0)
-                helper = "xrt_path_delimiter";
-        } else if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "os")) {
+        if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "os")) {
             if (strcmp(field, "platform") == 0)
                 helper = "xrt_os_platform";
             else if (strcmp(field, "arch") == 0)
@@ -4552,6 +4542,31 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             fprintf(out, "%s()", helper);
             emit_conversion_suffix(out, conv_suffix);
             return;
+        }
+        /* A field access on a namespace module import (`import mod; mod.X`)
+         * resolves to the target module's export shared slot. This lets pure-Xray
+         * module const/let exports (path.sep, ...) read xrt_shared_<mod>[slot]
+         * instead of a dynamic getprop on the module import object, which is null
+         * at AOT. Named imports (`import { X } from mod`) already resolve this way
+         * through the import ref (see xicgen_import_ref). */
+        {
+            const XiImportRef *mod_ref = cg_module_import_ref_for_value(ctx, f, v->args[0]);
+            if (mod_ref && mod_ref->resolved_mod_index >= 0 &&
+                mod_ref->resolved_mod_index < ctx->all_nmodules &&
+                ctx->all_modules[mod_ref->resolved_mod_index]) {
+                const XiModule *tmod = ctx->all_modules[mod_ref->resolved_mod_index];
+                for (uint16_t ei = 0; ei < tmod->nexports; ei++) {
+                    if (tmod->exports[ei].name && strcmp(tmod->exports[ei].name, field) == 0) {
+                        const char *tname = tmod->name ? tmod->name : "mod";
+                        const char *conv_suffix = emit_conversion_prefix(
+                            out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+                        fprintf(out, "xrt_shared_%s[%d]", tname,
+                                (int) tmod->exports[ei].shared_slot);
+                        emit_conversion_suffix(out, conv_suffix);
+                        return;
+                    }
+                }
+            }
         }
     }
     if (!field && v->aux_int >= 0) {
