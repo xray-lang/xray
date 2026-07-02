@@ -1,0 +1,53 @@
+// anchor: string-surface-declared-methods
+// Declared string/Bytes surface (stdlib/types/string.xr, array.xr) must
+// behave identically on VM and AOT. Covers the methods added when the
+// declaration file was re-synced with the runtime method tables:
+// codePointAt / byteAt / ord / reverse / toInt / toFloat / isEmpty /
+// toString, plus the Bytes(Array<uint8>).toString() UTF-8 decode.
+
+let s = "héllo"
+
+// length counts UTF-8 scalars; byteLength counts raw bytes
+print(s.length)
+print(s.byteLength)
+
+// codePointAt: Unicode scalar by char index, -1 when out of bounds
+print(s.codePointAt(0))
+print(s.codePointAt(1))
+print(s.codePointAt(99))
+
+// byteAt: raw octet as 1-byte string, null when out of bounds
+print(s.byteAt(0))
+print(s.byteAt(99))
+
+// ord: first scalar; 1-byte strings are raw octets; empty -> null
+print("é".ord())
+print("x".ord())
+print("".ord())
+print("é!".ord())
+
+// reverse: UTF-8 aware
+print("abc".reverse())
+print("aé😀".reverse())
+
+// numeric parsing: null on failure
+print("42".toInt())
+print(" -7 ".toInt())
+print("x".toInt())
+print("3.5".toFloat())
+print("nope".toFloat())
+
+// isEmpty / toString
+print("".isEmpty())
+print("a".isEmpty())
+print("self".toString())
+
+// Bytes <-> text bridge: Bytes.toString() decodes UTF-8 bytes
+let bin = Bytes([104, 105])
+print(bin.toString())
+let accented = Bytes([104, 195, 169])
+print(accented.toString())
+
+// non-U8 arrays keep the formatter rendering
+let nums = [1, 2, 3]
+print(nums.toString())

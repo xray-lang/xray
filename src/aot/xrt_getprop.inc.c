@@ -27,6 +27,8 @@ static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
     if (XR_IS_STR(obj)) {
         if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
             return XR_FROM_INT(xrt_utf8_scalar_count(xr_str_data(obj), xr_str_len(obj)));
+        if (symbol_id == XRT_SYM_BYTE_LENGTH)
+            return XR_FROM_INT(xr_str_len(obj));
         if (symbol_id == XRT_SYM_IS_EMPTY)
             return XR_FROM_INT(xr_str_len(obj) == 0);
     }

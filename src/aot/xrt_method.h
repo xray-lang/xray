@@ -326,8 +326,29 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
         XrStringCoreParseFloatResult parsed = xr_string_core_parse_float64(s, (size_t) slen);
         return parsed.ok ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
     }
-    if (sym == XRT_SYM_ORD)
-        return XR_FROM_INT(slen > 0 ? (int64_t) (unsigned char) s[0] : 0);
+    if (sym == XRT_SYM_ORD) {
+        /* Mirror VM xr_string_ord: empty -> null; a 1-byte string is a raw
+         * octet (byteAt() on binary buffers) -> unsigned byte; otherwise
+         * decode the first UTF-8 scalar (invalid sequences -> U+FFFD). */
+        if (slen == 0)
+            return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+        const unsigned char *p = (const unsigned char *) s;
+        if (slen == 1 || (p[0] & 0x80u) == 0)
+            return XR_FROM_INT((int64_t) p[0]);
+        uint32_t cp = 0xFFFD;
+        if ((p[0] & 0xE0u) == 0xC0u && slen >= 2 && (p[1] & 0xC0u) == 0x80u) {
+            cp = ((uint32_t) (p[0] & 0x1Fu) << 6) | (uint32_t) (p[1] & 0x3Fu);
+        } else if ((p[0] & 0xF0u) == 0xE0u && slen >= 3 && (p[1] & 0xC0u) == 0x80u &&
+                   (p[2] & 0xC0u) == 0x80u) {
+            cp = ((uint32_t) (p[0] & 0x0Fu) << 12) | ((uint32_t) (p[1] & 0x3Fu) << 6) |
+                 (uint32_t) (p[2] & 0x3Fu);
+        } else if ((p[0] & 0xF8u) == 0xF0u && slen >= 4 && (p[1] & 0xC0u) == 0x80u &&
+                   (p[2] & 0xC0u) == 0x80u && (p[3] & 0xC0u) == 0x80u) {
+            cp = ((uint32_t) (p[0] & 0x07u) << 18) | ((uint32_t) (p[1] & 0x3Fu) << 12) |
+                 ((uint32_t) (p[2] & 0x3Fu) << 6) | (uint32_t) (p[3] & 0x3Fu);
+        }
+        return XR_FROM_INT((int64_t) cp);
+    }
     if (sym == XRT_SYM_REVERSE) {
         XrValue sv = xrt_str_alloc((size_t) slen);
         xr_string_core_reverse_utf8_write(xr_str_buf(sv), s, (size_t) slen);
@@ -342,7 +363,20 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
      * XR_TAG_ENUM and handled by their own toString case below. */
     if (sym == XRT_SYM_TOSTRING) {
         int rk = xrt_value_kind(recv);
-        if (rk == XR_TAG_ARRAY || rk == XR_TAG_MAP || rk == XR_TAG_SET || rk == XR_TAG_TUPLE)
+        if (rk == XR_TAG_ARRAY) {
+            /* Bytes (Array<uint8>) decodes as UTF-8 text — mirrors the VM
+             * m_to_string and round-trips with string.toBytes(). */
+            xrt_array_t *a = (xrt_array_t *) recv.ptr;
+            if (a->elem_type == XR_ELEM_U8) {
+                XrValue sv = xrt_str_alloc((size_t) a->length);
+                if (a->length > 0)
+                    memcpy(xr_str_buf(sv), a->data, (size_t) a->length);
+                xr_str_buf(sv)[a->length] = 0;
+                return sv;
+            }
+            return xrt_value_to_string(recv);
+        }
+        if (rk == XR_TAG_MAP || rk == XR_TAG_SET || rk == XR_TAG_TUPLE)
             return xrt_value_to_string(recv);
     }
     if (XR_IS_STR(recv)) {

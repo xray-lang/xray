@@ -1,19 +1,31 @@
 // Built-in string type — implementation in src/runtime/object/xstring_methods.c
+//
+// Every method declared here must exist in the VM method table
+// (xstring_methods.c) with matching semantics; methods also supported by
+// the AOT dispatch (src/aot/xrt_method.h + xi_method_sym.def) compile to
+// native code, while VM-only methods fail AOT codegen with an explicit
+// "unsupported AOT method" error (never a silent null).
 
 @native
 class string {
     length: int
+    byteLength: int
     charAt(index: int) -> string
-    charCodeAt(index: int) -> int
+    codePointAt(index: int) -> int
+    byteAt(index: int) -> string?
+    ord() -> int?
     concat(...strings: string) -> string
     includes(search: string) -> bool
     indexOf(search: string, start?: int) -> int
     lastIndexOf(search: string) -> int
     slice(start: int, end?: int) -> string
     substring(start: int, end?: int) -> string
-    substr(start: int, length?: int) -> string
+    isEmpty() -> bool
     toLowerCase() -> string
     toUpperCase() -> string
+    toInt() -> int?
+    toFloat() -> float?
+    toString() -> string
     trim() -> string
     trimStart() -> string
     trimEnd() -> string
@@ -21,11 +33,15 @@ class string {
     replace(search: string, replacement: string) -> string
     replaceAll(search: string, replacement: string) -> string
     repeat(count: int) -> string
+    reverse() -> string
     startsWith(search: string) -> bool
     endsWith(search: string) -> bool
     padStart(length: int, pad?: string) -> string
     padEnd(length: int, pad?: string) -> string
-    match(pattern: string) -> Array<string>?
+    match(pattern: Regex) -> Array<string>?
+    // UTF-8 byte bridge — round-trips with Bytes.toString().
+    toBytes() -> Bytes
+    translate(table: Map<string, string>) -> string
     // Iteration protocol — iterator() yields each character, while
     // entriesIterator() yields (charIndex, character) tuples. Both
     // are used by for-in lowering and may be called directly.

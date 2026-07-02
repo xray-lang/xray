@@ -79,7 +79,9 @@ fn reverseComplement(seq: string) -> string {
     let j = 0
     let len = seq.byteLength
     while (j < len) {
-        let c = reversed.byteAt(j)
+        // byteAt is declared string? (null out of bounds); j < len keeps
+        // this access in bounds, so unwrap directly.
+        let c = reversed.byteAt(j)!
         let comp = COMP.get(c)
         if (comp != null) {
             sb.append(comp)
