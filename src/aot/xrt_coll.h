@@ -2932,6 +2932,9 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
         case XRT_ARC_KIND_SYS_MUTEX:
             xrt_sys_mutex_destroy_builtin(obj);
             break;
+        case XRT_ARC_KIND_SYS_RWLOCK:
+            xrt_sys_rwlock_destroy_builtin(obj);
+            break;
         default:
             break;
     }

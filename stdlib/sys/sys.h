@@ -8,5 +8,6 @@ struct XrVMRuntime;
 
 XR_FUNC struct XrModule *xr_load_module_sys(struct XrVMRuntime *isolate);
 XR_FUNC void xr_sys_mutex_register_class(struct XrVMRuntime *isolate);
+XR_FUNC void xr_sys_rwlock_register_class(struct XrVMRuntime *isolate);
 
 #endif /* XRAY_STDLIB_SYS_H */

@@ -18,6 +18,11 @@ typedef struct XrSysMutexBody {
     bool initialized;
 } XrSysMutexBody;
 
+typedef struct XrSysRwLockBody {
+    xr_rwlock_t rwlock;
+    bool initialized;
+} XrSysRwLockBody;
+
 static void sys_mutex_body_init(XrInstance *instance, void *body_ptr) {
     (void) instance;
     XrSysMutexBody *body = (XrSysMutexBody *) body_ptr;
@@ -43,10 +48,41 @@ static XrNativeBodyDesc g_sys_mutex_body_desc = {
     .to_shared = NULL,
 };
 
+static void sys_rwlock_body_init(XrInstance *instance, void *body_ptr) {
+    (void) instance;
+    XrSysRwLockBody *body = (XrSysRwLockBody *) body_ptr;
+    xr_rwlock_init(&body->rwlock);
+    body->initialized = true;
+}
+
+static void sys_rwlock_body_destroy(void *body_ptr) {
+    XrSysRwLockBody *body = (XrSysRwLockBody *) body_ptr;
+    if (!body || !body->initialized)
+        return;
+    xr_rwlock_destroy(&body->rwlock);
+    body->initialized = false;
+}
+
+static XrNativeBodyDesc g_sys_rwlock_body_desc = {
+    .body_size = sizeof(XrSysRwLockBody),
+    .body_align = _Alignof(XrSysRwLockBody),
+    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .init = sys_rwlock_body_init,
+    .destroy = sys_rwlock_body_destroy,
+    .deep_copy = NULL,
+    .to_shared = NULL,
+};
+
 static XrClass *sys_mutex_class(XrVMRuntime *isolate) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core != NULL && core->sysMutexClass != NULL, "sys.Mutex class not registered");
     return core ? core->sysMutexClass : NULL;
+}
+
+static XrClass *sys_rwlock_class(XrVMRuntime *isolate) {
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
+    XR_DCHECK(core != NULL && core->sysRwLockClass != NULL, "sys.RwLock class not registered");
+    return core ? core->sysRwLockClass : NULL;
 }
 
 static XrSysMutexBody *sys_mutex_body(XrVMRuntime *isolate, XrValue self) {
@@ -59,9 +95,26 @@ static XrSysMutexBody *sys_mutex_body(XrVMRuntime *isolate, XrValue self) {
     return (XrSysMutexBody *) xr_instance_native_body(instance);
 }
 
+static XrSysRwLockBody *sys_rwlock_body(XrVMRuntime *isolate, XrValue self) {
+    if (!XR_IS_INSTANCE(self))
+        return NULL;
+    XrInstance *instance = (XrInstance *) XR_TO_PTR(self);
+    XrClass *klass = sys_rwlock_class(isolate);
+    if (!klass || !xr_class_instanceof(instance->klass, klass))
+        return NULL;
+    return (XrSysRwLockBody *) xr_instance_native_body(instance);
+}
+
 static XrValue sys_mutex_invalid_receiver(XrVMRuntime *isolate) {
     XrValue exc = xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH,
                                      "sys.Mutex method called with non-Mutex receiver");
+    xr_vm_throw_exception(isolate, exc);
+    return xr_null();
+}
+
+static XrValue sys_rwlock_invalid_receiver(XrVMRuntime *isolate) {
+    XrValue exc = xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH,
+                                     "sys.RwLock method called with non-RwLock receiver");
     xr_vm_throw_exception(isolate, exc);
     return xr_null();
 }
@@ -74,6 +127,20 @@ static XrValue sys_mutex_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (!instance) {
         XrValue exc =
             xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.Mutex allocation failed");
+        xr_vm_throw_exception(isolate, exc);
+        return xr_null();
+    }
+    return xr_value_from_instance(instance);
+}
+
+static XrValue sys_rwlock_new(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+
+    XrInstance *instance = xr_instance_new(isolate, sys_rwlock_class(isolate));
+    if (!instance) {
+        XrValue exc =
+            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.RwLock allocation failed");
         xr_vm_throw_exception(isolate, exc);
         return xr_null();
     }
@@ -109,12 +176,58 @@ static XrValue sys_mutex_try_lock(XrVMRuntime *isolate, XrValue self, XrValue *a
     return xr_bool(xr_mutex_trylock(&body->mutex));
 }
 
+static XrValue sys_rwlock_rdlock(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrSysRwLockBody *body = sys_rwlock_body(isolate, self);
+    if (!body)
+        return sys_rwlock_invalid_receiver(isolate);
+    xr_rwlock_rdlock(&body->rwlock);
+    return xr_null();
+}
+
+static XrValue sys_rwlock_rdunlock(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrSysRwLockBody *body = sys_rwlock_body(isolate, self);
+    if (!body)
+        return sys_rwlock_invalid_receiver(isolate);
+    xr_rwlock_rdunlock(&body->rwlock);
+    return xr_null();
+}
+
+static XrValue sys_rwlock_wrlock(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrSysRwLockBody *body = sys_rwlock_body(isolate, self);
+    if (!body)
+        return sys_rwlock_invalid_receiver(isolate);
+    xr_rwlock_wrlock(&body->rwlock);
+    return xr_null();
+}
+
+static XrValue sys_rwlock_wrunlock(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrSysRwLockBody *body = sys_rwlock_body(isolate, self);
+    if (!body)
+        return sys_rwlock_invalid_receiver(isolate);
+    xr_rwlock_wrunlock(&body->rwlock);
+    return xr_null();
+}
+
 #define XR_STDLIB_VM_BIND_CLASS_MUTEX 1
+#define XR_STDLIB_VM_BIND_CLASS_RW_LOCK 1
 #include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_CLASS_RW_LOCK
 #undef XR_STDLIB_VM_BIND_CLASS_MUTEX
 
 void xr_sys_mutex_register_class(XrVMRuntime *isolate) {
     xr_stdlib_vm_register_mutex_class_generated(isolate);
+}
+
+void xr_sys_rwlock_register_class(XrVMRuntime *isolate) {
+    xr_stdlib_vm_register_rw_lock_class_generated(isolate);
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_SYS 1

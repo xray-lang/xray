@@ -49,6 +49,15 @@ static const XaBuiltinMember g_gen_mutex_members[] = {
 };
 #define GEN_MUTEX_MEMBER_COUNT 3
 
+// RwLock methods
+static const XaBuiltinMember g_gen_rwlock_members[] = {
+    {"rdlock", "(): ()", "Acquire the read side of the read-write lock", true, false},
+    {"rdunlock", "(): ()", "Release the read side of the read-write lock", true, false},
+    {"wrlock", "(): ()", "Acquire the write side of the read-write lock", true, false},
+    {"wrunlock", "(): ()", "Release the write side of the read-write lock", true, false},
+};
+#define GEN_RWLOCK_MEMBER_COUNT 4
+
 // ======== C Module Declarations ========
 
 // cluster module functions
@@ -489,8 +498,9 @@ static const XaBuiltinMember g_gen_regex_functions[] = {
 // sys module functions
 static const XaBuiltinMember g_gen_sys_functions[] = {
     {"Mutex", "(): Mutex", "Create an OS-domain mutex", true, false},
+    {"RwLock", "(): RwLock", "Create an OS-domain read-write lock", true, false},
 };
-#define GEN_SYS_FUNCTION_COUNT 1
+#define GEN_SYS_FUNCTION_COUNT 2
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {
