@@ -117,23 +117,6 @@ static const XaBuiltinMember g_gen_datetime_functions[] = {
 };
 #define GEN_DATETIME_FUNCTION_COUNT 8
 
-// encoding module functions
-static const XaBuiltinMember g_gen_encoding_functions[] = {
-    {"hexEncode", "(data: string): string", "Hex encode string to hex", true, false},
-    {"hexDecode", "(hex: string): Array<uint8>?", "Hex decode to bytes", true, false},
-    {"hexDecodeString", "(hex: string): string?", "Hex decode to string", true, false},
-    {"hexValid", "(hex: string): bool", "Check if valid hex string", true, false},
-    {"utf8Valid", "(data: string): bool", "Check if valid UTF-8", true, false},
-    {"utf8Count", "(data: string): int", "Count UTF-8 characters", true, false},
-    {"utf8ByteLength", "(data: string): int", "Get UTF-8 byte length", true, false},
-    {"utf16Encode", "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes", true, false},
-    {"utf16Decode", "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?", "UTF-16 decode to string (auto-detects BOM)", true, false},
-    // Module constants (is_method=false)
-    {"LE", ": int", "Little-endian UTF-16 byte order", false, false},
-    {"BE", ": int", "Big-endian UTF-16 byte order", false, false},
-};
-#define GEN_ENCODING_FUNCTION_COUNT 11
-
 // http.HttpResponse handle fields
 static const XaBuiltinHandleField g_gen_http_httpresponse_fields[] = {
     {"status", "int", true},
@@ -622,7 +605,6 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0},
     {"csv", g_gen_csv_functions, GEN_CSV_FUNCTION_COUNT, NULL, 0},
     {"datetime", g_gen_datetime_functions, GEN_DATETIME_FUNCTION_COUNT, NULL, 0},
-    {"encoding", g_gen_encoding_functions, GEN_ENCODING_FUNCTION_COUNT, NULL, 0},
     {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, g_gen_http_handles, GEN_HTTP_HANDLE_COUNT},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT},
     {"log", g_gen_log_functions, GEN_LOG_FUNCTION_COUNT, NULL, 0},
@@ -638,7 +620,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
     {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 20
+#define GEN_BUILTIN_MODULE_COUNT 19
 
 /* clang-format on */
 

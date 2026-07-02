@@ -88,22 +88,6 @@ static void xr_stdlib_vm_bind_datetime_generated(XrVMRuntime *isolate, XrModule 
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_DATETIME */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_ENCODING
-static void xr_stdlib_vm_bind_encoding_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "hexEncode", encoding_hex_encode);
-    XRS_EXPORT(module, isolate, "hexDecode", encoding_hex_decode);
-    XRS_EXPORT(module, isolate, "hexDecodeString", encoding_hex_decode_string);
-    XRS_EXPORT(module, isolate, "hexValid", encoding_hex_valid);
-    XRS_EXPORT(module, isolate, "utf8Valid", encoding_utf8_valid);
-    XRS_EXPORT(module, isolate, "utf8Count", encoding_utf8_count);
-    XRS_EXPORT(module, isolate, "utf8ByteLength", encoding_utf8_byte_length);
-    XRS_EXPORT(module, isolate, "utf16Encode", encoding_utf16_encode);
-    XRS_EXPORT(module, isolate, "utf16Decode", encoding_utf16_decode);
-    xr_module_add_export(isolate, module, "LE", xr_int(XR_UTF16_LE));
-    xr_module_add_export(isolate, module, "BE", xr_int(XR_UTF16_BE));
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_ENCODING */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_HTTP
 static void xr_stdlib_vm_bind_http_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT_SLOW(module, isolate, "get", http_get);

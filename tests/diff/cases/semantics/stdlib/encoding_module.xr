@@ -1,0 +1,37 @@
+// Pure-Xray encoding module: VM/AOT parity across hex, UTF-8 metrics, and
+// UTF-16 encode/decode (endianness, CJK surrogate-free BMP, empty input).
+import encoding
+
+print(encoding.hexEncode("Hello"))
+print(encoding.hexDecodeString("48656c6c6f"))
+print(encoding.hexValid("48656c6c6f"))
+print(encoding.hexValid("gg"))
+print(encoding.hexValid("abc"))
+print(encoding.hexDecode("gg") == null)
+
+let hb = encoding.hexDecode("48656c6c6f")
+print(hb != null)
+print(hb.length)
+print(hb[0])
+print(hb[4])
+
+print(encoding.utf8ByteLength("Hello"))
+print(encoding.utf8ByteLength("你好"))
+print(encoding.utf8Count("你好"))
+print(encoding.utf8Valid("你好"))
+print(encoding.LE)
+print(encoding.BE)
+
+let u = encoding.utf16Encode("AB")
+print(u.length)
+print(u[0])
+print(u[1])
+print(encoding.utf16Decode(u))
+
+let ub = encoding.utf16Encode("AB", encoding.BE)
+print(ub[0])
+print(ub[1])
+print(encoding.utf16Decode(ub, encoding.BE))
+
+print(encoding.utf16Decode(encoding.utf16Encode("你好世界")))
+print(encoding.utf16Decode(encoding.utf16Encode("")))

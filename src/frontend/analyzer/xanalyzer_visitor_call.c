@@ -426,6 +426,33 @@ static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, AstNode
     return NULL;
 }
 
+/* Resolve a module-member call's target function-symbol links (namespace.fn),
+ * mirroring xa_module_member_class_instance_type but for functions. Used so
+ * caller-side default-argument filling applies to `mod.fn(...)` calls exactly
+ * as it does to bare `fn(...)` calls. Returns NULL for non-module callees. */
+static XaSymbolLinks *xa_module_member_fn_links(XaInferContext *ctx, AstNode *callee) {
+    if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE ||
+        !ma->object->as.variable.name)
+        return NULL;
+    XaSymbol *mod_sym = xa_scope_lookup(ctx->analyzer->current_scope, ma->object->as.variable.name);
+    if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
+        return NULL;
+    XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
+    const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
+                                                                 : ma->object->as.variable.name;
+    bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+    if (!exports)
+        return NULL;
+    XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+    if (!member_sym || member_sym->kind != XA_SYM_FUNCTION)
+        return NULL;
+    return xa_analyzer_get_links(ctx->analyzer, member_sym);
+}
+
 static void xa_check_channel_send_transfer_arg(XaInferContext *ctx, AstNode *call_node,
                                                XrType *receiver_type, const char *method_name,
                                                AstNode *arg_node, XrType *arg_type, int slot) {
@@ -537,6 +564,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 xa_dep_add(incr, ctx->current_function->id, fn_sym->id, XA_DEP_CALL);
             }
         }
+    } else if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+        // Module member call (namespace.fn): resolve the exported function's
+        // links so caller-side default-argument filling below applies just as
+        // for a bare-name call. Non-module member calls (instance methods)
+        // resolve to NULL here and are unaffected.
+        fn_links = xa_module_member_fn_links(ctx, call->callee);
     }
 
     // Check generic type argument count and constraints
