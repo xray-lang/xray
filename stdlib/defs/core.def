@@ -939,6 +939,61 @@ module crypto {
   }
 }
 
+module sys {
+  native_class Mutex {
+    super_slot: "objectClass"
+    core_slot: "sysMutexClass"
+    native_body: "g_sys_mutex_body_desc"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: "XR_BK_SYSMUTEX"
+  }
+
+  class_method Mutex.lock {
+    vm: "sys_mutex_lock"
+    argc: 0
+  }
+
+  class_method Mutex.unlock {
+    vm: "sys_mutex_unlock"
+    argc: 0
+  }
+
+  class_method Mutex.tryLock {
+    vm: "sys_mutex_try_lock"
+    argc: 0
+  }
+
+  fn Mutex {
+    signature: "(): Mutex"
+    doc: "Create an OS-domain mutex"
+    vm: "sys_mutex_new"
+    aot: "xrt_sys_mutex_new"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  type_method Mutex.lock {
+    signature: "(): ()"
+    receiver: "Mutex"
+    doc: "Lock the mutex"
+  }
+
+  type_method Mutex.unlock {
+    signature: "(): ()"
+    receiver: "Mutex"
+    doc: "Unlock the mutex"
+  }
+
+  type_method Mutex.tryLock {
+    signature: "(): bool"
+    receiver: "Mutex"
+    doc: "Try to lock the mutex"
+  }
+}
+
 module regex {
   native_class Regex {
     super_slot: objectClass

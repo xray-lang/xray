@@ -33,6 +33,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"crypto", "encrypt", 2, "xrt_crypto_encrypt", "ss", CG_AOT_RET_VALUE, NULL},
     {"crypto", "decrypt", 2, "xrt_crypto_decrypt", "ss", CG_AOT_RET_VALUE, NULL},
     {"crypto", "timingSafeEqual", 2, "xrt_crypto_timing_safe_equal", "ss", CG_AOT_RET_VALUE, NULL},
+    {"sys", "Mutex", 0, "xrt_sys_mutex_new", "", CG_AOT_RET_VALUE, NULL},
     {"regex", "compile", 1, "xrt_regex_compile_default", "s", CG_AOT_RET_VALUE, NULL},
     {"regex", "compile", 2, "xrt_regex_compile_with_flags", "ss", CG_AOT_RET_VALUE, NULL},
     {"regex", "test", 2, "xrt_regex_test", "vs", CG_AOT_RET_VALUE, NULL},

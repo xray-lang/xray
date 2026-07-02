@@ -1,0 +1,133 @@
+#include "sys.h"
+
+#include "../common.h"
+#include "../../src/base/xchecks.h"
+#include "../../src/module/xmodule.h"
+#include "../../src/os/os_thread.h"
+#include "../../src/runtime/class/xclass.h"
+#include "../../src/runtime/class/xclass_builder.h"
+#include "../../src/runtime/class/xclass_system.h"
+#include "../../src/runtime/class/xinstance.h"
+#include "../../src/runtime/object/xpanic_info.h"
+#include "../../src/runtime/value/xvalue.h"
+#include "../../src/runtime/xisolate_api.h"
+#include "../../src/vm/xvm.h"
+
+typedef struct XrSysMutexBody {
+    xr_mutex_t mutex;
+    bool initialized;
+} XrSysMutexBody;
+
+static void sys_mutex_body_init(XrInstance *instance, void *body_ptr) {
+    (void) instance;
+    XrSysMutexBody *body = (XrSysMutexBody *) body_ptr;
+    xr_mutex_init(&body->mutex);
+    body->initialized = true;
+}
+
+static void sys_mutex_body_destroy(void *body_ptr) {
+    XrSysMutexBody *body = (XrSysMutexBody *) body_ptr;
+    if (!body || !body->initialized)
+        return;
+    xr_mutex_destroy(&body->mutex);
+    body->initialized = false;
+}
+
+static XrNativeBodyDesc g_sys_mutex_body_desc = {
+    .body_size = sizeof(XrSysMutexBody),
+    .body_align = _Alignof(XrSysMutexBody),
+    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .init = sys_mutex_body_init,
+    .destroy = sys_mutex_body_destroy,
+    .deep_copy = NULL,
+    .to_shared = NULL,
+};
+
+static XrClass *sys_mutex_class(XrVMRuntime *isolate) {
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
+    XR_DCHECK(core != NULL && core->sysMutexClass != NULL, "sys.Mutex class not registered");
+    return core ? core->sysMutexClass : NULL;
+}
+
+static XrSysMutexBody *sys_mutex_body(XrVMRuntime *isolate, XrValue self) {
+    if (!XR_IS_INSTANCE(self))
+        return NULL;
+    XrInstance *instance = (XrInstance *) XR_TO_PTR(self);
+    XrClass *klass = sys_mutex_class(isolate);
+    if (!klass || !xr_class_instanceof(instance->klass, klass))
+        return NULL;
+    return (XrSysMutexBody *) xr_instance_native_body(instance);
+}
+
+static XrValue sys_mutex_invalid_receiver(XrVMRuntime *isolate) {
+    XrValue exc = xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH,
+                                     "sys.Mutex method called with non-Mutex receiver");
+    xr_vm_throw_exception(isolate, exc);
+    return xr_null();
+}
+
+static XrValue sys_mutex_new(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+
+    XrInstance *instance = xr_instance_new(isolate, sys_mutex_class(isolate));
+    if (!instance) {
+        XrValue exc =
+            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.Mutex allocation failed");
+        xr_vm_throw_exception(isolate, exc);
+        return xr_null();
+    }
+    return xr_value_from_instance(instance);
+}
+
+static XrValue sys_mutex_lock(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrSysMutexBody *body = sys_mutex_body(isolate, self);
+    if (!body)
+        return sys_mutex_invalid_receiver(isolate);
+    xr_mutex_lock(&body->mutex);
+    return xr_null();
+}
+
+static XrValue sys_mutex_unlock(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrSysMutexBody *body = sys_mutex_body(isolate, self);
+    if (!body)
+        return sys_mutex_invalid_receiver(isolate);
+    xr_mutex_unlock(&body->mutex);
+    return xr_null();
+}
+
+static XrValue sys_mutex_try_lock(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrSysMutexBody *body = sys_mutex_body(isolate, self);
+    if (!body)
+        return sys_mutex_invalid_receiver(isolate);
+    return xr_bool(xr_mutex_trylock(&body->mutex));
+}
+
+#define XR_STDLIB_VM_BIND_CLASS_MUTEX 1
+#include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_CLASS_MUTEX
+
+void xr_sys_mutex_register_class(XrVMRuntime *isolate) {
+    xr_stdlib_vm_register_mutex_class_generated(isolate);
+}
+
+#define XR_STDLIB_VM_BIND_MODULE_SYS 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_SYS
+
+XrModule *xr_load_module_sys(XrVMRuntime *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_load_module_sys: NULL isolate");
+    XrModule *module = xr_module_create_native(isolate, "sys");
+    if (!module)
+        return NULL;
+
+    xr_stdlib_vm_bind_sys_generated(isolate, module);
+    module->loaded = true;
+    return module;
+}

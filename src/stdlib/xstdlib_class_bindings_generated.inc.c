@@ -13,6 +13,27 @@
  * one or more XR_STDLIB_VM_BIND_CLASS_<CLASS> macros before including it.
  */
 
+#ifdef XR_STDLIB_VM_BIND_CLASS_MUTEX
+static void xr_stdlib_vm_register_mutex_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_mutex_class_generated: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_mutex_class_generated: core not initialised");
+    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_mutex_class_generated: super class not registered");
+    XR_DCHECK(core->sysMutexClass == NULL, "xr_stdlib_vm_register_mutex_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "Mutex", core->objectClass);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_mutex_class_generated: builder alloc failed");
+    xr_class_builder_set_native_body(builder, &g_sys_mutex_body_desc);
+    xr_class_builder_add_method(builder, "lock", sys_mutex_lock, 0, 0);
+    xr_class_builder_add_method(builder, "unlock", sys_mutex_unlock, 0, 0);
+    xr_class_builder_add_method(builder, "tryLock", sys_mutex_try_lock, 0, 0);
+    XrClass *cls = xr_class_builder_finalize(builder);
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_mutex_class_generated: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+    cls->builtin_kind = XR_BK_SYSMUTEX;
+    core->sysMutexClass = cls;
+}
+#endif  /* XR_STDLIB_VM_BIND_CLASS_MUTEX */
+
 #ifdef XR_STDLIB_VM_BIND_CLASS_REGEX
 static void xr_stdlib_vm_register_regex_class_generated(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "xr_stdlib_vm_register_regex_class_generated: NULL isolate");

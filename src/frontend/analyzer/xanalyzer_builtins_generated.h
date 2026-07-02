@@ -41,6 +41,14 @@ static const XaBuiltinMember g_gen_datetime_members[] = {
 };
 #define GEN_DATETIME_MEMBER_COUNT 21
 
+// Mutex methods
+static const XaBuiltinMember g_gen_mutex_members[] = {
+    {"lock", "(): ()", "Lock the mutex", true, false},
+    {"unlock", "(): ()", "Unlock the mutex", true, false},
+    {"tryLock", "(): bool", "Try to lock the mutex", true, false},
+};
+#define GEN_MUTEX_MEMBER_COUNT 3
+
 // ======== C Module Declarations ========
 
 // cluster module functions
@@ -478,6 +486,12 @@ static const XaBuiltinMember g_gen_regex_functions[] = {
 };
 #define GEN_REGEX_FUNCTION_COUNT 13
 
+// sys module functions
+static const XaBuiltinMember g_gen_sys_functions[] = {
+    {"Mutex", "(): Mutex", "Create an OS-domain mutex", true, false},
+};
+#define GEN_SYS_FUNCTION_COUNT 1
+
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {
     {"now", "(): int", "Current time in milliseconds since epoch", true, false},
@@ -578,13 +592,14 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT},
     {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT},
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0},
+    {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0},
     {"toml", g_gen_toml_functions, GEN_TOML_FUNCTION_COUNT, NULL, 0},
     {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT},
     {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
     {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 18
+#define GEN_BUILTIN_MODULE_COUNT 19
 
 /* clang-format on */
 

@@ -175,6 +175,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"crypto", "encrypt", "(key: string, plaintext: string): string", "AES-256-CBC encrypt", "crypto_encrypt", "normal", "", "xrt_crypto_encrypt", "ss", "value", "crypto.encrypt", "", "core", "method", 2, true},
     {"crypto", "decrypt", "(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", "crypto_decrypt", "normal", "", "xrt_crypto_decrypt", "ss", "value", "crypto.decrypt", "", "core", "method", 2, true},
     {"crypto", "timingSafeEqual", "(a: string, b: string): bool", "Constant-time string comparison", "crypto_timing_safe_equal", "normal", "", "xrt_crypto_timing_safe_equal", "ss", "value", "", "", "core", "method", 2, true},
+    {"sys", "Mutex", "(): Mutex", "Create an OS-domain mutex", "sys_mutex_new", "normal", "", "xrt_sys_mutex_new", "", "value", "", "", "system", "method", 0, true},
     {"regex", "compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", "regex_compile", "normal", "", "xrt_regex_compile_default", "s", "value", "regex.compile", "XRT_ENABLE_REGEX", "alloc", "method", 1, true},
     {"regex", "compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", "regex_compile", "normal", "", "xrt_regex_compile_with_flags", "ss", "value", "regex.compile", "XRT_ENABLE_REGEX", "alloc", "method", 2, true},
     {"regex", "test", "(pattern: Regex, s: string): bool", "Test if regex matches", "regex_test", "normal", "", "xrt_regex_test", "vs", "value", "regex.test", "XRT_ENABLE_REGEX", "alloc", "method", 2, true},
@@ -539,6 +540,9 @@ static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
 #define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / sizeof(xr_stdlib_handle_def_entries[0])))
 
 static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
+    {"sys", "Mutex", "lock", "(): ()", "Lock the mutex"},
+    {"sys", "Mutex", "unlock", "(): ()", "Unlock the mutex"},
+    {"sys", "Mutex", "tryLock", "(): bool", "Try to lock the mutex"},
     {"datetime", "DateTime", "format", "(pattern?: string): string", "Format datetime to string"},
     {"datetime", "DateTime", "toISOString", "(): string", "Convert to ISO 8601 string"},
     {"datetime", "DateTime", "year", "(): int", "Get year"},
@@ -564,6 +568,7 @@ static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
 
 static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = {
+    {"sys", "Mutex", "objectClass", "sysMutexClass", "&g_sys_mutex_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_SYSMUTEX"},
     {"regex", "Regex", "objectClass", "regexClass", "&g_regex_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_REGEX"},
     {"log", "Logger", "objectClass", "loggerClass", "&g_logger_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", ""},
     {"net", "NetConn", "", "netConnClass", "xr_netconn_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETCONN"},
@@ -578,6 +583,9 @@ static const XrStdlibClassDefEntry xr_stdlib_class_def_entries[] = {
 #define XR_STDLIB_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_def_entries) / sizeof(xr_stdlib_class_def_entries[0])))
 
 static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = {
+    {"sys", "Mutex", "lock", "sys_mutex_lock", 0, "0"},
+    {"sys", "Mutex", "unlock", "sys_mutex_unlock", 0, "0"},
+    {"sys", "Mutex", "tryLock", "sys_mutex_try_lock", 0, "0"},
     {"regex", "Regex", "test", "re_m_test", 1, "0"},
     {"regex", "Regex", "find", "re_m_find", 2, "0"},
     {"regex", "Regex", "findText", "re_m_find_text", 1, "0"},

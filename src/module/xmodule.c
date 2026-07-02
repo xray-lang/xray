@@ -1287,6 +1287,7 @@ static const StdlibEntry stdlib_core[] = {
     {"regex", xr_load_module_regex},
     {"mem", xr_load_module_mem},
     {"sync", xr_load_module_sync},
+    {"sys", xr_load_module_sys},
     {"url", xr_load_module_url},
     {"datetime", xr_load_module_datetime},
     {"log", xr_load_module_log},
