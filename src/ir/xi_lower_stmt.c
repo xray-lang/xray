@@ -1042,6 +1042,50 @@ static struct XrType *tuple_elem_type(XiLower *l, struct XrType *subject_type, i
     return l->type_any;
 }
 
+/* Variant-ordinal test for an ADT-enum value: read field[0] (the variant tag)
+ * and compare it against the pattern variant's static ordinal. ADT-enum values
+ * are tagged instances (field[0] = ordinal, field[1..] = payload) in every
+ * backend, so both payload patterns (`Recv.Value(v)`) and bare-variant patterns
+ * (`Recv.Empty`) must discriminate on the ordinal — an identity compare against
+ * the variant singleton never matches the instance representation. */
+static XiValue *lower_adt_variant_tag_test(XiLower *l, XiValue *subject, AstNode *variant) {
+    int member_index = stmt_adt_member_index(l, subject->type, variant);
+    struct XrType *tag_type = member_index >= 0 ? l->type_int : l->type_any;
+    XiValue *tag = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, tag_type, 1);
+    if (!tag)
+        return NULL;
+    tag->args[0] = subject;
+    tag->aux_int = 0; /* field[0] = variant tag */
+    tag->aux_kind = XI_AUX_KIND_ADT_FIELD;
+
+    if (member_index >= 0) {
+        XiValue *want = xi_const_int(l->func, l->cur_block, member_index, l->type_int);
+        if (!want)
+            return NULL;
+        return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, tag, want);
+    }
+
+    XiValue *variant_val = xi_lower_expr(l, variant);
+    if (!variant_val)
+        return NULL;
+    return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, tag, variant_val);
+}
+
+/* A bare enum-member pattern (`Recv.Empty`, no payload parens) parses as a
+ * literal. When the subject is an ADT enum, it must still test the variant
+ * ordinal rather than compare against the variant singleton, otherwise the
+ * tagged-instance representation makes the match always fall through. */
+static bool lower_literal_is_adt_variant(XiLower *l, XiValue *subject, AstNode *value) {
+    if (!value)
+        return false;
+    if (value->type != AST_ENUM_ACCESS && value->type != AST_MEMBER_ACCESS)
+        return false;
+    XaSymbolLinks *links = stmt_adt_subject_links(l, subject->type);
+    if (!links || !links->is_adt_enum)
+        return false;
+    return stmt_adt_member_index(l, subject->type, value) >= 0;
+}
+
 XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pattern) {
     if (!pattern || !subject)
         return NULL;
@@ -1058,6 +1102,9 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
             AstNode *pval = pattern->as.pattern_literal.value;
             if (pval && pval->type == AST_VARIABLE)
                 return xi_const_bool(l->func, l->cur_block, true, l->type_bool);
+
+            if (lower_literal_is_adt_variant(l, subject, pval))
+                return lower_adt_variant_tag_test(l, subject, pval);
 
             XiValue *lit = xi_lower_expr(l, pattern->as.pattern_literal.value);
             if (!lit)
@@ -1127,26 +1174,7 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
              * Prefer a static ordinal compare so VM and AOT avoid dynamic enum
              * member lookup in every pattern test. */
             PatternAdtNode *ap = &pattern->as.pattern_adt;
-            int member_index = stmt_adt_member_index(l, subject->type, ap->variant);
-            struct XrType *tag_type = member_index >= 0 ? l->type_int : l->type_any;
-            XiValue *tag = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, tag_type, 1);
-            if (!tag)
-                return NULL;
-            tag->args[0] = subject;
-            tag->aux_int = 0; /* field[0] = variant tag */
-            tag->aux_kind = XI_AUX_KIND_ADT_FIELD;
-
-            if (member_index >= 0) {
-                XiValue *want = xi_const_int(l->func, l->cur_block, member_index, l->type_int);
-                if (!want)
-                    return NULL;
-                return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, tag, want);
-            }
-
-            XiValue *variant_val = xi_lower_expr(l, ap->variant);
-            if (!variant_val)
-                return NULL;
-            return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, tag, variant_val);
+            return lower_adt_variant_tag_test(l, subject, ap->variant);
         }
 
         case AST_PATTERN_OBJECT: {

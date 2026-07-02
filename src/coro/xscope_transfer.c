@@ -77,21 +77,21 @@ static XrEnumType *scope_task_outcome_type(XrCoroutine *coro) {
     return XR_TO_ENUM_TYPE(builtin);
 }
 
+/* TaskOutcome is an ADT enum (Success/Failed carry payloads). Every variant,
+ * including the non-payload Cancelled, must use the tagged-instance
+ * representation (field[0] = ordinal) so ordinal-based pattern matching works
+ * uniformly across VM and AOT; a plain enum singleton would never match a
+ * `TaskOutcome.Cancelled` arm sitting next to a payload arm. */
 static XrValue scope_task_outcome_value(XrCoroutine *coro, uint32_t member_index, XrValue payload,
                                         bool has_payload) {
     XrEnumType *enum_type = scope_task_outcome_type(coro);
     if (!enum_type || member_index >= enum_type->member_count)
         return has_payload ? payload : XR_NULL_VAL;
 
-    if (!has_payload) {
-        XrEnumValue *member = enum_type->members[member_index].instance;
-        return member ? XR_FROM_PTR(member) : XR_NULL_VAL;
-    }
-
-    XrValue copied = scope_copy_to_shared(coro, payload);
+    XrValue copied = has_payload ? scope_copy_to_shared(coro, payload) : XR_NULL_VAL;
     XrValue args[1] = {copied};
     XrInstance *inst = xr_enum_adt_construct_core(coro ? coro->core : NULL, NULL, enum_type,
-                                                  member_index, args, 1);
+                                                  member_index, args, has_payload ? 1 : 0);
     return inst ? XR_FROM_PTR(inst) : XR_NULL_VAL;
 }
 

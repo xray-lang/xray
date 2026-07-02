@@ -1838,16 +1838,21 @@ static XrValue aot_recv_value(const XrAotContext *ctx, XrValue value) {
     return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_RECV, 0, args, 1);
 }
 
+/* Recv is an ADT enum (Value carries a payload), so the native backend matches
+ * every Recv result by reading an ADT array tag (field[0]). The non-payload
+ * variants must therefore use the same ADT-instance representation as Value —
+ * returning a plain enum singleton here makes the native match read an
+ * XrEnumValue as an array and crash. */
 static XrValue aot_recv_empty(const XrAotContext *ctx) {
-    return aot_builtin_enum_member(ctx, XR_GLOBAL_VAR_RECV, 1);
+    return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_RECV, 1, NULL, 0);
 }
 
 static XrValue aot_recv_timeout(const XrAotContext *ctx) {
-    return aot_builtin_enum_member(ctx, XR_GLOBAL_VAR_RECV, 2);
+    return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_RECV, 2, NULL, 0);
 }
 
 static XrValue aot_recv_closed(const XrAotContext *ctx) {
-    return aot_builtin_enum_member(ctx, XR_GLOBAL_VAR_RECV, 3);
+    return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_RECV, 3, NULL, 0);
 }
 
 static XrValue aot_recv_result_from_block(const XrAotContext *ctx, XrCoroBlockResult block) {
@@ -1923,8 +1928,14 @@ static XrValue aot_task_result_failed(const XrAotContext *ctx, XrTask *task) {
     return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
 }
 
+/* TaskResult is an ADT enum (Success/Failed carry payloads), so the native
+ * backend matches every TaskResult by reading an ADT array tag (field[0])
+ * whenever the match binds a payload arm. The non-payload variants
+ * (Cancelled/Timeout/Pending) must therefore use the same ADT-instance
+ * representation — returning a plain enum singleton here makes the native match
+ * read an XrEnumValue as an array and crash. */
 static XrValue aot_task_result_member(const XrAotContext *ctx, uint32_t member_index) {
-    return aot_builtin_enum_member(ctx, XR_GLOBAL_VAR_TASK_RESULT, member_index);
+    return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, member_index, NULL, 0);
 }
 
 static XrValue aot_task_result_from_terminal(const XrAotContext *ctx, XrTask *task) {

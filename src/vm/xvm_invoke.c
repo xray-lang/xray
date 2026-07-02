@@ -80,16 +80,20 @@ static XrValue vm_recv_value(XrVMRuntime *isolate, XrValue value) {
     return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_RECV, 0, args, 1);
 }
 
+/* Recv is an ADT enum (Value carries a payload). Every variant must use the
+ * tagged-instance representation (field[0] = ordinal) so pattern matching can
+ * discriminate on the ordinal uniformly; a plain enum singleton would not carry
+ * field[0] and would never match a `Recv.Empty` arm. */
 static XrValue vm_recv_empty(XrVMRuntime *isolate) {
-    return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_RECV, 1);
+    return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_RECV, 1, NULL, 0);
 }
 
 static XrValue vm_recv_timeout(XrVMRuntime *isolate) {
-    return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_RECV, 2);
+    return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_RECV, 2, NULL, 0);
 }
 
 static XrValue vm_recv_closed(XrVMRuntime *isolate) {
-    return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_RECV, 3);
+    return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_RECV, 3, NULL, 0);
 }
 
 static XrValue vm_send_result(XrVMRuntime *isolate, uint32_t member_index) {
@@ -135,8 +139,11 @@ static XrValue vm_task_result_failed(XrVMRuntime *isolate, XrTask *task, XrCorou
     return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
 }
 
+/* TaskResult is an ADT enum (Success/Failed carry payloads), so its non-payload
+ * variants (Cancelled/Timeout/Pending) must also use the tagged-instance
+ * representation for uniform ordinal-based pattern matching. */
 static XrValue vm_task_result_member(XrVMRuntime *isolate, uint32_t member_index) {
-    return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_TASK_RESULT, member_index);
+    return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_TASK_RESULT, member_index, NULL, 0);
 }
 
 static void vm_task_recycle_cancelled_executor(XrTask *task, XrCoroutine *coro,
@@ -743,25 +750,23 @@ XR_FUNC XrDispatchAction vm_invoke_enum(XrVMRuntime *isolate, XrValue receiver, 
         }
 
         /* ADT variant construction via OP_INVOKE: Shape.Circle(5.0)
-         * Resolve method_symbol to member index, check payload, construct. */
+         * Every variant of an ADT enum is a tagged instance (field[0] = ordinal,
+         * field[1..] = payload), including zero-payload variants, so pattern
+         * matching can read the ordinal uniformly. */
         if (enum_type->is_adt) {
             XrEnumValue *eval = xr_enum_get_member_by_symbol(enum_type, method_symbol);
             if (eval) {
                 int midx = (int) eval->member_index;
                 int expected_pc = enum_type->payload_counts[midx];
-                if (expected_pc > 0) {
-                    XrInstance *inst = xr_enum_adt_construct(isolate, enum_type, eval->member_index,
-                                                             &base[a + 2], nargs);
-                    if (!inst) {
-                        VM_THROW(frame, pc, XR_ERR_TYPE_NO_CALL,
-                                 "failed to construct ADT variant '%s.%s'", enum_type->name,
-                                 eval->member_name);
-                    }
-                    base[a] = XR_FROM_PTR(inst);
-                    return XR_DISP_NEXT;
+                XrInstance *inst = xr_enum_adt_construct(isolate, enum_type, eval->member_index,
+                                                         expected_pc > 0 ? &base[a + 2] : NULL,
+                                                         expected_pc > 0 ? nargs : 0);
+                if (!inst) {
+                    VM_THROW(frame, pc, XR_ERR_TYPE_NO_CALL,
+                             "failed to construct ADT variant '%s.%s'", enum_type->name,
+                             eval->member_name);
                 }
-                /* Zero-payload variant: return the singleton XrEnumValue */
-                base[a] = XR_FROM_PTR(eval);
+                base[a] = XR_FROM_PTR(inst);
                 return XR_DISP_NEXT;
             }
         }

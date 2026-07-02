@@ -1,0 +1,94 @@
+// 0901_adt_enum.xr - ADT enum (payload + non-payload variants) matching.
+//
+// Regression: an ADT enum (any variant carries a payload) represents EVERY
+// variant, including the non-payload ones, as a tagged instance
+// (field[0] = ordinal). Pattern matching reads that ordinal uniformly, so a
+// bare non-payload variant (`Shape.Point`) must match its own arm and fall
+// through a wildcard correctly, whether or not the match also binds a payload
+// arm. This previously crashed under native AOT (array-tag read of an enum
+// singleton) while returning the right value under the VM.
+
+enum Shape {
+    Circle(int),
+    Square(int),
+    Point,
+    Unknown
+}
+
+enum Tree {
+    Leaf(int),
+    Branch(int),
+    Empty
+}
+
+fn describe(s: Shape) -> string {
+    return match (s) {
+        Shape.Circle(r) -> "circle:" + string(r)
+        Shape.Square(side) -> "square:" + string(side)
+        Shape.Point -> "point"
+        Shape.Unknown -> "unknown"
+    }
+}
+
+fn radius_or(s: Shape) -> int {
+    return match (s) {
+        Shape.Circle(r) -> r
+        Shape.Point -> -1
+        _ -> -2
+    }
+}
+
+@test
+fn test_adt_enum() {
+    // Payload and non-payload variants describe correctly.
+    assert_eq(describe(Shape.Circle(3)), "circle:3")
+    assert_eq(describe(Shape.Square(4)), "square:4")
+    assert_eq(describe(Shape.Point), "point")
+    assert_eq(describe(Shape.Unknown), "unknown")
+
+    // Non-payload variant matched alongside a payload arm, then wildcard.
+    assert_eq(radius_or(Shape.Circle(9)), 9)
+    assert_eq(radius_or(Shape.Point), -1)
+    assert_eq(radius_or(Shape.Square(2)), -2)
+    assert_eq(radius_or(Shape.Unknown), -2)
+
+    // Bare non-payload variant bound to a local, then matched.
+    let p = Shape.Point
+    let is_point = match (p) {
+        Shape.Point -> true
+        _ -> false
+    }
+    assert_eq(is_point, true)
+
+    // Non-payload variant must NOT match a payload arm of the same ordinal
+    // family — Circle(0) is ordinal 0, Point is ordinal 2.
+    let c0 = Shape.Circle(0)
+    let matched_circle = match (c0) {
+        Shape.Circle(_) -> true
+        _ -> false
+    }
+    assert_eq(matched_circle, true)
+
+    // ADT variants inside an array keep their instance representation.
+    let shapes = [Shape.Circle(1), Shape.Point, Shape.Square(5), Shape.Unknown]
+    assert_eq(describe(shapes[0]), "circle:1")
+    assert_eq(describe(shapes[1]), "point")
+    assert_eq(describe(shapes[2]), "square:5")
+    assert_eq(describe(shapes[3]), "unknown")
+
+    // A second ADT enum with a leading non-payload arm.
+    let t = Tree.Empty
+    let td = match (t) {
+        Tree.Empty -> 0
+        Tree.Leaf(v) -> v
+        Tree.Branch(v) -> v * 10
+    }
+    assert_eq(td, 0)
+    let leaf = Tree.Leaf(7)
+    let ld = match (leaf) {
+        Tree.Empty -> 0
+        Tree.Leaf(v) -> v
+        Tree.Branch(v) -> v * 10
+    }
+    assert_eq(ld, 7)
+}
