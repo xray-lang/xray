@@ -14,18 +14,6 @@
  * XR_STDLIB_VM_BIND_MODULE_<MODULE> macro before including it.
  */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_BASE64
-static void xr_stdlib_vm_bind_base64_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "encode", base64_encode);
-    XRS_EXPORT(module, isolate, "decode", base64_decode);
-    XRS_EXPORT(module, isolate, "encodeUrl", base64_encodeUrl);
-    XRS_EXPORT(module, isolate, "decodeUrl", base64_decodeUrl);
-    XRS_EXPORT(module, isolate, "encodeBytes", base64_encodeBytes);
-    XRS_EXPORT(module, isolate, "decodeToBytes", base64_decodeToBytes);
-    XRS_EXPORT(module, isolate, "isValid", base64_isValid);
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_BASE64 */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_CLUSTER
 static void xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "start", cluster_start);

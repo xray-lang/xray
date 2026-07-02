@@ -1,0 +1,34 @@
+// Pure-Xray base64 module: VM/AOT parity across encode/decode, URL-safe,
+// bytes, validation, empty input, and UTF-8 round-trips.
+import base64
+
+print(base64.encode("Hello, World!"))
+print(base64.decode("SGVsbG8sIFdvcmxkIQ=="))
+print(base64.encode("A"))
+print(base64.encode("AB"))
+print(base64.encode("ABC"))
+print(base64.encode(""))
+print(base64.decode("") == "")
+print(base64.encode("你好世界"))
+print(base64.decode(base64.encode("你好世界")))
+print(base64.encodeUrl("subjects?_d"))
+print(base64.decodeUrl(base64.encodeUrl("test +/= data")))
+print(base64.isValid("QUJD"))
+print(base64.isValid("QQ=="))
+print(base64.isValid("A"))
+print(base64.isValid("Q==="))
+print(base64.decode("!!!invalid") == null)
+print(base64.decode("A") == null)
+
+let bs = base64.decodeToBytes("SGVs")
+print(bs != null)
+print(bs.length)
+print(bs[0])
+print(bs[1])
+print(bs[2])
+
+let raw = Bytes(3)
+raw[0] = 72
+raw[1] = 101
+raw[2] = 108
+print(base64.encodeBytes(raw))

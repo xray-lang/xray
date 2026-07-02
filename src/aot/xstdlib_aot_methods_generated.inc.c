@@ -10,13 +10,6 @@
 static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"math", "random", 0, "xrt_math_random", "", CG_AOT_RET_VALUE, NULL},
     {"math", "randomInt", 2, "xrt_math_random_int", "vv", CG_AOT_RET_VALUE, NULL},
-    {"base64", "encode", 1, "xrt_base64_encode", "s", CG_AOT_RET_VALUE, NULL},
-    {"base64", "decode", 1, "xrt_base64_decode", "s", CG_AOT_RET_VALUE, NULL},
-    {"base64", "encodeUrl", 1, "xrt_base64_encode_url", "s", CG_AOT_RET_VALUE, NULL},
-    {"base64", "decodeUrl", 1, "xrt_base64_decode_url", "s", CG_AOT_RET_VALUE, NULL},
-    {"base64", "encodeBytes", 1, "xrt_base64_encode_bytes", "v", CG_AOT_RET_VALUE, NULL},
-    {"base64", "decodeToBytes", 1, "xrt_base64_decode_to_bytes", "s", CG_AOT_RET_VALUE, NULL},
-    {"base64", "isValid", 1, "xrt_base64_is_valid", "s", CG_AOT_RET_VALUE, NULL},
     {"url", "encode", 1, "xrt_url_encode", "s", CG_AOT_RET_VALUE, NULL},
     {"url", "decode", 1, "xrt_url_decode", "s", CG_AOT_RET_VALUE, NULL},
     {"url", "encodeForm", 1, "xrt_url_encode_form", "s", CG_AOT_RET_VALUE, NULL},

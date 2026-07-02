@@ -357,6 +357,16 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
+/* string.toBytes() -> Bytes (Array<uint8>): the UTF-8 bytes of the string.
+ * Mirrors the VM m_to_bytes and round-trips with Bytes.toString(). */
+static inline XrValue xrt_str_to_bytes(XrValue s) {
+    int64_t len = (int64_t) xr_str_len(s);
+    xrt_array_t *b = xrt_array_new_typed_ptr(len, XR_ELEM_U8);
+    if (len > 0)
+        memcpy(b->data, xr_str_data(s), (size_t) len);
+    return xr_mkptr(b, XR_TAG_ARRAY);
+}
+
 static inline XrValue xrt_method_0(XrValue recv, int sym) {
     /* Container/tuple toString renders via the shared value formatter so AOT
      * matches the VM ("[1, 2, 3]", "#{...}", "#[...]"). Simple enums are

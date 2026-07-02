@@ -143,8 +143,16 @@ XrString *xr_string_concat(XrVMRuntime *iso, XrString *a, XrString *b) {
 // Long strings (>64B): shared system-heap allocation
 XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t length,
                                 uint32_t hash) {
-    if (!core || !chars) {
-        xr_log_warning("string", "string_intern_core: core or chars is NULL");
+    if (!core) {
+        xr_log_warning("string", "string_intern_core: core is NULL");
+        return NULL;
+    }
+    // An empty string reads no bytes, so tolerate a NULL data pointer (e.g. an
+    // empty Bytes value whose backing store was never allocated -> toString()).
+    if (length == 0)
+        chars = "";
+    if (!chars) {
+        xr_log_warning("string", "string_intern_core: chars is NULL");
         return NULL;
     }
 

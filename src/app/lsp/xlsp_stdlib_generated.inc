@@ -8,18 +8,6 @@
 
 /* clang-format off */
 
-// base64 module symbols
-static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
-    {"encode", XLSP_SYM_FUNCTION, "fn(data: string): string", "Base64 encode", NULL, 0},
-    {"decode", XLSP_SYM_FUNCTION, "fn(data: string): string?", "Base64 decode", NULL, 0},
-    {"encodeUrl", XLSP_SYM_FUNCTION, "fn(data: string): string", "URL-safe base64 encode", NULL, 0},
-    {"decodeUrl", XLSP_SYM_FUNCTION, "fn(data: string): string?", "URL-safe base64 decode", NULL, 0},
-    {"encodeBytes", XLSP_SYM_FUNCTION, "fn(data: Array<uint8>): string", "Base64 encode bytes", NULL, 0},
-    {"decodeToBytes", XLSP_SYM_FUNCTION, "fn(data: string): Array<uint8>?", "Base64 decode to bytes", NULL, 0},
-    {"isValid", XLSP_SYM_FUNCTION, "fn(data: string): bool", "Check if valid base64", NULL, 0},
-};
-#define GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT 7
-
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"start", XLSP_SYM_FUNCTION, "fn(config: Json): ()", "Start cluster node", NULL, 0},
@@ -477,7 +465,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_yaml_symbols[] = {
 #define GEN_XLSP_STDLIB_YAML_SYMBOL_COUNT 6
 
 static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
-    {"base64", "base64 standard library module", g_xlsp_stdlib_base64_symbols, GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT},
     {"cluster", "cluster standard library module", g_xlsp_stdlib_cluster_symbols, GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT},
     {"compress", "compress standard library module", g_xlsp_stdlib_compress_symbols, GEN_XLSP_STDLIB_COMPRESS_SYMBOL_COUNT},
     {"crypto", "crypto standard library module", g_xlsp_stdlib_crypto_symbols, GEN_XLSP_STDLIB_CRYPTO_SYMBOL_COUNT},
