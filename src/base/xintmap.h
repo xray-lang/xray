@@ -15,10 +15,6 @@
  *   - xhashmap.h: String keys (variable names -> values)
  *   - xintmap.h: Integer keys (symbol IDs -> metadata)
  *
- * MEMORY MODES:
- *   - xr_intmap_new(): Uses malloc, caller must free
- *   - xr_intmap_new_in_arena(): Uses Arena, freed with arena
- *
  * USE CASES:
  *   - Analyzer symbol links (symbol ID -> XaSymbolLinks*)
  *   - Type cache (type ID -> cached type)
@@ -47,21 +43,18 @@ typedef struct XrIntMap {
     uint32_t capacity;
     uint32_t count;       // Active entries (excluding tombstones)
     uint32_t tombstones;  // Tombstone count for rehash decision
-    bool is_arena_allocated;
 } XrIntMap;
 
 // Create integer map (uses malloc)
 XR_FUNC XrIntMap *xr_intmap_new(void);
 
-struct XrArena;
-// Arena version - no need to free manually
-XR_FUNC XrIntMap *xr_intmap_new_in_arena(struct XrArena *arena);
-
-// Only for malloc version, not arena version
 XR_FUNC void xr_intmap_free(XrIntMap *map);
 
-// Set key-value pair (overwrites if exists)
-XR_FUNC void xr_intmap_set(XrIntMap *map, uint32_t key, void *value);
+// Insert or update. Returns true on success; false when the key is a
+// reserved sentinel (XR_INTMAP_EMPTY/TOMBSTONE) or when the key is
+// absent and no slot is available (allocation failure on a full table).
+// The map never silently drops an insert — callers must handle false.
+XR_FUNC bool xr_intmap_set(XrIntMap *map, uint32_t key, void *value);
 
 // Returns NULL if key not found
 XR_FUNC void *xr_intmap_get(XrIntMap *map, uint32_t key);

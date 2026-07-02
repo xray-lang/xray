@@ -15,9 +15,10 @@
  *   - xhash.h: Hash functions for XrValue keys (runtime Map/Set)
  *   - xhashmap.h: Hash table for C strings (compiler internal)
  *
- * MEMORY MODES:
- *   - xr_hashmap_new(): Uses malloc, caller must free
- *   - xr_hashmap_new_in_arena(): Uses Arena, freed with arena
+ * KEY LIFETIME CONTRACT:
+ *   Keys are NOT copied. The map stores the caller's pointer, so every
+ *   key must outlive the map (interned strings, arena-allocated names,
+ *   or string literals). Values are opaque pointers, never owned.
  *
  * USE CASES:
  *   - Compiler symbol tables (variable names -> Local*)
@@ -50,16 +51,10 @@ typedef struct XrHashMap {
     XrHashMapEntry *entries;
     uint32_t capacity;
     uint32_t count;
-    bool is_arena_allocated;
 } XrHashMap;
 
 XR_FUNC XrHashMap *xr_hashmap_new(void);
 
-struct XrArena;
-// Arena version - no need to free manually
-XR_FUNC XrHashMap *xr_hashmap_new_in_arena(struct XrArena *arena);
-
-// Only for malloc version, not arena version
 XR_FUNC void xr_hashmap_free(XrHashMap *map);
 
 // Insert or update. Returns true on success; false only when the key is

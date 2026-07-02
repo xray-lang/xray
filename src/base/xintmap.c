@@ -10,7 +10,6 @@
 
 #include "xintmap.h"
 #include "xchecks.h"
-#include "xarena.h"
 #include "xmalloc.h"
 #include <stdlib.h>
 #include <string.h>
@@ -57,17 +56,13 @@ static uint32_t find_slot(XrIntMap *map, uint32_t key, bool for_insert) {
     return for_insert && first_tombstone != UINT32_MAX ? first_tombstone : map->capacity;
 }
 
-// Resize map to new capacity
+// Resize map to new capacity. On allocation failure the old table is
+// kept: the map keeps working above its load factor (degraded probing)
+// and xr_intmap_set reports failure only once no free slot is left.
 static void resize(XrIntMap *map, uint32_t new_capacity) {
     XR_DCHECK((new_capacity & (new_capacity - 1)) == 0, "intmap resize: capacity not power-of-2");
     XrIntMapEntry *old_entries = map->entries;
     uint32_t old_capacity = map->capacity;
-
-    // Allocate new entries
-    if (map->is_arena_allocated) {
-        // Can't resize arena-allocated maps cleanly, just grow
-        return;
-    }
 
     map->entries = (XrIntMapEntry *) xr_malloc(new_capacity * sizeof(XrIntMapEntry));
     if (!map->entries) {
@@ -85,10 +80,10 @@ static void resize(XrIntMap *map, uint32_t new_capacity) {
     map->count = 0;
     map->tombstones = 0;
 
-    // Rehash old entries
+    // Rehash old entries (cannot fail: the doubled table always has room)
     for (uint32_t i = 0; i < old_capacity; i++) {
         if (old_entries[i].key != XR_INTMAP_EMPTY && old_entries[i].key != XR_INTMAP_TOMBSTONE) {
-            xr_intmap_set(map, old_entries[i].key, old_entries[i].value);
+            (void) xr_intmap_set(map, old_entries[i].key, old_entries[i].value);
         }
     }
 
@@ -103,7 +98,6 @@ XrIntMap *xr_intmap_new(void) {
     map->capacity = XR_INTMAP_MIN_CAPACITY;
     map->count = 0;
     map->tombstones = 0;
-    map->is_arena_allocated = false;
 
     map->entries = (XrIntMapEntry *) xr_malloc(map->capacity * sizeof(XrIntMapEntry));
     if (!map->entries) {
@@ -120,44 +114,22 @@ XrIntMap *xr_intmap_new(void) {
     return map;
 }
 
-XrIntMap *xr_intmap_new_in_arena(struct XrArena *arena) {
-    if (!arena)
-        return NULL;
-
-    XrIntMap *map = xr_arena_alloc(arena, sizeof(XrIntMap));
-    if (!map)
-        return NULL;
-
-    map->capacity = XR_INTMAP_MIN_CAPACITY;
-    map->entries = xr_arena_alloc(arena, map->capacity * sizeof(XrIntMapEntry));
-    if (!map->entries)
-        return NULL;
-
-    // Mark all slots as empty
-    for (uint32_t i = 0; i < map->capacity; i++) {
-        map->entries[i].key = XR_INTMAP_EMPTY;
-    }
-
-    map->count = 0;
-    map->tombstones = 0;
-    map->is_arena_allocated = true;
-    return map;
-}
-
 void xr_intmap_free(XrIntMap *map) {
-    if (!map || map->is_arena_allocated)
+    if (!map)
         return;
     xr_free(map->entries);
     xr_free(map);
 }
 
-void xr_intmap_set(XrIntMap *map, uint32_t key, void *value) {
+bool xr_intmap_set(XrIntMap *map, uint32_t key, void *value) {
     if (!map)
-        return;
+        return false;
 
-    // Don't allow reserved key values
+    // Reserved sentinel values can never be stored
+    XR_DCHECK(key != XR_INTMAP_EMPTY && key != XR_INTMAP_TOMBSTONE,
+              "intmap set: reserved sentinel key");
     if (key == XR_INTMAP_EMPTY || key == XR_INTMAP_TOMBSTONE) {
-        return;  // Invalid key
+        return false;
     }
 
     // Check load factor and resize if needed
@@ -167,8 +139,11 @@ void xr_intmap_set(XrIntMap *map, uint32_t key, void *value) {
     }
 
     uint32_t index = find_slot(map, key, true);
-    if (index >= map->capacity)
-        return;  // Table full (shouldn't happen)
+    if (index >= map->capacity) {
+        // Table full and key absent: resize already failed under OOM.
+        // Report failure instead of silently dropping the insert.
+        return false;
+    }
 
     XrIntMapEntry *entry = &map->entries[index];
     bool is_new = (entry->key == XR_INTMAP_EMPTY || entry->key == XR_INTMAP_TOMBSTONE);
@@ -184,6 +159,7 @@ void xr_intmap_set(XrIntMap *map, uint32_t key, void *value) {
         }
     }
     XR_DCHECK(map->count <= map->capacity, "intmap set: count > capacity");
+    return true;
 }
 
 void *xr_intmap_get(XrIntMap *map, uint32_t key) {

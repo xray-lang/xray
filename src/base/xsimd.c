@@ -113,7 +113,10 @@ static const char *find_string_end_quote_scalar(const char *s, size_t len, char 
 
 /* ========== SSE2 Implementation ========== */
 
-#if defined(XR_USE_SSE2)
+/* SSE2 is the x86-64 baseline: these helpers must also be compiled in
+ * AVX2/AVX-512 builds, where they serve as the tail path and (for AVX2)
+ * the main scan path. immintrin.h already provides the SSE2 intrinsics. */
+#if defined(XR_USE_SSE2) || defined(XR_USE_AVX2) || defined(XR_USE_AVX512)
 
 static const char *find_char_sse2(const char *s, size_t len, char c) {
     size_t i = 0;
@@ -280,7 +283,7 @@ static const char *find_string_end_quote_sse2(const char *s, size_t len, char q)
     return find_string_end_quote_scalar(s + i, len - i, q);
 }
 
-#endif  // XR_USE_SSE2
+#endif  // XR_USE_SSE2 || XR_USE_AVX2 || XR_USE_AVX512
 
 /* ========== AVX-512 Implementation ========== */
 
@@ -1053,20 +1056,25 @@ const uint8_t xr_digit_to_val[256] = {
 
 /* ========== Predefined Range Constants ========== */
 
+/* All range constants are padded to 16 bytes: the SSE4.2 path loads the
+ * range table with one unconditional 16-byte _mm_loadu_si128, so shorter
+ * arrays would be a global out-of-bounds read (caught by ASan). The
+ * padding bytes are never matched — pcmpestri honors the range_len arg. */
+
 // Printable ASCII range (0x20-0x7E)
-const char XR_RANGE_PRINTABLE[4] = {0x20, 0x7E, 0x00, 0x00};
+const char XR_RANGE_PRINTABLE[16] = {0x20, 0x7E};
 
 // Whitespace range: space, Tab, \r, \n
-const char XR_RANGE_WHITESPACE[8] = {0x09, 0x0A, 0x0D, 0x0D, 0x20, 0x20, 0x00, 0x00};
+const char XR_RANGE_WHITESPACE[16] = {0x09, 0x0A, 0x0D, 0x0D, 0x20, 0x20};
 
 // Digit range (0-9)
-const char XR_RANGE_DIGIT[2] = {'0', '9'};
+const char XR_RANGE_DIGIT[16] = {'0', '9'};
 
 // Identifier start chars range (a-z, A-Z, _)
-const char XR_RANGE_IDENT_START[6] = {'A', 'Z', 'a', 'z', '_', '_'};
+const char XR_RANGE_IDENT_START[16] = {'A', 'Z', 'a', 'z', '_', '_'};
 
 // Identifier chars range (a-z, A-Z, 0-9, _)
-const char XR_RANGE_IDENT[8] = {'0', '9', 'A', 'Z', 'a', 'z', '_', '_'};
+const char XR_RANGE_IDENT[16] = {'0', '9', 'A', 'Z', 'a', 'z', '_', '_'};
 
 /* ========== SSE4.2 Range Matching ========== */
 

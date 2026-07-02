@@ -97,22 +97,34 @@ static __forceinline int __builtin_popcountll(unsigned long long x) {
     return (int) __popcnt64(x);
 }
 
-// Overflow-checked arithmetic (C23 ckd_* style; MSVC lacks builtins)
+// Overflow-checked arithmetic (C23 ckd_* style; MSVC lacks builtins).
+// All three compute through uint64_t: signed overflow is UB in C, and
+// the naive "*res = a * b; check" form even traps in hardware for
+// INT64_MIN * -1 (the check's *res / a executes INT64_MIN / -1 => #DE).
+// Unsigned arithmetic wraps (defined), and casting the wrapped result
+// back to int64_t is well-defined two's-complement on MSVC.
 #include <stdint.h>
 #include <limits.h>
 static __forceinline int __builtin_add_overflow(int64_t a, int64_t b, int64_t *res) {
-    *res = a + b;
+    uint64_t ur = (uint64_t) a + (uint64_t) b;
+    *res = (int64_t) ur;
     return ((b > 0) && (a > INT64_MAX - b)) || ((b < 0) && (a < INT64_MIN - b));
 }
 static __forceinline int __builtin_sub_overflow(int64_t a, int64_t b, int64_t *res) {
-    *res = a - b;
+    uint64_t ur = (uint64_t) a - (uint64_t) b;
+    *res = (int64_t) ur;
     return ((b < 0) && (a > INT64_MAX + b)) || ((b > 0) && (a < INT64_MIN + b));
 }
 static __forceinline int __builtin_mul_overflow(int64_t a, int64_t b, int64_t *res) {
-    *res = a * b;
+    uint64_t ur = (uint64_t) a * (uint64_t) b;
+    *res = (int64_t) ur;
     if (a == 0 || b == 0)
         return 0;
-    return (*res / a != b);
+    // INT64_MIN / -1 would trap in the division check below; handle the
+    // only such pair explicitly (it always overflows).
+    if ((a == -1 && b == INT64_MIN) || (b == -1 && a == INT64_MIN))
+        return 1;
+    return *res / a != b;
 }
 #endif  // XR_COMPILER_MSVC builtins
 
