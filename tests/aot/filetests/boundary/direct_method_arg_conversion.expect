@@ -2,6 +2,6 @@ contains=xaot-plan v0
 contains=function 2 name=mark module=0 depth=1 abi=native boundary=none params=2 ret=void */ptr/ptr
 contains=op=CALL_METHOD_DIRECT
 regex=boundary [0-9]+ kind=value-rep func=<main> value=v[0-9]+ input=v[0-9]+ reason=box target=\? arg=- from=ptr/ptr to=tagged/tagged
-c_regex=void \* v[0-9]+ = direct_method_arg_conversion_mark_[0-9]+\(NULL, (&xrt_shared_native_[0-9]+|v[0-9]+), v[0-9]+\);
+c_regex=void \* v[0-9]+ = direct_method_arg_conversion_mark_[0-9]+\(NULL, (&xrt_shared_native_[0-9]+|v[0-9]+), (v[0-9]+|INT64_C\([0-9]+\))\);
 c_contains=xr_str_value_from_ptr(v
-contains=stats functions=3 native=1 tagged=2 coro=0
+contains=stats functions=3 native=2 tagged=1 coro=0

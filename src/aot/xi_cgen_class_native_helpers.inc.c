@@ -1899,6 +1899,17 @@ static const XiClassData *cg_class_native_ctor_call_data(XiCgenCtx *ctx, const X
         int slot = (int) callee->aux_int;
         if (slot >= 0 && slot < ctx->shared_cap)
             cd = ctx->shared_class[slot];
+        /* Slot-held classes are lowered by the module init function, so
+         * resolve the constructor child there (falling back to the current
+         * function for locally declared classes). Without the target the
+         * shared-native-instance and descriptor-elision fast paths reject
+         * the construction and fall back to boxed emission. */
+        if (cd && !target) {
+            if (ctx->module && ctx->module->init)
+                target = cg_find_constructor(ctx->module->init, cd);
+            if (!target)
+                target = cg_find_constructor(f, cd);
+        }
     } else if (callee && callee->op == XI_CLASS_CREATE && callee->aux) {
         cd = (const XiClassData *) callee->aux;
         target = cg_find_constructor(f, cd);

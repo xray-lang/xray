@@ -1,6 +1,6 @@
 contains=xaot-plan v0
 contains=function 0 name=<main> module=0 depth=0 abi=tagged boundary=module-init
-contains=function 1 name=constructor module=0 depth=1 abi=tagged boundary=tagged-type params=2
+contains=function 1 name=constructor module=0 depth=1 abi=native boundary=none params=2 ret=void/void/void
 contains=function 2 name=bump module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
 contains=  param 0 class=ptr kind=ptr rep=ptr c_type=void *
 contains=function 3 name=make_counter module=0 depth=1 abi=native boundary=none params=1 ret=void */ptr/ptr
@@ -9,9 +9,7 @@ contains=function 4 name=read_counter module=0 depth=1 abi=native boundary=none 
 contains=  param 0 class=ptr kind=ptr rep=ptr c_type=void *
 contains=boundary 0 kind=func-abi func=<main> value=- input=- reason=module-init
 regex=  value v[0-9]+ op=CALL kind=ptr rep=ptr c_type=void \*
-regex=boundary [0-9]+ kind=direct-call-arg func=<main> value=v[0-9]+ input=v[0-9]+ reason=direct-call target=read_counter arg=0 from=tagged/tagged to=ptr/ptr
 contains=reason=box
-contains=kind=func-abi func=constructor value=- input=- reason=tagged-type
 contains=  value v0 op=CLASS_CREATE kind=tagged rep=tagged c_type=XrValue
 c_regex=static xrt_native_tagged_boundary_Counter \* tagged_boundary_make_counter_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
 c_regex=static int64_t tagged_boundary_read_counter_[0-9]+\(xrt_closure_t \*_cl, xrt_native_tagged_boundary_Counter \*p0\)
@@ -23,4 +21,4 @@ c_not_contains=xrt_getprop_name(
 c_not_contains=xrt_setprop_name(
 c_not_contains=xrt_map_get(
 c_not_contains=xrt_map_set(
-contains=stats functions=5 native=3 tagged=2 coro=0
+contains=stats functions=5 native=4 tagged=1 coro=0

@@ -1,4 +1,4 @@
 c_contains=xr_aot_event_count_wait(ctx,
 c_contains=xr_aot_event_count_wait_resume(ctx,
-c_contains=xr_aot_event_count_advance(ctx,
+c_contains=xr_aot_event_count_advance_i64(ctx,
 c_not_contains=xrt_method_call
