@@ -369,6 +369,21 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"liveBytes", "(): int", "Get live memory usage in bytes", true, false},
     {"liveObjects", "(): int", "Get live object count", true, false},
     {"info", "(): Map", "Get memory-model runtime info as Map", true, false},
+    {"fence", "(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false},
+    {"prefetch", "(ptr: RawPtr<uint8>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false},
+    {"cacheLineSize", "(): int", "CPU cache line size in bytes", true, false},
+    {"alloc", "(n: int): RawMut<uint8>", "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free", true, false},
+    {"allocAligned", "(n: int, align: int): RawMut<uint8>", "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure", true, false},
+    {"realloc", "(ptr: RawMut<uint8>, n: int): RawMut<uint8>", "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM", true, false},
+    {"free", "(ptr: RawMut<uint8>): ()", "Free a buffer from mem.alloc/allocAligned/realloc", true, false},
+    {"fromAddress", "(addr: int): RawMut<uint8>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", true, false},
+    {"addressOf", "(ptr: RawPtr<uint8>): int", "Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", true, false},
+    {"copy", "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false},
+    {"move", "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false},
+    {"set", "(dst: RawMut<uint8>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", true, false},
+    {"compare", "(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int", "Compare n bytes at a and b (memcmp: <0, 0, >0)", true, false},
+    {"volatileLoad", "(ptr: RawPtr<uint8>, size: int): int", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false},
+    {"volatileStore", "(ptr: RawMut<uint8>, v: int, size: int): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false},
     {"popcount", "(x: int): int", "Number of set bits in the 64-bit value", true, false},
     {"leadingZeros", "(x: int): int", "Count of leading zero bits (0 -> 64)", true, false},
     {"trailingZeros", "(x: int): int", "Count of trailing zero bits (0 -> 64)", true, false},
@@ -382,7 +397,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"subOverflows", "(a: int, b: int): bool", "Whether signed 64-bit subtraction of a and b overflows", true, false},
     {"mulOverflows", "(a: int, b: int): bool", "Whether signed 64-bit multiplication of a and b overflows", true, false},
 };
-#define GEN_MEM_FUNCTION_COUNT 19
+#define GEN_MEM_FUNCTION_COUNT 34
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {

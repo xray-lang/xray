@@ -1,0 +1,29 @@
+// mem.prefetch (task 147 §7.5): a pure performance hint — VM no-op, AOT
+// __builtin_prefetch — so it has no observable effect and both backends must
+// produce identical output. Also exercises the analyzer fix that lets stdlib
+// functions take RawPtr/RawMut params (parsed as XR_KIND_POINTER, so a RawMut
+// argument coerces mut->const into the RawPtr param). rw = 0 read / 1 write.
+import mem
+@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
+@extern("C") fn free(p: RawMut<uint8>)
+
+let buf = unsafe { malloc(64) }
+unsafe { buf[0] = 3 }
+unsafe { buf[1] = 4 }
+
+// read-intent prefetch, then observe the data is unperturbed
+mem.prefetch(buf, 0)
+unsafe { print(buf[0]) }
+
+// write-intent prefetch
+mem.prefetch(buf, 1)
+unsafe { print(buf[1]) }
+
+// prefetch further into the buffer via offset()
+let mid = unsafe { buf.offset(32) }
+unsafe { mid[0] = 9 }
+mem.prefetch(mid, 0)
+unsafe { print(mid[0]) }
+
+unsafe { free(buf) }
+print("prefetched")

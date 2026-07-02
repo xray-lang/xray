@@ -1,0 +1,31 @@
+// mem.alloc / allocAligned / realloc / free (task 147 §7.3). Buffers are
+// user-managed raw memory. The allocation returns a raw pointer: the VM boxes
+// the address as an int, AOT converts the tagged pointer to its RAWPTR rep —
+// both must observe identical data behind the pointer. Addresses themselves are
+// non-deterministic, so every assertion reads DATA or isNull().
+import mem
+
+let p = mem.alloc(16)
+print(p.isNull())
+
+unsafe { p[0] = 42 }
+unsafe { p[15] = 99 }
+unsafe { print(p[0]) }
+unsafe { print(p[15]) }
+
+// aligned allocation
+let q = mem.allocAligned(128, 64)
+print(q.isNull())
+mem.set(q, 5, 128)
+unsafe { print(q[0]) }
+unsafe { print(q[127]) }
+
+// realloc keeps existing bytes
+let r = mem.realloc(p, 64)
+print(r.isNull())
+unsafe { print(r[0]) }
+unsafe { print(r[15]) }
+
+mem.free(r)
+mem.free(q)
+print("ok")

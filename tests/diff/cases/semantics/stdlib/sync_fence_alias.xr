@@ -1,0 +1,28 @@
+// sync.fence(Ordering) — pure-Xray alias over the mem.fence(int) intrinsic
+// (task 147 §6.5). A fence has no single-thread observable effect, so the case
+// pins statement position, all five Ordering arms, and both import forms on
+// both backends. Also the first module-level *function* exported from a pure
+// Xray stdlib module (sync previously exported classes only).
+import sync
+import { fence } from sync
+
+let a = 1
+sync.fence(Ordering.SeqCst)
+print(a)
+
+sync.fence(Ordering.Relaxed)
+sync.fence(Ordering.Acquire)
+sync.fence(Ordering.Release)
+sync.fence(Ordering.AcquireRelease)
+print("namespace-ok")
+
+fence(Ordering.SeqCst)
+print("named-ok")
+
+// Publish/consume shape around a fence pair (still single-coroutine, but the
+// canonical usage silhouette: write -> release fence ... acquire fence -> read).
+let data = 42
+sync.fence(Ordering.Release)
+sync.fence(Ordering.Acquire)
+print(data)
+print("ok")
