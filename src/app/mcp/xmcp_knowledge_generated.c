@@ -1219,9 +1219,49 @@ static const XmcpGeneratedStdlibSymbol _symbols_math[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
+        .name = "addOverflows",
+        .signature = "(a: int, b: int): bool",
+        .summary = "Whether signed 64-bit addition of a and b overflows",
+    },
+    {
+        .name = "addWrapping",
+        .signature = "(a: int, b: int): int",
+        .summary = "Two's-complement wrapping addition (wraps mod 2^64)",
+    },
+    {
+        .name = "alloc",
+        .signature = "(n: int): RawMut<uint8>",
+        .summary = "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free",
+    },
+    {
+        .name = "allocAligned",
+        .signature = "(n: int, align: int): RawMut<uint8>",
+        .summary = "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure",
+    },
+    {
+        .name = "byteswap",
+        .signature = "(x: int): int",
+        .summary = "Reverse the byte order of the 64-bit value",
+    },
+    {
+        .name = "cacheLineSize",
+        .signature = "(): int",
+        .summary = "CPU cache line size in bytes",
+    },
+    {
         .name = "collectCycles",
         .signature = "(): int",
         .summary = "Run cycle collection + whole-block reclaim, return cycle collection count",
+    },
+    {
+        .name = "compare",
+        .signature = "(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int",
+        .summary = "Compare n bytes at a and b (memcmp: <0, 0, >0)",
+    },
+    {
+        .name = "copy",
+        .signature = "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()",
+        .summary = "Copy n bytes from src to dst (non-overlapping; memcpy)",
     },
     {
         .name = "disableCycleCollection",
@@ -1234,6 +1274,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Resume the automatic cycle collector",
     },
     {
+        .name = "fence",
+        .signature = "(ordering: int): ()",
+        .summary = "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)",
+    },
+    {
+        .name = "free",
+        .signature = "(ptr: RawMut<uint8>): ()",
+        .summary = "Free a buffer from mem.alloc/allocAligned/realloc",
+    },
+    {
         .name = "info",
         .signature = "(): Map",
         .summary = "Get memory-model runtime info as Map",
@@ -1244,6 +1294,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Check if automatic cycle collection is enabled",
     },
     {
+        .name = "leadingZeros",
+        .signature = "(x: int): int",
+        .summary = "Count of leading zero bits (0 -> 64)",
+    },
+    {
         .name = "liveBytes",
         .signature = "(): int",
         .summary = "Get live memory usage in bytes",
@@ -1252,6 +1307,76 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "liveObjects",
         .signature = "(): int",
         .summary = "Get live object count",
+    },
+    {
+        .name = "move",
+        .signature = "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()",
+        .summary = "Copy n bytes from src to dst (may overlap; memmove)",
+    },
+    {
+        .name = "mulOverflows",
+        .signature = "(a: int, b: int): bool",
+        .summary = "Whether signed 64-bit multiplication of a and b overflows",
+    },
+    {
+        .name = "mulWrapping",
+        .signature = "(a: int, b: int): int",
+        .summary = "Two's-complement wrapping multiplication (wraps mod 2^64)",
+    },
+    {
+        .name = "popcount",
+        .signature = "(x: int): int",
+        .summary = "Number of set bits in the 64-bit value",
+    },
+    {
+        .name = "prefetch",
+        .signature = "(ptr: RawPtr<uint8>, rw: int): ()",
+        .summary = "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch",
+    },
+    {
+        .name = "realloc",
+        .signature = "(ptr: RawMut<uint8>, n: int): RawMut<uint8>",
+        .summary = "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM",
+    },
+    {
+        .name = "rotateLeft",
+        .signature = "(x: int, n: int): int",
+        .summary = "Rotate the 64-bit value left by n bits (n mod 64)",
+    },
+    {
+        .name = "rotateRight",
+        .signature = "(x: int, n: int): int",
+        .summary = "Rotate the 64-bit value right by n bits (n mod 64)",
+    },
+    {
+        .name = "set",
+        .signature = "(dst: RawMut<uint8>, byte: int, n: int): ()",
+        .summary = "Fill n bytes at dst with byte (memset)",
+    },
+    {
+        .name = "subOverflows",
+        .signature = "(a: int, b: int): bool",
+        .summary = "Whether signed 64-bit subtraction of a and b overflows",
+    },
+    {
+        .name = "subWrapping",
+        .signature = "(a: int, b: int): int",
+        .summary = "Two's-complement wrapping subtraction (wraps mod 2^64)",
+    },
+    {
+        .name = "trailingZeros",
+        .signature = "(x: int): int",
+        .summary = "Count of trailing zero bits (0 -> 64)",
+    },
+    {
+        .name = "volatileLoad",
+        .signature = "(ptr: RawPtr<uint8>, size: int): int",
+        .summary = "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)",
+    },
+    {
+        .name = "volatileStore",
+        .signature = "(ptr: RawMut<uint8>, v: int, size: int): ()",
+        .summary = "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)",
     },
 };
 
@@ -3940,13 +4065,38 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `mem.addOverflows` | `(a: int, b: int): bool` | Whether signed 64-bit addition of a and b overflows |\n"
+            "| `mem.addWrapping` | `(a: int, b: int): int` | Two's-complement wrapping addition (wraps mod 2^64) |\n"
+            "| `mem.alloc` | `(n: int): RawMut<uint8>` | Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free |\n"
+            "| `mem.allocAligned` | `(n: int, align: int): RawMut<uint8>` | Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure |\n"
+            "| `mem.byteswap` | `(x: int): int` | Reverse the byte order of the 64-bit value |\n"
+            "| `mem.cacheLineSize` | `(): int` | CPU cache line size in bytes |\n"
             "| `mem.collectCycles` | `(): int` | Run cycle collection + whole-block reclaim, return cycle collection count |\n"
+            "| `mem.compare` | `(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
+            "| `mem.copy` | `(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
             "| `mem.disableCycleCollection` | `(): ()` | Pause the automatic cycle collector |\n"
             "| `mem.enableCycleCollection` | `(): ()` | Resume the automatic cycle collector |\n"
+            "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
+            "| `mem.free` | `(ptr: RawMut<uint8>): ()` | Free a buffer from mem.alloc/allocAligned/realloc |\n"
             "| `mem.info` | `(): Map` | Get memory-model runtime info as Map |\n"
             "| `mem.isCycleCollectionEnabled` | `(): bool` | Check if automatic cycle collection is enabled |\n"
+            "| `mem.leadingZeros` | `(x: int): int` | Count of leading zero bits (0 -> 64) |\n"
             "| `mem.liveBytes` | `(): int` | Get live memory usage in bytes |\n"
             "| `mem.liveObjects` | `(): int` | Get live object count |\n"
+            "| `mem.move` | `(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
+            "| `mem.mulOverflows` | `(a: int, b: int): bool` | Whether signed 64-bit multiplication of a and b overflows |\n"
+            "| `mem.mulWrapping` | `(a: int, b: int): int` | Two's-complement wrapping multiplication (wraps mod 2^64) |\n"
+            "| `mem.popcount` | `(x: int): int` | Number of set bits in the 64-bit value |\n"
+            "| `mem.prefetch` | `(ptr: RawPtr<uint8>, rw: int): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
+            "| `mem.realloc` | `(ptr: RawMut<uint8>, n: int): RawMut<uint8>` | Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM |\n"
+            "| `mem.rotateLeft` | `(x: int, n: int): int` | Rotate the 64-bit value left by n bits (n mod 64) |\n"
+            "| `mem.rotateRight` | `(x: int, n: int): int` | Rotate the 64-bit value right by n bits (n mod 64) |\n"
+            "| `mem.set` | `(dst: RawMut<uint8>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
+            "| `mem.subOverflows` | `(a: int, b: int): bool` | Whether signed 64-bit subtraction of a and b overflows |\n"
+            "| `mem.subWrapping` | `(a: int, b: int): int` | Two's-complement wrapping subtraction (wraps mod 2^64) |\n"
+            "| `mem.trailingZeros` | `(x: int): int` | Count of trailing zero bits (0 -> 64) |\n"
+            "| `mem.volatileLoad` | `(ptr: RawPtr<uint8>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
+            "| `mem.volatileStore` | `(ptr: RawMut<uint8>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "",
         .symbols = _symbols_mem,
         .symbol_count = (int)(sizeof(_symbols_mem) / sizeof(_symbols_mem[0])),

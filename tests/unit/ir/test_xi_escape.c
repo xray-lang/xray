@@ -284,8 +284,11 @@ static void test_index_set_container_no_escape(void) {
     ASSERT_EQ(arr->escape, XI_ESC_NONE, "array filled via INDEX_SET should stay NO_ESCAPE");
     ASSERT_EQ(elem->escape, XI_ESC_HEAP, "element stored via INDEX_SET should be HEAP_ESCAPE");
 
+    /* Array literals stay on the heap even when NO_ESCAPE: the stack
+     * rewrite would lose the preset length + typed element storage the
+     * literal INDEX_SET fills depend on (xi_arc.c stack eligibility). */
     xi_stack_alloc_rewrite(f);
-    ASSERT_EQ(arr->op, XI_STACK_ALLOC, "filled local array should become STACK_ALLOC");
+    ASSERT_EQ(arr->op, XI_ARRAY_NEW, "filled local array stays on the heap path");
 
     xi_func_free(f);
 }
@@ -477,7 +480,9 @@ static void test_arc_many_consume_sites(void) {
 /* ========== Test: stack alloc rewrite — NO_ESCAPE becomes STACK_ALLOC ========== */
 
 static void test_stack_alloc_local_array(void) {
-    /* Local array (NO_ESCAPE) should be rewritten to XI_STACK_ALLOC */
+    /* Local arrays stay on the heap even when NO_ESCAPE: XI_ARRAY_NEW is
+     * excluded from the stack rewrite because literals depend on the heap
+     * path's preset length + typed element storage. */
     XiFunc *f = make_func("stack_local", &t_int);
     XiBlock *b0 = f->entry;
 
@@ -493,10 +498,7 @@ static void test_stack_alloc_local_array(void) {
     xi_escape_analyze(f);
     xi_stack_alloc_rewrite(f);
 
-    ASSERT_EQ(arr->op, XI_STACK_ALLOC, "NO_ESCAPE array should become STACK_ALLOC");
-    ASSERT_EQ(arr->aux_int, XI_ARRAY_NEW, "STACK_ALLOC should preserve original op in aux_int");
-    ASSERT_EQ((arr->flags & XI_FLAG_SIDE_EFFECT) != 0, 1,
-              "STACK_ALLOC must carry side-effect flag");
+    ASSERT_EQ(arr->op, XI_ARRAY_NEW, "NO_ESCAPE array stays on the heap path");
     xi_func_free(f);
 }
 
