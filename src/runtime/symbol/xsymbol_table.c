@@ -263,6 +263,9 @@ static const char *xr_builtin_symbol_names[] = {
     "setLengthUnchecked",
     "wildCopyFromNonOverlappingUnchecked",
     "wildRepeatAtUnchecked",
+    "lock",
+    "unlock",
+    "tryLock",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

@@ -422,6 +422,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
 };
 #define GEN_XLSP_STDLIB_SYNC_SYMBOL_COUNT 6
 
+// sys module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
+    {"Mutex", XLSP_SYM_FUNCTION, "fn(): Mutex", "Create an OS-domain mutex", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 1
+
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {
     {"now", XLSP_SYM_FUNCTION, "fn(): int", "Current time in milliseconds since epoch", NULL, 0},
@@ -523,6 +529,7 @@ static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
     {"path", "path standard library module", g_xlsp_stdlib_path_symbols, GEN_XLSP_STDLIB_PATH_SYMBOL_COUNT},
     {"regex", "regex standard library module", g_xlsp_stdlib_regex_symbols, GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT},
     {"sync", "sync standard library module", g_xlsp_stdlib_sync_symbols, GEN_XLSP_STDLIB_SYNC_SYMBOL_COUNT},
+    {"sys", "sys standard library module", g_xlsp_stdlib_sys_symbols, GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT},
     {"time", "time standard library module", g_xlsp_stdlib_time_symbols, GEN_XLSP_STDLIB_TIME_SYMBOL_COUNT},
     {"toml", "toml standard library module", g_xlsp_stdlib_toml_symbols, GEN_XLSP_STDLIB_TOML_SYMBOL_COUNT},
     {"url", "url standard library module", g_xlsp_stdlib_url_symbols, GEN_XLSP_STDLIB_URL_SYMBOL_COUNT},

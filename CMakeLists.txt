@@ -601,6 +601,7 @@ file(GLOB STDLIB_CORE_SRC
     "stdlib/log/*.c"
     "stdlib/mem/*.c"
     "stdlib/sync/*.c"
+    "stdlib/sys/*.c"
     "stdlib/regex/*.c"
     "stdlib/path/*.c"
     "stdlib/datetime/*.c"

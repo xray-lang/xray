@@ -369,6 +369,12 @@ static void xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *mo
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_REGEX */
 
+#ifdef XR_STDLIB_VM_BIND_MODULE_SYS
+static void xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT(module, isolate, "Mutex", sys_mutex_new);
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_SYS */
+
 #ifdef XR_STDLIB_VM_BIND_MODULE_TIME
 static void xr_stdlib_vm_bind_time_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "now", xr_time_now);

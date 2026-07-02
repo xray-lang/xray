@@ -18,6 +18,7 @@
 #include "xrt_value.h"
 #include "xrt_arc.h"  // xrt_str_alloc used by xrt_strbuf_finish
 #include "xrt_range.h"
+#include "xrt_sys.h"
 #include "../runtime/xerror_codes.h"
 #include "../shared/xr_array_abi.h"
 #include "../shared/xr_array_core.h"
@@ -2928,6 +2929,9 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
             xrt_regex_destroy_builtin(obj);
             break;
 #endif
+        case XRT_ARC_KIND_SYS_MUTEX:
+            xrt_sys_mutex_destroy_builtin(obj);
+            break;
         default:
             break;
     }
