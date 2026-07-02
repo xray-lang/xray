@@ -123,6 +123,10 @@ XR_FUNC const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_nam
 // Find a handle type by name across all loaded modules (builtin + .xrd)
 XR_FUNC const XaBuiltinHandle *xa_builtin_find_handle_by_name(const char *handle_name);
 
+// Owning builtin module name for a handle type, or NULL if no builtin module
+// declares one with this name (used for user-class name-collision diagnostics)
+XR_FUNC const char *xa_builtin_find_handle_module(const char *handle_name);
+
 // Set script directory for .xrd file search
 XR_FUNC void xa_builtin_set_script_dir(const char *dir);
 

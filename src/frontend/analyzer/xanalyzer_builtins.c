@@ -781,6 +781,19 @@ const XaBuiltinHandle *xa_builtin_find_handle_by_name(const char *handle_name) {
     return xa_xrd_find_handle_by_name(handle_name);
 }
 
+const char *xa_builtin_find_handle_module(const char *handle_name) {
+    if (!handle_name)
+        return NULL;
+    for (int i = 0; i < builtin_module_count; i++) {
+        const XaBuiltinModule *mod = &builtin_modules[i];
+        for (int j = 0; j < mod->handle_count; j++) {
+            if (strcmp(mod->handles[j].name, handle_name) == 0)
+                return mod->name;
+        }
+    }
+    return NULL;
+}
+
 // ============================================================================
 // Generic API (used by both compiler and LSP)
 // ============================================================================
@@ -1096,6 +1109,13 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
 
             if (strcmp(name_buf, "Task") == 0 && argc >= 1) {
                 type = xr_type_new_task(X, args[0]);
+            } else if (strcmp(name_buf, "RawPtr") == 0 && argc >= 1) {
+                // Raw pointers must round-trip as XR_KIND_POINTER (not a generic
+                // named instance) so stdlib-function pointer params compare equal
+                // to @extern-derived RawPtr/RawMut args (mirrors xtype_ref_resolve).
+                type = xr_type_new_pointer(X, args[0], false);
+            } else if (strcmp(name_buf, "RawMut") == 0 && argc >= 1) {
+                type = xr_type_new_pointer(X, args[0], true);
             } else if (argc > 0) {
                 type = xr_type_new_generic_instance(X, name_buf, NULL, args, argc);
             }

@@ -1,0 +1,23 @@
+// mem.fence (standalone memory fence, task 147 §6.5/§7.5): VM and AOT share
+// src/shared/xr_sync_core.h. A fence has no observable single-threaded effect,
+// so this case asserts the plumbing is bit-identical on both backends: every
+// Ordering ordinal (0 Relaxed .. 4 SeqCst) is accepted, returns unit, and the
+// surrounding computation is unperturbed. AOT resolves fence via the
+// zero-runtime-symbol direct helper xrt_mem_fence; VM via mem_fence.
+import mem
+
+let a = 7
+mem.fence(0)
+print(a)
+
+let b = a * 6
+mem.fence(1)
+print(b)
+
+mem.fence(2)
+let c = b - 1
+mem.fence(3)
+print(c)
+
+mem.fence(4)
+print("fenced")

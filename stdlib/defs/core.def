@@ -2789,6 +2789,186 @@ module mem {
     layer: "runtime"
   }
 
+  fn fence {
+    signature: "(ordering: int): ()"
+    doc: "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)"
+    vm: "mem_fence"
+    aot: "xrt_mem_fence"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn prefetch {
+    signature: "(ptr: RawPtr<uint8>, rw: int): ()"
+    doc: "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch"
+    vm: "mem_prefetch"
+    aot: "xrt_mem_prefetch"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn cacheLineSize {
+    signature: "(): int"
+    doc: "CPU cache line size in bytes"
+    vm: "mem_cache_line_size"
+    aot: "xrt_mem_cache_line_size"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn alloc {
+    signature: "(n: int): RawMut<uint8>"
+    doc: "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free"
+    vm: "mem_alloc"
+    aot: "xrt_mem_alloc"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn allocAligned {
+    signature: "(n: int, align: int): RawMut<uint8>"
+    doc: "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure"
+    vm: "mem_alloc_aligned"
+    aot: "xrt_mem_alloc_aligned"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn realloc {
+    signature: "(ptr: RawMut<uint8>, n: int): RawMut<uint8>"
+    doc: "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM"
+    vm: "mem_realloc"
+    aot: "xrt_mem_realloc"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn free {
+    signature: "(ptr: RawMut<uint8>): ()"
+    doc: "Free a buffer from mem.alloc/allocAligned/realloc"
+    vm: "mem_free"
+    aot: "xrt_mem_free"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn fromAddress {
+    signature: "(addr: int): RawMut<uint8>"
+    doc: "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe"
+    vm: "mem_from_address"
+    aot: "xrt_mem_from_address"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn addressOf {
+    signature: "(ptr: RawPtr<uint8>): int"
+    doc: "Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)"
+    vm: "mem_address_of"
+    aot: "xrt_mem_address_of"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn copy {
+    signature: "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()"
+    doc: "Copy n bytes from src to dst (non-overlapping; memcpy)"
+    vm: "mem_copy"
+    aot: "xrt_mem_copy"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn move {
+    signature: "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()"
+    doc: "Copy n bytes from src to dst (may overlap; memmove)"
+    vm: "mem_move"
+    aot: "xrt_mem_move"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn set {
+    signature: "(dst: RawMut<uint8>, byte: int, n: int): ()"
+    doc: "Fill n bytes at dst with byte (memset)"
+    vm: "mem_set"
+    aot: "xrt_mem_set"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn compare {
+    signature: "(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int"
+    doc: "Compare n bytes at a and b (memcmp: <0, 0, >0)"
+    vm: "mem_compare"
+    aot: "xrt_mem_compare"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn volatileLoad {
+    signature: "(ptr: RawPtr<uint8>, size: int): int"
+    doc: "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)"
+    vm: "mem_volatile_load"
+    aot: "xrt_mem_volatile_load"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn volatileStore {
+    signature: "(ptr: RawMut<uint8>, v: int, size: int): ()"
+    doc: "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)"
+    vm: "mem_volatile_store"
+    aot: "xrt_mem_volatile_store"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
   fn popcount {
     signature: "(x: int): int"
     doc: "Number of set bits in the 64-bit value"

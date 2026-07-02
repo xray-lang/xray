@@ -1,0 +1,42 @@
+// mem.copy/move/set/compare + mem.cacheLineSize (task 147 §7.4/§7.5). libc
+// memcpy/memmove/memset/memcmp are the shared semantics; VM decodes raw
+// pointers from address-ints, AOT uses the native .ptr — both must agree.
+// RawMut args flow into RawPtr params via mut->const coercion.
+import mem
+@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
+@extern("C") fn free(p: RawMut<uint8>)
+
+print(mem.cacheLineSize())
+
+let src = unsafe { malloc(8) }
+let dst = unsafe { malloc(8) }
+
+// set: fill src with 7
+mem.set(src, 7, 8)
+unsafe { print(src[0]) }
+unsafe { print(src[7]) }
+
+// copy: src -> dst
+mem.copy(dst, src, 8)
+unsafe { print(dst[0]) }
+unsafe { print(dst[5]) }
+
+// compare equal -> 0
+print(mem.compare(src, dst, 8))
+
+// diverge dst[0], compare non-zero
+unsafe { dst[0] = 9 }
+print(mem.compare(src, dst, 8) != 0)
+
+// move (overlapping): dst = [5,1,1,1,1,1,1,1]; copy [0..4) to [2..6)
+mem.set(dst, 1, 8)
+unsafe { dst[0] = 5 }
+unsafe { dst[1] = 6 }
+let mid = unsafe { dst.offset(2) }
+mem.move(mid, dst, 4)
+unsafe { print(dst[2]) }
+unsafe { print(dst[3]) }
+
+unsafe { free(src) }
+unsafe { free(dst) }
+print("ok")

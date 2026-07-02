@@ -278,6 +278,21 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"liveBytes", XLSP_SYM_FUNCTION, "fn(): int", "Get live memory usage in bytes", NULL, 0},
     {"liveObjects", XLSP_SYM_FUNCTION, "fn(): int", "Get live object count", NULL, 0},
     {"info", XLSP_SYM_FUNCTION, "fn(): Map", "Get memory-model runtime info as Map", NULL, 0},
+    {"fence", XLSP_SYM_FUNCTION, "fn(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", NULL, 0},
+    {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", NULL, 0},
+    {"cacheLineSize", XLSP_SYM_FUNCTION, "fn(): int", "CPU cache line size in bytes", NULL, 0},
+    {"alloc", XLSP_SYM_FUNCTION, "fn(n: int): RawMut<uint8>", "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free", NULL, 0},
+    {"allocAligned", XLSP_SYM_FUNCTION, "fn(n: int, align: int): RawMut<uint8>", "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure", NULL, 0},
+    {"realloc", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, n: int): RawMut<uint8>", "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM", NULL, 0},
+    {"free", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>): ()", "Free a buffer from mem.alloc/allocAligned/realloc", NULL, 0},
+    {"fromAddress", XLSP_SYM_FUNCTION, "fn(addr: int): RawMut<uint8>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", NULL, 0},
+    {"addressOf", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>): int", "Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", NULL, 0},
+    {"copy", XLSP_SYM_FUNCTION, "fn(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", NULL, 0},
+    {"move", XLSP_SYM_FUNCTION, "fn(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", NULL, 0},
+    {"set", XLSP_SYM_FUNCTION, "fn(dst: RawMut<uint8>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", NULL, 0},
+    {"compare", XLSP_SYM_FUNCTION, "fn(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int", "Compare n bytes at a and b (memcmp: <0, 0, >0)", NULL, 0},
+    {"volatileLoad", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, size: int): int", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", NULL, 0},
+    {"volatileStore", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, v: int, size: int): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", NULL, 0},
     {"popcount", XLSP_SYM_FUNCTION, "fn(x: int): int", "Number of set bits in the 64-bit value", NULL, 0},
     {"leadingZeros", XLSP_SYM_FUNCTION, "fn(x: int): int", "Count of leading zero bits (0 -> 64)", NULL, 0},
     {"trailingZeros", XLSP_SYM_FUNCTION, "fn(x: int): int", "Count of trailing zero bits (0 -> 64)", NULL, 0},
@@ -291,7 +306,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"subOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit subtraction of a and b overflows", NULL, 0},
     {"mulOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit multiplication of a and b overflows", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 19
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 34
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {

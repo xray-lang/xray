@@ -1,0 +1,46 @@
+// mem.fromAddress / mem.addressOf (task 147 §7.2, MMIO address bridge).
+// Addresses are non-deterministic, so assertions only observe data behind
+// pointers, null-ness, alignment remainders, and address equality — never a
+// raw address value. VM represents raw pointers as address ints (identity
+// bridge); AOT casts between int64 and the native .ptr slot.
+import mem
+
+// Null round-trip: address 0 is the null pointer.
+let z = mem.fromAddress(0)
+print(z.isNull())
+print(mem.addressOf(z))
+
+// Data round-trip: rebuild a pointer from its numeric address and observe
+// the same bytes through both the original and the rebuilt pointer.
+let p = mem.alloc(16)
+print(p.isNull())
+unsafe { p[0] = 42 }
+unsafe { p[15] = 99 }
+let addr = mem.addressOf(p)
+let q = mem.fromAddress(addr)
+print(q.isNull())
+unsafe { print(q[0]) }
+unsafe { print(q[15]) }
+
+// Manual pointer arithmetic through the address domain: fromAddress(addr + i)
+// must see byte i of the original buffer.
+let q15 = mem.fromAddress(addr + 15)
+unsafe { print(q15[0]) }
+
+// addressOf is stable: same pointer, same address.
+print(mem.addressOf(q) == addr)
+
+// Alignment observation: an allocAligned(_, 64) buffer's address is 64-aligned.
+let a = mem.allocAligned(128, 64)
+print(a.isNull())
+print(mem.addressOf(a) % 64)
+
+// MMIO access pattern: volatile store/load through an address-constructed
+// pointer (the real driver-code shape fromAddress exists for).
+let reg = mem.fromAddress(mem.addressOf(a) + 8)
+mem.volatileStore(reg, 305419896, 4)
+print(mem.volatileLoad(reg, 4))
+
+mem.free(a)
+mem.free(p)
+print("ok")

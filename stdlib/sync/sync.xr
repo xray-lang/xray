@@ -184,4 +184,15 @@ class Condvar {
     }
 }
 
-export { Mutex, RwLock, Once, Barrier, Condvar }
+// fence — standalone memory fence in Ordering-enum form (task 147 §6.5).
+// Pure-Xray alias over the mem.fence(int) intrinsic: the enum's backing value
+// maps 1:1 onto the C11 memory_order ladder (0 Relaxed .. 4 SeqCst). Prelude
+// enums are value-lowered at runtime, so `as int` is the conversion (not
+// `.value`, which needs an enum instance).
+import mem
+
+fn fence(order: Ordering) {
+    mem.fence(order as int)
+}
+
+export { Mutex, RwLock, Once, Barrier, Condvar, fence }

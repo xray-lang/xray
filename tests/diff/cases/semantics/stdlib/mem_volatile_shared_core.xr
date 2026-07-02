@@ -1,0 +1,32 @@
+// mem.volatileLoad / mem.volatileStore (task 147 §7.7, MMIO). `volatile`
+// forbids the AOT compiler from eliding/reordering the access; the VM
+// interpreter re-fetches every read anyway, so both backends observe the same
+// native-order sized value. size in {1,2,4,8}. RawMut args coerce into the
+// RawPtr param of volatileLoad via mut->const.
+import mem
+@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
+@extern("C") fn free(p: RawMut<uint8>)
+
+let p = unsafe { malloc(16) }
+mem.set(p, 0, 16)
+
+// 4-byte store/load round-trip (0x12345678)
+mem.volatileStore(p, 305419896, 4)
+print(mem.volatileLoad(p, 4))
+// low byte of the little-endian store
+print(mem.volatileLoad(p, 1))
+
+// 1-byte store/load
+mem.volatileStore(p, 255, 1)
+print(mem.volatileLoad(p, 1))
+
+// 2-byte store/load (0xABCD)
+mem.volatileStore(p, 43981, 2)
+print(mem.volatileLoad(p, 2))
+
+// 8-byte store/load (0x0102030405060708)
+mem.volatileStore(p, 72623859790382856, 8)
+print(mem.volatileLoad(p, 8))
+
+unsafe { free(p) }
+print("ok")
