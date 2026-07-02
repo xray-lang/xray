@@ -40,6 +40,14 @@ static inline int xrt_sort_cmp_default(XrValue a, XrValue b) {
             return cmp;
         return (la > lb) - (la < lb);
     }
+    if (a.tag == XR_TAG_CHAR && b.tag == XR_TAG_CHAR) {
+        uint32_t ca = XR_TO_CHAR(a), cb = XR_TO_CHAR(b);
+        return (ca > cb) - (ca < cb);
+    }
+    if (a.tag == XR_TAG_BOOL && b.tag == XR_TAG_BOOL) {
+        int ba = a.i != 0, bb = b.i != 0;
+        return ba - bb;
+    }
     return 0;
 }
 

@@ -56,6 +56,20 @@ static void emit_class_native_receiver_field_ref(XiCgenCtx *ctx, FILE *out, cons
     emit_class_native_field_path(ctx, out, cd, idx);
 }
 
+/* Emit `this-><field>` for a fast path guarded by
+ * cg_class_native_receiver_ref_field: `field_load` is the guarded
+ * XI_LOAD_FIELD whose args[0] is the receiver. Resolves the receiver
+ * through the receiver-aware emitter so both the plain p0 ABI and
+ * coroutine-frame receivers (held in a frame slot, no p0 parameter in
+ * the resume function) print correctly. */
+static void emit_class_native_guarded_field_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                const XiClassData *cd, const XiValue *field_load,
+                                                uint16_t idx) {
+    const XiValue *lf = cg_unwrap_identity_value(field_load);
+    const XiValue *recv = (lf && lf->nargs >= 1) ? lf->args[0] : NULL;
+    emit_class_native_receiver_field_ref(ctx, out, f, cd, recv, idx);
+}
+
 static const char *cg_class_native_ref_field_tag_name(uint8_t native_type) {
     return xaot_layout_ref_tag_name_for_native_type(native_type);
 }
@@ -259,7 +273,7 @@ static bool emit_class_native_receiver_ref_field_ptr_expr(XiCgenCtx *ctx, FILE *
     uint16_t idx = 0;
     if (!cg_class_native_receiver_ref_field(ctx, f, v, expected_native, &info, &idx))
         return false;
-    emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+    emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v, idx);
     return true;
 }
 
@@ -278,7 +292,7 @@ static bool emit_class_native_map_length_expr(XiCgenCtx *ctx, FILE *out, const X
     bool boolmap = cg_map_type_is_boolmap_ctx(ctx, v->args[0]->type);
     if (boolmap)
         fprintf(out, "xrt_boolmap_len((xrt_boolmap_t*)");
-    emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+    emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
     fprintf(out, "%s", boolmap ? ")" : "->len");
     emit_conversion_suffix(out, conv_suffix);
     return true;
@@ -359,7 +373,7 @@ static const XiValue *cg_map_get_fusion_has(XiCgenCtx *ctx, const XiValue *get) 
 }
 
 static bool emit_class_native_map_get_nullable_direct_expr(XiCgenCtx *ctx, FILE *out,
-                                                           const XiValue *v,
+                                                           const XiFunc *f, const XiValue *v,
                                                            const CgClassNativeFunc *info,
                                                            uint16_t field_idx,
                                                            const CgMapElemInfo *map_info) {
@@ -368,7 +382,7 @@ static bool emit_class_native_map_get_nullable_direct_expr(XiCgenCtx *ctx, FILE 
     const char *find_helper = cg_map_find_helper(map_info);
     const char *value_helper = cg_map_value_helper(map_info);
     fprintf(out, "({ xrt_map_t *_xrm = ");
-    emit_class_native_field_ref(ctx, out, info->class_data, "p0", field_idx);
+    emit_class_native_guarded_field_ref(ctx, out, f, info->class_data, v->args[0], field_idx);
     fprintf(out, "; %s _xrk = ", ctype_str(map_info->key.rep));
     emit_value_as_rep(out, v->args[1], map_info->key.rep);
     fprintf(out, "; int64_t _xri = %s(_xrm, _xrk, %s, %s); _xri >= 0 ? ", find_helper,
@@ -386,7 +400,7 @@ static bool emit_class_native_map_get_nullable_direct_expr(XiCgenCtx *ctx, FILE 
 }
 
 static bool emit_class_native_map_get_present_direct_expr(XiCgenCtx *ctx, FILE *out,
-                                                          const XiValue *v,
+                                                          const XiFunc *f, const XiValue *v,
                                                           const CgClassNativeFunc *info,
                                                           uint16_t field_idx,
                                                           const CgMapElemInfo *map_info) {
@@ -395,14 +409,14 @@ static bool emit_class_native_map_get_present_direct_expr(XiCgenCtx *ctx, FILE *
     const XiValue *fuse_has = cg_map_get_fusion_has(ctx, v);
     if (fuse_has) {
         fprintf(out, "%s(", cg_map_value_helper(map_info));
-        emit_class_native_field_ref(ctx, out, info->class_data, "p0", field_idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info->class_data, v->args[0], field_idx);
         fprintf(out, ", _mf%u, %s)", fuse_has->id, map_info->value.elem_name);
         return true;
     }
     const char *find_helper = cg_map_find_helper(map_info);
     const char *value_helper = cg_map_value_helper(map_info);
     fprintf(out, "({ xrt_map_t *_xrm = ");
-    emit_class_native_field_ref(ctx, out, info->class_data, "p0", field_idx);
+    emit_class_native_guarded_field_ref(ctx, out, f, info->class_data, v->args[0], field_idx);
     fprintf(out, "; %s _xrk = ", ctype_str(map_info->key.rep));
     emit_value_as_rep(out, v->args[1], map_info->key.rep);
     fprintf(out, "; int64_t _xri = %s(_xrm, _xrk, %s, %s); %s(_xrm, _xri, %s); })", find_helper,
@@ -427,7 +441,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         bool boolmap = cg_map_type_is_boolmap_ctx(ctx, v->args[0]->type);
         if (boolmap)
             fprintf(out, "xrt_boolmap_len((xrt_boolmap_t*)");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, "%s", boolmap ? ")" : "->len");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -435,10 +449,10 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
     if (nargs == 1 && strcmp(method, "get") == 0) {
         CgMapElemInfo map_info;
         if (cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info) &&
-            emit_class_native_map_get_present_direct_expr(ctx, out, v, &info, idx, &map_info))
+            emit_class_native_map_get_present_direct_expr(ctx, out, f, v, &info, idx, &map_info))
             return true;
         if (cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info) &&
-            emit_class_native_map_get_nullable_direct_expr(ctx, out, v, &info, idx, &map_info))
+            emit_class_native_map_get_nullable_direct_expr(ctx, out, f, v, &info, idx, &map_info))
             return true;
         if (cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info) &&
             cg_rep(v) == map_info.value.rep) {
@@ -447,7 +461,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 const char *conv_suffix =
                     emit_conversion_prefix(out, v->type, map_info.value.rep, cg_rep(v));
                 fprintf(out, "%s(", helper);
-                emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+                emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], map_info.key.rep);
                 fprintf(out, ", %s, %s)", map_info.key.elem_name, map_info.value.elem_name);
@@ -457,7 +471,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         }
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "xrt_map_get_owned(");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
@@ -470,7 +484,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         bool direct = cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info);
         if (direct && cg_map_fusable_get_for_has(ctx, v)) {
             fprintf(out, "((_mf%u = %s(", v->id, cg_map_find_helper(&map_info));
-            emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+            emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
             fprintf(out, ", ");
             emit_value_as_rep(out, v->args[1], map_info.key.rep);
             fprintf(out, ", %s, %s)) >= 0)", map_info.key.elem_name, map_info.value.elem_name);
@@ -480,7 +494,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         const char *helper = direct ? cg_map_direct_has_helper(&map_info) : NULL;
         if (helper) {
             fprintf(out, "(int64_t)%s(", helper);
-            emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+            emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
             fprintf(out, ", ");
             emit_value_as_rep(out, v->args[1], map_info.key.rep);
             fprintf(out, ", %s, %s)", map_info.key.elem_name, map_info.value.elem_name);
@@ -488,7 +502,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         }
         fprintf(out, "(int64_t)xrt_map_has(");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
@@ -502,7 +516,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                                  ? cg_map_direct_delete_helper(&map_info)
                                  : NULL;
         fprintf(out, "(int64_t)%s(", helper ? helper : "xrt_map_delete");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
         if (helper) {
             emit_value_as_rep(out, v->args[1], map_info.key.rep);
@@ -522,7 +536,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                                  : NULL;
         if (helper) {
             fprintf(out, "(%s(", helper);
-            emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+            emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
             fprintf(out, ", ");
             emit_value_as_rep(out, v->args[1], map_info.key.rep);
             fprintf(out, ", ");
@@ -533,7 +547,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             return true;
         }
         fprintf(out, "(xrt_map_set(");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", ");
@@ -742,7 +756,7 @@ static bool emit_class_native_map_method_call_stmt(XiCgenCtx *ctx, FILE *out, co
                              : NULL;
     if (helper) {
         fprintf(out, "    %s(", helper);
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], map_info.key.rep);
         fprintf(out, ", ");
@@ -751,7 +765,7 @@ static bool emit_class_native_map_method_call_stmt(XiCgenCtx *ctx, FILE *out, co
         return true;
     }
     fprintf(out, "    xrt_map_set(");
-    emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+    emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
     fprintf(out, ", ");
     emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ", ");
@@ -819,7 +833,7 @@ static bool emit_class_native_set_length_expr(XiCgenCtx *ctx, FILE *out, const X
     if (!cg_class_native_receiver_ref_field(ctx, f, v->args[0], XR_NATIVE_SET_REF, &info, &idx))
         return false;
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
-    emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+    emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
     fprintf(out, "->len");
     emit_conversion_suffix(out, conv_suffix);
     return true;
@@ -838,7 +852,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
 
     if (nargs == 0 && (strcmp(method, "length") == 0 || strcmp(method, "size") == 0)) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, "->len");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -846,7 +860,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
     if (nargs == 0 && strcmp(method, "clear") == 0) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(xrt_set_clear(");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, "), XR_NULL_VAL)");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -854,7 +868,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
     if (nargs == 0 && strcmp(method, "values") == 0) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "xrt_set_values(");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -867,7 +881,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 fprintf(out, "(%s(",
                         strcmp(set_info.elem_name, "XR_ELEM_I64") == 0 ? "xrt_set_add_i64"
                                                                        : "xrt_set_add_i64_typed");
-                emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+                emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], XR_REP_I64);
                 if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
@@ -878,7 +892,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             }
             if (set_info.rep == XR_REP_F64) {
                 fprintf(out, "(xrt_set_add_f64_typed(");
-                emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+                emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], XR_REP_F64);
                 fprintf(out, ", %s), XR_NULL_VAL)", set_info.elem_name);
@@ -887,7 +901,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             }
         }
         fprintf(out, "(xrt_set_add(");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, "), XR_NULL_VAL)");
@@ -902,7 +916,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 fprintf(out, "(int64_t)%s(",
                         strcmp(set_info.elem_name, "XR_ELEM_I64") == 0 ? "xrt_set_has_i64"
                                                                        : "xrt_set_has_i64_typed");
-                emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+                emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], XR_REP_I64);
                 if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
@@ -913,7 +927,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             }
             if (set_info.rep == XR_REP_F64) {
                 fprintf(out, "(int64_t)xrt_set_has_f64_typed(");
-                emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+                emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], XR_REP_F64);
                 fprintf(out, ", %s)", set_info.elem_name);
@@ -922,7 +936,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             }
         }
         fprintf(out, "(int64_t)xrt_set_has(");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
@@ -938,7 +952,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                         strcmp(set_info.elem_name, "XR_ELEM_I64") == 0
                             ? "xrt_set_delete_i64"
                             : "xrt_set_delete_i64_typed");
-                emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+                emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], XR_REP_I64);
                 if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
@@ -949,7 +963,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             }
             if (set_info.rep == XR_REP_F64) {
                 fprintf(out, "(int64_t)xrt_set_delete_f64_typed(");
-                emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+                emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], XR_REP_F64);
                 fprintf(out, ", %s)", set_info.elem_name);
@@ -958,7 +972,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             }
         }
         fprintf(out, "(int64_t)xrt_set_delete(");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
@@ -1152,7 +1166,7 @@ static bool emit_class_native_set_method_call_stmt(XiCgenCtx *ctx, FILE *out, co
                 fprintf(out, "    (void)%s(",
                         strcmp(set_info.elem_name, "XR_ELEM_I64") == 0 ? "xrt_set_add_i64"
                                                                        : "xrt_set_add_i64_typed");
-                emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+                emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], XR_REP_I64);
                 if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
@@ -1162,7 +1176,7 @@ static bool emit_class_native_set_method_call_stmt(XiCgenCtx *ctx, FILE *out, co
             }
             if (set_info.rep == XR_REP_F64) {
                 fprintf(out, "    (void)xrt_set_add_f64_typed(");
-                emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+                emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], XR_REP_F64);
                 fprintf(out, ", %s);\n", set_info.elem_name);
@@ -1170,13 +1184,13 @@ static bool emit_class_native_set_method_call_stmt(XiCgenCtx *ctx, FILE *out, co
             }
         }
         fprintf(out, "    (void)xrt_set_add(");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ");\n");
     } else {
         fprintf(out, "    xrt_set_clear(");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+        emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ");\n");
     }
     return true;
@@ -1712,7 +1726,12 @@ static void emit_class_native_boxed_adapter(XiCgenCtx *ctx, FILE *out, const cha
     fprintf(out, "    ");
     emit_class_native_instance_guard(ctx, out, info.class_data, "p0");
     fprintf(out, "\n");
-    if (ret_rep != XR_REP_TAGGED) {
+    /* Unit-returning methods have no C result to capture; call as a
+     * statement and hand back null (ctype_str(VOID) would otherwise
+     * mistype `XrValue _result = <void call>`). */
+    if (ret_rep == XR_REP_VOID) {
+        fprintf(out, "    ");
+    } else if (ret_rep != XR_REP_TAGGED) {
         fprintf(out, "    %s _result = ", ctype_str(ret_rep));
     } else {
         fprintf(out, "    XrValue _result = ");
@@ -1730,6 +1749,11 @@ static void emit_class_native_boxed_adapter(XiCgenCtx *ctx, FILE *out, const cha
         emit_conversion_suffix(out, param_suffix);
     }
     fprintf(out, ");\n");
+    if (ret_rep == XR_REP_VOID) {
+        fprintf(out, "    return XR_NULL_VAL;\n");
+        fprintf(out, "}\n\n");
+        return;
+    }
     fprintf(out, "    return ");
     const char *conv_suffix = emit_conversion_prefix(out, f->return_type, ret_rep, XR_REP_TAGGED);
     fprintf(out, "_result");
@@ -1788,7 +1812,11 @@ static bool emit_class_native_typed_boxed_adapter(XiCgenCtx *ctx, FILE *out, con
     }
 
     XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
-    if (ret_rep != XR_REP_TAGGED)
+    /* Unit-returning functions: call as a statement and return null —
+     * ctype_str(VOID) would otherwise mistype `XrValue _result = <void>`. */
+    if (ret_rep == XR_REP_VOID)
+        fprintf(out, "    ");
+    else if (ret_rep != XR_REP_TAGGED)
         fprintf(out, "    %s _result = ", ctype_str(ret_rep));
     else
         fprintf(out, "    XrValue _result = ");
@@ -1809,6 +1837,11 @@ static bool emit_class_native_typed_boxed_adapter(XiCgenCtx *ctx, FILE *out, con
     }
     fprintf(out, ");\n");
 
+    if (ret_rep == XR_REP_VOID) {
+        fprintf(out, "    return XR_NULL_VAL;\n");
+        fprintf(out, "}\n\n");
+        return true;
+    }
     fprintf(out, "    return ");
     const char *conv_suffix = emit_conversion_prefix(out, f->return_type, ret_rep, XR_REP_TAGGED);
     fprintf(out, "_result");

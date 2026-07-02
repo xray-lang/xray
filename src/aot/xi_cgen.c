@@ -727,7 +727,11 @@ static bool cg_array_data_cache_decl_mark(XiCgenCtx *ctx, const XiValue *origin)
 #include "xi_cgen_time_ctx_helpers.inc.c"
 
 /* Find the constructor child XiFunc from a XiClassData descriptor.
- * Uses arena-safe XiClassMethod array (no AST dependency). */
+ * Uses arena-safe XiClassMethod array (no AST dependency). The child
+ * indices are relative to the function that lowered the class; when a
+ * caller probes a different parent, the index may land on an unrelated
+ * child (e.g. a defer closure), so verify the resolved child really is
+ * a constructor before trusting it. */
 static const XiFunc *cg_find_constructor(const XiFunc *parent, const XiClassData *cd) {
     if (!cd || !cd->methods || !parent)
         return NULL;
@@ -737,8 +741,11 @@ static const XiFunc *cg_find_constructor(const XiFunc *parent, const XiClassData
         if (cd->methods[ci].is_constructor) {
             if (cd->child_idx && ci < cd->ninst + cd->nstat) {
                 uint16_t idx = cd->child_idx[ci];
-                if (idx < parent->nchildren)
-                    return parent->children[idx];
+                if (idx < parent->nchildren) {
+                    const XiFunc *child = parent->children[idx];
+                    if (child && child->name && strcmp(child->name, "constructor") == 0)
+                        return child;
+                }
             }
         }
     }

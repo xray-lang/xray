@@ -182,6 +182,14 @@ static int xr_value_compare_default(XrValue a, XrValue b) {
             return cmp;
         return (la > lb) - (la < lb);
     }
+    if (XR_IS_CHAR(a) && XR_IS_CHAR(b)) {
+        uint32_t ca = XR_TO_CHAR(a), cb = XR_TO_CHAR(b);
+        return (ca > cb) - (ca < cb);
+    }
+    if (XR_IS_BOOL(a) && XR_IS_BOOL(b)) {
+        int ba = XR_TO_BOOL(a) ? 1 : 0, bb = XR_TO_BOOL(b) ? 1 : 0;
+        return ba - bb;
+    }
     return 0;
 }
 

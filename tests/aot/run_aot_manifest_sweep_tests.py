@@ -31,6 +31,16 @@ ALLOWED_RUNTIME_CASES = {
     "tests/diff/cases/limits/select_cases_over_32.xr",
     "tests/diff/cases/semantics/cleanup/defer_async_await.xr",
     "tests/diff/cases/semantics/cleanup/defer_coroutine.xr",
+    # sync primitives compose coroutine-aware CountdownLatch/Semaphore, so
+    # they legitimately link the coroutine runtime archive.
+    "tests/diff/cases/semantics/concurrency/barrier_compose.xr",
+    "tests/diff/cases/semantics/concurrency/condvar_compose.xr",
+    "tests/diff/cases/semantics/concurrency/mutex_cross_coroutine.xr",
+    "tests/diff/cases/semantics/concurrency/mutex_generic_compose.xr",
+    "tests/diff/cases/semantics/concurrency/once_compose.xr",
+    "tests/diff/cases/semantics/concurrency/rwlock_generic_compose.xr",
+    "tests/diff/cases/semantics/stdlib/sync_module_import.xr",
+    "tests/diff/cases/semantics/stdlib/sync_namespace_import.xr",
     "tests/diff/cases/semantics/modules/xmod_coro.xr",
     "tests/diff/cases/semantics/ownership/in_go_copy_argument_allowed.xr",
     "tests/diff/cases/semantics/ownership/move_into_go.xr",

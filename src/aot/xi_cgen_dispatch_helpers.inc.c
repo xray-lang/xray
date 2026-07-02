@@ -1400,9 +1400,14 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     const char *call_prefix = static_call.prefix;
     const XiClassData *shared_class_data = xicgen_shared_class_data(ctx, callee);
     if (!target && shared_class_data) {
-        target = cg_find_constructor(f, shared_class_data);
-        if (!target && ctx && ctx->module && ctx->module->init)
+        /* Shared-slot classes are lowered by the module init function, so the
+         * class data's child indices are relative to it. Resolve there first:
+         * indexing the current function's children (e.g. defer closures)
+         * with those indices would silently pick an unrelated function. */
+        if (ctx && ctx->module && ctx->module->init)
             target = cg_find_constructor(ctx->module->init, shared_class_data);
+        if (!target)
+            target = cg_find_constructor(f, shared_class_data);
     }
     bool is_class_call = static_call.is_class_constructor || shared_class_data ||
                          xicgen_resolve_direct_class_ctor(f, callee, &target);
@@ -1528,14 +1533,16 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
      * same conversion as a typed direct call, so e.g. tagged -> double). */
     if (target && target->is_extern) {
         /* FFI: raw pointers cross the C boundary as real C pointers but are held
-         * internally as address-width ints, so cast int64 <-> pointer here. A
-         * pointer return is cast back to the int64 address; other return reps go
-         * through the normal conversion prefix/suffix. */
+         * internally as address-width ints. A pointer return converts from the
+         * C pointer to whatever storage rep the planner picked for this value
+         * (void* stays bare, i64 casts the address, tagged boxes it); other
+         * return reps go through the normal conversion prefix/suffix. */
         const XrType *ret_type = target->return_type;
         bool ret_is_ptr = ret_type && ret_type->kind == XR_KIND_POINTER;
         const char *conv_suffix = NULL;
         if (ret_is_ptr) {
-            fprintf(out, "(int64_t)(intptr_t)(");
+            XrRep vrep = xicgen_value_c_storage_rep(ctx, f, v);
+            conv_suffix = emit_conversion_prefix(out, ret_type, XR_REP_RAWPTR, vrep);
         } else {
             conv_suffix = emit_direct_call_return_conversion_prefix(ctx, out, f, v, target);
             if (ctx->error) {
@@ -1570,10 +1577,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
             }
         }
         fprintf(out, ")");
-        if (ret_is_ptr)
-            fprintf(out, ")");
-        else
-            emit_conversion_suffix(out, conv_suffix);
+        emit_conversion_suffix(out, conv_suffix);
         return;
     }
 
@@ -1917,15 +1921,24 @@ static void xicgen_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
 
 static void xicgen_map_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     int64_t cap = xicgen_capacity_arg_or_default(v, 8);
     uint8_t flags = (uint8_t) ((v ? v->aux_int : 0) & 0x02);
-    if (!flags && !emit_typed_map_new_expr(ctx, out, v, cap))
-        fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
-    else if (flags)
+    if (!flags && !emit_typed_map_new_expr(ctx, out, v, cap)) {
+        /* Untyped storage (e.g. string keys) with a scalar declared value
+         * type: record the value elem so values() returns lanes matching
+         * the consumer's static Array<V> layout. */
+        XaotContainerElemPlan vplan;
+        if (v && v->type && XR_TYPE_IS_MAP(v->type) && v->type->map.value_type &&
+            xaot_container_elem_plan_for_type(v->type->map.value_type, &vplan)) {
+            fprintf(out, "xrt_map_new_vt(%" PRId64 ", %s)", cap, vplan.elem_name);
+        } else {
+            fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
+        }
+    } else if (flags) {
         fprintf(out, "xrt_map_new_flags(%" PRId64 ", XR_MAP_FLAG_WEAK)", cap);
+    }
 }
 
 static void xicgen_set_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
