@@ -2026,6 +2026,15 @@ static bool cg_widen_elided_into_narrow_arith(XiCgenCtx *ctx, const XiFunc *f, c
     bool sign = false;
     if (!cg_value_narrow_int_rep(ctx, f, v, &size, &sign) || size <= 2)
         return false;
+    /* Elision is only sound when every operand use resolves through to
+     * args[0] (cg_arith_narrow_src's CAST_I64 look-through branch). A value
+     * whose own rep is narrow (size <= 4, e.g. NARROW_U32 with a u32 plan) is
+     * returned as-is by the first branch of cg_arith_narrow_src, so eliding
+     * its declaration would emit a reference to a C temp that was never
+     * declared (repro: `let t: uint32 = seed + 1; return t + SHARED_CONST`
+     * where select_rep unboxes the shared const and the add turns clean). */
+    if (size <= 4)
+        return false;
     if (!cg_arith_narrow_src(ctx, f, v, NULL, NULL))
         return false;
     bool any_user = false;

@@ -1,0 +1,2 @@
+c_regex=uint32_t v[0-9]+ = \(uint32_t\)
+c_not_contains=xrt_i64_add(
