@@ -1,7 +1,7 @@
 c_contains=static void fire_and_forget_go_worker_1(xrt_closure_t *_cl);
 c_contains=, 0, true, false, "worker");
 c_contains=XrValue _result = XR_NULL_VAL;
-c_contains=xr_aot_result_group_recv(ctx,
+c_contains=xr_aot_result_group_recv_value(ctx,
 c_not_contains=xr_aot_await_task(
 c_not_contains=xr_aot_await_task_resume(
 c_not_contains=static XrValue fire_and_forget_go_worker_1(xrt_closure_t *_cl);

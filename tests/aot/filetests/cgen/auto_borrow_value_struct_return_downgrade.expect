@@ -1,5 +1,5 @@
 contains=xaot-plan v0
-contains=function 1 name=id_pair module=0 depth=1 abi=tagged boundary=tagged-type params=1 ret=XrValue/tagged/tagged
+regex=function 1 name=id_pair module=0 depth=1 abi=native boundary=none params=1 ret=xrt_struct_[a-z_0-9]+/aggregate/tagged
 regex=  value v[0-9]+ op=COPY kind=tagged rep=tagged c_type=XrValue
 c_regex=XrValue v[0-9]+ = xrt_value_clone_for_coro\(v[0-9]+\);
 c_not_contains=xrt_getprop_name(

@@ -1,7 +1,7 @@
 regex=container [0-9]+ kind=array flags=0x5 elem=XR_ELEM_ANY/tagged/XrValue type-key=[0-9a-f]{16}
 regex=array-storage [0-9]+ func=taskArrayOps value=v[0-9]+ origin=v[0-9]+ flags=0x3 elem=XR_ELEM_ANY/tagged/XrValue
 c_contains=((XrValue*)_a->data)[_a->length++] =
-c_contains=xr_aot_submit_deferred_tasks_cached(ctx,
+c_contains=xr_aot_await_task(ctx,
 c_contains=XR_LIKELY(_idx >= 0 && _idx < _a->length) ? ((XrValue*)_a->data)[_idx]
 c_contains=xr_slot_aot_frame_offset
 c_not_contains=xrt_value_to_owned(((XrValue*)_a->data)[_idx])
