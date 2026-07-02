@@ -170,6 +170,15 @@ static bool stack_alloc_can_preserve_semantics(const XiFunc *f, const XiValue *v
                stack_alloc_closure_uses_are_synchronous_callbacks(f, v);
     switch (v->op) {
         case XI_ARRAY_NEW:
+            /* Array literals lower to XI_ARRAY_NEW(cap = element count) followed
+             * by XI_INDEX_SET fills, which require the array to start at
+             * length == count (the heap path's xrt_array_new_typed presets it).
+             * The stack rewrite emits xrt_array_stack_new, which starts at
+             * length 0 with a generic element type, so every literal index-set
+             * would trap and typed reads would use the wrong stride. Keep arrays
+             * on the heap until a length-preserving typed stack allocation
+             * exists. */
+            return false;
         case XI_MAP_NEW:
         case XI_SET_NEW:
             return v->aux_int == 0;
