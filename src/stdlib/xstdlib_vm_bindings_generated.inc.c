@@ -373,6 +373,7 @@ static void xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *mo
 static void xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "Mutex", sys_mutex_new);
     XRS_EXPORT(module, isolate, "RwLock", sys_rwlock_new);
+    XRS_EXPORT(module, isolate, "Condvar", sys_condvar_new);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_SYS */
 

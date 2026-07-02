@@ -15,6 +15,15 @@
 
 // ======== Builtin Type Members ========
 
+// Condvar methods
+static const XaBuiltinMember g_gen_condvar_members[] = {
+    {"wait", "(m: Mutex): ()", "Wait on the condition variable with an already-locked mutex", true, false},
+    {"waitFor", "(m: Mutex, timeoutNs: int): bool", "Wait on the condition variable until signalled or timeout elapses", true, false},
+    {"signal", "(): ()", "Wake one waiter", true, false},
+    {"broadcast", "(): ()", "Wake all waiters", true, false},
+};
+#define GEN_CONDVAR_MEMBER_COUNT 4
+
 // DateTime methods
 static const XaBuiltinMember g_gen_datetime_members[] = {
     {"format", "(pattern?: string): string", "Format datetime to string", true, false},
@@ -499,8 +508,9 @@ static const XaBuiltinMember g_gen_regex_functions[] = {
 static const XaBuiltinMember g_gen_sys_functions[] = {
     {"Mutex", "(): Mutex", "Create an OS-domain mutex", true, false},
     {"RwLock", "(): RwLock", "Create an OS-domain read-write lock", true, false},
+    {"Condvar", "(): Condvar", "Create an OS-domain condition variable", true, false},
 };
-#define GEN_SYS_FUNCTION_COUNT 2
+#define GEN_SYS_FUNCTION_COUNT 3
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {

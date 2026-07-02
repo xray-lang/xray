@@ -426,8 +426,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
 static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"Mutex", XLSP_SYM_FUNCTION, "fn(): Mutex", "Create an OS-domain mutex", NULL, 0},
     {"RwLock", XLSP_SYM_FUNCTION, "fn(): RwLock", "Create an OS-domain read-write lock", NULL, 0},
+    {"Condvar", XLSP_SYM_FUNCTION, "fn(): Condvar", "Create an OS-domain condition variable", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 2
+#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 3
 
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {
