@@ -1600,7 +1600,9 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
     fprintf(out, "; int64_t _idx = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-    fprintf(out, "; if (_idx < 0) _idx += _a->length; ");
+    /* Index assignment is strict: no negative-from-end wraparound (that is
+     * slice-only), matching index reads. An out-of-range index traps. */
+    fprintf(out, "; ");
     fprintf(out, "if (XR_LIKELY(_idx >= 0 && _idx < _a->length)) { ((%s*)_a->data)[_idx] = ",
             info.ctype);
     emit_typed_array_store_value(out, &info, v->args[2]);
