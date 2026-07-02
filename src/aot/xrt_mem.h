@@ -18,6 +18,7 @@
 
 #include "xrt_value.h"
 #include "../shared/xr_bits_core.h"
+#include "../shared/xr_arith_core.h"
 
 static inline int64_t xrt_mem_int_arg(XrValue v) {
     return XR_IS_INT(v) ? XR_TO_INT(v) : 0;
@@ -45,6 +46,30 @@ static inline XrValue xrt_mem_rotate_left(XrValue x, XrValue n) {
 
 static inline XrValue xrt_mem_rotate_right(XrValue x, XrValue n) {
     return XR_FROM_INT(xr_bits_core_rotate_right(xrt_mem_int_arg(x), xrt_mem_int_arg(n)));
+}
+
+static inline XrValue xrt_mem_add_wrapping(XrValue a, XrValue b) {
+    return XR_FROM_INT(xr_arith_core_add_wrapping(xrt_mem_int_arg(a), xrt_mem_int_arg(b)));
+}
+
+static inline XrValue xrt_mem_sub_wrapping(XrValue a, XrValue b) {
+    return XR_FROM_INT(xr_arith_core_sub_wrapping(xrt_mem_int_arg(a), xrt_mem_int_arg(b)));
+}
+
+static inline XrValue xrt_mem_mul_wrapping(XrValue a, XrValue b) {
+    return XR_FROM_INT(xr_arith_core_mul_wrapping(xrt_mem_int_arg(a), xrt_mem_int_arg(b)));
+}
+
+static inline XrValue xrt_mem_add_overflows(XrValue a, XrValue b) {
+    return XR_FROM_BOOL(xr_arith_core_add_overflows(xrt_mem_int_arg(a), xrt_mem_int_arg(b)) != 0);
+}
+
+static inline XrValue xrt_mem_sub_overflows(XrValue a, XrValue b) {
+    return XR_FROM_BOOL(xr_arith_core_sub_overflows(xrt_mem_int_arg(a), xrt_mem_int_arg(b)) != 0);
+}
+
+static inline XrValue xrt_mem_mul_overflows(XrValue a, XrValue b) {
+    return XR_FROM_BOOL(xr_arith_core_mul_overflows(xrt_mem_int_arg(a), xrt_mem_int_arg(b)) != 0);
 }
 
 #endif  // XRT_MEM_H

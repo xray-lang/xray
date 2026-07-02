@@ -2860,6 +2860,78 @@ module mem {
     link_object: false
     layer: "core"
   }
+
+  fn addWrapping {
+    signature: "(a: int, b: int): int"
+    doc: "Two's-complement wrapping addition (wraps mod 2^64)"
+    vm: "mem_add_wrapping"
+    aot: "xrt_mem_add_wrapping"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn subWrapping {
+    signature: "(a: int, b: int): int"
+    doc: "Two's-complement wrapping subtraction (wraps mod 2^64)"
+    vm: "mem_sub_wrapping"
+    aot: "xrt_mem_sub_wrapping"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn mulWrapping {
+    signature: "(a: int, b: int): int"
+    doc: "Two's-complement wrapping multiplication (wraps mod 2^64)"
+    vm: "mem_mul_wrapping"
+    aot: "xrt_mem_mul_wrapping"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn addOverflows {
+    signature: "(a: int, b: int): bool"
+    doc: "Whether signed 64-bit addition of a and b overflows"
+    vm: "mem_add_overflows"
+    aot: "xrt_mem_add_overflows"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn subOverflows {
+    signature: "(a: int, b: int): bool"
+    doc: "Whether signed 64-bit subtraction of a and b overflows"
+    vm: "mem_sub_overflows"
+    aot: "xrt_mem_sub_overflows"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn mulOverflows {
+    signature: "(a: int, b: int): bool"
+    doc: "Whether signed 64-bit multiplication of a and b overflows"
+    vm: "mem_mul_overflows"
+    aot: "xrt_mem_mul_overflows"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
 }
 
 module net {

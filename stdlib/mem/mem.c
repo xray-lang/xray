@@ -33,6 +33,7 @@
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/shared/xr_bits_core.h"
+#include "../../src/shared/xr_arith_core.h"
 #include "../../src/base/xchecks.h"
 
 /* ========== Helper ========== */
@@ -213,6 +214,57 @@ static XrValue mem_rotate_right(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
         return xr_int(0);
     return xr_int(xr_bits_core_rotate_right(XR_TO_INT(args[0]), XR_TO_INT(args[1])));
+}
+
+/* ========== Wrapping / overflow-checked arithmetic (mem.addWrapping / ...) ========== */
+
+/*
+ * Fixed-width 64-bit signed arithmetic. Semantics live in the shared core
+ * (src/shared/xr_arith_core.h) so these VM bindings and the AOT wrappers in
+ * src/aot/xrt_mem.h stay bit-identical. Wrapping ops give two's-complement
+ * wraparound; overflow predicates report signed overflow.
+ */
+
+static XrValue mem_add_wrapping(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+        return xr_int(0);
+    return xr_int(xr_arith_core_add_wrapping(XR_TO_INT(args[0]), XR_TO_INT(args[1])));
+}
+
+static XrValue mem_sub_wrapping(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+        return xr_int(0);
+    return xr_int(xr_arith_core_sub_wrapping(XR_TO_INT(args[0]), XR_TO_INT(args[1])));
+}
+
+static XrValue mem_mul_wrapping(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+        return xr_int(0);
+    return xr_int(xr_arith_core_mul_wrapping(XR_TO_INT(args[0]), XR_TO_INT(args[1])));
+}
+
+static XrValue mem_add_overflows(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+        return xr_bool(false);
+    return xr_bool(xr_arith_core_add_overflows(XR_TO_INT(args[0]), XR_TO_INT(args[1])) != 0);
+}
+
+static XrValue mem_sub_overflows(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+        return xr_bool(false);
+    return xr_bool(xr_arith_core_sub_overflows(XR_TO_INT(args[0]), XR_TO_INT(args[1])) != 0);
+}
+
+static XrValue mem_mul_overflows(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+        return xr_bool(false);
+    return xr_bool(xr_arith_core_mul_overflows(XR_TO_INT(args[0]), XR_TO_INT(args[1])) != 0);
 }
 
 /* ========== Module Loading ========== */

@@ -278,8 +278,20 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"liveBytes", XLSP_SYM_FUNCTION, "fn(): int", "Get live memory usage in bytes", NULL, 0},
     {"liveObjects", XLSP_SYM_FUNCTION, "fn(): int", "Get live object count", NULL, 0},
     {"info", XLSP_SYM_FUNCTION, "fn(): Map", "Get memory-model runtime info as Map", NULL, 0},
+    {"popcount", XLSP_SYM_FUNCTION, "fn(x: int): int", "Number of set bits in the 64-bit value", NULL, 0},
+    {"leadingZeros", XLSP_SYM_FUNCTION, "fn(x: int): int", "Count of leading zero bits (0 -> 64)", NULL, 0},
+    {"trailingZeros", XLSP_SYM_FUNCTION, "fn(x: int): int", "Count of trailing zero bits (0 -> 64)", NULL, 0},
+    {"byteswap", XLSP_SYM_FUNCTION, "fn(x: int): int", "Reverse the byte order of the 64-bit value", NULL, 0},
+    {"rotateLeft", XLSP_SYM_FUNCTION, "fn(x: int, n: int): int", "Rotate the 64-bit value left by n bits (n mod 64)", NULL, 0},
+    {"rotateRight", XLSP_SYM_FUNCTION, "fn(x: int, n: int): int", "Rotate the 64-bit value right by n bits (n mod 64)", NULL, 0},
+    {"addWrapping", XLSP_SYM_FUNCTION, "fn(a: int, b: int): int", "Two's-complement wrapping addition (wraps mod 2^64)", NULL, 0},
+    {"subWrapping", XLSP_SYM_FUNCTION, "fn(a: int, b: int): int", "Two's-complement wrapping subtraction (wraps mod 2^64)", NULL, 0},
+    {"mulWrapping", XLSP_SYM_FUNCTION, "fn(a: int, b: int): int", "Two's-complement wrapping multiplication (wraps mod 2^64)", NULL, 0},
+    {"addOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit addition of a and b overflows", NULL, 0},
+    {"subOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit subtraction of a and b overflows", NULL, 0},
+    {"mulOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit multiplication of a and b overflows", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 7
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 19
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
