@@ -43,18 +43,6 @@ static const XaBuiltinMember g_gen_datetime_members[] = {
 
 // ======== C Module Declarations ========
 
-// base64 module functions
-static const XaBuiltinMember g_gen_base64_functions[] = {
-    {"encode", "(data: string): string", "Base64 encode", true, false},
-    {"decode", "(data: string): string?", "Base64 decode", true, false},
-    {"encodeUrl", "(data: string): string", "URL-safe base64 encode", true, false},
-    {"decodeUrl", "(data: string): string?", "URL-safe base64 decode", true, false},
-    {"encodeBytes", "(data: Array<uint8>): string", "Base64 encode bytes", true, false},
-    {"decodeToBytes", "(data: string): Array<uint8>?", "Base64 decode to bytes", true, false},
-    {"isValid", "(data: string): bool", "Check if valid base64", true, false},
-};
-#define GEN_BASE64_FUNCTION_COUNT 7
-
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"start", "(config: Json): ()", "Start cluster node", true, false},
@@ -629,7 +617,6 @@ static const XaBuiltinMember g_gen_yaml_functions[] = {
 
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
-    {"base64", g_gen_base64_functions, GEN_BASE64_FUNCTION_COUNT, NULL, 0},
     {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0},
     {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0},
@@ -651,7 +638,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
     {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 21
+#define GEN_BUILTIN_MODULE_COUNT 20
 
 /* clang-format on */
 
