@@ -1467,6 +1467,18 @@ static inline XrValue xrt_map_new(int64_t cap) {
     return xrt_map_new_flags(cap, 0);
 }
 
+/* Untyped-storage map that still records its declared value element type
+ * (e.g. Map<string, int>: string keys force tagged entry storage, but the
+ * static value type is scalar). values() uses the recorded type so its
+ * result array lanes match the Array<V> layout consumers were planned
+ * with. key_type stays XR_ELEM_ANY, so xrt_map_is_typed remains false. */
+static inline XrValue xrt_map_new_vt(int64_t cap, uint8_t value_type) {
+    XrValue mv = xrt_map_new_flags(cap, 0);
+    if (mv.ptr)
+        ((xrt_map_t *) mv.ptr)->value_type = value_type;
+    return mv;
+}
+
 #ifndef xrt_map_stack_new
 #define xrt_map_stack_new(cap_expr)                                                                \
     ({                                                                                             \
@@ -2036,17 +2048,23 @@ static inline XrValue xrt_set_values(xrt_set_t *s) {
     return arr;
 }
 
+/* keys()/values() of a typed map return arrays whose lane type matches
+ * the map's key/value element type: AOT consumers read the result with
+ * the statically planned Array<K>/Array<V> lane layout, so returning a
+ * tagged array here would be misread as scalar lanes. Untyped maps keep
+ * tagged lanes (their static result types are tagged too). */
 static inline XrValue xrt_map_keys(xrt_map_t *m) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_keys((xrt_boolmap_t *) m);
-    XrValue arr = xrt_array_with_capacity(xrt_map_len(m));
     if (!xrt_map_is_typed(m)) {
+        XrValue arr = xrt_array_with_capacity(xrt_map_len(m));
         for (uint32_t i = 0; i < m->nentries; i++) {
             if (m->entries[i].key_tt != XR_MAP_ENTRY_NIL_KEY)
                 xrt_array_push(arr, m->entries[i].key);
         }
         return arr;
     }
+    XrValue arr = xr_mkptr(xrt_array_new_typed_ptr(0, m->key_type), XR_TAG_ARRAY);
     for (int64_t oi = 0; oi < m->order_len; oi++) {
         int64_t slot = m->order[oi];
         if (xrt_map_slot_is_full(m, slot))
@@ -2058,14 +2076,18 @@ static inline XrValue xrt_map_keys(xrt_map_t *m) {
 static inline XrValue xrt_map_values(xrt_map_t *m) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_values((xrt_boolmap_t *) m);
-    XrValue arr = xrt_array_with_capacity(xrt_map_len(m));
     if (!xrt_map_is_typed(m)) {
+        /* Untyped storage may still carry a declared scalar value type
+         * (xrt_map_new_vt); honor it so the result lanes match the
+         * consumer's static Array<V> layout. */
+        XrValue arr = xr_mkptr(xrt_array_new_typed_ptr(0, m->value_type), XR_TAG_ARRAY);
         for (uint32_t i = 0; i < m->nentries; i++) {
             if (m->entries[i].key_tt != XR_MAP_ENTRY_NIL_KEY)
                 xrt_array_push(arr, m->entries[i].value);
         }
         return arr;
     }
+    XrValue arr = xr_mkptr(xrt_array_new_typed_ptr(0, m->value_type), XR_TAG_ARRAY);
     for (int64_t oi = 0; oi < m->order_len; oi++) {
         int64_t slot = m->order[oi];
         if (xrt_map_slot_is_full(m, slot))

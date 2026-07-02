@@ -1,9 +1,9 @@
 contains=function 1 name=buildBytes module=0 depth=1 abi=native boundary=none
 regex=array-storage [0-9]+ func=buildBytes value=v[0-9]+ origin=v[0-9]+ flags=0x3 elem=XR_ELEM_U8/u8/uint8_t
-c_contains=xrt_bytes_append_from_unchecked_trusted_raw(
-c_contains=xrt_bytes_repeat_from_unchecked_trusted_raw(
-c_not_contains=xrt_bytes_append_from_unchecked_raw(
-c_not_contains=xrt_bytes_repeat_from_unchecked_raw(
+c_contains=xrt_bytes_append_from_unchecked_raw(
+c_contains=xrt_bytes_repeat_from_unchecked_raw(
+c_not_contains=xrt_bytes_append_from_unchecked_trusted_raw(
+c_not_contains=xrt_bytes_repeat_from_unchecked_trusted_raw(
 c_not_contains=return NULL;
 c_not_contains=XRT_SYM_APPEND_FROM_UNCHECKED
 c_not_contains=XRT_SYM_REPEAT_FROM_UNCHECKED

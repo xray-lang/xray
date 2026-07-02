@@ -17,10 +17,11 @@ print(ints[0])
 print(ints[2])
 print(ints[3])
 
+// Slices are borrowed views: grow methods (reserve/resize/push) are
+// rejected at compile time (see tests/compile_errors/type/span_owner_method),
+// so only read semantics are exercised here.
 let source = [10, 20, 30, 40, 50]
 let view = source[1:4]
-view.reserve(20)
-view.resize(1, 99)
 print(view.length)
 print(view[0])
 print(view[2])

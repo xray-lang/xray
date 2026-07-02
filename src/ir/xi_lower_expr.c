@@ -1552,16 +1552,12 @@ static XiValue *lower_array_literal_spread(XiLower *l, AstNode *node, struct XrT
     ArrayLiteralNode *arr = &node->as.array_literal;
     int count = arr->count;
 
-    /* Capacity hint = number of singleton (non-spread) elements; spreads
-     * grow the array on demand. */
-    int singleton_cap = 0;
-    for (int i = 0; i < count; i++) {
-        AstNode *child = arr->elements[i];
-        if (child && child->type != AST_SPREAD_EXPR)
-            singleton_cap++;
-    }
-
-    XiValue *cap = xi_const_int(l->func, l->cur_block, singleton_cap, l->type_int);
+    /* XI_ARRAY_NEW's argument is the initial LENGTH (both backends preset
+     * length and fill slots; the static literal path overwrites them via
+     * INDEX_SET). The spread path appends everything with PUSH/EXTEND, so
+     * it must start from an empty array — a non-zero count here would leave
+     * phantom leading null/zero elements. */
+    XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
     XiValue *arr_val = xi_value_new(l->func, l->cur_block, XI_ARRAY_NEW, result_type, 1);
     if (!arr_val)
         return NULL;

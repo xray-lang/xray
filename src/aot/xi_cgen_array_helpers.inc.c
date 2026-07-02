@@ -785,7 +785,8 @@ static bool emit_typed_array_class_field_alloc_store_stmt(XiCgenCtx *ctx, FILE *
         return false;
 
     fprintf(out, "    ");
-    emit_class_native_field_ref(ctx, out, info.class_info.class_data, "p0", info.field_idx);
+    emit_class_native_receiver_field_ref(ctx, out, f, info.class_info.class_data, store->args[0],
+                                         info.field_idx);
     fprintf(out, " = (xrt_array_t*)");
     if (!emit_typed_array_new_expr(ctx, out, f, origin, 4))
         return false;
@@ -795,7 +796,8 @@ static bool emit_typed_array_class_field_alloc_store_stmt(XiCgenCtx *ctx, FILE *
     emit_typed_array_data_cache_ref(out, origin);
     /* Fresh allocation stored into the field above: XRT_DATA_ALIGN contract. */
     fprintf(out, " = (%s*)XR_ASSUME_ALIGNED(", info.elem.ctype);
-    emit_class_native_field_ref(ctx, out, info.class_info.class_data, "p0", info.field_idx);
+    emit_class_native_receiver_field_ref(ctx, out, f, info.class_info.class_data, store->args[0],
+                                         info.field_idx);
     fprintf(out, "->data, XRT_DATA_ALIGN);\n");
     return true;
 }
@@ -1791,6 +1793,15 @@ static void emit_bytes_array_result_suffix(FILE *out, bool boxed) {
         fprintf(out, ", XR_TAG_ARRAY)");
 }
 
+/* The *Unchecked byte-op fast paths must keep VM parity: the VM validates
+ * argument tags and structural preconditions (range/capacity) and panics,
+ * so the fast path requires statically int-typed scalar args (dynamic
+ * Json/tagged args fall back to the generic dispatch, which type-checks)
+ * and calls the checked _raw helpers rather than the trusted variants. */
+static bool cg_bytes_unchecked_int_arg(const XiValue *arg) {
+    return arg && arg->type && arg->type->kind == XR_KIND_INT;
+}
+
 static bool emit_bytes_append_from_unchecked_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                   const char *prefix, const XiValue *call) {
     CgArrayElemInfo dst_info;
@@ -1801,11 +1812,13 @@ static bool emit_bytes_append_from_unchecked_expr(XiCgenCtx *ctx, FILE *out, con
                                           CG_ARRAY_STORAGE_MUTABLE) ||
         !cg_array_value_u8_unchecked_info(ctx, f, call->args[1], &src_info, CG_ARRAY_STORAGE_READ))
         return false;
+    if (!cg_bytes_unchecked_int_arg(call->args[2]) || !cg_bytes_unchecked_int_arg(call->args[3]))
+        return false;
 
     bool boxed = cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
-    fprintf(out, "xrt_bytes_append_from_unchecked_trusted_raw(");
+    fprintf(out, "xrt_bytes_append_from_unchecked_raw(");
     emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
     fprintf(out, ", ");
     emit_typed_array_ptr_expr(ctx, out, f, call->args[1], prefix);
@@ -1825,11 +1838,13 @@ static bool emit_bytes_repeat_from_unchecked_expr(XiCgenCtx *ctx, FILE *out, con
         return false;
     if (!cg_array_value_u8_unchecked_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
         return false;
+    if (!cg_bytes_unchecked_int_arg(call->args[1]) || !cg_bytes_unchecked_int_arg(call->args[2]))
+        return false;
 
     bool boxed = cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
-    fprintf(out, "xrt_bytes_repeat_from_unchecked_trusted_raw(");
+    fprintf(out, "xrt_bytes_repeat_from_unchecked_raw(");
     emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
     fprintf(out, ", ");
     emit_value_as_rep(out, call->args[1], XR_REP_I64);
@@ -1850,11 +1865,14 @@ static bool emit_bytes_write_from_unchecked_expr(XiCgenCtx *ctx, FILE *out, cons
                                           CG_ARRAY_STORAGE_MUTABLE) ||
         !cg_array_value_u8_unchecked_info(ctx, f, call->args[2], &src_info, CG_ARRAY_STORAGE_READ))
         return false;
+    if (!cg_bytes_unchecked_int_arg(call->args[1]) || !cg_bytes_unchecked_int_arg(call->args[3]) ||
+        !cg_bytes_unchecked_int_arg(call->args[4]))
+        return false;
 
     bool boxed = cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
-    fprintf(out, "xrt_bytes_write_from_unchecked_trusted_raw(");
+    fprintf(out, "xrt_bytes_write_from_unchecked_raw(");
     emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
     fprintf(out, ", ");
     emit_value_as_rep(out, call->args[1], XR_REP_I64);

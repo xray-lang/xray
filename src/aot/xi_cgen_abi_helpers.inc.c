@@ -330,6 +330,20 @@ static const char *emit_conversion_prefix(FILE *out, const XrType *type, XrRep f
                                           XrRep to_rep) {
     if (from_rep == to_rep)
         return NULL;
+    /* A void source (unit-returning call) produces no C value: run the
+     * expression inside a statement expression and materialize the unit
+     * result in the target rep. Without this, the fallthrough cases below
+     * would wrap a void call in XR_FROM_INT and fail C compilation. */
+    if (from_rep == XR_REP_VOID) {
+        fprintf(out, "({ ");
+        if (to_rep == XR_REP_TAGGED)
+            return "; XR_NULL_VAL; })";
+        if (to_rep == XR_REP_F64)
+            return "; 0.0; })";
+        if (to_rep == XR_REP_PTR || to_rep == XR_REP_RAWPTR)
+            return "; (void*)0; })";
+        return "; 0; })";
+    }
     if (to_rep == XR_REP_TAGGED) {
         if (from_rep == XR_REP_RAWPTR) {
             fprintf(out, "XR_FROM_INT((int64_t)(uintptr_t)(");

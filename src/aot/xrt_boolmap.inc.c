@@ -185,15 +185,19 @@ static inline void xrt_boolmap_set_v(xrt_boolmap_t *b, XrValue key, XrValue val)
         xrt_boolmap_set_i64(b, i, xr_value_to_int64_coerce(val));
 }
 
+/* keys()/values() lane types must match the static result types
+ * (Array<bool> / Array<V>): AOT consumers index the returned array with
+ * the statically planned lane layout, so a tagged array here would be
+ * misread as scalar lanes. */
 static inline XrValue xrt_boolmap_keys(xrt_boolmap_t *b) {
-    XrValue arr = xrt_array_with_capacity(b->order_len);
+    XrValue arr = xr_mkptr(xrt_array_new_typed_ptr(0, XR_ELEM_BOOL), XR_TAG_ARRAY);
     for (int o = 0; o < b->order_len; o++)
         xrt_array_push(arr, XR_FROM_BOOL(b->order[o] != 0));
     return arr;
 }
 
 static inline XrValue xrt_boolmap_values(xrt_boolmap_t *b) {
-    XrValue arr = xrt_array_with_capacity(b->order_len);
+    XrValue arr = xr_mkptr(xrt_array_new_typed_ptr(0, b->value_type), XR_TAG_ARRAY);
     for (int o = 0; o < b->order_len; o++)
         xrt_array_push(arr, xrt_boolmap_box_value(b, b->order[o]));
     return arr;
