@@ -378,7 +378,8 @@ static bool verify_abi_plan(const XaotFuncPlan *plan, char *errbuf, size_t errbu
     uint16_t pi;
     if (!plan || !plan->func)
         return set_error(errbuf, errbuf_len, "AOT function plan has no Xi function");
-    if (plan->abi.nparams != plan->func->nparams)
+    uint16_t expected_nparams = (uint16_t) (plan->func->nparams + (plan->func->is_vararg ? 1 : 0));
+    if (plan->abi.nparams != expected_nparams)
         return set_error(errbuf, errbuf_len, "AOT function ABI parameter count mismatch");
     if (plan->abi.nparams > 0 && !plan->abi.params)
         return set_error(errbuf, errbuf_len, "AOT function ABI missing parameter slots");
@@ -514,9 +515,13 @@ static bool verify_direct_call_boundaries(const XaotBundle *bundle, const XiFunc
     if (!target_plan)
         return set_error(errbuf, errbuf_len, "AOT direct call target has no function plan");
     call_arg_count = call->nargs > first_arg ? (uint16_t) (call->nargs - first_arg) : 0;
-    if (call_arg_count > target_plan->abi.nparams)
+    /* Vararg: only the fixed parameters map to ABI slots; trailing args are
+     * collected into the rest Array at the call site (boxed to tagged), so they
+     * carry no per-arg boundary step and may exceed the fixed count. */
+    uint16_t verify_argc = target->is_vararg ? target->nparams : call_arg_count;
+    if (!target->is_vararg && call_arg_count > target_plan->abi.nparams)
         return set_error(errbuf, errbuf_len, "AOT direct call has more args than target ABI");
-    for (a = first_arg; a < call->nargs; a++) {
+    for (a = first_arg; a < first_arg + verify_argc; a++) {
         const XiValue *arg = call->args[a];
         const XaotValuePlan *arg_plan;
         const XaotBoundaryStep *step;

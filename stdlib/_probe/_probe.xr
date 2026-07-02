@@ -19,14 +19,13 @@ fn probeConcat(a: string, b: string) -> string {
 }
 
 // --- variadic function (gap A: rest-parameter ABI) ---
-// TEMPORARILY DISABLED while gap A is being fixed.
-// fn probeSum(...nums: int) -> int {
-//     let total = 0
-//     for (let i = 0; i < nums.length; i++) {
-//         total = total + nums[i]
-//     }
-//     return total
-// }
+fn probeSum(...nums: int) -> int {
+    let total = 0
+    for (let i = 0; i < nums.length; i++) {
+        total = total + nums[i]
+    }
+    return total
+}
 
 // --- class + functions using it (gap C: intra-module class/function mix) ---
 
@@ -66,4 +65,4 @@ class ProbeCell<T> {
     }
 }
 
-export { probeAdd, probeConcat, ProbeBox, probeMakeBox, probeReadBox, ProbeCell }
+export { probeAdd, probeConcat, probeSum, ProbeBox, probeMakeBox, probeReadBox, ProbeCell }

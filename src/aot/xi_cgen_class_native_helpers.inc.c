@@ -1331,7 +1331,8 @@ static void emit_class_native_param_decl(XiCgenCtx *ctx, FILE *out, const char *
         fprintf(out, " *p%u", (unsigned) param_idx);
         return;
     }
-    const XrType *param_type = f && f->params && param_idx < f->nparams && f->params[param_idx]
+    uint16_t total_params = f ? (uint16_t) (f->nparams + (f->is_vararg ? 1 : 0)) : 0;
+    const XrType *param_type = f && f->params && param_idx < total_params && f->params[param_idx]
                                    ? f->params[param_idx]->type
                                    : NULL;
     if (cg_func_param_abi_rep(ctx, f, param_idx) == XR_REP_PTR &&

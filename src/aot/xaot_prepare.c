@@ -2161,9 +2161,10 @@ static void prepare_mark_direct_call_aggregate_args(XaotBundle *bundle, XiValue 
     const XaotFuncPlan *target_plan = target ? xaot_bundle_find_func_plan(bundle, target) : NULL;
     if (!target_plan || !target_plan->abi.params)
         return;
+    uint16_t fixed_params = target->is_vararg ? target->nparams : target_plan->abi.nparams;
     for (uint16_t a = first_arg; a < call->nargs; a++) {
         uint16_t param_idx = (uint16_t) (a - first_arg);
-        if (param_idx >= target_plan->abi.nparams)
+        if (param_idx >= fixed_params)
             break;
         XaotValueRep slot_rep = xaot_abi_slot_value_rep(&target_plan->abi.params[param_idx]);
         if (!value_rep_is_struct_aggregate(slot_rep) || !value_reps_equal(slot_rep, rep))
@@ -2359,14 +2360,30 @@ static bool prepare_direct_call_boundaries(XaotBundle *bundle, const XaotFuncPla
         return false;
     }
     call_arg_count = call->nargs > first_arg ? (uint16_t) (call->nargs - first_arg) : 0;
-    if (call_arg_count > target_plan->abi.nparams) {
-        bundle->error_msg = "AOT direct call has more arguments than target ABI";
-        return false;
-    }
-    for (a = first_arg; a < call->nargs; a++) {
-        if (!prepare_direct_call_arg_boundary(bundle, caller_plan, call, target, target_plan,
-                                              (uint16_t) (a - first_arg), call->args[a]))
+    if (target->is_vararg) {
+        /* Fixed args map to their ABI slots; the trailing args are collected
+         * into the rest Array at the call site (boxed to tagged), so they need
+         * no per-arg boundary and may exceed the fixed-parameter count. */
+        uint16_t fixed = target->nparams;
+        if (call_arg_count < fixed) {
+            bundle->error_msg = "AOT direct call has fewer arguments than target ABI";
             return false;
+        }
+        for (a = first_arg; a < (uint16_t) (first_arg + fixed); a++) {
+            if (!prepare_direct_call_arg_boundary(bundle, caller_plan, call, target, target_plan,
+                                                  (uint16_t) (a - first_arg), call->args[a]))
+                return false;
+        }
+    } else {
+        if (call_arg_count > target_plan->abi.nparams) {
+            bundle->error_msg = "AOT direct call has more arguments than target ABI";
+            return false;
+        }
+        for (a = first_arg; a < call->nargs; a++) {
+            if (!prepare_direct_call_arg_boundary(bundle, caller_plan, call, target, target_plan,
+                                                  (uint16_t) (a - first_arg), call->args[a]))
+                return false;
+        }
     }
     return prepare_direct_call_ret_boundary(bundle, caller_plan, call, target, target_plan);
 }
