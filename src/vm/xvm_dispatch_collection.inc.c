@@ -86,18 +86,18 @@ vmcase(OP_NEWARRAY) {
 
     if (array) {
         array->elem_tid = elem_tid;
-        if (elem_type != XR_ELEM_ANY) {
-            /* Typed arrays: set length directly (data is uninitialized).
-             * Caller populates via OP_INDEX_SET / OP_ARRAY_INIT afterward.
-             * Pushing from registers would crash on non-numeric garbage. */
-            array->length = b;
+        /* Preset length to the literal element count for both typed and ANY
+         * arrays; lower_array_literal then overwrites slots 0..b-1 via
+         * OP_INDEX_SET. Typed element storage is numeric (not GC-scanned), so
+         * its uninitialized bytes are harmless. ANY storage holds tagged
+         * XrValue slots that the GC scans, and the data buffer is not zeroed on
+         * allocation, so null-initialize the presented slots to keep the array
+         * safe to scan before the fills land. This makes array index-set strict
+         * (in-bounds overwrite) instead of relying on an append-at-length path. */
+        array->length = b;
+        if (elem_type == XR_ELEM_ANY && b > 0 && array->data) {
+            memset(array->data, 0, (size_t) b * sizeof(XrValue));
         }
-        /* ANY arrays: b is capacity hint only. length stays 0.
-         * lower_array_literal emits OP_INDEX_SET arr[i]=v for i=0..n-1,
-         * which append-grows via the idx == length branch of OP_INDEX_SET.
-         * This mirrors the OP_INDEX_SET append-grow path and avoids reading
-         * uninitialized register slots that would only be immediately
-         * overwritten by the subsequent OP_INDEX_SET. */
     }
     R(a) = xr_value_from_array(array);
     if (storage_mode == 0)
@@ -656,14 +656,18 @@ vmcase(OP_ARRAY_SET) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         int idx = (int) XR_TO_INT(R(b));
         XrValue _av = R(c);
-        if ((unsigned) idx < (unsigned) arr->length) {
-            if (arr->elem_type == XR_ELEM_ANY) {
-                ((XrValue *) arr->data)[idx] = _av;
-                XR_ARRAY_MARK_REFS(arr, _av);
-            } else {
-                VM_ARRAY_CHECK_STORABLE(arr, _av);
-                xr_array_set_element(arr, idx, _av);
-            }
+        /* Strict bounds: idx must be in [0, length). No append-at-length, no
+         * negative wraparound (that is slice-only). */
+        if ((unsigned) idx >= (unsigned) arr->length) {
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "array index out of range: %d (length %d)",
+                             idx, (int) arr->length);
+        }
+        if (arr->elem_type == XR_ELEM_ANY) {
+            ((XrValue *) arr->data)[idx] = _av;
+            XR_ARRAY_MARK_REFS(arr, _av);
+        } else {
+            VM_ARRAY_CHECK_STORABLE(arr, _av);
+            xr_array_set_element(arr, idx, _av);
         }
         vmbreak;
     }
@@ -753,14 +757,17 @@ vmcase(OP_ARRAY_SETC) {
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         XrValue _acv = R(c);
-        if (b < arr->length) {
-            if (arr->elem_type == XR_ELEM_ANY) {
-                ((XrValue *) arr->data)[b] = _acv;
-                XR_ARRAY_MARK_REFS(arr, _acv);
-            } else {
-                VM_ARRAY_CHECK_STORABLE(arr, _acv);
-                xr_array_set_element(arr, b, _acv);
-            }
+        /* Strict bounds: the constant index must be in [0, length). */
+        if (b >= arr->length) {
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "array index out of range: %d (length %d)",
+                             b, (int) arr->length);
+        }
+        if (arr->elem_type == XR_ELEM_ANY) {
+            ((XrValue *) arr->data)[b] = _acv;
+            XR_ARRAY_MARK_REFS(arr, _acv);
+        } else {
+            VM_ARRAY_CHECK_STORABLE(arr, _acv);
+            xr_array_set_element(arr, b, _acv);
         }
         vmbreak;
     }
@@ -1446,20 +1453,19 @@ vmcase(OP_INDEX_SET) {
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         int idx = (int) XR_TO_INT(key_val);
-        if ((unsigned) idx < (unsigned) arr->length) {
-            if (arr->elem_type == XR_ELEM_ANY) {
-                ((XrValue *) arr->data)[idx] = val;
-                XR_ARRAY_MARK_REFS(arr, val);
-            } else {
-                VM_ARRAY_CHECK_STORABLE(arr, val);
-                xr_array_set_element(arr, idx, val);
-            }
-        } else if (idx == arr->length && arr->elem_type == XR_ELEM_ANY && !xr_array_is_slice(arr)) {
-            /* Append: ANY-array append-grow. Used by lower_array_literal
-             * which emits OP_NEWARRAY (length=0) followed by OP_INDEX_SET
-             * arr[i]=v for i=0..n-1. Only valid for ANY arrays; typed
-             * and slice arrays use explicit OP_ARRAY_PUSH or grow. */
-            xr_array_push(arr, val);
+        /* Index assignment is strict: idx must be in [0, length). Assignment at
+         * exactly length is out of bounds (push() is the append API) and
+         * negative indexes never wrap from the end (that is slice-only). */
+        if ((unsigned) idx >= (unsigned) arr->length) {
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "array index out of range: %d (length %d)",
+                             idx, (int) arr->length);
+        }
+        if (arr->elem_type == XR_ELEM_ANY) {
+            ((XrValue *) arr->data)[idx] = val;
+            XR_ARRAY_MARK_REFS(arr, val);
+        } else {
+            VM_ARRAY_CHECK_STORABLE(arr, val);
+            xr_array_set_element(arr, idx, val);
         }
         vmbreak;
     }

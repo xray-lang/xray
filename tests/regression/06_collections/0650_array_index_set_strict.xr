@@ -1,0 +1,38 @@
+// Array index assignment is strict and identical on VM and AOT:
+//   - in-bounds assignment overwrites the element,
+//   - assignment at exactly length is out of bounds (push() is the append API),
+//   - negative indexes never wrap from the end (that is slice-only).
+// Every out-of-range assignment raises E0430 (array index out of range).
+
+fn set_at(xs: Array<int>, i: int, v: int) -> int {
+    // Returns the panic code on out-of-range assignment, or -1 on success.
+    try {
+        xs[i] = v
+        return -1
+    } catch panic (p) {
+        return p.code
+    }
+}
+
+@test
+fn test_index_set_strict() {
+    // In-bounds assignment overwrites.
+    let a = [1, 2, 3]
+    a[0] = 10
+    a[2] = 30
+    assert_eq(a[0], 10)
+    assert_eq(a[2], 30)
+    assert_eq(a.length, 3)
+
+    // Assignment at exactly length is out of bounds (no append).
+    assert_eq(set_at(a, 3, 9), 430)
+    assert_eq(a.length, 3)
+
+    // Beyond length is out of bounds (no sparse growth).
+    assert_eq(set_at(a, 10, 9), 430)
+    assert_eq(a.length, 3)
+
+    // Negative index does not wrap from the end.
+    assert_eq(set_at(a, -1, 9), 430)
+    assert_eq(a[2], 30)
+}
