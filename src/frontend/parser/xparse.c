@@ -546,8 +546,10 @@ void xr_parser_synchronize(Parser *parser) {
 
 /* ========== Expression Parsing ========== */
 
-// Pratt parser core: parse expression by precedence
-AstNode *xr_parse_precedence(Parser *parser, Precedence precedence) {
+// Pratt parser core: parse expression by precedence.
+// Inner implementation; the public xr_parse_precedence wraps this with the
+// recursion-depth guard.
+static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
     XR_DCHECK(parser != NULL, "parse_precedence: NULL parser");
     // Special handling for regex literals starting with escape sequences like /\d+/
     // When current is TK_SLASH, try regex scanning first to avoid TK_ERROR from backslash
@@ -604,6 +606,21 @@ AstNode *xr_parse_precedence(Parser *parser, Precedence precedence) {
     }
 
     return left;
+}
+
+// Public Pratt entry: recursion-depth guard around parse_precedence_inner.
+// All expression recursion (parens, unary, binary, ternary, member/index
+// chains) funnels through here, so one guard covers the whole expression grammar.
+AstNode *xr_parse_precedence(Parser *parser, Precedence precedence) {
+    XR_DCHECK(parser != NULL, "parse_precedence: NULL parser");
+    if (++parser->recursion_depth > XR_PARSER_MAX_DEPTH) {
+        parser->recursion_depth--;
+        xr_parser_error(parser, "expression nesting too deep (max 1000 levels)");
+        return NULL;
+    }
+    AstNode *result = parse_precedence_inner(parser, precedence);
+    parser->recursion_depth--;
+    return result;
 }
 
 // Parse expression (entry point)
@@ -973,6 +990,7 @@ static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, 
     parser->parsing_native_class = false;
     parser->parsing_extern_fn = false;
     parser->scope_depth = 0;
+    parser->recursion_depth = 0;
 }
 
 // Allocate and install a new arena on a toolchain compiler session.

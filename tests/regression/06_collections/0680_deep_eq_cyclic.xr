@@ -37,3 +37,29 @@ fn deep_eq_nested_maps() {
     inner[0] = 999
     assert(m1 != m2, "value mutation must break map equality")
 }
+
+@test
+fn deep_eq_self_referential_json() {
+    let a: Json = {}
+    let b: Json = {}
+    a["self"] = a
+    b["self"] = b
+    assert(a == b, "isomorphic Json self cycles must compare equal")
+
+    a["value"] = 1
+    b["value"] = 2
+    assert(a != b, "cycle guard must still compare ordinary fields")
+}
+
+@test
+fn deep_eq_mutually_referential_json() {
+    let a1: Json = {}
+    let a2: Json = {}
+    let b1: Json = {}
+    let b2: Json = {}
+    a1["next"] = a2
+    a2["next"] = a1
+    b1["next"] = b2
+    b2["next"] = b1
+    assert(a1 == b1, "isomorphic mutual Json cycles must compare equal")
+}

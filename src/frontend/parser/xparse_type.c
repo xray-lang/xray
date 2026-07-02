@@ -264,7 +264,10 @@ static void reject_redundant_null_union(Parser *parser, XrTypeRef **members, int
 
 /* ---- Top-level: base + optional '?' + optional '|' union ---- */
 
-XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
+// Inner implementation; public xr_parse_type_annotation wraps this with the
+// recursion-depth guard. All nested type arguments recurse through the
+// public entry, so the guard bounds type nesting depth.
+static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_type_annotation: NULL parser");
     XrTypeRef *base = parse_type_annotation_base(parser);
 
@@ -296,6 +299,18 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
     }
 
     return base;
+}
+
+XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_type_annotation: NULL parser");
+    if (++parser->recursion_depth > XR_PARSER_MAX_DEPTH) {
+        parser->recursion_depth--;
+        xr_parser_error(parser, "type nesting too deep (max 1000 levels)");
+        return xr_tref_unknown(parser->compiler_session);
+    }
+    XrTypeRef *result = parse_type_annotation_inner(parser);
+    parser->recursion_depth--;
+    return result;
 }
 
 /* ---- Base type (no trailing ? or |) ---- */

@@ -1,0 +1,14 @@
+// A closure bound to a local variable must obey the same coroutine-capture
+// rules as an inline go closure. Capturing a mutable local across `go` is
+// rejected even when the closure is invoked through its binding.
+
+fn main_logic() {
+    let counter = [0]
+    let bump = fn() {
+        counter.push(1)
+    }
+    let t = go bump()
+    await t
+}
+
+main_logic()

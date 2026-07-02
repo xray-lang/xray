@@ -253,7 +253,10 @@ static AstNode *expr_to_pattern(Parser *parser, AstNode *expr) {
  * collapse a trailing `, …` into an alternation pattern; the caller
  * (a tuple-element loop or a match-arm head) decides how to interpret
  * the comma. */
-static AstNode *parse_pattern_single(Parser *parser) {
+// Inner implementation; parse_pattern_single wraps this with the recursion-depth
+// guard. Nested tuple/object/array patterns recurse through the public
+// wrapper, so the guard bounds pattern nesting depth.
+static AstNode *parse_pattern_single_inner(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_pattern_single: NULL parser");
     int line = parser->current.line;
 
@@ -334,6 +337,21 @@ static AstNode *parse_pattern_single(Parser *parser) {
     }
 
     return xr_ast_pattern_literal(parser->compiler_session, first, line);
+}
+
+// Public pattern-atom entry: recursion-depth guard around
+// parse_pattern_single_inner. Nested tuple/object/array patterns recurse
+// through here, so this bounds pattern nesting depth.
+static AstNode *parse_pattern_single(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_pattern_single: NULL parser");
+    if (++parser->recursion_depth > XR_PARSER_MAX_DEPTH) {
+        parser->recursion_depth--;
+        xr_parser_error(parser, "pattern nesting too deep (max 1000 levels)");
+        return NULL;
+    }
+    AstNode *result = parse_pattern_single_inner(parser);
+    parser->recursion_depth--;
+    return result;
 }
 
 /* Top-level match-arm pattern: parse one atom, then optionally fold
