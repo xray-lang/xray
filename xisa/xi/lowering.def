@@ -726,6 +726,12 @@
   :vm-bytecode (driver xi_emit_tuple_get)
   :aot-c (driver xicgen_tuple_get))
 
+(lower xi.bytes.load.u16.le
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_bytes_load_u16_le)
+  :aot-c (driver xicgen_bytes_load_u16_le))
+
 (lower xi.bytes.load.u32.le
   :match ()
   :required-targets (vm-bytecode aot-c)
@@ -756,6 +762,12 @@
   :vm-bytecode (driver xi_emit_bytes_repeat_from)
   :aot-c (driver xicgen_bytes_repeat_from))
 
+(lower xi.array.data.ptr
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_array_data_ptr)
+  :aot-c (driver xicgen_array_data_ptr))
+
 (lower xi.ptr.load
   :match ()
   :required-targets (vm-bytecode aot-c)
@@ -767,3 +779,9 @@
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_ptr_store)
   :aot-c (driver xicgen_ptr_store))
+
+(lower xi.ptr.copy.nonoverlap
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_ptr_copy_nonoverlap)
+  :aot-c (driver xicgen_ptr_copy_nonoverlap))

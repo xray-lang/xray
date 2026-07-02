@@ -1,0 +1,36 @@
+fn main() {
+    let values: Array<int> = []
+    let marks: Array<int> = []
+    values.reserve(8)
+    marks.reserve(8)
+
+    parallel for i in 0..8 workers 4 worker wid
+        local acc = wid
+        local buf = Bytes.withCapacity(8)
+        local table = Array<int>(1, wid)
+        collect into (values, marks) {
+        unsafe {
+            buf.pushUnchecked(i)
+            table.setUnchecked(0, table.getUnchecked(0) + 1)
+        }
+        acc = acc + 1
+        let tag = 0
+        unsafe {
+            tag = buf.length + table.getUnchecked(0)
+        }
+        (i + acc, tag)
+    }
+
+    print(values.length)
+    print(marks.length)
+    print(values[0])
+    print(values[1])
+    print(values[2])
+    print(values[7])
+    print(marks[0])
+    print(marks[1])
+    print(marks[2])
+    print(marks[7])
+}
+
+main()

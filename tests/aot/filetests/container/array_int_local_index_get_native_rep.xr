@@ -1,0 +1,7 @@
+fn readLocal(h: int) -> int {
+    let table = Array<int>(8, -1)
+    table[h] = h + 10
+    return table[h]
+}
+
+print(readLocal(3))

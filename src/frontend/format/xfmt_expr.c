@@ -183,7 +183,6 @@ static void fmt_call(XrFmtContext *ctx, AstNode *node) {
 
 static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
-    xfmt_write_str(ctx, "new ");
     NewExprNode *new_expr = &node->as.new_expr;
     if (new_expr->module_name) {
         xfmt_write_str(ctx, new_expr->module_name);
@@ -329,6 +328,78 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
     ctx->indent_level--;
     xfmt_write_indent(ctx);
     xfmt_write_char(ctx, '}');
+}
+
+static void fmt_parallel_reduce_expr(XrFmtContext *ctx, AstNode *node) {
+    ParallelReduceExprNode *pr = &node->as.parallel_reduce_expr;
+    xfmt_write_indent(ctx);
+    if (pr->range_body) {
+        xfmt_write_str(ctx, "parallel range reduce ");
+        xfmt_write_str(ctx, pr->item_name);
+        xfmt_write_str(ctx, ", ");
+        xfmt_write_str(ctx, pr->end_name);
+        xfmt_write_str(ctx, " in ");
+    } else {
+        xfmt_write_str(ctx, "parallel reduce ");
+        xfmt_write_str(ctx, pr->item_name);
+        xfmt_write_str(ctx, " in ");
+    }
+    xfmt_emit_expression(ctx, pr->range);
+    if (pr->worker_count) {
+        xfmt_write_str(ctx, " workers ");
+        xfmt_emit_expression(ctx, pr->worker_count);
+    }
+    if (pr->worker_name) {
+        xfmt_write_str(ctx, " worker ");
+        xfmt_write_str(ctx, pr->worker_name);
+    }
+    for (int i = 0; i < pr->local_count; i++) {
+        xfmt_write_str(ctx, " local ");
+        xfmt_write_str(ctx, pr->locals[i].name);
+        xfmt_write_str(ctx, pr->locals[i].is_initializer ? " = " : " in ");
+        xfmt_emit_expression(ctx, pr->locals[i].source);
+    }
+    xfmt_write_str(ctx, " init ");
+    xfmt_emit_expression(ctx, pr->initial);
+    xfmt_write_str(ctx, " combine ");
+    xfmt_emit_expression(ctx, pr->combine);
+    xfmt_write_space(ctx);
+    xfmt_emit_block(ctx, pr->body);
+}
+
+static void fmt_parallel_collect_expr(XrFmtContext *ctx, AstNode *node) {
+    ParallelCollectExprNode *pc = &node->as.parallel_collect_expr;
+    xfmt_write_indent(ctx);
+    xfmt_write_str(ctx, "parallel for ");
+    xfmt_write_str(ctx, pc->item_name);
+    xfmt_write_str(ctx, " in ");
+    xfmt_emit_expression(ctx, pc->range);
+    if (pc->worker_count) {
+        xfmt_write_str(ctx, " workers ");
+        xfmt_emit_expression(ctx, pc->worker_count);
+    }
+    if (pc->worker_name) {
+        xfmt_write_str(ctx, " worker ");
+        xfmt_write_str(ctx, pc->worker_name);
+    }
+    for (int i = 0; i < pc->local_count; i++) {
+        xfmt_write_str(ctx, " local ");
+        xfmt_write_str(ctx, pc->locals[i].name);
+        xfmt_write_str(ctx, pc->locals[i].is_initializer ? " = " : " in ");
+        xfmt_emit_expression(ctx, pc->locals[i].source);
+    }
+    if (pc->final_body) {
+        xfmt_write_str(ctx, " final ");
+        xfmt_emit_block(ctx, pc->final_body);
+        xfmt_write_str(ctx, " ");
+    }
+    xfmt_write_str(ctx, " collect ");
+    if (pc->into) {
+        xfmt_write_str(ctx, "into ");
+        xfmt_emit_expression(ctx, pc->into);
+        xfmt_write_str(ctx, " ");
+    }
+    xfmt_emit_block(ctx, pc->body);
 }
 
 // ----------------------------------------------------------------------------
@@ -754,6 +825,13 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_expression(ctx, node->as.range.end);
             break;
 
+        case AST_PARALLEL_REDUCE_EXPR:
+            fmt_parallel_reduce_expr(ctx, node);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            fmt_parallel_collect_expr(ctx, node);
+            break;
+
         // Is expression
         case AST_IS_EXPR:
             xfmt_emit_expression(ctx, node->as.is_expr.expr);
@@ -938,6 +1016,10 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             }
             xfmt_write_space(ctx);
             xfmt_emit_expression(ctx, aw->expr);
+            if (aw->into) {
+                xfmt_write_str(ctx, " into ");
+                xfmt_emit_expression(ctx, aw->into);
+            }
             break;
         }
 

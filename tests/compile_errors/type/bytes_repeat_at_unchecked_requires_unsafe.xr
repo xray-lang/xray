@@ -1,0 +1,2 @@
+let out = Bytes.withCapacity(4)
+out.repeatAtUnchecked(0, 1, 1)

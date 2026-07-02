@@ -38,11 +38,13 @@
 #include "xi_opt_call_specialize.h"
 #include "xi_opt_comptime.h"
 #include "xi_range.h"
+#include "xi_value_query.h"
 #include "../shared/xr_int_arith.h"
 #include "xi_analysis.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
 #include "../base/xdefs.h"
+#include "../base/xglobal_indices.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../os/os_time.h"
@@ -98,6 +100,137 @@ static bool const_bool_value(const XiValue *v, bool *out) {
     if (out)
         *out = v->aux_int != 0;
     return true;
+}
+
+static char *opt_arena_strdup(XiFunc *f, const char *s) {
+    if (!f || !s)
+        return NULL;
+    size_t len = strlen(s);
+    char *copy = (char *) xi_func_arena_alloc(f, (uint32_t) len + 1u);
+    if (copy)
+        memcpy(copy, s, len + 1u);
+    return copy;
+}
+
+static XiConstLiteral *shared_const_literal_slot(XiFunc *f, int64_t slot) {
+    if (slot < 0 || slot > UINT16_MAX)
+        return NULL;
+    for (XiFunc *cur = f; cur; cur = cur->parent_func) {
+        uint16_t s = (uint16_t) slot;
+        if (!cur->shared_const_literals || s >= cur->shared_const_literal_count)
+            continue;
+        if (!cur->slot_owned_consts || s >= cur->nshared || !cur->slot_owned_consts[s])
+            continue;
+        return &cur->shared_const_literals[s];
+    }
+    return NULL;
+}
+
+static bool const_literal_from_value(XiFunc *owner, const XiValue *v, XiConstLiteral *out) {
+    if (!owner || !out)
+        return false;
+    v = const_source_value(v);
+    if (!v || v->op != XI_CONST || !v->type)
+        return false;
+
+    memset(out, 0, sizeof(*out));
+    out->type = v->type;
+    switch (v->type->kind) {
+        case XR_KIND_INT:
+            out->kind = XI_CONST_LITERAL_INT;
+            out->int_value = v->aux_int;
+            return true;
+        case XR_KIND_FLOAT:
+            out->kind = XI_CONST_LITERAL_FLOAT;
+            memcpy(&out->float_value, &v->aux_int, sizeof(double));
+            return true;
+        case XR_KIND_BOOL:
+            out->kind = XI_CONST_LITERAL_BOOL;
+            out->bool_value = v->aux_int != 0;
+            return true;
+        case XR_KIND_CHAR:
+            out->kind = XI_CONST_LITERAL_CHAR;
+            out->int_value = v->aux_int;
+            return true;
+        case XR_KIND_STRING:
+            if (!v->aux)
+                return false;
+            out->kind = XI_CONST_LITERAL_STRING;
+            out->string_value = opt_arena_strdup(owner, (const char *) v->aux);
+            return out->string_value != NULL;
+        case XR_KIND_NULL:
+            out->kind = XI_CONST_LITERAL_NULL;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool const_literal_equal(const XiConstLiteral *a, const XiConstLiteral *b) {
+    if (!a || !b || a->kind != b->kind || a->type != b->type)
+        return false;
+    switch (a->kind) {
+        case XI_CONST_LITERAL_NONE:
+        case XI_CONST_LITERAL_NULL:
+            return true;
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_CHAR:
+            return a->int_value == b->int_value;
+        case XI_CONST_LITERAL_FLOAT:
+            return memcmp(&a->float_value, &b->float_value, sizeof(double)) == 0;
+        case XI_CONST_LITERAL_BOOL:
+            return a->bool_value == b->bool_value;
+        case XI_CONST_LITERAL_STRING:
+            return a->string_value && b->string_value &&
+                   strcmp(a->string_value, b->string_value) == 0;
+        default:
+            return false;
+    }
+}
+
+static bool record_shared_const_literal(XiFunc *f, int64_t slot, const XiValue *src) {
+    XiConstLiteral *dst = shared_const_literal_slot(f, slot);
+    if (!dst)
+        return false;
+    XiConstLiteral lit;
+    if (!const_literal_from_value(f, src, &lit))
+        return false;
+    if (const_literal_equal(dst, &lit))
+        return false;
+    *dst = lit;
+    return true;
+}
+
+static bool rewrite_to_const_literal(XiValue *v, const XiConstLiteral *lit) {
+    if (!v || !lit || lit->kind == XI_CONST_LITERAL_NONE)
+        return false;
+    v->op = XI_CONST;
+    v->type = lit->type ? lit->type : v->type;
+    v->nargs = 0;
+    v->aux = NULL;
+    v->aux_int = 0;
+    v->aux_kind = XI_AUX_KIND_NONE;
+    v->flags = xi_op_default_effects(XI_CONST);
+    v->mem_group = XI_MEM_NONE;
+    switch (lit->kind) {
+        case XI_CONST_LITERAL_NULL:
+            return true;
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_CHAR:
+            v->aux_int = lit->int_value;
+            return true;
+        case XI_CONST_LITERAL_FLOAT:
+            memcpy(&v->aux_int, &lit->float_value, sizeof(double));
+            return true;
+        case XI_CONST_LITERAL_BOOL:
+            v->aux_int = lit->bool_value ? 1 : 0;
+            return true;
+        case XI_CONST_LITERAL_STRING:
+            v->aux = (void *) lit->string_value;
+            return lit->string_value != NULL;
+        default:
+            return false;
+    }
 }
 
 static bool opt_type_is_unsigned_int(const XrType *type) {
@@ -342,9 +475,52 @@ static void rewrite_to_const_int(XiValue *v, int64_t value) {
     v->op = XI_CONST;
     v->aux_int = value;
     v->aux = NULL;
+    v->aux_kind = XI_AUX_KIND_NONE;
     v->nargs = 0;
     v->flags = xi_op_default_effects(XI_CONST);
     v->mem_group = XI_MEM_NONE;
+}
+
+static bool ordering_member_index_opt(const char *name, int64_t *out_index) {
+    if (!name || !out_index)
+        return false;
+    if (strcmp(name, "Relaxed") == 0) {
+        *out_index = 0;
+        return true;
+    }
+    if (strcmp(name, "Acquire") == 0) {
+        *out_index = 1;
+        return true;
+    }
+    if (strcmp(name, "Release") == 0) {
+        *out_index = 2;
+        return true;
+    }
+    if (strcmp(name, "AcquireRelease") == 0) {
+        *out_index = 3;
+        return true;
+    }
+    if (strcmp(name, "SeqCst") == 0) {
+        *out_index = 4;
+        return true;
+    }
+    return false;
+}
+
+static bool rewrite_ordering_member_to_const_int(XiValue *v) {
+    if (!v || v->op != XI_LOAD_FIELD || v->nargs < 1 || !v->args[0] || !v->aux)
+        return false;
+    XiValue *recv = v->args[0];
+    while (recv && xi_copy_is_identity_alias(recv) && recv->nargs >= 1)
+        recv = recv->args[0];
+    if (!recv || recv->op != XI_GET_BUILTIN || recv->aux_int != XR_GLOBAL_VAR_ORDERING)
+        return false;
+    int64_t index = 0;
+    if (!ordering_member_index_opt((const char *) v->aux, &index))
+        return false;
+    rewrite_to_const_int(v, index);
+    v->type = xr_type_new_int(NULL);
+    return true;
 }
 
 static void rewrite_to_const_float(XiValue *v, double value) {
@@ -352,6 +528,7 @@ static void rewrite_to_const_float(XiValue *v, double value) {
     v->op = XI_CONST;
     memcpy(&v->aux_int, &value, sizeof(double));
     v->aux = NULL;
+    v->aux_kind = XI_AUX_KIND_NONE;
     v->nargs = 0;
     v->flags = xi_op_default_effects(XI_CONST);
     v->mem_group = XI_MEM_NONE;
@@ -366,6 +543,7 @@ static void rewrite_to_copy(XiValue *v, XiValue *src) {
     v->flags = xi_op_default_effects(XI_COPY);
     v->aux_int = XI_COPY_KIND_IDENTITY;
     v->aux = NULL;
+    v->aux_kind = XI_AUX_KIND_NONE;
     v->mem_group = XI_MEM_NONE;
 }
 
@@ -378,6 +556,25 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
 
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
+
+            if (rewrite_ordering_member_to_const_int(v)) {
+                chg.values_changed = true;
+                continue;
+            }
+
+            if (v->op == XI_GET_SHARED) {
+                const XiConstLiteral *lit = shared_const_literal_slot(f, v->aux_int);
+                if (lit && rewrite_to_const_literal(v, lit)) {
+                    chg.values_changed = true;
+                    continue;
+                }
+            }
+
+            if (v->op == XI_SET_SHARED && v->nargs == 1) {
+                if (record_shared_const_literal(f, v->aux_int, v->args[0]))
+                    chg.values_changed = true;
+                continue;
+            }
 
             /* Fold unary NEG on const int.
              * -INT64_MIN is UB on signed; negate on uint64_t then cast back
@@ -620,6 +817,21 @@ static bool xi_await_is_plain_one_task(const XiValue *v) {
     return (v->aux_int & variant_bits) == 0;
 }
 
+static bool xi_await_is_all_tasks(const XiValue *v) {
+    if (!v || v->op != XI_AWAIT || v->nargs < 1)
+        return false;
+    return (v->aux_int & XI_AWAIT_AUX_ALL) != 0 &&
+           (v->aux_int & (XI_AWAIT_AUX_ANY | XI_AWAIT_AUX_ANY_SUCCESS)) == 0;
+}
+
+static bool xi_go_can_be_one_shot_awaited(const XiValue *v) {
+    if (!v || v->op != XI_GO)
+        return false;
+    if (v->flags & XI_FLAG_FIRE_AND_FORGET)
+        return false;
+    return (v->aux_int & XI_GO_AUX_LINK_MASK) == 0;
+}
+
 static bool xi_identity_keeps_task_view(const XiValue *from, const XiValue *to) {
     if (!from || !to || (to->op != XI_COPY && to->op != XI_MOVE) || to->nargs != 1 ||
         to->args[0] != from)
@@ -648,6 +860,577 @@ static XiValue *find_one_shot_await_for_go(XiFunc *f, XiValue *go) {
     return NULL;
 }
 
+static XiValue *unwrap_unique_task_go_for_aggregate_set(XiValue *value) {
+    XiValue *cur = value;
+    for (uint8_t depth = 0; depth < 8; depth++) {
+        if (!cur || cur->uses != 1)
+            return NULL;
+        if (cur->op == XI_GO)
+            return xi_go_can_be_one_shot_awaited(cur) ? cur : NULL;
+        if (cur->nargs == 1 && xi_identity_keeps_task_view(cur->args[0], cur)) {
+            cur = cur->args[0];
+            continue;
+        }
+        return NULL;
+    }
+    return NULL;
+}
+
+static bool xi_opt_method_name_is(const XiValue *v, const char *name, SymbolId symbol) {
+    if (!v || !name)
+        return false;
+    const char *method = v->aux ? (const char *) v->aux : NULL;
+    if (method && strcmp(method, name) == 0)
+        return true;
+    if (v->aux_int <= 0)
+        return false;
+    return (SymbolId) (v->aux_int >> 1) == symbol;
+}
+
+static const XiValue *xi_identity_root_value(const XiValue *v) {
+    const XiValue *cur = v;
+    for (uint8_t depth = 0; depth < 8; depth++) {
+        if (!cur || cur->nargs != 1)
+            return cur;
+        const XiValue *src = cur->args[0];
+        if (!xi_identity_keeps_task_view(src, cur))
+            return cur;
+        cur = src;
+    }
+    return cur;
+}
+
+static XiValue *xi_task_array_unwrap_identity(XiValue *v) {
+    XiValue *cur = v;
+    for (uint8_t depth = 0; depth < 8; depth++) {
+        if (!cur || cur->nargs != 1)
+            return cur;
+        XiValue *src = cur->args[0];
+        if (!xi_identity_keeps_task_view(src, cur))
+            return cur;
+        cur = src;
+    }
+    return cur;
+}
+
+static XiValue *xi_task_array_unique_shared_init(XiFunc *f, int64_t slot) {
+    if (!f || slot < 0)
+        return NULL;
+    XiValue *init = NULL;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_SET_SHARED || v->aux_int != slot || v->nargs < 1)
+                continue;
+            XiValue *rhs = xi_task_array_unwrap_identity(v->args[0]);
+            if (!rhs || rhs->op != XI_ARRAY_NEW)
+                return NULL;
+            if (init && init != rhs)
+                return NULL;
+            init = rhs;
+        }
+    }
+    return init;
+}
+
+static bool xi_task_array_root_is_known(XiFunc *f, XiValue *v) {
+    v = xi_task_array_unwrap_identity(v);
+    if (!v)
+        return false;
+    if (v->op == XI_ARRAY_NEW)
+        return true;
+    return v->op == XI_GET_SHARED && xi_task_array_unique_shared_init(f, v->aux_int) != NULL;
+}
+
+static bool xi_task_array_values_same(XiFunc *f, XiValue *a, XiValue *b) {
+    a = xi_task_array_unwrap_identity(a);
+    b = xi_task_array_unwrap_identity(b);
+    if (!a || !b)
+        return false;
+    if (a == b)
+        return true;
+    if (a->op == XI_GET_SHARED && b->op == XI_GET_SHARED && a->aux_int == b->aux_int)
+        return xi_task_array_unique_shared_init(f, a->aux_int) != NULL;
+    if (a->op == XI_GET_SHARED && b->op == XI_ARRAY_NEW)
+        return xi_task_array_unique_shared_init(f, a->aux_int) == b;
+    if (b->op == XI_GET_SHARED && a->op == XI_ARRAY_NEW)
+        return xi_task_array_unique_shared_init(f, b->aux_int) == a;
+    return false;
+}
+
+static bool xi_task_array_use_is_shared_init(XiFunc *f, XiValue *user, uint16_t arg_idx,
+                                             XiValue *arr) {
+    if (!f || !user || !arr || user->op != XI_SET_SHARED || user->nargs < 1 || arg_idx != 0)
+        return false;
+    XiValue *root = xi_task_array_unwrap_identity(arr);
+    if (root && root->op == XI_GET_SHARED && root->aux_int == user->aux_int)
+        return xi_task_array_unique_shared_init(f, root->aux_int) ==
+               xi_task_array_unwrap_identity(user->args[0]);
+    if (root && root->op == XI_ARRAY_NEW)
+        return xi_task_array_unique_shared_init(f, user->aux_int) == root;
+    return false;
+}
+
+static bool xi_result_group_recv_uses_group(const XiValue *v, const XiValue *group) {
+    if (!v || !group || v->nargs < 1)
+        return false;
+    if (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT)
+        return false;
+    if (!xi_opt_method_name_is(v, "recv", SYMBOL_RECV))
+        return false;
+    if (!xi_value_type_is_result_group(v->args[0]))
+        return false;
+    return xi_identity_root_value(v->args[0]) == xi_identity_root_value(group);
+}
+
+static bool xi_func_has_result_group_recv_for_group(XiFunc *f, const XiValue *group) {
+    if (!f || !group)
+        return false;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (xi_result_group_recv_uses_group(blk->values[i], group))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool xi_go_can_defer_fire_and_forget_result_group(XiFunc *f, const XiValue *go) {
+    if (!f || !go || go->op != XI_GO)
+        return false;
+    if ((go->flags & XI_FLAG_FIRE_AND_FORGET) == 0)
+        return false;
+    if ((go->aux_int & XI_GO_AUX_LINK_MASK) != 0)
+        return false;
+    for (uint16_t a = 1; a < go->nargs; a++) {
+        XiValue *arg = go->args[a];
+        if (xi_value_type_is_result_group(arg) && xi_func_has_result_group_recv_for_group(f, arg))
+            return true;
+    }
+    return false;
+}
+
+static bool xi_mark_fire_and_forget_result_group_go_deferred(XiFunc *f, XiValue *go,
+                                                             XiPassChange *chg) {
+    if (!xi_go_can_defer_fire_and_forget_result_group(f, go))
+        return false;
+    if ((go->aux_int & XI_GO_AUX_DEFER_BATCH) != 0)
+        return false;
+    go->aux_int |= XI_GO_AUX_DEFER_BATCH;
+    if (chg) {
+        chg->values_changed = true;
+        chg->n_added++;
+    }
+    return true;
+}
+
+static bool xi_await_all_task_array_pushes_go(XiFunc *f, XiValue *user, XiValue *arr) {
+    if (!user || !arr)
+        return false;
+    if (user->op == XI_INDEX_SET && user->nargs >= 3 &&
+        xi_task_array_values_same(f, user->args[0], arr))
+        return unwrap_unique_task_go_for_aggregate_set(user->args[2]) != NULL;
+    if ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) && user->nargs >= 2 &&
+        xi_task_array_values_same(f, user->args[0], arr) &&
+        (xi_opt_method_name_is(user, "push", SYMBOL_PUSH) ||
+         xi_opt_method_name_is(user, "pushUnchecked", SYMBOL_PUSH_UNCHECKED))) {
+        return unwrap_unique_task_go_for_aggregate_set(user->args[1]) != NULL;
+    }
+    return false;
+}
+
+static XiValue *xi_await_all_task_array_pushed_go(XiFunc *f, XiValue *user, XiValue *arr) {
+    if (!xi_await_all_task_array_pushes_go(f, user, arr))
+        return NULL;
+    if (user->op == XI_INDEX_SET)
+        return unwrap_unique_task_go_for_aggregate_set(user->args[2]);
+    return unwrap_unique_task_go_for_aggregate_set(user->args[1]);
+}
+
+static bool xi_await_all_task_array_allowed_structural_use(XiFunc *f, const XiValue *user,
+                                                           uint16_t arg_idx, XiValue *arr) {
+    if (!user || !arr || arg_idx != 0)
+        return false;
+    if (user->op == XI_CALL_BUILTIN && user->aux) {
+        const char *name = (const char *) user->aux;
+        return strcmp(name, "array_clear") == 0 || strcmp(name, "array_reserve") == 0;
+    }
+    if ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
+        xi_task_array_values_same(f, user->args[0], arr)) {
+        return xi_opt_method_name_is(user, "clear", SYMBOL_CLEAR) ||
+               xi_opt_method_name_is(user, "reserve", SYMBOL_RESERVE);
+    }
+    return false;
+}
+
+static bool xi_task_array_use_is_clear(XiFunc *f, const XiValue *user, uint16_t arg_idx,
+                                       XiValue *arr) {
+    if (!user || !arr || arg_idx != 0)
+        return false;
+    if (user->op == XI_CALL_BUILTIN && user->aux) {
+        const char *name = (const char *) user->aux;
+        return strcmp(name, "array_clear") == 0;
+    }
+    if ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
+        xi_task_array_values_same(f, user->args[0], arr)) {
+        return xi_opt_method_name_is(user, "clear", SYMBOL_CLEAR);
+    }
+    return false;
+}
+
+static bool xi_await_all_fresh_task_array_can_be_one_shot(XiFunc *f, XiValue *await, XiValue *arr) {
+    if (!f || !xi_await_is_all_tasks(await) || !xi_task_array_root_is_known(f, arr))
+        return false;
+
+    bool saw_set = false;
+    bool saw_await = false;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (!xi_task_array_values_same(f, v->args[a], arr))
+                    continue;
+                if (v == await && a == 0) {
+                    if (saw_await)
+                        return false;
+                    saw_await = true;
+                    continue;
+                }
+                if (xi_task_array_use_is_shared_init(f, v, a, arr))
+                    continue;
+                if (a == 0 && xi_await_all_task_array_pushes_go(f, v, arr)) {
+                    saw_set = true;
+                    continue;
+                }
+                if (xi_await_all_task_array_allowed_structural_use(f, v, a, arr))
+                    continue;
+                return false;
+            }
+        }
+    }
+    return saw_set && saw_await;
+}
+
+static bool xi_mark_await_all_fresh_task_array_one_shot(XiFunc *f, XiValue *await, XiValue *arr,
+                                                        XiPassChange *chg) {
+    if (!xi_await_all_fresh_task_array_can_be_one_shot(f, await, arr))
+        return false;
+
+    bool changed = false;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->nargs < 2)
+                continue;
+            XiValue *go = xi_await_all_task_array_pushed_go(f, v, arr);
+            if (!go)
+                continue;
+            if ((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0) {
+                go->aux_int |= XI_GO_AUX_ONE_SHOT_AWAIT;
+                changed = true;
+            }
+            if ((go->aux_int & XI_GO_AUX_DEFER_BATCH) == 0) {
+                go->aux_int |= XI_GO_AUX_DEFER_BATCH;
+                changed = true;
+            }
+        }
+    }
+
+    if ((await->aux_int & XI_AWAIT_AUX_AGGREGATE_ONE_SHOT) == 0) {
+        await->aux_int |= XI_AWAIT_AUX_AGGREGATE_ONE_SHOT;
+        changed = true;
+    }
+
+    if (changed && chg) {
+        chg->values_changed = true;
+        chg->n_added++;
+    }
+    return changed;
+}
+
+static XiValue *xi_plain_await_for_task_index_get(XiFunc *f, XiValue *index_get) {
+    XiValue *cur = index_get;
+    for (uint8_t depth = 0; depth < 8; depth++) {
+        if (!cur || cur->uses != 1)
+            return NULL;
+        XiValue *user = find_unique_arg_user(f, cur);
+        if (!user)
+            return NULL;
+        if (xi_await_is_plain_one_task(user) && user->args[0] == cur)
+            return user;
+        if (xi_identity_keeps_task_view(cur, user)) {
+            cur = user;
+            continue;
+        }
+        return NULL;
+    }
+    return NULL;
+}
+
+static bool xi_plain_await_consumes_task_index_get(XiFunc *f, XiValue *index_get) {
+    return xi_plain_await_for_task_index_get(f, index_get) != NULL;
+}
+
+static const XiValue *xi_task_loop_unwrap_identity(const XiValue *v) {
+    const XiValue *cur = v;
+    for (uint8_t depth = 0; depth < 8; depth++) {
+        if (!cur || !xi_copy_is_identity_alias(cur) || cur->nargs < 1)
+            return cur;
+        cur = cur->args[0];
+    }
+    return cur;
+}
+
+static bool xi_task_loop_const_int_value(const XiValue *v, int64_t expected) {
+    v = xi_task_loop_unwrap_identity(v);
+    return v && v->op == XI_CONST && v->type && v->type->kind == XR_KIND_INT &&
+           v->aux_int == expected;
+}
+
+static bool xi_task_loop_is_add_one_from_phi(const XiValue *v, const XiValue *phi) {
+    v = xi_task_loop_unwrap_identity(v);
+    if (!v || !phi || v->op != XI_ADD || v->nargs < 2)
+        return false;
+    const XiValue *lhs = xi_task_loop_unwrap_identity(v->args[0]);
+    const XiValue *rhs = xi_task_loop_unwrap_identity(v->args[1]);
+    return (lhs == phi && xi_task_loop_const_int_value(rhs, 1)) ||
+           (rhs == phi && xi_task_loop_const_int_value(lhs, 1));
+}
+
+static bool xi_task_loop_loads_array_length(XiFunc *f, const XiValue *v, XiValue *arr) {
+    v = xi_task_loop_unwrap_identity(v);
+    if (!v || v->op != XI_LOAD_FIELD || v->nargs < 1 || !v->aux)
+        return false;
+    const char *field = (const char *) v->aux;
+    return strcmp(field, "length") == 0 &&
+           xi_task_array_values_same(f, (XiValue *) v->args[0], arr);
+}
+
+static bool xi_task_loop_header_checks_index_below_length(XiFunc *f, const XiBlock *header,
+                                                          const XiValue *index, XiValue *arr) {
+    if (!header || header->kind != XI_BLOCK_IF || !header->control)
+        return false;
+    const XiValue *control = xi_task_loop_unwrap_identity(header->control);
+    if (!control || control->nargs < 2)
+        return false;
+    const XiValue *lhs = xi_task_loop_unwrap_identity(control->args[0]);
+    const XiValue *rhs = xi_task_loop_unwrap_identity(control->args[1]);
+    switch ((XiOp) control->op) {
+        case XI_LT:
+            return lhs == index && xi_task_loop_loads_array_length(f, rhs, arr);
+        case XI_GT:
+            return rhs == index && xi_task_loop_loads_array_length(f, lhs, arr);
+        default:
+            return false;
+    }
+}
+
+static bool xi_task_loop_find_counted_latch(const XiValue *index, const XiBlock *header,
+                                            const XiBlock **out_latch) {
+    if (out_latch)
+        *out_latch = NULL;
+    index = xi_task_loop_unwrap_identity(index);
+    if (!index || !header || index->op != XI_PHI || index->block != header ||
+        index->nargs != header->npreds)
+        return false;
+
+    bool has_zero_base = false;
+    const XiBlock *latch = NULL;
+    for (uint16_t i = 0; i < index->nargs; i++) {
+        const XiValue *arg = xi_task_loop_unwrap_identity(index->args[i]);
+        if (xi_task_loop_const_int_value(arg, 0)) {
+            has_zero_base = true;
+            continue;
+        }
+        if (!xi_task_loop_is_add_one_from_phi(arg, index))
+            return false;
+        if (latch && latch != header->preds[i])
+            return false;
+        latch = header->preds[i];
+    }
+    if (!has_zero_base || !latch)
+        return false;
+    if (out_latch)
+        *out_latch = latch;
+    return true;
+}
+
+static bool xi_task_loop_body_reaches_latch_directly(const XiBlock *body, const XiBlock *latch) {
+    if (!body || !latch)
+        return false;
+    return body == latch || body->succs[0] == latch || body->succs[1] == latch;
+}
+
+static bool xi_task_index_get_is_counted_consuming_loop(XiFunc *f, XiValue *index_get,
+                                                        XiValue *arr) {
+    if (!f || !index_get || index_get->op != XI_INDEX_GET || index_get->nargs < 2 ||
+        !xi_task_array_values_same(f, index_get->args[0], arr))
+        return false;
+    if (!xi_plain_await_for_task_index_get(f, index_get))
+        return false;
+
+    const XiValue *index = xi_task_loop_unwrap_identity(index_get->args[1]);
+    if (!index || index->op != XI_PHI || !index->block)
+        return false;
+    const XiBlock *header = index->block;
+    const XiBlock *body = index_get->block;
+    const XiBlock *latch = NULL;
+    if (!xi_task_loop_find_counted_latch(index, header, &latch))
+        return false;
+    if (!xi_task_loop_header_checks_index_below_length(f, header, index, arr))
+        return false;
+    if (header->succs[0] != body)
+        return false;
+    return xi_task_loop_body_reaches_latch_directly(body, latch);
+}
+
+static bool xi_task_array_single_plain_await_index_get(XiFunc *f, XiValue *arr,
+                                                       XiValue **out_index_get,
+                                                       XiValue **out_await) {
+    if (out_index_get)
+        *out_index_get = NULL;
+    if (out_await)
+        *out_await = NULL;
+    uint32_t count = 0;
+    XiValue *only_index_get = NULL;
+    XiValue *only_await = NULL;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_INDEX_GET || v->nargs < 1 ||
+                !xi_task_array_values_same(f, v->args[0], arr))
+                continue;
+            XiValue *await = xi_plain_await_for_task_index_get(f, v);
+            if (!await)
+                return false;
+            count++;
+            only_index_get = v;
+            only_await = await;
+            if (count > 1)
+                return false;
+        }
+    }
+    if (count != 1)
+        return false;
+    if (out_index_get)
+        *out_index_get = only_index_get;
+    if (out_await)
+        *out_await = only_await;
+    return true;
+}
+
+static bool xi_task_array_allowed_sequential_await_use(XiFunc *f, XiValue *user, uint16_t arg_idx,
+                                                       XiValue *arr, bool *saw_await) {
+    if (!user || !arr || arg_idx != 0)
+        return false;
+    if (xi_await_all_task_array_allowed_structural_use(f, user, arg_idx, arr))
+        return true;
+    if (user->op == XI_LOAD_FIELD && xi_task_array_values_same(f, user->args[0], arr)) {
+        const char *field = user->aux ? (const char *) user->aux : NULL;
+        return field && strcmp(field, "length") == 0;
+    }
+    if (user->op == XI_INDEX_GET && xi_task_array_values_same(f, user->args[0], arr) &&
+        xi_plain_await_consumes_task_index_get(f, user)) {
+        if (saw_await)
+            *saw_await = true;
+        return true;
+    }
+    return false;
+}
+
+static bool xi_task_array_can_defer_batch_for_sequential_awaits(XiFunc *f, XiValue *arr) {
+    if (!f || !xi_task_array_root_is_known(f, arr))
+        return false;
+
+    bool saw_set = false;
+    bool saw_await = false;
+    bool saw_clear = false;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (!xi_task_array_values_same(f, v->args[a], arr))
+                    continue;
+                if (xi_task_array_use_is_shared_init(f, v, a, arr))
+                    continue;
+                if (a == 0 && xi_await_all_task_array_pushes_go(f, v, arr)) {
+                    saw_set = true;
+                    continue;
+                }
+                if (xi_task_array_use_is_clear(f, v, a, arr))
+                    saw_clear = true;
+                if (xi_task_array_allowed_sequential_await_use(f, v, a, arr, &saw_await))
+                    continue;
+                return false;
+            }
+        }
+    }
+    return saw_set && saw_await && saw_clear;
+}
+
+static bool xi_mark_task_array_deferred_batch_go_producers(XiFunc *f, XiValue *arr,
+                                                           XiPassChange *chg) {
+    if (!xi_task_array_can_defer_batch_for_sequential_awaits(f, arr))
+        return false;
+
+    bool changed = false;
+    XiValue *one_shot_index_get = NULL;
+    XiValue *one_shot_await = NULL;
+    bool can_one_shot_consuming_loop =
+        xi_task_array_single_plain_await_index_get(f, arr, &one_shot_index_get, &one_shot_await) &&
+        xi_task_index_get_is_counted_consuming_loop(f, one_shot_index_get, arr);
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->nargs < 2)
+                continue;
+            XiValue *go = xi_await_all_task_array_pushed_go(f, v, arr);
+            if (go) {
+                if ((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0) {
+                    go->aux_int |= XI_GO_AUX_ONE_SHOT_AWAIT;
+                    changed = true;
+                }
+                if ((go->aux_int & XI_GO_AUX_DEFER_BATCH) == 0) {
+                    go->aux_int |= XI_GO_AUX_DEFER_BATCH;
+                    changed = true;
+                }
+            }
+            if (v->op == XI_INDEX_GET && v->nargs >= 1 &&
+                xi_task_array_values_same(f, v->args[0], arr)) {
+                XiValue *await = xi_plain_await_for_task_index_get(f, v);
+                if (await && (await->aux_int & XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH) == 0) {
+                    await->aux_int |= XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH;
+                    changed = true;
+                }
+                if (await && can_one_shot_consuming_loop && v == one_shot_index_get &&
+                    await == one_shot_await && (await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0) {
+                    await->aux_int |= XI_AWAIT_AUX_ONE_SHOT_GO;
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    if (changed && chg) {
+        chg->values_changed = true;
+        chg->n_added++;
+    }
+    return changed;
+}
+
 XR_FUNC XiPassChange xi_opt_mark_one_shot_await(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_mark_one_shot_await: NULL func");
     XiPassChange chg = xi_pass_no_change();
@@ -660,19 +1443,47 @@ XR_FUNC XiPassChange xi_opt_mark_one_shot_await(XiFunc *f) {
             XiValue *v = blk->values[i];
             if (!v || v->op != XI_GO)
                 continue;
-            if (v->flags & XI_FLAG_FIRE_AND_FORGET)
+            if (xi_mark_fire_and_forget_result_group_go_deferred(f, v, &chg))
                 continue;
-            if ((v->aux_int & 0xff) != 0)
+            if (!xi_go_can_be_one_shot_awaited(v))
                 continue;
 
             XiValue *await = find_one_shot_await_for_go(f, v);
-            if (!await || (await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO))
+            if (!await)
                 continue;
 
-            await->aux_int |= XI_AWAIT_AUX_ONE_SHOT_GO;
-            v->aux_int |= XI_GO_AUX_ONE_SHOT_AWAIT;
-            chg.values_changed = true;
-            chg.n_added++;
+            bool changed = false;
+            if ((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0) {
+                await->aux_int |= XI_AWAIT_AUX_ONE_SHOT_GO;
+                changed = true;
+            }
+            if ((v->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0) {
+                v->aux_int |= XI_GO_AUX_ONE_SHOT_AWAIT;
+                changed = true;
+            }
+            if (changed) {
+                chg.values_changed = true;
+                chg.n_added++;
+            }
+        }
+    }
+
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!xi_await_is_all_tasks(v))
+                continue;
+            xi_mark_await_all_fresh_task_array_one_shot(f, v, v->args[0], &chg);
+        }
+    }
+
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (v && (v->op == XI_ARRAY_NEW || v->op == XI_GET_SHARED))
+                xi_mark_task_array_deferred_batch_go_producers(f, v, &chg);
         }
     }
 
@@ -781,6 +1592,11 @@ XR_FUNC XiPassChange xi_opt_phi_simplify(XiFunc *f) {
 static XrRep sr_type_scalar_rep(const struct XrType *type) {
     if (!type)
         return XR_REP_TAGGED;
+    if (type->is_nullable || type->kind == XR_KIND_NULL ||
+        xr_type_intrinsically_includes_null(type))
+        return XR_REP_TAGGED;
+    if (type->kind == XR_KIND_POINTER)
+        return XR_REP_RAWPTR;
     XrRep r = xr_type_rep(type);
     return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
 }
@@ -794,8 +1610,11 @@ static XrRep sr_type_native_boundary_rep(const struct XrType *type) {
     if (type->is_nullable)
         return XR_REP_TAGGED;
     switch (type->kind) {
+        case XR_KIND_POINTER:
+            return XR_REP_RAWPTR;
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_TUPLE:
@@ -870,7 +1689,7 @@ static bool sr_field_receiver_uses_native_rep(const XiValue *receiver) {
 static const XrType *sr_array_elem_type(const XrType *type) {
     if (!type)
         return NULL;
-    if (type->kind == XR_KIND_ARRAY)
+    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SPAN)
         return type->container.element_type;
     if (type->kind == XR_KIND_FIXED_ARRAY)
         return type->fixed_array.element_type;
@@ -897,6 +1716,14 @@ static XrRep sr_typed_array_elem_rep(const XrType *type) {
     }
 }
 
+static bool sr_type_has_static_typed_array_storage(const XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    if (type->kind != XR_KIND_ARRAY && type->kind != XR_KIND_SPAN)
+        return false;
+    return sr_typed_array_elem_rep(type) != XR_REP_TAGGED;
+}
+
 static const XiValue *sr_unwrap_identity_value(const XiValue *v) {
     while (v &&
            (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
@@ -908,27 +1735,16 @@ static const XiValue *sr_unwrap_identity_value(const XiValue *v) {
 
 static bool sr_value_has_static_typed_array_storage_depth(const XiValue *value, uint8_t depth) {
     const XiValue *v = sr_unwrap_identity_value(value);
-    if (!v || depth > 8 || sr_typed_array_elem_rep(v->type) == XR_REP_TAGGED)
+    if (!v || depth > 8 || !sr_type_has_static_typed_array_storage(v->type))
         return false;
-    if (v->op == XI_ARRAY_NEW)
-        return true;
-    if (v->op == XI_LOAD_FIELD)
-        return true;
+
+    /* Array<T>/Span<T> with a native element type is a language-level typed
+     * storage invariant.  The value may come from a param, local constructor,
+     * method result, import, or direct call.  AOT prepare/cgen still decides
+     * whether a particular access can use raw storage; select_rep only keeps
+     * the element value itself in its native register representation. */
     if (v->op == XI_SLICE && v->nargs >= 1)
         return sr_value_has_static_typed_array_storage_depth(v->args[0], depth + 1);
-    if (v->op == XI_CALL_BUILTIN) {
-        const char *name = (const char *) v->aux;
-        if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "Bytes") == 0))
-            return true;
-        return false;
-    }
-    if (v->op == XI_CALL_METHOD && v->nargs >= 1) {
-        const char *method = (const char *) v->aux;
-        if (method && strcmp(method, "filter") == 0)
-            return sr_value_has_static_typed_array_storage_depth(v->args[0], depth + 1);
-        if (method && strcmp(method, "map") == 0)
-            return true;
-    }
     if (v->op == XI_PHI) {
         bool has_base = false;
         if (v->nargs == 0)
@@ -943,7 +1759,7 @@ static bool sr_value_has_static_typed_array_storage_depth(const XiValue *value, 
         }
         return has_base;
     }
-    return false;
+    return true;
 }
 
 static bool sr_value_has_static_typed_array_storage(const XiValue *value) {
@@ -1000,8 +1816,8 @@ static bool sr_is_static_collection_length_field(const XiValue *v) {
     const XiValue *receiver = sr_unwrap_identity_value(v->args[0]);
     if (!receiver || !receiver->type)
         return false;
-    return receiver->type->kind == XR_KIND_ARRAY || receiver->type->kind == XR_KIND_MAP ||
-           receiver->type->kind == XR_KIND_SET;
+    return receiver->type->kind == XR_KIND_ARRAY || receiver->type->kind == XR_KIND_SPAN ||
+           receiver->type->kind == XR_KIND_MAP || receiver->type->kind == XR_KIND_SET;
 }
 
 static bool sr_type_is_native_map_key(const XrType *type) {
@@ -1039,6 +1855,65 @@ static bool sr_method_name_is(const XiValue *v, const char *name) {
         return symbol == SYMBOL_HAS;
     if (strcmp(name, "get") == 0)
         return symbol == SYMBOL_GET;
+    return false;
+}
+
+static bool sr_is_typed_array_native_receiver_method(const XiValue *v) {
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1 ||
+        !v->args[0] || !sr_value_has_static_typed_array_storage(v->args[0]) || !v->aux)
+        return false;
+    const char *method = (const char *) v->aux;
+    return strcmp(method, "push") == 0 || strcmp(method, "pushUnchecked") == 0 ||
+           strcmp(method, "reserve") == 0 || strcmp(method, "resize") == 0 ||
+           strcmp(method, "appendFromUnchecked") == 0 ||
+           strcmp(method, "repeatFromUnchecked") == 0 ||
+           strcmp(method, "writeFromUnchecked") == 0 || strcmp(method, "repeatAtUnchecked") == 0 ||
+           strcmp(method, "wildCopyFromNonOverlappingUnchecked") == 0 ||
+           strcmp(method, "wildRepeatAtUnchecked") == 0 ||
+           strcmp(method, "setLengthUnchecked") == 0 ||
+           strcmp(method, "commonPrefixUnchecked") == 0 || strcmp(method, "fill") == 0;
+}
+
+static bool sr_type_is_named_instance(const XrType *type, const char *name) {
+    if (!type || !name)
+        return false;
+    if (type->kind == XR_KIND_INSTANCE)
+        return type->instance.class_name && strcmp(type->instance.class_name, name) == 0;
+    if (type->kind == XR_KIND_UNION) {
+        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            if (sr_type_is_named_instance(type->union_type.members[i], name))
+                return true;
+        }
+    }
+    return false;
+}
+
+static const XrType *sr_atomic_inner_type(const XiValue *recv) {
+    const XiValue *origin = sr_unwrap_identity_value(recv);
+    const XrType *type = origin ? origin->type : (recv ? recv->type : NULL);
+    if (!sr_type_is_named_instance(type, "Atomic"))
+        return NULL;
+    if (type->kind != XR_KIND_INSTANCE || type->instance.type_arg_count == 0 ||
+        !type->instance.type_args)
+        return NULL;
+    return type->instance.type_args[0];
+}
+
+static bool sr_atomic_method_return_rep(const XiValue *v, XrRep *out_rep) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1)
+        return false;
+    const XrType *inner = sr_atomic_inner_type(v->args[0]);
+    if (!inner)
+        return false;
+    if (sr_method_name_is(v, "load") || sr_method_name_is(v, "swap") ||
+        sr_method_name_is(v, "fetchAdd") || sr_method_name_is(v, "fetchSub")) {
+        XrRep rep = sr_type_scalar_rep(inner);
+        if (inner->kind != XR_KIND_BOOL && (rep == XR_REP_I64 || rep == XR_REP_F64)) {
+            if (out_rep)
+                *out_rep = rep;
+            return true;
+        }
+    }
     return false;
 }
 
@@ -1271,7 +2146,20 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_CALL:
         case XI_CALL_METHOD_DIRECT:
             return sr_type_native_boundary_rep(v->type);
-        case XI_CALL_METHOD:
+        case XI_CALL_BUILTIN: {
+            const char *name = (const char *) v->aux;
+            if (name && strcmp(name, "array_reserve") == 0)
+                return sr_type_native_boundary_rep(v->type);
+            return XR_REP_TAGGED;
+        }
+        case XI_COPY:
+        case XI_MOVE:
+            return sr_type_native_boundary_rep(v->type);
+        case XI_CALL_METHOD: {
+            XrRep atomic_rep = XR_REP_TAGGED;
+            if (sr_atomic_method_return_rep(v, &atomic_rep))
+                return atomic_rep;
+        }
             if (sr_is_channel_recv_method(v))
                 return XR_REP_TAGGED;
             if (sr_map_get_has_present_guard(v)) {
@@ -1293,9 +2181,14 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
             if (v->nargs >= 1 && v->args[0] && sr_value_has_static_index_storage(v->args[0]))
                 return sr_typed_array_elem_rep(v->args[0]->type);
             return XR_REP_TAGGED;
+        case XI_BYTES_LOAD_U16_LE:
         case XI_BYTES_LOAD_U32_LE:
         case XI_BYTES_LOAD_U64_LE:
             return XR_REP_I64;
+        case XI_ARRAY_DATA_PTR:
+            return XR_REP_RAWPTR;
+        case XI_PTR_LOAD:
+            return sr_type_native_boundary_rep(v->type);
         case XI_PHI:
             if (policy && !policy->force_phi_tagged)
                 return sr_type_native_boundary_rep(v->type);
@@ -1359,6 +2252,12 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_BNOT:
         case XI_SHL:
         case XI_SHR: {
+            if ((user->op == XI_ADD || user->op == XI_SUB) && user->type &&
+                user->type->kind == XR_KIND_POINTER && arg_idx < user->nargs &&
+                user->args[arg_idx] && user->args[arg_idx]->type) {
+                return user->args[arg_idx]->type->kind == XR_KIND_POINTER ? XR_REP_RAWPTR
+                                                                          : XR_REP_I64;
+            }
             return sr_type_scalar_rep(user->type);
         }
         case XI_EQ:
@@ -1377,6 +2276,15 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             if (arg_idx == 0 && user->args[0])
                 return sr_def_rep(user->args[0], policy);
             return XR_REP_TAGGED;
+        case XI_CONVERT:
+            if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
+                !sr_convert_can_return_null(user)) {
+                XrRep r = sr_type_scalar_rep(user->args[0]->type);
+                if (r != XR_REP_TAGGED)
+                    return r;
+                return sr_def_rep(user->args[0], policy);
+            }
+            return XR_REP_TAGGED;
         case XI_SELECT:
             if (arg_idx == 0 && user->args[0])
                 return sr_def_rep(user->args[0], policy);
@@ -1392,6 +2300,13 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             return XR_REP_TAGGED;
         case XI_CALL_BUILTIN: {
             const char *name = (const char *) user->aux;
+            if (name && strcmp(name, "array_reserve") == 0 && arg_idx < user->nargs &&
+                user->args[arg_idx]) {
+                if (arg_idx == 0)
+                    return sr_type_native_boundary_rep(user->args[arg_idx]->type);
+                if (arg_idx == 1)
+                    return XR_REP_I64;
+            }
             if (name && strcmp(name, "Bytes") == 0 && arg_idx < user->nargs &&
                 user->args[arg_idx] && user->args[arg_idx]->type &&
                 user->args[arg_idx]->type->kind == XR_KIND_INT)
@@ -1400,11 +2315,16 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         }
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
+            if (arg_idx == 0 && sr_is_typed_array_native_receiver_method(user))
+                return sr_type_native_boundary_rep(user->args[0]->type);
             if (arg_idx > 0 && policy && policy->prefer_call_args_native && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
                 return sr_type_native_boundary_rep(user->args[arg_idx]->type);
             }
             return XR_REP_TAGGED;
+        case XI_COPY:
+        case XI_MOVE:
+            return arg_idx == 0 ? sr_def_rep(user, policy) : XR_REP_TAGGED;
         case XI_INDEX_GET:
             if (user->nargs >= 2 && user->args[0] &&
                 sr_value_has_static_index_storage(user->args[0])) {
@@ -1426,14 +2346,32 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
                     return sr_typed_array_elem_rep(user->args[0]->type);
             }
             return XR_REP_TAGGED;
+        case XI_BYTES_LOAD_U16_LE:
         case XI_BYTES_LOAD_U32_LE:
         case XI_BYTES_LOAD_U64_LE:
+            if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
+                sr_value_has_static_typed_array_storage(user->args[0]))
+                return sr_type_native_boundary_rep(user->args[0]->type);
             return arg_idx == 1 ? XR_REP_I64 : XR_REP_TAGGED;
         case XI_BYTES_COPY_WITHIN:
         case XI_BYTES_REPEAT_FROM:
             return arg_idx == 0 ? XR_REP_TAGGED : XR_REP_I64;
         case XI_BYTES_COPY_FROM:
             return arg_idx <= 1 ? XR_REP_TAGGED : XR_REP_I64;
+        case XI_ARRAY_DATA_PTR:
+            return arg_idx == 0 && user->nargs >= 1 && user->args[0]
+                       ? sr_type_native_boundary_rep(user->args[0]->type)
+                       : XR_REP_TAGGED;
+        case XI_PTR_LOAD:
+            return arg_idx == 0 ? XR_REP_RAWPTR : XR_REP_TAGGED;
+        case XI_PTR_STORE:
+            if (arg_idx == 0)
+                return XR_REP_RAWPTR;
+            if (arg_idx == 1 && user->nargs >= 2 && user->args[1])
+                return sr_type_native_boundary_rep(user->args[1]->type);
+            return XR_REP_TAGGED;
+        case XI_PTR_COPY_NONOVERLAP:
+            return arg_idx <= 1 ? XR_REP_RAWPTR : (arg_idx == 2 ? XR_REP_I64 : XR_REP_TAGGED);
         case XI_STRUCT_SET:
             if (arg_idx == 1 && user->nargs >= 2 && user->args[1])
                 return sr_type_scalar_rep(user->args[1]->type);

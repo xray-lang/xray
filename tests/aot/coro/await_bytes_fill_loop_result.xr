@@ -1,0 +1,18 @@
+fn makeSample(n: int) -> Bytes {
+    let out = Bytes(0)
+    let i = 0
+    while (i < n) {
+        out.push((i * 3) & 0xFF)
+        i = i + 1
+    }
+    return out
+}
+
+fn worker(n: int) -> Bytes {
+    return makeSample(n)
+}
+
+let t = go worker(1024)
+let data = await t
+print(data.length)
+print(data[7])

@@ -1,0 +1,2 @@
+let bytes = Bytes(8)
+bytes.repeatFrom(1, 1, 1)

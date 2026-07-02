@@ -1,0 +1,26 @@
+fn worker(n: int) -> int {
+    Coro.yield()
+    return n * n
+}
+
+let tasks: Array<Task<int>> = []
+let results: Array<int> = []
+tasks.reserve(4)
+results.reserve(4)
+
+let i = 0
+while (i < 4) {
+    tasks.push(go worker(i))
+    i = i + 1
+}
+
+await all tasks into results
+
+let sum = 0
+i = 0
+while (i < results.length) {
+    sum = sum + results[i]
+    i = i + 1
+}
+
+print(sum)

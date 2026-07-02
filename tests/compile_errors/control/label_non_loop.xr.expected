@@ -1,1 +1,1 @@
-loop labels can only annotate 'for' or 'while'
+loop labels can only annotate loops

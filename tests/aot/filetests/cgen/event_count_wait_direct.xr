@@ -1,0 +1,11 @@
+shared const event = EventCount(0)
+shared const ready = CountdownLatch(1)
+
+let t = go fn() -> int {
+    ready.done()
+    return event.wait(0, 0)
+}()
+
+print(ready.wait())
+print(event.advance())
+print(await t)

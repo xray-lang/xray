@@ -76,6 +76,35 @@ XR_FUNC bool xi_value_is_result_group_method_call(const XiValue *v, const char *
     return nargs < 0 || (int) v->nargs - 1 == nargs;
 }
 
+XR_FUNC bool xi_value_is_countdown_latch_method_call(const XiValue *v, const char *method,
+                                                     int nargs) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 ||
+        !xi_value_type_is_countdown_latch(v->args[0]))
+        return false;
+    const char *actual = (const char *) v->aux;
+    if (!actual || strcmp(actual, method) != 0)
+        return false;
+    return nargs < 0 || (int) v->nargs - 1 == nargs;
+}
+
+XR_FUNC bool xi_value_is_semaphore_method_call(const XiValue *v, const char *method, int nargs) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !xi_value_type_is_semaphore(v->args[0]))
+        return false;
+    const char *actual = (const char *) v->aux;
+    if (!actual || strcmp(actual, method) != 0)
+        return false;
+    return nargs < 0 || (int) v->nargs - 1 == nargs;
+}
+
+XR_FUNC bool xi_value_is_event_count_method_call(const XiValue *v, const char *method, int nargs) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !xi_value_type_is_event_count(v->args[0]))
+        return false;
+    const char *actual = (const char *) v->aux;
+    if (!actual || strcmp(actual, method) != 0)
+        return false;
+    return nargs < 0 || (int) v->nargs - 1 == nargs;
+}
+
 static bool xi_value_is_blocking_channel_method_call(const XiValue *v) {
     return xi_value_is_channel_method_call(v, "send", 1) ||
            xi_value_is_channel_method_call(v, "sendTimeout", 2) ||
@@ -96,6 +125,19 @@ XR_FUNC bool xi_value_is_blocking_work_queue_method_call(const XiValue *v) {
 
 XR_FUNC bool xi_value_is_blocking_result_group_method_call(const XiValue *v) {
     return xi_value_is_result_group_method_call(v, "recv", 0);
+}
+
+XR_FUNC bool xi_value_is_blocking_countdown_latch_method_call(const XiValue *v) {
+    return xi_value_is_countdown_latch_method_call(v, "wait", 0);
+}
+
+XR_FUNC bool xi_value_is_blocking_semaphore_method_call(const XiValue *v) {
+    return xi_value_is_semaphore_method_call(v, "acquire", 0);
+}
+
+XR_FUNC bool xi_value_is_blocking_event_count_method_call(const XiValue *v) {
+    return xi_value_is_event_count_method_call(v, "wait", 1) ||
+           xi_value_is_event_count_method_call(v, "wait", 2);
 }
 
 /* ========== Intrinsic suspendability predicates (intraprocedural) ========== */
@@ -133,16 +175,21 @@ static bool xi_result_group_method_needs_coro(const XiValue *v) {
     return xi_value_is_blocking_result_group_method_call(v);
 }
 
-static bool xi_work_queue_constructor_needs_coro(const XiValue *v) {
-    if (!v || v->op != XI_CALL || v->nargs < 1)
-        return false;
-    const XiValue *callee = v->args[0];
-    while (callee && (callee->op == XI_BOX || callee->op == XI_UNBOX || callee->op == XI_COPY) &&
-           callee->nargs >= 1) {
-        callee = callee->args[0];
-    }
-    return callee && callee->op == XI_GET_BUILTIN && callee->aux_int == XR_GLOBAL_VAR_WORKQUEUE;
+static bool xi_countdown_latch_method_needs_coro(const XiValue *v) {
+    return xi_value_is_blocking_countdown_latch_method_call(v);
 }
+
+static bool xi_event_count_method_needs_coro(const XiValue *v) {
+    return xi_value_is_blocking_event_count_method_call(v);
+}
+
+/* NOTE: constructing a coroutine-aware primitive (Semaphore / CountdownLatch /
+ * WorkQueue / EventCount) is intentionally NOT treated as a suspension point:
+ * construction allocates + binds the scheduler but never yields. The former
+ * xi_*_constructor_needs_coro predicates were removed so that ordinary sync
+ * functions (e.g. a Mutex<T> constructor holding a Semaphore) are not forced
+ * into coroutine codegen under AOT. Real suspension happens only at the
+ * blocking method calls (acquire/wait/recv/...), which are still detected. */
 
 /* `time.sleep(...)` recognized via the resolver's module-import query so the
  * analysis never depends on the backend's import-resolution internals. */
@@ -172,8 +219,20 @@ static bool xi_coro_func_intrinsic_suspends(const XiFunc *f, const XiCoroResolve
                 continue;
             if (xi_op_is_coroutine(v->op))
                 return true;
+            /* Only *suspension points* (calls that may yield the coroutine)
+             * make a function suspendable. Constructing a coroutine-aware
+             * primitive (Semaphore/CountdownLatch/WorkQueue/EventCount) does
+             * NOT yield — it only allocates and binds the scheduler — so it
+             * must not force the constructing function into coroutine codegen.
+             * This lets pure-Xray wrappers (e.g. a Mutex<T> holding a
+             * Semaphore) be constructed from ordinary sync contexts under AOT.
+             * The real suspension sites (acquire/wait/recv/...) are still
+             * detected by the method-call predicates above. */
             if (xi_channel_method_may_suspend(v) || xi_work_queue_method_needs_coro(v) ||
-                xi_result_group_method_needs_coro(v) || xi_work_queue_constructor_needs_coro(v))
+                xi_result_group_method_needs_coro(v) || xi_countdown_latch_method_needs_coro(v) ||
+                xi_event_count_method_needs_coro(v) ||
+                xi_value_is_blocking_semaphore_method_call(v) ||
+                xi_value_is_blocking_event_count_method_call(v))
                 return true;
             if (xi_coro_is_time_sleep_call(f, v, resolver))
                 return true;
@@ -252,7 +311,10 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
         return true;
     if (xi_value_is_blocking_channel_method_call(v) || xi_value_is_blocking_task_method_call(v) ||
         xi_value_is_blocking_work_queue_method_call(v) ||
-        xi_value_is_blocking_result_group_method_call(v))
+        xi_value_is_blocking_result_group_method_call(v) ||
+        xi_value_is_blocking_countdown_latch_method_call(v) ||
+        xi_value_is_blocking_semaphore_method_call(v) ||
+        xi_value_is_blocking_event_count_method_call(v))
         return true;
     if (xi_coro_is_time_sleep_call(f, v, resolver))
         return true;
@@ -403,6 +465,9 @@ XR_FUNC bool xi_coro_value_needs_runtime_slot(const XiValue *v) {
                  xi_value_is_channel_method_call(v, "recvTimeout", 1) ||
                  xi_value_is_blocking_work_queue_method_call(v) ||
                  xi_value_is_blocking_result_group_method_call(v) ||
+                 xi_value_is_blocking_countdown_latch_method_call(v) ||
+                 xi_value_is_blocking_semaphore_method_call(v) ||
+                 xi_value_is_blocking_event_count_method_call(v) ||
                  xi_value_is_blocking_task_method_call(v));
 }
 
@@ -418,6 +483,24 @@ XR_FUNC bool xi_coro_value_is_aggregate_await_tasks(const XiFunc *f, const XiVal
             if (!v || v->op != XI_AWAIT || v->nargs < 1 || v->args[0] != target)
                 continue;
             if (((int) v->aux_int & 0x7) != 0)
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool xi_coro_value_is_await_into_result(const XiFunc *f, const XiValue *target) {
+    if (!f || !target)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_AWAIT || v->nargs < 2 || v->args[1] != target)
+                continue;
+            if ((v->aux_int & XI_AWAIT_AUX_INTO_RESULT) != 0)
                 return true;
         }
     }
@@ -491,6 +574,8 @@ XR_FUNC bool xi_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness
                                                const XiCoroResolver *resolver) {
     if (!f || !live || !target)
         return false;
+    if (xi_coro_value_is_await_into_result(f, target))
+        return true;
 
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -533,6 +618,8 @@ XR_FUNC bool xi_coro_value_is_logical_member(const XiFunc *f, const XiValue *v,
     if (xi_coro_value_needs_runtime_slot(v))
         return true;
     if (xi_coro_value_is_aggregate_await_tasks(f, v))
+        return true;
+    if (xi_coro_value_is_await_into_result(f, v))
         return true;
     if (v->op == XI_GO)
         return true;
@@ -612,6 +699,7 @@ XR_FUNC bool xi_coro_type_needs_boundary_clone(const XrType *type) {
         return true;
     switch (type->kind) {
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_FIXED_ARRAY:
@@ -687,7 +775,10 @@ static XiCoroSuspendKind xi_coro_suspend_kind(const XiFunc *f, const XiValue *v,
         return XI_CORO_SUSP_CHAN_RECV;
     if (xi_value_is_blocking_task_method_call(v) ||
         xi_value_is_blocking_work_queue_method_call(v) ||
-        xi_value_is_blocking_result_group_method_call(v))
+        xi_value_is_blocking_result_group_method_call(v) ||
+        xi_value_is_blocking_countdown_latch_method_call(v) ||
+        xi_value_is_blocking_semaphore_method_call(v) ||
+        xi_value_is_blocking_event_count_method_call(v))
         return XI_CORO_SUSP_AWAIT;
     if (xi_coro_is_time_sleep_call(f, v, resolver))
         return XI_CORO_SUSP_SLEEP;

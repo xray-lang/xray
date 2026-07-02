@@ -1,0 +1,12 @@
+enum NativeAbiErr {
+    Bad
+}
+
+fn mayThrow(x: int) -> int {
+    if (x < 0) {
+        throw NativeAbiErr.Bad
+    }
+    return x + 1
+}
+
+print(mayThrow(41))

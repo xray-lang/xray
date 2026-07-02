@@ -60,9 +60,12 @@ static XrResultGroupBatch *result_group_batch_new(int64_t value, uint32_t count)
     return batch;
 }
 
-static void result_group_enqueue_batch_locked(XrResultGroup *g, XrResultGroupBatch *batch) {
-    XR_DCHECK(g != NULL, "result_group_enqueue_batch_locked: NULL group");
-    XR_DCHECK(batch != NULL, "result_group_enqueue_batch_locked: NULL batch");
+static bool result_group_enqueue_heap_batch_locked(XrResultGroup *g, int64_t value,
+                                                   uint32_t count) {
+    XR_DCHECK(g != NULL, "result_group_enqueue_heap_batch_locked: NULL group");
+    XrResultGroupBatch *batch = result_group_batch_new(value, count);
+    if (!batch)
+        return false;
     batch->next = NULL;
     if (g->batch_last) {
         g->batch_last->next = batch;
@@ -70,19 +73,32 @@ static void result_group_enqueue_batch_locked(XrResultGroup *g, XrResultGroupBat
         g->batch_first = batch;
     }
     g->batch_last = batch;
-    atomic_fetch_add_explicit(&g->length, 1, memory_order_release);
+    return true;
+}
+
+static bool result_group_enqueue_ready_locked(XrResultGroup *g, int64_t value, uint32_t count) {
+    XR_DCHECK(g != NULL, "result_group_enqueue_ready_locked: NULL group");
+    if (count == 0)
+        return false;
+    if (!g->inline_batch_ready && !g->batch_first) {
+        g->inline_batch_value = value;
+        g->inline_batch_count = count;
+        g->inline_batch_ready = true;
+    } else if (!result_group_enqueue_heap_batch_locked(g, value, count)) {
+        return false;
+    }
+    atomic_fetch_add_explicit(&g->length, 1, memory_order_relaxed);
     RESULT_GROUP_METRIC_INC(g, result_group_flush_count);
-    RESULT_GROUP_METRIC_ADD(g, result_group_flush_item_count, batch->count);
+    RESULT_GROUP_METRIC_ADD(g, result_group_flush_item_count, count);
+    return true;
 }
 
 static bool result_group_flush_locked(XrResultGroup *g) {
     XR_DCHECK(g != NULL, "result_group_flush_locked: NULL group");
     if (g->current_count == 0)
         return false;
-    XrResultGroupBatch *batch = result_group_batch_new(g->current_value, g->current_count);
-    if (!batch)
+    if (!result_group_enqueue_ready_locked(g, g->current_value, g->current_count))
         return false;
-    result_group_enqueue_batch_locked(g, batch);
     g->current_value = 0;
     g->current_count = 0;
     return true;
@@ -91,6 +107,16 @@ static bool result_group_flush_locked(XrResultGroup *g) {
 static bool result_group_pop_batch_locked(XrResultGroup *g, int64_t *out) {
     XR_DCHECK(g != NULL, "result_group_pop_batch_locked: NULL group");
     XR_DCHECK(out != NULL, "result_group_pop_batch_locked: NULL out");
+    if (g->inline_batch_ready) {
+        *out = g->inline_batch_value;
+        atomic_fetch_sub_explicit(&g->length, 1, memory_order_relaxed);
+        atomic_fetch_sub_explicit(&g->pending_count, g->inline_batch_count, memory_order_relaxed);
+        g->inline_batch_ready = false;
+        g->inline_batch_value = 0;
+        g->inline_batch_count = 0;
+        RESULT_GROUP_METRIC_INC(g, result_group_recv_count);
+        return true;
+    }
     XrResultGroupBatch *batch = g->batch_first;
     if (!batch) {
         // Closed-drain fallback: close() flushes the accumulator into a
@@ -100,7 +126,7 @@ static bool result_group_pop_batch_locked(XrResultGroup *g, int64_t *out) {
         // keep the batch-granularity contract for live groups.
         if (atomic_load_explicit(&g->closed, memory_order_relaxed) && g->current_count > 0) {
             *out = g->current_value;
-            atomic_fetch_sub_explicit(&g->pending_count, g->current_count, memory_order_release);
+            atomic_fetch_sub_explicit(&g->pending_count, g->current_count, memory_order_relaxed);
             g->current_value = 0;
             g->current_count = 0;
             RESULT_GROUP_METRIC_INC(g, result_group_recv_count);
@@ -111,8 +137,8 @@ static bool result_group_pop_batch_locked(XrResultGroup *g, int64_t *out) {
     g->batch_first = batch->next;
     if (!g->batch_first)
         g->batch_last = NULL;
-    atomic_fetch_sub_explicit(&g->length, 1, memory_order_release);
-    atomic_fetch_sub_explicit(&g->pending_count, batch->count, memory_order_release);
+    atomic_fetch_sub_explicit(&g->length, 1, memory_order_relaxed);
+    atomic_fetch_sub_explicit(&g->pending_count, batch->count, memory_order_relaxed);
     *out = batch->value;
     xr_free(batch);
     RESULT_GROUP_METRIC_INC(g, result_group_recv_count);
@@ -209,6 +235,8 @@ static void result_group_wake_one(XrResultGroup *g) {
     if (!g)
         return;
     if (!result_group_runtime_can_wake(result_group_runtime(g)))
+        return;
+    if (atomic_load_explicit(&g->waiter_count, memory_order_relaxed) == 0)
         return;
     for (;;) {
         xr_amutex_lock(&g->lock);
@@ -310,6 +338,9 @@ XrResultGroup *xr_result_group_new(XrRuntimeCore *core, XrRuntime *scheduler, ui
     g->batch_size = batch_size;
     g->current_value = 0;
     g->current_count = 0;
+    g->inline_batch_ready = false;
+    g->inline_batch_value = 0;
+    g->inline_batch_count = 0;
     g->batch_first = NULL;
     g->batch_last = NULL;
     g->wait_first = NULL;
@@ -319,27 +350,52 @@ XrResultGroup *xr_result_group_new(XrRuntimeCore *core, XrRuntime *scheduler, ui
     return g;
 }
 
+bool xr_result_group_reset(XrResultGroup *g, uint32_t batch_size) {
+    if (!g)
+        return false;
+    if (batch_size == 0)
+        batch_size = XR_RESULT_GROUP_DEFAULT_BATCH;
+    if (batch_size > XR_RESULT_GROUP_MAX_BATCH)
+        batch_size = XR_RESULT_GROUP_MAX_BATCH;
+
+    bool ok = false;
+    xr_amutex_lock(&g->lock);
+    if (atomic_load_explicit(&g->pending_count, memory_order_relaxed) == 0 &&
+        atomic_load_explicit(&g->length, memory_order_relaxed) == 0 &&
+        atomic_load_explicit(&g->waiter_count, memory_order_relaxed) == 0 &&
+        g->current_count == 0 && !g->inline_batch_ready && !g->batch_first && !g->batch_last) {
+        atomic_store_explicit(&g->closed, false, memory_order_release);
+        g->batch_size = batch_size;
+        g->current_value = 0;
+        g->current_count = 0;
+        g->inline_batch_ready = false;
+        g->inline_batch_value = 0;
+        g->inline_batch_count = 0;
+        ok = true;
+    }
+    xr_amutex_unlock(&g->lock);
+    return ok;
+}
+
 bool xr_result_group_add(XrResultGroup *g, int64_t value) {
     XR_DCHECK(g != NULL, "xr_result_group_add: NULL group");
     bool enqueued = false;
     bool ok = false;
     xr_amutex_lock(&g->lock);
     if (!atomic_load_explicit(&g->closed, memory_order_relaxed)) {
-        XrResultGroupBatch *batch = NULL;
-        if (g->current_count + 1u >= g->batch_size) {
-            batch = result_group_batch_new(g->current_value + value, g->current_count + 1u);
-        }
-        if (g->current_count + 1u < g->batch_size || batch) {
-            if (batch) {
-                result_group_enqueue_batch_locked(g, batch);
+        uint32_t next_count = g->current_count + 1u;
+        if (next_count >= g->batch_size) {
+            if (result_group_enqueue_ready_locked(g, g->current_value + value, next_count)) {
                 g->current_value = 0;
                 g->current_count = 0;
                 enqueued = true;
-            } else {
-                g->current_value += value;
-                g->current_count++;
+                atomic_fetch_add_explicit(&g->pending_count, 1, memory_order_relaxed);
+                ok = true;
             }
-            atomic_fetch_add_explicit(&g->pending_count, 1, memory_order_release);
+        } else {
+            g->current_value += value;
+            g->current_count = next_count;
+            atomic_fetch_add_explicit(&g->pending_count, 1, memory_order_relaxed);
             ok = true;
         }
     }
@@ -393,11 +449,11 @@ bool xr_result_group_is_closed(XrResultGroup *g) {
 }
 
 uint64_t xr_result_group_length(XrResultGroup *g) {
-    return g ? atomic_load_explicit(&g->length, memory_order_acquire) : 0;
+    return g ? atomic_load_explicit(&g->length, memory_order_relaxed) : 0;
 }
 
 uint64_t xr_result_group_pending_count(XrResultGroup *g) {
-    return g ? atomic_load_explicit(&g->pending_count, memory_order_acquire) : 0;
+    return g ? atomic_load_explicit(&g->pending_count, memory_order_relaxed) : 0;
 }
 
 static void result_group_finish_wait_if_current(XrCoroutine *coro, XrResultGroup *g) {
@@ -409,20 +465,28 @@ static void result_group_finish_wait_if_current(XrCoroutine *coro, XrResultGroup
         xr_result_group_wait_token_finish(&wait->result_group_token);
 }
 
-XrResultGroupRecvStatus xr_result_group_recv_for_coro(XrResultGroup *g, XrCoroutine *coro,
-                                                      XrValue *result) {
-    if (!g || !result)
+XrResultGroupRecvStatus xr_result_group_recv_i64_for_coro(XrResultGroup *g, XrCoroutine *coro,
+                                                          int64_t *out, bool *out_has) {
+    if (out)
+        *out = 0;
+    if (out_has)
+        *out_has = false;
+    if (!g || !out || !out_has)
         return XR_RESULT_GROUP_RECV_ERROR;
     int64_t value = 0;
-    if (xr_result_group_try_recv(g, &value)) {
-        result_group_finish_wait_if_current(coro, g);
-        *result = xr_int(value);
-        return XR_RESULT_GROUP_RECV_DONE;
-    }
-    if (xr_result_group_is_closed(g)) {
-        result_group_finish_wait_if_current(coro, g);
-        *result = xr_null();
-        return XR_RESULT_GROUP_RECV_DONE;
+    bool may_have_ready =
+        atomic_load_explicit(&g->length, memory_order_acquire) > 0 || xr_result_group_is_closed(g);
+    if (may_have_ready) {
+        if (xr_result_group_try_recv(g, &value)) {
+            result_group_finish_wait_if_current(coro, g);
+            *out = value;
+            *out_has = true;
+            return XR_RESULT_GROUP_RECV_DONE;
+        }
+        if (xr_result_group_is_closed(g)) {
+            result_group_finish_wait_if_current(coro, g);
+            return XR_RESULT_GROUP_RECV_DONE;
+        }
     }
     if (!coro)
         return XR_RESULT_GROUP_RECV_ERROR;
@@ -435,13 +499,13 @@ XrResultGroupRecvStatus xr_result_group_recv_for_coro(XrResultGroup *g, XrCorout
     if (result_group_pop_batch_locked(g, &value)) {
         xr_amutex_unlock(&g->lock);
         xr_result_group_wait_token_finish(&wait->result_group_token);
-        *result = xr_int(value);
+        *out = value;
+        *out_has = true;
         return XR_RESULT_GROUP_RECV_DONE;
     }
     if (xr_result_group_is_closed(g)) {
         xr_amutex_unlock(&g->lock);
         xr_result_group_wait_token_finish(&wait->result_group_token);
-        *result = xr_null();
         return XR_RESULT_GROUP_RECV_DONE;
     }
 
@@ -461,8 +525,9 @@ XrResultGroupRecvStatus xr_result_group_recv_for_coro(XrResultGroup *g, XrCorout
     return XR_RESULT_GROUP_RECV_BLOCKED;
 }
 
-XrResultGroupRecvStatus xr_result_group_recv_resume_for_coro(XrCoroutine *coro, XrValue *result) {
-    if (!coro || !result)
+XrResultGroupRecvStatus xr_result_group_recv_i64_resume_for_coro(XrCoroutine *coro, int64_t *out,
+                                                                 bool *out_has) {
+    if (!coro || !out || !out_has)
         return XR_RESULT_GROUP_RECV_ERROR;
     XrCoroWaitState *wait = xr_coro_wait_state(coro);
     if (!wait)
@@ -471,7 +536,31 @@ XrResultGroupRecvStatus xr_result_group_recv_resume_for_coro(XrCoroutine *coro, 
                                                               memory_order_acquire);
     if (!g)
         return XR_RESULT_GROUP_RECV_ERROR;
-    return xr_result_group_recv_for_coro(g, coro, result);
+    return xr_result_group_recv_i64_for_coro(g, coro, out, out_has);
+}
+
+XrResultGroupRecvStatus xr_result_group_recv_for_coro(XrResultGroup *g, XrCoroutine *coro,
+                                                      XrValue *result) {
+    if (!result)
+        return XR_RESULT_GROUP_RECV_ERROR;
+    int64_t value = 0;
+    bool has_value = false;
+    XrResultGroupRecvStatus status = xr_result_group_recv_i64_for_coro(g, coro, &value, &has_value);
+    if (status == XR_RESULT_GROUP_RECV_DONE)
+        *result = has_value ? xr_int(value) : xr_null();
+    return status;
+}
+
+XrResultGroupRecvStatus xr_result_group_recv_resume_for_coro(XrCoroutine *coro, XrValue *result) {
+    if (!result)
+        return XR_RESULT_GROUP_RECV_ERROR;
+    int64_t value = 0;
+    bool has_value = false;
+    XrResultGroupRecvStatus status =
+        xr_result_group_recv_i64_resume_for_coro(coro, &value, &has_value);
+    if (status == XR_RESULT_GROUP_RECV_DONE)
+        *result = has_value ? xr_int(value) : xr_null();
+    return status;
 }
 
 #undef RESULT_GROUP_METRIC_ADD

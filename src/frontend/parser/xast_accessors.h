@@ -47,6 +47,7 @@
 #define AST_AS_WHILE_STMT(n) (XR_AST_ASSERT(n, AST_WHILE_STMT), &(n)->as.while_stmt)
 #define AST_AS_FOR_STMT(n) (XR_AST_ASSERT(n, AST_FOR_STMT), &(n)->as.for_stmt)
 #define AST_AS_FOR_IN(n) (XR_AST_ASSERT(n, AST_FOR_IN_STMT), &(n)->as.for_in_stmt)
+#define AST_AS_PARALLEL_FOR(n) (XR_AST_ASSERT(n, AST_PARALLEL_FOR_STMT), &(n)->as.parallel_for_stmt)
 #define AST_AS_FUNC_DECL(n) (XR_AST_ASSERT(n, AST_FUNCTION_DECL), &(n)->as.function_decl)
 #define AST_AS_FUNC_EXPR(n) (XR_AST_ASSERT(n, AST_FUNCTION_EXPR), &(n)->as.function_expr)
 #define AST_AS_CALL(n) (XR_AST_ASSERT(n, AST_CALL_EXPR), &(n)->as.call_expr)

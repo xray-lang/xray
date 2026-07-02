@@ -1,0 +1,6 @@
+contains=name=worker
+regex=value v[0-9]+ op=MUL kind=scalar rep=i64 c_type=int64_t
+c_contains=xr_aot_work_queue_pop(ctx,
+c_contains=XR_TO_INT(v
+c_not_contains=xrt_mul(
+c_not_contains=Attempted to unwrap a null value

@@ -1,0 +1,116 @@
+// Condvar as a pure-Xray class composing the coroutine-aware Semaphore, with a
+// short non-suspendable Atomic spinlock guarding the waiter count (same shape as
+// RwLock's reader-count guard). This deliberately avoids EventCount, whose
+// worker-pool epoch model traps a general condvar at VM shutdown (task 147
+// §0.11): parking on a counting Semaphore is clean cross-coroutine in both VM
+// and AOT, so wait/signal/broadcast stay VM/AOT identical AND exit rc=0.
+//
+// Correctness of the semaphore-composed condvar relies on the standard contract:
+// callers re-check the predicate in a `while` loop, so a banked/stolen permit is
+// a within-contract spurious wakeup, never a lost update. The counting Semaphore
+// banks a signal that races ahead of the corresponding wait(), closing the
+// classic lost-wakeup window.
+
+class Condvar {
+    _mutex: Semaphore    // the monitor lock (yieldable acquire)
+    _wlock: Atomic<bool> // spinlock guarding _waiters; never held across a yield
+    _waiters: int
+    _sem: Semaphore      // counting parking spot; init 0
+
+    constructor() {
+        this._mutex = Semaphore(1)
+        this._wlock = Atomic<bool>(false)
+        this._waiters = 0
+        this._sem = Semaphore(0)
+    }
+
+    _lockWaiters() {
+        while (true) {
+            let (_, ok) = this._wlock.compareExchange(false, true, Ordering.AcquireRelease)
+            if (ok) { break }
+        }
+    }
+
+    lock() { this._mutex.acquire() }
+    unlock() { this._mutex.release() }
+
+    // Must be called holding the monitor lock. Atomically releases it, parks the
+    // coroutine, and re-acquires it before returning.
+    wait() {
+        this._lockWaiters()
+        this._waiters = this._waiters + 1
+        this._wlock.store(false, Ordering.Release)
+        this._mutex.release()
+        this._sem.acquire()
+        this._mutex.acquire()
+    }
+
+    signal() {
+        this._lockWaiters()
+        let wake = this._waiters > 0
+        if (wake) { this._waiters = this._waiters - 1 }
+        this._wlock.store(false, Ordering.Release)
+        if (wake) { this._sem.release(1) }
+    }
+
+    broadcast() {
+        this._lockWaiters()
+        let n = this._waiters
+        this._waiters = 0
+        this._wlock.store(false, Ordering.Release)
+        if (n > 0) { this._sem.release(n) }
+    }
+}
+
+// --- Scenario 1: single-producer / single-consumer via signal ----------------
+// The consumer parks on the condvar until the producer publishes a value under
+// the same monitor lock and signals. Output is deterministic regardless of which
+// coroutine is scheduled first, because the consumer checks the predicate first.
+
+shared const cv = Condvar()
+shared const box = Atomic<int>(-1)   // -1 = empty; guarded by cv's monitor lock
+shared const consumed = CountdownLatch(1)
+
+go {
+    cv.lock()
+    while (box.load() < 0) { cv.wait() }
+    let v = box.load()
+    cv.unlock()
+    print(v)              // 42
+    consumed.done()
+}
+
+cv.lock()
+box.store(42)
+cv.signal()
+cv.unlock()
+
+consumed.wait()
+
+// --- Scenario 2: broadcast wakes every parked waiter -------------------------
+// Three consumers park until a flag flips; one broadcast must release all of
+// them. The observable result (count of woken consumers) is order-independent.
+
+shared const cv2 = Condvar()
+shared const ready = Atomic<bool>(false)
+shared const woke = Atomic<int>(0)
+shared const all = CountdownLatch(3)
+
+for (i in 0..3) {
+    go {
+        cv2.lock()
+        while (!ready.load()) { cv2.wait() }
+        cv2.unlock()
+        woke.fetchAdd(1)
+        all.done()
+    }
+}
+
+cv2.lock()
+ready.store(true)
+cv2.broadcast()
+cv2.unlock()
+
+all.wait()
+print(woke.load())       // 3 — every parked waiter was released by one broadcast
+print("done")

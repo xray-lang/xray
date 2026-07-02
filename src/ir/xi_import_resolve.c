@@ -96,18 +96,24 @@ static void resolve_func_imports(XiFunc *f, const XrModuleGraph *graph, const ch
             if (ref->resolved_mod_index >= 0)
                 continue; /* already resolved */
 
-            /* Skip stdlib imports (bare names like "math") */
-            if (ref->module_path[0] != '.')
-                continue;
-
-            /* Resolve specifier to canonical path via graph */
-            const char *canonical =
-                xi_resolve_import_canonical(graph, importer_path, ref->module_path);
-            if (!canonical)
-                continue;
-
-            /* Find target module topo index */
-            int target_spec_idx = xr_module_graph_find(graph, canonical);
+            int target_spec_idx = -1;
+            if (ref->module_path[0] == '.') {
+                /* Relative import: resolve specifier to canonical path via graph */
+                const char *canonical =
+                    xi_resolve_import_canonical(graph, importer_path, ref->module_path);
+                if (!canonical)
+                    continue;
+                target_spec_idx = xr_module_graph_find(graph, canonical);
+            } else {
+                /* Bare (stdlib) import.  Pure-C native stdlib modules (math, os,
+                 * ...) ship no compiled source and are absent from the graph, so
+                 * they stay unresolved here and are emitted as native calls
+                 * downstream.  A pure-Xray stdlib module (e.g. `sync`) is
+                 * compiled into the bundle as a real graph module keyed by its
+                 * bare name, so resolve it here to link cross-module class /
+                 * function references exactly like any other module. */
+                target_spec_idx = xr_module_graph_find(graph, ref->module_path);
+            }
             if (target_spec_idx < 0)
                 continue;
 

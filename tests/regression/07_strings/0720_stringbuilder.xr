@@ -50,6 +50,16 @@ fn test_mixed_types() {
     assert_eq(result.includes("100"), true)
 }
 
+@test
+fn test_append_char() {
+    let sb = StringBuilder()
+    sb.append("hex=")
+    sb.append("0123456789abcdef"[10])
+    sb.append(", unicode=")
+    sb.append("你好"[1])
+    assert_eq(sb.toString(), "hex=a, unicode=好")
+}
+
 // ===== 循环中使用 =====
 
 @test
@@ -112,4 +122,3 @@ fn test_large_append() {
     }
     assert_eq(sb.toString().length, 100)
 }
-

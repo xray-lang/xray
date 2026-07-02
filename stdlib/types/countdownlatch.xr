@@ -1,0 +1,12 @@
+// Built-in CountdownLatch type; implemented by the runtime.
+
+@native
+class CountdownLatch {
+    remaining: int
+    isClosed: bool
+    reset(count: int) -> bool
+    done(count?: int) -> int
+    tryWait() -> bool
+    wait() -> bool
+    close()
+}

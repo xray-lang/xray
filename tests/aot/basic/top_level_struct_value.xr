@@ -1,0 +1,8 @@
+struct Pair {
+    a: int
+    b: int
+}
+
+let pair = Pair{a: 7, b: 5}
+
+print(pair.a + pair.b)

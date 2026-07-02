@@ -86,6 +86,23 @@ typedef struct ForInStmtNode {
     uint32_t value_symbol_id; /* symbol ID for iteration value variable (key-value loops) */
 } ForInStmtNode;
 
+typedef struct ParallelForStmtNode {
+    char *label;
+    char *item_name;
+    char *end_name;
+    char *worker_name;
+    XrParallelLocalBinding *locals;
+    int local_count;
+    AstNode *range;
+    AstNode *worker_count; /* optional `workers expr`; NULL lets lowering choose */
+    AstNode *final_body;
+    AstNode *body;
+    uint32_t item_symbol_id;
+    uint32_t end_symbol_id;
+    uint32_t worker_symbol_id;
+    bool range_body;
+} ParallelForStmtNode;
+
 typedef struct BreakStmtNode {
     char *label;
 } BreakStmtNode;
@@ -225,6 +242,7 @@ typedef struct GoExprNode {
 typedef struct AwaitExprNode {
     AstNode *expr;
     AstNode *timeout;
+    AstNode *into;
     bool is_any;
     bool is_all;
     bool is_any_success;

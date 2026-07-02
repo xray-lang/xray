@@ -67,6 +67,15 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
         return type;
     }
 
+    if (type->kind == XR_KIND_SPAN) {
+        XrType *elem =
+            xr_type_substitute(X, type->container.element_type, param_names, actual_types, count);
+        if (elem != type->container.element_type) {
+            return xr_type_new_span(X, elem);
+        }
+        return type;
+    }
+
     if (type->kind == XR_KIND_SET) {
         XrType *elem =
             xr_type_substitute(X, type->container.element_type, param_names, actual_types, count);
@@ -242,6 +251,7 @@ static XrType *iterable_element_of(XrType *type) {
         return NULL;
     switch (type->kind) {
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
             return type->container.element_type;
@@ -263,6 +273,7 @@ static void indexable_kv_of(XrType *type, XrType **key_out, XrType **value_out) 
         return;
     switch (type->kind) {
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
             *value_out = type->container.element_type;
             break;
         case XR_KIND_STRING:
@@ -331,12 +342,13 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
                 // Fall through to user-class check
             } else if (strcmp(iface_name, "Indexable") == 0) {
                 XrTypeKind k = type->kind;
-                if (k == XR_KIND_ARRAY || k == XR_KIND_STRING || k == XR_KIND_MAP) {
+                if (k == XR_KIND_ARRAY || k == XR_KIND_SPAN || k == XR_KIND_STRING ||
+                    k == XR_KIND_MAP) {
                     if (targs >= 1 && args) {
                         XrType *kt = NULL;
                         XrType *vt = NULL;
                         indexable_kv_of(type, &kt, &vt);
-                        if (!kt && (k == XR_KIND_ARRAY || k == XR_KIND_STRING))
+                        if (!kt && (k == XR_KIND_ARRAY || k == XR_KIND_SPAN || k == XR_KIND_STRING))
                             kt = xr_type_new_int(NULL);
                         if (args[0] && !type_arg_match(args[0], kt))
                             goto check_user_implements;
@@ -348,8 +360,8 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
                 // Not a builtin indexable — fall through to user-class check
             } else if (strcmp(iface_name, "Lengthable") == 0) {
                 XrTypeKind k = type->kind;
-                if (k == XR_KIND_ARRAY || k == XR_KIND_STRING || k == XR_KIND_MAP ||
-                    k == XR_KIND_SET)
+                if (k == XR_KIND_ARRAY || k == XR_KIND_SPAN || k == XR_KIND_STRING ||
+                    k == XR_KIND_MAP || k == XR_KIND_SET)
                     return true;
                 // Not a builtin lengthable — fall through to user-class check
             } else if (strcmp(iface_name, "Callable") == 0) {
@@ -396,7 +408,7 @@ bool xr_type_is_iterable(XrType *type, XrType **out_element_type) {
         return false;
 
     // Built-in iterable types
-    if (type->kind == XR_KIND_ARRAY) {
+    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SPAN) {
         if (out_element_type) {
             *out_element_type = type->container.element_type ? type->container.element_type
                                                              : xr_type_new_unknown(NULL);

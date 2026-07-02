@@ -1,0 +1,20 @@
+fn makeSample(n: int) -> Bytes {
+    let out = Bytes(0)
+    let i = 0
+    while (i < n) {
+        out.push(i & 0xFF)
+        i = i + 1
+    }
+    return out
+}
+
+shared const data = makeSample(1024)
+
+fn worker(offset: int) -> int {
+    return int(data[offset])
+}
+
+let t1 = go worker(7)
+let t2 = go worker(255)
+print(await t1)
+print(await t2)

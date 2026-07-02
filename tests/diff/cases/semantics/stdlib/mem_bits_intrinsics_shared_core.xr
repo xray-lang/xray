@@ -1,0 +1,38 @@
+// mem.* bit intrinsics: VM and AOT share src/shared/xr_bits_core.h, so every
+// line below must print identically under both backends (including the sign-bit
+// and modulo-64 rotate edge cases).
+import mem
+
+// popcount
+print(mem.popcount(0))
+print(mem.popcount(255))
+print(mem.popcount(1023))
+print(mem.popcount(-1))
+
+// leadingZeros (0 -> 64)
+print(mem.leadingZeros(0))
+print(mem.leadingZeros(1))
+print(mem.leadingZeros(256))
+print(mem.leadingZeros(-1))
+
+// trailingZeros (0 -> 64)
+print(mem.trailingZeros(0))
+print(mem.trailingZeros(8))
+print(mem.trailingZeros(1024))
+print(mem.trailingZeros(-1))
+
+// byteswap
+print(mem.byteswap(1))
+print(mem.byteswap(255))
+print(mem.byteswap(-1))
+
+// rotateLeft (n taken modulo 64)
+print(mem.rotateLeft(1, 4))
+print(mem.rotateLeft(1, 0))
+print(mem.rotateLeft(1, 64))
+print(mem.rotateLeft(1, 68))
+
+// rotateRight (n taken modulo 64; sign-bit path)
+print(mem.rotateRight(16, 4))
+print(mem.rotateRight(1, 1))
+print(mem.rotateRight(1, 64))

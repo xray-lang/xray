@@ -102,6 +102,12 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_func(analyzer, "assert_false", fn_assert);
     register_builtin_func(analyzer, "assert_throws", fn_assert);
 
+    /* Branch-probability hints: VM observes plain bool identity; AOT can lower
+     * conditions to XR_LIKELY / XR_UNLIKELY. */
+    XrType *fn_branch_hint = xr_type_new_function(analyzer->isolate, &t_bool, 1, t_bool, false);
+    register_builtin_func(analyzer, "likely", fn_branch_hint);
+    register_builtin_func(analyzer, "unlikely", fn_branch_hint);
+
     // Type conversion: fn(any) -> T (precise return type)
     XrType *fn_to_int = xr_type_new_function(analyzer->isolate, &p_any, 1, t_int, false);
     register_builtin_func(analyzer, "int", fn_to_int);
@@ -455,7 +461,7 @@ static const char *get_export_decl_name(AstNode *decl) {
     }
 }
 
-XrHashMap *xa_analyzer_collect_exports(XaAnalyzer *analyzer, XrAstNode *ast) {
+XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *ast) {
     if (!analyzer || !ast || ast->type != AST_PROGRAM)
         return NULL;
 
@@ -479,11 +485,11 @@ XrHashMap *xa_analyzer_collect_exports(XaAnalyzer *analyzer, XrAstNode *ast) {
                 if (sym && sym->links.type) {
                     if (!exports)
                         exports = xr_hashmap_new();
-                    /* OOM: skip the entry. A missing entry means "no type
+                    /* OOM: skip the entry. A missing entry means "no semantic
                      * info for this export", which consumers already
                      * tolerate (same as sym->links.type == NULL). */
                     if (exports)
-                        (void) xr_hashmap_set(exports, name, sym->links.type);
+                        (void) xr_hashmap_set(exports, name, sym);
                 }
             }
         }
@@ -500,7 +506,7 @@ XrHashMap *xa_analyzer_collect_exports(XaAnalyzer *analyzer, XrAstNode *ast) {
                 if (!exports)
                     exports = xr_hashmap_new();
                 if (exports)
-                    (void) xr_hashmap_set(exports, name, sym->links.type);
+                    (void) xr_hashmap_set(exports, name, sym);
             }
         }
     }

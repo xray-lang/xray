@@ -10,8 +10,10 @@
 
 #include "../test_framework.h"
 #include "base/xglobal_indices.h"
+#include "base/xmalloc.h"
 #include "coro/xchannel.h"
 #include "coro/xaot_coro.h"
+#include "coro/xblock.h"
 #include "coro/xcoro_pool.h"
 #include "coro/xcoroutine.h"
 #include "coro/xdeep_copy.h"
@@ -32,6 +34,78 @@ static void native_increment(void *arg) {
     int *value = (int *) arg;
     if (value)
         (*value)++;
+}
+
+static _Atomic int64_t aot_par_for_sum;
+
+static _Atomic int64_t aot_par_for_bad_worker_id;
+static _Atomic int64_t aot_par_for_seen_mask;
+static _Atomic int64_t aot_par_for_lane_begin[8];
+static _Atomic int64_t aot_par_for_lane_end[8];
+static _Atomic int64_t aot_par_for_lane_calls[8];
+
+static void aot_par_for_reset_lane_records(void) {
+    for (int i = 0; i < 8; i++) {
+        atomic_store_explicit(&aot_par_for_lane_begin[i], -1, memory_order_relaxed);
+        atomic_store_explicit(&aot_par_for_lane_end[i], -1, memory_order_relaxed);
+        atomic_store_explicit(&aot_par_for_lane_calls[i], 0, memory_order_relaxed);
+    }
+}
+
+static void aot_par_for_record_lane_body(struct xrt_closure *closure, int64_t begin, int64_t end,
+                                         int64_t worker_id) {
+    (void) closure;
+    if (worker_id < 0 || worker_id >= 8) {
+        atomic_fetch_add_explicit(&aot_par_for_bad_worker_id, 1, memory_order_relaxed);
+        return;
+    }
+    atomic_store_explicit(&aot_par_for_lane_begin[worker_id], begin, memory_order_relaxed);
+    atomic_store_explicit(&aot_par_for_lane_end[worker_id], end, memory_order_relaxed);
+    atomic_fetch_add_explicit(&aot_par_for_lane_calls[worker_id], 1, memory_order_relaxed);
+}
+
+static void aot_par_for_range_sum_body(struct xrt_closure *closure, int64_t begin, int64_t end,
+                                       int64_t worker_id) {
+    (void) closure;
+    if (worker_id < 0 || worker_id >= 8)
+        atomic_fetch_add_explicit(&aot_par_for_bad_worker_id, 1, memory_order_relaxed);
+    if (worker_id >= 0 && worker_id < 63)
+        atomic_fetch_or_explicit(&aot_par_for_seen_mask, (int64_t) 1 << worker_id,
+                                 memory_order_relaxed);
+    for (int64_t i = begin; i < end; i++)
+        atomic_fetch_add_explicit(&aot_par_for_sum, i, memory_order_relaxed);
+}
+
+static bool aot_par_reduce_range_sum_body(struct xrt_closure *closure, int64_t begin, int64_t end,
+                                          int64_t worker_id, int64_t *out) {
+    (void) closure;
+    if (!out)
+        return false;
+    if (worker_id < 0 || worker_id >= 8)
+        atomic_fetch_add_explicit(&aot_par_for_bad_worker_id, 1, memory_order_relaxed);
+    if (worker_id >= 0 && worker_id < 63)
+        atomic_fetch_or_explicit(&aot_par_for_seen_mask, (int64_t) 1 << worker_id,
+                                 memory_order_relaxed);
+    int64_t sum = 0;
+    for (int64_t i = begin; i < end; i++)
+        sum += i;
+    *out = sum;
+    return true;
+}
+
+static int64_t aot_par_reduce_i64_add(struct xrt_closure *closure, int64_t acc, int64_t value) {
+    (void) closure;
+    return acc + value;
+}
+
+static bool aot_par_reduce_failing_body(struct xrt_closure *closure, int64_t begin, int64_t end,
+                                        int64_t worker_id, int64_t *out) {
+    (void) closure;
+    (void) begin;
+    (void) end;
+    (void) worker_id;
+    (void) out;
+    return false;
 }
 
 typedef enum AotTestMode {
@@ -304,6 +378,17 @@ TEST(aot_frame_alloc_accepts_zero_state_frames) {
     xr_aot_frame_free(frame);
 }
 
+TEST(aot_frame_alloc_reuses_small_frames_locally) {
+    void *frame = xr_aot_frame_alloc(24);
+    ASSERT_NOT_NULL(frame);
+    memset(frame, 0xA5, 24);
+    xr_aot_frame_free(frame);
+
+    void *reused = xr_aot_frame_alloc(24);
+    ASSERT_EQ_PTR(reused, frame);
+    xr_aot_frame_free(reused);
+}
+
 TEST(aot_runtime_owns_core_without_isolate) {
     char *argv[] = {"alpha", "beta"};
     int userdata = 123;
@@ -525,6 +610,14 @@ TEST(aot_result_group_uses_runtime_without_isolate) {
     ASSERT_EQ_INT(XR_TO_INT(received), 12);
     ASSERT_FALSE(xr_aot_result_group_try_recv(&ctx, group_value, &received));
 
+    ASSERT_TRUE(XR_TO_BOOL(xr_aot_result_group_reset(&ctx, group_value, 3)));
+    ASSERT_EQ_INT((int) group->batch_size, 3);
+    ASSERT_TRUE(XR_TO_BOOL(xr_aot_result_group_add(&ctx, group_value, 1)));
+    ASSERT_TRUE(XR_TO_BOOL(xr_aot_result_group_add(&ctx, group_value, 2)));
+    ASSERT_TRUE(XR_TO_BOOL(xr_aot_result_group_add(&ctx, group_value, 4)));
+    ASSERT_TRUE(xr_aot_result_group_try_recv(&ctx, group_value, &received));
+    ASSERT_EQ_INT(XR_TO_INT(received), 7);
+
     xr_obj_destroy_result_group(&group->hdr, NULL);
     xr_aot_runtime_delete(runtime);
 }
@@ -556,6 +649,21 @@ TEST(aot_work_queue_uses_runtime_owner_without_isolate) {
     ASSERT_TRUE(XR_TO_BOOL(xr_aot_work_queue_push_sync(queue_value, xr_int(55), 0)));
     ASSERT_TRUE(xr_aot_work_queue_try_pop_sync(queue_value, 0, &popped));
     ASSERT_EQ_INT(XR_TO_INT(popped), 55);
+
+    ASSERT_EQ_INT(XR_TO_INT(xr_aot_work_queue_push_range(&ctx, queue_value, 70, 3, 0)), 3);
+    ASSERT_TRUE(xr_aot_work_queue_try_pop(&ctx, queue_value, 0, &popped));
+    ASSERT_EQ_INT(XR_TO_INT(popped), 72);
+    ASSERT_TRUE(xr_aot_work_queue_try_pop(&ctx, queue_value, 1, &popped));
+    ASSERT_EQ_INT(XR_TO_INT(popped), 71);
+    ASSERT_TRUE(xr_aot_work_queue_try_pop(&ctx, queue_value, 0, &popped));
+    ASSERT_EQ_INT(XR_TO_INT(popped), 70);
+
+    ASSERT_EQ_INT(XR_TO_INT(xr_aot_work_queue_push_range_sync(queue_value, 80, 2, 0)), 2);
+    ASSERT_TRUE(xr_aot_work_queue_try_pop_sync(queue_value, 0, &popped));
+    ASSERT_EQ_INT(XR_TO_INT(popped), 80);
+    ASSERT_TRUE(xr_aot_work_queue_try_pop_sync(queue_value, 1, &popped));
+    ASSERT_EQ_INT(XR_TO_INT(popped), 81);
+
     xr_aot_work_queue_close_sync(queue_value);
     ASSERT_TRUE(XR_TO_BOOL(xr_aot_work_queue_is_closed_sync(queue_value)));
 
@@ -633,14 +741,236 @@ TEST(aot_task_await_uses_runtime_owner_without_isolate) {
     xr_task_complete(task, xr_int(91));
 
     int64_t result = 0;
-    XrAotResult await = xr_aot_await_task(&ctx, xr_value_from_task(task),
-                                          xr_slot_native_ptr(&result, XR_REP_I64), -1, false);
+    XrAotResult await = xr_aot_await_task(
+        &ctx, xr_value_from_task(task), xr_slot_native_ptr(&result, XR_REP_I64), -1, false, false);
     ASSERT_EQ_INT(await.kind, XR_AOT_RUN_DONE);
     ASSERT_EQ_INT((int) result, 91);
     ASSERT_NULL(ctx.vm_host_ops);
     ASSERT_NULL(ctx.vm_host);
 
     xr_coro_destroy(ctx.coro);
+    xr_aot_runtime_delete(runtime);
+}
+
+TEST(runtime_task_one_shot_destroy_unlinks_in_constant_time) {
+    XrAotRuntime *runtime = aot_test_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    XrRuntime *scheduler = xr_aot_runtime_scheduler(runtime);
+    ASSERT_NOT_NULL(scheduler);
+
+    XrCoroutine exec1 = {0};
+    XrCoroutine exec2 = {0};
+    XrCoroutine exec3 = {0};
+    XrTask *t1 = xr_task_create(scheduler, NULL, &exec1);
+    XrTask *t2 = xr_task_create(scheduler, NULL, &exec2);
+    XrTask *t3 = xr_task_create(scheduler, NULL, &exec3);
+    ASSERT_NOT_NULL(t1);
+    ASSERT_NOT_NULL(t2);
+    ASSERT_NOT_NULL(t3);
+    ASSERT_EQ_PTR(scheduler->task_list, t3);
+    ASSERT_EQ_PTR(t3->runtime_next, t2);
+    ASSERT_EQ_PTR(t2->runtime_next, t1);
+    ASSERT_EQ_PTR(t3->runtime_prev_link, &scheduler->task_list);
+    ASSERT_EQ_PTR(t2->runtime_prev_link, &t3->runtime_next);
+    ASSERT_EQ_PTR(t1->runtime_prev_link, &t2->runtime_next);
+    ASSERT_EQ_INT((int) scheduler->task_count, 3);
+
+    atomic_store_explicit(&t1->state, XR_TASK_COMPLETED, memory_order_release);
+    atomic_store_explicit(&t2->state, XR_TASK_COMPLETED, memory_order_release);
+    atomic_store_explicit(&t3->state, XR_TASK_COMPLETED, memory_order_release);
+    atomic_store_explicit(&t1->coro, NULL, memory_order_release);
+    atomic_store_explicit(&t2->coro, NULL, memory_order_release);
+    atomic_store_explicit(&t3->coro, NULL, memory_order_release);
+    atomic_store_explicit(&t1->completer_done, 1, memory_order_release);
+    atomic_store_explicit(&t2->completer_done, 1, memory_order_release);
+    atomic_store_explicit(&t3->completer_done, 1, memory_order_release);
+    exec1.task = NULL;
+    exec2.task = NULL;
+    exec3.task = NULL;
+
+    ASSERT_TRUE(xr_task_runtime_try_destroy_detached(scheduler, t2));
+    ASSERT_EQ_PTR(scheduler->task_list, t3);
+    ASSERT_EQ_PTR(t3->runtime_next, t1);
+    ASSERT_EQ_PTR(t1->runtime_prev_link, &t3->runtime_next);
+    ASSERT_EQ_INT((int) scheduler->task_count, 2);
+
+    ASSERT_TRUE(xr_task_runtime_try_destroy_detached(scheduler, t3));
+    ASSERT_EQ_PTR(scheduler->task_list, t1);
+    ASSERT_EQ_PTR(t1->runtime_next, NULL);
+    ASSERT_EQ_PTR(t1->runtime_prev_link, &scheduler->task_list);
+    ASSERT_EQ_INT((int) scheduler->task_count, 1);
+
+    ASSERT_TRUE(xr_task_runtime_try_destroy_detached(scheduler, t1));
+    ASSERT_EQ_PTR(scheduler->task_list, NULL);
+    ASSERT_EQ_INT((int) scheduler->task_count, 0);
+
+    xr_aot_runtime_delete(runtime);
+}
+
+TEST(runtime_task_one_shot_destroy_reuses_task_handle_locally) {
+    XrAotRuntime *runtime = aot_test_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    XrRuntime *scheduler = xr_aot_runtime_scheduler(runtime);
+    ASSERT_NOT_NULL(scheduler);
+
+    XrCoroutine exec1 = {0};
+    XrTask *task = xr_task_create(scheduler, NULL, &exec1);
+    ASSERT_NOT_NULL(task);
+    atomic_store_explicit(&task->state, XR_TASK_COMPLETED, memory_order_release);
+    atomic_store_explicit(&task->coro, NULL, memory_order_release);
+    atomic_store_explicit(&task->completer_done, 1, memory_order_release);
+    exec1.task = NULL;
+    ASSERT_TRUE(xr_task_runtime_try_destroy_detached(scheduler, task));
+    ASSERT_EQ_PTR(scheduler->task_list, NULL);
+    ASSERT_EQ_INT((int) scheduler->task_count, 0);
+
+    XrCoroutine exec2 = {0};
+    XrTask *reused = xr_task_create(scheduler, NULL, &exec2);
+    ASSERT_EQ_PTR(reused, task);
+    ASSERT_EQ_PTR(exec2.task, reused);
+    ASSERT_EQ_PTR(xr_task_executor_peek(reused), &exec2);
+    ASSERT_EQ_INT(atomic_load_explicit(&reused->state, memory_order_acquire), XR_TASK_ACTIVE);
+    ASSERT_EQ_INT(reused->flags, XR_TASK_FLG_RUNTIME_OWNED);
+    ASSERT_EQ_PTR(reused->runtime_prev_link, &scheduler->task_list);
+    ASSERT_EQ_PTR(scheduler->task_list, reused);
+    ASSERT_EQ_INT((int) scheduler->task_count, 1);
+
+    atomic_store_explicit(&reused->state, XR_TASK_COMPLETED, memory_order_release);
+    atomic_store_explicit(&reused->coro, NULL, memory_order_release);
+    atomic_store_explicit(&reused->completer_done, 1, memory_order_release);
+    exec2.task = NULL;
+    ASSERT_TRUE(xr_task_runtime_try_destroy_detached(scheduler, reused));
+    xr_aot_runtime_delete(runtime);
+}
+
+TEST(runtime_task_deferred_registry_batches_one_shot_handles) {
+    XrAotRuntime *runtime = aot_test_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    XrRuntime *scheduler = xr_aot_runtime_scheduler(runtime);
+    ASSERT_NOT_NULL(scheduler);
+
+    XrCoroutine exec1 = {0};
+    XrCoroutine exec2 = {0};
+    XrTask *t1 = xr_task_create_deferred_registry(scheduler, NULL, &exec1);
+    XrTask *t2 = xr_task_create_deferred_registry(scheduler, NULL, &exec2);
+    ASSERT_NOT_NULL(t1);
+    ASSERT_NOT_NULL(t2);
+    ASSERT_EQ_INT((int) scheduler->task_count, 0);
+    ASSERT_EQ_PTR(scheduler->task_list, NULL);
+    ASSERT_TRUE((t1->flags & XR_TASK_FLG_DEFERRED_REGISTRY) != 0);
+    ASSERT_TRUE((t2->flags & XR_TASK_FLG_DEFERRED_REGISTRY) != 0);
+
+    XrCoroutine *batch[] = {&exec1, &exec2};
+    ASSERT_EQ_INT((int) xr_task_runtime_register_deferred_batch(scheduler, batch, 2), 2);
+    ASSERT_EQ_INT((int) scheduler->task_count, 2);
+    ASSERT_TRUE((t1->flags & XR_TASK_FLG_DEFERRED_REGISTRY) == 0);
+    ASSERT_TRUE((t2->flags & XR_TASK_FLG_DEFERRED_REGISTRY) == 0);
+    ASSERT_EQ_INT((int) xr_task_runtime_register_deferred_batch(scheduler, batch, 2), 0);
+    ASSERT_EQ_INT((int) scheduler->task_count, 2);
+
+    atomic_store_explicit(&t1->state, XR_TASK_COMPLETED, memory_order_release);
+    atomic_store_explicit(&t2->state, XR_TASK_COMPLETED, memory_order_release);
+    atomic_store_explicit(&t1->coro, NULL, memory_order_release);
+    atomic_store_explicit(&t2->coro, NULL, memory_order_release);
+    atomic_store_explicit(&t1->completer_done, 1, memory_order_release);
+    atomic_store_explicit(&t2->completer_done, 1, memory_order_release);
+    exec1.task = NULL;
+    exec2.task = NULL;
+    ASSERT_TRUE(xr_task_runtime_try_destroy_detached(scheduler, t1));
+    ASSERT_TRUE(xr_task_runtime_try_destroy_detached(scheduler, t2));
+    ASSERT_EQ_INT((int) scheduler->task_count, 0);
+
+    XrCoroutine exec4 = {0};
+    XrCoroutine exec5 = {0};
+    XrTask *t4 = xr_task_create_deferred_registry(scheduler, NULL, &exec4);
+    XrTask *t5 = xr_task_create_deferred_registry(scheduler, NULL, &exec5);
+    ASSERT_NOT_NULL(t4);
+    ASSERT_NOT_NULL(t5);
+    XrTask *task_batch[] = {t4, t5};
+    ASSERT_EQ_INT((int) xr_task_runtime_register_deferred_tasks(scheduler, task_batch, 2), 2);
+    ASSERT_EQ_INT((int) scheduler->task_count, 2);
+    ASSERT_TRUE((t4->flags & XR_TASK_FLG_DEFERRED_REGISTRY) == 0);
+    ASSERT_TRUE((t5->flags & XR_TASK_FLG_DEFERRED_REGISTRY) == 0);
+    ASSERT_EQ_INT((int) xr_task_runtime_register_deferred_tasks(scheduler, task_batch, 2), 0);
+
+    atomic_store_explicit(&t4->state, XR_TASK_COMPLETED, memory_order_release);
+    atomic_store_explicit(&t5->state, XR_TASK_COMPLETED, memory_order_release);
+    atomic_store_explicit(&t4->coro, NULL, memory_order_release);
+    atomic_store_explicit(&t5->coro, NULL, memory_order_release);
+    atomic_store_explicit(&t4->completer_done, 1, memory_order_release);
+    atomic_store_explicit(&t5->completer_done, 1, memory_order_release);
+    exec4.task = NULL;
+    exec5.task = NULL;
+    ASSERT_TRUE(xr_task_runtime_try_destroy_detached(scheduler, t4));
+    ASSERT_TRUE(xr_task_runtime_try_destroy_detached(scheduler, t5));
+    ASSERT_EQ_INT((int) scheduler->task_count, 0);
+
+    XrCoroutine exec3 = {0};
+    XrTask *t3 = xr_task_create_deferred_registry(scheduler, NULL, &exec3);
+    ASSERT_NOT_NULL(t3);
+    ASSERT_EQ_INT((int) scheduler->task_count, 0);
+    ASSERT_TRUE(xr_task_destroy_deferred_unregistered(t3));
+    ASSERT_EQ_PTR(exec3.task, NULL);
+    ASSERT_EQ_INT((int) scheduler->task_count, 0);
+
+    xr_aot_runtime_delete(runtime);
+}
+
+TEST(runtime_deferred_array_submit_cache_tracks_content_version) {
+    XrAotRuntime *runtime = aot_test_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    XrRuntime *scheduler = xr_aot_runtime_scheduler(runtime);
+    ASSERT_NOT_NULL(scheduler);
+
+    XrCoroutine parent = {0};
+    XrCoroutine exec1 = {0};
+    XrCoroutine exec2 = {0};
+    XrTask *t1 = xr_task_create_deferred_registry(scheduler, NULL, &exec1);
+    XrTask *t2 = xr_task_create_deferred_registry(scheduler, NULL, &exec2);
+    ASSERT_NOT_NULL(t1);
+    ASSERT_NOT_NULL(t2);
+    xr_coro_flags_set(&exec1, XR_CORO_FLG_DEFERRED_SUBMIT);
+    xr_coro_flags_set(&exec2, XR_CORO_FLG_DEFERRED_SUBMIT);
+
+    XrArray tasks;
+    memset(&tasks, 0, sizeof(tasks));
+    xr_obj_header_init_type(&tasks.hdr, XR_TARRAY);
+    xr_array_init_inplace(&tasks, 4, XR_ELEM_ANY);
+    ASSERT_NOT_NULL(tasks.data);
+    uint64_t initial_version = tasks.content_version;
+    xr_array_push(&tasks, xr_value_from_task(t1));
+    xr_array_push(&tasks, xr_value_from_task(t2));
+    ASSERT_TRUE(tasks.content_version != initial_version);
+
+    uint64_t batch_version = tasks.content_version;
+    xr_coro_submit_deferred_array_tasks_cached(&parent, &tasks);
+    ASSERT_EQ_UINT(tasks.deferred_submit_version, batch_version);
+    ASSERT_EQ_UINT(xr_coro_flags_load(&exec1) & XR_CORO_FLG_DEFERRED_SUBMIT, 0);
+    ASSERT_EQ_UINT(xr_coro_flags_load(&exec2) & XR_CORO_FLG_DEFERRED_SUBMIT, 0);
+    ASSERT_EQ_INT((int) scheduler->task_count, 0);
+
+    xr_coro_flags_set(&exec1, XR_CORO_FLG_DEFERRED_SUBMIT);
+    xr_coro_submit_deferred_array_tasks_cached(&parent, &tasks);
+    ASSERT_TRUE((xr_coro_flags_load(&exec1) & XR_CORO_FLG_DEFERRED_SUBMIT) != 0);
+    xr_coro_flags_clear(&exec1, XR_CORO_FLG_DEFERRED_SUBMIT);
+
+    XrCoroutine exec3 = {0};
+    XrTask *t3 = xr_task_create_deferred_registry(scheduler, NULL, &exec3);
+    ASSERT_NOT_NULL(t3);
+    xr_coro_flags_set(&exec3, XR_CORO_FLG_DEFERRED_SUBMIT);
+    xr_array_push(&tasks, xr_value_from_task(t3));
+    uint64_t mutated_version = tasks.content_version;
+    ASSERT_TRUE(mutated_version != batch_version);
+    xr_coro_submit_deferred_array_tasks_cached(&parent, &tasks);
+    ASSERT_EQ_UINT(tasks.deferred_submit_version, mutated_version);
+    ASSERT_EQ_UINT(xr_coro_flags_load(&exec3) & XR_CORO_FLG_DEFERRED_SUBMIT, 0);
+    ASSERT_EQ_INT((int) scheduler->task_count, 0);
+
+    ASSERT_TRUE(xr_task_destroy_deferred_unregistered(t1));
+    ASSERT_TRUE(xr_task_destroy_deferred_unregistered(t2));
+    ASSERT_TRUE(xr_task_destroy_deferred_unregistered(t3));
+    xr_array_clear(&tasks);
+    xr_free(tasks.data);
     xr_aot_runtime_delete(runtime);
 }
 
@@ -684,8 +1014,8 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     XrCoroutine *aot = xr_coro_create_aot(runtime, &aot_test_desc, frame, "aot_no_pool");
     ASSERT_NOT_NULL(aot);
     ASSERT_NULL(xr_coro_vm_owner(aot));
-    ASSERT_FALSE(xr_coro_backend_prepare_recycle(aot, NULL));
-    ASSERT_FALSE(xr_coro_backend_reset_reusable(aot));
+    ASSERT_TRUE(xr_coro_backend_prepare_recycle(aot, NULL));
+    ASSERT_TRUE(xr_coro_backend_reset_reusable(aot));
     ASSERT_FALSE(xr_coro_has_continuation(aot));
     ASSERT_NULL(aot->backend->setup_yield_continuation);
     ASSERT_NULL(aot->backend->call_closure);
@@ -696,6 +1026,58 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(aot_parallel_for_range_i64_runs_static_lanes) {
+    atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
+    aot_par_for_reset_lane_records();
+    ASSERT_TRUE(xr_aot_parallel_for_range_i64(0, 16, 4, aot_par_for_record_lane_body, NULL));
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
+    for (int i = 0; i < 4; i++) {
+        ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_begin[i], memory_order_relaxed),
+                      i * 4);
+        ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_end[i], memory_order_relaxed),
+                      (i + 1) * 4);
+        ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_lane_calls[i], memory_order_relaxed), 1);
+    }
+
+    atomic_store_explicit(&aot_par_for_sum, 0, memory_order_relaxed);
+    atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
+    atomic_store_explicit(&aot_par_for_seen_mask, 0, memory_order_relaxed);
+    ASSERT_TRUE(xr_aot_parallel_for_range_i64(0, 1000, 8, aot_par_for_range_sum_body, NULL));
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_sum, memory_order_relaxed), 499500);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
+    ASSERT_TRUE(atomic_load_explicit(&aot_par_for_seen_mask, memory_order_relaxed) != 0);
+
+    atomic_store_explicit(&aot_par_for_sum, 0, memory_order_relaxed);
+    atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
+    atomic_store_explicit(&aot_par_for_seen_mask, 0, memory_order_relaxed);
+    ASSERT_TRUE(xr_aot_parallel_for_range_i64(10, 14, 1, aot_par_for_range_sum_body, NULL));
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_sum, memory_order_relaxed), 46);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_seen_mask, memory_order_relaxed), 1);
+}
+
+TEST(aot_parallel_reduce_i64_runs_range_reducer) {
+    atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
+    atomic_store_explicit(&aot_par_for_seen_mask, 0, memory_order_relaxed);
+
+    int64_t result = -1;
+    ASSERT_TRUE(xr_aot_parallel_reduce_i64(0, 1000, 8, 10, aot_par_reduce_range_sum_body,
+                                           aot_par_reduce_i64_add, NULL, &result));
+    ASSERT_EQ_INT(result, 499510);
+    ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
+    ASSERT_TRUE(atomic_load_explicit(&aot_par_for_seen_mask, memory_order_relaxed) != 0);
+
+    result = -1;
+    ASSERT_TRUE(xr_aot_parallel_reduce_i64(5, 5, 8, 123, aot_par_reduce_range_sum_body,
+                                           aot_par_reduce_i64_add, NULL, &result));
+    ASSERT_EQ_INT(result, 123);
+
+    result = 77;
+    ASSERT_FALSE(xr_aot_parallel_reduce_i64(0, 16, 4, 0, aot_par_reduce_failing_body,
+                                            aot_par_reduce_i64_add, NULL, &result));
+    ASSERT_EQ_INT(result, 77);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Native Coroutine Backend");
@@ -704,6 +1086,7 @@ RUN_TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done);
 RUN_TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results);
 RUN_TEST(aot_coroutine_create_failure_releases_frame);
 RUN_TEST(aot_frame_alloc_accepts_zero_state_frames);
+RUN_TEST(aot_frame_alloc_reuses_small_frames_locally);
 RUN_TEST(aot_runtime_owns_core_without_isolate);
 RUN_TEST(aot_runtime_creates_scheduler_for_runtime_caps);
 RUN_TEST(aot_runtime_creates_isolate_free_aot_coroutine);
@@ -715,6 +1098,12 @@ RUN_TEST(aot_result_group_uses_runtime_without_isolate);
 RUN_TEST(aot_work_queue_uses_runtime_owner_without_isolate);
 RUN_TEST(aot_channel_uses_runtime_owner_without_isolate);
 RUN_TEST(aot_task_await_uses_runtime_owner_without_isolate);
+RUN_TEST(runtime_task_one_shot_destroy_unlinks_in_constant_time);
+RUN_TEST(runtime_task_one_shot_destroy_reuses_task_handle_locally);
+RUN_TEST(runtime_task_deferred_registry_batches_one_shot_handles);
+RUN_TEST(runtime_deferred_array_submit_cache_tracks_content_version);
 RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
+RUN_TEST(aot_parallel_for_range_i64_runs_static_lanes);
+RUN_TEST(aot_parallel_reduce_i64_runs_range_reducer);
 
 TEST_MAIN_END()

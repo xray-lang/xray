@@ -1,0 +1,73 @@
+fn worker(n: int) -> int {
+    Coro.yield()
+    return n * n
+}
+
+fn evenWorker(n: int) -> bool {
+    Coro.yield()
+    return (n & 1) == 0
+}
+
+fn run() {
+    let tasks: Array<Task<int>> = []
+    let results: Array<int> = []
+    tasks.reserve(4)
+    results.reserve(4)
+
+    let i = 0
+    while (i < 4) {
+        tasks.push(go worker(i))
+        i = i + 1
+    }
+
+    await all tasks into results
+    let sum = 0
+    i = 0
+    while (i < results.length) {
+        sum = sum + results[i]
+        i = i + 1
+    }
+    print(sum)
+
+    tasks.clear()
+    results.push(999)
+    i = 0
+    while (i < 2) {
+        tasks.push(go worker(i + 4))
+        i = i + 1
+    }
+
+    await all tasks into results
+    sum = 0
+    i = 0
+    while (i < results.length) {
+        sum = sum + results[i]
+        i = i + 1
+    }
+    print(results.length)
+    print(sum)
+
+    let boolTasks: Array<Task<bool>> = []
+    let boolResults: Array<bool> = []
+    boolTasks.reserve(4)
+    boolResults.reserve(4)
+
+    i = 0
+    while (i < 4) {
+        boolTasks.push(go evenWorker(i))
+        i = i + 1
+    }
+
+    await all boolTasks into boolResults
+    let trueCount = 0
+    i = 0
+    while (i < boolResults.length) {
+        if (boolResults[i]) {
+            trueCount = trueCount + 1
+        }
+        i = i + 1
+    }
+    print(trueCount)
+}
+
+run()

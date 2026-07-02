@@ -43,8 +43,10 @@ fn show_mod_zero() {
 
 fn show_bytes_load_oob() {
     let bytes = Bytes(4, 1)
+    let view: ByteSpan = bytes
     try {
-        print(bytes.loadU32LE(2))
+        let value: uint32 = view.loadLE<uint32>(2)
+        print(int(value))
     } catch panic (p) {
         print(p.message)
         print(p.code)
@@ -52,9 +54,14 @@ fn show_bytes_load_oob() {
 }
 
 fn show_bytes_copy_within_oob() {
-    let bytes = Bytes(4, 1)
+    let bytes = Bytes.withCapacity(4)
+    unsafe {
+        bytes.pushUnchecked(1)
+    }
     try {
-        bytes.copyWithin(2, 0, 4)
+        unsafe {
+            bytes.repeatFromUnchecked(2, 4)
+        }
         print(bytes[0])
     } catch panic (p) {
         print(p.message)

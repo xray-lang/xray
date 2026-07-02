@@ -603,6 +603,235 @@ static inline void xr_result_group_wait_token_finish(XrResultGroupWaitToken *tok
     xr_result_group_wait_token_reset(token);
 }
 
+/* ========== Countdown Latch Wait Token ==========
+ *
+ * CountdownLatch.wait uses a latch-owned waiter list. The coroutine-side token
+ * records the owner so cancellation and shell recycle can unlink the waiter
+ * before the coroutine is reused.
+ */
+typedef enum {
+    XR_COUNTDOWN_LATCH_WAIT_IDLE = 0,
+    XR_COUNTDOWN_LATCH_WAIT_REGISTERING,
+    XR_COUNTDOWN_LATCH_WAIT_REGISTERED,
+    XR_COUNTDOWN_LATCH_WAIT_RESOLVED,
+    XR_COUNTDOWN_LATCH_WAIT_CANCELLED,
+} XrCountdownLatchWaitTokenState;
+
+typedef struct XrCountdownLatchWaitToken {
+    _Atomic int state;
+    _Atomic(void *) latch;
+    _Atomic bool success;
+    uint32_t sequence;
+} XrCountdownLatchWaitToken;
+
+static inline void xr_countdown_latch_wait_token_reset(XrCountdownLatchWaitToken *token) {
+    if (!token)
+        return;
+    atomic_store_explicit(&token->state, XR_COUNTDOWN_LATCH_WAIT_IDLE, memory_order_relaxed);
+    atomic_store_explicit(&token->latch, NULL, memory_order_relaxed);
+    atomic_store_explicit(&token->success, false, memory_order_relaxed);
+}
+
+static inline void xr_countdown_latch_wait_token_prepare(XrCountdownLatchWaitToken *token,
+                                                         void *latch) {
+    if (!token)
+        return;
+    token->sequence++;
+    atomic_store_explicit(&token->latch, latch, memory_order_relaxed);
+    atomic_store_explicit(&token->success, false, memory_order_relaxed);
+    atomic_store_explicit(&token->state, XR_COUNTDOWN_LATCH_WAIT_REGISTERING, memory_order_release);
+}
+
+static inline void xr_countdown_latch_wait_token_commit(XrCountdownLatchWaitToken *token) {
+    if (!token)
+        return;
+    int expected = XR_COUNTDOWN_LATCH_WAIT_REGISTERING;
+    (void) atomic_compare_exchange_strong_explicit(&token->state, &expected,
+                                                   XR_COUNTDOWN_LATCH_WAIT_REGISTERED,
+                                                   memory_order_acq_rel, memory_order_acquire);
+}
+
+static inline void xr_countdown_latch_wait_token_set_terminal(XrCountdownLatchWaitToken *token,
+                                                              int terminal) {
+    if (!token)
+        return;
+    int state = atomic_load_explicit(&token->state, memory_order_acquire);
+    while (state == XR_COUNTDOWN_LATCH_WAIT_REGISTERING ||
+           state == XR_COUNTDOWN_LATCH_WAIT_REGISTERED) {
+        if (atomic_compare_exchange_weak_explicit(&token->state, &state, terminal,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+static inline void xr_countdown_latch_wait_token_resolve(XrCountdownLatchWaitToken *token,
+                                                         bool success) {
+    if (token)
+        atomic_store_explicit(&token->success, success, memory_order_release);
+    xr_countdown_latch_wait_token_set_terminal(token, XR_COUNTDOWN_LATCH_WAIT_RESOLVED);
+}
+
+static inline void xr_countdown_latch_wait_token_cancel(XrCountdownLatchWaitToken *token) {
+    xr_countdown_latch_wait_token_set_terminal(token, XR_COUNTDOWN_LATCH_WAIT_CANCELLED);
+}
+
+static inline void xr_countdown_latch_wait_token_finish(XrCountdownLatchWaitToken *token) {
+    xr_countdown_latch_wait_token_reset(token);
+}
+
+/* ========== Semaphore Wait Token ==========
+ *
+ * Semaphore.acquire uses a semaphore-owned waiter list. The coroutine-side
+ * token records the owner so cancellation and shell recycle can unlink the
+ * waiter before the coroutine is reused.
+ */
+typedef enum {
+    XR_SEMAPHORE_WAIT_IDLE = 0,
+    XR_SEMAPHORE_WAIT_REGISTERING,
+    XR_SEMAPHORE_WAIT_REGISTERED,
+    XR_SEMAPHORE_WAIT_RESOLVED,
+    XR_SEMAPHORE_WAIT_CANCELLED,
+} XrSemaphoreWaitTokenState;
+
+typedef struct XrSemaphoreWaitToken {
+    _Atomic int state;
+    _Atomic(void *) semaphore;
+    _Atomic bool success;
+    uint32_t sequence;
+} XrSemaphoreWaitToken;
+
+static inline void xr_semaphore_wait_token_reset(XrSemaphoreWaitToken *token) {
+    if (!token)
+        return;
+    atomic_store_explicit(&token->state, XR_SEMAPHORE_WAIT_IDLE, memory_order_relaxed);
+    atomic_store_explicit(&token->semaphore, NULL, memory_order_relaxed);
+    atomic_store_explicit(&token->success, false, memory_order_relaxed);
+}
+
+static inline void xr_semaphore_wait_token_prepare(XrSemaphoreWaitToken *token, void *semaphore) {
+    if (!token)
+        return;
+    token->sequence++;
+    atomic_store_explicit(&token->semaphore, semaphore, memory_order_relaxed);
+    atomic_store_explicit(&token->success, false, memory_order_relaxed);
+    atomic_store_explicit(&token->state, XR_SEMAPHORE_WAIT_REGISTERING, memory_order_release);
+}
+
+static inline void xr_semaphore_wait_token_commit(XrSemaphoreWaitToken *token) {
+    if (!token)
+        return;
+    int expected = XR_SEMAPHORE_WAIT_REGISTERING;
+    (void) atomic_compare_exchange_strong_explicit(&token->state, &expected,
+                                                   XR_SEMAPHORE_WAIT_REGISTERED,
+                                                   memory_order_acq_rel, memory_order_acquire);
+}
+
+static inline void xr_semaphore_wait_token_set_terminal(XrSemaphoreWaitToken *token, int terminal) {
+    if (!token)
+        return;
+    int state = atomic_load_explicit(&token->state, memory_order_acquire);
+    while (state == XR_SEMAPHORE_WAIT_REGISTERING || state == XR_SEMAPHORE_WAIT_REGISTERED) {
+        if (atomic_compare_exchange_weak_explicit(&token->state, &state, terminal,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+static inline void xr_semaphore_wait_token_resolve(XrSemaphoreWaitToken *token, bool success) {
+    if (token)
+        atomic_store_explicit(&token->success, success, memory_order_release);
+    xr_semaphore_wait_token_set_terminal(token, XR_SEMAPHORE_WAIT_RESOLVED);
+}
+
+static inline void xr_semaphore_wait_token_cancel(XrSemaphoreWaitToken *token) {
+    xr_semaphore_wait_token_set_terminal(token, XR_SEMAPHORE_WAIT_CANCELLED);
+}
+
+static inline void xr_semaphore_wait_token_finish(XrSemaphoreWaitToken *token) {
+    xr_semaphore_wait_token_reset(token);
+}
+
+/* ========== EventCount Wait Token ==========
+ *
+ * EventCount.wait(lastEpoch) blocks until the shared epoch changes. The token
+ * carries both the expected epoch and the resolved epoch so VM/AOT resume paths
+ * do not have to re-consume a later epoch accidentally.
+ */
+typedef enum {
+    XR_EVENT_COUNT_WAIT_IDLE = 0,
+    XR_EVENT_COUNT_WAIT_REGISTERING,
+    XR_EVENT_COUNT_WAIT_REGISTERED,
+    XR_EVENT_COUNT_WAIT_RESOLVED,
+    XR_EVENT_COUNT_WAIT_CANCELLED,
+} XrEventCountWaitTokenState;
+
+typedef struct XrEventCountWaitToken {
+    _Atomic int state;
+    _Atomic(void *) event;
+    _Atomic(int64_t) expected_epoch;
+    _Atomic(int64_t) result_epoch;
+    uint32_t sequence;
+} XrEventCountWaitToken;
+
+static inline void xr_event_count_wait_token_reset(XrEventCountWaitToken *token) {
+    if (!token)
+        return;
+    atomic_store_explicit(&token->state, XR_EVENT_COUNT_WAIT_IDLE, memory_order_relaxed);
+    atomic_store_explicit(&token->event, NULL, memory_order_relaxed);
+    atomic_store_explicit(&token->expected_epoch, 0, memory_order_relaxed);
+    atomic_store_explicit(&token->result_epoch, -1, memory_order_relaxed);
+}
+
+static inline void xr_event_count_wait_token_prepare(XrEventCountWaitToken *token, void *event,
+                                                     int64_t expected_epoch) {
+    if (!token)
+        return;
+    token->sequence++;
+    atomic_store_explicit(&token->event, event, memory_order_relaxed);
+    atomic_store_explicit(&token->expected_epoch, expected_epoch, memory_order_relaxed);
+    atomic_store_explicit(&token->result_epoch, -1, memory_order_relaxed);
+    atomic_store_explicit(&token->state, XR_EVENT_COUNT_WAIT_REGISTERING, memory_order_release);
+}
+
+static inline void xr_event_count_wait_token_commit(XrEventCountWaitToken *token) {
+    if (!token)
+        return;
+    int expected = XR_EVENT_COUNT_WAIT_REGISTERING;
+    (void) atomic_compare_exchange_strong_explicit(&token->state, &expected,
+                                                   XR_EVENT_COUNT_WAIT_REGISTERED,
+                                                   memory_order_acq_rel, memory_order_acquire);
+}
+
+static inline void xr_event_count_wait_token_set_terminal(XrEventCountWaitToken *token,
+                                                          int terminal) {
+    if (!token)
+        return;
+    int state = atomic_load_explicit(&token->state, memory_order_acquire);
+    while (state == XR_EVENT_COUNT_WAIT_REGISTERING || state == XR_EVENT_COUNT_WAIT_REGISTERED) {
+        if (atomic_compare_exchange_weak_explicit(&token->state, &state, terminal,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+static inline void xr_event_count_wait_token_resolve(XrEventCountWaitToken *token,
+                                                     int64_t result_epoch) {
+    if (token)
+        atomic_store_explicit(&token->result_epoch, result_epoch, memory_order_release);
+    xr_event_count_wait_token_set_terminal(token, XR_EVENT_COUNT_WAIT_RESOLVED);
+}
+
+static inline void xr_event_count_wait_token_cancel(XrEventCountWaitToken *token) {
+    xr_event_count_wait_token_set_terminal(token, XR_EVENT_COUNT_WAIT_CANCELLED);
+}
+
+static inline void xr_event_count_wait_token_finish(XrEventCountWaitToken *token) {
+    xr_event_count_wait_token_reset(token);
+}
+
 /* ========== Channel Wait Token ==========
  *
  * A channel waiter has a short but race-sensitive lifecycle:
@@ -835,6 +1064,9 @@ typedef struct XrCoroWaitState {
     XrIoWaitToken io_token;
     XrWorkQueueWaitToken work_queue_token;
     XrResultGroupWaitToken result_group_token;
+    XrCountdownLatchWaitToken countdown_latch_token;
+    XrSemaphoreWaitToken semaphore_token;
+    XrEventCountWaitToken event_count_token;
 } XrCoroWaitState;
 
 struct XrBlockedBucket {

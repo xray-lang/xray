@@ -1,0 +1,32 @@
+fn makeBytes(n: int) -> Bytes {
+    let out = Bytes(0)
+    let i = 0
+    while (i < n) {
+        out.push(i & 0xFF)
+        i = i + 1
+    }
+    return out
+}
+
+fn appendToSized(n: int) -> Bytes {
+    let out = Bytes(3)
+    out[0] = 100
+    out[1] = 101
+    out[2] = 102
+    let i = 0
+    while (i < n) {
+        out.push(i & 0xFF)
+        i = i + 1
+    }
+    return out
+}
+
+let a = makeBytes(16)
+print(a.length)
+print(a[7])
+
+let b = appendToSized(5)
+print(b.length)
+print(b[0])
+print(b[3])
+print(b[7])

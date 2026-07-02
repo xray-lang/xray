@@ -280,6 +280,12 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "liveBytes", mem_live_bytes);
     XRS_EXPORT(module, isolate, "liveObjects", mem_live_objects);
     XRS_EXPORT(module, isolate, "info", mem_info);
+    XRS_EXPORT(module, isolate, "popcount", mem_popcount);
+    XRS_EXPORT(module, isolate, "leadingZeros", mem_leading_zeros);
+    XRS_EXPORT(module, isolate, "trailingZeros", mem_trailing_zeros);
+    XRS_EXPORT(module, isolate, "byteswap", mem_byteswap);
+    XRS_EXPORT(module, isolate, "rotateLeft", mem_rotate_left);
+    XRS_EXPORT(module, isolate, "rotateRight", mem_rotate_right);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_MEM */
 

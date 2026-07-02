@@ -81,10 +81,12 @@ typedef struct XiModule {
     /* Shared-slot mappings: populated during lowering, consumed by C codegen.
      * Indexed by shared slot number (0..nslots-1).  NULL entries mean the
      * slot holds a plain value with no specialized module metadata. */
-    XiFunc **slot_funcs;        /* [nslots] shared slot -> XiFunc* */
-    XiClassData **slot_classes; /* [nslots] shared slot -> XiClassData* */
-    XiEnumData **slot_enums;    /* [nslots] shared slot -> XiEnumData* */
-    uint16_t nslots;            /* = init->nshared */
+    XiFunc **slot_funcs;                 /* [nslots] shared slot -> XiFunc* */
+    XiClassData **slot_classes;          /* [nslots] shared slot -> XiClassData* */
+    XiEnumData **slot_enums;             /* [nslots] shared slot -> XiEnumData* */
+    XiImportRef **slot_imports;          /* [nslots] shared slot -> XiImportRef* */
+    XiConstLiteral *slot_const_literals; /* [nslots] shared slot -> scalar const literal */
+    uint16_t nslots;                     /* = init->nshared */
     /* Closure metadata for all closures in this module */
     XiClosureMeta **closure_metas; /* [nclosure_metas] */
     uint16_t nclosure_metas;

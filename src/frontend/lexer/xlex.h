@@ -122,6 +122,7 @@ typedef enum {
     TK_ABSTRACT,     // abstract
     TK_OVERRIDE,     // override
     TK_FINAL,        // final
+    TK_PARALLEL,     // parallel (batch-parallel control flow)
     TK_ENUM,         // enum
     TK_MATCH,        // match
     TK_TYPE_ALIAS,   // type (type alias definition)

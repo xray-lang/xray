@@ -1,0 +1,10 @@
+let a: Array<int> = []
+let b: Array<bool> = []
+a.reserve(8)
+b.reserve(8)
+
+parallel for i in 0..4 workers 2 worker wid collect into (a, b) {
+    (i + wid, ((i + wid) % 2) == 0)
+}
+
+print(a.length + b.length)

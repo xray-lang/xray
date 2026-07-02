@@ -61,16 +61,63 @@ static inline void await_lock_release(_Atomic bool *lock) {
     atomic_store_explicit(lock, false, memory_order_release);
 }
 
+/*
+ * One-shot tasks are short-lived by construction: the compiler proved the
+ * handle has a single consumer and xr_task_runtime_try_destroy_detached has
+ * already unlinked it from the runtime registry. Keep a small thread-local
+ * cache so hot fan-out/fan-in code avoids repeating calloc/free for the task
+ * handle itself. This is deliberately below XrRuntime: cached handles carry no
+ * runtime ownership after unlink and can be reinitialized for any runtime.
+ */
+#define XR_TASK_LOCAL_CACHE_MAX 1024u
+
+static _Thread_local XrTask *tls_task_cache = NULL;
+static _Thread_local size_t tls_task_cache_count = 0;
+
+static XrTask *task_alloc_handle(void) {
+    XrTask *task = tls_task_cache;
+    if (task) {
+        tls_task_cache = task->runtime_next;
+        tls_task_cache_count--;
+        memset(task, 0, sizeof(*task));
+        return task;
+    }
+    return (XrTask *) xr_calloc(1, sizeof(XrTask));
+}
+
+static void task_free_handle(XrTask *task, bool cache_local) {
+    if (!task)
+        return;
+    if (cache_local && tls_task_cache_count < XR_TASK_LOCAL_CACHE_MAX) {
+        task->runtime_next = tls_task_cache;
+        task->runtime_prev_link = NULL;
+        tls_task_cache = task;
+        tls_task_cache_count++;
+        return;
+    }
+    xr_free(task);
+}
+
 /* ========== Task Creation ========== */
 
-XrTask *xr_task_create(XrRuntime *runtime, XrCoroutine *parent_coro, XrCoroutine *executor) {
+static void task_runtime_link_locked(XrRuntime *runtime, XrTask *task) {
+    task->runtime_next = runtime->task_list;
+    task->runtime_prev_link = &runtime->task_list;
+    if (task->runtime_next)
+        task->runtime_next->runtime_prev_link = &task->runtime_next;
+    runtime->task_list = task;
+    runtime->task_count++;
+}
+
+static XrTask *task_create_common(XrRuntime *runtime, XrCoroutine *parent_coro,
+                                  XrCoroutine *executor, bool defer_registry) {
     (void) parent_coro;
     XR_DCHECK(runtime != NULL, "xr_task_create: runtime must not be NULL");
     XR_DCHECK(executor != NULL, "xr_task_create: executor must not be NULL");
     if (!runtime || !executor)
         return NULL;
 
-    XrTask *task = (XrTask *) xr_calloc(1, sizeof(XrTask));
+    XrTask *task = task_alloc_handle();
     if (!task)
         return NULL;
 
@@ -111,17 +158,90 @@ XrTask *xr_task_create(XrRuntime *runtime, XrCoroutine *parent_coro, XrCoroutine
     atomic_init(&task->await_lock, false);
     task->await_waiters = NULL;
     task->runtime_next = NULL;
+    task->runtime_prev_link = NULL;
 
     atomic_store_explicit(&task->coro, executor, memory_order_relaxed);
     executor->task = task;
 
-    xr_mutex_lock(&runtime->task_lock);
-    task->runtime_next = runtime->task_list;
-    runtime->task_list = task;
-    runtime->task_count++;
-    xr_mutex_unlock(&runtime->task_lock);
+    if (defer_registry) {
+        task->flags |= XR_TASK_FLG_DEFERRED_REGISTRY;
+    } else {
+        xr_mutex_lock(&runtime->task_lock);
+        task_runtime_link_locked(runtime, task);
+        xr_mutex_unlock(&runtime->task_lock);
+    }
 
     return task;
+}
+
+XrTask *xr_task_create(XrRuntime *runtime, XrCoroutine *parent_coro, XrCoroutine *executor) {
+    return task_create_common(runtime, parent_coro, executor, false);
+}
+
+XrTask *xr_task_create_deferred_registry(XrRuntime *runtime, XrCoroutine *parent_coro,
+                                         XrCoroutine *executor) {
+    return task_create_common(runtime, parent_coro, executor, true);
+}
+
+size_t xr_task_runtime_register_deferred_tasks(XrRuntime *runtime, XrTask **tasks, int count) {
+    if (!runtime || !tasks || count <= 0)
+        return 0;
+
+    size_t registered = 0;
+    xr_mutex_lock(&runtime->task_lock);
+    for (int i = 0; i < count; i++) {
+        XrTask *task = tasks[i];
+        if (!task || !(task->flags & XR_TASK_FLG_DEFERRED_REGISTRY))
+            continue;
+        task->flags &= (uint8_t) ~XR_TASK_FLG_DEFERRED_REGISTRY;
+        if (!task->runtime_prev_link) {
+            task_runtime_link_locked(runtime, task);
+            registered++;
+        }
+    }
+    xr_mutex_unlock(&runtime->task_lock);
+    return registered;
+}
+
+size_t xr_task_runtime_register_deferred_batch(XrRuntime *runtime, XrCoroutine **executors,
+                                               int count) {
+    if (!runtime || !executors || count <= 0)
+        return 0;
+
+    XrTask *inline_tasks[64];
+    XrTask **tasks = inline_tasks;
+    if (count > (int) (sizeof(inline_tasks) / sizeof(inline_tasks[0]))) {
+        tasks = (XrTask **) xr_malloc((size_t) count * sizeof(XrTask *));
+        if (!tasks)
+            return 0;
+    }
+
+    int task_count = 0;
+    for (int i = 0; i < count; i++) {
+        XrCoroutine *exec = executors[i];
+        XrTask *task = exec ? exec->task : NULL;
+        if (task && (task->flags & XR_TASK_FLG_DEFERRED_REGISTRY))
+            tasks[task_count++] = task;
+    }
+
+    size_t registered = xr_task_runtime_register_deferred_tasks(runtime, tasks, task_count);
+
+    if (tasks != inline_tasks)
+        xr_free(tasks);
+    return registered;
+}
+
+bool xr_task_destroy_deferred_unregistered(XrTask *task) {
+    if (!task || !(task->flags & XR_TASK_FLG_DEFERRED_REGISTRY))
+        return false;
+    task->flags &= (uint8_t) ~XR_TASK_FLG_DEFERRED_REGISTRY;
+    XrCoroutine *executor = atomic_load_explicit(&task->coro, memory_order_acquire);
+    if (executor && executor->task == task)
+        executor->task = NULL;
+    atomic_store_explicit(&task->coro, NULL, memory_order_release);
+    xr_obj_destroy_task(&task->hdr, NULL);
+    task_free_handle(task, true);
+    return true;
 }
 
 XrTask *xr_task_runtime_detach_all(XrRuntime *runtime, size_t *out_count) {
@@ -135,6 +255,8 @@ XrTask *xr_task_runtime_detach_all(XrRuntime *runtime, size_t *out_count) {
     size_t count = runtime->task_count;
     runtime->task_list = NULL;
     runtime->task_count = 0;
+    for (XrTask *it = task; it; it = it->runtime_next)
+        it->runtime_prev_link = NULL;
     xr_mutex_unlock(&runtime->task_lock);
 
     if (out_count)
@@ -187,19 +309,16 @@ bool xr_task_runtime_try_destroy_detached(XrRuntime *runtime, XrTask *task) {
         return false;
     }
 
-    bool found = false;
     xr_mutex_lock(&runtime->task_lock);
-    XrTask **cursor = &runtime->task_list;
-    while (*cursor) {
-        if (*cursor == task) {
-            *cursor = task->runtime_next;
-            task->runtime_next = NULL;
-            if (runtime->task_count > 0)
-                runtime->task_count--;
-            found = true;
-            break;
-        }
-        cursor = &(*cursor)->runtime_next;
+    bool found = task->runtime_prev_link != NULL;
+    if (found) {
+        *task->runtime_prev_link = task->runtime_next;
+        if (task->runtime_next)
+            task->runtime_next->runtime_prev_link = task->runtime_prev_link;
+        task->runtime_next = NULL;
+        task->runtime_prev_link = NULL;
+        if (runtime->task_count > 0)
+            runtime->task_count--;
     }
     xr_mutex_unlock(&runtime->task_lock);
     if (!found) {
@@ -209,7 +328,7 @@ bool xr_task_runtime_try_destroy_detached(XrRuntime *runtime, XrTask *task) {
     }
 
     xr_obj_destroy_task(&task->hdr, NULL);
-    xr_free(task);
+    task_free_handle(task, true);
     xr_sched_metric_inc(runtime, &runtime->sched_stats.task_one_shot_destroy_success_count);
     return true;
 }
@@ -218,8 +337,9 @@ void xr_task_destroy_list(XrTask *task) {
     while (task) {
         XrTask *next = task->runtime_next;
         task->runtime_next = NULL;
+        task->runtime_prev_link = NULL;
         xr_obj_destroy_task(&task->hdr, NULL);
-        xr_free(task);
+        task_free_handle(task, false);
         task = next;
     }
 }

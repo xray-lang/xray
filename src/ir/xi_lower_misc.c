@@ -334,6 +334,7 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
             et->enum_class->own_field_count = (uint16_t) (1 + max_pc);
             // ADT enum identity is now tracked via builtin_kind
             et->enum_class->builtin_kind = XR_BK_ADT_ENUM;
+            et->enum_class->builtin_data = et;
         }
     }
     if (enum_data) {

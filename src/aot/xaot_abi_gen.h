@@ -34,11 +34,12 @@ typedef struct {
     X(UNIT, "unit", XR_KIND_UNIT, XAOT_ABI_CLASS_VOID, XAOT_REP_VOID, false, false, false) \
     X(STRING, "string", XR_KIND_STRING, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(ARRAY, "array", XR_KIND_ARRAY, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
+    X(SPAN, "span", XR_KIND_SPAN, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(MAP, "map", XR_KIND_MAP, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(SET, "set", XR_KIND_SET, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(TUPLE, "tuple", XR_KIND_TUPLE, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(RECORD, "record", XR_KIND_RECORD, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
-    X(POINTER, "pointer", XR_KIND_POINTER, XAOT_ABI_CLASS_SCALAR, XAOT_REP_I64, false, false, true)
+    X(POINTER, "pointer", XR_KIND_POINTER, XAOT_ABI_CLASS_SCALAR, XAOT_REP_RAWPTR, false, false, true)
 
 
 static inline const XaotAbiInfo *xaot_abi_for_type_kind(XrTypeKind kind) {
@@ -67,6 +68,10 @@ static inline const XaotAbiInfo *xaot_abi_for_type_kind(XrTypeKind kind) {
          XAOT_ABI_CLASS_POINTER,
          XAOT_REP_PTR, false,
          false, true},
+        {"span", XR_KIND_SPAN,
+         XAOT_ABI_CLASS_POINTER,
+         XAOT_REP_PTR, false,
+         false, true},
         {"map", XR_KIND_MAP,
          XAOT_ABI_CLASS_POINTER,
          XAOT_REP_PTR, false,
@@ -85,7 +90,7 @@ static inline const XaotAbiInfo *xaot_abi_for_type_kind(XrTypeKind kind) {
          false, true},
         {"pointer", XR_KIND_POINTER,
          XAOT_ABI_CLASS_SCALAR,
-         XAOT_REP_I64, false,
+         XAOT_REP_RAWPTR, false,
          false, true},
     };
     for (unsigned i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
@@ -123,7 +128,8 @@ static inline bool xaot_abi_type_can_use_typed_boundary(const XrType *type) {
     if (!abi || !abi->typed_boundary || (type->is_nullable && !abi->allows_nullable))
         return false;
     storage = xaot_abi_storage_rep_for_type(type);
-    return storage == XR_REP_I64 || storage == XR_REP_F64 || storage == XR_REP_PTR;
+    return storage == XR_REP_I64 || storage == XR_REP_F64 || storage == XR_REP_PTR ||
+           storage == XR_REP_RAWPTR;
 }
 
 #endif  /* XAOT_ABI_GEN_H */

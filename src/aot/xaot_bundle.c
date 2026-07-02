@@ -272,6 +272,16 @@ XR_FUNC const XaotValuePlan *xaot_bundle_find_value_plan(const XaotBundle *bundl
     return NULL;
 }
 
+XR_FUNC XaotValuePlan *xaot_bundle_find_value_plan_mut(XaotBundle *bundle, const XiValue *value) {
+    uint32_t idx;
+
+    if (!bundle || !value)
+        return NULL;
+    if (xaot_ptr_index_get(&bundle->value_index, value, &idx) && idx < bundle->nvalue_plans)
+        return &bundle->value_plans[idx];
+    return NULL;
+}
+
 XR_FUNC XaotContainerTypePlan *xaot_bundle_add_container_plan(XaotBundle *bundle,
                                                               const XrType *type) {
     XaotContainerTypePlan *plan;

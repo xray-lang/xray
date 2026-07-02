@@ -298,6 +298,29 @@ else
     sed 's/^/      /' "$CORE_LOG" | sed -n '1,120p'
 fi
 
+CORE_FAST_BIN="$WORK/core_math_fast"
+CORE_FAST_LOG="$WORK/core_math_fast.log"
+case "$(uname -m 2>/dev/null)" in
+    arm64|aarch64|arm*)
+        CORE_FAST_CPU_FLAG="-mcpu=native"
+        ;;
+    *)
+        CORE_FAST_CPU_FLAG="-march=native"
+        ;;
+esac
+if "$XRAY" build --native -O fast --dry-run-link --dump-link-command --cache-dir "$WORK_CACHE" \
+        -o "$CORE_FAST_BIN" "$CORE_SRC" >"$CORE_FAST_LOG" 2>&1; then
+    expect_log_contains "$CORE_FAST_LOG" "Link command:" "core-math-fast: emitted link command"
+    expect_log_contains "$CORE_FAST_LOG" "-O3" "core-math-fast: keeps semantic-safe O3"
+    expect_log_contains "$CORE_FAST_LOG" "-flto" "core-math-fast: enables LTO"
+    expect_log_contains "$CORE_FAST_LOG" "$CORE_FAST_CPU_FLAG" \
+        "core-math-fast: tunes for native CPU"
+    expect_log_not_contains "$CORE_FAST_LOG" "-lxray_core" "core-math-fast: does not link xray_core"
+else
+    record_fail "core-math-fast: build failed"
+    sed 's/^/      /' "$CORE_FAST_LOG" | sed -n '1,120p'
+fi
+
 CORE_FULL_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_math.xr"
 CORE_FULL_BIN="$WORK/core_math_full"
 CORE_FULL_LOG="$WORK/core_math_full.log"

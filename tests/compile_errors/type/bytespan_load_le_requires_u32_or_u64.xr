@@ -1,0 +1,3 @@
+fn bad(src: ByteSpan) -> int {
+    return int(src.loadLE<int>(0))
+}

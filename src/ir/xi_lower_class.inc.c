@@ -115,7 +115,7 @@ static XrStructLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNo
         if (!type || type->kind == XR_KIND_UNKNOWN)
             return NULL;
         int native = xr_type_kind_to_native(type->kind, type->native_width);
-        if (native < 0 && type->kind == XR_KIND_ARRAY)
+        if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SPAN))
             native = XR_NATIVE_ARRAY_REF;
         if (native < 0 && type->kind == XR_KIND_MAP)
             native = XR_NATIVE_MAP_REF;
@@ -201,6 +201,14 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         }
         XiValue *p = xi_param(ml.func, entry, (uint16_t) (base + i), pt);
         ml.func->params[base + i] = p;
+        uint8_t mode = (m->param_passing_modes && i < m->param_count) ? m->param_passing_modes[i]
+                                                                      : XR_PARAM_VALUE;
+        if (mode != XR_PARAM_VALUE &&
+            !xi_func_set_param_passing_mode(ml.func, (uint16_t) (base + i), mode)) {
+            xi_func_free(ml.func);
+            xi_lower_cleanup(&ml);
+            return NULL;
+        }
         XR_DCHECK(m->parameters != NULL && m->parameters[i] != NULL,
                   "method param name must not be NULL");
         xi_lower_braun_write(&ml, xi_lower_var_create(&ml, 0, m->parameters[i], pt), entry, p);

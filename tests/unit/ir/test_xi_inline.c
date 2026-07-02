@@ -82,8 +82,8 @@ TEST(small_callee_positive) {
         .caller_size = 50,
     };
     int b = xi_inline_benefit(&cost, &site);
-    /* base=30, cost=5, score=25 */
-    ASSERT(b == 25);
+    /* leaf straight-line score=60-5+1=56 */
+    ASSERT(b == 56);
 }
 
 /* ========== Test: large callee, negative benefit ========== */
@@ -124,8 +124,8 @@ TEST(const_args_boost) {
         .caller_size = 50,
     };
     int b = xi_inline_benefit(&cost, &site);
-    /* base=30-35=-5, +15(const) = 10 */
-    ASSERT(b == 10);
+    /* leaf straight-line score=60-35+1, +15(const) = 41 */
+    ASSERT(b == 41);
 }
 
 /* ========== Test: single call site boost ========== */
@@ -145,8 +145,8 @@ TEST(single_call_site_boost) {
         .caller_size = 50,
     };
     int b = xi_inline_benefit(&cost, &site);
-    /* base=30-38=-8, +10(single) = 2 */
-    ASSERT(b == 2);
+    /* leaf straight-line score=60-38+1, +10(single) = 33 */
+    ASSERT(b == 33);
 }
 
 /* ========== Test: loop penalty ========== */
@@ -190,9 +190,9 @@ TEST(self_recursive_never_inline) {
     ASSERT(b == -1000);
 }
 
-/* ========== Test: large caller penalty ========== */
+/* ========== Test: straight-line helper ignores large caller penalty ========== */
 
-TEST(large_caller_penalty) {
+TEST(straightline_helper_ignores_large_caller_penalty) {
     XiInlineCostModel cost = {
         .value_count = 25,
         .call_count = 0,
@@ -207,8 +207,29 @@ TEST(large_caller_penalty) {
         .caller_size = 400,
     };
     int b = xi_inline_benefit(&cost, &site);
-    /* base=30-25=5, -15(large caller) = -10 */
-    ASSERT(b == -10);
+    /* leaf straight-line score=60-25+1; large caller does not suppress it */
+    ASSERT(b == 36);
+}
+
+/* ========== Test: large caller still penalizes non-leaf helper ========== */
+
+TEST(large_caller_penalizes_general_helper) {
+    XiInlineCostModel cost = {
+        .value_count = 25,
+        .call_count = 1,
+        .branch_count = 0,
+        .has_loop = false,
+        .calls_self = false,
+        .has_throw = false,
+    };
+    XiInlineCallSiteInfo site = {
+        .all_args_const = false,
+        .single_call_site = false,
+        .caller_size = 400,
+    };
+    int b = xi_inline_benefit(&cost, &site);
+    /* base=30-25=5, -3(call), -15(large caller) = -13 */
+    ASSERT(b == -13);
 }
 
 /* ========== Test: exception flow is not inlined ========== */
@@ -357,7 +378,8 @@ int main(void) {
     run_single_call_site_boost();
     run_loop_penalty();
     run_self_recursive_never_inline();
-    run_large_caller_penalty();
+    run_straightline_helper_ignores_large_caller_penalty();
+    run_large_caller_penalizes_general_helper();
     run_throw_never_inline();
     run_combined_bonuses();
     run_budget_small_caller();

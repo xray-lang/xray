@@ -1,0 +1,12 @@
+fn main() {
+    let values = parallel for i in 0..=4 workers 2 worker wid
+        final {
+            print(wid)
+        }
+        collect {
+        i
+    }
+    print(values.length)
+}
+
+main()

@@ -1,0 +1,127 @@
+let WORKERS = process.args.length > 0 ? (int(process.args[0]) ?? 8) : 8
+let SIZE = process.args.length > 1 ? (int(process.args[1]) ?? 1048576) : 1048576
+let ITERS = process.args.length > 2 ? (int(process.args[2]) ?? 10) : 10
+let BLOCK = process.args.length > 3 ? (int(process.args[3]) ?? 32768) : 32768
+
+if (WORKERS < 1) {
+    WORKERS = 1
+}
+if (SIZE < 0) {
+    SIZE = 0
+}
+if (ITERS < 0) {
+    ITERS = 0
+}
+if (BLOCK < 1) {
+    BLOCK = 1
+}
+
+fn makeBytes(n: int) -> Bytes {
+    let out = Bytes(0)
+    let i = 0
+    while (i < n) {
+        out.push((i * 31 + (i >> 3) + 17) & 0xFF)
+        i = i + 1
+    }
+    return out
+}
+
+fn blockCountFor(size: int, blockSize: int) -> int {
+    if (size <= 0) {
+        return 0
+    }
+    return (size + blockSize - 1) / blockSize
+}
+
+fn blockLenAt(size: int, blockSize: int, index: int) -> int {
+    let start = index * blockSize
+    let len = size - start
+    if (len > blockSize) {
+        return blockSize
+    }
+    return len
+}
+
+fn checksum(span: ByteSpan) -> int {
+    let h = 2166136261
+    let i = 0
+    while (i < span.length) {
+        let b = 0
+        unsafe {
+            b = int(span.getUnchecked(i))
+        }
+        h = ((h ^ b) * 16777619) & 0xFFFFFFFF
+        i = i + 1
+    }
+    return h
+}
+
+fn pack(sum: int, count: int) -> int {
+    return (sum << 32) | (count & 0xFFFFFFFF)
+}
+
+fn unpackSum(packed: int) -> int {
+    return packed >> 32
+}
+
+fn unpackCount(packed: int) -> int {
+    return packed & 0xFFFFFFFF
+}
+
+fn worker(src: Bytes, queue: WorkQueue<int>, id: int, blockSize: int) -> int {
+    let sum = 0
+    let count = 0
+    while (true) {
+        let item = queue.pop(id)
+        if (item == null) {
+            return pack(sum, count)
+        }
+        let index = item
+        let start = index * blockSize
+        let len = blockLenAt(src.length, blockSize, index)
+        let chunk: ByteSpan = src[start:start + len]
+        sum = (sum + checksum(chunk)) & 0xFFFFFFFF
+        count = count + 1
+    }
+    return pack(sum, count)
+}
+
+let src = makeBytes(SIZE)
+let blocks = blockCountFor(src.length, BLOCK)
+shared const sharedSrc = copy(src)
+shared const queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
+
+let tasks: Array<Task> = []
+let w = 0
+while (w < WORKERS) {
+    tasks.push(go worker(sharedSrc, queue, w, BLOCK))
+    w = w + 1
+}
+
+let expectedCount = 0
+let i = 0
+while (i < ITERS) {
+    let b = 0
+    while (b < blocks) {
+        assert_true(queue.push(b, b % WORKERS))
+        expectedCount = expectedCount + 1
+        b = b + 1
+    }
+    i = i + 1
+}
+queue.close()
+
+let actualCount = 0
+let actualSum = 0
+w = 0
+while (w < tasks.length) {
+    let packed: int = await tasks[w]
+    actualCount = actualCount + unpackCount(packed)
+    actualSum = (actualSum + unpackSum(packed)) & 0xFFFFFFFF
+    w = w + 1
+}
+
+print(actualCount)
+print(expectedCount)
+print(actualCount == expectedCount)
+print(actualSum != 0 || expectedCount == 0)

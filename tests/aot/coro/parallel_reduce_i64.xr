@@ -1,0 +1,11 @@
+let sum = parallel reduce i in 0..1000 workers 8 worker wid init 10 combine (a: int, b: int) -> a + b {
+    i + wid - wid
+}
+
+print(sum)
+
+let empty = parallel reduce i in 5..5 workers 8 init 123 combine (a: int, b: int) -> a + b {
+    i
+}
+
+print(empty)

@@ -64,6 +64,37 @@ typedef struct CallExprNode {
     int type_arg_count;
 } CallExprNode;
 
+typedef struct ParallelReduceExprNode {
+    char *item_name;
+    char *end_name;
+    char *worker_name;
+    XrParallelLocalBinding *locals;
+    int local_count;
+    AstNode *range;
+    AstNode *worker_count; /* optional `workers expr`; NULL lets lowering choose */
+    AstNode *initial;
+    AstNode *combine;
+    AstNode *body;
+    uint32_t item_symbol_id;
+    uint32_t end_symbol_id;
+    uint32_t worker_symbol_id;
+    bool range_body;
+} ParallelReduceExprNode;
+
+typedef struct ParallelCollectExprNode {
+    char *item_name;
+    char *worker_name;
+    XrParallelLocalBinding *locals;
+    int local_count;
+    AstNode *range;
+    AstNode *worker_count; /* optional `workers expr`; NULL lets lowering choose */
+    AstNode *into;         /* optional `collect into array` target; NULL returns Array<T> */
+    AstNode *final_body;   /* optional per-worker normal-completion final block */
+    AstNode *body;
+    uint32_t item_symbol_id;
+    uint32_t worker_symbol_id;
+} ParallelCollectExprNode;
+
 // is expression node (runtime type check)
 typedef struct IsExprNode {
     AstNode *expr;

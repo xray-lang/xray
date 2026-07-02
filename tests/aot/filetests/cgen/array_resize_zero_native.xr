@@ -1,0 +1,10 @@
+fn clearLocal() -> int {
+    let a = Array<uint32>(4, 7)
+    a.resize(0, 0)
+    a.push(9)
+    unsafe {
+        return int(a.getUnchecked(0)) + a.length
+    }
+}
+
+print(clearLocal())

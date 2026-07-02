@@ -67,20 +67,12 @@ static bool loop_shape_eligible(const XiLoop *loop) {
     return has_pre && has_latch;
 }
 
-static XiValue *header_phi_preheader_value(const XiLoop *loop, const XiValue *arg) {
-    if (!loop || !arg || !loop->header || !loop->preheader)
+static XiValue *basic_iv_preheader_value(const XiLoop *loop, const XiValue *arg) {
+    if (!loop || !arg)
         return NULL;
-
-    uint16_t pre_idx = xi_cfg_pred_index(loop->header, loop->preheader);
-    if (pre_idx >= loop->header->npreds)
-        return NULL;
-
-    for (XiPhi *phi = loop->header->phis; phi; phi = phi->next) {
-        if (arg == &phi->value) {
-            if (pre_idx >= phi->value.nargs)
-                return NULL;
-            return phi->value.args[pre_idx];
-        }
+    for (uint32_t i = 0; i < loop->nbasic_ivs; i++) {
+        if (loop->basic_ivs[i].phi == arg)
+            return loop->basic_ivs[i].start;
     }
     return NULL;
 }
@@ -94,7 +86,7 @@ static bool value_is_outside_loop(const XiLoop *loop, const XiValue *v) {
 static bool guard_arg_can_be_materialized(const XiLoop *loop, const XiValue *arg) {
     if (value_is_outside_loop(loop, arg))
         return true;
-    return header_phi_preheader_value(loop, arg) != NULL;
+    return basic_iv_preheader_value(loop, arg) != NULL;
 }
 
 /* Find a body block with an early-exit IF whose condition is a
@@ -148,7 +140,7 @@ static XiBlock *find_splittable_exit(const XiLoop *loop, XiValue **out_check,
                 has_invariant_arg = false;
                 break;
             }
-            if (header_phi_preheader_value(loop, arg))
+            if (basic_iv_preheader_value(loop, arg))
                 has_iv_arg = true;
             else if (value_is_outside_loop(loop, arg))
                 has_invariant_arg = true;
@@ -207,7 +199,7 @@ static bool split_loop(XiFunc *f, XiLoop *loop, XiBlock *exit_block, XiValue *ch
         XiValue *arg = check->args[a];
         if (!arg)
             return false;
-        XiValue *pre_val = header_phi_preheader_value(loop, arg);
+        XiValue *pre_val = basic_iv_preheader_value(loop, arg);
         if (pre_val) {
             guard_args[a] = pre_val;
         } else if (value_is_outside_loop(loop, arg)) {

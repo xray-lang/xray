@@ -756,6 +756,10 @@ AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int 
     } else {
         // Expression body: -> expr (auto-wrap in return)
         AstNode *expr = xr_parse_expression(parser);
+        if (!expr) {
+            parser->scope_depth--;
+            return NULL;
+        }
 
         // return_stmt shallow-copies values into the AST node; must be arena.
         AstNode **values =
@@ -771,6 +775,291 @@ AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int 
 
     // params ownership transferred to func_expr
     return xr_ast_function_expr(parser->compiler_session, params, param_count, body, line);
+}
+
+static char *expr_token_to_ast_string(Parser *parser, Token tok) {
+    char *s = (char *) ast_alloc(parser->compiler_session, (size_t) tok.length + 1);
+    memcpy(s, tok.start, (size_t) tok.length);
+    s[tok.length] = '\0';
+    return s;
+}
+
+static XrParallelLocalBinding *parse_expr_parallel_locals(Parser *parser, int *out_count) {
+    XrParallelLocalBinding *locals = NULL;
+    int count = 0;
+    int capacity = 0;
+    while (xr_parser_match_name(parser, "local")) {
+        if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+            xr_parser_error_expected_name(parser, "expected parallel local variable name");
+            *out_count = 0;
+            return NULL;
+        }
+        XrParallelLocalBinding binding;
+        memset(&binding, 0, sizeof(binding));
+        binding.name = expr_token_to_ast_string(parser, parser->current);
+        xr_parser_advance(parser);
+        if (xr_parser_match(parser, TK_IN)) {
+            binding.is_initializer = false;
+        } else if (xr_parser_match(parser, TK_ASSIGN)) {
+            binding.is_initializer = true;
+        } else {
+            xr_parser_error_at_current(parser,
+                                       "expected 'in' or '=' after parallel local variable name");
+            *out_count = 0;
+            return NULL;
+        }
+        binding.source = xr_parse_expression(parser);
+        if (!binding.source) {
+            *out_count = 0;
+            return NULL;
+        }
+        XR_PARSE_PUSH(parser, locals, count, capacity, binding);
+    }
+    *out_count = count;
+    return locals;
+}
+
+static AstNode *parse_expr_parallel_final(Parser *parser) {
+    if (!xr_parser_match(parser, TK_FINAL))
+        return NULL;
+    if (!xr_parser_check(parser, TK_LBRACE)) {
+        xr_parser_error_at_current(parser, "parallel final block requires braces { }");
+        return NULL;
+    }
+    xr_parser_advance(parser);
+    return xr_parse_block(parser);
+}
+
+static AstNode *xr_parse_parallel_reduce_expr(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_parallel_reduce_expr: NULL parser");
+    int line = parser->previous.line;
+
+    if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+        xr_parser_error_expected_name(parser, "expected parallel reduce item variable name");
+        return NULL;
+    }
+    char *item_name = expr_token_to_ast_string(parser, parser->current);
+    xr_parser_advance(parser);
+
+    xr_parser_consume(parser, TK_IN, "expected 'in' after parallel reduce item variable");
+    AstNode *range = xr_parse_expression(parser);
+    if (!range)
+        return NULL;
+
+    AstNode *worker_count = NULL;
+    if (xr_parser_match_name(parser, "workers")) {
+        worker_count = xr_parse_expression(parser);
+        if (!worker_count)
+            return NULL;
+    }
+
+    char *worker_name = NULL;
+    if (xr_parser_match_name(parser, "worker")) {
+        if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+            xr_parser_error_expected_name(parser, "expected parallel reduce worker variable name");
+            return NULL;
+        }
+        worker_name = expr_token_to_ast_string(parser, parser->current);
+        xr_parser_advance(parser);
+    }
+
+    int local_count = 0;
+    XrParallelLocalBinding *locals = parse_expr_parallel_locals(parser, &local_count);
+    if (parser->panic_mode)
+        return NULL;
+
+    if (!xr_parser_match_name(parser, "init")) {
+        xr_parser_error_at_current(parser, "expected 'init' in parallel reduce expression");
+        return NULL;
+    }
+    AstNode *initial = xr_parse_expression(parser);
+    if (!initial)
+        return NULL;
+
+    if (!xr_parser_match_name(parser, "combine")) {
+        xr_parser_error_at_current(parser, "expected 'combine' in parallel reduce expression");
+        return NULL;
+    }
+    AstNode *combine = xr_parse_expression(parser);
+    if (!combine)
+        return NULL;
+
+    if (!xr_parser_check(parser, TK_LBRACE)) {
+        xr_parser_error_at_current(parser, "parallel reduce expression requires braces { }");
+        return NULL;
+    }
+    xr_parser_advance(parser);
+    AstNode *body = xr_parse_block(parser);
+
+    return xr_ast_parallel_reduce_expr(parser->compiler_session, item_name, range, worker_count,
+                                       worker_name, locals, local_count, initial, combine, body,
+                                       line);
+}
+
+static AstNode *xr_parse_parallel_range_reduce_expr(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_parallel_range_reduce_expr: NULL parser");
+    int line = parser->previous.line;
+
+    if (!xr_parser_match_name(parser, "reduce")) {
+        xr_parser_error_at_current(
+            parser, "expected 'reduce' after 'parallel range' in expression context");
+        return NULL;
+    }
+
+    if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+        xr_parser_error_expected_name(parser, "expected parallel range reduce begin variable name");
+        return NULL;
+    }
+    char *begin_name = expr_token_to_ast_string(parser, parser->current);
+    xr_parser_advance(parser);
+
+    if (!xr_parser_match(parser, TK_COMMA)) {
+        xr_parser_error(parser, "expected ',' between parallel range reduce begin and end names");
+        return NULL;
+    }
+    if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+        xr_parser_error_expected_name(parser, "expected parallel range reduce end variable name");
+        return NULL;
+    }
+    char *end_name = expr_token_to_ast_string(parser, parser->current);
+    xr_parser_advance(parser);
+
+    xr_parser_consume(parser, TK_IN, "expected 'in' after parallel range reduce variables");
+    AstNode *range = xr_parse_expression(parser);
+    if (!range)
+        return NULL;
+
+    AstNode *worker_count = NULL;
+    if (xr_parser_match_name(parser, "workers")) {
+        worker_count = xr_parse_expression(parser);
+        if (!worker_count)
+            return NULL;
+    }
+
+    char *worker_name = NULL;
+    if (xr_parser_match_name(parser, "worker")) {
+        if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+            xr_parser_error_expected_name(parser,
+                                          "expected parallel range reduce worker variable name");
+            return NULL;
+        }
+        worker_name = expr_token_to_ast_string(parser, parser->current);
+        xr_parser_advance(parser);
+    }
+
+    int local_count = 0;
+    XrParallelLocalBinding *locals = parse_expr_parallel_locals(parser, &local_count);
+    if (parser->panic_mode)
+        return NULL;
+
+    if (!xr_parser_match_name(parser, "init")) {
+        xr_parser_error_at_current(parser, "expected 'init' in parallel range reduce expression");
+        return NULL;
+    }
+    AstNode *initial = xr_parse_expression(parser);
+    if (!initial)
+        return NULL;
+
+    if (!xr_parser_match_name(parser, "combine")) {
+        xr_parser_error_at_current(parser,
+                                   "expected 'combine' in parallel range reduce expression");
+        return NULL;
+    }
+    AstNode *combine = xr_parse_expression(parser);
+    if (!combine)
+        return NULL;
+
+    if (!xr_parser_check(parser, TK_LBRACE)) {
+        xr_parser_error_at_current(parser, "parallel range reduce expression requires braces { }");
+        return NULL;
+    }
+    xr_parser_advance(parser);
+    AstNode *body = xr_parse_block(parser);
+
+    return xr_ast_parallel_range_reduce_expr(parser->compiler_session, begin_name, end_name, range,
+                                             worker_count, worker_name, locals, local_count,
+                                             initial, combine, body, line);
+}
+
+// Parse parallel collect expression:
+// parallel for i in 0..n workers workers worker wid collect [into results] { ...expr }
+static AstNode *xr_parse_parallel_collect_expr(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_parallel_collect_expr: NULL parser");
+    int line = parser->previous.line;
+
+    if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+        xr_parser_error_expected_name(parser, "expected parallel collect item variable name");
+        return NULL;
+    }
+    char *item_name = expr_token_to_ast_string(parser, parser->current);
+    xr_parser_advance(parser);
+
+    xr_parser_consume(parser, TK_IN, "expected 'in' after parallel collect item variable");
+    AstNode *range = xr_parse_expression(parser);
+    if (!range)
+        return NULL;
+
+    AstNode *worker_count = NULL;
+    if (xr_parser_match_name(parser, "workers")) {
+        worker_count = xr_parse_expression(parser);
+        if (!worker_count)
+            return NULL;
+    }
+
+    char *worker_name = NULL;
+    if (xr_parser_match_name(parser, "worker")) {
+        if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+            xr_parser_error_expected_name(parser, "expected parallel collect worker variable name");
+            return NULL;
+        }
+        worker_name = expr_token_to_ast_string(parser, parser->current);
+        xr_parser_advance(parser);
+    }
+
+    int local_count = 0;
+    XrParallelLocalBinding *locals = parse_expr_parallel_locals(parser, &local_count);
+    if (parser->panic_mode)
+        return NULL;
+
+    AstNode *final_body = parse_expr_parallel_final(parser);
+    if (parser->panic_mode)
+        return NULL;
+
+    if (!xr_parser_match_name(parser, "collect")) {
+        xr_parser_error_at_current(parser, "expected 'collect' before parallel collect body");
+        return NULL;
+    }
+    AstNode *into = NULL;
+    if (xr_parser_match_name(parser, "into")) {
+        into = xr_parse_precedence(parser, PREC_UNARY);
+        if (!into) {
+            xr_parser_error(parser, "expected result array expression after 'into'");
+            return NULL;
+        }
+    }
+    if (!xr_parser_check(parser, TK_LBRACE)) {
+        xr_parser_error_at_current(parser, "parallel collect expression requires braces { }");
+        return NULL;
+    }
+    xr_parser_advance(parser);
+    AstNode *body = xr_parse_block(parser);
+
+    return xr_ast_parallel_collect_expr(parser->compiler_session, item_name, range, worker_count,
+                                        worker_name, locals, local_count, into, final_body, body,
+                                        line);
+}
+
+AstNode *xr_parse_parallel_expr(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_parallel_expr: NULL parser");
+    if (xr_parser_match_name(parser, "range"))
+        return xr_parse_parallel_range_reduce_expr(parser);
+    if (xr_parser_match_name(parser, "reduce"))
+        return xr_parse_parallel_reduce_expr(parser);
+    if (xr_parser_match(parser, TK_FOR))
+        return xr_parse_parallel_collect_expr(parser);
+    xr_parser_error_at_previous(
+        parser, "expected 'range', 'reduce' or 'for' after 'parallel' in expression context");
+    return NULL;
 }
 
 // Parse fn anonymous function expression

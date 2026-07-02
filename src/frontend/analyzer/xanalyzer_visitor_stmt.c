@@ -446,9 +446,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     xa_update_borrowed_alias_root(ctx, sym, var->initializer, var_type);
 
     /* Shared mutable runtime primitives require an immutable binding. */
-    if (var_type && (xr_type_is_named_class(var_type, "Atomic") ||
-                     xr_type_is_named_class(var_type, "WorkQueue") ||
-                     xr_type_is_named_class(var_type, "ResultGroup"))) {
+    if (var_type && var_type->kind != XR_KIND_CHANNEL &&
+        xa_type_is_threadsafe_shared_ref(var_type)) {
         if (!sym->is_shared || !sym->is_const) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             xa_analyzer_add_diagnostic(
@@ -510,6 +509,7 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
 
     /* Write back resolved symbol ID for Xi lowering (Braun SSA key). */
     assign->symbol_id = sym->id;
+    xa_parallel_capture_check(ctx, node, sym, true);
 
     // Record write reference for Find References
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);

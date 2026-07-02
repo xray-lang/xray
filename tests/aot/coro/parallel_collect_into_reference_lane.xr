@@ -1,0 +1,24 @@
+fn makePayload() -> Bytes {
+    let out = Bytes.withCapacity(2)
+    out.push(65)
+    out.push(66)
+    return out
+}
+
+let labels: Array<string> = []
+const label = "chunk"
+parallel for i in 0..4 workers 2 collect into labels {
+    label
+}
+print(labels.length)
+print(labels[0])
+print(labels[3])
+
+shared const payload = makePayload()
+let blocks: Array<Bytes> = []
+parallel for i in 0..4 workers 2 collect into blocks {
+    payload
+}
+print(blocks.length)
+print(blocks[0].length)
+print(blocks[3][1])

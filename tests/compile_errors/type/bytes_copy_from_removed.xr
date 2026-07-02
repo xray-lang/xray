@@ -1,0 +1,3 @@
+let bytes = Bytes(8)
+let src = Bytes(8)
+bytes.copyFrom(src, 0, 0, 1)

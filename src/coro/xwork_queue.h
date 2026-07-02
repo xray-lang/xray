@@ -66,8 +66,13 @@ XR_FUNC XrWorkQueue *xr_work_queue_new(struct XrRuntimeCore *core, struct XrRunt
                                        uint32_t shard_count, uint32_t shard_capacity);
 XR_FUNC bool xr_work_queue_push_core(struct XrRuntimeCore *core, XrWorkQueue *q, XrValue value,
                                      int64_t shard_hint);
+XR_FUNC int64_t xr_work_queue_push_int_range_core(struct XrRuntimeCore *core, XrWorkQueue *q,
+                                                  int64_t start, int64_t count,
+                                                  int64_t shard_start);
 XR_FUNC bool xr_work_queue_push(struct XrVMRuntime *X, XrWorkQueue *q, XrValue value,
                                 int64_t shard_hint);
+XR_FUNC int64_t xr_work_queue_push_int_range(struct XrVMRuntime *X, XrWorkQueue *q, int64_t start,
+                                             int64_t count, int64_t shard_start);
 XR_FUNC XrValue xr_work_queue_try_pop_for_coro_core(struct XrRuntimeCore *core, XrWorkQueue *q,
                                                     int64_t worker_hint,
                                                     struct XrCoroutine *recv_coro, bool *ok);

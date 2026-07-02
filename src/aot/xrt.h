@@ -50,6 +50,7 @@
 #include "xrt_crypto.h"     // L2: freestanding crypto helpers
 #include "xrt_regex.h"      // L2: freestanding regex helpers
 #include "xrt_math.h"       // L2: freestanding math helpers
+#include "xrt_mem.h"        // L2: freestanding mem bit intrinsics
 #include "xrt_time.h"       // L2: freestanding time query helpers
 #include "xrt_datetime.h"   // L2: freestanding datetime module queries
 #include "xrt_os.h"         // L2: freestanding OS query helpers

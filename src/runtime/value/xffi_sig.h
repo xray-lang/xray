@@ -45,6 +45,18 @@ typedef enum XrFFIType {
     XR_FFI_T_PTR = 12
 } XrFFIType;
 
+#define XR_FFI_PTR_AUX_TYPE_MASK 0x7fu
+#define XR_FFI_PTR_AUX_LITTLE_ENDIAN 0x80u
+
+static inline uint8_t xr_ffi_ptr_aux_type(uint8_t aux) {
+    return (uint8_t) (aux & XR_FFI_PTR_AUX_TYPE_MASK);
+}
+
+static inline uint8_t xr_ffi_ptr_aux(uint8_t type, bool little_endian) {
+    return (uint8_t) ((type & XR_FFI_PTR_AUX_TYPE_MASK) |
+                      (little_endian ? XR_FFI_PTR_AUX_LITTLE_ENDIAN : 0u));
+}
+
 typedef struct XrFFICallbackSig {
     uint8_t *params; /* [nparams] XrFFIType codes (owned, NULL when nparams==0) */
     uint8_t nparams;

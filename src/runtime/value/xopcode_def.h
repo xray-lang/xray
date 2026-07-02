@@ -58,6 +58,7 @@
 #define KOP_ABC_BIN_K XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_K_IDX
 #define KOP_ABC_BIN_S XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_LIT_S
 #define KOP_ABC_BIN_LIT XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_LIT
+#define KOP_ABC_INOUT_IN_LIT XR_OPF_REG_INOUT, XR_OPF_REG_IN, XR_OPF_LIT
 #define KOP_ABC_STORE_LIT XR_OPF_REG_IN, XR_OPF_REG_IN, XR_OPF_LIT
 #define KOP_ABC_INPLACE_K XR_OPF_REG_INOUT, XR_OPF_K_IDX, XR_OPF_REG_IN
 #define KOP_ABC_INPLACE_LIT XR_OPF_REG_INOUT, XR_OPF_LIT, XR_OPF_REG_IN
@@ -171,10 +172,13 @@
     _(ARRAY_SETC, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A]:Array[B] = R[C]")                            \
     _(ARRAY_PUSH, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.push(R[B])")                                 \
     _(ARRAY_LEN, FMT_AB, KOP_AB_UNARY, "R[A] = len(R[B]:Array)")                                   \
+    _(ARRAY_CLEAR, FMT_A, KOP_A_INOUT, "R[A]:Array.clear()")                                       \
     _(ARRAY_RESERVE, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.reserve(R[B])")                           \
     _(ARRAY_RESIZE, FMT_ABC, KOP_ABC_INPLACE, "R[A]:Array.resize(R[B], R[C])")                     \
+    _(BYTES_LOAD_U16_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = Bytes.loadU16LE(R[B], R[C])")               \
     _(BYTES_LOAD_U32_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = Bytes.loadU32LE(R[B], R[C])")               \
     _(BYTES_LOAD_U64_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = Bytes.loadU64LE(R[B], R[C])")               \
+    _(ARRAY_DATA_PTR, FMT_ABC, KOP_ABC_BIN, "R[A] = raw data pointer of Array/Span R[B]")          \
     _(BYTES_COPY_WITHIN, FMT_A, KOP_A_INOUT, "R[A].copyWithin(R[A+1], R[A+2], R[A+3])")            \
     _(BYTES_COPY_FROM, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1], R[A+2], R[A+3], R[A+4])")        \
     _(BYTES_REPEAT_FROM, FMT_A, KOP_A_INOUT, "R[A].repeatFrom(R[A+1], R[A+2], R[A+3])")            \
@@ -274,7 +278,9 @@
       "R[A]=task = go R[B](R[B+1]..R[B+C&0x7F]), C bit7=fire-and-forget")                          \
     _(AWAIT, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = await R[B], C bit0=discard bit1=one-shot-go")       \
     _(AWAIT_TIMEOUT, FMT_ABC, KOP_ABC_BIN, "R[A] = await(timeout: R[C]) R[B]")                     \
-    _(AWAIT_ALL, FMT_AB, KOP_AB_UNARY, "R[A] = await R[B]:Array")                                  \
+    _(AWAIT_ALL, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = await R[B]:Array, C=result elem type")          \
+    _(AWAIT_ALL_INTO, FMT_ABC, KOP_ABC_INOUT_IN_LIT,                                               \
+      "R[A] = await all R[B]:Array into R[A], C=result elem type")                                 \
     _(AWAIT_ANY, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = await any R[B]:Array, C=mode")                  \
     _(YIELD, FMT_A, KOP_A_LIT, "yield (A=poll_threshold for select default)")                      \
     _(CANCELLED, FMT_A, KOP_A_LOAD, "R[A] = cancelled()")                                          \
@@ -325,6 +331,7 @@
     _(STRUCT_COPY, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = memcpy struct R[B] into struct_area slot C")  \
     _(PTR_LOAD, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = *(T*)R[B], C = XrFFIType width of T")            \
     _(PTR_STORE, FMT_ABC, KOP_ABC_STORE_LIT, "*(T*)R[A] = R[B], C = XrFFIType width of T")         \
+    _(PTR_COPY_NONOVERLAP, FMT_ABC, KOP_ABC_INPLACE, "memcpy(R[A], R[B], R[C] * elem_size)")       \
     /* Inserted just before NOP: NUM_OPCODES is (OP_NOP + 1), so NOP must stay                     \
      * the last entry. Placing these here keeps every pre-NOP opcode value stable                  \
      * (the embedded bytecode smoke blob uses only those), while NOP — unused by                 \

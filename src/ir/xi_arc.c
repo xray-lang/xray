@@ -50,7 +50,57 @@ static bool stack_alloc_has_const_capacity(const XiValue *v) {
            v->args[0]->aux_int >= 0;
 }
 
-static bool stack_alloc_closure_uses_are_direct_calls(const XiFunc *f, const XiValue *target) {
+static bool stack_alloc_closure_use_is_synchronous_callback(const XiValue *user, uint16_t arg_idx,
+                                                            const XiValue *target) {
+    if (!user || !target)
+        return false;
+    if (user->op == XI_CALL)
+        return arg_idx == 0;
+    if (user->op == XI_PAR_FOR && arg_idx == 3 && user->aux_kind == XI_AUX_KIND_PAR_FOR) {
+        const XiParallelForData *data = (const XiParallelForData *) user->aux;
+        return data && data->body_func == (const XiFunc *) target->aux;
+    }
+    if (user->op == XI_PAR_COLLECT && arg_idx == 3 && user->aux_kind == XI_AUX_KIND_PAR_COLLECT) {
+        const XiParallelCollectData *data = (const XiParallelCollectData *) user->aux;
+        return data && data->body_func == (const XiFunc *) target->aux;
+    }
+    if (user->op == XI_PAR_REDUCE && arg_idx == 4 && user->aux_kind == XI_AUX_KIND_PAR_REDUCE) {
+        const XiParallelReduceData *data = (const XiParallelReduceData *) user->aux;
+        return data && data->body_func == (const XiFunc *) target->aux;
+    }
+    if (user->op == XI_PAR_REDUCE && arg_idx == 5 && user->aux_kind == XI_AUX_KIND_PAR_REDUCE) {
+        const XiParallelReduceData *data = (const XiParallelReduceData *) user->aux;
+        return data && data->combine_func == (const XiFunc *) target->aux;
+    }
+    return false;
+}
+
+static bool stack_alloc_closure_use_is_scoped_par_for_callback(const XiValue *user,
+                                                               uint16_t arg_idx,
+                                                               const XiValue *target) {
+    if (!user || !target)
+        return false;
+    if (user->op == XI_PAR_FOR && arg_idx == 3 && user->aux_kind == XI_AUX_KIND_PAR_FOR) {
+        const XiParallelForData *data = (const XiParallelForData *) user->aux;
+        return data && data->body_func == (const XiFunc *) target->aux;
+    }
+    if (user->op == XI_PAR_COLLECT && arg_idx == 3 && user->aux_kind == XI_AUX_KIND_PAR_COLLECT) {
+        const XiParallelCollectData *data = (const XiParallelCollectData *) user->aux;
+        return data && data->body_func == (const XiFunc *) target->aux;
+    }
+    if (user->op == XI_PAR_REDUCE && arg_idx == 4 && user->aux_kind == XI_AUX_KIND_PAR_REDUCE) {
+        const XiParallelReduceData *data = (const XiParallelReduceData *) user->aux;
+        return data && data->body_func == (const XiFunc *) target->aux;
+    }
+    if (user->op == XI_PAR_REDUCE && arg_idx == 5 && user->aux_kind == XI_AUX_KIND_PAR_REDUCE) {
+        const XiParallelReduceData *data = (const XiParallelReduceData *) user->aux;
+        return data && data->combine_func == (const XiFunc *) target->aux;
+    }
+    return false;
+}
+
+static bool stack_alloc_closure_uses_are_synchronous_callbacks(const XiFunc *f,
+                                                               const XiValue *target) {
     bool saw_use = false;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         const XiBlock *blk = f->blocks[b];
@@ -63,7 +113,41 @@ static bool stack_alloc_closure_uses_are_direct_calls(const XiFunc *f, const XiV
             for (uint16_t a = 0; a < user->nargs; a++) {
                 if (user->args[a] != target)
                     continue;
-                if (user->op != XI_CALL || a != 0)
+                if (!stack_alloc_closure_use_is_synchronous_callback(user, a, target))
+                    return false;
+                saw_use = true;
+            }
+        }
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == target)
+                    return false;
+            }
+        }
+        if (blk->control == target)
+            return false;
+    }
+    return saw_use;
+}
+
+static bool stack_alloc_closure_uses_are_scoped_par_for_callbacks(const XiFunc *f,
+                                                                  const XiValue *target) {
+    if (!f || !target || target->op != XI_STACK_ALLOC || target->aux_int != XI_CLOSURE_NEW ||
+        !target->aux)
+        return false;
+    bool saw_use = false;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *user = blk->values[i];
+            if (!user || user == target)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != target)
+                    continue;
+                if (!stack_alloc_closure_use_is_scoped_par_for_callback(user, a, target))
                     return false;
                 saw_use = true;
             }
@@ -83,14 +167,14 @@ static bool stack_alloc_closure_uses_are_direct_calls(const XiFunc *f, const XiV
 static bool stack_alloc_can_preserve_semantics(const XiFunc *f, const XiValue *v) {
     if (!v || !stack_alloc_has_const_capacity(v))
         return v && v->op == XI_CLOSURE_NEW && v->aux &&
-               stack_alloc_closure_uses_are_direct_calls(f, v);
+               stack_alloc_closure_uses_are_synchronous_callbacks(f, v);
     switch (v->op) {
         case XI_ARRAY_NEW:
         case XI_MAP_NEW:
         case XI_SET_NEW:
             return v->aux_int == 0;
         case XI_CLOSURE_NEW:
-            return v->aux && stack_alloc_closure_uses_are_direct_calls(f, v);
+            return v->aux && stack_alloc_closure_uses_are_synchronous_callbacks(f, v);
         default:
             return false;
     }
@@ -330,6 +414,67 @@ static bool op_is_call(uint16_t op) {
     return op_result_ownership(op) == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
 }
 
+static bool arc_type_is_raw_pointer(const XrType *type) {
+    return type && XR_TYPE_IS_POINTER(type);
+}
+
+static bool arc_value_is_raw_pointer_carrier(const XiValue *v) {
+    if (!v)
+        return false;
+    if (arc_type_is_raw_pointer(v->type))
+        return true;
+    switch (v->op) {
+        case XI_ARRAY_DATA_PTR:
+            return true;
+        case XI_BOX:
+        case XI_COPY:
+        case XI_CONVERT:
+        case XI_PHI:
+        case XI_SELECT:
+            return v->nargs > 0 && arc_value_is_raw_pointer_carrier(v->args[0]);
+        default:
+            return false;
+    }
+}
+
+static bool arc_raw_pointer_borrow_flows_to_user(const XiValue *member, const XiValue *user) {
+    if (!member || !user)
+        return false;
+    if (user->op == XI_ARRAY_DATA_PTR && user->nargs >= 1 && user->args[0] == member)
+        return true;
+    if (!arc_value_is_raw_pointer_carrier(member))
+        return false;
+    switch (user->op) {
+        case XI_ADD:
+            /* RawPtr<T>.offset / p[i] address arithmetic keeps carrying the same
+             * borrowed owner lifetime. The result type gate prevents ordinary
+             * integer arithmetic from joining the borrow closure. */
+            return arc_type_is_raw_pointer(user->type) && user->nargs >= 1 &&
+                   user->args[0] == member;
+        case XI_BOX:
+        case XI_UNBOX:
+        case XI_COPY:
+        case XI_CONVERT:
+            return user->nargs >= 1 && user->args[0] == member;
+        case XI_CALL_BUILTIN:
+            if (user->nargs < 1 || user->args[0] != member || !user->aux)
+                return false;
+            return strcmp((const char *) user->aux, "copy") == 0 ||
+                   strcmp((const char *) user->aux, "to_shared") == 0;
+        case XI_PHI:
+        case XI_SELECT:
+        case XI_CLOSURE_NEW:
+        case XI_STACK_ALLOC:
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] == member)
+                    return true;
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
 /* ========== Per-callee return-ownership ==========
  *
  * A call result can be promoted from CALL_RESULT to OWNED when the callee
@@ -466,6 +611,9 @@ static bool collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSiteVec *si
                 continue;
             for (uint16_t a = 0; a < user->nargs; a++) {
                 if (user->args[a] != target)
+                    continue;
+                if (user->op == XI_STACK_ALLOC &&
+                    stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, user))
                     continue;
                 if (!xi_own_value_arg_is_consuming(user, a))
                     continue;
@@ -653,12 +801,12 @@ static XiBlock *arc_split_edge(XiFunc *f, XiBlock *pred, XiBlock *succ) {
     return ok ? mid : NULL;
 }
 
-/* Collect `target` plus the transitive closure of its RC-typed borrowed
- * projections (GETFIELD and friends). A borrow reads through the owner
- * without holding a reference, so the owner must outlive the projection's
- * last use — otherwise the release would free storage a live borrow still
- * points into. Returns a heap array (caller frees) with the count in
- * *out_count, or NULL on OOM. */
+/* Collect `target` plus the transitive closure of borrowed projections
+ * (GETFIELD and friends, plus RawPtr/RawMut data-pointer borrows). A borrow
+ * reads through the owner without holding a reference, so the owner must
+ * outlive the projection's last use — otherwise the release would free storage
+ * a live borrow still points into. Returns a heap array (caller frees) with
+ * the count in *out_count, or NULL on OOM. */
 static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t *out_count) {
     enum {
         ARC_TRACK_INIT = 16
@@ -679,7 +827,9 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                 if (!u)
                     continue;
                 bool is_member_borrow = false;
-                if (op_produces_borrow(u->op) && xi_own_type_may_be_ref(u->type)) {
+                if (arc_raw_pointer_borrow_flows_to_user(member, u)) {
+                    is_member_borrow = true;
+                } else if (op_produces_borrow(u->op) && xi_own_type_may_be_ref(u->type)) {
                     /* A projection (GETFIELD / INDEX_GET / ...) borrows through
                      * any argument that is the tracked member. The result need
                      * only be a POSSIBLE reference: a Json field typed `null`
@@ -1161,6 +1311,9 @@ static bool param_has_consuming_use(XiFunc *f, XiValue *p) {
             for (uint16_t a = 0; a < u->nargs; a++) {
                 if (u->args[a] != p || !xi_own_value_arg_is_consuming(u, a))
                     continue;
+                if (u->op == XI_STACK_ALLOC &&
+                    stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, u))
+                    continue;
                 if (u->op == XI_CALL && a >= 1) {
                     XiFunc *callee = arc_resolve_callee(f, u->args[0]);
                     if (callee && arc_callee_borrows_param(callee, (uint16_t) (a - 1)))
@@ -1289,6 +1442,9 @@ static void arc_insert_rec(XiFunc *f) {
              * loop above. Collecting them again here would process each twice
              * and insert a duplicate death-drop on every non-consuming branch
              * path (a double-free). */
+            if (v && v->op != XI_PARAM &&
+                stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
+                continue;
             if (v && v->op != XI_PARAM && tracks_rc(v) && !xi_value_vec_push(&targets, v)) {
                 xr_free(targets.items);
                 XR_CHECK(false, "xi_arc: out of memory collecting ARC targets");

@@ -1,0 +1,10 @@
+shared const results: ResultGroup = ResultGroup(1)
+
+fn worker() {
+    results.add(42)
+    results.close()
+}
+
+go worker()
+let value = results.recv()
+print(value ?? -1)

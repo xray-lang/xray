@@ -444,6 +444,10 @@ static bool is_array_type(XrType *type) {
     return type && (type->kind == XR_KIND_ARRAY);
 }
 
+static bool is_span_type(XrType *type) {
+    return type && (type->kind == XR_KIND_SPAN);
+}
+
 static bool is_map_type(XrType *type) {
     return type && (type->kind == XR_KIND_MAP);
 }
@@ -480,9 +484,9 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
 
     switch (iface) {
         case XA_IFACE_ITERABLE:
-            // Iterable: Array, Map, Set, string
-            return is_array_type(type) || is_map_type(type) || is_set_type(type) ||
-                   is_string_type(type);
+            // Iterable: Array, Span, Map, Set, string
+            return is_array_type(type) || is_span_type(type) || is_map_type(type) ||
+                   is_set_type(type) || is_string_type(type);
 
         case XA_IFACE_ITERATOR:
             // Iterator: internal use only, no built-in types directly implement
@@ -503,18 +507,18 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
             return true;
 
         case XA_IFACE_INDEXABLE:
-            // Indexable: Array, string, Map, Json
-            return is_array_type(type) || is_string_type(type) || is_map_type(type) ||
-                   is_json_type(type);
+            // Indexable: Array, Span, string, Map, Json
+            return is_array_type(type) || is_span_type(type) || is_string_type(type) ||
+                   is_map_type(type) || is_json_type(type);
 
         case XA_IFACE_EQUATABLE:
             // Equatable: all types support == and !=
             return true;
 
         case XA_IFACE_LENGTHABLE:
-            // Lengthable: Array, string, Map, Set, Json
-            return is_array_type(type) || is_string_type(type) || is_map_type(type) ||
-                   is_set_type(type) || is_json_type(type);
+            // Lengthable: Array, Span, string, Map, Set, Json
+            return is_array_type(type) || is_span_type(type) || is_string_type(type) ||
+                   is_map_type(type) || is_set_type(type) || is_json_type(type);
 
         case XA_IFACE_CALLABLE:
             // Callable: Function, Class

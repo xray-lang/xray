@@ -1,0 +1,10 @@
+// Built-in EventCount type; implemented by the runtime.
+
+@native
+class EventCount {
+    epoch: int
+    isClosed: bool
+    advance(step?: int) -> int
+    wait(lastEpoch: int, workerHint?: int) -> int
+    close()
+}

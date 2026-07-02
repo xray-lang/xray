@@ -1,0 +1,3 @@
+fn bump(counter: Atomic<int>) -> int {
+    return counter.fetchAdd(1, Ordering.Relaxed)
+}

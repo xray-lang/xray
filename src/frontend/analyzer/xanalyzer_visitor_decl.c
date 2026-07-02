@@ -511,11 +511,13 @@ static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr) {
 static bool xa_summary_method_stores_argument(const char *method_name, int slot) {
     if (!method_name || slot < 0)
         return false;
-    if ((strcmp(method_name, "push") == 0 || strcmp(method_name, "unshift") == 0 ||
-         strcmp(method_name, "fill") == 0 || strcmp(method_name, "add") == 0 ||
-         strcmp(method_name, "send") == 0 || strcmp(method_name, "trySend") == 0 ||
-         strcmp(method_name, "sendTimeout") == 0) &&
+    if ((strcmp(method_name, "push") == 0 || strcmp(method_name, "pushUnchecked") == 0 ||
+         strcmp(method_name, "unshift") == 0 || strcmp(method_name, "fill") == 0 ||
+         strcmp(method_name, "add") == 0 || strcmp(method_name, "send") == 0 ||
+         strcmp(method_name, "trySend") == 0 || strcmp(method_name, "sendTimeout") == 0) &&
         slot == 0)
+        return true;
+    if (strcmp(method_name, "setUnchecked") == 0 && slot == 1)
         return true;
     return strcmp(method_name, "set") == 0 && (slot == 0 || slot == 1);
 }
@@ -613,6 +615,30 @@ static void xa_summary_mark_capture_refs(XaParamEscapeSummary *summary, AstNode 
             xa_summary_mark_capture_refs(summary, node->as.for_stmt.condition);
             xa_summary_mark_capture_refs(summary, node->as.for_stmt.increment);
             xa_summary_mark_capture_refs(summary, node->as.for_stmt.body);
+            break;
+        case AST_FOR_IN_STMT:
+            xa_summary_mark_capture_refs(summary, node->as.for_in_stmt.collection);
+            xa_summary_mark_capture_refs(summary, node->as.for_in_stmt.body);
+            break;
+        case AST_PARALLEL_FOR_STMT:
+            xa_summary_mark_capture_refs(summary, node->as.parallel_for_stmt.range);
+            xa_summary_mark_capture_refs(summary, node->as.parallel_for_stmt.worker_count);
+            xa_summary_mark_capture_refs(summary, node->as.parallel_for_stmt.final_body);
+            xa_summary_mark_capture_refs(summary, node->as.parallel_for_stmt.body);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            xa_summary_mark_capture_refs(summary, node->as.parallel_reduce_expr.range);
+            xa_summary_mark_capture_refs(summary, node->as.parallel_reduce_expr.worker_count);
+            xa_summary_mark_capture_refs(summary, node->as.parallel_reduce_expr.initial);
+            xa_summary_mark_capture_refs(summary, node->as.parallel_reduce_expr.combine);
+            xa_summary_mark_capture_refs(summary, node->as.parallel_reduce_expr.body);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            xa_summary_mark_capture_refs(summary, node->as.parallel_collect_expr.range);
+            xa_summary_mark_capture_refs(summary, node->as.parallel_collect_expr.worker_count);
+            xa_summary_mark_capture_refs(summary, node->as.parallel_collect_expr.into);
+            xa_summary_mark_capture_refs(summary, node->as.parallel_collect_expr.final_body);
+            xa_summary_mark_capture_refs(summary, node->as.parallel_collect_expr.body);
             break;
         case AST_FUNCTION_EXPR:
             break;
@@ -785,6 +811,30 @@ static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
             xa_summary_walk(summary, node->as.for_stmt.condition);
             xa_summary_walk(summary, node->as.for_stmt.increment);
             xa_summary_walk(summary, node->as.for_stmt.body);
+            break;
+        case AST_FOR_IN_STMT:
+            xa_summary_walk(summary, node->as.for_in_stmt.collection);
+            xa_summary_walk(summary, node->as.for_in_stmt.body);
+            break;
+        case AST_PARALLEL_FOR_STMT:
+            xa_summary_walk(summary, node->as.parallel_for_stmt.range);
+            xa_summary_walk(summary, node->as.parallel_for_stmt.worker_count);
+            xa_summary_walk(summary, node->as.parallel_for_stmt.final_body);
+            xa_summary_walk(summary, node->as.parallel_for_stmt.body);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            xa_summary_walk(summary, node->as.parallel_reduce_expr.range);
+            xa_summary_walk(summary, node->as.parallel_reduce_expr.worker_count);
+            xa_summary_walk(summary, node->as.parallel_reduce_expr.initial);
+            xa_summary_walk(summary, node->as.parallel_reduce_expr.combine);
+            xa_summary_walk(summary, node->as.parallel_reduce_expr.body);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            xa_summary_walk(summary, node->as.parallel_collect_expr.range);
+            xa_summary_walk(summary, node->as.parallel_collect_expr.worker_count);
+            xa_summary_walk(summary, node->as.parallel_collect_expr.into);
+            xa_summary_walk(summary, node->as.parallel_collect_expr.final_body);
+            xa_summary_walk(summary, node->as.parallel_collect_expr.body);
             break;
         case AST_ARRAY_LITERAL:
             for (int i = 0; i < node->as.array_literal.count; i++)
@@ -1016,6 +1066,36 @@ static bool xa_method_body_mutates_receiver(AstNode *node, XrClassInfo *receiver
             return xa_method_body_mutates_receiver(node->as.for_in_stmt.collection,
                                                    receiver_info) ||
                    xa_method_body_mutates_receiver(node->as.for_in_stmt.body, receiver_info);
+        case AST_PARALLEL_FOR_STMT:
+            return xa_method_body_mutates_receiver(node->as.parallel_for_stmt.range,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.parallel_for_stmt.worker_count,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.parallel_for_stmt.final_body,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.parallel_for_stmt.body, receiver_info);
+        case AST_PARALLEL_REDUCE_EXPR:
+            return xa_method_body_mutates_receiver(node->as.parallel_reduce_expr.range,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.parallel_reduce_expr.worker_count,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.parallel_reduce_expr.initial,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.parallel_reduce_expr.combine,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.parallel_reduce_expr.body,
+                                                   receiver_info);
+        case AST_PARALLEL_COLLECT_EXPR:
+            return xa_method_body_mutates_receiver(node->as.parallel_collect_expr.range,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.parallel_collect_expr.worker_count,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.parallel_collect_expr.into,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.parallel_collect_expr.final_body,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.parallel_collect_expr.body,
+                                                   receiver_info);
         case AST_DESTRUCTURE_DECL:
             return xa_method_body_mutates_receiver(node->as.destructure_decl.initializer,
                                                    receiver_info);
@@ -1098,7 +1178,8 @@ static bool xa_method_body_mutates_receiver(AstNode *node, XrClassInfo *receiver
             return xa_method_body_mutates_receiver(node->as.unsafe_expr.operand, receiver_info);
         case AST_AWAIT_EXPR:
             return xa_method_body_mutates_receiver(node->as.await_expr.expr, receiver_info) ||
-                   xa_method_body_mutates_receiver(node->as.await_expr.timeout, receiver_info);
+                   xa_method_body_mutates_receiver(node->as.await_expr.timeout, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.await_expr.into, receiver_info);
         case AST_SCOPE_BLOCK:
             return xa_method_body_mutates_receiver(node->as.scope_block.body, receiver_info);
         case AST_DEFER_STMT:
@@ -1310,6 +1391,17 @@ static void collect_return_types(XaInferContext *ctx, AstNode *node, XrType ***t
             break;
         case AST_FOR_IN_STMT:
             collect_return_types(ctx, node->as.for_in_stmt.body, types, count, cap);
+            break;
+        case AST_PARALLEL_FOR_STMT:
+            collect_return_types(ctx, node->as.parallel_for_stmt.body, types, count, cap);
+            collect_return_types(ctx, node->as.parallel_for_stmt.final_body, types, count, cap);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            collect_return_types(ctx, node->as.parallel_reduce_expr.body, types, count, cap);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            collect_return_types(ctx, node->as.parallel_collect_expr.final_body, types, count, cap);
+            collect_return_types(ctx, node->as.parallel_collect_expr.body, types, count, cap);
             break;
         case AST_TRY_CATCH:
             collect_return_types(ctx, node->as.try_catch.try_body, types, count, cap);
@@ -2986,6 +3078,10 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
     // (xa_visit_function_expr enters function scope, then xa_visit_block_stmt
     //  enters block scope for the body).
     AstNode *init = var->initializer;
+    if (init &&
+        (init->type == AST_PARALLEL_REDUCE_EXPR || init->type == AST_PARALLEL_COLLECT_EXPR)) {
+        xa_visit_collect(ctx, init);
+    }
     if (init && init->type == AST_GO_EXPR) {
         AstNode *go_fn = init->as.go_expr.expr;
         if (go_fn && go_fn->type == AST_FUNCTION_EXPR) {

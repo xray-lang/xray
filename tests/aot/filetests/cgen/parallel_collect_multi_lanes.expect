@@ -1,0 +1,8 @@
+c_contains=parallel_collect_lanes_
+c_contains=_xr_pc_out_
+c_contains=->length = _xr_pc_count_
+c_contains=((int64_t*)
+c_contains=((uint8_t*)
+c_not_contains=xrt_array_write_preallocated(
+c_not_contains=xrt_tuple_make
+c_not_contains=xrt_tuple_new

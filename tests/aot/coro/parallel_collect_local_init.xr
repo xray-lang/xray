@@ -1,0 +1,28 @@
+fn main() {
+    let xs = parallel for i in 0..8 workers 4 worker wid
+        local acc = wid
+        collect {
+        acc = acc + i
+        acc
+    }
+
+    print(xs.length)
+    print(xs[0])
+    print(xs[1])
+    print(xs[2])
+    print(xs[3])
+    print(xs[4])
+    print(xs[5])
+    print(xs[6])
+    print(xs[7])
+
+    let empty = parallel for i in 5..5 workers 4
+        local acc = 99
+        collect {
+        acc = acc + i
+        acc
+    }
+    print(empty.length)
+}
+
+main()

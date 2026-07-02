@@ -1,0 +1,36 @@
+// A pure-Xray Mutex<T> shared across coroutines (shared const): the guarded
+// value must be genuinely shared by reference (not copied per coroutine), and
+// mutation under the lock in a spawned coroutine must be visible to the parent
+// after synchronisation. Confirms the composition provides real cross-coroutine
+// mutual exclusion in both VM and AOT, not just single-coroutine behaviour.
+
+class Mutex<T> {
+    _sem: Semaphore
+    value: T
+    constructor(v: T) {
+        this._sem = Semaphore(1)
+        this.value = v
+    }
+    lock<U>(body: (T) -> U) -> U {
+        this._sem.acquire()
+        defer { this._sem.release() }
+        return body(this.value)
+    }
+    replace(body: (T) -> T) -> T {
+        this._sem.acquire()
+        defer { this._sem.release() }
+        this.value = body(this.value)
+        return this.value
+    }
+}
+
+shared const m = Mutex<int>(0)
+shared const done = CountdownLatch(1)
+
+go {
+    m.replace((v) -> v + 100)
+    done.done()
+}
+
+done.wait()
+print(m.lock((v) -> v))   // 100 — mutation from the spawned coroutine is visible

@@ -1,0 +1,5 @@
+let out = Bytes.withCapacity(2)
+unsafe {
+    out.pushUnchecked(1)
+}
+out.repeatFromUnchecked(1, 1)

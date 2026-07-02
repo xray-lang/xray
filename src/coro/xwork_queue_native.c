@@ -39,6 +39,12 @@ bool xr_work_queue_push(XrVMRuntime *X, XrWorkQueue *q, XrValue value, int64_t s
     return xr_work_queue_push_core(X ? xr_isolate_get_runtime_core(X) : NULL, q, value, shard_hint);
 }
 
+int64_t xr_work_queue_push_int_range(XrVMRuntime *X, XrWorkQueue *q, int64_t start, int64_t count,
+                                     int64_t shard_start) {
+    return xr_work_queue_push_int_range_core(X ? xr_isolate_get_runtime_core(X) : NULL, q, start,
+                                             count, shard_start);
+}
+
 XrValue xr_work_queue_try_pop(XrVMRuntime *X, XrWorkQueue *q, int64_t worker_hint, bool *ok) {
     return xr_work_queue_try_pop_for_coro_core(X ? xr_isolate_get_runtime_core(X) : NULL, q,
                                                worker_hint, X ? xr_current_coro(X) : NULL, ok);
@@ -65,6 +71,18 @@ static XrValue m_push(XrVMRuntime *isolate, XrValue self, XrValue *args, int nar
     if (nargs >= 2 && XR_IS_INT(args[1]))
         shard = XR_TO_INT(args[1]);
     return xr_bool(xr_work_queue_push(isolate, q, args[0], shard));
+}
+
+static XrValue m_push_range(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
+    XrWorkQueue *q = xr_value_to_work_queue(self);
+    XR_DCHECK(q != NULL, "WorkQueue.pushRange: NULL queue");
+    XR_DCHECK(nargs >= 2, "WorkQueue.pushRange: missing start/count");
+    int64_t start = XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : 0;
+    int64_t count = XR_IS_INT(args[1]) ? XR_TO_INT(args[1]) : 0;
+    int64_t shard_start = -1;
+    if (nargs >= 3 && XR_IS_INT(args[2]))
+        shard_start = XR_TO_INT(args[2]);
+    return XR_FROM_INT(xr_work_queue_push_int_range(isolate, q, start, count, shard_start));
 }
 
 static XrValue m_try_pop(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
@@ -159,9 +177,8 @@ static XrValue work_queue_construct(XrVMRuntime *isolate, XrValue receiver, XrVa
 
 void xr_work_queue_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod work_queue_methods[] = {
-        {"push", m_push, 1},
-        {"tryPop", m_try_pop, 0},
-        {"close", m_close, 0},
+        {"push", m_push, 1},      {"pushRange", m_push_range, 2},
+        {"tryPop", m_try_pop, 0}, {"close", m_close, 0},
         {NULL, NULL, 0},
     };
     static const XrNativeYieldableMethod work_queue_yieldable_methods[] = {

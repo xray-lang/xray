@@ -1,0 +1,6 @@
+fn main() {
+    let xs = [1, 2, 3]
+    parallel for i in xs workers 2 {
+        print(i)
+    }
+}

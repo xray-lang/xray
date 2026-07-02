@@ -338,6 +338,10 @@ static void emit_builtin_bytes_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
 }
 
+XR_FUNC void xi_emit_bytes_load_u16_le(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U16_LE);
+}
+
 XR_FUNC void xi_emit_bytes_load_u32_le(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U32_LE);
 }
@@ -346,7 +350,19 @@ XR_FUNC void xi_emit_bytes_load_u64_le(EmitCtx *ctx, XiValue *v, XiEmitReg dst) 
     emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U64_LE);
 }
 
-/* FFI raw-pointer load: R[dst] = *(T*)R[addr], width code in C operand. */
+/* Unsafe container data pointer: R[dst] = (uintptr_t)Array/Span.data. */
+XR_FUNC void xi_emit_array_data_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs != 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg arr = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_DATA_PTR, dst, arr, 0));
+}
+
+/* FFI raw-pointer load: R[dst] = load(aux, R[addr]), aux in C operand. */
 XR_FUNC void xi_emit_ptr_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs != 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -370,6 +386,21 @@ XR_FUNC void xi_emit_ptr_store(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
     emit_inst(ctx, CREATE_ABC(OP_PTR_STORE, addr, val, (XiEmitReg) (v->aux_int & 0xff)));
+}
+
+/* Raw pointer memcpy: memcpy(dst, src, byte_count). */
+XR_FUNC void xi_emit_ptr_copy_nonoverlap(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (v->nargs != 3) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg dst_addr = reg_of(ctx, v->args[0]);
+    XiEmitReg src_addr = reg_of(ctx, v->args[1]);
+    XiEmitReg byte_count = reg_of(ctx, v->args[2]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_PTR_COPY_NONOVERLAP, dst_addr, src_addr, byte_count));
 }
 
 XR_FUNC void xi_emit_bytes_copy_within(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
@@ -475,6 +506,19 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_builtin_array_filled_new(ctx, v, dst);
         return;
     }
+    if (bname && strcmp(bname, "array_clear") == 0) {
+        if (v->nargs != 1) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        XiEmitReg arr = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_ARRAY_CLEAR, arr, 0, 0));
+        if (dst != arr)
+            emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
+        return;
+    }
     if (bname && strcmp(bname, "array_reserve") == 0) {
         if (v->nargs != 2) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -502,6 +546,10 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESIZE, arr, len, fill));
         if (dst != arr)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, arr, 0));
+        return;
+    }
+    if (bname && strcmp(bname, "bytes_load_u16_le") == 0) {
+        emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U16_LE);
         return;
     }
     if (bname && strcmp(bname, "bytes_load_u32_le") == 0) {

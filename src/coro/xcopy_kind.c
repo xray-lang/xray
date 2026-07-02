@@ -25,6 +25,9 @@ XrCopyKind xr_value_copy_kind(XrValue value) {
         case XR_TATOMIC:
         case XR_TWORKQUEUE:
         case XR_TRESULTGROUP:
+        case XR_TCOUNTDOWNLATCH:
+        case XR_TSEMAPHORE:
+        case XR_TEVENTCOUNT:
             return XR_COPY_SHARED_REF;
         case XR_TARRAY:
         case XR_TMAP:

@@ -34,7 +34,7 @@ static XaotValueRep value_rep_make(const XrType *type, XaotRep rep) {
         out.kind = XAOT_VALUE_VOID;
         return out;
     }
-    if (rep == XAOT_REP_PTR) {
+    if (info->dynamic_kind == XAOT_DYNAMIC_POINTER) {
         out.kind = XAOT_VALUE_PTR;
         return out;
     }
@@ -114,6 +114,9 @@ static bool rep_from_xr_storage(const XrType *type, XrRep storage, XaotRep *out)
         case XR_REP_PTR:
             *out = XAOT_REP_PTR;
             return true;
+        case XR_REP_RAWPTR:
+            *out = XAOT_REP_RAWPTR;
+            return true;
         case XR_REP_VOID:
             *out = XAOT_REP_VOID;
             return true;
@@ -188,6 +191,22 @@ XR_FUNC XaotValueRep xaot_value_rep_for_value(const XiValue *value) {
 XR_FUNC XrRep xaot_value_storage_rep(XaotValueRep rep) {
     const XaotRepInfo *info = xaot_rep_info(rep.rep);
     return info ? info->storage_rep : XR_REP_TAGGED;
+}
+
+static bool rep_c_type_equal(const char *a, const char *b) {
+    if (a == b)
+        return true;
+    if (!a || !b)
+        return false;
+    return strcmp(a, b) == 0;
+}
+
+XR_FUNC bool xaot_value_reps_equal(XaotValueRep a, XaotValueRep b) {
+    if (a.kind == XAOT_VALUE_AGGREGATE || b.kind == XAOT_VALUE_AGGREGATE) {
+        return a.kind == b.kind && a.rep == b.rep && a.flags == b.flags &&
+               rep_c_type_equal(a.c_type, b.c_type);
+    }
+    return xaot_value_storage_rep(a) == xaot_value_storage_rep(b);
 }
 
 XR_FUNC const char *xaot_value_kind_name(XaotValueKind kind) {

@@ -1,0 +1,125 @@
+/* Slice/view lifetime across source grow (task 143/144 M2).
+ *
+ * A zero-copy slice must stay valid (and observe a stable snapshot) after the
+ * source array grows and reallocates its backing buffer. Before the storage
+ * block fix this dangled: the slice cached `source->data` and the grow freed
+ * that buffer (heap-use-after-free under ASan; freed at xrt_coll.h:155 /
+ * xarray.c grow). After the fix the POD buffer is a refcounted storage block, so
+ * the slice keeps the old storage alive and reads a frozen snapshot.
+ *
+ * Covers POD element buffers (Bytes / typed Array<int>) and ANY buffers (object
+ * arrays), which carry XrValue refs that the storage block owns and releases at
+ * refcount zero (with per-element dup on fork).
+ */
+
+@test
+fn test_bytes_slice_survives_source_grow() {
+    let b = Bytes(4)
+    b[0] = 1
+    b[1] = 2
+    b[2] = 3
+    b[3] = 4
+
+    // Spill the backing store to the system heap BEFORE slicing, so the slice
+    // points into a heap buffer (the case that actually freed on a later grow).
+    for (let i = 0; i < 64; i++) {
+        b.push(200)
+    }
+
+    let s = b[1:4]
+    print(s[0])  // 2
+    print(s[2])  // 4
+
+    // Grow far past capacity -> realloc/fork of the backing store.
+    for (let i = 0; i < 4096; i++) {
+        b.push(7)
+    }
+
+    // The slice must still be valid and observe the snapshot taken at slice time.
+    print(s[0])  // 2
+    print(s[2])  // 4
+
+    s[1] = 99
+    print(s[1])  // 99
+
+    print("bytes slice survived grow")
+
+    // expect: 2
+    // expect: 4
+    // expect: 2
+    // expect: 4
+    // expect: 99
+    // expect: bytes slice survived grow
+}
+
+@test
+fn test_typed_int_slice_survives_source_grow() {
+    let a = Array<int>(4, 0)
+    a[0] = 10
+    a[1] = 20
+    a[2] = 30
+    a[3] = 40
+
+    for (let i = 0; i < 64; i++) {
+        a.push(100 + i)
+    }
+
+    let s = a[1:4]
+    print(s[0])  // 20
+    print(s[1])  // 30
+    print(s[2])  // 40
+
+    for (let i = 0; i < 4096; i++) {
+        a.push(i)
+    }
+
+    print(s[0])  // 20
+    print(s[1])  // 30
+    print(s[2])  // 40
+
+    s[1] = 999
+    print(s[1])  // 999
+
+    print("typed int slice survived grow")
+
+    // expect: 20
+    // expect: 30
+    // expect: 40
+    // expect: 20
+    // expect: 30
+    // expect: 40
+    // expect: 999
+    // expect: typed int slice survived grow
+}
+
+@test
+fn test_any_object_slice_survives_source_grow() {
+    let a = ["a", "b", "c", "d"]
+
+    for (let i = 0; i < 64; i++) {
+        a.push("x")
+    }
+
+    let s = a[1:4]
+    print(s[0])  // b
+    print(s[1])  // c
+    print(s[2])  // d
+
+    for (let i = 0; i < 4096; i++) {
+        a.push("y")
+    }
+
+    print(s[0])  // b
+    print(s[1])  // c
+    print(s[2])  // d
+
+    print("any object slice survived grow")
+
+    // expect: b
+    // expect: c
+    // expect: d
+    // expect: b
+    // expect: c
+    // expect: d
+    // expect: any object slice survived grow
+}

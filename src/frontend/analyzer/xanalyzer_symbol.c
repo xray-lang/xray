@@ -614,6 +614,81 @@ XrType **xa_symbol_links_get_type_param_constraints(XaSymbolLinks *links, int in
     return links->type_param_constraints[index];
 }
 
+void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLinks *src) {
+    if (!dst)
+        return;
+
+    links_release_dynamic(dst);
+    memset(dst, 0, sizeof(*dst));
+    if (!src)
+        return;
+
+    dst->type = src->type;
+    dst->declared_type = src->declared_type;
+    dst->type_computed = src->type_computed;
+    dst->is_definitely_assigned = src->is_definitely_assigned;
+    dst->move_state = src->move_state;
+    dst->moved_line = src->moved_line;
+    dst->moved_column = src->moved_column;
+
+    xa_symbol_links_set_function_sig(dst, src->param_types, src->param_names, src->param_count,
+                                     src->return_type);
+    if (src->param_defaults)
+        xa_symbol_links_set_param_defaults(dst, src->param_defaults, src->param_count);
+    if (src->param_escapes && src->param_escape_count > 0) {
+        dst->param_escapes = xr_malloc((size_t) src->param_escape_count * sizeof(uint8_t));
+        if (dst->param_escapes) {
+            memcpy(dst->param_escapes, src->param_escapes,
+                   (size_t) src->param_escape_count * sizeof(uint8_t));
+            dst->param_escape_count = src->param_escape_count;
+        }
+    }
+    dst->return_type_inferred = src->return_type_inferred;
+    dst->is_extern = src->is_extern;
+    dst->is_c_export = src->is_c_export;
+    dst->c_export_symbol = src->c_export_symbol ? xr_strdup(src->c_export_symbol) : NULL;
+    dst->error_set = src->error_set;
+
+    if (src->type_param_count > 0) {
+        xa_symbol_links_set_type_params(dst, src->type_param_names, src->type_param_constraints,
+                                        src->type_param_constraint_counts, src->type_param_count);
+    }
+
+    dst->class_info = src->class_info;
+    dst->enum_member_names = src->enum_member_names;
+    dst->enum_member_count = src->enum_member_count;
+    dst->enum_value_type = src->enum_value_type;
+    dst->is_adt_enum = src->is_adt_enum;
+    if (src->enum_member_count > 0 && src->enum_payload_counts) {
+        dst->enum_payload_counts = xr_malloc((size_t) src->enum_member_count * sizeof(int));
+        if (dst->enum_payload_counts) {
+            memcpy(dst->enum_payload_counts, src->enum_payload_counts,
+                   (size_t) src->enum_member_count * sizeof(int));
+        }
+    }
+    if (src->enum_member_count > 0 && src->enum_payload_types) {
+        dst->enum_payload_types = xr_calloc((size_t) src->enum_member_count, sizeof(XrType **));
+        if (dst->enum_payload_types) {
+            for (int i = 0; i < src->enum_member_count; i++) {
+                int pc = src->enum_payload_counts ? src->enum_payload_counts[i] : 0;
+                if (pc <= 0 || !src->enum_payload_types[i])
+                    continue;
+                XrType **copy = xr_malloc((size_t) pc * sizeof(XrType *));
+                if (!copy)
+                    continue;
+                memcpy(copy, src->enum_payload_types[i], (size_t) pc * sizeof(XrType *));
+                dst->enum_payload_types[i] = copy;
+            }
+        }
+    }
+
+    dst->module_name = src->module_name;
+    dst->file_path = src->file_path;
+    dst->assign_count = src->assign_count;
+    dst->is_const_foldable = src->is_const_foldable;
+    dst->is_loop_variable = src->is_loop_variable;
+}
+
 // Callback context for collecting symbols
 struct SymbolCollectCtx {
     XaSymbol **result;

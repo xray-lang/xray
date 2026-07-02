@@ -89,7 +89,36 @@ static XrValue m_push(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
         } else {
             xr_array_set_element(arr, arr->length++, args[0]);
         }
+        XR_ARRAY_MARK_MUTATED(arr);
     }
+    return self;
+}
+
+static XrValue m_push_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    XrArray *arr = array_self(self);
+    if (argc < 1)
+        return self;
+    if (xr_array_is_slice(arr)) {
+        XrValue exc =
+            xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s", XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!array_accepts_value(iso, arr, args[0]))
+        return self;
+    if (arr->length >= arr->capacity) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
+                                         "Array.pushUnchecked capacity exceeded");
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (arr->elem_type == XR_ELEM_ANY) {
+        ((XrValue *) arr->data)[arr->length++] = args[0];
+        XR_ARRAY_MARK_REFS(arr, args[0]);
+    } else {
+        xr_array_set_element(arr, arr->length++, args[0]);
+    }
+    XR_ARRAY_MARK_MUTATED(arr);
     return self;
 }
 
@@ -214,50 +243,211 @@ static XrValue m_index_of(XrVMRuntime *iso, XrValue self, XrValue *args, int arg
     return xr_int((xr_Integer) xr_array_index_of(array_self(self), args[0]));
 }
 
-static XrValue m_load_u32_le(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    if (argc < 1 || !XR_IS_INT(args[0]))
-        return xr_int(0);
-    bool ok = false;
-    uint32_t value = xr_array_load_u32_le(array_self(self), XR_TO_INT(args[0]), &ok);
-    return ok ? xr_int((xr_Integer) value) : xr_int(0);
-}
-
-static XrValue m_load_u64_le(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    if (argc < 1 || !XR_IS_INT(args[0]))
-        return xr_int(0);
-    bool ok = false;
-    uint64_t value = xr_array_load_u64_le(array_self(self), XR_TO_INT(args[0]), &ok);
-    return ok ? xr_int((xr_Integer) value) : xr_int(0);
-}
-
-static XrValue m_copy_within(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
-        return self;
-    xr_array_bytes_copy_within(array_self(self), (int32_t) XR_TO_INT(args[0]),
-                               (int32_t) XR_TO_INT(args[1]), (int32_t) XR_TO_INT(args[2]));
+static XrValue m_append_from_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    XrArray *dst = array_self(self);
+    if (argc < 3 || !XR_IS_ARRAY(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2])) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_APPEND_FROM_UNCHECKED_EXPECTS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    XrArray *src = XR_TO_ARRAY(args[0]);
+    if (!dst || !src || dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_APPEND_FROM_UNCHECKED_OPERANDS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!xr_array_bytes_append_from_unchecked(dst, src, XR_TO_INT(args[1]), XR_TO_INT(args[2]))) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
+                                         XR_ERROR_CORE_BYTES_APPEND_FROM_UNCHECKED_OOB_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
     return self;
 }
 
-static XrValue m_copy_from(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    if (argc < 4 || !XR_IS_ARRAY(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) ||
-        !XR_IS_INT(args[3]))
-        return self;
-    xr_array_bytes_copy_from(array_self(self), XR_TO_ARRAY(args[0]), (int32_t) XR_TO_INT(args[1]),
-                             (int32_t) XR_TO_INT(args[2]), (int32_t) XR_TO_INT(args[3]));
+static XrValue m_repeat_from_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    XrArray *arr = array_self(self);
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1])) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_REPEAT_FROM_UNCHECKED_EXPECTS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!arr || arr->elem_type != XR_ELEM_U8) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_REPEAT_FROM_UNCHECKED_RECEIVER_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!xr_array_bytes_repeat_from_unchecked(arr, XR_TO_INT(args[0]), XR_TO_INT(args[1]))) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
+                                         XR_ERROR_CORE_BYTES_REPEAT_FROM_UNCHECKED_OOB_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
     return self;
 }
 
-static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
-        return self;
-    xr_array_bytes_repeat_from(array_self(self), (int32_t) XR_TO_INT(args[0]),
-                               (int32_t) XR_TO_INT(args[1]), (int32_t) XR_TO_INT(args[2]));
+static XrValue m_write_from_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    XrArray *dst = array_self(self);
+    if (argc < 4 || !XR_IS_INT(args[0]) || !XR_IS_ARRAY(args[1]) || !XR_IS_INT(args[2]) ||
+        !XR_IS_INT(args[3])) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_WRITE_FROM_UNCHECKED_EXPECTS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    XrArray *src = XR_TO_ARRAY(args[1]);
+    if (!dst || !src || dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_WRITE_FROM_UNCHECKED_OPERANDS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!xr_array_bytes_write_from_unchecked(dst, XR_TO_INT(args[0]), src, XR_TO_INT(args[2]),
+                                             XR_TO_INT(args[3]))) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
+                                         XR_ERROR_CORE_BYTES_WRITE_FROM_UNCHECKED_OOB_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
     return self;
+}
+
+static XrValue m_repeat_at_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    XrArray *arr = array_self(self);
+    if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2])) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_REPEAT_AT_UNCHECKED_EXPECTS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!arr || arr->elem_type != XR_ELEM_U8) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_REPEAT_AT_UNCHECKED_RECEIVER_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!xr_array_bytes_repeat_at_unchecked(arr, XR_TO_INT(args[0]), XR_TO_INT(args[1]),
+                                            XR_TO_INT(args[2]))) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
+                                         XR_ERROR_CORE_BYTES_REPEAT_AT_UNCHECKED_OOB_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    return self;
+}
+
+static XrValue m_wild_copy_from_nonoverlapping_unchecked(XrVMRuntime *iso, XrValue self,
+                                                         XrValue *args, int argc) {
+    XrArray *dst = array_self(self);
+    if (argc < 4 || !XR_IS_INT(args[0]) || !XR_IS_ARRAY(args[1]) || !XR_IS_INT(args[2]) ||
+        !XR_IS_INT(args[3])) {
+        XrValue exc = xr_panic_info_newf(
+            iso, XR_ERR_TYPE_MISMATCH, "%s",
+            XR_ERROR_CORE_BYTES_WILD_COPY_FROM_NONOVERLAPPING_UNCHECKED_EXPECTS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    XrArray *src = XR_TO_ARRAY(args[1]);
+    if (!dst || !src || dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8 ||
+        xr_array_is_slice(dst)) {
+        XrValue exc = xr_panic_info_newf(
+            iso, XR_ERR_TYPE_MISMATCH, "%s",
+            XR_ERROR_CORE_BYTES_WILD_COPY_FROM_NONOVERLAPPING_UNCHECKED_OPERANDS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!xr_array_bytes_wild_copy_from_nonoverlapping_unchecked(
+            dst, XR_TO_INT(args[0]), src, XR_TO_INT(args[2]), XR_TO_INT(args[3]))) {
+        XrValue exc =
+            xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
+                               XR_ERROR_CORE_BYTES_WILD_COPY_FROM_NONOVERLAPPING_UNCHECKED_OOB_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    return self;
+}
+
+static XrValue m_wild_repeat_at_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    XrArray *arr = array_self(self);
+    if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2])) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_WILD_REPEAT_AT_UNCHECKED_EXPECTS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!arr || arr->elem_type != XR_ELEM_U8 || xr_array_is_slice(arr)) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_WILD_REPEAT_AT_UNCHECKED_RECEIVER_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!xr_array_bytes_wild_repeat_at_unchecked(arr, XR_TO_INT(args[0]), XR_TO_INT(args[1]),
+                                                 XR_TO_INT(args[2]))) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
+                                         XR_ERROR_CORE_BYTES_WILD_REPEAT_AT_UNCHECKED_OOB_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    return self;
+}
+
+static XrValue m_set_length_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    XrArray *arr = array_self(self);
+    if (argc < 1 || !XR_IS_INT(args[0])) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_SET_LENGTH_UNCHECKED_EXPECTS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!arr || arr->elem_type != XR_ELEM_U8) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_SET_LENGTH_UNCHECKED_RECEIVER_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!xr_array_bytes_set_length_unchecked(arr, XR_TO_INT(args[0]))) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
+                                         XR_ERROR_CORE_BYTES_SET_LENGTH_UNCHECKED_OOB_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    return self;
+}
+
+static XrValue m_common_prefix_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    XrArray *arr = array_self(self);
+    if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2])) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH,
+                                         "ByteSpan.commonPrefixUnchecked expects integer ranges");
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!arr || arr->elem_type != XR_ELEM_U8) {
+        XrValue exc = xr_panic_info_newf(
+            iso, XR_ERR_TYPE_MISMATCH, "ByteSpan.commonPrefixUnchecked receiver must be ByteSpan");
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    int64_t left = XR_TO_INT(args[0]);
+    int64_t right = XR_TO_INT(args[1]);
+    int64_t max_count = XR_TO_INT(args[2]);
+    if (left < 0 || right < 0 || max_count < 0 || max_count > arr->length - left ||
+        max_count > arr->length - right) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
+                                         "ByteSpan.commonPrefixUnchecked range out of bounds");
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    const uint8_t *lp = (const uint8_t *) arr->data + left;
+    const uint8_t *rp = (const uint8_t *) arr->data + right;
+    int64_t i = 0;
+    while (i < max_count && lp[i] == rp[i])
+        i++;
+    return xr_int(i);
 }
 
 /* === Construction (returns new array) === */
@@ -456,6 +646,7 @@ void xr_array_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod array_methods[] = {
         /* Mutation */
         {"push", m_push, 1},
+        {"pushUnchecked", m_push_unchecked, 1},
         {"pop", m_pop, 0},
         {"shift", m_shift, 0},
         {"unshift", m_unshift, 1},
@@ -469,11 +660,14 @@ void xr_array_register_native_type(XrVMRuntime *isolate) {
         {"isEmpty", m_is_empty, 0},
         {"includes", m_includes, 1},
         {"indexOf", m_index_of, 1},
-        {"loadU32LE", m_load_u32_le, 1},
-        {"loadU64LE", m_load_u64_le, 1},
-        {"copyWithin", m_copy_within, 3},
-        {"copyFrom", m_copy_from, 4},
-        {"repeatFrom", m_repeat_from, 3},
+        {"appendFromUnchecked", m_append_from_unchecked, 3},
+        {"repeatFromUnchecked", m_repeat_from_unchecked, 2},
+        {"writeFromUnchecked", m_write_from_unchecked, 4},
+        {"repeatAtUnchecked", m_repeat_at_unchecked, 3},
+        {"wildCopyFromNonOverlappingUnchecked", m_wild_copy_from_nonoverlapping_unchecked, 4},
+        {"wildRepeatAtUnchecked", m_wild_repeat_at_unchecked, 3},
+        {"setLengthUnchecked", m_set_length_unchecked, 1},
+        {"commonPrefixUnchecked", m_common_prefix_unchecked, 3},
         /* Construction */
         {"concat", m_concat, 0},
         {"join", m_join, 0},

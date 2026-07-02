@@ -199,6 +199,8 @@ static const char *type_kind_to_name(XrTypeKind kind) {
             return "null";
         case XR_KIND_ARRAY:
             return "Array";
+        case XR_KIND_SPAN:
+            return "Span";
         case XR_KIND_MAP:
             return "Map";
         case XR_KIND_SET:

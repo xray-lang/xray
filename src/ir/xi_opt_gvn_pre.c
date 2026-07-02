@@ -310,6 +310,9 @@ static XiValue *pre_clone_value(XiFunc *f, XiBlock *pred, const XiValue *tmpl) {
         ins->args[a] = tmpl->args[a];
     ins->flags = tmpl->flags;
     ins->rep = tmpl->rep;
+    ins->transfer_mode = tmpl->transfer_mode;
+    ins->aux_kind = tmpl->aux_kind;
+    ins->escape = tmpl->escape;
     ins->mem_group = tmpl->mem_group;
     ins->aux_int = tmpl->aux_int;
     ins->aux = tmpl->aux;
@@ -392,6 +395,7 @@ static bool pre_try_value(XiFunc *f, VnTable *vn, XiBlock *blk, XiValue *v, GvnP
     v->flags = xi_op_default_effects(XI_COPY);
     v->aux_int = 0;
     v->aux = NULL;
+    v->aux_kind = XI_AUX_KIND_NONE;
     v->mem_group = XI_MEM_NONE;
     vn_set(vn, v, target_vn);
 
@@ -540,6 +544,7 @@ XR_FUNC XiPassChange xi_opt_gvn_pre(XiFunc *f) {
             v->nargs = 1;
             v->aux_int = XI_COPY_KIND_IDENTITY;
             v->aux = NULL;
+            v->aux_kind = XI_AUX_KIND_NONE;
             v->mem_group = XI_MEM_NONE;
             n_replaced++;
         }

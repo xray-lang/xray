@@ -234,11 +234,11 @@ XR_FUNC bool xa_analyzer_is_iterator(XaAnalyzer *analyzer, XrType *type, XrType 
 XR_FUNC bool xa_analyzer_is_iterable(XaAnalyzer *analyzer, XrType *type, XrType **out_element_type);
 
 // API: Cross-module exports collection
-// After analyzing a file, collect exported symbol types into a hashmap.
-// Returns a new hashmap (name -> XrType*) owned by caller (free with xr_hashmap_free).
-// Type pointers are borrowed from the analyzer's pool and live until analyzer is freed.
+// After analyzing a file, collect exported semantic symbols into a hashmap.
+// Returns a new hashmap (name -> XaSymbol*) owned by caller (free with xr_hashmap_free).
+// Symbol pointers are borrowed from analyzer scopes and live until analyzer is freed.
 // Returns NULL if no exports found.
-XR_FUNC struct XrHashMap *xa_analyzer_collect_exports(XaAnalyzer *analyzer, XrAstNode *ast);
+XR_FUNC struct XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *ast);
 
 // Internal: Add diagnostic
 XR_FUNC void xa_analyzer_add_diagnostic(XaAnalyzer *analyzer, XrDiagSeverity severity, int code,

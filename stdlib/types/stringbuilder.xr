@@ -3,7 +3,7 @@
 @native
 class StringBuilder {
     length: int
-    append(value: Json) -> StringBuilder
+    append(value: string | char | int | float | bool | null) -> StringBuilder
     toString() -> string
     clear() -> StringBuilder
 }

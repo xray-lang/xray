@@ -101,11 +101,12 @@ typedef enum {
 
 /* ========== Task Flags ========== */
 
-#define XR_TASK_FLG_SUPERVISOR (1 << 0)      // child error doesn't propagate up
-#define XR_TASK_FLG_SCOPE_TASK (1 << 1)      // implicit task created by scope block
-#define XR_TASK_FLG_HAS_PARENT (1 << 2)      // attached to a parent task
-#define XR_TASK_FLG_RUNTIME_OWNED (1 << 3)   // handle lives outside executor heap
-#define XR_TASK_FLG_ONE_SHOT_AWAIT (1 << 4)  // compiler-proven single await consumer
+#define XR_TASK_FLG_SUPERVISOR (1 << 0)         // child error doesn't propagate up
+#define XR_TASK_FLG_SCOPE_TASK (1 << 1)         // implicit task created by scope block
+#define XR_TASK_FLG_HAS_PARENT (1 << 2)         // attached to a parent task
+#define XR_TASK_FLG_RUNTIME_OWNED (1 << 3)      // handle lives outside executor heap
+#define XR_TASK_FLG_ONE_SHOT_AWAIT (1 << 4)     // compiler-proven single await consumer
+#define XR_TASK_FLG_DEFERRED_REGISTRY (1 << 5)  // registry link delayed until batch submit
 
 /* ========== Completion Listener ========== */
 
@@ -196,11 +197,14 @@ typedef struct XrTask {
     _Atomic bool await_lock;
     XrTaskAwaitNode *await_waiters;
 
-    // Intrusive runtime registry link. Task handles are owned by XrRuntime,
-    // not by executor coroutine heaps.
+    // Intrusive runtime registry links. Task handles are owned by XrRuntime,
+    // not by executor coroutine heaps. runtime_prev_link points at the list
+    // field that references this node, so one-shot destroy can unlink in O(1)
+    // under runtime->task_lock instead of scanning the whole task list.
     struct XrTask *runtime_next;
+    struct XrTask **runtime_prev_link;
 } XrTask;
-// ~136B total
+// ~144B total
 
 /* Heuristic read of the executor pointer (diagnostics, cancel targeting).
  * The executor may be claimed/recycled concurrently; never recycle or
@@ -223,6 +227,14 @@ static inline struct XrCoroutine *xr_task_claim_executor(XrTask *task) {
  * Links task->coro = executor, executor->task = task. */
 XR_FUNC struct XrTask *xr_task_create(struct XrRuntime *runtime, struct XrCoroutine *parent_coro,
                                       struct XrCoroutine *executor);
+XR_FUNC struct XrTask *xr_task_create_deferred_registry(struct XrRuntime *runtime,
+                                                        struct XrCoroutine *parent_coro,
+                                                        struct XrCoroutine *executor);
+XR_FUNC size_t xr_task_runtime_register_deferred_tasks(struct XrRuntime *runtime,
+                                                       struct XrTask **tasks, int count);
+XR_FUNC size_t xr_task_runtime_register_deferred_batch(struct XrRuntime *runtime,
+                                                       struct XrCoroutine **executors, int count);
+XR_FUNC bool xr_task_destroy_deferred_unregistered(struct XrTask *task);
 XR_FUNC struct XrTask *xr_task_runtime_detach_all(struct XrRuntime *runtime, size_t *out_count);
 XR_FUNC bool xr_task_runtime_try_destroy_detached(struct XrRuntime *runtime, struct XrTask *task);
 XR_FUNC void xr_task_destroy_list(struct XrTask *task);

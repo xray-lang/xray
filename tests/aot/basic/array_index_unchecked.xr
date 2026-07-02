@@ -1,0 +1,9 @@
+fn touch(values: Array<int>) -> int {
+    unsafe {
+        values.setUnchecked(1, 41)
+        return values.getUnchecked(1) + values.getUnchecked(2)
+    }
+}
+
+let values = Array<int>(3, 1)
+print(touch(values))

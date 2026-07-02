@@ -146,6 +146,8 @@ static void clone_metadata(XiValue *dst, const XiValue *src) {
     dst->flags = src->flags;
     dst->var_id = src->var_id;
     dst->rep = src->rep;
+    dst->transfer_mode = src->transfer_mode;
+    dst->aux_kind = src->aux_kind;
     dst->escape = src->escape;
     dst->mem_group = src->mem_group;
     dst->aux_int = src->aux_int;

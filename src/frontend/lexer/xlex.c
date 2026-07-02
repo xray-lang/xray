@@ -1100,6 +1100,7 @@ static const char *token_names[] = {
     [TK_ABSTRACT] = "abstract",
     [TK_OVERRIDE] = "override",
     [TK_FINAL] = "final",
+    [TK_PARALLEL] = "parallel",
     [TK_ENUM] = "enum",
     [TK_MATCH] = "match",
     [TK_TYPE_ALIAS] = "type",

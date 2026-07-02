@@ -12,6 +12,8 @@ XR_FUNC void xi_func_free(XiFunc *f);
 XR_FUNC void xi_func_set_stage_recursive(XiFunc *f, XiStage stage);
 XR_FUNC void *xi_func_arena_alloc(XiFunc *f, uint32_t size);
 XR_FUNC void xi_func_compute_effects(XiFunc *f);
+XR_FUNC bool xi_func_set_param_passing_mode(XiFunc *f, uint16_t index, uint8_t mode);
+XR_FUNC uint8_t xi_func_param_passing_mode(const XiFunc *f, uint16_t index);
 
 XR_FUNC XiBlock *xi_block_new(XiFunc *f);
 XR_FUNC void xi_block_add_pred(XiBlock *blk, XiBlock *pred);

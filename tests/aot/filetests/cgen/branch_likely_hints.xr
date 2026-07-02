@@ -1,0 +1,17 @@
+fn hinted(a: int, b: int) -> int {
+    let x = 0
+    if (likely(a < b)) {
+        print("hot")
+        x = x + 1
+    } else {
+        print("cold")
+        x = x + 2
+    }
+    if (unlikely(a == b)) {
+        print("equal")
+        x = x + 10
+    }
+    return x
+}
+
+print(hinted(1, 2))

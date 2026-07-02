@@ -133,6 +133,13 @@ static XrRuntime *work_queue_stats_runtime(XrWorkQueue *q) {
             xr_sched_metric_inc(_rt, &_rt->sched_stats.field);                                     \
     } while (0)
 
+#define WORK_QUEUE_METRIC_ADD(q, field, value)                                                     \
+    do {                                                                                           \
+        XrRuntime *_rt = work_queue_stats_runtime((q));                                            \
+        if (_rt)                                                                                   \
+            xr_sched_metric_add(_rt, &_rt->sched_stats.field, (uint64_t) (value));                 \
+    } while (0)
+
 static bool work_queue_waiter_enqueue_locked(XrWorkQueue *q, XrCoroutine *coro,
                                              int64_t worker_hint) {
     XR_DCHECK(q != NULL, "work_queue_waiter_enqueue_locked: NULL queue");
@@ -328,6 +335,79 @@ static void work_queue_wake_all(XrWorkQueue *q) {
     }
 }
 
+static void work_queue_wake_some(XrWorkQueue *q, uint64_t max_count) {
+    if (!q || max_count == 0)
+        return;
+    XrRuntime *runtime = work_queue_runtime(q);
+    if (!work_queue_runtime_can_wake(runtime))
+        return;
+
+    XrCoroutine *list = NULL;
+    XrCoroutine *last = NULL;
+    uint64_t count = 0;
+
+    xr_amutex_lock(&q->wait_lock);
+    while (count < max_count && q->wait_first) {
+        XrCoroutine *coro = work_queue_waiter_pop_locked(q);
+        if (!coro)
+            break;
+        coro->sched_link = NULL;
+        if (last) {
+            last->sched_link = coro;
+        } else {
+            list = coro;
+        }
+        last = coro;
+        count++;
+    }
+    xr_amutex_unlock(&q->wait_lock);
+
+    XrWorker *current = xr_current_worker();
+    bool current_matches = current && current->p.runtime == runtime;
+    XrWorkQueueWakeBatch local_batch = {0};
+    XrWorkQueueWakeBatch *remote_batches = NULL;
+    if (runtime && runtime->worker_count > 0) {
+        remote_batches = (XrWorkQueueWakeBatch *) xr_calloc((size_t) runtime->worker_count,
+                                                            sizeof(XrWorkQueueWakeBatch));
+    }
+    int remote_ready_count = 0;
+
+    while (list) {
+        XrCoroutine *next = list->sched_link;
+        list->sched_link = NULL;
+        int target_id = 0;
+        if (work_queue_claim_waiter(q, list, runtime, &target_id)) {
+            if (current_matches && target_id == current->p.id) {
+                work_queue_wake_batch_append(&local_batch, list);
+            } else if (remote_batches) {
+                work_queue_wake_batch_append(&remote_batches[target_id], list);
+                remote_ready_count++;
+            } else {
+                xr_worker_inbox_enqueue(runtime, target_id, list);
+                remote_ready_count++;
+            }
+        }
+        list = next;
+    }
+
+    if (local_batch.first) {
+        (void) xr_worker_push_lifo_batch(current, local_batch.first);
+        xr_runtime_wake_idle_worker(runtime);
+    }
+    if (remote_batches) {
+        for (int i = 0; i < runtime->worker_count; i++) {
+            XrWorkQueueWakeBatch *batch = &remote_batches[i];
+            if (batch->first)
+                xr_worker_inbox_enqueue_batch(runtime, i, batch->first, batch->last, batch->count);
+        }
+        xr_free(remote_batches);
+    }
+    if (remote_ready_count > 0 &&
+        atomic_load_explicit(&runtime->spinning_count, memory_order_relaxed) == 0) {
+        xr_runtime_wake_idle_worker(runtime);
+    }
+}
+
 static XrValue work_queue_try_pop_raw(XrWorkQueue *q, int64_t worker_hint, bool *ok) {
     XR_DCHECK(q != NULL, "work_queue_try_pop_raw: NULL queue");
     XR_DCHECK(ok != NULL, "work_queue_try_pop_raw: NULL ok");
@@ -443,6 +523,70 @@ bool xr_work_queue_push_core(XrRuntimeCore *core, XrWorkQueue *q, XrValue value,
         xr_chan_abandon_send_core(core, value);
     }
     return ok;
+}
+
+int64_t xr_work_queue_push_int_range_core(XrRuntimeCore *core, XrWorkQueue *q, int64_t start,
+                                          int64_t count, int64_t shard_start) {
+    XR_DCHECK(q != NULL, "xr_work_queue_push_int_range: NULL queue");
+    if (!core)
+        core = q->core;
+    if (!core)
+        return 0;
+    if (count <= 0)
+        return 0;
+    if (start > INT64_MAX - (count - 1))
+        return 0;
+    if (atomic_load_explicit(&q->closed, memory_order_acquire))
+        return 0;
+
+    uint32_t shard_count = q->shard_count;
+    uint64_t base;
+    if (shard_start >= 0) {
+        base = (uint64_t) shard_start % shard_count;
+    } else {
+        base = atomic_fetch_add_explicit(&q->next_shard, (uint32_t) count, memory_order_relaxed) %
+               shard_count;
+    }
+
+    uint64_t pushed = 0;
+    bool ok = true;
+    uint64_t total = (uint64_t) count;
+    for (uint32_t s = 0; s < shard_count; s++) {
+        uint64_t first = (s + shard_count - base) % shard_count;
+        if (first >= total)
+            continue;
+
+        XrWorkQueueShard *shard = &q->shards[s];
+        xr_amutex_lock(&shard->lock);
+        if (atomic_load_explicit(&q->closed, memory_order_relaxed)) {
+            ok = false;
+        } else {
+            for (uint64_t i = first; i < total; i += shard_count) {
+                if (!shard_push_tail(shard, XR_FROM_INT(start + (int64_t) i))) {
+                    ok = false;
+                    break;
+                }
+                pushed++;
+            }
+        }
+        xr_amutex_unlock(&shard->lock);
+        if (!ok)
+            break;
+    }
+
+    if (pushed > 0) {
+        atomic_fetch_add_explicit(&q->length, pushed, memory_order_release);
+        WORK_QUEUE_METRIC_ADD(q, work_queue_push_count, pushed);
+        if (ok && pushed == total) {
+            for (uint64_t i = 0; i < total; i++) {
+                uint32_t shard_idx = (uint32_t) ((base + i) % shard_count);
+                work_queue_wake_one(q, shard_idx);
+            }
+        } else {
+            work_queue_wake_some(q, pushed);
+        }
+    }
+    return pushed > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) pushed;
 }
 
 static bool work_queue_pop_from_shard(XrWorkQueue *q, uint32_t shard_idx, bool own_shard,
@@ -581,3 +725,4 @@ XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro_core(XrRuntimeCore *core,
 }
 
 #undef WORK_QUEUE_METRIC_INC
+#undef WORK_QUEUE_METRIC_ADD

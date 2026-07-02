@@ -466,7 +466,7 @@ static inline XrValue xrt_os_loadavg(void) {
         avg[2] = 0.0;
     }
 #endif
-    XrValue arr = xrt_array_new(3);
+    XrValue arr = xrt_array_new(0);
     xrt_array_push(arr, XR_FROM_FLOAT(avg[0]));
     xrt_array_push(arr, XR_FROM_FLOAT(avg[1]));
     xrt_array_push(arr, XR_FROM_FLOAT(avg[2]));

@@ -1,0 +1,6 @@
+fn worker(n: int) -> int {
+    return n + 1
+}
+
+let result = await go worker(41)
+print(result)

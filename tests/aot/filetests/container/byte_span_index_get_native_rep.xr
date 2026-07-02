@@ -1,0 +1,3 @@
+fn readByteAsInt(b: ByteSpan, i: int) -> int {
+    return int(b[i])
+}

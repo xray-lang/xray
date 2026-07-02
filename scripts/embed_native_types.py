@@ -59,7 +59,6 @@ def main():
     for i, (name, var_name) in enumerate(entries):
         suffix = " \\" if i < len(entries) - 1 else ""
         print(f'    X("{name}", {var_name}){suffix}')
-    print()
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,29 @@
+shared const starts: Array<int> = []
+shared const ends: Array<int> = []
+shared const counts: Array<int> = []
+
+let w = 0
+while (w < 3) {
+    starts.push(0)
+    ends.push(0)
+    counts.push(0)
+    w = w + 1
+}
+
+parallel range begin, end in 0..10 workers 3 worker wid {
+    unsafe {
+        starts.setUnchecked(wid, begin)
+        ends.setUnchecked(wid, end)
+        counts.setUnchecked(wid, counts.getUnchecked(wid) + 1)
+    }
+}
+
+unsafe {
+    print(starts.getUnchecked(0))
+    print(ends.getUnchecked(0))
+    print(starts.getUnchecked(1))
+    print(ends.getUnchecked(1))
+    print(starts.getUnchecked(2))
+    print(ends.getUnchecked(2))
+    print(counts.getUnchecked(0) + counts.getUnchecked(1) + counts.getUnchecked(2))
+}

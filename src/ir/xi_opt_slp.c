@@ -164,6 +164,7 @@ static bool vectorize_group(XiFunc *f, XiBlock *blk, uint32_t start, uint32_t vf
             v->nargs = 1;
             v->aux_int = XI_COPY_KIND_IDENTITY;
             v->aux = NULL;
+            v->aux_kind = XI_AUX_KIND_NONE;
         }
     }
 

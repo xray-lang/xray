@@ -1,0 +1,3 @@
+c_contains=memset(_a->data, 0, (size_t)_a->length * (size_t)_a->elem_size)
+c_not_contains=xrt_array_fill_value(
+c_not_contains=xrt_method_3(

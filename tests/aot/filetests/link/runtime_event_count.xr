@@ -1,0 +1,6 @@
+shared const event = EventCount(0)
+
+print(event.advance())
+print(event.epoch)
+event.close()
+print(event.isClosed)

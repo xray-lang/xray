@@ -47,7 +47,7 @@ static void emit_boxed_value_ref(FILE *out, const XiValue *v) {
     XrRep rep = cg_rep(v);
     if (rep == XR_REP_TAGGED) {
         emit_vref(out, v);
-    } else if (rep == XR_REP_PTR) {
+    } else if (rep == XR_REP_PTR || rep == XR_REP_RAWPTR) {
         const char *conv_suffix =
             emit_conversion_prefix(out, v ? v->type : NULL, rep, XR_REP_TAGGED);
         emit_vref(out, v);
@@ -85,6 +85,8 @@ static void emit_cell_get_for_rep(FILE *out, const XiValue *v, const char *cell_
         fprintf(out, "xrt_cell_get(%s)", cell_expr);
     } else if (rep == XR_REP_PTR) {
         fprintf(out, "xrt_cell_get(%s).ptr", cell_expr);
+    } else if (rep == XR_REP_RAWPTR) {
+        fprintf(out, "(void *)(uintptr_t)XR_TO_INT(xrt_cell_get(%s))", cell_expr);
     } else if (rep == XR_REP_F64) {
         fprintf(out, "xrt_cell_get(%s).f", cell_expr);
     } else {
@@ -103,6 +105,8 @@ static void emit_upval_get_for_rep(FILE *out, XrRep rep, const char *up_expr) {
         fprintf(out, "%s", up_expr);
     } else if (rep == XR_REP_PTR) {
         fprintf(out, "%s.ptr", up_expr);
+    } else if (rep == XR_REP_RAWPTR) {
+        fprintf(out, "(void *)(uintptr_t)XR_TO_INT(%s)", up_expr);
     } else if (rep == XR_REP_F64) {
         fprintf(out, "%s.f", up_expr);
     } else {
@@ -479,11 +483,14 @@ static int cg_enum_member_index(const XiEnumData *ed, const char *member_name) {
     return -1;
 }
 
-static const XiEnumData *cg_enum_for_shared_value(const XiCgenCtx *ctx, const XiValue *v) {
+static const XiEnumData *cg_enum_for_shared_value_in_func(const XiCgenCtx *ctx, const XiFunc *f,
+                                                          const XiValue *v) {
     v = cg_unwrap_identity_value(v);
     if (!ctx || !v || v->op != XI_GET_SHARED)
         return NULL;
     int slot = (int) v->aux_int;
+    if (f && f->module && f->module->slot_enums && slot >= 0 && slot < (int) f->module->nslots)
+        return f->module->slot_enums[slot];
     if (slot < 0 || slot >= ctx->shared_cap)
         return NULL;
     return ctx->shared_enum[slot];
@@ -500,8 +507,8 @@ static const XiEnumData *cg_enum_for_runtime_type(const XiCgenCtx *ctx, const vo
     return NULL;
 }
 
-static void emit_adt_enum_construct_expr(FILE *out, const XiEnumData *ed, int member_idx,
-                                         const XiValue *v) {
+static void emit_adt_enum_construct_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed,
+                                         int member_idx, const XiValue *v) {
     uint16_t payload_count = v->nargs > 0 ? (uint16_t) (v->nargs - 1) : 0;
     const char *enum_name = ed && ed->name ? ed->name : "";
     const char *member_name =
@@ -509,7 +516,20 @@ static void emit_adt_enum_construct_expr(FILE *out, const XiEnumData *ed, int me
          ed->members[member_idx].name)
             ? ed->members[member_idx].name
             : "";
-    fprintf(out, "({ XrValue _adt = xrt_array_new(%u); ", (unsigned) payload_count + 1);
+    if (cg_value_plan_is_aggregate(ctx, v)) {
+        fprintf(out, "xrt_adt_value_make(%d, %u, ", member_idx, (unsigned) payload_count);
+        emit_c_string_literal(out, enum_name);
+        fprintf(out, ", ");
+        emit_c_string_literal(out, member_name);
+        fprintf(out, ", ");
+        if (payload_count > 0 && v->nargs > 1)
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        else
+            fprintf(out, "XR_NULL_VAL");
+        fprintf(out, ")");
+        return;
+    }
+    fprintf(out, "({ XrValue _adt = xrt_array_with_capacity(%u); ", (unsigned) payload_count + 1);
     fprintf(out, "xrt_array_t *_adt_arr = (xrt_array_t*)_adt.ptr; ");
     fprintf(out, "_adt_arr->adt_enum_name = ");
     emit_c_string_literal(out, enum_name);
@@ -632,6 +652,55 @@ static bool cg_aot_coro_closure_has_only_supported_uses(XiCgenCtx *ctx, const Xi
     return saw_use;
 }
 
+static void emit_closure_entry_pointer(XiCgenCtx *ctx, FILE *out, const char *prefix,
+                                       const XiFunc *child) {
+    if (cg_func_is_par_for_native_callback(child))
+        emit_fname(ctx, out, prefix, child);
+    else if (cg_func_uses_typed_abi(ctx, child) && !cg_func_needs_aot_coro_ctx(ctx, child))
+        emit_typed_abi_fname(ctx, out, prefix, child);
+    else
+        emit_fname(ctx, out, prefix, child);
+}
+
+static void emit_closure_upval_initializers(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
+                                            const XiValue *v, bool retain_upvals) {
+    (void) current;
+    XiFunc *child = v && v->aux ? (XiFunc *) v->aux : NULL;
+    uint16_t ncap = child ? child->ncaptures : 0;
+    for (uint16_t ci = 0; ci < ncap; ci++) {
+        XiCapture *cap = &child->captures[ci];
+        if (cap->needs_cell && cap->source == XI_CAPTURE_SRC_REG) {
+            const XiValue *cap_val = (ci < v->nargs && v->args[ci]) ? v->args[ci] : cap->value;
+            fprintf(out, "_c->upvals[%u] = ", ci);
+            if (cap_val && cg_value_has_cell(ctx, cap_val))
+                emit_cell_ref(out, cap_val->var_id);
+            else if (cap_val)
+                emit_vref(out, cap_val);
+            else
+                fprintf(out, "XR_NULL_VAL");
+            fprintf(out, "; ");
+        } else if (ci < v->nargs && v->args[ci]) {
+            /* Upvals are stored as tagged XrValues; convert the capture from
+             * its declared storage rep to TAGGED (e.g. box an all-scalar
+             * native class instance via xrt_box_obj) so the assignment is
+             * well-typed and the load can unbox it back. */
+            fprintf(out, "_c->upvals[%u] = ", ci);
+            emit_value_as_rep_ctx(ctx, out, v->args[ci], XR_REP_TAGGED);
+            fprintf(out, "; ");
+        } else if (cap->source == XI_CAPTURE_SRC_UPVAL) {
+            fprintf(out, "_c->upvals[%u] = _cl ? _cl->upvals[%u] : XR_NULL_VAL; ", ci,
+                    (unsigned) cap->index);
+        } else {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: missing AOT closure capture '%s'\n",
+                    cap->name ? cap->name : "?");
+            fprintf(out, "_c->upvals[%u] = XR_NULL_VAL; ", ci);
+        }
+        if (retain_upvals)
+            fprintf(out, "xrt_retain(_c->upvals[%u]); ", ci);
+    }
+}
+
 static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
                                   const char *prefix, const XiValue *v) {
     if (v->aux) {
@@ -658,43 +727,9 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
         bool stack_closure = v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW;
         const char *alloc_fn = stack_closure ? "xrt_closure_stack_new" : "xrt_closure_new";
         fprintf(out, "({ xrt_closure_t *_c = (xrt_closure_t*)%s((void*)", alloc_fn);
-        if (cg_func_uses_typed_abi(ctx, child) && !cg_func_needs_aot_coro_ctx(ctx, child))
-            emit_typed_abi_fname(ctx, out, prefix, child);
-        else
-            emit_fname(ctx, out, prefix, child);
+        emit_closure_entry_pointer(ctx, out, prefix, child);
         fprintf(out, ", %u).ptr; ", ncap);
-        for (uint16_t ci = 0; ci < ncap; ci++) {
-            XiCapture *cap = &child->captures[ci];
-            if (cap->needs_cell && cap->source == XI_CAPTURE_SRC_REG) {
-                const XiValue *cap_val = (ci < v->nargs && v->args[ci]) ? v->args[ci] : cap->value;
-                fprintf(out, "_c->upvals[%u] = ", ci);
-                if (cap_val && cg_value_has_cell(ctx, cap_val))
-                    emit_cell_ref(out, cap_val->var_id);
-                else if (cap_val)
-                    emit_vref(out, cap_val);
-                else
-                    fprintf(out, "XR_NULL_VAL");
-                fprintf(out, "; ");
-            } else if (ci < v->nargs && v->args[ci]) {
-                /* Upvals are stored as tagged XrValues; convert the capture from
-                 * its declared storage rep to TAGGED (e.g. box an all-scalar
-                 * native class instance via xrt_box_obj) so the assignment is
-                 * well-typed and the load can unbox it back. */
-                fprintf(out, "_c->upvals[%u] = ", ci);
-                emit_value_as_rep_ctx(ctx, out, v->args[ci], XR_REP_TAGGED);
-                fprintf(out, "; ");
-            } else if (cap->source == XI_CAPTURE_SRC_UPVAL) {
-                fprintf(out, "_c->upvals[%u] = _cl ? _cl->upvals[%u] : XR_NULL_VAL; ", ci,
-                        (unsigned) cap->index);
-            } else {
-                ctx->error = true;
-                fprintf(stderr, "[xi_cgen] ERROR: missing AOT closure capture '%s'\n",
-                        cap->name ? cap->name : "?");
-                fprintf(out, "_c->upvals[%u] = XR_NULL_VAL; ", ci);
-            }
-            if (!stack_closure)
-                fprintf(out, "xrt_retain(_c->upvals[%u]); ", ci);
-        }
+        emit_closure_upval_initializers(ctx, out, current, v, !stack_closure);
         fprintf(out, "xr_mkptr(_c, XR_TAG_CLOSURE); })");
     } else {
         fprintf(out, "XR_NULL_VAL /* closure: unknown */");

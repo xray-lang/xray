@@ -49,11 +49,11 @@ static CgStaticFunctionCall cg_resolve_import_function_call(XiCgenCtx *ctx,
     return cg_no_static_function_call();
 }
 
-static const XiImportRef *cg_module_import_ref_for_value(XiCgenCtx *ctx, const XiFunc *f,
-                                                         const XiValue *value) {
+static const XiImportRef *cg_import_ref_for_value(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
     const XiImportRef *ref = cg_value_import_ref(v);
-    if (ref && !ref->member_name)
+    if (ref)
         return ref;
     if (!v || v->op != XI_GET_SHARED)
         return NULL;
@@ -61,9 +61,37 @@ static const XiImportRef *cg_module_import_ref_for_value(XiCgenCtx *ctx, const X
     ref = cg_shared_slot_import_ref(f, slot);
     if (!ref && f && f->module && f->module->init != f)
         ref = cg_shared_slot_import_ref(f->module->init, slot);
-    if (!ref && ctx && ctx->module && ctx->module->init && ctx->module->init != f)
+    if (!ref && (!f || !f->module) && ctx && ctx->module && ctx->module->init &&
+        ctx->module->init != f)
         ref = cg_shared_slot_import_ref(ctx->module->init, slot);
+    return ref;
+}
+
+static const XiImportRef *cg_module_import_ref_for_value(XiCgenCtx *ctx, const XiFunc *f,
+                                                         const XiValue *value) {
+    const XiImportRef *ref = cg_import_ref_for_value(ctx, f, value);
     return ref && !ref->member_name ? ref : NULL;
+}
+
+static const XiEnumData *cg_resolve_imported_enum_value(XiCgenCtx *ctx, const XiFunc *f,
+                                                        const XiValue *value) {
+    const XiImportRef *ref = cg_import_ref_for_value(ctx, f, value);
+    if (!ctx || !ref || !ref->member_name)
+        return NULL;
+
+    if (ref->resolved_mod_index >= 0 && ref->resolved_mod_index < ctx->all_nmodules &&
+        ref->resolved_shared_slot >= 0) {
+        const XiModule *mod = ctx->all_modules[ref->resolved_mod_index];
+        if (mod && mod->slot_enums && ref->resolved_shared_slot < (int) mod->nslots)
+            return mod->slot_enums[ref->resolved_shared_slot];
+    }
+
+    for (int ii = 0; ii < ctx->nimports; ii++) {
+        CgImportEntry *imp = &ctx->imports[ii];
+        if (imp->target_enum && cg_import_entry_matches_ref(ctx, imp, ref, ref->member_name))
+            return imp->target_enum;
+    }
+    return NULL;
 }
 
 static CgStaticFunctionCall cg_resolve_module_member_call(XiCgenCtx *ctx, const XiFunc *f,
@@ -91,7 +119,7 @@ static const XiFunc *cg_resolve_local_shared_function(XiCgenCtx *ctx, const XiFu
             f->shared_slot_funcs[slot])
             return f->shared_slot_funcs[slot];
     }
-    XiModule *mod = ctx && ctx->module ? ctx->module : (current ? current->module : NULL);
+    XiModule *mod = current && current->module ? current->module : (ctx ? ctx->module : NULL);
     if (mod && mod->slot_funcs && slot < (int) mod->nslots && mod->slot_funcs[slot])
         return mod->slot_funcs[slot];
     return NULL;
@@ -127,12 +155,15 @@ static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, cons
 
     if (callee->op == XI_GET_SHARED && ctx) {
         int slot = (int) callee->aux_int;
-        if (slot >= 0 && slot < ctx->nshared && ctx->shared_funcs[slot])
-            return cg_static_function_call(ctx->shared_funcs[slot], NULL);
         const XiFunc *local = cg_resolve_local_shared_function(ctx, current, slot);
         if (local)
             return cg_static_function_call(local, cg_module_prefix_for_func(ctx, local));
-        const XiFunc *module_init = ctx->module ? ctx->module->init : current;
+        if ((!current || current->module == ctx->module) && slot >= 0 && slot < ctx->nshared &&
+            ctx->shared_funcs[slot])
+            return cg_static_function_call(ctx->shared_funcs[slot], NULL);
+        const XiFunc *module_init = current && current->module ? current->module->init
+                                    : ctx->module              ? ctx->module->init
+                                                               : current;
         const XiImportRef *ref = cg_shared_slot_import_ref(module_init, slot);
         CgStaticFunctionCall imported = cg_resolve_import_function_call(ctx, ref);
         if (imported.func)

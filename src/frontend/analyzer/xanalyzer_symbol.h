@@ -154,6 +154,7 @@ struct XaSymbol {
     bool is_protected;      // protected member (class + subclass visibility)
     bool is_override;       // explicit override modifier on a method
     bool is_shared;         // shared variable
+    bool is_imported;       // selective import binding; kind remains the exported semantic kind
     bool is_builtin;        // built-in type member (Array.push, etc.)
     bool mutates_receiver;  // method body writes through `this`
     uint8_t passing_mode;   // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF (for parameters)
@@ -280,6 +281,7 @@ XR_FUNC int xa_symbol_links_get_type_param_count(XaSymbolLinks *links);
 XR_FUNC const char *xa_symbol_links_get_type_param_name(XaSymbolLinks *links, int index);
 XR_FUNC XrType **xa_symbol_links_get_type_param_constraints(XaSymbolLinks *links, int index,
                                                             int *out_count);
+XR_FUNC void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLinks *src);
 
 // Type alias helpers
 XR_FUNC XaSymbol *xa_scope_define_type_alias(XaScope *scope, const char *name, void *type);

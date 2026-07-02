@@ -8,31 +8,33 @@ bytes[5] = 6
 bytes[6] = 7
 bytes[7] = 8
 print(bytes.length)
-print(bytes.loadU32LE(0))
-print(bytes.loadU64LE(0))
+let view: ByteSpan = bytes
+let u16: uint16 = view.loadLE<uint16>(0)
+let u32: uint32 = view.loadLE<uint32>(0)
+let u64: uint64 = view.loadLE<uint64>(0)
+print(int(u16))
+print(int(u32))
+print(int(u64))
 
 let dst = Bytes.withCapacity(6)
 print(dst.length)
 print(dst.capacity)
-dst.resize(6, 0)
-dst.copyFrom(bytes, 1, 2, 3)
+unsafe {
+    dst.appendFromUnchecked(view, 1, 3)
+}
+print(dst.length)
+print(dst[0])
 print(dst[2])
-print(dst[4])
 
-let move = Bytes(6)
-move[0] = 10
-move[1] = 20
-move[2] = 30
-move[3] = 40
-move.copyWithin(2, 0, 4)
-print(move[2])
-print(move[5])
-
-let repeated = Bytes(9)
-repeated[0] = 65
-repeated[1] = 66
-repeated[2] = 67
-repeated.repeatFrom(3, 3, 6)
+let repeated = Bytes.withCapacity(9)
+let seed = Bytes(3)
+seed[0] = 65
+seed[1] = 66
+seed[2] = 67
+unsafe {
+    repeated.appendFromUnchecked(seed, 0, 3)
+    repeated.repeatFromUnchecked(3, 6)
+}
 print(repeated[3])
 print(repeated[8])
 
@@ -43,6 +45,6 @@ print(filled[1])
 print(filled[3])
 print(filled[4])
 
-let view = filled[1:4]
-print(view.length)
-print(view[0])
+let filledView = filled[1:4]
+print(filledView.length)
+print(filledView[0])

@@ -35,9 +35,17 @@ typedef struct XaotValueRep {
     uint32_t flags;
 } XaotValueRep;
 
+enum {
+    XAOT_VALUE_FLAG_ADT = 1u << 0,
+    XAOT_VALUE_FLAG_ADT_SINGLE_PAYLOAD = 1u << 1,
+    XAOT_VALUE_FLAG_STRUCT = 1u << 2,
+    XAOT_VALUE_FLAG_OWNED_C_TYPE = 1u << 31,
+};
+
 XR_FUNC XaotValueRep xaot_value_rep_for_type(const XrType *type);
 XR_FUNC XaotValueRep xaot_value_rep_for_value(const struct XiValue *value);
 XR_FUNC XrRep xaot_value_storage_rep(XaotValueRep rep);
+XR_FUNC bool xaot_value_reps_equal(XaotValueRep a, XaotValueRep b);
 XR_FUNC const char *xaot_value_kind_name(XaotValueKind kind);
 
 #endif  // XAOT_REP_H

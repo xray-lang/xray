@@ -1,0 +1,187 @@
+// sync — coroutine-aware synchronisation primitives.
+//
+// Every primitive here is a pure-Xray class composing the builtin
+// coroutine-aware `Semaphore`/`CountdownLatch` plus the non-suspendable
+// `Atomic` spinlock. There is no per-primitive native heap type and no AOT
+// cgen specialisation: the closure/defer/generic machinery the compiler
+// already provides gives VM/AOT parity for free (task 147 §0.8–§0.12).
+//
+// Design notes:
+//   * `Semaphore.acquire()` parks the coroutine instead of busy-waiting, so a
+//     contended lock never stalls a scheduler worker.
+//   * `defer`-based release runs at scope exit and must stay non-suspendable,
+//     so any reader-count bookkeeping uses an `Atomic<bool>` spinlock (whose
+//     `release`/`store` never yield), never a `Semaphore`, inside a `defer`.
+//   * Constructing a `Semaphore`/`CountdownLatch` only allocates and binds the
+//     scheduler (it never yields), so these constructors stay synchronous and
+//     are legal to call from ordinary (non-coroutine) AOT contexts.
+
+// Mutex<T> — data guarded by a coroutine-aware lock; closure-scoped access
+// guarantees paired lock/unlock even on early return or panic.
+class Mutex<T> {
+    _sem: Semaphore
+    value: T
+
+    constructor(v: T) {
+        this._sem = Semaphore(1)
+        this.value = v
+    }
+
+    lock<U>(body: (T) -> U) -> U {
+        this._sem.acquire()
+        defer { this._sem.release() }
+        return body(this.value)
+    }
+
+    replace(body: (T) -> T) -> T {
+        this._sem.acquire()
+        defer { this._sem.release() }
+        this.value = body(this.value)
+        return this.value
+    }
+}
+
+// RwLock<T> — many readers XOR one writer. A `Semaphore(1)` write/read gate is
+// held for the whole write, and by the first reader in / last reader out; the
+// reader count is guarded by a short `Atomic<bool>` spinlock so the defer-side
+// cleanup stays non-suspendable.
+class RwLock<T> {
+    _gate: Semaphore
+    _rflag: Atomic<bool>
+    _readers: int
+    value: T
+
+    constructor(v: T) {
+        this._gate = Semaphore(1)
+        this._rflag = Atomic<bool>(false)
+        this._readers = 0
+        this.value = v
+    }
+
+    _lockCounter() {
+        while (true) {
+            let (_, ok) = this._rflag.compareExchange(false, true, Ordering.AcquireRelease)
+            if (ok) { break }
+        }
+    }
+
+    read<U>(body: (T) -> U) -> U {
+        this._lockCounter()
+        this._readers = this._readers + 1
+        let first = this._readers == 1
+        this._rflag.store(false, Ordering.Release)
+        if (first) { this._gate.acquire() }
+        defer {
+            this._lockCounter()
+            this._readers = this._readers - 1
+            let last = this._readers == 0
+            this._rflag.store(false, Ordering.Release)
+            if (last) { this._gate.release() }
+        }
+        return body(this.value)
+    }
+
+    write<U>(body: (T) -> U) -> U {
+        this._gate.acquire()
+        defer { this._gate.release() }
+        return body(this.value)
+    }
+
+    replace(body: (T) -> T) -> T {
+        this._gate.acquire()
+        defer { this._gate.release() }
+        this.value = body(this.value)
+        return this.value
+    }
+}
+
+// Once — run a body exactly once across repeated calls, even under contention.
+class Once {
+    _sem: Semaphore
+    _done: bool
+
+    constructor() {
+        this._sem = Semaphore(1)
+        this._done = false
+    }
+
+    call(body: () -> ()) {
+        this._sem.acquire()
+        defer { this._sem.release() }
+        if (!this._done) {
+            body()
+            this._done = true
+        }
+    }
+}
+
+// Barrier — N parties rendezvous; every party blocks until all have arrived.
+class Barrier {
+    _latch: CountdownLatch
+
+    constructor(parties: int) {
+        this._latch = CountdownLatch(parties)
+    }
+
+    wait() -> bool {
+        this._latch.done()
+        return this._latch.wait()
+    }
+}
+
+// Condvar — a monitor condition variable. Callers hold the monitor lock, then
+// re-check their predicate in a `while` loop around `wait()` (spurious wakeups
+// are within contract). Parking is on a counting `Semaphore`, which banks a
+// signal that races ahead of the matching `wait()` and so closes the classic
+// lost-wakeup window. Deliberately avoids `EventCount` (a worker-pool epoch
+// primitive that traps at VM shutdown when used as a general condvar).
+class Condvar {
+    _mutex: Semaphore
+    _wlock: Atomic<bool>
+    _waiters: int
+    _sem: Semaphore
+
+    constructor() {
+        this._mutex = Semaphore(1)
+        this._wlock = Atomic<bool>(false)
+        this._waiters = 0
+        this._sem = Semaphore(0)
+    }
+
+    _lockWaiters() {
+        while (true) {
+            let (_, ok) = this._wlock.compareExchange(false, true, Ordering.AcquireRelease)
+            if (ok) { break }
+        }
+    }
+
+    lock() { this._mutex.acquire() }
+    unlock() { this._mutex.release() }
+
+    wait() {
+        this._lockWaiters()
+        this._waiters = this._waiters + 1
+        this._wlock.store(false, Ordering.Release)
+        this._mutex.release()
+        this._sem.acquire()
+        this._mutex.acquire()
+    }
+
+    signal() {
+        this._lockWaiters()
+        let wake = this._waiters > 0
+        if (wake) { this._waiters = this._waiters - 1 }
+        this._wlock.store(false, Ordering.Release)
+        if (wake) { this._sem.release(1) }
+    }
+
+    broadcast() {
+        this._lockWaiters()
+        let n = this._waiters
+        this._waiters = 0
+        this._wlock.store(false, Ordering.Release)
+        if (n > 0) { this._sem.release(n) }
+    }
+}
+
+export { Mutex, RwLock, Once, Barrier, Condvar }

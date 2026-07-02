@@ -78,7 +78,7 @@ static inline XrArrayElemType xr_tid_to_elem_type(uint8_t tid) {
             return XR_ELEM_U64; /* XR_TID_UINT64 */
         case 10:
             return XR_ELEM_F32; /* XR_TID_FLOAT32 */
-        case 40:
+        case 41:
             return XR_ELEM_CHAR; /* XR_TID_CHAR */
         default:
             return XR_ELEM_ANY; /* string, object, etc. */

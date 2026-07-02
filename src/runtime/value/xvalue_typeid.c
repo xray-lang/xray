@@ -20,7 +20,7 @@ static const XrTypeId tag_to_typeid[8] = {
     [XR_TAG_STRUCT_REF] = XR_TID_NULL, [XR_TAG_NOTFOUND] = XR_TID_NULL,
 };
 
-static const XrTypeId gctype_to_typeid[XR_TRESULTGROUP + 1] = {
+static const XrTypeId gctype_to_typeid[XR_TEVENTCOUNT + 1] = {
     [XR_TNULL] = XR_TID_NULL,
     [XR_TBOOL] = XR_TID_BOOL,
     [XR_TINT] = XR_TID_INT,
@@ -43,6 +43,10 @@ static const XrTypeId gctype_to_typeid[XR_TRESULTGROUP + 1] = {
     [XR_TATOMIC] = XR_TID_ATOMIC,
     [XR_TWORKQUEUE] = XR_TID_WORKQUEUE,
     [XR_TRESULTGROUP] = XR_TID_RESULTGROUP,
+    [XR_TBOOLMAP] = XR_TID_MAP,
+    [XR_TCOUNTDOWNLATCH] = XR_TID_COUNTDOWNLATCH,
+    [XR_TSEMAPHORE] = XR_TID_SEMAPHORE,
+    [XR_TEVENTCOUNT] = XR_TID_EVENTCOUNT,
 };
 
 XrTypeId xr_value_typeid(XrValue v) {
@@ -135,6 +139,9 @@ XR_DATADEF const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_ATOMIC] = TYPE_NAME_ATOMIC,
     [XR_TID_WORKQUEUE] = TYPE_NAME_WORKQUEUE,
     [XR_TID_RESULTGROUP] = TYPE_NAME_RESULTGROUP,
+    [XR_TID_COUNTDOWNLATCH] = TYPE_NAME_COUNTDOWNLATCH,
+    [XR_TID_SEMAPHORE] = TYPE_NAME_SEMAPHORE,
+    [XR_TID_EVENTCOUNT] = TYPE_NAME_EVENTCOUNT,
 };
 
 const char *xr_typeid_name(XrTypeId tid) {
@@ -181,6 +188,7 @@ uint8_t xr_type_to_tid(const XrType *type) {
         case XR_KIND_CHAR:
             return XR_TID_CHAR;
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
             return XR_TID_ARRAY;
         case XR_KIND_MAP:
             return XR_TID_MAP;

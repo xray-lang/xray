@@ -1,0 +1,3 @@
+let src = Bytes(1)
+let out = Bytes.withCapacity(1)
+out.appendFromUnchecked(src, 0, 1)

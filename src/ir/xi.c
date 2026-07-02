@@ -85,6 +85,28 @@ void *xi_func_arena_alloc(XiFunc *f, uint32_t size) {
     return arena_alloc(f, size);
 }
 
+XR_FUNC bool xi_func_set_param_passing_mode(XiFunc *f, uint16_t index, uint8_t mode) {
+    if (!f || index >= f->nparams)
+        return false;
+    if (mode == XR_PARAM_VALUE && !f->param_passing_modes)
+        return true;
+    if (!f->param_passing_modes) {
+        f->param_passing_modes =
+            (uint8_t *) xi_func_arena_alloc(f, (uint32_t) f->nparams * sizeof(uint8_t));
+        if (!f->param_passing_modes)
+            return false;
+        memset(f->param_passing_modes, XR_PARAM_VALUE, (size_t) f->nparams * sizeof(uint8_t));
+    }
+    f->param_passing_modes[index] = mode;
+    return true;
+}
+
+XR_FUNC uint8_t xi_func_param_passing_mode(const XiFunc *f, uint16_t index) {
+    if (!f || index >= f->nparams || !f->param_passing_modes)
+        return XR_PARAM_VALUE;
+    return f->param_passing_modes[index];
+}
+
 XR_FUNC bool xi_block_ensure_value_capacity(XiBlock *blk, uint32_t min_cap) {
     XR_DCHECK(blk != NULL, "xi_block_ensure_value_capacity: blk is NULL");
     XR_DCHECK(blk->func != NULL, "xi_block_ensure_value_capacity: blk->func is NULL");
@@ -319,9 +341,17 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->flags = xi_op_default_effects(op);
     v->rep = XR_REP_TAGGED;   /* default until select_rep assigns concrete rep */
     v->var_id = XI_NO_VAR_ID; /* no source variable */
+    v->transfer_mode = 0;
+    v->aux_kind = XI_AUX_KIND_NONE;
+    v->escape = 0;
+    v->mem_group = 0;
     v->type = type;
+    v->aux_int = 0;
+    v->aux = NULL;
+    v->args = NULL;
     v->nargs = nargs;
     v->uses = -1; /* not yet computed */
+    v->line = 0;
     v->block = blk;
 }
 
@@ -607,6 +637,8 @@ XR_FUNC void xi_module_free(XiModule *mod) {
     xr_free(mod->slot_funcs);
     xr_free(mod->slot_classes);
     xr_free(mod->slot_enums);
+    xr_free(mod->slot_imports);
+    xr_free(mod->slot_const_literals);
     /* Free closure metadata array (entries point into XiFunc, not owned) */
     for (uint16_t i = 0; i < mod->nclosure_metas; i++)
         xr_free(mod->closure_metas[i]);

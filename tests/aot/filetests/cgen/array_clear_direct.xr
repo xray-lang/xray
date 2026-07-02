@@ -1,0 +1,9 @@
+fn clearLocal() -> int {
+    let a: Array<int> = []
+    a.push(1)
+    a.push(2)
+    a.clear()
+    return a.length
+}
+
+print(clearLocal())

@@ -1,0 +1,15 @@
+// Namespace import of a generic class + generic method with a closure argument.
+// Regression for task 147 §0.13: `ns.Box<int>(...)` must infer the class
+// instance type so its methods resolve to direct cross-module calls in AOT
+// (instead of null-returning dynamic dispatch), and the closure passed to the
+// generic method must keep its inferred return type (instead of lowering to a
+// value-discarding `void` body). VM and AOT must agree byte-for-byte.
+import "./_genbox" as bx
+
+let b = bx.Box<int>(10)
+print(b.get())                 // 10
+print(b.map((v) -> v * 2))     // 20
+
+let s = bx.Box<string>("hi")
+print(s.get())                 // hi
+print(s.map((v) -> v + "!"))   // hi!

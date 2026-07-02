@@ -18,6 +18,7 @@
 #include "xanalyzer_symbol.h"
 #include "../parser/xtype_ref.h"
 #include "../../runtime/value/xtype.h"
+#include "../../runtime/value/xtype_names.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../base/xchecks.h"
 #include "../../../stdlib/prelude/prelude.h"
@@ -38,6 +39,11 @@ static XrType *resolve_named(XrVMRuntime *X, const char *name) {
      * global cache — multiple isolates would race on shared mutable state. */
     if (xa_is_builtin_interface_name(name))
         return xr_type_new_interface(X, name);
+
+    if (strcmp(name, TYPE_NAME_BYTESPAN) == 0)
+        return xr_type_new_bytespan(X);
+    if (strcmp(name, TYPE_NAME_SPAN) == 0)
+        return xr_type_new_span(X, xr_type_new_unknown(NULL));
 
     /* Prelude lookup (Array, Map, Set, Channel, Json, Bytes, ...) */
     const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
@@ -101,6 +107,8 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
     XrType *result = NULL;
     if (strcmp(name, "Array") == 0 && nargs >= 1) {
         result = xr_type_new_array(X, args[0]);
+    } else if (strcmp(name, TYPE_NAME_SPAN) == 0 && nargs >= 1) {
+        result = xr_type_new_span(X, args[0]);
     } else if (strcmp(name, "Set") == 0 && nargs >= 1) {
         result = xr_type_new_set(X, args[0]);
     } else if (strcmp(name, "Channel") == 0 && nargs >= 1) {

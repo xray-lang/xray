@@ -1,0 +1,29 @@
+class Probe {
+    count: int
+
+    constructor() {
+        this.count = 0
+    }
+
+    hit() -> bool {
+        this.count = this.count + 1
+        return true
+    }
+}
+
+let p = Probe()
+
+if (false && p.hit()) {
+    print(100)
+}
+print(p.count)
+
+if (true || p.hit()) {
+    print(1)
+}
+print(p.count)
+
+if (true && p.hit()) {
+    print(2)
+}
+print(p.count)

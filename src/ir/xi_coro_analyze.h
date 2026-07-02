@@ -124,12 +124,19 @@ XR_FUNC bool xi_value_is_channel_method_call(const XiValue *v, const char *metho
 XR_FUNC bool xi_value_is_task_method_call(const XiValue *v, const char *method, int nargs);
 XR_FUNC bool xi_value_is_work_queue_method_call(const XiValue *v, const char *method, int nargs);
 XR_FUNC bool xi_value_is_result_group_method_call(const XiValue *v, const char *method, int nargs);
+XR_FUNC bool xi_value_is_countdown_latch_method_call(const XiValue *v, const char *method,
+                                                     int nargs);
+XR_FUNC bool xi_value_is_semaphore_method_call(const XiValue *v, const char *method, int nargs);
+XR_FUNC bool xi_value_is_event_count_method_call(const XiValue *v, const char *method, int nargs);
 
 /* True if 'v' is a Task/WorkQueue method call that may block (and therefore
  * needs a runtime result slot across the suspend). */
 XR_FUNC bool xi_value_is_blocking_task_method_call(const XiValue *v);
 XR_FUNC bool xi_value_is_blocking_work_queue_method_call(const XiValue *v);
 XR_FUNC bool xi_value_is_blocking_result_group_method_call(const XiValue *v);
+XR_FUNC bool xi_value_is_blocking_countdown_latch_method_call(const XiValue *v);
+XR_FUNC bool xi_value_is_blocking_semaphore_method_call(const XiValue *v);
+XR_FUNC bool xi_value_is_blocking_event_count_method_call(const XiValue *v);
 
 /* True if 'v' is a coroutine suspension site.  'resolver' supplies the two
  * context-dependent queries (stdlib module-import for time.sleep, and

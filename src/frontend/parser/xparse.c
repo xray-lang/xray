@@ -145,6 +145,7 @@ static ParseRule rules[] = {
     [TK_DEFER] = {NULL, NULL, PREC_NONE},                   // defer statement
     [TK_SCOPE] = {NULL, NULL, PREC_NONE},                   // scope block
     [TK_UNSAFE] = {xr_parse_unsafe_expr, NULL, PREC_NONE},  // unsafe { expr }
+    [TK_PARALLEL] = {xr_parse_parallel_expr, NULL, PREC_NONE},
     // cancelled(), move, and Channel(...) are all contextual keywords
     // handled in xr_parse_variable — they reach the parser as plain
     // TK_NAME tokens (the lexer no longer special-cases them).
@@ -744,7 +745,8 @@ AstNode *xr_parse_statement(Parser *parser) {
         Token label_tok = parser->current;
         xr_parser_advance(parser);
         if (xr_parser_match(parser, TK_COLON)) {
-            if (parser->current.type == TK_FOR || parser->current.type == TK_WHILE) {
+            if (parser->current.type == TK_FOR || parser->current.type == TK_WHILE ||
+                parser->current.type == TK_PARALLEL) {
                 char *label =
                     (char *) ast_alloc(parser->compiler_session, (size_t) label_tok.length + 1);
                 memcpy(label, label_tok.start, (size_t) label_tok.length);
@@ -763,6 +765,9 @@ AstNode *xr_parse_statement(Parser *parser) {
                     case AST_FOR_IN_STMT:
                         stmt->as.for_in_stmt.label = label;
                         return stmt;
+                    case AST_PARALLEL_FOR_STMT:
+                        stmt->as.parallel_for_stmt.label = label;
+                        return stmt;
                     default:
                         xr_parser_error_at_current(parser, "loop labels can only annotate loops");
                         return NULL;
@@ -770,8 +775,7 @@ AstNode *xr_parse_statement(Parser *parser) {
             }
             if (parser->current.type != TK_ASSIGN) {
                 *parser = checkpoint;
-                xr_parser_error_at_current(parser,
-                                           "loop labels can only annotate 'for' or 'while'");
+                xr_parser_error_at_current(parser, "loop labels can only annotate loops");
                 return NULL;
             }
         }
@@ -860,6 +864,18 @@ AstNode *xr_parse_statement(Parser *parser) {
         // Otherwise traditional for loop
         *parser = checkpoint;
         return xr_parse_for_statement(parser);
+    }
+    if (parser->current.type == TK_PARALLEL) {
+        Parser checkpoint = *parser;
+        xr_parser_advance(parser);
+        bool is_parallel_for = parser->current.type == TK_FOR;
+        bool is_parallel_range = xr_parser_check_name(parser, "range");
+        *parser = checkpoint;
+        if (!is_parallel_for && !is_parallel_range)
+            return xr_parse_expr_statement(parser);
+        if (is_parallel_range)
+            return xr_parse_parallel_range_statement(parser);
+        return xr_parse_parallel_for_statement(parser);
     }
     if (parser->current.type == TK_BREAK) {
         return xr_parse_break_statement(parser);
@@ -1336,6 +1352,7 @@ static int try_parse_generic_type_args(Parser *parser, XrType **type_args, int c
         goto rollback;
     }
 
+    parser->panic_mode = saved_panic_mode;
     return count;
 
 rollback:

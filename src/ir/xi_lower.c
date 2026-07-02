@@ -667,7 +667,19 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
      * struct layouts and produces garbage values for every downstream
      * type lookup (AOT codegen RET tag, TFA, etc.). */
     struct XrType *ret_type =
-        fdecl->return_type ? xr_tref_resolve(isolate, fdecl->return_type) : l.type_unit;
+        fdecl->return_type ? xr_tref_resolve(isolate, fdecl->return_type) : NULL;
+    if (!ret_type) {
+        /* Un-annotated closure/lambda: named functions must annotate their
+         * return type, but anonymous functions may leave it to inference. The
+         * analyzer records the inferred type on the function-literal node; if
+         * we ignore it and fall back to `unit`, AOT emits a `void` closure
+         * body that drops the returned value (call sites then see null/0).
+         * The VM is unaffected because it is dynamically typed, so this only
+         * manifests under AOT. Recover the inferred return type here. */
+        struct XrType *node_type = xa_analyzer_get_node_type(analyzer, func_node);
+        if (node_type && XR_TYPE_IS_FUNCTION(node_type) && node_type->function.return_type)
+            ret_type = node_type->function.return_type;
+    }
     if (!ret_type)
         ret_type = l.type_unit;
 
@@ -746,6 +758,12 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
 
         XiValue *param_val = xi_param(l.func, entry, (uint16_t) i, ptype);
         l.func->params[i] = param_val;
+        if (i < l.func->nparams && p && p->passing_mode != XR_PARAM_VALUE &&
+            !xi_func_set_param_passing_mode(l.func, (uint16_t) i, p->passing_mode)) {
+            xi_func_free(l.func);
+            xi_lower_cleanup(&l);
+            return NULL;
+        }
 
         /* Register parameter in Braun SSA using analyzer-assigned symbol_id */
         int var_id = xi_lower_var_create(&l, p->symbol_id, p->name, ptype);
@@ -895,6 +913,105 @@ static bool prescan_is_user_owned_decl(AstNode *s) {
     return s && s->line > 0;
 }
 
+typedef struct PrescanSlotMeta {
+    const char **export_names;
+    const char **owned_names;
+    uint8_t *owned_consts;
+    XiConstLiteral *const_literals;
+    uint16_t cap;
+} PrescanSlotMeta;
+
+static bool prescan_slot_meta_reserve(PrescanSlotMeta *m, uint16_t need) {
+    if (!m || need <= m->cap)
+        return true;
+    uint16_t nc = m->cap ? m->cap : 16;
+    while (nc < need) {
+        if (nc > UINT16_MAX / 2u) {
+            nc = need;
+            break;
+        }
+        nc = (uint16_t) (nc * 2u);
+    }
+
+    const char **exports =
+        (const char **) xr_realloc(m->export_names, (size_t) nc * sizeof(const char *));
+    const char **owned =
+        (const char **) xr_realloc(m->owned_names, (size_t) nc * sizeof(const char *));
+    uint8_t *consts = (uint8_t *) xr_realloc(m->owned_consts, (size_t) nc * sizeof(uint8_t));
+    XiConstLiteral *lits =
+        (XiConstLiteral *) xr_realloc(m->const_literals, (size_t) nc * sizeof(XiConstLiteral));
+    if (!exports || !owned || !consts || !lits)
+        return false;
+
+    uint16_t old = m->cap;
+    m->export_names = exports;
+    m->owned_names = owned;
+    m->owned_consts = consts;
+    m->const_literals = lits;
+    memset(&m->export_names[old], 0, (size_t) (nc - old) * sizeof(const char *));
+    memset(&m->owned_names[old], 0, (size_t) (nc - old) * sizeof(const char *));
+    memset(&m->owned_consts[old], 0, (size_t) (nc - old) * sizeof(uint8_t));
+    memset(&m->const_literals[old], 0, (size_t) (nc - old) * sizeof(XiConstLiteral));
+    m->cap = nc;
+    return true;
+}
+
+static void prescan_slot_meta_free(PrescanSlotMeta *m) {
+    if (!m)
+        return;
+    xr_free(m->export_names);
+    xr_free(m->owned_names);
+    xr_free(m->owned_consts);
+    xr_free(m->const_literals);
+    memset(m, 0, sizeof(*m));
+}
+
+static bool const_literal_from_ast(XiLower *l, AstNode *expr, struct XrType *type,
+                                   XiConstLiteral *out) {
+    if (!l || !expr || !out)
+        return false;
+    memset(out, 0, sizeof(*out));
+    out->type = type;
+    switch (expr->type) {
+        case AST_LITERAL_INT:
+            out->kind = XI_CONST_LITERAL_INT;
+            out->type = type ? type : l->type_int;
+            out->int_value = expr->as.literal.raw_value.int_val;
+            return true;
+        case AST_LITERAL_FLOAT:
+            out->kind = XI_CONST_LITERAL_FLOAT;
+            out->type = type ? type : l->type_float;
+            out->float_value = expr->as.literal.raw_value.float_val;
+            return true;
+        case AST_LITERAL_TRUE:
+            out->kind = XI_CONST_LITERAL_BOOL;
+            out->type = type ? type : l->type_bool;
+            out->bool_value = true;
+            return true;
+        case AST_LITERAL_FALSE:
+            out->kind = XI_CONST_LITERAL_BOOL;
+            out->type = type ? type : l->type_bool;
+            out->bool_value = false;
+            return true;
+        case AST_LITERAL_CHAR:
+            out->kind = XI_CONST_LITERAL_CHAR;
+            out->type = type ? type : l->type_char;
+            out->int_value = (int64_t) expr->as.literal.raw_value.char_val;
+            return true;
+        case AST_LITERAL_STRING:
+            out->kind = XI_CONST_LITERAL_STRING;
+            out->type = type ? type : l->type_string;
+            out->string_value = arena_strdup(l->func, expr->as.literal.raw_value.string_val);
+            return out->string_value != NULL;
+        case AST_LITERAL_NULL:
+            out->kind = XI_CONST_LITERAL_NULL;
+            out->type = type ? type : l->type_null;
+            return true;
+        default:
+            return false;
+    }
+}
+
 XR_FUNC const char *xi_lower_enum_method_hidden_name(XiFunc *arena, const char *enum_name,
                                                      const char *method_name, bool is_static) {
     if (!arena || !enum_name || !method_name)
@@ -966,12 +1083,10 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
     XR_DCHECK(l->is_program, "prescan_top_level_bindings: not a program context");
     uint16_t next_shared = start_shared;
 
-    const char *export_flags[512];
-    memset(export_flags, 0, sizeof(export_flags));
-    const char *owned_name_flags[512];
-    memset(owned_name_flags, 0, sizeof(owned_name_flags));
-    uint8_t owned_const_flags[512];
-    memset(owned_const_flags, 0, sizeof(owned_const_flags));
+    PrescanSlotMeta slot_meta;
+    memset(&slot_meta, 0, sizeof(slot_meta));
+    if (!prescan_slot_meta_reserve(&slot_meta, start_shared > 0 ? start_shared : 16))
+        return;
 
     for (int i = 0; i < count; i++) {
         AstNode *s = stmts[i];
@@ -995,8 +1110,8 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                 int vid = xi_lower_var_find(l, 0, ename);
                 if (vid >= 0 && l->shared_map[vid] >= 0) {
                     int slot = l->shared_map[vid];
-                    if (slot < 512)
-                        export_flags[slot] = ename;
+                    if (slot >= 0 && prescan_slot_meta_reserve(&slot_meta, (uint16_t) slot + 1u))
+                        slot_meta.export_names[slot] = ename;
                 }
             }
             continue;
@@ -1030,12 +1145,21 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
         XR_DCHECK(var_id >= 0 && var_id < l->var_cap,
                   "prescan_top_level_bindings: var_id overflow");
         l->shared_map[var_id] = (int16_t) next_shared;
-        if (prescan_is_user_owned_decl(s) && next_shared < 512) {
-            owned_name_flags[next_shared] = name;
-            owned_const_flags[next_shared] = is_const ? 1u : 0u;
+        if (!prescan_slot_meta_reserve(&slot_meta, next_shared + 1u)) {
+            prescan_slot_meta_free(&slot_meta);
+            return;
         }
-        if (is_exported && next_shared < 512)
-            export_flags[next_shared] = name;
+        if (prescan_is_user_owned_decl(s)) {
+            slot_meta.owned_names[next_shared] = name;
+            slot_meta.owned_consts[next_shared] = is_const ? 1u : 0u;
+        }
+        if (is_const && s && s->type == AST_CONST_DECL && s->as.var_decl.initializer) {
+            XiConstLiteral lit;
+            if (const_literal_from_ast(l, s->as.var_decl.initializer, type, &lit))
+                slot_meta.const_literals[next_shared] = lit;
+        }
+        if (is_exported)
+            slot_meta.export_names[next_shared] = name;
         next_shared++;
 
         if (s && s->type == AST_ENUM_DECL)
@@ -1052,13 +1176,17 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
             l->func, (uint32_t) (next_shared * sizeof(const char *)));
         uint8_t *consts =
             (uint8_t *) xi_func_arena_alloc(l->func, (uint32_t) (next_shared * sizeof(uint8_t)));
+        XiConstLiteral *literals = (XiConstLiteral *) xi_func_arena_alloc(
+            l->func, (uint32_t) (next_shared * sizeof(XiConstLiteral)));
         XiFunc **slot_funcs =
             (XiFunc **) xi_func_arena_alloc(l->func, (uint32_t) (next_shared * sizeof(XiFunc *)));
         l->func->shared_slot_funcs = slot_funcs;
         l->func->shared_slot_func_count = next_shared;
+        l->func->shared_const_literals = literals;
+        l->func->shared_const_literal_count = literals ? next_shared : 0;
         for (uint16_t si = 0; si < next_shared; si++) {
             if (names) {
-                const char *src = (si < 512) ? export_flags[si] : NULL;
+                const char *src = (si < slot_meta.cap) ? slot_meta.export_names[si] : NULL;
                 if (src) {
                     uint32_t slen = (uint32_t) strlen(src);
                     char *copy = (char *) xi_func_arena_alloc(l->func, slen + 1);
@@ -1070,7 +1198,7 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                 }
             }
             if (owned) {
-                const char *src = (si < 512) ? owned_name_flags[si] : NULL;
+                const char *src = (si < slot_meta.cap) ? slot_meta.owned_names[si] : NULL;
                 if (src) {
                     uint32_t slen = (uint32_t) strlen(src);
                     char *copy = (char *) xi_func_arena_alloc(l->func, slen + 1);
@@ -1083,10 +1211,16 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
             }
             if (slot_funcs)
                 slot_funcs[si] = NULL;
+            if (literals) {
+                if (si < slot_meta.cap)
+                    literals[si] = slot_meta.const_literals[si];
+                else
+                    memset(&literals[si], 0, sizeof(XiConstLiteral));
+            }
         }
         if (consts) {
             for (uint16_t si = 0; si < next_shared; si++)
-                consts[si] = (si < 512) ? owned_const_flags[si] : 0u;
+                consts[si] = (si < slot_meta.cap) ? slot_meta.owned_consts[si] : 0u;
         }
         if (names)
             l->func->export_names = names;
@@ -1095,6 +1229,7 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
         if (consts)
             l->func->slot_owned_consts = consts;
     }
+    prescan_slot_meta_free(&slot_meta);
 }
 
 /*
@@ -1204,11 +1339,17 @@ static void build_module_metadata(XiLower *l) {
         mod->slot_funcs = (XiFunc **) xr_calloc(nshared, sizeof(XiFunc *));
         mod->slot_classes = (XiClassData **) xr_calloc(nshared, sizeof(XiClassData *));
         mod->slot_enums = (XiEnumData **) xr_calloc(nshared, sizeof(XiEnumData *));
-        if (mod->slot_funcs && mod->slot_classes && mod->slot_enums) {
+        mod->slot_imports = (XiImportRef **) xr_calloc(nshared, sizeof(XiImportRef *));
+        mod->slot_const_literals = (XiConstLiteral *) xr_calloc(nshared, sizeof(XiConstLiteral));
+        if (mod->slot_funcs && mod->slot_classes && mod->slot_enums && mod->slot_imports &&
+            mod->slot_const_literals) {
             for (uint16_t s = 0; s < nshared; s++) {
                 mod->slot_funcs[s] = l->shared_slot_funcs[s];
                 mod->slot_classes[s] = l->shared_slot_classes[s];
                 mod->slot_enums[s] = l->shared_slot_enums[s];
+                mod->slot_imports[s] = l->shared_slot_imports[s];
+                if (f->shared_const_literals && s < f->shared_const_literal_count)
+                    mod->slot_const_literals[s] = f->shared_const_literals[s];
             }
         }
     }

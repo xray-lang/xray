@@ -1,0 +1,10 @@
+fn unwrapAfterGuard(value: int?) -> int {
+    if (value == null) {
+        return -1
+    }
+    let narrowed = value!
+    return narrowed * 2
+}
+
+print(unwrapAfterGuard(21))
+print(unwrapAfterGuard(null))

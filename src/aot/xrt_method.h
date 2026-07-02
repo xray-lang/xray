@@ -260,7 +260,7 @@ static inline int64_t xrt_utf8_scalar_count(const char *s, int64_t slen) {
 
 static inline XrValue xrt_string_entries(XrValue recv) {
     int64_t n = xrt_utf8_scalar_count(xr_str_data(recv), xr_str_len(recv));
-    XrValue arr = xrt_array_new(n);
+    XrValue arr = xrt_array_with_capacity(n);
     xrt_iterator_t iter = {
         .coll = recv,
         .cursor = 0,
@@ -356,6 +356,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return XR_FROM_INT(a->capacity);
         if (sym == XRT_SYM_IS_EMPTY)
             return XR_FROM_BOOL(a->length == 0);
+        if (sym == XRT_SYM_CLEAR)
+            return xrt_array_clear_value(recv);
         if (sym == XRT_SYM_POP && a->length > 0) {
             a->length--;
             return xr_typed_get(a->data, (int32_t) a->length, a->elem_type);
@@ -523,7 +525,7 @@ static inline XrValue xrt_str_split(const char *s, int64_t slen, const char *sep
     if (plan.kind == XR_STRING_CORE_SPLIT_INVALID || plan.count > (size_t) INT64_MAX)
         return XR_NULL_VAL;
 
-    XrValue arr = xrt_array_new((int64_t) plan.count);
+    XrValue arr = xrt_array_with_capacity((int64_t) plan.count);
     XrtStringSplitCtx ctx = {arr};
     size_t emitted = xr_string_core_split_each(s, len, sep, sep_len, xrt_str_split_emit, &ctx);
     return emitted == plan.count ? arr : XR_NULL_VAL;
@@ -673,15 +675,17 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             xrt_array_push(recv, arg0);
             return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
         }
+        if (sym == XRT_SYM_PUSH_UNCHECKED) {
+            xrt_array_push_unchecked(recv, arg0);
+            return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+        }
         if (sym == XRT_SYM_RESERVE)
             return xrt_array_reserve_value(recv, arg0);
+        if (sym == XRT_SYM_SET_LENGTH_UNCHECKED)
+            return xrt_bytes_set_length_unchecked_value(recv, arg0);
         if (sym == XRT_SYM_RESIZE)
             return xrt_array_resize_value(
                 recv, arg0, a->elem_type == XR_ELEM_CHAR ? XR_FROM_CHAR(0) : XR_FROM_INT(0));
-        if (sym == XRT_SYM_LOADU32LE)
-            return xrt_bytes_load_u32_le(recv, arg0);
-        if (sym == XRT_SYM_LOADU64LE)
-            return xrt_bytes_load_u64_le(recv, arg0);
         if (sym == XRT_SYM_UNSHIFT) {
             xrt_array_check_store_or_abort(a, arg0, "Array.unshift");
             if (XR_UNLIKELY(a->data_storage == XR_ARRAY_DATA_BORROWED)) {
@@ -694,6 +698,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
                     (size_t) a->length * (size_t) a->elem_size);
             a->length++;
             xr_typed_set(a->data, 0, arg0, a->elem_type);
+            XR_ARRAY_MARK_MUTATED(a);
             return XR_NULL_VAL;
         }
         if (sym == XRT_SYM_FILL) {
@@ -908,6 +913,8 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         return xrt_array_reduce_typed(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_RESIZE)
         return xrt_array_resize_value(recv, arg0, arg1);
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REPEAT_FROM_UNCHECKED)
+        return xrt_bytes_repeat_from_unchecked_value(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         return xrt_array_fill_value(recv, arg0, arg1, XR_FROM_INT(a->length));
@@ -926,8 +933,26 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
 
 static inline XrValue xrt_method_3(XrValue recv, int sym, XrValue arg0, XrValue arg1,
                                    XrValue arg2) {
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_APPEND_FROM_UNCHECKED)
+        return xrt_bytes_append_from_unchecked_value(recv, arg0, arg1, arg2);
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REPEAT_AT_UNCHECKED)
+        return xrt_bytes_repeat_at_unchecked_value(recv, arg0, arg1, arg2);
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_WILD_REPEAT_AT_UNCHECKED)
+        return xrt_bytes_wild_repeat_at_unchecked_value(recv, arg0, arg1, arg2);
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_COMMON_PREFIX_UNCHECKED)
+        return xrt_bytes_common_prefix_unchecked_value(recv, arg0, arg1, arg2);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL)
         return xrt_array_fill_value(recv, arg0, arg1, arg2);
+    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+}
+
+static inline XrValue xrt_method_4(XrValue recv, int sym, XrValue arg0, XrValue arg1, XrValue arg2,
+                                   XrValue arg3) {
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_WRITE_FROM_UNCHECKED)
+        return xrt_bytes_write_from_unchecked_value(recv, arg0, arg1, arg2, arg3);
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_WILD_COPY_FROM_NONOVERLAPPING_UNCHECKED)
+        return xrt_bytes_wild_copy_from_nonoverlapping_unchecked_value(recv, arg0, arg1, arg2,
+                                                                       arg3);
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 

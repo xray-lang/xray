@@ -1,0 +1,4 @@
+shared const counter: Atomic<int> = Atomic<int>(0)
+
+counter.store(7, Ordering.Relaxed)
+print(counter.load(Ordering.Relaxed))

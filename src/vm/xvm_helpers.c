@@ -398,6 +398,18 @@ void xr_vm_vm_init(XrVMRuntime *isolate) {
             isolate->vm.builtins[XR_GLOBAL_VAR_RESULTGROUP] =
                 xr_value_from_class(isolate->core_rt->native_type_classes[XR_TRESULTGROUP]);
         }
+        if (isolate->core_rt->native_type_classes[XR_TCOUNTDOWNLATCH]) {
+            isolate->vm.builtins[XR_GLOBAL_VAR_COUNTDOWNLATCH] =
+                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TCOUNTDOWNLATCH]);
+        }
+        if (isolate->core_rt->native_type_classes[XR_TSEMAPHORE]) {
+            isolate->vm.builtins[XR_GLOBAL_VAR_SEMAPHORE] =
+                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TSEMAPHORE]);
+        }
+        if (isolate->core_rt->native_type_classes[XR_TEVENTCOUNT]) {
+            isolate->vm.builtins[XR_GLOBAL_VAR_EVENTCOUNT] =
+                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TEVENTCOUNT]);
+        }
 
         // process/__file__/__dir__ indices 5/6/7, user global variables start from
         // XR_USER_GLOBALS_START

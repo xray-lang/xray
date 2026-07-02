@@ -63,6 +63,7 @@ TEST(is_memory_load) {
     assert(!xi_is_memory_load(XI_CONST));
     assert(!xi_is_memory_load(XI_CALL));
     assert(!xi_is_memory_load(XI_IMPORT_REF));
+    assert(!xi_is_memory_load(XI_BYTES_LOAD_U16_LE));
     assert(!xi_is_memory_load(XI_BYTES_LOAD_U32_LE));
 }
 

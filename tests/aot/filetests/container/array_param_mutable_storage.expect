@@ -1,0 +1,2 @@
+regex=array-storage [0-9]+ func=store_bytes value=v[0-9]+ origin=v[0-9]+ flags=0x3 elem=XR_ELEM_U8/u8/uint8_t
+c_contains=((uint8_t*)_a->data)

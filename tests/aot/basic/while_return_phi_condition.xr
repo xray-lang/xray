@@ -1,0 +1,16 @@
+fn choose(requested: int, size: int) -> int {
+    let proposed = 64
+    let maxSize = 65536
+    while (requested > proposed) {
+        if (size <= maxSize) {
+            return proposed
+        }
+        proposed = proposed + 16
+        maxSize = maxSize * 4
+    }
+    return requested
+}
+
+print(choose(112, 150000))
+print(choose(112, 1048576))
+print(choose(112, 1048577))

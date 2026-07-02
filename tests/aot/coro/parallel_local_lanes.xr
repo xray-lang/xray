@@ -1,0 +1,74 @@
+fn makeLane() -> Array<int> {
+    return []
+}
+
+let lanes: Array<Array<int>> = []
+let w = 0
+while (w < 2) {
+    let lane = makeLane()
+    lane.resize(8, 0)
+    lanes.push(lane)
+    w = w + 1
+}
+
+parallel range begin, end in 0..8 workers 2 worker wid local lane in lanes {
+    let i = begin
+    unsafe {
+        while (i < end) {
+            lane.setUnchecked(i, i + wid * 100)
+            i = i + 1
+        }
+    }
+}
+
+let laneTotal = 0
+w = 0
+while (w < 2) {
+    let lane = lanes[w]
+    let i = 0
+    while (i < lane.length) {
+        laneTotal = laneTotal + lane[i]
+        i = i + 1
+    }
+    w = w + 1
+}
+
+let sums: Array<Array<int>> = []
+w = 0
+while (w < 2) {
+    let lane = makeLane()
+    lane.resize(8, 0)
+    sums.push(lane)
+    w = w + 1
+}
+
+let reduced = parallel range reduce begin, end in 0..8 workers 2 worker wid local lane in sums
+    init 0
+    combine (a: int, b: int) -> a + b {
+    let local = 0
+    let i = begin
+    unsafe {
+        while (i < end) {
+            lane.setUnchecked(i, i)
+            local = local + i
+            i = i + 1
+        }
+    }
+    local
+}
+
+let reduceLaneTotal = 0
+w = 0
+while (w < 2) {
+    let lane = sums[w]
+    let i = 0
+    while (i < lane.length) {
+        reduceLaneTotal = reduceLaneTotal + lane[i]
+        i = i + 1
+    }
+    w = w + 1
+}
+
+print(laneTotal)
+print(reduced)
+print(reduceLaneTotal)

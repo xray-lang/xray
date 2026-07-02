@@ -1,0 +1,1 @@
+RawPtr.loadLEUnchecked<T>() currently supports T = uint16, uint32 or uint64

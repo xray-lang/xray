@@ -46,6 +46,8 @@
 #define TYPE_NAME_WEAKMAP "WeakMap"
 #define TYPE_NAME_WEAKSET "WeakSet"
 #define TYPE_NAME_BYTES "Bytes"
+#define TYPE_NAME_SPAN "Span"
+#define TYPE_NAME_BYTESPAN "ByteSpan"
 
 /* ========== Runtime Types ========== */
 
@@ -82,6 +84,9 @@
 #define TYPE_NAME_ATOMIC "Atomic"
 #define TYPE_NAME_WORKQUEUE "WorkQueue"
 #define TYPE_NAME_RESULTGROUP "ResultGroup"
+#define TYPE_NAME_COUNTDOWNLATCH "CountdownLatch"
+#define TYPE_NAME_SEMAPHORE "Semaphore"
+#define TYPE_NAME_EVENTCOUNT "EventCount"
 
 /* ========== DateTime Types ========== */
 
@@ -122,45 +127,48 @@
  * VM runtime helpers and AOT direct codegen helpers. */
 typedef enum {
     XR_TID_NULL = 0,
-    XR_TID_BOOL,          /* 1 */
-    XR_TID_INT8,          /* 2 */
-    XR_TID_UINT8,         /* 3 */
-    XR_TID_INT16,         /* 4 */
-    XR_TID_UINT16,        /* 5 */
-    XR_TID_INT32,         /* 6 */
-    XR_TID_UINT32,        /* 7 */
-    XR_TID_INT,           /* 8  (= int64, "int" is the canonical name) */
-    XR_TID_UINT64,        /* 9 */
-    XR_TID_FLOAT32,       /* 10 */
-    XR_TID_FLOAT,         /* 11 (= float64, "float" is the canonical name) */
-    XR_TID_STRING,        /* 12 */
-    XR_TID_FUNCTION,      /* 13 */
-    XR_TID_ARRAY,         /* 14 */
-    XR_TID_SET,           /* 15 */
-    XR_TID_MAP,           /* 16 */
-    XR_TID_INSTANCE,      /* 17 */
-    XR_TID_JSON,          /* 18 */
-    XR_TID_BIGINT,        /* 19 */
-    XR_TID_STRINGBUILDER, /* 20 */
-    XR_TID_CHANNEL,       /* 21 */
-    XR_TID_REGEX,         /* 22 */
-    XR_TID_DATETIME,      /* 23 */
-    XR_TID_EXCEPTION,     /* 24 */
-    XR_TID_ENUM_VALUE,    /* 25 */
-    XR_TID_ENUM_TYPE,     /* 26 */
-    XR_TID_BOUND_METHOD,  /* 27 */
-    XR_TID_ITERATOR,      /* 28 */
-    XR_TID_MODULE,        /* 29 */
-    XR_TID_COROUTINE,     /* 30 */
-    XR_TID_RANGE,         /* 31 */
-    XR_TID_TASK,          /* 32 */
-    XR_TID_NETCONN,       /* 33 */
-    XR_TID_NETLISTENER,   /* 34 */
-    XR_TID_ATOMIC,        /* 35 */
-    XR_TID_WORKQUEUE,     /* 36 */
-    XR_TID_RESULTGROUP,   /* 37 */
-    XR_TID_WEAKMAP,       /* 38, analyzer-only */
-    XR_TID_WEAKSET,       /* 39, analyzer-only */
+    XR_TID_BOOL,           /* 1 */
+    XR_TID_INT8,           /* 2 */
+    XR_TID_UINT8,          /* 3 */
+    XR_TID_INT16,          /* 4 */
+    XR_TID_UINT16,         /* 5 */
+    XR_TID_INT32,          /* 6 */
+    XR_TID_UINT32,         /* 7 */
+    XR_TID_INT,            /* 8  (= int64, "int" is the canonical name) */
+    XR_TID_UINT64,         /* 9 */
+    XR_TID_FLOAT32,        /* 10 */
+    XR_TID_FLOAT,          /* 11 (= float64, "float" is the canonical name) */
+    XR_TID_STRING,         /* 12 */
+    XR_TID_FUNCTION,       /* 13 */
+    XR_TID_ARRAY,          /* 14 */
+    XR_TID_SET,            /* 15 */
+    XR_TID_MAP,            /* 16 */
+    XR_TID_INSTANCE,       /* 17 */
+    XR_TID_JSON,           /* 18 */
+    XR_TID_BIGINT,         /* 19 */
+    XR_TID_STRINGBUILDER,  /* 20 */
+    XR_TID_CHANNEL,        /* 21 */
+    XR_TID_REGEX,          /* 22 */
+    XR_TID_DATETIME,       /* 23 */
+    XR_TID_EXCEPTION,      /* 24 */
+    XR_TID_ENUM_VALUE,     /* 25 */
+    XR_TID_ENUM_TYPE,      /* 26 */
+    XR_TID_BOUND_METHOD,   /* 27 */
+    XR_TID_ITERATOR,       /* 28 */
+    XR_TID_MODULE,         /* 29 */
+    XR_TID_COROUTINE,      /* 30 */
+    XR_TID_RANGE,          /* 31 */
+    XR_TID_TASK,           /* 32 */
+    XR_TID_NETCONN,        /* 33 */
+    XR_TID_NETLISTENER,    /* 34 */
+    XR_TID_ATOMIC,         /* 35 */
+    XR_TID_WORKQUEUE,      /* 36 */
+    XR_TID_RESULTGROUP,    /* 37 */
+    XR_TID_COUNTDOWNLATCH, /* 38 */
+    XR_TID_SEMAPHORE,      /* 39 */
+    XR_TID_EVENTCOUNT,     /* 40 */
+    XR_TID_WEAKMAP,        /* 41, analyzer-only */
+    XR_TID_WEAKSET,        /* 42, analyzer-only */
     XR_TID_COUNT
 } XrTypeId;
 
@@ -248,6 +256,12 @@ static inline const char *xr_type_name_from_tid(XrTypeId tid) {
             return TYPE_NAME_WORKQUEUE;
         case XR_TID_RESULTGROUP:
             return TYPE_NAME_RESULTGROUP;
+        case XR_TID_COUNTDOWNLATCH:
+            return TYPE_NAME_COUNTDOWNLATCH;
+        case XR_TID_SEMAPHORE:
+            return TYPE_NAME_SEMAPHORE;
+        case XR_TID_EVENTCOUNT:
+            return TYPE_NAME_EVENTCOUNT;
         case XR_TID_WEAKMAP:
             return TYPE_NAME_WEAKMAP;
         case XR_TID_WEAKSET:

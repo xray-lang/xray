@@ -149,6 +149,14 @@ typedef struct XrAotEnumValueView {
     uint32_t member_index;
 } XrAotEnumValueView;
 
+typedef struct XrAotAdtValue {
+    const char *enum_name;
+    const char *member_name;
+    int64_t tag;
+    uint32_t payload_count;
+    XrValue payload0;
+} XrAotAdtValue;
+
 static inline const char *xrt_enum_to_cstr(XrValue v, char *buf, size_t bufsz) {
     const XrAotEnumValueView *ev = (const XrAotEnumValueView *) v.ptr;
     if (ev && ev->enum_name && ev->member_name) {
@@ -386,6 +394,24 @@ static inline XrValue xr_mkf64(double v, uint8_t tag) {
 #define XR_TO_INT(v) ((v).i)
 #define XR_TO_FLOAT(v) ((v).f)
 #define XR_TO_CHAR(v) ((uint32_t) (v).i)
+
+static inline XrAotAdtValue xrt_adt_value_zero(void) {
+    XrAotAdtValue out = {0};
+    out.payload0 = XR_NULL_VAL;
+    return out;
+}
+
+static inline XrAotAdtValue xrt_adt_value_make(int64_t tag, uint32_t payload_count,
+                                               const char *enum_name, const char *member_name,
+                                               XrValue payload0) {
+    XrAotAdtValue out;
+    out.enum_name = enum_name;
+    out.member_name = member_name;
+    out.tag = tag;
+    out.payload_count = payload_count;
+    out.payload0 = payload_count > 0 ? payload0 : XR_NULL_VAL;
+    return out;
+}
 
 static inline const char *xr_unbox_str(XrValue v) {
     return xr_str_data(v);

@@ -32,8 +32,8 @@ XR_FUNC XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, 
                                   int nargs);
 
 /* FFI raw-pointer scalar load/store backing the VM's OP_PTR_LOAD / OP_PTR_STORE.
- * `ffi_type` is an XrFFIType code naming the pointee width. Plain typed memory
- * access (no libffi); validity of `addr` is the `unsafe` block's contract. */
+ * `ffi_type` is an XrFFIType code plus optional pointer-load flags. Plain typed
+ * memory access (no libffi); validity of `addr` is the `unsafe` block's contract. */
 XR_FUNC XrValue xr_ffi_ptr_load(uintptr_t addr, uint8_t ffi_type);
 XR_FUNC void xr_ffi_ptr_store(uintptr_t addr, uint8_t ffi_type, XrValue val);
 

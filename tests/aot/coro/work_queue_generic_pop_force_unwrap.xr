@@ -1,0 +1,15 @@
+shared const queue: WorkQueue<int> = WorkQueue<int>(2, 1)
+
+fn worker() -> int {
+    let item = queue.pop(0)
+    if (item == null) {
+        return -1
+    }
+    let value = item!
+    return value * 2
+}
+
+let task = go worker()
+assert_true(queue.push(21, 0))
+
+print(await task)

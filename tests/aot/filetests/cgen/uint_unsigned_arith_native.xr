@@ -1,0 +1,12 @@
+fn hash32(seq: uint32) -> uint32 {
+    let prime: uint32 = 2654435761
+    return seq * prime
+}
+
+fn mix64(seq: uint64) -> uint64 {
+    let prime: uint64 = 889523592379
+    return (seq + prime) * prime
+}
+
+print(hash32(123456))
+print(mix64(123456))

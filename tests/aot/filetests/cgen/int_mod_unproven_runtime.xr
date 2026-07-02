@@ -1,0 +1,5 @@
+fn uncheckedMod(n: int, d: int) -> int {
+    return n % d
+}
+
+print(uncheckedMod(17, 5))

@@ -388,6 +388,9 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrVMRuntime *isolate, XrVMContext *vm_
 XR_FUNC XrDispatchAction vm_await_all(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc);
+XR_FUNC XrDispatchAction vm_await_all_into(XrVMRuntime *isolate, XrVMContext *vm_ctx,
+                                           XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
+                                           XrInstruction *pc);
 XR_FUNC XrDispatchAction vm_await_any(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc);

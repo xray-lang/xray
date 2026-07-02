@@ -2522,9 +2522,9 @@ static const XiValue *cg_class_native_prev_block_value(const XiValue *site) {
 static const XiValue *cg_class_native_prev_error_source_value(const XiValue *site) {
     const XiValue *prev = cg_class_native_prev_block_value(site);
     for (uint8_t depth = 0; prev && depth < 8; depth++) {
-        if ((prev->op != XI_BOX && prev->op != XI_UNBOX && prev->op != XI_COPY &&
-             prev->op != XI_MOVE) ||
-            prev->nargs < 1)
+        bool passthrough = prev->op == XI_MOVE || xi_copy_is_identity_alias(prev) ||
+                           xi_generated_op_class(prev->op) == XI_GEN_CLASS_CONVERSION;
+        if (!passthrough || prev->nargs < 1)
             break;
         prev = prev->args[0];
     }
@@ -3186,12 +3186,27 @@ static bool cg_class_native_call_is_nothrow_direct(XiCgenCtx *ctx, const XiFunc 
     return cg_class_native_call_is_nothrow_direct_depth(ctx, current, call, 0);
 }
 
+static bool cg_class_native_value_is_nothrow_lowlevel(const XiValue *value) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v)
+        return false;
+    switch (v->op) {
+        case XI_BYTES_LOAD_U16_LE:
+        case XI_BYTES_LOAD_U32_LE:
+        case XI_BYTES_LOAD_U64_LE:
+            return (v->aux_int & 1) != 0;
+        default:
+            return false;
+    }
+}
+
 static bool cg_class_native_err_check_is_dead(XiCgenCtx *ctx, const XiFunc *current,
                                               const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
-    return cg_class_native_call_is_nothrow_direct(ctx, current,
-                                                  cg_class_native_prev_error_source_value(check));
+    const XiValue *source = cg_class_native_prev_error_source_value(check);
+    return cg_class_native_value_is_nothrow_lowlevel(source) ||
+           cg_class_native_call_is_nothrow_direct(ctx, current, source);
 }
 
 static bool cg_class_native_const_int_value(const XiValue *value, int64_t *out) {
@@ -3237,6 +3252,8 @@ static bool cg_class_native_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f,
             if (v->flags & XI_FLAG_MAY_SUSPEND)
                 return true;
             if (v->flags & XI_FLAG_MAY_THROW) {
+                if (cg_class_native_value_is_nothrow_lowlevel(v))
+                    continue;
                 if (cg_class_native_value_is_nothrow_native_scalar(v))
                     continue;
                 if (!cg_class_native_call_is_nothrow_direct_depth(ctx, f, v, (uint8_t) (depth + 1)))
@@ -3249,10 +3266,7 @@ static bool cg_class_native_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f,
 
 static bool cg_class_native_err_check_after_nothrow_call(XiCgenCtx *ctx, const XiFunc *current,
                                                          const XiValue *check) {
-    if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
-        return false;
-    return cg_class_native_call_is_nothrow_direct(ctx, current,
-                                                  cg_class_native_prev_error_source_value(check));
+    return cg_class_native_err_check_is_dead(ctx, current, check);
 }
 
 /* Emit the C struct typedef (and dtor, if the layout has ARC ref fields) for a

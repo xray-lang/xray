@@ -156,7 +156,7 @@ static uint64_t cg_struct_layout_hash_depth(const XrStructLayout *sl, int depth)
 }
 
 static uint64_t cg_struct_layout_hash(const XrStructLayout *sl) {
-    return cg_struct_layout_hash_depth(sl, 0);
+    return xaot_struct_layout_hash(sl);
 }
 
 static bool cg_struct_layout_same_shape_depth(const XrStructLayout *a, const XrStructLayout *b,
@@ -192,8 +192,7 @@ static bool cg_struct_layout_same_shape(const XrStructLayout *a, const XrStructL
 
 static void cg_struct_heap_type_name(char *buf, size_t buflen, const char *prefix,
                                      const XrStructLayout *sl) {
-    snprintf(buf, buflen, "xrt_struct_%s_%016" PRIx64, prefix ? prefix : "mod",
-             cg_struct_layout_hash(sl));
+    xaot_struct_c_type_name(buf, buflen, prefix, sl);
 }
 
 static const XrStructFieldLayout *cg_struct_field(const XrStructLayout *sl, int64_t idx);
@@ -344,6 +343,13 @@ static const XiValue *cg_trace_struct_new_identity(const XiValue *v) {
     return (v && v->op == XI_STRUCT_NEW) ? v : NULL;
 }
 
+static const XrStructLayout *cg_type_struct_layout(const XrType *type) {
+    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
+        !type->instance.class_ref)
+        return NULL;
+    return type->instance.class_ref->struct_layout;
+}
+
 static const XrStructLayout *cg_struct_layout_for_shared_slot_in_func(const XiFunc *f, int slot) {
     if (!f || slot < 0)
         return NULL;
@@ -437,6 +443,58 @@ static bool cg_value_traces_to_heap_struct_shared(const XiCgenCtx *ctx, const Xi
                                                   const XrStructLayout **out_layout,
                                                   int *out_slot) {
     return cg_value_traces_to_heap_struct_shared_depth(ctx, f, v, out_layout, out_slot, 0);
+}
+
+static const XrStructLayout *cg_value_struct_layout(XiCgenCtx *ctx, const XiFunc *f,
+                                                    const XiValue *v) {
+    if (!v)
+        return NULL;
+
+    const XiValue *cur = v;
+    for (int depth = 0; cur && depth <= 8; depth++) {
+        if (cur->op == XI_STRUCT_NEW)
+            return (const XrStructLayout *) cur->aux;
+        if ((cur->op == XI_COPY || cur->op == XI_MOVE || cur->op == XI_RETAIN) && cur->nargs >= 1) {
+            cur = cur->args[0];
+            continue;
+        }
+        break;
+    }
+
+    const XrStructLayout *shared_layout = NULL;
+    if (cg_value_traces_to_heap_struct_shared(ctx, f, v, &shared_layout, NULL))
+        return shared_layout;
+
+    return cg_type_struct_layout(v->type);
+}
+
+static bool emit_struct_aggregate_box_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *value, const char *prefix) {
+    if (!ctx || !out || !value || !cg_value_plan_is_struct_aggregate(ctx, value))
+        return false;
+    const XrStructLayout *sl = cg_value_struct_layout(ctx, f, value);
+    if (!cg_struct_native_heap_supported(sl))
+        return false;
+    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    char tname_buf[128];
+    const char *tname = (plan && plan->rep.c_type) ? plan->rep.c_type : NULL;
+    if (!tname || !tname[0]) {
+        cg_struct_heap_type_name(tname_buf, sizeof(tname_buf), prefix, sl);
+        tname = tname_buf;
+    }
+
+    fprintf(out, "({ %s *_s = (%s*)xrt_arc_alloc(sizeof(%s)); *_s = ", tname, tname, tname);
+    emit_vref(out, value);
+    fprintf(out, "; ");
+    if (xr_struct_layout_header_size(sl) == 0) {
+        fprintf(out, "xr_struct_ref(_s, (uint16_t)sizeof(%s)); })", tname);
+    } else {
+        fprintf(out,
+                "_s->_size = (uint32_t)sizeof(%s); _s->_layout = UINT32_C(%" PRIu32 "); "
+                "xr_mkptr(_s, XR_TAG_STRUCT_REF); })",
+                tname, (uint32_t) cg_struct_layout_hash(sl));
+    }
+    return true;
 }
 
 static bool cg_heap_struct_shared_alias_safe_uses(const XiCgenCtx *ctx, const XiFunc *f,
@@ -568,7 +626,7 @@ static bool cg_value_traces_to_inlined_struct(const XiFunc *f, const XiValue *v)
     return origin && cg_struct_can_inline(f, origin);
 }
 
-static bool cg_value_only_used_by_inlined_struct_new(const XiFunc *f, const XiValue *target) {
+static bool cg_value_only_used_by_layout_struct_new(const XiFunc *f, const XiValue *target) {
     bool seen = false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -589,7 +647,7 @@ static bool cg_value_only_used_by_inlined_struct_new(const XiFunc *f, const XiVa
             for (uint16_t a = 0; a < v->nargs; a++) {
                 if (v->args[a] != target)
                     continue;
-                if (v->op == XI_STRUCT_NEW && a == 0 && cg_struct_can_inline(f, v)) {
+                if (v->op == XI_STRUCT_NEW && a == 0 && v->aux) {
                     seen = true;
                     continue;
                 }
@@ -605,18 +663,18 @@ static bool cg_value_only_used_by_inlined_struct_new(const XiFunc *f, const XiVa
     return seen;
 }
 
-/* The (tagged-int) type-id load consumed only by an inlined value struct, or an
- * ARC dup/drop the ownership pass attached to that load. The inlined struct
- * never references the type id and retaining a tagged int does nothing at
- * runtime, so both the GET_SHARED and its retain/release are dead. */
-static bool cg_value_is_elided_inlined_struct_type_load(const XiFunc *f, const XiValue *v) {
+/* The (tagged-int) type-id load consumed only by a layout-backed struct new, or
+ * an ARC dup/drop the ownership pass attached to that load. AOT constructs the
+ * value from the compile-time layout, so it never needs the runtime class
+ * descriptor; retaining a tagged int is also a no-op. */
+static bool cg_value_is_elided_layout_struct_type_load(const XiFunc *f, const XiValue *v) {
     if (!v)
         return false;
     const XiValue *target = v;
     if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1)
         target = v->args[0];
     return target && target->op == XI_GET_SHARED &&
-           cg_value_only_used_by_inlined_struct_new(f, target);
+           cg_value_only_used_by_layout_struct_new(f, target);
 }
 
 static void emit_struct_field_ref(FILE *out, const XrStructLayout *sl, const XiValue *origin,

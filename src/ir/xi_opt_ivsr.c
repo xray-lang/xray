@@ -173,6 +173,7 @@ static bool reduce_derived_iv(XiFunc *f, XiLoop *L, const XiBasicIV *biv, const 
     orig->nargs = 1;
     orig->aux_int = XI_COPY_KIND_IDENTITY;
     orig->aux = NULL;
+    orig->aux_kind = XI_AUX_KIND_NONE;
     /* Inputs that used to feed the multiply are now unreferenced; dce
      * will reap them along with the original op. */
     return true;

@@ -65,6 +65,10 @@ XR_FUNC void xa_validate_hashable_key_type(XaInferContext *ctx, XrType *type,
                                            XrLocation *loc);
 XR_FUNC void xa_validate_hashable_contract_for_class(XaInferContext *ctx, AstNode *node,
                                                      XrClassInfo *info);
+XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, XaSymbol *sym,
+                                       bool is_write);
+XR_FUNC bool xa_type_is_threadsafe_shared_ref(const XrType *type);
+XR_FUNC const char *xa_threadsafe_shared_ref_label(const XrType *type);
 
 // Expression visitors (defined in xanalyzer_visitor_expr.c)
 XR_FUNC XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node);
@@ -103,10 +107,10 @@ struct XrClassInfo;
 XR_FUNC void xa_check_member_visibility(XaInferContext *ctx, AstNode *node, XaSymbol *member,
                                         struct XrClassInfo *owner);
 
-// Module graph exports lookup (defined in xanalyzer_visitor.c).
-// Resolves an import specifier to the target module's exports hashmap.
+// Module graph export-symbol lookup (defined in xanalyzer_visitor.c).
+// Resolves an import specifier to the target module's semantic export-symbol hashmap.
 struct XrHashMap;
-XR_FUNC struct XrHashMap *resolve_graph_exports(XaAnalyzer *analyzer, const char *module_name,
-                                                bool is_quoted);
+XR_FUNC struct XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer,
+                                                       const char *module_name, bool is_quoted);
 
 #endif  // XANALYZER_VISITOR_INTERNAL_H

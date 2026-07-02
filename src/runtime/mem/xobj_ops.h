@@ -59,6 +59,8 @@ XR_FUNC void xr_obj_destroy_instance(XrObjHeader *obj, struct XrCoroHeap *owner_
 XR_FUNC void xr_obj_destroy_task(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 XR_FUNC void xr_obj_destroy_work_queue(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 XR_FUNC void xr_obj_destroy_result_group(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_countdown_latch(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_semaphore(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 // NetConn / NetListener destroy handled by native body descriptors.
 
 XR_FUNC bool xr_obj_type_may_need_finalize(uint8_t type);

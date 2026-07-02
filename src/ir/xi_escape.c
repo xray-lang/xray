@@ -228,6 +228,55 @@ static void mark_capture_escapes(XiFunc *f) {
 
 /* ========== Loop-Allocation Demotion ========== */
 
+static bool loop_alloc_closure_use_is_scoped_par_for_callback(const XiValue *user, uint16_t arg_idx,
+                                                              const XiValue *target) {
+    if (!user || !target)
+        return false;
+    if (user->op == XI_PAR_FOR && arg_idx == 3 && user->aux_kind == XI_AUX_KIND_PAR_FOR) {
+        const XiParallelForData *data = (const XiParallelForData *) user->aux;
+        return data && target->aux && data->body_func == (const XiFunc *) target->aux;
+    }
+    if (user->op == XI_PAR_COLLECT && arg_idx == 3 && user->aux_kind == XI_AUX_KIND_PAR_COLLECT) {
+        const XiParallelCollectData *data = (const XiParallelCollectData *) user->aux;
+        return data && target->aux && data->body_func == (const XiFunc *) target->aux;
+    }
+    if (user->op == XI_PAR_REDUCE && (arg_idx == 4 || arg_idx == 5) &&
+        user->aux_kind == XI_AUX_KIND_PAR_REDUCE) {
+        const XiParallelReduceData *data = (const XiParallelReduceData *) user->aux;
+        if (!data || !target->aux)
+            return false;
+        const XiFunc *func = (const XiFunc *) target->aux;
+        return (arg_idx == 4 && data->body_func == func) ||
+               (arg_idx == 5 && data->combine_func == func);
+    }
+    return false;
+}
+
+static bool loop_alloc_closure_uses_are_scoped_par_for_callbacks(const XiFunc *f,
+                                                                 const XiValue *target) {
+    bool saw_use = false;
+    if (!f || !target || target->op != XI_CLOSURE_NEW || !target->aux)
+        return false;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *user = blk->values[i];
+            if (!user || user == target)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != target)
+                    continue;
+                if (!loop_alloc_closure_use_is_scoped_par_for_callback(user, a, target))
+                    return false;
+                saw_use = true;
+            }
+        }
+    }
+    return saw_use;
+}
+
 /* A heap allocation defined inside a loop must NOT be left at NO_ESCAPE.
  *
  *   - AOT would stack-allocate it (XI_STACK_ALLOC -> alloca), but alloca in a
@@ -240,7 +289,13 @@ static void mark_capture_escapes(XiFunc *f) {
  * Demote such allocations to ARG_ESCAPE so BOTH backends manage them as heap
  * objects with precise dup/drop (freed at the per-iteration death point). A
  * single-execution (non-loop) allocation is left at NO_ESCAPE and still becomes
- * a safe one-shot stack allocation in AOT. */
+ * a safe one-shot stack allocation in AOT.
+ *
+ * Exception: a closure used only as a synchronous `parallel for` body callback
+ * or `parallel reduce` range/combine callback can be lowered by AOT into a
+ * block-scoped C closure env at the parallel boundary. It is not implemented with alloca, so
+ * it does not accumulate across loop iterations. Keep it at NO_ESCAPE so
+ * stack_alloc_rewrite can mark the stronger ownership fact for ARC/CGen. */
 static void demote_loop_heap_allocs(XiFunc *f) {
     if (!f->nblocks)
         return;
@@ -254,7 +309,8 @@ static void demote_loop_heap_allocs(XiFunc *f) {
             continue;
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            if (v && v->escape == (uint8_t) XI_ESC_NONE && xi_op_is_heap_alloc(v->op))
+            if (v && v->escape == (uint8_t) XI_ESC_NONE && xi_op_is_heap_alloc(v->op) &&
+                !loop_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
                 v->escape = (uint8_t) XI_ESC_ARG;
         }
     }

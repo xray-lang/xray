@@ -123,7 +123,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     xr_module_system_init_with_script(iso, file);
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
-    // Graph exports point at analyzer-owned XrType/XrClassInfo objects.
+    // Graph export symbols point at analyzer-owned semantic symbols.
     XrModuleGraph *active_graph = NULL;
     XaAnalyzer *active_graph_analyzer = NULL;
 
@@ -172,8 +172,8 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                                     continue;
                                 xa_analyzer_analyze(analyzer, spec->source_path,
                                                     (XrAstNode *) spec->ast);
-                                spec->exports =
-                                    xa_analyzer_collect_exports(analyzer, (XrAstNode *) spec->ast);
+                                spec->export_symbols = xa_analyzer_collect_export_symbols(
+                                    analyzer, (XrAstNode *) spec->ast);
 
                                 int diag_count = 0;
                                 XaDiagnostic *diags =

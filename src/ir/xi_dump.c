@@ -48,6 +48,8 @@ static const char *xi_type_name(const struct XrType *type) {
             return "void";
         case XR_KIND_ARRAY:
             return "array";
+        case XR_KIND_SPAN:
+            return "span";
         case XR_KIND_MAP:
             return "map";
         case XR_KIND_FUNCTION:
@@ -129,7 +131,9 @@ static void dump_value(FILE *out, const XiValue *v) {
     }
 
     /* Auxiliary info for specific ops */
-    if ((v->op == XI_LOAD_FIELD || v->op == XI_STORE_FIELD) && v->aux) {
+    if (v->op == XI_LOAD_FIELD && xi_load_field_is_adt(v)) {
+        fprintf(out, " [adt-field=%" PRId64 "]", v->aux_int);
+    } else if ((v->op == XI_LOAD_FIELD || v->op == XI_STORE_FIELD) && v->aux) {
         fprintf(out, " .%s", (const char *) v->aux);
     } else if (v->op == XI_STRUCT_GET || v->op == XI_STRUCT_SET) {
         XrStructLayout *sl = (XrStructLayout *) v->aux;
@@ -157,6 +161,8 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " :i64");
     else if (v->rep == XR_REP_F64)
         fprintf(out, " :f64");
+    else if (v->rep == XR_REP_RAWPTR)
+        fprintf(out, " :rawptr");
 
     /* Show escape level when set (after escape analysis) */
     if (v->escape == 1)

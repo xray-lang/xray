@@ -36,7 +36,8 @@ static char *cg_derive_import_string(const char *target_path, const char *import
 /* Add one entry to the internal import table. */
 static void cg_add_import(XiCgenCtx *ctx, const char *module_path, const char *member_name,
                           const char *target_mod_name, int shared_slot, const XiFunc *target_func,
-                          const XiClassData *target_class, const XiFunc *exporter_func) {
+                          const XiClassData *target_class, const XiEnumData *target_enum,
+                          const XiFunc *exporter_func) {
     if (!cg_reserve_imports(ctx, ctx->nimports + 1))
         return;
     CgImportEntry *e = &ctx->imports[ctx->nimports++];
@@ -46,6 +47,7 @@ static void cg_add_import(XiCgenCtx *ctx, const char *module_path, const char *m
     e->shared_slot = shared_slot;
     e->target_func = target_func;
     e->target_class = target_class;
+    e->target_enum = target_enum;
     e->exporter_func = exporter_func;
 }
 
@@ -93,6 +95,9 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, 
                 const XiModuleExport *exp = &emod->exports[ei];
                 const XiFunc *target_fn = exp->function;
                 const XiClassData *target_cd = exp->class_data;
+                const XiEnumData *target_ed = (emod->slot_enums && exp->shared_slot < emod->nslots)
+                                                  ? emod->slot_enums[exp->shared_slot]
+                                                  : NULL;
 
                 /* For class exports, resolve constructor if not already set */
                 if (target_cd && !target_fn && target_cd->methods) {
@@ -109,7 +114,7 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, 
                 }
 
                 cg_add_import(ctx, import_str, exp->name, emod->name, (int) exp->shared_slot,
-                              target_fn, target_cd, emod->init);
+                              target_fn, target_cd, target_ed, emod->init);
             }
             /* import_str is kept in the table for the short-lived AOT process. */
         }

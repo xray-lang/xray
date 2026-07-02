@@ -13,7 +13,8 @@
  *     - Compound assignment desugaring (variable and member targets)
  *     - Increment/decrement expansion (x++ → x += 1 → x = x + 1)
  *     - Index-set receiver extraction (statement context, temporaries)
- *     - Short-circuit logic expansion (&& / || → ternary)
+ *     - Short-circuit logic expansion (&& / || → ternary), except proven
+ *       speculation-safe bool chains that can stay as value expressions
  *     - Nullish coalesce expansion (?? → null-check ternary)
  *
  *   Constructs handled directly by the lowerer (not canonicalized):

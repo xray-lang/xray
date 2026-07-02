@@ -55,18 +55,19 @@ typedef struct XrtExcFrame {
 } XrtExcFrame;
 
 /* =========================================================================
- * Thread-local exception stack
+ * Thread-local exception stack.
  *
- * In single-threaded AOT mode, a plain global suffices.
- * Once concurrency support lands, switch to _Thread_local.
+ * AOT code can run on multiple scheduler workers. Exception stack and pending
+ * value-return error state therefore must be per OS thread: a panic/error in
+ * one worker must not overwrite another worker's in-flight state.
  * ========================================================================= */
 
 #ifdef XRT_IMPL
-XrtExcFrame *xrt_exc_top = NULL;
-XrValue xrt_pending_error = {.tag = XR_TAG_NULL};
+XR_THREAD_LOCAL XrtExcFrame *xrt_exc_top = NULL;
+XR_THREAD_LOCAL XrValue xrt_pending_error = {.tag = XR_TAG_NULL};
 #else
-extern XrtExcFrame *xrt_exc_top;
-extern XrValue xrt_pending_error;
+extern XR_THREAD_LOCAL XrtExcFrame *xrt_exc_top;
+extern XR_THREAD_LOCAL XrValue xrt_pending_error;
 #endif
 
 static inline int xrt_has_pending_error(void) {

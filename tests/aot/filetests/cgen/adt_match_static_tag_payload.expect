@@ -1,0 +1,8 @@
+c_contains=FastResult
+c_contains=XrAotAdtValue
+c_contains=xrt_adt_value_make(
+c_contains=.payload0
+c_contains=.tag
+c_not_contains=xrt_array_with_capacity(
+c_not_contains=xrt_getprop_name(
+c_not_contains=xrt_index_get(

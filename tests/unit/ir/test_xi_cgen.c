@@ -42,6 +42,14 @@ typedef struct TestAotPlan {
     bool initialized;
 } TestAotPlan;
 
+#define TEST_REQUIRE(cond, msg)                                                                    \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "  FAIL: %s\n", (msg));                                                \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
 #define TEST(name)                                                                                 \
     static void test_##name(void);                                                                 \
     static void run_##name(void) {                                                                 \
@@ -71,14 +79,14 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
                                   uint32_t entry_module) {
     char verify_err[256];
 
-    assert(plan != NULL);
+    TEST_REQUIRE(plan != NULL, "AOT plan holder is NULL");
     memset(plan, 0, sizeof(*plan));
-    assert(xaot_bundle_init(&plan->bundle, modules, nmodules, entry_module) &&
-           "AOT bundle init failed");
+    TEST_REQUIRE(xaot_bundle_init(&plan->bundle, modules, nmodules, entry_module),
+                 "AOT bundle init failed");
     plan->initialized = true;
-    assert(xaot_prepare_bundle(&plan->bundle, NULL) && "AOT prepare failed");
-    assert(
-        xaot_verify_bundle(&plan->bundle, XAOT_VERIFY_AOT_READY, verify_err, sizeof(verify_err)) &&
+    TEST_REQUIRE(xaot_prepare_bundle(&plan->bundle, NULL), "AOT prepare failed");
+    TEST_REQUIRE(
+        xaot_verify_bundle(&plan->bundle, XAOT_VERIFY_AOT_READY, verify_err, sizeof(verify_err)),
         "AOT verify failed");
 }
 
@@ -538,6 +546,32 @@ TEST(cgen_if_else) {
     xi_func_free(ir);
 }
 
+TEST(cgen_early_return_branch_uses_unlikely_hint) {
+    const char *src = "fn guard(x: int) -> int {\n"
+                      "    if (x < 0) {\n"
+                      "        return -1\n"
+                      "    }\n"
+                      "    return x + 1\n"
+                      "}\n"
+                      "print(guard(1))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    if (!ir) {
+        printf("  SKIP\n");
+        return;
+    }
+
+    char *code = generate_c(ir, "test");
+    assert(code != NULL);
+
+    assert(contains(code, "XR_UNLIKELY(") &&
+           "early-return guard branch should be marked unlikely in generated C");
+
+    printf("  Generated early-return branch hint %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_multi_print) {
     /* Multiple print statements */
     const char *src = "let a = 10\n"
@@ -712,6 +746,67 @@ TEST(cgen_c_export_emits_public_c_abi_wrapper) {
     printf("  Generated C export wrapper %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
+}
+
+TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
+    const char *lib_src = "fn helper(x: int) -> int {\n"
+                          "    return x + 1\n"
+                          "}\n"
+                          "export fn public(x: int) -> int {\n"
+                          "    return helper(x) + 1\n"
+                          "}\n";
+    const char *app_src = "print(0)\n";
+
+    XiFunc *lib_ir = compile_to_ir(lib_src);
+    XiFunc *app_ir = compile_to_ir(app_src);
+    assert(lib_ir != NULL && app_ir != NULL && "IR compilation failed");
+    assert(lib_ir->module != NULL && app_ir->module != NULL && "module metadata required");
+    lib_ir->module->name = "lib";
+    lib_ir->module->path = "lib.xr";
+    app_ir->module->name = "app";
+    app_ir->module->path = "app.xr";
+    XiModule *modules[] = {lib_ir->module, app_ir->module};
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    xi_opt_select_rep_with_policy(lib_ir, &policy);
+    xi_opt_select_rep_with_policy(app_ir, &policy);
+
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 2, 1);
+
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    assert(ctx != NULL);
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    xi_cgen_resolve_module_imports(ctx, modules, 2);
+
+    char *buf = NULL;
+    size_t bufsz = 0;
+    FILE *mem = xr_open_memstream(&buf, &bufsz);
+    assert(mem != NULL);
+    xi_cgen_module_tu(ctx, mem, modules, 2, 0, 1);
+    int rc = xr_close_memstream(mem, &buf, &bufsz);
+    assert(rc == 0);
+    assert(!xi_cgen_has_error(ctx) && "multi-module C generation should succeed");
+
+    assert((contains(buf, "\nstatic XR_AINLINE int64_t lib_helper_") ||
+            contains(buf, "\nstatic XR_AINLINE XRT_FN_CONST int64_t lib_helper_")) &&
+           "private helper should be file-local and inlineable in multi-module C");
+    assert((contains(buf, "\nint64_t lib_public_exp(") ||
+            contains(buf, "\nXRT_FN_CONST int64_t lib_public_exp(")) &&
+           "exported function should keep external stable C linkage");
+    assert(!contains(buf, "static XR_AINLINE int64_t lib_public_exp(") &&
+           !contains(buf, "static XR_AINLINE XRT_FN_CONST int64_t lib_public_exp(") &&
+           "exported function must not become file-static");
+    assert(!contains(buf, "\nint64_t lib_helper_") &&
+           "private helper must not keep external linkage");
+
+    printf("  Generated multi-module TU with private inline helper %zu bytes of C code\n",
+           strlen(buf));
+    xr_free(buf);
+    xi_cgen_ctx_free(ctx);
+    test_aot_plan_free(&plan);
+    xi_func_free(lib_ir);
+    xi_func_free(app_ir);
 }
 
 TEST(cgen_stats_tracks_native_abi) {
@@ -892,6 +987,45 @@ TEST(cgen_struct_debug_source_var_slots_use_typed_pointers) {
            "struct source local q should not degrade to an opaque XrValue debug slot");
 
     printf("  Generated struct debug source-var mapped C %zu bytes\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_struct_value_abi_uses_module_prefixed_typedef) {
+    const char *src =
+        "struct Totals {\n"
+        "    bytes: int\n"
+        "    checksum: int\n"
+        "}\n"
+        "fn make(a: int, b: int) -> Totals {\n"
+        "    return Totals{bytes: a, checksum: b}\n"
+        "}\n"
+        "fn combine(a: Totals, b: Totals) -> Totals {\n"
+        "    return Totals{bytes: a.bytes + b.bytes, checksum: a.checksum + b.checksum}\n"
+        "}\n"
+        "fn run(n: int) -> int {\n"
+        "    let t = combine(make(n, 1), make(2, 3))\n"
+        "    return t.bytes + t.checksum\n"
+        "}\n"
+        "print(run(10))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "struct value ABI should generate without adapter errors");
+    assert(contains(code, "typedef struct xrt_struct_test_") &&
+           "native value struct typedef should use the module prefix");
+    assert(contains(code, "static xrt_struct_test_") &&
+           "struct-returning helpers should use native value struct ABI");
+    assert(contains(code, ", xrt_struct_test_") &&
+           "struct parameters should pass by value through the native ABI");
+    assert(!contains(code, "xrt_struct_mod_") &&
+           "child function ABI must not fall back to the generic mod prefix");
+
+    printf("  Generated struct value ABI path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1096,6 +1230,1050 @@ TEST(cgen_for_loop) {
     xi_func_free(ir);
 }
 
+TEST(cgen_parallel_for_uses_runtime_executor) {
+    const char *src = "fn run(n: int) {\n"
+                      "    let base = 10\n"
+                      "    parallel for i in 0..n workers 2 worker wid {\n"
+                      "        print(i + wid + base)\n"
+                      "    }\n"
+                      "}\n"
+                      "run(3)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    char *code = generate_c(ir, "test");
+    assert(code != NULL);
+
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "parallel for should lower to the AOT runtime executor");
+    assert(contains(code, "_xr_par_workers_") && "workers expression should be evaluated once");
+    assert(contains(code, "(XrAotParForRangeI64Fn)") &&
+           "runtime executor should receive the native range callback");
+    assert(contains(code, "_par_range_") &&
+           "parallel for should emit a chunk range wrapper around the item body");
+    assert(!contains(code, "xr_aot_parallel_for_i64(") &&
+           "parallel for should not use the per-item callback runtime path");
+    assert(contains(code, "xrt_closure_t *_cl, int64_t p0, int64_t p1") &&
+           "capturing parallel body should keep native int callback params");
+    assert(contains(code, "static XR_AINLINE void ") && contains(code, "_parallel_for_0_") &&
+           "parallel for item body should be internal inline C so range wrappers can inline it");
+    assert(!contains(code, "for (int64_t _xr_par_i_") &&
+           "exclusive parallel for should not fall back to the serial counted loop");
+    assert(!contains(code, "xr_aot_spawn_child") &&
+           "parallel for must not fall back to per-iteration task spawning");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_local_init_uses_range_body_executor) {
+    const char *src = "fn run(n: int) {\n"
+                      "    let base = 10\n"
+                      "    parallel for i in 0..n workers 2 worker wid\n"
+                      "        local acc = wid {\n"
+                      "        print(i + acc + base)\n"
+                      "    }\n"
+                      "}\n"
+                      "run(3)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    char *code = generate_c(ir, "test");
+    assert(code != NULL);
+
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "parallel for local init should use the AOT range executor");
+    assert(contains(code, "xrt_closure_t *_cl, int64_t p0, int64_t p1, int64_t p2") &&
+           "local-init parallel for body should use begin/end/worker native params");
+    assert(contains(code, "_par_range_") && "parallel for should still emit a range wrapper");
+    assert(contains(code, "_xr_begin, _xr_end, _xr_worker") &&
+           "range wrapper should pass begin/end/worker directly to the body");
+    assert(!contains(code, "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") &&
+           "local-init parallel for wrapper must not call the body once per item");
+    assert(!contains(code, "xr_aot_parallel_for_i64(") &&
+           "local-init parallel for should not use the per-item callback runtime path");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_final_uses_range_body_executor) {
+    const char *src = "fn run(n: int) {\n"
+                      "    parallel for i in 0..n workers 2 worker wid\n"
+                      "        final { print(wid) } {\n"
+                      "        print(i)\n"
+                      "    }\n"
+                      "}\n"
+                      "run(3)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    char *code = generate_c(ir, "test");
+    assert(code != NULL);
+
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "parallel for final should use the AOT range executor");
+    assert(contains(code, "xrt_closure_t *_cl, int64_t p0, int64_t p1, int64_t p2") &&
+           "parallel final body should use begin/end/worker native params");
+    assert(contains(code, "_par_range_") && "parallel final should emit a range wrapper");
+    assert(contains(code, "_xr_begin, _xr_end, _xr_worker") &&
+           "range wrapper should pass begin/end/worker directly to the body");
+    assert(!contains(code, "xr_aot_parallel_for_i64(") &&
+           "parallel final should not use a per-item callback runtime path");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_range_uses_range_body_executor) {
+    const char *src = "fn run(n: int) {\n"
+                      "    let base = 10\n"
+                      "    parallel range begin, end in 0..n workers 2 worker wid {\n"
+                      "        print(begin + end + wid + base)\n"
+                      "    }\n"
+                      "}\n"
+                      "run(3)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    char *code = generate_c(ir, "test");
+    assert(code != NULL);
+
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "parallel range should use the AOT range executor");
+    assert(contains(code, "xrt_closure_t *_cl, int64_t p0, int64_t p1, int64_t p2") &&
+           "range body should keep begin/end/worker native params");
+    assert(contains(code, "_par_range_") && "parallel range should emit a range wrapper");
+    assert(contains(code, "_xr_begin, _xr_end, _xr_worker") &&
+           "range wrapper should pass begin/end/worker to the body");
+    assert(!contains(code, "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") &&
+           "parallel range wrapper must not loop over each item");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_reduce_uses_runtime_executor) {
+    const char *src = "fn run(n: int) -> int {\n"
+                      "    let base = 10\n"
+                      "    return parallel reduce i in 0..n workers 2 worker wid init 0 "
+                      "combine (a: int, b: int) -> a + b {\n"
+                      "        i + wid - wid + base\n"
+                      "    }\n"
+                      "}\n"
+                      "print(run(3))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "parallel reduce AOT program should generate");
+
+    assert(contains(code, "xr_aot_parallel_reduce_i64(") &&
+           "parallel reduce should lower to the AOT runtime reducer");
+    assert(contains(code, "_xr_pr_workers_") && "workers expression should be evaluated once");
+    assert(contains(code, "(XrAotParReduceRangeI64Fn)") &&
+           "runtime reducer should receive the native range callback");
+    assert(contains(code, "(XrAotParReduceCombineI64Fn)") &&
+           "runtime reducer should receive the native combine callback");
+    assert(contains(code, "_par_reduce_range_") &&
+           "parallel reduce should emit a chunk range wrapper around the item body");
+    assert(contains(code, "_par_reduce_combine_") &&
+           "parallel reduce should emit a native combine wrapper");
+    assert(contains(code, "static XR_AINLINE int64_t ") &&
+           "reduce body/combine should be inline native i64 callbacks");
+    assert(!contains(code, "xr_aot_spawn_child") &&
+           "parallel reduce must not fall back to per-iteration task spawning");
+    assert(!contains(code, "xr_aot_await_all") &&
+           "parallel reduce must not route scalar aggregation through await all");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_reduce_local_init_uses_range_body_executor) {
+    const char *src = "fn run(n: int) -> int {\n"
+                      "    return parallel reduce i in 0..n workers 2 worker wid\n"
+                      "        local acc = wid\n"
+                      "        init 0\n"
+                      "        combine (a: int, b: int) -> a + b {\n"
+                      "        acc = acc + i\n"
+                      "        acc\n"
+                      "    }\n"
+                      "}\n"
+                      "print(run(4))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "parallel reduce local init should generate");
+
+    assert(contains(code, "xr_aot_parallel_reduce_i64(") &&
+           "local-init reduce should lower to the scalar runtime reducer");
+    assert(contains(code, "(XrAotParReduceRangeI64Fn)") &&
+           "local-init reduce should pass a native range callback");
+    assert(contains(code, "_par_reduce_range_") && "local-init reduce should emit a range wrapper");
+    assert(contains(code, "_xr_begin, _xr_end, _xr_worker") &&
+           "range wrapper should pass begin/end/worker directly to the synthetic body");
+    assert(!contains(code, "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") &&
+           "local-init reduce wrapper must not call the body once per item");
+    assert(!contains(code, "xrt_closure_new((void*)test_run_parallel_reduce_body") &&
+           "lane-local static combine closure should be elided in the synthetic range body");
+    assert(!contains(code, "xr_aot_await_all") &&
+           "local-init reduce must not route scalar aggregation through await all");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_reduce_local_init_guarded_upval_mod_is_nothrow) {
+    const char *src =
+        "struct Totals {\n"
+        "    compressed: int\n"
+        "    checksum: int\n"
+        "    failed: int\n"
+        "}\n"
+        "fn mergeTotals(a: Totals, b: Totals) -> Totals {\n"
+        "    if (a.failed != 0 || b.failed != 0) {\n"
+        "        return Totals{compressed: 0, checksum: 0, failed: 1}\n"
+        "    }\n"
+        "    return Totals{compressed: a.compressed + b.compressed, "
+        "checksum: a.checksum + b.checksum, failed: 0}\n"
+        "}\n"
+        "fn run(n: int, blocks: int) -> int {\n"
+        "    if (blocks <= 0) { return 0 }\n"
+        "    const stableBlocks = blocks\n"
+        "    let totals = parallel reduce job in 0..n workers 2 worker wid\n"
+        "        local acc = wid\n"
+        "        init Totals{compressed: 0, checksum: 0, failed: 0}\n"
+        "        combine (a: Totals, b: Totals) -> mergeTotals(a, b) {\n"
+        "        let result = Totals{compressed: 0, checksum: 0, failed: 1}\n"
+        "        if (stableBlocks > 0) {\n"
+        "            let b = job % stableBlocks\n"
+        "            result = Totals{compressed: b + acc - acc, checksum: 0, failed: 0}\n"
+        "        }\n"
+        "        result\n"
+        "    }\n"
+        "    return totals.compressed\n"
+        "}\n"
+        "print(run(8, 3))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error &&
+           "guarded modulo by captured const in local-init reduce must be trusted nothrow");
+    assert(contains(code, "_par_reduce_range_") &&
+           "guarded captured modulo case should stay on the range reduce path");
+    assert(contains(code, " % ") && "guarded captured modulo should emit native C %");
+    assert(!contains(code, "xrt_int_mod(") &&
+           "guarded captured modulo must not call the throwing runtime helper");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_range_reduce_uses_range_body_executor) {
+    const char *src = "fn run(n: int) -> int {\n"
+                      "    return parallel range reduce begin, end in 0..n workers 2 worker wid "
+                      "init 0 combine (a: int, b: int) -> a + b {\n"
+                      "        end - begin + wid - wid\n"
+                      "    }\n"
+                      "}\n"
+                      "print(run(3))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "parallel range reduce AOT program should generate");
+
+    assert(contains(code, "xr_aot_parallel_reduce_i64(") &&
+           "range reduce should lower to the scalar runtime reducer");
+    assert(contains(code, "(XrAotParReduceRangeI64Fn)") &&
+           "range reduce should pass a native range callback");
+    assert(contains(code, "_par_reduce_range_") && "range reduce should emit a range wrapper");
+    assert(contains(code, "_xr_begin, _xr_end, _xr_worker") &&
+           "range reduce wrapper should pass begin/end/worker directly to the body");
+    assert(!contains(code, "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") &&
+           "range reduce wrapper must not loop over each item");
+    assert(!contains(code, "xr_aot_await_all") &&
+           "range reduce must not route scalar aggregation through await all");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime) {
+    const char *src = "struct Totals {\n"
+                      "    bytes: int\n"
+                      "    checksum: int\n"
+                      "}\n"
+                      "fn run(n: int) -> int {\n"
+                      "    let totals = parallel reduce i in 0..n workers 2 worker wid "
+                      "init Totals{bytes: 0, checksum: 0} "
+                      "combine (a: Totals, b: Totals) -> Totals{"
+                      "bytes: a.bytes + b.bytes, "
+                      "checksum: a.checksum + b.checksum} {\n"
+                      "        Totals{bytes: i, checksum: wid}\n"
+                      "    }\n"
+                      "    return totals.bytes + totals.checksum\n"
+                      "}\n"
+                      "print(run(3))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "struct accumulator parallel reduce should generate");
+    assert(contains(code, "xr_aot_parallel_reduce_agg(") &&
+           "struct reduce should lower to the aggregate runtime reducer");
+    assert(contains(code, "(XrAotParReduceRangeAggFn)") &&
+           "aggregate reducer should receive the native range callback");
+    assert(contains(code, "(XrAotParReduceCombineAggFn)") &&
+           "aggregate reducer should receive the native combine callback");
+    assert(contains(code, "static XR_AINLINE xrt_struct_test_") &&
+           "reduce body/combine should be inline native struct callbacks");
+    assert(contains(code, "_par_reduce_range_") && "struct reduce should emit a range wrapper");
+    assert(contains(code, "_par_reduce_combine_") && "struct reduce should emit a combine wrapper");
+    assert(!contains(code, "xr_aot_parallel_reduce_i64(") &&
+           "struct reduce must not route through the i64 runtime reducer");
+    assert(!contains(code, "_boxed") &&
+           "direct aggregate reduce callbacks should not require boxed adapters");
+    assert(!contains(code, "xrt_value_clone_for_coro(v") &&
+           "aggregate value clone should be a typed assignment, not a boxed clone");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_range_reduce_struct_accumulator_uses_aggregate_runtime) {
+    const char *src = "struct Totals {\n"
+                      "    bytes: int\n"
+                      "    checksum: int\n"
+                      "}\n"
+                      "fn run(n: int) -> int {\n"
+                      "    let totals = parallel range reduce begin, end in 0..n workers 2 "
+                      "worker wid init Totals{bytes: 0, checksum: 0} "
+                      "combine (a: Totals, b: Totals) -> Totals{"
+                      "bytes: a.bytes + b.bytes, "
+                      "checksum: a.checksum + b.checksum} {\n"
+                      "        Totals{bytes: end - begin, checksum: wid - wid}\n"
+                      "    }\n"
+                      "    return totals.bytes + totals.checksum\n"
+                      "}\n"
+                      "print(run(3))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "struct accumulator range reduce should generate");
+    assert(contains(code, "xr_aot_parallel_reduce_agg(") &&
+           "struct range reduce should lower to the aggregate runtime reducer");
+    assert(contains(code, "(XrAotParReduceRangeAggFn)") &&
+           "aggregate range reducer should receive the native range callback");
+    assert(contains(code, "_par_reduce_range_") &&
+           "struct range reduce should emit a range wrapper");
+    assert(contains(code, "_xr_begin, _xr_end, _xr_worker") &&
+           "struct range reduce wrapper should pass begin/end/worker directly to the body");
+    assert(!contains(code, "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") &&
+           "struct range reduce wrapper must not loop over each item");
+    assert(!contains(code, "xr_aot_parallel_reduce_i64(") &&
+           "struct range reduce must not route through the i64 runtime reducer");
+    assert(!contains(code, "_boxed") &&
+           "direct aggregate range reduce callbacks should not require boxed adapters");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_range_reduce_struct_debug_locals_use_value_slots) {
+    const char *src = "struct Totals {\n"
+                      "    bytes: int\n"
+                      "    checksum: int\n"
+                      "}\n"
+                      "fn run(n: int) -> int {\n"
+                      "    let totals = parallel range reduce begin, end in 0..n workers 2 "
+                      "worker wid init Totals{bytes: 0, checksum: 0} "
+                      "combine (a: Totals, b: Totals) -> Totals{"
+                      "bytes: a.bytes + b.bytes, "
+                      "checksum: a.checksum + b.checksum} {\n"
+                      "        let result = Totals{bytes: end - begin, checksum: wid - wid}\n"
+                      "        result\n"
+                      "    }\n"
+                      "    return totals.bytes + totals.checksum\n"
+                      "}\n"
+                      "print(run(3))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "struct range reduce debug locals should generate");
+    assert(contains(code, "#if defined(XRAY_AOT_DEBUG_LOCALS)") &&
+           "struct aggregate debug locals should stay behind the debug guard");
+    assert(contains(code, "xrt_struct_test_") &&
+           "test module should emit native aggregate struct types");
+    assert(contains(code, " totals = ((xrt_struct_test_") &&
+           "aggregate source local totals should use a value debug slot");
+    assert(contains(code, " result = ((xrt_struct_test_") &&
+           "aggregate source local result should use a value debug slot");
+    assert(!contains(code, "* totals =") &&
+           "aggregate debug local totals must not be declared as a pointer");
+    assert(!contains(code, "* result =") &&
+           "aggregate debug local result must not be declared as a pointer");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_collect_into_scalar_lanes_use_direct_storage) {
+    const char *src = "const bias = 2\n"
+                      "let floats: Array<float> = []\n"
+                      "floats.reserve(8)\n"
+                      "parallel for i in 0..4 workers 2 collect into floats {\n"
+                      "    float(i + bias) + 0.5\n"
+                      "}\n"
+                      "let flags: Array<bool> = []\n"
+                      "flags.reserve(8)\n"
+                      "parallel for i in 0..4 workers 2 collect into flags {\n"
+                      "    ((i + bias) % 2) == 0\n"
+                      "}\n"
+                      "fn byteValue() -> uint8 { return 2 }\n"
+                      "let bytes: Array<uint8> = []\n"
+                      "bytes.reserve(8)\n"
+                      "parallel for i in 0..4 workers 2 collect into bytes {\n"
+                      "    byteValue()\n"
+                      "}\n"
+                      "print(floats[0])\n"
+                      "print(flags[0])\n"
+                      "print(bytes[0])\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "scalar parallel collect into should generate");
+
+    const char *code_end = code + strlen(code);
+    TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 3,
+                 "scalar collect into should use one range executor per collect");
+    TEST_REQUIRE(count_between(code, code_end, "((double*)") >= 2,
+                 "Array<float> collect should store/load through direct double storage");
+    TEST_REQUIRE(count_between(code, code_end, "((uint8_t*)") >= 4,
+                 "Array<bool>/Array<uint8> collect should store/load through direct byte storage");
+    TEST_REQUIRE(count_between(code, code_end, "xrt_array_write_preallocated(") == 0,
+                 "scalar collect into must not box through preallocated array writes");
+    TEST_REQUIRE(count_between(code, code_end, "_xr_pc_item_") == 0,
+                 "scalar collect into should not materialize boxed temporary items");
+
+    printf("  Generated scalar collect direct storage %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_collect_into_multi_lanes_use_direct_storage) {
+    const char *src = "let ints: Array<int> = []\n"
+                      "let flags: Array<bool> = []\n"
+                      "ints.reserve(8)\n"
+                      "flags.reserve(8)\n"
+                      "parallel for i in 0..4 workers 2 worker wid collect into (ints, flags) {\n"
+                      "    (i + wid, ((i + wid) % 2) == 0)\n"
+                      "}\n"
+                      "print(ints.length + flags.length)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "multi-lane parallel collect into should generate");
+
+    const char *code_end = code + strlen(code);
+    TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 1,
+                 "multi-lane collect into should use one range executor");
+    TEST_REQUIRE(count_between(code, code_end, "_xr_pc_out_") >= 2,
+                 "multi-lane collect into should prepare each output lane");
+    TEST_REQUIRE(count_between(code, code_end, "->length = _xr_pc_count_") >= 2,
+                 "multi-lane collect into should resize lanes before dispatch");
+    TEST_REQUIRE(count_between(code, code_end, "((int64_t*)") >= 1,
+                 "int lane should store through direct int64 storage");
+    TEST_REQUIRE(count_between(code, code_end, "((uint8_t*)") >= 1,
+                 "bool lane should store through direct byte storage");
+    TEST_REQUIRE(count_between(code, code_end, "xrt_tuple_make") == 0 &&
+                     count_between(code, code_end, "xrt_tuple_new") == 0,
+                 "multi-lane collect into must not materialize tuple results");
+    TEST_REQUIRE(count_between(code, code_end, "xrt_array_write_preallocated(") == 0,
+                 "multi-lane collect into must not box through preallocated array writes");
+
+    printf("  Generated multi-lane collect direct storage %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_collect_into_local_init_uses_range_body) {
+    const char *src = "let ints: Array<int> = []\n"
+                      "ints.reserve(8)\n"
+                      "parallel for i in 0..8 workers 4 worker wid\n"
+                      "    local acc = wid\n"
+                      "    collect into ints {\n"
+                      "    acc = acc + 1\n"
+                      "    i + acc\n"
+                      "}\n"
+                      "print(ints.length)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "collect into local init should generate");
+
+    const char *code_end = code + strlen(code);
+    TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 1,
+                 "collect into local init should use one range executor");
+    TEST_REQUIRE(count_between(code, code_end,
+                               "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") == 0,
+                 "range wrapper should call the worker-range body once per lane");
+    TEST_REQUIRE(count_between(code, code_end, "((int64_t*)") >= 1,
+                 "int lane should still store through direct int64 storage");
+    TEST_REQUIRE(count_between(code, code_end, "xrt_array_write_preallocated(") == 0,
+                 "collect into local init must not box through preallocated writes");
+
+    printf("  Generated collect local-init range body %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_collect_return_local_init_uses_direct_storage) {
+    const char *src = "let xs = parallel for i in 0..8 workers 4 worker wid\n"
+                      "    local acc = wid\n"
+                      "    collect {\n"
+                      "    acc = acc + 1\n"
+                      "    i + acc\n"
+                      "}\n"
+                      "print(xs.length)\n"
+                      "print(xs[7])\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "returning collect local init should generate");
+
+    const char *code_end = code + strlen(code);
+    TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 1,
+                 "returning collect local init should use one range executor");
+    TEST_REQUIRE(count_between(code, code_end, "((int64_t*)") >= 1,
+                 "returning int collect should store through direct int64 storage");
+    TEST_REQUIRE(count_between(code, code_end, "xrt_array_write_preallocated(") == 0,
+                 "returning collect local init must not box through preallocated writes");
+    TEST_REQUIRE(count_between(code, code_end, "xrt_release(v") == 0,
+                 "hidden returning collect result array must not be released before use");
+
+    printf("  Generated returning collect local-init direct storage %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_collect_final_uses_range_body_executor) {
+    const char *src = "let xs = parallel for i in 0..8 workers 4 worker wid\n"
+                      "    final { print(wid) }\n"
+                      "    collect {\n"
+                      "    i + wid\n"
+                      "}\n"
+                      "print(xs.length)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "collect final should generate");
+
+    const char *code_end = code + strlen(code);
+    TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 1,
+                 "collect final should use one range executor");
+    TEST_REQUIRE(contains(code, "xrt_closure_t *_cl, int64_t p0, int64_t p1, int64_t p2"),
+                 "collect final body should use begin/end/worker native params");
+    TEST_REQUIRE(count_between(code, code_end,
+                               "for (int64_t _xr_i = _xr_begin; _xr_i < _xr_end; _xr_i++)") == 0,
+                 "range wrapper should call the worker-range body once per lane");
+    TEST_REQUIRE(!contains(code, "xr_aot_parallel_for_i64("),
+                 "collect final should not use the per-item callback runtime path");
+
+    printf("  Generated collect final range body %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_collect_into_reference_lane_uses_direct_body_write) {
+    const char *src = "let out: Array<string> = []\n"
+                      "out.reserve(8)\n"
+                      "let label = \"chunk\"\n"
+                      "parallel for i in 0..4 workers 2 collect into out {\n"
+                      "    label\n"
+                      "}\n"
+                      "print(out.length)\n"
+                      "print(out[0])\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "reference parallel collect into should generate");
+
+    const char *code_end = code + strlen(code);
+    TEST_REQUIRE(count_between(code, code_end, "xr_aot_parallel_for_range_i64(") == 1,
+                 "reference collect into should use one range executor");
+    TEST_REQUIRE(count_between(code, code_end, "xrt_array_resize_value(") >= 1,
+                 "reference collect into should pre-size the output array");
+    size_t direct_ref_writes = count_between(code, code_end, "xrt_array_write_preallocated(") +
+                               count_between(code, code_end, "((XrValue*)") +
+                               count_between(code, code_end, "xrt_index_set(");
+    TEST_REQUIRE(direct_ref_writes >= 1, "reference lane should write directly from the body");
+    TEST_REQUIRE(count_between(code, code_end, "_xr_pc_item_") == 0,
+                 "reference collect into should not materialize outer boxed temporary items");
+    TEST_REQUIRE(count_between(code, code_end, "XR_ELEM_ANY") >= 1,
+                 "reference lane should use the generic array storage path");
+    TEST_REQUIRE(count_between(code, code_end, "int64_t _idx = v") == 0,
+                 "constant reference-lane indexes should be emitted as literals");
+
+    printf("  Generated reference collect direct write %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_inside_unsafe_keeps_loop_bindings) {
+    const char *src = "fn run(n: int) {\n"
+                      "    unsafe {\n"
+                      "        parallel for i in 0..n workers 2 worker wid {\n"
+                      "            print(i + wid)\n"
+                      "        }\n"
+                      "    }\n"
+                      "}\n"
+                      "run(3)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "parallel for loop bindings should be collected inside unsafe blocks");
+
+    char *code = generate_c(ir, "test");
+    assert(code != NULL);
+
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "parallel for inside unsafe should still use the AOT runtime executor");
+    assert(contains(code, "xrt_closure_t *_cl, int64_t p0, int64_t p1") &&
+           "unsafe-wrapped parallel body should keep native loop callback params");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_body_closure_stack_allocates) {
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 906, .frozen = true};
+    XrType int_type = {.kind = XR_KIND_INT, .id = 907, .frozen = true};
+    XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 908, .frozen = true};
+
+    XiFunc *ir = xi_func_new("manual_parfor_stack_closure", &unit_type);
+    assert(ir != NULL);
+    XiBlock *entry = xi_block_new(ir);
+    entry->sealed = true;
+
+    XiValue *captured = xi_const_int(ir, entry, 7, &int_type);
+    XiValue *start = xi_const_int(ir, entry, 0, &int_type);
+    XiValue *end = xi_const_int(ir, entry, 8, &int_type);
+    XiValue *workers = xi_const_int(ir, entry, 2, &int_type);
+
+    XiFunc *child = xi_func_new("manual_parfor_stack_child", &unit_type);
+    assert(child != NULL);
+    child->parent_func = ir;
+    child->native_callback_kind = XI_NATIVE_CALLBACK_PAR_FOR_I64;
+    child->nparams = 2;
+    child->min_params = 2;
+    child->params = (XiValue **) xr_calloc(2, sizeof(XiValue *));
+    assert(child->params != NULL);
+
+    XiBlock *child_entry = xi_block_new(child);
+    child_entry->sealed = true;
+    child->params[0] = xi_param(child, child_entry, 0, &int_type);
+    child->params[1] = xi_param(child, child_entry, 1, &int_type);
+    assert(child->params[0] != NULL && child->params[1] != NULL);
+    child->captures[0] = (XiCapture) {
+        .source = XI_CAPTURE_SRC_REG,
+        .needs_cell = false,
+        .type = &int_type,
+        .value = captured,
+        .name = "captured",
+    };
+    child->ncaptures = 1;
+    xi_block_set_return(child_entry, NULL);
+
+    ir->children = (XiFunc **) xr_calloc(1, sizeof(XiFunc *));
+    assert(ir->children != NULL);
+    ir->children[0] = child;
+    ir->children_cap = 1;
+    ir->nchildren = 1;
+
+    XiValue *closure = xi_value_new(ir, entry, XI_CLOSURE_NEW, &func_type, 1);
+    assert(closure != NULL);
+    closure->aux = (void *) child;
+    closure->aux_int = 0;
+    closure->args[0] = captured;
+
+    XiParallelForData *data =
+        (XiParallelForData *) xi_func_arena_alloc(ir, (uint32_t) sizeof(XiParallelForData));
+    assert(data != NULL);
+    memset(data, 0, sizeof(*data));
+    data->body_func = child;
+
+    XiValue *par = xi_value_new(ir, entry, XI_PAR_FOR, &unit_type, 4);
+    assert(par != NULL);
+    par->args[0] = start;
+    par->args[1] = end;
+    par->args[2] = workers;
+    par->args[3] = closure;
+    par->aux = data;
+    par->aux_kind = XI_AUX_KIND_PAR_FOR;
+    xi_block_set_return(entry, NULL);
+
+    xi_escape_analyze(ir);
+    xi_stack_alloc_rewrite(ir);
+    assert(closure->op == XI_STACK_ALLOC &&
+           "parallel for body closure should be recognized as no-escape");
+    xi_arc_insert(ir);
+    xi_arc_elim(ir);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "parallel for stack closure should generate");
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "parallel for should still use the AOT runtime executor");
+    assert(contains(code, "_xr_par_closure_storage_") &&
+           "parallel for no-escape closure should use a scoped C closure env");
+    assert(contains(code, "xrt_closure_init(_xr_par_closure_") &&
+           "parallel for scoped closure env should initialize the runtime closure view");
+    assert(!contains(code, "xrt_closure_stack_new((void*)") &&
+           "parallel for scoped closure env must not use function-lifetime alloca");
+    assert(!contains(code, "xrt_closure_new((void*)") &&
+           "parallel for no-escape closure must not allocate a heap closure");
+
+    printf("  Generated parallel-for stack closure path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_loop_body_closure_uses_scoped_stack_env) {
+    const char *src = "fn run(n: int, rounds: int) {\n"
+                      "    shared const sums: Array<int> = []\n"
+                      "    sums.push(0)\n"
+                      "    let r = 0\n"
+                      "    while (r < rounds) {\n"
+                      "        parallel for i in 0..n workers 2 worker wid {\n"
+                      "            unsafe {\n"
+                      "                let old = sums.getUnchecked(0)\n"
+                      "                sums.setUnchecked(0, old + i + wid)\n"
+                      "            }\n"
+                      "        }\n"
+                      "        r = r + 1\n"
+                      "    }\n"
+                      "}\n"
+                      "run(4, 3)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "parallel for in a loop should generate with scoped closure env");
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "loop parallel for should still use the runtime executor");
+    assert(contains(code, "_xr_par_closure_storage_") &&
+           "loop parallel for body closure should use scoped C storage");
+    assert(contains(code, "xrt_closure_init(_xr_par_closure_") &&
+           "loop parallel for scoped closure should initialize the runtime closure view");
+    assert(!contains(code, "xrt_closure_new((void*)test_run_parallel_for") &&
+           "loop parallel for body closure must not allocate a heap closure");
+    assert(!contains(code, "xrt_closure_stack_new((void*)") &&
+           "loop parallel for body closure must not use function-lifetime alloca");
+
+    printf("  Generated loop parallel-for scoped closure path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_upval_array_unchecked_uses_raw_storage) {
+    const char *src = "fn run(n: int) {\n"
+                      "    shared const sums: Array<int> = []\n"
+                      "    sums.push(0)\n"
+                      "    sums.push(0)\n"
+                      "    parallel for i in 0..n workers 2 worker wid {\n"
+                      "        unsafe {\n"
+                      "            let old = sums.getUnchecked(wid)\n"
+                      "            sums.setUnchecked(wid, old + i)\n"
+                      "        }\n"
+                      "    }\n"
+                      "}\n"
+                      "run(4)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "parallel for captured Array<int> unchecked access should generate");
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "captured array body should still use the AOT runtime executor");
+    assert(contains(code, "((int64_t*)") && contains(code, "->data)[") &&
+           "captured Array<int>.getUnchecked/setUnchecked should use raw i64 storage");
+    assert(!contains(code, "xrt_index_get(") &&
+           "captured Array<int>.getUnchecked should not fall back to dynamic index get");
+    assert(!contains(code, "xrt_index_set(") &&
+           "captured Array<int>.setUnchecked should not fall back to dynamic index set");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_rejects_throwing_body) {
+    const char *src = "fn run(n: int) {\n"
+                      "    parallel for i in 0..n workers 2 {\n"
+                      "        assert(false)\n"
+                      "    }\n"
+                      "}\n"
+                      "run(3)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(had_error && "AOT parallel for body must reject throwing ops");
+    assert(contains(code, "abort();") && "rejected parallel for should fail fast in generated C");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_allows_proven_nothrow_helper_body) {
+    const char *src = "fn touch(v: int) {\n"
+                      "    print(v)\n"
+                      "}\n"
+                      "fn run(n: int) {\n"
+                      "    parallel for i in 0..n workers 2 {\n"
+                      "        touch(i)\n"
+                      "    }\n"
+                      "}\n"
+                      "run(3)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error &&
+           "parallel for AOT body should allow direct calls to proven nonthrowing helpers");
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "helper body should use the AOT runtime executor");
+    assert(contains(code, "test_touch_") && "helper should be called directly from the body");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_allows_atomic_i64_direct_body) {
+    const char *src = "shared const total = Atomic(0)\n"
+                      "fn run(n: int) {\n"
+                      "    parallel for i in 0..n workers 2 {\n"
+                      "        total.fetchAdd(i, Ordering.Relaxed)\n"
+                      "    }\n"
+                      "}\n"
+                      "run(3)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "parallel for AOT body should allow direct Atomic<int> RMW ops");
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "Atomic body should still use the AOT runtime executor");
+    assert(contains(code, "atomic_fetch_add_explicit(") &&
+           "Atomic<int>.fetchAdd should keep the direct C11 atomic lowering");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_allows_unchecked_bytes_append_from_array_slot) {
+    const char *src = "fn run(n: int) {\n"
+                      "    let seed = Bytes.withCapacity(4)\n"
+                      "    unsafe {\n"
+                      "        seed.pushUnchecked(1)\n"
+                      "        seed.pushUnchecked(2)\n"
+                      "    }\n"
+                      "    shared const src = seed\n"
+                      "    shared const outs: Array<Bytes> = []\n"
+                      "    outs.push(Bytes.withCapacity(8))\n"
+                      "    outs.push(Bytes.withCapacity(8))\n"
+                      "    parallel for i in 0..n workers 2 worker wid {\n"
+                      "        unsafe {\n"
+                      "            let out = outs.getUnchecked(wid)\n"
+                      "            out.resize(0)\n"
+                      "            out.appendFromUnchecked(src, 0, 2)\n"
+                      "        }\n"
+                      "    }\n"
+                      "}\n"
+                      "run(1)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "parallel for AOT body should allow unchecked Bytes append on Bytes "
+                         "values loaded from arrays");
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "unchecked Bytes append body should still use the AOT runtime executor");
+    assert(contains(code, "xrt_bytes_append_from_unchecked_trusted_raw(") &&
+           "appendFromUnchecked should lower to the trusted raw Bytes helper");
+    assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
+           "borrow-only Array<Bytes>.getUnchecked slot loads should not retain every item");
+    assert(!contains(code, "xrt_method_3(") &&
+           "appendFromUnchecked must not fall back to dynamic method dispatch");
+    const char *body = strstr(code, "static XR_AINLINE void test_run_parallel_for_");
+    const char *body_end = body ? next_static_after(body) : NULL;
+    assert(body != NULL && body_end != NULL && "parallel for body should be bounded");
+    assert(count_between(body, body_end, "XR_TO_INT(v") == 0 &&
+           count_between(body, body_end, "XR_FROM_INT(v") == 0 &&
+           "Array<Bytes>.getUnchecked(wid) should keep the worker id as a native index");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
+    const char *src = "enum FastResult<T> {\n"
+                      "    Ok(T),\n"
+                      "    Err(int)\n"
+                      "}\n"
+                      "fn writePrepared(src: in ByteSpan, out: Bytes) -> FastResult<int> {\n"
+                      "    let mark = out.length\n"
+                      "    if (out.capacity < mark + 2) {\n"
+                      "        return FastResult.Err(-1)\n"
+                      "    }\n"
+                      "    unsafe {\n"
+                      "        out.appendFromUnchecked(src, 0, 2)\n"
+                      "    }\n"
+                      "    return FastResult.Ok(out.length - mark)\n"
+                      "}\n"
+                      "fn run(n: int) {\n"
+                      "    let seed = Bytes.withCapacity(4)\n"
+                      "    unsafe {\n"
+                      "        seed.pushUnchecked(1)\n"
+                      "        seed.pushUnchecked(2)\n"
+                      "    }\n"
+                      "    shared const src = seed\n"
+                      "    shared const outs: Array<Bytes> = []\n"
+                      "    outs.push(Bytes.withCapacity(8))\n"
+                      "    parallel for i in 0..n workers 2 {\n"
+                      "        unsafe {\n"
+                      "            let out = outs.getUnchecked(0)\n"
+                      "            out.resize(0)\n"
+                      "            let result = writePrepared(src, out)\n"
+                      "            match (result) {\n"
+                      "                FastResult.Ok(written) -> {\n"
+                      "                    assert(written == 2)\n"
+                      "                }\n"
+                      "                FastResult.Err(code) -> {\n"
+                      "                    assert(code == 0)\n"
+                      "                }\n"
+                      "            }\n"
+                      "        }\n"
+                      "    }\n"
+                      "}\n"
+                      "run(1)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error &&
+           "parallel for AOT body should allow prepared helper calls on Bytes loaded from arrays");
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "prepared helper body should still use the AOT runtime executor");
+    assert(contains(code, "xrt_bytes_append_from_unchecked_trusted_raw(") &&
+           "prepared helper should keep the trusted raw Bytes append lowering");
+    assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
+           "borrow-only Array<Bytes>.getUnchecked should survive through prepared helper calls");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_rejects_throwing_helper_body) {
+    const char *src = "fn fail(v: int) {\n"
+                      "    assert(false)\n"
+                      "}\n"
+                      "fn run(n: int) {\n"
+                      "    parallel for i in 0..n workers 2 {\n"
+                      "        fail(i)\n"
+                      "    }\n"
+                      "}\n"
+                      "run(3)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(had_error && "parallel for AOT body must reject helper calls that may throw");
+    assert(contains(code, "abort();") && "rejected helper body should fail fast in generated C");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_typed_array_uses_raw_storage_fast_path) {
     const char *src = "fn sum() -> int {\n"
                       "    let values: Array<int> = []\n"
@@ -1134,6 +2312,9 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
     const char *src = "fn sum() -> int {\n"
                       "    let bytes: Array<uint8> = []\n"
                       "    bytes.push(300)\n"
+                      "    unsafe {\n"
+                      "        bytes.setUnchecked(0, 42)\n"
+                      "    }\n"
                       "    return bytes[0] + bytes.length\n"
                       "}\n"
                       "print(sum())\n";
@@ -1158,24 +2339,41 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
            "Array<uint8>.length must not fall back to dynamic property dispatch");
     assert(!contains(code, "xrt_index_get(") &&
            "Array<uint8> index read must not fall back to runtime index dispatch");
+    assert(!contains(code, "xrt_index_set(") &&
+           "Array<uint8>.setUnchecked must not fall back to runtime index dispatch");
 
     printf("  Generated typed byte array fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
-TEST(cgen_bytes_methods_use_raw_memory_helpers) {
+TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
     const char *src = "fn run() -> int {\n"
-                      "    let src = Bytes(8)\n"
+                      "    let src = Bytes(16)\n"
                       "    src[0] = 1\n"
                       "    src[1] = 2\n"
                       "    src[2] = 3\n"
                       "    src[3] = 4\n"
-                      "    let dst = Bytes(8)\n"
-                      "    dst.copyFrom(src, 0, 0, 4)\n"
-                      "    dst.copyWithin(2, 0, 4)\n"
-                      "    dst.repeatFrom(6, 2, 2)\n"
-                      "    return dst.loadU32LE(0) + dst.loadU64LE(0) + dst[6]\n"
+                      "    let view: ByteSpan = src\n"
+                      "    let dst = Bytes.withCapacity(460)\n"
+                      "    dst.reserve(460)\n"
+                      "    unsafe {\n"
+                      "        dst.appendFromUnchecked(view, 0, 4)\n"
+                      "        dst.repeatFromUnchecked(2, 2)\n"
+                      "        dst.wildRepeatAtUnchecked(6, 2, 2)\n"
+                      "        dst.wildCopyFromNonOverlappingUnchecked(8, dst, 6, 2)\n"
+                      "        dst.wildCopyFromNonOverlappingUnchecked(32, view, 0, 16)\n"
+                      "        dst.wildRepeatAtUnchecked(16, 4, 96)\n"
+                      "        dst.wildCopyFromNonOverlappingUnchecked(112, dst, 0, 96)\n"
+                      "        dst.wildCopyFromNonOverlappingUnchecked(208, dst, 0, 104)\n"
+                      "        dst.wildCopyFromNonOverlappingUnchecked(312, dst, 0, 112)\n"
+                      "        dst.wildRepeatAtUnchecked(330, 8, 18)\n"
+                      "        dst.setLengthUnchecked(10)\n"
+                      "    }\n"
+                      "    let v16: uint16 = view.loadLE<uint16>(0)\n"
+                      "    let v32: uint32 = view.loadLE<uint32>(0)\n"
+                      "    let v64: uint64 = view.loadLE<uint64>(0)\n"
+                      "    return int(v16) + int(v32) + int(v64) + dst[5] + dst[9]\n"
                       "}\n"
                       "print(run())\n";
 
@@ -1196,27 +2394,360 @@ TEST(cgen_bytes_methods_use_raw_memory_helpers) {
     assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
            "run function body should be bounded");
 
+    assert(count_between(fn_body, fn_end, "xrt_bytes_load_u16_le_raw(") > 0 &&
+           "ByteSpan.loadLE<uint16> must lower to the raw AOT helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_load_u32_le_raw(") > 0 &&
-           "Bytes.loadU32LE must lower to the raw AOT helper");
+           "ByteSpan.loadLE<uint32> must lower to the raw AOT helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_load_u64_le_raw(") > 0 &&
-           "Bytes.loadU64LE must lower to the raw AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_copy_from_raw(") > 0 &&
-           "Bytes.copyFrom must lower to the raw AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_copy_within_raw(") > 0 &&
-           "Bytes.copyWithin must lower to the raw AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_repeat_from_raw(") > 0 &&
-           "Bytes.repeatFrom must lower to the raw AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_load_u32_le_value(") == 0 &&
+           "ByteSpan.loadLE<uint64> must lower to the raw AOT helper");
+    assert(count_between(fn_body, fn_end, "xrt_bytes_append_from_unchecked_raw(") > 0 &&
+           "Bytes.appendFromUnchecked must lower to the raw AOT helper");
+    assert(count_between(fn_body, fn_end, "xrt_bytes_repeat_from_unchecked_raw(") > 0 &&
+           "Bytes.repeatFromUnchecked must lower to the raw AOT helper");
+    assert(count_between(fn_body, fn_end, "xrt_bytes_wild_repeat_at_unchecked_trusted_raw(") > 0 &&
+           "Bytes.wildRepeatAtUnchecked must lower to the trusted raw AOT helper");
+    assert(count_between(fn_body, fn_end,
+                         "xrt_bytes_wild_copy_from_nonoverlapping_unchecked_trusted_raw(") > 0 &&
+           "Bytes.wildCopyFromNonOverlappingUnchecked must lower to the trusted raw AOT helper");
+    assert(count_between(fn_body, fn_end, "xrt_bytes_wild_repeat4_96_trusted_raw(") > 0 &&
+           "fixed distance/count wildRepeatAtUnchecked must lower to the fixed-window helper");
+    assert(count_between(fn_body, fn_end, "xrt_bytes_wild_repeat18_ge8_trusted_raw(") > 0 &&
+           "fixed-count 18 wildRepeatAtUnchecked with distance >= 8 must lower to the branchless "
+           "short-match helper");
+    assert(
+        count_between(fn_body, fn_end, "xrt_bytes_wild_copy_16_nonoverlap_trusted_raw(") > 0 &&
+        "fixed-count 16 wildCopyFromNonOverlappingUnchecked must lower to the fixed-window helper");
+    assert(
+        count_between(fn_body, fn_end, "xrt_bytes_wild_copy_96_nonoverlap_trusted_raw(") > 0 &&
+        "fixed-count 96 wildCopyFromNonOverlappingUnchecked must lower to the fixed-window helper");
+    assert(count_between(fn_body, fn_end, "xrt_bytes_wild_copy_104_nonoverlap_trusted_raw(") > 0 &&
+           "fixed-count 104 wildCopyFromNonOverlappingUnchecked must lower to the fixed-window "
+           "helper");
+    assert(count_between(fn_body, fn_end, "xrt_bytes_wild_copy_112_nonoverlap_trusted_raw(") > 0 &&
+           "fixed-count 112 wildCopyFromNonOverlappingUnchecked must lower to the fixed-window "
+           "helper");
+    assert(count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") > 0 &&
+           "Bytes.reserve must lower to the raw AOT helper");
+    assert(count_between(fn_body, fn_end, "xrt_bytes_load_u16_le_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_bytes_load_u32_le_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_bytes_load_u64_le_value(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_bytes_copy_from_value(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_bytes_copy_within_value(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_bytes_repeat_from_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_bytes_append_from_unchecked_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_bytes_repeat_from_unchecked_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_bytes_wild_repeat_at_unchecked_value(") == 0 &&
+           count_between(fn_body, fn_end,
+                         "xrt_bytes_wild_copy_from_nonoverlapping_unchecked_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_array_reserve_value(") == 0 &&
            "Bytes hot path must not call boxed value helpers");
     assert(count_between(fn_body, fn_end, "xrt_method_") == 0 &&
            count_between(fn_body, fn_end, "xrt_index_get(") == 0 &&
            "Bytes hot path must not fall back to dynamic dispatch");
 
     printf("  Generated Bytes raw helper fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
+    const char *src = "fn hot(dst: Bytes) -> int {\n"
+                      "    dst.reserve(8)\n"
+                      "    return dst.length\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    let dst = Bytes(1)\n"
+                      "    return hot(dst)\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "Borrowed Bytes parameter reserve should generate");
+
+    const char *fn = strstr(code, "static int64_t test_hot_");
+    assert(fn != NULL && "hot declaration should exist");
+    fn = strstr(fn + 1, "static int64_t test_hot_");
+    assert(fn != NULL && "hot definition should exist");
+    const char *fn_end = next_static_after(fn);
+    assert(fn_end != NULL && "hot function body should be bounded");
+
+    assert(count_between(fn, fn_end, "xrt_array_reserve_trusted_raw(") > 0 &&
+           "borrowed Bytes.reserve must still lower to the raw helper");
+    assert(count_between(fn, fn_end, "xrt_retain(") == 0 &&
+           count_between(fn, fn_end, "xrt_release(") == 0 &&
+           "borrowed Bytes.reserve receiver must not force parameter ARC");
+
+    printf("  Generated borrowed Bytes reserve fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
+    const char *src = "fn run() -> int {\n"
+                      "    let src = Bytes(2)\n"
+                      "    src[0] = 7\n"
+                      "    src[1] = 9\n"
+                      "    let out = Bytes(4)\n"
+                      "    let sum = 0\n"
+                      "    unsafe {\n"
+                      "        let p = out.dataMutPtrUnchecked()\n"
+                      "        p[0] = 0\n"
+                      "        let sp = src.dataPtrUnchecked()\n"
+                      "        p.copyFromNonOverlappingUnchecked(sp, 2)\n"
+                      "        out.setLengthUnchecked(2)\n"
+                      "        let view: ByteSpan = out\n"
+                      "        let rp = view.dataPtrUnchecked()\n"
+                      "        sum = int(rp[0]) + int(rp[1])\n"
+                      "    }\n"
+                      "    return sum\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "Array/Span data pointer lowering should generate");
+    assert(contains(code, "->data)") && "dataPtrUnchecked must lower to raw array data");
+    assert(!contains(code, "dataMutPtrUnchecked") && !contains(code, "dataPtrUnchecked") &&
+           "data pointer methods must not survive as dynamic method names");
+    assert(!contains(code, "xrt_method_0(") &&
+           "data pointer methods must not fall back to dynamic method dispatch");
+    const char *fn = strstr(code, "static int64_t test_run_");
+    assert(fn != NULL && "run prototype should exist");
+    fn = strstr(fn + 1, "static int64_t test_run_");
+    assert(fn != NULL && "run definition should exist");
+    const char *fn_end = next_static_after(fn);
+    assert(fn_end != NULL && "run function body should be bounded");
+    assert(count_between(fn, fn_end, "void *") > 0 &&
+           "RawPtr/RawMut locals must use native pointer C storage");
+    assert(count_between(fn, fn_end, "*(uint8_t *)(") > 0 &&
+           "RawMut<uint8>/RawPtr<uint8> accesses must lower to direct pointer load/store");
+    assert(count_between(fn, fn_end, "memcpy(") > 0 &&
+           "RawMut.copyFromNonOverlappingUnchecked must lower to raw memcpy");
+    assert(count_between(fn, fn_end, "(size_t)INT64_C(2)") > 0 &&
+           "constant-size RawMut.copyFromNonOverlappingUnchecked should expose literal byte count");
+    assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
+           "RawPtr/RawMut hot locals must not round-trip through integer pointer casts");
+    assert(count_between(fn, fn_end, "memcpy((void *)(uintptr_t)") == 0 &&
+           "RawPtr memcpy must use native pointer locals directly");
+    assert(count_between(fn, fn_end, "XR_FROM_INT(") == 0 &&
+           count_between(fn, fn_end, "XR_TO_INT(") == 0 &&
+           "RawPtr/RawMut locals must stay in native address representation");
+    assert(count_between(fn, fn_end, "xrt_release(") == 0 &&
+           "RawPtr/RawMut locals must not participate in ARC");
+
+    printf("  Generated Array/Span data pointer fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_rawptr_parallel_for_capture_keeps_owner_alive) {
+#define CHECK_RAWPTR_PAR_CAPTURE(cond, msg)                                                        \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "  FAIL: %s\n", (msg));                                                \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    const char *src = "fn run(n: int) {\n"
+                      "    shared const slots: Array<int> = []\n"
+                      "    slots.push(0)\n"
+                      "    slots.push(0)\n"
+                      "    unsafe {\n"
+                      "        shared const p = slots.dataMutPtrUnchecked()\n"
+                      "        parallel for i in 0..n workers 2 worker wid {\n"
+                      "            let first = p[wid]\n"
+                      "            print(first + i + wid)\n"
+                      "        }\n"
+                      "    }\n"
+                      "}\n"
+                      "run(4)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    CHECK_RAWPTR_PAR_CAPTURE(ir != NULL, "RawMut capture inside parallel for should lower");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    CHECK_RAWPTR_PAR_CAPTURE(code != NULL, "C code generation failed");
+    CHECK_RAWPTR_PAR_CAPTURE(!had_error, "RawMut capture inside parallel for should generate");
+
+    const char *run = code;
+    while ((run = strstr(run, "static void test_run_")) != NULL) {
+        const char *suffix = run + strlen("static void test_run_");
+        const char *line_end = strchr(run, '\n');
+        const char *body_open = strstr(run, ") {");
+        const char *after_id = suffix;
+        while (*after_id >= '0' && *after_id <= '9')
+            after_id++;
+        if (after_id > suffix && *after_id == '(' && body_open &&
+            (!line_end || body_open < line_end))
+            break;
+        run = suffix;
+    }
+    CHECK_RAWPTR_PAR_CAPTURE(run != NULL, "run function body should exist");
+    const char *run_end = strstr(run + 1, "\nstatic ");
+    if (!run_end)
+        run_end = code + strlen(code);
+    CHECK_RAWPTR_PAR_CAPTURE(run_end != NULL, "run function body should be bounded");
+    const char *par_for = strstr(run, "xr_aot_parallel_for_range_i64(");
+    CHECK_RAWPTR_PAR_CAPTURE(par_for && par_for < run_end,
+                             "parallel for should use the AOT runtime executor");
+    const char *release = strstr(run, "xrt_release(xr_mkptr(");
+    CHECK_RAWPTR_PAR_CAPTURE(release && release < run_end, "owner Array should still be released");
+    CHECK_RAWPTR_PAR_CAPTURE(
+        release > par_for,
+        "Array owner borrowed by dataMutPtrUnchecked must outlive RawMut parallel capture");
+
+    printf("  Generated RawMut parallel capture owner-lifetime path %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+
+#undef CHECK_RAWPTR_PAR_CAPTURE
+}
+
+TEST(cgen_rawptr_load_le_unchecked_uses_pointer_helper) {
+    const char *src = "fn read(src: Bytes) -> int {\n"
+                      "    let view: ByteSpan = src\n"
+                      "    let sum = 0\n"
+                      "    unsafe {\n"
+                      "        let p = view.dataPtrUnchecked()\n"
+                      "        let v16: uint16 = p.loadLEUnchecked<uint16>(1)\n"
+                      "        let v32: uint32 = p.loadLEUnchecked<uint32>(0)\n"
+                      "        let v64: uint64 = p.loadLEUnchecked<uint64>(0)\n"
+                      "        sum = int(v16) + int(v32) + int(v64)\n"
+                      "    }\n"
+                      "    return sum\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    let src = Bytes(8)\n"
+                      "    src[0] = 1\n"
+                      "    src[1] = 2\n"
+                      "    src[2] = 3\n"
+                      "    src[3] = 4\n"
+                      "    src[4] = 5\n"
+                      "    src[5] = 6\n"
+                      "    src[6] = 7\n"
+                      "    src[7] = 8\n"
+                      "    return read(src)\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "RawPtr.loadLEUnchecked should generate");
+
+    const char *fn = strstr(code, "static int64_t test_read_");
+    assert(fn != NULL && "read declaration should exist");
+    fn = strstr(fn + 1, "static int64_t test_read_");
+    assert(fn != NULL && "read definition should exist");
+    const char *fn_end = next_static_after(fn);
+    assert(fn_end != NULL && "read function body should be bounded");
+
+    assert(count_between(fn, fn_end, "xrt_ptr_load_u16_le_unchecked_raw(") > 0 &&
+           "RawPtr.loadLEUnchecked<uint16> must lower to the raw pointer helper");
+    assert(count_between(fn, fn_end, "xrt_ptr_load_u32_le_unchecked_raw(") > 0 &&
+           "RawPtr.loadLEUnchecked<uint32> must lower to the raw pointer helper");
+    assert(count_between(fn, fn_end, "xrt_ptr_load_u64_le_unchecked_raw(") > 0 &&
+           "RawPtr.loadLEUnchecked<uint64> must lower to the raw pointer helper");
+    assert(count_between(fn, fn_end, "void *") > 0 &&
+           "RawPtr.loadLEUnchecked should keep the data pointer in native C storage");
+    assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
+           "RawPtr.loadLEUnchecked hot path must not round-trip through integer pointer casts");
+    assert(count_between(fn, fn_end, "XR_FROM_INT(") == 0 &&
+           count_between(fn, fn_end, "XR_TO_INT(") == 0 &&
+           "RawPtr.loadLEUnchecked hot path must not box or unbox pointer values");
+    assert(count_between(fn, fn_end, "xrt_bytes_load_u16_le_") == 0 &&
+           count_between(fn, fn_end, "xrt_bytes_load_u32_le_") == 0 &&
+           count_between(fn, fn_end, "xrt_bytes_load_u64_le_") == 0 &&
+           "RawPtr loadLE must not route back through Bytes/ByteSpan helpers");
+    assert(!contains(code, "loadLEUnchecked") &&
+           "RawPtr.loadLEUnchecked method name must not survive as dynamic dispatch");
+
+    printf("  Generated RawPtr loadLE fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
+    const char *src = "fn readByteAt(src: in ByteSpan, pos: int) -> int {\n"
+                      "    unsafe {\n"
+                      "        return int(src.dataPtrUnchecked().offset(pos)[0])\n"
+                      "    }\n"
+                      "}\n"
+                      "fn callWindow(bytes: Bytes) -> int {\n"
+                      "    let view: ByteSpan = bytes[1:3]\n"
+                      "    return readByteAt(view, 1)\n"
+                      "}\n"
+                      "let bytes = Bytes(4)\n"
+                      "bytes[0] = 5\n"
+                      "bytes[1] = 7\n"
+                      "bytes[2] = 11\n"
+                      "bytes[3] = 13\n"
+                      "print(callWindow(bytes))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "local RawPtr read chain should generate");
+    assert(contains(code, "xrt_array_stack_borrow_slice_view(") &&
+           "in ByteSpan call should borrow a stack slice view");
+    assert(!contains(code, "xrt_array_stack_slice_view_release(") &&
+           "borrowed in ByteSpan stack slice must not release storage");
+    assert(!contains(code, "xrt_slice(") &&
+           "local RawPtr read chain must not force a heap slice view");
+
+    printf("  Generated stack-borrow slice RawPtr read-chain fast path %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
+    const char *src = "fn leakPtr(src: in ByteSpan) -> RawPtr<uint8> {\n"
+                      "    unsafe {\n"
+                      "        return src.dataPtrUnchecked()\n"
+                      "    }\n"
+                      "}\n"
+                      "fn callWindow(bytes: Bytes) -> int {\n"
+                      "    let view: ByteSpan = bytes[1:3]\n"
+                      "    let p = leakPtr(view)\n"
+                      "    unsafe {\n"
+                      "        return int(p[0])\n"
+                      "    }\n"
+                      "}\n"
+                      "let bytes = Bytes(4)\n"
+                      "bytes[0] = 5\n"
+                      "bytes[1] = 7\n"
+                      "bytes[2] = 11\n"
+                      "bytes[3] = 13\n"
+                      "print(callWindow(bytes))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "returned RawPtr case should generate");
+    assert(contains(code, "xrt_slice(") && "returning a RawPtr must keep the slice heap-backed");
+    assert(!contains(code, "xrt_array_stack_borrow_slice_view(") &&
+           "returned RawPtr must not borrow a stack slice view");
+
+    printf("  Generated returned RawPtr slice escape guard %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -3229,6 +4760,208 @@ TEST(cgen_int_const_div_mod_uses_native_ops) {
     xi_func_free(ir);
 }
 
+TEST(cgen_nonnegative_const_shr_uses_native_op) {
+    const char *src = "fn fast(b: uint8) -> int {\n"
+                      "    let x = int(b)\n"
+                      "    return x >> 4\n"
+                      "}\n"
+                      "fn widen(b: uint8) -> int {\n"
+                      "    let x = int(b)\n"
+                      "    return x << 8\n"
+                      "}\n"
+                      "fn checked(n: int, s: int) -> int {\n"
+                      "    return n >> s\n"
+                      "}\n"
+                      "fn checkedLeft(n: int, s: int) -> int {\n"
+                      "    return n << s\n"
+                      "}\n"
+                      "print(fast(240))\n"
+                      "print(widen(240))\n"
+                      "print(checked(-8, 1))\n"
+                      "print(checkedLeft(8, 1))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "integer shift fast path should generate");
+
+    const char *fast = strstr(code, "static int64_t test_fast_");
+    assert(fast != NULL && "fast function should be generated");
+    const char *fast_end = next_static_after(fast);
+    assert(count_between(fast, fast_end, " >> INT64_C(4)") == 1 &&
+           "nonnegative constant right shift should use native C >>");
+    assert(count_between(fast, fast_end, "xrt_i64_shr(") == 0 &&
+           "proven nonnegative constant right shift must not call the runtime helper");
+
+    const char *widen = strstr(code, "static int64_t test_widen_");
+    assert(widen != NULL && "widen function should be generated");
+    const char *widen_end = next_static_after(widen);
+    assert(count_between(widen, widen_end, " << INT64_C(8)") == 1 &&
+           "range-safe constant left shift should use native C <<");
+    assert(count_between(widen, widen_end, "xrt_i64_shl(") == 0 &&
+           "range-safe constant left shift must not call the runtime helper");
+
+    const char *checked = strstr(code, "static int64_t test_checked_");
+    assert(checked != NULL && "checked function should be generated");
+    const char *checked_end = next_static_after(checked);
+    assert(count_between(checked, checked_end, "xrt_i64_shr(") == 1 &&
+           "unproven shift must keep the runtime helper semantics");
+
+    const char *checked_left = strstr(code, "static int64_t test_checkedLeft_");
+    assert(checked_left != NULL && "checkedLeft function should be generated");
+    const char *checked_left_end = next_static_after(checked_left);
+    assert(count_between(checked_left, checked_left_end, "xrt_i64_shl(") == 1 &&
+           "unproven left shift must keep the runtime helper semantics");
+
+    printf("  Generated integer shift fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_unsigned_const_shift_uses_native_op) {
+    const char *src = "fn unsignedShift(x: uint64) -> uint64 {\n"
+                      "    let shifted = x << 24\n"
+                      "    return shifted >> 52\n"
+                      "}\n"
+                      "fn dynamicShift(x: uint64, s: int) -> uint64 {\n"
+                      "    return x >> s\n"
+                      "}\n"
+                      "print(unsignedShift(889523592379))\n"
+                      "print(dynamicShift(16, 1))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "unsigned integer shift fast path should generate");
+
+    const char *fast = strstr(code, "test_unsignedShift_");
+    assert(fast != NULL && "unsignedShift function should be generated");
+    const char *fast_end = next_static_after(fast);
+    assert(count_between(fast, fast_end, "<< UINT64_C(24)") == 1 &&
+           "uint64 constant left shift should use native C <<");
+    assert(count_between(fast, fast_end, ">> UINT64_C(52)") == 1 &&
+           "uint64 constant right shift should use native C >>");
+    assert(count_between(fast, fast_end, "UINT64_C(24)))") == 0 &&
+           "uint64 constant left shift expression must be balanced C");
+    assert(count_between(fast, fast_end, "UINT64_C(52)))") == 0 &&
+           "uint64 constant right shift expression must be balanced C");
+    assert(count_between(fast, fast_end, "(int64_t)(((uint64_t)") == 0 &&
+           "unboxed uint64 constant shifts should stay unsigned in generated C");
+    assert(count_between(fast, fast_end, "xrt_i64_shl(") == 0 &&
+           "uint64 constant left shift must not call the runtime helper");
+    assert(count_between(fast, fast_end, "xrt_i64_shr(") == 0 &&
+           "uint64 constant right shift must not call the runtime helper");
+
+    const char *dynamic = strstr(code, "test_dynamicShift_");
+    assert(dynamic != NULL && "dynamicShift function should be generated");
+    const char *dynamic_end = next_static_after(dynamic);
+    assert(count_between(dynamic, dynamic_end, "xrt_i64_shr(") == 1 &&
+           "dynamic unsigned shift must keep mod-64 runtime helper semantics");
+
+    printf("  Generated unsigned integer shift fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_unsigned_arith_uses_native_unsigned_expr) {
+    const char *src = "fn hash32(seq: uint32) -> uint32 {\n"
+                      "    let prime: uint32 = 2654435761\n"
+                      "    return seq * prime\n"
+                      "}\n"
+                      "fn mix64(seq: uint64) -> uint64 {\n"
+                      "    let prime: uint64 = 889523592379\n"
+                      "    return (seq + prime) * prime\n"
+                      "}\n"
+                      "fn signedMul(a: int, b: int) -> int {\n"
+                      "    return a * b\n"
+                      "}\n"
+                      "print(hash32(123456))\n"
+                      "print(mix64(123456))\n"
+                      "print(signedMul(7, 9))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "unsigned arithmetic fast path should generate");
+
+    const char *hash32 = strstr(code, "test_hash32_");
+    assert(hash32 != NULL && "hash32 function should be generated");
+    const char *hash32_end = next_static_after(hash32);
+    assert(count_between(hash32, hash32_end, "(uint64_t)(") >= 2 &&
+           "uint32 arithmetic should use unsigned C operands");
+    assert(count_between(hash32, hash32_end, "(int64_t)((uint64_t)") == 0 &&
+           "uint32 arithmetic should not cast the product through int64_t");
+
+    const char *mix64 = strstr(code, "test_mix64_");
+    assert(mix64 != NULL && "mix64 function should be generated");
+    const char *mix64_end = next_static_after(mix64);
+    assert(count_between(mix64, mix64_end, "(uint64_t)(") >= 4 &&
+           "uint64 arithmetic should use unsigned C operands");
+    assert(count_between(mix64, mix64_end, "(int64_t)((uint64_t)") == 0 &&
+           "unboxed uint64 arithmetic should not cast through int64_t");
+
+    const char *signed_mul = strstr(code, "test_signedMul_");
+    assert(signed_mul != NULL && "signedMul function should be generated");
+    const char *signed_mul_end = next_static_after(signed_mul);
+    assert(count_between(signed_mul, signed_mul_end, "(int64_t)((uint64_t)") == 1 &&
+           "signed int multiplication must keep signed-wrap-safe lowering");
+
+    printf("  Generated unsigned arithmetic fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain) {
+    const char *src = "fn packParts(high: int, low: int) -> int {\n"
+                      "    return (high << 32) | (low & 0xFFFFFFFF)\n"
+                      "}\n"
+                      "fn highPart(packed: int) -> int {\n"
+                      "    return packed >> 32\n"
+                      "}\n"
+                      "fn lowPart(packed: int) -> int {\n"
+                      "    return packed & 0xFFFFFFFF\n"
+                      "}\n"
+                      "fn combine(a: int, b: int) -> int {\n"
+                      "    if (a < 0 || b < 0) { return -1 }\n"
+                      "    return packParts(highPart(a) + highPart(b), "
+                      "(lowPart(a) + lowPart(b)) & 0xFFFFFFFF)\n"
+                      "}\n"
+                      "print(combine(4294967296, 1))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "nothrow scalar helper chain should generate");
+
+    const char *combine = strstr(code, "static int64_t test_combine_");
+    assert(combine != NULL && "combine function should be generated");
+    const char *combine_end = next_static_after(combine);
+    assert(count_between(combine, combine_end, "xrt_has_pending_error") == 0 &&
+           "inlined no-throw scalar helper chain must not keep dead error-channel checks");
+    assert((count_between(combine, combine_end, " >> ") > 0 ||
+            count_between(combine, combine_end, "xrt_i64_shr(") > 0) &&
+           "combine should still contain the right-shift scalar work under test");
+    assert((count_between(combine, combine_end, " | ") > 0 ||
+            count_between(combine, combine_end, "xrt_i64_shl(") > 0) &&
+           "combine should still contain the pack scalar work under test");
+
+    printf("  Generated no-throw scalar helper chain %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_defer_isolates_existing_pending_error) {
     const char *src = "enum E { Bad(code: int) }\n"
                       "fn run() -> int {\n"
@@ -3742,8 +5475,227 @@ TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
     assert(resume != NULL && trace != NULL && "run_once resume/trace functions should exist");
     assert(count_between(resume, trace, "\n    int64_t phi") == 0 &&
            "cross-suspend phi values must not be resume-local zeroed temporaries");
+    assert(contains(code, "uint32_t _xr_aot_coro_poll_count = 0;") &&
+           "automatic coroutine loop safepoint should declare a throttled poll counter");
+    assert(contains(code, "XrAotRunKind _yield_poll_") &&
+           "automatic coroutine loop safepoint should use the compact poll kind fast path");
+    assert(contains(code, "xr_aot_poll_yield_kind_cost(ctx, XR_AOT_LOOP_POLL_INTERVAL)") &&
+           "automatic coroutine loop safepoint should batch runtime polling by loop interval");
+    assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
+           "automatic coroutine loop safepoint should not call the runtime poll helper on every "
+           "backedge");
+    assert(!contains(code, "XrAotResult _yield_poll_") &&
+           "automatic coroutine loop safepoint should not materialize a result on the hot path");
 
     printf("  Generated loop-tail phi frame %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
+    const char *src = "fn worker(signal: EventCount, workerId: int) -> int {\n"
+                      "    let seen = 0\n"
+                      "    while (true) {\n"
+                      "        seen = signal.wait(seen, workerId)\n"
+                      "        if (seen < 0) {\n"
+                      "            return 0\n"
+                      "        }\n"
+                      "    }\n"
+                      "    return 0\n"
+                      "}\n"
+                      "fn main() {\n"
+                      "    shared const signal: EventCount = EventCount(0)\n"
+                      "    let task = go worker(signal, 0)\n"
+                      "    signal.close()\n"
+                      "    print(await task)\n"
+                      "}\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT wait-driven loop should generate");
+    assert(contains(code, "xr_aot_event_count_wait(ctx,") &&
+           "test must exercise EventCount.wait in a coroutine loop");
+    assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
+           "loop backedge into a blocking wait should not emit a redundant poll safepoint");
+
+    printf("  Generated wait-driven loop without redundant poll %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_event_count_advance_uses_i64_helper) {
+    const char *src = "fn tick(signal: EventCount) -> int {\n"
+                      "    let next = signal.advance(1)\n"
+                      "    signal.close()\n"
+                      "    return next\n"
+                      "}\n"
+                      "fn worker(signal: EventCount) -> int {\n"
+                      "    let seen = signal.wait(0, 0)\n"
+                      "    let next = signal.advance(1)\n"
+                      "    return next + seen\n"
+                      "}\n"
+                      "fn main() {\n"
+                      "    shared const signal: EventCount = EventCount(1)\n"
+                      "    print(tick(signal))\n"
+                      "    let task = go worker(signal)\n"
+                      "    signal.close()\n"
+                      "    print(await task)\n"
+                      "}\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT EventCount advance should generate");
+    assert(contains(code, "xr_aot_event_count_advance_i64_sync(") &&
+           "sync EventCount.advance should use the native int helper");
+    assert(contains(code, "xr_aot_event_count_close_void_sync(") &&
+           "sync EventCount.close should use the native void helper");
+    assert(contains(code, "xr_aot_event_count_advance_i64(ctx,") &&
+           "coroutine EventCount.advance should use the native int helper");
+    assert(contains(code, "xr_aot_event_count_close_void(ctx,") &&
+           "coroutine EventCount.close should use the native void helper");
+    assert(!contains(code, "XrValue _event_count_advance_") &&
+           "coroutine EventCount.advance should not materialize an XrValue temp");
+    assert(!contains(code, "XrValue _event_count_close_") &&
+           "EventCount.close should not materialize a tagged Unit result");
+    assert(!contains(code, "xr_aot_event_count_advance_sync(") &&
+           "sync EventCount.advance should not return tagged XrValue");
+    assert(!contains(code, "xr_aot_event_count_close_sync(") &&
+           "sync EventCount.close should not return tagged XrValue");
+    assert(!contains(code, "XR_TO_INT(xr_aot_event_count_advance") &&
+           "EventCount.advance should not immediately unbox a tagged helper result");
+
+    printf("  Generated EventCount native advance bridge %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_countdown_latch_methods_use_native_helpers) {
+    const char *src = "fn syncUse(latch: CountdownLatch) -> int {\n"
+                      "    let ok = latch.reset(2)\n"
+                      "    let left = latch.done()\n"
+                      "    let ready = latch.tryWait()\n"
+                      "    latch.close()\n"
+                      "    return (ok ? left : 0) + (ready ? 1 : 0)\n"
+                      "}\n"
+                      "fn worker(latch: CountdownLatch) -> int {\n"
+                      "    let ok = latch.reset(1)\n"
+                      "    let left = latch.done(1)\n"
+                      "    if (latch.tryWait()) {\n"
+                      "        return ok ? left : -1\n"
+                      "    }\n"
+                      "    return -2\n"
+                      "}\n"
+                      "fn main() {\n"
+                      "    shared const latch: CountdownLatch = CountdownLatch(0)\n"
+                      "    print(syncUse(latch))\n"
+                      "    let task = go worker(latch)\n"
+                      "    latch.close()\n"
+                      "    print(await task)\n"
+                      "}\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT CountdownLatch methods should generate");
+    assert(contains(code, "xr_aot_countdown_latch_reset_bool_sync(") &&
+           "sync CountdownLatch.reset should use the native bool helper");
+    assert(contains(code, "xr_aot_countdown_latch_done_i64_sync(") &&
+           "sync CountdownLatch.done should use the native int helper");
+    assert(contains(code, "xr_aot_countdown_latch_try_wait_bool_sync(") &&
+           "sync CountdownLatch.tryWait should use the native bool helper");
+    assert(contains(code, "xr_aot_countdown_latch_close_void_sync(") &&
+           "sync CountdownLatch.close should use the native void helper");
+    assert(contains(code, "xr_aot_countdown_latch_reset_bool(ctx,") &&
+           "coroutine CountdownLatch.reset should use the native bool helper");
+    assert(contains(code, "xr_aot_countdown_latch_done_i64(ctx,") &&
+           "coroutine CountdownLatch.done should use the native int helper");
+    assert(contains(code, "xr_aot_countdown_latch_try_wait_bool(ctx,") &&
+           "coroutine CountdownLatch.tryWait should use the native bool helper");
+    assert(contains(code, "xr_aot_countdown_latch_close_void(ctx,") &&
+           "coroutine CountdownLatch.close should use the native void helper");
+    assert(!contains(code, "XrValue _latch_reset_") &&
+           "CountdownLatch.reset should not materialize an XrValue temp");
+    assert(!contains(code, "XrValue _latch_done_") &&
+           "CountdownLatch.done should not materialize an XrValue temp");
+    assert(!contains(code, "XrValue _latch_try_wait_") &&
+           "CountdownLatch.tryWait should not materialize an XrValue temp");
+    assert(!contains(code, "XrValue _latch_close_") &&
+           "CountdownLatch.close should not materialize a tagged Unit result");
+    assert(!contains(code, "XR_TO_INT(_latch_") &&
+           "CountdownLatch native helper results should not be immediately unboxed");
+    assert(!contains(code, "xr_aot_countdown_latch_close_sync(") &&
+           "sync CountdownLatch.close should not return tagged XrValue");
+
+    printf("  Generated CountdownLatch native method bridge %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_semaphore_methods_use_native_helpers) {
+    const char *src = "fn syncUse(sem: Semaphore) -> int {\n"
+                      "    let released = sem.release(2)\n"
+                      "    let ok = sem.tryAcquire()\n"
+                      "    sem.close()\n"
+                      "    return released + (ok ? 1 : 0)\n"
+                      "}\n"
+                      "fn worker(sem: Semaphore) -> int {\n"
+                      "    let released = sem.release()\n"
+                      "    let ok = sem.tryAcquire()\n"
+                      "    sem.close()\n"
+                      "    return released + (ok ? 1 : 0)\n"
+                      "}\n"
+                      "fn main() {\n"
+                      "    shared const sem: Semaphore = Semaphore(0)\n"
+                      "    print(syncUse(sem))\n"
+                      "    let task = go worker(sem)\n"
+                      "    print(await task)\n"
+                      "}\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT Semaphore methods should generate");
+    assert(contains(code, "xr_aot_semaphore_release_i64_sync(") &&
+           "sync Semaphore.release should use the native int helper");
+    assert(contains(code, "xr_aot_semaphore_try_acquire_bool_sync(") &&
+           "sync Semaphore.tryAcquire should use the native bool helper");
+    assert(contains(code, "xr_aot_semaphore_close_void_sync(") &&
+           "sync Semaphore.close should use the native void helper");
+    assert(contains(code, "xr_aot_semaphore_release_i64(ctx,") &&
+           "coroutine Semaphore.release should use the native int helper");
+    assert(contains(code, "xr_aot_semaphore_try_acquire_bool(ctx,") &&
+           "coroutine Semaphore.tryAcquire should use the native bool helper");
+    assert(contains(code, "xr_aot_semaphore_close_void(ctx,") &&
+           "coroutine Semaphore.close should use the native void helper");
+    assert(!contains(code, "XrValue _sem_release_") &&
+           "Semaphore.release should not materialize an XrValue temp");
+    assert(!contains(code, "XrValue _sem_try_acquire_") &&
+           "Semaphore.tryAcquire should not materialize an XrValue temp");
+    assert(!contains(code, "XrValue _sem_close_") &&
+           "Semaphore.close should not materialize a tagged Unit result");
+    assert(!contains(code, "XR_TO_INT(_sem_release_") &&
+           "Semaphore native helper results should not be immediately unboxed");
+    assert(!contains(code, "xr_aot_semaphore_release_sync(") &&
+           "sync Semaphore.release should not return tagged XrValue");
+    assert(!contains(code, "xr_aot_semaphore_try_acquire_sync(") &&
+           "sync Semaphore.tryAcquire should not return tagged XrValue");
+
+    printf("  Generated Semaphore native method bridge %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -4011,6 +5963,95 @@ TEST(cgen_coro_sync_go_wrappers_only_for_go_targets) {
     xi_func_free(ir);
 }
 
+TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
+    const char *non_go_loop_src = "fn unused(n: int) -> int {\n"
+                                  "    let i = 0\n"
+                                  "    let sum = 0\n"
+                                  "    while (i < n) {\n"
+                                  "        sum = sum + i\n"
+                                  "        i = i + 1\n"
+                                  "    }\n"
+                                  "    return sum\n"
+                                  "}\n"
+                                  "fn used(n: int) -> int {\n"
+                                  "    return n + 1\n"
+                                  "}\n"
+                                  "let task = go used(3)\n"
+                                  "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(non_go_loop_src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "non-loop sync-go target should generate");
+    assert(!contains(code, "xr_aot_sync_backedge_heartbeat();") &&
+           "plain sync loops must not inherit sync-go heartbeat instrumentation");
+    xr_free(code);
+    xi_func_free(ir);
+
+    const char *go_loop_src = "fn used(n: int) -> int {\n"
+                              "    let i = 0\n"
+                              "    let sum = 0\n"
+                              "    while (i < n) {\n"
+                              "        sum = sum + i\n"
+                              "        i = i + 1\n"
+                              "    }\n"
+                              "    return sum\n"
+                              "}\n"
+                              "let task = go used(3)\n"
+                              "print(await task)\n";
+
+    ir = compile_to_ir(go_loop_src);
+    assert(ir != NULL && "IR compilation failed");
+
+    had_error = false;
+    code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "looping sync-go target should generate");
+    assert(contains(code, "uint32_t _xr_aot_sync_backedge_count = 0;") &&
+           "looping sync-go target should declare a throttled heartbeat counter");
+    assert(contains(code, "xr_aot_sync_backedge_heartbeat();") &&
+           "looping sync-go target should bump scheduler heartbeat on hot backedges");
+
+    xr_free(code);
+    xi_func_free(ir);
+
+    const char *coro_direct_sync_loop_src = "fn syncLoop(n: int) -> int {\n"
+                                            "    let i = 0\n"
+                                            "    let sum = 0\n"
+                                            "    while (i < n) {\n"
+                                            "        sum = sum + i\n"
+                                            "        i = i + 1\n"
+                                            "    }\n"
+                                            "    return sum\n"
+                                            "}\n"
+                                            "fn used(n: int) -> int {\n"
+                                            "    return n + 1\n"
+                                            "}\n"
+                                            "let x = syncLoop(3)\n"
+                                            "let task = go used(3)\n"
+                                            "print((await task) + x)\n";
+
+    ir = compile_to_ir(coro_direct_sync_loop_src);
+    assert(ir != NULL && "IR compilation failed");
+
+    had_error = false;
+    code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "coroutine direct sync loop call should generate");
+    assert(contains(code, "uint32_t _xr_aot_sync_backedge_count = 0;") &&
+           "sync loop called from an AOT coroutine should declare a heartbeat counter");
+    assert(contains(code, "xr_aot_sync_backedge_heartbeat();") &&
+           "sync loop called from an AOT coroutine should bump scheduler heartbeat");
+
+    printf("  Generated sync AOT backedge heartbeat instrumentation %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_channel_send_copy_uses_transfer_helper) {
     const char *src = "let ch: Channel<Array<int>> = Channel(1)\n"
                       "let xs = [1, 2]\n"
@@ -4106,7 +6147,7 @@ TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
     assert(!had_error && "AOT scalar channel trySend should generate");
     assert(contains(code, "xr_aot_chan_try_send_i64(ctx,") &&
            "scalar channel trySend must use the typed AOT bridge");
-    assert(!contains(code, "xr_aot_poll_yield(ctx)") &&
+    assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
            "nonblocking trySend must not own a suspend/poll state");
     assert(!contains(code, "xr_aot_chan_try_send(ctx,") &&
            "scalar channel trySend must not re-box at the generated call site");
@@ -4237,6 +6278,95 @@ TEST(cgen_coro_scalar_await_uses_tagged_slot) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_await_array_task_index_borrows_checked_slot) {
+    const char *src = "fn worker() -> int {\n"
+                      "    Coro.yield()\n"
+                      "    return 7\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    let tasks: Array<Task<int>> = []\n"
+                      "    tasks.push(go worker())\n"
+                      "    let result = await tasks[0]\n"
+                      "    return result + tasks.length\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT await from Array<Task<int>> should generate");
+    assert(contains(code, "xr_aot_await_deferred_task_from_array(ctx,") &&
+           "checked Array<Task<int>> slot await must fuse deferred batch submit with await");
+    assert(contains(code, "xr_aot_await_deferred_task_from_array_resume(ctx,") &&
+           "resumed Array<Task<int>> slot await must clear the consumed one-shot slot");
+    assert(contains(code, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? "
+                          "((XrValue*)_a->data)[_idx]") &&
+           "checked Array<Task<int>> slot await should borrow the array element");
+    assert(!contains(code, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? "
+                           "xrt_value_to_owned(((XrValue*)_a->data)[_idx])") &&
+           "direct await of a checked Array<Task<int>> slot must not retain every task handle");
+    assert(contains(code, "xr_slot_aot_frame_offset") &&
+           "scalar await result should still use a native AOT frame slot");
+
+    printf("  Generated checked Array<Task> await borrow path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_one_shot_await_task_array_loop_borrows_checked_slot) {
+    const char *src = "fn worker(n: int) -> int {\n"
+                      "    Coro.yield()\n"
+                      "    return n + 1\n"
+                      "}\n"
+                      "fn run(n: int) -> int {\n"
+                      "    let tasks: Array<Task<int>> = []\n"
+                      "    tasks.reserve(n)\n"
+                      "    let i = 0\n"
+                      "    while (i < n) {\n"
+                      "        tasks.push(go worker(i))\n"
+                      "        i = i + 1\n"
+                      "    }\n"
+                      "    let total = 0\n"
+                      "    let j = 0\n"
+                      "    while (j < tasks.length) {\n"
+                      "        total = total + await tasks[j]\n"
+                      "        j = j + 1\n"
+                      "    }\n"
+                      "    tasks.clear()\n"
+                      "    return total\n"
+                      "}\n"
+                      "print(run(4))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT sequential await over Array<Task<int>> should generate");
+    assert(contains(code, "xr_aot_await_deferred_task_from_array(ctx,") &&
+           "sequential Array<Task<int>> slot await must fuse deferred batch submit with await");
+    assert(contains(code, "xr_aot_await_deferred_task_from_array_resume(ctx,") &&
+           "sequential Array<Task<int>> slot await resume must consume the array slot");
+    assert(contains(code, ", false, true);") &&
+           "counted task array await loop should keep the one-shot await flag");
+    assert(contains(code, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? "
+                          "((XrValue*)_a->data)[_idx]") &&
+           "one-shot checked Array<Task<int>> loop await should borrow the array element");
+    assert(
+        !contains(code, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? "
+                        "xrt_value_to_owned(((XrValue*)_a->data)[_idx])") &&
+        "one-shot direct await of checked Array<Task<int>> slot must not retain every task handle");
+
+    printf("  Generated one-shot Array<Task> await-loop borrow path %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_await_timeout_passes_deadline) {
     const char *src = "fn worker(ch: Channel<int>) -> int {\n"
                       "    match (ch.recv()) {\n"
@@ -4326,6 +6456,37 @@ TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
            "channel recv resume must not depend on a local slot variable");
 
     printf("  Generated channel recv wait-state slot %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_discarded_recv_does_not_materialize_result) {
+    const char *src = "fn wait_then_return(ch: Channel<int>) -> int {\n"
+                      "    ch.recv()\n"
+                      "    return 7\n"
+                      "}\n"
+                      "shared const ch: Channel<int> = Channel(0)\n"
+                      "let task = go wait_then_return(ch)\n"
+                      "ch.send(1)\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "discarded AOT channel recv should generate");
+    assert(contains(code, "xr_aot_chan_recv_slot(ctx,") &&
+           "discarded channel recv must still use the blocking recv helper");
+    assert(contains(code, ", -1, false);") &&
+           "discarded channel recv must tell the runtime not to materialize Recv");
+    assert(contains(code, "xr_aot_chan_recv_slot_resume(ctx, xr_slot_none(), false);") &&
+           "discarded channel recv resume must discard the recovered result");
+    assert(!contains(code, "xr_aot_chan_recv_slot_resume(ctx, xr_slot_none(), true);") &&
+           "discarded channel recv must not resume through the result-producing path");
+
+    printf("  Generated discarded channel recv %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -4468,7 +6629,7 @@ TEST(cgen_coro_scalar_channel_try_recv_returns_recv_enum) {
     assert(!had_error && "AOT channel tryRecv should generate");
     assert(contains(code, "xr_aot_chan_try_recv(ctx,") &&
            "tryRecv must use the Recv<T> enum bridge");
-    assert(!contains(code, "xr_aot_poll_yield(ctx)") &&
+    assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
            "nonblocking tryRecv must not own a suspend/poll state");
     assert(!contains(code, "xr_aot_chan_try_recv_slot(ctx,") &&
            "tryRecv must not use the old typed slot bridge");
@@ -4657,18 +6818,398 @@ TEST(cgen_coro_await_all_uses_aggregate_bridge) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT await all should generate");
-    assert(contains(code, "xr_aot_await_all_tasks(ctx,") &&
-           "await all must use the aggregate AOT bridge");
-    assert(nonzero_state_precedes_call(code, "xr_aot_await_all_tasks(ctx,") &&
+    assert(contains(code, "xr_aot_await_all_task_values_to_slots(ctx,") &&
+           "fresh await all literals with scalar uses must write result slots directly");
+    assert(contains(code, "xr_aot_await_all_task_values_to_slots(ctx,") &&
+           contains(code, "XR_ELEM_I64") &&
+           "await all over Task<int> must pass the typed result element layout");
+    assert(contains(code, "XR_ELEM_I64, true") &&
+           "fresh await all task literals must use aggregate one-shot");
+    assert(nonzero_state_precedes_call(code, "xr_aot_await_all_task_values_to_slots(ctx,") &&
            "await all must publish the AOT resume state before runtime blocking");
-    assert(contains(code, "xr_aot_await_all_tasks_resume(ctx,") &&
+    assert(contains(code, "xr_aot_await_all_task_values_to_slots_resume(ctx,") &&
            "await all resume must use the aggregate AOT bridge");
-    assert(contains(code, "xrt_value_clone_for_coro(") &&
-           "await all task arrays must survive suspension");
-    assert(contains(code, "xr_aot_bridge_value_to_xrt(") &&
-           "await all runtime result arrays must be converted back to AOT arrays");
+    const char *await_call = strstr(code, "xr_aot_await_all_task_values_to_slots(ctx,");
+    assert(await_call != NULL);
+    assert(count_between(code, await_call, "xrt_value_clone_for_coro(") == 0 &&
+           "inline await all literals must not clone a task array before suspension");
+    assert(!contains(code, "xrt_array_new_typed(2, XR_ELEM_ANY)") &&
+           "inline await all literals must not allocate an input task array");
+    assert(!contains(code, "xr_aot_bridge_value_to_xrt(") &&
+           "scalarized await all result arrays should not be materialized");
+    assert(count_between(await_call, code + strlen(code), "xrt_value_clone_for_coro(") == 0 &&
+           "scalar await all result arrays must not be cloned after bridge conversion");
 
     printf("  Generated await all aggregate bridge %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_await_all_named_task_array_skips_task_list_clone) {
+    const char *src = "fn worker(n: int) -> int {\n"
+                      "    Coro.yield()\n"
+                      "    return n * n\n"
+                      "}\n"
+                      "let t1 = go worker(2)\n"
+                      "let t2 = go worker(3)\n"
+                      "let tasks: Array<Task<int>> = []\n"
+                      "tasks.push(t1)\n"
+                      "tasks.push(t2)\n"
+                      "let results = await all tasks\n"
+                      "print(results[0] + results[1])\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT await all over named task array should generate");
+    const char *await_call = strstr(code, "xr_aot_await_all_task_values_to_slots(ctx,");
+    assert(await_call != NULL);
+    assert(!contains(code, "xr_aot_await_all_tasks(ctx,") &&
+           "fixed pushed named task arrays should scalarize to task value slots");
+    assert(contains(code, "XR_ELEM_I64") &&
+           "await all over named Array<Task<int>> must keep typed result layout");
+    assert(contains(code, "XR_ELEM_I64, true") &&
+           "named task arrays whose pushed tasks have no other users may use aggregate one-shot");
+    assert(contains(code, "xr_aot_spawn_deferred(ctx, &") &&
+           "await-all-only task producers should use deferred batch submission");
+    assert(!contains(code, "xr_aot_spawn_child") &&
+           "await-all-only task producers should not yield after each go");
+    assert(contains(code, ", 0, false, true, \"worker\"") &&
+           "unique pushed task producers should be spawned as one-shot await tasks");
+    assert(count_between(code, await_call, "xrt_value_clone_for_coro(") == 0 &&
+           "named task arrays are frame roots and should not be deep-cloned before await all");
+    assert(count_between(await_call, code + strlen(code), "xrt_value_clone_for_coro(") == 0 &&
+           "scalar await all result arrays must not be cloned after bridge conversion");
+    assert(!contains(code, "xrt_array_push(") &&
+           "fixed pushed task arrays should not materialize input array pushes");
+    assert(!contains(code, "xr_aot_bridge_value_to_xrt(") &&
+           "scalarized await all should not bridge a result array back to xrt");
+    assert(count_between(await_call, code + strlen(code), "xrt_index_get(") == 0 &&
+           "scalarized await all result indexes should not use dynamic indexing");
+
+    printf("  Generated await all named task array no-clone path %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_await_all_reused_push_task_array_uses_one_shot) {
+    const char *src = "fn worker(n: int) -> int {\n"
+                      "    Coro.yield()\n"
+                      "    return n * n\n"
+                      "}\n"
+                      "fn run(n: int) -> int {\n"
+                      "    let tasks: Array<Task<int>> = []\n"
+                      "    tasks.reserve(n)\n"
+                      "    tasks.clear()\n"
+                      "    let i = 0\n"
+                      "    while (i < n) {\n"
+                      "        tasks.push(go worker(i))\n"
+                      "        i = i + 1\n"
+                      "    }\n"
+                      "    let results = await all tasks\n"
+                      "    return results[0]\n"
+                      "}\n"
+                      "print(run(4))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT await all over reused pushed task array should generate");
+    assert(contains(code, "xr_aot_await_all_tasks_wait(ctx,") &&
+           "reused pushed task arrays should wait separately from typed result collection");
+    assert(contains(code, "xr_aot_await_all_tasks_wait_resume(ctx,") &&
+           "reused pushed task arrays should resume through the wait-only path");
+    assert(contains(code, "xrt_array_new_typed(_await_count_") &&
+           "reused pushed task arrays should allocate the AOT typed result array directly");
+    assert(contains(code, "xr_aot_await_all_tasks_collect_into_array(ctx,") &&
+           "reused pushed task arrays should fill the AOT typed result array in place");
+    assert(!contains(code, "xr_aot_await_all_tasks(ctx,") &&
+           "dynamic scalar await-all should not materialize a VM result array first");
+    assert(!contains(code, "xr_aot_bridge_value_to_xrt(") &&
+           "dynamic scalar await-all should not bridge a result array back to xrt");
+    assert(contains(code, "XR_ELEM_I64, true") &&
+           "reused pushed task arrays with unique go producers should use aggregate one-shot");
+    assert(contains(code, "xr_aot_spawn_deferred(ctx, &") &&
+           "loop-pushed await-all tasks should use deferred batch submission");
+    assert(!contains(code, "xr_aot_spawn_child") &&
+           "loop-pushed await-all tasks should not yield after each go");
+    assert(contains(code, ", 0, false, true, \"worker\"") &&
+           "loop-pushed go producers should be spawned as one-shot await tasks");
+    assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
+           "deferred spawn registration loops should not poll before the aggregate await submit");
+    assert(count_between(code, code + strlen(code), "xrt_value_clone_for_coro(") == 0 &&
+           "task array roots and scalar await-all results should not be deep-cloned");
+
+    printf("  Generated reused pushed task array one-shot path %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_await_all_into_reuses_result_array) {
+    const char *src = "fn worker(n: int) -> int {\n"
+                      "    Coro.yield()\n"
+                      "    return n * n\n"
+                      "}\n"
+                      "fn run(n: int) -> int {\n"
+                      "    let tasks: Array<Task<int>> = []\n"
+                      "    let results: Array<int> = []\n"
+                      "    tasks.reserve(n)\n"
+                      "    results.reserve(n)\n"
+                      "    tasks.clear()\n"
+                      "    let i = 0\n"
+                      "    while (i < n) {\n"
+                      "        tasks.push(go worker(i))\n"
+                      "        i = i + 1\n"
+                      "    }\n"
+                      "    await all tasks into results\n"
+                      "    let sum = 0\n"
+                      "    i = 0\n"
+                      "    while (i < results.length) {\n"
+                      "        sum = sum + results[i]\n"
+                      "        i = i + 1\n"
+                      "    }\n"
+                      "    return sum\n"
+                      "}\n"
+                      "print(run(4))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT await all into should generate");
+    assert(contains(code, "xr_aot_await_all_tasks_into_array(ctx,") &&
+           "await all into should fuse wait and typed result collection");
+    const char *await_into = strstr(code, "xr_aot_await_all_tasks_into_array(ctx,");
+    TEST_REQUIRE(await_into != NULL, "await all into fused call missing");
+    size_t await_prefix_len = (size_t) (await_into - code);
+    const char *await_retain_window = await_prefix_len > 384 ? await_into - 384 : code;
+    TEST_REQUIRE(count_between(await_retain_window, await_into, "xrt_retain(") == 0,
+                 "await all into must borrow task/result arrays without pre-await retains");
+    assert(contains(code, "xr_aot_await_all_tasks_into_array_resume(ctx,") &&
+           "await all into should resume through the fused wait/result bridge");
+    assert(!contains(code, "xr_aot_await_all_tasks_wait(ctx,") &&
+           "await all into should not emit a separate wait helper");
+    assert(!contains(code, "xr_aot_await_all_tasks_collect_into_array(ctx,") &&
+           "await all into should not emit a second post-await collect helper");
+    assert(contains(code, "XR_ELEM_I64, true") &&
+           "await all into Array<int> must keep typed result layout and one-shot tasks");
+    assert(!contains(code, "XR_ELEM_I64, false") &&
+           "await all into Array<int> must not lose aggregate one-shot marking");
+    assert(contains(code, "xr_aot_spawn_deferred(ctx, &") &&
+           "await all into task producers should use deferred batch submission");
+    assert(!contains(code, "xr_aot_spawn(ctx, &") &&
+           "await all into task producers should not yield after each go");
+    assert(contains(code, ", 0, false, true, \"worker\"") &&
+           "await all into task producers should be spawned as one-shot await tasks");
+    assert(!contains(code, "xrt_array_reserve_value(") &&
+           "await all into setup should reserve typed arrays through the raw pointer helper");
+    assert(!contains(code, "xrt_array_new_typed(_await_count_") &&
+           "await all into must not allocate a fresh typed result array");
+    assert(!contains(code, "xr_aot_await_all_tasks(ctx,") &&
+           "await all into should not use the materializing aggregate await helper");
+    assert(!contains(code, "xr_aot_bridge_value_to_xrt(") &&
+           "await all into should not bridge a materialized result array back to xrt");
+
+    printf("  Generated await all into result array path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_top_level_await_all_into_keeps_result_array_alive) {
+    const char *src = "fn worker(n: int) -> int {\n"
+                      "    Coro.yield()\n"
+                      "    return n * n\n"
+                      "}\n"
+                      "let tasks: Array<Task<int>> = []\n"
+                      "let results: Array<int> = []\n"
+                      "tasks.reserve(4)\n"
+                      "results.reserve(4)\n"
+                      "let i = 0\n"
+                      "while (i < 4) {\n"
+                      "    tasks.push(go worker(i))\n"
+                      "    i = i + 1\n"
+                      "}\n"
+                      "await all tasks into results\n"
+                      "let sum = 0\n"
+                      "i = 0\n"
+                      "while (i < results.length) {\n"
+                      "    sum = sum + results[i]\n"
+                      "    i = i + 1\n"
+                      "}\n"
+                      "print(sum)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "top-level AOT await all into should generate");
+    assert(contains(code, "xr_aot_spawn_deferred(ctx, &") &&
+           "top-level loop-pushed await-all tasks should use deferred batch submission");
+    assert(!contains(code, "xr_aot_spawn_child") &&
+           "top-level deferred batch producers should not yield after each go");
+    assert(contains(code, "xr_aot_await_all_tasks_into_array(ctx,") &&
+           "top-level await all into should fuse wait and typed result collection");
+    assert(contains(code, "xr_aot_await_all_tasks_into_array_resume(ctx,") &&
+           "top-level await all into should resume through the fused bridge");
+    assert(!contains(code, "xr_aot_await_all_tasks_collect_into_array(ctx,") &&
+           "top-level await all into should not emit a second post-await collect helper");
+    assert(contains(code, "XR_ELEM_I64, true") &&
+           "top-level await all into Array<int> should keep typed one-shot collection");
+    assert(contains(code, "xr_aot_trace_frame_value(visitor, f->v33);") &&
+           "top-level await all into result array must survive the suspend in the frame");
+    assert(!contains(code, "XrValue v33 = XR_NULL_VAL;") &&
+           "top-level await all into result array must not be a transient local after resume");
+
+    printf("  Generated top-level await all into frame-root path %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
+    const char *src = "fn worker(group: ResultGroup, n: int) {\n"
+                      "    group.add(n)\n"
+                      "    if (n == 3) {\n"
+                      "        group.close()\n"
+                      "    }\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    shared const group: ResultGroup = ResultGroup(4)\n"
+                      "    let i = 0\n"
+                      "    while (i < 4) {\n"
+                      "        go worker(group, i)\n"
+                      "        i = i + 1\n"
+                      "    }\n"
+                      "    return group.recv() ?? -1\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT ResultGroup fire-and-forget should generate");
+    const char *recv_call = strstr(code, "xr_aot_result_group_recv_value(ctx,");
+    assert(recv_call != NULL);
+    assert(contains(code, "xr_aot_spawn_deferred(ctx, &") &&
+           "ResultGroup fire-and-forget producers should use deferred batch submission");
+    assert(!contains(code, "xr_aot_spawn_child") &&
+           "deferred ResultGroup producers should not yield after each go");
+    assert(contains_between(code, recv_call, "xr_aot_submit_deferred_spawns(ctx);") &&
+           "ResultGroup recv should submit deferred fire-and-forget producers first");
+    assert(contains(code, ", 0, true, false, \"worker\"") &&
+           "fire-and-forget ResultGroup producers should stay task-less");
+    assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
+           "deferred fire-and-forget producer loops should not poll before the blocking recv");
+
+    printf("  Generated ResultGroup fire-and-forget deferred path %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_result_group_reset_uses_native_helper) {
+    const char *src = "fn run(n: int) -> bool {\n"
+                      "    shared const group: ResultGroup = ResultGroup(n)\n"
+                      "    group.add(1)\n"
+                      "    group.add(2)\n"
+                      "    group.flush()\n"
+                      "    let first = group.recv() ?? -1\n"
+                      "    let ok = group.reset(n)\n"
+                      "    group.close()\n"
+                      "    return first == 3 && ok\n"
+                      "}\n"
+                      "print(run(2))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT ResultGroup reset should generate");
+    assert(contains(code, "xr_aot_result_group_add_bool(ctx,") &&
+           "ResultGroup.add in coroutine code should use the native bool AOT helper");
+    assert(contains(code, "xr_aot_result_group_reset_bool(ctx,") &&
+           "ResultGroup.reset in coroutine code should use the native bool AOT helper");
+    assert(contains(code, "xr_aot_result_group_flush_void(ctx,") &&
+           "ResultGroup.flush in coroutine code should use the native void AOT helper");
+    assert(contains(code, "xr_aot_result_group_close_void(ctx,") &&
+           "ResultGroup.close in coroutine code should use the native void AOT helper");
+    assert(!contains(code, "XR_TO_INT(xr_aot_result_group_add") &&
+           "ResultGroup.add should not box and immediately unbox a bool result");
+    assert(!contains(code, "XR_TO_INT(xr_aot_result_group_reset") &&
+           "ResultGroup.reset should not box and immediately unbox a bool result");
+    assert(!contains(code, "XrValue _rg_flush_") &&
+           "ResultGroup.flush should not materialize a tagged Unit result");
+    assert(!contains(code, "XrValue _rg_close_") &&
+           "ResultGroup.close should not materialize a tagged Unit result");
+
+    printf("  Generated ResultGroup reset helper path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_result_group_sync_methods_elide_dead_err_checks) {
+    const char *src = "fn useGroup(group: ResultGroup, n: int) -> int {\n"
+                      "    if (!group.add(n)) { return -1 }\n"
+                      "    group.flush()\n"
+                      "    if (!group.reset(1)) { return -2 }\n"
+                      "    group.close()\n"
+                      "    return 0\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    shared const group: ResultGroup = ResultGroup(1)\n"
+                      "    return useGroup(group, 1)\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT ResultGroup sync helpers should generate");
+
+    const char *use_group = strstr(code, "int64_t test_useGroup_");
+    assert(use_group != NULL && "useGroup function should be generated");
+    const char *use_group_end = strstr(use_group, "\n}\n\nint64_t test_useGroup_");
+    assert(use_group_end != NULL && "useGroup native body should precede its C wrapper");
+    assert(count_between(use_group, use_group_end, "xr_aot_result_group_add_bool_sync(") == 1 &&
+           "ResultGroup.add should use the native bool sync AOT helper");
+    assert(count_between(use_group, use_group_end, "xr_aot_result_group_reset_bool_sync(") == 1 &&
+           "ResultGroup.reset should use the native bool sync AOT helper");
+    assert(count_between(use_group, use_group_end, "xr_aot_result_group_add_sync(") == 0 &&
+           "ResultGroup.add should not box a bool result before local use");
+    assert(count_between(use_group, use_group_end, "xr_aot_result_group_reset_sync(") == 0 &&
+           "ResultGroup.reset should not box a bool result before local use");
+    assert(count_between(use_group, use_group_end, "xr_aot_result_group_flush_void_sync(") == 1 &&
+           "ResultGroup.flush should use the native void sync AOT helper");
+    assert(count_between(use_group, use_group_end, "xr_aot_result_group_close_void_sync(") == 1 &&
+           "ResultGroup.close should use the native void sync AOT helper");
+    assert(count_between(use_group, use_group_end, "xr_aot_result_group_flush_sync(") == 0 &&
+           "ResultGroup.flush should not materialize a tagged Unit result");
+    assert(count_between(use_group, use_group_end, "xr_aot_result_group_close_sync(") == 0 &&
+           "ResultGroup.close should not materialize a tagged Unit result");
+    assert(count_between(use_group, use_group_end, "xrt_has_pending_error") == 0 &&
+           "ResultGroup sync helpers report status by return value, not the pending-error channel");
+
+    printf("  Generated ResultGroup sync no-error helper path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -4820,7 +7361,8 @@ TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
                       "}\n"
                       "let task = go consumer()\n"
                       "assert_true(queue.push(7, 0))\n"
-                      "print(await task)\n";
+                      "print(await task)\n"
+                      "queue.close()\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -4829,16 +7371,111 @@ TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT WorkQueue pop should generate");
+    assert(contains(code, "xr_aot_work_queue_push_bool(ctx,") &&
+           "coroutine WorkQueue.push should use the native bool helper");
+    assert(contains(code, "xr_aot_work_queue_close_void(ctx,") &&
+           "coroutine WorkQueue.close should use the native void helper");
     assert(contains(code, "xr_aot_work_queue_pop(ctx,") &&
-           "initial WorkQueue.pop must use the AOT bridge");
+           "initial WorkQueue.pop with native scalar result must use the slot bridge");
     assert(contains(code, "S1:;\n    f->state = 1;\n    _wq_pop_slot_") &&
-           "WorkQueue.pop resume must rebuild the frame slot after jumping to the label");
+           "native WorkQueue.pop resume must rebuild the frame slot after jumping to the label");
     assert(contains(code, "xr_aot_work_queue_pop_resume(ctx, _wq_pop_slot_") &&
-           "WorkQueue.pop resume must use the rebuilt slot");
+           "native WorkQueue.pop resume must use the rebuilt slot");
     assert(contains(code, "xr_aot_trace_frame_value(visitor, f->v") &&
            "go-created Task values kept across spawn continuation must be traced");
+    assert(!contains(code, "XrValue _wq_push_") &&
+           "coroutine WorkQueue.push should not materialize an XrValue temp");
+    assert(!contains(code, "XrValue _wq_close_") &&
+           "coroutine WorkQueue.close should not materialize a tagged Unit result");
 
     printf("  Generated WorkQueue resume slot rebuild %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
+    const char *src = "shared const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
+                      "fn consumer() -> int {\n"
+                      "    let item = queue.pop(0)\n"
+                      "    if (item == null) { return -1 }\n"
+                      "    let value = item!\n"
+                      "    return value * 2\n"
+                      "}\n"
+                      "let task = go consumer()\n"
+                      "assert_true(queue.push(21, 0))\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "AOT WorkQueue i64 optional pop should generate");
+    TEST_REQUIRE(contains(code, "xr_aot_work_queue_push_bool(ctx,"),
+                 "coroutine WorkQueue.push should use the native bool helper");
+    TEST_REQUIRE(contains(code, "xr_aot_work_queue_pop_i64_optional(ctx,"),
+                 "WorkQueue<int>.pop should use typed optional i64 AOT helper");
+    TEST_REQUIRE(contains(code, "xr_aot_work_queue_pop_i64_optional_resume(ctx,"),
+                 "WorkQueue<int>.pop resume should use typed optional i64 AOT helper");
+    TEST_REQUIRE(contains(code, "_opt_has") && contains(code, "_opt_value"),
+                 "WorkQueue<int>.pop should store nullable state as has/value slots");
+    TEST_REQUIRE(!contains(code, "_wq_pop_slot_"),
+                 "typed optional WorkQueue.pop should not materialize a generic slot ref");
+    TEST_REQUIRE(!contains(code, "xr_aot_work_queue_pop_value(ctx,"),
+                 "typed optional WorkQueue.pop should not write through XrValue*");
+    TEST_REQUIRE(!contains(code, "XrValue v4 ="),
+                 "typed optional WorkQueue.pop should not keep the tagged nullable carrier");
+    TEST_REQUIRE(!contains(code, "xrt_eq(v4, XR_NULL_VAL)") && !contains(code, "XR_TO_INT(v14)"),
+                 "typed optional WorkQueue.pop should lower null check and unwrap to has/value");
+    TEST_REQUIRE(!contains(code, "Attempted to unwrap a null value"),
+                 "guarded force unwrap should stay a no-op after the null guard");
+    TEST_REQUIRE(!contains(code, "XrValue _wq_push_"),
+                 "coroutine WorkQueue.push should not materialize an XrValue temp");
+
+    printf("  Generated WorkQueue typed optional i64 path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
+    const char *src = "shared const group: ResultGroup = ResultGroup(1)\n"
+                      "fn producer() -> int {\n"
+                      "    group.add(21)\n"
+                      "    group.close()\n"
+                      "    return 0\n"
+                      "}\n"
+                      "fn consumer() -> int {\n"
+                      "    let item = group.recv()\n"
+                      "    if (item == null) { return -1 }\n"
+                      "    let value = item!\n"
+                      "    return value * 2\n"
+                      "}\n"
+                      "go producer()\n"
+                      "let task = go consumer()\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "AOT ResultGroup i64 optional recv should generate");
+    TEST_REQUIRE(contains(code, "xr_aot_result_group_recv_i64_optional(ctx,"),
+                 "ResultGroup.recv should use typed optional i64 AOT helper");
+    TEST_REQUIRE(contains(code, "xr_aot_result_group_recv_i64_optional_resume(ctx,"),
+                 "ResultGroup.recv resume should use typed optional i64 AOT helper");
+    TEST_REQUIRE(contains(code, "_opt_has") && contains(code, "_opt_value"),
+                 "ResultGroup.recv should store nullable state as has/value slots");
+    TEST_REQUIRE(!contains(code, "_rg_recv_slot_"),
+                 "typed optional ResultGroup.recv should not materialize a generic slot ref");
+    TEST_REQUIRE(!contains(code, "xr_aot_result_group_recv_value(ctx,"),
+                 "typed optional ResultGroup.recv should not write through XrValue*");
+    TEST_REQUIRE(!contains(code, "xrt_eq("),
+                 "typed optional ResultGroup.recv null check should not call xrt_eq");
+
+    printf("  Generated ResultGroup typed optional i64 path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -4847,9 +7484,11 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
     const char *src = "shared const queue: WorkQueue<int> = WorkQueue<int>(4, 2)\n"
                       "fn use_queue() -> int {\n"
                       "    assert_true(queue.push(1, 0))\n"
+                      "    assert_eq(queue.pushRange(2, 2, 0), 2)\n"
                       "    let (value, ok) = queue.tryPop(0)\n"
                       "    if (!ok) { return -1 }\n"
                       "    if (queue.isClosed) { return -2 }\n"
+                      "    queue.close()\n"
                       "    return value + queue.length + queue.shardCount\n"
                       "}\n"
                       "print(use_queue())\n";
@@ -4861,8 +7500,12 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT WorkQueue native methods should generate");
-    assert(contains(code, "xr_aot_work_queue_push_sync(") &&
-           "WorkQueue.push should use the sync AOT bridge outside suspendable code");
+    assert(contains(code, "xr_aot_work_queue_push_bool_sync(") &&
+           "WorkQueue.push should use the native bool sync AOT bridge");
+    assert(contains(code, "xr_aot_work_queue_push_range_i64_sync(") &&
+           "WorkQueue.pushRange should use the native int sync AOT bridge");
+    assert(contains(code, "xr_aot_work_queue_close_void_sync(") &&
+           "WorkQueue.close should use the native void sync AOT bridge");
     assert(contains(code, "xr_aot_work_queue_try_pop_sync(") &&
            "WorkQueue.tryPop should use the sync AOT bridge outside suspendable code");
     assert(contains(code, "xr_aot_work_queue_length(") &&
@@ -4878,6 +7521,12 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
     assert(!contains(code, "xray_vm_new(") && "sync WorkQueue main must not use a VM isolate");
     assert(!contains(code, "xrt_method_0(") && !contains(code, "xrt_method_1(") &&
            "WorkQueue native methods must not fall back to dynamic method dispatch");
+    assert(!contains(code, "xr_aot_work_queue_push_sync(") &&
+           "sync WorkQueue.push should not return tagged XrValue");
+    assert(!contains(code, "xr_aot_work_queue_push_range_sync(") &&
+           "sync WorkQueue.pushRange should not return tagged XrValue");
+    assert(!contains(code, "xr_aot_work_queue_close_sync(") &&
+           "sync WorkQueue.close should not return tagged XrValue");
 
     printf("  Generated WorkQueue native method helpers %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -4973,26 +7622,62 @@ int main(void) {
     run_cgen_cancelled_builtin_generates_false();
     run_cgen_variable_and_print();
     run_cgen_if_else();
+    run_cgen_early_return_branch_uses_unlikely_hint();
     run_cgen_multi_print();
     run_cgen_while_loop();
     run_cgen_string_literal();
     run_cgen_str_concat_uses_single_allocation_helper();
     run_cgen_function_call();
     run_cgen_c_export_emits_public_c_abi_wrapper();
+    run_cgen_multimodule_private_helpers_are_file_local_inline();
     run_cgen_stats_tracks_native_abi();
     run_cgen_module_prefix_is_c_identifier();
     run_cgen_emits_source_line_directives();
     run_cgen_emits_debug_source_var_slots();
     run_cgen_emits_shadowed_debug_source_var_slots();
     run_cgen_struct_debug_source_var_slots_use_typed_pointers();
+    run_cgen_struct_value_abi_uses_module_prefixed_typedef();
     run_cgen_coro_emits_source_line_directives();
     run_cgen_coro_emits_debug_source_var_slots();
     run_cgen_coro_syncs_helper_result_debug_source_vars();
     run_cgen_recursive();
     run_cgen_for_loop();
+    run_cgen_parallel_for_uses_runtime_executor();
+    run_cgen_parallel_for_local_init_uses_range_body_executor();
+    run_cgen_parallel_for_final_uses_range_body_executor();
+    run_cgen_parallel_range_uses_range_body_executor();
+    run_cgen_parallel_reduce_uses_runtime_executor();
+    run_cgen_parallel_reduce_local_init_uses_range_body_executor();
+    run_cgen_parallel_reduce_local_init_guarded_upval_mod_is_nothrow();
+    run_cgen_parallel_range_reduce_uses_range_body_executor();
+    run_cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime();
+    run_cgen_parallel_range_reduce_struct_accumulator_uses_aggregate_runtime();
+    run_cgen_parallel_range_reduce_struct_debug_locals_use_value_slots();
+    run_cgen_parallel_collect_into_scalar_lanes_use_direct_storage();
+    run_cgen_parallel_collect_into_multi_lanes_use_direct_storage();
+    run_cgen_parallel_collect_into_local_init_uses_range_body();
+    run_cgen_parallel_collect_return_local_init_uses_direct_storage();
+    run_cgen_parallel_collect_final_uses_range_body_executor();
+    run_cgen_parallel_collect_into_reference_lane_uses_direct_body_write();
+    run_cgen_parallel_for_inside_unsafe_keeps_loop_bindings();
+    run_cgen_parallel_for_body_closure_stack_allocates();
+    run_cgen_parallel_for_loop_body_closure_uses_scoped_stack_env();
+    run_cgen_parallel_for_upval_array_unchecked_uses_raw_storage();
+    run_cgen_parallel_for_rejects_throwing_body();
+    run_cgen_parallel_for_allows_proven_nothrow_helper_body();
+    run_cgen_parallel_for_allows_atomic_i64_direct_body();
+    run_cgen_parallel_for_allows_unchecked_bytes_append_from_array_slot();
+    run_cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper();
+    run_cgen_parallel_for_rejects_throwing_helper_body();
     run_cgen_typed_array_uses_raw_storage_fast_path();
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();
-    run_cgen_bytes_methods_use_raw_memory_helpers();
+    run_cgen_bytes_new_low_level_methods_use_raw_memory_helpers();
+    run_cgen_borrowed_bytes_param_reserve_skips_arc();
+    run_cgen_array_data_ptr_unchecked_uses_raw_pointer_path();
+    run_cgen_rawptr_parallel_for_capture_keeps_owner_alive();
+    run_cgen_rawptr_load_le_unchecked_uses_pointer_helper();
+    run_cgen_stack_borrow_slice_allows_local_rawptr_read_chain();
+    run_cgen_stack_borrow_slice_rejects_returned_rawptr();
     run_cgen_typed_array_i16_and_u32_use_raw_storage_fast_path();
     run_cgen_typed_array_float_and_bool_use_raw_storage_fast_path();
     run_cgen_inlined_struct_uses_native_field_storage();
@@ -5034,6 +7719,10 @@ int main(void) {
     run_cgen_typed_array_reduce_uses_native_accumulator_fast_path();
     run_cgen_typed_array_reduce_captured_callback_uses_runtime_helper();
     run_cgen_int_const_div_mod_uses_native_ops();
+    run_cgen_nonnegative_const_shr_uses_native_op();
+    run_cgen_unsigned_const_shift_uses_native_op();
+    run_cgen_unsigned_arith_uses_native_unsigned_expr();
+    run_cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain();
     run_cgen_defer_isolates_existing_pending_error();
     run_cgen_err_return_stops_unreachable_tail();
     run_cgen_unsupported_coroutine_ops_fail_fast();
@@ -5048,6 +7737,10 @@ int main(void) {
     run_cgen_coro_frame_params_use_typed_storage();
     run_cgen_coro_frame_skips_dead_ssa_slots();
     run_cgen_coro_loop_tail_phi_survives_poll_suspend();
+    run_cgen_coro_wait_driven_loop_omits_redundant_poll();
+    run_cgen_event_count_advance_uses_i64_helper();
+    run_cgen_countdown_latch_methods_use_native_helpers();
+    run_cgen_semaphore_methods_use_native_helpers();
     run_cgen_runtime_managed_types_skip_arc();
     run_cgen_coro_frame_release_uses_aot_arc();
     run_cgen_coro_go_clones_tagged_args();
@@ -5056,6 +7749,7 @@ int main(void) {
     run_cgen_coro_go_zero_state_sync_wrapper_has_nonempty_frame();
     run_cgen_sync_functions_without_go_emit_no_aot_wrappers();
     run_cgen_coro_sync_go_wrappers_only_for_go_targets();
+    run_cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops();
     run_cgen_coro_channel_send_copy_uses_transfer_helper();
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_unit_match_send_omits_void_phi();
@@ -5063,9 +7757,12 @@ int main(void) {
     run_cgen_coro_builtin_no_payload_enum_fields_skip_bridge();
     run_cgen_coro_await_clones_tagged_result();
     run_cgen_coro_scalar_await_uses_tagged_slot();
+    run_cgen_coro_await_array_task_index_borrows_checked_slot();
+    run_cgen_coro_one_shot_await_task_array_loop_borrows_checked_slot();
     run_cgen_coro_await_timeout_passes_deadline();
     run_cgen_tagged_null_equality_keeps_null_literal();
     run_cgen_coro_recv_resume_uses_wait_state_slot();
+    run_cgen_coro_discarded_recv_does_not_materialize_result();
     run_cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge();
     run_cgen_coro_scalar_channel_recv_uses_tagged_slot();
     run_cgen_coro_channel_recv_null_check_keeps_tagged_slot();
@@ -5077,11 +7774,20 @@ int main(void) {
     run_cgen_coro_channel_timeout_publishes_state_before_block();
     run_cgen_coro_recv_slot_is_traced_as_frame_root();
     run_cgen_coro_await_all_uses_aggregate_bridge();
+    run_cgen_coro_await_all_named_task_array_skips_task_list_clone();
+    run_cgen_coro_await_all_reused_push_task_array_uses_one_shot();
+    run_cgen_coro_await_all_into_reuses_result_array();
+    run_cgen_coro_top_level_await_all_into_keeps_result_array_alive();
+    run_cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch();
+    run_cgen_coro_result_group_reset_uses_native_helper();
+    run_cgen_result_group_sync_methods_elide_dead_err_checks();
     run_cgen_coro_await_any_uses_typed_aggregate_bridge();
     run_cgen_coro_scope_exit_publishes_state_before_block();
     run_cgen_channel_fields_use_aot_helpers();
     run_cgen_sync_go_channel_try_methods_use_aot_helpers();
     run_cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task();
+    run_cgen_coro_work_queue_pop_i64_optional_uses_typed_abi();
+    run_cgen_coro_result_group_recv_i64_optional_uses_typed_abi();
     run_cgen_work_queue_native_methods_use_aot_helpers();
     run_cgen_coro_task_status_uses_native_enum_status();
 

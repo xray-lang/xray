@@ -1,0 +1,15 @@
+/*
+** generic_result_lib.xr
+** 用于验证跨模块导出的泛型 ADT enum 会保留 payload 元数据。
+*/
+
+enum Result<T> {
+    Ok(T),
+    Err(int),
+}
+
+export fn makeBytes() -> Result<Bytes> {
+    return Result.Ok(Bytes([65, 66]))
+}
+
+export { Result }

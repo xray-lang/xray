@@ -6,6 +6,7 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_core_api.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_opt_block_simplify.h"
 #include "../../../src/ir/xi_opt_jump_thread.h"
@@ -29,6 +30,14 @@ static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
 static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 7, .frozen = true};
 static XrType stub_task = {
     .kind = XR_KIND_INSTANCE, .id = 10, .frozen = true, .instance = {.class_name = "Task"}};
+static XrType stub_result_group = {
+    .kind = XR_KIND_INSTANCE, .id = 13, .frozen = true, .instance = {.class_name = "ResultGroup"}};
+static XrType stub_task_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 12,
+    .frozen = true,
+    .container = {.element_type = &stub_task},
+};
 static XrType stub_u8 = {
     .kind = XR_KIND_INT, .id = 8, .frozen = true, .native_width = XR_NATIVE_U8};
 static XrType stub_uint64 = {
@@ -49,6 +58,14 @@ static XiFunc *make_func(const char *name, XrType *ret_type) {
     XiBlock *entry = xi_block_new(f);
     entry->sealed = true;
     return f;
+}
+
+static int pred_index(const XiBlock *blk, const XiBlock *pred) {
+    for (uint16_t i = 0; i < blk->npreds; i++) {
+        if (blk->preds[i] == pred)
+            return (int) i;
+    }
+    return -1;
 }
 
 #define TEST(name)                                                                                 \
@@ -272,6 +289,68 @@ TEST(const_fold_no_fold_variable) {
     xi_func_free(f);
 }
 
+static void setup_shared_const_slots(XiFunc *f, uint16_t count) {
+    f->nshared = count;
+    f->slot_owned_consts = (uint8_t *) xi_func_arena_alloc(f, count * sizeof(uint8_t));
+    f->shared_const_literals =
+        (XiConstLiteral *) xi_func_arena_alloc(f, count * sizeof(XiConstLiteral));
+    f->shared_const_literal_count = count;
+    assert(f->slot_owned_consts && f->shared_const_literals);
+    memset(f->slot_owned_consts, 1, count * sizeof(uint8_t));
+    memset(f->shared_const_literals, 0, count * sizeof(XiConstLiteral));
+}
+
+TEST(const_fold_shared_const_get) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+    setup_shared_const_slots(f, 1);
+    f->shared_const_literals[0].kind = XI_CONST_LITERAL_INT;
+    f->shared_const_literals[0].type = &stub_int;
+    f->shared_const_literals[0].int_value = 42;
+
+    XiValue *load = xi_value_new(f, blk, XI_GET_SHARED, &stub_int, 0);
+    load->aux_int = 0;
+
+    xi_opt_const_fold(f);
+
+    assert(load->op == XI_CONST && "const shared load should fold to CONST");
+    assert(load->aux_int == 42);
+    assert(load->nargs == 0);
+    assert((load->flags & XI_FLAG_READS_MEM) == 0);
+    xi_func_free(f);
+}
+
+TEST(const_fold_shared_const_set_records_expression_result) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+    setup_shared_const_slots(f, 2);
+
+    XiValue *c16 = xi_const_int(f, blk, 16, &stub_int);
+    XiValue *set0 = xi_value_new(f, blk, XI_SET_SHARED, &stub_void, 1);
+    set0->args[0] = c16;
+    set0->aux_int = 0;
+
+    XiValue *load0 = xi_value_new(f, blk, XI_GET_SHARED, &stub_int, 0);
+    load0->aux_int = 0;
+    XiValue *c2 = xi_const_int(f, blk, 2, &stub_int);
+    XiValue *shl = xi_binary(f, blk, XI_SHL, &stub_int, load0, c2);
+    XiValue *set1 = xi_value_new(f, blk, XI_SET_SHARED, &stub_void, 1);
+    set1->args[0] = shl;
+    set1->aux_int = 1;
+    XiValue *load1 = xi_value_new(f, blk, XI_GET_SHARED, &stub_int, 0);
+    load1->aux_int = 1;
+
+    xi_opt_const_fold(f);
+
+    assert(f->shared_const_literals[0].kind == XI_CONST_LITERAL_INT);
+    assert(f->shared_const_literals[0].int_value == 16);
+    assert(shl->op == XI_CONST && shl->aux_int == 64);
+    assert(f->shared_const_literals[1].kind == XI_CONST_LITERAL_INT);
+    assert(f->shared_const_literals[1].int_value == 64);
+    assert(load1->op == XI_CONST && load1->aux_int == 64);
+    xi_func_free(f);
+}
+
 TEST(const_fold_int_mod) {
     /* 17 % 5 -> 2 */
     XiFunc *f = make_func("test", &stub_int);
@@ -481,6 +560,7 @@ TEST(mark_one_shot_await_unique_go) {
     assert(chg.values_changed && "unique go->await should be marked");
     assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) != 0);
     assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
+    assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) == 0);
     xi_func_free(f);
 }
 
@@ -501,6 +581,27 @@ TEST(mark_one_shot_await_through_copy) {
     XiPassChange chg = xi_opt_mark_one_shot_await(f);
 
     assert(chg.values_changed && "unique copied go->await should be marked");
+    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) != 0);
+    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
+    xi_func_free(f);
+}
+
+TEST(mark_one_shot_await_completes_direct_lowering_pair) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *callee = xi_param(f, blk, 0, &stub_func);
+    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_task, 1);
+    go->args[0] = callee;
+    go->flags |= XI_FLAG_SIDE_EFFECT;
+    XiValue *await = xi_value_new(f, blk, XI_AWAIT, &stub_int, 1);
+    await->args[0] = go;
+    await->aux_int |= XI_AWAIT_AUX_ONE_SHOT_GO;
+    await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    assert(chg.values_changed && "pre-marked await should still mark its go producer");
     assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) != 0);
     assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
     xi_func_free(f);
@@ -547,6 +648,343 @@ TEST(mark_one_shot_await_skips_linked_go) {
     assert(!chg.values_changed && "linked go has observable propagation state");
     assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0);
     assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0);
+    xi_func_free(f);
+}
+
+TEST(mark_one_shot_await_all_fresh_literal) {
+    XiFunc *f = make_func("test", &stub_task_array);
+    XiBlock *blk = f->entry;
+
+    XiValue *callee = xi_param(f, blk, 0, &stub_func);
+    XiValue *go1 = xi_value_new(f, blk, XI_GO, &stub_task, 1);
+    go1->args[0] = callee;
+    go1->flags |= XI_FLAG_SIDE_EFFECT;
+    XiValue *go2 = xi_value_new(f, blk, XI_GO, &stub_task, 1);
+    go2->args[0] = callee;
+    go2->flags |= XI_FLAG_SIDE_EFFECT;
+
+    XiValue *cap = xi_const_int(f, blk, 2, &stub_int);
+    XiValue *arr = xi_value_new(f, blk, XI_ARRAY_NEW, &stub_task_array, 1);
+    arr->args[0] = cap;
+    XiValue *idx0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *set0 = xi_value_new(f, blk, XI_INDEX_SET, &stub_void, 3);
+    set0->args[0] = arr;
+    set0->args[1] = idx0;
+    set0->args[2] = go1;
+    set0->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    XiValue *idx1 = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *set1 = xi_value_new(f, blk, XI_INDEX_SET, &stub_void, 3);
+    set1->args[0] = arr;
+    set1->args[1] = idx1;
+    set1->args[2] = go2;
+    set1->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+
+    XiValue *await = xi_value_new(f, blk, XI_AWAIT, &stub_task_array, 1);
+    await->args[0] = arr;
+    await->aux_int |= XI_AWAIT_AUX_ALL;
+    await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    assert(chg.values_changed && "fresh await-all task literal should be aggregate one-shot");
+    assert((await->aux_int & XI_AWAIT_AUX_AGGREGATE_ONE_SHOT) != 0);
+    assert((go1->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
+    assert((go2->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
+    assert((go1->aux_int & XI_GO_AUX_DEFER_BATCH) != 0);
+    assert((go2->aux_int & XI_GO_AUX_DEFER_BATCH) != 0);
+    xi_func_free(f);
+}
+
+TEST(mark_one_shot_await_all_keeps_visible_array) {
+    XiFunc *f = make_func("test", &stub_task_array);
+    XiBlock *blk = f->entry;
+
+    XiValue *callee = xi_param(f, blk, 0, &stub_func);
+    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_task, 1);
+    go->args[0] = callee;
+    go->flags |= XI_FLAG_SIDE_EFFECT;
+    XiValue *cap = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *arr = xi_value_new(f, blk, XI_ARRAY_NEW, &stub_task_array, 1);
+    arr->args[0] = cap;
+    XiValue *idx0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *set0 = xi_value_new(f, blk, XI_INDEX_SET, &stub_void, 3);
+    set0->args[0] = arr;
+    set0->args[1] = idx0;
+    set0->args[2] = go;
+    set0->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    XiValue *await = xi_value_new(f, blk, XI_AWAIT, &stub_task_array, 1);
+    await->args[0] = arr;
+    await->aux_int |= XI_AWAIT_AUX_ALL;
+    await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    XiValue *len = xi_value_new(f, blk, XI_LOAD_FIELD, &stub_int, 1);
+    len->args[0] = arr;
+    len->aux = (void *) "length";
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    assert(!chg.values_changed && "observable task array must not be consumed");
+    assert((await->aux_int & XI_AWAIT_AUX_AGGREGATE_ONE_SHOT) == 0);
+    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0);
+    assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) == 0);
+    xi_func_free(f);
+}
+
+TEST(mark_one_shot_sequential_await_fresh_cleared_task_array) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *cap = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *arr = xi_value_new(f, blk, XI_ARRAY_NEW, &stub_task_array, 1);
+    arr->args[0] = cap;
+    XiValue *clear = xi_value_new(f, blk, XI_CALL_METHOD, &stub_void, 1);
+    clear->args[0] = arr;
+    clear->aux = (void *) "clear";
+    clear->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+
+    XiValue *callee = xi_param(f, blk, 0, &stub_func);
+    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_task, 1);
+    go->args[0] = callee;
+    go->flags |= XI_FLAG_SIDE_EFFECT;
+    XiValue *push = xi_value_new(f, blk, XI_CALL_METHOD, &stub_void, 2);
+    push->args[0] = arr;
+    push->args[1] = go;
+    push->aux = (void *) "push";
+    push->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+
+    XiValue *length = xi_value_new(f, blk, XI_LOAD_FIELD, &stub_int, 1);
+    length->args[0] = arr;
+    length->aux = (void *) "length";
+    XiValue *idx = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *get = xi_value_new(f, blk, XI_INDEX_GET, &stub_task, 2);
+    get->args[0] = arr;
+    get->args[1] = idx;
+    XiValue *await = xi_value_new(f, blk, XI_AWAIT, &stub_int, 1);
+    await->args[0] = get;
+    await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    (void) length;
+    assert(chg.values_changed && "cleared task array with sequential awaits should be batched");
+    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
+    assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) != 0);
+    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0);
+    assert((await->aux_int & XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH) != 0);
+    xi_func_free(f);
+}
+
+TEST(mark_one_shot_sequential_await_counted_task_array_loop) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+    XiBlock *header = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *latch = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+    entry->sealed = header->sealed = body->sealed = latch->sealed = exit_blk->sealed = true;
+
+    XiValue *cap = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *arr = xi_value_new(f, entry, XI_ARRAY_NEW, &stub_task_array, 1);
+    arr->args[0] = cap;
+    XiValue *clear = xi_value_new(f, entry, XI_CALL_METHOD, &stub_void, 1);
+    clear->args[0] = arr;
+    clear->aux = (void *) "clear";
+    clear->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    XiValue *callee = xi_param(f, entry, 0, &stub_func);
+    XiValue *go = xi_value_new(f, entry, XI_GO, &stub_task, 1);
+    go->args[0] = callee;
+    go->flags |= XI_FLAG_SIDE_EFFECT;
+    XiValue *push = xi_value_new(f, entry, XI_CALL_METHOD, &stub_void, 2);
+    push->args[0] = arr;
+    push->args[1] = go;
+    push->aux = (void *) "push";
+    push->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    XiValue *zero = xi_const_int(f, entry, 0, &stub_int);
+
+    xi_block_set_jump(entry, header);
+    xi_block_set_jump(latch, header);
+    XiPhi *iv = xi_phi_new(f, header, &stub_int, header->npreds);
+    XiValue *length = xi_value_new(f, header, XI_LOAD_FIELD, &stub_int, 1);
+    length->args[0] = arr;
+    length->aux = (void *) "length";
+    XiValue *cond = xi_binary(f, header, XI_LT, &stub_bool, &iv->value, length);
+    xi_block_set_if(header, cond, body, exit_blk);
+
+    XiValue *get = xi_value_new(f, body, XI_INDEX_GET, &stub_task, 2);
+    get->args[0] = arr;
+    get->args[1] = &iv->value;
+    XiValue *await = xi_value_new(f, body, XI_AWAIT, &stub_int, 1);
+    await->args[0] = get;
+    await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    xi_block_set_jump(body, latch);
+
+    XiValue *one = xi_const_int(f, latch, 1, &stub_int);
+    XiValue *next = xi_binary(f, latch, XI_ADD, &stub_int, &iv->value, one);
+    int entry_idx = pred_index(header, entry);
+    int latch_idx = pred_index(header, latch);
+    assert(entry_idx >= 0 && latch_idx >= 0);
+    iv->value.args[entry_idx] = zero;
+    iv->value.args[latch_idx] = next;
+    xi_block_set_return(exit_blk, xi_const_int(f, exit_blk, 0, &stub_int));
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    assert(chg.values_changed && "counted task array await loop should be one-shot");
+    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
+    assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) != 0);
+    assert((await->aux_int & XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH) != 0);
+    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) != 0);
+    xi_func_free(f);
+}
+
+TEST(mark_one_shot_sequential_await_rejects_repeated_constant_index_loop) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+    XiBlock *header = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *latch = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+    entry->sealed = header->sealed = body->sealed = latch->sealed = exit_blk->sealed = true;
+
+    XiValue *cap = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *arr = xi_value_new(f, entry, XI_ARRAY_NEW, &stub_task_array, 1);
+    arr->args[0] = cap;
+    XiValue *clear = xi_value_new(f, entry, XI_CALL_METHOD, &stub_void, 1);
+    clear->args[0] = arr;
+    clear->aux = (void *) "clear";
+    clear->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    XiValue *callee = xi_param(f, entry, 0, &stub_func);
+    XiValue *go = xi_value_new(f, entry, XI_GO, &stub_task, 1);
+    go->args[0] = callee;
+    go->flags |= XI_FLAG_SIDE_EFFECT;
+    XiValue *push = xi_value_new(f, entry, XI_CALL_METHOD, &stub_void, 2);
+    push->args[0] = arr;
+    push->args[1] = go;
+    push->aux = (void *) "push";
+    push->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    XiValue *zero = xi_const_int(f, entry, 0, &stub_int);
+
+    xi_block_set_jump(entry, header);
+    xi_block_set_jump(latch, header);
+    XiPhi *iv = xi_phi_new(f, header, &stub_int, header->npreds);
+    XiValue *length = xi_value_new(f, header, XI_LOAD_FIELD, &stub_int, 1);
+    length->args[0] = arr;
+    length->aux = (void *) "length";
+    XiValue *cond = xi_binary(f, header, XI_LT, &stub_bool, &iv->value, length);
+    xi_block_set_if(header, cond, body, exit_blk);
+
+    XiValue *get = xi_value_new(f, body, XI_INDEX_GET, &stub_task, 2);
+    get->args[0] = arr;
+    get->args[1] = zero;
+    XiValue *await = xi_value_new(f, body, XI_AWAIT, &stub_int, 1);
+    await->args[0] = get;
+    await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    xi_block_set_jump(body, latch);
+
+    XiValue *one = xi_const_int(f, latch, 1, &stub_int);
+    XiValue *next = xi_binary(f, latch, XI_ADD, &stub_int, &iv->value, one);
+    int entry_idx = pred_index(header, entry);
+    int latch_idx = pred_index(header, latch);
+    assert(entry_idx >= 0 && latch_idx >= 0);
+    iv->value.args[entry_idx] = zero;
+    iv->value.args[latch_idx] = next;
+    xi_block_set_return(exit_blk, xi_const_int(f, exit_blk, 0, &stub_int));
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    assert(chg.values_changed && "constant-index loop should still get deferred submit");
+    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
+    assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) != 0);
+    assert((await->aux_int & XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH) != 0);
+    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0);
+    xi_func_free(f);
+}
+
+TEST(mark_one_shot_sequential_await_skips_persistent_task_array) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *cap = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *arr = xi_value_new(f, blk, XI_ARRAY_NEW, &stub_task_array, 1);
+    arr->args[0] = cap;
+    XiValue *callee = xi_param(f, blk, 0, &stub_func);
+    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_task, 1);
+    go->args[0] = callee;
+    go->flags |= XI_FLAG_SIDE_EFFECT;
+    XiValue *push = xi_value_new(f, blk, XI_CALL_METHOD, &stub_void, 2);
+    push->args[0] = arr;
+    push->args[1] = go;
+    push->aux = (void *) "push";
+    push->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+
+    XiValue *length = xi_value_new(f, blk, XI_LOAD_FIELD, &stub_int, 1);
+    length->args[0] = arr;
+    length->aux = (void *) "length";
+    XiValue *idx = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *get = xi_value_new(f, blk, XI_INDEX_GET, &stub_task, 2);
+    get->args[0] = arr;
+    get->args[1] = idx;
+    XiValue *await = xi_value_new(f, blk, XI_AWAIT, &stub_int, 1);
+    await->args[0] = get;
+    await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    (void) length;
+    assert(!chg.values_changed && "persistent task arrays must not be deferred blindly");
+    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0);
+    assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) == 0);
+    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0);
+    assert((await->aux_int & XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH) == 0);
+    xi_func_free(f);
+}
+
+TEST(mark_fire_and_forget_result_group_go_deferred) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *callee = xi_param(f, blk, 0, &stub_func);
+    XiValue *group = xi_param(f, blk, 1, &stub_result_group);
+    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_void, 2);
+    go->args[0] = callee;
+    go->args[1] = group;
+    go->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_FIRE_AND_FORGET;
+
+    XiValue *recv = xi_value_new(f, blk, XI_CALL_METHOD, &stub_int, 1);
+    recv->args[0] = group;
+    recv->aux = (void *) "recv";
+    recv->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_READS_MEM;
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    (void) recv;
+    assert(chg.values_changed && "ResultGroup producer go should be deferred until recv");
+    assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) != 0);
+    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0);
+    xi_func_free(f);
+}
+
+TEST(mark_fire_and_forget_result_group_go_keeps_linked_go_immediate) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *callee = xi_param(f, blk, 0, &stub_func);
+    XiValue *group = xi_param(f, blk, 1, &stub_result_group);
+    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_void, 2);
+    go->args[0] = callee;
+    go->args[1] = group;
+    go->aux_int = 1;
+    go->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_FIRE_AND_FORGET;
+
+    XiValue *recv = xi_value_new(f, blk, XI_CALL_METHOD, &stub_int, 1);
+    recv->args[0] = group;
+    recv->aux = (void *) "recv";
+    recv->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_READS_MEM;
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    (void) recv;
+    assert(!chg.values_changed && "linked fire-and-forget go has observable propagation state");
+    assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) == 0);
     xi_func_free(f);
 }
 
@@ -1449,6 +1887,8 @@ int main(void) {
     run_const_fold_float_add();
     run_const_fold_chain();
     run_const_fold_no_fold_variable();
+    run_const_fold_shared_const_get();
+    run_const_fold_shared_const_set_records_expression_result();
     run_const_fold_int_mod();
     run_const_fold_mod_by_zero();
     run_const_fold_bnot();
@@ -1466,8 +1906,17 @@ int main(void) {
     /* One-shot await marking */
     run_mark_one_shot_await_unique_go();
     run_mark_one_shot_await_through_copy();
+    run_mark_one_shot_await_completes_direct_lowering_pair();
     run_mark_one_shot_await_keeps_visible_task();
     run_mark_one_shot_await_skips_linked_go();
+    run_mark_one_shot_await_all_fresh_literal();
+    run_mark_one_shot_await_all_keeps_visible_array();
+    run_mark_one_shot_sequential_await_fresh_cleared_task_array();
+    run_mark_one_shot_sequential_await_counted_task_array_loop();
+    run_mark_one_shot_sequential_await_rejects_repeated_constant_index_loop();
+    run_mark_one_shot_sequential_await_skips_persistent_task_array();
+    run_mark_fire_and_forget_result_group_go_deferred();
+    run_mark_fire_and_forget_result_group_go_keeps_linked_go_immediate();
 
     /* Dead code elimination */
     run_dce_removes_unused();

@@ -1,0 +1,51 @@
+fn read16(src: ByteSpan, pos: int) -> int {
+    let value: uint16 = src.loadLE<uint16>(pos)
+    return int(value)
+}
+
+fn read32(src: ByteSpan, pos: int) -> int {
+    let value: uint32 = src.loadLE<uint32>(pos)
+    return int(value)
+}
+
+fn read64(src: ByteSpan, pos: int) -> int {
+    let value: uint64 = src.loadLE<uint64>(pos)
+    return int(value)
+}
+
+fn read32Unchecked(src: ByteSpan, pos: int) -> int {
+    let value: uint32 = 0
+    unsafe {
+        value = src.loadLEUnchecked<uint32>(pos)
+    }
+    return int(value)
+}
+
+fn read16Unchecked(src: ByteSpan, pos: int) -> int {
+    let value: uint16 = 0
+    unsafe {
+        value = src.loadLEUnchecked<uint16>(pos)
+    }
+    return int(value)
+}
+
+let bytes = Bytes.withCapacity(8)
+unsafe {
+    bytes.pushUnchecked(1)
+    bytes.pushUnchecked(2)
+    bytes.pushUnchecked(3)
+    bytes.pushUnchecked(4)
+    bytes.pushUnchecked(5)
+    bytes.pushUnchecked(6)
+    bytes.pushUnchecked(7)
+    bytes.pushUnchecked(8)
+}
+
+let view: ByteSpan = bytes
+print(read16(view, 0))
+print(read16(view, 3))
+print(read32(view, 0))
+print(read32(view, 1))
+print(read64(view, 0))
+print(read16Unchecked(view, 6))
+print(read32Unchecked(view, 2))

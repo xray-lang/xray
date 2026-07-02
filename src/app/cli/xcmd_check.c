@@ -170,7 +170,8 @@ static int check_with_graph(XrVMRuntime *X, XaAnalyzer *analyzer, const char *en
             xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
 
             /* Collect exports so downstream modules can resolve import types */
-            spec->exports = xa_analyzer_collect_exports(analyzer, (XrAstNode *) spec->ast);
+            spec->export_symbols =
+                xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
 
             int file_errs = 0;
             int diag_count = 0;

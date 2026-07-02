@@ -1,0 +1,41 @@
+// Mutex<T> as a pure-Xray generic class composing the builtin coroutine-aware
+// Semaphore(1) as its lock, with closure-based critical sections. Exercises
+// generic class + generic method + closure arg + defer + a coroutine-aware
+// primitive constructed from a sync context; all must be VM/AOT identical.
+//
+// Constructing a Semaphore inside this constructor is a plain allocation (it
+// binds the scheduler but never yields), so it must NOT force the constructor
+// into coroutine codegen under AOT (task 147 §0.10). The real suspension point
+// is Semaphore.acquire(), which parks the coroutine instead of busy-waiting.
+
+class Mutex<T> {
+    _sem: Semaphore
+    value: T
+
+    constructor(v: T) {
+        this._sem = Semaphore(1)
+        this.value = v
+    }
+
+    lock<U>(body: (T) -> U) -> U {
+        this._sem.acquire()
+        defer { this._sem.release() }
+        return body(this.value)
+    }
+
+    replace(body: (T) -> T) -> T {
+        this._sem.acquire()
+        defer { this._sem.release() }
+        this.value = body(this.value)
+        return this.value
+    }
+}
+
+let m = Mutex<int>(10)
+print(m.lock((v) -> v * 2))       // 20 (reads guarded value)
+print(m.replace((v) -> v + 5))    // 15 (mutates guarded value under lock)
+print(m.lock((v) -> v))           // 15 (sees the mutation)
+
+let ms = Mutex<string>("a")
+print(ms.replace((s) -> s + "b")) // ab
+print(ms.lock((s) -> s + "!"))    // ab!

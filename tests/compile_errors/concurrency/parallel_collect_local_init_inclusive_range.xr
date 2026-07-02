@@ -1,0 +1,9 @@
+fn main() {
+    let out: Array<int> = []
+    parallel for i in 0..=4 workers 2 worker wid
+        local acc = wid
+        collect into out {
+        acc = acc + 1
+        i + acc
+    }
+}

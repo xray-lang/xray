@@ -1,0 +1,38 @@
+// User higher-order functions must behave identically under VM and AOT.
+// Regression guard: anonymous closures with an *inferred* return type used to
+// lower to a `void` C function under AOT (dropping the returned value -> null/0
+// at every call site), while the VM was unaffected. See task 147 §0.7.
+
+fn apply(f: (int) -> int, x: int) -> int { return f(x) }
+fn applyTwice(f: (int) -> int, x: int) -> int { return f(f(x)) }
+fn toStr(f: (int) -> string, x: int) -> string { return f(x) }
+
+fn mapInt(xs: Array<int>, f: (int) -> int) -> Array<int> {
+    let out: Array<int> = []
+    for (x in xs) { out.push(f(x)) }
+    return out
+}
+
+class Cell<T> {
+    value: T
+    constructor(v: T) { this.value = v }
+    map<U>(f: (T) -> U) -> U { return f(this.value) }
+    update(f: (T) -> T) -> T { this.value = f(this.value); return this.value }
+}
+
+// inferred-return lambdas passed to free functions
+print(apply((y) -> y * 3, 10))       // 30
+print(applyTwice((y) -> y + 1, 5))   // 7
+print(toStr((n) -> "n=" + n.toString(), 7))  // n=7
+
+// generic free function taking a closure
+let r = mapInt([1, 2, 3], (v) -> v * v)
+print(r[0])   // 1
+print(r[1])   // 4
+print(r[2])   // 9
+
+// generic class method taking a closure (inferred method type param U)
+let c = Cell<int>(10)
+print(c.map((v) -> v + 100))   // 110
+print(c.update((v) -> v * 2))  // 20
+print(c.value)                  // 20

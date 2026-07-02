@@ -263,6 +263,24 @@ static char **clone_str_array(char **arr, int count) {
     return result;
 }
 
+static XrParallelLocalBinding *clone_parallel_locals(XrParallelLocalBinding *locals, int count,
+                                                     XrMonoTypeMap *map, int mc,
+                                                     XrAstCloneCtx *clone_ctx) {
+    if (!locals || count <= 0)
+        return NULL;
+    XrParallelLocalBinding *result =
+        (XrParallelLocalBinding *) xr_calloc((size_t) count, sizeof(XrParallelLocalBinding));
+    if (!result)
+        return NULL;
+    for (int i = 0; i < count; i++) {
+        result[i].name = clone_str(locals[i].name);
+        result[i].source = xr_ast_clone_ctx(locals[i].source, map, mc, clone_ctx);
+        result[i].is_initializer = locals[i].is_initializer;
+        result[i].symbol_id = locals[i].symbol_id;
+    }
+    return result;
+}
+
 static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                                  XrAstCloneCtx *clone_ctx) {
     XR_DCHECK(map != NULL || mc == 0, "xr_ast_clone: map is NULL with non-zero mc");
@@ -425,6 +443,67 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                 xr_ast_clone_ctx(node->as.for_in_stmt.collection, map, mc, clone_ctx);
             n->as.for_in_stmt.body =
                 xr_ast_clone_ctx(node->as.for_in_stmt.body, map, mc, clone_ctx);
+            break;
+        case AST_PARALLEL_FOR_STMT:
+            n->as.parallel_for_stmt.label = clone_str(node->as.parallel_for_stmt.label);
+            n->as.parallel_for_stmt.item_name = clone_str(node->as.parallel_for_stmt.item_name);
+            n->as.parallel_for_stmt.end_name = clone_str(node->as.parallel_for_stmt.end_name);
+            n->as.parallel_for_stmt.worker_name = clone_str(node->as.parallel_for_stmt.worker_name);
+            n->as.parallel_for_stmt.locals =
+                clone_parallel_locals(node->as.parallel_for_stmt.locals,
+                                      node->as.parallel_for_stmt.local_count, map, mc, clone_ctx);
+            n->as.parallel_for_stmt.local_count = node->as.parallel_for_stmt.local_count;
+            n->as.parallel_for_stmt.range =
+                xr_ast_clone_ctx(node->as.parallel_for_stmt.range, map, mc, clone_ctx);
+            n->as.parallel_for_stmt.worker_count =
+                xr_ast_clone_ctx(node->as.parallel_for_stmt.worker_count, map, mc, clone_ctx);
+            n->as.parallel_for_stmt.final_body =
+                xr_ast_clone_ctx(node->as.parallel_for_stmt.final_body, map, mc, clone_ctx);
+            n->as.parallel_for_stmt.body =
+                xr_ast_clone_ctx(node->as.parallel_for_stmt.body, map, mc, clone_ctx);
+            n->as.parallel_for_stmt.range_body = node->as.parallel_for_stmt.range_body;
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            n->as.parallel_reduce_expr.item_name =
+                clone_str(node->as.parallel_reduce_expr.item_name);
+            n->as.parallel_reduce_expr.end_name = clone_str(node->as.parallel_reduce_expr.end_name);
+            n->as.parallel_reduce_expr.worker_name =
+                clone_str(node->as.parallel_reduce_expr.worker_name);
+            n->as.parallel_reduce_expr.locals = clone_parallel_locals(
+                node->as.parallel_reduce_expr.locals, node->as.parallel_reduce_expr.local_count,
+                map, mc, clone_ctx);
+            n->as.parallel_reduce_expr.local_count = node->as.parallel_reduce_expr.local_count;
+            n->as.parallel_reduce_expr.range =
+                xr_ast_clone_ctx(node->as.parallel_reduce_expr.range, map, mc, clone_ctx);
+            n->as.parallel_reduce_expr.worker_count =
+                xr_ast_clone_ctx(node->as.parallel_reduce_expr.worker_count, map, mc, clone_ctx);
+            n->as.parallel_reduce_expr.initial =
+                xr_ast_clone_ctx(node->as.parallel_reduce_expr.initial, map, mc, clone_ctx);
+            n->as.parallel_reduce_expr.combine =
+                xr_ast_clone_ctx(node->as.parallel_reduce_expr.combine, map, mc, clone_ctx);
+            n->as.parallel_reduce_expr.body =
+                xr_ast_clone_ctx(node->as.parallel_reduce_expr.body, map, mc, clone_ctx);
+            n->as.parallel_reduce_expr.range_body = node->as.parallel_reduce_expr.range_body;
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            n->as.parallel_collect_expr.item_name =
+                clone_str(node->as.parallel_collect_expr.item_name);
+            n->as.parallel_collect_expr.worker_name =
+                clone_str(node->as.parallel_collect_expr.worker_name);
+            n->as.parallel_collect_expr.locals = clone_parallel_locals(
+                node->as.parallel_collect_expr.locals, node->as.parallel_collect_expr.local_count,
+                map, mc, clone_ctx);
+            n->as.parallel_collect_expr.local_count = node->as.parallel_collect_expr.local_count;
+            n->as.parallel_collect_expr.range =
+                xr_ast_clone_ctx(node->as.parallel_collect_expr.range, map, mc, clone_ctx);
+            n->as.parallel_collect_expr.worker_count =
+                xr_ast_clone_ctx(node->as.parallel_collect_expr.worker_count, map, mc, clone_ctx);
+            n->as.parallel_collect_expr.into =
+                xr_ast_clone_ctx(node->as.parallel_collect_expr.into, map, mc, clone_ctx);
+            n->as.parallel_collect_expr.final_body =
+                xr_ast_clone_ctx(node->as.parallel_collect_expr.final_body, map, mc, clone_ctx);
+            n->as.parallel_collect_expr.body =
+                xr_ast_clone_ctx(node->as.parallel_collect_expr.body, map, mc, clone_ctx);
             break;
         case AST_BREAK_STMT:
             n->as.break_stmt.label = clone_str(node->as.break_stmt.label);
@@ -703,6 +782,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.await_expr.expr = xr_ast_clone_ctx(node->as.await_expr.expr, map, mc, clone_ctx);
             n->as.await_expr.timeout =
                 xr_ast_clone_ctx(node->as.await_expr.timeout, map, mc, clone_ctx);
+            n->as.await_expr.into = xr_ast_clone_ctx(node->as.await_expr.into, map, mc, clone_ctx);
             n->as.await_expr.is_any = node->as.await_expr.is_any;
             n->as.await_expr.is_all = node->as.await_expr.is_all;
             n->as.await_expr.is_any_success = node->as.await_expr.is_any_success;
@@ -1254,6 +1334,30 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             collect_instantiation_sites(node->as.for_in_stmt.collection, registry, collector);
             collect_instantiation_sites(node->as.for_in_stmt.body, registry, collector);
             break;
+        case AST_PARALLEL_FOR_STMT:
+            collect_instantiation_sites(node->as.parallel_for_stmt.range, registry, collector);
+            collect_instantiation_sites(node->as.parallel_for_stmt.worker_count, registry,
+                                        collector);
+            collect_instantiation_sites(node->as.parallel_for_stmt.final_body, registry, collector);
+            collect_instantiation_sites(node->as.parallel_for_stmt.body, registry, collector);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            collect_instantiation_sites(node->as.parallel_reduce_expr.range, registry, collector);
+            collect_instantiation_sites(node->as.parallel_reduce_expr.worker_count, registry,
+                                        collector);
+            collect_instantiation_sites(node->as.parallel_reduce_expr.initial, registry, collector);
+            collect_instantiation_sites(node->as.parallel_reduce_expr.combine, registry, collector);
+            collect_instantiation_sites(node->as.parallel_reduce_expr.body, registry, collector);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            collect_instantiation_sites(node->as.parallel_collect_expr.range, registry, collector);
+            collect_instantiation_sites(node->as.parallel_collect_expr.worker_count, registry,
+                                        collector);
+            collect_instantiation_sites(node->as.parallel_collect_expr.into, registry, collector);
+            collect_instantiation_sites(node->as.parallel_collect_expr.final_body, registry,
+                                        collector);
+            collect_instantiation_sites(node->as.parallel_collect_expr.body, registry, collector);
+            break;
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++)
                 collect_instantiation_sites(node->as.return_stmt.values[i], registry, collector);
@@ -1330,6 +1434,7 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             break;
         case AST_AWAIT_EXPR:
             collect_instantiation_sites(node->as.await_expr.expr, registry, collector);
+            collect_instantiation_sites(node->as.await_expr.into, registry, collector);
             break;
         case AST_UNSAFE_EXPR:
             collect_instantiation_sites(node->as.unsafe_expr.operand, registry, collector);
@@ -1491,6 +1596,26 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             rewrite_call_sites(node->as.for_in_stmt.collection, registry, collector);
             rewrite_call_sites(node->as.for_in_stmt.body, registry, collector);
             break;
+        case AST_PARALLEL_FOR_STMT:
+            rewrite_call_sites(node->as.parallel_for_stmt.range, registry, collector);
+            rewrite_call_sites(node->as.parallel_for_stmt.worker_count, registry, collector);
+            rewrite_call_sites(node->as.parallel_for_stmt.final_body, registry, collector);
+            rewrite_call_sites(node->as.parallel_for_stmt.body, registry, collector);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            rewrite_call_sites(node->as.parallel_reduce_expr.range, registry, collector);
+            rewrite_call_sites(node->as.parallel_reduce_expr.worker_count, registry, collector);
+            rewrite_call_sites(node->as.parallel_reduce_expr.initial, registry, collector);
+            rewrite_call_sites(node->as.parallel_reduce_expr.combine, registry, collector);
+            rewrite_call_sites(node->as.parallel_reduce_expr.body, registry, collector);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            rewrite_call_sites(node->as.parallel_collect_expr.range, registry, collector);
+            rewrite_call_sites(node->as.parallel_collect_expr.worker_count, registry, collector);
+            rewrite_call_sites(node->as.parallel_collect_expr.into, registry, collector);
+            rewrite_call_sites(node->as.parallel_collect_expr.final_body, registry, collector);
+            rewrite_call_sites(node->as.parallel_collect_expr.body, registry, collector);
+            break;
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++)
                 rewrite_call_sites(node->as.return_stmt.values[i], registry, collector);
@@ -1531,6 +1656,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         case AST_AWAIT_EXPR:
             rewrite_call_sites(node->as.await_expr.expr, registry, collector);
+            rewrite_call_sites(node->as.await_expr.into, registry, collector);
             break;
         case AST_UNSAFE_EXPR:
             rewrite_call_sites(node->as.unsafe_expr.operand, registry, collector);

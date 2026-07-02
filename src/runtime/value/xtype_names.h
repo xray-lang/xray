@@ -53,6 +53,8 @@
 #define TYPE_NAME_WEAKMAP "WeakMap"
 #define TYPE_NAME_WEAKSET "WeakSet"
 #define TYPE_NAME_BYTES "Bytes"
+#define TYPE_NAME_SPAN "Span"
+#define TYPE_NAME_BYTESPAN "ByteSpan"
 
 /* ========== Runtime Types ========== */
 
@@ -90,6 +92,9 @@
 #define TYPE_NAME_ATOMIC "Atomic"
 #define TYPE_NAME_WORKQUEUE "WorkQueue"
 #define TYPE_NAME_RESULTGROUP "ResultGroup"
+#define TYPE_NAME_COUNTDOWNLATCH "CountdownLatch"
+#define TYPE_NAME_SEMAPHORE "Semaphore"
+#define TYPE_NAME_EVENTCOUNT "EventCount"
 
 /* ========== DateTime Types ========== */
 
@@ -144,38 +149,41 @@ typedef enum {
     XR_TID_FLOAT32,  // 10
     XR_TID_FLOAT,    // 11 (= float64, "float" is the canonical name)
     // Object types
-    XR_TID_STRING,         // 12
-    XR_TID_FUNCTION,       // 13
-    XR_TID_ARRAY,          // 14
-    XR_TID_SET,            // 15
-    XR_TID_MAP,            // 16
-    XR_TID_INSTANCE,       // 17
-    XR_TID_JSON,           // 18
-    XR_TID_BIGINT,         // 19
-    XR_TID_STRINGBUILDER,  // 20
-    XR_TID_CHANNEL,        // 21
-    XR_TID_REGEX,          // 22
-    XR_TID_DATETIME,       // 23
-    XR_TID_PANIC_INFO,     // 24
-    XR_TID_ENUM_VALUE,     // 25
-    XR_TID_ENUM_TYPE,      // 26
-    XR_TID_BOUND_METHOD,   // 27
-    XR_TID_ITERATOR,       // 28
-    XR_TID_MODULE,         // 29
-    XR_TID_COROUTINE,      // 30
-    XR_TID_RANGE,          // 31
-    XR_TID_TASK,           // 32
-    XR_TID_NETCONN,        // 33
-    XR_TID_NETLISTENER,    // 34
-    XR_TID_ATOMIC,         // 35
-    XR_TID_WORKQUEUE,      // 36
-    XR_TID_RESULTGROUP,    // 37
+    XR_TID_STRING,          // 12
+    XR_TID_FUNCTION,        // 13
+    XR_TID_ARRAY,           // 14
+    XR_TID_SET,             // 15
+    XR_TID_MAP,             // 16
+    XR_TID_INSTANCE,        // 17
+    XR_TID_JSON,            // 18
+    XR_TID_BIGINT,          // 19
+    XR_TID_STRINGBUILDER,   // 20
+    XR_TID_CHANNEL,         // 21
+    XR_TID_REGEX,           // 22
+    XR_TID_DATETIME,        // 23
+    XR_TID_PANIC_INFO,      // 24
+    XR_TID_ENUM_VALUE,      // 25
+    XR_TID_ENUM_TYPE,       // 26
+    XR_TID_BOUND_METHOD,    // 27
+    XR_TID_ITERATOR,        // 28
+    XR_TID_MODULE,          // 29
+    XR_TID_COROUTINE,       // 30
+    XR_TID_RANGE,           // 31
+    XR_TID_TASK,            // 32
+    XR_TID_NETCONN,         // 33
+    XR_TID_NETLISTENER,     // 34
+    XR_TID_ATOMIC,          // 35
+    XR_TID_WORKQUEUE,       // 36
+    XR_TID_RESULTGROUP,     // 37
+    XR_TID_COUNTDOWNLATCH,  // 38
+    XR_TID_SEMAPHORE,       // 39
+    XR_TID_EVENTCOUNT,      // 40
     // Analyzer-only type IDs (not returned by typeof at runtime)
-    XR_TID_WEAKMAP,  // 38
-    XR_TID_WEAKSET,  // 39
-    // char: appended last to keep all existing TID values stable (embedded
-    // in Reflect/Type constants and MCP knowledge tables).
-    XR_TID_CHAR,  // 40
+    XR_TID_WEAKMAP,  // 41
+    XR_TID_WEAKSET,  // 42
+    // char and Record are runtime-visible scalar/struct names outside the
+    // concurrency block.
+    XR_TID_CHAR,  // 42
     XR_TID_RECORD,
     XR_TID_COUNT
 } XrTypeId;

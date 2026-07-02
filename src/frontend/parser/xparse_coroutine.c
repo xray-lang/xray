@@ -121,6 +121,7 @@ AstNode *xr_parse_go_expr_with_link(Parser *parser, uint8_t link_mode) {
  * await task
  * await(timeout: N) task
  * await all [tasks]
+ * await all [tasks] into results
  * await any [tasks]
  * await anySuccess [tasks]
  */
@@ -189,7 +190,24 @@ AstNode *xr_parse_await_expr(Parser *parser) {
         return NULL;
     }
 
-    return xr_ast_await_expr(parser->compiler_session, expr, timeout, is_any, is_all,
+    AstNode *into = NULL;
+    if (is_all && xr_parser_check(parser, TK_NAME)) {
+        Token name = parser->current;
+        if (name.length == 4 && memcmp(name.start, "into", 4) == 0) {
+            if (timeout) {
+                xr_parser_error_at_current(parser, "await all into does not support timeout");
+                return NULL;
+            }
+            xr_parser_advance(parser);  // Consume 'into'
+            into = xr_parse_precedence(parser, PREC_UNARY);
+            if (!into) {
+                xr_parser_error(parser, "expected result array expression after 'into'");
+                return NULL;
+            }
+        }
+    }
+
+    return xr_ast_await_expr(parser->compiler_session, expr, timeout, into, is_any, is_all,
                              is_any_success, line);
 }
 

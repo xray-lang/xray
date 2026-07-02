@@ -11,12 +11,56 @@
 
 #include "xi_emit_internal.h"
 #include "../runtime/value/xtype.h"
+#include "../shared/xr_elem_type.h"
 #include <stdio.h>
 
 static void emit_channel_transfer_annotation(EmitCtx *ctx, uint8_t mode) {
     if (mode == XR_TRANSFER_SHARE)
         return;
     emit_inst(ctx, CREATE_ABx(OP_NOP, 6, (uint32_t) mode));
+}
+
+static uint8_t xi_emit_await_all_result_elem_type(const XiValue *v) {
+    XrType *elem =
+        (v && v->type && XR_TYPE_IS_ARRAY(v->type)) ? v->type->container.element_type : NULL;
+    return (uint8_t) xr_tid_to_elem_type(xr_type_to_tid(elem));
+}
+
+static uint8_t xi_emit_array_value_elem_type(const XiValue *v) {
+    XrType *elem =
+        (v && v->type && XR_TYPE_IS_ARRAY(v->type)) ? v->type->container.element_type : NULL;
+    return (uint8_t) xr_tid_to_elem_type(xr_type_to_tid(elem));
+}
+
+static void xi_emit_load_array_zero_value(EmitCtx *ctx, XrArrayElemType elem_type, XiEmitReg dst) {
+    switch (elem_type) {
+        case XR_ELEM_F32:
+        case XR_ELEM_F64:
+            emit_inst(ctx, CREATE_AsBx(OP_LOADF, dst, 0));
+            break;
+        case XR_ELEM_CHAR:
+            emit_inst(ctx, CREATE_AsBx(OP_LOADI, dst, 0));
+            emit_inst(ctx, CREATE_ABC(OP_TOCHAR, dst, dst, 0));
+            break;
+        default:
+            emit_inst(ctx, CREATE_AsBx(OP_LOADI, dst, 0));
+            break;
+    }
+}
+
+#define XI_EMIT_AWAIT_ALL_ONE_SHOT_FLAG 0x80
+#define XI_EMIT_AWAIT_ALL_ELEM_MASK 0x7f
+
+static int emit_jump_if_cmp(EmitCtx *ctx, OpCode op, XiEmitReg lhs, XiEmitReg rhs,
+                            bool jump_when_true) {
+    emit_inst(ctx, CREATE_ABC(op, lhs, rhs, jump_when_true ? 1 : 0));
+    int jmp_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    return jmp_pc;
+}
+
+static void patch_jump_to(EmitCtx *ctx, int jmp_pc, int target_pc) {
+    PROTO_SET_CODE(ctx->proto, jmp_pc, CREATE_sJ(OP_JMP, target_pc - (jmp_pc + 1)));
 }
 
 /* ========== Exception Handling ========== */
@@ -263,6 +307,9 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) {
         emit_inst(ctx, CREATE_ABx(OP_NOP, 4, 1));
     }
+    if (v->aux_int & XI_GO_AUX_DEFER_BATCH) {
+        emit_inst(ctx, CREATE_ABx(OP_NOP, 6, 1));
+    }
 }
 
 /* Generator call: build a coroutine-backed iterator from a generator closure.
@@ -314,12 +361,32 @@ XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     bool is_all = (flags & XI_AWAIT_AUX_ALL) != 0;
     bool is_any_success = (flags & XI_AWAIT_AUX_ANY_SUCCESS) != 0;
     bool one_shot_go = (flags & XI_AWAIT_AUX_ONE_SHOT_GO) != 0;
+    bool into_result = (flags & XI_AWAIT_AUX_INTO_RESULT) != 0;
     if (is_any_success) {
         emit_inst(ctx, CREATE_ABC(OP_AWAIT_ANY, dst, task, 1));
     } else if (is_any) {
         emit_inst(ctx, CREATE_ABC(OP_AWAIT_ANY, dst, task, 0));
     } else if (is_all) {
-        emit_inst(ctx, CREATE_ABx(OP_AWAIT_ALL, dst, task));
+        uint8_t await_all_c =
+            (into_result && v->nargs >= 2 ? xi_emit_array_value_elem_type(v->args[1])
+                                          : xi_emit_await_all_result_elem_type(v)) &
+            XI_EMIT_AWAIT_ALL_ELEM_MASK;
+        if ((flags & XI_AWAIT_AUX_AGGREGATE_ONE_SHOT) != 0)
+            await_all_c |= XI_EMIT_AWAIT_ALL_ONE_SHOT_FLAG;
+        if (into_result) {
+            if (v->nargs < 2) {
+                emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+                return;
+            }
+            XiEmitReg out = reg_of(ctx, v->args[1]);
+            if (ctx->status != XI_EMIT_OK)
+                return;
+            emit_inst(ctx, CREATE_ABC(OP_AWAIT_ALL_INTO, out, task, await_all_c));
+            if (dst != out)
+                emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
+        } else {
+            emit_inst(ctx, CREATE_ABC(OP_AWAIT_ALL, dst, task, await_all_c));
+        }
     } else if (v->nargs >= 2) {
         XiEmitReg timeout = reg_of(ctx, v->args[1]);
         if (ctx->status != XI_EMIT_OK)
@@ -329,6 +396,643 @@ XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         uint8_t await_c = one_shot_go ? 0x02 : 0;
         emit_inst(ctx, CREATE_ABC(OP_AWAIT, dst, task, await_c));
     }
+}
+
+/* xi.par.for VM fallback: execute the batch body sequentially.
+ * The VM path is a semantic oracle, not the performance implementation; AOT can
+ * later replace the same IR op with persistent-worker range dispatch. */
+XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (!ctx || !v || v->nargs < 4 || v->aux_kind != XI_AUX_KIND_PAR_FOR || !v->aux) {
+        if (ctx)
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    const XiParallelForData *data = (const XiParallelForData *) v->aux;
+    if (!data->body_func) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    XiEmitReg start = reg_of_cell_deref(ctx, v->args[0]);
+    XiEmitReg end = reg_of_cell_deref(ctx, v->args[1]);
+    XiEmitReg workers = reg_of_cell_deref(ctx, v->args[2]);
+    XiEmitReg closure = reg_of(ctx, v->args[3]);
+    (void) workers;
+    if (ctx->status != XI_EMIT_OK)
+        return;
+
+    if (ctx->next_reg + (data->range_body ? 17 : 16) > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg end_excl = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg count = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg participants = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg one = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg max_participants = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg lane = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg base = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg rem = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg lane_count = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg extra_before = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg offset = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg iter = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg limit = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg call_base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg += data->range_body ? 4 : 3;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, end_excl, end, 0));
+    if (data->inclusive_end)
+        emit_inst(ctx, CREATE_ABC(OP_ADDI, end_excl, end_excl, 1));
+    emit_inst(ctx, CREATE_ABC(OP_SUB, count, end_excl, start));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, one, 1));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, max_participants, 256));
+
+    int empty_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, start, end_excl, false);
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, workers, 0));
+    int participants_gt_one_jmp = emit_jump_if_cmp(ctx, OP_LT, one, participants, false);
+    int participants_one_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int participants_set_one_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, one, 0));
+    int participants_one_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, participants_gt_one_jmp, participants_set_one_pc);
+    patch_jump_to(ctx, participants_one_done_jmp, participants_one_done_pc);
+
+    int count_lt_participants_jmp = emit_jump_if_cmp(ctx, OP_LT, count, participants, true);
+    int count_clamp_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int count_clamp_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, count, 0));
+    int count_clamp_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, count_lt_participants_jmp, count_clamp_pc);
+    patch_jump_to(ctx, count_clamp_done_jmp, count_clamp_done_pc);
+
+    int max_lt_participants_jmp =
+        emit_jump_if_cmp(ctx, OP_LT, max_participants, participants, true);
+    int max_clamp_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int max_clamp_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, max_participants, 0));
+    int max_clamp_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, max_lt_participants_jmp, max_clamp_pc);
+    patch_jump_to(ctx, max_clamp_done_jmp, max_clamp_done_pc);
+
+    emit_inst(ctx, CREATE_ABC(OP_DIV, base, count, participants));
+    emit_inst(ctx, CREATE_ABC(OP_MOD, rem, count, participants));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, lane, 0));
+
+    int outer_pc = current_pc(ctx);
+    int outer_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, lane, participants, false);
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, lane_count, base, 0));
+    int lane_lt_rem_for_count_jmp = emit_jump_if_cmp(ctx, OP_LT, lane, rem, true);
+    int lane_count_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int lane_count_inc_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_ADDI, lane_count, lane_count, 1));
+    int lane_count_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, lane_lt_rem_for_count_jmp, lane_count_inc_pc);
+    patch_jump_to(ctx, lane_count_done_jmp, lane_count_done_pc);
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, extra_before, rem, 0));
+    int lane_lt_rem_for_extra_jmp = emit_jump_if_cmp(ctx, OP_LT, lane, rem, true);
+    int extra_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int extra_set_lane_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, extra_before, lane, 0));
+    int extra_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, lane_lt_rem_for_extra_jmp, extra_set_lane_pc);
+    patch_jump_to(ctx, extra_done_jmp, extra_done_pc);
+
+    emit_inst(ctx, CREATE_ABC(OP_MUL, offset, lane, base));
+    emit_inst(ctx, CREATE_ABC(OP_ADD, offset, offset, extra_before));
+    emit_inst(ctx, CREATE_ABC(OP_ADD, iter, start, offset));
+    emit_inst(ctx, CREATE_ABC(OP_ADD, limit, iter, lane_count));
+
+    if (data->range_body) {
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, closure, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), iter, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), limit, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 3), lane, 0));
+        emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 3, 1));
+    } else {
+        int loop_pc = current_pc(ctx);
+        int inner_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, iter, limit, false);
+
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, closure, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), iter, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), lane, 0));
+        emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
+        emit_inst(ctx, CREATE_ABC(OP_ADDI, iter, iter, 1));
+
+        int back_jmp_pc = current_pc(ctx);
+        emit_inst(ctx, CREATE_sJ(OP_JMP, loop_pc - (back_jmp_pc + 1)));
+
+        int inner_exit_pc = current_pc(ctx);
+        patch_jump_to(ctx, inner_exit_jmp_pc, inner_exit_pc);
+    }
+    emit_inst(ctx, CREATE_ABC(OP_ADDI, lane, lane, 1));
+    int outer_back_jmp_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, outer_pc - (outer_back_jmp_pc + 1)));
+
+    int exit_pc = current_pc(ctx);
+    patch_jump_to(ctx, empty_jmp_pc, exit_pc);
+    patch_jump_to(ctx, outer_exit_jmp_pc, exit_pc);
+}
+
+/* xi.par.collect VM fallback: execute stable lanes sequentially and collect
+ * body results into a deterministic Array<T>. */
+XR_FUNC void xi_emit_par_collect(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!ctx || !v || v->nargs < 4 || v->aux_kind != XI_AUX_KIND_PAR_COLLECT || !v->aux) {
+        if (ctx)
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    const XiParallelCollectData *data = (const XiParallelCollectData *) v->aux;
+    if (!data->body_func || (data->into_result && v->nargs < 5)) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    XiEmitReg start = reg_of_cell_deref(ctx, v->args[0]);
+    XiEmitReg end = reg_of_cell_deref(ctx, v->args[1]);
+    XiEmitReg workers = reg_of_cell_deref(ctx, v->args[2]);
+    XiEmitReg closure = reg_of(ctx, v->args[3]);
+    if (data->direct_lane_writes) {
+        if (data->lane_count < 1 || data->lane_count > 16 ||
+            v->nargs < (uint16_t) (4u + data->lane_count)) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        XiEmitReg targets[16];
+        for (uint16_t i = 0; i < data->lane_count; i++)
+            targets[i] = reg_of(ctx, v->args[4 + i]);
+        (void) workers;
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        bool body_range = data->body_func && data->body_func->nparams == 3;
+        if (!body_range && (!data->body_func || data->body_func->nparams != 2)) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+
+        if (ctx->next_reg + 18 > MAX_REGS) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return;
+        }
+        XiEmitReg end_excl = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg count = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg participants = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg one = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg max_participants = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg lane = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg base = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg rem = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg lane_count = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg extra_before = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg offset = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg iter = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg limit = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg fill_value = (XiEmitReg) ctx->next_reg++;
+        XiEmitReg call_base = (XiEmitReg) ctx->next_reg;
+        ctx->next_reg += 4;
+        if (ctx->next_reg > ctx->max_reg)
+            ctx->max_reg = ctx->next_reg;
+
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, end_excl, end, 0));
+        if (data->inclusive_end)
+            emit_inst(ctx, CREATE_ABC(OP_ADDI, end_excl, end_excl, 1));
+        emit_inst(ctx, CREATE_ABC(OP_SUB, count, end_excl, start));
+        for (uint16_t i = 0; i < data->lane_count; i++) {
+            uint8_t elem_tid = 0;
+            if (v->args[4 + i] && v->args[4 + i]->type && XR_TYPE_IS_ARRAY(v->args[4 + i]->type) &&
+                v->args[4 + i]->type->container.element_type)
+                elem_tid = xr_type_to_tid(v->args[4 + i]->type->container.element_type);
+            XrArrayElemType elem_type = xr_tid_to_elem_type(elem_tid);
+            if (elem_type == XR_ELEM_ANY)
+                emit_inst(ctx, CREATE_ABC(OP_LOADNULL, fill_value, 0, 0));
+            else
+                xi_emit_load_array_zero_value(ctx, elem_type, fill_value);
+            emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESIZE, targets[i], count, fill_value));
+        }
+        emit_inst(ctx, CREATE_AsBx(OP_LOADI, one, 1));
+        emit_inst(ctx, CREATE_AsBx(OP_LOADI, max_participants, 256));
+
+        int empty_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, start, end_excl, false);
+
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, workers, 0));
+        int participants_gt_one_jmp = emit_jump_if_cmp(ctx, OP_LT, one, participants, false);
+        int participants_one_done_jmp = current_pc(ctx);
+        emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+        int participants_set_one_pc = current_pc(ctx);
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, one, 0));
+        int participants_one_done_pc = current_pc(ctx);
+        patch_jump_to(ctx, participants_gt_one_jmp, participants_set_one_pc);
+        patch_jump_to(ctx, participants_one_done_jmp, participants_one_done_pc);
+
+        int count_lt_participants_jmp = emit_jump_if_cmp(ctx, OP_LT, count, participants, true);
+        int count_clamp_done_jmp = current_pc(ctx);
+        emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+        int count_clamp_pc = current_pc(ctx);
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, count, 0));
+        int count_clamp_done_pc = current_pc(ctx);
+        patch_jump_to(ctx, count_lt_participants_jmp, count_clamp_pc);
+        patch_jump_to(ctx, count_clamp_done_jmp, count_clamp_done_pc);
+
+        int max_lt_participants_jmp =
+            emit_jump_if_cmp(ctx, OP_LT, max_participants, participants, true);
+        int max_clamp_done_jmp = current_pc(ctx);
+        emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+        int max_clamp_pc = current_pc(ctx);
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, max_participants, 0));
+        int max_clamp_done_pc = current_pc(ctx);
+        patch_jump_to(ctx, max_lt_participants_jmp, max_clamp_pc);
+        patch_jump_to(ctx, max_clamp_done_jmp, max_clamp_done_pc);
+
+        emit_inst(ctx, CREATE_ABC(OP_DIV, base, count, participants));
+        emit_inst(ctx, CREATE_ABC(OP_MOD, rem, count, participants));
+        emit_inst(ctx, CREATE_AsBx(OP_LOADI, lane, 0));
+
+        int outer_pc = current_pc(ctx);
+        int outer_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, lane, participants, false);
+
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, lane_count, base, 0));
+        int lane_lt_rem_for_count_jmp = emit_jump_if_cmp(ctx, OP_LT, lane, rem, true);
+        int lane_count_done_jmp = current_pc(ctx);
+        emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+        int lane_count_inc_pc = current_pc(ctx);
+        emit_inst(ctx, CREATE_ABC(OP_ADDI, lane_count, lane_count, 1));
+        int lane_count_done_pc = current_pc(ctx);
+        patch_jump_to(ctx, lane_lt_rem_for_count_jmp, lane_count_inc_pc);
+        patch_jump_to(ctx, lane_count_done_jmp, lane_count_done_pc);
+
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, extra_before, rem, 0));
+        int lane_lt_rem_for_extra_jmp = emit_jump_if_cmp(ctx, OP_LT, lane, rem, true);
+        int extra_done_jmp = current_pc(ctx);
+        emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+        int extra_set_lane_pc = current_pc(ctx);
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, extra_before, lane, 0));
+        int extra_done_pc = current_pc(ctx);
+        patch_jump_to(ctx, lane_lt_rem_for_extra_jmp, extra_set_lane_pc);
+        patch_jump_to(ctx, extra_done_jmp, extra_done_pc);
+
+        emit_inst(ctx, CREATE_ABC(OP_MUL, offset, lane, base));
+        emit_inst(ctx, CREATE_ABC(OP_ADD, offset, offset, extra_before));
+        emit_inst(ctx, CREATE_ABC(OP_ADD, iter, start, offset));
+        emit_inst(ctx, CREATE_ABC(OP_ADD, limit, iter, lane_count));
+
+        if (body_range) {
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, closure, 0));
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), iter, 0));
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), limit, 0));
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 3), lane, 0));
+            emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 3, 0));
+        } else {
+            int loop_pc = current_pc(ctx);
+            int inner_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, iter, limit, false);
+
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, closure, 0));
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), iter, 0));
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), lane, 0));
+            emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 0));
+            emit_inst(ctx, CREATE_ABC(OP_ADDI, iter, iter, 1));
+
+            int back_jmp_pc = current_pc(ctx);
+            emit_inst(ctx, CREATE_sJ(OP_JMP, loop_pc - (back_jmp_pc + 1)));
+
+            int inner_exit_pc = current_pc(ctx);
+            patch_jump_to(ctx, inner_exit_jmp_pc, inner_exit_pc);
+        }
+        emit_inst(ctx, CREATE_ABC(OP_ADDI, lane, lane, 1));
+        int outer_back_jmp_pc = current_pc(ctx);
+        emit_inst(ctx, CREATE_sJ(OP_JMP, outer_pc - (outer_back_jmp_pc + 1)));
+
+        int exit_pc = current_pc(ctx);
+        patch_jump_to(ctx, empty_jmp_pc, exit_pc);
+        patch_jump_to(ctx, outer_exit_jmp_pc, exit_pc);
+        if (data->into_result) {
+            emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
+        } else {
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, targets[0], 0));
+        }
+        return;
+    }
+
+    XiEmitReg target_array = data->into_result ? reg_of(ctx, v->args[4]) : dst;
+    (void) workers;
+    if (ctx->status != XI_EMIT_OK)
+        return;
+
+    if (ctx->next_reg + 19 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg end_excl = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg count = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg participants = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg one = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg max_participants = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg lane = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg base = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg rem = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg lane_count = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg extra_before = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg offset = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg iter = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg limit = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg collect_idx = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg item_result = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg fill_value = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg call_base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg += 3;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+
+    uint8_t elem_tid = xr_type_to_tid(data->element_type);
+    if (elem_tid == 0 && data->into_result && v->args[4] && v->args[4]->type &&
+        XR_TYPE_IS_ARRAY(v->args[4]->type) && v->args[4]->type->container.element_type)
+        elem_tid = xr_type_to_tid(v->args[4]->type->container.element_type);
+    if (elem_tid == 0 && v->type && XR_TYPE_IS_ARRAY(v->type) && v->type->container.element_type)
+        elem_tid = xr_type_to_tid(v->type->container.element_type);
+    uint8_t array_c = (uint8_t) (elem_tid << 2);
+    XrArrayElemType elem_type = xr_tid_to_elem_type(elem_tid);
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, end_excl, end, 0));
+    if (data->inclusive_end)
+        emit_inst(ctx, CREATE_ABC(OP_ADDI, end_excl, end_excl, 1));
+    emit_inst(ctx, CREATE_ABC(OP_SUB, count, end_excl, start));
+    if (!data->into_result)
+        emit_inst(ctx, CREATE_ABC(OP_ARRAY_NEW_CAP, target_array, count, array_c));
+    if (elem_type == XR_ELEM_ANY)
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, fill_value, 0, 0));
+    else
+        xi_emit_load_array_zero_value(ctx, elem_type, fill_value);
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESIZE, target_array, count, fill_value));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, one, 1));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, max_participants, 256));
+
+    int empty_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, start, end_excl, false);
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, workers, 0));
+    int participants_gt_one_jmp = emit_jump_if_cmp(ctx, OP_LT, one, participants, false);
+    int participants_one_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int participants_set_one_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, one, 0));
+    int participants_one_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, participants_gt_one_jmp, participants_set_one_pc);
+    patch_jump_to(ctx, participants_one_done_jmp, participants_one_done_pc);
+
+    int count_lt_participants_jmp = emit_jump_if_cmp(ctx, OP_LT, count, participants, true);
+    int count_clamp_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int count_clamp_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, count, 0));
+    int count_clamp_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, count_lt_participants_jmp, count_clamp_pc);
+    patch_jump_to(ctx, count_clamp_done_jmp, count_clamp_done_pc);
+
+    int max_lt_participants_jmp =
+        emit_jump_if_cmp(ctx, OP_LT, max_participants, participants, true);
+    int max_clamp_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int max_clamp_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, max_participants, 0));
+    int max_clamp_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, max_lt_participants_jmp, max_clamp_pc);
+    patch_jump_to(ctx, max_clamp_done_jmp, max_clamp_done_pc);
+
+    emit_inst(ctx, CREATE_ABC(OP_DIV, base, count, participants));
+    emit_inst(ctx, CREATE_ABC(OP_MOD, rem, count, participants));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, lane, 0));
+
+    int outer_pc = current_pc(ctx);
+    int outer_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, lane, participants, false);
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, lane_count, base, 0));
+    int lane_lt_rem_for_count_jmp = emit_jump_if_cmp(ctx, OP_LT, lane, rem, true);
+    int lane_count_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int lane_count_inc_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_ADDI, lane_count, lane_count, 1));
+    int lane_count_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, lane_lt_rem_for_count_jmp, lane_count_inc_pc);
+    patch_jump_to(ctx, lane_count_done_jmp, lane_count_done_pc);
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, extra_before, rem, 0));
+    int lane_lt_rem_for_extra_jmp = emit_jump_if_cmp(ctx, OP_LT, lane, rem, true);
+    int extra_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int extra_set_lane_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, extra_before, lane, 0));
+    int extra_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, lane_lt_rem_for_extra_jmp, extra_set_lane_pc);
+    patch_jump_to(ctx, extra_done_jmp, extra_done_pc);
+
+    emit_inst(ctx, CREATE_ABC(OP_MUL, offset, lane, base));
+    emit_inst(ctx, CREATE_ABC(OP_ADD, offset, offset, extra_before));
+    emit_inst(ctx, CREATE_ABC(OP_ADD, iter, start, offset));
+    emit_inst(ctx, CREATE_ABC(OP_ADD, limit, iter, lane_count));
+
+    int loop_pc = current_pc(ctx);
+    int inner_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, iter, limit, false);
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, closure, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), iter, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), lane, 0));
+    emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, item_result, call_base, 0));
+    emit_inst(ctx, CREATE_ABC(OP_SUB, collect_idx, iter, start));
+    emit_inst(ctx, CREATE_ABC(OP_INDEX_SET, target_array, collect_idx, item_result));
+    emit_inst(ctx, CREATE_ABC(OP_ADDI, iter, iter, 1));
+
+    int back_jmp_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, loop_pc - (back_jmp_pc + 1)));
+
+    int inner_exit_pc = current_pc(ctx);
+    patch_jump_to(ctx, inner_exit_jmp_pc, inner_exit_pc);
+    emit_inst(ctx, CREATE_ABC(OP_ADDI, lane, lane, 1));
+    int outer_back_jmp_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, outer_pc - (outer_back_jmp_pc + 1)));
+
+    int exit_pc = current_pc(ctx);
+    patch_jump_to(ctx, empty_jmp_pc, exit_pc);
+    patch_jump_to(ctx, outer_exit_jmp_pc, exit_pc);
+    if (data->into_result)
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
+}
+
+/* xi.par.reduce VM fallback: execute the range sequentially and combine each
+ * item result into the accumulator.  AOT lowers the same op to the native
+ * range reducer; VM keeps the semantic contract aligned. */
+XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!ctx || !v || v->nargs < 6 || v->aux_kind != XI_AUX_KIND_PAR_REDUCE || !v->aux) {
+        if (ctx)
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    const XiParallelReduceData *data = (const XiParallelReduceData *) v->aux;
+    if (!data->body_func || !data->combine_func) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    XiEmitReg start = reg_of_cell_deref(ctx, v->args[0]);
+    XiEmitReg end = reg_of_cell_deref(ctx, v->args[1]);
+    XiEmitReg workers = reg_of_cell_deref(ctx, v->args[2]);
+    XiEmitReg initial = reg_of_cell_deref(ctx, v->args[3]);
+    XiEmitReg body_closure = reg_of(ctx, v->args[4]);
+    XiEmitReg combine_closure = reg_of(ctx, v->args[5]);
+    (void) workers;
+    if (ctx->status != XI_EMIT_OK)
+        return;
+
+    if (ctx->next_reg + 18 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg end_excl = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg count = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg participants = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg one = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg max_participants = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg lane = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg base = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg rem = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg lane_count = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg extra_before = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg offset = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg iter = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg limit = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg item_result = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg call_base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg += 4;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, initial, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, end_excl, end, 0));
+    if (data->inclusive_end)
+        emit_inst(ctx, CREATE_ABC(OP_ADDI, end_excl, end_excl, 1));
+    emit_inst(ctx, CREATE_ABC(OP_SUB, count, end_excl, start));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, one, 1));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, max_participants, 256));
+
+    int empty_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, start, end_excl, false);
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, workers, 0));
+    int participants_gt_one_jmp = emit_jump_if_cmp(ctx, OP_LT, one, participants, false);
+    int participants_one_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int participants_set_one_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, one, 0));
+    int participants_one_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, participants_gt_one_jmp, participants_set_one_pc);
+    patch_jump_to(ctx, participants_one_done_jmp, participants_one_done_pc);
+
+    int count_lt_participants_jmp = emit_jump_if_cmp(ctx, OP_LT, count, participants, true);
+    int count_clamp_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int count_clamp_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, count, 0));
+    int count_clamp_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, count_lt_participants_jmp, count_clamp_pc);
+    patch_jump_to(ctx, count_clamp_done_jmp, count_clamp_done_pc);
+
+    int max_lt_participants_jmp =
+        emit_jump_if_cmp(ctx, OP_LT, max_participants, participants, true);
+    int max_clamp_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int max_clamp_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, participants, max_participants, 0));
+    int max_clamp_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, max_lt_participants_jmp, max_clamp_pc);
+    patch_jump_to(ctx, max_clamp_done_jmp, max_clamp_done_pc);
+
+    emit_inst(ctx, CREATE_ABC(OP_DIV, base, count, participants));
+    emit_inst(ctx, CREATE_ABC(OP_MOD, rem, count, participants));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, lane, 0));
+
+    int outer_pc = current_pc(ctx);
+    int outer_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, lane, participants, false);
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, lane_count, base, 0));
+    int lane_lt_rem_for_count_jmp = emit_jump_if_cmp(ctx, OP_LT, lane, rem, true);
+    int lane_count_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int lane_count_inc_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_ADDI, lane_count, lane_count, 1));
+    int lane_count_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, lane_lt_rem_for_count_jmp, lane_count_inc_pc);
+    patch_jump_to(ctx, lane_count_done_jmp, lane_count_done_pc);
+
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, extra_before, rem, 0));
+    int lane_lt_rem_for_extra_jmp = emit_jump_if_cmp(ctx, OP_LT, lane, rem, true);
+    int extra_done_jmp = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int extra_set_lane_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, extra_before, lane, 0));
+    int extra_done_pc = current_pc(ctx);
+    patch_jump_to(ctx, lane_lt_rem_for_extra_jmp, extra_set_lane_pc);
+    patch_jump_to(ctx, extra_done_jmp, extra_done_pc);
+
+    emit_inst(ctx, CREATE_ABC(OP_MUL, offset, lane, base));
+    emit_inst(ctx, CREATE_ABC(OP_ADD, offset, offset, extra_before));
+    emit_inst(ctx, CREATE_ABC(OP_ADD, iter, start, offset));
+    emit_inst(ctx, CREATE_ABC(OP_ADD, limit, iter, lane_count));
+
+    if (data->range_body) {
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, body_closure, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), iter, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), limit, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 3), lane, 0));
+        emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 3, 1));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, item_result, call_base, 0));
+
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, combine_closure, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), dst, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), item_result, 0));
+        emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, call_base, 0));
+    } else {
+        int loop_pc = current_pc(ctx);
+        int inner_exit_jmp_pc = emit_jump_if_cmp(ctx, OP_LT, iter, limit, false);
+
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, body_closure, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), iter, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), lane, 0));
+        emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, item_result, call_base, 0));
+
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, call_base, combine_closure, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 1), dst, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (call_base + 2), item_result, 0));
+        emit_inst(ctx, CREATE_ABC(OP_CALL_STATIC, call_base, 2, 1));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, call_base, 0));
+
+        emit_inst(ctx, CREATE_ABC(OP_ADDI, iter, iter, 1));
+
+        int back_jmp_pc = current_pc(ctx);
+        emit_inst(ctx, CREATE_sJ(OP_JMP, loop_pc - (back_jmp_pc + 1)));
+
+        int inner_exit_pc = current_pc(ctx);
+        patch_jump_to(ctx, inner_exit_jmp_pc, inner_exit_pc);
+    }
+    emit_inst(ctx, CREATE_ABC(OP_ADDI, lane, lane, 1));
+    int outer_back_jmp_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, outer_pc - (outer_back_jmp_pc + 1)));
+
+    int exit_pc = current_pc(ctx);
+    patch_jump_to(ctx, empty_jmp_pc, exit_pc);
+    patch_jump_to(ctx, outer_exit_jmp_pc, exit_pc);
 }
 
 /* Yield */

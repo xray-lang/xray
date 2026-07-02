@@ -177,6 +177,7 @@ XrCoroBlockResult xr_coro_chan_send_transfer(XrCoroutine *coro, XrChannel *ch, X
                                              uint8_t transfer_mode) {
     XR_DCHECK(ch != NULL, "xr_coro_chan_send: NULL channel");
 
+    xr_coro_submit_deferred_spawns(coro);
     bool had_ext = coro && coro->ext != NULL;
     XrRuntimeCore *core = channel_transfer_core(ch, coro);
     record_channel_ownership_metric(channel_transfer_stats_runtime(ch, coro), value, false);
@@ -241,6 +242,7 @@ XrCoroBlockResult xr_coro_chan_recv(XrCoroutine *coro, XrChannel *ch, XrSlotRef 
                                     XrSlotRef ok_slot, int64_t timeout_ms, bool deliver) {
     XR_DCHECK(ch != NULL, "xr_coro_chan_recv: NULL channel");
 
+    xr_coro_submit_deferred_spawns(coro);
     bool had_ext = coro && coro->ext != NULL;
     XrRuntimeCore *core = channel_transfer_core(ch, coro);
 
@@ -453,6 +455,169 @@ static XrTaskAwaitNode *coro_prepare_multi_await_nodes(XrMultiAwaitWaitToken *to
     return nodes;
 }
 
+static void submit_deferred_task_batch(XrCoroutine *coro, XrCoroutine **coros,
+                                       XrTask **registry_tasks, int count) {
+    if (!coro || !coros || count <= 0)
+        return;
+    XrRuntime *runtime = (XrRuntime *) xr_coro_scheduler(coro);
+    if (!runtime)
+        return;
+    if (registry_tasks)
+        xr_task_runtime_register_deferred_tasks(runtime, registry_tasks, count);
+    else
+        xr_task_runtime_register_deferred_batch(runtime, coros, count);
+    xr_runtime_spawn_batch(runtime, coros, count);
+}
+
+static bool coro_claim_deferred_submit(XrCoroutine *executor) {
+    if (!executor)
+        return false;
+    uint32_t flags = atomic_load_explicit(&executor->flags, memory_order_acquire);
+    if ((flags & XR_CORO_FLG_DEFERRED_SUBMIT) == 0)
+        return false;
+    uint32_t old_flags = atomic_fetch_and_explicit(
+        &executor->flags, ~(uint32_t) XR_CORO_FLG_DEFERRED_SUBMIT, memory_order_acq_rel);
+    return (old_flags & XR_CORO_FLG_DEFERRED_SUBMIT) != 0;
+}
+
+static void submit_deferred_array_tasks_scan(XrCoroutine *coro, XrArray *tasks) {
+    if (!coro || !tasks)
+        return;
+
+    int count = xr_array_size(tasks);
+    if (count <= 0)
+        return;
+
+    XrCoroutine *inline_coros[64];
+    XrTask *inline_registry_tasks[64];
+    XrCoroutine **coros = inline_coros;
+    XrTask **registry_tasks = inline_registry_tasks;
+    if (count > (int) (sizeof(inline_coros) / sizeof(inline_coros[0]))) {
+        coros = (XrCoroutine **) xr_malloc((size_t) count * sizeof(XrCoroutine *));
+        registry_tasks = (XrTask **) xr_malloc((size_t) count * sizeof(XrTask *));
+        if (!coros) {
+            if (coros)
+                xr_free(coros);
+            if (registry_tasks)
+                xr_free(registry_tasks);
+            return;
+        }
+    }
+
+    int submit_count = 0;
+    for (int j = 0; j < count; j++) {
+        XrValue cv = xr_array_get(tasks, j);
+        if (!xr_value_is_task(cv))
+            continue;
+        XrTask *task = xr_value_to_task(cv);
+        XrCoroutine *executor = xr_task_executor_peek(task);
+        if (coro_claim_deferred_submit(executor)) {
+            coros[submit_count] = executor;
+            if (registry_tasks)
+                registry_tasks[submit_count] = task;
+            submit_count++;
+        }
+    }
+
+    submit_deferred_task_batch(coro, coros, registry_tasks, submit_count);
+    if (coros != inline_coros)
+        xr_free(coros);
+    if (registry_tasks && registry_tasks != inline_registry_tasks)
+        xr_free(registry_tasks);
+}
+
+void xr_coro_submit_deferred_array_tasks(XrCoroutine *coro, XrArray *tasks) {
+    if (!coro || !tasks)
+        return;
+
+    xr_coro_submit_deferred_spawns(coro);
+    submit_deferred_array_tasks_scan(coro, tasks);
+}
+
+void xr_coro_submit_deferred_array_tasks_cached(XrCoroutine *coro, XrArray *tasks) {
+    if (!coro || !tasks)
+        return;
+
+    xr_coro_submit_deferred_spawns(coro);
+    if (XR_ARRAY_DEFERRED_SUBMIT_CURRENT(tasks))
+        return;
+
+    uint64_t version = tasks->content_version;
+    submit_deferred_array_tasks_scan(coro, tasks);
+    XR_ARRAY_MARK_DEFERRED_SUBMITTED(tasks, version);
+}
+
+void xr_coro_submit_deferred_task_values(XrCoroutine *coro, const XrValue *task_values,
+                                         int task_count) {
+    if (!coro || !task_values || task_count <= 0)
+        return;
+
+    xr_coro_submit_deferred_spawns(coro);
+    XrCoroutine *inline_coros[64];
+    XrTask *inline_registry_tasks[64];
+    XrCoroutine **coros = inline_coros;
+    XrTask **registry_tasks = inline_registry_tasks;
+    if (task_count > (int) (sizeof(inline_coros) / sizeof(inline_coros[0]))) {
+        coros = (XrCoroutine **) xr_malloc((size_t) task_count * sizeof(XrCoroutine *));
+        registry_tasks = (XrTask **) xr_malloc((size_t) task_count * sizeof(XrTask *));
+        if (!coros) {
+            if (coros)
+                xr_free(coros);
+            if (registry_tasks)
+                xr_free(registry_tasks);
+            return;
+        }
+    }
+
+    int submit_count = 0;
+    for (int j = 0; j < task_count; j++) {
+        XrValue cv = task_values[j];
+        if (!xr_value_is_task(cv))
+            continue;
+        XrTask *task = xr_value_to_task(cv);
+        XrCoroutine *executor = xr_task_executor_peek(task);
+        if (coro_claim_deferred_submit(executor)) {
+            coros[submit_count] = executor;
+            if (registry_tasks)
+                registry_tasks[submit_count] = task;
+            submit_count++;
+        }
+    }
+
+    submit_deferred_task_batch(coro, coros, registry_tasks, submit_count);
+    if (coros != inline_coros)
+        xr_free(coros);
+    if (registry_tasks && registry_tasks != inline_registry_tasks)
+        xr_free(registry_tasks);
+}
+
+static bool all_array_tasks_done(XrArray *tasks) {
+    if (!tasks)
+        return false;
+    int count = xr_array_size(tasks);
+    for (int j = 0; j < count; j++) {
+        XrValue cv = xr_array_get(tasks, j);
+        if (!xr_value_is_task(cv))
+            continue;
+        if (!xr_task_is_done(xr_value_to_task(cv)))
+            return false;
+    }
+    return true;
+}
+
+static bool all_task_values_done(const XrValue *task_values, int task_count) {
+    if (task_count < 0 || (task_count > 0 && !task_values))
+        return false;
+    for (int j = 0; j < task_count; j++) {
+        XrValue cv = task_values[j];
+        if (!xr_value_is_task(cv))
+            continue;
+        if (!xr_task_is_done(xr_value_to_task(cv)))
+            return false;
+    }
+    return true;
+}
+
 XrCoroBlockResult xr_coro_await_task_resume_slot(XrCoroutine *coro, XrTask *task,
                                                  XrSlotRef result_slot, bool discard_result) {
     XrCoroBlockResult result = xr_coro_await_task_resume(coro, task);
@@ -465,8 +630,18 @@ XrCoroBlockResult xr_coro_await_task_resume_slot(XrCoroutine *coro, XrTask *task
     return result;
 }
 
-XrCoroBlockResult xr_coro_await_task(XrCoroutine *coro, XrTask *task, int64_t timeout_ms) {
+static XrCoroBlockResult coro_await_task_impl(XrCoroutine *coro, XrTask *task, int64_t timeout_ms,
+                                              bool submit_deferred) {
     XR_DCHECK(task != NULL, "xr_coro_await_task: NULL task");
+
+    if (submit_deferred) {
+        xr_coro_submit_deferred_spawns(coro);
+        XrCoroutine *executor = xr_task_executor_peek(task);
+        if (coro_claim_deferred_submit(executor)) {
+            XrTask *registry_task = task;
+            submit_deferred_task_batch(coro, &executor, &registry_task, 1);
+        }
+    }
 
     uint8_t task_state = atomic_load_explicit(&task->state, memory_order_acquire);
     if (task_state == XR_TASK_COMPLETED) {
@@ -488,9 +663,27 @@ XrCoroBlockResult xr_coro_await_task(XrCoroutine *coro, XrTask *task, int64_t ti
     return coro_register_single_await(coro, task, timeout_ms);
 }
 
+XrCoroBlockResult xr_coro_await_task(XrCoroutine *coro, XrTask *task, int64_t timeout_ms) {
+    return coro_await_task_impl(coro, task, timeout_ms, true);
+}
+
 XrCoroBlockResult xr_coro_await_task_slot(XrCoroutine *coro, XrTask *task, XrSlotRef result_slot,
                                           int64_t timeout_ms, bool discard_result) {
-    XrCoroBlockResult result = xr_coro_await_task(coro, task, timeout_ms);
+    XrCoroBlockResult result = coro_await_task_impl(coro, task, timeout_ms, true);
+    if (result.kind == XR_CORO_BLOCK_READY) {
+        XrValue value =
+            xr_coro_await_result_value(coro ? coro->core : NULL, coro, task, discard_result);
+        if (!xr_slot_store_value(result_slot, value))
+            return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+        result.value = value;
+    }
+    return result;
+}
+
+XrCoroBlockResult xr_coro_await_submitted_task_slot(XrCoroutine *coro, XrTask *task,
+                                                    XrSlotRef result_slot, int64_t timeout_ms,
+                                                    bool discard_result) {
+    XrCoroBlockResult result = coro_await_task_impl(coro, task, timeout_ms, false);
     if (result.kind == XR_CORO_BLOCK_READY) {
         XrValue value =
             xr_coro_await_result_value(coro ? coro->core : NULL, coro, task, discard_result);
@@ -508,18 +701,11 @@ XrCoroBlockResult xr_coro_await_all_tasks(XrCoroutine *coro, XrArray *tasks) {
         return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
 
     int count = xr_array_size(tasks);
-    bool all_done = true;
-    for (int j = 0; j < count; j++) {
-        XrValue cv = xr_array_get(tasks, j);
-        if (!xr_value_is_task(cv))
-            continue;
-        if (!xr_task_is_done(xr_value_to_task(cv))) {
-            all_done = false;
-            break;
-        }
-    }
+    if (all_array_tasks_done(tasks))
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
 
-    if (all_done)
+    xr_coro_submit_deferred_array_tasks_cached(coro, tasks);
+    if (all_array_tasks_done(tasks))
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
 
     XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
@@ -558,6 +744,100 @@ XrCoroBlockResult xr_coro_await_all_tasks(XrCoroutine *coro, XrArray *tasks) {
 
     xr_multi_await_wait_token_commit(&wait->multi_await_token);
     return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
+}
+
+XrCoroBlockResult xr_coro_await_all_tasks_resume(XrCoroutine *coro, XrArray *tasks) {
+    if (!coro)
+        return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
+    if (!tasks)
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
+    XrCoroWaitState *wait = xr_coro_wait_state(coro);
+    if (wait) {
+        int state = atomic_load_explicit(&wait->multi_await_token.state, memory_order_acquire);
+        if (state == XR_MULTI_AWAIT_WAIT_RESOLVED)
+            return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+        if (state == XR_MULTI_AWAIT_WAIT_CANCELLED)
+            return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
+    }
+
+    if (all_array_tasks_done(tasks))
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+    return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
+}
+
+XrCoroBlockResult xr_coro_await_all_task_values(XrCoroutine *coro, const XrValue *task_values,
+                                                int task_count) {
+    if (!coro)
+        return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
+    if (task_count < 0 || (task_count > 0 && !task_values))
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
+    if (all_task_values_done(task_values, task_count))
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+
+    xr_coro_submit_deferred_task_values(coro, task_values, task_count);
+    if (all_task_values_done(task_values, task_count))
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+
+    XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
+    if (!wait)
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
+    XrTaskAwaitNode *nodes = coro_prepare_multi_await_nodes(&wait->multi_await_token, task_count);
+    if (task_count > 0 && !nodes)
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
+    xr_multi_await_wait_token_prepare(&wait->multi_await_token, NULL, XR_MULTI_AWAIT_ALL,
+                                      task_count);
+    atomic_store(&wait->wait_count, 1);
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT_ALL >> XR_CORO_WAIT_SHIFT);
+    XrCoroBlockSnapshot block_snapshot = xr_coro_begin_reversible_block(coro);
+
+    for (int j = 0; j < task_count; j++) {
+        XrValue cv = task_values[j];
+        if (!xr_value_is_task(cv))
+            continue;
+
+        atomic_fetch_add(&wait->wait_count, 1);
+        XrTask *task = xr_value_to_task(cv);
+        if (!xr_task_register_await_node(task, coro, &nodes[j], j))
+            atomic_fetch_sub(&wait->wait_count, 1);
+    }
+
+    int remaining = atomic_fetch_sub(&wait->wait_count, 1) - 1;
+    if (remaining == 0) {
+        xr_multi_await_wait_token_resolve(&wait->multi_await_token);
+        if (xr_coro_flags_has(coro, XR_CORO_FLG_READY))
+            return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
+        xr_task_finish_await_waiters(coro);
+        (void) coro_rollback_wait_block_if_unwoken(coro, block_snapshot);
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+    }
+
+    xr_multi_await_wait_token_commit(&wait->multi_await_token);
+    return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
+}
+
+XrCoroBlockResult xr_coro_await_all_task_values_resume(XrCoroutine *coro,
+                                                       const XrValue *task_values, int task_count) {
+    if (!coro)
+        return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
+    if (task_count < 0 || (task_count > 0 && !task_values))
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
+    XrCoroWaitState *wait = xr_coro_wait_state(coro);
+    if (wait) {
+        int state = atomic_load_explicit(&wait->multi_await_token.state, memory_order_acquire);
+        if (state == XR_MULTI_AWAIT_WAIT_RESOLVED)
+            return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+        if (state == XR_MULTI_AWAIT_WAIT_CANCELLED)
+            return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
+    }
+
+    if (all_task_values_done(task_values, task_count))
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+    return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
 }
 
 XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool success_only) {
@@ -893,6 +1173,7 @@ XrCoroBlockResult xr_coro_scope_exit(XrCoroutine *coro, uint8_t scope_mode) {
     if (!scope) {
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
     }
+    xr_coro_submit_deferred_spawns(coro);
 
     if (atomic_load(&scope->count) > 0) {
         XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);

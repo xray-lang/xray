@@ -1,0 +1,5 @@
+contains=name=unwrapAfterGuard
+regex=value v[0-9]+ op=MUL kind=scalar rep=i64 c_type=int64_t
+c_contains=xrt_eq(v
+c_contains=XR_TO_INT(v
+c_not_contains=Attempted to unwrap a null value

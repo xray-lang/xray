@@ -9,6 +9,7 @@ class ResultGroup {
     isClosed: bool
     add(value: int) -> bool
     flush()
+    reset(count: int) -> bool
     recv(): int?
     tryRecv(): (int?, bool)
     close()

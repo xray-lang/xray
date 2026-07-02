@@ -36,6 +36,36 @@ static const char *cg_result_group_field_helper(const char *field) {
     return NULL;
 }
 
+static const char *cg_countdown_latch_field_helper(const char *field) {
+    if (!field)
+        return NULL;
+    if (strcmp(field, "remaining") == 0)
+        return "xr_aot_countdown_latch_remaining";
+    if (strcmp(field, "isClosed") == 0)
+        return "xr_aot_countdown_latch_is_closed";
+    return NULL;
+}
+
+static const char *cg_semaphore_field_helper(const char *field) {
+    if (!field)
+        return NULL;
+    if (strcmp(field, "available") == 0)
+        return "xr_aot_semaphore_available";
+    if (strcmp(field, "isClosed") == 0)
+        return "xr_aot_semaphore_is_closed";
+    return NULL;
+}
+
+static const char *cg_event_count_field_helper(const char *field) {
+    if (!field)
+        return NULL;
+    if (strcmp(field, "epoch") == 0)
+        return "xr_aot_event_count_epoch";
+    if (strcmp(field, "isClosed") == 0)
+        return "xr_aot_event_count_is_closed";
+    return NULL;
+}
+
 static bool cg_value_type_is_bool(const XiValue *v) {
     return v && v->type && v->type->kind == XR_KIND_BOOL;
 }

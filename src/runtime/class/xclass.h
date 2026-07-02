@@ -224,6 +224,7 @@ struct XrClass {
     // Nominal identity for builtin instance sub-types (XR_BK_*).
     // XR_BK_NONE for ordinary user classes.
     uint8_t builtin_kind;
+    void *builtin_data;  // Optional metadata owned by the builtin kind.
 
     /* === Dynamic Layout (hidden class transitions) === */
     // Used only when flags & XR_CLASS_DYNAMIC_LAYOUT. Implements V8-style

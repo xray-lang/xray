@@ -269,9 +269,12 @@ bool xr_enum_type_ensure_adt_class(XrEnumType *enum_type) {
         enum_type->enum_class->field_count = field_count;
         enum_type->enum_class->own_field_count = field_count;
         enum_type->enum_class->builtin_kind = XR_BK_ADT_ENUM;
+        enum_type->enum_class->builtin_data = enum_type;
         return true;
     }
     enum_type->enum_class = xr_enum_minimal_adt_class_new(enum_type->name, field_count);
+    if (enum_type->enum_class)
+        enum_type->enum_class->builtin_data = enum_type;
     enum_type->owns_enum_class = enum_type->enum_class != NULL;
     return enum_type->enum_class != NULL;
 }
@@ -440,10 +443,8 @@ XR_FUNC XrInstance *xr_enum_adt_construct_core(XrRuntimeCore *core, struct XrCor
     if (!inst)
         return NULL;
 
-    /* field[0] = XrEnumValue* for the variant (carries name, tag, parent) */
-    XrEnumValue *variant = enum_type->members[member_index].instance;
-    XR_DCHECK(variant != NULL, "adt_construct: NULL variant instance");
-    inst->fields[0] = XR_FROM_PTR(variant);
+    /* field[0] = int tag. Metadata such as names stays on enum_type. */
+    inst->fields[0] = xr_int((int64_t) member_index);
 
     /* field[1..payload_count] = args */
     for (int i = 0; i < actual_payload; i++) {

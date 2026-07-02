@@ -2492,6 +2492,7 @@ VALID_AOT_STORAGE_REPS = {
     'XR_REP_F64',
     'XR_REP_I64',
     'XR_REP_PTR',
+    'XR_REP_RAWPTR',
     'XR_REP_TAGGED',
     'XR_REP_VOID',
 }
@@ -2912,7 +2913,8 @@ def generate_aot_abi_header(entries: list[AotAbiDef]) -> str:
     lines.append('    if (!abi || !abi->typed_boundary || (type->is_nullable && !abi->allows_nullable))')
     lines.append('        return false;')
     lines.append('    storage = xaot_abi_storage_rep_for_type(type);')
-    lines.append('    return storage == XR_REP_I64 || storage == XR_REP_F64 || storage == XR_REP_PTR;')
+    lines.append('    return storage == XR_REP_I64 || storage == XR_REP_F64 || storage == XR_REP_PTR ||')
+    lines.append('           storage == XR_REP_RAWPTR;')
     lines.append('}')
     lines.append('')
     lines.append('#endif  /* XAOT_ABI_GEN_H */')

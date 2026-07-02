@@ -29,7 +29,8 @@ typedef struct XrErrorSet XrErrorSet;
 /* ========== XrRep - Machine Representation ========== */
 /*
  * Derived from XrType via xr_type_rep().
- * Only 5 values — no value-level hints (NULL/TRUE/FALSE are xr_tag).
+ * Value-level hints such as NULL/TRUE/FALSE are xr_tag; reps describe native
+ * storage selected by IR/AOT.
  */
 typedef enum {
     XR_REP_I64 = 0,     // 64-bit integer (raw, untagged)
@@ -38,6 +39,8 @@ typedef enum {
     XR_REP_TAGGED = 3,  // full 16B XrValue (tag + payload)
     XR_REP_VOID = 4,    // no value
     XR_REP_STR = 5,     // NUL-terminated C string (AOT only, no GC)
+    XR_REP_RAWPTR = 6,  // raw C pointer address (AOT only, GC-invisible)
+    XR_REP_COUNT = 7,
 } XrRep;
 
 /* ========== XrType - Static type system ========== */
@@ -75,6 +78,7 @@ typedef enum XrTypeKind {
     XR_KIND_CHAR,         // Unicode scalar value. Immediate value (tag XR_TAG_CHAR), not
                           // a uint32; appended last to keep existing kind values stable.
     XR_KIND_RECORD,       // Sealed/open structural record; shares ObjectShape metadata with Json.
+    XR_KIND_SPAN,  // Typed bounded view over contiguous storage. Runtime value is Array view.
     XR_KIND_COUNT
 } XrTypeKind;
 
@@ -87,10 +91,11 @@ static inline bool xr_kind_is_primitive(XrTypeKind k) {
            k == XR_KIND_CHAR;
 }
 static inline bool xr_kind_is_container(XrTypeKind k) {
-    return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET;
+    return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET || k == XR_KIND_SPAN;
 }
 static inline bool xr_kind_is_builtin_iterable(XrTypeKind k) {
-    return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET || k == XR_KIND_STRING;
+    return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET || k == XR_KIND_SPAN ||
+           k == XR_KIND_STRING;
 }
 static inline bool xr_kind_has_object_shape(XrTypeKind k) {
     return k == XR_KIND_RECORD || k == XR_KIND_JSON;
@@ -265,6 +270,7 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_ARRAY(t) ((t)->kind == XR_KIND_ARRAY)
 #define XR_TYPE_IS_MAP(t) ((t)->kind == XR_KIND_MAP)
 #define XR_TYPE_IS_SET(t) ((t)->kind == XR_KIND_SET)
+#define XR_TYPE_IS_SPAN(t) ((t)->kind == XR_KIND_SPAN)
 #define XR_TYPE_IS_FUNCTION(t) ((t)->kind == XR_KIND_FUNCTION)
 #define XR_TYPE_IS_C_FUNCTION(t) ((t)->kind == XR_KIND_FUNCTION && (t)->function.is_c_abi)
 #define XR_TYPE_IS_INSTANCE(t) ((t)->kind == XR_KIND_INSTANCE)
@@ -309,6 +315,7 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
          * AOT optimization, not needed for correctness. */
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_TUPLE:
@@ -408,6 +415,7 @@ static inline uint8_t xr_type_to_slot_type(XrType *type) {
             return XR_SLOT_BOOL;
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_TUPLE:
@@ -462,6 +470,7 @@ static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
             return XR_TAG_NULL;
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_JSON:
@@ -509,6 +518,7 @@ static inline uint8_t xr_type_element_gc_tag(XrType *type) {
         return XR_SLOT_ANY;
     switch (type->kind) {
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
             return xr_type_to_slot_type(type->container.element_type);
@@ -521,6 +531,8 @@ static inline uint8_t xr_type_element_gc_tag(XrType *type) {
 
 // API: Container types
 XR_FUNC XrType *xr_type_new_array(XrVMRuntime *X, XrType *element_type);
+XR_FUNC XrType *xr_type_new_span(XrVMRuntime *X, XrType *element_type);
+XR_FUNC XrType *xr_type_new_bytespan(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_map(XrVMRuntime *X, XrType *key_type, XrType *value_type);
 XR_FUNC XrType *xr_type_new_set(XrVMRuntime *X, XrType *element_type);
 XR_FUNC XrType *xr_type_new_channel(XrVMRuntime *X, XrType *element_type);

@@ -96,6 +96,13 @@ typedef struct XrDestructurePattern {
     } as;
 } XrDestructurePattern;
 
+typedef struct XrParallelLocalBinding {
+    char *name;
+    AstNode *source;
+    bool is_initializer;
+    uint32_t symbol_id;
+} XrParallelLocalBinding;
+
 /* ========== Program / Block ==========
  *
  * Program node arena rules:

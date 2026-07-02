@@ -123,11 +123,20 @@ static void cg_builtin_init_scan_value(CgBuiltinInitPlan *plan, const XiValue *v
                 plan->file = true;
             } else if (v->aux_int == XR_GLOBAL_VAR_DIR) {
                 plan->dir = true;
+            } else if (v->aux_int == XR_GLOBAL_VAR_ATOMIC) {
+                plan->runtime_caps |= XR_AOT_CAP_ATOMIC | XR_AOT_CAP_OBJECTS;
             } else if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE) {
                 plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_WORK_QUEUE | XR_AOT_CAP_OBJECTS;
             } else if (v->aux_int == XR_GLOBAL_VAR_RESULTGROUP) {
                 plan->runtime_caps |=
                     XR_AOT_CAP_CORO | XR_AOT_CAP_RESULT_GROUP | XR_AOT_CAP_OBJECTS;
+            } else if (v->aux_int == XR_GLOBAL_VAR_COUNTDOWNLATCH) {
+                plan->runtime_caps |=
+                    XR_AOT_CAP_CORO | XR_AOT_CAP_COUNTDOWN_LATCH | XR_AOT_CAP_OBJECTS;
+            } else if (v->aux_int == XR_GLOBAL_VAR_SEMAPHORE) {
+                plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_SEMAPHORE | XR_AOT_CAP_OBJECTS;
+            } else if (v->aux_int == XR_GLOBAL_VAR_EVENTCOUNT) {
+                plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_EVENT_COUNT | XR_AOT_CAP_OBJECTS;
             }
             break;
         default:
@@ -242,6 +251,10 @@ static void emit_xrt_runtime_caps_expr(FILE *out, uint32_t caps) {
         {XR_AOT_CAP_TRANSFER, "XR_AOT_CAP_TRANSFER"},
         {XR_AOT_CAP_TASK, "XR_AOT_CAP_TASK"},
         {XR_AOT_CAP_OBJECTS, "XR_AOT_CAP_OBJECTS"},
+        {XR_AOT_CAP_ATOMIC, "XR_AOT_CAP_ATOMIC"},
+        {XR_AOT_CAP_COUNTDOWN_LATCH, "XR_AOT_CAP_COUNTDOWN_LATCH"},
+        {XR_AOT_CAP_SEMAPHORE, "XR_AOT_CAP_SEMAPHORE"},
+        {XR_AOT_CAP_EVENT_COUNT, "XR_AOT_CAP_EVENT_COUNT"},
     };
 
     if (caps == XR_AOT_CAP_NONE) {
@@ -262,7 +275,8 @@ static void emit_xrt_runtime_caps_expr(FILE *out, uint32_t caps) {
 
 static bool cg_runtime_caps_need_destroy_config(uint32_t caps) {
     return (caps & (XR_AOT_CAP_OBJECTS | XR_AOT_CAP_TASK | XR_AOT_CAP_CHANNEL |
-                    XR_AOT_CAP_WORK_QUEUE | XR_AOT_CAP_RESULT_GROUP)) != 0;
+                    XR_AOT_CAP_WORK_QUEUE | XR_AOT_CAP_RESULT_GROUP | XR_AOT_CAP_COUNTDOWN_LATCH |
+                    XR_AOT_CAP_SEMAPHORE | XR_AOT_CAP_EVENT_COUNT)) != 0;
 }
 
 static void emit_xrt_runtime_core_configure_fn(FILE *out, uint32_t caps) {
@@ -283,6 +297,12 @@ static void emit_xrt_runtime_core_configure_fn(FILE *out, uint32_t caps) {
         fprintf(out, "    xr_runtime_core_enable_work_queue_destroy_ops(core);\n");
     if ((caps & XR_AOT_CAP_RESULT_GROUP) != 0)
         fprintf(out, "    xr_runtime_core_enable_result_group_destroy_ops(core);\n");
+    if ((caps & XR_AOT_CAP_COUNTDOWN_LATCH) != 0)
+        fprintf(out, "    xr_runtime_core_enable_countdown_latch_destroy_ops(core);\n");
+    if ((caps & XR_AOT_CAP_SEMAPHORE) != 0)
+        fprintf(out, "    xr_runtime_core_enable_semaphore_destroy_ops(core);\n");
+    if ((caps & XR_AOT_CAP_EVENT_COUNT) != 0)
+        fprintf(out, "    xr_runtime_core_enable_event_count_destroy_ops(core);\n");
     fprintf(out, "}\n\n");
 }
 

@@ -1,0 +1,5 @@
+c_contains=<< UINT64_C(24)
+c_contains=>> UINT64_C(52)
+c_contains=(uint64_t)(
+c_not_contains=xrt_i64_shl(
+c_not_contains=xrt_i64_shr(

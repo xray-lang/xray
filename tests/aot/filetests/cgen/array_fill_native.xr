@@ -1,0 +1,9 @@
+fn fillZero(a: Array<uint32>) -> int {
+    a.fill(0)
+    unsafe {
+        return int(a.getUnchecked(1)) + int(a.getUnchecked(2)) + int(a.getUnchecked(6))
+    }
+}
+
+let a = Array<uint32>(8, 7)
+print(fillZero(a))

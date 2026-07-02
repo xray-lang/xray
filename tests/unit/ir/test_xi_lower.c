@@ -465,28 +465,31 @@ TEST(member_access_field_symbols_are_distinct) {
     xi_func_free(f);
 }
 
-TEST(bytes_methods_lower_to_semantic_ops) {
+TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
     XiFunc *f = lower_source("let src = Bytes(8)\n"
-                             "let dst = Bytes(8)\n"
-                             "let a = src.loadU32LE(0)\n"
-                             "let b = src.loadU64LE(0)\n"
-                             "src.copyWithin(1, 0, 2)\n"
-                             "dst.copyFrom(src, 0, 0, 2)\n"
-                             "dst.repeatFrom(2, 2, 4)\n"
+                             "let view: ByteSpan = src\n"
+                             "let dst = Bytes.withCapacity(8)\n"
+                             "let h = view.loadLE<uint16>(0)\n"
+                             "let a = view.loadLE<uint32>(0)\n"
+                             "let b = view.loadLE<uint64>(0)\n"
+                             "unsafe {\n"
+                             "    dst.appendFromUnchecked(view, 0, 2)\n"
+                             "    dst.repeatFromUnchecked(2, 4)\n"
+                             "}\n"
+                             "print(h)\n"
                              "print(a)\n"
                              "print(b)\n");
     assert(f != NULL);
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U32_LE) && "loadU32LE should lower to Bytes op");
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U64_LE) && "loadU64LE should lower to Bytes op");
-    assert(func_tree_has_op(f, XI_BYTES_COPY_WITHIN) && "copyWithin should lower to Bytes op");
-    assert(func_tree_has_op(f, XI_BYTES_COPY_FROM) && "copyFrom should lower to Bytes op");
-    assert(func_tree_has_op(f, XI_BYTES_REPEAT_FROM) && "repeatFrom should lower to Bytes op");
-    assert(!func_tree_has_builtin_name(f, "bytes_load_u32_le") &&
-           "loadU32LE should not lower through string builtin");
-    assert(!func_tree_has_builtin_name(f, "bytes_copy_within") &&
-           "copyWithin should not lower through string builtin");
-    assert(!func_tree_has_builtin_name(f, "bytes_repeat_from") &&
-           "repeatFrom should not lower through string builtin");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U16_LE) && "loadLE<uint16> should lower to Bytes op");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U32_LE) && "loadLE<uint32> should lower to Bytes op");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U64_LE) && "loadLE<uint64> should lower to Bytes op");
+    assert(func_tree_find_method(f, "appendFromUnchecked") &&
+           "appendFromUnchecked should remain an explicit method call");
+    assert(func_tree_find_method(f, "repeatFromUnchecked") &&
+           "repeatFromUnchecked should remain an explicit method call");
+    assert(!func_tree_has_builtin_name(f, "bytes_load_u16_le") &&
+           !func_tree_has_builtin_name(f, "bytes_load_u32_le") &&
+           "loadLE should not lower through string builtin");
     xi_func_free(f);
 }
 
@@ -1145,6 +1148,588 @@ TEST(yield_stmt) {
     xi_func_free(f);
 }
 
+TEST(parallel_for_lowers_to_dedicated_ir) {
+#define REQUIRE_PAR_FOR(cond, msg)                                                                 \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "parallel_for_lowers_to_dedicated_ir: %s\n", msg);                     \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XiFunc *f = lower_source("fn run(n: int) {\n"
+                             "    let base = 3\n"
+                             "    parallel for i in 0..n workers 2 worker wid {\n"
+                             "        print(i + wid + base)\n"
+                             "    }\n"
+                             "}\n"
+                             "run(4)\n");
+    REQUIRE_PAR_FOR(f != NULL, "source should lower");
+    XiValue *par = func_tree_find_op(f, XI_PAR_FOR);
+    REQUIRE_PAR_FOR(par != NULL, "PAR_FOR should be present");
+    REQUIRE_PAR_FOR(par->nargs >= 4, "PAR_FOR should start with start/end/workers/closure args");
+    REQUIRE_PAR_FOR(par->aux_kind == XI_AUX_KIND_PAR_FOR, "PAR_FOR aux kind should be explicit");
+    REQUIRE_PAR_FOR(par->args[0] && par->args[1] && par->args[2] && par->args[3],
+                    "PAR_FOR args should be populated");
+    REQUIRE_PAR_FOR(par->args[3]->op == XI_CLOSURE_NEW, "PAR_FOR body should be a closure");
+
+    XiParallelForData *data = (XiParallelForData *) par->aux;
+    REQUIRE_PAR_FOR(data != NULL, "PAR_FOR should carry XiParallelForData");
+    REQUIRE_PAR_FOR(data->body_func != NULL, "parallel body func should be recorded");
+    REQUIRE_PAR_FOR(par->nargs == 4 + data->body_func->ncaptures,
+                    "PAR_FOR should append captured values as hidden lifetime anchors");
+    REQUIRE_PAR_FOR(data->item_name && strcmp(data->item_name, "i") == 0,
+                    "loop item name should be recorded");
+    REQUIRE_PAR_FOR(data->worker_name && strcmp(data->worker_name, "wid") == 0,
+                    "worker name should be recorded");
+    REQUIRE_PAR_FOR(data->body_func->nparams == 2,
+                    "body func should take loop item and worker params");
+    REQUIRE_PAR_FOR(data->body_func->params[0] != NULL, "body param should be populated");
+    REQUIRE_PAR_FOR(data->body_func->params[0]->op == XI_PARAM, "body param should be PARAM");
+    REQUIRE_PAR_FOR(data->body_func->params[1] != NULL, "worker param should be populated");
+    REQUIRE_PAR_FOR(data->body_func->params[1]->op == XI_PARAM, "worker param should be PARAM");
+    REQUIRE_PAR_FOR(data->body_func->native_callback_kind == XI_NATIVE_CALLBACK_PAR_FOR_I64,
+                    "parallel body should use the native runtime callback ABI");
+    REQUIRE_PAR_FOR((XiFunc *) par->args[3]->aux == data->body_func,
+                    "closure should point at body func");
+    REQUIRE_PAR_FOR(data->body_func->ncaptures >= 1, "body should capture outer base");
+    xi_func_free(f);
+
+#undef REQUIRE_PAR_FOR
+}
+
+TEST(parallel_for_final_lowers_to_range_body_ir) {
+#define REQUIRE_PAR_FINAL(cond, msg)                                                               \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "parallel_for_final_lowers_to_range_body_ir: %s\n", msg);              \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XiFunc *f = lower_source("fn run(n: int) {\n"
+                             "    parallel for i in 0..n workers 2 worker wid\n"
+                             "        final { print(wid) } {\n"
+                             "        print(i)\n"
+                             "    }\n"
+                             "}\n"
+                             "run(4)\n");
+    REQUIRE_PAR_FINAL(f != NULL, "source should lower");
+    XiValue *par = func_tree_find_op(f, XI_PAR_FOR);
+    REQUIRE_PAR_FINAL(par != NULL, "PAR_FOR should be present");
+    XiParallelForData *data = (XiParallelForData *) par->aux;
+    REQUIRE_PAR_FINAL(data != NULL, "PAR_FOR should carry XiParallelForData");
+    REQUIRE_PAR_FINAL(data->range_body, "parallel final should force range_body lowering");
+    REQUIRE_PAR_FINAL(data->body_func != NULL, "parallel final body func should be recorded");
+    REQUIRE_PAR_FINAL(data->body_func->nparams == 3,
+                      "final body should take begin, end and worker params");
+    REQUIRE_PAR_FINAL(data->body_func->native_callback_kind == XI_NATIVE_CALLBACK_PAR_RANGE_I64,
+                      "parallel final body should use the native range callback ABI");
+    xi_func_free(f);
+
+#undef REQUIRE_PAR_FINAL
+}
+
+TEST(parallel_range_lowers_to_range_body_ir) {
+#define REQUIRE_PAR_RANGE(cond, msg)                                                               \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "parallel_range_lowers_to_range_body_ir: %s\n", msg);                  \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XiFunc *f = lower_source("fn run(n: int) {\n"
+                             "    let base = 3\n"
+                             "    parallel range begin, end in 0..n workers 2 worker wid {\n"
+                             "        print(begin + end + wid + base)\n"
+                             "    }\n"
+                             "}\n"
+                             "run(4)\n");
+    REQUIRE_PAR_RANGE(f != NULL, "source should lower");
+    XiValue *par = func_tree_find_op(f, XI_PAR_FOR);
+    REQUIRE_PAR_RANGE(par != NULL, "PAR_FOR should be present");
+    XiParallelForData *data = (XiParallelForData *) par->aux;
+    REQUIRE_PAR_RANGE(data != NULL, "PAR_FOR should carry XiParallelForData");
+    REQUIRE_PAR_RANGE(data->range_body, "parallel range should mark range_body");
+    REQUIRE_PAR_RANGE(data->body_func != NULL, "parallel range body func should be recorded");
+    REQUIRE_PAR_RANGE(data->body_func->nparams == 3,
+                      "range body should take begin, end and worker params");
+    REQUIRE_PAR_RANGE(data->item_name && strcmp(data->item_name, "begin") == 0,
+                      "range begin name should be recorded");
+    REQUIRE_PAR_RANGE(data->end_name && strcmp(data->end_name, "end") == 0,
+                      "range end name should be recorded");
+    REQUIRE_PAR_RANGE(data->worker_name && strcmp(data->worker_name, "wid") == 0,
+                      "range worker name should be recorded");
+    REQUIRE_PAR_RANGE(data->body_func->params[0] && data->body_func->params[0]->op == XI_PARAM,
+                      "begin param should be populated");
+    REQUIRE_PAR_RANGE(data->body_func->params[1] && data->body_func->params[1]->op == XI_PARAM,
+                      "end param should be populated");
+    REQUIRE_PAR_RANGE(data->body_func->params[2] && data->body_func->params[2]->op == XI_PARAM,
+                      "worker param should be populated");
+    REQUIRE_PAR_RANGE(data->body_func->native_callback_kind == XI_NATIVE_CALLBACK_PAR_RANGE_I64,
+                      "range body should use the native range callback ABI");
+    xi_func_free(f);
+
+#undef REQUIRE_PAR_RANGE
+}
+
+TEST(parallel_reduce_lowers_to_dedicated_ir) {
+#define REQUIRE_PAR_REDUCE(cond, msg)                                                              \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "parallel_reduce_lowers_to_dedicated_ir: %s\n", msg);                  \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XiFunc *f = lower_source("fn run(n: int) -> int {\n"
+                             "    let base = 3\n"
+                             "    return parallel reduce i in 0..n workers 2 worker wid init 10 "
+                             "combine (a: int, b: int) -> a + b {\n"
+                             "        i + wid - wid + base\n"
+                             "    }\n"
+                             "}\n"
+                             "print(run(4))\n");
+    REQUIRE_PAR_REDUCE(f != NULL, "source should lower");
+    XiValue *par = func_tree_find_op(f, XI_PAR_REDUCE);
+    REQUIRE_PAR_REDUCE(par != NULL, "PAR_REDUCE should be present");
+    REQUIRE_PAR_REDUCE(par->nargs >= 6,
+                       "PAR_REDUCE should start with start/end/workers/init/body/combine args");
+    REQUIRE_PAR_REDUCE(par->aux_kind == XI_AUX_KIND_PAR_REDUCE,
+                       "PAR_REDUCE aux kind should be explicit");
+    for (uint16_t i = 0; i < 6; i++)
+        REQUIRE_PAR_REDUCE(par->args[i] != NULL, "PAR_REDUCE leading args should be populated");
+    REQUIRE_PAR_REDUCE(par->args[4]->op == XI_CLOSURE_NEW, "PAR_REDUCE body should be a closure");
+    REQUIRE_PAR_REDUCE(par->args[5]->op == XI_CLOSURE_NEW,
+                       "PAR_REDUCE combine should be a closure");
+
+    XiParallelReduceData *data = (XiParallelReduceData *) par->aux;
+    REQUIRE_PAR_REDUCE(data != NULL, "PAR_REDUCE should carry XiParallelReduceData");
+    REQUIRE_PAR_REDUCE(data->accumulator_type && XR_TYPE_IS_INT(data->accumulator_type),
+                       "int parallel reduce should record an int accumulator type");
+    REQUIRE_PAR_REDUCE(par->type && XR_TYPE_IS_INT(par->type),
+                       "int parallel reduce value should keep int result type");
+    REQUIRE_PAR_REDUCE(data->body_func != NULL, "parallel reduce body func should be recorded");
+    REQUIRE_PAR_REDUCE(data->combine_func != NULL,
+                       "parallel reduce combine func should be recorded");
+    REQUIRE_PAR_REDUCE((XiFunc *) par->args[4]->aux == data->body_func,
+                       "body closure should point at body func");
+    REQUIRE_PAR_REDUCE((XiFunc *) par->args[5]->aux == data->combine_func,
+                       "combine closure should point at combine func");
+    REQUIRE_PAR_REDUCE(par->nargs == 6 + data->body_func->ncaptures + data->combine_func->ncaptures,
+                       "PAR_REDUCE should append captured values as hidden lifetime anchors");
+    REQUIRE_PAR_REDUCE(data->item_name && strcmp(data->item_name, "i") == 0,
+                       "loop item name should be recorded");
+    REQUIRE_PAR_REDUCE(data->worker_name && strcmp(data->worker_name, "wid") == 0,
+                       "worker name should be recorded");
+    REQUIRE_PAR_REDUCE(data->body_func->nparams == 2,
+                       "body func should take item and worker params");
+    REQUIRE_PAR_REDUCE(data->combine_func->nparams == 2,
+                       "combine func should take accumulator and value params");
+    REQUIRE_PAR_REDUCE(!data->range_body,
+                       "item parallel reduce should not be marked as range body");
+    REQUIRE_PAR_REDUCE(data->end_name == NULL,
+                       "item parallel reduce should not record a range end name");
+    REQUIRE_PAR_REDUCE(data->body_func->params[0] && data->body_func->params[0]->op == XI_PARAM,
+                       "body item param should be PARAM");
+    REQUIRE_PAR_REDUCE(data->body_func->params[1] && data->body_func->params[1]->op == XI_PARAM,
+                       "body worker param should be PARAM");
+    REQUIRE_PAR_REDUCE(data->combine_func->params[0] &&
+                           data->combine_func->params[0]->op == XI_PARAM,
+                       "combine accumulator param should be PARAM");
+    REQUIRE_PAR_REDUCE(data->combine_func->params[1] &&
+                           data->combine_func->params[1]->op == XI_PARAM,
+                       "combine value param should be PARAM");
+    REQUIRE_PAR_REDUCE(data->body_func->native_callback_kind ==
+                           XI_NATIVE_CALLBACK_PAR_REDUCE_I64_BODY,
+                       "parallel reduce body should use the native i64 callback ABI");
+    REQUIRE_PAR_REDUCE(data->combine_func->native_callback_kind ==
+                           XI_NATIVE_CALLBACK_PAR_REDUCE_I64_COMBINE,
+                       "parallel reduce combine should use the native i64 callback ABI");
+    REQUIRE_PAR_REDUCE(data->body_func->ncaptures >= 1, "body should capture outer base");
+    REQUIRE_PAR_REDUCE(data->combine_func->ncaptures == 0,
+                       "uncaptured combine should not manufacture captures");
+    xi_func_free(f);
+
+#undef REQUIRE_PAR_REDUCE
+}
+
+TEST(parallel_range_reduce_lowers_to_range_body_ir) {
+#define REQUIRE_PAR_RANGE_REDUCE(cond, msg)                                                        \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "parallel_range_reduce_lowers_to_range_body_ir: %s\n", msg);           \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XiFunc *f =
+        lower_source("fn run(n: int) -> int {\n"
+                     "    let base = 3\n"
+                     "    return parallel range reduce begin, end in 0..n workers 2 worker wid "
+                     "init 0 combine (a: int, b: int) -> a + b {\n"
+                     "        end - begin + wid - wid + base - base\n"
+                     "    }\n"
+                     "}\n"
+                     "print(run(4))\n");
+    REQUIRE_PAR_RANGE_REDUCE(f != NULL, "source should lower");
+    XiValue *par = func_tree_find_op(f, XI_PAR_REDUCE);
+    REQUIRE_PAR_RANGE_REDUCE(par != NULL, "PAR_REDUCE should be present");
+    REQUIRE_PAR_RANGE_REDUCE(par->aux_kind == XI_AUX_KIND_PAR_REDUCE,
+                             "PAR_REDUCE aux kind should be explicit");
+
+    XiParallelReduceData *data = (XiParallelReduceData *) par->aux;
+    REQUIRE_PAR_RANGE_REDUCE(data != NULL, "PAR_REDUCE should carry reduce metadata");
+    REQUIRE_PAR_RANGE_REDUCE(data->range_body, "range reduce should mark range_body");
+    REQUIRE_PAR_RANGE_REDUCE(data->item_name && strcmp(data->item_name, "begin") == 0,
+                             "range reduce begin name should be recorded");
+    REQUIRE_PAR_RANGE_REDUCE(data->end_name && strcmp(data->end_name, "end") == 0,
+                             "range reduce end name should be recorded");
+    REQUIRE_PAR_RANGE_REDUCE(data->worker_name && strcmp(data->worker_name, "wid") == 0,
+                             "range reduce worker name should be recorded");
+    REQUIRE_PAR_RANGE_REDUCE(data->body_func != NULL, "range reduce body func should exist");
+    REQUIRE_PAR_RANGE_REDUCE(data->combine_func != NULL, "range reduce combine func should exist");
+    REQUIRE_PAR_RANGE_REDUCE(data->body_func->nparams == 3,
+                             "range reduce body should take begin, end and worker params");
+    REQUIRE_PAR_RANGE_REDUCE(data->combine_func->nparams == 2,
+                             "combine should take accumulator and value params");
+    for (uint16_t i = 0; i < data->body_func->nparams; i++)
+        REQUIRE_PAR_RANGE_REDUCE(data->body_func->params[i] &&
+                                     data->body_func->params[i]->op == XI_PARAM,
+                                 "range reduce body params should be PARAM values");
+    REQUIRE_PAR_RANGE_REDUCE(data->body_func->native_callback_kind ==
+                                 XI_NATIVE_CALLBACK_PAR_REDUCE_I64_BODY,
+                             "range reduce body should keep the native i64 callback ABI");
+    REQUIRE_PAR_RANGE_REDUCE(data->combine_func->native_callback_kind ==
+                                 XI_NATIVE_CALLBACK_PAR_REDUCE_I64_COMBINE,
+                             "range reduce combine should keep the native i64 callback ABI");
+    REQUIRE_PAR_RANGE_REDUCE(par->type && XR_TYPE_IS_INT(par->type),
+                             "range reduce value should keep int result type");
+    xi_func_free(f);
+
+#undef REQUIRE_PAR_RANGE_REDUCE
+}
+
+TEST(parallel_reduce_local_init_lowers_to_range_body_ir) {
+#define REQUIRE_PAR_REDUCE_LOCAL(cond, msg)                                                        \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "parallel_reduce_local_init_lowers_to_range_body_ir: %s\n", msg);      \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XiFunc *f = lower_source("fn run(n: int) -> int {\n"
+                             "    let base = 3\n"
+                             "    return parallel reduce i in 0..n workers 2 worker wid\n"
+                             "        local acc = base + wid\n"
+                             "        init 0\n"
+                             "        combine (a: int, b: int) -> a + b {\n"
+                             "        acc = acc + i\n"
+                             "        acc\n"
+                             "    }\n"
+                             "}\n"
+                             "print(run(4))\n");
+    REQUIRE_PAR_REDUCE_LOCAL(f != NULL, "source should lower");
+    XiValue *par = func_tree_find_op(f, XI_PAR_REDUCE);
+    REQUIRE_PAR_REDUCE_LOCAL(par != NULL, "PAR_REDUCE should be present");
+    REQUIRE_PAR_REDUCE_LOCAL(par->aux_kind == XI_AUX_KIND_PAR_REDUCE,
+                             "PAR_REDUCE aux kind should be explicit");
+
+    XiParallelReduceData *data = (XiParallelReduceData *) par->aux;
+    REQUIRE_PAR_REDUCE_LOCAL(data != NULL, "PAR_REDUCE should carry reduce metadata");
+    REQUIRE_PAR_REDUCE_LOCAL(data->range_body,
+                             "local-init item reduce should lower as a worker range body");
+    REQUIRE_PAR_REDUCE_LOCAL(data->item_name && strcmp(data->item_name, "i") == 0,
+                             "item name should remain the user item variable");
+    REQUIRE_PAR_REDUCE_LOCAL(data->end_name == NULL,
+                             "synthetic range end should not expose a user end name");
+    REQUIRE_PAR_REDUCE_LOCAL(data->worker_name && strcmp(data->worker_name, "wid") == 0,
+                             "worker name should be recorded");
+    REQUIRE_PAR_REDUCE_LOCAL(data->body_func != NULL, "reduce body func should exist");
+    REQUIRE_PAR_REDUCE_LOCAL(data->combine_func != NULL, "combine func should exist");
+    REQUIRE_PAR_REDUCE_LOCAL(data->body_func->nparams == 3,
+                             "local-init reduce body should take begin, end and worker params");
+    REQUIRE_PAR_REDUCE_LOCAL(data->combine_func->nparams == 2,
+                             "combine func should take accumulator and value params");
+    for (uint16_t i = 0; i < data->body_func->nparams; i++)
+        REQUIRE_PAR_REDUCE_LOCAL(data->body_func->params[i] &&
+                                     data->body_func->params[i]->op == XI_PARAM,
+                                 "local-init reduce body params should be PARAM values");
+    REQUIRE_PAR_REDUCE_LOCAL(data->body_func->native_callback_kind ==
+                                 XI_NATIVE_CALLBACK_PAR_REDUCE_I64_BODY,
+                             "body should keep the native i64 reduce callback ABI");
+    REQUIRE_PAR_REDUCE_LOCAL(data->combine_func->native_callback_kind ==
+                                 XI_NATIVE_CALLBACK_PAR_REDUCE_I64_COMBINE,
+                             "combine should keep the native i64 reduce callback ABI");
+    REQUIRE_PAR_REDUCE_LOCAL(func_tree_find_op(data->body_func, XI_CALL) != NULL,
+                             "synthetic range body should call the combine function locally");
+    REQUIRE_PAR_REDUCE_LOCAL(par->type && XR_TYPE_IS_INT(par->type),
+                             "local-init reduce value should keep int result type");
+    xi_func_free(f);
+
+#undef REQUIRE_PAR_REDUCE_LOCAL
+}
+
+TEST(parallel_collect_lowers_to_dedicated_ir) {
+#define REQUIRE_PAR_COLLECT(cond, msg)                                                             \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "parallel_collect_lowers_to_dedicated_ir: %s\n", msg);                 \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XiFunc *f =
+        lower_source("fn run(n: int) -> int {\n"
+                     "    let base = 3\n"
+                     "    let values = parallel for i in 0..n workers 2 worker wid collect {\n"
+                     "        i + wid + base\n"
+                     "    }\n"
+                     "    return values[0] + values[3]\n"
+                     "}\n"
+                     "print(run(4))\n");
+    REQUIRE_PAR_COLLECT(f != NULL, "source should lower");
+    XiValue *par = func_tree_find_op(f, XI_PAR_COLLECT);
+    REQUIRE_PAR_COLLECT(par != NULL, "PAR_COLLECT should be present");
+    REQUIRE_PAR_COLLECT(par->nargs >= 4,
+                        "PAR_COLLECT should start with start/end/workers/closure args");
+    REQUIRE_PAR_COLLECT(par->aux_kind == XI_AUX_KIND_PAR_COLLECT,
+                        "PAR_COLLECT aux kind should be explicit");
+    for (uint16_t i = 0; i < 4; i++)
+        REQUIRE_PAR_COLLECT(par->args[i] != NULL, "PAR_COLLECT leading args should be populated");
+    REQUIRE_PAR_COLLECT(par->args[3]->op == XI_CLOSURE_NEW, "PAR_COLLECT body should be a closure");
+    REQUIRE_PAR_COLLECT(par->type && XR_TYPE_IS_ARRAY(par->type),
+                        "PAR_COLLECT result should be an array");
+    REQUIRE_PAR_COLLECT(par->type->container.element_type &&
+                            XR_TYPE_IS_INT(par->type->container.element_type),
+                        "PAR_COLLECT int body should produce Array<int>");
+
+    XiParallelCollectData *data = (XiParallelCollectData *) par->aux;
+    REQUIRE_PAR_COLLECT(data != NULL, "PAR_COLLECT should carry XiParallelCollectData");
+    REQUIRE_PAR_COLLECT(data->element_type && XR_TYPE_IS_INT(data->element_type),
+                        "int parallel collect should record int element type");
+    REQUIRE_PAR_COLLECT(data->body_func != NULL, "parallel collect body func should be recorded");
+    REQUIRE_PAR_COLLECT((XiFunc *) par->args[3]->aux == data->body_func,
+                        "body closure should point at body func");
+    REQUIRE_PAR_COLLECT(par->nargs == 4 + data->body_func->ncaptures,
+                        "PAR_COLLECT should append captured values as hidden lifetime anchors");
+    REQUIRE_PAR_COLLECT(data->item_name && strcmp(data->item_name, "i") == 0,
+                        "loop item name should be recorded");
+    REQUIRE_PAR_COLLECT(data->worker_name && strcmp(data->worker_name, "wid") == 0,
+                        "worker name should be recorded");
+    REQUIRE_PAR_COLLECT(data->body_func->nparams == 2,
+                        "body func should take item and worker params");
+    REQUIRE_PAR_COLLECT(data->body_func->return_type &&
+                            XR_TYPE_IS_INT(data->body_func->return_type),
+                        "body func should return int");
+    REQUIRE_PAR_COLLECT(data->body_func->native_callback_kind ==
+                            XI_NATIVE_CALLBACK_PAR_COLLECT_SCALAR_BODY,
+                        "parallel collect body should use the native scalar callback ABI");
+    REQUIRE_PAR_COLLECT(data->body_func->ncaptures >= 1, "body should capture outer base");
+    xi_func_free(f);
+
+#undef REQUIRE_PAR_COLLECT
+}
+
+TEST(parallel_collect_into_lowers_to_dedicated_ir) {
+#define REQUIRE_PAR_COLLECT_INTO(cond, msg)                                                        \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "parallel_collect_into_lowers_to_dedicated_ir: %s\n", msg);            \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XiFunc *f = lower_source("fn run(n: int) {\n"
+                             "    let out: Array<int> = []\n"
+                             "    let base = 7\n"
+                             "    parallel for i in 0..n workers 2 worker wid collect into out {\n"
+                             "        i + wid + base\n"
+                             "    }\n"
+                             "    print(out.length)\n"
+                             "}\n"
+                             "run(4)\n");
+    REQUIRE_PAR_COLLECT_INTO(f != NULL, "source should lower");
+    XiValue *par = func_tree_find_op(f, XI_PAR_COLLECT);
+    REQUIRE_PAR_COLLECT_INTO(par != NULL, "PAR_COLLECT should be present");
+    REQUIRE_PAR_COLLECT_INTO(par->aux_kind == XI_AUX_KIND_PAR_COLLECT,
+                             "PAR_COLLECT aux kind should be explicit");
+
+    XiParallelCollectData *data = (XiParallelCollectData *) par->aux;
+    REQUIRE_PAR_COLLECT_INTO(data != NULL, "PAR_COLLECT should carry data");
+    REQUIRE_PAR_COLLECT_INTO(data->into_result, "collect into should be marked in aux data");
+    REQUIRE_PAR_COLLECT_INTO(data->direct_lane_writes,
+                             "scalar collect into should write the result lane in the body");
+    REQUIRE_PAR_COLLECT_INTO(par->type && XR_TYPE_IS_UNIT(par->type),
+                             "collect into should return unit");
+    REQUIRE_PAR_COLLECT_INTO(par->nargs >= 5, "collect into should carry target array arg");
+    REQUIRE_PAR_COLLECT_INTO(par->args[4] && par->args[4]->type &&
+                                 XR_TYPE_IS_ARRAY(par->args[4]->type),
+                             "arg 4 should be the result buffer array");
+    REQUIRE_PAR_COLLECT_INTO(data->element_type && XR_TYPE_IS_INT(data->element_type),
+                             "collect into should record element type from target array");
+    REQUIRE_PAR_COLLECT_INTO(data->body_func != NULL, "body func should be recorded");
+    REQUIRE_PAR_COLLECT_INTO(par->nargs == 5 + data->body_func->ncaptures,
+                             "captures should start after the explicit result buffer arg");
+    REQUIRE_PAR_COLLECT_INTO(data->body_func->return_type &&
+                                 XR_TYPE_IS_UNIT(data->body_func->return_type),
+                             "direct collect into body should return unit");
+    REQUIRE_PAR_COLLECT_INTO(data->body_func->native_callback_kind ==
+                                 XI_NATIVE_CALLBACK_PAR_FOR_I64,
+                             "direct collect into body should use the native range callback ABI");
+    xi_func_free(f);
+
+#undef REQUIRE_PAR_COLLECT_INTO
+}
+
+TEST(parallel_collect_final_lowers_to_range_body_ir) {
+#define REQUIRE_PAR_COLLECT_FINAL(cond, msg)                                                       \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "parallel_collect_final_lowers_to_range_body_ir: %s\n", msg);          \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XiFunc *f = lower_source("fn run(n: int) {\n"
+                             "    let values = parallel for i in 0..n workers 2 worker wid\n"
+                             "        final { print(wid) }\n"
+                             "        collect {\n"
+                             "        i + wid\n"
+                             "    }\n"
+                             "    print(values.length)\n"
+                             "}\n"
+                             "run(4)\n");
+    REQUIRE_PAR_COLLECT_FINAL(f != NULL, "source should lower");
+    XiValue *par = func_tree_find_op(f, XI_PAR_COLLECT);
+    REQUIRE_PAR_COLLECT_FINAL(par != NULL, "PAR_COLLECT should be present");
+    REQUIRE_PAR_COLLECT_FINAL(par->aux_kind == XI_AUX_KIND_PAR_COLLECT,
+                              "PAR_COLLECT aux kind should be explicit");
+
+    XiParallelCollectData *data = (XiParallelCollectData *) par->aux;
+    REQUIRE_PAR_COLLECT_FINAL(data != NULL, "PAR_COLLECT should carry data");
+    REQUIRE_PAR_COLLECT_FINAL(!data->into_result, "returning collect should produce an array");
+    REQUIRE_PAR_COLLECT_FINAL(data->direct_lane_writes,
+                              "collect final should use direct result lane writes");
+    REQUIRE_PAR_COLLECT_FINAL(data->body_func != NULL, "body func should be recorded");
+    REQUIRE_PAR_COLLECT_FINAL(data->body_func->nparams == 3,
+                              "collect final body should take begin, end and worker params");
+    REQUIRE_PAR_COLLECT_FINAL(data->body_func->native_callback_kind ==
+                                  XI_NATIVE_CALLBACK_PAR_RANGE_I64,
+                              "collect final body should use the native range callback ABI");
+    xi_func_free(f);
+
+#undef REQUIRE_PAR_COLLECT_FINAL
+}
+
+TEST(parallel_collect_into_reference_lane_uses_direct_ir) {
+#define REQUIRE_PAR_COLLECT_REF(cond, msg)                                                         \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "parallel_collect_into_reference_lane_uses_direct_ir: %s\n", msg);     \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XiFunc *f = lower_source("fn run(n: int) {\n"
+                             "    let out: Array<string> = []\n"
+                             "    let label = \"chunk\"\n"
+                             "    parallel for i in 0..n workers 2 collect into out {\n"
+                             "        label\n"
+                             "    }\n"
+                             "    print(out.length)\n"
+                             "}\n"
+                             "run(4)\n");
+    REQUIRE_PAR_COLLECT_REF(f != NULL, "source should lower");
+    XiValue *par = func_tree_find_op(f, XI_PAR_COLLECT);
+    REQUIRE_PAR_COLLECT_REF(par != NULL, "PAR_COLLECT should be present");
+    REQUIRE_PAR_COLLECT_REF(par->aux_kind == XI_AUX_KIND_PAR_COLLECT,
+                            "PAR_COLLECT aux kind should be explicit");
+
+    XiParallelCollectData *data = (XiParallelCollectData *) par->aux;
+    REQUIRE_PAR_COLLECT_REF(data != NULL, "PAR_COLLECT should carry data");
+    REQUIRE_PAR_COLLECT_REF(data->into_result, "collect into should be marked in aux data");
+    REQUIRE_PAR_COLLECT_REF(data->direct_lane_writes,
+                            "reference collect into should write the result lane in the body");
+    REQUIRE_PAR_COLLECT_REF(par->type && XR_TYPE_IS_UNIT(par->type),
+                            "collect into should return unit");
+    REQUIRE_PAR_COLLECT_REF(par->nargs >= 5, "collect into should carry target array arg");
+    REQUIRE_PAR_COLLECT_REF(data->element_type && XR_TYPE_IS_STRING(data->element_type),
+                            "collect into should record string element type from target array");
+    REQUIRE_PAR_COLLECT_REF(data->body_func != NULL, "body func should be recorded");
+    REQUIRE_PAR_COLLECT_REF(data->body_func->return_type &&
+                                XR_TYPE_IS_UNIT(data->body_func->return_type),
+                            "direct reference collect into body should return unit");
+    REQUIRE_PAR_COLLECT_REF(data->body_func->native_callback_kind == XI_NATIVE_CALLBACK_PAR_FOR_I64,
+                            "direct reference collect into body should use range callback ABI");
+    xi_func_free(f);
+
+#undef REQUIRE_PAR_COLLECT_REF
+}
+
+TEST(parallel_reduce_struct_accumulator_keeps_typed_ir) {
+#define REQUIRE_PAR_REDUCE_STRUCT(cond, msg)                                                       \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "parallel_reduce_struct_accumulator_keeps_typed_ir: %s\n", msg);       \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XiFunc *f = lower_source("struct Totals {\n"
+                             "    bytes: int\n"
+                             "    checksum: int\n"
+                             "}\n"
+                             "fn run(n: int) -> int {\n"
+                             "    let totals = parallel reduce i in 0..n workers 2 worker wid "
+                             "init Totals{bytes: 0, checksum: 0} "
+                             "combine (a: Totals, b: Totals) -> Totals{"
+                             "bytes: a.bytes + b.bytes, "
+                             "checksum: a.checksum + b.checksum} {\n"
+                             "        Totals{bytes: i, checksum: wid}\n"
+                             "    }\n"
+                             "    return totals.bytes + totals.checksum\n"
+                             "}\n"
+                             "print(run(4))\n");
+    REQUIRE_PAR_REDUCE_STRUCT(f != NULL, "source should lower");
+    XiValue *par = func_tree_find_op(f, XI_PAR_REDUCE);
+    REQUIRE_PAR_REDUCE_STRUCT(par != NULL, "PAR_REDUCE should be present");
+    XiParallelReduceData *data = (XiParallelReduceData *) par->aux;
+    REQUIRE_PAR_REDUCE_STRUCT(data != NULL, "PAR_REDUCE should carry reduce metadata");
+    REQUIRE_PAR_REDUCE_STRUCT(data->accumulator_type != NULL,
+                              "struct reduce should record accumulator type");
+    REQUIRE_PAR_REDUCE_STRUCT(!XR_TYPE_IS_INT(data->accumulator_type),
+                              "struct reduce accumulator must not collapse to int");
+    REQUIRE_PAR_REDUCE_STRUCT(par->type == data->accumulator_type ||
+                                  xr_type_equals(par->type, data->accumulator_type),
+                              "PAR_REDUCE result should use the accumulator type");
+    REQUIRE_PAR_REDUCE_STRUCT(data->body_func && data->combine_func,
+                              "struct reduce should still build body/combine funcs");
+    REQUIRE_PAR_REDUCE_STRUCT(
+        data->body_func->return_type &&
+            xr_type_assignable(data->accumulator_type, data->body_func->return_type),
+        "body func should return the accumulator type");
+    REQUIRE_PAR_REDUCE_STRUCT(
+        data->combine_func->return_type &&
+            xr_type_assignable(data->accumulator_type, data->combine_func->return_type),
+        "combine func should return the accumulator type");
+    REQUIRE_PAR_REDUCE_STRUCT(
+        data->combine_func->params[0] &&
+            xr_type_assignable(data->accumulator_type, data->combine_func->params[0]->type),
+        "combine accumulator param should use accumulator type");
+    REQUIRE_PAR_REDUCE_STRUCT(data->body_func->native_callback_kind ==
+                                  XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_BODY,
+                              "struct reduce body should use the native aggregate callback ABI");
+    REQUIRE_PAR_REDUCE_STRUCT(data->combine_func->native_callback_kind ==
+                                  XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_COMBINE,
+                              "struct combine should use the native aggregate callback ABI");
+    xi_func_free(f);
+
+#undef REQUIRE_PAR_REDUCE_STRUCT
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -1172,7 +1757,7 @@ int main(void) {
     run_index_access();
     run_member_access();
     run_member_access_field_symbols_are_distinct();
-    run_bytes_methods_lower_to_semantic_ops();
+    run_bytes_new_low_level_methods_lower_to_semantic_ops();
     run_throw_stmt();
     run_for_in_loop();
     run_nullish_coalesce();
@@ -1208,6 +1793,17 @@ int main(void) {
     run_import_export_skip();
     run_class_decl_skip();
     run_yield_stmt();
+    run_parallel_for_lowers_to_dedicated_ir();
+    run_parallel_for_final_lowers_to_range_body_ir();
+    run_parallel_range_lowers_to_range_body_ir();
+    run_parallel_reduce_lowers_to_dedicated_ir();
+    run_parallel_range_reduce_lowers_to_range_body_ir();
+    run_parallel_reduce_local_init_lowers_to_range_body_ir();
+    run_parallel_collect_lowers_to_dedicated_ir();
+    run_parallel_collect_into_lowers_to_dedicated_ir();
+    run_parallel_collect_final_lowers_to_range_body_ir();
+    run_parallel_collect_into_reference_lane_uses_direct_ir();
+    run_parallel_reduce_struct_accumulator_keeps_typed_ir();
 
     teardown();
 

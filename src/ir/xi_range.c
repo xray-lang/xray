@@ -85,6 +85,41 @@ XR_FUNC bool xi_range_contains(XiRange outer, XiRange inner) {
 
 /* ========== Arithmetic Transfer Functions ========== */
 
+static bool xi_range_for_native_int_width(uint8_t native_width, XiRange *out) {
+    if (!out)
+        return false;
+    switch (native_width) {
+        case XR_NATIVE_I8:
+            *out = xi_range_make(-128, 127);
+            return true;
+        case XR_NATIVE_U8:
+            *out = xi_range_make(0, 255);
+            return true;
+        case XR_NATIVE_I16:
+            *out = xi_range_make(-32768, 32767);
+            return true;
+        case XR_NATIVE_U16:
+            *out = xi_range_make(0, 65535);
+            return true;
+        case XR_NATIVE_I32:
+            *out = xi_range_make(INT32_MIN, INT32_MAX);
+            return true;
+        case XR_NATIVE_U32:
+            *out = xi_range_make(0, UINT32_MAX);
+            return true;
+        default:
+            return false;
+    }
+}
+
+static XiRange xi_range_bound_by_type(const XrType *type, XiRange range) {
+    XiRange type_range = xi_range_top();
+    if (!type || type->kind != XR_KIND_INT ||
+        !xi_range_for_native_int_width(type->native_width, &type_range))
+        return range;
+    return xi_range_intersect(range, type_range);
+}
+
 /* Overflow-safe addition check. */
 static bool add_overflows(int64_t a, int64_t b) {
     if (b > 0 && a > INT64_MAX - b)
@@ -235,10 +270,10 @@ static XiRange eval_range(const XiValue *v, const RangeTable *rt, const XiLoopIn
     XR_DCHECK(v != NULL, "eval_range: NULL value");
 
     if (v->op == XI_CONST && is_int_value(v))
-        return xi_range_const(v->aux_int);
+        return xi_range_bound_by_type(v->type, xi_range_const(v->aux_int));
 
     if (v->op == XI_PARAM)
-        return xi_range_top(); /* No info for params (yet). */
+        return xi_range_bound_by_type(v->type, xi_range_top());
 
     if (!is_int_value(v))
         return xi_range_top();
@@ -261,6 +296,8 @@ static XiRange eval_range(const XiValue *v, const RangeTable *rt, const XiLoopIn
             return xi_range_neg(r0);
         case XI_COPY:
             return r0;
+        case XI_CONVERT:
+            return xi_range_bound_by_type(v->type, r0);
         case XI_PHI: {
             /* Union of all phi inputs, tightened by the counted-loop IV
              * bound when the phi is a canonical induction variable. */
@@ -287,8 +324,20 @@ static XiRange eval_range(const XiValue *v, const RangeTable *rt, const XiLoopIn
             return xi_range_intersect(r0, xi_range_make(INT32_MIN, INT32_MAX));
         case XI_NARROW_U32:
             return xi_range_intersect(r0, xi_range_make(0, UINT32_MAX));
+        case XI_WIDEN_I8:
+            return xi_range_make(-128, 127);
+        case XI_WIDEN_U8:
+            return xi_range_make(0, 255);
+        case XI_WIDEN_I16:
+            return xi_range_make(-32768, 32767);
+        case XI_WIDEN_U16:
+            return xi_range_make(0, 65535);
+        case XI_WIDEN_I32:
+            return xi_range_make(INT32_MIN, INT32_MAX);
+        case XI_WIDEN_U32:
+            return xi_range_make(0, UINT32_MAX);
         default:
-            return xi_range_top();
+            return xi_range_bound_by_type(v->type, xi_range_top());
     }
 }
 

@@ -420,7 +420,7 @@ static inline XrValue xrt_io_read_lines(const char *path_data, int64_t path_len)
     XRT_FREE(owned);
     if (!buf)
         return XR_NULL_VAL;
-    XrValue arr = xrt_array_new(8);
+    XrValue arr = xrt_array_new(0);
     XrtIoReadLinesCtx read_ctx = {arr};
     xr_io_core_read_lines_each(buf, len, xrt_io_read_lines_push, &read_ctx);
     XRT_FREE(buf);
@@ -787,7 +787,7 @@ static inline XrValue xrt_io_read_dir(const char *path_data, int64_t path_len) {
         XRT_FREE(owned);
         return XR_NULL_VAL;
     }
-    XrValue arr = xrt_array_new(8);
+    XrValue arr = xrt_array_new(0);
     XrtIoReadDirEmitCtx emit = {.arr = arr};
     if (!xr_io_core_read_dir(path, xrt_io_dir_for_each_entry, NULL, xrt_io_read_dir_emit, &emit)) {
         xrt_release(arr);
@@ -806,7 +806,7 @@ static inline XrValue xrt_io_read_dir_recursive(const char *path_data, int64_t p
         XRT_FREE(owned);
         return XR_NULL_VAL;
     }
-    XrValue arr = xrt_array_new(8);
+    XrValue arr = xrt_array_new(0);
     XrtIoReadDirEmitCtx emit = {.arr = arr};
     XrIoCoreReadDirOps ops = {
         .for_each_entry = xrt_io_dir_for_each_entry,

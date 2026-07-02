@@ -78,11 +78,14 @@ struct AstNode {
         WhileStmtNode while_stmt;
         ForStmtNode for_stmt;
         ForInStmtNode for_in_stmt;
+        ParallelForStmtNode parallel_for_stmt;
         BreakStmtNode break_stmt;
         ContinueStmtNode continue_stmt;
         FunctionDeclNode function_decl;
         FunctionDeclNode function_expr;
         CallExprNode call_expr;
+        ParallelReduceExprNode parallel_reduce_expr;
+        ParallelCollectExprNode parallel_collect_expr;
         ReturnStmtNode return_stmt;
         IsExprNode is_expr;
         AsExprNode as_expr;

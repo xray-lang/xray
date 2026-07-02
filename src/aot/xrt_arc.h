@@ -134,16 +134,17 @@ int xrt_bump_enabled = 0;  // 0 = calloc (safe default); 1 = bump (fast, no per-
  * destructor cascade gets too deep, dead objects are queued here and drained
  * iteratively by the outermost xrt_release instead of recursing, so freeing a
  * deep data structure (10k+ node list/tree) cannot overflow the C stack.
- * Single global to match the bump allocator's threading model. */
-int xrt_release_depth;
-void *xrt_deferred_head;
+ * These are thread-local: concurrent worker releases must not share the
+ * recursive destructor queue. */
+_Thread_local int xrt_release_depth;
+_Thread_local void *xrt_deferred_head;
 #else
 extern char *xrt_bump_cursor;
 extern char *xrt_bump_end;
 extern XrtBumpBlock *xrt_bump_blocks;
 extern int xrt_bump_enabled;
-extern int xrt_release_depth;
-extern void *xrt_deferred_head;
+extern _Thread_local int xrt_release_depth;
+extern _Thread_local void *xrt_deferred_head;
 #endif
 
 /* Outermost release recurses at most this deep before queuing dead objects for
@@ -258,6 +259,31 @@ static inline void xrt_retain(XrValue v) {
     atomic_fetch_add_explicit(&hdr->refcount, 1, memory_order_relaxed);
 }
 
+static inline int xrt_rc_claim_release_last(XrObjHeader *hdr) {
+    if (!hdr || (hdr->extra & XR_OBJ_STORAGE_BUMP))
+        return 0;
+    for (;;) {
+        int32_t rc = atomic_load_explicit(&hdr->refcount, memory_order_acquire);
+        if (rc == XR_RC_STICKY)
+            return 0;
+        if (rc > 0) {
+            int32_t next = rc - 1;
+            if (atomic_compare_exchange_weak_explicit(&hdr->refcount, &rc, next,
+                                                      memory_order_acq_rel, memory_order_acquire))
+                return 0;
+            continue;
+        }
+        if (rc == 0) {
+            int32_t next = XR_RC_STICKY;
+            if (atomic_compare_exchange_weak_explicit(&hdr->refcount, &rc, next,
+                                                      memory_order_acq_rel, memory_order_acquire))
+                return 1;
+            continue;
+        }
+        return 0;
+    }
+}
+
 /* ARC release: release one owning reference, free on the LAST one.
  * 0-based RC (matching the VM/AOT unified header): rc == 0 means a single
  * owner, so a release at rc == 0 frees; otherwise it just decrements. The
@@ -287,14 +313,8 @@ static inline void xrt_release(XrValue v) {
     if (!xrt_arc_value_has_header(v))
         return;
     XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
-    if (hdr->extra & XR_OBJ_STORAGE_BUMP)
+    if (!xrt_rc_claim_release_last(hdr))
         return;
-    int32_t rc = atomic_load_explicit(&hdr->refcount, memory_order_relaxed);
-    if (rc != 0) {
-        /* not the last owner: just drop one reference */
-        atomic_store_explicit(&hdr->refcount, rc - 1, memory_order_relaxed);
-        return;
-    }
 
     /* Last owner (rc == 0). Depth-bound the destructor cascade: queue and
      * drain iteratively past the limit so deep graphs cannot blow the stack.

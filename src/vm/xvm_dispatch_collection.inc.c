@@ -841,6 +841,27 @@ vmcase(OP_ARRAY_LEN) {
     vmbreak;
 }
 
+vmcase(OP_ARRAY_DATA_PTR) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    if (!XR_IS_ARRAY(R(b))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "Array.dataPtrUnchecked() expects an array or span receiver");
+    }
+    XrArray *arr = XR_TO_ARRAY(R(b));
+    R(a) = xr_int((xr_Integer) (intptr_t) arr->data);
+    vmbreak;
+}
+
+vmcase(OP_ARRAY_CLEAR) {
+    int a = GETARG_A(i);
+    if (!XR_IS_ARRAY(R(a))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array.clear() expects an array receiver");
+    }
+    xr_array_clear(XR_TO_ARRAY(R(a)));
+    vmbreak;
+}
+
 vmcase(OP_ARRAY_RESERVE) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
@@ -886,6 +907,24 @@ vmcase(OP_BYTES_LOAD_U32_LE) {
     vmbreak;
 }
 
+vmcase(OP_BYTES_LOAD_U16_LE) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U16_EXPECTS_MSG);
+    }
+    XrArray *arr = XR_TO_ARRAY(R(b));
+    if (arr->elem_type != XR_ELEM_U8)
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U16_RECEIVER_MSG);
+    bool ok = false;
+    uint16_t value = xr_array_load_u16_le(arr, XR_TO_INT(R(c)), &ok);
+    if (!ok)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U16_OOB_MSG);
+    R(a) = xr_int((xr_Integer) value);
+    vmbreak;
+}
+
 vmcase(OP_BYTES_LOAD_U64_LE) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
@@ -919,6 +958,15 @@ vmcase(OP_PTR_STORE) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     xr_ffi_ptr_store((uintptr_t) (intptr_t) XR_TO_INT(R(a)), (uint8_t) c, R(b));
+    vmbreak;
+}
+
+vmcase(OP_PTR_COPY_NONOVERLAP) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    memcpy((void *) (uintptr_t) (intptr_t) XR_TO_INT(R(a)),
+           (const void *) (uintptr_t) (intptr_t) XR_TO_INT(R(b)), (size_t) XR_TO_INT(R(c)));
     vmbreak;
 }
 

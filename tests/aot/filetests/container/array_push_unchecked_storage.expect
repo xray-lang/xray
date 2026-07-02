@@ -1,0 +1,2 @@
+c_contains=((uint8_t*)_a->data)[_a->length++] =
+c_not_contains=XRT_SYM_PUSH_UNCHECKED

@@ -51,6 +51,9 @@ typedef struct XrResultGroup {
     uint32_t batch_size;
     int64_t current_value;
     uint32_t current_count;
+    bool inline_batch_ready;
+    int64_t inline_batch_value;
+    uint32_t inline_batch_count;
     XrResultGroupBatch *batch_first;
     XrResultGroupBatch *batch_last;
     struct XrCoroutine *wait_first;
@@ -61,9 +64,16 @@ typedef struct XrResultGroup {
 
 XR_FUNC XrResultGroup *xr_result_group_new(struct XrRuntimeCore *core, struct XrRuntime *scheduler,
                                            uint32_t batch_size);
+XR_FUNC bool xr_result_group_reset(XrResultGroup *g, uint32_t batch_size);
 XR_FUNC bool xr_result_group_add(XrResultGroup *g, int64_t value);
 XR_FUNC bool xr_result_group_flush(XrResultGroup *g);
 XR_FUNC bool xr_result_group_try_recv(XrResultGroup *g, int64_t *out);
+XR_FUNC XrResultGroupRecvStatus xr_result_group_recv_i64_for_coro(XrResultGroup *g,
+                                                                  struct XrCoroutine *coro,
+                                                                  int64_t *out, bool *out_has);
+XR_FUNC XrResultGroupRecvStatus xr_result_group_recv_i64_resume_for_coro(struct XrCoroutine *coro,
+                                                                         int64_t *out,
+                                                                         bool *out_has);
 XR_FUNC XrResultGroupRecvStatus xr_result_group_recv_for_coro(XrResultGroup *g,
                                                               struct XrCoroutine *coro,
                                                               XrValue *result);

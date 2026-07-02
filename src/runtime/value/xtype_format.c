@@ -110,6 +110,15 @@ const char *xr_type_to_string(XrType *type) {
         return xr_pool_strdup(pool, buf);
     }
 
+    if (XR_TYPE_IS_SPAN(type)) {
+        XrType *elem_type = type->container.element_type;
+        if (elem_type && XR_TYPE_IS_INT(elem_type) && elem_type->native_width == XR_NATIVE_U8)
+            return TYPE_NAME_BYTESPAN;
+        const char *elem = elem_type ? xr_type_to_string(elem_type) : "unknown";
+        snprintf(buf, TYPE_STR_BUF_SIZE, "Span<%s>", elem);
+        return xr_pool_strdup(pool, buf);
+    }
+
     if (XR_TYPE_IS_MAP(type)) {
         const char *key = type->map.key_type ? xr_type_to_string(type->map.key_type) : "unknown";
         const char *val =
@@ -458,6 +467,7 @@ bool xr_type_is_default_initializable(const XrType *type) {
         case XR_KIND_INSTANCE:
         case XR_KIND_CLASS:
         case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
