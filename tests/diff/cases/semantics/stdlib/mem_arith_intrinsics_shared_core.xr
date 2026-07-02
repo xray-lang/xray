@@ -1,0 +1,38 @@
+// mem.* wrapping / overflow arithmetic: VM and AOT share
+// src/shared/xr_arith_core.h, so every line below must print identically under
+// both backends, including the two's-complement wraparound and signed-overflow
+// edge cases at the int64 boundaries. Values use MAX (9223372036854775807) and
+// 2^62 (4611686018427387904) to avoid the INT64_MIN literal (which the lexer
+// clamps), keeping every expected result unambiguous.
+import mem
+
+// addWrapping (wraps modulo 2^64)
+print(mem.addWrapping(1, 2))
+print(mem.addWrapping(9223372036854775807, 1))
+print(mem.addWrapping(9223372036854775807, 9223372036854775807))
+
+// subWrapping
+print(mem.subWrapping(5, 3))
+print(mem.subWrapping(0, 1))
+print(mem.subWrapping(9223372036854775807, -1))
+
+// mulWrapping
+print(mem.mulWrapping(3, 4))
+print(mem.mulWrapping(9223372036854775807, 2))
+print(mem.mulWrapping(4611686018427387904, 4))
+
+// addOverflows
+print(mem.addOverflows(1, 2))
+print(mem.addOverflows(9223372036854775807, 1))
+print(mem.addOverflows(9223372036854775807, 9223372036854775807))
+
+// subOverflows
+print(mem.subOverflows(5, 3))
+print(mem.subOverflows(9223372036854775807, -1))
+print(mem.subOverflows(0, 9223372036854775807))
+
+// mulOverflows
+print(mem.mulOverflows(3, 4))
+print(mem.mulOverflows(9223372036854775807, 2))
+print(mem.mulOverflows(4611686018427387904, 4))
+print(mem.mulOverflows(0, 9223372036854775807))

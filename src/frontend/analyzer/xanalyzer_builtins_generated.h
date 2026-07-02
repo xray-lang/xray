@@ -369,8 +369,20 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"liveBytes", "(): int", "Get live memory usage in bytes", true, false},
     {"liveObjects", "(): int", "Get live object count", true, false},
     {"info", "(): Map", "Get memory-model runtime info as Map", true, false},
+    {"popcount", "(x: int): int", "Number of set bits in the 64-bit value", true, false},
+    {"leadingZeros", "(x: int): int", "Count of leading zero bits (0 -> 64)", true, false},
+    {"trailingZeros", "(x: int): int", "Count of trailing zero bits (0 -> 64)", true, false},
+    {"byteswap", "(x: int): int", "Reverse the byte order of the 64-bit value", true, false},
+    {"rotateLeft", "(x: int, n: int): int", "Rotate the 64-bit value left by n bits (n mod 64)", true, false},
+    {"rotateRight", "(x: int, n: int): int", "Rotate the 64-bit value right by n bits (n mod 64)", true, false},
+    {"addWrapping", "(a: int, b: int): int", "Two's-complement wrapping addition (wraps mod 2^64)", true, false},
+    {"subWrapping", "(a: int, b: int): int", "Two's-complement wrapping subtraction (wraps mod 2^64)", true, false},
+    {"mulWrapping", "(a: int, b: int): int", "Two's-complement wrapping multiplication (wraps mod 2^64)", true, false},
+    {"addOverflows", "(a: int, b: int): bool", "Whether signed 64-bit addition of a and b overflows", true, false},
+    {"subOverflows", "(a: int, b: int): bool", "Whether signed 64-bit subtraction of a and b overflows", true, false},
+    {"mulOverflows", "(a: int, b: int): bool", "Whether signed 64-bit multiplication of a and b overflows", true, false},
 };
-#define GEN_MEM_FUNCTION_COUNT 7
+#define GEN_MEM_FUNCTION_COUNT 19
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {

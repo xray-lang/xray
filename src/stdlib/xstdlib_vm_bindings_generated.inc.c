@@ -286,6 +286,12 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "byteswap", mem_byteswap);
     XRS_EXPORT(module, isolate, "rotateLeft", mem_rotate_left);
     XRS_EXPORT(module, isolate, "rotateRight", mem_rotate_right);
+    XRS_EXPORT(module, isolate, "addWrapping", mem_add_wrapping);
+    XRS_EXPORT(module, isolate, "subWrapping", mem_sub_wrapping);
+    XRS_EXPORT(module, isolate, "mulWrapping", mem_mul_wrapping);
+    XRS_EXPORT(module, isolate, "addOverflows", mem_add_overflows);
+    XRS_EXPORT(module, isolate, "subOverflows", mem_sub_overflows);
+    XRS_EXPORT(module, isolate, "mulOverflows", mem_mul_overflows);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_MEM */
 

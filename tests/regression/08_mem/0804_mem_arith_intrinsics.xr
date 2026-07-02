@@ -1,0 +1,41 @@
+// Test: mem.* wrapping / overflow-checked integer arithmetic.
+// Semantics live in src/shared/xr_arith_core.h, shared by VM and AOT.
+
+import mem
+
+@test
+fn test_mem_wrapping() {
+    // Wrapping addition (two's-complement, mod 2^64).
+    assert_eq(mem.addWrapping(1, 2), 3)
+    assert_eq(mem.addWrapping(9223372036854775807, 1), -9223372036854775807 - 1)
+    assert_eq(mem.addWrapping(9223372036854775807, 9223372036854775807), -2)
+
+    // Wrapping subtraction.
+    assert_eq(mem.subWrapping(5, 3), 2)
+    assert_eq(mem.subWrapping(0, 1), -1)
+    assert_eq(mem.subWrapping(9223372036854775807, -1), -9223372036854775807 - 1)
+
+    // Wrapping multiplication.
+    assert_eq(mem.mulWrapping(3, 4), 12)
+    assert_eq(mem.mulWrapping(9223372036854775807, 2), -2)
+    assert_eq(mem.mulWrapping(4611686018427387904, 4), 0)
+}
+
+@test
+fn test_mem_overflow_predicates() {
+    // Signed addition overflow.
+    assert_eq(mem.addOverflows(1, 2), false)
+    assert_eq(mem.addOverflows(9223372036854775807, 1), true)
+    assert_eq(mem.addOverflows(9223372036854775807, 9223372036854775807), true)
+
+    // Signed subtraction overflow.
+    assert_eq(mem.subOverflows(5, 3), false)
+    assert_eq(mem.subOverflows(9223372036854775807, -1), true)
+    assert_eq(mem.subOverflows(0, 9223372036854775807), false)
+
+    // Signed multiplication overflow.
+    assert_eq(mem.mulOverflows(3, 4), false)
+    assert_eq(mem.mulOverflows(9223372036854775807, 2), true)
+    assert_eq(mem.mulOverflows(4611686018427387904, 4), true)
+    assert_eq(mem.mulOverflows(0, 9223372036854775807), false)
+}
