@@ -379,23 +379,6 @@ static void xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modul
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_OS */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_PATH
-static void xr_stdlib_vm_bind_path_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "join", path_join);
-    XRS_EXPORT(module, isolate, "isAbsolute", path_isAbsolute);
-    XRS_EXPORT(module, isolate, "dirname", path_dirname);
-    XRS_EXPORT(module, isolate, "basename", path_basename);
-    XRS_EXPORT(module, isolate, "extname", path_extname);
-    XRS_EXPORT(module, isolate, "normalize", path_normalize);
-    XRS_EXPORT(module, isolate, "relative", path_relative);
-    XRS_EXPORT(module, isolate, "resolve", path_resolve);
-    XRS_EXPORT(module, isolate, "parse", path_parse);
-    XRS_EXPORT(module, isolate, "format", path_format);
-    xr_module_add_export(isolate, module, "sep", xrs_string_value_c(isolate, xr_path_core_sep_str()));
-    xr_module_add_export(isolate, module, "delimiter", xrs_string_value_c(isolate, xr_path_core_delimiter_str()));
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_PATH */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_REGEX
 static void xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "compile", regex_compile);

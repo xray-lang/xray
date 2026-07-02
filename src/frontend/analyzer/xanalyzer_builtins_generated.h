@@ -489,38 +489,6 @@ static const XaBuiltinMember g_gen_os_functions[] = {
 };
 #define GEN_OS_FUNCTION_COUNT 28
 
-// path.PathInfo handle fields
-static const XaBuiltinHandleField g_gen_path_pathinfo_fields[] = {
-    {"root", "string", true},
-    {"dir", "string", true},
-    {"base", "string", true},
-    {"name", "string", true},
-    {"ext", "string", true},
-};
-
-static const XaBuiltinHandle g_gen_path_handles[] = {
-    {"PathInfo", g_gen_path_pathinfo_fields, 5, NULL, 0},
-};
-#define GEN_PATH_HANDLE_COUNT 1
-
-// path module functions
-static const XaBuiltinMember g_gen_path_functions[] = {
-    {"join", "(...parts: string): string", "Join path segments", true, false},
-    {"isAbsolute", "(path: string): bool", "Check if path is absolute", true, false},
-    {"dirname", "(path: string): string", "Get directory name", true, false},
-    {"basename", "(path: string): string", "Get base name", true, false},
-    {"extname", "(path: string): string", "Get file extension", true, false},
-    {"normalize", "(path: string): string", "Normalize path", true, false},
-    {"relative", "(from: string, to: string): string", "Get relative path", true, false},
-    {"resolve", "(...parts: string): string", "Resolve to absolute path", true, false},
-    {"parse", "(path: string): PathInfo", "Parse path into components", true, false},
-    {"format", "(obj: PathInfo): string", "Format path from components", true, false},
-    // Module constants (is_method=false)
-    {"sep", ": string", "Platform path separator", false, false},
-    {"delimiter", ": string", "Platform path-list delimiter", false, false},
-};
-#define GEN_PATH_FUNCTION_COUNT 12
-
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
     {"compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", true, false},
@@ -675,7 +643,6 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0},
     {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT},
     {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT},
-    {"path", g_gen_path_functions, GEN_PATH_FUNCTION_COUNT, g_gen_path_handles, GEN_PATH_HANDLE_COUNT},
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0},
     {"toml", g_gen_toml_functions, GEN_TOML_FUNCTION_COUNT, NULL, 0},
@@ -684,7 +651,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
     {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 22
+#define GEN_BUILTIN_MODULE_COUNT 21
 
 /* clang-format on */
 

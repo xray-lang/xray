@@ -152,16 +152,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"math", "radToDeg", "(rad: float): float", "Radians to degrees", "math_radToDeg", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
     {"math", "isNaN", "(x: float): bool", "Check if NaN", "math_isNaN", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
     {"math", "isFinite", "(x: float): bool", "Check if finite", "math_isFinite", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
-    {"path", "join", "(...parts: string): string", "Join path segments", "path_join", "normal", "", "xrt_path_join", "*", "value", "", "", "core", "method", UINT16_MAX, true},
-    {"path", "isAbsolute", "(path: string): bool", "Check if path is absolute", "path_isAbsolute", "normal", "", "xrt_path_is_absolute", "s", "value", "", "", "core", "method", 1, true},
-    {"path", "dirname", "(path: string): string", "Get directory name", "path_dirname", "normal", "", "xrt_path_dirname", "s", "str_borrowed", "", "", "core", "method", 1, true},
-    {"path", "basename", "(path: string): string", "Get base name", "path_basename", "normal", "", "xrt_path_basename", "s", "str_borrowed", "", "", "core", "method", 1, true},
-    {"path", "extname", "(path: string): string", "Get file extension", "path_extname", "normal", "", "xrt_path_extname", "s", "str_borrowed", "", "", "core", "method", 1, true},
-    {"path", "normalize", "(path: string): string", "Normalize path", "path_normalize", "normal", "", "xrt_path_normalize", "s", "value", "", "", "core", "method", 1, true},
-    {"path", "relative", "(from: string, to: string): string", "Get relative path", "path_relative", "normal", "", "xrt_path_relative", "ss", "value", "", "", "core", "method", 2, true},
-    {"path", "resolve", "(...parts: string): string", "Resolve to absolute path", "path_resolve", "normal", "", "xrt_path_resolve", "*", "value", "", "", "core", "method", UINT16_MAX, true},
-    {"path", "parse", "(path: string): PathInfo", "Parse path into components", "path_parse", "normal", "", "xrt_path_parse", "s", "value", "", "", "core", "method", 1, true},
-    {"path", "format", "(obj: PathInfo): string", "Format path from components", "path_format", "normal", "", "xrt_path_format", "v", "value", "", "", "core", "method", 1, true},
     {"base64", "encode", "(data: string): string", "Base64 encode", "base64_encode", "normal", "", "xrt_base64_encode", "s", "value", "", "", "alloc", "method", 1, true},
     {"base64", "decode", "(data: string): string?", "Base64 decode", "base64_decode", "normal", "", "xrt_base64_decode", "s", "value", "", "", "alloc", "method", 1, true},
     {"base64", "encodeUrl", "(data: string): string", "URL-safe base64 encode", "base64_encodeUrl", "normal", "", "xrt_base64_encode_url", "s", "value", "", "", "alloc", "method", 1, true},
@@ -488,8 +478,6 @@ static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
     {"math", "MAX_FLOAT", ": float", "Largest finite IEEE-754 double", "math.MAX_FLOAT", "xr_float(DBL_MAX)", "", "float64", "", "", "core", INT64_C(0), 1.79769313486231570815e+308},
     {"math", "INF", ": float", "Positive infinity", "math.INF", "xr_float(INFINITY)", "", "float64", "", "", "core", INT64_C(0), INFINITY},
     {"math", "NAN", ": float", "Quiet NaN value", "math.NAN", "xr_float(NAN)", "", "float64", "", "", "core", INT64_C(0), NAN},
-    {"path", "sep", ": string", "Platform path separator", "path.sep", "xrs_string_value_c(isolate, xr_path_core_sep_str())", "xrt_path_sep", "helper_value", "", "", "core", INT64_C(0), 0.0},
-    {"path", "delimiter", ": string", "Platform path-list delimiter", "path.delimiter", "xrs_string_value_c(isolate, xr_path_core_delimiter_str())", "xrt_path_delimiter", "helper_value", "", "", "core", INT64_C(0), 0.0},
     {"encoding", "LE", ": int", "Little-endian UTF-16 byte order", "XR_UTF16_LE", "xr_int(XR_UTF16_LE)", "", "int64", "", "", "core", INT64_C(0), 0.0},
     {"encoding", "BE", ": int", "Big-endian UTF-16 byte order", "XR_UTF16_BE", "xr_int(XR_UTF16_BE)", "", "int64", "", "", "core", INT64_C(1), 0.0},
     {"os", "platform", ": string", "Current operating system name", "os.platform", "xrs_string_value_c(isolate, get_platform())", "xrt_os_platform", "helper_value", "", "", "system", INT64_C(0), 0.0},
@@ -503,14 +491,6 @@ static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
     {"log", "FATAL", ": int", "Fatal log level", "XR_LOG_FATAL", "xr_int(XR_LOG_FATAL)", "", "int64", "", "", "core", INT64_C(50), 0.0},
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_path_PathInfo[] = {
-    {"path", "PathInfo", "root", "string", true},
-    {"path", "PathInfo", "dir", "string", true},
-    {"path", "PathInfo", "base", "string", true},
-    {"path", "PathInfo", "name", "string", true},
-    {"path", "PathInfo", "ext", "string", true},
-};
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_url_URL[] = {
     {"url", "URL", "protocol", "string", true},
@@ -592,7 +572,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsMessage[] 
 };
 
 static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
-    {"path", "PathInfo", "Native handle type", xr_stdlib_handle_fields_path_PathInfo, 5},
     {"url", "URL", "Native handle type", xr_stdlib_handle_fields_url_URL, 11},
     {"os", "ExecResult", "Native handle type", xr_stdlib_handle_fields_os_ExecResult, 3},
     {"io", "FileStat", "Native handle type", xr_stdlib_handle_fields_io_FileStat, 10},

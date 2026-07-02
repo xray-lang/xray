@@ -4502,6 +4502,11 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         const char *helper = NULL;
         int64_t int_const = 0;
         bool has_int_const = false;
+        /* path.sep / path.delimiter are pure-Xray module-level const exports
+         * (stdlib/path/path.xr). AOT has no general cross-module const-export
+         * slot resolution yet, so they resolve through the shared-core helpers,
+         * which return the same POSIX values as the .xr definitions. Remove this
+         * special case once module-level const exports resolve to shared slots. */
         if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "path")) {
             if (strcmp(field, "sep") == 0)
                 helper = "xrt_path_sep";

@@ -1,0 +1,265 @@
+// path — pure-Xray cross-platform path manipulation (POSIX semantics).
+//
+// Every operation here is a pure string algorithm; the sole runtime dependency
+// is `os.getcwd()`, used by `resolve` to anchor relative inputs.
+//
+// Semantics:
+//   * output always uses '/' as the separator;
+//   * parsing treats '/' as the separator (POSIX). Windows drive letters and
+//     backslash separators are out of scope for this module; `sep`/`delimiter`
+//     report the POSIX values.
+//
+// Char-indexed scanning is safe for separator logic because '/' and '.' are
+// single-byte ASCII scalars that never appear inside a multi-byte UTF-8 unit.
+
+import os
+
+// Platform surface. POSIX values; see the module note above.
+let sep = "/"
+let delimiter = ":"
+
+// PathInfo — the structured result of `parse`: a typed class so
+// `.root`/`.dir`/`.base`/`.name`/`.ext` are checked fields rather than dynamic
+// map lookups.
+class PathInfo {
+    root: string
+    dir: string
+    base: string
+    name: string
+    ext: string
+
+    constructor(root: string, dir: string, base: string, name: string, ext: string) {
+        this.root = root
+        this.dir = dir
+        this.base = base
+        this.name = name
+        this.ext = ext
+    }
+}
+
+fn _isSep(c: string) -> bool {
+    return c == "/"
+}
+
+// isAbsolute — POSIX: a leading '/'.
+fn isAbsolute(p: string) -> bool {
+    if (p.length == 0) { return false }
+    return _isSep(p.charAt(0))
+}
+
+// joinAll — join a segment array (POSIX). The last absolute segment resets the
+// accumulator; a single '/' separates segments that need one, and a leading
+// separator on a joined segment is dropped so joins never double up. `resolve`
+// builds its segment list dynamically and calls this directly; `join` is the
+// ergonomic variadic wrapper.
+fn joinAll(parts: Array<string>) -> string {
+    let n = parts.length
+    let start = 0
+    for (let i = 0; i < n; i++) {
+        let p = parts[i]
+        if (p.length > 0 && isAbsolute(p)) { start = i }
+    }
+
+    let out = ""
+    for (let i = start; i < n; i++) {
+        let p = parts[i]
+        if (p.length == 0) { continue }
+
+        if (out.length > 0 && !_isSep(out.charAt(out.length - 1)) && !_isSep(p.charAt(0))) {
+            out = out + "/"
+        }
+
+        let off = 0
+        if (out.length > 0 && _isSep(p.charAt(0))) { off = 1 }
+        if (off < p.length) {
+            out = out + p.slice(off)
+        }
+    }
+    return out
+}
+
+// join — variadic ergonomic form, e.g. join("a", "b", "c").
+fn join(...parts: string) -> string {
+    return joinAll(parts)
+}
+
+// dirname — the directory portion, or "." / "/" for the degenerate cases.
+fn dirname(p: string) -> string {
+    if (p.length == 0) { return "." }
+    let end = p.length
+    while (end > 0 && _isSep(p.charAt(end - 1))) { end = end - 1 }
+    while (end > 0 && !_isSep(p.charAt(end - 1))) { end = end - 1 }
+    while (end > 1 && _isSep(p.charAt(end - 1))) { end = end - 1 }
+    if (end == 0) {
+        if (_isSep(p.charAt(0))) { return "/" }
+        return "."
+    }
+    return p.slice(0, end)
+}
+
+// basename — the final path component, trailing separators stripped.
+fn basename(p: string) -> string {
+    if (p.length == 0) { return "" }
+    let end = p.length
+    while (end > 0 && _isSep(p.charAt(end - 1))) { end = end - 1 }
+    if (end == 0) { return "" }
+    let start = end
+    while (start > 0 && !_isSep(p.charAt(start - 1))) { start = start - 1 }
+    return p.slice(start, end)
+}
+
+// extname — the extension including the leading dot, or "" when there is none.
+// A leading dot on the basename (dotfile) is not an extension.
+fn extname(p: string) -> string {
+    if (p.length == 0) { return "" }
+    let end = p.length
+    while (end > 0 && _isSep(p.charAt(end - 1))) { end = end - 1 }
+    let start = end
+    while (start > 0 && !_isSep(p.charAt(start - 1))) { start = start - 1 }
+
+    let baseLen = end - start
+    let dotIdx = -1
+    let i = baseLen
+    while (i > 0) {
+        if (p.charAt(start + i - 1) == ".") {
+            if (i > 1) { dotIdx = start + i - 1 }
+            break
+        }
+        i = i - 1
+    }
+    if (dotIdx < 0) { return "" }
+    return p.slice(dotIdx, end)
+}
+
+// normalize — collapse '.'/'..' and redundant separators.
+fn normalize(p: string) -> string {
+    if (p.length == 0) { return "." }
+    let isAbs = _isSep(p.charAt(0))
+
+    let segs: Array<string> = []
+    let parts = p.split("/")
+    for (let i = 0; i < parts.length; i++) {
+        let seg = parts[i]
+        if (seg.length == 0) { continue }
+        if (seg == ".") { continue }
+        if (seg == "..") {
+            if (segs.length > 0 && segs[segs.length - 1] != "..") {
+                segs.pop()
+            } else if (!isAbs) {
+                segs.push("..")
+            }
+            continue
+        }
+        segs.push(seg)
+    }
+
+    let body = segs.join("/")
+    if (isAbs) {
+        return "/" + body
+    }
+    if (body.length == 0) { return "." }
+    return body
+}
+
+// relative — the path from `fromRaw` to `toRaw`, both normalized first.
+fn relative(fromRaw: string, toRaw: string) -> string {
+    let fromP = normalize(fromRaw)
+    let toP = normalize(toRaw)
+    let fromLen = fromP.length
+    let toLen = toP.length
+
+    let common = 0
+    let lastSep = 0
+    while (common < fromLen && common < toLen && fromP.charAt(common) == toP.charAt(common)) {
+        if (_isSep(fromP.charAt(common))) { lastSep = common }
+        common = common + 1
+    }
+
+    let atBoundary = false
+    if (common == fromLen && common == toLen) {
+        atBoundary = true
+    } else if (common == fromLen && common < toLen && _isSep(toP.charAt(common))) {
+        atBoundary = true
+    } else if (common == toLen && common < fromLen && _isSep(fromP.charAt(common))) {
+        atBoundary = true
+    }
+    if (!atBoundary) { common = lastSep }
+
+    let fromPos = common
+    while (fromPos < fromLen && _isSep(fromP.charAt(fromPos))) { fromPos = fromPos + 1 }
+    let upCount = 0
+    if (fromPos < fromLen) {
+        upCount = 1
+        for (let i = fromPos; i < fromLen; i++) {
+            if (_isSep(fromP.charAt(i))) { upCount = upCount + 1 }
+        }
+    }
+
+    let toRestStart = common
+    while (toRestStart < toLen && _isSep(toP.charAt(toRestStart))) { toRestStart = toRestStart + 1 }
+    let toRest = toP.slice(toRestStart, toLen)
+
+    let out = ""
+    for (let i = 0; i < upCount; i++) {
+        if (out.length > 0) { out = out + "/" }
+        out = out + ".."
+    }
+    if (toRest.length > 0) {
+        if (out.length > 0) { out = out + "/" }
+        out = out + toRest
+    }
+    if (out.length == 0) { return "." }
+    return out
+}
+
+// resolve — join the inputs into an absolute, normalized path. When no input
+// is absolute, the current working directory anchors the result.
+fn resolve(...parts: string) -> string {
+    let hasAbs = false
+    for (let i = 0; i < parts.length; i++) {
+        if (parts[i].length > 0 && isAbsolute(parts[i])) { hasAbs = true }
+    }
+
+    let all: Array<string> = []
+    if (!hasAbs) {
+        all.push(os.getcwd())
+    }
+    for (let i = 0; i < parts.length; i++) {
+        all.push(parts[i])
+    }
+
+    return normalize(joinAll(all))
+}
+
+// parse — split a path into its structured components.
+fn parse(p: string) -> PathInfo {
+    let dir = dirname(p)
+    let base = basename(p)
+    let ext = extname(base)
+    let name = base
+    if (ext.length > 0) {
+        name = base.slice(0, base.length - ext.length)
+    }
+    let root = ""
+    if (p.length > 0 && _isSep(p.charAt(0))) { root = "/" }
+    return PathInfo(root, dir, base, name, ext)
+}
+
+// format — rebuild a path from PathInfo. `base` wins over `name`+`ext`; a
+// single separator joins a non-empty `dir` to the basename.
+fn format(info: PathInfo) -> string {
+    let dir = info.dir
+    let base = info.base
+    if (base.length == 0 && info.name.length > 0) {
+        base = info.name + info.ext
+    }
+
+    let out = ""
+    if (dir.length > 0) {
+        out = dir
+        if (!_isSep(dir.charAt(dir.length - 1))) { out = out + "/" }
+    }
+    return out + base
+}
+
+export { sep, delimiter, PathInfo, isAbsolute, join, dirname, basename, extname, normalize, relative, resolve, parse, format }
