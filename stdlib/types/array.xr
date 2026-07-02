@@ -35,6 +35,9 @@ class Array<T> {
     some(fn: (item: T) -> bool) -> bool
     flat(depth?: int) -> Array<T>
     fill(value: T, start?: int, end?: int) -> Array<T>
+    // Bytes (Array<uint8>) decodes as UTF-8 text — round-trips with
+    // string.toBytes(). Other element types render the "[a, b]" form.
+    toString() -> string
     // Iteration protocol — used by for-in lowering. Users can also
     // call them directly; iterator()/next() yields elements, while
     // entriesIterator()/next() yields (index, element) tuples.
