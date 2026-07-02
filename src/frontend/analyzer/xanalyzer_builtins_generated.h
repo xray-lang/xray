@@ -15,6 +15,12 @@
 
 // ======== Builtin Type Members ========
 
+// Barrier methods
+static const XaBuiltinMember g_gen_barrier_members[] = {
+    {"wait", "(): bool", "Wait until all parties have arrived", true, false},
+};
+#define GEN_BARRIER_MEMBER_COUNT 1
+
 // Condvar methods
 static const XaBuiltinMember g_gen_condvar_members[] = {
     {"wait", "(m: Mutex): ()", "Wait on the condition variable with an already-locked mutex", true, false},
@@ -509,8 +515,9 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"Mutex", "(): Mutex", "Create an OS-domain mutex", true, false},
     {"RwLock", "(): RwLock", "Create an OS-domain read-write lock", true, false},
     {"Condvar", "(): Condvar", "Create an OS-domain condition variable", true, false},
+    {"Barrier", "(parties: int): Barrier", "Create a reusable OS-domain barrier", true, false},
 };
-#define GEN_SYS_FUNCTION_COUNT 3
+#define GEN_SYS_FUNCTION_COUNT 4
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {

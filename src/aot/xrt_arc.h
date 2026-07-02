@@ -110,6 +110,7 @@ static inline void xrt_coll_release(XrValue v);
 #define XRT_ARC_KIND_SYS_MUTEX 4u
 #define XRT_ARC_KIND_SYS_RWLOCK 5u
 #define XRT_ARC_KIND_SYS_CONDVAR 6u
+#define XRT_ARC_KIND_SYS_BARRIER 7u
 
 /* =========================================================================
  * Bump allocator
@@ -244,7 +245,8 @@ static inline int xrt_arc_value_has_header(XrValue v) {
         return v.heap_type == XR_TINSTANCE;
     return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_CLOSURE || v.tag == XR_TAG_CELL ||
            v.tag == XR_TAG_STRUCT_REF || v.tag == XR_TAG_REGEX || v.tag == XR_TAG_DATETIME ||
-           v.tag == XR_TAG_SYS_MUTEX || v.tag == XR_TAG_SYS_RWLOCK || v.tag == XR_TAG_SYS_CONDVAR;
+           v.tag == XR_TAG_SYS_MUTEX || v.tag == XR_TAG_SYS_RWLOCK || v.tag == XR_TAG_SYS_CONDVAR ||
+           v.tag == XR_TAG_SYS_BARRIER;
 }
 
 /* ARC retain: acquire a new owning reference (0-based: rc++ adds one ref).

@@ -28,6 +28,15 @@ typedef struct XrSysCondvarBody {
     bool initialized;
 } XrSysCondvarBody;
 
+typedef struct XrSysBarrierBody {
+    xr_mutex_t mutex;
+    xr_cond_t cond;
+    int64_t parties;
+    int64_t arrived;
+    int64_t generation;
+    bool initialized;
+} XrSysBarrierBody;
+
 static void sys_mutex_body_init(XrInstance *instance, void *body_ptr) {
     (void) instance;
     XrSysMutexBody *body = (XrSysMutexBody *) body_ptr;
@@ -103,6 +112,36 @@ static XrNativeBodyDesc g_sys_condvar_body_desc = {
     .to_shared = NULL,
 };
 
+static void sys_barrier_body_init(XrInstance *instance, void *body_ptr) {
+    (void) instance;
+    XrSysBarrierBody *body = (XrSysBarrierBody *) body_ptr;
+    xr_mutex_init(&body->mutex);
+    xr_cond_init(&body->cond);
+    body->parties = 1;
+    body->arrived = 0;
+    body->generation = 0;
+    body->initialized = true;
+}
+
+static void sys_barrier_body_destroy(void *body_ptr) {
+    XrSysBarrierBody *body = (XrSysBarrierBody *) body_ptr;
+    if (!body || !body->initialized)
+        return;
+    xr_cond_destroy(&body->cond);
+    xr_mutex_destroy(&body->mutex);
+    body->initialized = false;
+}
+
+static XrNativeBodyDesc g_sys_barrier_body_desc = {
+    .body_size = sizeof(XrSysBarrierBody),
+    .body_align = _Alignof(XrSysBarrierBody),
+    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .init = sys_barrier_body_init,
+    .destroy = sys_barrier_body_destroy,
+    .deep_copy = NULL,
+    .to_shared = NULL,
+};
+
 static XrClass *sys_mutex_class(XrVMRuntime *isolate) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core != NULL && core->sysMutexClass != NULL, "sys.Mutex class not registered");
@@ -119,6 +158,12 @@ static XrClass *sys_condvar_class(XrVMRuntime *isolate) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core != NULL && core->sysCondvarClass != NULL, "sys.Condvar class not registered");
     return core ? core->sysCondvarClass : NULL;
+}
+
+static XrClass *sys_barrier_class(XrVMRuntime *isolate) {
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
+    XR_DCHECK(core != NULL && core->sysBarrierClass != NULL, "sys.Barrier class not registered");
+    return core ? core->sysBarrierClass : NULL;
 }
 
 static XrSysMutexBody *sys_mutex_body(XrVMRuntime *isolate, XrValue self) {
@@ -151,6 +196,16 @@ static XrSysCondvarBody *sys_condvar_body(XrVMRuntime *isolate, XrValue self) {
     return (XrSysCondvarBody *) xr_instance_native_body(instance);
 }
 
+static XrSysBarrierBody *sys_barrier_body(XrVMRuntime *isolate, XrValue self) {
+    if (!XR_IS_INSTANCE(self))
+        return NULL;
+    XrInstance *instance = (XrInstance *) XR_TO_PTR(self);
+    XrClass *klass = sys_barrier_class(isolate);
+    if (!klass || !xr_class_instanceof(instance->klass, klass))
+        return NULL;
+    return (XrSysBarrierBody *) xr_instance_native_body(instance);
+}
+
 static XrValue sys_mutex_invalid_receiver(XrVMRuntime *isolate) {
     XrValue exc = xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH,
                                      "sys.Mutex method called with non-Mutex receiver");
@@ -175,6 +230,20 @@ static XrValue sys_condvar_invalid_receiver(XrVMRuntime *isolate) {
 static XrValue sys_condvar_invalid_mutex(XrVMRuntime *isolate) {
     XrValue exc =
         xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH, "sys.Condvar requires a sys.Mutex");
+    xr_vm_throw_exception(isolate, exc);
+    return xr_null();
+}
+
+static XrValue sys_barrier_invalid_receiver(XrVMRuntime *isolate) {
+    XrValue exc = xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH,
+                                     "sys.Barrier method called with non-Barrier receiver");
+    xr_vm_throw_exception(isolate, exc);
+    return xr_null();
+}
+
+static XrValue sys_barrier_invalid_parties(XrVMRuntime *isolate) {
+    XrValue exc =
+        xr_panic_info_newf(isolate, XR_ERR_INVALID_ARG_TYPE, "sys.Barrier parties must be > 0");
     xr_vm_throw_exception(isolate, exc);
     return xr_null();
 }
@@ -219,6 +288,25 @@ static XrValue sys_condvar_new(XrVMRuntime *isolate, XrValue *args, int argc) {
         return xr_null();
     }
     return xr_value_from_instance(instance);
+}
+
+static XrValue sys_barrier_new(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) argc;
+    if (!XR_IS_INT(args[0]) || XR_TO_INT(args[0]) <= 0)
+        return sys_barrier_invalid_parties(isolate);
+
+    XrInstance *instance = xr_instance_new(isolate, sys_barrier_class(isolate));
+    if (!instance) {
+        XrValue exc =
+            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.Barrier allocation failed");
+        xr_vm_throw_exception(isolate, exc);
+        return xr_null();
+    }
+    XrValue value = xr_value_from_instance(instance);
+    XrSysBarrierBody *body = sys_barrier_body(isolate, value);
+    if (body)
+        body->parties = XR_TO_INT(args[0]);
+    return value;
 }
 
 static XrValue sys_mutex_lock(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
@@ -335,12 +423,37 @@ static XrValue sys_condvar_broadcast(XrVMRuntime *isolate, XrValue self, XrValue
     return xr_null();
 }
 
+static XrValue sys_barrier_wait(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrSysBarrierBody *body = sys_barrier_body(isolate, self);
+    if (!body)
+        return sys_barrier_invalid_receiver(isolate);
+
+    xr_mutex_lock(&body->mutex);
+    int64_t generation = body->generation;
+    body->arrived++;
+    if (body->arrived >= body->parties) {
+        body->arrived = 0;
+        body->generation++;
+        xr_cond_broadcast(&body->cond);
+        xr_mutex_unlock(&body->mutex);
+        return xr_bool(true);
+    }
+    while (generation == body->generation)
+        xr_cond_wait(&body->cond, &body->mutex);
+    xr_mutex_unlock(&body->mutex);
+    return xr_bool(true);
+}
+
 #define XR_STDLIB_VM_BIND_CLASS_CONDVAR 1
+#define XR_STDLIB_VM_BIND_CLASS_BARRIER 1
 #define XR_STDLIB_VM_BIND_CLASS_MUTEX 1
 #define XR_STDLIB_VM_BIND_CLASS_RW_LOCK 1
 #include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_CLASS_RW_LOCK
 #undef XR_STDLIB_VM_BIND_CLASS_MUTEX
+#undef XR_STDLIB_VM_BIND_CLASS_BARRIER
 #undef XR_STDLIB_VM_BIND_CLASS_CONDVAR
 
 void xr_sys_mutex_register_class(XrVMRuntime *isolate) {
@@ -353,6 +466,10 @@ void xr_sys_rwlock_register_class(XrVMRuntime *isolate) {
 
 void xr_sys_condvar_register_class(XrVMRuntime *isolate) {
     xr_stdlib_vm_register_condvar_class_generated(isolate);
+}
+
+void xr_sys_barrier_register_class(XrVMRuntime *isolate) {
+    xr_stdlib_vm_register_barrier_class_generated(isolate);
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_SYS 1

@@ -31,6 +31,14 @@ typedef struct xrt_sys_condvar_object {
     xr_cond_t cond;
 } xrt_sys_condvar_object_t;
 
+typedef struct xrt_sys_barrier_object {
+    xr_mutex_t mutex;
+    xr_cond_t cond;
+    int64_t parties;
+    int64_t arrived;
+    int64_t generation;
+} xrt_sys_barrier_object_t;
+
 static inline void xrt_sys_mutex_init(xr_mutex_t *mutex) {
 #if defined(XR_OS_WINDOWS)
     InitializeSRWLock(mutex);
@@ -190,6 +198,10 @@ static inline int xrt_sys_condvar_is(XrValue value) {
     return value.tag == XR_TAG_SYS_CONDVAR && value.ptr != NULL;
 }
 
+static inline int xrt_sys_barrier_is(XrValue value) {
+    return value.tag == XR_TAG_SYS_BARRIER && value.ptr != NULL;
+}
+
 static inline xrt_sys_mutex_object_t *xrt_sys_mutex_ptr(XrValue value) {
     return xrt_sys_mutex_is(value) ? (xrt_sys_mutex_object_t *) value.ptr : NULL;
 }
@@ -202,6 +214,10 @@ static inline xrt_sys_condvar_object_t *xrt_sys_condvar_ptr(XrValue value) {
     return xrt_sys_condvar_is(value) ? (xrt_sys_condvar_object_t *) value.ptr : NULL;
 }
 
+static inline xrt_sys_barrier_object_t *xrt_sys_barrier_ptr(XrValue value) {
+    return xrt_sys_barrier_is(value) ? (xrt_sys_barrier_object_t *) value.ptr : NULL;
+}
+
 static inline XrValue xrt_sys_mutex_box(xrt_sys_mutex_object_t *mutex) {
     return mutex ? xr_mkptr(mutex, XR_TAG_SYS_MUTEX) : XR_NULL_VAL;
 }
@@ -212,6 +228,10 @@ static inline XrValue xrt_sys_rwlock_box(xrt_sys_rwlock_object_t *rwlock) {
 
 static inline XrValue xrt_sys_condvar_box(xrt_sys_condvar_object_t *condvar) {
     return condvar ? xr_mkptr(condvar, XR_TAG_SYS_CONDVAR) : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_sys_barrier_box(xrt_sys_barrier_object_t *barrier) {
+    return barrier ? xr_mkptr(barrier, XR_TAG_SYS_BARRIER) : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_sys_mutex_new(void) {
@@ -236,6 +256,24 @@ static inline XrValue xrt_sys_condvar_new(void) {
     return xrt_sys_condvar_box(condvar);
 }
 
+static inline XrValue xrt_sys_barrier_new(XrValue parties_value) {
+    int64_t parties =
+        (parties_value.tag == XR_TAG_I64 && parties_value.i > 0) ? parties_value.i : 0;
+    if (parties <= 0) {
+        fprintf(stderr, "sys.Barrier parties must be > 0\n");
+        abort();
+    }
+    xrt_sys_barrier_object_t *barrier =
+        (xrt_sys_barrier_object_t *) xrt_arc_alloc(sizeof(*barrier));
+    xrt_sys_mutex_init(&barrier->mutex);
+    xrt_sys_condvar_init(&barrier->cond);
+    barrier->parties = parties;
+    barrier->arrived = 0;
+    barrier->generation = 0;
+    xrt_arc_mark_builtin(barrier, XRT_ARC_KIND_SYS_BARRIER);
+    return xrt_sys_barrier_box(barrier);
+}
+
 static inline void xrt_sys_mutex_destroy_builtin(void *obj) {
     if (!obj)
         return;
@@ -255,6 +293,14 @@ static inline void xrt_sys_condvar_destroy_builtin(void *obj) {
         return;
     xrt_sys_condvar_object_t *condvar = (xrt_sys_condvar_object_t *) obj;
     xrt_sys_condvar_destroy(&condvar->cond);
+}
+
+static inline void xrt_sys_barrier_destroy_builtin(void *obj) {
+    if (!obj)
+        return;
+    xrt_sys_barrier_object_t *barrier = (xrt_sys_barrier_object_t *) obj;
+    xrt_sys_condvar_destroy(&barrier->cond);
+    xrt_sys_mutex_destroy(&barrier->mutex);
 }
 
 static inline XrValue xrt_sys_mutex_method_0(XrValue recv, int sym) {
@@ -295,6 +341,27 @@ static inline XrValue xrt_sys_rwlock_method_0(XrValue recv, int sym) {
         return XR_NULL_VAL;
     }
     return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_sys_barrier_method_0(XrValue recv, int sym) {
+    xrt_sys_barrier_object_t *barrier = xrt_sys_barrier_ptr(recv);
+    if (!barrier || sym != XRT_SYM_WAIT)
+        return XR_NULL_VAL;
+
+    xrt_sys_mutex_lock_native(&barrier->mutex);
+    int64_t generation = barrier->generation;
+    barrier->arrived++;
+    if (barrier->arrived >= barrier->parties) {
+        barrier->arrived = 0;
+        barrier->generation++;
+        xrt_sys_condvar_broadcast_native(&barrier->cond);
+        xrt_sys_mutex_unlock_native(&barrier->mutex);
+        return XR_TRUE_VAL;
+    }
+    while (generation == barrier->generation)
+        xrt_sys_condvar_wait_native(&barrier->cond, &barrier->mutex);
+    xrt_sys_mutex_unlock_native(&barrier->mutex);
+    return XR_TRUE_VAL;
 }
 
 static inline XrValue xrt_sys_condvar_method_0(XrValue recv, int sym) {
