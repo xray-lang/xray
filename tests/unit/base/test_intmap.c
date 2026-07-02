@@ -9,12 +9,11 @@
  *
  * KEY CONCEPT:
  *   Tests XrIntMap operations: create, set, get, has, delete, clear,
- *   tombstone handling, rehash, reserved keys, and arena allocation.
+ *   tombstone handling, rehash, and reserved keys.
  */
 
 #include "../test_framework.h"
 #include "base/xintmap.h"
-#include "base/xarena.h"
 
 /* ========== Basic Operations ========== */
 
@@ -218,38 +217,32 @@ TEST(intmap_foreach) {
     xr_intmap_free(map);
 }
 
-/* ========== Arena Allocation ========== */
+/* ========== Set Return Value ========== */
 
-TEST(intmap_arena) {
-    XrArena arena;
-    xr_arena_init(&arena, 4096);
-
-    XrIntMap *map = xr_intmap_new_in_arena(&arena);
-    ASSERT_NOT_NULL(map);
-    ASSERT_TRUE(map->is_arena_allocated);
-
+TEST(intmap_set_returns_status) {
+    XrIntMap *map = xr_intmap_new();
     int v = 77;
-    xr_intmap_set(map, 1, &v);
-    ASSERT_EQ_UINT(map->count, 1);
-    ASSERT_EQ_INT(*(int *) xr_intmap_get(map, 1), 77);
 
-    // No xr_intmap_free needed - arena handles it
-    xr_arena_destroy(&arena);
+    ASSERT_TRUE(xr_intmap_set(map, 1, &v));
+    // Reserved sentinel keys are rejected
+    ASSERT_FALSE(xr_intmap_set(map, XR_INTMAP_EMPTY, &v));
+    ASSERT_FALSE(xr_intmap_set(map, XR_INTMAP_TOMBSTONE, &v));
+    ASSERT_EQ_UINT(map->count, 1);
+
+    xr_intmap_free(map);
 }
 
 /* ========== NULL Safety ========== */
 
 TEST(intmap_null_safety) {
     // All operations should handle NULL map gracefully
-    xr_intmap_set(NULL, 1, NULL);
+    ASSERT_FALSE(xr_intmap_set(NULL, 1, NULL));
     ASSERT_NULL(xr_intmap_get(NULL, 1));
     ASSERT_FALSE(xr_intmap_has(NULL, 1));
     ASSERT_FALSE(xr_intmap_delete(NULL, 1));
     xr_intmap_clear(NULL);
     xr_intmap_foreach(NULL, count_callback, NULL);
     xr_intmap_free(NULL);
-
-    ASSERT_NULL(xr_intmap_new_in_arena(NULL));
     ASSERT_TRUE(1);
 }
 
@@ -281,8 +274,8 @@ RUN_TEST(intmap_grow);
 RUN_TEST_SUITE("IntMap - Foreach");
 RUN_TEST(intmap_foreach);
 
-RUN_TEST_SUITE("IntMap - Arena");
-RUN_TEST(intmap_arena);
+RUN_TEST_SUITE("IntMap - Set Status");
+RUN_TEST(intmap_set_returns_status);
 
 RUN_TEST_SUITE("IntMap - NULL Safety");
 RUN_TEST(intmap_null_safety);

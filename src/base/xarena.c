@@ -31,6 +31,85 @@ typedef struct {
 
 static XR_THREAD_LOCAL XrArenaSegmentCache tls_cache = {NULL, 0};
 
+/* Thread-exit cleanup for the segment cache. Without it, every exiting
+ * thread leaks up to XR_ARENA_MAX_CACHED_SEGMENTS * 64KB (512KB) of
+ * cached segments — harmless for long-lived workers, but a steady leak
+ * for short-lived threads (LSP sessions, test runners, embedders).
+ * POSIX uses a TSD destructor; Windows uses an FLS callback (FLS
+ * callbacks run on plain thread exit, not just fiber deletion).
+ * The main thread's cache is reclaimed by the OS at process exit. */
+
+static void arena_cache_flush(XrArenaSegmentCache *cache) {
+    XrArenaSegment *seg = cache->segments;
+    while (seg) {
+        XrArenaSegment *next = seg->next;
+        xr_free(seg);
+        seg = next;
+    }
+    cache->segments = NULL;
+    cache->count = 0;
+}
+
+static XR_THREAD_LOCAL bool tls_cache_cleanup_registered = false;
+
+#if defined(XR_OS_WINDOWS)
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
+static DWORD arena_cache_fls_index = FLS_OUT_OF_INDEXES;
+static INIT_ONCE arena_cache_once = INIT_ONCE_STATIC_INIT;
+
+static void WINAPI arena_cache_fls_destructor(void *data) {
+    if (data)
+        arena_cache_flush((XrArenaSegmentCache *) data);
+}
+
+static BOOL CALLBACK arena_cache_once_init(PINIT_ONCE once, PVOID param, PVOID *ctx) {
+    (void) once;
+    (void) param;
+    (void) ctx;
+    arena_cache_fls_index = FlsAlloc(arena_cache_fls_destructor);
+    return TRUE;
+}
+
+static void arena_cache_register_cleanup(void) {
+    if (tls_cache_cleanup_registered)
+        return;
+    tls_cache_cleanup_registered = true;
+    InitOnceExecuteOnce(&arena_cache_once, arena_cache_once_init, NULL, NULL);
+    if (arena_cache_fls_index != FLS_OUT_OF_INDEXES)
+        FlsSetValue(arena_cache_fls_index, &tls_cache);
+}
+
+#else  // POSIX
+
+#include <pthread.h>
+
+static pthread_key_t arena_cache_key;
+static pthread_once_t arena_cache_once = PTHREAD_ONCE_INIT;
+
+static void arena_cache_key_destructor(void *data) {
+    if (data)
+        arena_cache_flush((XrArenaSegmentCache *) data);
+}
+
+static void arena_cache_key_init(void) {
+    (void) pthread_key_create(&arena_cache_key, arena_cache_key_destructor);
+}
+
+static void arena_cache_register_cleanup(void) {
+    if (tls_cache_cleanup_registered)
+        return;
+    tls_cache_cleanup_registered = true;
+    pthread_once(&arena_cache_once, arena_cache_key_init);
+    (void) pthread_setspecific(arena_cache_key, &tls_cache);
+}
+
+#endif  // XR_OS_WINDOWS
+
 // Align to 8-byte boundary
 static inline bool align_size(size_t size, size_t *aligned_size) {
     if (!aligned_size)
@@ -64,6 +143,7 @@ static bool cache_put_segment(XrArenaSegment *seg) {
     if (tls_cache.count >= XR_ARENA_MAX_CACHED_SEGMENTS) {
         return false;
     }
+    arena_cache_register_cleanup();
     seg->next = tls_cache.segments;
     tls_cache.segments = seg;
     tls_cache.count++;
@@ -274,11 +354,35 @@ XrArenaState xr_arena_save(XrArena *arena) {
 
 void xr_arena_restore(XrArena *arena, XrArenaState state) {
     XR_DCHECK(arena != NULL, "arena_restore: NULL arena");
-    // Only valid if no new segments were allocated since save.
-    // If head changed, allocations spanned a new segment boundary
-    // and we cannot safely rewind (old segment data is abandoned).
-    XR_DCHECK(arena->head == state.head,
-              "arena_restore: head segment changed since save, cannot rewind across segments");
+    if (arena->head != state.head) {
+        // Segments were allocated since the savepoint. New segments are
+        // always prepended, so the saved head is further down the chain:
+        // release the newer segments, then restore limit for the saved
+        // head. (Previously this case only DCHECKed — in release builds
+        // position was rewound while limit still pointed into the newer
+        // segment, making `limit - position` garbage and enabling
+        // out-of-bounds writes.)
+        XrArenaSegment *seg = arena->head;
+        while (seg && seg != state.head) {
+            XrArenaSegment *next = seg->next;
+            if (!cache_put_segment(seg)) {
+                xr_free(seg);
+            }
+            seg = next;
+        }
+        XR_DCHECK(seg == state.head, "arena_restore: saved head not in segment chain");
+        if (!seg) {
+            // Foreign savepoint (not from this arena). Nothing sane to
+            // restore; leave the arena empty but consistent.
+            arena->head = NULL;
+            arena->position = NULL;
+            arena->limit = NULL;
+            arena->total_allocated = 0;
+            return;
+        }
+        arena->head = seg;
+        arena->limit = seg->data + seg->capacity;
+    }
     arena->position = state.position;
     arena->total_allocated = state.total_allocated;
     arena->head->size = (size_t) (state.position - arena->head->data);

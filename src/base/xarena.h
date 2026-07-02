@@ -61,7 +61,8 @@ XR_FUNC char *xr_arena_strndup(XrArena *arena, const char *str, size_t len);
 XR_FUNC size_t xr_arena_get_allocated_size(XrArena *arena);
 
 // Savepoint: mark/rewind for tentative allocations (e.g. speculative parsing).
-// Constraint: restore only valid when head segment unchanged since save.
+// Restore is safe across segment boundaries: segments allocated after the
+// savepoint are released (cached or freed) before the bump pointer rewinds.
 typedef struct XrArenaState {
     XrArenaSegment *head;
     char *position;

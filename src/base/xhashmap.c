@@ -10,7 +10,6 @@
 
 #include "xhashmap.h"
 #include "xmalloc.h"
-#include "xarena.h"
 #include "xchecks.h"
 #include "xhash.h"
 #include <string.h>
@@ -69,12 +68,6 @@ static XrHashMapEntry *find_entry(XrHashMap *map, const char *key, uint32_t hash
 // probing), and xr_hashmap_set reports failure only once no free slot
 // is left.
 static bool resize(XrHashMap *map, uint32_t new_capacity) {
-    if (map->is_arena_allocated) {
-        XR_CHECK(false, "hashmap resize: arena-allocated map hit load factor, consider larger "
-                        "initial capacity");
-        return false;
-    }
-
     XR_DCHECK(new_capacity >= map->capacity, "New capacity must be >= current capacity");
     XR_DCHECK((new_capacity & (new_capacity - 1)) == 0, "hashmap resize: capacity not power-of-2");
 
@@ -124,28 +117,6 @@ XrHashMap *xr_hashmap_new(void) {
     }
     map->capacity = initial_capacity;
     map->count = 0;
-    map->is_arena_allocated = false;
-
-    memset(map->entries, 0, sizeof(XrHashMapEntry) * initial_capacity);
-    return map;
-}
-
-XrHashMap *xr_hashmap_new_in_arena(XrArena *arena) {
-    if (!arena)
-        return NULL;
-
-    XrHashMap *map = xr_arena_new(arena, XrHashMap);
-    if (!map)
-        return NULL;
-
-    uint32_t initial_capacity = 16;
-    map->entries = xr_arena_alloc(arena, sizeof(XrHashMapEntry) * initial_capacity);
-    if (!map->entries)
-        return NULL;
-
-    map->capacity = initial_capacity;
-    map->count = 0;
-    map->is_arena_allocated = true;
 
     memset(map->entries, 0, sizeof(XrHashMapEntry) * initial_capacity);
     return map;
@@ -154,10 +125,8 @@ XrHashMap *xr_hashmap_new_in_arena(XrArena *arena) {
 void xr_hashmap_free(XrHashMap *map) {
     if (!map)
         return;
-    if (!map->is_arena_allocated && map->entries)
-        xr_free(map->entries);
-    if (!map->is_arena_allocated)
-        xr_free(map);
+    xr_free(map->entries);
+    xr_free(map);
 }
 
 bool xr_hashmap_set(XrHashMap *map, const char *key, void *value) {

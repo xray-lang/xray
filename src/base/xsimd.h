@@ -62,11 +62,13 @@ XR_DATA const uint8_t xr_digit_to_val[256];
 
 /* ========== Predefined Range Constants ========== */
 
-XR_DATA const char XR_RANGE_PRINTABLE[4];
-XR_DATA const char XR_RANGE_WHITESPACE[8];
-XR_DATA const char XR_RANGE_DIGIT[2];
-XR_DATA const char XR_RANGE_IDENT_START[6];
-XR_DATA const char XR_RANGE_IDENT[8];
+/* Padded to 16 bytes: SSE4.2 range matching loads the whole table with
+ * one _mm_loadu_si128. Pass the *effective* range_len (pairs*2), not 16. */
+XR_DATA const char XR_RANGE_PRINTABLE[16];
+XR_DATA const char XR_RANGE_WHITESPACE[16];
+XR_DATA const char XR_RANGE_DIGIT[16];
+XR_DATA const char XR_RANGE_IDENT_START[16];
+XR_DATA const char XR_RANGE_IDENT[16];
 
 /* ========== Platform Detection ========== */
 

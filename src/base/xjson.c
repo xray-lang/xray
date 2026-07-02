@@ -138,26 +138,43 @@ static XrJsonValue *parse_number(JsonParser *p) {
             p->pos++;
     }
 
-    XrJsonValue *v = alloc_value(XR_JSON_NUMBER);
-    if (!v)
-        return NULL;
+    /* Copy the token into a NUL-terminated buffer before strtod/strtoll:
+     * the input is a (ptr,len) slice with no NUL guarantee, and both libc
+     * functions would otherwise scan past p->end (heap over-read, and
+     * possibly wrong values if adjacent bytes happen to be digits).
+     * Typical numbers fit the stack buffer; pathological long tokens take
+     * a temporary heap copy so precision is never silently dropped. */
+    size_t tok_len = (size_t) (p->pos - start);
+    char stack_numbuf[64];
+    char *numbuf = stack_numbuf;
+    if (tok_len + 1 > sizeof(stack_numbuf)) {
+        numbuf = (char *) xr_malloc(tok_len + 1);
+        if (!numbuf)
+            return NULL;
+    }
+    memcpy(numbuf, start, tok_len);
+    numbuf[tok_len] = '\0';
 
-    if (is_float) {
-        v->is_integer = false;
-        v->as.number = strtod(start, NULL);
-    } else {
-        /* Try int64 first; fall back to double on overflow */
-        errno = 0;
-        char *end_ptr;
-        int64_t ival = strtoll(start, &end_ptr, 10);
-        if (errno == ERANGE) {
+    XrJsonValue *v = alloc_value(XR_JSON_NUMBER);
+    if (v) {
+        if (is_float) {
             v->is_integer = false;
-            v->as.number = strtod(start, NULL);
+            v->as.number = strtod(numbuf, NULL);
         } else {
-            v->is_integer = true;
-            v->as.integer = ival;
+            /* Try int64 first; fall back to double on overflow */
+            errno = 0;
+            int64_t ival = strtoll(numbuf, NULL, 10);
+            if (errno == ERANGE) {
+                v->is_integer = false;
+                v->as.number = strtod(numbuf, NULL);
+            } else {
+                v->is_integer = true;
+                v->as.integer = ival;
+            }
         }
     }
+    if (numbuf != stack_numbuf)
+        xr_free(numbuf);
     return v;
 }
 
