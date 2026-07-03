@@ -55,50 +55,6 @@
     "Bytes.repeatFrom(distance, count) expects integers"
 #define XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG "Bytes.repeatFrom receiver must be Bytes"
 #define XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG "Bytes.repeatFrom range/grow failed"
-#define XR_ERROR_CORE_BYTES_APPEND_FROM_UNCHECKED_EXPECTS_MSG                                      \
-    "Bytes.appendFromUnchecked(src, srcOffset, count) expects ByteSpan and integers"
-#define XR_ERROR_CORE_BYTES_APPEND_FROM_UNCHECKED_OPERANDS_MSG                                     \
-    "Bytes.appendFromUnchecked receiver/source must use byte storage"
-#define XR_ERROR_CORE_BYTES_APPEND_FROM_UNCHECKED_OOB_MSG                                          \
-    "Bytes.appendFromUnchecked range/capacity precondition failed"
-#define XR_ERROR_CORE_BYTES_REPEAT_FROM_UNCHECKED_EXPECTS_MSG                                      \
-    "Bytes.repeatFromUnchecked(distance, count) expects integer distance and count"
-#define XR_ERROR_CORE_BYTES_REPEAT_FROM_UNCHECKED_RECEIVER_MSG                                     \
-    "Bytes.repeatFromUnchecked receiver must be Bytes"
-#define XR_ERROR_CORE_BYTES_REPEAT_FROM_UNCHECKED_OOB_MSG                                          \
-    "Bytes.repeatFromUnchecked range/capacity precondition failed"
-#define XR_ERROR_CORE_BYTES_WRITE_FROM_UNCHECKED_EXPECTS_MSG                                       \
-    "Bytes.writeFromUnchecked(dstOffset, src, srcOffset, count) expects ByteSpan and integers"
-#define XR_ERROR_CORE_BYTES_WRITE_FROM_UNCHECKED_OPERANDS_MSG                                      \
-    "Bytes.writeFromUnchecked receiver/source must use byte storage"
-#define XR_ERROR_CORE_BYTES_WRITE_FROM_UNCHECKED_OOB_MSG                                           \
-    "Bytes.writeFromUnchecked range/capacity precondition failed"
-#define XR_ERROR_CORE_BYTES_REPEAT_AT_UNCHECKED_EXPECTS_MSG                                        \
-    "Bytes.repeatAtUnchecked(dstOffset, distance, count) expects integers"
-#define XR_ERROR_CORE_BYTES_REPEAT_AT_UNCHECKED_RECEIVER_MSG                                       \
-    "Bytes.repeatAtUnchecked receiver must be Bytes"
-#define XR_ERROR_CORE_BYTES_REPEAT_AT_UNCHECKED_OOB_MSG                                            \
-    "Bytes.repeatAtUnchecked range/capacity precondition failed"
-#define XR_ERROR_CORE_BYTES_WILD_COPY_FROM_NONOVERLAPPING_UNCHECKED_EXPECTS_MSG                    \
-    "Bytes.wildCopyFromNonOverlappingUnchecked(dstOffset, src, srcOffset, count) expects "         \
-    "ByteSpan and integers"
-#define XR_ERROR_CORE_BYTES_WILD_COPY_FROM_NONOVERLAPPING_UNCHECKED_OPERANDS_MSG                   \
-    "Bytes.wildCopyFromNonOverlappingUnchecked receiver must be owned Bytes and source must use "  \
-    "readable byte storage"
-#define XR_ERROR_CORE_BYTES_WILD_COPY_FROM_NONOVERLAPPING_UNCHECKED_OOB_MSG                        \
-    "Bytes.wildCopyFromNonOverlappingUnchecked range/capacity precondition failed"
-#define XR_ERROR_CORE_BYTES_WILD_REPEAT_AT_UNCHECKED_EXPECTS_MSG                                   \
-    "Bytes.wildRepeatAtUnchecked(dstOffset, distance, count) expects integers"
-#define XR_ERROR_CORE_BYTES_WILD_REPEAT_AT_UNCHECKED_RECEIVER_MSG                                  \
-    "Bytes.wildRepeatAtUnchecked receiver must be owned Bytes"
-#define XR_ERROR_CORE_BYTES_WILD_REPEAT_AT_UNCHECKED_OOB_MSG                                       \
-    "Bytes.wildRepeatAtUnchecked range/capacity precondition failed"
-#define XR_ERROR_CORE_BYTES_SET_LENGTH_UNCHECKED_EXPECTS_MSG                                       \
-    "Bytes.setLengthUnchecked(length) expects integer length"
-#define XR_ERROR_CORE_BYTES_SET_LENGTH_UNCHECKED_RECEIVER_MSG                                      \
-    "Bytes.setLengthUnchecked receiver must be Bytes"
-#define XR_ERROR_CORE_BYTES_SET_LENGTH_UNCHECKED_OOB_MSG                                           \
-    "Bytes.setLengthUnchecked range/capacity precondition failed"
 #define XR_ERROR_CORE_RANGE_TO_ARRAY_TOO_LARGE_MSG "Range.toArray range too large"
 
 typedef struct XrErrorCoreMessageView {

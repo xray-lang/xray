@@ -207,17 +207,5 @@ XR_FUNC bool xr_array_bytes_repeat_from(XrArray *arr, int32_t dst_offset, int32_
 XR_FUNC bool xr_array_bytes_append_from_span(XrArray *dst, const void *src_data, int64_t src_length,
                                              const void *src_guard);
 XR_FUNC bool xr_array_bytes_repeat_from_tail(XrArray *arr, int64_t distance, int64_t count);
-XR_FUNC bool xr_array_bytes_append_from_unchecked(XrArray *dst, XrArray *src, int64_t src_offset,
-                                                  int64_t count);
-XR_FUNC bool xr_array_bytes_repeat_from_unchecked(XrArray *arr, int64_t distance, int64_t count);
-XR_FUNC bool xr_array_bytes_write_from_unchecked(XrArray *dst, int64_t dst_offset, XrArray *src,
-                                                 int64_t src_offset, int64_t count);
-XR_FUNC bool xr_array_bytes_repeat_at_unchecked(XrArray *arr, int64_t dst_offset, int64_t distance,
-                                                int64_t count);
-XR_FUNC bool xr_array_bytes_wild_copy_from_nonoverlapping_unchecked(
-    XrArray *dst, int64_t dst_offset, XrArray *src, int64_t src_offset, int64_t count);
-XR_FUNC bool xr_array_bytes_wild_repeat_at_unchecked(XrArray *arr, int64_t dst_offset,
-                                                     int64_t distance, int64_t count);
-XR_FUNC bool xr_array_bytes_set_length_unchecked(XrArray *arr, int64_t length);
 
 #endif  // XARRAY_H

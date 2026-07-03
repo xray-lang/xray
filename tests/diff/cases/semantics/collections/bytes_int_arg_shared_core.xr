@@ -32,9 +32,7 @@ fn show_load_u64() {
 
 fn show_append_from() {
     try {
-        unsafe {
-            bytes.appendFromUnchecked(src, dyn.badOffset, 1)
-        }
+        bytes.appendFrom(src[dyn.badOffset:2])
         print(bytes[0])
     } catch panic (p) {
         print(p.message)
@@ -44,9 +42,7 @@ fn show_append_from() {
 
 fn show_repeat_distance() {
     try {
-        unsafe {
-            bytes.repeatFromUnchecked(dyn.badDst, 1)
-        }
+        bytes.repeatFrom(dyn.badDst, 1)
         print(bytes[0])
     } catch panic (p) {
         print(p.message)
@@ -56,9 +52,7 @@ fn show_repeat_distance() {
 
 fn show_repeat_from() {
     try {
-        unsafe {
-            bytes.repeatFromUnchecked(1, dyn.badCount)
-        }
+        bytes.repeatFrom(1, dyn.badCount)
         print(bytes[0])
     } catch panic (p) {
         print(p.message)

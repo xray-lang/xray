@@ -64,9 +64,7 @@ print(int(packet32))
 print(int(packet64))
 
 let copied = Bytes.withCapacity(6)
-unsafe {
-    copied.appendFromUnchecked(packetView, 1, 3)
-}
+copied.appendFrom(packetView[1:4])
 print(copied[0])
 print(copied[2])
 
@@ -75,9 +73,7 @@ let seed = Bytes(3)
 seed[0] = 65
 seed[1] = 66
 seed[2] = 67
-unsafe {
-    repeated.appendFromUnchecked(seed, 0, 3)
-    repeated.repeatFromUnchecked(3, 6)
-}
+repeated.appendFrom(seed)
+repeated.repeatFrom(3, 6)
 print(repeated[3])
 print(repeated[8])

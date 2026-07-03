@@ -1,19 +1,11 @@
 fn makeWildBytes() -> Bytes {
-    let out = Bytes.withCapacity(20)
-    unsafe {
-        out.pushUnchecked(65)
-        out.pushUnchecked(66)
-        out.pushUnchecked(67)
-        out.pushUnchecked(68)
-        out.wildRepeatAtUnchecked(4, 4, 8)
-        out.wildCopyFromNonOverlappingUnchecked(12, out, 4, 8)
-    }
-
-    print(out.length)
-
-    unsafe {
-        out.setLengthUnchecked(20)
-    }
+    let out = Bytes(4)
+    out[0] = 65
+    out[1] = 66
+    out[2] = 67
+    out[3] = 68
+    out.repeatFrom(4, 8)
+    out.appendFrom(out[4:12])
 
     return out
 }

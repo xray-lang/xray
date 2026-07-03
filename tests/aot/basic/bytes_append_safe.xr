@@ -7,10 +7,8 @@ src[4] = 50
 src[5] = 60
 
 let out = Bytes.withCapacity(12)
-unsafe {
-    out.appendFromUnchecked(src, 1, 3)
-    out.repeatFromUnchecked(2, 4)
-}
+out.appendFrom(src[1:4])
+out.repeatFrom(2, 4)
 
 print(out.length)
 print(out.capacity)

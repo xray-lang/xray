@@ -1,1 +1,1 @@
-Bytes.wildRepeatAtUnchecked() must be inside an unsafe block
+Bytes has no member 'wildRepeatAtUnchecked'

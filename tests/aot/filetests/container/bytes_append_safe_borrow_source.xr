@@ -1,8 +1,6 @@
 fn appendThenRead(src: Bytes) -> int {
     let out = Bytes.withCapacity(8)
-    unsafe {
-        out.appendFromUnchecked(src, 0, 2)
-    }
+    out.appendFrom(src[0:2])
 
     let tail: uint8 = 0
     unsafe {

@@ -1,0 +1,3 @@
+fn common(src: ByteSpan, left: int, right: int, maxCount: int) -> int {
+    return src[left:left + maxCount].commonPrefix(src[right:right + maxCount])
+}
