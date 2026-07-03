@@ -1,0 +1,4 @@
+@c_export("xray_checked_div")
+fn xray_checked_div(a: int, b: int) -> int {
+    return a / b
+}

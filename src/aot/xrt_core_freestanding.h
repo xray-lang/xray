@@ -33,22 +33,29 @@
 #define XR_LIKELY(x) __builtin_expect(!!(x), 1)
 #define XR_UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define XRT_COLD __attribute__((cold))
+#define XRT_NORETURN __attribute__((noreturn))
 #define XR_ASSUME_ALIGNED(p, n) __builtin_assume_aligned((p), (n))
 #define XRT_FN_CONST __attribute__((const))
 #define XRT_FN_PURE __attribute__((pure))
 #define XRT_RESTRICT __restrict__
+#elif defined(_MSC_VER)
+#define XR_LIKELY(x) (x)
+#define XR_UNLIKELY(x) (x)
+#define XRT_COLD
+#define XRT_NORETURN __declspec(noreturn)
+#define XR_ASSUME_ALIGNED(p, n) (p)
+#define XRT_FN_CONST
+#define XRT_FN_PURE
+#define XRT_RESTRICT __restrict
 #else
 #define XR_LIKELY(x) (x)
 #define XR_UNLIKELY(x) (x)
 #define XRT_COLD
+#define XRT_NORETURN
 #define XR_ASSUME_ALIGNED(p, n) (p)
 #define XRT_FN_CONST
 #define XRT_FN_PURE
-#if defined(_MSC_VER)
-#define XRT_RESTRICT __restrict
-#else
 #define XRT_RESTRICT
-#endif
 #endif
 
 #if defined(__APPLE__)
@@ -309,13 +316,28 @@ typedef struct XrAotContext {
     void *worker;
 } XrAotContext;
 
-static inline void xrt_freestanding_trap(const char *message) {
-    (void) message;
+XRT_COLD XRT_NORETURN void xr_hook_panic(const char *message, size_t len);
+
+static inline size_t xrt_freestanding_strlen(const char *s) {
+    size_t len = 0;
+    if (!s)
+        return 0;
+    while (s[len] != '\0') {
+        len++;
+    }
+    return len;
+}
+
+static inline XRT_COLD XRT_NORETURN void xrt_freestanding_trap(const char *message) {
+    if (!message)
+        message = "panic";
+    xr_hook_panic(message, xrt_freestanding_strlen(message));
 #if defined(__GNUC__) || defined(__clang__)
-    __builtin_trap();
-#endif
+    __builtin_unreachable();
+#else
     for (;;) {
     }
+#endif
 }
 
 static inline int64_t xrt_i64_add(int64_t a, int64_t b) {
