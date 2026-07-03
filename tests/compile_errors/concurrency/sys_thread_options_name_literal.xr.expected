@@ -1,0 +1,1 @@
+sys.Thread.spawn ThreadOptions.name must be a string literal

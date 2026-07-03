@@ -122,6 +122,7 @@ typedef enum {
     XI_AUX_KIND_PAR_FOR = 2,
     XI_AUX_KIND_PAR_REDUCE = 3,
     XI_AUX_KIND_PAR_COLLECT = 4,
+    XI_AUX_KIND_THREAD_SPAWN = 5,
 } XiAuxKind;
 
 /* Source-variable IDs are carried on XiValue for backend register/cell
@@ -611,6 +612,12 @@ typedef enum {
 #define XI_THREAD_SPAWN_AUX_STACK_SIZE_SHIFT 16
 #define XI_THREAD_SPAWN_AUX_STACK_SIZE_MASK ((int64_t) 0x0000ffffffffffffULL)
 
+typedef struct XiThreadSpawnOptions {
+    const char *name;
+    int64_t stack_size;
+    uint8_t *transfer_modes;
+} XiThreadSpawnOptions;
+
 /* XI_YIELD aux_int values. */
 #define XI_YIELD_AUX_IMMEDIATE 0
 #define XI_YIELD_AUX_POLL 1
@@ -701,15 +708,32 @@ static inline bool xi_load_field_is_adt(const XiValue *v) {
 static inline int64_t xi_thread_spawn_stack_size(const XiValue *v) {
     if (!v || v->op != XI_THREAD_SPAWN)
         return 0;
+    if (v->aux_kind == XI_AUX_KIND_THREAD_SPAWN) {
+        const XiThreadSpawnOptions *opts = (const XiThreadSpawnOptions *) v->aux;
+        return opts && opts->stack_size > 0 ? opts->stack_size : 0;
+    }
     int64_t stack_size =
         (v->aux_int >> XI_THREAD_SPAWN_AUX_STACK_SIZE_SHIFT) & XI_THREAD_SPAWN_AUX_STACK_SIZE_MASK;
     return stack_size > 0 ? stack_size : 0;
 }
 
+static inline const char *xi_thread_spawn_name(const XiValue *v) {
+    if (!v || v->op != XI_THREAD_SPAWN || v->aux_kind != XI_AUX_KIND_THREAD_SPAWN)
+        return NULL;
+    const XiThreadSpawnOptions *opts = (const XiThreadSpawnOptions *) v->aux;
+    return opts ? opts->name : NULL;
+}
+
 static inline uint8_t xi_go_arg_transfer_mode(const XiValue *go, uint16_t arg_index) {
     if (!go || (go->op != XI_GO && go->op != XI_THREAD_SPAWN) || arg_index + 1 >= go->nargs)
         return XR_TRANSFER_SHARE;
-    const uint8_t *modes = (const uint8_t *) go->aux;
+    const uint8_t *modes = NULL;
+    if (go->op == XI_THREAD_SPAWN && go->aux_kind == XI_AUX_KIND_THREAD_SPAWN) {
+        const XiThreadSpawnOptions *opts = (const XiThreadSpawnOptions *) go->aux;
+        modes = opts ? opts->transfer_modes : NULL;
+    } else {
+        modes = (const uint8_t *) go->aux;
+    }
     return modes ? modes[arg_index] : XR_TRANSFER_SHARE;
 }
 
