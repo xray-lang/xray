@@ -333,6 +333,8 @@ static inline void xrt_release(XrValue v) {
 
 XRT_COLD XRT_NORETURN void xr_hook_panic(const char *message, size_t len);
 void xr_hook_write(const char *bytes, size_t len);
+void *xr_hook_alloc(size_t size, size_t align);
+void xr_hook_free(void *ptr);
 
 static inline size_t xrt_freestanding_strlen(const char *s) {
     size_t len = 0;
@@ -650,6 +652,37 @@ static inline XrValue xrt_mem_prefetch(XrValue ptr, XrValue rw) {
 
 static inline XrValue xrt_mem_cache_line_size(void) {
     return XR_FROM_INT(64);
+}
+
+static inline XrValue xrt_mem_alloc(XrValue n) {
+    int64_t size = xrt_mem_int_arg(n);
+    if (size <= 0)
+        return xr_mkptr(NULL, XR_TAG_PTR);
+    return xr_mkptr(xr_hook_alloc((size_t) size, sizeof(void *)), XR_TAG_PTR);
+}
+
+static inline XrValue xrt_mem_alloc_zeroed(XrValue n) {
+    int64_t size = xrt_mem_int_arg(n);
+    if (size <= 0)
+        return xr_mkptr(NULL, XR_TAG_PTR);
+    void *p = xr_hook_alloc((size_t) size, sizeof(void *));
+    if (p)
+        memset(p, 0, (size_t) size);
+    return xr_mkptr(p, XR_TAG_PTR);
+}
+
+static inline XrValue xrt_mem_alloc_aligned(XrValue n, XrValue align) {
+    int64_t size = xrt_mem_int_arg(n);
+    int64_t a = xrt_mem_int_arg(align);
+    if (size <= 0 || a < (int64_t) sizeof(void *) || ((uint64_t) a & ((uint64_t) a - 1u)) != 0)
+        return xr_mkptr(NULL, XR_TAG_PTR);
+    return xr_mkptr(xr_hook_alloc((size_t) size, (size_t) a), XR_TAG_PTR);
+}
+
+static inline XrValue xrt_mem_free(XrValue ptr) {
+    if (ptr.ptr)
+        xr_hook_free(ptr.ptr);
+    return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_mem_from_address(XrValue addr) {

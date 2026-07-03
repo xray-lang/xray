@@ -1,0 +1,22 @@
+import mem
+
+@c_export("xray_alloc_hook_score")
+fn xray_alloc_hook_score(n: int) -> int {
+    let p = mem.allocZeroed(8)
+    if (p.isNull()) {
+        return -1
+    }
+    unsafe { p[0] = 9 }
+
+    let q = mem.allocAligned(16, 8)
+    if (q.isNull()) {
+        mem.free(p)
+        return -2
+    }
+    unsafe { q[0] = 3 }
+
+    let out = unsafe { int(p[0]) + int(q[0]) }
+    mem.free(q)
+    mem.free(p)
+    return n + out
+}
