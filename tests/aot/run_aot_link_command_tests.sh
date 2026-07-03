@@ -339,6 +339,24 @@ else
         "freestanding-profile: requires native backend"
 fi
 
+FREESTANDING_QUOTED_STDLIB_SRC="$WORK/freestanding_quoted_stdlib.xr"
+cat > "$FREESTANDING_QUOTED_STDLIB_SRC" <<'XR'
+import { now } from "time"
+
+print(now())
+XR
+FREESTANDING_QUOTED_STDLIB_LOG="$WORK/freestanding_quoted_stdlib.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_quoted_stdlib" \
+        "$FREESTANDING_QUOTED_STDLIB_SRC" >"$FREESTANDING_QUOTED_STDLIB_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects quoted hosted stdlib imports"
+    sed 's/^/      /' "$FREESTANDING_QUOTED_STDLIB_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_QUOTED_STDLIB_LOG" \
+        "freestanding profile rejects stdlib module 'time'" \
+        "freestanding-profile: rejects quoted hosted stdlib imports"
+fi
+
 CORE_FAST_BIN="$WORK/core_math_fast"
 CORE_FAST_LOG="$WORK/core_math_fast.log"
 case "$(uname -m 2>/dev/null)" in
@@ -617,12 +635,12 @@ FREESTANDING_STDLIB_LOG="$WORK/freestanding_stdlib_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
         --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_stdlib_reject" \
         "$COMPRESS_SRC" >"$FREESTANDING_STDLIB_LOG" 2>&1; then
-    record_fail "freestanding-profile: rejects hosted stdlib objects"
+    record_fail "freestanding-profile: rejects hosted stdlib imports"
     sed 's/^/      /' "$FREESTANDING_STDLIB_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_STDLIB_LOG" \
-        "freestanding profile rejects hosted stdlib objects" \
-        "freestanding-profile: rejects hosted stdlib objects"
+        "freestanding profile rejects stdlib module 'compress'" \
+        "freestanding-profile: rejects hosted stdlib imports"
 fi
 
 CRYPTO_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_crypto.xr"
@@ -683,12 +701,25 @@ FREESTANDING_RUNTIME_LOG="$WORK/freestanding_runtime_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
         --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_runtime_reject" \
         "$RUNTIME_SRC" >"$FREESTANDING_RUNTIME_LOG" 2>&1; then
-    record_fail "freestanding-profile: rejects runtime-backed features"
+    record_fail "freestanding-profile: rejects hosted time stdlib"
     sed 's/^/      /' "$FREESTANDING_RUNTIME_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_RUNTIME_LOG" \
-        "freestanding profile rejects runtime-backed features" \
-        "freestanding-profile: rejects runtime-backed features"
+        "freestanding profile rejects stdlib module 'time'" \
+        "freestanding-profile: rejects hosted time stdlib"
+fi
+
+RUNTIME_TASK_SRC="$PROJECT_DIR/tests/aot/filetests/link/runtime_task.xr"
+FREESTANDING_TASK_LOG="$WORK/freestanding_task_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_task_reject" \
+        "$RUNTIME_TASK_SRC" >"$FREESTANDING_TASK_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects coroutine constructs"
+    sed 's/^/      /' "$FREESTANDING_TASK_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_TASK_LOG" \
+        "freestanding profile rejects go expression" \
+        "freestanding-profile: rejects coroutine constructs"
 fi
 
 if [ "${XRAY_LINK_COMMAND_REAL_BUILDS:-0}" != "1" ]; then

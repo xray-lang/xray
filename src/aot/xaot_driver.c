@@ -785,11 +785,11 @@ static int report_analyzer_diagnostics(XaAnalyzer *analyzer, const char *fallbac
 }
 
 XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildResult *result) {
-    return xaot_build_ex(input_path, emit_plan_dump, true, result);
+    return xaot_build_ex(input_path, emit_plan_dump, true, XAOT_BUILD_PROFILE_HOSTED, result);
 }
 
 XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit_program_main,
-                          XaotBuildResult *result) {
+                          XaotBuildProfile profile, XaotBuildResult *result) {
     XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
     XR_DCHECK(result != NULL, "xaot_build: NULL result");
     memset(result, 0, sizeof(*result));
@@ -875,6 +875,9 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
         fprintf(stderr, "Error: failed to create shared analyzer\n");
         goto fail_free_graph;
     }
+    xa_analyzer_set_build_profile(shared_analyzer, profile == XAOT_BUILD_PROFILE_FREESTANDING
+                                                       ? XA_ANALYZER_BUILD_PROFILE_FREESTANDING
+                                                       : XA_ANALYZER_BUILD_PROFILE_HOSTED);
     xa_analyzer_set_graph(shared_analyzer, graph);
 
     for (int ti = 0; ti < nmodules; ti++) {

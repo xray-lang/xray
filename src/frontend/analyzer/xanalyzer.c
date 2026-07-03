@@ -341,6 +341,7 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     analyzer->strict_null_checks = false;
     analyzer->strict_mode = false;
     analyzer->infer_return_types = true;
+    analyzer->build_profile = XA_ANALYZER_BUILD_PROFILE_HOSTED;
 
     // Initialize incremental analysis support
     analyzer->incremental = xa_incremental_new();
@@ -430,6 +431,15 @@ void xa_analyzer_set_strict_null(XaAnalyzer *analyzer, bool enable) {
 void xa_analyzer_set_strict_mode(XaAnalyzer *analyzer, bool enable) {
     if (analyzer)
         analyzer->strict_mode = enable;
+}
+
+void xa_analyzer_set_build_profile(XaAnalyzer *analyzer, XaAnalyzerBuildProfile profile) {
+    if (analyzer)
+        analyzer->build_profile = profile;
+}
+
+bool xa_analyzer_is_freestanding(const XaAnalyzer *analyzer) {
+    return analyzer && analyzer->build_profile == XA_ANALYZER_BUILD_PROFILE_FREESTANDING;
 }
 
 void xa_analyzer_set_graph(XaAnalyzer *analyzer, struct XrModuleGraph *graph) {

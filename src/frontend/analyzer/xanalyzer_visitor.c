@@ -64,6 +64,48 @@ XR_FUNC bool xa_type_is_threadsafe_shared_ref(const XrType *type) {
     return xa_threadsafe_shared_ref_label(type) != NULL;
 }
 
+XR_FUNC bool xa_freestanding_profile_enabled(XaAnalyzer *analyzer) {
+    return xa_analyzer_is_freestanding(analyzer);
+}
+
+XR_FUNC bool xa_freestanding_stdlib_module_known(const char *module_name) {
+    static const char *modules[] = {
+        "prelude", "time",     "math", "path",     "base64", "regex", "mem",      "sync", "sys",
+        "url",     "datetime", "log",  "encoding", "_probe", "io",    "os",       "json", "net",
+        "http",    "crypto",   "csv",  "toml",     "yaml",   "xml",   "compress", "ws"};
+    if (!module_name)
+        return false;
+    for (size_t i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
+        if (strcmp(module_name, modules[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
+XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name) {
+    if (!module_name)
+        return false;
+    return strcmp(module_name, "prelude") == 0 || strcmp(module_name, "math") == 0 ||
+           strcmp(module_name, "mem") == 0;
+}
+
+XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *node,
+                                                const char *feature, const char *suggestion) {
+    if (!ctx || !ctx->analyzer || !node || !xa_freestanding_profile_enabled(ctx->analyzer))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[384];
+    if (suggestion && suggestion[0]) {
+        snprintf(msg, sizeof(msg), "freestanding profile rejects %s; %s",
+                 feature ? feature : "this construct", suggestion);
+    } else {
+        snprintf(msg, sizeof(msg), "freestanding profile rejects %s",
+                 feature ? feature : "this construct");
+    }
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg, &loc);
+}
+
 XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, XaSymbol *sym,
                                        bool is_write) {
     if (!ctx || !ctx->in_parallel_for_body || !ctx->parallel_for_scope || !loc_node || !sym)
@@ -1765,6 +1807,16 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
         return;
 
     ImportStmtNode *import = &node->as.import_stmt;
+    if (xa_freestanding_profile_enabled(ctx->analyzer) &&
+        (!import->is_quoted || xa_freestanding_stdlib_module_known(import->module_name)) &&
+        !xa_freestanding_stdlib_module_allowed(import->module_name)) {
+        char feature[160];
+        snprintf(feature, sizeof(feature), "stdlib module '%s'",
+                 import->module_name ? import->module_name : "?");
+        xa_freestanding_report_unavailable(
+            ctx, node, feature,
+            "only prelude, math, and mem are in the initial freestanding allowlist");
+    }
 
     // For whole module import: import math or import math as m
     if (import->member_count == 0) {
@@ -2619,6 +2671,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             result = xr_type_new_string(NULL);
             break;
         case AST_TEMPLATE_STRING:
+            xa_freestanding_report_unavailable(ctx, node, "template string",
+                                               "string interpolation allocates formatted text");
             /* Visit all interpolation parts to resolve variable symbol_ids. */
             for (int ti = 0; ti < node->as.template_str.part_count; ti++) {
                 if (node->as.template_str.parts[ti])
@@ -2627,9 +2681,13 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             result = xr_type_new_string(NULL);
             break;
         case AST_LITERAL_BIGINT:
+            xa_freestanding_report_unavailable(ctx, node, "BigInt literal",
+                                               "BigInt values require hosted allocation");
             result = xr_type_new_bigint(ctx->analyzer->isolate);
             break;
         case AST_LITERAL_REGEX:
+            xa_freestanding_report_unavailable(ctx, node, "regex literal",
+                                               "regex compilation is hosted-only");
             result = xr_type_new_regex(ctx->analyzer->isolate);
             break;
         case AST_LITERAL_NULL:
@@ -2701,9 +2759,13 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             result = xa_visit_function_expr(ctx, node);
             break;
         case AST_PARALLEL_REDUCE_EXPR:
+            xa_freestanding_report_unavailable(ctx, node, "parallel reduce expression",
+                                               "parallel worker scheduling is hosted-only");
             result = xa_visit_parallel_reduce_expr(ctx, node);
             break;
         case AST_PARALLEL_COLLECT_EXPR:
+            xa_freestanding_report_unavailable(ctx, node, "parallel collect expression",
+                                               "parallel worker scheduling is hosted-only");
             result = xa_visit_parallel_collect_expr(ctx, node);
             break;
         case AST_GROUPING:
@@ -2746,6 +2808,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             result = xr_type_new_named_instance(ctx->analyzer->isolate, "Range");
             break;
         case AST_SET_LITERAL: {
+            xa_freestanding_report_unavailable(ctx, node, "Set literal",
+                                               "dynamic containers require hosted allocation");
             XrType *elem = NULL;
             if (ctx->expected_type && ctx->expected_type->kind == XR_KIND_SET &&
                 ctx->expected_type->container.element_type) {
@@ -2770,6 +2834,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_CHANNEL_NEW:
+            xa_freestanding_report_unavailable(ctx, node, "Channel construction",
+                                               "channels require the hosted coroutine runtime");
             // Visit buffer size expression to resolve variable symbol_ids
             if (node->as.channel_new.buffer_size)
                 xa_visit_infer_expr(ctx, node->as.channel_new.buffer_size);
@@ -2885,6 +2951,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                          : xr_type_new_unknown(NULL);
             break;
         case AST_SCOPE_BLOCK:
+            xa_freestanding_report_unavailable(ctx, node, "scope block",
+                                               "structured concurrency is hosted-only");
             if (node->as.scope_block.body)
                 xa_visit_infer_stmt(ctx, node->as.scope_block.body);
             if (node->as.scope_block.scope_mode == 2) {
@@ -2895,6 +2963,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             }
             break;
         case AST_CANCELLED_EXPR:
+            xa_freestanding_report_unavailable(ctx, node, "cancelled() expression",
+                                               "task cancellation is hosted-only");
             result = xr_type_new_bool(NULL);
             break;
         default:
@@ -3514,6 +3584,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Type alias is compile-time concept, already registered in pass 1
             break;
         case AST_PARALLEL_FOR_STMT: {
+            xa_freestanding_report_unavailable(ctx, node, "parallel for statement",
+                                               "parallel worker scheduling is hosted-only");
             ParallelForStmtNode *pf = &node->as.parallel_for_stmt;
             XrType **local_types =
                 xa_parallel_infer_local_sources(ctx, pf->locals, pf->local_count,
@@ -4112,14 +4184,20 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_DEFER_STMT:
+            xa_freestanding_report_unavailable(ctx, node, "defer statement",
+                                               "defer uses hosted cleanup/runtime state");
             if (node->as.defer_stmt.expr)
                 xa_visit_infer_expr(ctx, node->as.defer_stmt.expr);
             break;
         case AST_SCOPE_BLOCK:
+            xa_freestanding_report_unavailable(ctx, node, "scope block",
+                                               "structured concurrency is hosted-only");
             if (node->as.scope_block.body)
                 xa_visit_infer_stmt(ctx, node->as.scope_block.body);
             break;
         case AST_SELECT_STMT: {
+            xa_freestanding_report_unavailable(ctx, node, "select statement",
+                                               "channels require the hosted coroutine runtime");
             SelectStmtNode *sel = &node->as.select_stmt;
             for (int i = 0; i < sel->case_count; i++) {
                 if (sel->cases[i])
@@ -4226,6 +4304,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_YIELD_STMT: {
+            xa_freestanding_report_unavailable(ctx, node, "yield statement",
+                                               "generators require hosted runtime state");
             /* `yield expr` produces a generator value. The enclosing function
              * must be a generator declared `-> Iterator<T>`; the yielded value
              * must be assignable to T. Mark the function as a generator so IR

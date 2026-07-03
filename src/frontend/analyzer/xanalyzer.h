@@ -43,6 +43,11 @@ typedef enum XrDiagSeverity {
     XR_DIAG_SEV_HINT = 4,
 } XrDiagSeverity;
 
+typedef enum XaAnalyzerBuildProfile {
+    XA_ANALYZER_BUILD_PROFILE_HOSTED = 0,
+    XA_ANALYZER_BUILD_PROFILE_FREESTANDING,
+} XaAnalyzerBuildProfile;
+
 // Diagnostic message
 typedef struct XaDiagnostic {
     XrDiagSeverity severity;
@@ -102,6 +107,7 @@ struct XaAnalyzer {
     bool strict_null_checks;  // Treat null as distinct type
     bool strict_mode;         // Enable all strict checks
     bool infer_return_types;  // Infer function return types
+    XaAnalyzerBuildProfile build_profile;
 
     // Caches
     void *type_cache;  // Cache for computed types
@@ -138,6 +144,8 @@ XR_FUNC void xa_analyzer_free(XaAnalyzer *analyzer);
 // API: Configuration
 XR_FUNC void xa_analyzer_set_strict_null(XaAnalyzer *analyzer, bool enable);
 XR_FUNC void xa_analyzer_set_strict_mode(XaAnalyzer *analyzer, bool enable);
+XR_FUNC void xa_analyzer_set_build_profile(XaAnalyzer *analyzer, XaAnalyzerBuildProfile profile);
+XR_FUNC bool xa_analyzer_is_freestanding(const XaAnalyzer *analyzer);
 
 // Set module graph for cross-module type resolution.
 // The graph must outlive the analyzer. Pass NULL to disable.

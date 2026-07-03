@@ -1779,7 +1779,10 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             bool rebuild, bool lto, const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan) {
     XaotBuildResult aot_result;
-    int rc = xaot_build_ex(input, dump_xaot_plan, !shared_library, &aot_result);
+    XaotBuildProfile aot_profile = profile == XR_CLI_BUILD_PROFILE_FREESTANDING
+                                       ? XAOT_BUILD_PROFILE_FREESTANDING
+                                       : XAOT_BUILD_PROFILE_HOSTED;
+    int rc = xaot_build_ex(input, dump_xaot_plan, !shared_library, aot_profile, &aot_result);
     if (rc != 0)
         return rc;
     if (target && target->name) {
