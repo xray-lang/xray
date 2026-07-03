@@ -10,10 +10,16 @@
 
 #include "xthread_obj.h"
 
+#include "xcoroutine.h"
+#include "xdeep_copy.h"
+#include "../runtime/core/xr_runtime_core.h"
+#include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/object/xnative_type.h"
 #include "../runtime/object/xpanic_info.h"
+#include "../runtime/xshared.h"
 #include "../runtime/xisolate_api.h"
 #include "../vm/xvm.h"
+#include "../vm/xvm_coro_api.h"
 
 static void thread_throw(XrVMRuntime *isolate, XrErrorCode code, const char *message) {
     if (!isolate || !message)
@@ -22,15 +28,85 @@ static void thread_throw(XrVMRuntime *isolate, XrErrorCode code, const char *mes
     xr_vm_throw_exception(isolate, exc);
 }
 
-XrThread *xr_thread_obj_spawn(struct XrVMRuntime *isolate, struct XrClosure *body, const char *name,
-                              size_t stack_size) {
-    (void) body;
-    (void) name;
-    (void) stack_size;
-    thread_throw(isolate, XR_ERR_RUNTIME,
-                 "sys.Thread.spawn backend is not wired; XI_THREAD_SPAWN needs a backend "
-                 "trampoline");
+static void thread_release_ref(XrThread *thread) {
+    if (!thread)
+        return;
+    XrRuntimeCore *core = thread->core;
+    if (xr_obj_drop_is_last(&thread->hdr))
+        xr_shared_destroy_core(core, &thread->hdr);
+}
+
+static void *thread_entry_vm(void *arg) {
+    XrThread *thread = (XrThread *) arg;
+    if (!thread)
+        return NULL;
+
+    if (thread->isolate)
+        xray_vm_enter(thread->isolate);
+    if (thread->name)
+        xr_thread_set_name(xr_thread_self(), thread->name);
+
+    XrValue out = xr_null();
+    XrCoroRunKind kind = xr_vm_coro_run_to_completion(thread->coro, &out);
+    if (kind == XR_CORO_RUN_DONE) {
+        thread->retval = out;
+        atomic_store_explicit(&thread->failed, false, memory_order_release);
+    } else {
+        thread->retval = xr_null();
+        thread->error = out;
+        thread->error_is_value = thread->coro ? thread->coro->error_is_value : false;
+        atomic_store_explicit(&thread->failed, true, memory_order_release);
+    }
+    atomic_store_explicit(&thread->finished, true, memory_order_release);
+
+    if (thread->isolate)
+        xray_vm_exit();
+
+    thread_release_ref(thread);
     return NULL;
+}
+
+XrThread *xr_thread_obj_spawn_vm(struct XrVMRuntime *isolate, struct XrCoroutine *coro,
+                                 const char *name, size_t stack_size) {
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
+    if (!core || !core->sys_heap || !coro) {
+        if (coro)
+            xr_coro_destroy(coro);
+        thread_throw(isolate, XR_ERR_OUT_OF_MEMORY, "sys.Thread.spawn: unable to allocate handle");
+        return NULL;
+    }
+
+    XrThread *thread =
+        (XrThread *) xr_sysheap_alloc_shared(core->sys_heap, sizeof(XrThread), XR_TTHREAD);
+    if (!thread) {
+        xr_coro_destroy(coro);
+        thread_throw(isolate, XR_ERR_OUT_OF_MEMORY, "sys.Thread.spawn: unable to allocate handle");
+        return NULL;
+    }
+
+    thread->coro = coro;
+    thread->isolate = isolate;
+    thread->core = core;
+    thread->name = name;
+    thread->retval = xr_null();
+    thread->error = xr_null();
+    thread->error_is_value = false;
+    atomic_store_explicit(&thread->state, XR_THREAD_CREATED, memory_order_relaxed);
+    atomic_store_explicit(&thread->finished, false, memory_order_relaxed);
+    atomic_store_explicit(&thread->failed, false, memory_order_relaxed);
+
+    xr_shared_retain(&thread->hdr); /* OS entry owns the handle until exit. */
+    if (!xr_thread_create_ex(&thread->handle, thread_entry_vm, thread, stack_size)) {
+        thread->coro = NULL;
+        xr_coro_destroy(coro);
+        thread_release_ref(thread); /* entry ref */
+        thread_release_ref(thread); /* returned-handle ref */
+        thread_throw(isolate, XR_ERR_RUNTIME, "sys.Thread.spawn: OS thread creation failed");
+        return NULL;
+    }
+    if (name)
+        xr_thread_set_name(thread->handle, name);
+    return thread;
 }
 
 XrValue xr_thread_obj_join(XrThread *thread) {
@@ -81,8 +157,13 @@ void xr_obj_destroy_thread(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
         return;
     XrThread *thread = (XrThread *) obj;
     xr_thread_obj_detach(thread);
-    thread->body = NULL;
+    if (thread->coro) {
+        xr_coro_destroy(thread->coro);
+        thread->coro = NULL;
+    }
     thread->isolate = NULL;
+    thread->core = NULL;
+    thread->name = NULL;
 }
 
 static XrValue m_join(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
@@ -97,7 +178,24 @@ static XrValue m_join(XrVMRuntime *isolate, XrValue self, XrValue *args, int nar
         thread_throw(isolate, XR_ERR_RUNTIME, "Thread.join: thread is detached");
         return xr_null();
     }
-    return xr_thread_obj_join(thread);
+    XrValue result = xr_thread_obj_join(thread);
+    XrCoroutine *caller = xr_current_coro(isolate);
+    if (atomic_load_explicit(&thread->failed, memory_order_acquire)) {
+        XrValue err = thread->error;
+        if (XR_IS_PTR(err))
+            err = xr_deep_copy_to_coro(isolate, err, caller);
+        if (XR_IS_NULL(err)) {
+            thread_throw(isolate, XR_ERR_RUNTIME, "Thread.join: thread body failed");
+        } else if (thread->error_is_value) {
+            xr_vm_set_pending_error(isolate, err);
+        } else {
+            xr_vm_throw_exception(isolate, err);
+        }
+        return xr_null();
+    }
+    if (XR_IS_PTR(result))
+        result = xr_deep_copy_to_coro(isolate, result, caller);
+    return result;
 }
 
 static XrValue m_detach(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {

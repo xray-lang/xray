@@ -21,10 +21,12 @@
 #include "xvm_dispatch_helpers.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../coro/xthread_obj.h"
 #include "../os/os_time.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "xvm_checks.h"
 #include "xdebug.h"
+#include "xvm_coro_api.h"
 #include "../runtime/xray_debug_hooks.h"
 #include "../runtime/xstrbuf.h"
 #include "../runtime/object/xstringbuilder.h"
@@ -801,6 +803,78 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
     }
 
     return XR_DISP_GO_CHILD;
+}
+
+XR_FUNC XrDispatchAction vm_thread_spawn(XrVMRuntime *isolate, XrVMContext *vm_ctx,
+                                         XrInstruction instr, XrValue *base, XrBcCallFrame *frame) {
+    (void) vm_ctx;
+    int a = GETARG_A(instr);
+    int b = GETARG_B(instr);
+    int c = GETARG_C(instr);
+    XrInstruction *pc = frame->pc;
+
+    XrValue fn_val = base[b];
+    if (!xr_value_is_closure(fn_val)) {
+        VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "sys.Thread.spawn: expected closure");
+    }
+
+    struct XrClosure *closure = xr_value_to_closure(fn_val);
+    XrProto *proto = closure->proto;
+    if (!proto->is_coro_safe) {
+        VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
+                 "sys.Thread.spawn: closure captures non-thread-safe variables");
+    }
+    if (c != proto->numparams) {
+        VM_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT,
+                 "sys.Thread.spawn: argument count mismatch (expected %d, got %d)",
+                 proto->numparams, c);
+    }
+
+    const char *thread_name = NULL;
+    uint8_t arg_modes[128];
+    for (int i = 0; i < c; i++)
+        arg_modes[i] = XR_TRANSFER_SHARE;
+    int mode_base = 0;
+
+    XrInstruction next_inst = *pc;
+    while (GET_OPCODE(next_inst) == OP_NOP) {
+        int ann = GETARG_A(next_inst);
+        if (ann == 1) {
+            int name_idx = GETARG_Bx(next_inst);
+            XrValue name_val = PROTO_CONSTANT(frame->closure->proto, name_idx);
+            if (XR_IS_STRING(name_val))
+                thread_name = xr_value_to_string(isolate, name_val)->data;
+        } else if (ann == 5) {
+            uint32_t packed = GETARG_Bx(next_inst);
+            for (uint32_t slot = 0; slot < XR_TRANSFER_MODES_PER_U32 && mode_base + (int) slot < c;
+                 slot++) {
+                arg_modes[mode_base + (int) slot] = xr_transfer_unpack_mode(packed, slot);
+            }
+            mode_base += (int) XR_TRANSFER_MODES_PER_U32;
+        } else {
+            break;
+        }
+        pc++;
+        next_inst = *pc;
+    }
+
+    XrValue *args = (c > 0) ? &base[b + 1] : NULL;
+    XrCoroutine *coro = xr_coro_create_vm_closure(isolate, closure, args, c > 0 ? arg_modes : NULL,
+                                                  c, thread_name, NULL, 0);
+    if (!coro) {
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD,
+                 "sys.Thread.spawn: failed to create thread coroutine");
+    }
+
+    XrThread *thread = xr_thread_obj_spawn_vm(isolate, coro, thread_name, 0);
+    if (!thread) {
+        frame->pc = pc;
+        return XR_DISP_RAISE;
+    }
+
+    base[a] = xr_value_from_thread(thread);
+    frame->pc = pc;
+    return XR_DISP_NEXT;
 }
 
 #define AWAIT_TIMEOUT_SPINS 100000000

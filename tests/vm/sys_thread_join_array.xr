@@ -1,0 +1,7 @@
+import sys
+
+let t = sys.Thread.spawn(fn() -> Array<int> {
+    return [20, 22]
+})
+let values = t.join()
+print(values[0] + values[1])

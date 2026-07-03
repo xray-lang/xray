@@ -62,6 +62,7 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
 static XrCoroRunResult vm_backend_resume(XrCoroutine *coro, const XrCoroEvent *event,
                                          const XrCoroRunContext *run_ctx);
 static XrCoroRunKind vm_backend_gen_drive(XrCoroutine *coro, XrValue *out);
+static XrCoroRunKind vm_backend_drive_inline(XrCoroutine *coro, XrValue *out, bool allow_yield);
 static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result);
 static const char *vm_backend_debug_name(const XrCoroutine *coro);
 static void vm_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
@@ -1532,6 +1533,14 @@ static XrVMResult run_first_exec(XrVMRuntime *isolate, XrWorker *worker, XrCorou
 // worker run queue or arm direct-switch admission, so the generator executes in
 // isolation and returns control to the caller at each yield.
 static XrCoroRunKind vm_backend_gen_drive(XrCoroutine *coro, XrValue *out) {
+    return vm_backend_drive_inline(coro, out, true);
+}
+
+XrCoroRunKind xr_vm_coro_run_to_completion(XrCoroutine *coro, XrValue *out) {
+    return vm_backend_drive_inline(coro, out, false);
+}
+
+static XrCoroRunKind vm_backend_drive_inline(XrCoroutine *coro, XrValue *out, bool allow_yield) {
     if (out)
         *out = xr_null();
     if (!coro)
@@ -1561,7 +1570,7 @@ static XrCoroRunKind vm_backend_gen_drive(XrCoroutine *coro, XrValue *out) {
         res = run(isolate, gctx);
     }
 
-    if (res == XR_VM_YIELD) {
+    if (res == XR_VM_YIELD && allow_yield) {
         xr_coro_transition_to_ready(coro);
         if (out)
             *out = coro->result;
@@ -1575,7 +1584,8 @@ static XrCoroRunKind vm_backend_gen_drive(XrCoroutine *coro, XrValue *out) {
         return XR_CORO_RUN_DONE;
     }
 
-    // Error / unexpected suspend (block): generators are pure value producers.
+    // Error / unexpected suspend (block/yield): inline drivers do not have a
+    // scheduler worker to park on, and sys.Thread bodies are synchronous.
     xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
     XrValue err = xr_null();
     coro->error_is_value = !XR_IS_NULL(gctx->pending_error);

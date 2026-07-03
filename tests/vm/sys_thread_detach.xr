@@ -1,0 +1,7 @@
+import sys
+
+let t = sys.Thread.spawn(fn() -> int {
+    return 7
+})
+t.detach()
+print("detached")

@@ -23,5 +23,6 @@ XR_FUNC XrCoroutine *xr_coro_create_vm_closure(XrVMRuntime *X, XrClosure *closur
                                                const char *name, const char *file, int line);
 XR_FUNC XrCoroutine *xr_coro_create_vm_cfunc(XrVMRuntime *X, XrCoroCFuncEntry cfunc, XrValue *args,
                                              int argc, const char *name);
+XR_FUNC XrCoroRunKind xr_vm_coro_run_to_completion(XrCoroutine *coro, XrValue *out);
 
 #endif  // XVM_CORO_API_H

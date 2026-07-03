@@ -276,6 +276,8 @@
     _(REGEX_COMPILE, FMT_ABC, KOP_ABC_BIN_K, "R[A] = regex.compile(K[B], K[C])")                   \
     _(GO, FMT_ABC, KOP_ABC_BIN_LIT,                                                                \
       "R[A]=task = go R[B](R[B+1]..R[B+C&0x7F]), C bit7=fire-and-forget")                          \
+    _(THREAD_SPAWN, FMT_ABC, KOP_ABC_BIN_LIT,                                                      \
+      "R[A]=thread = sys.Thread.spawn R[B](R[B+1]..R[B+C])")                                       \
     _(AWAIT, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = await R[B], C bit0=discard bit1=one-shot-go")       \
     _(AWAIT_TIMEOUT, FMT_ABC, KOP_ABC_BIN, "R[A] = await(timeout: R[C]) R[B]")                     \
     _(AWAIT_ALL, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = await R[B]:Array, C=result elem type")          \

@@ -378,6 +378,8 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrVMRuntime *isolate, XrVMContext *vm_
                                           XrInstruction *pc);
 XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                                XrValue *base, XrBcCallFrame *frame);
+XR_FUNC XrDispatchAction vm_thread_spawn(XrVMRuntime *isolate, XrVMContext *vm_ctx,
+                                         XrInstruction instr, XrValue *base, XrBcCallFrame *frame);
 XR_FUNC XrDispatchAction vm_gen_start(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame);
 XR_FUNC XrDispatchAction vm_await(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInstruction instr,
