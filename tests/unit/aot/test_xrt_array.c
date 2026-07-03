@@ -452,6 +452,24 @@ static void test_bytes_raw_helpers_share_core_rules(void) {
     ASSERT_EQ_INT(((uint8_t *) rep->data)[5], 67, "repeatFrom writes third repeat byte");
     ASSERT_EQ_INT(((uint8_t *) rep->data)[8], 67, "repeatFrom repeats through overlap");
 
+    XrValue safe_append_value = xrt_array_new_typed_exact(2, XR_ELEM_U8);
+    xrt_array_t *safe_append = (xrt_array_t *) safe_append_value.ptr;
+    xrt_array_push(safe_append_value, XR_FROM_INT(65));
+    xrt_array_push(safe_append_value, XR_FROM_INT(66));
+    xr_span_t safe_src = xrt_span_from_array_slice(safe_append_value, 0, 2);
+    xrt_bytes_append_from_span_raw(safe_append, safe_src);
+    ASSERT_EQ_INT(safe_append->length, 4, "appendFrom grows and commits length");
+    ASSERT_EQ_INT(((uint8_t *) safe_append->data)[2], 65,
+                  "appendFrom keeps aliased source valid across grow");
+    ASSERT_EQ_INT(((uint8_t *) safe_append->data)[3], 66,
+                  "appendFrom copies aliased source after grow");
+    xrt_bytes_repeat_from_tail_raw(safe_append, 2, 4);
+    ASSERT_EQ_INT(safe_append->length, 8, "repeatFrom grows and commits repeated tail");
+    ASSERT_EQ_INT(((uint8_t *) safe_append->data)[6], 65,
+                  "repeatFrom repeats first source byte at tail");
+    ASSERT_EQ_INT(((uint8_t *) safe_append->data)[7], 66,
+                  "repeatFrom repeats second source byte at tail");
+
     XrValue single_value = xrt_array_new_typed_exact(16, XR_ELEM_U8);
     xrt_array_t *single = (xrt_array_t *) single_value.ptr;
     xrt_array_push(single_value, XR_FROM_INT(90));

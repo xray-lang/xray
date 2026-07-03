@@ -791,6 +791,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         }
         if (sym == XRT_SYM_RESERVE)
             return xrt_array_reserve_value(recv, arg0);
+        if (sym == XRT_SYM_APPEND_FROM)
+            return xrt_bytes_append_from_value(recv, arg0);
         if (sym == XRT_SYM_SET_LENGTH_UNCHECKED)
             return xrt_bytes_set_length_unchecked_value(recv, arg0);
         if (sym == XRT_SYM_RESIZE)
@@ -1041,6 +1043,8 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         return xrt_array_reduce_typed(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_RESIZE)
         return xrt_array_resize_value(recv, arg0, arg1);
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REPEATFROM)
+        return xrt_bytes_repeat_from_tail_value(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REPEAT_FROM_UNCHECKED)
         return xrt_bytes_repeat_from_unchecked_value(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL) {

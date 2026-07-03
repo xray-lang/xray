@@ -2423,7 +2423,8 @@ static bool cg_method_receiver_accepts_borrowed_ref(const XiValue *user, uint16_
         return false;
     const char *method = (const char *) user->aux;
     return strcmp(method, "resize") == 0 || strcmp(method, "reserve") == 0 ||
-           strcmp(method, "clear") == 0 || strcmp(method, "appendFromUnchecked") == 0 ||
+           strcmp(method, "clear") == 0 || strcmp(method, "appendFrom") == 0 ||
+           strcmp(method, "repeatFrom") == 0 || strcmp(method, "appendFromUnchecked") == 0 ||
            strcmp(method, "writeFromUnchecked") == 0 ||
            strcmp(method, "wildCopyFromNonOverlappingUnchecked") == 0 ||
            strcmp(method, "wildRepeatAtUnchecked") == 0 ||

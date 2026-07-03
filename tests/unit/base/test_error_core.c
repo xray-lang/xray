@@ -66,11 +66,16 @@ TEST(error_core_defines_bytes_messages) {
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG,
                   "Bytes.copyFrom operands must be Bytes");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG, "Bytes.copyFrom range out of bounds");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_APPEND_FROM_EXPECTS_MSG,
+                  "Bytes.appendFrom(src) expects ByteSpan");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_APPEND_FROM_OPERANDS_MSG,
+                  "Bytes.appendFrom receiver/source must use byte storage");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_APPEND_FROM_OOB_MSG, "Bytes.appendFrom range/grow failed");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG,
-                  "Bytes.repeatFrom expects integer offsets and count");
+                  "Bytes.repeatFrom(distance, count) expects integers");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG,
                   "Bytes.repeatFrom receiver must be Bytes");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG, "Bytes.repeatFrom range out of bounds");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG, "Bytes.repeatFrom range/grow failed");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_APPEND_FROM_UNCHECKED_EXPECTS_MSG,
                   "Bytes.appendFromUnchecked(src, srcOffset, count) expects ByteSpan and integers");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_APPEND_FROM_UNCHECKED_OPERANDS_MSG,

@@ -1212,6 +1212,7 @@ XR_FUNC bool xa_method_name_mutates_receiver(const char *name) {
     static const char *const mutators[] = {"push",
                                            "pushUnchecked",
                                            "setUnchecked",
+                                           "appendFrom",
                                            "appendFromUnchecked",
                                            "repeatFromUnchecked",
                                            "writeFromUnchecked",

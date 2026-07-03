@@ -204,6 +204,9 @@ XR_FUNC bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int32_t src_of
                                       int32_t dst_offset, int32_t count);
 XR_FUNC bool xr_array_bytes_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance,
                                         int32_t count);
+XR_FUNC bool xr_array_bytes_append_from_span(XrArray *dst, const void *src_data, int64_t src_length,
+                                             const void *src_guard);
+XR_FUNC bool xr_array_bytes_repeat_from_tail(XrArray *arr, int64_t distance, int64_t count);
 XR_FUNC bool xr_array_bytes_append_from_unchecked(XrArray *dst, XrArray *src, int64_t src_offset,
                                                   int64_t count);
 XR_FUNC bool xr_array_bytes_repeat_from_unchecked(XrArray *arr, int64_t distance, int64_t count);

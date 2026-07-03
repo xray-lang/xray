@@ -1154,6 +1154,8 @@ static bool xicgen_method_arg_keeps_span_noescape(const XiValue *user, uint16_t 
         (strcmp(method, "getUnchecked") == 0 || strcmp(method, "load") == 0 ||
          strcmp(method, "store") == 0 || strcmp(method, "commonPrefixUnchecked") == 0))
         return true;
+    if (arg_index == 1 && strcmp(method, "appendFrom") == 0)
+        return true;
     if (arg_index == 1 && strcmp(method, "appendFromUnchecked") == 0)
         return true;
     if (arg_index == 2 && strcmp(method, "writeFromUnchecked") == 0)
@@ -2932,6 +2934,12 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
         return true;
     if (method && strcmp(method, "resize") == 0 && nargs >= 1 && nargs <= 2 &&
         emit_typed_array_resize_zero_expr(ctx, out, f, prefix, v))
+        return true;
+    if (nargs == 1 && method && strcmp(method, "appendFrom") == 0 &&
+        emit_bytes_append_from_expr(ctx, out, f, prefix, v))
+        return true;
+    if (nargs == 2 && method && strcmp(method, "repeatFrom") == 0 &&
+        emit_bytes_repeat_from_expr(ctx, out, f, prefix, v))
         return true;
     if (nargs == 3 && method && strcmp(method, "appendFromUnchecked") == 0 &&
         emit_bytes_append_from_unchecked_expr(ctx, out, f, prefix, v))
