@@ -111,6 +111,8 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"io", "writeFileBytes", 2, "xrt_io_write_file_bytes", "sv", CG_AOT_RET_VALUE, NULL},
     {"mem", "fence", 1, "xrt_mem_fence", "v", CG_AOT_RET_VALUE, NULL},
     {"mem", "prefetch", 2, "xrt_mem_prefetch", "vv", CG_AOT_RET_VALUE, NULL},
+    {"mem", "cacheFlush", 2, "xrt_mem_cache_flush", "vv", CG_AOT_RET_VALUE, NULL},
+    {"mem", "cacheInvalidate", 2, "xrt_mem_cache_invalidate", "vv", CG_AOT_RET_VALUE, NULL},
     {"mem", "cacheLineSize", 0, "xrt_mem_cache_line_size", "", CG_AOT_RET_VALUE, NULL},
     {"mem", "alloc", 1, "xrt_mem_alloc", "v", CG_AOT_RET_VALUE, NULL},
     {"mem", "allocZeroed", 1, "xrt_mem_alloc_zeroed", "v", CG_AOT_RET_VALUE, NULL},

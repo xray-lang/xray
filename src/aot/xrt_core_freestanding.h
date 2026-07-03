@@ -712,6 +712,41 @@ static inline XrValue xrt_mem_compare(XrValue a, XrValue b, XrValue n) {
     return XR_FROM_INT(memcmp(a.ptr, b.ptr, (size_t) xrt_mem_int_arg(n)));
 }
 
+static inline void xrt_mem_cache_maintain_range(void *ptr, size_t n) {
+    if (!ptr || n == 0)
+        return;
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+    uintptr_t addr = (uintptr_t) ptr;
+    uintptr_t start = addr & ~(uintptr_t) 63u;
+    uintptr_t end = addr + n;
+    if (end < addr)
+        end = UINTPTR_MAX;
+    for (uintptr_t p = start; p < end; p += 64u) {
+        __asm__ __volatile__("clflush (%0)" : : "r"((const void *) p) : "memory");
+        if (UINTPTR_MAX - p < 64u)
+            break;
+    }
+#else
+    (void) ptr;
+    (void) n;
+#endif
+    xr_sync_core_fence(4);
+}
+
+static inline XrValue xrt_mem_cache_flush(XrValue ptr, XrValue n) {
+    int64_t len = xrt_mem_int_arg(n);
+    if (len > 0)
+        xrt_mem_cache_maintain_range(ptr.ptr, (size_t) len);
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_mem_cache_invalidate(XrValue ptr, XrValue n) {
+    int64_t len = xrt_mem_int_arg(n);
+    if (len > 0)
+        xrt_mem_cache_maintain_range(ptr.ptr, (size_t) len);
+    return XR_NULL_VAL;
+}
+
 static inline XrValue xrt_mem_volatile_load(XrValue ptr, XrValue size) {
     void *p = ptr.ptr;
     uint64_t v = 0;

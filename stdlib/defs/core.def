@@ -2531,6 +2531,30 @@ module mem {
     layer: "core"
   }
 
+  fn cacheFlush {
+    signature: "(ptr: RawPtr<uint8>, n: int): ()"
+    doc: "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available"
+    vm: "mem_cache_flush"
+    aot: "xrt_mem_cache_flush"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn cacheInvalidate {
+    signature: "(ptr: RawPtr<uint8>, n: int): ()"
+    doc: "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available"
+    vm: "mem_cache_invalidate"
+    aot: "xrt_mem_cache_invalidate"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
   fn cacheLineSize {
     signature: "(): int"
     doc: "CPU cache line size in bytes"
