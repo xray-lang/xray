@@ -1,0 +1,5 @@
+@c_export("xray_array_reject")
+fn xray_array_reject() -> int {
+    let xs = [1, 2, 3]
+    return xs[0]
+}

@@ -499,6 +499,19 @@ else
         "freestanding-profile: rejects top-level const declarations"
 fi
 
+FREESTANDING_ARRAY_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_array_reject.xr"
+FREESTANDING_ARRAY_LOG="$WORK/freestanding_array_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_array_reject" \
+        "$FREESTANDING_ARRAY_SRC" >"$FREESTANDING_ARRAY_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects array literals"
+    sed 's/^/      /' "$FREESTANDING_ARRAY_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_ARRAY_LOG" \
+        "freestanding profile rejects Array literal" \
+        "freestanding-profile: rejects array literals"
+fi
+
 FREESTANDING_ENUM_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_reject.xr"
 FREESTANDING_ENUM_LOG="$WORK/freestanding_enum_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
