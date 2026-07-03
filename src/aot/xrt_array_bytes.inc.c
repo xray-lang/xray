@@ -236,6 +236,46 @@ static inline int64_t xrt_bytes_load_u64_le_checked_raw(xrt_array_t *a, int64_t 
     return (int64_t) xrt_bytes_load_u64_le_raw(a, off);
 }
 
+static inline int xrt_span_bytes_range_ok(xr_span_t span, int64_t off, int64_t count) {
+    return span.data && xr_array_core_bytes_range_ok(span.length, span.elem_type, off, count);
+}
+
+static inline int64_t xrt_span_bytes_load_u16_le_unchecked_raw(xr_span_t span, int64_t off) {
+    return xrt_ptr_load_u16_le_unchecked_raw((const uint8_t *) span.data + off);
+}
+
+static inline int64_t xrt_span_bytes_load_u16_le_checked_raw(xr_span_t span, int64_t off) {
+    if (span.elem_type != XR_ELEM_U8)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U16_RECEIVER_MSG);
+    if (!xrt_span_bytes_range_ok(span, off, 2))
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U16_OOB_MSG);
+    return xrt_span_bytes_load_u16_le_unchecked_raw(span, off);
+}
+
+static inline int64_t xrt_span_bytes_load_u32_le_unchecked_raw(xr_span_t span, int64_t off) {
+    return xrt_ptr_load_u32_le_unchecked_raw((const uint8_t *) span.data + off);
+}
+
+static inline int64_t xrt_span_bytes_load_u32_le_checked_raw(xr_span_t span, int64_t off) {
+    if (span.elem_type != XR_ELEM_U8)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG);
+    if (!xrt_span_bytes_range_ok(span, off, 4))
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U32_OOB_MSG);
+    return xrt_span_bytes_load_u32_le_unchecked_raw(span, off);
+}
+
+static inline int64_t xrt_span_bytes_load_u64_le_unchecked_raw(xr_span_t span, int64_t off) {
+    return xrt_ptr_load_u64_le_unchecked_raw((const uint8_t *) span.data + off);
+}
+
+static inline int64_t xrt_span_bytes_load_u64_le_checked_raw(xr_span_t span, int64_t off) {
+    if (span.elem_type != XR_ELEM_U8)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U64_RECEIVER_MSG);
+    if (!xrt_span_bytes_range_ok(span, off, 8))
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U64_OOB_MSG);
+    return xrt_span_bytes_load_u64_le_unchecked_raw(span, off);
+}
+
 static inline xrt_array_t *xrt_bytes_copy_within_raw(xrt_array_t *a, int64_t dst, int64_t src,
                                                      int64_t count) {
     if (xrt_bytes_range_ok(a, dst, count) && xrt_bytes_range_ok(a, src, count) && count > 0)

@@ -15,6 +15,21 @@ typedef struct CgArrayElemInfo {
 } CgArrayElemInfo;
 
 static bool cg_array_elem_info_is_u8(const CgArrayElemInfo *info);
+static bool cg_array_elem_info_from_type_ctx(XiCgenCtx *ctx, const XrType *type,
+                                             CgArrayElemInfo *out);
+
+static bool cg_value_type_is_span(const XiValue *value) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    return v && v->type && v->type->kind == XR_KIND_SPAN;
+}
+
+static bool cg_span_elem_info_from_value(XiCgenCtx *ctx, const XiValue *value,
+                                         CgArrayElemInfo *out) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || !v->type || v->type->kind != XR_KIND_SPAN)
+        return false;
+    return cg_array_elem_info_from_type_ctx(ctx, v->type, out);
+}
 
 static bool cg_array_get_const_int_literal(const XiValue *value, int64_t *out) {
     const XiValue *v = cg_unwrap_identity_value(value);
@@ -972,6 +987,11 @@ static bool emit_typed_array_data_cache_decl(XiCgenCtx *ctx, FILE *out, const Xi
         fprintf(out, "    %s *%s", info.ctype, cg_array_cache_restrict_str(ctx, plan->value));
         emit_typed_array_data_cache_ref(out, plan->value);
         fprintf(out, " = (%s*)", info.ctype);
+        if (cg_value_plan_is_span_aggregate(ctx, plan->storage_value)) {
+            emit_vref(out, cg_unwrap_identity_value(plan->storage_value));
+            fprintf(out, ".data;\n");
+            return true;
+        }
         if (aligned)
             fprintf(out, "XR_ASSUME_ALIGNED(");
         const XiFunc *f = plan->storage_value && plan->storage_value->block
@@ -991,6 +1011,12 @@ static bool emit_typed_array_data_cache_decl(XiCgenCtx *ctx, FILE *out, const Xi
     const XiFunc *f = v && v->block ? v->block->func : NULL;
     fprintf(out, "    %s *%s", info.ctype, cg_array_cache_restrict_str(ctx, v));
     emit_typed_array_data_cache_ref(out, v);
+    if (cg_value_plan_is_span_aggregate(ctx, v)) {
+        fprintf(out, " = (%s*)", info.ctype);
+        emit_vref(out, v);
+        fprintf(out, ".data;\n");
+        return true;
+    }
     /* Fresh local allocation: XRT_DATA_ALIGN contract (see xrt_coll.h). */
     fprintf(out, " = (%s*)XR_ASSUME_ALIGNED(", info.ctype);
     emit_typed_array_ptr_expr(ctx, out, f, v, NULL);
@@ -1569,6 +1595,128 @@ static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     return emit_typed_array_index_get_expr_as_rep(ctx, out, f, v, prefix, cg_rep(v));
 }
 
+static void emit_span_ref_expr(FILE *out, const XiValue *value) {
+    emit_vref(out, cg_unwrap_identity_value(value));
+}
+
+static bool cg_span_value_u8_info(XiCgenCtx *ctx, const XiValue *value, CgArrayElemInfo *out) {
+    CgArrayElemInfo info;
+    if (!cg_value_plan_is_span_aggregate(ctx, value) ||
+        !cg_span_elem_info_from_value(ctx, value, &info) || !cg_array_elem_info_is_u8(&info))
+        return false;
+    if (out)
+        *out = info;
+    return true;
+}
+
+static void emit_span_array_view_ptr_expr(FILE *out, const XiValue *value) {
+    fprintf(out, "xrt_array_stack_borrow_span_view(");
+    emit_span_ref_expr(out, value);
+    fprintf(out, ")");
+}
+
+static bool cg_bytes_u8_read_info(XiCgenCtx *ctx, const XiFunc *f, const XiValue *value,
+                                  CgArrayElemInfo *out) {
+    return cg_array_value_u8_unchecked_info(ctx, f, value, out, CG_ARRAY_STORAGE_READ) ||
+           cg_span_value_u8_info(ctx, value, out);
+}
+
+static void emit_bytes_u8_read_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                        const XiValue *value, const char *prefix) {
+    if (cg_span_value_u8_info(ctx, value, NULL)) {
+        emit_span_array_view_ptr_expr(out, value);
+        return;
+    }
+    emit_typed_array_ptr_expr(ctx, out, f, value, prefix);
+}
+
+static bool emit_span_length_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (!v || v->op != XI_LOAD_FIELD || v->nargs < 1 || !v->aux)
+        return false;
+    const char *field = (const char *) v->aux;
+    if (strcmp(field, "length") != 0 && strcmp(field, "size") != 0)
+        return false;
+    if (!cg_value_plan_is_span_aggregate(ctx, v->args[0]))
+        return false;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "(");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ").length");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+static bool emit_span_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
+    (void) f;
+    CgArrayElemInfo info;
+    if (!v || v->op != XI_INDEX_GET || v->nargs < 2 ||
+        !cg_value_plan_is_span_aggregate(ctx, v->args[0]) ||
+        !cg_span_elem_info_from_value(ctx, v->args[0], &info))
+        return false;
+
+    XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
+    bool unchecked = cg_array_index_access_bounds_proven(ctx, f, v);
+    bool borrowed_tagged = target_rep == XR_REP_TAGGED && info.rep == XR_REP_TAGGED &&
+                           cg_tagged_array_index_get_can_borrow(ctx, f, v);
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
+    fprintf(out, "({ xr_span_t _s = ");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, "; int64_t _idx = ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+    fprintf(out, "; ");
+    if (!unchecked)
+        fprintf(out, "XR_LIKELY(_idx >= 0 && _idx < _s.length) ? ");
+    if (info.rep == XR_REP_F64) {
+        fprintf(out, "(double)((%s*)_s.data)[_idx]", info.ctype);
+        if (!unchecked)
+            fprintf(out, " : (xrt_index_oob(_idx, _s.length), 0.0)");
+    } else if (info.rep == XR_REP_TAGGED) {
+        emit_typed_array_load_value(out, &info, borrowed_tagged);
+        fprintf(out, "((XrValue*)_s.data)[_idx]");
+        emit_typed_array_load_value_end(out, &info, borrowed_tagged);
+        if (!unchecked)
+            fprintf(out, " : (xrt_index_oob(_idx, _s.length), XR_NULL_VAL)");
+    } else {
+        fprintf(out, "(int64_t)((%s*)_s.data)[_idx]", info.ctype);
+        if (!unchecked)
+            fprintf(out, " : (xrt_index_oob(_idx, _s.length), 0)");
+    }
+    fprintf(out, "; })");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+static bool emit_span_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
+    (void) f;
+    CgArrayElemInfo info;
+    if (!v || v->op != XI_INDEX_SET || v->nargs < 3 ||
+        !cg_value_plan_is_span_aggregate(ctx, v->args[0]) ||
+        !cg_span_elem_info_from_value(ctx, v->args[0], &info))
+        return false;
+
+    bool unchecked = cg_array_index_access_bounds_proven(ctx, f, v);
+    fprintf(out, "({ xr_span_t _s = ");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, "; int64_t _idx = ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+    fprintf(out, "; if (XR_UNLIKELY(xrt_span_is_readonly(_s))) ");
+    fprintf(out,
+            "xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+    if (!unchecked)
+        fprintf(out, "if (XR_LIKELY(_idx >= 0 && _idx < _s.length)) { ");
+    fprintf(out, "((%s*)_s.data)[_idx] = ", info.ctype);
+    emit_typed_array_store_value(out, &info, v->args[2]);
+    fprintf(out, "; ");
+    if (info.rep == XR_REP_TAGGED)
+        fprintf(out,
+                "/* Span writes through owner storage; owner barrier metadata is unchanged. */ ");
+    if (!unchecked)
+        fprintf(out, "} else { xrt_index_oob(_idx, _s.length); } ");
+    fprintf(out, "XR_NULL_VAL; })");
+    return true;
+}
+
 static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                             const XiValue *v, const char *prefix) {
     CgArrayElemInfo info;
@@ -1810,7 +1958,7 @@ static bool emit_bytes_append_from_unchecked_expr(XiCgenCtx *ctx, FILE *out, con
         return false;
     if (!cg_array_value_u8_unchecked_info(ctx, f, call->args[0], &dst_info,
                                           CG_ARRAY_STORAGE_MUTABLE) ||
-        !cg_array_value_u8_unchecked_info(ctx, f, call->args[1], &src_info, CG_ARRAY_STORAGE_READ))
+        !cg_bytes_u8_read_info(ctx, f, call->args[1], &src_info))
         return false;
     if (!cg_bytes_unchecked_int_arg(call->args[2]) || !cg_bytes_unchecked_int_arg(call->args[3]))
         return false;
@@ -1821,7 +1969,7 @@ static bool emit_bytes_append_from_unchecked_expr(XiCgenCtx *ctx, FILE *out, con
     fprintf(out, "xrt_bytes_append_from_unchecked_raw(");
     emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
     fprintf(out, ", ");
-    emit_typed_array_ptr_expr(ctx, out, f, call->args[1], prefix);
+    emit_bytes_u8_read_ptr_expr(ctx, out, f, call->args[1], prefix);
     fprintf(out, ", ");
     emit_value_as_rep(out, call->args[2], XR_REP_I64);
     fprintf(out, ", ");
@@ -1863,7 +2011,7 @@ static bool emit_bytes_write_from_unchecked_expr(XiCgenCtx *ctx, FILE *out, cons
         return false;
     if (!cg_array_value_u8_unchecked_info(ctx, f, call->args[0], &dst_info,
                                           CG_ARRAY_STORAGE_MUTABLE) ||
-        !cg_array_value_u8_unchecked_info(ctx, f, call->args[2], &src_info, CG_ARRAY_STORAGE_READ))
+        !cg_bytes_u8_read_info(ctx, f, call->args[2], &src_info))
         return false;
     if (!cg_bytes_unchecked_int_arg(call->args[1]) || !cg_bytes_unchecked_int_arg(call->args[3]) ||
         !cg_bytes_unchecked_int_arg(call->args[4]))
@@ -1877,7 +2025,7 @@ static bool emit_bytes_write_from_unchecked_expr(XiCgenCtx *ctx, FILE *out, cons
     fprintf(out, ", ");
     emit_value_as_rep(out, call->args[1], XR_REP_I64);
     fprintf(out, ", ");
-    emit_typed_array_ptr_expr(ctx, out, f, call->args[2], prefix);
+    emit_bytes_u8_read_ptr_expr(ctx, out, f, call->args[2], prefix);
     fprintf(out, ", ");
     emit_value_as_rep(out, call->args[3], XR_REP_I64);
     fprintf(out, ", ");
@@ -1921,7 +2069,7 @@ static bool emit_bytes_wild_copy_from_nonoverlapping_unchecked_expr(XiCgenCtx *c
         return false;
     if (!cg_array_value_u8_unchecked_info(ctx, f, call->args[0], &dst_info,
                                           CG_ARRAY_STORAGE_MUTABLE) ||
-        !cg_array_value_u8_unchecked_info(ctx, f, call->args[2], &src_info, CG_ARRAY_STORAGE_READ))
+        !cg_bytes_u8_read_info(ctx, f, call->args[2], &src_info))
         return false;
 
     bool boxed = cg_rep(call) == XR_REP_TAGGED;
@@ -1936,7 +2084,7 @@ static bool emit_bytes_wild_copy_from_nonoverlapping_unchecked_expr(XiCgenCtx *c
         fprintf(out, ", ");
         emit_array_i64_arg(out, call->args[1]);
         fprintf(out, ", ");
-        emit_typed_array_ptr_expr(ctx, out, f, call->args[2], prefix);
+        emit_bytes_u8_read_ptr_expr(ctx, out, f, call->args[2], prefix);
         fprintf(out, ", ");
         emit_array_i64_arg(out, call->args[3]);
         fprintf(out, ")");
@@ -1948,7 +2096,7 @@ static bool emit_bytes_wild_copy_from_nonoverlapping_unchecked_expr(XiCgenCtx *c
     fprintf(out, ", ");
     emit_array_i64_arg(out, call->args[1]);
     fprintf(out, ", ");
-    emit_typed_array_ptr_expr(ctx, out, f, call->args[2], prefix);
+    emit_bytes_u8_read_ptr_expr(ctx, out, f, call->args[2], prefix);
     fprintf(out, ", ");
     emit_array_i64_arg(out, call->args[3]);
     fprintf(out, ", ");
@@ -2052,6 +2200,7 @@ static bool cg_array_call_is_unchecked_bytes_trusted_nothrow(XiCgenCtx *ctx, con
     if (strcmp(method, "commonPrefixUnchecked") == 0 && v->nargs == 4) {
         return (cg_array_value_storage_info(ctx, f, v->args[0], &dst_info, CG_ARRAY_STORAGE_READ) &&
                 cg_array_elem_info_is_u8(&dst_info)) ||
+               cg_span_value_u8_info(ctx, v->args[0], NULL) ||
                cg_array_value_type_is_u8_contiguous(ctx, v->args[0]);
     }
     if (strcmp(method, "appendFromUnchecked") == 0 && v->nargs == 4) {
@@ -2063,6 +2212,7 @@ static bool cg_array_call_is_unchecked_bytes_trusted_nothrow(XiCgenCtx *ctx, con
                ((cg_array_value_storage_info(ctx, f, v->args[1], &src_info,
                                              CG_ARRAY_STORAGE_READ) &&
                  cg_array_elem_info_is_u8(&src_info)) ||
+                cg_span_value_u8_info(ctx, v->args[1], NULL) ||
                 cg_array_value_type_is_u8_contiguous(ctx, v->args[1]));
     }
     if (strcmp(method, "repeatFromUnchecked") == 0 && v->nargs == 3) {
@@ -2080,6 +2230,7 @@ static bool cg_array_call_is_unchecked_bytes_trusted_nothrow(XiCgenCtx *ctx, con
                ((cg_array_value_storage_info(ctx, f, v->args[2], &src_info,
                                              CG_ARRAY_STORAGE_READ) &&
                  cg_array_elem_info_is_u8(&src_info)) ||
+                cg_span_value_u8_info(ctx, v->args[2], NULL) ||
                 cg_array_value_type_is_u8_contiguous(ctx, v->args[2]));
     }
     if (strcmp(method, "repeatAtUnchecked") == 0 && v->nargs == 4) {
@@ -2130,8 +2281,9 @@ static bool cg_array_bytes_load_le_unchecked_trusted_nothrow(XiCgenCtx *ctx, con
     }
 
     CgArrayElemInfo info;
-    return cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_READ) &&
-           cg_array_elem_info_is_u8(&info);
+    return (cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_READ) &&
+            cg_array_elem_info_is_u8(&info)) ||
+           cg_span_value_u8_info(ctx, v->args[0], NULL);
 }
 
 static bool cg_array_err_check_after_bytes_load_le_unchecked_trusted(XiCgenCtx *ctx,
@@ -2178,14 +2330,12 @@ static bool emit_bytes_common_prefix_unchecked_expr(XiCgenCtx *ctx, FILE *out, c
     CgArrayElemInfo info;
     if (!call || call->nargs != 4)
         return false;
-    if (!cg_array_value_storage_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_READ))
-        return false;
-    if (!cg_array_elem_info_is_u8(&info))
+    if (!cg_bytes_u8_read_info(ctx, f, call->args[0], &info))
         return false;
 
     const char *conv_suffix = emit_conversion_prefix(out, call->type, XR_REP_I64, cg_rep(call));
     fprintf(out, "xrt_bytes_common_prefix_unchecked_raw(");
-    emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
+    emit_bytes_u8_read_ptr_expr(ctx, out, f, call->args[0], prefix);
     fprintf(out, ", ");
     emit_value_as_rep(out, call->args[1], XR_REP_I64);
     fprintf(out, ", ");

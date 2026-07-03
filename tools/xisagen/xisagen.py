@@ -2764,6 +2764,7 @@ def generate_aot_rep_header(reps: list[AotRepDef]) -> str:
 # ============================================================
 
 VALID_AOT_ABI_CLASSES = {
+    'aggregate',
     'pointer',
     'scalar',
     'tagged',
@@ -2913,6 +2914,9 @@ def generate_aot_abi_header(entries: list[AotAbiDef]) -> str:
     lines.append('    if (!abi || !abi->typed_boundary || (type->is_nullable && !abi->allows_nullable))')
     lines.append('        return false;')
     lines.append('    storage = xaot_abi_storage_rep_for_type(type);')
+    lines.append('    const XaotRepInfo *rep_info = xaot_rep_info(abi->default_rep);')
+    lines.append('    if (rep_info && rep_info->dynamic_kind == XAOT_DYNAMIC_AGGREGATE)')
+    lines.append('        return true;')
     lines.append('    return storage == XR_REP_I64 || storage == XR_REP_F64 || storage == XR_REP_PTR ||')
     lines.append('           storage == XR_REP_RAWPTR;')
     lines.append('}')

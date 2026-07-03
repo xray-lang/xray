@@ -489,16 +489,111 @@ static void xicgen_select(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVa
     fprintf(out, ")");
 }
 
+static const XiValue *xicgen_span_shared_slot_source_in_func(const XiFunc *f, int slot,
+                                                             bool *ambiguous) {
+    const XiValue *source = NULL;
+    if (!f || slot < 0)
+        return NULL;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_SET_SHARED || (int) v->aux_int != slot || v->nargs < 1)
+                continue;
+            const XiValue *value = v->args[0];
+            if (source && cg_unwrap_identity_value(source) != cg_unwrap_identity_value(value)) {
+                if (ambiguous)
+                    *ambiguous = true;
+                return NULL;
+            }
+            source = value;
+        }
+    }
+    return source;
+}
+
+static const XiValue *xicgen_span_shared_slot_source(const XiCgenCtx *ctx, const XiFunc *f,
+                                                     int slot, bool *ambiguous) {
+    const XiValue *source = xicgen_span_shared_slot_source_in_func(f, slot, ambiguous);
+    if (source || (ambiguous && *ambiguous))
+        return source;
+    if (ctx && ctx->module && ctx->module->init && ctx->module->init != f)
+        return xicgen_span_shared_slot_source_in_func(ctx->module->init, slot, ambiguous);
+    return NULL;
+}
+
+static bool xicgen_value_belongs_to_func(const XiFunc *f, const XiValue *value) {
+    const XiValue *unwrapped = cg_unwrap_identity_value(value);
+    if (!f || !unwrapped)
+        return false;
+    if (unwrapped->block && unwrapped->block->func == f)
+        return true;
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (cg_unwrap_identity_value(f->params[i]) == unwrapped)
+            return true;
+    }
+    return false;
+}
+
 static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
-    (void) f;
     (void) prefix;
+    if (cg_value_type_is_span(v)) {
+        bool ambiguous = false;
+        const XiValue *source =
+            xicgen_span_shared_slot_source(ctx, f, (int) v->aux_int, &ambiguous);
+        if (source) {
+            if (cg_value_plan_is_span_aggregate(ctx, source)) {
+                if (xicgen_value_belongs_to_func(f, source)) {
+                    emit_vref(out, source);
+                    return;
+                }
+                fprintf(stderr,
+                        "[xi_cgen] ERROR: cannot read non-local Span aggregate shared slot %d "
+                        "as XrValue in %s\n",
+                        (int) v->aux_int, f && f->name ? f->name : "?");
+                ctx->error = true;
+                emit_codegen_abort_expr(out);
+            } else {
+                fprintf(out, "xrt_span_from_array_slice(");
+                if (xicgen_value_belongs_to_func(f, source)) {
+                    emit_value_as_rep_ctx(ctx, out, source, XR_REP_TAGGED);
+                } else {
+                    fprintf(out, "%s[%d]", ctx->shared_name, (int) v->aux_int);
+                }
+                fprintf(out, ", INT64_C(0), INT64_MAX)");
+            }
+            return;
+        }
+        fprintf(stderr, "[xi_cgen] ERROR: cannot read Span shared slot %d as XrValue in %s\n",
+                (int) v->aux_int, f && f->name ? f->name : "?");
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
     fprintf(out, "%s[%d]", ctx->shared_name, (int) v->aux_int);
 }
 
 static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     const XiValue *value = (v && v->nargs >= 1) ? v->args[0] : NULL;
+    if (cg_value_plan_is_span_aggregate(ctx, value)) {
+        bool ambiguous = false;
+        const XiValue *source =
+            xicgen_span_shared_slot_source(ctx, f, (int) v->aux_int, &ambiguous);
+        if (source && cg_unwrap_identity_value(source) == cg_unwrap_identity_value(value)) {
+            fprintf(out, "XR_NULL_VAL");
+            return;
+        }
+        fprintf(stderr,
+                "[xi_cgen] ERROR: cannot store Span aggregate v%u in shared slot %d in %s\n",
+                value ? value->id : 0, (int) v->aux_int, f && f->name ? f->name : "?");
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
     fprintf(out, "(%s[%d] = ", ctx->shared_name, (int) v->aux_int);
     if (cg_value_plan_is_struct_aggregate(ctx, value)) {
         if (!emit_struct_aggregate_box_expr(ctx, out, f, value, prefix)) {
@@ -1181,12 +1276,17 @@ static bool xicgen_direct_call_param_noescape(XiCgenCtx *ctx, const XiFunc *curr
 static bool xicgen_direct_call_arg_can_stack_slice_view(XiCgenCtx *ctx, const XiFunc *current,
                                                         const XiValue *call, const XiFunc *target,
                                                         uint16_t arg_index, const XiValue *arg) {
-    (void) ctx;
     (void) current;
     (void) call;
     const XiValue *slice = xicgen_stack_slice_source_value(arg);
     if (!slice || !target || arg_index >= target->nparams || !target->params)
         return false;
+    const XaotFuncPlan *target_plan = cg_func_plan(ctx, target);
+    if (target_plan && arg_index < target_plan->abi.nparams && target_plan->abi.params) {
+        XaotValueRep slot_rep = xaot_abi_slot_value_rep(&target_plan->abi.params[arg_index]);
+        if (slot_rep.kind == XAOT_VALUE_AGGREGATE)
+            return false;
+    }
     if (!xicgen_direct_call_param_noescape(ctx, current, target, arg_index, 0))
         return false;
     if (!xicgen_type_is_span_like(slice->type))
@@ -2176,16 +2276,30 @@ static void xicgen_checktype(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
 
 static void xicgen_slice(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 3, "xicgen_slice: need source, start, and end");
+    if (cg_value_plan_is_span_aggregate(ctx, v)) {
+        if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
+            fprintf(out, "xrt_span_from_span_slice(");
+            emit_vref(out, v->args[0]);
+        } else {
+            fprintf(out, "xrt_span_from_array_slice(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        }
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+        fprintf(out, ")");
+        return;
+    }
     fprintf(out, "xrt_slice(");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
     fprintf(out, ")");
 }
 
@@ -2579,12 +2693,18 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         /* Expression emitted by the array/bytes helper. */
     } else if (strcmp(bn, "string_bytes_span") == 0) {
         XR_DCHECK(v->nargs >= 1, "builtin string_bytes_span: need string arg");
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xrt_str_to_bytes(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
+        if (cg_value_plan_is_span_aggregate(ctx, v)) {
+            fprintf(out, "xrt_span_from_string_bytes(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ")");
+        } else {
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
+            fprintf(out, "xrt_str_to_bytes(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+        }
     } else if (strcmp(bn, "StringBuilder") == 0) {
         fprintf(out, "xrt_strbuf_new()");
     } else if (strcmp(bn, "map_new") == 0) {
@@ -2604,6 +2724,21 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
          * only for shared-slot stores; standalone AOT has one RC heap, so it
          * is still a single recursive clone rather than a VM heap promotion. */
         XR_DCHECK(v->nargs >= 1, "builtin copy: need arg");
+        if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
+            if (cg_value_plan_is_span_aggregate(ctx, v)) {
+                fprintf(out, "xrt_span_to_owned_span(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ")");
+                return;
+            }
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
+            fprintf(out, "xrt_span_to_owned_array(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+            return;
+        }
         bool is_json = v->args[0] && XR_TYPE_HAS_OBJECT_SHAPE(v->args[0]->type);
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
@@ -4865,6 +5000,9 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_class_native_array_length_expr(ctx, out, f, v))
         return;
     if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
+        emit_span_length_expr(ctx, out, v))
+        return;
+    if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
         emit_typed_array_length_expr(ctx, out, f, prefix, v))
         return;
     if (field && cg_emit_aot_stdlib_generated_constant_field(ctx, out, f, v))
@@ -4933,6 +5071,7 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
                              const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_index_get: need obj and key");
     if (emit_struct_fixed_array_index_get_expr(ctx, out, f, v, prefix) ||
+        emit_span_index_get_expr(ctx, out, f, v) ||
         emit_typed_array_index_get_expr(ctx, out, f, v, prefix) ||
         emit_class_native_array_index_get_expr(ctx, out, f, v))
         return;
@@ -4950,6 +5089,8 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
                              const char *prefix) {
     XR_DCHECK(v->nargs >= 3, "xicgen_index_set: need obj, key, and value");
     if (emit_struct_fixed_array_index_set_expr(ctx, out, f, v, prefix))
+        return;
+    if (emit_span_index_set_expr(ctx, out, f, v))
         return;
     if (emit_typed_array_index_set_expr(ctx, out, f, v, prefix))
         return;
@@ -5122,13 +5263,35 @@ static void xicgen_bytes_box_array_result(FILE *out, bool boxed) {
         fprintf(out, ", XR_TAG_ARRAY)");
 }
 
+static bool xicgen_emit_span_bytes_load_le(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                           const char *checked_helper,
+                                           const char *unchecked_helper) {
+    CgArrayElemInfo info;
+    if (!v || v->nargs != 2 || !cg_span_value_u8_info(ctx, v->args[0], &info))
+        return false;
+    (void) info;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "%s(", (v->aux_int & 1) ? unchecked_helper : checked_helper);
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
 static void xicgen_bytes_load_u16_le(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                      const char *prefix) {
     CgArrayElemInfo info;
+    if (xicgen_emit_span_bytes_load_le(ctx, out, v, "xrt_span_bytes_load_u16_le_checked_raw",
+                                       "xrt_span_bytes_load_u16_le_unchecked_raw"))
+        return;
     if (v && v->nargs == 2 &&
         cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_READ) &&
         cg_array_elem_info_is_u8(&info)) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "%s(",
                 (v->aux_int & 1) ? "xrt_bytes_load_u16_le_unchecked_raw"
                                  : "xrt_bytes_load_u16_le_checked_raw");
@@ -5151,10 +5314,14 @@ static void xicgen_bytes_load_u16_le(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
 static void xicgen_bytes_load_u32_le(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                      const char *prefix) {
     CgArrayElemInfo info;
+    if (xicgen_emit_span_bytes_load_le(ctx, out, v, "xrt_span_bytes_load_u32_le_checked_raw",
+                                       "xrt_span_bytes_load_u32_le_unchecked_raw"))
+        return;
     if (v && v->nargs == 2 &&
         cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_READ) &&
         cg_array_elem_info_is_u8(&info)) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "%s(",
                 (v->aux_int & 1) ? "xrt_bytes_load_u32_le_unchecked_raw"
                                  : "xrt_bytes_load_u32_le_checked_raw");
@@ -5180,10 +5347,14 @@ static void xicgen_bytes_load_u32_le(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
 static void xicgen_bytes_load_u64_le(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                      const char *prefix) {
     CgArrayElemInfo info;
+    if (xicgen_emit_span_bytes_load_le(ctx, out, v, "xrt_span_bytes_load_u64_le_checked_raw",
+                                       "xrt_span_bytes_load_u64_le_unchecked_raw"))
+        return;
     if (v && v->nargs == 2 &&
         cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_READ) &&
         cg_array_elem_info_is_u8(&info)) {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "%s(",
                 (v->aux_int & 1) ? "xrt_bytes_load_u64_le_unchecked_raw"
                                  : "xrt_bytes_load_u64_le_checked_raw");
@@ -5332,9 +5503,15 @@ static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     }
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_RAWPTR, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "(void *)(");
-    emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
-    fprintf(out, "->data)");
+    if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
+        fprintf(out, "(void *)((");
+        emit_span_ref_expr(out, v->args[0]);
+        fprintf(out, ").data)");
+    } else {
+        fprintf(out, "(void *)(");
+        emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
+        fprintf(out, "->data)");
+    }
     emit_conversion_suffix(out, conv_suffix);
 }
 

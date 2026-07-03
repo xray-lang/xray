@@ -52,8 +52,8 @@
 (define-aot-abi span
   :type-kind XR_KIND_SPAN
   :nullable no
-  :abi-class pointer
-  :default-rep ptr
+  :abi-class aggregate
+  :default-rep span
   :native-width no
   :typed-boundary yes)
 

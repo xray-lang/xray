@@ -550,6 +550,107 @@ static inline int64_t xrt_array_len(XrValue arr) {
     return ((xrt_array_t *) arr.ptr)->length;
 }
 
+static inline void xrt_array_normalize_slice(int64_t len, int64_t *start, int64_t *end);
+
+enum {
+    XRT_SPAN_FLAG_READONLY = 1u << 0,
+};
+
+typedef struct {
+    void *data;
+    int64_t length;
+    void *guard;
+    uint8_t elem_type;
+    uint8_t elem_size;
+    uint8_t elem_tid;
+    uint8_t contains_refs;
+    uint32_t flags;
+} xr_span_t;
+
+static inline xr_span_t xrt_span_empty(void) {
+    return (xr_span_t) {NULL, 0, NULL, XR_ELEM_ANY, (uint8_t) sizeof(XrValue), 0, 0, 0};
+}
+
+static inline xr_span_t xrt_span_from_array_slice(XrValue arr, int64_t start, int64_t end) {
+    if (!XR_IS_ARRAY(arr) || !arr.ptr)
+        return xrt_span_empty();
+    xrt_array_t *src = (xrt_array_t *) arr.ptr;
+    xrt_array_normalize_slice(src->length, &start, &end);
+    int64_t count = end - start;
+    if (count < 0)
+        count = 0;
+    xr_span_t out = {0};
+    out.data = (count > 0 && src->data)
+                   ? (void *) ((uint8_t *) src->data + (size_t) start * (size_t) src->elem_size)
+                   : src->data;
+    out.length = count;
+    out.guard = arr.ptr;
+    out.elem_type = src->elem_type;
+    out.elem_size = src->elem_size ? src->elem_size : (uint8_t) sizeof(XrValue);
+    out.elem_tid = src->elem_tid;
+    out.contains_refs = src->contains_refs;
+    out.flags = 0;
+    return out;
+}
+
+static inline xr_span_t xrt_span_from_span_slice(xr_span_t src, int64_t start, int64_t end) {
+    xrt_array_normalize_slice(src.length, &start, &end);
+    int64_t count = end - start;
+    if (count < 0)
+        count = 0;
+    xr_span_t out = src;
+    out.data = (count > 0 && src.data)
+                   ? (void *) ((uint8_t *) src.data + (size_t) start * (size_t) src.elem_size)
+                   : src.data;
+    out.length = count;
+    return out;
+}
+
+static inline xr_span_t xrt_span_from_string_bytes(XrValue str) {
+    if (!XR_IS_STR(str))
+        return xrt_span_empty();
+    xr_span_t out = {0};
+    out.data = (void *) xr_str_data(str);
+    out.length = xr_str_len(str);
+    out.guard = str.ptr;
+    out.elem_type = XR_ELEM_U8;
+    out.elem_size = 1;
+    out.elem_tid = 0;
+    out.contains_refs = 0;
+    out.flags = XRT_SPAN_FLAG_READONLY;
+    return out;
+}
+
+static inline bool xrt_span_is_readonly(xr_span_t span) {
+    return (span.flags & XRT_SPAN_FLAG_READONLY) != 0;
+}
+
+static inline XrValue xrt_span_to_owned_array(xr_span_t span) {
+    int64_t len = span.length < 0 ? 0 : span.length;
+    XrValue outv = xrt_array_new_typed(len, span.elem_type);
+    xrt_array_t *out = (xrt_array_t *) outv.ptr;
+    out->elem_tid = span.elem_tid;
+    out->contains_refs = span.contains_refs;
+    if (len <= 0 || !span.data || !out->data)
+        return outv;
+    size_t bytes = (size_t) len * (size_t) span.elem_size;
+    memcpy(out->data, span.data, bytes);
+    if (span.elem_type == XR_ELEM_ANY) {
+        XrValue *items = (XrValue *) out->data;
+        for (int64_t i = 0; i < len; i++)
+            xrt_retain(items[i]);
+    }
+    return outv;
+}
+
+static inline xr_span_t xrt_span_to_owned_span(xr_span_t span) {
+    XrValue owner = xrt_span_to_owned_array(span);
+    if (!XR_IS_ARRAY(owner) || !owner.ptr)
+        return xrt_span_empty();
+    xrt_array_t *arr = (xrt_array_t *) owner.ptr;
+    return xrt_span_from_array_slice(owner, 0, arr->length);
+}
+
 static inline void xrt_array_normalize_slice(int64_t len, int64_t *start, int64_t *end) {
     if (*start < 0)
         *start += len;
@@ -686,6 +787,26 @@ static inline void xrt_array_stack_borrow_slice_view_init(xrt_array_t *slice, Xr
     slice->contains_refs = src->contains_refs;
     slice->adt_enum_name = src->adt_enum_name;
     slice->adt_member_name = src->adt_member_name;
+}
+
+static inline void xrt_array_stack_borrow_span_view_init(xrt_array_t *view, xr_span_t span) {
+    if (XR_UNLIKELY(!view)) {
+        fprintf(stderr, "xrt_array_stack_borrow_span_view_init: NULL view\n");
+        abort();
+    }
+    uint8_t elem_size = span.elem_size ? span.elem_size : (uint8_t) sizeof(XrValue);
+    int64_t len = span.length < 0 ? 0 : span.length;
+    xrt_array_init_header(view, len, span.elem_type, elem_size);
+    view->data = span.data;
+    view->length = len;
+    view->capacity = len;
+    view->data_storage = XR_ARRAY_DATA_BORROWED;
+    view->source = span.guard;
+    view->storage = NULL;
+    view->elem_type = span.elem_type;
+    view->elem_size = elem_size;
+    view->elem_tid = span.elem_tid;
+    view->contains_refs = span.contains_refs;
 }
 
 static inline void xrt_array_stack_slice_view_release(XrValue view) {
@@ -825,6 +946,16 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
         xrt_array_t *_slice = (xrt_array_t *) __builtin_alloca(sizeof(xrt_array_t));               \
         xrt_array_stack_borrow_slice_view_init(_slice, _srcv, _start, _end);                       \
         xr_mkptr(_slice, XR_TAG_ARRAY);                                                            \
+    })
+#endif
+
+#ifndef xrt_array_stack_borrow_span_view
+#define xrt_array_stack_borrow_span_view(span_expr)                                                \
+    ({                                                                                             \
+        xr_span_t _span = (span_expr);                                                             \
+        xrt_array_t *_view = (xrt_array_t *) __builtin_alloca(sizeof(xrt_array_t));                \
+        xrt_array_stack_borrow_span_view_init(_view, _span);                                       \
+        _view;                                                                                     \
     })
 #endif
 
