@@ -1,11 +1,29 @@
 // _probe capability matrix: pins VM/AOT parity for every export shape a
 // pure-Xray stdlib module can use. Kept permanently as the compiler gate for
-// pure-Xray stdlib migration (module-level functions via named import and
-// namespace call, variadic functions, plain class + functions using it, and a
-// generic class with a closure-taking method).
-import { probeAdd, probeConcat, probeSum, ProbeBox, probeMakeBox, probeReadBox, ProbeCell } from _probe
+// pure-Xray stdlib migration (module-level values/functions via named import
+// and namespace call, variadic functions, closure/defer shapes, plain class +
+// functions using it, static methods, and generic class methods with closure
+// bodies).
+import {
+    probeSeed,
+    probeAdd,
+    probeConcat,
+    probeSum,
+    probeDeferValue,
+    probeMakeAdder,
+    probeApply,
+    ProbeBox,
+    probeMakeBox,
+    probeReadBox,
+    ProbeCell,
+    ProbeBag,
+    probeMakeBag
+} from _probe
 import _probe
 
+// module-level value, named import + namespace call
+print(probeSeed)
+print(_probe.probeSeed)
 // module-level function, named import
 print(probeAdd(3, 4))
 print(probeConcat("a", "b"))
@@ -14,11 +32,24 @@ print(probeSum())
 print(probeSum(1, 2, 3))
 // variadic module-level function, namespace call
 print(_probe.probeSum(10, 20, 30))
+// closure + defer inside an exported stdlib module function
+print(probeDeferValue(5))
+let addTen = probeMakeAdder(10)
+print(addTen(5))
+print(probeApply(7, probeMakeAdder(20)))
+print(probeApply(6, (v) -> v * 3))
 // plain class + functions constructing/consuming it
 let box = probeMakeBox("n", 5)
 print(probeReadBox(box))
 // namespace call returning a class, then a method
 print(_probe.probeMakeBox("m", 9).describe())
+// static method on a class exported from a pure-Xray stdlib module
+print(ProbeBox.tagged("s", 3).describe())
 // generic class with a closure-taking method
 let cell = ProbeCell<int>(21)
 print(cell.map((v) -> v * 2))
+// class containing arrays of another exported module class
+let bag = probeMakeBag()
+print(bag.labels())
+let nsBag: ProbeBag = _probe.probeMakeBag()
+print(nsBag.labels())
