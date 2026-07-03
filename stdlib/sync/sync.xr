@@ -16,6 +16,13 @@
 //     scheduler (it never yields), so these constructors stay synchronous and
 //     are legal to call from ordinary (non-coroutine) AOT contexts.
 
+// CachePadded<T> — cache-line aligned wrapper for counters/flags that should
+// not share a line with adjacent values.
+@align(64)
+struct CachePadded<T> {
+    value: T
+}
+
 // Mutex<T> — data guarded by a coroutine-aware lock; closure-scoped access
 // guarantees paired lock/unlock even on early return or panic.
 class Mutex<T> {
@@ -195,4 +202,4 @@ fn fence(order: Ordering) {
     mem.fence(order as int)
 }
 
-export { Mutex, RwLock, Once, Barrier, Condvar, fence }
+export { CachePadded, Mutex, RwLock, Once, Barrier, Condvar, fence }

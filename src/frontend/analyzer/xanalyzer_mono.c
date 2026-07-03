@@ -1156,6 +1156,38 @@ static XaGenericDecl *registry_find(XaGenericRegistry *r, const char *name) {
     return NULL;
 }
 
+// External modules contribute only generic value-struct templates. The clone is
+// injected into the module that uses the struct literal, so AOT gets a concrete
+// local layout without changing generic class/function import behavior.
+static void collect_external_generic_struct_decls(AstNode *root, XaGenericRegistry *registry) {
+    if (!root || root->type != AST_PROGRAM)
+        return;
+
+    ProgramNode *prog = &root->as.program;
+    for (int i = 0; i < prog->count; i++) {
+        AstNode *stmt = prog->statements[i];
+        if (!stmt)
+            continue;
+        if (stmt->type == AST_STRUCT_DECL && stmt->as.struct_decl.type_param_count > 0) {
+            if (!registry_find(registry, stmt->as.struct_decl.name)) {
+                registry_add(registry, stmt->as.struct_decl.name, stmt,
+                             stmt->as.struct_decl.type_params,
+                             stmt->as.struct_decl.type_param_count);
+            }
+            continue;
+        }
+        if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration) {
+            AstNode *decl = stmt->as.export_stmt.declaration;
+            if (decl->type == AST_STRUCT_DECL && decl->as.struct_decl.type_param_count > 0 &&
+                !registry_find(registry, decl->as.struct_decl.name)) {
+                registry_add(registry, decl->as.struct_decl.name, decl,
+                             decl->as.struct_decl.type_params,
+                             decl->as.struct_decl.type_param_count);
+            }
+        }
+    }
+}
+
 // Phase 1: Collect generic function/class declarations from top-level program
 static void collect_generic_decls(AstNode *root, XaGenericRegistry *registry) {
     if (!root)
@@ -1819,7 +1851,8 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
 
 /* ========== Public API ========== */
 
-void xa_mono_pass(AstNode *root, XrVMRuntime *isolate) {
+static void xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int external_root_count,
+                                  XrVMRuntime *isolate) {
     if (!root || root->type != AST_PROGRAM)
         return;
 
@@ -1831,6 +1864,10 @@ void xa_mono_pass(AstNode *root, XrVMRuntime *isolate) {
 
     // Phase 1: Collect generic declarations
     collect_generic_decls(root, &registry);
+    for (int i = 0; external_roots && i < external_root_count; i++) {
+        if (external_roots[i] && external_roots[i] != root)
+            collect_external_generic_struct_decls(external_roots[i], &registry);
+    }
     if (registry.count == 0)
         goto cleanup;
 
@@ -1856,4 +1893,13 @@ void xa_mono_pass(AstNode *root, XrVMRuntime *isolate) {
 cleanup:
     xa_mono_collector_free(&collector);
     xr_free(registry.decls);
+}
+
+void xa_mono_pass(AstNode *root, XrVMRuntime *isolate) {
+    xa_mono_pass_internal(root, NULL, 0, isolate);
+}
+
+void xa_mono_pass_with_external_structs(AstNode *root, AstNode **external_roots,
+                                        int external_root_count, XrVMRuntime *isolate) {
+    xa_mono_pass_internal(root, external_roots, external_root_count, isolate);
 }

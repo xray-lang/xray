@@ -850,9 +850,11 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     /* Build parallel arrays for paths/names (graph topo order) */
     char **paths = (char **) xr_calloc(nmodules, sizeof(char *));
     char **mod_names = (char **) xr_calloc(nmodules, sizeof(char *));
-    if (!paths || !mod_names) {
+    AstNode **mono_roots = (AstNode **) xr_calloc(nmodules, sizeof(AstNode *));
+    if (!paths || !mod_names || !mono_roots) {
         xr_free(paths);
         xr_free(mod_names);
+        xr_free(mono_roots);
         xr_module_graph_free(graph);
         xray_vm_delete(X);
         return 1;
@@ -867,6 +869,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
         XrModuleSpec *spec = &graph->specs[idx];
         paths[ti] = xr_strdup(spec->source_path);
         mod_names[ti] = derive_module_name(spec->source_path);
+        mono_roots[ti] = (AstNode *) spec->ast;
         if (strcmp(spec->source_path, real_input) == 0)
             entry_index = ti;
     }
@@ -914,7 +917,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
         int idx = graph->topo_order[ti];
         XrModuleSpec *spec = &graph->specs[idx];
         if (spec->ast)
-            xa_mono_pass((AstNode *) spec->ast, X);
+            xa_mono_pass_with_external_structs((AstNode *) spec->ast, mono_roots, nmodules, X);
     }
 
     for (int ti = 0; ti < nmodules; ti++) {
@@ -1037,6 +1040,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
 
     /* Graph ASTs must not be freed before compilation is done.
      * Now that pipeline is complete, free the graph (frees ASTs too). */
+    xr_free(mono_roots);
+    mono_roots = NULL;
     xr_module_graph_free(graph);
     graph = NULL;
     xray_vm_delete(X);
@@ -1219,6 +1224,7 @@ fail_free_graph:
         xr_module_graph_free(graph);
     if (X)
         xray_vm_delete(X);
+    xr_free(mono_roots);
     for (int i = 0; i < nmodules; i++) {
         xr_free(paths[i]);
         xr_free(mod_names[i]);

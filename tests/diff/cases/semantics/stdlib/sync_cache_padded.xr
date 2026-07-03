@@ -1,0 +1,8 @@
+import { CachePadded } from sync
+
+let a = CachePadded<int>{ value: 41 }
+a.value = a.value + 1
+print(a.value)
+
+let b = CachePadded<string>{ value: "hot" }
+print(b.value)
