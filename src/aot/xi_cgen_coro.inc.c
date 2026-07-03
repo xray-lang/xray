@@ -1191,7 +1191,8 @@ static bool emit_thread_spawn_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc
     emit_vref(out, v);
     fprintf(out, " = xrt_thread_spawn_aot(&");
     emit_fname_suffix(ctx, out, thread_prefix, target, "_aot_desc");
-    fprintf(out, ", _thread_frame_%u, 0);\n", v->id);
+    fprintf(out, ", _thread_frame_%u, %llu);\n", v->id,
+            (unsigned long long) xi_thread_spawn_stack_size(v));
     if (in_coro) {
         fprintf(out, "    if (XR_UNLIKELY(XR_IS_NULL(");
         emit_vref(out, v);

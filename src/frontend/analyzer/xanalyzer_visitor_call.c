@@ -168,6 +168,66 @@ static int xa_thread_spawn_body_arg_index(const CallExprNode *call) {
     return -1;
 }
 
+static bool xa_thread_spawn_options_is_int_literal(AstNode *node, int64_t *out) {
+    if (!node || node->type != AST_LITERAL_INT)
+        return false;
+    if (out)
+        *out = node->as.literal.raw_value.int_val;
+    return true;
+}
+
+static void xa_check_thread_spawn_options(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !node)
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    if (node->type != AST_STRUCT_LITERAL) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "sys.Thread.spawn options must be ThreadOptions{ stackSize: <int> }", &loc);
+        return;
+    }
+
+    StructLiteralNode *sl = &node->as.struct_literal;
+    if (!sl->struct_name || strcmp(sl->struct_name, "ThreadOptions") != 0) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "sys.Thread.spawn options must use ThreadOptions{ ... }", &loc);
+        return;
+    }
+
+    bool saw_stack_size = false;
+    for (int i = 0; i < sl->field_count; i++) {
+        AstNode *value = sl->field_values ? sl->field_values[i] : NULL;
+        const char *name = sl->field_names ? sl->field_names[i] : NULL;
+        if (value)
+            xa_visit_infer_expr(ctx, value);
+        if (!name || strcmp(name, "stackSize") != 0) {
+            XrLocation floc = {.file = ctx->file_path,
+                               .line = value ? value->line : node->line,
+                               .column = value ? value->column : node->column};
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                "sys.Thread.spawn ThreadOptions currently supports only stackSize", &floc);
+            continue;
+        }
+        saw_stack_size = true;
+        int64_t stack_size = 0;
+        if (!xa_thread_spawn_options_is_int_literal(value, &stack_size) || stack_size < 0) {
+            XrLocation floc = {.file = ctx->file_path,
+                               .line = value ? value->line : node->line,
+                               .column = value ? value->column : node->column};
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                "sys.Thread.spawn ThreadOptions.stackSize must be a non-negative integer literal",
+                &floc);
+        }
+    }
+    if (!saw_stack_size) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "sys.Thread.spawn ThreadOptions requires stackSize in this implementation", &loc);
+    }
+}
+
 static void xa_check_spawn_call_boundary_args(XaInferContext *ctx, AstNode *boundary_node,
                                               CallExprNode *call) {
     if (!ctx || !call)
@@ -262,7 +322,7 @@ static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node
     }
 
     if (body_index == 1 && call->arguments[0])
-        xa_visit_infer_expr(ctx, call->arguments[0]);
+        xa_check_thread_spawn_options(ctx, call->arguments[0]);
 
     AstNode *body = call->arguments[body_index];
     XrType *body_type = xa_visit_infer_expr(ctx, body);

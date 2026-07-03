@@ -345,6 +345,14 @@ XR_FUNC void xi_emit_thread_spawn(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
     emit_inst(ctx, CREATE_ABC(OP_THREAD_SPAWN, dst, dst, nargs));
 
+    int64_t stack_size = xi_thread_spawn_stack_size(v);
+    if (stack_size > 0) {
+        int stack_k = add_const_int(ctx, stack_size);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABx(OP_NOP, 7, (uint32_t) stack_k));
+    }
+
     bool has_transfer_modes = false;
     for (uint16_t i = 0; i < nargs; i++) {
         if (xi_go_arg_transfer_mode(v, i) != XR_TRANSFER_SHARE) {

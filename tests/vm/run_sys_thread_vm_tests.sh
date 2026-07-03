@@ -50,10 +50,12 @@ fi
 JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_spawn_join.xr"
 DETACH_SRC="$PROJECT_DIR/tests/vm/sys_thread_detach.xr"
 ARRAY_SRC="$PROJECT_DIR/tests/vm/sys_thread_join_array.xr"
+OPTIONS_SRC="$PROJECT_DIR/tests/vm/sys_thread_spawn_options.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
 expect_output "detach" "$DETACH_SRC" "detached"
 expect_output "join_array" "$ARRAY_SRC" "42"
+expect_output "spawn_options" "$OPTIONS_SRC" "42"
 
 "$XRAY" run --dump-bytecode "$JOIN_SRC" >"$WORK/join.dump" 2>"$WORK/join.dump.err"
 if grep -Eq '^[0-9]+.*[[:space:]]THREAD_SPAWN[[:space:]]' "$WORK/join.dump"; then

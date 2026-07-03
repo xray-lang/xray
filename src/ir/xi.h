@@ -603,10 +603,13 @@ typedef enum {
 #define XI_AWAIT_AUX_INTO_RESULT                                                                   \
     (1 << 6) /* await all writes results into the provided result array and returns unit */
 
-/* XI_GO aux_int bits. Low 8 bits carry link mode. */
+/* XI_GO / XI_THREAD_SPAWN aux_int bits. Low 8 bits carry link mode for GO.
+ * THREAD_SPAWN reuses the flag bits and stores stackSize in high bits. */
 #define XI_GO_AUX_LINK_MASK 0xff
 #define XI_GO_AUX_ONE_SHOT_AWAIT (1 << 8)
 #define XI_GO_AUX_DEFER_BATCH (1 << 9) /* defer child submission until aggregate await batch */
+#define XI_THREAD_SPAWN_AUX_STACK_SIZE_SHIFT 16
+#define XI_THREAD_SPAWN_AUX_STACK_SIZE_MASK ((int64_t) 0x0000ffffffffffffULL)
 
 /* XI_YIELD aux_int values. */
 #define XI_YIELD_AUX_IMMEDIATE 0
@@ -693,6 +696,14 @@ typedef struct XiValue {
 
 static inline bool xi_load_field_is_adt(const XiValue *v) {
     return v && v->op == XI_LOAD_FIELD && v->aux_kind == XI_AUX_KIND_ADT_FIELD;
+}
+
+static inline int64_t xi_thread_spawn_stack_size(const XiValue *v) {
+    if (!v || v->op != XI_THREAD_SPAWN)
+        return 0;
+    int64_t stack_size =
+        (v->aux_int >> XI_THREAD_SPAWN_AUX_STACK_SIZE_SHIFT) & XI_THREAD_SPAWN_AUX_STACK_SIZE_MASK;
+    return stack_size > 0 ? stack_size : 0;
 }
 
 static inline uint8_t xi_go_arg_transfer_mode(const XiValue *go, uint16_t arg_index) {

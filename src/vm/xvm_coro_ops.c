@@ -831,6 +831,7 @@ XR_FUNC XrDispatchAction vm_thread_spawn(XrVMRuntime *isolate, XrVMContext *vm_c
     }
 
     const char *thread_name = NULL;
+    size_t stack_size = 0;
     uint8_t arg_modes[128];
     for (int i = 0; i < c; i++)
         arg_modes[i] = XR_TRANSFER_SHARE;
@@ -844,6 +845,11 @@ XR_FUNC XrDispatchAction vm_thread_spawn(XrVMRuntime *isolate, XrVMContext *vm_c
             XrValue name_val = PROTO_CONSTANT(frame->closure->proto, name_idx);
             if (XR_IS_STRING(name_val))
                 thread_name = xr_value_to_string(isolate, name_val)->data;
+        } else if (ann == 7) {
+            int stack_idx = GETARG_Bx(next_inst);
+            XrValue stack_val = PROTO_CONSTANT(frame->closure->proto, stack_idx);
+            if (XR_IS_INT(stack_val) && XR_TO_INT(stack_val) > 0)
+                stack_size = (size_t) XR_TO_INT(stack_val);
         } else if (ann == 5) {
             uint32_t packed = GETARG_Bx(next_inst);
             for (uint32_t slot = 0; slot < XR_TRANSFER_MODES_PER_U32 && mode_base + (int) slot < c;
@@ -866,7 +872,7 @@ XR_FUNC XrDispatchAction vm_thread_spawn(XrVMRuntime *isolate, XrVMContext *vm_c
                  "sys.Thread.spawn: failed to create thread coroutine");
     }
 
-    XrThread *thread = xr_thread_obj_spawn_vm(isolate, coro, thread_name, 0);
+    XrThread *thread = xr_thread_obj_spawn_vm(isolate, coro, thread_name, stack_size);
     if (!thread) {
         frame->pc = pc;
         return XR_DISP_RAISE;
