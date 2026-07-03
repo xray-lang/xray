@@ -1,0 +1,8 @@
+import sys
+import sync
+
+let t = sys.Thread.spawn(fn() -> int {
+    let rw = sync.RwLock<int>(7)
+    return rw.read((v) -> v)
+})
+print(t.join())

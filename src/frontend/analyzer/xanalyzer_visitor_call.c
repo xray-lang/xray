@@ -315,8 +315,15 @@ static void xa_check_spawn_call_boundary_args(XaInferContext *ctx, AstNode *boun
 typedef struct XaThreadSpawnSyncScan {
     XaInferContext *ctx;
     XaSymbol *call_stack[32];
+    struct {
+        const char *name;
+        const char *class_name;
+        int block_depth;
+    } local_sync_vars[64];
     char feature_buf[128];
+    int local_sync_var_count;
     int call_depth;
+    int block_depth;
     int nested_function_depth;
     bool report;
     bool found;
@@ -324,6 +331,7 @@ typedef struct XaThreadSpawnSyncScan {
 } XaThreadSpawnSyncScan;
 
 static AstNode *xa_thread_spawn_inline_body(AstNode *body);
+static XaSymbol *xa_lookup_visible_class_symbol(XaInferContext *ctx, const char *class_name);
 
 static XaScope *xa_find_function_scope_for_symbol(XaScope *scope, XaSymbol *sym) {
     if (!scope || !sym)
@@ -361,6 +369,160 @@ static bool xa_thread_spawn_call_is_coro_yield(CallExprNode *call) {
         return false;
     const char *module_name = ma->object->as.variable.name;
     return module_name && strcmp(module_name, "Coro") == 0;
+}
+
+static bool xa_thread_spawn_path_is_sync_module(const char *path) {
+    return path && strstr(path, "stdlib/sync/sync.xr") != NULL;
+}
+
+static bool xa_thread_spawn_sync_class_name(const char *class_name) {
+    return class_name && (strcmp(class_name, "Mutex") == 0 || strcmp(class_name, "RwLock") == 0 ||
+                          strcmp(class_name, "Once") == 0 || strcmp(class_name, "Barrier") == 0 ||
+                          strcmp(class_name, "Condvar") == 0);
+}
+
+static bool xa_thread_spawn_sync_method_name(const char *class_name, const char *method_name) {
+    if (!xa_thread_spawn_sync_class_name(class_name) || !method_name)
+        return false;
+    if (strcmp(class_name, "Mutex") == 0)
+        return strcmp(method_name, "lock") == 0 || strcmp(method_name, "replace") == 0;
+    if (strcmp(class_name, "RwLock") == 0)
+        return strcmp(method_name, "read") == 0 || strcmp(method_name, "write") == 0 ||
+               strcmp(method_name, "replace") == 0;
+    if (strcmp(class_name, "Once") == 0)
+        return strcmp(method_name, "call") == 0;
+    if (strcmp(class_name, "Barrier") == 0)
+        return strcmp(method_name, "wait") == 0;
+    if (strcmp(class_name, "Condvar") == 0)
+        return strcmp(method_name, "lock") == 0 || strcmp(method_name, "unlock") == 0 ||
+               strcmp(method_name, "wait") == 0 || strcmp(method_name, "signal") == 0 ||
+               strcmp(method_name, "broadcast") == 0;
+    return false;
+}
+
+static bool xa_thread_spawn_module_alias_is_sync(XaInferContext *ctx, const char *name) {
+    if (!ctx || !ctx->analyzer || !name)
+        return false;
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
+    if (!sym || sym->kind != XA_SYM_MODULE)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    const char *module_name = links && links->module_name ? links->module_name : name;
+    return module_name && strcmp(module_name, "sync") == 0;
+}
+
+static const char *xa_thread_spawn_type_sync_class_name(XaInferContext *ctx, XrType *type) {
+    if (!ctx || !type || !XR_TYPE_IS_INSTANCE(type) || !type->instance.class_name ||
+        !xa_thread_spawn_sync_class_name(type->instance.class_name))
+        return NULL;
+
+    XrClassInfo *class_info = type->instance.class_ref;
+    if (class_info) {
+        for (int i = 0; i < class_info->method_count; i++) {
+            XaSymbol *m = class_info->methods ? class_info->methods[i] : NULL;
+            XaSymbolLinks *links = m ? xa_analyzer_get_links(ctx->analyzer, m) : NULL;
+            if (links && xa_thread_spawn_path_is_sync_module(links->file_path))
+                return type->instance.class_name;
+        }
+    }
+
+    XaSymbol *class_sym = xa_lookup_visible_class_symbol(ctx, type->instance.class_name);
+    XaSymbolLinks *class_links = class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+    return class_links && xa_thread_spawn_path_is_sync_module(class_links->file_path)
+               ? type->instance.class_name
+               : NULL;
+}
+
+static const char *xa_thread_spawn_expr_sync_ctor_class(XaInferContext *ctx, AstNode *expr) {
+    if (!ctx || !expr)
+        return NULL;
+    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, expr);
+    const char *typed_class = xa_thread_spawn_type_sync_class_name(ctx, type);
+    if (typed_class)
+        return typed_class;
+
+    if (expr->type == AST_CALL_EXPR) {
+        CallExprNode *call = &expr->as.call_expr;
+        AstNode *callee = call->callee;
+        if (!callee)
+            return NULL;
+        if (callee->type == AST_VARIABLE) {
+            const char *name = callee->as.variable.name;
+            XaSymbol *sym = xa_lookup_visible_symbol(ctx, name);
+            XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
+            if (xa_thread_spawn_sync_class_name(name) && sym && sym->is_imported)
+                return name;
+            XaSymbol *class_sym =
+                sym && sym->kind == XA_SYM_CLASS ? sym : xa_lookup_visible_class_symbol(ctx, name);
+            links = class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+            if (xa_thread_spawn_sync_class_name(name) && links &&
+                xa_thread_spawn_path_is_sync_module(links->file_path))
+                return name;
+        } else if (callee->type == AST_MEMBER_ACCESS) {
+            MemberAccessNode *ma = &callee->as.member_access;
+            if (ma->object && ma->object->type == AST_VARIABLE &&
+                xa_thread_spawn_module_alias_is_sync(ctx, ma->object->as.variable.name) &&
+                xa_thread_spawn_sync_class_name(ma->name))
+                return ma->name;
+        }
+    } else if (expr->type == AST_NEW_EXPR) {
+        NewExprNode *ne = &expr->as.new_expr;
+        if (!xa_thread_spawn_sync_class_name(ne->class_name))
+            return NULL;
+        if (ne->module_name && xa_thread_spawn_module_alias_is_sync(ctx, ne->module_name))
+            return ne->class_name;
+        XaSymbol *class_sym = xa_lookup_visible_class_symbol(ctx, ne->class_name);
+        XaSymbolLinks *links = class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+        if (!ne->module_name && links && xa_thread_spawn_path_is_sync_module(links->file_path))
+            return ne->class_name;
+    }
+    return NULL;
+}
+
+static void xa_thread_spawn_scan_note_local(XaThreadSpawnSyncScan *scan, const char *name,
+                                            const char *class_name) {
+    if (!scan || !name || scan->local_sync_var_count >= 64)
+        return;
+    scan->local_sync_vars[scan->local_sync_var_count].name = name;
+    scan->local_sync_vars[scan->local_sync_var_count].class_name = class_name;
+    scan->local_sync_vars[scan->local_sync_var_count].block_depth = scan->block_depth;
+    scan->local_sync_var_count++;
+}
+
+static const char *xa_thread_spawn_scan_lookup_local(XaThreadSpawnSyncScan *scan,
+                                                     const char *name) {
+    if (!scan || !name)
+        return NULL;
+    for (int i = scan->local_sync_var_count - 1; i >= 0; i--) {
+        if (scan->local_sync_vars[i].name && strcmp(scan->local_sync_vars[i].name, name) == 0)
+            return scan->local_sync_vars[i].class_name;
+    }
+    return NULL;
+}
+
+static void xa_thread_spawn_scan_pop_block(XaThreadSpawnSyncScan *scan) {
+    if (!scan)
+        return;
+    while (scan->local_sync_var_count > 0 &&
+           scan->local_sync_vars[scan->local_sync_var_count - 1].block_depth == scan->block_depth) {
+        scan->local_sync_var_count--;
+    }
+}
+
+static bool xa_thread_spawn_call_is_sync_method(XaThreadSpawnSyncScan *scan, CallExprNode *call) {
+    if (!scan || !scan->ctx || !call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    if (!ma->name || !ma->object)
+        return false;
+
+    XrType *receiver_type = xa_analyzer_get_node_type(scan->ctx->analyzer, ma->object);
+    const char *class_name = xa_thread_spawn_type_sync_class_name(scan->ctx, receiver_type);
+    if (!class_name && ma->object->type == AST_VARIABLE)
+        class_name = xa_thread_spawn_scan_lookup_local(scan, ma->object->as.variable.name);
+    if (!class_name)
+        class_name = xa_thread_spawn_expr_sync_ctor_class(scan->ctx, ma->object);
+    return xa_thread_spawn_sync_method_name(class_name, ma->name);
 }
 
 static void xa_report_thread_spawn_suspend(XaThreadSpawnSyncScan *scan, AstNode *site,
@@ -447,6 +609,20 @@ static void xa_thread_spawn_sync_scan_pre(AstNode *node, void *ud) {
     }
     if (scan->nested_function_depth > 0)
         return;
+    if (node->type == AST_BLOCK)
+        scan->block_depth++;
+
+    if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
+        VarDeclNode *var = &node->as.var_decl;
+        const char *class_name =
+            xa_thread_spawn_expr_sync_ctor_class(scan->ctx, var ? var->initializer : NULL);
+        xa_thread_spawn_scan_note_local(scan, var ? var->name : NULL, class_name);
+    } else if (node->type == AST_ASSIGNMENT) {
+        AssignmentNode *assign = &node->as.assignment;
+        const char *class_name =
+            xa_thread_spawn_expr_sync_ctor_class(scan->ctx, assign ? assign->value : NULL);
+        xa_thread_spawn_scan_note_local(scan, assign ? assign->name : NULL, class_name);
+    }
 
     const char *feature = NULL;
     if (node->type == AST_AWAIT_EXPR)
@@ -456,8 +632,10 @@ static void xa_thread_spawn_sync_scan_pre(AstNode *node, void *ud) {
     else if (node->type == AST_CALL_EXPR) {
         CallExprNode *call = &node->as.call_expr;
         const char *call_feature = NULL;
-        if (xa_thread_spawn_inline_call_may_suspend(scan->ctx, call, scan->call_stack,
-                                                    scan->call_depth, &call_feature)) {
+        if (xa_thread_spawn_call_is_sync_method(scan, call)) {
+            feature = "coroutine-domain sync.* method";
+        } else if (xa_thread_spawn_inline_call_may_suspend(scan->ctx, call, scan->call_stack,
+                                                           scan->call_depth, &call_feature)) {
             feature = call_feature;
             if (!feature && call->callee && call->callee->type == AST_VARIABLE) {
                 snprintf(scan->feature_buf, sizeof(scan->feature_buf),
@@ -483,6 +661,13 @@ static void xa_thread_spawn_sync_scan_post(AstNode *node, void *ud) {
          node->type == AST_METHOD_DECL) &&
         scan->nested_function_depth > 0) {
         scan->nested_function_depth--;
+        return;
+    }
+    if (scan->nested_function_depth > 0)
+        return;
+    if (node->type == AST_BLOCK && scan->block_depth > 0) {
+        xa_thread_spawn_scan_pop_block(scan);
+        scan->block_depth--;
     }
 }
 

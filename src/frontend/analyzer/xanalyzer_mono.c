@@ -881,8 +881,12 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                 clone_node_array(src->base_args, src->base_arg_count, map, mc, clone_ctx);
             dst->default_values =
                 clone_node_array(src->default_values, src->param_count, map, mc, clone_ctx);
-            dst->type_param_names = NULL;  // Cleared for mono
-            dst->type_param_count = 0;
+            // Class monomorphization substitutes the enclosing class type
+            // params (for example T in Box<T>) but must preserve method-local
+            // params (for example U in map<U>). Clearing them makes the
+            // post-mono analyzer treat U as an ordinary unresolved type name.
+            dst->type_param_names = clone_str_array(src->type_param_names, src->type_param_count);
+            dst->type_param_count = src->type_param_count;
             break;
         }
 
