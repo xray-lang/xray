@@ -192,13 +192,25 @@ static XrType *xa_bytespan_method_type(XaInferContext *ctx, XrType *receiver, co
         return NULL;
 
     XrVMRuntime *X = ctx->analyzer->isolate;
-    if (strcmp(name, "loadLE") == 0 || strcmp(name, "loadLEUnchecked") == 0) {
-        XrType *params[1] = {xr_type_new_int(X)};
+    if (strcmp(name, "load") == 0) {
+        XrType *params[2] = {xr_type_new_int(X), xr_type_new_enum(X, "Endian")};
         XrType *ret = xr_type_new_type_param(X, "T", 0);
-        XrType *fn = xr_type_new_function(X, params, 1, ret, false);
+        XrType *fn = xr_type_new_function(X, params, 2, ret, false);
         if (fn) {
             const char *names[1] = {"T"};
             xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
+            fn->function.min_params = 1;
+        }
+        return fn;
+    }
+    if (strcmp(name, "store") == 0) {
+        XrType *ret = xr_type_new_type_param(X, "T", 0);
+        XrType *params[3] = {xr_type_new_int(X), ret, xr_type_new_enum(X, "Endian")};
+        XrType *fn = xr_type_new_function(X, params, 3, xr_type_new_unit(X), false);
+        if (fn) {
+            const char *names[1] = {"T"};
+            xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
+            fn->function.min_params = 2;
         }
         return fn;
     }
@@ -1226,8 +1238,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                                    msg, &loc);
     }
     if (XR_TYPE_IS_SPAN(obj_type) && ma->name && ctx->unsafe_depth == 0 &&
-        (strcmp(ma->name, "loadLEUnchecked") == 0 || strcmp(ma->name, "getUnchecked") == 0 ||
-         strcmp(ma->name, "commonPrefixUnchecked") == 0 ||
+        (strcmp(ma->name, "getUnchecked") == 0 || strcmp(ma->name, "commonPrefixUnchecked") == 0 ||
          strcmp(ma->name, "dataPtrUnchecked") == 0 ||
          strcmp(ma->name, "dataMutPtrUnchecked") == 0)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};

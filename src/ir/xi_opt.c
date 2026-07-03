@@ -2185,9 +2185,9 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
             if (v->nargs >= 1 && v->args[0] && sr_value_has_static_index_storage(v->args[0]))
                 return sr_typed_array_elem_rep(v->args[0]->type);
             return XR_REP_TAGGED;
-        case XI_BYTES_LOAD_U16_LE:
-        case XI_BYTES_LOAD_U32_LE:
-        case XI_BYTES_LOAD_U64_LE:
+        case XI_BYTES_LOAD_U16:
+        case XI_BYTES_LOAD_U32:
+        case XI_BYTES_LOAD_U64:
             return XR_REP_I64;
         case XI_ARRAY_DATA_PTR:
             return XR_REP_RAWPTR;
@@ -2281,15 +2281,25 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             }
             *out = XR_REP_TAGGED;
             return true;
-        case XI_BYTES_LOAD_U16_LE:
-        case XI_BYTES_LOAD_U32_LE:
-        case XI_BYTES_LOAD_U64_LE:
+        case XI_BYTES_LOAD_U16:
+        case XI_BYTES_LOAD_U32:
+        case XI_BYTES_LOAD_U64:
             if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
                 sr_value_has_static_typed_array_storage(user->args[0])) {
                 *out = sr_type_native_boundary_rep(user->args[0]->type);
                 return true;
             }
             *out = arg_idx == 1 ? XR_REP_I64 : XR_REP_TAGGED;
+            return true;
+        case XI_BYTES_STORE_U16:
+        case XI_BYTES_STORE_U32:
+        case XI_BYTES_STORE_U64:
+            if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
+                sr_value_has_static_typed_array_storage(user->args[0])) {
+                *out = sr_type_native_boundary_rep(user->args[0]->type);
+                return true;
+            }
+            *out = (arg_idx == 1 || arg_idx == 2) ? XR_REP_I64 : XR_REP_TAGGED;
             return true;
         case XI_BYTES_COPY_WITHIN:
         case XI_BYTES_REPEAT_FROM:

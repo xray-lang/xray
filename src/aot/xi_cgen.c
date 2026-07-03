@@ -27,6 +27,7 @@
 #include "xi_to_c_stmt_dispatch_gen.h"
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_backend_lower.h"
+#include "../shared/xr_array_core.h"
 #include "../shared/xr_hash_core.h"
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_ops_gen.h"
@@ -2590,9 +2591,12 @@ static bool cg_borrowed_array_slot_user_is_borrow(const XiCgenCtx *ctx_ro, const
         }
         case XI_INDEX_GET:
         case XI_ARRAY_DATA_PTR:
-        case XI_BYTES_LOAD_U16_LE:
-        case XI_BYTES_LOAD_U32_LE:
-        case XI_BYTES_LOAD_U64_LE:
+        case XI_BYTES_LOAD_U16:
+        case XI_BYTES_LOAD_U32:
+        case XI_BYTES_LOAD_U64:
+        case XI_BYTES_STORE_U16:
+        case XI_BYTES_STORE_U32:
+        case XI_BYTES_STORE_U64:
             return arg_index == 0;
         case XI_CALL: {
             if (arg_index == 0)

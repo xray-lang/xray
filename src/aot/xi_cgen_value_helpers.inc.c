@@ -398,6 +398,11 @@ static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
         {"Relaxed", false},        {"Acquire", false}, {"Release", false},
         {"AcquireRelease", false}, {"SeqCst", false},
     };
+    static const CgPreludeEnumMember endian[] = {
+        {"Native", false},
+        {"LE", false},
+        {"BE", false},
+    };
     static const CgPreludeEnumMember recv[] = {
         {"Value", true},
         {"Empty", false},
@@ -425,6 +430,7 @@ static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
     };
     static const CgPreludeEnumData enums[] = {
         {XR_GLOBAL_VAR_ORDERING, "Ordering", ordering, 5},
+        {XR_GLOBAL_VAR_ENDIAN, "Endian", endian, 3},
         {XR_GLOBAL_VAR_RECV, "Recv", recv, 4},
         {XR_GLOBAL_VAR_SEND_RESULT, "SendResult", send_result, 4},
         {XR_GLOBAL_VAR_TASK_RESULT, "TaskResult", task_result, 5},

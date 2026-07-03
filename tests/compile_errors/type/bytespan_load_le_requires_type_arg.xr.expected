@@ -1,1 +1,1 @@
-ByteSpan.loadLE<T>() expects exactly one type argument
+ByteSpan.load<T>() expects exactly one type argument

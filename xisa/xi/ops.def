@@ -478,30 +478,63 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.load.u16.le
+(define-xi-op xi.bytes.load.u16
   :class memory-read
-  :arity 2
+  :arity 3
   :own-use borrow
   :effects (may-throw memory-read)
-  :requires (bytes bounds little-endian)
+  :requires (bytes bounds endian)
   :observable (u16-wrap)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.load.u32.le
+(define-xi-op xi.bytes.load.u32
   :class memory-read
-  :arity 2
+  :arity 3
   :own-use borrow
   :effects (may-throw memory-read)
-  :requires (bytes bounds little-endian)
+  :requires (bytes bounds endian)
   :observable (u32-wrap)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.bytes.load.u64.le
+(define-xi-op xi.bytes.load.u64
   :class memory-read
-  :arity 2
+  :arity 3
   :own-use borrow
   :effects (may-throw memory-read)
-  :requires (bytes bounds little-endian)
+  :requires (bytes bounds endian)
+  :observable (u64-wrap)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bytes.store.u16
+  :class memory-write
+  :arity 4
+  :result-kind void
+  :result-ownership none
+  :own-use stored-value
+  :effects (side-effect may-throw memory-write)
+  :requires (bytes bounds endian)
+  :observable (u16-wrap)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bytes.store.u32
+  :class memory-write
+  :arity 4
+  :result-kind void
+  :result-ownership none
+  :own-use stored-value
+  :effects (side-effect may-throw memory-write)
+  :requires (bytes bounds endian)
+  :observable (u32-wrap)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bytes.store.u64
+  :class memory-write
+  :arity 4
+  :result-kind void
+  :result-ownership none
+  :own-use stored-value
+  :effects (side-effect may-throw memory-write)
+  :requires (bytes bounds endian)
   :observable (u64-wrap)
   :targets (vm-bytecode aot-c aot-verify))
 

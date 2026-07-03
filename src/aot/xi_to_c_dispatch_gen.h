@@ -101,9 +101,12 @@
     X(STRUCT_SET, "xi.struct.set", xicgen_struct_set) \
     X(TUPLE_NEW, "xi.tuple.new", xicgen_tuple_new) \
     X(TUPLE_GET, "xi.tuple.get", xicgen_tuple_get) \
-    X(BYTES_LOAD_U16_LE, "xi.bytes.load.u16.le", xicgen_bytes_load_u16_le) \
-    X(BYTES_LOAD_U32_LE, "xi.bytes.load.u32.le", xicgen_bytes_load_u32_le) \
-    X(BYTES_LOAD_U64_LE, "xi.bytes.load.u64.le", xicgen_bytes_load_u64_le) \
+    X(BYTES_LOAD_U16, "xi.bytes.load.u16", xicgen_bytes_load_u16) \
+    X(BYTES_LOAD_U32, "xi.bytes.load.u32", xicgen_bytes_load_u32) \
+    X(BYTES_LOAD_U64, "xi.bytes.load.u64", xicgen_bytes_load_u64) \
+    X(BYTES_STORE_U16, "xi.bytes.store.u16", xicgen_bytes_store_u16) \
+    X(BYTES_STORE_U32, "xi.bytes.store.u32", xicgen_bytes_store_u32) \
+    X(BYTES_STORE_U64, "xi.bytes.store.u64", xicgen_bytes_store_u64) \
     X(BYTES_COPY_WITHIN, "xi.bytes.copy.within", xicgen_bytes_copy_within) \
     X(BYTES_COPY_FROM, "xi.bytes.copy.from", xicgen_bytes_copy_from) \
     X(BYTES_REPEAT_FROM, "xi.bytes.repeat.from", xicgen_bytes_repeat_from) \

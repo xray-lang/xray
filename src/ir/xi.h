@@ -274,14 +274,18 @@ typedef enum {
     XI_INDEX_SET,   /* obj[key]=val: args[0]=obj, args[1]=key, args[2]=val */
 
     /* Bytes memory primitives: all offsets/counts are integer values.
-     * LOAD args: args[0]=bytes, args[1]=offset.
+     * LOAD args: args[0]=bytes, args[1]=offset, args[2]=Endian.
+     * STORE args: args[0]=bytes, args[1]=offset, args[2]=value, args[3]=Endian.
      * COPY_WITHIN args: args[0]=bytes, args[1]=dst, args[2]=src, args[3]=count.
      * COPY_FROM args: args[0]=dst, args[1]=src, args[2]=src_offset,
      *                 args[3]=dst_offset, args[4]=count.
      * REPEAT_FROM args: args[0]=bytes, args[1]=dst, args[2]=distance, args[3]=count. */
-    XI_BYTES_LOAD_U16_LE,
-    XI_BYTES_LOAD_U32_LE,
-    XI_BYTES_LOAD_U64_LE,
+    XI_BYTES_LOAD_U16,
+    XI_BYTES_LOAD_U32,
+    XI_BYTES_LOAD_U64,
+    XI_BYTES_STORE_U16,
+    XI_BYTES_STORE_U32,
+    XI_BYTES_STORE_U64,
     XI_BYTES_COPY_WITHIN,
     XI_BYTES_COPY_FROM,
     XI_BYTES_REPEAT_FROM,

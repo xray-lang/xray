@@ -74,6 +74,12 @@ typedef struct XrArrayCoreNeedle {
     uint8_t boolean;
 } XrArrayCoreNeedle;
 
+typedef enum XrEndianCore {
+    XR_ENDIAN_NATIVE = 0,
+    XR_ENDIAN_LE = 1,
+    XR_ENDIAN_BE = 2,
+} XrEndianCore;
+
 typedef bool (*XrArrayCoreJoinElementFn)(void *ctx, int64_t index, char *dst, size_t *len);
 typedef XrValue (*XrArrayCoreReadFn)(void *ctx, int64_t index);
 typedef XrValue (*XrArrayCoreMapFn)(void *ctx, XrValue value);
@@ -653,6 +659,116 @@ static inline bool xr_array_core_bytes_range_ok(int64_t length, uint8_t elem_typ
     return count <= length && offset <= length - count;
 }
 
+static inline bool xr_array_core_host_is_little_endian(void) {
+    const uint16_t one = 1;
+    return *((const uint8_t *) &one) == 1;
+}
+
+static inline bool xr_array_core_effective_little_endian(int64_t endian) {
+    if (endian == XR_ENDIAN_BE)
+        return false;
+    if (endian == XR_ENDIAN_LE)
+        return true;
+    return xr_array_core_host_is_little_endian();
+}
+
+static inline uint16_t xr_array_core_bytes_load_u16(const void *data, int64_t length,
+                                                    uint8_t elem_type, int64_t offset,
+                                                    int64_t endian, bool *ok) {
+    bool valid = data && xr_array_core_bytes_range_ok(length, elem_type, offset, 2);
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return 0;
+    const uint8_t *p = (const uint8_t *) data + offset;
+    if (xr_array_core_effective_little_endian(endian))
+        return (uint16_t) p[0] | (uint16_t) ((uint16_t) p[1] << 8);
+    return (uint16_t) ((uint16_t) p[0] << 8) | (uint16_t) p[1];
+}
+
+static inline uint32_t xr_array_core_bytes_load_u32(const void *data, int64_t length,
+                                                    uint8_t elem_type, int64_t offset,
+                                                    int64_t endian, bool *ok) {
+    bool valid = data && xr_array_core_bytes_range_ok(length, elem_type, offset, 4);
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return 0;
+    const uint8_t *p = (const uint8_t *) data + offset;
+    if (xr_array_core_effective_little_endian(endian))
+        return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) |
+               ((uint32_t) p[3] << 24);
+    return ((uint32_t) p[0] << 24) | ((uint32_t) p[1] << 16) | ((uint32_t) p[2] << 8) |
+           (uint32_t) p[3];
+}
+
+static inline uint64_t xr_array_core_bytes_load_u64(const void *data, int64_t length,
+                                                    uint8_t elem_type, int64_t offset,
+                                                    int64_t endian, bool *ok) {
+    bool valid = data && xr_array_core_bytes_range_ok(length, elem_type, offset, 8);
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return 0;
+    const uint8_t *p = (const uint8_t *) data + offset;
+    if (xr_array_core_effective_little_endian(endian))
+        return (uint64_t) p[0] | ((uint64_t) p[1] << 8) | ((uint64_t) p[2] << 16) |
+               ((uint64_t) p[3] << 24) | ((uint64_t) p[4] << 32) | ((uint64_t) p[5] << 40) |
+               ((uint64_t) p[6] << 48) | ((uint64_t) p[7] << 56);
+    return ((uint64_t) p[0] << 56) | ((uint64_t) p[1] << 48) | ((uint64_t) p[2] << 40) |
+           ((uint64_t) p[3] << 32) | ((uint64_t) p[4] << 24) | ((uint64_t) p[5] << 16) |
+           ((uint64_t) p[6] << 8) | (uint64_t) p[7];
+}
+
+static inline bool xr_array_core_bytes_store_u16(void *data, int64_t length, uint8_t elem_type,
+                                                 int64_t offset, uint16_t value, int64_t endian) {
+    if (!data || !xr_array_core_bytes_range_ok(length, elem_type, offset, 2))
+        return false;
+    uint8_t *p = (uint8_t *) data + offset;
+    if (xr_array_core_effective_little_endian(endian)) {
+        p[0] = (uint8_t) (value & 0xffu);
+        p[1] = (uint8_t) ((value >> 8) & 0xffu);
+    } else {
+        p[0] = (uint8_t) ((value >> 8) & 0xffu);
+        p[1] = (uint8_t) (value & 0xffu);
+    }
+    return true;
+}
+
+static inline bool xr_array_core_bytes_store_u32(void *data, int64_t length, uint8_t elem_type,
+                                                 int64_t offset, uint32_t value, int64_t endian) {
+    if (!data || !xr_array_core_bytes_range_ok(length, elem_type, offset, 4))
+        return false;
+    uint8_t *p = (uint8_t *) data + offset;
+    if (xr_array_core_effective_little_endian(endian)) {
+        p[0] = (uint8_t) (value & 0xffu);
+        p[1] = (uint8_t) ((value >> 8) & 0xffu);
+        p[2] = (uint8_t) ((value >> 16) & 0xffu);
+        p[3] = (uint8_t) ((value >> 24) & 0xffu);
+    } else {
+        p[0] = (uint8_t) ((value >> 24) & 0xffu);
+        p[1] = (uint8_t) ((value >> 16) & 0xffu);
+        p[2] = (uint8_t) ((value >> 8) & 0xffu);
+        p[3] = (uint8_t) (value & 0xffu);
+    }
+    return true;
+}
+
+static inline bool xr_array_core_bytes_store_u64(void *data, int64_t length, uint8_t elem_type,
+                                                 int64_t offset, uint64_t value, int64_t endian) {
+    if (!data || !xr_array_core_bytes_range_ok(length, elem_type, offset, 8))
+        return false;
+    uint8_t *p = (uint8_t *) data + offset;
+    if (xr_array_core_effective_little_endian(endian)) {
+        for (int i = 0; i < 8; i++)
+            p[i] = (uint8_t) ((value >> (8 * i)) & 0xffu);
+    } else {
+        for (int i = 0; i < 8; i++)
+            p[i] = (uint8_t) ((value >> (8 * (7 - i))) & 0xffu);
+    }
+    return true;
+}
+
 static inline uint16_t xr_array_core_bytes_load_u16_le(const void *data, int64_t length,
                                                        uint8_t elem_type, int64_t offset,
                                                        bool *ok) {
@@ -661,8 +777,7 @@ static inline uint16_t xr_array_core_bytes_load_u16_le(const void *data, int64_t
         *ok = valid;
     if (!valid)
         return 0;
-    const uint8_t *p = (const uint8_t *) data + offset;
-    return (uint16_t) p[0] | (uint16_t) ((uint16_t) p[1] << 8);
+    return xr_array_core_bytes_load_u16(data, length, elem_type, offset, XR_ENDIAN_LE, ok);
 }
 
 static inline uint32_t xr_array_core_bytes_load_u32_le(const void *data, int64_t length,
@@ -673,9 +788,7 @@ static inline uint32_t xr_array_core_bytes_load_u32_le(const void *data, int64_t
         *ok = valid;
     if (!valid)
         return 0;
-    const uint8_t *p = (const uint8_t *) data + offset;
-    return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) |
-           ((uint32_t) p[3] << 24);
+    return xr_array_core_bytes_load_u32(data, length, elem_type, offset, XR_ENDIAN_LE, ok);
 }
 
 static inline uint64_t xr_array_core_bytes_load_u64_le(const void *data, int64_t length,
@@ -686,10 +799,7 @@ static inline uint64_t xr_array_core_bytes_load_u64_le(const void *data, int64_t
         *ok = valid;
     if (!valid)
         return 0;
-    const uint8_t *p = (const uint8_t *) data + offset;
-    return (uint64_t) p[0] | ((uint64_t) p[1] << 8) | ((uint64_t) p[2] << 16) |
-           ((uint64_t) p[3] << 24) | ((uint64_t) p[4] << 32) | ((uint64_t) p[5] << 40) |
-           ((uint64_t) p[6] << 48) | ((uint64_t) p[7] << 56);
+    return xr_array_core_bytes_load_u64(data, length, elem_type, offset, XR_ENDIAN_LE, ok);
 }
 
 static inline bool xr_array_core_bytes_copy_within(void *data, int64_t length, uint8_t elem_type,
