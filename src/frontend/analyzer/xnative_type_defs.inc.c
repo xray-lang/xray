@@ -191,6 +191,15 @@ static const char xr_native_def_stringbuilder[] =
     "int\n    append(value: string | char | int | float | bool | null) -> StringBuilder\n    "
     "toString() -> string\n    clear() -> StringBuilder\n}\n";
 
+static const char xr_native_def_thread[] =
+    "// sys.Thread.spawn is compiler-defined, not a native constructor surface.\n//\n// Task 147 "
+    "selected the language/IR construct form:\n//     sys.Thread.spawn(fn() -> T { ... }) -> "
+    "Thread<T>\n//\n// The handle itself is a native runtime type so join/detach/property "
+    "dispatch\n// use the normal native-type tables. Do not add a constructor or static call\n// "
+    "here; doing so would reintroduce the old Thread<T>(body) surface and bypass\n// the go-like "
+    "capture/move checks enforced by sys.Thread.spawn.\n\n@native\nclass Thread<T> {\n    done: "
+    "bool\n    join() -> T\n    detach()\n}\n";
+
 static const char xr_native_def_workqueue[] =
     "// Built-in WorkQueue<T> type; implemented by the runtime.\n\n@native\nclass WorkQueue<T> {\n "
     "   length: int\n    shardCount: int\n    isClosed: bool\n    push(value: T, shard?: int) -> "
@@ -219,4 +228,5 @@ static const char xr_native_def_workqueue[] =
     X("set", xr_native_def_set)                                                                    \
     X("string", xr_native_def_string)                                                              \
     X("stringbuilder", xr_native_def_stringbuilder)                                                \
+    X("thread", xr_native_def_thread)                                                              \
     X("workqueue", xr_native_def_workqueue)

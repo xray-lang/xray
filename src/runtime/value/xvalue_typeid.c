@@ -20,7 +20,7 @@ static const XrTypeId tag_to_typeid[8] = {
     [XR_TAG_STRUCT_REF] = XR_TID_NULL, [XR_TAG_NOTFOUND] = XR_TID_NULL,
 };
 
-static const XrTypeId gctype_to_typeid[XR_TEVENTCOUNT + 1] = {
+static const XrTypeId gctype_to_typeid[XR_TTHREAD + 1] = {
     [XR_TNULL] = XR_TID_NULL,
     [XR_TBOOL] = XR_TID_BOOL,
     [XR_TINT] = XR_TID_INT,
@@ -47,6 +47,7 @@ static const XrTypeId gctype_to_typeid[XR_TEVENTCOUNT + 1] = {
     [XR_TCOUNTDOWNLATCH] = XR_TID_COUNTDOWNLATCH,
     [XR_TSEMAPHORE] = XR_TID_SEMAPHORE,
     [XR_TEVENTCOUNT] = XR_TID_EVENTCOUNT,
+    [XR_TTHREAD] = XR_TID_THREAD,
 };
 
 XrTypeId xr_value_typeid(XrValue v) {
@@ -142,6 +143,7 @@ XR_DATADEF const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_COUNTDOWNLATCH] = TYPE_NAME_COUNTDOWNLATCH,
     [XR_TID_SEMAPHORE] = TYPE_NAME_SEMAPHORE,
     [XR_TID_EVENTCOUNT] = TYPE_NAME_EVENTCOUNT,
+    [XR_TID_THREAD] = TYPE_NAME_THREAD,
 };
 
 const char *xr_typeid_name(XrTypeId tid) {

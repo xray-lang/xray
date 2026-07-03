@@ -303,8 +303,9 @@ static inline const char *xr_obj_type_name(XrObjType type) {
                                   "BoolMap",
                                   TYPE_NAME_COUNTDOWNLATCH,
                                   TYPE_NAME_SEMAPHORE,
-                                  TYPE_NAME_EVENTCOUNT};
-    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TEVENTCOUNT + 1,
+                                  TYPE_NAME_EVENTCOUNT,
+                                  TYPE_NAME_THREAD};
+    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TTHREAD + 1,
                    "xr_obj_type_name: names array out of sync with XrObjType enum");
     if (type < sizeof(names) / sizeof(names[0])) {
         return names[type];

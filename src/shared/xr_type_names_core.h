@@ -87,6 +87,7 @@
 #define TYPE_NAME_COUNTDOWNLATCH "CountdownLatch"
 #define TYPE_NAME_SEMAPHORE "Semaphore"
 #define TYPE_NAME_EVENTCOUNT "EventCount"
+#define TYPE_NAME_THREAD "Thread"
 
 /* ========== DateTime Types ========== */
 
@@ -167,8 +168,9 @@ typedef enum {
     XR_TID_COUNTDOWNLATCH, /* 38 */
     XR_TID_SEMAPHORE,      /* 39 */
     XR_TID_EVENTCOUNT,     /* 40 */
-    XR_TID_WEAKMAP,        /* 41, analyzer-only */
-    XR_TID_WEAKSET,        /* 42, analyzer-only */
+    XR_TID_THREAD,         /* 41 */
+    XR_TID_WEAKMAP,        /* 42, analyzer-only */
+    XR_TID_WEAKSET,        /* 43, analyzer-only */
     XR_TID_COUNT
 } XrTypeId;
 
@@ -262,6 +264,8 @@ static inline const char *xr_type_name_from_tid(XrTypeId tid) {
             return TYPE_NAME_SEMAPHORE;
         case XR_TID_EVENTCOUNT:
             return TYPE_NAME_EVENTCOUNT;
+        case XR_TID_THREAD:
+            return TYPE_NAME_THREAD;
         case XR_TID_WEAKMAP:
             return TYPE_NAME_WEAKMAP;
         case XR_TID_WEAKSET:

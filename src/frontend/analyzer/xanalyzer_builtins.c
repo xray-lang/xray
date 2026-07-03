@@ -72,6 +72,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_SEMAPHORE;
     if (xr_type_is_named_class(type, "EventCount"))
         return XR_TID_EVENTCOUNT;
+    if (xr_type_is_named_class(type, "Thread"))
+        return XR_TID_THREAD;
     if (xr_type_is_named_class(type, "DateTime"))
         return XR_TID_DATETIME;
     return XR_TID_NULL;

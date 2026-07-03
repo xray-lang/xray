@@ -50,6 +50,7 @@ struct XrRuntimeCore;
 /* Lifecycle state. `state` is atomic so join()/detach()/destroy race safely. */
 typedef enum XrThreadState {
     XR_THREAD_CREATED = 0, /* handle populated, entry may or may not have started */
+    XR_THREAD_JOINING,     /* one joiner owns xr_thread_join; others wait for JOINED */
     XR_THREAD_JOINED,      /* successfully joined; retval read */
     XR_THREAD_DETACHED,    /* detached; must not be joined */
 } XrThreadState;
@@ -85,7 +86,7 @@ static inline bool xr_value_is_thread(XrValue v) {
 }
 
 static inline XrThread *xr_value_to_thread(XrValue v) {
-    return (XrThread *) XR_TO_PTR(v);
+    return xr_value_is_thread(v) ? (XrThread *) XR_TO_PTR(v) : NULL;
 }
 
 static inline XrValue xr_value_from_thread(XrThread *thread) {

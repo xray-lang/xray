@@ -74,6 +74,7 @@ extern void xr_sys_rwlock_register_class(XrVMRuntime *isolate);
 extern void xr_sys_condvar_register_class(XrVMRuntime *isolate);
 extern void xr_sys_barrier_register_class(XrVMRuntime *isolate);
 extern void xr_sys_once_register_class(XrVMRuntime *isolate);
+extern void xr_thread_register_native_type(XrVMRuntime *isolate);
 extern void xr_netconn_register_class(XrVMRuntime *isolate);
 extern void xr_netlistener_register_class(XrVMRuntime *isolate);
 
@@ -235,6 +236,7 @@ void xr_prelude_register_all_native_types(XrVMRuntime *isolate) {
     xr_sys_condvar_register_class(isolate);
     xr_sys_barrier_register_class(isolate);
     xr_sys_once_register_class(isolate);
+    xr_thread_register_native_type(isolate);
     xr_netconn_register_class(isolate);
     xr_netlistener_register_class(isolate);
 
