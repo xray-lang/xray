@@ -107,6 +107,8 @@ static const XrCliOptionSpec build_options[] = {
      "Dump resolved AOT link command"},
     {"dry-run-link", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Resolve the AOT link command without invoking the native toolchain"},
+    {"linker-script", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
+     "Pass a linker script to the native linker"},
     {"c-header", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
      "Emit a C header for @c_export symbols"},
     {"keep-c", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Keep generated temporary C source"},
