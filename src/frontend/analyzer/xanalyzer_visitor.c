@@ -89,6 +89,16 @@ XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name) {
            strcmp(module_name, "mem") == 0;
 }
 
+XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
+                                                   const char *member_name) {
+    if (!module_name || !member_name)
+        return true;
+    if (strcmp(module_name, "mem") != 0)
+        return true;
+    return strcmp(member_name, "alloc") != 0 && strcmp(member_name, "allocAligned") != 0 &&
+           strcmp(member_name, "realloc") != 0 && strcmp(member_name, "free") != 0;
+}
+
 XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *node,
                                                 const char *feature, const char *suggestion) {
     if (!ctx || !ctx->analyzer || !node || !xa_freestanding_profile_enabled(ctx->analyzer))
@@ -1843,6 +1853,16 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
 
         for (int i = 0; i < import->member_count; i++) {
             ImportMember *member = &import->members[i];
+            if (xa_freestanding_profile_enabled(ctx->analyzer) &&
+                (!import->is_quoted || xa_freestanding_stdlib_module_known(import->module_name)) &&
+                !xa_freestanding_stdlib_member_allowed(import->module_name, member->name)) {
+                char feature[192];
+                snprintf(feature, sizeof(feature), "%s.%s",
+                         import->module_name ? import->module_name : "?", member->name);
+                xa_freestanding_report_unavailable(
+                    ctx, node, feature,
+                    "allocator hooks are not part of the freestanding mem allowlist yet");
+            }
             const char *local_name = member->alias ? member->alias : member->name;
             XaSymbol *export_sym =
                 graph_exports ? (XaSymbol *) xr_hashmap_get(graph_exports, member->name) : NULL;

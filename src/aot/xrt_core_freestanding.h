@@ -24,6 +24,9 @@
 #include <stdatomic.h>
 
 #include "../shared/xr_obj_header.h"
+#include "../shared/xr_arith_core.h"
+#include "../shared/xr_bits_core.h"
+#include "../shared/xr_sync_core.h"
 
 #ifndef XR_FUNC
 #define XR_FUNC extern
@@ -316,6 +319,18 @@ typedef struct XrAotContext {
     void *worker;
 } XrAotContext;
 
+static inline int xrt_has_pending_error(void) {
+    return 0;
+}
+
+static inline void xrt_retain(XrValue v) {
+    (void) v;
+}
+
+static inline void xrt_release(XrValue v) {
+    (void) v;
+}
+
 XRT_COLD XRT_NORETURN void xr_hook_panic(const char *message, size_t len);
 
 static inline size_t xrt_freestanding_strlen(const char *s) {
@@ -481,6 +496,156 @@ static inline void xrt_arc_init(void) {
 }
 
 static inline void xrt_bump_destroy(void) {
+}
+
+extern void *memcpy(void *XRT_RESTRICT dst, const void *XRT_RESTRICT src, size_t n);
+extern void *memmove(void *dst, const void *src, size_t n);
+extern void *memset(void *dst, int byte, size_t n);
+extern int memcmp(const void *a, const void *b, size_t n);
+
+static inline int64_t xrt_mem_int_arg(XrValue v) {
+    return XR_IS_INT(v) ? XR_TO_INT(v) : 0;
+}
+
+static inline XrValue xrt_mem_popcount(XrValue x) {
+    return XR_FROM_INT(xr_bits_core_popcount(xrt_mem_int_arg(x)));
+}
+
+static inline XrValue xrt_mem_leading_zeros(XrValue x) {
+    return XR_FROM_INT(xr_bits_core_leading_zeros(xrt_mem_int_arg(x)));
+}
+
+static inline XrValue xrt_mem_trailing_zeros(XrValue x) {
+    return XR_FROM_INT(xr_bits_core_trailing_zeros(xrt_mem_int_arg(x)));
+}
+
+static inline XrValue xrt_mem_byteswap(XrValue x) {
+    return XR_FROM_INT(xr_bits_core_byteswap(xrt_mem_int_arg(x)));
+}
+
+static inline XrValue xrt_mem_rotate_left(XrValue x, XrValue n) {
+    return XR_FROM_INT(xr_bits_core_rotate_left(xrt_mem_int_arg(x), xrt_mem_int_arg(n)));
+}
+
+static inline XrValue xrt_mem_rotate_right(XrValue x, XrValue n) {
+    return XR_FROM_INT(xr_bits_core_rotate_right(xrt_mem_int_arg(x), xrt_mem_int_arg(n)));
+}
+
+static inline XrValue xrt_mem_add_wrapping(XrValue a, XrValue b) {
+    return XR_FROM_INT(xr_arith_core_add_wrapping(xrt_mem_int_arg(a), xrt_mem_int_arg(b)));
+}
+
+static inline XrValue xrt_mem_sub_wrapping(XrValue a, XrValue b) {
+    return XR_FROM_INT(xr_arith_core_sub_wrapping(xrt_mem_int_arg(a), xrt_mem_int_arg(b)));
+}
+
+static inline XrValue xrt_mem_mul_wrapping(XrValue a, XrValue b) {
+    return XR_FROM_INT(xr_arith_core_mul_wrapping(xrt_mem_int_arg(a), xrt_mem_int_arg(b)));
+}
+
+static inline XrValue xrt_mem_add_overflows(XrValue a, XrValue b) {
+    return XR_FROM_BOOL(xr_arith_core_add_overflows(xrt_mem_int_arg(a), xrt_mem_int_arg(b)) != 0);
+}
+
+static inline XrValue xrt_mem_sub_overflows(XrValue a, XrValue b) {
+    return XR_FROM_BOOL(xr_arith_core_sub_overflows(xrt_mem_int_arg(a), xrt_mem_int_arg(b)) != 0);
+}
+
+static inline XrValue xrt_mem_mul_overflows(XrValue a, XrValue b) {
+    return XR_FROM_BOOL(xr_arith_core_mul_overflows(xrt_mem_int_arg(a), xrt_mem_int_arg(b)) != 0);
+}
+
+static inline XrValue xrt_mem_fence(XrValue ordering) {
+    xr_sync_core_fence(xrt_mem_int_arg(ordering));
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_mem_prefetch(XrValue ptr, XrValue rw) {
+#if defined(__GNUC__) || defined(__clang__)
+    if (xrt_mem_int_arg(rw) != 0)
+        __builtin_prefetch(ptr.ptr, 1, 3);
+    else
+        __builtin_prefetch(ptr.ptr, 0, 3);
+#else
+    (void) ptr;
+    (void) rw;
+#endif
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_mem_cache_line_size(void) {
+    return XR_FROM_INT(64);
+}
+
+static inline XrValue xrt_mem_from_address(XrValue addr) {
+    return xr_mkptr((void *) (uintptr_t) (int64_t) xrt_mem_int_arg(addr), XR_TAG_PTR);
+}
+
+static inline XrValue xrt_mem_address_of(XrValue ptr) {
+    return XR_FROM_INT((int64_t) (intptr_t) ptr.ptr);
+}
+
+static inline XrValue xrt_mem_copy(XrValue dst, XrValue src, XrValue n) {
+    memcpy(dst.ptr, src.ptr, (size_t) xrt_mem_int_arg(n));
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_mem_move(XrValue dst, XrValue src, XrValue n) {
+    memmove(dst.ptr, src.ptr, (size_t) xrt_mem_int_arg(n));
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_mem_set(XrValue dst, XrValue byte, XrValue n) {
+    memset(dst.ptr, (int) xrt_mem_int_arg(byte), (size_t) xrt_mem_int_arg(n));
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_mem_compare(XrValue a, XrValue b, XrValue n) {
+    return XR_FROM_INT(memcmp(a.ptr, b.ptr, (size_t) xrt_mem_int_arg(n)));
+}
+
+static inline XrValue xrt_mem_volatile_load(XrValue ptr, XrValue size) {
+    void *p = ptr.ptr;
+    uint64_t v = 0;
+    switch (xrt_mem_int_arg(size)) {
+        case 1:
+            v = *(volatile uint8_t *) p;
+            break;
+        case 2:
+            v = *(volatile uint16_t *) p;
+            break;
+        case 4:
+            v = *(volatile uint32_t *) p;
+            break;
+        case 8:
+            v = *(volatile uint64_t *) p;
+            break;
+        default:
+            break;
+    }
+    return XR_FROM_INT((int64_t) v);
+}
+
+static inline XrValue xrt_mem_volatile_store(XrValue ptr, XrValue value, XrValue size) {
+    void *p = ptr.ptr;
+    int64_t v = xrt_mem_int_arg(value);
+    switch (xrt_mem_int_arg(size)) {
+        case 1:
+            *(volatile uint8_t *) p = (uint8_t) v;
+            break;
+        case 2:
+            *(volatile uint16_t *) p = (uint16_t) v;
+            break;
+        case 4:
+            *(volatile uint32_t *) p = (uint32_t) v;
+            break;
+        case 8:
+            *(volatile uint64_t *) p = (uint64_t) v;
+            break;
+        default:
+            break;
+    }
+    return XR_NULL_VAL;
 }
 
 #endif  // XRT_CORE_FREESTANDING_H
