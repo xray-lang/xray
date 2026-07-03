@@ -41,6 +41,12 @@ ALLOWED_RUNTIME_CASES = {
     "tests/diff/cases/semantics/concurrency/mutex_generic_compose.xr",
     "tests/diff/cases/semantics/concurrency/once_compose.xr",
     "tests/diff/cases/semantics/concurrency/rwlock_generic_compose.xr",
+    # `sync.fence` itself lowers to the freestanding mem.fence helper, but the
+    # hosted `sync` module is a pure-Xray script module that also exports
+    # coroutine-aware Mutex/RwLock/Once/Barrier/Condvar. Current AOT compiles
+    # script modules as whole units, so importing sync intentionally pulls those
+    # runtime-backed definitions into the manifest.
+    "tests/diff/cases/semantics/stdlib/sync_fence_alias.xr",
     "tests/diff/cases/semantics/stdlib/sync_module_import.xr",
     "tests/diff/cases/semantics/stdlib/sync_namespace_import.xr",
     "tests/diff/cases/semantics/modules/xmod_coro.xr",

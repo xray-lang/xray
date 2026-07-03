@@ -2952,9 +2952,15 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
         case XRT_ARC_KIND_SYS_ONCE:
             xrt_sys_once_destroy_builtin(obj);
             break;
+#ifdef XRT_ENABLE_SYS_THREAD
+        /* Guarded like regex: xrt_thread_destroy_builtin calls the extern
+         * xr_thread_detach, which only links when the coro runtime archive is
+         * present. Thread handles can only exist when the program spawns
+         * threads, which also sets this define (xaot_driver.c). */
         case XRT_ARC_KIND_THREAD:
             xrt_thread_destroy_builtin(obj);
             break;
+#endif
         default:
             break;
     }
