@@ -148,6 +148,7 @@ XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type) {
         return false;
     }
     switch (type->kind) {
+        case XR_KIND_SPAN:
         case XR_KIND_ARRAY:
         case XR_KIND_MAP:
         case XR_KIND_SET:
@@ -212,6 +213,28 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
     return NULL;
 }
 
+static bool xa_type_contains_span_view(XrType *type) {
+    if (!type || XR_TYPE_IS_UNKNOWN(type) || XR_TYPE_IS_NULL(type))
+        return false;
+    if (XR_TYPE_IS_SPAN(type))
+        return true;
+    if (XR_TYPE_IS_UNION(type)) {
+        int n = xr_type_union_count(type);
+        for (int i = 0; i < n; i++) {
+            if (xa_type_contains_span_view(xr_type_union_member(type, i)))
+                return true;
+        }
+        return false;
+    }
+    if (XR_TYPE_IS_TUPLE(type)) {
+        for (int i = 0; i < type->tuple.element_count; i++) {
+            if (xa_type_contains_span_view(type->tuple.element_types[i]))
+                return true;
+        }
+    }
+    return false;
+}
+
 static void xa_update_borrowed_alias_root(XaInferContext *ctx, XaSymbol *sym, AstNode *value,
                                           XrType *value_type) {
     if (!sym || sym->kind != XA_SYM_VARIABLE)
@@ -242,6 +265,18 @@ static void xa_check_borrowed_return_escape(XaInferContext *ctx, AstNode *return
              root->name ? root->name : "?", root->name ? root->name : "?");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
+}
+
+static void xa_check_span_return_escape(XaInferContext *ctx, AstNode *return_node,
+                                        XrType *value_type) {
+    if (!ctx || !return_node || !xa_type_contains_span_view(value_type))
+        return;
+
+    XrLocation loc = {
+        .file = ctx->file_path, .line = return_node->line, .column = return_node->column};
+    xa_analyzer_add_diagnostic(
+        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+        "cannot return Span view; return the owner container or copy the view into an Array", &loc);
 }
 
 static bool xa_call_is_copy_builtin(AstNode *node) {
@@ -785,6 +820,7 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             return_type = xa_visit_infer_expr(ctx, ret->values[0]);
             ctx->expected_type = saved_expected;
             xa_check_borrowed_return_escape(ctx, node, ret->values[0], return_type);
+            xa_check_span_return_escape(ctx, node, return_type);
         }
     } else {
         // Legacy AST multi-expression return is treated as a tuple type.
@@ -802,6 +838,7 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
 
         // Store return type info in the analyzer side table.
         xa_analyzer_set_node_type(ctx->analyzer, node, return_type);
+        xa_check_span_return_escape(ctx, node, return_type);
 
         xr_free(element_types);
     }
