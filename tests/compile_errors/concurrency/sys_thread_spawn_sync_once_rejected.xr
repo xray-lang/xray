@@ -1,0 +1,11 @@
+import sys
+import sync
+
+let t = sys.Thread.spawn(fn() -> int {
+    let once = sync.Once()
+    once.call(fn() {
+        print("init")
+    })
+    return 0
+})
+print(t.join())

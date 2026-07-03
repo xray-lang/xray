@@ -1,0 +1,10 @@
+import sys
+import sync
+
+let t = sys.Thread.spawn(fn() -> int {
+    let cv = sync.Condvar()
+    cv.lock()
+    cv.unlock()
+    return 0
+})
+print(t.join())

@@ -1,0 +1,7 @@
+import sys
+import sync
+
+let t = sys.Thread.spawn(fn() -> int {
+    return sync.Mutex<int>(1).lock((v) -> v)
+})
+print(t.join())
