@@ -24,6 +24,7 @@
 #include "../../base/xhash.h"
 #include "../../base/xhashmap.h"
 #include "../mem/xobj_header.h"
+#include <stdatomic.h>
 #include <stdbool.h>
 
 #include "xmethod.h"
@@ -234,10 +235,13 @@ struct XrClass {
     /* === Dynamic Layout (hidden class transitions) === */
     // Used only when flags & XR_CLASS_DYNAMIC_LAYOUT. Implements V8-style
     // hidden classes: adding a field creates a child class (transition).
-    struct XrClassTransition *transitions;  // Linked list of transitions
-    struct XrClass *transition_parent;      // Parent class in transition chain
-    int transition_symbol;                  // Symbol that caused transition from parent
-    uint16_t in_object_capacity;            // Max inline field slots (default 8)
+    // The head is atomic: the list only grows and nodes are immortal &
+    // immutable once published (release-store), so readers traverse lock-free
+    // via an acquire-load while writers serialize on core->metadata_lock (P1-3).
+    _Atomic(struct XrClassTransition *) transitions;  // Linked list of transitions
+    struct XrClass *transition_parent;                // Parent class in transition chain
+    int transition_symbol;                            // Symbol that caused transition from parent
+    uint16_t in_object_capacity;                      // Max inline field slots (default 8)
 
     /* === Struct Layout (VALUE_TYPE only) === */
     struct XrStructLayout *struct_layout;  // NULL for class, set for struct

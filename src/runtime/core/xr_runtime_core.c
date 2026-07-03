@@ -23,6 +23,7 @@ XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg) {
 
     core->vm_owner = cfg ? cfg->owner_isolate : NULL;
     core->userdata = cfg ? cfg->userdata : NULL;
+    xr_amutex_init(&core->metadata_lock);
     core->ext_type_next = XR_TTHREAD + 1;
     for (int32_t i = 0; i < XR_USER_GLOBALS_START; i++)
         core->builtins[i] = XR_NULL_VAL;

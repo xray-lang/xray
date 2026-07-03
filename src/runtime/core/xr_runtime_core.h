@@ -14,6 +14,7 @@
 #include "../../base/xconfig.h"
 #include "../../base/xforward_decl.h"
 #include "../../base/xglobal_indices.h"
+#include "../../base/xmutex.h"
 #include "../mem/xheap.h"
 #include "../object/xnative_type.h"
 #include "../value/xvalue.h"
@@ -63,6 +64,13 @@ typedef struct XrRuntimeCore {
     XrObjDestroyFn ext_destroy_funcs[XR_OBJ_TYPE_MAX];
     void *ext_traverse_funcs[XR_OBJ_TYPE_MAX];
     const XrScopeTransferOps *scope_transfer_ops;
+
+    /* Guards isolate-level shared metadata writes that happen off the object
+     * fast path: the hidden-class transition chains (xinstance.c). These are
+     * cold paths (first time a given field is added to a shape), so a single
+     * lock adds no measurable cost to steady-state execution while making
+     * concurrent shape evolution across worker threads race-free (P1-3). */
+    XrAdaptiveMutex metadata_lock;
 } XrRuntimeCore;
 
 XR_FUNC XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg);
