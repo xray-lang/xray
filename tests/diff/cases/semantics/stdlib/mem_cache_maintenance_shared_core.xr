@@ -1,0 +1,27 @@
+// mem.cacheFlush/cacheInvalidate (task 147 §7.5): explicit cache maintenance
+// hints for DMA/persistent-memory style code. They must not alter memory
+// contents; unsupported platforms may lower them to a fence/no-op.
+import mem
+
+let buf = mem.allocZeroed(96)
+if (buf.isNull()) {
+    print("alloc failed")
+} else {
+    unsafe { buf[0] = 11 }
+    unsafe { buf[63] = 12 }
+    unsafe { buf[64] = 13 }
+
+    mem.cacheFlush(buf, 96)
+    unsafe { print(buf[0]) }
+    unsafe { print(buf[63]) }
+
+    let mid = unsafe { buf.offset(32) }
+    mem.cacheInvalidate(mid, 32)
+    unsafe { print(buf[64]) }
+
+    mem.cacheFlush(buf, 0)
+    mem.cacheInvalidate(buf, -1)
+
+    mem.free(buf)
+    print("cache-maintained")
+}

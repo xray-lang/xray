@@ -280,6 +280,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"info", XLSP_SYM_FUNCTION, "fn(): Map", "Get memory-model runtime info as Map", NULL, 0},
     {"fence", XLSP_SYM_FUNCTION, "fn(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", NULL, 0},
     {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", NULL, 0},
+    {"cacheFlush", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
+    {"cacheInvalidate", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
     {"cacheLineSize", XLSP_SYM_FUNCTION, "fn(): int", "CPU cache line size in bytes", NULL, 0},
     {"alloc", XLSP_SYM_FUNCTION, "fn(n: int): RawMut<uint8>", "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free", NULL, 0},
     {"allocZeroed", XLSP_SYM_FUNCTION, "fn(n: int): RawMut<uint8>", "Allocate n zero-initialized bytes (calloc). NULL on OOM; pair with mem.free", NULL, 0},
@@ -314,7 +316,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"PROT_WRITE", XLSP_SYM_CONSTANT, "int", "Writable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_EXEC", XLSP_SYM_CONSTANT, "int", "Executable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 42
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 44
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {

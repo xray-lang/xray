@@ -340,6 +340,20 @@ static XrValue mem_compare(XrVMRuntime *isolate, XrValue *args, int argc) {
         memcmp(mem_rawptr_arg(args[0]), mem_rawptr_arg(args[1]), (size_t) XR_TO_INT(args[2])));
 }
 
+static XrValue mem_cache_flush(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    return xr_null();
+}
+
+static XrValue mem_cache_invalidate(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    return xr_null();
+}
+
 static XrValue mem_cache_line_size(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     (void) args;

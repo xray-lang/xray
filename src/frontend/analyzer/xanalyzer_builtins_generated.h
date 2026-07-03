@@ -380,6 +380,8 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"info", "(): Map", "Get memory-model runtime info as Map", true, false},
     {"fence", "(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false},
     {"prefetch", "(ptr: RawPtr<uint8>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false},
+    {"cacheFlush", "(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false},
+    {"cacheInvalidate", "(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false},
     {"cacheLineSize", "(): int", "CPU cache line size in bytes", true, false},
     {"alloc", "(n: int): RawMut<uint8>", "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free", true, false},
     {"allocZeroed", "(n: int): RawMut<uint8>", "Allocate n zero-initialized bytes (calloc). NULL on OOM; pair with mem.free", true, false},
@@ -415,7 +417,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"PROT_WRITE", ": int", "Writable page protection bit for mem.pageAlloc/pageProtect", false, false},
     {"PROT_EXEC", ": int", "Executable page protection bit for mem.pageAlloc/pageProtect", false, false},
 };
-#define GEN_MEM_FUNCTION_COUNT 42
+#define GEN_MEM_FUNCTION_COUNT 44
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {

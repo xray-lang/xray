@@ -27,6 +27,8 @@ fn xray_mem_bulk(dst: int, src: int, n: int) -> int {
 fn xray_mem_mmio_shape(addr: int) -> int {
     let p = mem.fromAddress(addr)
     mem.prefetch(p, 1)
+    mem.cacheFlush(p, 64)
+    mem.cacheInvalidate(p, 64)
     mem.volatileStore(p, 305419896, 4)
     mem.fence(4)
     return mem.volatileLoad(p, 4)
