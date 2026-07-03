@@ -116,6 +116,10 @@ typedef struct {
     int depth;
     bool has_error;
     char error_msg[128];
+    // Container pointers on the current serialization path, for precise cycle
+    // detection (matches JS JSON.stringify throwing on circular structures).
+    const void *seen[JSON_MAX_DEPTH];
+    int seen_count;
 } JsonWriter;
 
 typedef struct {
@@ -135,6 +139,7 @@ static inline void writer_init(JsonWriter *w, XrVMRuntime *isolate, int indent) 
     w->depth = 0;
     w->has_error = false;
     w->error_msg[0] = '\0';
+    w->seen_count = 0;
 }
 
 static inline void writer_free(JsonWriter *w) {
@@ -269,6 +274,8 @@ static void stringify_array(JsonWriter *w, XrArray *arr) {
                 writer_char(w, ',');
             writer_newline(w);
             stringify_value(w, xr_array_get(arr, i));
+            if (w->has_error)
+                break;
         }
         w->depth--;
         writer_newline(w);
@@ -334,6 +341,8 @@ static void stringify_map(JsonWriter *w, XrMap *map) {
 
         stringify_value(w, node->value);
         output_count++;
+        if (w->has_error)
+            break;
     }
 
     w->depth--;
@@ -374,6 +383,8 @@ static void stringify_json(JsonWriter *w, XrJson *json) {
             writer_char(w, ' ');
         stringify_value(w, xr_instance_get_dynamic_field(json, i));
         output_count++;
+        if (w->has_error)
+            break;
     }
 
     w->depth--;
@@ -423,6 +434,8 @@ static void stringify_instance(JsonWriter *w, XrInstance *inst) {
         XrValue field_val = xr_instance_get_field_fast(inst, i);
         stringify_value(w, field_val);
         output_count++;
+        if (w->has_error)
+            break;
     }
 
     w->depth--;
@@ -431,12 +444,45 @@ static void stringify_instance(JsonWriter *w, XrInstance *inst) {
     writer_char(w, '}');
 }
 
-// Stringify value (with depth guard against circular/deep nesting)
-static void stringify_value(JsonWriter *w, XrValue val) {
-    if (w->depth >= JSON_MAX_DEPTH) {
-        writer_str(w, "null");
-        return;
+// Push a container pointer onto the serialization path. Returns false (and
+// flags the writer error) if `ptr` is already on the path (circular structure)
+// or the path is too deep — never silently truncates to "null", which would
+// corrupt data unnoticed (P1-1).
+static bool stringify_enter(JsonWriter *w, const void *ptr) {
+    for (int i = 0; i < w->seen_count; i++) {
+        if (w->seen[i] == ptr) {
+            if (!w->has_error) {
+                w->has_error = true;
+                snprintf(w->error_msg, sizeof(w->error_msg),
+                         "cannot serialize circular structure to JSON");
+            }
+            return false;
+        }
     }
+    if (w->seen_count >= JSON_MAX_DEPTH) {
+        if (!w->has_error) {
+            w->has_error = true;
+            snprintf(w->error_msg, sizeof(w->error_msg),
+                     "cannot serialize structure nested deeper than %d levels to JSON",
+                     JSON_MAX_DEPTH);
+        }
+        return false;
+    }
+    w->seen[w->seen_count++] = ptr;
+    return true;
+}
+
+static inline void stringify_leave(JsonWriter *w) {
+    if (w->seen_count > 0)
+        w->seen_count--;
+}
+
+// Stringify value. Container types are guarded by stringify_enter/leave, which
+// detect circular references and excessive nesting and flag an error instead
+// of silently emitting "null".
+static void stringify_value(JsonWriter *w, XrValue val) {
+    if (w->has_error)
+        return;
     if (XR_IS_NULL(val)) {
         writer_str(w, "null");
     } else if (XR_IS_BOOL(val)) {
@@ -469,11 +515,23 @@ static void stringify_value(JsonWriter *w, XrValue val) {
         else
             writer_str(w, "null");
     } else if (XR_IS_ARRAY(val)) {
-        stringify_array(w, XR_TO_ARRAY(val));
+        XrArray *arr = XR_TO_ARRAY(val);
+        if (stringify_enter(w, arr)) {
+            stringify_array(w, arr);
+            stringify_leave(w);
+        }
     } else if (xr_value_is_json(val)) {
-        stringify_json(w, xr_value_to_json(val));
+        XrJson *json = xr_value_to_json(val);
+        if (stringify_enter(w, json)) {
+            stringify_json(w, json);
+            stringify_leave(w);
+        }
     } else if (XR_IS_MAP(val)) {
-        stringify_map(w, XR_TO_MAP(val));
+        XrMap *map = XR_TO_MAP(val);
+        if (stringify_enter(w, map)) {
+            stringify_map(w, map);
+            stringify_leave(w);
+        }
     } else if (XR_IS_ENUM_VALUE(val)) {
         // Enum value: serialize as member name string
         XrEnumValue *ev = XR_TO_ENUM_VALUE(val);
@@ -497,7 +555,11 @@ static void stringify_value(JsonWriter *w, XrValue val) {
             writer_str(w, "null");
     } else if (xr_value_is_instance(val)) {
         // Struct or Class instance
-        stringify_instance(w, (XrInstance *) XR_TO_PTR(val));
+        XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
+        if (stringify_enter(w, inst)) {
+            stringify_instance(w, inst);
+            stringify_leave(w);
+        }
     } else {
         // Non-serializable type: record error
         if (!w->has_error) {

@@ -76,9 +76,9 @@ vmcase(OP_ARRAY_GET_NOCHECK) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     XrArray *arr = XR_TO_ARRAY(R(b));
-    int idx = (int) XR_TO_INT(R(c));
+    int64_t idx = XR_TO_INT(R(c));
     R(a) = (arr->elem_type == XR_ELEM_ANY) ? ((XrValue *) arr->data)[idx]
-                                           : xr_array_get_element(arr, idx);
+                                           : xr_array_get_element(arr, (int32_t) idx);
     vmbreak;
 }
 

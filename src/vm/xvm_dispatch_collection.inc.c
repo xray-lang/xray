@@ -396,8 +396,8 @@ vmcase(OP_ARRAY_GET) {
     if (XR_IS_ARRAY_REF(obj_val)) {
         uint8_t etype = XR_ARRAY_REF_ELEM_TYPE(obj_val);
         uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
-        int idx = (int) XR_TO_INT(R(c));
-        if ((unsigned) idx < (unsigned) ecount) {
+        int64_t idx = XR_TO_INT(R(c));
+        if ((uint64_t) idx < (uint64_t) ecount) {
             uint8_t *bp = (uint8_t *) obj_val.ptr;
             uint8_t es = xr_native_type_size(etype);
             uint8_t *ep = bp + idx * es;
@@ -438,7 +438,7 @@ vmcase(OP_ARRAY_GET) {
             }
         } else {
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                             "fixed array index out of range: %d (length %u)", idx,
+                             "fixed array index out of range: %lld (length %u)", (long long) idx,
                              (unsigned) ecount);
         }
         vmbreak;
@@ -469,10 +469,10 @@ vmcase(OP_ARRAY_GET) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "only Array supports dynamic indexing");
     }
     XrArray *arr = XR_TO_ARRAY(obj_val);
-    int idx = (int) XR_TO_INT(R(c));
-    if ((unsigned) idx < (unsigned) arr->length) {
+    int64_t idx = XR_TO_INT(R(c));
+    if ((uint64_t) idx < (uint64_t) arr->length) {
         R(a) = (arr->elem_type == XR_ELEM_ANY) ? ((XrValue *) arr->data)[idx]
-                                               : xr_array_get_element(arr, idx);
+                                               : xr_array_get_element(arr, (int32_t) idx);
     } else {
         R(a) = xr_null();
     }
@@ -605,8 +605,8 @@ vmcase(OP_ARRAY_SET) {
     if (XR_IS_ARRAY_REF(obj_val)) {
         uint8_t etype = XR_ARRAY_REF_ELEM_TYPE(obj_val);
         uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
-        int idx = (int) XR_TO_INT(R(b));
-        if ((unsigned) idx < (unsigned) ecount) {
+        int64_t idx = XR_TO_INT(R(b));
+        if ((uint64_t) idx < (uint64_t) ecount) {
             uint8_t *bp = (uint8_t *) obj_val.ptr;
             uint8_t es = xr_native_type_size(etype);
             uint8_t *ep = bp + idx * es;
@@ -647,27 +647,28 @@ vmcase(OP_ARRAY_SET) {
             }
         } else {
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                             "fixed array index out of range: %d (length %u)", idx,
+                             "fixed array index out of range: %lld (length %u)", (long long) idx,
                              (unsigned) ecount);
         }
         vmbreak;
     }
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
-        int idx = (int) XR_TO_INT(R(b));
+        int64_t idx = XR_TO_INT(R(b));
         XrValue _av = R(c);
         /* Strict bounds: idx must be in [0, length). No append-at-length, no
          * negative wraparound (that is slice-only). */
-        if ((unsigned) idx >= (unsigned) arr->length) {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "array index out of range: %d (length %d)",
-                             idx, (int) arr->length);
+        if ((uint64_t) idx >= (uint64_t) arr->length) {
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "array index out of range: %lld (length %d)", (long long) idx,
+                             (int) arr->length);
         }
         if (arr->elem_type == XR_ELEM_ANY) {
             ((XrValue *) arr->data)[idx] = _av;
             XR_ARRAY_MARK_REFS(arr, _av);
         } else {
             VM_ARRAY_CHECK_STORABLE(arr, _av);
-            xr_array_set_element(arr, idx, _av);
+            xr_array_set_element(arr, (int32_t) idx, _av);
         }
         vmbreak;
     }
@@ -1243,8 +1244,8 @@ vmcase(OP_INDEX_GET) {
     if (XR_IS_ARRAY_REF(obj_val) && XR_IS_INT(key_val)) {
         uint8_t etype = XR_ARRAY_REF_ELEM_TYPE(obj_val);
         uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
-        int idx = (int) XR_TO_INT(key_val);
-        if ((unsigned) idx < (unsigned) ecount) {
+        int64_t idx = XR_TO_INT(key_val);
+        if ((uint64_t) idx < (uint64_t) ecount) {
             uint8_t *base_ptr = (uint8_t *) obj_val.ptr;
             uint8_t es = xr_native_type_size(etype);
             uint8_t *ep = base_ptr + idx * es;
@@ -1285,7 +1286,7 @@ vmcase(OP_INDEX_GET) {
             }
         } else {
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                             "fixed array index out of range: %d (length %u)", idx,
+                             "fixed array index out of range: %lld (length %u)", (long long) idx,
                              (unsigned) ecount);
         }
         vmbreak;
@@ -1304,15 +1305,16 @@ vmcase(OP_INDEX_GET) {
     // Fast path: Array (includes slices — capacity==0 && source!=NULL)
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
-        int idx = (int) XR_TO_INT(key_val);
+        int64_t idx = XR_TO_INT(key_val);
         /* Spec §3 (expr-index-access): an `int` index outside [0, length) — including
          * any negative index — throws E0430. No Python-style from-end wraparound. */
-        if ((unsigned) idx < (unsigned) arr->length) {
+        if ((uint64_t) idx < (uint64_t) arr->length) {
             R(a) = (arr->elem_type == XR_ELEM_ANY) ? ((XrValue *) arr->data)[idx]
-                                                   : xr_array_get_element(arr, idx);
+                                                   : xr_array_get_element(arr, (int32_t) idx);
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "array index out of range: %d (length %d)",
-                             idx, (int) arr->length);
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "array index out of range: %lld (length %d)", (long long) idx,
+                             (int) arr->length);
         }
         vmbreak;
     }
@@ -1354,10 +1356,10 @@ vmcase(OP_INDEX_GET) {
     if (XR_IS_SET(obj_val) && XR_IS_INT(key_val)) {
         XrSet *set = XR_TO_SET(obj_val);
         XrArray *vals = xr_set_values(VM_CURRENT_CORO, set);
-        int idx = (int) XR_TO_INT(key_val);
-        if (vals && (unsigned) idx < (unsigned) vals->length) {
+        int64_t idx = XR_TO_INT(key_val);
+        if (vals && (uint64_t) idx < (uint64_t) vals->length) {
             R(a) = (vals->elem_type == XR_ELEM_ANY) ? ((XrValue *) vals->data)[idx]
-                                                    : xr_array_get_element(vals, idx);
+                                                    : xr_array_get_element(vals, (int32_t) idx);
         } else {
             R(a) = xr_null();
         }
@@ -1403,8 +1405,8 @@ vmcase(OP_INDEX_SET) {
     if (XR_IS_ARRAY_REF(obj_val) && XR_IS_INT(key_val)) {
         uint8_t etype = XR_ARRAY_REF_ELEM_TYPE(obj_val);
         uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
-        int idx = (int) XR_TO_INT(key_val);
-        if ((unsigned) idx < (unsigned) ecount) {
+        int64_t idx = XR_TO_INT(key_val);
+        if ((uint64_t) idx < (uint64_t) ecount) {
             uint8_t *base_ptr = (uint8_t *) obj_val.ptr;
             uint8_t es = xr_native_type_size(etype);
             uint8_t *ep = base_ptr + idx * es;
@@ -1444,7 +1446,7 @@ vmcase(OP_INDEX_SET) {
             }
         } else {
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                             "fixed array index out of range: %d (length %u)", idx,
+                             "fixed array index out of range: %lld (length %u)", (long long) idx,
                              (unsigned) ecount);
         }
         vmbreak;
@@ -1452,20 +1454,21 @@ vmcase(OP_INDEX_SET) {
     // Fast path: Array (includes slices — capacity==0 && source!=NULL)
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
-        int idx = (int) XR_TO_INT(key_val);
+        int64_t idx = XR_TO_INT(key_val);
         /* Index assignment is strict: idx must be in [0, length). Assignment at
          * exactly length is out of bounds (push() is the append API) and
          * negative indexes never wrap from the end (that is slice-only). */
-        if ((unsigned) idx >= (unsigned) arr->length) {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "array index out of range: %d (length %d)",
-                             idx, (int) arr->length);
+        if ((uint64_t) idx >= (uint64_t) arr->length) {
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "array index out of range: %lld (length %d)", (long long) idx,
+                             (int) arr->length);
         }
         if (arr->elem_type == XR_ELEM_ANY) {
             ((XrValue *) arr->data)[idx] = val;
             XR_ARRAY_MARK_REFS(arr, val);
         } else {
             VM_ARRAY_CHECK_STORABLE(arr, val);
-            xr_array_set_element(arr, idx, val);
+            xr_array_set_element(arr, (int32_t) idx, val);
         }
         vmbreak;
     }
