@@ -2952,6 +2952,9 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
         case XRT_ARC_KIND_SYS_ONCE:
             xrt_sys_once_destroy_builtin(obj);
             break;
+        case XRT_ARC_KIND_THREAD:
+            xrt_thread_destroy_builtin(obj);
+            break;
         default:
             break;
     }

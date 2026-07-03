@@ -4604,6 +4604,20 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             fprintf(out, ")");
         return;
     }
+    const char *thread_helper =
+        xi_value_type_is_thread(v->args[0]) ? cg_thread_field_helper(field) : NULL;
+    if (thread_helper) {
+        if (cg_rep(v) == XR_REP_I64)
+            fprintf(out, "XR_TO_INT(");
+        else if (cg_rep(v) == XR_REP_F64)
+            fprintf(out, "XR_TO_FLOAT(");
+        fprintf(out, "%s(", thread_helper);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+        if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)
+            fprintf(out, ")");
+        return;
+    }
     const char *channel_helper =
         xi_value_type_is_channel(v->args[0]) ? cg_channel_field_helper(field) : NULL;
     if (channel_helper) {

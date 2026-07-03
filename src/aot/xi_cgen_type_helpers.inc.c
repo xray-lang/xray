@@ -107,6 +107,14 @@ static const char *cg_task_field_helper(const char *field) {
     return NULL;
 }
 
+static const char *cg_thread_field_helper(const char *field) {
+    if (!field)
+        return NULL;
+    if (strcmp(field, "done") == 0)
+        return "xrt_thread_done_value";
+    return NULL;
+}
+
 typedef struct CgSetElemInfo {
     const char *elem_name;
     XrRep rep;

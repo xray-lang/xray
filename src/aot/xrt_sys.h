@@ -15,6 +15,7 @@
 #include "xrt_method_symbols.h"
 #include "xrt_value.h"
 #include "../os/os_thread.h"
+#include <stdatomic.h>
 #if !defined(XR_OS_WINDOWS)
 #include <time.h>
 #endif
@@ -44,6 +45,20 @@ typedef struct xrt_sys_barrier_object {
 typedef struct xrt_sys_once_object {
     xr_once_t once;
 } xrt_sys_once_object_t;
+
+typedef enum xrt_thread_state {
+    XRT_THREAD_CREATED = 0,
+    XRT_THREAD_JOINING,
+    XRT_THREAD_JOINED,
+    XRT_THREAD_DETACHED,
+} xrt_thread_state_t;
+
+typedef struct xrt_thread_object {
+    xr_thread_t handle;
+    _Atomic(int) state;
+    _Atomic(bool) finished;
+    XrValue retval;
+} xrt_thread_object_t;
 
 static XR_THREAD_LOCAL XrValue xrt_sys_once_callback = {.tag = XR_TAG_NULL};
 
@@ -245,6 +260,10 @@ static inline int xrt_sys_once_is(XrValue value) {
     return value.tag == XR_TAG_SYS_ONCE && value.ptr != NULL;
 }
 
+static inline int xrt_thread_is(XrValue value) {
+    return value.tag == XR_TAG_THREAD && value.ptr != NULL;
+}
+
 static inline xrt_sys_mutex_object_t *xrt_sys_mutex_ptr(XrValue value) {
     return xrt_sys_mutex_is(value) ? (xrt_sys_mutex_object_t *) value.ptr : NULL;
 }
@@ -265,6 +284,10 @@ static inline xrt_sys_once_object_t *xrt_sys_once_ptr(XrValue value) {
     return xrt_sys_once_is(value) ? (xrt_sys_once_object_t *) value.ptr : NULL;
 }
 
+static inline xrt_thread_object_t *xrt_thread_ptr(XrValue value) {
+    return xrt_thread_is(value) ? (xrt_thread_object_t *) value.ptr : NULL;
+}
+
 static inline XrValue xrt_sys_mutex_box(xrt_sys_mutex_object_t *mutex) {
     return mutex ? xr_mkptr(mutex, XR_TAG_SYS_MUTEX) : XR_NULL_VAL;
 }
@@ -283,6 +306,10 @@ static inline XrValue xrt_sys_barrier_box(xrt_sys_barrier_object_t *barrier) {
 
 static inline XrValue xrt_sys_once_box(xrt_sys_once_object_t *once) {
     return once ? xr_mkptr(once, XR_TAG_SYS_ONCE) : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_thread_box(xrt_thread_object_t *thread) {
+    return thread ? xr_mkptr(thread, XR_TAG_THREAD) : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_sys_mutex_new(void) {
@@ -363,6 +390,66 @@ static inline void xrt_sys_barrier_destroy_builtin(void *obj) {
 
 static inline void xrt_sys_once_destroy_builtin(void *obj) {
     (void) obj;
+}
+
+static inline void xrt_thread_destroy_builtin(void *obj) {
+    xrt_thread_object_t *thread = (xrt_thread_object_t *) obj;
+    if (!thread)
+        return;
+    int expected = XRT_THREAD_CREATED;
+    if (atomic_compare_exchange_strong_explicit(&thread->state, &expected, XRT_THREAD_DETACHED,
+                                                memory_order_acq_rel, memory_order_acquire) &&
+        xr_thread_is_valid(thread->handle)) {
+        xr_thread_detach(thread->handle);
+    }
+}
+
+static inline XrValue xrt_thread_done_value(XrValue recv) {
+    xrt_thread_object_t *thread = xrt_thread_ptr(recv);
+    return XR_FROM_BOOL(thread && atomic_load_explicit(&thread->finished, memory_order_acquire));
+}
+
+static inline XrValue xrt_thread_method_0(XrValue recv, int sym) {
+    xrt_thread_object_t *thread = xrt_thread_ptr(recv);
+    if (!thread)
+        return XR_NULL_VAL;
+    if (sym == XRT_SYM_JOIN) {
+        for (;;) {
+            int state = atomic_load_explicit(&thread->state, memory_order_acquire);
+            switch ((xrt_thread_state_t) state) {
+                case XRT_THREAD_JOINED:
+                    return thread->retval;
+                case XRT_THREAD_DETACHED:
+                    return XR_NULL_VAL;
+                case XRT_THREAD_JOINING:
+                    xr_thread_yield();
+                    break;
+                case XRT_THREAD_CREATED: {
+                    int expected = XRT_THREAD_CREATED;
+                    if (!atomic_compare_exchange_strong_explicit(
+                            &thread->state, &expected, XRT_THREAD_JOINING, memory_order_acq_rel,
+                            memory_order_acquire)) {
+                        break;
+                    }
+                    if (xr_thread_is_valid(thread->handle))
+                        (void) xr_thread_join(thread->handle, NULL);
+                    atomic_store_explicit(&thread->finished, true, memory_order_release);
+                    atomic_store_explicit(&thread->state, XRT_THREAD_JOINED, memory_order_release);
+                    return thread->retval;
+                }
+            }
+        }
+    }
+    if (sym == XRT_SYM_DETACH) {
+        int expected = XRT_THREAD_CREATED;
+        if (atomic_compare_exchange_strong_explicit(&thread->state, &expected, XRT_THREAD_DETACHED,
+                                                    memory_order_acq_rel, memory_order_acquire) &&
+            xr_thread_is_valid(thread->handle)) {
+            xr_thread_detach(thread->handle);
+        }
+        return XR_NULL_VAL;
+    }
+    return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_sys_mutex_method_0(XrValue recv, int sym) {

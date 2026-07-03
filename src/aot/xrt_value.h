@@ -144,6 +144,7 @@ typedef struct XrValue {
 #define XR_TAG_SYS_CONDVAR 30 /* AOT sys.Condvar OS-domain handle */
 #define XR_TAG_SYS_BARRIER 31 /* AOT sys.Barrier OS-domain handle */
 #define XR_TAG_SYS_ONCE 32    /* AOT sys.Once OS-domain handle */
+#define XR_TAG_THREAD 33      /* AOT Thread<T> OS-thread handle */
 
 typedef struct XrAotEnumValueView {
     uint64_t gc_words[2];

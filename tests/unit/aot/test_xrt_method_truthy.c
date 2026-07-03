@@ -87,6 +87,29 @@ static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj) {
         g_passed++;                                                                                \
     } while (0)
 
+#define ASSERT_INT(value, expected, msg)                                                           \
+    do {                                                                                           \
+        XrValue _actual = (value);                                                                 \
+        if (_actual.tag != XR_TAG_I64 || _actual.i != (expected)) {                                \
+            fprintf(stderr, "FAIL: %s (got tag %d value %lld, expected %lld)\n", msg, _actual.tag, \
+                    (long long) _actual.i, (long long) (expected));                                \
+            g_failed++;                                                                            \
+            return;                                                                                \
+        }                                                                                          \
+        g_passed++;                                                                                \
+    } while (0)
+
+#define ASSERT_NULL(value, msg)                                                                    \
+    do {                                                                                           \
+        XrValue _actual = (value);                                                                 \
+        if (_actual.tag != XR_TAG_NULL) {                                                          \
+            fprintf(stderr, "FAIL: %s (got tag %d)\n", msg, _actual.tag);                          \
+            g_failed++;                                                                            \
+            return;                                                                                \
+        }                                                                                          \
+        g_passed++;                                                                                \
+    } while (0)
+
 static XrValue test_string_with_bytes(const char *bytes, size_t len) {
     XrValue s = xrt_str_alloc(len);
     if (len != 0)
@@ -148,10 +171,24 @@ static void test_xrt_weak_predicate_accepts_aot_object_tags(void) {
                         "native struct reference is an object-like weak key");
 }
 
+static void test_xrt_thread_handle_methods(void) {
+    xrt_thread_object_t thread = {0};
+    atomic_store_explicit(&thread.state, XRT_THREAD_JOINED, memory_order_release);
+    atomic_store_explicit(&thread.finished, true, memory_order_release);
+    thread.retval = XR_FROM_INT(42);
+
+    XrValue handle = xrt_thread_box(&thread);
+    ASSERT_WEAK_ACCEPTS(handle, true, "Thread handle is an object-like weak key");
+    ASSERT_BOOL(xrt_thread_done_value(handle), true, "Thread.done reads finished flag");
+    ASSERT_INT(xrt_method_0(handle, XRT_SYM_JOIN), 42, "Thread.join returns cached retval");
+    ASSERT_NULL(xrt_method_0(handle, XRT_SYM_DETACH), "Thread.detach is a null-returning method");
+}
+
 int main(void) {
     test_xrt_to_bool_reuses_truthy_core_for_scalars_and_strings();
     test_xrt_to_bool_reuses_truthy_core_for_sized_containers();
     test_xrt_weak_predicate_accepts_aot_object_tags();
+    test_xrt_thread_handle_methods();
 
     if (g_failed == 0) {
         printf("test_xrt_method_truthy: %d passed, %d failed\n", g_passed, g_failed);
