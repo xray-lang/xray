@@ -284,7 +284,7 @@ XrValue xr_reflect_fieldCount(XrVMRuntime *isolate, XrValue self, XrValue *args,
     }
 
     // Struct ref (skip array_ref which uses ext for elem metadata)
-    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj)) {
+    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
         XrStructLayout *layout =
             xr_vm_struct_layout_lookup(xr_isolate_get_vm_state(isolate), xr_struct_layout_id(obj));
         if (layout)

@@ -618,7 +618,8 @@ XR_FUNC void xi_emit_range(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(v->aux_int ? OP_NEWRANGE_INCLUSIVE : OP_NEWRANGE, dst, start, end));
 }
 
-/* Slice: OP_SLICE expects start at R[C], end at R[C+1] (consecutive) */
+/* Slice: OP_SLICE expects start at R[C], end at R[C+1] (consecutive).
+ * Span results additionally pass a frame-local XrSpanView slot in R[C+2]. */
 XR_FUNC void xi_emit_slice(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 3) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -629,16 +630,27 @@ XR_FUNC void xi_emit_slice(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg hi_src = reg_of(ctx, v->args[2]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    if (ctx->next_reg + 2 > MAX_REGS) {
+
+    bool result_is_span = v->type && XR_TYPE_IS_SPAN(v->type);
+    uint16_t span_slot = 0;
+    if (result_is_span &&
+        !xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSpanView), &span_slot)) {
+        return;
+    }
+
+    uint16_t tmp_count = result_is_span ? 3 : 2;
+    if (ctx->next_reg + tmp_count > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
     XiEmitReg lo_slot = (XiEmitReg) ctx->next_reg;
-    ctx->next_reg += 2;
+    ctx->next_reg += tmp_count;
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
     emit_inst(ctx, CREATE_ABC(OP_MOVE, lo_slot, lo_src, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (lo_slot + 1), hi_src, 0));
+    if (result_is_span)
+        emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (lo_slot + 2), span_slot));
     emit_inst(ctx, CREATE_ABC(OP_SLICE, dst, src, lo_slot));
 }
 

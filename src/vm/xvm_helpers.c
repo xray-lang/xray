@@ -87,7 +87,7 @@ XrStructLayout *xr_vm_struct_layout_lookup(XrVMState *vm, uint16_t layout_id) {
 }
 
 XrStructLayout *xr_vm_struct_ref_layout(XrVMRuntime *isolate, XrValue ref) {
-    if (!XR_IS_STRUCT_REF(ref) || XR_IS_ARRAY_REF(ref) || !ref.ptr)
+    if (!XR_IS_STRUCT_REF(ref) || XR_IS_ARRAY_REF(ref) || XR_IS_SPAN_REF(ref) || !ref.ptr)
         return NULL;
 
     uint16_t layout_id = xr_struct_layout_id(ref);

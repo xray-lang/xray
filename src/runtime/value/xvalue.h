@@ -198,7 +198,39 @@ XR_FUNC bool xr_value_is_bigint(XrValue v);
  * Callers that have already established is_tuple may cast the
  * instance pointer directly. */
 
-/* ========== Struct Ref ========== */
+/* ========== Struct Ref / Frame-Local Span Ref ========== */
+
+/* Reserved STRUCT_REF layout id for frame-local Span values.
+ * Real value-struct layout ids are allocated by the VM layout registry. Span is
+ * not a user struct: it reuses the STRUCT_REF tag only to point at frame-owned
+ * bytes without adding another XrValue tag. */
+#define XR_STRUCT_REF_SPAN_LAYOUT_ID UINT16_MAX
+
+typedef struct XrSpanView {
+    void *data;
+    int64_t length;
+    uint8_t elem_type;
+    uint8_t elem_size;
+    uint8_t elem_tid;
+    uint8_t contains_refs;
+    uint32_t reserved;
+    void *guard;
+} XrSpanView;
+
+static inline bool xr_value_is_span_ref(XrValue v) {
+    return v.tag == XR_TAG_STRUCT_REF && v.ext == 0 && v.heap_type == XR_STRUCT_REF_SPAN_LAYOUT_ID;
+}
+
+static inline XrValue xr_span_ref(XrSpanView *span) {
+    XrValue v = {0};
+    v.tag = XR_TAG_STRUCT_REF;
+    v.heap_type = XR_STRUCT_REF_SPAN_LAYOUT_ID;
+    v.ptr = span;
+    return v;
+}
+
+#define XR_IS_SPAN_REF(v) xr_value_is_span_ref(v)
+#define XR_TO_SPAN_REF(v) ((XrSpanView *) ((v).ptr))
 
 /* Construct a struct ref: ptr points into frame struct_area,
  * heap_type is repurposed as layout_id. */

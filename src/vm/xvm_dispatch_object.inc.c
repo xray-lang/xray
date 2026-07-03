@@ -468,8 +468,15 @@ vmcase(OP_GETPROP) {
         vmbreak;
     }
 
+    // Frame-local Span .length/.size
+    if (XR_IS_SPAN_REF(obj) && (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_SIZE)) {
+        XrSpanView *span = XR_TO_SPAN_REF(obj);
+        R(a) = XR_FROM_INT(span ? span->length : 0);
+        vmbreak;
+    }
+
     // Stack-allocated struct field access
-    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj)) {
+    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
         XrStructLayout *slayout = NULL;
         uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
         int fidx = xr_vm_struct_layout_field_index(isolate, slayout, prop_symbol);

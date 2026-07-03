@@ -88,6 +88,24 @@ static void format_array(XrVMRuntime *isolate, XrStrBuf *sb, XrArray *arr, int d
     xr_strbuf_append_cstr(sb, "]", 1);
 }
 
+static void format_span(XrVMRuntime *isolate, XrStrBuf *sb, XrSpanView *span, int depth) {
+    xr_strbuf_append_cstr(sb, "[", 1);
+    int64_t len = span ? span->length : 0;
+    int64_t limit = (len > XR_FORMAT_MAX_ELEMENTS) ? XR_FORMAT_MAX_ELEMENTS : len;
+    for (int64_t i = 0; i < limit; i++) {
+        if (i > 0)
+            xr_strbuf_append_cstr(sb, ", ", 2);
+        xr_value_to_strbuf(isolate, sb, xr_typed_get(span->data, (int32_t) i, span->elem_type),
+                           depth + 1);
+    }
+    if (len > limit) {
+        char more[32];
+        int n = snprintf(more, sizeof(more), ", ...(%" PRId64 " more)", len - limit);
+        xr_strbuf_append_cstr(sb, more, (size_t) n);
+    }
+    xr_strbuf_append_cstr(sb, "]", 1);
+}
+
 static void format_tuple(XrVMRuntime *isolate, XrStrBuf *sb, XrTuple *tup, int depth) {
     xr_strbuf_append_cstr(sb, "(", 1);
     uint16_t n = xr_tuple_arity(tup);
@@ -216,6 +234,10 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
     }
     if (XR_IS_NULL(val)) {
         xr_strbuf_append_cstr(sb, "null", 4);
+        return;
+    }
+    if (XR_IS_SPAN_REF(val)) {
+        format_span(isolate, sb, XR_TO_SPAN_REF(val), depth);
         return;
     }
 

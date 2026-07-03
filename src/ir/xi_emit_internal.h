@@ -195,6 +195,8 @@ XR_FUNC int current_pc(EmitCtx *ctx);
 XR_FUNC void emit_inst(EmitCtx *ctx, XrInstruction inst);
 XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const struct XrStructLayout *layout,
                                             uint16_t *slot_out);
+XR_FUNC bool xi_emit_alloc_struct_area_bytes(EmitCtx *ctx, uint32_t bytes_needed,
+                                             uint16_t *slot_out);
 XR_FUNC void free_reg(EmitCtx *ctx, XiEmitReg reg);
 XR_FUNC XiEmitReg reg_of(EmitCtx *ctx, const XiValue *v);
 XR_FUNC XiEmitReg reg_of_cell_deref(EmitCtx *ctx, const XiValue *v);

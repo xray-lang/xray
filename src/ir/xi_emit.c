@@ -54,8 +54,19 @@ XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const XrStructLayout *
         return false;
     }
 
-    uint32_t slot = ctx->struct_area_offset;
     uint32_t bytes_needed = xr_struct_layout_storage_size(layout);
+    return xi_emit_alloc_struct_area_bytes(ctx, bytes_needed, slot_out);
+}
+
+XR_FUNC bool xi_emit_alloc_struct_area_bytes(EmitCtx *ctx, uint32_t bytes_needed,
+                                             uint16_t *slot_out) {
+    if (!ctx || bytes_needed == 0 || !slot_out) {
+        if (ctx)
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return false;
+    }
+
+    uint32_t slot = ctx->struct_area_offset;
     uint32_t slots_needed = (bytes_needed + 15u) / 16u;
     uint32_t next = slot + slots_needed;
     if (slot > MAXARG_C || next > UINT16_MAX) {

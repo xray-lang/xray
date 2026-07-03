@@ -46,6 +46,29 @@
         }                                                                                          \
     } while (0)
 
+#define VM_SPAN_CHECK_STORABLE(span, val)                                                          \
+    do {                                                                                           \
+        if ((span)->elem_type == XR_ELEM_CHAR && !XR_IS_CHAR(val)) {                               \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span<char> element must be char");             \
+        }                                                                                          \
+    } while (0)
+
+#define VM_SPAN_SLOT(slot_value)                                                                   \
+    ((XrSpanView *) (vm_ctx->struct_areas[VM_FRAME_COUNT - 1] +                                    \
+                     (uint16_t) (XR_TO_INT(slot_value)) * 16u))
+
+#define VM_SPAN_GET_ELEMENT(span, idx)                                                             \
+    xr_typed_get((span)->data, (int32_t) (idx), (span)->elem_type)
+
+#define VM_SPAN_SET_ELEMENT(span, idx, val)                                                        \
+    do {                                                                                           \
+        if (xr_typed_set((span)->data, (int32_t) (idx), (val), (span)->elem_type) &&               \
+            (span)->guard) {                                                                       \
+            XrArray *_span_owner = (XrArray *) (span)->guard;                                      \
+            XR_ARRAY_MARK_REFS(_span_owner, (val));                                                \
+        }                                                                                          \
+    } while (0)
+
 vmcase(OP_NEWARRAY) {
     /* OP_NEWARRAY: create array
     ** A = destination register
@@ -844,6 +867,11 @@ vmcase(OP_ARRAY_LEN) {
     // OP_ARRAY_LEN: array length
     int a = GETARG_A(i);
     int b = GETARG_B(i);
+    if (XR_IS_SPAN_REF(R(b))) {
+        XrSpanView *span = XR_TO_SPAN_REF(R(b));
+        R(a) = xr_int((xr_Integer) (span ? span->length : 0));
+        vmbreak;
+    }
     XrArray *arr = XR_TO_ARRAY(R(b));
     R(a) = xr_int((xr_Integer) arr->length);
     vmbreak;
@@ -852,6 +880,11 @@ vmcase(OP_ARRAY_LEN) {
 vmcase(OP_ARRAY_DATA_PTR) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
+    if (XR_IS_SPAN_REF(R(b))) {
+        XrSpanView *span = XR_TO_SPAN_REF(R(b));
+        R(a) = xr_int((xr_Integer) (intptr_t) (span ? span->data : NULL));
+        vmbreak;
+    }
     if (!XR_IS_ARRAY(R(b))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                          "Array.dataPtrUnchecked() expects an array or span receiver");
@@ -901,6 +934,18 @@ vmcase(OP_BYTES_LOAD_U32_LE) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
+    if (XR_IS_SPAN_REF(R(b)) && XR_IS_INT(R(c))) {
+        XrSpanView *span = XR_TO_SPAN_REF(R(b));
+        if (!span || span->elem_type != XR_ELEM_U8)
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU32LE receiver must be Bytes");
+        bool ok = false;
+        uint32_t value = xr_array_core_bytes_load_u32_le(span->data, span->length, span->elem_type,
+                                                         XR_TO_INT(R(c)), &ok);
+        if (!ok)
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU32LE offset out of bounds");
+        R(a) = xr_int((xr_Integer) value);
+        vmbreak;
+    }
     if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU32LE(offset) expects Bytes and integer");
     }
@@ -919,6 +964,18 @@ vmcase(OP_BYTES_LOAD_U16_LE) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
+    if (XR_IS_SPAN_REF(R(b)) && XR_IS_INT(R(c))) {
+        XrSpanView *span = XR_TO_SPAN_REF(R(b));
+        if (!span || span->elem_type != XR_ELEM_U8)
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U16_RECEIVER_MSG);
+        bool ok = false;
+        uint16_t value = xr_array_core_bytes_load_u16_le(span->data, span->length, span->elem_type,
+                                                         XR_TO_INT(R(c)), &ok);
+        if (!ok)
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U16_OOB_MSG);
+        R(a) = xr_int((xr_Integer) value);
+        vmbreak;
+    }
     if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U16_EXPECTS_MSG);
     }
@@ -937,6 +994,18 @@ vmcase(OP_BYTES_LOAD_U64_LE) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
+    if (XR_IS_SPAN_REF(R(b)) && XR_IS_INT(R(c))) {
+        XrSpanView *span = XR_TO_SPAN_REF(R(b));
+        if (!span || span->elem_type != XR_ELEM_U8)
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU64LE receiver must be Bytes");
+        bool ok = false;
+        uint64_t value = xr_array_core_bytes_load_u64_le(span->data, span->length, span->elem_type,
+                                                         XR_TO_INT(R(c)), &ok);
+        if (!ok)
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU64LE offset out of bounds");
+        R(a) = xr_int((xr_Integer) value);
+        vmbreak;
+    }
     if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU64LE(offset) expects Bytes and integer");
     }
@@ -1291,6 +1360,19 @@ vmcase(OP_INDEX_GET) {
         }
         vmbreak;
     }
+    // Fast path: frame-local Span value
+    if (XR_IS_SPAN_REF(obj_val) && XR_IS_INT(key_val)) {
+        XrSpanView *span = XR_TO_SPAN_REF(obj_val);
+        int64_t idx = XR_TO_INT(key_val);
+        if (span && (uint64_t) idx < (uint64_t) span->length) {
+            R(a) = VM_SPAN_GET_ELEMENT(span, idx);
+        } else {
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "span index out of range: %lld (length %d)", (long long) idx,
+                             (int) (span ? span->length : 0));
+        }
+        vmbreak;
+    }
     // Fast path: String (Unicode character index)
     if (XR_IS_STRING(obj_val) && XR_IS_INT(key_val)) {
         XrString *str = XR_TO_STRING(obj_val);
@@ -1451,6 +1533,19 @@ vmcase(OP_INDEX_SET) {
         }
         vmbreak;
     }
+    // Fast path: frame-local Span value
+    if (XR_IS_SPAN_REF(obj_val) && XR_IS_INT(key_val)) {
+        XrSpanView *span = XR_TO_SPAN_REF(obj_val);
+        int64_t idx = XR_TO_INT(key_val);
+        if (!span || (uint64_t) idx >= (uint64_t) span->length) {
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "span index out of range: %lld (length %d)", (long long) idx,
+                             (int) (span ? span->length : 0));
+        }
+        VM_SPAN_CHECK_STORABLE(span, val);
+        VM_SPAN_SET_ELEMENT(span, idx, val);
+        vmbreak;
+    }
     // Fast path: Array (includes slices — capacity==0 && source!=NULL)
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
@@ -1533,11 +1628,47 @@ vmcase(OP_SLICE) {
     int64_t start = XR_TO_INT(R(c));
     int64_t end = XR_TO_INT(R(c + 1));
 
-    // Array slice: zero-copy, shared data
+    // Array slice: frame-local borrowed Span value, zero heap allocation.
     if (XR_IS_ARRAY(source)) {
         XrArray *arr = XR_TO_ARRAY(source);
-        XrArray *slice = xr_array_slice(VM_CURRENT_CORO, arr, start, end);
-        R(a) = slice ? XR_FROM_PTR(slice) : xr_null();
+        if (!XR_IS_INT(R(c + 2))) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "array slice missing Span frame slot");
+        }
+        xr_array_normalize_slice(arr->length, &start, &end);
+        XrSpanView *span = VM_SPAN_SLOT(R(c + 2));
+        span->data = (arr->data && end > start)
+                         ? (uint8_t *) arr->data + (size_t) start * arr->elem_size
+                         : (uint8_t *) arr->data;
+        span->length = end - start;
+        span->elem_type = arr->elem_type;
+        span->elem_size = arr->elem_size;
+        span->elem_tid = arr->elem_tid;
+        span->contains_refs = arr->contains_refs;
+        span->reserved = 0;
+        span->guard = arr;
+        R(a) = xr_span_ref(span);
+        vmbreak;
+    }
+
+    // Span slice-of-slice: pure pointer arithmetic into another frame-local Span.
+    if (XR_IS_SPAN_REF(source)) {
+        XrSpanView *src_span = XR_TO_SPAN_REF(source);
+        if (!src_span || !XR_IS_INT(R(c + 2))) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "span slice missing Span frame slot");
+        }
+        xr_array_normalize_slice(src_span->length, &start, &end);
+        XrSpanView *span = VM_SPAN_SLOT(R(c + 2));
+        span->data = (src_span->data && end > start)
+                         ? (uint8_t *) src_span->data + (size_t) start * src_span->elem_size
+                         : (uint8_t *) src_span->data;
+        span->length = end - start;
+        span->elem_type = src_span->elem_type;
+        span->elem_size = src_span->elem_size;
+        span->elem_tid = src_span->elem_tid;
+        span->contains_refs = src_span->contains_refs;
+        span->reserved = 0;
+        span->guard = src_span->guard;
+        R(a) = xr_span_ref(span);
         vmbreak;
     }
 

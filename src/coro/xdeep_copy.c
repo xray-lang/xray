@@ -1123,6 +1123,41 @@ XrValue xr_to_shared_array(struct XrVMRuntime *X, XrObjHeader *obj) {
     return XR_FROM_PTR(new_arr);
 }
 
+static XrValue xr_span_to_shared_array(struct XrVMRuntime *X, XrSpanView *span) {
+    if (!X || !span || !xr_isolate_get_sys_heap(X) || span->length < 0 ||
+        span->length > INT32_MAX || span->elem_type >= XR_ELEM_COUNT)
+        return XR_NULL_VAL;
+    if (span->length > 0 && !span->data)
+        return XR_NULL_VAL;
+
+    int32_t length = (int32_t) span->length;
+    XrArray *new_arr =
+        (XrArray *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), sizeof(XrArray), XR_TARRAY);
+    if (!new_arr)
+        return XR_NULL_VAL;
+    xr_array_init_inplace(new_arr, length > 0 ? length : 4, span->elem_type);
+    new_arr->elem_tid = span->elem_tid;
+    new_arr->contains_refs = span->contains_refs;
+    XR_OBJ_SET_STORAGE(&new_arr->hdr, XR_OBJ_STORAGE_SHARED);
+    xr_shared_set_refc(&new_arr->hdr, 1);
+
+    if (span->elem_type == XR_ELEM_ANY) {
+        XrValue *src = (XrValue *) span->data;
+        for (int32_t i = 0; i < length; i++)
+            xr_array_push(new_arr, xr_to_shared(X, src[i]));
+        new_arr->contains_refs = span->contains_refs;
+        return XR_FROM_PTR(new_arr);
+    }
+
+    if (length > 0) {
+        if (!new_arr->data)
+            return XR_NULL_VAL;
+        memcpy(new_arr->data, span->data, (size_t) length * span->elem_size);
+        new_arr->length = length;
+    }
+    return XR_FROM_PTR(new_arr);
+}
+
 XrValue xr_to_shared_map(struct XrVMRuntime *X, XrObjHeader *obj) {
     XrMap *map = (XrMap *) obj;
     if (!map || !xr_isolate_get_sys_heap(X))
@@ -1243,6 +1278,8 @@ XrValue xr_to_shared_closure(struct XrVMRuntime *X, XrObjHeader *obj) {
 }
 
 XrValue xr_to_shared(struct XrVMRuntime *X, XrValue value) {
+    if (XR_IS_SPAN_REF(value))
+        return xr_span_to_shared_array(X, XR_TO_SPAN_REF(value));
     if (!XR_IS_PTR(value))
         return value;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
