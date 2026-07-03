@@ -2204,6 +2204,11 @@ static void emit_shift_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (emit_native_range_safe_const_shl_expr(ctx, out, v))
         return;
 
+    /* Unsigned lhs with a non-constant count: logical shift (matches the
+     * VM's OP_SHR_U; the const-count case was handled above). */
+    if (v->op == XI_SHR && v->nargs >= 1 && v->args[0] && cg_type_is_unsigned_int(v->args[0]->type))
+        fn = "xrt_i64_shr_u";
+
     bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "XR_FROM_INT(");

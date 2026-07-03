@@ -401,6 +401,10 @@ static inline xr_Integer xr_int_shl_wrap(xr_Integer a, xr_Integer b) {
 static inline xr_Integer xr_int_shr_wrap(xr_Integer a, xr_Integer b) {
     return xr_i64_shr_wrap(a, b);
 }
+/* Logical right shift for statically-unsigned operands (OP_SHR_U). */
+static inline xr_Integer xr_int_shr_u_wrap(xr_Integer a, xr_Integer b) {
+    return xr_i64_shr_u_wrap(a, b);
+}
 
 /* ========== Type Query ========== */
 

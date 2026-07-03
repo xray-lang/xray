@@ -147,6 +147,8 @@ XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         else if (v->op == XI_LE || v->op == XI_GE)
             op = OP_CMP_LEU;
     }
+    if (xi_emit_shr_uses_unsigned(v))
+        op = OP_SHR_U;
     if (op == OP_NOP) {
         emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
         return;

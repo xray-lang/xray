@@ -85,6 +85,15 @@ static inline bool xi_emit_compare_uses_unsigned(const XiValue *v) {
            (xi_emit_type_is_unsigned_int(left) || xi_emit_type_is_unsigned_int(right));
 }
 
+/* XI_SHR on a statically-unsigned lhs is a logical shift (OP_SHR_U). Keyed on
+ * the lhs only: xray shift results take the left operand's width/signedness.
+ * Mirrors cg_type_is_unsigned_int in the AOT backend (xi_cgen.c). */
+static inline bool xi_emit_shr_uses_unsigned(const XiValue *v) {
+    if (!v || v->op != XI_SHR || v->nargs < 1)
+        return false;
+    return xi_emit_type_is_unsigned_int(v->args[0] ? v->args[0]->type : NULL);
+}
+
 /* ========== Emit Context ========== */
 
 typedef struct {
