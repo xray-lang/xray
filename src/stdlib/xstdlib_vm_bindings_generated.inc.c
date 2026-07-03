@@ -256,6 +256,7 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "prefetch", mem_prefetch);
     XRS_EXPORT(module, isolate, "cacheFlush", mem_cache_flush);
     XRS_EXPORT(module, isolate, "cacheInvalidate", mem_cache_invalidate);
+    XRS_EXPORT(module, isolate, "nontemporalStore", mem_nontemporal_store);
     XRS_EXPORT(module, isolate, "cacheLineSize", mem_cache_line_size);
     XRS_EXPORT(module, isolate, "alloc", mem_alloc);
     XRS_EXPORT(module, isolate, "allocZeroed", mem_alloc_zeroed);

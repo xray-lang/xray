@@ -117,6 +117,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"mem", "prefetch", 2, "xrt_mem_prefetch", "vv", CG_AOT_RET_VALUE, NULL},
     {"mem", "cacheFlush", 2, "xrt_mem_cache_flush", "vv", CG_AOT_RET_VALUE, NULL},
     {"mem", "cacheInvalidate", 2, "xrt_mem_cache_invalidate", "vv", CG_AOT_RET_VALUE, NULL},
+    {"mem", "nontemporalStore", 3, "xrt_mem_nontemporal_store", "vvv", CG_AOT_RET_VALUE, NULL},
     {"mem", "cacheLineSize", 0, "xrt_mem_cache_line_size", "", CG_AOT_RET_VALUE, NULL},
     {"mem", "alloc", 1, "xrt_mem_alloc", "v", CG_AOT_RET_VALUE, NULL},
     {"mem", "allocZeroed", 1, "xrt_mem_alloc_zeroed", "v", CG_AOT_RET_VALUE, NULL},

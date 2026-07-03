@@ -1,0 +1,26 @@
+// mem.nontemporalStore (task 147 §7.5): cache-bypassing store hint.
+// The observable semantics are a sized native-order store; VM falls back to a
+// normal store, while AOT may emit streaming stores on supported targets.
+import mem
+
+let buf = mem.allocZeroed(16)
+if (buf.isNull()) {
+    print("alloc failed")
+} else {
+    mem.nontemporalStore(buf, 0x12, 1)
+    let p2 = unsafe { buf.offset(2) }
+    let p4 = unsafe { buf.offset(4) }
+    let p8 = unsafe { buf.offset(8) }
+
+    mem.nontemporalStore(p2, 0x3456, 2)
+    mem.nontemporalStore(p4, 0x789abcde, 4)
+    mem.nontemporalStore(p8, 0x102030405060708, 8)
+
+    print(mem.volatileLoad(buf, 1))
+    print(mem.volatileLoad(p2, 2))
+    print(mem.volatileLoad(p4, 4))
+    print(mem.volatileLoad(p8, 8))
+
+    mem.free(buf)
+    print("nontemporal-stored")
+}

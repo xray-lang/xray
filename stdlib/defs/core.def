@@ -2603,6 +2603,18 @@ module mem {
     layer: "core"
   }
 
+  fn nontemporalStore {
+    signature: "(ptr: RawMut<uint8>, v: int, size: int): ()"
+    doc: "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available"
+    vm: "mem_nontemporal_store"
+    aot: "xrt_mem_nontemporal_store"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
   fn cacheLineSize {
     signature: "(): int"
     doc: "CPU cache line size in bytes"
