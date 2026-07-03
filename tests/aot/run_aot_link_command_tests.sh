@@ -486,6 +486,19 @@ else
         "freestanding-profile: rejects shared const declarations"
 fi
 
+FREESTANDING_TOP_CONST_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_const_reject.xr"
+FREESTANDING_TOP_CONST_LOG="$WORK/freestanding_top_const_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_top_const_reject" \
+        "$FREESTANDING_TOP_CONST_SRC" >"$FREESTANDING_TOP_CONST_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects top-level const declarations"
+    sed 's/^/      /' "$FREESTANDING_TOP_CONST_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_TOP_CONST_LOG" \
+        "freestanding profile rejects top-level const declaration" \
+        "freestanding-profile: rejects top-level const declarations"
+fi
+
 FREESTANDING_HOOK_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_panic_hook.xr"
 FREESTANDING_HOOK_OBJ="$WORK/freestanding_panic_hook.o"
 FREESTANDING_HOOK_REAL_LOG="$WORK/freestanding_panic_hook.log"

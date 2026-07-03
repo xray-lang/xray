@@ -16,6 +16,10 @@
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 
+static bool xa_is_module_level_scope(const XaAnalyzer *analyzer) {
+    return analyzer && analyzer->current_scope && analyzer->current_scope->kind == XA_SCOPE_GLOBAL;
+}
+
 XR_FUNC void xa_loop_scope_push(XaInferContext *ctx, XaLoopScope *scope, const char *label,
                                 AstNode *node) {
     if (!ctx || !scope)
@@ -352,12 +356,20 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         var->symbol_id = sym->id;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    if (var->storage_mode == XR_STORAGE_SHARED && xa_freestanding_profile_enabled(ctx->analyzer)) {
+    if (xa_freestanding_profile_enabled(ctx->analyzer) && var->storage_mode == XR_STORAGE_SHARED) {
         xa_freestanding_report_unavailable(
             ctx, node,
             node->type == AST_CONST_DECL ? "shared const declaration" : "shared let declaration",
             "shared storage still requires module initialization; static data sections are a "
             "future freestanding M3 step");
+    } else if (xa_freestanding_profile_enabled(ctx->analyzer) &&
+               xa_is_module_level_scope(ctx->analyzer)) {
+        xa_freestanding_report_unavailable(
+            ctx, node,
+            node->type == AST_CONST_DECL ? "top-level const declaration"
+                                         : "top-level let declaration",
+            "module storage still requires constructor initialization; move constants inside "
+            "functions until static data sections land in freestanding M3");
     }
 
     // Variable declarations must have a type annotation or initializer.
