@@ -13,7 +13,8 @@ static bool cg_import_entry_matches_ref(const XiCgenCtx *ctx, const CgImportEntr
     if (!ctx || !imp || !ref || !member_name || !imp->member_name ||
         strcmp(imp->member_name, member_name) != 0)
         return false;
-    if (ref->resolved_mod_index >= 0 && ref->resolved_mod_index < ctx->all_nmodules) {
+    if (ctx->all_modules && ref->resolved_mod_index >= 0 &&
+        ref->resolved_mod_index < ctx->all_nmodules) {
         const XiModule *target_module = ctx->all_modules[ref->resolved_mod_index];
         const char *target_module_name = target_module ? target_module->name : NULL;
         if (imp->target_mod_name && target_module_name &&
