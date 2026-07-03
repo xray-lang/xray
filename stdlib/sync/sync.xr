@@ -202,4 +202,17 @@ fn fence(order: Ordering) {
     mem.fence(order as int)
 }
 
-export { CachePadded, Mutex, RwLock, Once, Barrier, Condvar, fence }
+export {
+    CachePadded,
+    Mutex,
+    RwLock,
+    Once,
+    Barrier,
+    Condvar,
+    fence,
+    Semaphore,
+    CountdownLatch,
+    EventCount,
+    WorkQueue,
+    ResultGroup
+}

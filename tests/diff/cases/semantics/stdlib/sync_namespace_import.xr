@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 // Namespace import of the pure-Xray generic `sync` stdlib module. The generic
 // classes (Mutex<T>/RwLock<T>) and their generic closure-taking methods must
 // monomorphize through `sync.Type<T>(...)` namespace access in AOT (not fall to

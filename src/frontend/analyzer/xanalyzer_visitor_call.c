@@ -1034,6 +1034,45 @@ static XaSymbol *xa_lookup_visible_class_symbol(XaInferContext *ctx, const char 
     return sym && sym->kind == XA_SYM_CLASS ? sym : NULL;
 }
 
+static bool xa_sync_runtime_class_name(const char *name) {
+    return name && (strcmp(name, "Semaphore") == 0 || strcmp(name, "CountdownLatch") == 0 ||
+                    strcmp(name, "EventCount") == 0 || strcmp(name, "WorkQueue") == 0 ||
+                    strcmp(name, "ResultGroup") == 0);
+}
+
+static bool xa_symbol_is_sync_runtime_class(XaInferContext *ctx, XaSymbol *sym, const char *name) {
+    if (!ctx || !sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_IMPORT))
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links)
+        return false;
+    const char *class_name = links->import_member_name ? links->import_member_name : name;
+    if (!xa_sync_runtime_class_name(class_name))
+        return false;
+    if (links->module_name && strcmp(links->module_name, "sync") == 0)
+        return true;
+    return links->file_path && strstr(links->file_path, "stdlib/sync/sync.xr") != NULL;
+}
+
+static XrType *xa_sync_runtime_construct_type(XaInferContext *ctx, const char *name,
+                                              CallExprNode *call) {
+    if (!ctx || !name || !xa_sync_runtime_class_name(name))
+        return NULL;
+    if (strcmp(name, "WorkQueue") == 0) {
+        XrType *elem = NULL;
+        if (call && call->type_arg_count > 0 && call->type_args[0])
+            elem = xr_tref_resolve(ctx->analyzer->isolate, call->type_args[0]);
+        if (!elem)
+            elem = xr_type_new_unknown(NULL);
+        XrType **arg_copy = (XrType **) xr_malloc(sizeof(XrType *));
+        if (!arg_copy)
+            return xr_type_new_unknown(NULL);
+        arg_copy[0] = elem;
+        return xr_type_new_generic_instance(ctx->analyzer->isolate, "WorkQueue", NULL, arg_copy, 1);
+    }
+    return xr_type_new_named_instance(ctx->analyzer->isolate, name);
+}
+
 /* Namespace-imported class construction: for a callee shaped as
  * `moduleAlias.ClassName` where `moduleAlias` is an imported module, resolve
  * the exported class from the module graph and return its instance type.
@@ -1046,7 +1085,8 @@ static XaSymbol *xa_lookup_visible_class_symbol(XaInferContext *ctx, const char 
  * dispatch returning null, and native-struct classes hit a missing boxed-
  * adapter link error in AOT. Returns NULL when the callee is not a module-
  * member class reference, so every other call falls through unchanged. */
-static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, AstNode *callee) {
+static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, CallExprNode *call) {
+    AstNode *callee = call ? call->callee : NULL;
     if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
         return NULL;
     MemberAccessNode *ma = &callee->as.member_access;
@@ -1073,6 +1113,8 @@ static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, AstNode
     XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
     if (member_links && member_links->class_info)
         return xr_type_new_instance(ctx->analyzer->isolate, member_links->class_info);
+    if (!is_quoted && strcmp(mod_name, "sync") == 0)
+        return xa_sync_runtime_construct_type(ctx, ma->name, call);
     return NULL;
 }
 
@@ -1498,7 +1540,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
      * only recognise AST_VARIABLE callees, so the receiver keeps its class
      * identity for cross-module method resolution and AOT codegen. */
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
-        XrType *ns_instance = xa_module_member_class_instance_type(ctx, call->callee);
+        XrType *ns_instance = xa_module_member_class_instance_type(ctx, call);
         if (ns_instance)
             return ns_instance;
     }
@@ -1523,31 +1565,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                                         arg_copy, 1);
                 }
             }
-            if (strcmp(name, "WorkQueue") == 0) {
-                XrType *et = NULL;
-                if (call->type_arg_count > 0 && call->type_args[0])
-                    et = xr_tref_resolve(ctx->analyzer->isolate, call->type_args[0]);
-                if (!et)
-                    et = xr_type_new_unknown(NULL);
-                XrType **arg_copy = (XrType **) xr_malloc(sizeof(XrType *));
-                if (arg_copy) {
-                    arg_copy[0] = et;
-                    return xr_type_new_generic_instance(ctx->analyzer->isolate, "WorkQueue", NULL,
-                                                        arg_copy, 1);
-                }
-            }
-            if (strcmp(name, "ResultGroup") == 0) {
-                return xr_type_new_named_instance(ctx->analyzer->isolate, "ResultGroup");
-            }
-            if (strcmp(name, "CountdownLatch") == 0) {
-                return xr_type_new_named_instance(ctx->analyzer->isolate, "CountdownLatch");
-            }
-            if (strcmp(name, "Semaphore") == 0) {
-                return xr_type_new_named_instance(ctx->analyzer->isolate, "Semaphore");
-            }
-            if (strcmp(name, "EventCount") == 0) {
-                return xr_type_new_named_instance(ctx->analyzer->isolate, "EventCount");
-            }
+            XaSymbol *visible_class = xa_lookup_visible_symbol(ctx, name);
+            if (xa_symbol_is_sync_runtime_class(ctx, visible_class, name))
+                return xa_sync_runtime_construct_type(ctx, name, call);
             if (strcmp(name, "Thread") == 0) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
@@ -1568,6 +1588,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 if (links && links->class_info) {
                     return xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
                 }
+                if (xa_symbol_is_sync_runtime_class(ctx, sym, name))
+                    return xa_sync_runtime_construct_type(ctx, name, call);
             }
 
             // Built-in primitive class Exception (and bare construction of it):
@@ -1623,6 +1645,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 if (links && links->class_info) {
                     return xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
                 }
+                if (xa_symbol_is_sync_runtime_class(ctx, class_sym, class_name))
+                    return xa_sync_runtime_construct_type(ctx, class_name, call);
             }
         }
         return xr_type_new_unknown(NULL);
@@ -2033,6 +2057,15 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType *return_type = callee_type->function.return_type;
+
+    if (method_name && callee_obj_type) {
+        XrType *builtin_return_type =
+            xa_builtin_get_method_return_type(ctx->analyzer->isolate, callee_obj_type, method_name);
+        if (builtin_return_type &&
+            (!return_type || XR_TYPE_IS_UNKNOWN(return_type) || XR_TYPE_IS_JSON(return_type))) {
+            return_type = builtin_return_type;
+        }
+    }
 
     // G2: Override return type for container methods using callback return type
     if (container_elem_type && method_name && arg_count >= 1) {

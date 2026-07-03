@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 // RwLock<T> as a pure-Xray generic class: a coroutine-aware write/read gate
 // (Semaphore) plus a short non-suspendable Atomic spinlock guarding the reader
 // count. The reader-release cleanup runs in a `defer`, so it must stay

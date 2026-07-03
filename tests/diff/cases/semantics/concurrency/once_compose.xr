@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 // Once as a pure-Xray class composing the coroutine-aware Semaphore(1): the
 // body runs exactly once even across repeated calls. Constructing the Semaphore
 // in a sync constructor must not force coroutine codegen (task 147 §0.10); the

@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 shared const q: WorkQueue<int> = WorkQueue<int>(4, 2)
 
 assert_eq(q.shardCount, 4)

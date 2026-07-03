@@ -48,6 +48,9 @@
 /* ========== Forward Declarations ========== */
 
 static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode *call);
+static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result_type,
+                                const char *module_name, const char *cname, AstNode **arguments,
+                                int arg_count);
 
 static int pack_go_aux(int link_mode) {
     return link_mode & XI_GO_AUX_LINK_MASK;
@@ -58,6 +61,82 @@ static int64_t pack_thread_spawn_aux(int64_t stack_size) {
         return 0;
     int64_t masked = stack_size & XI_THREAD_SPAWN_AUX_STACK_SIZE_MASK;
     return masked << XI_THREAD_SPAWN_AUX_STACK_SIZE_SHIFT;
+}
+
+static int xi_lower_builtin_class_global_index(const char *name) {
+    if (!name)
+        return -1;
+    static const struct {
+        const char *name;
+        int index;
+    } builtin_classes[] = {
+        {"Reflect", XR_GLOBAL_VAR_REFLECT},
+        {"Array", XR_GLOBAL_VAR_ARRAY},
+        {"Set", XR_GLOBAL_VAR_SET},
+        {"Map", XR_GLOBAL_VAR_MAP},
+        {"String", XR_GLOBAL_VAR_STRING},
+        {"Json", XR_GLOBAL_VAR_JSON},
+        {"Bytes", XR_GLOBAL_VAR_BYTES},
+        {"Process", XR_GLOBAL_VAR_PROCESS},
+        {"PanicInfo", XR_GLOBAL_VAR_PANIC_INFO},
+        {"Range", XR_GLOBAL_VAR_RANGE},
+        {"DateTime", XR_GLOBAL_VAR_DATETIME},
+        {"Atomic", XR_GLOBAL_VAR_ATOMIC},
+        {"Ordering", XR_GLOBAL_VAR_ORDERING},
+        {"Endian", XR_GLOBAL_VAR_ENDIAN},
+        {"Recv", XR_GLOBAL_VAR_RECV},
+        {"SendResult", XR_GLOBAL_VAR_SEND_RESULT},
+        {"TaskResult", XR_GLOBAL_VAR_TASK_RESULT},
+        {"TaskOutcome", XR_GLOBAL_VAR_TASK_OUTCOME},
+        {"TaskStatus", XR_GLOBAL_VAR_TASK_STATUS},
+        {"WorkQueue", XR_GLOBAL_VAR_WORKQUEUE},
+        {"ResultGroup", XR_GLOBAL_VAR_RESULTGROUP},
+        {"CountdownLatch", XR_GLOBAL_VAR_COUNTDOWNLATCH},
+        {"Semaphore", XR_GLOBAL_VAR_SEMAPHORE},
+        {"EventCount", XR_GLOBAL_VAR_EVENTCOUNT},
+    };
+    for (int i = 0; i < (int) (sizeof(builtin_classes) / sizeof(builtin_classes[0])); i++) {
+        if (strcmp(name, builtin_classes[i].name) == 0)
+            return builtin_classes[i].index;
+    }
+    return -1;
+}
+
+static XiValue *xi_lower_emit_builtin_class(XiLower *l, const char *name, int line) {
+    int index = xi_lower_builtin_class_global_index(name);
+    if (index < 0)
+        return NULL;
+    struct XrType *cls_type = xr_type_new_class(NULL, name);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, cls_type, 0);
+    if (v) {
+        v->aux_int = index;
+        v->aux = (void *) name;
+        v->line = (uint32_t) line;
+    }
+    return v;
+}
+
+static bool xi_lower_sync_runtime_class_name(const char *name) {
+    return name && (strcmp(name, "Semaphore") == 0 || strcmp(name, "CountdownLatch") == 0 ||
+                    strcmp(name, "EventCount") == 0 || strcmp(name, "WorkQueue") == 0 ||
+                    strcmp(name, "ResultGroup") == 0);
+}
+
+static bool xi_lower_symbol_is_sync_runtime_class(XiLower *l, uint32_t sid, const char *name) {
+    if (!l || !l->analyzer || !sid)
+        return false;
+    XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, sid);
+    if (!sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_IMPORT))
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+    if (!links)
+        return false;
+    const char *class_name = links->import_member_name ? links->import_member_name : name;
+    if (!xi_lower_sync_runtime_class_name(class_name))
+        return false;
+    if (links->module_name && strcmp(links->module_name, "sync") == 0)
+        return true;
+    return links->file_path && strstr(links->file_path, "stdlib/sync/sync.xr") != NULL;
 }
 
 static XaSymbol *xi_lower_lookup_class_symbol(XiLower *l, const char *name) {
@@ -650,6 +729,9 @@ static XiValue *lower_unary(XiLower *l, AstNode *node) {
 static XiValue *lower_variable(XiLower *l, AstNode *node) {
     const char *name = node->as.variable.name;
     uint32_t sid = node->as.variable.symbol_id;
+    if (xi_lower_symbol_is_sync_runtime_class(l, sid, name))
+        return xi_lower_emit_builtin_class(l, name, node->line);
+
     int var_id = xi_lower_var_find(l, sid, name);
     if (var_id >= 0) {
         /* Program-level top-level variables must be read from the
@@ -697,47 +779,9 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
     /* Builtin class names (PascalCase) resolve to runtime class globals.
      * Used as namespaces for static method dispatch like Json.parse(s). */
     if (name) {
-        static const struct {
-            const char *name;
-            int index;
-        } builtin_classes[] = {
-            {"Reflect", XR_GLOBAL_VAR_REFLECT},
-            {"Array", XR_GLOBAL_VAR_ARRAY},
-            {"Set", XR_GLOBAL_VAR_SET},
-            {"Map", XR_GLOBAL_VAR_MAP},
-            {"String", XR_GLOBAL_VAR_STRING},
-            {"Json", XR_GLOBAL_VAR_JSON},
-            {"Bytes", XR_GLOBAL_VAR_BYTES},
-            {"Process", XR_GLOBAL_VAR_PROCESS},
-            {"PanicInfo", XR_GLOBAL_VAR_PANIC_INFO},
-            {"Range", XR_GLOBAL_VAR_RANGE},
-            {"DateTime", XR_GLOBAL_VAR_DATETIME},
-            {"Atomic", XR_GLOBAL_VAR_ATOMIC},
-            {"Ordering", XR_GLOBAL_VAR_ORDERING},
-            {"Endian", XR_GLOBAL_VAR_ENDIAN},
-            {"Recv", XR_GLOBAL_VAR_RECV},
-            {"SendResult", XR_GLOBAL_VAR_SEND_RESULT},
-            {"TaskResult", XR_GLOBAL_VAR_TASK_RESULT},
-            {"TaskOutcome", XR_GLOBAL_VAR_TASK_OUTCOME},
-            {"TaskStatus", XR_GLOBAL_VAR_TASK_STATUS},
-            {"WorkQueue", XR_GLOBAL_VAR_WORKQUEUE},
-            {"ResultGroup", XR_GLOBAL_VAR_RESULTGROUP},
-            {"CountdownLatch", XR_GLOBAL_VAR_COUNTDOWNLATCH},
-            {"Semaphore", XR_GLOBAL_VAR_SEMAPHORE},
-            {"EventCount", XR_GLOBAL_VAR_EVENTCOUNT},
-        };
-        for (int i = 0; i < (int) (sizeof(builtin_classes) / sizeof(builtin_classes[0])); i++) {
-            if (strcmp(name, builtin_classes[i].name) == 0) {
-                struct XrType *cls_type = xr_type_new_class(NULL, name);
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, cls_type, 0);
-                if (v) {
-                    v->aux_int = builtin_classes[i].index;
-                    v->aux = (void *) name;
-                    v->line = (uint32_t) node->line;
-                }
-                return v;
-            }
-        }
+        XiValue *builtin_class = xi_lower_emit_builtin_class(l, name, node->line);
+        if (builtin_class)
+            return builtin_class;
 
         /* Builtin instance / value globals (camelCase / dunder) are populated
          * per script by xray_vm_set_script_info: `process` is the Process
@@ -2823,6 +2867,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (!recv)
             return NULL;
 
+        if (lower_value_is_whole_module_import(l, recv, "sync") &&
+            xi_lower_builtin_class_global_index(ma->name) >= 0) {
+            return lower_construct(l, node, xi_lower_node_type(l, node), "sync", ma->name,
+                                   call->arguments, call->arg_count);
+        }
+
         XiValue *chan_send = lower_channel_send_boundary_call(l, node, call, ma->name, recv);
         if (chan_send)
             return chan_send;
@@ -3747,24 +3797,35 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
     int n = args.count;
 
     XiValue *cls = NULL;
-    int var_id = xi_lower_var_find(l, 0, cname);
-    if (var_id >= 0) {
-        if (l->is_program && l->shared_map[var_id] >= 0) {
-            XiTopBinding b;
-            b.slot = l->shared_map[var_id];
-            b.name = l->vars[var_id].name;
-            b.type = l->vars[var_id].type;
-            cls = xi_lower_emit_top_load(l, b, l->type_any);
-        } else {
-            cls = xi_lower_braun_read(l, var_id, l->cur_block);
+    XaSymbol *class_sym = xi_lower_lookup_class_symbol(l, cname);
+    XaSymbolLinks *class_links =
+        (class_sym && l->analyzer) ? xa_analyzer_get_links(l->analyzer, class_sym) : NULL;
+    bool has_user_class_info = class_links && class_links->class_info != NULL;
+    bool force_builtin_class =
+        ((module_name && strcmp(module_name, "sync") == 0 &&
+          xi_lower_sync_runtime_class_name(cname)) ||
+         (class_sym && xi_lower_symbol_is_sync_runtime_class(l, class_sym->id, cname)) ||
+         (xi_lower_sync_runtime_class_name(cname) && !has_user_class_info));
+    if (!force_builtin_class) {
+        int var_id = xi_lower_var_find(l, 0, cname);
+        if (var_id >= 0) {
+            if (l->is_program && l->shared_map[var_id] >= 0) {
+                XiTopBinding b;
+                b.slot = l->shared_map[var_id];
+                b.name = l->vars[var_id].name;
+                b.type = l->vars[var_id].type;
+                cls = xi_lower_emit_top_load(l, b, l->type_any);
+            } else {
+                cls = xi_lower_braun_read(l, var_id, l->cur_block);
+            }
         }
     }
-    if (!cls) {
+    if (!cls && !force_builtin_class) {
         XiTopBinding tb = xi_lower_find_top_binding(l, 0, cname);
         if (xi_top_binding_valid(tb))
             cls = xi_lower_emit_top_load(l, tb, l->type_any);
     }
-    if (!cls) {
+    if (!cls && !force_builtin_class) {
         struct XrType *upval_type = NULL;
         int upval_idx = xi_lower_resolve_upvalue(l, 0, cname, &upval_type);
         if (upval_idx >= 0) {
@@ -3777,28 +3838,8 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
      * are populated into the VM builtins array by the prelude module
      * loader at fixed XR_GLOBAL_VAR_* indices. Resolve them via
      * XI_GET_BUILTIN before falling back to null. */
-    if (!cls && cname) {
-        static const struct {
-            const char *name;
-            int index;
-        } builtin_class_globals[] = {
-            {"PanicInfo", XR_GLOBAL_VAR_PANIC_INFO},
-            {"Range", XR_GLOBAL_VAR_RANGE},
-            {"DateTime", XR_GLOBAL_VAR_DATETIME},
-        };
-        for (size_t bi = 0; bi < sizeof(builtin_class_globals) / sizeof(builtin_class_globals[0]);
-             bi++) {
-            if (strcmp(cname, builtin_class_globals[bi].name) == 0) {
-                struct XrType *cls_type = xr_type_new_class(NULL, cname);
-                cls = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, cls_type, 0);
-                if (cls) {
-                    cls->aux_int = builtin_class_globals[bi].index;
-                    cls->aux = (void *) builtin_class_globals[bi].name;
-                }
-                break;
-            }
-        }
-    }
+    if (!cls && cname)
+        cls = xi_lower_emit_builtin_class(l, cname, node->line);
     if (!cls) {
         cls = xi_const_null(l->func, l->cur_block, l->type_null);
     }
@@ -3886,7 +3927,14 @@ static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode
     const char *name = call->callee->as.variable.name;
     if (!name)
         return NULL;
-    if (!lower_class_is_exception_kind(l, name) && !lower_class_is_generic(l, name))
+    if (xi_lower_symbol_is_sync_runtime_class(l, call->callee->as.variable.symbol_id, name))
+        return NULL;
+    bool generic_class_call = lower_class_is_generic(l, name);
+    if (!generic_class_call && call->type_arg_count > 0 && xi_lower_lookup_class_symbol(l, name))
+        generic_class_call = true;
+    if (!generic_class_call && strchr(name, '$') && xi_lower_lookup_class_symbol(l, name))
+        generic_class_call = true;
+    if (!lower_class_is_exception_kind(l, name) && !generic_class_call)
         return NULL;
     return lower_construct(l, node, xi_lower_node_type(l, node), NULL, name, call->arguments,
                            call->arg_count);

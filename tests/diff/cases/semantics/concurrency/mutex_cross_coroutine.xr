@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 // A pure-Xray Mutex<T> shared across coroutines (shared const): the guarded
 // value must be genuinely shared by reference (not copied per coroutine), and
 // mutation under the lock in a spawned coroutine must be visible to the parent

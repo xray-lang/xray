@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 // `import { ... } from sync` — the pure-Xray sync stdlib module.
 //
 // Mutex/RwLock/Once/Barrier/Condvar are defined in stdlib/sync/sync.xr as

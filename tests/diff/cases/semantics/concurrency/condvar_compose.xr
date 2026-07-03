@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 // Condvar as a pure-Xray class composing the coroutine-aware Semaphore, with a
 // short non-suspendable Atomic spinlock guarding the waiter count (same shape as
 // RwLock's reader-count guard). This deliberately avoids EventCount, whose

@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 // Barrier as a pure-Xray class composing the coroutine-aware CountdownLatch.
 //
 // The constructor takes the party count as a native `int` and constructs the

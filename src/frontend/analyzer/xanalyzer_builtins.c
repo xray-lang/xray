@@ -227,6 +227,23 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
             return xr_type_new_unit(NULL);
     }
 
+    if (xr_type_is_named_class(container_type, "ResultGroup")) {
+        if (strcmp(method_name, "add") == 0)
+            return xr_type_new_bool(NULL);
+        if (strcmp(method_name, "reset") == 0)
+            return xr_type_new_bool(NULL);
+        if (strcmp(method_name, "flush") == 0 || sym == SYMBOL_CLOSE)
+            return xr_type_new_unit(NULL);
+        if (strcmp(method_name, "recv") == 0) {
+            return xr_type_make_nullable(X, xr_type_new_int(NULL));
+        }
+        if (strcmp(method_name, "tryRecv") == 0) {
+            XrType *item = xr_type_make_nullable(X, xr_type_new_int(NULL));
+            XrType *elems[2] = {item, xr_type_new_bool(NULL)};
+            return xr_type_new_tuple(X, elems, 2);
+        }
+    }
+
     if (xr_type_is_named_class(container_type, "Semaphore")) {
         if (strcmp(method_name, "release") == 0)
             return xr_type_new_int(NULL);
@@ -465,10 +482,7 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
             case SYMBOL_CHECKED_ADD:
             case SYMBOL_CHECKED_SUB:
             case SYMBOL_CHECKED_MUL: {
-                XrType *t = xr_type_new_int(NULL);
-                if (t)
-                    t->is_nullable = true;
-                return t;
+                return xr_type_make_nullable(X, xr_type_new_int(NULL));
             }
             case SYMBOL_TOSTRING:
             case SYMBOL_TOHEX:
@@ -527,10 +541,7 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
             case SYMBOL_ISPOSITIVE:
                 return xr_type_new_bool(NULL);
             case SYMBOL_TOINT: {
-                XrType *t = xr_type_new_int(NULL);
-                if (t)
-                    t->is_nullable = true;
-                return t;
+                return xr_type_make_nullable(X, xr_type_new_int(NULL));
             }
             case SYMBOL_TOFLOAT:
                 return xr_type_new_float(NULL);
@@ -558,10 +569,7 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
             case SYMBOL_IS_EMPTY:
                 return xr_type_new_bool(NULL);
             case SYMBOL_GET: {
-                XrType *t = xr_type_new_json(NULL);
-                if (t)
-                    t->is_nullable = true;
-                return t;
+                return xr_type_make_nullable(X, xr_type_new_json(NULL));
             }
             case SYMBOL_DELETE:
             case SYMBOL_CLEAR:

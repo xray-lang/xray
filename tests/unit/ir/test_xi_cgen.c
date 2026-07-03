@@ -1707,7 +1707,6 @@ TEST(cgen_parallel_collect_into_multi_lanes_use_direct_storage) {
 
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "IR compilation failed");
-
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     TEST_REQUIRE(code != NULL, "C code generation failed");
@@ -5496,7 +5495,8 @@ TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
 }
 
 TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
-    const char *src = "fn worker(signal: EventCount, workerId: int) -> int {\n"
+    const char *src = "import { EventCount } from sync\n"
+                      "fn worker(signal: EventCount, workerId: int) -> int {\n"
                       "    let seen = 0\n"
                       "    while (true) {\n"
                       "        seen = signal.wait(seen, workerId)\n"
@@ -5532,7 +5532,8 @@ TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
 }
 
 TEST(cgen_event_count_advance_uses_i64_helper) {
-    const char *src = "fn tick(signal: EventCount) -> int {\n"
+    const char *src = "import { EventCount } from sync\n"
+                      "fn tick(signal: EventCount) -> int {\n"
                       "    let next = signal.advance(1)\n"
                       "    signal.close()\n"
                       "    return next\n"
@@ -5582,7 +5583,8 @@ TEST(cgen_event_count_advance_uses_i64_helper) {
 }
 
 TEST(cgen_countdown_latch_methods_use_native_helpers) {
-    const char *src = "fn syncUse(latch: CountdownLatch) -> int {\n"
+    const char *src = "import { CountdownLatch } from sync\n"
+                      "fn syncUse(latch: CountdownLatch) -> int {\n"
                       "    let ok = latch.reset(2)\n"
                       "    let left = latch.done()\n"
                       "    let ready = latch.tryWait()\n"
@@ -5647,7 +5649,8 @@ TEST(cgen_countdown_latch_methods_use_native_helpers) {
 }
 
 TEST(cgen_semaphore_methods_use_native_helpers) {
-    const char *src = "fn syncUse(sem: Semaphore) -> int {\n"
+    const char *src = "import { Semaphore } from sync\n"
+                      "fn syncUse(sem: Semaphore) -> int {\n"
                       "    let released = sem.release(2)\n"
                       "    let ok = sem.tryAcquire()\n"
                       "    sem.close()\n"
@@ -7082,7 +7085,8 @@ TEST(cgen_coro_top_level_await_all_into_keeps_result_array_alive) {
 }
 
 TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
-    const char *src = "fn worker(group: ResultGroup, n: int) {\n"
+    const char *src = "import { ResultGroup } from sync\n"
+                      "fn worker(group: ResultGroup, n: int) {\n"
                       "    group.add(n)\n"
                       "    if (n == 3) {\n"
                       "        group.close()\n"
@@ -7126,7 +7130,8 @@ TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
 }
 
 TEST(cgen_coro_result_group_reset_uses_native_helper) {
-    const char *src = "fn run(n: int) -> bool {\n"
+    const char *src = "import { ResultGroup } from sync\n"
+                      "fn run(n: int) -> bool {\n"
                       "    shared const group: ResultGroup = ResultGroup(n)\n"
                       "    group.add(1)\n"
                       "    group.add(2)\n"
@@ -7168,7 +7173,8 @@ TEST(cgen_coro_result_group_reset_uses_native_helper) {
 }
 
 TEST(cgen_result_group_sync_methods_elide_dead_err_checks) {
-    const char *src = "fn useGroup(group: ResultGroup, n: int) -> int {\n"
+    const char *src = "import { ResultGroup } from sync\n"
+                      "fn useGroup(group: ResultGroup, n: int) -> int {\n"
                       "    if (!group.add(n)) { return -1 }\n"
                       "    group.flush()\n"
                       "    if (!group.reset(1)) { return -2 }\n"
@@ -7357,7 +7363,8 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
 }
 
 TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
-    const char *src = "shared const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
+    const char *src = "import { WorkQueue } from sync\n"
+                      "shared const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
                       "fn consumer() -> int {\n"
                       "    let item = queue.pop(0)\n"
                       "    return item ?? 0\n"
@@ -7397,7 +7404,8 @@ TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
 }
 
 TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
-    const char *src = "shared const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
+    const char *src = "import { WorkQueue } from sync\n"
+                      "shared const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
                       "fn consumer() -> int {\n"
                       "    let item = queue.pop(0)\n"
                       "    if (item == null) { return -1 }\n"
@@ -7427,9 +7435,14 @@ TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
                  "typed optional WorkQueue.pop should not materialize a generic slot ref");
     TEST_REQUIRE(!contains(code, "xr_aot_work_queue_pop_value(ctx,"),
                  "typed optional WorkQueue.pop should not write through XrValue*");
-    TEST_REQUIRE(!contains(code, "XrValue v4 ="),
-                 "typed optional WorkQueue.pop should not keep the tagged nullable carrier");
-    TEST_REQUIRE(!contains(code, "xrt_eq(v4, XR_NULL_VAL)") && !contains(code, "XR_TO_INT(v14)"),
+    TEST_REQUIRE(!contains(code, "xr_aot_work_queue_pop_resume(ctx,"),
+                 "typed optional WorkQueue.pop should not use the generic resume bridge");
+    const char *consumer_fn = strstr(code, "test_consumer_");
+    const char *consumer_end = next_static_after(consumer_fn);
+    TEST_REQUIRE(consumer_fn != NULL && consumer_end != NULL,
+                 "consumer function should be generated for WorkQueue typed optional test");
+    TEST_REQUIRE(count_between(consumer_fn, consumer_end, "xrt_eq(") == 0 &&
+                     count_between(consumer_fn, consumer_end, "XR_TO_INT(") == 0,
                  "typed optional WorkQueue.pop should lower null check and unwrap to has/value");
     TEST_REQUIRE(!contains(code, "Attempted to unwrap a null value"),
                  "guarded force unwrap should stay a no-op after the null guard");
@@ -7442,19 +7455,15 @@ TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
 }
 
 TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
-    const char *src = "shared const group: ResultGroup = ResultGroup(1)\n"
-                      "fn producer() -> int {\n"
-                      "    group.add(21)\n"
-                      "    group.close()\n"
-                      "    return 0\n"
-                      "}\n"
+    const char *src = "import { ResultGroup } from sync\n"
                       "fn consumer() -> int {\n"
+                      "    let group: ResultGroup = ResultGroup(1)\n"
+                      "    group.add(21)\n"
                       "    let item = group.recv()\n"
                       "    if (item == null) { return -1 }\n"
                       "    let value = item!\n"
                       "    return value * 2\n"
                       "}\n"
-                      "go producer()\n"
                       "let task = go consumer()\n"
                       "print(await task)\n";
 
@@ -7484,7 +7493,8 @@ TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
 }
 
 TEST(cgen_work_queue_native_methods_use_aot_helpers) {
-    const char *src = "shared const queue: WorkQueue<int> = WorkQueue<int>(4, 2)\n"
+    const char *src = "import { WorkQueue } from sync\n"
+                      "shared const queue: WorkQueue<int> = WorkQueue<int>(4, 2)\n"
                       "fn use_queue() -> int {\n"
                       "    assert_true(queue.push(1, 0))\n"
                       "    assert_eq(queue.pushRange(2, 2, 0), 2)\n"

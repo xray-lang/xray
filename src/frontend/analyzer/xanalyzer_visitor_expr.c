@@ -1327,8 +1327,15 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                             xr_type_substitute(ctx->analyzer->isolate, fn_type, names, types, 2);
                     }
                 }
+                XrType *return_type =
+                    xa_builtin_get_method_return_type(ctx->analyzer->isolate, obj_type, ma->name);
+                if (return_type && (!fn_type->function.return_type ||
+                                    XR_TYPE_IS_UNKNOWN(fn_type->function.return_type) ||
+                                    XR_TYPE_IS_JSON(fn_type->function.return_type))) {
+                    fn_type->function.return_type = return_type;
+                }
+                return fn_type;
             }
-            return fn_type;
         }
         // Fallback: return function with unknown return type
         XrType *return_type =

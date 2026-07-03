@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 shared const latch = CountdownLatch(2)
 shared const counter = Atomic(0)
 

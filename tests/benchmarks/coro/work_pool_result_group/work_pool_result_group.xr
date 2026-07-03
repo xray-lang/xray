@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 // Work pool benchmark using ResultGroup for batched result aggregation.
 
 import time
