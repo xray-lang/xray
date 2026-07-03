@@ -1058,6 +1058,19 @@ else
         "freestanding-profile: rejects coroutine constructs"
 fi
 
+FREESTANDING_CATCH_PANIC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_catch_panic_reject.xr"
+FREESTANDING_CATCH_PANIC_LOG="$WORK/freestanding_catch_panic_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_catch_panic_reject" \
+        "$FREESTANDING_CATCH_PANIC_SRC" >"$FREESTANDING_CATCH_PANIC_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects catch panic"
+    sed 's/^/      /' "$FREESTANDING_CATCH_PANIC_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_CATCH_PANIC_LOG" \
+        "freestanding profile rejects catch panic" \
+        "freestanding-profile: rejects catch panic"
+fi
+
 if [ "${XRAY_LINK_COMMAND_REAL_BUILDS:-0}" != "1" ]; then
     echo ""
     echo "-- Real Link Smoke --"

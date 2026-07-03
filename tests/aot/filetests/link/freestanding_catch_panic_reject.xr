@@ -1,0 +1,10 @@
+@c_export("xray_catch_panic_reject")
+fn xray_catch_panic_reject(n: int) -> int {
+    let out = 0
+    try {
+        out = 10 / n
+    } catch panic (p) {
+        out = -1
+    }
+    return out
+}
