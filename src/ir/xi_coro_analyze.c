@@ -621,7 +621,7 @@ XR_FUNC bool xi_coro_value_is_logical_member(const XiFunc *f, const XiValue *v,
         return true;
     if (xi_coro_value_is_await_into_result(f, v))
         return true;
-    if (v->op == XI_GO)
+    if (v->op == XI_GO || v->op == XI_THREAD_SPAWN)
         return true;
     return xi_coro_value_live_across_suspend(f, live, v, resolver);
 }
@@ -655,6 +655,7 @@ static bool xi_coro_value_from_runtime_bridge(const XiValue *v) {
         return false;
     switch (origin->op) {
         case XI_GO:
+        case XI_THREAD_SPAWN:
         case XI_AWAIT:
         case XI_CHAN_SEND:
         case XI_CHAN_RECV:
@@ -790,8 +791,8 @@ static XiCoroSuspendKind xi_coro_suspend_kind(const XiFunc *f, const XiValue *v,
  * result slot, or an await-aggregate element.  Typed recv/await unbox reuse and
  * paired recv-status do not, even though they are frame members. */
 static bool xi_coro_slot_value_may_hold_root(const XiFunc *f, const XiValue *v, bool live_across) {
-    return (v && v->op == XI_GO) || live_across || xi_coro_value_needs_runtime_slot(v) ||
-           xi_coro_value_is_aggregate_await_tasks(f, v);
+    return (v && (v->op == XI_GO || v->op == XI_THREAD_SPAWN)) || live_across ||
+           xi_coro_value_needs_runtime_slot(v) || xi_coro_value_is_aggregate_await_tasks(f, v);
 }
 
 static void xi_coro_fill_slot(XiCoroSlot *slot, const XiFunc *f, XiValue *v, XiCoroSlotKind kind,

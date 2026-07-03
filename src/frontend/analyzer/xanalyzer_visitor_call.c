@@ -121,6 +121,94 @@ static bool xa_is_module_call(CallExprNode *call, const char *module_name, const
     return strcmp(ma->object->as.variable.name, module_name) == 0;
 }
 
+static bool xa_call_is_sys_thread_spawn(const CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *spawn = &call->callee->as.member_access;
+    if (!spawn->name || strcmp(spawn->name, "spawn") != 0 || !spawn->object ||
+        spawn->object->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *thread = &spawn->object->as.member_access;
+    if (!thread->name || strcmp(thread->name, "Thread") != 0 || !thread->object ||
+        thread->object->type != AST_VARIABLE)
+        return false;
+    const char *module_name = thread->object->as.variable.name;
+    return module_name && strcmp(module_name, "sys") == 0;
+}
+
+static int xa_thread_spawn_body_arg_index(const CallExprNode *call) {
+    if (!call)
+        return -1;
+    if (call->arg_count == 1)
+        return 0;
+    if (call->arg_count == 2)
+        return 1;
+    return -1;
+}
+
+static void xa_check_spawn_call_boundary_args(XaInferContext *ctx, AstNode *boundary_node,
+                                              CallExprNode *call) {
+    if (!ctx || !call)
+        return;
+    for (int i = 0; i < call->arg_count; i++) {
+        AstNode *arg = call->arguments[i];
+        if (!arg)
+            continue;
+        if (arg->type == AST_SPREAD_EXPR) {
+            XrType *src = xa_analyzer_get_node_type(ctx->analyzer, arg->as.spread_expr.expr);
+            if (!src)
+                src = xa_visit_infer_expr(ctx, arg->as.spread_expr.expr);
+            if (src && XR_TYPE_IS_TUPLE(src)) {
+                for (int j = 0; j < src->tuple.element_count; j++) {
+                    xa_check_boundary_transfer_arg(ctx, boundary_node, arg,
+                                                   src->tuple.element_types[j],
+                                                   "sys.Thread.spawn argument");
+                }
+            }
+            continue;
+        }
+        XrType *arg_type = xa_analyzer_get_node_type(ctx->analyzer, arg);
+        if (!arg_type)
+            arg_type = xa_visit_infer_expr(ctx, arg);
+        xa_check_boundary_transfer_arg(ctx, boundary_node, arg, arg_type,
+                                       "sys.Thread.spawn argument");
+    }
+}
+
+static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node,
+                                              CallExprNode *call) {
+    xa_freestanding_report_unavailable(ctx, node, "sys.Thread.spawn", "OS threads are hosted-only");
+
+    int body_index = xa_thread_spawn_body_arg_index(call);
+    if (body_index < 0 || !call->arguments[body_index]) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "sys.Thread.spawn expects fn or (ThreadOptions, fn)", &loc);
+        return xr_type_new_unknown(NULL);
+    }
+
+    if (body_index == 1 && call->arguments[0])
+        xa_visit_infer_expr(ctx, call->arguments[0]);
+
+    AstNode *body = call->arguments[body_index];
+    XrType *body_type = xa_visit_infer_expr(ctx, body);
+    if (body && body->type == AST_CALL_EXPR)
+        xa_check_spawn_call_boundary_args(ctx, node, &body->as.call_expr);
+    check_coro_capture(ctx, body, node->line);
+
+    XrType *result_type = xr_type_new_unit(NULL);
+    if (body_type && XR_TYPE_IS_FUNCTION(body_type) && body_type->function.return_type)
+        result_type = body_type->function.return_type;
+    else if (body_type && !XR_TYPE_IS_FUNCTION(body_type))
+        result_type = body_type;
+
+    XrType **args = (XrType **) xr_malloc(sizeof(XrType *));
+    if (!args)
+        return xr_type_new_named_instance(ctx->analyzer->isolate, "Thread");
+    args[0] = result_type ? result_type : xr_type_new_unknown(NULL);
+    return xr_type_new_generic_instance(ctx->analyzer->isolate, "Thread", NULL, args, 1);
+}
+
 static bool xa_type_is_bytespan_view(XrType *type) {
     if (!type || !XR_TYPE_IS_SPAN(type) || !type->container.element_type)
         return false;
@@ -534,6 +622,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
     bool optional_function_call = call->callee && call->callee->type == AST_OPTIONAL_CHAIN &&
                                   call->callee->as.optional_chain.chain_type == 3;
+
+    if (xa_call_is_sys_thread_spawn(call))
+        return xa_visit_sys_thread_spawn_call(ctx, node, call);
 
     // Record dependency: current function depends on called function
     XaSymbol *fn_sym = NULL;

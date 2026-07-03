@@ -2293,6 +2293,14 @@ AstNode *xr_ast_go_expr(XrCompilerSession *session, AstNode *expr, const char *n
     node->as.go_expr.expr = expr;
     node->as.go_expr.name = name;
     node->as.go_expr.link_mode = link_mode;
+    node->as.go_expr.spawn_kind = XR_SPAWN_COROUTINE;
+    return node;
+}
+
+AstNode *xr_ast_thread_spawn_expr(XrCompilerSession *session, AstNode *expr, int line) {
+    AstNode *node = xr_ast_go_expr(session, expr, NULL, XR_LINK_NONE, line);
+    if (node)
+        node->as.go_expr.spawn_kind = XR_SPAWN_THREAD;
     return node;
 }
 

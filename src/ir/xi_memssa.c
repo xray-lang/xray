@@ -98,6 +98,7 @@ static bool is_mem_def(uint16_t op) {
         case XI_TAIL_CALL:
         case XI_CALL_BUILTIN:
         case XI_GO:
+        case XI_THREAD_SPAWN:
         case XI_PRINT:
         case XI_THROW:
             return true;

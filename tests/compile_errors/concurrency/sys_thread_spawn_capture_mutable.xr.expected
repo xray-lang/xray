@@ -1,0 +1,1 @@
+go closure cannot capture mutable variable 'x'

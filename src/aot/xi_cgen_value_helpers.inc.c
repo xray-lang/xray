@@ -631,6 +631,7 @@ static bool cg_aot_coro_closure_has_only_supported_uses(XiCgenCtx *ctx, const Xi
                             return false;
                         break;
                     case XI_GO:
+                    case XI_THREAD_SPAWN:
                         if (ai != 0)
                             return false;
                         break;

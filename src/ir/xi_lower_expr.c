@@ -2147,6 +2147,92 @@ XR_FUNC bool xi_lower_boundary_transfer_arg(XiLower *l, AstNode *child, XiValue 
     return true;
 }
 
+static bool lower_call_is_sys_thread_spawn(const CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *spawn = &call->callee->as.member_access;
+    if (!spawn->name || strcmp(spawn->name, "spawn") != 0 || !spawn->object ||
+        spawn->object->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *thread = &spawn->object->as.member_access;
+    if (!thread->name || strcmp(thread->name, "Thread") != 0 || !thread->object ||
+        thread->object->type != AST_VARIABLE)
+        return false;
+    const char *module_name = thread->object->as.variable.name;
+    return module_name && strcmp(module_name, "sys") == 0;
+}
+
+static AstNode *lower_thread_spawn_body_arg(CallExprNode *call) {
+    if (!call)
+        return NULL;
+    if (call->arg_count == 1)
+        return call->arguments[0];
+    if (call->arg_count == 2)
+        return call->arguments[1];
+    return NULL;
+}
+
+static XiValue *lower_thread_spawn_expr(XiLower *l, AstNode *node, AstNode *expr) {
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    if (!expr)
+        return NULL;
+
+    if (expr->type == AST_CALL_EXPR) {
+        CallExprNode *call = &expr->as.call_expr;
+        XiValue *callee = xi_lower_expr(l, call->callee);
+        if (!callee)
+            return NULL;
+        XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
+        uint8_t stack_modes[XI_LOWER_CALL_ARG_STACK_CAP];
+        XiLowerGoArgList args;
+        xi_lower_go_arg_list_init(&args, stack_args, stack_modes, XI_LOWER_CALL_ARG_STACK_CAP);
+        if (!lower_go_call_args(l, call, &args, XI_LOWER_MAX_CALL_ARGS, (int) node->line))
+            return NULL;
+        int n = args.count;
+        XiValue *v =
+            xi_value_new(l->func, l->cur_block, XI_THREAD_SPAWN, result_type, (uint16_t) (1 + n));
+        if (!v)
+            return NULL;
+        v->args[0] = callee;
+        for (int i = 0; i < n; i++)
+            v->args[1 + i] = args.items[i];
+        if (n > 0) {
+            uint8_t *modes =
+                (uint8_t *) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) n * sizeof(uint8_t)));
+            if (!modes)
+                return NULL;
+            memcpy(modes, args.modes, (size_t) n * sizeof(uint8_t));
+            v->aux = modes;
+        }
+        v->aux_int = (int64_t) pack_go_aux(XR_LINK_NONE);
+        v->flags |= XI_FLAG_SIDE_EFFECT;
+        v->line = (uint32_t) node->line;
+        return v;
+    }
+
+    XiValue *callee = xi_lower_expr(l, expr);
+    if (!callee)
+        return NULL;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_THREAD_SPAWN, result_type, 1);
+    if (!v)
+        return NULL;
+    v->args[0] = callee;
+    v->aux_int = (int64_t) pack_go_aux(XR_LINK_NONE);
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_thread_spawn_call(XiLower *l, AstNode *node, CallExprNode *call) {
+    if (!call)
+        return NULL;
+    if (call->arg_count == 2 && call->arguments[0]) {
+        if (!xi_lower_expr(l, call->arguments[0]))
+            return NULL;
+    }
+    return lower_thread_spawn_expr(l, node, lower_thread_spawn_body_arg(call));
+}
+
 /* Lower Coro.method(args...) → XI_CORO_OP.
  * Returns NULL for unrecognized methods. */
 static XiValue *lower_coro_method(XiLower *l, AstNode *node, const char *method,
@@ -2533,6 +2619,9 @@ static XiValue *lower_channel_send_boundary_call(XiLower *l, AstNode *node, Call
 
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
+
+    if (lower_call_is_sys_thread_spawn(call))
+        return lower_thread_spawn_call(l, node, call);
 
     /* Method call: callee is obj.method — emit XI_CALL_METHOD (→ OP_INVOKE).
      * This is required for builtin methods (set.size, array.push, etc.)
@@ -5045,6 +5134,7 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
     GoExprNode *go = &node->as.go_expr;
     AstNode *expr = go->expr;
     struct XrType *result_type = xi_lower_node_type(l, node);
+    XiOp spawn_op = go->spawn_kind == XR_SPAWN_THREAD ? XI_THREAD_SPAWN : XI_GO;
 
     if (expr->type == AST_CALL_EXPR) {
         /* go fn(args): extract callee + args, don't execute the call.
@@ -5064,7 +5154,7 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
         XiValue **arg_vals = args.items;
         int n = args.count;
         uint16_t nargs = (uint16_t) (1 + n);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_GO, result_type, nargs);
+        XiValue *v = xi_value_new(l->func, l->cur_block, spawn_op, result_type, nargs);
         if (!v)
             return NULL;
         v->args[0] = callee;
@@ -5089,7 +5179,7 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
     XiValue *callee = xi_lower_expr(l, expr);
     if (!callee)
         return NULL;
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_GO, result_type, 1);
+    XiValue *v = xi_value_new(l->func, l->cur_block, spawn_op, result_type, 1);
     if (!v)
         return NULL;
     v->args[0] = callee;

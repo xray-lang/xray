@@ -358,8 +358,9 @@ typedef enum {
     XI_PRINT, /* print: args[0..n]=values, aux_int=flags */
 
     /* Coroutine */
-    XI_GO,    /* go expr: args[0]=callee, args[1..n]=params */
-    XI_AWAIT, /* await task: args[0]=task */
+    XI_GO,           /* go expr: args[0]=callee, args[1..n]=params */
+    XI_THREAD_SPAWN, /* sys.Thread.spawn: go-like closure on a dedicated OS thread */
+    XI_AWAIT,        /* await task: args[0]=task */
 
     /* Batch-parallel high-level ops.
      * These are semantic placeholders for TaskGroup / parallelFor lowering:
@@ -593,9 +594,10 @@ typedef enum {
 #define XI_AWAIT_AUX_ANY (1 << 0)
 #define XI_AWAIT_AUX_ALL (1 << 1)
 #define XI_AWAIT_AUX_ANY_SUCCESS (1 << 2)
-#define XI_AWAIT_AUX_ONE_SHOT_GO (1 << 3)        /* await operand is a non-escaping XI_GO */
-#define XI_AWAIT_AUX_AGGREGATE_ONE_SHOT (1 << 4) /* await all consumes a fresh task array literal  \
-                                                  */
+#define XI_AWAIT_AUX_ONE_SHOT_GO (1 << 3) /* await operand is a non-escaping XI_GO */
+#define XI_AWAIT_AUX_AGGREGATE_ONE_SHOT                                                            \
+    (1 << 4) /* await all consumes a fresh task array literal                                      \
+              */
 #define XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH                                                         \
     (1 << 5) /* plain await should submit its producer array as a deferred batch first */
 #define XI_AWAIT_AUX_INTO_RESULT                                                                   \
@@ -694,7 +696,7 @@ static inline bool xi_load_field_is_adt(const XiValue *v) {
 }
 
 static inline uint8_t xi_go_arg_transfer_mode(const XiValue *go, uint16_t arg_index) {
-    if (!go || go->op != XI_GO || arg_index + 1 >= go->nargs)
+    if (!go || (go->op != XI_GO && go->op != XI_THREAD_SPAWN) || arg_index + 1 >= go->nargs)
         return XR_TRANSFER_SHARE;
     const uint8_t *modes = (const uint8_t *) go->aux;
     return modes ? modes[arg_index] : XR_TRANSFER_SHARE;
