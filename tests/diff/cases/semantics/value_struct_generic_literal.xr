@@ -1,0 +1,9 @@
+// Generic value struct literals must lower to XI_STRUCT_NEW after monomorphization.
+// The VM and AOT both rely on the concrete struct layout, not a constructor fallback.
+struct Box<T> {
+    value: T
+}
+
+let p = Box<int>{value: 41}
+p.value = p.value + 1
+print(p.value)

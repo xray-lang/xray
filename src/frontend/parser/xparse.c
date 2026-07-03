@@ -1322,7 +1322,7 @@ static bool is_raw_pointer_type_name(const char *name) {
 }
 
 // Returns: number of type args parsed, 0 means not a generic call/type namespace.
-static int try_parse_generic_type_args(Parser *parser, XrType **type_args, int capacity,
+static int try_parse_generic_type_args(Parser *parser, XrTypeRef **type_args, int capacity,
                                        bool allow_dot_follow) {
     // disambiguation: if '<' has leading space, treat as comparison
     if (parser->current.type == TK_LT && parser->current.has_leading_space) {
@@ -1351,7 +1351,7 @@ static int try_parse_generic_type_args(Parser *parser, XrType **type_args, int c
             goto rollback;
         }
 
-        XrType *type = xr_parse_type_annotation(parser);
+        XrTypeRef *type = xr_parse_type_annotation(parser);
 
         if (parser->had_error && !saved_had_error) {
             goto rollback;
@@ -1453,14 +1453,14 @@ AstNode *xr_parse_variable(Parser *parser) {
     int column = parser->previous.column;
 
     // Try parsing generic type args <T1, T2, ...>
-    XrType *type_args[16];  // Max 16 type args
+    XrTypeRef *type_args[16];  // Max 16 type args
     int type_arg_count =
         try_parse_generic_type_args(parser, type_args, 16, is_raw_pointer_type_name(name));
 
     if (type_arg_count > 0) {
         if (xr_parser_check(parser, TK_DOT) && is_raw_pointer_type_name(name)) {
-            return xr_ast_new_expr(parser->compiler_session, NULL, name, NULL, 0,
-                                   (XrTypeRef **) type_args, type_arg_count, line);
+            return xr_ast_new_expr(parser->compiler_session, NULL, name, NULL, 0, type_args,
+                                   type_arg_count, line);
         }
 
         // Check if this is a generic struct literal: Name<T1, T2>{field: value}
@@ -1514,9 +1514,9 @@ AstNode *xr_parse_variable(Parser *parser) {
                                                   field_values, field_count, line);
             node->column = column;
             // Attach generic type arguments for monomorphization
-            XrType **ta = (XrType **) ast_alloc_array(parser->compiler_session, sizeof(XrType *),
-                                                      (size_t) type_arg_count);
-            memcpy(ta, type_args, sizeof(XrType *) * type_arg_count);
+            XrTypeRef **ta = (XrTypeRef **) ast_alloc_array(
+                parser->compiler_session, sizeof(XrTypeRef *), (size_t) type_arg_count);
+            memcpy(ta, type_args, sizeof(XrTypeRef *) * type_arg_count);
             node->as.struct_literal.type_args = ta;
             node->as.struct_literal.type_arg_count = type_arg_count;
             return node;
@@ -1546,7 +1546,7 @@ AstNode *xr_parse_variable(Parser *parser) {
         // types directly (no `new`); route to the construction node.
         if (xr_is_construct_only_type_name(name)) {
             return xr_ast_new_expr(parser->compiler_session, NULL, name, arguments, arg_count,
-                                   (XrTypeRef **) type_args, type_arg_count, line);
+                                   type_args, type_arg_count, line);
         }
 
         return xr_ast_call_expr_generic(parser->compiler_session, callee, arguments, arg_count,
@@ -1784,7 +1784,7 @@ AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
     int column = parser->previous.column;
     int name_length = parser->previous.length;
 
-    XrType *type_annotation = NULL;
+    XrTypeRef *type_annotation = NULL;
     AstNode *initializer = NULL;
 
     // Parse optional type annotation (: Type)
