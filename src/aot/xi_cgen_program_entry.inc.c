@@ -208,12 +208,16 @@ XR_FUNC void xi_cgen_header(XiCgenCtx *ctx, FILE *out) {
     fprintf(out, "static XrValue xrt_builtins[%d];\n\n", XR_USER_GLOBALS_START);
 }
 
-static void emit_xrt_builtin_init(FILE *out, const CgBuiltinInitPlan *plan,
-                                  const char *source_path) {
+static bool cg_builtin_init_plan_needs_values(const CgBuiltinInitPlan *plan) {
+    return plan && (plan->process || plan->file || plan->dir);
+}
+
+static void emit_xrt_builtin_init(FILE *out, const CgBuiltinInitPlan *plan, const char *source_path,
+                                  const char *argc_expr, const char *argv_expr) {
     if (plan && plan->process) {
         fprintf(out, "    xrt_builtins[%d] = xrt_process_new(", XR_GLOBAL_VAR_PROCESS);
         emit_optional_c_string_literal(out, source_path);
-        fprintf(out, ", argc > 1 ? argc - 1 : 0, argc > 1 ? argv + 1 : NULL, ");
+        fprintf(out, ", %s, %s, ", argc_expr ? argc_expr : "0", argv_expr ? argv_expr : "NULL");
         emit_optional_source_dir_literal(out, source_path);
         fprintf(out, ");\n");
     }
@@ -353,6 +357,33 @@ static bool cg_runtime_caps_need_runtime(uint32_t caps) {
     return (caps & ~XR_AOT_CAP_OBJECTS) != XR_AOT_CAP_NONE;
 }
 
+/* Shared-library init: --shared exports a C ABI library; loading it must not run
+ * the Xray program's top-level body. Only materialize builtin globals that an
+ * exported function may read without an executable argv context. */
+static void xi_cgen_shared_lib_ctor(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n,
+                                    int entry_index) {
+    CgBuiltinInitPlan builtin_plan = cg_builtin_init_plan_for_modules(modules, n);
+    uint32_t runtime_caps = builtin_plan.runtime_caps;
+    bool entry_is_coro = modules[entry_index] && modules[entry_index]->init &&
+                         cg_func_needs_aot_coro_ctx(ctx, modules[entry_index]->init);
+    if (entry_is_coro || cg_runtime_caps_need_runtime(runtime_caps)) {
+        fprintf(out, "/* --shared: runtime-backed bundle; no load-time init emitted. */\n");
+        return;
+    }
+    if (!cg_builtin_init_plan_needs_values(&builtin_plan))
+        return;
+
+    const char *entry_source_path = cg_entry_source_path(ctx, modules, n, entry_index);
+
+    fprintf(out, "#if defined(__GNUC__) || defined(__clang__)\n");
+    fprintf(out, "__attribute__((constructor))\n");
+    fprintf(out, "#endif\n");
+    fprintf(out, "static void xrt_shared_lib_ctor(void) {\n");
+    fprintf(out, "    xrt_arc_init();\n");
+    emit_xrt_builtin_init(out, &builtin_plan, entry_source_path, "0", "NULL");
+    fprintf(out, "}\n");
+}
+
 XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, int entry_index) {
     XR_DCHECK(ctx != NULL, "xi_cgen_main: NULL ctx");
     XR_DCHECK(out != NULL, "xi_cgen_main: NULL output");
@@ -373,7 +404,10 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
 
     fprintf(out, "int main(int argc, char **argv) {\n");
     fprintf(out, "    xrt_arc_init();\n");
-    emit_xrt_builtin_init(out, &builtin_plan, entry_source_path);
+    // main() has the real argv, so process.args drops argv[0] (the program
+    // name); the --shared load-constructor path has no argv and passes "0"/NULL.
+    emit_xrt_builtin_init(out, &builtin_plan, entry_source_path, "argc > 1 ? argc - 1 : 0",
+                          "argc > 1 ? argv + 1 : NULL");
     if (entry_needs_runtime) {
         emit_xrt_runtime_init(out, &builtin_plan, runtime_caps, entry_source_path);
     } else {
@@ -481,7 +515,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
 
         fprintf(body, "int main(int argc, char **argv) {\n");
         fprintf(body, "    xrt_arc_init();\n");
-        emit_xrt_builtin_init(body, &builtin_plan, entry_source_path);
+        emit_xrt_builtin_init(body, &builtin_plan, entry_source_path, "argc > 1 ? argc - 1 : 0",
+                              "argc > 1 ? argv + 1 : NULL");
         if (entry_needs_runtime) {
             emit_xrt_runtime_init(body, &builtin_plan, runtime_caps, entry_source_path);
         }
@@ -507,6 +542,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         fprintf(body, "    xrt_bump_destroy();\n");
         fprintf(body, "    return 0;\n");
         fprintf(body, "}\n");
+    } else {
+        xi_cgen_shared_lib_ctor(ctx, body, single_module, 1, 0);
     }
 
     if (xr_close_memstream(body, &bodybuf, &bodysz) != 0) {
@@ -583,8 +620,12 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     ctx->collect_xmod_refs = true;
     xi_cgen_func(ctx, body, module->init, prefix);
 
-    if (is_entry && ctx->emit_main)
-        xi_cgen_main(ctx, body, modules, nmodules, entry_index);
+    if (is_entry) {
+        if (ctx->emit_main)
+            xi_cgen_main(ctx, body, modules, nmodules, entry_index);
+        else
+            xi_cgen_shared_lib_ctor(ctx, body, modules, nmodules, entry_index);
+    }
     ctx->collect_xmod_refs = false;
 
     if (xr_close_memstream(body, &bodybuf, &bodysz) != 0) {
