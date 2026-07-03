@@ -1,0 +1,8 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects enum declaration
+contains=freestanding profile rejects throw statement
+not_contains=CRASH
+not_contains=SIGBUS
+not_contains=SIGSEGV
+not_contains=xrt_map

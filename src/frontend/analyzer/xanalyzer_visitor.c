@@ -1926,6 +1926,8 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                         links->type = member_type ? member_type : xr_type_new_unknown(NULL);
                         links->declared_type = links->type;
                     }
+                    links->module_name = import->module_name;
+                    links->import_member_name = member->name;
                 }
             }
         }

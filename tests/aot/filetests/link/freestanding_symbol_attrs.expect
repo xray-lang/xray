@@ -1,0 +1,13 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="system_libs": []
+contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=XRT_ATTR_SECTION("__TEXT,.xray_boot")
+c_contains=XRT_ATTR_SECTION("__TEXT,.xray_hook")
+c_contains=XRT_ATTR_WEAK
+c_contains=XRT_ATTR_USED int32_t xray_hook_score
+not_contains=xray_rt_coro
+not_contains=xray_core

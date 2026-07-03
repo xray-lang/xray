@@ -1,0 +1,6 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects mem.pageAlloc
+not_contains=mmap
+not_contains=VirtualAlloc
+not_contains=CRASH

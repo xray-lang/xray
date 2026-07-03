@@ -124,8 +124,9 @@ struct XaSymbolLinks {
     int *enum_payload_counts;      // Per-variant payload field count (0 = no payload)
     XrType ***enum_payload_types;  // Per-variant payload type arrays (NULL = no payload)
 
-    // For module symbols (XA_SYM_MODULE)
+    // For module symbols and selective imports.
     const char *module_name;  // Actual module name (may differ from variable name due to alias)
+    const char *import_member_name;  // Original exported member for selective imports.
 
     // File ownership (for multi-file support)
     const char *file_path;  // File where this symbol is defined

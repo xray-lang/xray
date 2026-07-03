@@ -1,0 +1,6 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects mem.realloc
+not_contains=unresolved AOT import
+not_contains=unsupported AOT indirect call
+not_contains=CRASH
