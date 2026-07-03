@@ -168,6 +168,25 @@ static XrType *xa_bytes_method_type(XaInferContext *ctx, XrType *receiver, const
     return NULL;
 }
 
+static XrType *xa_string_view_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
+    if (!receiver || !XR_TYPE_IS_STRING(receiver) || !name)
+        return NULL;
+    if (strcmp(name, "bytes") != 0)
+        return NULL;
+    XrVMRuntime *X = ctx->analyzer->isolate;
+    return xr_type_new_function(X, NULL, 0, xr_type_new_bytespan(X), false);
+}
+
+static XrType *xa_array_view_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
+    if (!receiver || !XR_TYPE_IS_ARRAY(receiver) || !name || strcmp(name, "span") != 0)
+        return NULL;
+    XrVMRuntime *X = ctx->analyzer->isolate;
+    XrType *elem = receiver->container.element_type;
+    if (!elem)
+        elem = xr_type_new_unknown(X);
+    return xr_type_new_function(X, NULL, 0, xr_type_new_span(X, elem), false);
+}
+
 static XrType *xa_bytespan_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
     if (!xa_type_is_bytespan(receiver) || !name)
         return NULL;
@@ -1226,6 +1245,14 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     XrType *bytes_method = xa_bytes_method_type(ctx, obj_type, ma->name);
     if (bytes_method)
         return bytes_method;
+
+    XrType *string_view_method = xa_string_view_method_type(ctx, obj_type, ma->name);
+    if (string_view_method)
+        return string_view_method;
+
+    XrType *array_view_method = xa_array_view_method_type(ctx, obj_type, ma->name);
+    if (array_view_method)
+        return array_view_method;
 
     XrType *bytespan_method = xa_bytespan_method_type(ctx, obj_type, ma->name);
     if (bytespan_method)

@@ -217,6 +217,8 @@ typedef struct XrSpanView {
     void *guard;
 } XrSpanView;
 
+#define XR_SPAN_VIEW_READONLY (1u << 0)
+
 static inline bool xr_value_is_span_ref(XrValue v) {
     return v.tag == XR_TAG_STRUCT_REF && v.ext == 0 && v.heap_type == XR_STRUCT_REF_SPAN_LAYOUT_ID;
 }

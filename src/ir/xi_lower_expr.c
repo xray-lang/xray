@@ -2853,6 +2853,41 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
 
         if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
+            strcmp(ma->name, "span") == 0 && n == 0) {
+            XiValue *start = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+            XiValue *end = xi_const_int(l->func, l->cur_block, INT64_MAX, l->type_int);
+            struct XrType *span_type = result_type;
+            if (!span_type || xi_lower_type_is_unknown(span_type)) {
+                XrType *elem = xi_get_container_elem_type(recv->type);
+                span_type =
+                    xr_type_new_span(l->isolate, elem ? elem : xr_type_new_unknown(l->isolate));
+            }
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_SLICE, span_type, 3);
+            if (!v)
+                return NULL;
+            v->args[0] = recv;
+            v->args[1] = start;
+            v->args[2] = end;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+
+        if (recv->type && recv->type->kind == XR_KIND_STRING && ma->name &&
+            strcmp(ma->name, "bytes") == 0 && n == 0) {
+            struct XrType *bytespan_type = result_type;
+            if (!bytespan_type || xi_lower_type_is_unknown(bytespan_type))
+                bytespan_type = xr_type_new_bytespan(l->isolate);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, bytespan_type, 1);
+            if (!v)
+                return NULL;
+            v->args[0] = recv;
+            v->aux = (void *) "string_bytes_span";
+            v->flags |= XI_FLAG_READS_MEM | XI_FLAG_MAY_THROW;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+
+        if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
             strcmp(ma->name, "reserve") == 0 && n == 1) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 2);
             if (!v)

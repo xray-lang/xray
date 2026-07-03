@@ -180,6 +180,7 @@
     _(BYTES_LOAD_U32_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = Bytes.loadU32LE(R[B], R[C])")               \
     _(BYTES_LOAD_U64_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = Bytes.loadU64LE(R[B], R[C])")               \
     _(ARRAY_DATA_PTR, FMT_ABC, KOP_ABC_BIN, "R[A] = raw data pointer of Array/Span R[B]")          \
+    _(STRING_BYTES_SPAN, FMT_ABC, KOP_ABC_BIN, "R[A] = borrowed ByteSpan of string R[B], C=slot")  \
     _(BYTES_COPY_WITHIN, FMT_A, KOP_A_INOUT, "R[A].copyWithin(R[A+1], R[A+2], R[A+3])")            \
     _(BYTES_COPY_FROM, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1], R[A+2], R[A+3], R[A+4])")        \
     _(BYTES_REPEAT_FROM, FMT_A, KOP_A_INOUT, "R[A].repeatFrom(R[A+1], R[A+2], R[A+3])")            \

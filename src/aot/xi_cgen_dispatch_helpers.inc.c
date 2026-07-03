@@ -2577,6 +2577,14 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         }
     } else if (emit_array_bytes_builtin_expr(ctx, out, f, v, bn)) {
         /* Expression emitted by the array/bytes helper. */
+    } else if (strcmp(bn, "string_bytes_span") == 0) {
+        XR_DCHECK(v->nargs >= 1, "builtin string_bytes_span: need string arg");
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+        fprintf(out, "xrt_str_to_bytes(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
     } else if (strcmp(bn, "StringBuilder") == 0) {
         fprintf(out, "xrt_strbuf_new()");
     } else if (strcmp(bn, "map_new") == 0) {
