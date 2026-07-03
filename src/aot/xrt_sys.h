@@ -46,6 +46,7 @@ typedef struct xrt_sys_once_object {
     xr_once_t once;
 } xrt_sys_once_object_t;
 
+#ifdef XRT_ENABLE_SYS_THREAD
 typedef enum xrt_thread_state {
     XRT_THREAD_CREATED = 0,
     XRT_THREAD_JOINING,
@@ -59,6 +60,7 @@ typedef struct xrt_thread_object {
     _Atomic(bool) finished;
     XrValue retval;
 } xrt_thread_object_t;
+#endif
 
 static XR_THREAD_LOCAL XrValue xrt_sys_once_callback = {.tag = XR_TAG_NULL};
 
@@ -284,10 +286,6 @@ static inline xrt_sys_once_object_t *xrt_sys_once_ptr(XrValue value) {
     return xrt_sys_once_is(value) ? (xrt_sys_once_object_t *) value.ptr : NULL;
 }
 
-static inline xrt_thread_object_t *xrt_thread_ptr(XrValue value) {
-    return xrt_thread_is(value) ? (xrt_thread_object_t *) value.ptr : NULL;
-}
-
 static inline XrValue xrt_sys_mutex_box(xrt_sys_mutex_object_t *mutex) {
     return mutex ? xr_mkptr(mutex, XR_TAG_SYS_MUTEX) : XR_NULL_VAL;
 }
@@ -306,10 +304,6 @@ static inline XrValue xrt_sys_barrier_box(xrt_sys_barrier_object_t *barrier) {
 
 static inline XrValue xrt_sys_once_box(xrt_sys_once_object_t *once) {
     return once ? xr_mkptr(once, XR_TAG_SYS_ONCE) : XR_NULL_VAL;
-}
-
-static inline XrValue xrt_thread_box(xrt_thread_object_t *thread) {
-    return thread ? xr_mkptr(thread, XR_TAG_THREAD) : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_sys_mutex_new(void) {
@@ -392,6 +386,15 @@ static inline void xrt_sys_once_destroy_builtin(void *obj) {
     (void) obj;
 }
 
+#ifdef XRT_ENABLE_SYS_THREAD
+static inline xrt_thread_object_t *xrt_thread_ptr(XrValue value) {
+    return xrt_thread_is(value) ? (xrt_thread_object_t *) value.ptr : NULL;
+}
+
+static inline XrValue xrt_thread_box(xrt_thread_object_t *thread) {
+    return thread ? xr_mkptr(thread, XR_TAG_THREAD) : XR_NULL_VAL;
+}
+
 static inline void xrt_thread_destroy_builtin(void *obj) {
     xrt_thread_object_t *thread = (xrt_thread_object_t *) obj;
     if (!thread)
@@ -451,6 +454,7 @@ static inline XrValue xrt_thread_method_0(XrValue recv, int sym) {
     }
     return XR_NULL_VAL;
 }
+#endif
 
 static inline XrValue xrt_sys_mutex_method_0(XrValue recv, int sym) {
     xrt_sys_mutex_object_t *mutex = xrt_sys_mutex_ptr(recv);

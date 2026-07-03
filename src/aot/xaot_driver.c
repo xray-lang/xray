@@ -332,6 +332,8 @@ static void scan_func_features(XiFunc *f, const XiFunc *module_init, XaotFeature
                     fs->need_coro = true;
                     fs->need_task = true;
                     fs->need_netpoll = true;
+                    if (v->op == XI_THREAD_SPAWN)
+                        fs->need_sys_thread = true;
                     break;
                 case XI_ARRAY_NEW:
                 case XI_MAP_NEW:
@@ -591,6 +593,13 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_ENABLE_GENERATORS"))
             return false;
         needs_aot_runtime = true;
+    }
+    if (features->need_sys_thread) {
+        /* Thread handle destructor (xrt_coll.h dispatch) calls the extern
+         * xr_thread_detach; only enable it when threads can actually be
+         * spawned so thread-free binaries don't need the OS thread object. */
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_ENABLE_SYS_THREAD"))
+            return false;
     }
     if (features->need_scope) {
         if (!add_runtime_cap(manifest, "transfer"))

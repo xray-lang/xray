@@ -2,10 +2,10 @@
 
 import sys
 
-shared const counter = Atomic<int>(0)
+let counter = 0
 let once = sys.Once()
 
-once.call(() -> { counter.fetchAdd(1) })
-once.call(() -> { counter.fetchAdd(10) })
-once.call(() -> { counter.fetchAdd(100) })
-print(counter.load())
+once.call(() -> { counter = counter + 1 })
+once.call(() -> { counter = counter + 10 })
+once.call(() -> { counter = counter + 100 })
+print(counter)
