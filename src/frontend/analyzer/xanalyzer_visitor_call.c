@@ -1018,6 +1018,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             if (strcmp(name, "EventCount") == 0) {
                 return xr_type_new_named_instance(ctx->analyzer->isolate, "EventCount");
             }
+            if (strcmp(name, "Thread") == 0) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                    "Thread handles can only be created by sys.Thread.spawn", &loc);
+                return xr_type_new_unknown(NULL);
+            }
 
             // Construction `T(args)`: resolve the class in any visible scope
             // (global, enclosing function for nested classes). new-expr used to
@@ -1069,6 +1077,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // (covers function-local / nested class declarations) then global.
         if (call->callee && call->callee->type == AST_VARIABLE) {
             const char *class_name = call->callee->as.variable.name;
+            if (strcmp(class_name, "Thread") == 0) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                    "Thread handles can only be created by sys.Thread.spawn", &loc);
+                return xr_type_new_unknown(NULL);
+            }
             XaSymbol *class_sym = xa_lookup_visible_symbol(ctx, class_name);
             if (!class_sym || class_sym->kind != XA_SYM_CLASS)
                 class_sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);

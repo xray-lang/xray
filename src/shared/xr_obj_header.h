@@ -111,6 +111,7 @@ typedef enum {
     XR_TCOUNTDOWNLATCH, /* CountdownLatch shared completion barrier (system heap) */
     XR_TSEMAPHORE,      /* Semaphore shared counting permit primitive (system heap) */
     XR_TEVENTCOUNT,     /* EventCount shared epoch/broadcast primitive (system heap) */
+    XR_TTHREAD,         /* sys.Thread shared OS-thread handle (system heap) */
 } XrObjType;
 
 #endif  // XR_OBJ_HEADER_H

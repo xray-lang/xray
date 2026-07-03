@@ -1,7 +1,16 @@
-// sys.Thread is compiler-defined, not a native constructor surface.
+// sys.Thread.spawn is compiler-defined, not a native constructor surface.
 //
 // Task 147 selected the language/IR construct form:
-//     sys.Thread.spawn(fn() -> T { ... }) -> sys.Thread<T>
+//     sys.Thread.spawn(fn() -> T { ... }) -> Thread<T>
 //
-// Do not declare `@native class Thread<T>` here. A native method accepting a
-// closure would bypass the same capture/move rules that protect `go`.
+// The handle itself is a native runtime type so join/detach/property dispatch
+// use the normal native-type tables. Do not add a constructor or static call
+// here; doing so would reintroduce the old Thread<T>(body) surface and bypass
+// the go-like capture/move checks enforced by sys.Thread.spawn.
+
+@native
+class Thread<T> {
+    done: bool
+    join() -> T
+    detach()
+}

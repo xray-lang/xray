@@ -279,6 +279,7 @@ static const NativeTypeMapping type_mappings[] = {
     {"CountdownLatch", XR_TID_COUNTDOWNLATCH, TYPE_NAME_COUNTDOWNLATCH},
     {"Semaphore", XR_TID_SEMAPHORE, TYPE_NAME_SEMAPHORE},
     {"EventCount", XR_TID_EVENTCOUNT, TYPE_NAME_EVENTCOUNT},
+    {"Thread", XR_TID_THREAD, TYPE_NAME_THREAD},
 };
 
 #define NUM_TYPE_MAPPINGS (int) (sizeof(type_mappings) / sizeof(type_mappings[0]))
@@ -440,6 +441,7 @@ static const TidObjMapping tid_obj_map[] = {
     {XR_TID_COUNTDOWNLATCH, XR_TCOUNTDOWNLATCH},
     {XR_TID_SEMAPHORE, XR_TSEMAPHORE},
     {XR_TID_EVENTCOUNT, XR_TEVENTCOUNT},
+    {XR_TID_THREAD, XR_TTHREAD},
     {XR_TID_REGEX, XR_TINSTANCE},
     {XR_TID_PANIC_INFO, XR_TINSTANCE},
     {XR_TID_COROUTINE, XR_TTASK},
