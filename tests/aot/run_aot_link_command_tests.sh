@@ -298,13 +298,7 @@ else
     sed 's/^/      /' "$CORE_LOG" | sed -n '1,120p'
 fi
 
-FREESTANDING_EXPORT_SRC="$WORK/freestanding_export.xr"
-cat > "$FREESTANDING_EXPORT_SRC" <<'XR'
-@c_export("xray_add")
-fn xray_add(a: int, b: int) -> int {
-    return a + b
-}
-XR
+FREESTANDING_EXPORT_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_export.xr"
 FREESTANDING_EXPORT_BIN="$WORK/freestanding_export"
 FREESTANDING_EXPORT_LOG="$WORK/freestanding_export.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
@@ -327,6 +321,50 @@ if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-comm
 else
     record_fail "freestanding-profile: build failed"
     sed 's/^/      /' "$FREESTANDING_EXPORT_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_EXPORT_OBJ="$WORK/freestanding_export.o"
+FREESTANDING_EXPORT_REAL_LOG="$WORK/freestanding_export_real.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_EXPORT_OBJ" \
+        "$FREESTANDING_EXPORT_SRC" >"$FREESTANDING_EXPORT_REAL_LOG" 2>&1; then
+    expect_log_contains "$FREESTANDING_EXPORT_REAL_LOG" "Link command:" \
+        "freestanding-profile: real object emitted link command"
+    expect_log_contains "$FREESTANDING_EXPORT_REAL_LOG" " -r " \
+        "freestanding-profile: shared output is relocatable object"
+    expect_log_contains "$FREESTANDING_EXPORT_REAL_LOG" "-nostdlib" \
+        "freestanding-profile: real object links without libc"
+    expect_log_not_contains "$FREESTANDING_EXPORT_REAL_LOG" "-dynamiclib" \
+        "freestanding-profile: does not request hosted dylib"
+    FREESTANDING_KEPT_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_EXPORT_REAL_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_KEPT_C" ]; then
+        expect_log_contains "$FREESTANDING_KEPT_C" "#include \"xrt_core_freestanding.h\"" \
+            "freestanding-profile: generated C uses freestanding prelude"
+        expect_log_not_contains "$FREESTANDING_KEPT_C" "#include \"xrt.h\"" \
+            "freestanding-profile: generated C avoids hosted xrt umbrella"
+        expect_log_not_contains "$FREESTANDING_KEPT_C" "#include \"xaot_coro.h\"" \
+            "freestanding-profile: generated C avoids coroutine bridge"
+    else
+        record_fail "freestanding-profile: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_EXPORT_REAL_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_UNDEFINED="$(nm -u "$FREESTANDING_EXPORT_OBJ" 2>&1 | sed '/^[[:space:]]*$/d')"
+    if [ -z "$FREESTANDING_UNDEFINED" ]; then
+        record_pass "freestanding-profile: no undefined symbols in relocatable object"
+    else
+        record_fail "freestanding-profile: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_UNDEFINED" | sed 's/^/      /'
+    fi
+    if nm -g "$FREESTANDING_EXPORT_OBJ" 2>/dev/null | grep -Eq '(^|[[:space:]])_?xray_add$'; then
+        record_pass "freestanding-profile: exports c symbol"
+    else
+        record_fail "freestanding-profile: missing c export symbol"
+        nm -g "$FREESTANDING_EXPORT_OBJ" 2>/dev/null | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile: real object build failed"
+    sed 's/^/      /' "$FREESTANDING_EXPORT_REAL_LOG" | sed -n '1,120p'
 fi
 
 FREESTANDING_NON_NATIVE_LOG="$WORK/freestanding_non_native.log"

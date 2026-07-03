@@ -9,7 +9,9 @@
  *
  * Translates typed SSA IR (XiFunc) directly to C source code,
  * bypassing bytecode and the machine-code Xm builder entirely.
- * Generated code includes xrt.h for the value representation.
+ * Hosted generated code includes xrt.h for the full value/runtime surface.
+ * Freestanding generated code includes xrt_core_freestanding.h for the
+ * no-libc scalar ABI surface.
  */
 
 #ifndef XI_CGEN_H
@@ -54,6 +56,7 @@ XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
 XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle);
 XR_FUNC void xi_cgen_ctx_set_emit_main(XiCgenCtx *ctx, bool emit_main);
+XR_FUNC void xi_cgen_ctx_set_freestanding_profile(XiCgenCtx *ctx, bool freestanding);
 XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx);
 XR_FUNC XiCgenCoroFrameStats xi_cgen_coro_frame_stats(const XiCgenCtx *ctx);
 XR_FUNC XiCgenStats xi_cgen_stats(const XiCgenCtx *ctx);
@@ -66,7 +69,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, struct XiModule *module)
 /* ========== Multi-module API ========== */
 
 /* Emit the common C header (includes, defines). Call once per file. */
-XR_FUNC void xi_cgen_header(FILE *out);
+XR_FUNC void xi_cgen_header(XiCgenCtx *ctx, FILE *out);
 
 /* Resolve cross-module imports.  Populates ctx internal import table
  * from the module graph.  Must be called before C generation. */

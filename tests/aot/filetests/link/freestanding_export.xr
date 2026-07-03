@@ -1,0 +1,4 @@
+@c_export("xray_add")
+fn xray_add(a: int, b: int) -> int {
+    return a + b
+}

@@ -1010,6 +1010,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     }
     xi_cgen_ctx_set_aot_bundle(cg_ctx, &aot_bundle);
     xi_cgen_ctx_set_emit_main(cg_ctx, emit_program_main);
+    xi_cgen_ctx_set_freestanding_profile(cg_ctx, profile == XAOT_BUILD_PROFILE_FREESTANDING);
 
     /* --- Resolve cross-module imports for C codegen --- */
     xi_cgen_resolve_module_imports(cg_ctx, modules, nmodules);
