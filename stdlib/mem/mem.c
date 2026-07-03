@@ -35,6 +35,7 @@
 #include "../../src/shared/xr_bits_core.h"
 #include "../../src/shared/xr_arith_core.h"
 #include "../../src/shared/xr_sync_core.h"
+#include "../../src/os/os_mem.h"
 #include "../../src/base/xplatform.h"
 #include "../../src/base/xchecks.h"
 #include <string.h>
@@ -393,6 +394,44 @@ static XrValue mem_free(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc >= 1)
         free(mem_rawptr_arg(args[0]));
     return xr_null();
+}
+
+static int mem_page_default_prot(void) {
+    return XR_MEM_PROT_READ | XR_MEM_PROT_WRITE;
+}
+
+static int mem_page_prot_arg(XrValue v) {
+    return XR_IS_INT(v) ? (int) XR_TO_INT(v) : mem_page_default_prot();
+}
+
+static XrValue mem_page_alloc(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    int64_t bytes = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
+    int prot = argc >= 2 ? mem_page_prot_arg(args[1]) : mem_page_default_prot();
+    if (bytes <= 0)
+        return mem_ptr_result(NULL);
+    return mem_ptr_result(xr_mem_map((size_t) bytes, prot));
+}
+
+static XrValue mem_page_protect(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 3 || !XR_IS_INT(args[1]))
+        return xr_bool(false);
+    int64_t bytes = XR_TO_INT(args[1]);
+    if (bytes <= 0)
+        return xr_bool(false);
+    return xr_bool(
+        xr_mem_protect(mem_rawptr_arg(args[0]), (size_t) bytes, mem_page_prot_arg(args[2])));
+}
+
+static XrValue mem_page_free(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2 || !XR_IS_INT(args[1]))
+        return xr_bool(false);
+    int64_t bytes = XR_TO_INT(args[1]);
+    if (bytes <= 0)
+        return xr_bool(false);
+    return xr_bool(xr_mem_unmap(mem_rawptr_arg(args[0]), (size_t) bytes));
 }
 
 /*

@@ -280,6 +280,10 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"mem", "allocAligned", "(n: int, align: int): RawMut<uint8>", "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure", "mem_alloc_aligned", "normal", "", "xrt_mem_alloc_aligned", "vv", "value", "", "", "core", "method", 2, true},
     {"mem", "realloc", "(ptr: RawMut<uint8>, n: int): RawMut<uint8>", "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM", "mem_realloc", "normal", "", "xrt_mem_realloc", "vv", "value", "", "", "core", "method", 2, true},
     {"mem", "free", "(ptr: RawMut<uint8>): ()", "Free a buffer from mem.alloc/allocAligned/realloc", "mem_free", "normal", "", "xrt_mem_free", "v", "value", "", "", "core", "method", 1, true},
+    {"mem", "pageAlloc", "(bytes: int, prot?: int): RawMut<uint8>", "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", "mem_page_alloc", "normal", "", "xrt_mem_page_alloc_default", "v", "value", "", "", "core", "method", 1, true},
+    {"mem", "pageAlloc", "(bytes: int, prot?: int): RawMut<uint8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", "mem_page_alloc", "normal", "", "xrt_mem_page_alloc", "vv", "value", "", "", "core", "method", 2, true},
+    {"mem", "pageProtect", "(ptr: RawMut<uint8>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", "mem_page_protect", "normal", "", "xrt_mem_page_protect", "vvv", "value", "", "", "core", "method", 3, true},
+    {"mem", "pageFree", "(ptr: RawMut<uint8>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", "mem_page_free", "normal", "", "xrt_mem_page_free", "vv", "value", "", "", "core", "method", 2, true},
     {"mem", "fromAddress", "(addr: int): RawMut<uint8>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", "mem_from_address", "normal", "", "xrt_mem_from_address", "v", "value", "", "", "core", "method", 1, true},
     {"mem", "addressOf", "(ptr: RawPtr<uint8>): int", "Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", "mem_address_of", "normal", "", "xrt_mem_address_of", "v", "value", "", "", "core", "method", 1, true},
     {"mem", "copy", "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", "mem_copy", "normal", "", "xrt_mem_copy", "vvv", "value", "", "", "core", "method", 3, true},
@@ -464,6 +468,10 @@ static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
     {"log", "WARN", ": int", "Warning log level", "XR_LOG_WARN", "xr_int(XR_LOG_WARN)", "", "int64", "", "", "core", INT64_C(30), 0.0},
     {"log", "ERROR", ": int", "Error log level", "XR_LOG_ERROR", "xr_int(XR_LOG_ERROR)", "", "int64", "", "", "core", INT64_C(40), 0.0},
     {"log", "FATAL", ": int", "Fatal log level", "XR_LOG_FATAL", "xr_int(XR_LOG_FATAL)", "", "int64", "", "", "core", INT64_C(50), 0.0},
+    {"mem", "PROT_NONE", ": int", "No access protection for mem.pageAlloc/pageProtect", "mem.PROT_NONE", "xr_int(XR_MEM_PROT_NONE)", "", "int64", "", "", "core", INT64_C(0), 0.0},
+    {"mem", "PROT_READ", ": int", "Readable page protection bit for mem.pageAlloc/pageProtect", "mem.PROT_READ", "xr_int(XR_MEM_PROT_READ)", "", "int64", "", "", "core", INT64_C(1), 0.0},
+    {"mem", "PROT_WRITE", ": int", "Writable page protection bit for mem.pageAlloc/pageProtect", "mem.PROT_WRITE", "xr_int(XR_MEM_PROT_WRITE)", "", "int64", "", "", "core", INT64_C(2), 0.0},
+    {"mem", "PROT_EXEC", ": int", "Executable page protection bit for mem.pageAlloc/pageProtect", "mem.PROT_EXEC", "xr_int(XR_MEM_PROT_EXEC)", "", "int64", "", "", "core", INT64_C(4), 0.0},
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
 

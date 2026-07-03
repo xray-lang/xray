@@ -522,6 +522,8 @@ static bool cg_module_has_aot_direct_calls(const char *module);
 static bool cg_emit_aot_stdlib_generated_constant_import_ref(XiCgenCtx *ctx, FILE *out,
                                                              const XiValue *v,
                                                              const XiImportRef *ref);
+static bool cg_emit_aot_stdlib_generated_constant_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                        const XiValue *v);
 
 static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
@@ -4714,6 +4716,8 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
         emit_typed_array_length_expr(ctx, out, f, prefix, v))
+        return;
+    if (field && cg_emit_aot_stdlib_generated_constant_field(ctx, out, f, v))
         return;
     int sym = cg_method_sym(field);
     const XiValue *receiver = xicgen_getprop_receiver_value(ctx, v->args[0]);

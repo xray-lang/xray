@@ -286,6 +286,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"allocAligned", XLSP_SYM_FUNCTION, "fn(n: int, align: int): RawMut<uint8>", "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure", NULL, 0},
     {"realloc", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, n: int): RawMut<uint8>", "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM", NULL, 0},
     {"free", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>): ()", "Free a buffer from mem.alloc/allocAligned/realloc", NULL, 0},
+    {"pageAlloc", XLSP_SYM_FUNCTION, "fn(bytes: int, prot?: int): RawMut<uint8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", NULL, 0},
+    {"pageProtect", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", NULL, 0},
+    {"pageFree", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", NULL, 0},
     {"fromAddress", XLSP_SYM_FUNCTION, "fn(addr: int): RawMut<uint8>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", NULL, 0},
     {"addressOf", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>): int", "Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", NULL, 0},
     {"copy", XLSP_SYM_FUNCTION, "fn(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", NULL, 0},
@@ -306,8 +309,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"addOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit addition of a and b overflows", NULL, 0},
     {"subOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit subtraction of a and b overflows", NULL, 0},
     {"mulOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit multiplication of a and b overflows", NULL, 0},
+    {"PROT_NONE", XLSP_SYM_CONSTANT, "int", "No access protection for mem.pageAlloc/pageProtect", NULL, 0},
+    {"PROT_READ", XLSP_SYM_CONSTANT, "int", "Readable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
+    {"PROT_WRITE", XLSP_SYM_CONSTANT, "int", "Writable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
+    {"PROT_EXEC", XLSP_SYM_CONSTANT, "int", "Executable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 35
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 42
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
