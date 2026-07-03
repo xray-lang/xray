@@ -550,6 +550,11 @@
   :required-targets (vm-bytecode)
   :vm-bytecode (driver xi_emit_go :fresh-dst yes))
 
+(lower xi.thread.spawn
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_thread_spawn :fresh-dst yes))
+
 (lower xi.gen.call
   :match ()
   :required-targets (vm-bytecode aot-c)
