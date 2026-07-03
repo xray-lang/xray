@@ -1603,6 +1603,11 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
 
+    xa_freestanding_report_unavailable(
+        ctx, node, "Array literal",
+        "dynamic arrays require hosted allocation; fixed-size array literals are tracked for a "
+        "future no-heap data slice");
+
     ArrayLiteralNode *arr = &node->as.array_literal;
     if (ctx->expected_type && XR_TYPE_IS_JSON(ctx->expected_type)) {
         XrType *saved_expected = ctx->expected_type;
