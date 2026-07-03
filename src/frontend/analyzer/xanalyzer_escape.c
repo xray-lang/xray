@@ -21,6 +21,7 @@
 #include "xanalyzer_escape.h"
 #include "xanalyzer.h"
 #include "../../base/xchecks.h"
+#include "../../base/xmalloc.h"
 #include "../../runtime/xerror.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,8 +29,12 @@
 
 /* ========== Scope Stack for Name Resolution ========== */
 
-#define EA_MAX_VARS_PER_SCOPE 128
-#define EA_MAX_SCOPE_DEPTH 64
+// Initial capacities; both the per-scope variable table and the scope stack
+// grow dynamically. Fixed caps previously (128 vars / 64 depth) silently
+// dropped entries in large functions, which made go-capture checks miss
+// variables past the limit (P1-9). Dynamic growth removes that blind spot.
+#define EA_INITIAL_VARS 16
+#define EA_INITIAL_SCOPES 16
 
 typedef struct {
     const char *name;
@@ -44,13 +49,16 @@ typedef struct {
 } EaVarEntry;
 
 typedef struct {
-    EaVarEntry vars[EA_MAX_VARS_PER_SCOPE];
+    EaVarEntry *vars;  // dynamic array, grows on demand
     int count;
+    int capacity;
 } EaScope;
 
 typedef struct {
-    EaScope scopes[EA_MAX_SCOPE_DEPTH];
+    EaScope *scopes;        // dynamic array, grows on demand
     int depth;              // current scope index (0 = top-level)
+    int scopes_capacity;    // allocated length of `scopes`
+    int skipped_scopes;     // pushes dropped under OOM; keeps push/pop balanced
     int func_boundary;      // scope depth at current function entry
     bool in_go_closure;     // true when inside a go-spawned closure body
     int go_scope_boundary;  // scope depth where go closure starts (captures below this are outer)
@@ -79,22 +87,49 @@ static void ea_emit_error(EaContext *ctx, AstNode *loc_node, int code, const cha
 }
 
 static void ea_push_scope(EaContext *ctx) {
-    if (ctx->depth + 1 >= EA_MAX_SCOPE_DEPTH)
-        return;
+    if (ctx->depth + 1 >= ctx->scopes_capacity) {
+        int new_cap = ctx->scopes_capacity ? ctx->scopes_capacity * 2 : EA_INITIAL_SCOPES;
+        EaScope *grown = (EaScope *) xr_realloc(ctx->scopes, (size_t) new_cap * sizeof(EaScope));
+        if (!grown) {
+            // OOM: cannot grow the scope stack. Skip this push but remember it
+            // so the matching pop stays balanced. Analysis degrades (variables
+            // in this scope go unchecked) but remains memory-safe.
+            ctx->skipped_scopes++;
+            return;
+        }
+        // Zero the freshly added slots: vars=NULL, count=0, capacity=0.
+        memset(grown + ctx->scopes_capacity, 0,
+               (size_t) (new_cap - ctx->scopes_capacity) * sizeof(EaScope));
+        ctx->scopes = grown;
+        ctx->scopes_capacity = new_cap;
+    }
     ctx->depth++;
-    ctx->scopes[ctx->depth].count = 0;
+    ctx->scopes[ctx->depth].count = 0;  // reuse any previously allocated vars buffer
 }
 
 static void ea_pop_scope(EaContext *ctx) {
+    if (ctx->skipped_scopes > 0) {
+        ctx->skipped_scopes--;
+        return;
+    }
     if (ctx->depth > 0)
         ctx->depth--;
 }
 
 static void ea_register_var_entry(EaContext *ctx, const char *name, AstNode *decl, bool is_param,
                                   uint8_t param_passing_mode) {
+    if (ctx->depth >= ctx->scopes_capacity)
+        return;  // defensive: only reachable if a push was OOM-skipped
     EaScope *scope = &ctx->scopes[ctx->depth];
-    if (scope->count >= EA_MAX_VARS_PER_SCOPE)
-        return;
+    if (scope->count >= scope->capacity) {
+        int new_cap = scope->capacity ? scope->capacity * 2 : EA_INITIAL_VARS;
+        EaVarEntry *grown =
+            (EaVarEntry *) xr_realloc(scope->vars, (size_t) new_cap * sizeof(EaVarEntry));
+        if (!grown)
+            return;  // OOM: skip registering this variable (memory-safe degrade)
+        scope->vars = grown;
+        scope->capacity = new_cap;
+    }
     scope->vars[scope->count].name = name;
     scope->vars[scope->count].decl_node = decl;
     scope->vars[scope->count].is_param = is_param;
@@ -889,15 +924,17 @@ void xa_escape_analyze(AstNode *ast, XaAnalyzer *analyzer) {
 
     EaContext ctx;
     memset(&ctx, 0, sizeof(ctx));
-    ctx.depth = 0;
-    ctx.func_boundary = 0;
-    ctx.in_go_closure = false;
-    ctx.go_scope_boundary = 0;
-    ctx.in_fn_closure = false;
-    ctx.fn_scope_boundary = 0;
+    ctx.scopes = (EaScope *) xr_calloc(EA_INITIAL_SCOPES, sizeof(EaScope));
+    if (!ctx.scopes)
+        return;  // OOM: cannot run the pass
+    ctx.scopes_capacity = EA_INITIAL_SCOPES;
     ctx.analyzer = analyzer;
-    ctx.file_path = NULL;
-    ctx.scopes[0].count = 0;
 
     ea_walk(&ctx, ast);
+
+    // Free every scope's variable buffer (buffers persist across push/pop for
+    // reuse, so walk the whole allocated range, not just [0, depth]).
+    for (int i = 0; i < ctx.scopes_capacity; i++)
+        xr_free(ctx.scopes[i].vars);
+    xr_free(ctx.scopes);
 }
