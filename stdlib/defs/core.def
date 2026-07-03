@@ -940,7 +940,7 @@ module crypto {
 }
 
 module sys {
-  native_class Mutex {
+  native_class OsMutex {
     super_slot: "objectClass"
     core_slot: "sysMutexClass"
     native_body: "g_sys_mutex_body_desc"
@@ -948,7 +948,7 @@ module sys {
     builtin_kind: "XR_BK_SYSMUTEX"
   }
 
-  native_class RwLock {
+  native_class OsRwLock {
     super_slot: "objectClass"
     core_slot: "sysRwLockClass"
     native_body: "g_sys_rwlock_body_desc"
@@ -956,7 +956,7 @@ module sys {
     builtin_kind: "XR_BK_SYSRWLOCK"
   }
 
-  native_class Condvar {
+  native_class OsCondvar {
     super_slot: "objectClass"
     core_slot: "sysCondvarClass"
     native_body: "g_sys_condvar_body_desc"
@@ -964,7 +964,7 @@ module sys {
     builtin_kind: "XR_BK_SYSCONDVAR"
   }
 
-  native_class Barrier {
+  native_class OsBarrier {
     super_slot: "objectClass"
     core_slot: "sysBarrierClass"
     native_body: "g_sys_barrier_body_desc"
@@ -972,7 +972,7 @@ module sys {
     builtin_kind: "XR_BK_SYSBARRIER"
   }
 
-  native_class Once {
+  native_class OsOnce {
     super_slot: "objectClass"
     core_slot: "sysOnceClass"
     native_body: "g_sys_once_body_desc"
@@ -980,73 +980,73 @@ module sys {
     builtin_kind: "XR_BK_SYSONCE"
   }
 
-  class_method Mutex.lock {
+  class_method OsMutex.lock {
     vm: "sys_mutex_lock"
     argc: 0
   }
 
-  class_method Mutex.unlock {
+  class_method OsMutex.unlock {
     vm: "sys_mutex_unlock"
     argc: 0
   }
 
-  class_method Mutex.tryLock {
+  class_method OsMutex.tryLock {
     vm: "sys_mutex_try_lock"
     argc: 0
   }
 
-  class_method RwLock.rdlock {
+  class_method OsRwLock.rdlock {
     vm: "sys_rwlock_rdlock"
     argc: 0
   }
 
-  class_method RwLock.rdunlock {
+  class_method OsRwLock.rdunlock {
     vm: "sys_rwlock_rdunlock"
     argc: 0
   }
 
-  class_method RwLock.wrlock {
+  class_method OsRwLock.wrlock {
     vm: "sys_rwlock_wrlock"
     argc: 0
   }
 
-  class_method RwLock.wrunlock {
+  class_method OsRwLock.wrunlock {
     vm: "sys_rwlock_wrunlock"
     argc: 0
   }
 
-  class_method Condvar.wait {
+  class_method OsCondvar.wait {
     vm: "sys_condvar_wait"
     argc: 1
   }
 
-  class_method Condvar.waitFor {
+  class_method OsCondvar.waitFor {
     vm: "sys_condvar_wait_for"
     argc: 2
   }
 
-  class_method Condvar.signal {
+  class_method OsCondvar.signal {
     vm: "sys_condvar_signal"
     argc: 0
   }
 
-  class_method Condvar.broadcast {
+  class_method OsCondvar.broadcast {
     vm: "sys_condvar_broadcast"
     argc: 0
   }
 
-  class_method Barrier.wait {
+  class_method OsBarrier.wait {
     vm: "sys_barrier_wait"
     argc: 0
   }
 
-  class_method Once.call {
+  class_method OsOnce.call {
     vm: "sys_once_call"
     argc: 1
   }
 
-  fn Mutex {
-    signature: "(): Mutex"
+  fn OsMutex {
+    signature: "(): OsMutex"
     doc: "Create an OS-domain mutex"
     vm: "sys_mutex_new"
     aot: "xrt_sys_mutex_new"
@@ -1057,8 +1057,8 @@ module sys {
     layer: "system"
   }
 
-  fn RwLock {
-    signature: "(): RwLock"
+  fn OsRwLock {
+    signature: "(): OsRwLock"
     doc: "Create an OS-domain read-write lock"
     vm: "sys_rwlock_new"
     aot: "xrt_sys_rwlock_new"
@@ -1069,8 +1069,8 @@ module sys {
     layer: "system"
   }
 
-  fn Condvar {
-    signature: "(): Condvar"
+  fn OsCondvar {
+    signature: "(): OsCondvar"
     doc: "Create an OS-domain condition variable"
     vm: "sys_condvar_new"
     aot: "xrt_sys_condvar_new"
@@ -1081,8 +1081,8 @@ module sys {
     layer: "system"
   }
 
-  fn Barrier {
-    signature: "(parties: int): Barrier"
+  fn OsBarrier {
+    signature: "(parties: int): OsBarrier"
     doc: "Create a reusable OS-domain barrier"
     vm: "sys_barrier_new"
     aot: "xrt_sys_barrier_new"
@@ -1093,8 +1093,8 @@ module sys {
     layer: "system"
   }
 
-  fn Once {
-    signature: "(): Once"
+  fn OsOnce {
+    signature: "(): OsOnce"
     doc: "Create an OS-domain once gate"
     vm: "sys_once_new"
     aot: "xrt_sys_once_new"
@@ -1153,81 +1153,81 @@ module sys {
     layer: "system"
   }
 
-  type_method Mutex.lock {
+  type_method OsMutex.lock {
     signature: "(): ()"
-    receiver: "Mutex"
+    receiver: "OsMutex"
     doc: "Lock the mutex"
   }
 
-  type_method Mutex.unlock {
+  type_method OsMutex.unlock {
     signature: "(): ()"
-    receiver: "Mutex"
+    receiver: "OsMutex"
     doc: "Unlock the mutex"
   }
 
-  type_method Mutex.tryLock {
+  type_method OsMutex.tryLock {
     signature: "(): bool"
-    receiver: "Mutex"
+    receiver: "OsMutex"
     doc: "Try to lock the mutex"
   }
 
-  type_method RwLock.rdlock {
+  type_method OsRwLock.rdlock {
     signature: "(): ()"
-    receiver: "RwLock"
+    receiver: "OsRwLock"
     doc: "Acquire the read side of the read-write lock"
   }
 
-  type_method RwLock.rdunlock {
+  type_method OsRwLock.rdunlock {
     signature: "(): ()"
-    receiver: "RwLock"
+    receiver: "OsRwLock"
     doc: "Release the read side of the read-write lock"
   }
 
-  type_method RwLock.wrlock {
+  type_method OsRwLock.wrlock {
     signature: "(): ()"
-    receiver: "RwLock"
+    receiver: "OsRwLock"
     doc: "Acquire the write side of the read-write lock"
   }
 
-  type_method RwLock.wrunlock {
+  type_method OsRwLock.wrunlock {
     signature: "(): ()"
-    receiver: "RwLock"
+    receiver: "OsRwLock"
     doc: "Release the write side of the read-write lock"
   }
 
-  type_method Condvar.wait {
-    signature: "(m: Mutex): ()"
-    receiver: "Condvar"
+  type_method OsCondvar.wait {
+    signature: "(m: OsMutex): ()"
+    receiver: "OsCondvar"
     doc: "Wait on the condition variable with an already-locked mutex"
   }
 
-  type_method Condvar.waitFor {
-    signature: "(m: Mutex, timeoutNs: int): bool"
-    receiver: "Condvar"
+  type_method OsCondvar.waitFor {
+    signature: "(m: OsMutex, timeoutNs: int): bool"
+    receiver: "OsCondvar"
     doc: "Wait on the condition variable until signalled or timeout elapses"
   }
 
-  type_method Condvar.signal {
+  type_method OsCondvar.signal {
     signature: "(): ()"
-    receiver: "Condvar"
+    receiver: "OsCondvar"
     doc: "Wake one waiter"
   }
 
-  type_method Condvar.broadcast {
+  type_method OsCondvar.broadcast {
     signature: "(): ()"
-    receiver: "Condvar"
+    receiver: "OsCondvar"
     doc: "Wake all waiters"
   }
 
-  type_method Barrier.wait {
+  type_method OsBarrier.wait {
     signature: "(): bool"
-    receiver: "Barrier"
+    receiver: "OsBarrier"
     doc: "Wait until all parties have arrived"
   }
 
-  type_method Once.call {
+  type_method OsOnce.call {
     signature: "(body: fn(): ()): ()"
-    receiver: "Once"
+    receiver: "OsOnce"
     doc: "Run the closure exactly once"
   }
 }
@@ -1873,6 +1873,17 @@ module os {
     link_object: false
     layer: "system"
   }
+
+  fn spawn {
+    signature: "(program: string, args: Array<string>): ExecResult?"
+    doc: "Execute a program without a shell (injection-safe argv)"
+    vm: "os_spawn"
+    argc: 2
+    arg_spec: "sv"
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
 }
 
 module io {
@@ -2477,11 +2488,11 @@ module log {
   }
 }
 
-module mem {
+module runtime {
   fn collectCycles {
     signature: "(): int"
     doc: "Run cycle collection + whole-block reclaim, return cycle collection count"
-    vm: "mem_collect_cycles"
+    vm: "runtime_collect_cycles"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2492,7 +2503,7 @@ module mem {
   fn disableCycleCollection {
     signature: "(): ()"
     doc: "Pause the automatic cycle collector"
-    vm: "mem_disable_cycle_collection"
+    vm: "runtime_disable_cycle_collection"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2503,7 +2514,7 @@ module mem {
   fn enableCycleCollection {
     signature: "(): ()"
     doc: "Resume the automatic cycle collector"
-    vm: "mem_enable_cycle_collection"
+    vm: "runtime_enable_cycle_collection"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2514,7 +2525,7 @@ module mem {
   fn isCycleCollectionEnabled {
     signature: "(): bool"
     doc: "Check if automatic cycle collection is enabled"
-    vm: "mem_is_cycle_collection_enabled"
+    vm: "runtime_is_cycle_collection_enabled"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2525,7 +2536,7 @@ module mem {
   fn liveBytes {
     signature: "(): int"
     doc: "Get live memory usage in bytes"
-    vm: "mem_live_bytes"
+    vm: "runtime_live_bytes"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2536,7 +2547,7 @@ module mem {
   fn liveObjects {
     signature: "(): int"
     doc: "Get live object count"
-    vm: "mem_live_objects"
+    vm: "runtime_live_objects"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2547,14 +2558,16 @@ module mem {
   fn info {
     signature: "(): Map"
     doc: "Get memory-model runtime info as Map"
-    vm: "mem_info"
+    vm: "runtime_info"
     argc: 0
     arg_spec: ""
     aot_direct: false
     link_object: false
     layer: "runtime"
   }
+}
 
+module mem {
   fn fence {
     signature: "(ordering: int): ()"
     doc: "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)"
@@ -2871,149 +2884,6 @@ module mem {
     layer: "core"
   }
 
-  fn popcount {
-    signature: "(x: int): int"
-    doc: "Number of set bits in the 64-bit value"
-    vm: "mem_popcount"
-    aot: "xrt_mem_popcount"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn leadingZeros {
-    signature: "(x: int): int"
-    doc: "Count of leading zero bits (0 -> 64)"
-    vm: "mem_leading_zeros"
-    aot: "xrt_mem_leading_zeros"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn trailingZeros {
-    signature: "(x: int): int"
-    doc: "Count of trailing zero bits (0 -> 64)"
-    vm: "mem_trailing_zeros"
-    aot: "xrt_mem_trailing_zeros"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn byteswap {
-    signature: "(x: int): int"
-    doc: "Reverse the byte order of the 64-bit value"
-    vm: "mem_byteswap"
-    aot: "xrt_mem_byteswap"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn rotateLeft {
-    signature: "(x: int, n: int): int"
-    doc: "Rotate the 64-bit value left by n bits (n mod 64)"
-    vm: "mem_rotate_left"
-    aot: "xrt_mem_rotate_left"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn rotateRight {
-    signature: "(x: int, n: int): int"
-    doc: "Rotate the 64-bit value right by n bits (n mod 64)"
-    vm: "mem_rotate_right"
-    aot: "xrt_mem_rotate_right"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn addWrapping {
-    signature: "(a: int, b: int): int"
-    doc: "Two's-complement wrapping addition (wraps mod 2^64)"
-    vm: "mem_add_wrapping"
-    aot: "xrt_mem_add_wrapping"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn subWrapping {
-    signature: "(a: int, b: int): int"
-    doc: "Two's-complement wrapping subtraction (wraps mod 2^64)"
-    vm: "mem_sub_wrapping"
-    aot: "xrt_mem_sub_wrapping"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn mulWrapping {
-    signature: "(a: int, b: int): int"
-    doc: "Two's-complement wrapping multiplication (wraps mod 2^64)"
-    vm: "mem_mul_wrapping"
-    aot: "xrt_mem_mul_wrapping"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn addOverflows {
-    signature: "(a: int, b: int): bool"
-    doc: "Whether signed 64-bit addition of a and b overflows"
-    vm: "mem_add_overflows"
-    aot: "xrt_mem_add_overflows"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn subOverflows {
-    signature: "(a: int, b: int): bool"
-    doc: "Whether signed 64-bit subtraction of a and b overflows"
-    vm: "mem_sub_overflows"
-    aot: "xrt_mem_sub_overflows"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn mulOverflows {
-    signature: "(a: int, b: int): bool"
-    doc: "Whether signed 64-bit multiplication of a and b overflows"
-    vm: "mem_mul_overflows"
-    aot: "xrt_mem_mul_overflows"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
 }
 
 module net {

@@ -149,6 +149,17 @@ XI_METHOD_SYM(SATURATING_MUL, 200, SATURATING_MUL, "saturatingMul")
 XI_METHOD_SYM(WRAPPING_ADD,   201, WRAPPING_ADD,   "wrappingAdd")
 XI_METHOD_SYM(WRAPPING_SUB,   202, WRAPPING_SUB,   "wrappingSub")
 XI_METHOD_SYM(WRAPPING_MUL,   203, WRAPPING_MUL,   "wrappingMul")
+/* Int bit-manipulation + overflow predicates (task 153: moved from mem.*;
+ * single semantic source src/shared/xr_bits_core.h / xr_arith_core.h). */
+XI_METHOD_SYM(POPCOUNT,       228, POPCOUNT,       "popcount")
+XI_METHOD_SYM(LEADING_ZEROS,  229, LEADING_ZEROS,  "leadingZeros")
+XI_METHOD_SYM(TRAILING_ZEROS, 230, TRAILING_ZEROS, "trailingZeros")
+XI_METHOD_SYM(BYTESWAP,       231, BYTESWAP,       "byteswap")
+XI_METHOD_SYM(ROTATE_LEFT,    232, ROTATE_LEFT,    "rotateLeft")
+XI_METHOD_SYM(ROTATE_RIGHT,   233, ROTATE_RIGHT,   "rotateRight")
+XI_METHOD_SYM(ADD_OVERFLOWS,  234, ADD_OVERFLOWS,  "addOverflows")
+XI_METHOD_SYM(SUB_OVERFLOWS,  235, SUB_OVERFLOWS,  "subOverflows")
+XI_METHOD_SYM(MUL_OVERFLOWS,  236, MUL_OVERFLOWS,  "mulOverflows")
 
 /* --- DateTime methods --- */
 XI_METHOD_SYM(FORMAT,      88,  FORMAT,       "format")

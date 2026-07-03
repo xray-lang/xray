@@ -21,8 +21,8 @@ fn test_file_info() {
     io.writeFile(tmp, "test content")
     let st = io.stat(tmp)
     assert(st != null)
-    assert_eq(st.size, 12)
-    assert_eq(st.isFile, true)
+    assert_eq(st!.size, 12)
+    assert_eq(st!.isFile, true)
     assert(io.isFile(tmp))
     assert(!io.isDir(tmp))
     io.remove(tmp)
@@ -71,7 +71,7 @@ fn test_touch_and_chmod() {
     let st = io.stat(tmp)
     // Windows does not support Unix file permissions; skip mode check
     if (os.platform != "windows") {
-        assert_eq(st.mode, 420)
+        assert_eq(st!.mode, 420)
     }
     io.remove(tmp)
 }

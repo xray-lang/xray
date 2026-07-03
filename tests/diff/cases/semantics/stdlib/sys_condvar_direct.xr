@@ -1,10 +1,10 @@
-// sys.Condvar uses a pthread-style external sys.Mutex. The timed wait keeps
+// sys.OsCondvar uses a pthread-style external sys.OsMutex. The timed wait keeps
 // this differential case deterministic and avoids blocking the test runner.
 
 import sys
 
-let m = sys.Mutex()
-let cv = sys.Condvar()
+let m = sys.OsMutex()
+let cv = sys.OsCondvar()
 
 m.lock()
 print(cv.waitFor(m, 1000000))

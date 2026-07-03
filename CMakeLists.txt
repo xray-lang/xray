@@ -600,6 +600,7 @@ file(GLOB STDLIB_CORE_SRC
     "stdlib/math/*.c"
     "stdlib/log/*.c"
     "stdlib/mem/*.c"
+    "stdlib/runtime/*.c"
     "stdlib/sync/*.c"
     "stdlib/sys/*.c"
     "stdlib/regex/*.c"

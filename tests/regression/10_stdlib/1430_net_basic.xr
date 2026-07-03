@@ -18,7 +18,7 @@ fn test_lookup_localhost() {
     let addr = net.lookup("localhost")
     assert_true(addr != null)
     // localhost 通常解析为 127.0.0.1 或 ::1
-    assert_true(addr == "127.0.0.1" || addr.startsWith("::"))
+    assert_true(addr == "127.0.0.1" || addr!.startsWith("::"))
 }
 
 @test

@@ -39,39 +39,39 @@
 // rotation, which is the exact sequence that surfaced all three
 // bugs during the May 2026 burn-in.
 
-import mem
+import runtime
 
-// @test mem.disableCycleCollection/enableCycleCollection pairing toggles the automatic cycle collector
+// @test runtime.disableCycleCollection/enableCycleCollection pairing toggles the automatic cycle collector
 @test
 fn test_mem_disable_enable() {
-    assert_eq(mem.isCycleCollectionEnabled(), true)
-    mem.disableCycleCollection()
-    assert_eq(mem.isCycleCollectionEnabled(), false)
-    mem.enableCycleCollection()
-    assert_eq(mem.isCycleCollectionEnabled(), true)
+    assert_eq(runtime.isCycleCollectionEnabled(), true)
+    runtime.disableCycleCollection()
+    assert_eq(runtime.isCycleCollectionEnabled(), false)
+    runtime.enableCycleCollection()
+    assert_eq(runtime.isCycleCollectionEnabled(), true)
 }
 
-// @test mem.disableCycleCollection pauses the automatic cycle collector
+// @test runtime.disableCycleCollection pauses the automatic cycle collector
 @test
 fn test_mem_disable_prevents_gc() {
-    mem.disableCycleCollection()
-    let before_count = mem.info()["cycleCollections"]
+    runtime.disableCycleCollection()
+    let before_count = runtime.info()["cycleCollections"]
     // Allocate a bunch of objects
     let arr: Array<Json> = []
     for (let i = 0; i < 500; i++) {
         arr.push({"idx": i, "data": "item_" + string(i)})
     }
     // Automatic cycle collection must not have run while disabled
-    let after_count = mem.info()["cycleCollections"]
+    let after_count = runtime.info()["cycleCollections"]
     assert_eq(before_count, after_count)
     assert(arr.length == 500)
-    mem.enableCycleCollection()
+    runtime.enableCycleCollection()
 }
 
-// @test mem.info contains the RC-native keys
+// @test runtime.info contains the RC-native keys
 @test
 fn test_mem_info_keys() {
-    let info = mem.info()
+    let info = runtime.info()
     // Live memory + object stats
     assert(info["liveBytes"] >= 0)
     assert(info["liveKB"] >= 0.0)
@@ -86,21 +86,21 @@ fn test_mem_info_keys() {
     assert(info["fullBlocks"] >= 0)
 }
 
-// @test mem.collectCycles returns a monotonic cycle count
+// @test runtime.collectCycles returns a monotonic cycle count
 @test
 fn test_mem_collect_returns_count() {
     // Under RC the cycle counter never decreases. A cycle-free program may
     // report the same count across collects — assert monotonicity, not growth.
-    let count1 = mem.collectCycles()
-    let count2 = mem.collectCycles()
+    let count1 = runtime.collectCycles()
+    let count2 = runtime.collectCycles()
     assert(count2 >= count1)
 }
 
-// @test mem.liveBytes decreases after collect with dead objects
+// @test runtime.liveBytes decreases after collect with dead objects
 @test
 fn test_mem_live_bytes_decreases_after_collect() {
-    mem.collectCycles()
-    let baseline = mem.liveBytes()
+    runtime.collectCycles()
+    let baseline = runtime.liveBytes()
     // Create objects in a scope that makes them collectable
     fn make_garbage() {
         let temp: Array<Json> = []
@@ -109,18 +109,18 @@ fn test_mem_live_bytes_decreases_after_collect() {
         }
     }
     make_garbage()
-    let after_alloc = mem.liveBytes()
+    let after_alloc = runtime.liveBytes()
     assert(after_alloc >= baseline)
-    mem.collectCycles()
-    let after_collect = mem.liveBytes()
+    runtime.collectCycles()
+    let after_collect = runtime.liveBytes()
     // Memory should not grow after collecting the garbage
     assert(after_collect <= after_alloc)
 }
 
-// @test mem.liveObjects tracks allocations
+// @test runtime.liveObjects tracks allocations
 @test
 fn test_mem_live_objects_tracks_alloc() {
-    let before = mem.liveObjects()
+    let before = runtime.liveObjects()
     let arr: Array<Json> = []
     for (let i = 0; i < 10; i++) {
         arr.push({"k": i})
@@ -131,7 +131,7 @@ fn test_mem_live_objects_tracks_alloc() {
     // (and its 10 elements) by this line and the live-object count would read
     // back as `before`. The touch below extends arr's lifetime across the
     // measurement so the just-allocated objects are still counted.
-    let after = mem.liveObjects()
+    let after = runtime.liveObjects()
     assert(arr.length == 10)
     assert(after > before)
 }

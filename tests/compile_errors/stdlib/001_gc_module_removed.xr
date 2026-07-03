@@ -1,6 +1,7 @@
 // 001_gc_module_removed.xr
 // Expected: Compile error - the old gc module was removed.
-// Use `import mem` and mem.collectCycles()/mem.liveBytes() instead.
+// Use `import runtime` and runtime.collectCycles()/runtime.liveBytes()
+// instead (task 154: runtime introspection lives in `runtime`, not `mem`).
 
 import gc
 

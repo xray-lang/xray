@@ -26,6 +26,7 @@
 #include "../shared/xr_obj_header.h"
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_bits_core.h"
+#include "../shared/xr_int_arith.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
 #include "../shared/xr_sync_core.h"
 
 #ifndef XR_FUNC
@@ -593,53 +594,12 @@ static inline int64_t xrt_mem_int_arg(XrValue v) {
     return XR_IS_INT(v) ? XR_TO_INT(v) : 0;
 }
 
-static inline XrValue xrt_mem_popcount(XrValue x) {
-    return XR_FROM_INT(xr_bits_core_popcount(xrt_mem_int_arg(x)));
-}
-
-static inline XrValue xrt_mem_leading_zeros(XrValue x) {
-    return XR_FROM_INT(xr_bits_core_leading_zeros(xrt_mem_int_arg(x)));
-}
-
-static inline XrValue xrt_mem_trailing_zeros(XrValue x) {
-    return XR_FROM_INT(xr_bits_core_trailing_zeros(xrt_mem_int_arg(x)));
-}
-
-static inline XrValue xrt_mem_byteswap(XrValue x) {
-    return XR_FROM_INT(xr_bits_core_byteswap(xrt_mem_int_arg(x)));
-}
-
-static inline XrValue xrt_mem_rotate_left(XrValue x, XrValue n) {
-    return XR_FROM_INT(xr_bits_core_rotate_left(xrt_mem_int_arg(x), xrt_mem_int_arg(n)));
-}
-
-static inline XrValue xrt_mem_rotate_right(XrValue x, XrValue n) {
-    return XR_FROM_INT(xr_bits_core_rotate_right(xrt_mem_int_arg(x), xrt_mem_int_arg(n)));
-}
-
-static inline XrValue xrt_mem_add_wrapping(XrValue a, XrValue b) {
-    return XR_FROM_INT(xr_arith_core_add_wrapping(xrt_mem_int_arg(a), xrt_mem_int_arg(b)));
-}
-
-static inline XrValue xrt_mem_sub_wrapping(XrValue a, XrValue b) {
-    return XR_FROM_INT(xr_arith_core_sub_wrapping(xrt_mem_int_arg(a), xrt_mem_int_arg(b)));
-}
-
-static inline XrValue xrt_mem_mul_wrapping(XrValue a, XrValue b) {
-    return XR_FROM_INT(xr_arith_core_mul_wrapping(xrt_mem_int_arg(a), xrt_mem_int_arg(b)));
-}
-
-static inline XrValue xrt_mem_add_overflows(XrValue a, XrValue b) {
-    return XR_FROM_BOOL(xr_arith_core_add_overflows(xrt_mem_int_arg(a), xrt_mem_int_arg(b)) != 0);
-}
-
-static inline XrValue xrt_mem_sub_overflows(XrValue a, XrValue b) {
-    return XR_FROM_BOOL(xr_arith_core_sub_overflows(xrt_mem_int_arg(a), xrt_mem_int_arg(b)) != 0);
-}
-
-static inline XrValue xrt_mem_mul_overflows(XrValue a, XrValue b) {
-    return XR_FROM_BOOL(xr_arith_core_mul_overflows(xrt_mem_int_arg(a), xrt_mem_int_arg(b)) != 0);
-}
+/* Bit intrinsics + wrapping/overflow arithmetic are `int` methods now
+ * (task 153). The freestanding profile still gets them zero-overhead: the
+ * cgen lowers x.popcount()/x.rotateLeft(n)/x.addOverflows(y)/... straight
+ * to xr_bits_core_* / xr_arith_core_* / xr_i64_*, and this header already
+ * includes those shared cores above. The old boxed mem.* wrappers were
+ * deleted along with the core.def mem entries. */
 
 static inline XrValue xrt_mem_fence(XrValue ordering) {
     xr_sync_core_fence(xrt_mem_int_arg(ordering));

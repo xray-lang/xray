@@ -34,7 +34,7 @@ fn test_eol() {
 fn test_getenv_path() {
     let path = os.getenv("PATH")
     assert(path != null)
-    assert(path.length > 0)
+    assert(path!.length > 0)
 }
 
 @test

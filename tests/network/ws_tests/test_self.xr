@@ -21,8 +21,8 @@ go fn() {
             if (msg == null || msg.error) {
                 break
             }
-            if (msg.data) {
-                ws.send(conn, msg.data, null)
+            if (msg!.data) {
+                ws.send(conn, msg!.data, null)
             }
         }
     })

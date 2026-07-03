@@ -132,8 +132,8 @@ fn test_array_of_arrays() {
 @test
 fn test_map_of_arrays() {
     let groups = #{"odd": [1, 3, 5], "even": [2, 4, 6]}
-    assert_eq(groups.get("odd")[0], 1)
-    assert_eq(groups.get("even")[2], 6)
+    assert_eq(groups.get("odd")![0], 1)
+    assert_eq(groups.get("even")![2], 6)
 }
 
 // ===== Generic Function Calls =====

@@ -3740,8 +3740,110 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
     return true;
 }
 
+/* Direct scalar lowering for int numeric methods (task 153). When the
+ * receiver is statically `int`, emit the shared-core helper on native i64
+ * operands instead of the tagged xrt_method_* dispatch: the semantics live
+ * in src/shared/xr_bits_core.h / xr_arith_core.h / xr_int_arith.h (the same
+ * cores the VM binding and xrt_method.h call), and all three headers are
+ * available in both hosted (xrt.h) and freestanding (xrt_core_freestanding.h)
+ * profiles, so this stays zero-overhead with no runtime symbols. checked*
+ * methods return `int?` (tagged) and keep the generic dispatch. */
+static bool xicgen_emit_int_numeric_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                           const char *method, uint16_t nargs) {
+    if (!v || v->nargs < 1 || !method)
+        return false;
+    const XiValue *recv = v->args[0];
+    if (!recv || !recv->type || recv->type->kind != XR_KIND_INT)
+        return false;
+
+    /* 0-arg int -> int (bit queries). */
+    const char *fn0 = NULL;
+    if (nargs == 0) {
+        if (strcmp(method, "popcount") == 0)
+            fn0 = "xr_bits_core_popcount";
+        else if (strcmp(method, "leadingZeros") == 0)
+            fn0 = "xr_bits_core_leading_zeros";
+        else if (strcmp(method, "trailingZeros") == 0)
+            fn0 = "xr_bits_core_trailing_zeros";
+        else if (strcmp(method, "byteswap") == 0)
+            fn0 = "xr_bits_core_byteswap";
+        if (fn0) {
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+            fprintf(out, "%s(", fn0);
+            emit_value_as_rep_ctx(ctx, out, recv, XR_REP_I64);
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        return false;
+    }
+
+    if (nargs != 1 || v->nargs < 2)
+        return false;
+    const XiValue *arg = v->args[1];
+    if (!arg || !arg->type || arg->type->kind != XR_KIND_INT)
+        return false;
+
+    /* 1-arg int -> int (rotates + wrapping/saturating arithmetic). */
+    const char *fn1 = NULL;
+    if (strcmp(method, "rotateLeft") == 0)
+        fn1 = "xr_bits_core_rotate_left";
+    else if (strcmp(method, "rotateRight") == 0)
+        fn1 = "xr_bits_core_rotate_right";
+    else if (strcmp(method, "wrappingAdd") == 0)
+        fn1 = "xr_i64_add_wrap";
+    else if (strcmp(method, "wrappingSub") == 0)
+        fn1 = "xr_i64_sub_wrap";
+    else if (strcmp(method, "wrappingMul") == 0)
+        fn1 = "xr_i64_mul_wrap";
+    else if (strcmp(method, "saturatingAdd") == 0)
+        fn1 = "xr_i64_saturating_add";
+    else if (strcmp(method, "saturatingSub") == 0)
+        fn1 = "xr_i64_saturating_sub";
+    else if (strcmp(method, "saturatingMul") == 0)
+        fn1 = "xr_i64_saturating_mul";
+    if (fn1) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "%s(", fn1);
+        emit_value_as_rep_ctx(ctx, out, recv, XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, arg, XR_REP_I64);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    /* 1-arg int -> bool (overflow predicates). */
+    const char *pred = NULL;
+    if (strcmp(method, "addOverflows") == 0)
+        pred = "xr_arith_core_add_overflows";
+    else if (strcmp(method, "subOverflows") == 0)
+        pred = "xr_arith_core_sub_overflows";
+    else if (strcmp(method, "mulOverflows") == 0)
+        pred = "xr_arith_core_mul_overflows";
+    if (pred) {
+        bool box_bool = cg_rep(v) == XR_REP_TAGGED;
+        const char *conv_suffix =
+            box_bool ? NULL : emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        if (box_bool)
+            fprintf(out, "XR_FROM_BOOL(");
+        fprintf(out, "(%s(", pred);
+        emit_value_as_rep_ctx(ctx, out, recv, XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, arg, XR_REP_I64);
+        fprintf(out, ") != 0)");
+        if (box_bool)
+            fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    return false;
+}
+
 static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *method, uint16_t nargs) {
+    if (xicgen_emit_int_numeric_method(ctx, out, v, method, nargs))
+        return;
     if (xicgen_emit_json_static_method(ctx, out, v, method, nargs))
         return;
     if (xicgen_emit_atomic_method(ctx, out, v, method, nargs))

@@ -5,11 +5,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * mem.h - RC memory and cycle-collection introspection module header
+ * mem.h - Raw-memory capability module header
  *
  * KEY CONCEPT:
- *   Per-coroutine memory and cycle-collection statistics. All operations
- *   target the current coroutine's heap, not a global tracing collector.
+ *   Raw-memory capabilities: fence, cache hints, explicit allocation,
+ *   anonymous pages, address bridge, bulk byte ops, volatile MMIO access.
+ *   Runtime/GC introspection lives in stdlib/runtime (task 154).
  */
 
 #ifndef XR_STDLIB_MEM_H

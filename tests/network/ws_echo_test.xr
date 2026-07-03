@@ -11,8 +11,8 @@ const TEST_URL = "wss://ws.postman-echo.com/raw"
 print("Connecting to: " + TEST_URL)
 let conn = ws.connect(TEST_URL, null)
 
-if (conn.error) {
-    print("Connection error: " + conn.error)
+if (conn!.error) {
+    print("Connection error: " + conn!.error)
 } else {
     print("Connected!")
     print("State: " + ws.state(conn))

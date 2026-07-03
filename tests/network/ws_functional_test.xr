@@ -19,13 +19,13 @@ fn test_connect() {
     
     let conn = ws.connect(TEST_URL, null)
     
-    if (conn.error) {
-        print("  ❌ 连接失败: " + conn.error)
+    if (conn!.error) {
+        print("  ❌ 连接失败: " + conn!.error)
         return false
     }
     
     print("  ✓ 连接成功")
-    print("  URL: " + conn.url)
+    print("  URL: " + conn!.url)
     print("  状态: " + ws.state(conn))
     
     ws.close(conn, null, null)
@@ -39,8 +39,8 @@ fn test_send_recv() {
     print("[测试 2] 发送和接收消息...")
     
     let conn = ws.connect(TEST_URL, null)
-    if (conn.error) {
-        print("  ❌ 连接失败: " + conn.error)
+    if (conn!.error) {
+        print("  ❌ 连接失败: " + conn!.error)
         return false
     }
     
@@ -56,16 +56,16 @@ fn test_send_recv() {
     
     // 接收回显
     let msg = ws.recv(conn, null)
-    if (msg.error) {
-        print("  ❌ 接收失败: " + msg.error)
+    if (msg!.error) {
+        print("  ❌ 接收失败: " + msg!.error)
         ws.close(conn, null, null)
         return false
     }
     
-    print("  ✓ 已接收: " + msg.data)
+    print("  ✓ 已接收: " + msg!.data)
     
     // 验证回显
-    if (msg.data == testMsg) {
+    if (msg!.data == testMsg) {
         print("  ✓ 回显验证通过")
     } else {
         print("  ❌ 回显不匹配")
@@ -83,8 +83,8 @@ fn test_multiple_messages() {
     print("[测试 3] 多条消息...")
     
     let conn = ws.connect(TEST_URL, null)
-    if (conn.error) {
-        print("  ❌ 连接失败: " + conn.error)
+    if (conn!.error) {
+        print("  ❌ 连接失败: " + conn!.error)
         return false
     }
     
@@ -94,7 +94,7 @@ fn test_multiple_messages() {
     for (msg in messages) {
         ws.send(conn, msg, null)
         let resp = ws.recv(conn, null)
-        if (resp.data == msg) {
+        if (resp!.data == msg) {
             success = success + 1
         }
     }
@@ -118,8 +118,8 @@ fn test_state() {
     print("[测试 4] 状态检查...")
     
     let conn = ws.connect(TEST_URL, null)
-    if (conn.error) {
-        print("  ❌ 连接失败: " + conn.error)
+    if (conn!.error) {
+        print("  ❌ 连接失败: " + conn!.error)
         return false
     }
     
@@ -156,8 +156,8 @@ fn test_ping() {
     print("[测试 5] Ping 保活...")
     
     let conn = ws.connect(TEST_URL, null)
-    if (conn.error) {
-        print("  ❌ 连接失败: " + conn.error)
+    if (conn!.error) {
+        print("  ❌ 连接失败: " + conn!.error)
         return false
     }
     
@@ -181,9 +181,9 @@ fn test_connection_failure() {
     
     let conn = ws.connect("ws://invalid.nonexistent.domain.xyz/ws", null)
     
-    if (conn.error) {
+    if (conn!.error) {
         print("  ✓ 正确处理连接失败")
-        print("  错误信息: " + conn.error)
+        print("  错误信息: " + conn!.error)
         return true
     } else {
         print("  ❌ 应该返回错误")

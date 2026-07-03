@@ -1,9 +1,9 @@
-// sys.RwLock is an OS-domain primitive. Keep this case single-threaded so
+// sys.OsRwLock is an OS-domain primitive. Keep this case single-threaded so
 // VM/AOT differential output stays deterministic.
 
 import sys
 
-let rw = sys.RwLock()
+let rw = sys.OsRwLock()
 rw.rdlock()
 print(true)
 rw.rdunlock()

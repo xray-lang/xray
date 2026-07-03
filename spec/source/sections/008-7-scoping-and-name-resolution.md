@@ -178,8 +178,8 @@ Xray 采用多层内存管理：
 
 **内存观察点**：
 - 默认以引用计数立即释放对象。
-- 强引用环由 cycle collector 在安全点或显式 `mem.collectCycles()` 时处理。
-- 指令列表中成为内存安全点的点包括函数调用、后向跳转、显式 `mem.collectCycles()`。
+- 强引用环由 cycle collector 在安全点或显式 `runtime.collectCycles()` 时处理。
+- 指令列表中成为内存安全点的点包括函数调用、后向跳转、显式 `runtime.collectCycles()`。
 
 循环引用回收与堆布局设计：见 `src/runtime/mem/`。
 <!-- /xr-spec:cn -->
@@ -359,8 +359,8 @@ Xray uses a layered memory management strategy:
 
 **Memory observation points**:
 - Default reclamation is reference-counted.
-- Strong reference cycles are handled by the cycle collector at safepoints or explicit `mem.collectCycles()`.
-- Memory safepoints in the instruction stream include function calls, backward branches, and explicit `mem.collectCycles()`.
+- Strong reference cycles are handled by the cycle collector at safepoints or explicit `runtime.collectCycles()`.
+- Memory safepoints in the instruction stream include function calls, backward branches, and explicit `runtime.collectCycles()`.
 
 Cycle collection and heap-layout design: see `src/runtime/mem/`.
 <!-- /xr-spec:en -->

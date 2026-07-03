@@ -367,6 +367,178 @@ static inline bool xr_crypto_core_aes_decrypt_hex(const uint8_t *key, size_t key
     return true;
 }
 
+/* ========== Authenticated Encryption (AES-256-CBC + HMAC-SHA256) ==========
+ *
+ * crypto.encrypt/decrypt use authenticated encryption so ciphertext cannot be
+ * silently tampered with (the old bare CBC output was malleable — a bit-flip in
+ * the ciphertext flips the corresponding plaintext bit undetected). We use the
+ * Encrypt-then-MAC construction (the provably-secure ordering): CBC-encrypt,
+ * then HMAC-SHA256 over IV||ciphertext. Decryption verifies the tag in constant
+ * time BEFORE touching the ciphertext, so a forged/altered message is rejected
+ * without running the cipher (also closes the CBC padding-oracle surface).
+ *
+ * Wire format (hex): IV(16) || ciphertext(16*n) || tag(32).
+ *
+ * The user key is stretched into two independent subkeys via HMAC-SHA256 as a
+ * PRF (domain-separated), so the same key never drives both the cipher and MAC.
+ */
+#define XR_AEAD_TAG_LEN 32
+#define XR_AEAD_IV_LEN 16
+#define XR_AEAD_OVERHEAD (XR_AEAD_IV_LEN + XR_AEAD_TAG_LEN)
+
+static inline void xr_crypto_core_aead_derive_keys(const uint8_t *key, size_t key_len,
+                                                   uint8_t enc_key[32], uint8_t mac_key[32]) {
+    static const char enc_label[] = "xray-aead-enc-v1";
+    static const char mac_label[] = "xray-aead-mac-v1";
+    xr_hmac_sha256(key, key_len, (const uint8_t *) enc_label, sizeof(enc_label) - 1, enc_key);
+    xr_hmac_sha256(key, key_len, (const uint8_t *) mac_label, sizeof(mac_label) - 1, mac_key);
+}
+
+static inline bool xr_crypto_core_aead_encrypt_plan(size_t plain_len, size_t *out_padded_len,
+                                                    size_t *out_hex_len) {
+    size_t pad = 16 - (plain_len % 16);
+    if (plain_len > SIZE_MAX - pad)
+        return false;
+    size_t padded_len = plain_len + pad;
+    if (padded_len > SIZE_MAX - XR_AEAD_OVERHEAD)
+        return false;
+    size_t out_bytes = XR_AEAD_OVERHEAD + padded_len;
+    if (out_bytes > SIZE_MAX / 2)
+        return false;
+    if (out_padded_len)
+        *out_padded_len = padded_len;
+    if (out_hex_len)
+        *out_hex_len = out_bytes * 2;
+    return true;
+}
+
+static inline bool xr_crypto_core_aead_decrypt_plan(size_t cipher_hex_len, size_t *out_raw_len,
+                                                    size_t *out_cipher_len) {
+    // Minimum: IV(16) + one cipher block(16) + tag(32) = 64 bytes => 128 hex.
+    if (cipher_hex_len < (XR_AEAD_OVERHEAD + 16) * 2 || (cipher_hex_len % 2) != 0)
+        return false;
+    size_t raw_len = cipher_hex_len / 2;
+    size_t cipher_len = raw_len - XR_AEAD_OVERHEAD;
+    if (cipher_len == 0 || (cipher_len % 16) != 0)
+        return false;
+    if (out_raw_len)
+        *out_raw_len = raw_len;
+    if (out_cipher_len)
+        *out_cipher_len = cipher_len;
+    return true;
+}
+
+// Encrypt `plain` and write hex(IV || ciphertext || tag) into `hex`.
+// `padded` is scratch of at least `padded_len` bytes (PKCS7 buffer);
+// `raw` is scratch of at least (IV + padded_len + TAG) bytes (assembled output).
+static inline bool xr_crypto_core_aead_encrypt_hex(const uint8_t *key, size_t key_len,
+                                                   const uint8_t *plain, size_t plain_len,
+                                                   const uint8_t iv[16], uint8_t *padded,
+                                                   size_t padded_cap, uint8_t *raw, size_t raw_cap,
+                                                   char *hex, size_t hex_cap) {
+    if ((!key && key_len != 0) || (!plain && plain_len != 0) || !iv || !padded || !raw || !hex)
+        return false;
+    key = xr_crypto_core_bytes_or_empty(key);
+    plain = xr_crypto_core_bytes_or_empty(plain);
+
+    size_t padded_len = 0;
+    size_t hex_len = 0;
+    if (!xr_crypto_core_aead_encrypt_plan(plain_len, &padded_len, &hex_len))
+        return false;
+    size_t raw_len = XR_AEAD_OVERHEAD + padded_len;
+    if (padded_cap < padded_len || raw_cap < raw_len || hex_cap < hex_len + 1)
+        return false;
+
+    uint8_t enc_key[32];
+    uint8_t mac_key[32];
+    xr_crypto_core_aead_derive_keys(key, key_len, enc_key, mac_key);
+
+    uint8_t pad = (uint8_t) (16 - (plain_len % 16));
+    if (plain_len != 0)
+        memcpy(padded, plain, plain_len);
+    memset(padded + plain_len, pad, pad);
+
+    // raw = IV || ciphertext, then append tag over that whole prefix.
+    memcpy(raw, iv, XR_AEAD_IV_LEN);
+    XrAESContext ctx;
+    xr_aes_init(&ctx, enc_key, 256);
+    xr_aes_cbc_encrypt(&ctx, iv, padded, raw + XR_AEAD_IV_LEN, padded_len);
+    xr_hmac_sha256(mac_key, sizeof(mac_key), raw, XR_AEAD_IV_LEN + padded_len,
+                   raw + XR_AEAD_IV_LEN + padded_len);
+
+    xr_bytes_to_hex(raw, raw_len, hex);
+    hex[hex_len] = '\0';
+
+    xr_secure_wipe(enc_key, sizeof(enc_key));
+    xr_secure_wipe(mac_key, sizeof(mac_key));
+    xr_secure_wipe(&ctx, sizeof(ctx));
+    return true;
+}
+
+// Verify the tag (constant time), then decrypt. Returns false on any tampering,
+// wrong key, or malformed input — never leaks whether padding was the failure.
+static inline bool xr_crypto_core_aead_decrypt_hex(const uint8_t *key, size_t key_len,
+                                                   const char *cipher_hex, size_t cipher_hex_len,
+                                                   uint8_t *raw, size_t raw_cap, uint8_t *plain,
+                                                   size_t plain_cap, size_t *out_plain_len) {
+    if ((!key && key_len != 0) || (!cipher_hex && cipher_hex_len != 0) || !raw || !plain)
+        return false;
+    key = xr_crypto_core_bytes_or_empty(key);
+
+    size_t raw_len = 0;
+    size_t cipher_len = 0;
+    if (!xr_crypto_core_aead_decrypt_plan(cipher_hex_len, &raw_len, &cipher_len))
+        return false;
+    if (raw_cap < raw_len || plain_cap < cipher_len)
+        return false;
+    if (!xr_crypto_core_hex_to_bytes(cipher_hex, cipher_hex_len, raw, raw_cap))
+        return false;
+
+    uint8_t enc_key[32];
+    uint8_t mac_key[32];
+    xr_crypto_core_aead_derive_keys(key, key_len, enc_key, mac_key);
+
+    // Recompute the tag over IV||ciphertext and compare in constant time.
+    uint8_t expect_tag[32];
+    xr_hmac_sha256(mac_key, sizeof(mac_key), raw, XR_AEAD_IV_LEN + cipher_len, expect_tag);
+    const uint8_t *actual_tag = raw + XR_AEAD_IV_LEN + cipher_len;
+    volatile uint8_t diff = 0;
+    for (int i = 0; i < XR_AEAD_TAG_LEN; i++)
+        diff |= (uint8_t) (expect_tag[i] ^ actual_tag[i]);
+    if (diff != 0) {
+        xr_secure_wipe(enc_key, sizeof(enc_key));
+        xr_secure_wipe(mac_key, sizeof(mac_key));
+        xr_secure_wipe(expect_tag, sizeof(expect_tag));
+        return false;  // authentication failed: reject without decrypting
+    }
+
+    XrAESContext ctx;
+    xr_aes_init(&ctx, enc_key, 256);
+    xr_aes_cbc_decrypt(&ctx, raw, raw + XR_AEAD_IV_LEN, plain, cipher_len);
+
+    uint8_t pad = plain[cipher_len - 1];
+    bool bad_pad = (pad == 0 || pad > 16);
+    if (!bad_pad) {
+        for (uint8_t i = 0; i < pad; i++) {
+            if (plain[cipher_len - 1 - i] != pad) {
+                bad_pad = true;
+                break;
+            }
+        }
+    }
+
+    xr_secure_wipe(enc_key, sizeof(enc_key));
+    xr_secure_wipe(mac_key, sizeof(mac_key));
+    xr_secure_wipe(expect_tag, sizeof(expect_tag));
+    xr_secure_wipe(&ctx, sizeof(ctx));
+    if (bad_pad)
+        return false;
+
+    if (out_plain_len)
+        *out_plain_len = cipher_len - pad;
+    return true;
+}
+
 static inline bool xr_crypto_core_timing_safe_equal(const char *a, size_t a_len, const char *b,
                                                     size_t b_len) {
     if ((!a && a_len != 0) || (!b && b_len != 0))

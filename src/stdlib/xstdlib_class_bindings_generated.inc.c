@@ -13,108 +13,108 @@
  * one or more XR_STDLIB_VM_BIND_CLASS_<CLASS> macros before including it.
  */
 
-#ifdef XR_STDLIB_VM_BIND_CLASS_MUTEX
-static void xr_stdlib_vm_register_mutex_class_generated(XrVMRuntime *X) {
-    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_mutex_class_generated: NULL isolate");
+#ifdef XR_STDLIB_VM_BIND_CLASS_OS_MUTEX
+static void xr_stdlib_vm_register_os_mutex_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_os_mutex_class_generated: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_mutex_class_generated: core not initialised");
-    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_mutex_class_generated: super class not registered");
-    XR_DCHECK(core->sysMutexClass == NULL, "xr_stdlib_vm_register_mutex_class_generated: already registered");
-    XrClassBuilder *builder = xr_class_builder_new(X, "Mutex", core->objectClass);
-    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_mutex_class_generated: builder alloc failed");
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_os_mutex_class_generated: core not initialised");
+    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_os_mutex_class_generated: super class not registered");
+    XR_DCHECK(core->sysMutexClass == NULL, "xr_stdlib_vm_register_os_mutex_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "OsMutex", core->objectClass);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_os_mutex_class_generated: builder alloc failed");
     xr_class_builder_set_native_body(builder, &g_sys_mutex_body_desc);
     xr_class_builder_add_method(builder, "lock", sys_mutex_lock, 0, 0);
     xr_class_builder_add_method(builder, "unlock", sys_mutex_unlock, 0, 0);
     xr_class_builder_add_method(builder, "tryLock", sys_mutex_try_lock, 0, 0);
     XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_mutex_class_generated: finalize failed");
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_os_mutex_class_generated: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
     cls->builtin_kind = XR_BK_SYSMUTEX;
     core->sysMutexClass = cls;
 }
-#endif  /* XR_STDLIB_VM_BIND_CLASS_MUTEX */
+#endif  /* XR_STDLIB_VM_BIND_CLASS_OS_MUTEX */
 
-#ifdef XR_STDLIB_VM_BIND_CLASS_RW_LOCK
-static void xr_stdlib_vm_register_rw_lock_class_generated(XrVMRuntime *X) {
-    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_rw_lock_class_generated: NULL isolate");
+#ifdef XR_STDLIB_VM_BIND_CLASS_OS_RW_LOCK
+static void xr_stdlib_vm_register_os_rw_lock_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_os_rw_lock_class_generated: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_rw_lock_class_generated: core not initialised");
-    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_rw_lock_class_generated: super class not registered");
-    XR_DCHECK(core->sysRwLockClass == NULL, "xr_stdlib_vm_register_rw_lock_class_generated: already registered");
-    XrClassBuilder *builder = xr_class_builder_new(X, "RwLock", core->objectClass);
-    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_rw_lock_class_generated: builder alloc failed");
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_os_rw_lock_class_generated: core not initialised");
+    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_os_rw_lock_class_generated: super class not registered");
+    XR_DCHECK(core->sysRwLockClass == NULL, "xr_stdlib_vm_register_os_rw_lock_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "OsRwLock", core->objectClass);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_os_rw_lock_class_generated: builder alloc failed");
     xr_class_builder_set_native_body(builder, &g_sys_rwlock_body_desc);
     xr_class_builder_add_method(builder, "rdlock", sys_rwlock_rdlock, 0, 0);
     xr_class_builder_add_method(builder, "rdunlock", sys_rwlock_rdunlock, 0, 0);
     xr_class_builder_add_method(builder, "wrlock", sys_rwlock_wrlock, 0, 0);
     xr_class_builder_add_method(builder, "wrunlock", sys_rwlock_wrunlock, 0, 0);
     XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_rw_lock_class_generated: finalize failed");
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_os_rw_lock_class_generated: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
     cls->builtin_kind = XR_BK_SYSRWLOCK;
     core->sysRwLockClass = cls;
 }
-#endif  /* XR_STDLIB_VM_BIND_CLASS_RW_LOCK */
+#endif  /* XR_STDLIB_VM_BIND_CLASS_OS_RW_LOCK */
 
-#ifdef XR_STDLIB_VM_BIND_CLASS_CONDVAR
-static void xr_stdlib_vm_register_condvar_class_generated(XrVMRuntime *X) {
-    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_condvar_class_generated: NULL isolate");
+#ifdef XR_STDLIB_VM_BIND_CLASS_OS_CONDVAR
+static void xr_stdlib_vm_register_os_condvar_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_os_condvar_class_generated: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_condvar_class_generated: core not initialised");
-    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_condvar_class_generated: super class not registered");
-    XR_DCHECK(core->sysCondvarClass == NULL, "xr_stdlib_vm_register_condvar_class_generated: already registered");
-    XrClassBuilder *builder = xr_class_builder_new(X, "Condvar", core->objectClass);
-    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_condvar_class_generated: builder alloc failed");
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_os_condvar_class_generated: core not initialised");
+    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_os_condvar_class_generated: super class not registered");
+    XR_DCHECK(core->sysCondvarClass == NULL, "xr_stdlib_vm_register_os_condvar_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "OsCondvar", core->objectClass);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_os_condvar_class_generated: builder alloc failed");
     xr_class_builder_set_native_body(builder, &g_sys_condvar_body_desc);
     xr_class_builder_add_method(builder, "wait", sys_condvar_wait, 1, 0);
     xr_class_builder_add_method(builder, "waitFor", sys_condvar_wait_for, 2, 0);
     xr_class_builder_add_method(builder, "signal", sys_condvar_signal, 0, 0);
     xr_class_builder_add_method(builder, "broadcast", sys_condvar_broadcast, 0, 0);
     XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_condvar_class_generated: finalize failed");
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_os_condvar_class_generated: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
     cls->builtin_kind = XR_BK_SYSCONDVAR;
     core->sysCondvarClass = cls;
 }
-#endif  /* XR_STDLIB_VM_BIND_CLASS_CONDVAR */
+#endif  /* XR_STDLIB_VM_BIND_CLASS_OS_CONDVAR */
 
-#ifdef XR_STDLIB_VM_BIND_CLASS_BARRIER
-static void xr_stdlib_vm_register_barrier_class_generated(XrVMRuntime *X) {
-    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_barrier_class_generated: NULL isolate");
+#ifdef XR_STDLIB_VM_BIND_CLASS_OS_BARRIER
+static void xr_stdlib_vm_register_os_barrier_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_os_barrier_class_generated: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_barrier_class_generated: core not initialised");
-    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_barrier_class_generated: super class not registered");
-    XR_DCHECK(core->sysBarrierClass == NULL, "xr_stdlib_vm_register_barrier_class_generated: already registered");
-    XrClassBuilder *builder = xr_class_builder_new(X, "Barrier", core->objectClass);
-    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_barrier_class_generated: builder alloc failed");
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_os_barrier_class_generated: core not initialised");
+    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_os_barrier_class_generated: super class not registered");
+    XR_DCHECK(core->sysBarrierClass == NULL, "xr_stdlib_vm_register_os_barrier_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "OsBarrier", core->objectClass);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_os_barrier_class_generated: builder alloc failed");
     xr_class_builder_set_native_body(builder, &g_sys_barrier_body_desc);
     xr_class_builder_add_method(builder, "wait", sys_barrier_wait, 0, 0);
     XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_barrier_class_generated: finalize failed");
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_os_barrier_class_generated: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
     cls->builtin_kind = XR_BK_SYSBARRIER;
     core->sysBarrierClass = cls;
 }
-#endif  /* XR_STDLIB_VM_BIND_CLASS_BARRIER */
+#endif  /* XR_STDLIB_VM_BIND_CLASS_OS_BARRIER */
 
-#ifdef XR_STDLIB_VM_BIND_CLASS_ONCE
-static void xr_stdlib_vm_register_once_class_generated(XrVMRuntime *X) {
-    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_once_class_generated: NULL isolate");
+#ifdef XR_STDLIB_VM_BIND_CLASS_OS_ONCE
+static void xr_stdlib_vm_register_os_once_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_os_once_class_generated: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_once_class_generated: core not initialised");
-    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_once_class_generated: super class not registered");
-    XR_DCHECK(core->sysOnceClass == NULL, "xr_stdlib_vm_register_once_class_generated: already registered");
-    XrClassBuilder *builder = xr_class_builder_new(X, "Once", core->objectClass);
-    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_once_class_generated: builder alloc failed");
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_os_once_class_generated: core not initialised");
+    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_os_once_class_generated: super class not registered");
+    XR_DCHECK(core->sysOnceClass == NULL, "xr_stdlib_vm_register_os_once_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "OsOnce", core->objectClass);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_os_once_class_generated: builder alloc failed");
     xr_class_builder_set_native_body(builder, &g_sys_once_body_desc);
     xr_class_builder_add_method(builder, "call", sys_once_call, 1, 0);
     XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_once_class_generated: finalize failed");
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_os_once_class_generated: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
     cls->builtin_kind = XR_BK_SYSONCE;
     core->sysOnceClass = cls;
 }
-#endif  /* XR_STDLIB_VM_BIND_CLASS_ONCE */
+#endif  /* XR_STDLIB_VM_BIND_CLASS_OS_ONCE */
 
 #ifdef XR_STDLIB_VM_BIND_CLASS_REGEX
 static void xr_stdlib_vm_register_regex_class_generated(XrVMRuntime *X) {

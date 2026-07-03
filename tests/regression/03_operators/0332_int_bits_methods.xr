@@ -1,0 +1,62 @@
+// Test: int bit-manipulation methods + signed-overflow predicates.
+// Task 153 moved these from mem.* module functions to int methods; the
+// semantics live in src/shared/xr_bits_core.h and xr_arith_core.h, shared
+// by VM and AOT.
+
+@test
+fn test_int_bits() {
+    assert_eq((0).popcount(), 0)
+    assert_eq((255).popcount(), 8)
+    assert_eq((-1).popcount(), 64)
+
+    assert_eq((0).leadingZeros(), 64)
+    assert_eq((1).leadingZeros(), 63)
+    assert_eq((-1).leadingZeros(), 0)
+
+    assert_eq((0).trailingZeros(), 64)
+    assert_eq((1024).trailingZeros(), 10)
+    assert_eq((-1).trailingZeros(), 0)
+
+    assert_eq((1).byteswap(), 72057594037927936)
+    assert_eq((-1).byteswap(), -1)
+    assert_eq((12345).byteswap().byteswap(), 12345)
+
+    assert_eq((1).rotateLeft(4), 16)
+    assert_eq((1).rotateLeft(64), 1)
+    assert_eq((1).rotateLeft(68), 16)
+    assert_eq((16).rotateRight(4), 1)
+    assert_eq((1).rotateRight(64), 1)
+}
+
+@test
+fn test_int_overflow_predicates() {
+    // Signed addition overflow.
+    assert_eq((1).addOverflows(2), false)
+    assert_eq((9223372036854775807).addOverflows(1), true)
+    assert_eq((9223372036854775807).addOverflows(9223372036854775807), true)
+
+    // Signed subtraction overflow.
+    assert_eq((5).subOverflows(3), false)
+    assert_eq((9223372036854775807).subOverflows(-1), true)
+    assert_eq((0).subOverflows(9223372036854775807), false)
+
+    // Signed multiplication overflow.
+    assert_eq((3).mulOverflows(4), false)
+    assert_eq((9223372036854775807).mulOverflows(2), true)
+    assert_eq((4611686018427387904).mulOverflows(4), true)
+    assert_eq((0).mulOverflows(9223372036854775807), false)
+
+    // Predicates agree with the checked* family.
+    let max: int = 9223372036854775807
+    assert_eq(max.addOverflows(1), max.checkedAdd(1) == null)
+    assert_eq(max.mulOverflows(2), max.checkedMul(2) == null)
+}
+
+@test
+fn test_int_wrapping_matches_operators() {
+    // Wrapping methods agree with the default two's-complement operators.
+    let max: int = 9223372036854775807
+    assert_eq(max.wrappingAdd(1), max + 1)
+    assert_eq(max.wrappingMul(2), max * 2)
+    assert_eq((4611686018427387904).wrappingMul(4), 0)
+}

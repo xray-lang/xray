@@ -45,9 +45,9 @@ Typed array 元素布局是容器元数据的一部分。`Array<char>` 使用 `X
 ### 16.3 内存模型
 
 - 默认 **per-coroutine reference counting**。最后一个强引用释放时，对象立即进入释放路径。
-- **循环引用回收**：强引用环由 cycle collector 处理；显式入口是 `mem.collectCycles()`。
-- **内存安全点**：函数调用、后向跳转、显式 `mem.collectCycles()`。
-- **用户可见 introspection**：`mem.liveBytes()` / `mem.liveObjects()` / `mem.info()` 只报告当前协程堆的 live memory 视图。
+- **循环引用回收**：强引用环由 cycle collector 处理；显式入口是 `runtime.collectCycles()`。
+- **内存安全点**：函数调用、后向跳转、显式 `runtime.collectCycles()`。
+- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 只报告当前协程堆的 live memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 
 详见 `src/runtime/mem/`。
 
@@ -172,9 +172,9 @@ Typed-array element layout is part of the container metadata. `Array<char>` uses
 ### 16.3 Memory Model
 
 - Default reclamation is **per-coroutine reference counting**. When the last strong reference is released, the object enters its release path immediately.
-- **Cycle collection** handles strong reference cycles; the explicit user entrypoint is `mem.collectCycles()`.
-- **Memory safepoints**: function calls, backward branches, explicit `mem.collectCycles()`.
-- **User-visible introspection**: `mem.liveBytes()` / `mem.liveObjects()` / `mem.info()` report the current coroutine heap's live-memory view.
+- **Cycle collection** handles strong reference cycles; the explicit user entrypoint is `runtime.collectCycles()`.
+- **Memory safepoints**: function calls, backward branches, explicit `runtime.collectCycles()`.
+- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view (`import runtime`; the `mem` module carries raw-memory capabilities only).
 
 See `src/runtime/mem/` for details.
 

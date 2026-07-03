@@ -11,9 +11,9 @@ print(encoding.hexDecode("gg") == null)
 
 let hb = encoding.hexDecode("48656c6c6f")
 print(hb != null)
-print(hb.length)
-print(hb[0])
-print(hb[4])
+print(hb!.length)
+print(hb![0])
+print(hb![4])
 
 print(encoding.utf8ByteLength("Hello"))
 print(encoding.utf8ByteLength("你好"))

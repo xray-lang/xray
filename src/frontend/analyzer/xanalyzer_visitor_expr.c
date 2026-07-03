@@ -817,7 +817,22 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
     XrType *saved_expected = ctx->expected_type;
     ctx->expected_type = NULL;
     XrType *left = xa_visit_infer_expr(ctx, node->as.binary.left);
-    XrType *right = xa_visit_infer_expr(ctx, node->as.binary.right);
+    XrType *right;
+    if ((node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) && ctx->flow &&
+        ctx->flow->current_flow) {
+        // Short-circuit narrowing: the right operand only runs once the left's
+        // truthiness is known. `a && b` evaluates b assuming a is true; `a || b`
+        // evaluates b assuming a is false. This lets idioms like
+        // `x != null && x.field` and `x == null || x.field` narrow x for the
+        // right operand (matching how `if` narrows its body).
+        XaFlowNode *saved_flow = ctx->flow->current_flow;
+        ctx->flow->current_flow =
+            xa_flow_create_condition(ctx->flow, node->as.binary.left, node->type == AST_BINARY_AND);
+        right = xa_visit_infer_expr(ctx, node->as.binary.right);
+        ctx->flow->current_flow = saved_flow;
+    } else {
+        right = xa_visit_infer_expr(ctx, node->as.binary.right);
+    }
     ctx->expected_type = saved_expected;
 
     if (xa_freestanding_profile_enabled(ctx->analyzer) && node->type == AST_BINARY_ADD &&
@@ -912,6 +927,29 @@ XrType *xa_visit_unary(XaInferContext *ctx, AstNode *node) {
 /* ----------------------------------------------------------------------------
  * Member Access Type Inference
  * -------------------------------------------------------------------------- */
+// Under strict null checks (default on), accessing a member/index of — or
+// calling — a value whose static type is still nullable is a compile error:
+// the operation would panic at runtime if the value is null. The programmer
+// must narrow first (an `if x != null` check, optional-chaining `?.`, or the
+// `!` non-null assertion), all of which strip the nullable flag before we get
+// here. Returns true if an error was reported.
+static bool xa_check_nullable_access(XaInferContext *ctx, AstNode *node, XrType *recv_type,
+                                     const char *access_desc) {
+    if (!ctx || !ctx->analyzer || !ctx->analyzer->strict_null_checks)
+        return false;
+    if (!recv_type || XR_TYPE_IS_UNKNOWN(recv_type) || !recv_type->is_nullable)
+        return false;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "%s on a possibly-null value: narrow it first with `if x != null`, use `?.`, "
+             "or assert non-null with `!`",
+             access_desc);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_POSSIBLY_NULL, msg,
+                               &loc);
+    return true;
+}
+
 XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
@@ -923,6 +961,9 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return raw_pointer_static_fn;
 
     XrType *obj_type = xa_visit_infer_expr(ctx, ma->object);
+
+    // Reject `.member` on a possibly-null receiver (strict null checks).
+    xa_check_nullable_access(ctx, node, obj_type, "member access");
 
     XrType *static_capacity_fn = xa_static_capacity_method_type(ctx, ma->object, ma->name);
     if (static_capacity_fn)
@@ -1390,6 +1431,9 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
 
     IndexGetNode *ig = &node->as.index_get;
     XrType *container = xa_visit_infer_expr(ctx, ig->array);
+
+    // Reject `[...]` indexing of a possibly-null container (strict null checks).
+    xa_check_nullable_access(ctx, node, container, "index access");
 
     /* Visit the index expression so variable references get their symbol_id resolved */
     XrType *index_type = NULL;

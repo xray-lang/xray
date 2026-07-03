@@ -271,13 +271,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_math_symbols[] = {
 
 // mem module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
-    {"collectCycles", XLSP_SYM_FUNCTION, "fn(): int", "Run cycle collection + whole-block reclaim, return cycle collection count", NULL, 0},
-    {"disableCycleCollection", XLSP_SYM_FUNCTION, "fn(): ()", "Pause the automatic cycle collector", NULL, 0},
-    {"enableCycleCollection", XLSP_SYM_FUNCTION, "fn(): ()", "Resume the automatic cycle collector", NULL, 0},
-    {"isCycleCollectionEnabled", XLSP_SYM_FUNCTION, "fn(): bool", "Check if automatic cycle collection is enabled", NULL, 0},
-    {"liveBytes", XLSP_SYM_FUNCTION, "fn(): int", "Get live memory usage in bytes", NULL, 0},
-    {"liveObjects", XLSP_SYM_FUNCTION, "fn(): int", "Get live object count", NULL, 0},
-    {"info", XLSP_SYM_FUNCTION, "fn(): Map", "Get memory-model runtime info as Map", NULL, 0},
     {"fence", XLSP_SYM_FUNCTION, "fn(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", NULL, 0},
     {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", NULL, 0},
     {"cacheFlush", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
@@ -300,24 +293,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"compare", XLSP_SYM_FUNCTION, "fn(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int", "Compare n bytes at a and b (memcmp: <0, 0, >0)", NULL, 0},
     {"volatileLoad", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, size: int): int", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", NULL, 0},
     {"volatileStore", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, v: int, size: int): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", NULL, 0},
-    {"popcount", XLSP_SYM_FUNCTION, "fn(x: int): int", "Number of set bits in the 64-bit value", NULL, 0},
-    {"leadingZeros", XLSP_SYM_FUNCTION, "fn(x: int): int", "Count of leading zero bits (0 -> 64)", NULL, 0},
-    {"trailingZeros", XLSP_SYM_FUNCTION, "fn(x: int): int", "Count of trailing zero bits (0 -> 64)", NULL, 0},
-    {"byteswap", XLSP_SYM_FUNCTION, "fn(x: int): int", "Reverse the byte order of the 64-bit value", NULL, 0},
-    {"rotateLeft", XLSP_SYM_FUNCTION, "fn(x: int, n: int): int", "Rotate the 64-bit value left by n bits (n mod 64)", NULL, 0},
-    {"rotateRight", XLSP_SYM_FUNCTION, "fn(x: int, n: int): int", "Rotate the 64-bit value right by n bits (n mod 64)", NULL, 0},
-    {"addWrapping", XLSP_SYM_FUNCTION, "fn(a: int, b: int): int", "Two's-complement wrapping addition (wraps mod 2^64)", NULL, 0},
-    {"subWrapping", XLSP_SYM_FUNCTION, "fn(a: int, b: int): int", "Two's-complement wrapping subtraction (wraps mod 2^64)", NULL, 0},
-    {"mulWrapping", XLSP_SYM_FUNCTION, "fn(a: int, b: int): int", "Two's-complement wrapping multiplication (wraps mod 2^64)", NULL, 0},
-    {"addOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit addition of a and b overflows", NULL, 0},
-    {"subOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit subtraction of a and b overflows", NULL, 0},
-    {"mulOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit multiplication of a and b overflows", NULL, 0},
     {"PROT_NONE", XLSP_SYM_CONSTANT, "int", "No access protection for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_READ", XLSP_SYM_CONSTANT, "int", "Readable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_WRITE", XLSP_SYM_CONSTANT, "int", "Writable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_EXEC", XLSP_SYM_CONSTANT, "int", "Executable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 45
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 26
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
@@ -378,13 +359,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
     {"clock", XLSP_SYM_FUNCTION, "fn(): float", "Get process CPU time in seconds", NULL, 0},
     {"sleep", XLSP_SYM_FUNCTION, "fn(ms: int): ()", "Sleep for milliseconds", NULL, 0},
     {"exec", XLSP_SYM_FUNCTION, "fn(cmd: string): ExecResult?", "Execute shell command", NULL, 0},
+    {"spawn", XLSP_SYM_FUNCTION, "fn(program: string, args: Array<string>): ExecResult?", "Execute a program without a shell (injection-safe argv)", NULL, 0},
     {"platform", XLSP_SYM_CONSTANT, "string", "Current operating system name", NULL, 0},
     {"arch", XLSP_SYM_CONSTANT, "string", "Current CPU architecture name", NULL, 0},
     {"sep", XLSP_SYM_CONSTANT, "string", "Platform path separator", NULL, 0},
     {"eol", XLSP_SYM_CONSTANT, "string", "Platform end-of-line string", NULL, 0},
     {"ExecResult", XLSP_SYM_CLASS, "type ExecResult", "Native handle type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_OS_SYMBOL_COUNT 29
+#define GEN_XLSP_STDLIB_OS_SYMBOL_COUNT 30
 
 // path module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_path_symbols[] = {
@@ -422,6 +404,18 @@ static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {
 };
 #define GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT 13
 
+// runtime module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {
+    {"collectCycles", XLSP_SYM_FUNCTION, "fn(): int", "Run cycle collection + whole-block reclaim, return cycle collection count", NULL, 0},
+    {"disableCycleCollection", XLSP_SYM_FUNCTION, "fn(): ()", "Pause the automatic cycle collector", NULL, 0},
+    {"enableCycleCollection", XLSP_SYM_FUNCTION, "fn(): ()", "Resume the automatic cycle collector", NULL, 0},
+    {"isCycleCollectionEnabled", XLSP_SYM_FUNCTION, "fn(): bool", "Check if automatic cycle collection is enabled", NULL, 0},
+    {"liveBytes", XLSP_SYM_FUNCTION, "fn(): int", "Get live memory usage in bytes", NULL, 0},
+    {"liveObjects", XLSP_SYM_FUNCTION, "fn(): int", "Get live object count", NULL, 0},
+    {"info", XLSP_SYM_FUNCTION, "fn(): Map", "Get memory-model runtime info as Map", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT 7
+
 // sync module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
     {"fence", XLSP_SYM_FUNCTION, "fn(order: Ordering): ()", "standalone memory fence in Ordering-enum form (task 147 §6.5).", NULL, 0},
@@ -435,11 +429,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
 
 // sys module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
-    {"Mutex", XLSP_SYM_FUNCTION, "fn(): Mutex", "Create an OS-domain mutex", NULL, 0},
-    {"RwLock", XLSP_SYM_FUNCTION, "fn(): RwLock", "Create an OS-domain read-write lock", NULL, 0},
-    {"Condvar", XLSP_SYM_FUNCTION, "fn(): Condvar", "Create an OS-domain condition variable", NULL, 0},
-    {"Barrier", XLSP_SYM_FUNCTION, "fn(parties: int): Barrier", "Create a reusable OS-domain barrier", NULL, 0},
-    {"Once", XLSP_SYM_FUNCTION, "fn(): Once", "Create an OS-domain once gate", NULL, 0},
+    {"OsMutex", XLSP_SYM_FUNCTION, "fn(): OsMutex", "Create an OS-domain mutex", NULL, 0},
+    {"OsRwLock", XLSP_SYM_FUNCTION, "fn(): OsRwLock", "Create an OS-domain read-write lock", NULL, 0},
+    {"OsCondvar", XLSP_SYM_FUNCTION, "fn(): OsCondvar", "Create an OS-domain condition variable", NULL, 0},
+    {"OsBarrier", XLSP_SYM_FUNCTION, "fn(parties: int): OsBarrier", "Create a reusable OS-domain barrier", NULL, 0},
+    {"OsOnce", XLSP_SYM_FUNCTION, "fn(): OsOnce", "Create an OS-domain once gate", NULL, 0},
     {"cpuCount", XLSP_SYM_FUNCTION, "fn(): int", "Return the number of CPUs available to OS-thread work", NULL, 0},
     {"threadYield", XLSP_SYM_FUNCTION, "fn(): ()", "Yield the current OS thread to another runnable OS thread", NULL, 0},
     {"sleepMs", XLSP_SYM_FUNCTION, "fn(ms: int): ()", "Block the current OS thread for at least ms milliseconds", NULL, 0},
@@ -547,6 +541,7 @@ static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
     {"os", "os standard library module", g_xlsp_stdlib_os_symbols, GEN_XLSP_STDLIB_OS_SYMBOL_COUNT},
     {"path", "path standard library module", g_xlsp_stdlib_path_symbols, GEN_XLSP_STDLIB_PATH_SYMBOL_COUNT},
     {"regex", "regex standard library module", g_xlsp_stdlib_regex_symbols, GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT},
+    {"runtime", "runtime standard library module", g_xlsp_stdlib_runtime_symbols, GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT},
     {"sync", "sync standard library module", g_xlsp_stdlib_sync_symbols, GEN_XLSP_STDLIB_SYNC_SYMBOL_COUNT},
     {"sys", "sys standard library module", g_xlsp_stdlib_sys_symbols, GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT},
     {"time", "time standard library module", g_xlsp_stdlib_time_symbols, GEN_XLSP_STDLIB_TIME_SYMBOL_COUNT},

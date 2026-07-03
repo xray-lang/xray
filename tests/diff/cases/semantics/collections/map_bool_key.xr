@@ -17,7 +17,7 @@ let a: Map<bool, int> = #{}
 a.set(false, 34)
 a.set(true, 21)
 dump_int(a)
-print("get true=" + a.get(true).toString() + " get false=" + a.get(false).toString())
+print("get true=" + a.get(true)!.toString() + " get false=" + a.get(false)!.toString())
 
 print("-- insert true then false --")
 let b: Map<bool, int> = #{}
@@ -44,7 +44,7 @@ let c: Map<bool, float32> = #{}
 c.set(true, 1.5)
 c.set(false, 2.25)
 print("csize=" + c.size.toString())
-print("cget true=" + c.get(true).toString() + " cget false=" + c.get(false).toString())
+print("cget true=" + c.get(true)!.toString() + " cget false=" + c.get(false)!.toString())
 for (k, v in c) { print("cf " + k.toString() + "=" + v.toString()) }
 
 class BoolIntMapBag {

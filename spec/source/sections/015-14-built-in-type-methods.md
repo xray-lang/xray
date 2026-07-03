@@ -29,8 +29,13 @@ order: 015
 | `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | 溢出返回 `null` |
 | `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(int) -> int` | 溢出饱和到 `int` 边界 |
 | `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(int) -> int` | 显式二补码环绕 |
+| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(int) -> bool` | 仅报告有符号溢出（要结果用 `checked*`） |
+| `popcount()` | `() -> int` | 二补码位表示中置位的个数 |
+| `leadingZeros()` / `trailingZeros()` | `() -> int` | 前导/后缀零比特数（`0` 返回 `64`） |
+| `byteswap()` | `() -> int` | 反转字节序 |
+| `rotateLeft(n)` / `rotateRight(n)` | `(int) -> int` | 循环移位（`n` 按模 64） |
 
-`abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。
+`abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词的语义源是 `src/shared/xr_bits_core.h` / `xr_arith_core.h`，VM 与 AOT 共享同一实现。
 
 ### 14.2 `float` 方法
 
@@ -280,8 +285,13 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | returns `null` on overflow |
 | `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(int) -> int` | clamps overflow to the `int` boundary |
 | `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(int) -> int` | explicit two's-complement wrap |
+| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(int) -> bool` | reports signed overflow only (use `checked*` for the value) |
+| `popcount()` | `() -> int` | number of set bits in the two's-complement representation |
+| `leadingZeros()` / `trailingZeros()` | `() -> int` | leading/trailing zero bit count (`0` yields `64`) |
+| `byteswap()` | `() -> int` | reverses the byte order |
+| `rotateLeft(n)` / `rotateRight(n)` | `(int) -> int` | bit rotation (`n` taken modulo 64) |
 
-`abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`.
+`abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. The bit-manipulation methods and overflow predicates share a single semantic source (`src/shared/xr_bits_core.h` / `xr_arith_core.h`) between VM and AOT.
 
 ### 14.2 `float` Methods
 

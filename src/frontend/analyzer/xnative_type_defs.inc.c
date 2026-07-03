@@ -91,7 +91,10 @@ static const char xr_native_def_int[] =
     "checkedMul(other: int) -> int?\n    saturatingAdd(other: int) -> int\n    "
     "saturatingSub(other: int) -> int\n    saturatingMul(other: int) -> int\n    "
     "wrappingAdd(other: int) -> int\n    wrappingSub(other: int) -> int\n    wrappingMul(other: "
-    "int) -> int\n}\n";
+    "int) -> int\n    addOverflows(other: int) -> bool\n    subOverflows(other: int) -> bool\n    "
+    "mulOverflows(other: int) -> bool\n    popcount() -> int\n    leadingZeros() -> int\n    "
+    "trailingZeros() -> int\n    byteswap() -> int\n    rotateLeft(n: int) -> int\n    "
+    "rotateRight(n: int) -> int\n}\n";
 
 static const char xr_native_def_json[] =
     "// Built-in Json type — implementation in "

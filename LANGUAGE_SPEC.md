@@ -3098,8 +3098,8 @@ Xray uses a layered memory management strategy:
 
 **Memory observation points**:
 - Default reclamation is reference-counted.
-- Strong reference cycles are handled by the cycle collector at safepoints or explicit `mem.collectCycles()`.
-- Memory safepoints in the instruction stream include function calls, backward branches, and explicit `mem.collectCycles()`.
+- Strong reference cycles are handled by the cycle collector at safepoints or explicit `runtime.collectCycles()`.
+- Memory safepoints in the instruction stream include function calls, backward branches, and explicit `runtime.collectCycles()`.
 
 Cycle collection and heap-layout design: see `src/runtime/mem/`.
 
@@ -4521,8 +4521,13 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | returns `null` on overflow |
 | `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(int) -> int` | clamps overflow to the `int` boundary |
 | `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(int) -> int` | explicit two's-complement wrap |
+| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(int) -> bool` | reports signed overflow only (use `checked*` for the value) |
+| `popcount()` | `() -> int` | number of set bits in the two's-complement representation |
+| `leadingZeros()` / `trailingZeros()` | `() -> int` | leading/trailing zero bit count (`0` yields `64`) |
+| `byteswap()` | `() -> int` | reverses the byte order |
+| `rotateLeft(n)` / `rotateRight(n)` | `(int) -> int` | bit rotation (`n` taken modulo 64) |
 
-`abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`.
+`abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. The bit-manipulation methods and overflow predicates share a single semantic source (`src/shared/xr_bits_core.h` / `xr_arith_core.h`) between VM and AOT.
 
 ### 14.2 `float` Methods
 
@@ -4913,9 +4918,9 @@ Typed-array element layout is part of the container metadata. `Array<char>` uses
 ### 16.3 Memory Model
 
 - Default reclamation is **per-coroutine reference counting**. When the last strong reference is released, the object enters its release path immediately.
-- **Cycle collection** handles strong reference cycles; the explicit user entrypoint is `mem.collectCycles()`.
-- **Memory safepoints**: function calls, backward branches, explicit `mem.collectCycles()`.
-- **User-visible introspection**: `mem.liveBytes()` / `mem.liveObjects()` / `mem.info()` report the current coroutine heap's live-memory view.
+- **Cycle collection** handles strong reference cycles; the explicit user entrypoint is `runtime.collectCycles()`.
+- **Memory safepoints**: function calls, backward branches, explicit `runtime.collectCycles()`.
+- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view (`import runtime`; the `mem` module carries raw-memory capabilities only).
 
 See `src/runtime/mem/` for details.
 

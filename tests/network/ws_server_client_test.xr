@@ -27,9 +27,9 @@ go fn() {
             if (msg == null || msg.error) {
                 break
             }
-            if (msg.data) {
-                print("[Server] Received: " + msg.data)
-                ws.send(conn, "Echo: " + msg.data, null)
+            if (msg!.data) {
+                print("[Server] Received: " + msg!.data)
+                ws.send(conn, "Echo: " + msg!.data, null)
             }
         }
         
@@ -45,8 +45,8 @@ go fn() {
     print("[Client] Connecting to ws://localhost:8766...")
     
     let conn = ws.connect("ws://localhost:8766", null)
-    if (conn.error) {
-        print("[Client] Connection error: " + conn.error)
+    if (conn!.error) {
+        print("[Client] Connection error: " + conn!.error)
         ws.stopServer()
         return
     }
@@ -59,9 +59,9 @@ go fn() {
     
     // Receive echo
     let msg = ws.recv(conn, null)
-    if (msg != null && msg.data) {
-        print("[Client] Received: " + msg.data)
-        if (msg.data == "Echo: Hello Server!") {
+    if (msg != null && msg!.data) {
+        print("[Client] Received: " + msg!.data)
+        if (msg!.data == "Echo: Hello Server!") {
             print("[Client] Test PASSED!")
             testPassed = true
         } else {

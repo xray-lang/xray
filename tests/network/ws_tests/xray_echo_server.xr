@@ -23,8 +23,8 @@ ws.serve(port, fn(conn) {
         if (msg == null || msg.error) {
             break
         }
-        if (msg.data != null) {
-            ws.send(conn, msg.data, msg.binary)
+        if (msg!.data != null) {
+            ws.send(conn, msg!.data, msg!.binary)
         }
     }
 })

@@ -279,7 +279,7 @@ fn test_find_with_complex_predicate() {
             return s >= 90
         })
     })
-    assert_eq(highAchiever.name, "Carol")
+    assert_eq(highAchiever!.name, "Carol")
 }
 
 // ===== Function Composition with Higher-Order Functions =====

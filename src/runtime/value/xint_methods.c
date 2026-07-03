@@ -30,6 +30,15 @@ void xr_int_register_native_type(XrVMRuntime *isolate) {
         {"wrappingAdd", xr_int_wrapping_add_method, 0},
         {"wrappingSub", xr_int_wrapping_sub_method, 0},
         {"wrappingMul", xr_int_wrapping_mul_method, 0},
+        {"popcount", xr_int_popcount_method, 0},
+        {"leadingZeros", xr_int_leading_zeros_method, 0},
+        {"trailingZeros", xr_int_trailing_zeros_method, 0},
+        {"byteswap", xr_int_byteswap_method, 0},
+        {"rotateLeft", xr_int_rotate_left_method, 0},
+        {"rotateRight", xr_int_rotate_right_method, 0},
+        {"addOverflows", xr_int_add_overflows_method, 0},
+        {"subOverflows", xr_int_sub_overflows_method, 0},
+        {"mulOverflows", xr_int_mul_overflows_method, 0},
         {NULL, NULL, 0},
     };
     static const XrNativeTypeInfo int_info = {

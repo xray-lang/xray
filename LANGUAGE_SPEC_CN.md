@@ -3091,8 +3091,8 @@ Xray 采用多层内存管理：
 
 **内存观察点**：
 - 默认以引用计数立即释放对象。
-- 强引用环由 cycle collector 在安全点或显式 `mem.collectCycles()` 时处理。
-- 指令列表中成为内存安全点的点包括函数调用、后向跳转、显式 `mem.collectCycles()`。
+- 强引用环由 cycle collector 在安全点或显式 `runtime.collectCycles()` 时处理。
+- 指令列表中成为内存安全点的点包括函数调用、后向跳转、显式 `runtime.collectCycles()`。
 
 循环引用回收与堆布局设计：见 `src/runtime/mem/`。
 
@@ -4508,8 +4508,13 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | 溢出返回 `null` |
 | `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(int) -> int` | 溢出饱和到 `int` 边界 |
 | `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(int) -> int` | 显式二补码环绕 |
+| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(int) -> bool` | 仅报告有符号溢出（要结果用 `checked*`） |
+| `popcount()` | `() -> int` | 二补码位表示中置位的个数 |
+| `leadingZeros()` / `trailingZeros()` | `() -> int` | 前导/后缀零比特数（`0` 返回 `64`） |
+| `byteswap()` | `() -> int` | 反转字节序 |
+| `rotateLeft(n)` / `rotateRight(n)` | `(int) -> int` | 循环移位（`n` 按模 64） |
 
-`abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。
+`abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词的语义源是 `src/shared/xr_bits_core.h` / `xr_arith_core.h`，VM 与 AOT 共享同一实现。
 
 ### 14.2 `float` 方法
 
@@ -4900,9 +4905,9 @@ Typed array 元素布局是容器元数据的一部分。`Array<char>` 使用 `X
 ### 16.3 内存模型
 
 - 默认 **per-coroutine reference counting**。最后一个强引用释放时，对象立即进入释放路径。
-- **循环引用回收**：强引用环由 cycle collector 处理；显式入口是 `mem.collectCycles()`。
-- **内存安全点**：函数调用、后向跳转、显式 `mem.collectCycles()`。
-- **用户可见 introspection**：`mem.liveBytes()` / `mem.liveObjects()` / `mem.info()` 只报告当前协程堆的 live memory 视图。
+- **循环引用回收**：强引用环由 cycle collector 处理；显式入口是 `runtime.collectCycles()`。
+- **内存安全点**：函数调用、后向跳转、显式 `runtime.collectCycles()`。
+- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 只报告当前协程堆的 live memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 
 详见 `src/runtime/mem/`。
 

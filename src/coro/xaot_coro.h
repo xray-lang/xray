@@ -220,6 +220,12 @@ XR_FUNC void xr_aot_frame_free(void *frame);
 XR_FUNC void xr_aot_runtime_config_init(XrAotRuntimeConfig *cfg);
 XR_FUNC XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg);
 XR_FUNC void xr_aot_runtime_delete(XrAotRuntime *runtime);
+/* Process-wide "current" standalone AOT runtime (the last one created,
+ * cleared on delete). Standalone binaries create exactly one; the *_sync
+ * bridge helpers use it to reach the builtin table (Recv/SendResult ADT
+ * types, ...) when a synchronous function operates on a concurrency handle
+ * that did not come from a VM host. NULL under a VM host or before boot. */
+XR_FUNC XrAotRuntime *xr_aot_runtime_current(void);
 XR_FUNC uint32_t xr_aot_runtime_caps(const XrAotRuntime *runtime);
 XR_FUNC struct XrRuntimeCore *xr_aot_runtime_core(XrAotRuntime *runtime);
 XR_FUNC struct XrRuntime *xr_aot_runtime_scheduler(XrAotRuntime *runtime);
@@ -347,6 +353,10 @@ XR_FUNC XrAotResult xr_aot_await_all_task_values_to_slots_resume(
     const XrAotContext *ctx, const XrValue *task_values, int task_count,
     const XrSlotRef *result_slots, uint8_t result_elem_type, bool aggregate_one_shot);
 
+/* Channel construction never yields (pure shared-system-heap allocation), so
+ * synchronous AOT functions may call this too — the cgen passes the
+ * process-wide &xrt_global_ctx there, mirroring the coroutine fallback path
+ * (task 147 §0.10 constructor narrowing extended to XI_CHAN_NEW). */
 XR_FUNC XrValue xr_aot_channel_new(const XrAotContext *ctx, int64_t buffer_size);
 XR_FUNC XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_value,
                                      XrValue send_value);

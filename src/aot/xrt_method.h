@@ -23,6 +23,8 @@
 #include "xrt_datetime.h"
 #include "xrt_arith.h"  // xrt_value_to_string for container/tuple toString
 #include "../shared/xr_int_arith.h"
+#include "../shared/xr_bits_core.h"   // int.popcount/rotate* (task 153)
+#include "../shared/xr_arith_core.h"  // int.addOverflows/... (task 153)
 #include "../shared/xr_range_core.h"
 #include "../shared/xr_string_core.h"
 
@@ -552,6 +554,16 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
                 snprintf(buf, sizeof(buf), "0x%" PRIX64, (uint64_t) recv.i);
             return xrt_str_from_cstr(buf);
         }
+        /* Bit-manipulation methods (task 153): same shared core as the VM
+         * binding (xr_bits_core.h), so both ends agree bit-for-bit. */
+        if (sym == XRT_SYM_POPCOUNT)
+            return XR_FROM_INT(xr_bits_core_popcount(recv.i));
+        if (sym == XRT_SYM_LEADING_ZEROS)
+            return XR_FROM_INT(xr_bits_core_leading_zeros(recv.i));
+        if (sym == XRT_SYM_TRAILING_ZEROS)
+            return XR_FROM_INT(xr_bits_core_trailing_zeros(recv.i));
+        if (sym == XRT_SYM_BYTESWAP)
+            return XR_FROM_INT(xr_bits_core_byteswap(recv.i));
     }
     if (recv.tag == XR_TAG_F64) {
         double v = recv.f;
@@ -930,6 +942,18 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             return XR_FROM_INT(xr_i64_sub_wrap(recv.i, arg0.i));
         if (sym == XRT_SYM_WRAPPING_MUL)
             return XR_FROM_INT(xr_i64_mul_wrap(recv.i, arg0.i));
+        /* Rotates + overflow predicates (task 153): shared cores
+         * xr_bits_core.h / xr_arith_core.h, identical to the VM binding. */
+        if (sym == XRT_SYM_ROTATE_LEFT)
+            return XR_FROM_INT(xr_bits_core_rotate_left(recv.i, arg0.i));
+        if (sym == XRT_SYM_ROTATE_RIGHT)
+            return XR_FROM_INT(xr_bits_core_rotate_right(recv.i, arg0.i));
+        if (sym == XRT_SYM_ADD_OVERFLOWS)
+            return XR_FROM_BOOL(xr_arith_core_add_overflows(recv.i, arg0.i) != 0);
+        if (sym == XRT_SYM_SUB_OVERFLOWS)
+            return XR_FROM_BOOL(xr_arith_core_sub_overflows(recv.i, arg0.i) != 0);
+        if (sym == XRT_SYM_MUL_OVERFLOWS)
+            return XR_FROM_BOOL(xr_arith_core_mul_overflows(recv.i, arg0.i) != 0);
     }
     /* max/min accept int or float operands. */
     if (sym == XRT_SYM_MAX) {

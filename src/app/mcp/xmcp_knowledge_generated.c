@@ -1123,14 +1123,24 @@ static const XmcpGeneratedStdlibSymbol _symbols_math[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
-        .name = "addOverflows",
-        .signature = "(a: int, b: int): bool",
-        .summary = "Whether signed 64-bit addition of a and b overflows",
+        .name = "PROT_EXEC",
+        .signature = ": int",
+        .summary = "Executable page protection bit for mem.pageAlloc/pageProtect",
     },
     {
-        .name = "addWrapping",
-        .signature = "(a: int, b: int): int",
-        .summary = "Two's-complement wrapping addition (wraps mod 2^64)",
+        .name = "PROT_NONE",
+        .signature = ": int",
+        .summary = "No access protection for mem.pageAlloc/pageProtect",
+    },
+    {
+        .name = "PROT_READ",
+        .signature = ": int",
+        .summary = "Readable page protection bit for mem.pageAlloc/pageProtect",
+    },
+    {
+        .name = "PROT_WRITE",
+        .signature = ": int",
+        .summary = "Writable page protection bit for mem.pageAlloc/pageProtect",
     },
     {
         .name = "addressOf",
@@ -1148,19 +1158,24 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure",
     },
     {
-        .name = "byteswap",
-        .signature = "(x: int): int",
-        .summary = "Reverse the byte order of the 64-bit value",
+        .name = "allocZeroed",
+        .signature = "(n: int): RawMut<uint8>",
+        .summary = "Allocate n zero-initialized bytes (calloc). NULL on OOM; pair with mem.free",
+    },
+    {
+        .name = "cacheFlush",
+        .signature = "(ptr: RawPtr<uint8>, n: int): ()",
+        .summary = "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available",
+    },
+    {
+        .name = "cacheInvalidate",
+        .signature = "(ptr: RawPtr<uint8>, n: int): ()",
+        .summary = "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available",
     },
     {
         .name = "cacheLineSize",
         .signature = "(): int",
         .summary = "CPU cache line size in bytes",
-    },
-    {
-        .name = "collectCycles",
-        .signature = "(): int",
-        .summary = "Run cycle collection + whole-block reclaim, return cycle collection count",
     },
     {
         .name = "compare",
@@ -1171,16 +1186,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "copy",
         .signature = "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()",
         .summary = "Copy n bytes from src to dst (non-overlapping; memcpy)",
-    },
-    {
-        .name = "disableCycleCollection",
-        .signature = "(): ()",
-        .summary = "Pause the automatic cycle collector",
-    },
-    {
-        .name = "enableCycleCollection",
-        .signature = "(): ()",
-        .summary = "Resume the automatic cycle collector",
     },
     {
         .name = "fence",
@@ -1198,49 +1203,29 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe",
     },
     {
-        .name = "info",
-        .signature = "(): Map",
-        .summary = "Get memory-model runtime info as Map",
-    },
-    {
-        .name = "isCycleCollectionEnabled",
-        .signature = "(): bool",
-        .summary = "Check if automatic cycle collection is enabled",
-    },
-    {
-        .name = "leadingZeros",
-        .signature = "(x: int): int",
-        .summary = "Count of leading zero bits (0 -> 64)",
-    },
-    {
-        .name = "liveBytes",
-        .signature = "(): int",
-        .summary = "Get live memory usage in bytes",
-    },
-    {
-        .name = "liveObjects",
-        .signature = "(): int",
-        .summary = "Get live object count",
-    },
-    {
         .name = "move",
         .signature = "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()",
         .summary = "Copy n bytes from src to dst (may overlap; memmove)",
     },
     {
-        .name = "mulOverflows",
-        .signature = "(a: int, b: int): bool",
-        .summary = "Whether signed 64-bit multiplication of a and b overflows",
+        .name = "nontemporalStore",
+        .signature = "(ptr: RawMut<uint8>, v: int, size: int): ()",
+        .summary = "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available",
     },
     {
-        .name = "mulWrapping",
-        .signature = "(a: int, b: int): int",
-        .summary = "Two's-complement wrapping multiplication (wraps mod 2^64)",
+        .name = "pageAlloc",
+        .signature = "(bytes: int, prot?: int): RawMut<uint8>",
+        .summary = "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree",
     },
     {
-        .name = "popcount",
-        .signature = "(x: int): int",
-        .summary = "Number of set bits in the 64-bit value",
+        .name = "pageFree",
+        .signature = "(ptr: RawMut<uint8>, bytes: int): bool",
+        .summary = "Release anonymous pages from mem.pageAlloc; returns false on OS failure",
+    },
+    {
+        .name = "pageProtect",
+        .signature = "(ptr: RawMut<uint8>, bytes: int, prot: int): bool",
+        .summary = "Change anonymous page protection bits; returns false on OS failure",
     },
     {
         .name = "prefetch",
@@ -1253,34 +1238,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM",
     },
     {
-        .name = "rotateLeft",
-        .signature = "(x: int, n: int): int",
-        .summary = "Rotate the 64-bit value left by n bits (n mod 64)",
-    },
-    {
-        .name = "rotateRight",
-        .signature = "(x: int, n: int): int",
-        .summary = "Rotate the 64-bit value right by n bits (n mod 64)",
-    },
-    {
         .name = "set",
         .signature = "(dst: RawMut<uint8>, byte: int, n: int): ()",
         .summary = "Fill n bytes at dst with byte (memset)",
-    },
-    {
-        .name = "subOverflows",
-        .signature = "(a: int, b: int): bool",
-        .summary = "Whether signed 64-bit subtraction of a and b overflows",
-    },
-    {
-        .name = "subWrapping",
-        .signature = "(a: int, b: int): int",
-        .summary = "Two's-complement wrapping subtraction (wraps mod 2^64)",
-    },
-    {
-        .name = "trailingZeros",
-        .signature = "(x: int): int",
-        .summary = "Count of trailing zero bits (0 -> 64)",
     },
     {
         .name = "volatileLoad",
@@ -1582,6 +1542,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
         .name = "sleep",
         .signature = "(ms: int): ()",
         .summary = "Sleep for milliseconds",
+    },
+    {
+        .name = "spawn",
+        .signature = "(program: string, args: Array<string>): ExecResult?",
+        .summary = "Execute a program without a shell (injection-safe argv)",
     },
     {
         .name = "tmpdir",
@@ -3745,38 +3710,30 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `mem.addOverflows` | `(a: int, b: int): bool` | Whether signed 64-bit addition of a and b overflows |\n"
-            "| `mem.addWrapping` | `(a: int, b: int): int` | Two's-complement wrapping addition (wraps mod 2^64) |\n"
+            "| `mem.PROT_EXEC` | `: int` | Executable page protection bit for mem.pageAlloc/pageProtect |\n"
+            "| `mem.PROT_NONE` | `: int` | No access protection for mem.pageAlloc/pageProtect |\n"
+            "| `mem.PROT_READ` | `: int` | Readable page protection bit for mem.pageAlloc/pageProtect |\n"
+            "| `mem.PROT_WRITE` | `: int` | Writable page protection bit for mem.pageAlloc/pageProtect |\n"
             "| `mem.addressOf` | `(ptr: RawPtr<uint8>): int` | Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress) |\n"
             "| `mem.alloc` | `(n: int): RawMut<uint8>` | Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free |\n"
             "| `mem.allocAligned` | `(n: int, align: int): RawMut<uint8>` | Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure |\n"
-            "| `mem.byteswap` | `(x: int): int` | Reverse the byte order of the 64-bit value |\n"
+            "| `mem.allocZeroed` | `(n: int): RawMut<uint8>` | Allocate n zero-initialized bytes (calloc). NULL on OOM; pair with mem.free |\n"
+            "| `mem.cacheFlush` | `(ptr: RawPtr<uint8>, n: int): ()` | Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
+            "| `mem.cacheInvalidate` | `(ptr: RawPtr<uint8>, n: int): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
             "| `mem.cacheLineSize` | `(): int` | CPU cache line size in bytes |\n"
-            "| `mem.collectCycles` | `(): int` | Run cycle collection + whole-block reclaim, return cycle collection count |\n"
             "| `mem.compare` | `(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
             "| `mem.copy` | `(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
-            "| `mem.disableCycleCollection` | `(): ()` | Pause the automatic cycle collector |\n"
-            "| `mem.enableCycleCollection` | `(): ()` | Resume the automatic cycle collector |\n"
             "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
             "| `mem.free` | `(ptr: RawMut<uint8>): ()` | Free a buffer from mem.alloc/allocAligned/realloc |\n"
             "| `mem.fromAddress` | `(addr: int): RawMut<uint8>` | Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe |\n"
-            "| `mem.info` | `(): Map` | Get memory-model runtime info as Map |\n"
-            "| `mem.isCycleCollectionEnabled` | `(): bool` | Check if automatic cycle collection is enabled |\n"
-            "| `mem.leadingZeros` | `(x: int): int` | Count of leading zero bits (0 -> 64) |\n"
-            "| `mem.liveBytes` | `(): int` | Get live memory usage in bytes |\n"
-            "| `mem.liveObjects` | `(): int` | Get live object count |\n"
             "| `mem.move` | `(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
-            "| `mem.mulOverflows` | `(a: int, b: int): bool` | Whether signed 64-bit multiplication of a and b overflows |\n"
-            "| `mem.mulWrapping` | `(a: int, b: int): int` | Two's-complement wrapping multiplication (wraps mod 2^64) |\n"
-            "| `mem.popcount` | `(x: int): int` | Number of set bits in the 64-bit value |\n"
+            "| `mem.nontemporalStore` | `(ptr: RawMut<uint8>, v: int, size: int): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
+            "| `mem.pageAlloc` | `(bytes: int, prot?: int): RawMut<uint8>` | Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
+            "| `mem.pageFree` | `(ptr: RawMut<uint8>, bytes: int): bool` | Release anonymous pages from mem.pageAlloc; returns false on OS failure |\n"
+            "| `mem.pageProtect` | `(ptr: RawMut<uint8>, bytes: int, prot: int): bool` | Change anonymous page protection bits; returns false on OS failure |\n"
             "| `mem.prefetch` | `(ptr: RawPtr<uint8>, rw: int): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
             "| `mem.realloc` | `(ptr: RawMut<uint8>, n: int): RawMut<uint8>` | Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM |\n"
-            "| `mem.rotateLeft` | `(x: int, n: int): int` | Rotate the 64-bit value left by n bits (n mod 64) |\n"
-            "| `mem.rotateRight` | `(x: int, n: int): int` | Rotate the 64-bit value right by n bits (n mod 64) |\n"
             "| `mem.set` | `(dst: RawMut<uint8>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
-            "| `mem.subOverflows` | `(a: int, b: int): bool` | Whether signed 64-bit subtraction of a and b overflows |\n"
-            "| `mem.subWrapping` | `(a: int, b: int): int` | Two's-complement wrapping subtraction (wraps mod 2^64) |\n"
-            "| `mem.trailingZeros` | `(x: int): int` | Count of trailing zero bits (0 -> 64) |\n"
             "| `mem.volatileLoad` | `(ptr: RawPtr<uint8>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "| `mem.volatileStore` | `(ptr: RawMut<uint8>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "",
@@ -3905,6 +3862,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `os.sep` | `: string` | Platform path separator |\n"
             "| `os.setenv` | `(name: string, value: string): bool` | Set environment variable |\n"
             "| `os.sleep` | `(ms: int): ()` | Sleep for milliseconds |\n"
+            "| `os.spawn` | `(program: string, args: Array<string>): ExecResult?` | Execute a program without a shell (injection-safe argv) |\n"
             "| `os.tmpdir` | `(): string` | Get temporary directory path |\n"
             "| `os.totalMemory` | `(): int` | Get total system memory in bytes |\n"
             "| `os.uid` | `(): int` | Get user ID |\n"

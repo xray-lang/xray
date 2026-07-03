@@ -25,7 +25,7 @@ fn test_hex_encode_special() {
 
 @test
 fn test_hex_decode_bytes() {
-    let bytes = encoding.hexDecode("48656c6c6f")
+    let bytes = encoding.hexDecode("48656c6c6f")!
     assert_eq(bytes.length, 5)
     assert_eq(bytes[0], 0x48)  // 'H'
     assert_eq(bytes[4], 0x6f)  // 'o'
@@ -44,7 +44,7 @@ fn test_hex_decode_invalid() {
 
 @test
 fn test_hex_decode_empty() {
-    let bytes = encoding.hexDecode("")
+    let bytes = encoding.hexDecode("")!
     assert_eq(bytes.length, 0)
 }
 

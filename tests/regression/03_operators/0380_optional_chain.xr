@@ -50,7 +50,7 @@ fn test_optional_index_access() {
         items: [1, 2, 3]
     }
     let items = data?.items
-    assert_eq(items[0], 1)
+    assert_eq(items![0], 1)
 }
 
 @test
@@ -60,7 +60,7 @@ fn test_optional_array_chain() {
     }
     let vals = data?.values
     assert_eq(vals != null, true)
-    assert_eq(vals[1], 20)
+    assert_eq(vals![1], 20)
 }
 
 // ===== ?[ optional index access =====

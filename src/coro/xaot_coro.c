@@ -3042,6 +3042,10 @@ XrValue xr_aot_channel_new(const XrAotContext *ctx, int64_t buffer_size) {
     return ch ? xr_value_from_channel(ch) : XR_NULL_VAL;
 }
 
+/* Synchronous (non-coroutine) AOT functions construct channels through
+ * xr_aot_channel_new(&xrt_global_ctx, ...) — the same process-wide context
+ * the coroutine fallback path uses — so no worker-TLS variant is needed. */
+
 XrValue xr_aot_chan_try_send_transfer(const XrAotContext *ctx, XrValue channel_value,
                                       XrValue send_value, uint8_t transfer_mode) {
     if (!ctx || !xr_value_is_channel(channel_value))
@@ -3082,11 +3086,22 @@ static bool aot_context_from_channel_value(XrValue channel_value, XrAotContext *
     if (!out || !xr_value_is_channel(channel_value))
         return false;
     XrChannel *ch = xr_value_to_channel(channel_value);
-    out->runtime = NULL;
     out->vm_host_ops = NULL;
     out->vm_host = ch ? ch->vm_host_isolate : NULL;
-    out->coro = NULL;
-    out->worker = NULL;
+    /* Standalone AOT: the channel carries no VM host, so recover the
+     * process-wide runtime — the *_sync helpers still need the builtin table
+     * (Recv/SendResult ADT enum types) to build their results. VM-hosted
+     * channels keep runtime NULL so xr_aot_get_builtin routes to the host. */
+    out->runtime = out->vm_host ? NULL : xr_aot_runtime_current();
+    /* Recover the running coroutine from the worker TLS so ADT results
+     * (Recv.Value/...) are allocated on its heap and released through the
+     * normal RC path. A NULL coro would fall back to the fixed_heap, whose
+     * nodes must never be freed by xrt_release (teardown UAF). */
+    XrWorker *worker = xr_current_worker();
+    out->coro = (worker && worker->m)
+                    ? atomic_load_explicit(&worker->m->current_coro, memory_order_relaxed)
+                    : NULL;
+    out->worker = worker;
     return true;
 }
 

@@ -13,8 +13,8 @@ fn test_decode_basic() {
     let json = Json.parse("{\"name\": \"Alice\", \"age\": 30}")
     let user = Json.decode<User>(json)
     assert(user != null)
-    assert_eq(user.name, "Alice")
-    assert_eq(user.age, 30)
+    assert_eq(user!.name, "Alice")
+    assert_eq(user!.age, 30)
 }
 
 @test
@@ -31,7 +31,7 @@ fn test_decode_wrong_type() {
     let wrong = Json.parse("{\"name\": 123, \"age\": 30}")
     let result = Json.decode<User>(wrong)
     assert(result != null)
-    assert_eq(result.name, 123)
+    assert_eq(result!.name, 123)
 }
 
 @test
@@ -39,8 +39,8 @@ fn test_decode_extra_fields() {
     let extra = Json.parse("{\"name\": \"Carol\", \"age\": 25, \"email\": \"c@test.com\"}")
     let user = Json.decode<User>(extra)
     assert(user != null)
-    assert_eq(user.name, "Carol")
-    assert_eq(user.age, 25)
+    assert_eq(user!.name, "Carol")
+    assert_eq(user!.age, 25)
 }
 
 @test
@@ -58,9 +58,9 @@ fn test_decode_bool_field() {
     let json = Json.parse("{\"host\": \"localhost\", \"port\": 8080, \"debug\": true}")
     let cfg = Json.decode<Config>(json)
     assert(cfg != null)
-    assert_eq(cfg.host, "localhost")
-    assert_eq(cfg.port, 8080)
-    assert_eq(cfg.debug, true)
+    assert_eq(cfg!.host, "localhost")
+    assert_eq(cfg!.port, 8080)
+    assert_eq(cfg!.debug, true)
 }
 
 type Point = { x: float, y: float }
@@ -70,8 +70,8 @@ fn test_decode_float_fields() {
     let json = Json.parse("{\"x\": 1.5, \"y\": 2.7}")
     let pt = Json.decode<Point>(json)
     assert(pt != null)
-    assert_eq(pt.x, 1.5)
-    assert_eq(pt.y, 2.7)
+    assert_eq(pt!.x, 1.5)
+    assert_eq(pt!.y, 2.7)
 }
 
 @test

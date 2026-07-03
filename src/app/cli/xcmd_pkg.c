@@ -249,7 +249,8 @@ static int cmd_pkg_add(int argc, char **argv) {
     const char *installed_ver = NULL;
     if (home && info->version_count > 0) {
         installed_ver = info->versions[0];
-        if (xr_pkg_client_install(owner, name, installed_ver, home_packages_dir(home))) {
+        if (xr_pkg_client_install(owner, name, installed_ver, home_packages_dir(home), NULL, NULL,
+                                  0)) {
             printf("Installed %s@%s\n", package, installed_ver);
         } else {
             fprintf(stderr, "Install failed, adding to xray.toml anyway\n");
@@ -549,12 +550,27 @@ static int cmd_pkg_install(int argc, char **argv) {
             continue;
         }
 
-        /* Download + extract */
+        /* Download + extract. Verify against the locked checksum if we have one
+         * (tamper detection); otherwise record the computed checksum (TOFU). */
         printf("  %s@%s — downloading...\n", dep_name, target_version);
-        if (!xr_pkg_client_install(owner, name, target_version, home_packages_dir(home))) {
+        const char *expected_checksum = (locked && locked->checksum) ? locked->checksum : NULL;
+        char computed_checksum[80];
+        computed_checksum[0] = '\0';
+        if (!xr_pkg_client_install(owner, name, target_version, home_packages_dir(home),
+                                   expected_checksum, computed_checksum,
+                                   sizeof(computed_checksum))) {
             fprintf(stderr, "  %s@%s — install failed\n", dep_name, target_version);
             failed++;
             continue;
+        }
+        if (computed_checksum[0] && (!expected_checksum || !expected_checksum[0])) {
+            /* Trust-on-first-use: persist the checksum so future installs of
+             * this locked version detect tampering. */
+            char resolved_url[512];
+            snprintf(resolved_url, sizeof(resolved_url), "%s/api/packages/%s/%s/%s/download",
+                     PKG_REGISTRY_URL, owner, name, target_version);
+            xr_lockfile_add_package(lockfile, dep_name, target_version, resolved_url,
+                                    computed_checksum);
         }
 
         /* Detect native and build */
