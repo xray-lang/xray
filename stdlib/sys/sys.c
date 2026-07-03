@@ -541,6 +541,37 @@ static XrValue sys_once_call(XrVMRuntime *isolate, XrValue self, XrValue *args, 
     return xr_null();
 }
 
+static XrValue sys_cpu_count(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    return xr_int((int64_t) xr_os_cpu_count());
+}
+
+static XrValue sys_thread_yield(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    xr_thread_yield();
+    return xr_null();
+}
+
+static XrValue sys_sleep_ms(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    int64_t ms = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
+    if (ms > 0)
+        xr_thread_sleep_ms((unsigned int) ms);
+    return xr_null();
+}
+
+static XrValue sys_pin_to_cpu(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    int64_t cpu = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
+    if (cpu < 0)
+        return xr_bool(false);
+    return xr_bool(xr_thread_pin_to_cpu((unsigned int) cpu) == 0);
+}
+
 #define XR_STDLIB_VM_BIND_CLASS_CONDVAR 1
 #define XR_STDLIB_VM_BIND_CLASS_BARRIER 1
 #define XR_STDLIB_VM_BIND_CLASS_ONCE 1

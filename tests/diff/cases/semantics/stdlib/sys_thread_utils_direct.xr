@@ -1,0 +1,9 @@
+// sys OS-thread utilities: deterministic, single-threaded coverage for the
+// public surface backed by os_thread.h.
+import sys
+
+print(sys.cpuCount() >= 1)
+sys.threadYield()
+sys.sleepMs(0)
+print(sys.pinToCpu(-1))
+print("sys-thread-utils")

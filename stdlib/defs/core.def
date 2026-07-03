@@ -1105,6 +1105,54 @@ module sys {
     layer: "system"
   }
 
+  fn cpuCount {
+    signature: "(): int"
+    doc: "Return the number of CPUs available to OS-thread work"
+    vm: "sys_cpu_count"
+    aot: "xrt_sys_cpu_count"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn threadYield {
+    signature: "(): ()"
+    doc: "Yield the current OS thread to another runnable OS thread"
+    vm: "sys_thread_yield"
+    aot: "xrt_sys_thread_yield"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn sleepMs {
+    signature: "(ms: int): ()"
+    doc: "Block the current OS thread for at least ms milliseconds"
+    vm: "sys_sleep_ms"
+    aot: "xrt_sys_sleep_ms"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn pinToCpu {
+    signature: "(cpu: int): bool"
+    doc: "Best-effort pin of the current OS thread to a CPU index"
+    vm: "sys_pin_to_cpu"
+    aot: "xrt_sys_pin_to_cpu"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
   type_method Mutex.lock {
     signature: "(): ()"
     receiver: "Mutex"

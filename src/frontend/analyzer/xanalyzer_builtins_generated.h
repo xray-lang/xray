@@ -534,8 +534,12 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"Condvar", "(): Condvar", "Create an OS-domain condition variable", true, false},
     {"Barrier", "(parties: int): Barrier", "Create a reusable OS-domain barrier", true, false},
     {"Once", "(): Once", "Create an OS-domain once gate", true, false},
+    {"cpuCount", "(): int", "Return the number of CPUs available to OS-thread work", true, false},
+    {"threadYield", "(): ()", "Yield the current OS thread to another runnable OS thread", true, false},
+    {"sleepMs", "(ms: int): ()", "Block the current OS thread for at least ms milliseconds", true, false},
+    {"pinToCpu", "(cpu: int): bool", "Best-effort pin of the current OS thread to a CPU index", true, false},
 };
-#define GEN_SYS_FUNCTION_COUNT 5
+#define GEN_SYS_FUNCTION_COUNT 9
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {

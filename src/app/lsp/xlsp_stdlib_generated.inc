@@ -439,8 +439,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"Condvar", XLSP_SYM_FUNCTION, "fn(): Condvar", "Create an OS-domain condition variable", NULL, 0},
     {"Barrier", XLSP_SYM_FUNCTION, "fn(parties: int): Barrier", "Create a reusable OS-domain barrier", NULL, 0},
     {"Once", XLSP_SYM_FUNCTION, "fn(): Once", "Create an OS-domain once gate", NULL, 0},
+    {"cpuCount", XLSP_SYM_FUNCTION, "fn(): int", "Return the number of CPUs available to OS-thread work", NULL, 0},
+    {"threadYield", XLSP_SYM_FUNCTION, "fn(): ()", "Yield the current OS thread to another runnable OS thread", NULL, 0},
+    {"sleepMs", XLSP_SYM_FUNCTION, "fn(ms: int): ()", "Block the current OS thread for at least ms milliseconds", NULL, 0},
+    {"pinToCpu", XLSP_SYM_FUNCTION, "fn(cpu: int): bool", "Best-effort pin of the current OS thread to a CPU index", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 5
+#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 9
 
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {

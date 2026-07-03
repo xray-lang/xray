@@ -386,6 +386,10 @@ static void xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "Condvar", sys_condvar_new);
     XRS_EXPORT(module, isolate, "Barrier", sys_barrier_new);
     XRS_EXPORT(module, isolate, "Once", sys_once_new);
+    XRS_EXPORT(module, isolate, "cpuCount", sys_cpu_count);
+    XRS_EXPORT(module, isolate, "threadYield", sys_thread_yield);
+    XRS_EXPORT(module, isolate, "sleepMs", sys_sleep_ms);
+    XRS_EXPORT(module, isolate, "pinToCpu", sys_pin_to_cpu);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_SYS */
 

@@ -17,7 +17,10 @@
 #include "../os/os_thread.h"
 #include <stdatomic.h>
 #if !defined(XR_OS_WINDOWS)
+#include <errno.h>
+#include <sched.h>
 #include <time.h>
+#include <unistd.h>
 #endif
 
 static inline XrValue xrt_closure_call0(XrValue callback);
@@ -76,6 +79,10 @@ static XR_THREAD_LOCAL XrValue xrt_sys_once_callback = {.tag = XR_TAG_NULL};
 
 static inline void xrt_sys_once_trampoline(void) {
     (void) xrt_closure_call0(xrt_sys_once_callback);
+}
+
+static inline int64_t xrt_sys_int_arg(XrValue v) {
+    return v.tag == XR_TAG_I64 ? v.i : 0;
 }
 
 #if defined(XR_OS_WINDOWS)
@@ -361,6 +368,66 @@ static inline XrValue xrt_sys_once_new(void) {
     xrt_sys_once_init(&once->once);
     xrt_arc_mark_builtin(once, XRT_ARC_KIND_SYS_ONCE);
     return xrt_sys_once_box(once);
+}
+
+static inline XrValue xrt_sys_cpu_count(void) {
+#if defined(XR_OS_WINDOWS)
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    return XR_FROM_INT(si.dwNumberOfProcessors > 0 ? (int64_t) si.dwNumberOfProcessors : 1);
+#elif defined(_SC_NPROCESSORS_ONLN)
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    return XR_FROM_INT(n > 0 ? (int64_t) n : 1);
+#else
+    return XR_FROM_INT(1);
+#endif
+}
+
+static inline XrValue xrt_sys_thread_yield(void) {
+#if defined(XR_OS_WINDOWS)
+    SwitchToThread();
+#else
+    sched_yield();
+#endif
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_sys_sleep_ms(XrValue ms_value) {
+    int64_t ms = xrt_sys_int_arg(ms_value);
+    if (ms <= 0)
+        return XR_NULL_VAL;
+#if defined(XR_OS_WINDOWS)
+    Sleep((DWORD) ms);
+#else
+    struct timespec req;
+    req.tv_sec = (time_t) (ms / 1000);
+    req.tv_nsec = (long) (ms % 1000) * 1000000L;
+    while (nanosleep(&req, &req) == -1 && errno == EINTR) {
+    }
+#endif
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_sys_pin_to_cpu(XrValue cpu_value) {
+    int64_t cpu = xrt_sys_int_arg(cpu_value);
+    if (cpu < 0)
+        return XR_FROM_BOOL(false);
+#if defined(XR_OS_WINDOWS)
+    XrValue count_value = xrt_sys_cpu_count();
+    int64_t count = count_value.tag == XR_TAG_I64 && count_value.i > 0 ? count_value.i : 1;
+    DWORD_PTR mask = ((DWORD_PTR) 1) << ((unsigned int) cpu % (unsigned int) count);
+    return XR_FROM_BOOL(SetThreadAffinityMask(GetCurrentThread(), mask) != 0);
+#elif defined(XR_OS_LINUX) && defined(CPU_ZERO) && defined(CPU_SET)
+    XrValue count_value = xrt_sys_cpu_count();
+    int64_t count = count_value.tag == XR_TAG_I64 && count_value.i > 0 ? count_value.i : 1;
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    CPU_SET((int) ((unsigned int) cpu % (unsigned int) count), &set);
+    return XR_FROM_BOOL(pthread_setaffinity_np(pthread_self(), sizeof(set), &set) == 0);
+#else
+    (void) cpu;
+    return XR_FROM_BOOL(false);
+#endif
 }
 
 static inline void xrt_sys_mutex_destroy_builtin(void *obj) {
