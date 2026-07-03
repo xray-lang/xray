@@ -126,6 +126,7 @@
     _(BNOT, FMT_AB, KOP_AB_UNARY, "R[A] = ~R[B]")                                                  \
     _(SHL, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B] << R[C]")                                            \
     _(SHR, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B] >> R[C]")                                            \
+    _(SHR_U, FMT_ABC, KOP_ABC_BIN, "R[A] = (uint64)R[B] >> R[C]")                                  \
     _(EQ, FMT_AB_IMM, KOP_AB_TEST, "if (R[A] == R[B]) != k then PC++")                             \
     _(EQK, FMT_AB_IMM, KOP_AB_TEST_K, "if (R[A] == K[B]) != k then PC++")                          \
     _(EQI, FMT_AsB_C, KOP_AB_TEST_S, "if (R[A] == sB) != k then PC++")                             \

@@ -67,6 +67,14 @@ static inline int64_t xr_i64_shr_wrap(int64_t a, int64_t b) {
     return a >> ((uint64_t) b & 63);
 }
 
+/* Logical (zero-extending) right shift for statically-unsigned lhs (uint64
+ * is the only width where it differs from the arithmetic shift above: the
+ * narrower unsigned payloads are already zero-extended in the i64 value
+ * model). Shift count taken mod 64, same as the arithmetic variant. */
+static inline int64_t xr_i64_shr_u_wrap(int64_t a, int64_t b) {
+    return (int64_t) ((uint64_t) a >> ((uint64_t) b & 63));
+}
+
 static inline bool xr_i64_checked_add(int64_t a, int64_t b, int64_t *out) {
 #if XR_HAS_BUILTIN(__builtin_add_overflow) || defined(__GNUC__) || defined(__clang__)
     return !__builtin_add_overflow(a, b, out);

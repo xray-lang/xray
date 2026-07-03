@@ -123,4 +123,11 @@
 
 #include "xvm_template_shift_gen.inc.c"
 
+/* OP_SHR_U: logical (zero-extending) right shift. Emitted by xi_emit_arith
+ * for XI_SHR whose lhs static type is an unsigned integer — uint64 payloads
+ * occupy all 64 bits, so the arithmetic OP_SHR would sign-extend and diverge
+ * from AOT/C. Not part of the generated shift template because there is no
+ * distinct xi op: the split happens at bytecode emission on the static type. */
+XVM_TEMPLATE_SHIFT_CASE(OP_SHR_U, xr_int_shr_u_wrap, xr_bigint_shr)
+
 #undef XVM_TEMPLATE_SHIFT_CASE

@@ -323,7 +323,7 @@ static void block_remove_value(XiBlock *blk, uint32_t idx) {
  * INT64_MIN / -1 and INT64_MIN %% -1 are special-cased to match the
  * runtime VM and AOT, which also produce INT64_MIN / 0 respectively.
  */
-static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) {
+static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, bool shr_unsigned, int64_t *result) {
     switch (op) {
         case XI_ADD:
             *result = xr_i64_add_wrap(a, b);
@@ -362,8 +362,10 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) 
         case XI_SHR:
             /* Arithmetic right shift on negative values is
              * implementation-defined in C99/C11 but well-defined on every
-             * compiler xray supports (GCC, Clang, MSVC all sign-extend). */
-            *result = xr_i64_shr_wrap(a, b);
+             * compiler xray supports (GCC, Clang, MSVC all sign-extend).
+             * Statically-unsigned lhs folds with the logical shift instead,
+             * matching OP_SHR_U / xrt_i64_shr_u. */
+            *result = shr_unsigned ? xr_i64_shr_u_wrap(a, b) : xr_i64_shr_wrap(a, b);
             return true;
         default:
             return false;
@@ -640,7 +642,9 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             int64_t lhs_i = 0, rhs_i = 0;
             if (const_int_value(lhs, &lhs_i) && const_int_value(rhs, &rhs_i)) {
                 int64_t result;
-                if (fold_int_binary(v->op, lhs_i, rhs_i, &result)) {
+                bool shr_unsigned = v->op == XI_SHR && opt_type_is_int_like(lhs->type) &&
+                                    opt_type_is_unsigned_int(lhs->type);
+                if (fold_int_binary(v->op, lhs_i, rhs_i, shr_unsigned, &result)) {
                     rewrite_to_const_int(v, result);
                     chg.values_changed = true;
                     continue;

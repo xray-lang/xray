@@ -273,6 +273,14 @@ static bool sccp_compare_uses_unsigned(const XiValue *v) {
            (sccp_type_is_unsigned_int(left) || sccp_type_is_unsigned_int(right));
 }
 
+/* XI_SHR with a statically-unsigned lhs is a logical shift (OP_SHR_U). */
+static bool sccp_shr_uses_unsigned(const XiValue *v) {
+    if (!v || v->op != XI_SHR || v->nargs < 1)
+        return false;
+    const XrType *left = v->args[0] ? v->args[0]->type : NULL;
+    return sccp_type_is_int_like(left) && sccp_type_is_unsigned_int(left);
+}
+
 /* True if the cell carries integer range info (const or range). */
 static bool has_int_bounds(SccpCell c) {
     return c.kind == SCCP_CONST_INT || c.kind == SCCP_RANGE_INT;
@@ -359,7 +367,7 @@ static SccpCell eval_arith(uint16_t op, SccpCell a, SccpCell b) {
 }
 
 /* Bitwise / shift operations on integer cells. */
-static SccpCell eval_bitwise(uint16_t op, SccpCell a, SccpCell b) {
+static SccpCell eval_bitwise(uint16_t op, SccpCell a, SccpCell b, bool shr_unsigned) {
     if (!both_int(a, b))
         return sccp_bot();
     switch (op) {
@@ -376,9 +384,11 @@ static SccpCell eval_bitwise(uint16_t op, SccpCell a, SccpCell b) {
         case XI_SHR:
             /* Arithmetic shift (sign-extending), matching xi_opt fold and
              * codegen (SAR/ASR/SRA); a logical shift here would fold
-             * negative operands to the wrong value. */
+             * negative operands to the wrong value. Statically-unsigned lhs
+             * folds logically instead (OP_SHR_U / xrt_i64_shr_u). */
             if (b.ival >= 0 && b.ival < 64)
-                return sccp_int(a.ival >> b.ival);
+                return sccp_int(shr_unsigned ? (int64_t) ((uint64_t) a.ival >> b.ival)
+                                             : (a.ival >> b.ival));
             return sccp_bot();
         default:
             return sccp_bot();
@@ -531,7 +541,7 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
         if (is_compare_op(v->op))
             return eval_compare(v->op, a, b, sccp_compare_uses_unsigned(v));
         if (is_bitwise_op(v->op))
-            return eval_bitwise(v->op, a, b);
+            return eval_bitwise(v->op, a, b, sccp_shr_uses_unsigned(v));
         /* float32 arithmetic folds at single precision (operands and result
          * narrowed to float), mirroring the VM *_F32 opcodes and AOT codegen;
          * folding in double would round once and diverge from the runtime. */

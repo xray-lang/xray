@@ -96,6 +96,10 @@ static inline int64_t xrt_i64_shl(int64_t a, int64_t b) {
 static inline int64_t xrt_i64_shr(int64_t a, int64_t b) {
     return xr_i64_shr_wrap(a, b);
 }
+/* Logical right shift for statically-unsigned lhs (mirrors OP_SHR_U). */
+static inline int64_t xrt_i64_shr_u(int64_t a, int64_t b) {
+    return xr_i64_shr_u_wrap(a, b);
+}
 
 static inline XrValue xrt_div(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)

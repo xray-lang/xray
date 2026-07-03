@@ -358,6 +358,10 @@ static inline int64_t xrt_i64_shr(int64_t a, int64_t b) {
     return a >> ((uint64_t) b & 63);
 }
 
+static inline int64_t xrt_i64_shr_u(int64_t a, int64_t b) {
+    return (int64_t) ((uint64_t) a >> ((uint64_t) b & 63));
+}
+
 static inline double xrt_math_number(XrValue v) {
     if (XR_IS_FLOAT(v))
         return v.f;
