@@ -587,7 +587,9 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
             result_rep = xaot_value_storage_rep(step->to_rep);
         }
     }
-    return emit_conversion_prefix(out, call ? call->type : NULL, actual_rep, result_rep);
+    const XrType *ret_type =
+        (target && target->return_type) ? target->return_type : (call ? call->type : NULL);
+    return emit_conversion_prefix(out, ret_type, actual_rep, result_rep);
 }
 
 static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f,

@@ -3,10 +3,14 @@
 // This module intentionally exercises every export shape a migrated stdlib
 // module can use, so tests/diff can pin VM/AOT parity for each of them:
 //   * module-level functions (named import + namespace call)
+//   * module-level values/constants
 //   * variadic functions
+//   * exported functions that use closure/defer internally
 //   * a plain class, and functions constructing/consuming that class
-//   * a generic class with closure-taking methods
+//   * static methods and generic class methods with closure-taking bodies
 // Keep it tiny: it ships in every binary as the permanent compiler gate.
+
+let probeSeed = 148
 
 // --- module-level functions (gap B: slot_funcs direct call) ---
 
@@ -27,6 +31,27 @@ fn probeSum(...nums: int) -> int {
     return total
 }
 
+// --- closure + defer in exported module functions (T3.4 permanent guard) ---
+
+fn probeDeferValue(base: int) -> int {
+    let total = base
+    {
+        defer { total = total + 7 }
+        total = total + 1
+    }
+    return total
+}
+
+fn probeMakeAdder(base: int) -> (int) -> int {
+    return fn(v: int) -> int {
+        return base + v
+    }
+}
+
+fn probeApply(value: int, body: (int) -> int) -> int {
+    return body(value)
+}
+
 // --- class + functions using it (gap C: intra-module class/function mix) ---
 
 class ProbeBox {
@@ -40,6 +65,10 @@ class ProbeBox {
 
     describe() -> string {
         return this.label + ":" + this.count.toString()
+    }
+
+    static tagged(label: string, count: int) -> ProbeBox {
+        return ProbeBox("tag:" + label, count)
     }
 }
 
@@ -65,4 +94,38 @@ class ProbeCell<T> {
     }
 }
 
-export { probeAdd, probeConcat, probeSum, ProbeBox, probeMakeBox, probeReadBox, ProbeCell }
+class ProbeBag {
+    boxes: Array<ProbeBox>
+
+    constructor(boxes: Array<ProbeBox>) {
+        this.boxes = boxes
+    }
+
+    labels() -> string {
+        let out: Array<string> = []
+        for (let i = 0; i < this.boxes.length; i++) {
+            out.push(this.boxes[i].describe())
+        }
+        return out.join("|")
+    }
+}
+
+fn probeMakeBag() -> ProbeBag {
+    return ProbeBag([ProbeBox("a", 1), ProbeBox.tagged("b", 2)])
+}
+
+export {
+    probeSeed,
+    probeAdd,
+    probeConcat,
+    probeSum,
+    probeDeferValue,
+    probeMakeAdder,
+    probeApply,
+    ProbeBox,
+    probeMakeBox,
+    probeReadBox,
+    ProbeCell,
+    ProbeBag,
+    probeMakeBag
+}
