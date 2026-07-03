@@ -3287,6 +3287,18 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     v->line = (uint32_t) node->line;
                     return v;
                 }
+                if (strcmp(ma->name, "repeatFrom") == 0 && n == 3) {
+                    XiValue *v =
+                        xi_value_new(l->func, l->cur_block, XI_BYTES_SPAN_REPEAT, recv->type, 4);
+                    if (!v)
+                        return NULL;
+                    v->args[0] = recv;
+                    v->args[1] = arg_vals[0];
+                    v->args[2] = arg_vals[1];
+                    v->args[3] = arg_vals[2];
+                    v->line = (uint32_t) node->line;
+                    return v;
+                }
             }
         }
 

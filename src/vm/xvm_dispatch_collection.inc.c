@@ -1338,6 +1338,28 @@ vmcase(OP_BYTES_SPAN_COMMON_PREFIX) {
     vmbreak;
 }
 
+vmcase(OP_BYTES_SPAN_REPEAT) {
+    int a = GETARG_A(i);
+    void *data = NULL;
+    int64_t length = 0;
+    bool readonly = false;
+    VM_BYTESPAN_VIEW(R(a), data, length, readonly,
+                     "ByteSpan.repeatFrom(dstOffset, distance, count) expects ByteSpan");
+    if (readonly) {
+        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+    }
+    if (!XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) || !XR_IS_INT(R(a + 3))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "ByteSpan.repeatFrom(dstOffset, distance, count) expects integers");
+    }
+    if (!xr_array_core_bytes_repeat_from(data, length, XR_ELEM_U8, XR_TO_INT(R(a + 1)),
+                                         XR_TO_INT(R(a + 2)), XR_TO_INT(R(a + 3)))) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                         "ByteSpan.repeatFrom(dstOffset, distance, count) range out of bounds");
+    }
+    vmbreak;
+}
+
 #undef VM_BYTESPAN_VIEW
 
 /* FFI raw-pointer access. B (load) / A (store) holds an address-width int;

@@ -1280,6 +1280,7 @@ static bool xicgen_op_arg_keeps_span_noescape(XiCgenCtx *ctx, const XiFunc *curr
         case XI_BYTES_STORE_U32:
         case XI_BYTES_STORE_U64:
         case XI_BYTES_SPAN_FILL:
+        case XI_BYTES_SPAN_REPEAT:
         case XI_SPAN_AS_BYTES:
         case XI_SPAN_REINTERPRET:
             return arg_index == 0;
@@ -5535,6 +5536,22 @@ static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiF
     emit_span_ref_expr(out, v->args[1]);
     fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
+}
+
+static void xicgen_bytes_span_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                     const char *prefix) {
+    (void) f;
+    (void) prefix;
+    (void) ctx;
+    fprintf(out, "xrt_span_bytes_repeat_from_checked_raw(");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_I64);
+    fprintf(out, ")");
 }
 
 static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

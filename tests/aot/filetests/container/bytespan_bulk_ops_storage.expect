@@ -4,3 +4,4 @@ c_contains=xrt_span_bytes_fill_checked_raw(
 c_contains=xrt_span_bytes_copy_checked_raw(
 c_contains=xrt_span_bytes_compare_checked_raw(
 c_contains=xrt_span_bytes_common_prefix_checked_raw(
+c_contains=xrt_span_bytes_repeat_from_checked_raw(

@@ -392,6 +392,20 @@ static inline int64_t xrt_span_bytes_common_prefix_checked_raw(xr_span_t left, x
     return prefix;
 }
 
+static inline xr_span_t xrt_span_bytes_repeat_from_checked_raw(xr_span_t span, int64_t dst_offset,
+                                                               int64_t distance, int64_t count) {
+    if (span.elem_type != XR_ELEM_U8)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "ByteSpan.repeatFrom(dstOffset, distance, count) expects ByteSpan");
+    if (xrt_span_is_readonly(span))
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+    if (!xr_array_core_bytes_repeat_from(span.data, span.length, span.elem_type, dst_offset,
+                                         distance, count))
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        "ByteSpan.repeatFrom(dstOffset, distance, count) range out of bounds");
+    return span;
+}
+
 static inline xr_span_t xrt_byte_span_from_value(XrValue recv, const char *message) {
     if (!XR_IS_ARRAY(recv) || !recv.ptr)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, message);
