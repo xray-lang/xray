@@ -2568,6 +2568,39 @@ module runtime {
 }
 
 module mem {
+  native_class Buffer {
+    super_slot: "objectClass"
+    core_slot: "memBufferClass"
+    native_body: "g_mem_buffer_body_desc"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: "XR_BK_BUFFER"
+  }
+
+  class_method Buffer.get:length {
+    vm: "mem_buffer_length"
+    argc: 1
+  }
+
+  class_method Buffer.length {
+    vm: "mem_buffer_length"
+    argc: 0
+  }
+
+  class_method Buffer.asSpan {
+    vm: "mem_buffer_as_span"
+    argc: 0
+  }
+
+  class_method Buffer.ptrUnchecked {
+    vm: "mem_buffer_ptr_unchecked"
+    argc: 0
+  }
+
+  class_method Buffer.resize {
+    vm: "mem_buffer_resize"
+    argc: 1
+  }
+
   fn fence {
     signature: "(ordering: int): ()"
     doc: "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)"
@@ -2681,8 +2714,8 @@ module mem {
   }
 
   fn alloc {
-    signature: "(n: int): RawMut<uint8>"
-    doc: "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free"
+    signature: "(n: int): Buffer"
+    doc: "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped"
     vm: "mem_alloc"
     aot: "xrt_mem_alloc"
     argc: 1
@@ -2693,8 +2726,8 @@ module mem {
   }
 
   fn allocZeroed {
-    signature: "(n: int): RawMut<uint8>"
-    doc: "Allocate n zero-initialized bytes (calloc). NULL on OOM; pair with mem.free"
+    signature: "(n: int): Buffer"
+    doc: "Allocate n zero-initialized bytes as a managed Buffer"
     vm: "mem_alloc_zeroed"
     aot: "xrt_mem_alloc_zeroed"
     argc: 1
@@ -2705,36 +2738,12 @@ module mem {
   }
 
   fn allocAligned {
-    signature: "(n: int, align: int): RawMut<uint8>"
-    doc: "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure"
+    signature: "(n: int, align: int): Buffer"
+    doc: "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))"
     vm: "mem_alloc_aligned"
     aot: "xrt_mem_alloc_aligned"
     argc: 2
     arg_spec: "vv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn realloc {
-    signature: "(ptr: RawMut<uint8>, n: int): RawMut<uint8>"
-    doc: "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM"
-    vm: "mem_realloc"
-    aot: "xrt_mem_realloc"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn free {
-    signature: "(ptr: RawMut<uint8>): ()"
-    doc: "Free a buffer from mem.alloc/allocAligned/realloc"
-    vm: "mem_free"
-    aot: "xrt_mem_free"
-    argc: 1
-    arg_spec: "v"
     aot_direct: true
     link_object: false
     layer: "core"
@@ -2882,6 +2891,30 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+  }
+
+  type_method Buffer.length {
+    signature: "(): int"
+    receiver: "Buffer"
+    doc: "Return the buffer length in bytes"
+  }
+
+  type_method Buffer.asSpan {
+    signature: "(): ByteSpan"
+    receiver: "Buffer"
+    doc: "Borrow this buffer as a mutable ByteSpan value"
+  }
+
+  type_method Buffer.ptrUnchecked {
+    signature: "(): RawMut<uint8>"
+    receiver: "Buffer"
+    doc: "Return the underlying raw pointer; unsafe escape hatch"
+  }
+
+  type_method Buffer.resize {
+    signature: "(n: int): bool"
+    receiver: "Buffer"
+    doc: "Resize this buffer; returns false on allocation failure"
   }
 
 }

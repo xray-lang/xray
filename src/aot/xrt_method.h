@@ -18,6 +18,7 @@
 #include "xrt_value.h"
 #include "xrt_arc.h"   // xrt_str_concat, xrt_str_alloc
 #include "xrt_coll.h"  // xrt_array_t, xrt_map_t, xrt_strbuf_finish, xrt_array_push
+#include "xrt_mem.h"
 #include "xrt_array_hof.h"
 #include "xrt_range.h"
 #include "xrt_datetime.h"
@@ -56,6 +57,7 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
         case XR_TAG_SYS_BARRIER:
         case XR_TAG_SYS_ONCE:
         case XR_TAG_THREAD:
+        case XR_TAG_BUFFER:
         case XR_TAG_RANGE:
         case XR_TAG_ENUM:
         case XR_TAG_ITERATOR:
@@ -529,6 +531,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         return xrt_range_method_0(recv, sym);
     if (recv.tag == XR_TAG_DATETIME)
         return xrt_datetime_method_0(recv, sym);
+    if (recv.tag == XR_TAG_BUFFER)
+        return xrt_buffer_method_0(recv, sym);
     if (recv.tag == XR_TAG_SYS_MUTEX)
         return xrt_sys_mutex_method_0(recv, sym);
     if (recv.tag == XR_TAG_SYS_RWLOCK)
@@ -907,6 +911,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         return xrt_range_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_DATETIME)
         return xrt_datetime_method_1(recv, sym, arg0);
+    if (recv.tag == XR_TAG_BUFFER)
+        return xrt_buffer_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_SYS_CONDVAR)
         return xrt_sys_condvar_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_SYS_ONCE)

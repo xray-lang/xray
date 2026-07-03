@@ -122,8 +122,6 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"mem", "alloc", 1, "xrt_mem_alloc", "v", CG_AOT_RET_VALUE, NULL},
     {"mem", "allocZeroed", 1, "xrt_mem_alloc_zeroed", "v", CG_AOT_RET_VALUE, NULL},
     {"mem", "allocAligned", 2, "xrt_mem_alloc_aligned", "vv", CG_AOT_RET_VALUE, NULL},
-    {"mem", "realloc", 2, "xrt_mem_realloc", "vv", CG_AOT_RET_VALUE, NULL},
-    {"mem", "free", 1, "xrt_mem_free", "v", CG_AOT_RET_VALUE, NULL},
     {"mem", "pageAlloc", 1, "xrt_mem_page_alloc_default", "v", CG_AOT_RET_VALUE, NULL},
     {"mem", "pageAlloc", 2, "xrt_mem_page_alloc", "vv", CG_AOT_RET_VALUE, NULL},
     {"mem", "pageProtect", 3, "xrt_mem_page_protect", "vvv", CG_AOT_RET_VALUE, NULL},

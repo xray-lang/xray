@@ -280,6 +280,7 @@ static const NativeTypeMapping type_mappings[] = {
     {"Semaphore", XR_TID_SEMAPHORE, TYPE_NAME_SEMAPHORE},
     {"EventCount", XR_TID_EVENTCOUNT, TYPE_NAME_EVENTCOUNT},
     {"Thread", XR_TID_THREAD, TYPE_NAME_THREAD},
+    {"Buffer", XR_TID_BUFFER, TYPE_NAME_BUFFER},
 };
 
 #define NUM_TYPE_MAPPINGS (int) (sizeof(type_mappings) / sizeof(type_mappings[0]))
@@ -391,6 +392,11 @@ static void xa_native_types_init_once(void) {
     native_builtin_types[XR_TID_DATETIME].name = "DateTime";
     native_builtin_types[XR_TID_DATETIME].members = g_gen_datetime_members;
     native_builtin_types[XR_TID_DATETIME].member_count = GEN_DATETIME_MEMBER_COUNT;
+#endif
+#ifdef GEN_BUFFER_MEMBER_COUNT
+    native_builtin_types[XR_TID_BUFFER].name = TYPE_NAME_BUFFER;
+    native_builtin_types[XR_TID_BUFFER].members = g_gen_buffer_members;
+    native_builtin_types[XR_TID_BUFFER].member_count = GEN_BUFFER_MEMBER_COUNT;
 #endif
 
     native_types_initialized = true;

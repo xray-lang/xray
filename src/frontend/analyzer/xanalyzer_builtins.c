@@ -74,6 +74,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_EVENTCOUNT;
     if (xr_type_is_named_class(type, "Thread"))
         return XR_TID_THREAD;
+    if (xr_type_is_named_class(type, "Buffer"))
+        return XR_TID_BUFFER;
     if (xr_type_is_named_class(type, "DateTime"))
         return XR_TID_DATETIME;
     return XR_TID_NULL;
@@ -988,6 +990,10 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     } else if (base_len == 5 && strncmp(s, "Regex", 5) == 0) {
         type = xr_type_new_instance(X, NULL);
         type->instance.class_name = "Regex";
+    } else if (base_len == strlen(TYPE_NAME_BUFFER) &&
+               strncmp(s, TYPE_NAME_BUFFER, strlen(TYPE_NAME_BUFFER)) == 0) {
+        type = xr_type_new_instance(X, NULL);
+        type->instance.class_name = TYPE_NAME_BUFFER;
     } else if (base_len == 5 && strncmp(s, "Bytes", 5) == 0) {
         type = xr_type_new_bytes(X);
     } else if (base_len == strlen(TYPE_NAME_BYTESPAN) &&

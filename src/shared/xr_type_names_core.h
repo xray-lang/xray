@@ -67,6 +67,7 @@
 #define TYPE_NAME_STRUCT "struct"
 #define TYPE_NAME_JSON "Json"
 #define TYPE_NAME_STRINGBUILDER "StringBuilder"
+#define TYPE_NAME_BUFFER "Buffer"
 #define TYPE_NAME_UNKNOWN "unknown"
 #define TYPE_NAME_BIGINT "BigInt"
 #define TYPE_NAME_CLOSURE "closure"
@@ -169,8 +170,9 @@ typedef enum {
     XR_TID_SEMAPHORE,      /* 39 */
     XR_TID_EVENTCOUNT,     /* 40 */
     XR_TID_THREAD,         /* 41 */
-    XR_TID_WEAKMAP,        /* 42, analyzer-only */
-    XR_TID_WEAKSET,        /* 43, analyzer-only */
+    XR_TID_BUFFER,         /* 42 */
+    XR_TID_WEAKMAP,        /* 43, analyzer-only */
+    XR_TID_WEAKSET,        /* 44, analyzer-only */
     XR_TID_COUNT
 } XrTypeId;
 
@@ -266,6 +268,8 @@ static inline const char *xr_type_name_from_tid(XrTypeId tid) {
             return TYPE_NAME_EVENTCOUNT;
         case XR_TID_THREAD:
             return TYPE_NAME_THREAD;
+        case XR_TID_BUFFER:
+            return TYPE_NAME_BUFFER;
         case XR_TID_WEAKMAP:
             return TYPE_NAME_WEAKMAP;
         case XR_TID_WEAKSET:

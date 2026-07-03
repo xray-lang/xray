@@ -17,6 +17,7 @@
 #define XRT_MEM_H
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #ifdef _WIN32
@@ -34,6 +35,8 @@
 #endif
 
 #include "xrt_value.h"
+#include "xrt_arc.h"
+#include "xrt_coll.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_sync_core.h"
@@ -45,6 +48,128 @@
 
 static inline int64_t xrt_mem_int_arg(XrValue v) {
     return XR_IS_INT(v) ? XR_TO_INT(v) : 0;
+}
+
+static inline int xrt_buffer_is(XrValue v) {
+    return v.tag == XR_TAG_BUFFER && v.ptr != NULL;
+}
+
+static inline xrt_buffer_object_t *xrt_buffer_ptr(XrValue v) {
+    return xrt_buffer_is(v) ? (xrt_buffer_object_t *) v.ptr : NULL;
+}
+
+static inline XrValue xrt_buffer_box(xrt_buffer_object_t *buf) {
+    return buf ? xr_mkptr(buf, XR_TAG_BUFFER) : XR_NULL_VAL;
+}
+
+static inline void *xrt_buffer_alloc_aligned(size_t size, size_t align) {
+    if (align == 0)
+        return XRT_MALLOC(size);
+    if (align < sizeof(void *) || (align & (align - 1u)) != 0) {
+        fprintf(stderr, "mem.allocAligned: align must be a power of two >= sizeof(void*)\n");
+        abort();
+    }
+#if defined(XRT_USE_XR_MALLOC)
+    return xr_malloc_aligned(size, align);
+#elif defined(_WIN32)
+    return _aligned_malloc(size, align);
+#else
+    void *p = NULL;
+    if (posix_memalign(&p, align, size) != 0)
+        return NULL;
+    return p;
+#endif
+}
+
+static inline XrValue xrt_buffer_new(int64_t length, int zeroed, size_t align) {
+    if (length < 0)
+        length = 0;
+    xrt_buffer_object_t *buf = (xrt_buffer_object_t *) xrt_arc_alloc(sizeof(*buf));
+    buf->data = NULL;
+    buf->length = length;
+    buf->align = align;
+    if (length > 0) {
+        size_t size = (size_t) length;
+        buf->data = align ? xrt_buffer_alloc_aligned(size, align)
+                          : (zeroed ? XRT_CALLOC(1, size) : XRT_MALLOC(size));
+        if (!buf->data) {
+            fprintf(stderr, "mem.alloc: out of memory\n");
+            abort();
+        }
+        if (zeroed && align)
+            memset(buf->data, 0, size);
+    }
+    xrt_arc_mark_builtin(buf, XRT_ARC_KIND_BUFFER);
+    return xrt_buffer_box(buf);
+}
+
+static inline xr_span_t xrt_buffer_as_span(XrValue value) {
+    xrt_buffer_object_t *buf = xrt_buffer_ptr(value);
+    if (!buf)
+        return xrt_span_empty();
+    xr_span_t out = {0};
+    out.data = buf->data;
+    out.length = buf->length;
+    out.guard = buf;
+    out.elem_type = XR_ELEM_U8;
+    out.elem_size = 1;
+    out.elem_tid = 0;
+    out.contains_refs = 0;
+    out.flags = 0;
+    return out;
+}
+
+static inline XrValue xrt_buffer_ptr_unchecked(XrValue value) {
+    xrt_buffer_object_t *buf = xrt_buffer_ptr(value);
+    return xr_mkptr(buf ? buf->data : NULL, XR_TAG_PTR);
+}
+
+static inline XrValue xrt_buffer_resize(XrValue value, XrValue size_value) {
+    xrt_buffer_object_t *buf = xrt_buffer_ptr(value);
+    int64_t new_len = xrt_mem_int_arg(size_value);
+    if (!buf || new_len < 0)
+        return XR_FALSE_VAL;
+    if (new_len == 0) {
+        xrt_buffer_free_data(buf->data, buf->align);
+        buf->data = NULL;
+        buf->length = 0;
+        buf->align = 0;
+        return XR_TRUE_VAL;
+    }
+    if (buf->align) {
+        void *new_data = xrt_buffer_alloc_aligned((size_t) new_len, buf->align);
+        if (!new_data)
+            return XR_FALSE_VAL;
+        size_t copy = (size_t) ((buf->length < new_len) ? buf->length : new_len);
+        if (copy > 0 && buf->data)
+            memcpy(new_data, buf->data, copy);
+        xrt_buffer_free_data(buf->data, buf->align);
+        buf->data = new_data;
+    } else {
+        void *new_data = XRT_REALLOC(buf->data, (size_t) new_len);
+        if (!new_data)
+            return XR_FALSE_VAL;
+        buf->data = new_data;
+    }
+    buf->length = new_len;
+    return XR_TRUE_VAL;
+}
+
+static inline XrValue xrt_buffer_method_0(XrValue recv, int sym) {
+    xrt_buffer_object_t *buf = xrt_buffer_ptr(recv);
+    if (!buf)
+        return XR_NULL_VAL;
+    if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
+        return XR_FROM_INT(buf->length);
+    if (sym == XRT_SYM_PTR_UNCHECKED)
+        return xrt_buffer_ptr_unchecked(recv);
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_buffer_method_1(XrValue recv, int sym, XrValue arg0) {
+    if (sym == XRT_SYM_RESIZE)
+        return xrt_buffer_resize(recv, arg0);
+    return XR_NULL_VAL;
 }
 
 /* Bit intrinsics + wrapping/overflow arithmetic moved to `int` methods
@@ -123,37 +248,17 @@ static inline XrValue xrt_mem_cache_line_size(void) {
     return XR_FROM_INT(64);
 }
 
-/* Allocation face (mem.alloc/allocAligned/realloc/free). Returns a raw pointer
- * boxed as a tagged value; the cgen converts TAGGED->RAWPTR (extracting .ptr)
- * at the call's RawMut/RawPtr result rep. The VM (mem.c) returns the address as
- * an int (its raw-pointer representation). Buffers are user-managed: pair with
- * mem.free. NULL on OOM (isNull() testable). */
+/* Managed allocation face (mem.alloc/allocZeroed/allocAligned). */
 static inline XrValue xrt_mem_alloc(XrValue n) {
-    return xr_mkptr(malloc((size_t) xrt_mem_int_arg(n)), XR_TAG_PTR);
+    return xrt_buffer_new(xrt_mem_int_arg(n), 0, 0);
 }
 
 static inline XrValue xrt_mem_alloc_zeroed(XrValue n) {
-    return xr_mkptr(calloc(1, (size_t) xrt_mem_int_arg(n)), XR_TAG_PTR);
+    return xrt_buffer_new(xrt_mem_int_arg(n), 1, 0);
 }
 
 static inline XrValue xrt_mem_alloc_aligned(XrValue n, XrValue align) {
-    size_t a = (size_t) xrt_mem_int_arg(align);
-    size_t sz = (size_t) xrt_mem_int_arg(n);
-    void *p = NULL;
-    if (a >= sizeof(void *) && (a & (a - 1)) == 0) {
-        if (posix_memalign(&p, a, sz) != 0)
-            p = NULL;
-    }
-    return xr_mkptr(p, XR_TAG_PTR);
-}
-
-static inline XrValue xrt_mem_realloc(XrValue ptr, XrValue n) {
-    return xr_mkptr(realloc(ptr.ptr, (size_t) xrt_mem_int_arg(n)), XR_TAG_PTR);
-}
-
-static inline XrValue xrt_mem_free(XrValue ptr) {
-    free(ptr.ptr);
-    return XR_NULL_VAL;
+    return xrt_buffer_new(xrt_mem_int_arg(n), 0, (size_t) xrt_mem_int_arg(align));
 }
 
 #ifdef _WIN32

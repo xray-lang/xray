@@ -1,40 +1,45 @@
-// mem.alloc / allocAligned / realloc / free (task 147 §7.3). Buffers are
-// user-managed raw memory. The allocation returns a raw pointer: the VM boxes
-// the address as an int, AOT converts the tagged pointer to its RAWPTR rep —
-// both must observe identical data behind the pointer. Addresses themselves are
-// non-deterministic, so every assertion reads DATA or isNull().
+// mem.alloc / allocAligned / allocZeroed return managed Buffer handles.
+// Raw pointer access is only available through Buffer.ptrUnchecked().
 import mem
 
 let p = mem.alloc(16)
-print(p.isNull())
+print(p.length)
 
-unsafe { p[0] = 42 }
-unsafe { p[15] = 99 }
-unsafe { print(p[0]) }
-unsafe { print(p[15]) }
+let pp = unsafe { p.ptrUnchecked() }
+unsafe { pp[0] = 42 }
+unsafe { pp[15] = 99 }
+unsafe { print(pp[0]) }
+unsafe { print(pp[15]) }
+
+let ps = p.asSpan()
+print(ps.length)
+ps[0] = 43
+print(ps[0])
+unsafe { print(pp[0]) }
 
 // aligned allocation
 let q = mem.allocAligned(128, 64)
-print(q.isNull())
-mem.set(q, 5, 128)
-unsafe { print(q[0]) }
-unsafe { print(q[127]) }
+print(q.length)
+let qp = unsafe { q.ptrUnchecked() }
+mem.set(qp, 5, 128)
+unsafe { print(qp[0]) }
+unsafe { print(qp[127]) }
+print(mem.addressOf(qp) % 64)
 
 // zeroed allocation
 let z = mem.allocZeroed(8)
-print(z.isNull())
-unsafe { print(z[0]) }
-unsafe { print(z[7]) }
-unsafe { z[3] = 11 }
-unsafe { print(z[3]) }
+print(z.length)
+let zp = unsafe { z.ptrUnchecked() }
+unsafe { print(zp[0]) }
+unsafe { print(zp[7]) }
+unsafe { zp[3] = 11 }
+unsafe { print(zp[3]) }
 
-// realloc keeps existing bytes
-let r = mem.realloc(p, 64)
-print(r.isNull())
-unsafe { print(r[0]) }
-unsafe { print(r[15]) }
+// resize keeps existing bytes and updates the Buffer length.
+print(p.resize(64))
+print(p.length)
+let rp = unsafe { p.ptrUnchecked() }
+unsafe { print(rp[0]) }
+unsafe { print(rp[15]) }
 
-mem.free(r)
-mem.free(q)
-mem.free(z)
 print("ok")

@@ -1149,18 +1149,18 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "alloc",
-        .signature = "(n: int): RawMut<uint8>",
-        .summary = "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free",
+        .signature = "(n: int): Buffer",
+        .summary = "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped",
     },
     {
         .name = "allocAligned",
-        .signature = "(n: int, align: int): RawMut<uint8>",
-        .summary = "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure",
+        .signature = "(n: int, align: int): Buffer",
+        .summary = "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))",
     },
     {
         .name = "allocZeroed",
-        .signature = "(n: int): RawMut<uint8>",
-        .summary = "Allocate n zero-initialized bytes (calloc). NULL on OOM; pair with mem.free",
+        .signature = "(n: int): Buffer",
+        .summary = "Allocate n zero-initialized bytes as a managed Buffer",
     },
     {
         .name = "cacheFlush",
@@ -1191,11 +1191,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "fence",
         .signature = "(ordering: int): ()",
         .summary = "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)",
-    },
-    {
-        .name = "free",
-        .signature = "(ptr: RawMut<uint8>): ()",
-        .summary = "Free a buffer from mem.alloc/allocAligned/realloc",
     },
     {
         .name = "fromAddress",
@@ -1231,11 +1226,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "prefetch",
         .signature = "(ptr: RawPtr<uint8>, rw: int): ()",
         .summary = "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch",
-    },
-    {
-        .name = "realloc",
-        .signature = "(ptr: RawMut<uint8>, n: int): RawMut<uint8>",
-        .summary = "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM",
     },
     {
         .name = "set",
@@ -3715,16 +3705,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.PROT_READ` | `: int` | Readable page protection bit for mem.pageAlloc/pageProtect |\n"
             "| `mem.PROT_WRITE` | `: int` | Writable page protection bit for mem.pageAlloc/pageProtect |\n"
             "| `mem.addressOf` | `(ptr: RawPtr<uint8>): int` | Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress) |\n"
-            "| `mem.alloc` | `(n: int): RawMut<uint8>` | Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free |\n"
-            "| `mem.allocAligned` | `(n: int, align: int): RawMut<uint8>` | Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure |\n"
-            "| `mem.allocZeroed` | `(n: int): RawMut<uint8>` | Allocate n zero-initialized bytes (calloc). NULL on OOM; pair with mem.free |\n"
+            "| `mem.alloc` | `(n: int): Buffer` | Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped |\n"
+            "| `mem.allocAligned` | `(n: int, align: int): Buffer` | Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*)) |\n"
+            "| `mem.allocZeroed` | `(n: int): Buffer` | Allocate n zero-initialized bytes as a managed Buffer |\n"
             "| `mem.cacheFlush` | `(ptr: RawPtr<uint8>, n: int): ()` | Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
             "| `mem.cacheInvalidate` | `(ptr: RawPtr<uint8>, n: int): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
             "| `mem.cacheLineSize` | `(): int` | CPU cache line size in bytes |\n"
             "| `mem.compare` | `(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
             "| `mem.copy` | `(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
             "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
-            "| `mem.free` | `(ptr: RawMut<uint8>): ()` | Free a buffer from mem.alloc/allocAligned/realloc |\n"
             "| `mem.fromAddress` | `(addr: int): RawMut<uint8>` | Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.move` | `(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
             "| `mem.nontemporalStore` | `(ptr: RawMut<uint8>, v: int, size: int): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
@@ -3732,7 +3721,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.pageFree` | `(ptr: RawMut<uint8>, bytes: int): bool` | Release anonymous pages from mem.pageAlloc; returns false on OS failure |\n"
             "| `mem.pageProtect` | `(ptr: RawMut<uint8>, bytes: int, prot: int): bool` | Change anonymous page protection bits; returns false on OS failure |\n"
             "| `mem.prefetch` | `(ptr: RawPtr<uint8>, rw: int): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
-            "| `mem.realloc` | `(ptr: RawMut<uint8>, n: int): RawMut<uint8>` | Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM |\n"
             "| `mem.set` | `(dst: RawMut<uint8>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
             "| `mem.volatileLoad` | `(ptr: RawPtr<uint8>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "| `mem.volatileStore` | `(ptr: RawMut<uint8>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"

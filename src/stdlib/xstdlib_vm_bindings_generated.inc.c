@@ -254,8 +254,6 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "alloc", mem_alloc);
     XRS_EXPORT(module, isolate, "allocZeroed", mem_alloc_zeroed);
     XRS_EXPORT(module, isolate, "allocAligned", mem_alloc_aligned);
-    XRS_EXPORT(module, isolate, "realloc", mem_realloc);
-    XRS_EXPORT(module, isolate, "free", mem_free);
     XRS_EXPORT(module, isolate, "pageAlloc", mem_page_alloc);
     XRS_EXPORT(module, isolate, "pageProtect", mem_page_protect);
     XRS_EXPORT(module, isolate, "pageFree", mem_page_free);

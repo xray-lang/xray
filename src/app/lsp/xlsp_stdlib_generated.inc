@@ -277,11 +277,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"cacheInvalidate", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
     {"nontemporalStore", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", NULL, 0},
     {"cacheLineSize", XLSP_SYM_FUNCTION, "fn(): int", "CPU cache line size in bytes", NULL, 0},
-    {"alloc", XLSP_SYM_FUNCTION, "fn(n: int): RawMut<uint8>", "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free", NULL, 0},
-    {"allocZeroed", XLSP_SYM_FUNCTION, "fn(n: int): RawMut<uint8>", "Allocate n zero-initialized bytes (calloc). NULL on OOM; pair with mem.free", NULL, 0},
-    {"allocAligned", XLSP_SYM_FUNCTION, "fn(n: int, align: int): RawMut<uint8>", "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure", NULL, 0},
-    {"realloc", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, n: int): RawMut<uint8>", "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM", NULL, 0},
-    {"free", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>): ()", "Free a buffer from mem.alloc/allocAligned/realloc", NULL, 0},
+    {"alloc", XLSP_SYM_FUNCTION, "fn(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", NULL, 0},
+    {"allocZeroed", XLSP_SYM_FUNCTION, "fn(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", NULL, 0},
+    {"allocAligned", XLSP_SYM_FUNCTION, "fn(n: int, align: int): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", NULL, 0},
     {"pageAlloc", XLSP_SYM_FUNCTION, "fn(bytes: int, prot?: int): RawMut<uint8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", NULL, 0},
     {"pageProtect", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", NULL, 0},
     {"pageFree", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", NULL, 0},
@@ -298,7 +296,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"PROT_WRITE", XLSP_SYM_CONSTANT, "int", "Writable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_EXEC", XLSP_SYM_CONSTANT, "int", "Executable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 26
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 24
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {

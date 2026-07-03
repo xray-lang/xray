@@ -167,6 +167,29 @@ static void xr_stdlib_vm_register_logger_class_generated(XrVMRuntime *X) {
 }
 #endif  /* XR_STDLIB_VM_BIND_CLASS_LOGGER */
 
+#ifdef XR_STDLIB_VM_BIND_CLASS_BUFFER
+static void xr_stdlib_vm_register_buffer_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_buffer_class_generated: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_buffer_class_generated: core not initialised");
+    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_buffer_class_generated: super class not registered");
+    XR_DCHECK(core->memBufferClass == NULL, "xr_stdlib_vm_register_buffer_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "Buffer", core->objectClass);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_buffer_class_generated: builder alloc failed");
+    xr_class_builder_set_native_body(builder, &g_mem_buffer_body_desc);
+    xr_class_builder_add_method(builder, "get:length", mem_buffer_length, 1, 0);
+    xr_class_builder_add_method(builder, "length", mem_buffer_length, 0, 0);
+    xr_class_builder_add_method(builder, "asSpan", mem_buffer_as_span, 0, 0);
+    xr_class_builder_add_method(builder, "ptrUnchecked", mem_buffer_ptr_unchecked, 0, 0);
+    xr_class_builder_add_method(builder, "resize", mem_buffer_resize, 1, 0);
+    XrClass *cls = xr_class_builder_finalize(builder);
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_buffer_class_generated: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+    cls->builtin_kind = XR_BK_BUFFER;
+    core->memBufferClass = cls;
+}
+#endif  /* XR_STDLIB_VM_BIND_CLASS_BUFFER */
+
 #ifdef XR_STDLIB_VM_BIND_CLASS_NET_CONN
 static void xr_stdlib_vm_register_net_conn_class_generated(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "xr_stdlib_vm_register_net_conn_class_generated: NULL isolate");

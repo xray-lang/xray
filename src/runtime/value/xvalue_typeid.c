@@ -88,6 +88,8 @@ XrTypeId xr_value_typeid(XrValue v) {
                             return XR_TID_RANGE;
                         case XR_BK_DATETIME:
                             return XR_TID_DATETIME;
+                        case XR_BK_BUFFER:
+                            return XR_TID_BUFFER;
                         default:
                             break;
                     }
@@ -144,6 +146,7 @@ XR_DATADEF const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_SEMAPHORE] = TYPE_NAME_SEMAPHORE,
     [XR_TID_EVENTCOUNT] = TYPE_NAME_EVENTCOUNT,
     [XR_TID_THREAD] = TYPE_NAME_THREAD,
+    [XR_TID_BUFFER] = TYPE_NAME_BUFFER,
 };
 
 const char *xr_typeid_name(XrTypeId tid) {

@@ -4,23 +4,19 @@
 import mem
 
 let buf = mem.allocZeroed(16)
-if (buf.isNull()) {
-    print("alloc failed")
-} else {
-    mem.nontemporalStore(buf, 0x12, 1)
-    let p2 = unsafe { buf.offset(2) }
-    let p4 = unsafe { buf.offset(4) }
-    let p8 = unsafe { buf.offset(8) }
+let p = unsafe { buf.ptrUnchecked() }
+mem.nontemporalStore(p, 0x12, 1)
+let p2 = unsafe { p.offset(2) }
+let p4 = unsafe { p.offset(4) }
+let p8 = unsafe { p.offset(8) }
 
-    mem.nontemporalStore(p2, 0x3456, 2)
-    mem.nontemporalStore(p4, 0x789abcde, 4)
-    mem.nontemporalStore(p8, 0x102030405060708, 8)
+mem.nontemporalStore(p2, 0x3456, 2)
+mem.nontemporalStore(p4, 0x789abcde, 4)
+mem.nontemporalStore(p8, 0x102030405060708, 8)
 
-    print(mem.volatileLoad(buf, 1))
-    print(mem.volatileLoad(p2, 2))
-    print(mem.volatileLoad(p4, 4))
-    print(mem.volatileLoad(p8, 8))
+print(mem.volatileLoad(p, 1))
+print(mem.volatileLoad(p2, 2))
+print(mem.volatileLoad(p4, 4))
+print(mem.volatileLoad(p8, 8))
 
-    mem.free(buf)
-    print("nontemporal-stored")
-}
+print("nontemporal-stored")

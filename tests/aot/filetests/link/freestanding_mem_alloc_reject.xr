@@ -1,8 +1,7 @@
 import mem
 
-@c_export("xray_bad_realloc")
-fn xray_bad_realloc(n: int) -> int {
-    let p = mem.fromAddress(0)
-    let q = mem.realloc(p, n)
-    return mem.addressOf(q)
+@c_export("xray_bad_alloc")
+fn xray_bad_alloc(n: int) -> int {
+    let b = mem.alloc(n)
+    return b.length
 }

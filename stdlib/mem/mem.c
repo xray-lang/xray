@@ -5,13 +5,16 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * mem.c - Raw-memory capability module
+ * mem.c - Managed buffer + raw-memory capability module
  *
  * KEY CONCEPT:
- *   `mem` carries raw-memory capabilities only: memory fence, cache
+ *   `mem.alloc*` returns a managed Buffer handle whose native body owns the
+ *   allocated byte block and releases it on drop. Low-level callers can still
+ *   cross into the raw pointer world through Buffer.ptrUnchecked().
+ *
+ *   The module also carries raw-memory capabilities: memory fence, cache
  *   performance hints (prefetch/flush/invalidate/non-temporal store),
- *   explicit allocation (malloc/calloc/aligned/realloc/free), anonymous
- *   pages (mmap/VirtualAlloc), the numeric address bridge
+ *   anonymous pages (mmap/VirtualAlloc), the numeric address bridge
  *   (fromAddress/addressOf), bulk byte operations (copy/move/set/compare)
  *   and volatile sized load/store for MMIO.
  *
@@ -30,6 +33,10 @@
 #include "../../src/runtime/xexec_frame.h"
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/runtime/xisolate_api.h"
+#include "../../src/runtime/class/xclass.h"
+#include "../../src/runtime/class/xclass_builder.h"
+#include "../../src/runtime/class/xclass_system.h"
+#include "../../src/runtime/class/xinstance.h"
 #include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/shared/xr_sync_core.h"
 #include "../../src/os/os_mem.h"
@@ -75,6 +82,81 @@ static XrValue mem_prefetch(XrVMRuntime *isolate, XrValue *args, int argc) {
  */
 static inline void *mem_rawptr_arg(XrValue v) {
     return (void *) (uintptr_t) (intptr_t) (XR_IS_INT(v) ? XR_TO_INT(v) : 0);
+}
+
+typedef struct XrMemBufferBody {
+    void *data;
+    int64_t length;
+    XrSpanView span_cache;
+} XrMemBufferBody;
+
+static void mem_buffer_body_init(XrInstance *inst, void *body) {
+    (void) inst;
+    XrMemBufferBody *buf = (XrMemBufferBody *) body;
+    memset(buf, 0, sizeof(*buf));
+}
+
+static void mem_buffer_body_destroy(void *body) {
+    XrMemBufferBody *buf = (XrMemBufferBody *) body;
+    if (!buf)
+        return;
+    free(buf->data);
+    buf->data = NULL;
+    buf->length = 0;
+}
+
+static XrNativeBodyDesc g_mem_buffer_body_desc = {
+    .body_size = sizeof(XrMemBufferBody),
+    .body_align = 0,
+    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .init = mem_buffer_body_init,
+    .destroy = mem_buffer_body_destroy,
+    .deep_copy = NULL,
+    .to_shared = NULL,
+};
+
+static XrClass *mem_buffer_class(XrVMRuntime *isolate) {
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
+    XR_DCHECK(core != NULL && core->memBufferClass != NULL, "mem.Buffer class not registered");
+    return core ? core->memBufferClass : NULL;
+}
+
+static XrMemBufferBody *mem_buffer_body(XrVMRuntime *isolate, XrValue value) {
+    if (!XR_IS_INSTANCE(value))
+        return NULL;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
+    XrClass *klass = mem_buffer_class(isolate);
+    if (!klass || !xr_class_instanceof(inst->klass, klass))
+        return NULL;
+    return (XrMemBufferBody *) xr_instance_native_body(inst);
+}
+
+static XrValue mem_buffer_new(XrVMRuntime *isolate, int64_t length, bool zeroed, size_t align) {
+    if (length < 0)
+        length = 0;
+    XrInstance *inst = xr_instance_new(isolate, mem_buffer_class(isolate));
+    XR_CHECK(inst != NULL, "mem.Buffer allocation failed");
+    XrMemBufferBody *buf = (XrMemBufferBody *) xr_instance_native_body(inst);
+    XR_CHECK(buf != NULL, "mem.Buffer native body missing");
+
+    if (length > 0) {
+        size_t n = (size_t) length;
+        void *data = NULL;
+        if (align > 0) {
+            if (align < sizeof(void *) || (align & (align - 1)) != 0)
+                XR_CHECK(false, "mem.allocAligned: align must be a power of two >= sizeof(void*)");
+            if (posix_memalign(&data, align, n) != 0)
+                data = NULL;
+            if (data && zeroed)
+                memset(data, 0, n);
+        } else {
+            data = zeroed ? calloc(1, n) : malloc(n);
+        }
+        XR_CHECK(data != NULL, "mem.alloc: out of memory");
+        buf->data = data;
+    }
+    buf->length = length;
+    return XR_FROM_PTR(inst);
 }
 
 static XrValue mem_copy(XrVMRuntime *isolate, XrValue *args, int argc) {
@@ -127,53 +209,82 @@ static XrValue mem_cache_line_size(XrVMRuntime *isolate, XrValue *args, int argc
     return xr_int(XR_CACHE_LINE);
 }
 
-/*
- * Allocation face (mem.alloc/allocAligned/realloc/free). In the VM a raw
- * pointer is an address-width int (see mem_rawptr_arg / OP_PTR_LOAD), so return
- * the address as an int; the AOT helpers (xrt_mem_alloc etc.) box a native
- * pointer. Buffers are user-managed — pair alloc with free. NULL/0 on OOM.
- */
+/* Managed allocation face (mem.alloc/allocZeroed/allocAligned). */
 static inline XrValue mem_ptr_result(void *p) {
     return xr_int((int64_t) (intptr_t) p);
 }
 
 static XrValue mem_alloc(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    size_t n = (argc >= 1 && XR_IS_INT(args[0])) ? (size_t) XR_TO_INT(args[0]) : 0;
-    return mem_ptr_result(malloc(n));
+    int64_t n = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
+    return mem_buffer_new(isolate, n, false, 0);
 }
 
 static XrValue mem_alloc_zeroed(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    size_t n = (argc >= 1 && XR_IS_INT(args[0])) ? (size_t) XR_TO_INT(args[0]) : 0;
-    return mem_ptr_result(calloc(1, n));
+    int64_t n = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
+    return mem_buffer_new(isolate, n, true, 0);
 }
 
 static XrValue mem_alloc_aligned(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
     if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
-        return mem_ptr_result(NULL);
-    size_t n = (size_t) XR_TO_INT(args[0]);
+        return mem_buffer_new(isolate, 0, false, 0);
+    int64_t n = XR_TO_INT(args[0]);
     size_t a = (size_t) XR_TO_INT(args[1]);
-    void *p = NULL;
-    if (a >= sizeof(void *) && (a & (a - 1)) == 0) {
-        if (posix_memalign(&p, a, n) != 0)
-            p = NULL;
+    return mem_buffer_new(isolate, n, false, a);
+}
+
+static XrValue mem_buffer_length(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    XrMemBufferBody *buf = mem_buffer_body(isolate, self);
+    return xr_int(buf ? buf->length : 0);
+}
+
+static XrValue mem_buffer_ptr_unchecked(XrVMRuntime *isolate, XrValue self, XrValue *args,
+                                        int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    XrMemBufferBody *buf = mem_buffer_body(isolate, self);
+    return mem_ptr_result(buf ? buf->data : NULL);
+}
+
+static XrValue mem_buffer_as_span(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrMemBufferBody *buf = mem_buffer_body(isolate, self);
+    if (!buf)
+        return xr_span_ref(NULL);
+    buf->span_cache.data = buf->data;
+    buf->span_cache.length = buf->length;
+    buf->span_cache.elem_type = XR_ELEM_U8;
+    buf->span_cache.elem_size = 1;
+    buf->span_cache.elem_tid = 0;
+    buf->span_cache.contains_refs = 0;
+    buf->span_cache.reserved = 0;
+    buf->span_cache.guard = XR_TO_PTR(self);
+    return xr_span_ref(&buf->span_cache);
+}
+
+static XrValue mem_buffer_resize(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    XrMemBufferBody *buf = mem_buffer_body(isolate, self);
+    if (!buf || argc < 1 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    int64_t new_len = XR_TO_INT(args[0]);
+    if (new_len < 0)
+        return xr_bool(false);
+    if (new_len == 0) {
+        free(buf->data);
+        buf->data = NULL;
+        buf->length = 0;
+        return xr_bool(true);
     }
-    return mem_ptr_result(p);
-}
-
-static XrValue mem_realloc(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    size_t n = (argc >= 2 && XR_IS_INT(args[1])) ? (size_t) XR_TO_INT(args[1]) : 0;
-    return mem_ptr_result(realloc(mem_rawptr_arg(args[0]), n));
-}
-
-static XrValue mem_free(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    if (argc >= 1)
-        free(mem_rawptr_arg(args[0]));
-    return xr_null();
+    void *new_data = realloc(buf->data, (size_t) new_len);
+    if (!new_data)
+        return xr_bool(false);
+    buf->data = new_data;
+    buf->length = new_len;
+    return xr_bool(true);
 }
 
 static int mem_page_default_prot(void) {
@@ -274,6 +385,10 @@ static XrValue mem_nontemporal_store(XrVMRuntime *isolate, XrValue *args, int ar
     return mem_volatile_store(isolate, args, argc);
 }
 
+#define XR_STDLIB_VM_BIND_CLASS_BUFFER 1
+#include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_CLASS_BUFFER
+
 #define XR_STDLIB_VM_BIND_MODULE_MEM 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_MEM
@@ -285,6 +400,7 @@ XR_FUNC XrModule *xr_load_module_mem(XrVMRuntime *isolate) {
     if (!module)
         return NULL;
 
+    xr_stdlib_vm_register_buffer_class_generated(isolate);
     xr_stdlib_vm_bind_mem_generated(isolate, module);
 
     module->loaded = true;
