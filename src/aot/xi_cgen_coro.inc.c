@@ -916,7 +916,7 @@ static void cg_collect_sync_go_targets_from_func(XiCgenCtx *ctx, const XiFunc *f
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!v || v->op != XI_GO || v->nargs < 1)
+            if (!v || (v->op != XI_GO && v->op != XI_THREAD_SPAWN) || v->nargs < 1)
                 continue;
             CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, v->args[0]);
             if (call.func && cg_func_can_emit_sync_go_wrapper_ctx(ctx, call.func)) {
@@ -1132,6 +1132,97 @@ static void emit_sync_go_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *
     }
     fprintf(out, "    return f;\n");
     fprintf(out, "}\n\n");
+}
+
+static void emit_thread_spawn_abort_stmt(FILE *out, bool in_coro, const XiValue *v,
+                                         bool declare_local, XiCgenCtx *ctx, const XiFunc *f) {
+    if (in_coro) {
+        emit_codegen_abort_aot_result(out);
+        return;
+    }
+    fprintf(out, "    ");
+    if (declare_local)
+        fprintf(out, "%s ", local_ctype_str_ctx(ctx, f, v));
+    emit_vref(out, v);
+    fprintf(out, " = ");
+    emit_codegen_abort_expr(out);
+    fprintf(out, ";\n");
+}
+
+static bool emit_thread_spawn_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                         const XiValue *v, const char *prefix, bool in_coro) {
+    if (!v || v->op != XI_THREAD_SPAWN)
+        return false;
+
+    bool declare_local = !in_coro && !ctx->pre_decl_all;
+    emit_value_generated_line_reset(ctx, out, v);
+    if (v->nargs < 1) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: THREAD_SPAWN missing callee\n");
+        emit_thread_spawn_abort_stmt(out, in_coro, v, declare_local, ctx, f);
+        return true;
+    }
+
+    CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, v->args[0]);
+    const XiFunc *target = call.func;
+    const char *thread_prefix = call.prefix ? call.prefix : prefix;
+    if (!target || !cg_func_needs_sync_go_wrapper_ctx(ctx, target)) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT sys.Thread.spawn target\n");
+        emit_thread_spawn_abort_stmt(out, in_coro, v, declare_local, ctx, f);
+        return true;
+    }
+    if (!cg_aot_frame_new_can_supply_cl_arg(f, v->args[0], target)) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported captured AOT sys.Thread.spawn target\n");
+        emit_thread_spawn_abort_stmt(out, in_coro, v, declare_local, ctx, f);
+        return true;
+    }
+
+    emit_value_source_line(ctx, out, v);
+    fprintf(out, "    void *_thread_frame_%u = ", v->id);
+    emit_fname_suffix(ctx, out, thread_prefix, target, "_aot_frame_new");
+    fprintf(out, "(");
+    emit_aot_frame_new_call_args(ctx, out, f, v->args[0], target, true, v->args, 1, v->nargs, v);
+    fprintf(out, ");\n");
+    fprintf(out, "    ");
+    if (declare_local)
+        fprintf(out, "%s ", local_ctype_str_ctx(ctx, f, v));
+    emit_vref(out, v);
+    fprintf(out, " = xrt_thread_spawn_aot(&");
+    emit_fname_suffix(ctx, out, thread_prefix, target, "_aot_desc");
+    fprintf(out, ", _thread_frame_%u, 0);\n", v->id);
+    if (in_coro) {
+        fprintf(out, "    if (XR_UNLIKELY(XR_IS_NULL(");
+        emit_vref(out, v);
+        fprintf(out, "))) {\n");
+        fprintf(out, "        XrValue _thread_error_%u = xrt_pending_error;\n", v->id);
+        fprintf(out, "        xrt_pending_error = XR_NULL_VAL;\n");
+        fprintf(out, "        return xr_aot_error(_thread_error_%u, true);\n", v->id);
+        fprintf(out, "    }\n");
+        emit_value_generated_line_reset(ctx, out, v);
+        return true;
+    }
+
+    emit_typed_array_data_cache_decl(ctx, out, v);
+    emit_value_generated_line_reset(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, f, v);
+    bool cell_origin = cg_value_is_cell_origin(ctx, v);
+    bool cell_update = cg_value_has_cell(ctx, v) && !cell_origin;
+    if (cell_origin) {
+        fprintf(out, "    ");
+        emit_cell_ref(out, v->var_id);
+        fprintf(out, " = xrt_cell_new(");
+        emit_boxed_value_ref(out, v);
+        fprintf(out, ");\n");
+    } else if (cell_update) {
+        fprintf(out, "    xrt_cell_set(");
+        emit_cell_ref(out, v->var_id);
+        fprintf(out, ", ");
+        emit_boxed_value_ref(out, v);
+        fprintf(out, ");\n");
+    }
+    return true;
 }
 
 static bool cg_sync_go_param_needs_release(const XiFunc *f, uint16_t index) {
@@ -1967,6 +2058,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
 
     if (xi_coro_unbox_from_typed_await(f, v))
+        return;
+
+    if (emit_thread_spawn_value_stmt(ctx, out, f, v, prefix, true))
         return;
 
     if (v->op == XI_GO) {

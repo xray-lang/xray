@@ -193,9 +193,11 @@ static void cg_emit_tu_includes(FILE *out, bool define_impl, bool freestanding_p
     if (freestanding_profile) {
         fprintf(out, "#include \"xrt_core_freestanding.h\"\n\n");
     } else {
+        fprintf(out, "#define XRT_THREAD_USE_PENDING_ERROR 1\n");
         fprintf(out, "#include <math.h>\n");
         fprintf(out, "#include \"xrt.h\"\n\n");
         fprintf(out, "#include \"xaot_coro.h\"\n\n");
+        fprintf(out, "#include \"xrt_thread_aot.h\"\n\n");
     }
 }
 

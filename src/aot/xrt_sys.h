@@ -58,8 +58,18 @@ typedef struct xrt_thread_object {
     xr_thread_t handle;
     _Atomic(int) state;
     _Atomic(bool) finished;
+    _Atomic(bool) failed;
+    bool error_is_value;
     XrValue retval;
+    XrValue error;
 } xrt_thread_object_t;
+
+#ifdef XRT_THREAD_USE_PENDING_ERROR
+extern XR_THREAD_LOCAL XrValue xrt_pending_error;
+#define XRT_THREAD_SET_PENDING_ERROR(value) (xrt_pending_error = (value))
+#else
+#define XRT_THREAD_SET_PENDING_ERROR(value) ((void) (value))
+#endif
 #endif
 
 static XR_THREAD_LOCAL XrValue xrt_sys_once_callback = {.tag = XR_TAG_NULL};
@@ -412,6 +422,18 @@ static inline XrValue xrt_thread_done_value(XrValue recv) {
     return XR_FROM_BOOL(thread && atomic_load_explicit(&thread->finished, memory_order_acquire));
 }
 
+static inline XrValue xrt_thread_join_result_value(xrt_thread_object_t *thread) {
+    if (!thread)
+        return XR_NULL_VAL;
+    if (atomic_load_explicit(&thread->failed, memory_order_acquire)) {
+        if (!XR_IS_NULL(thread->error)) {
+            XRT_THREAD_SET_PENDING_ERROR(thread->error);
+        }
+        return XR_NULL_VAL;
+    }
+    return thread->retval;
+}
+
 static inline XrValue xrt_thread_method_0(XrValue recv, int sym) {
     xrt_thread_object_t *thread = xrt_thread_ptr(recv);
     if (!thread)
@@ -421,7 +443,7 @@ static inline XrValue xrt_thread_method_0(XrValue recv, int sym) {
             int state = atomic_load_explicit(&thread->state, memory_order_acquire);
             switch ((xrt_thread_state_t) state) {
                 case XRT_THREAD_JOINED:
-                    return thread->retval;
+                    return xrt_thread_join_result_value(thread);
                 case XRT_THREAD_DETACHED:
                     return XR_NULL_VAL;
                 case XRT_THREAD_JOINING:
@@ -438,7 +460,7 @@ static inline XrValue xrt_thread_method_0(XrValue recv, int sym) {
                         (void) xr_thread_join(thread->handle, NULL);
                     atomic_store_explicit(&thread->finished, true, memory_order_release);
                     atomic_store_explicit(&thread->state, XRT_THREAD_JOINED, memory_order_release);
-                    return thread->retval;
+                    return xrt_thread_join_result_value(thread);
                 }
             }
         }
