@@ -27,6 +27,14 @@ vmcase(OP_GO) {
     VM_DISPATCH(_sc_cr);
 }
 
+vmcase(OP_THREAD_SPAWN) {
+    TRACE_EXECUTION();
+    ci->pc = pc;
+    XrDispatchAction _ts_cr = vm_thread_spawn(isolate, vm_ctx, i, base, ci);
+    pc = ci->pc;
+    VM_DISPATCH(_ts_cr);
+}
+
 vmcase(OP_GEN_START) {
     TRACE_EXECUTION();
     ci->pc = pc;

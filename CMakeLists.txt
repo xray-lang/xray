@@ -1173,6 +1173,19 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME sys_thread_vm
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_sys_thread_vm_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(sys_thread_vm PROPERTIES
+        LABELS "vm;thread;regression"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME stdlib_metadata_sync
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}

@@ -312,6 +312,59 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 }
 
+/* sys.Thread.spawn: same closure+argument register packing and transfer-mode
+ * annotations as `go`, but returns a Thread<T> handle and is dispatched to a
+ * real OS thread instead of the coroutine scheduler. */
+XR_FUNC void xi_emit_thread_spawn(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+
+    {
+        uint32_t call_top = (dst + nargs + 1);
+        if (call_top > ctx->max_reg)
+            ctx->max_reg = call_top;
+    }
+
+    XiEmitReg callee = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    if (callee != dst)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
+
+    for (uint16_t a = 1; a < v->nargs; a++) {
+        XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        XiEmitReg target = (XiEmitReg) (dst + a);
+        if (arg_reg != target)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
+    }
+
+    emit_inst(ctx, CREATE_ABC(OP_THREAD_SPAWN, dst, dst, nargs));
+
+    bool has_transfer_modes = false;
+    for (uint16_t i = 0; i < nargs; i++) {
+        if (xi_go_arg_transfer_mode(v, i) != XR_TRANSFER_SHARE) {
+            has_transfer_modes = true;
+            break;
+        }
+    }
+    if (has_transfer_modes) {
+        for (uint16_t base = 0; base < nargs; base += XR_TRANSFER_MODES_PER_U32) {
+            uint32_t packed = 0;
+            for (uint16_t slot = 0; slot < XR_TRANSFER_MODES_PER_U32 && base + slot < nargs;
+                 slot++) {
+                packed =
+                    xr_transfer_pack_mode(packed, slot, xi_go_arg_transfer_mode(v, base + slot));
+            }
+            emit_inst(ctx, CREATE_ABx(OP_NOP, 5, packed));
+        }
+    }
+}
+
 /* Generator call: build a coroutine-backed iterator from a generator closure.
  * Same register-packing convention as OP_GO (closure at dst, args at
  * dst+1..dst+nargs), but the coroutine is pull-driven (never scheduled) and the

@@ -43,7 +43,7 @@
 #include "../runtime/value/xvalue.h"
 
 struct XrVMRuntime;
-struct XrClosure;
+struct XrCoroutine;
 struct XrCoroHeap;
 struct XrRuntimeCore;
 
@@ -57,19 +57,24 @@ typedef enum XrThreadState {
 
 typedef struct XrThread {
     XrObjHeader hdr;
-    xr_thread_t handle;     /* OS thread handle */
-    struct XrClosure *body; /* user closure the thread runs (owned) */
+    xr_thread_t handle; /* OS thread handle */
+    struct XrCoroutine *coro;
     struct XrVMRuntime *isolate;
+    struct XrRuntimeCore *core;
+    const char *name;
     _Atomic(int) state;     /* XrThreadState */
     _Atomic(bool) finished; /* entry set the return slot */
-    XrValue retval;         /* closure result (scalar payload; see §5.1) */
+    _Atomic(bool) failed;
+    bool error_is_value;
+    XrValue retval; /* closure result; join deep-copies pointer payloads to caller */
+    XrValue error;
 } XrThread;
 
-/* Spawn a real OS thread running `body` to completion. `name`/`stack_size` are
- * best-effort (0/NULL = platform default). Returns NULL on allocation/spawn
+/* Spawn a real OS thread that drives `coro` to completion. `name`/`stack_size`
+ * are best-effort (0/NULL = platform default). Returns NULL on allocation/spawn
  * failure. The returned handle is a system-heap shared object. */
-XR_FUNC XrThread *xr_thread_obj_spawn(struct XrVMRuntime *isolate, struct XrClosure *body,
-                                      const char *name, size_t stack_size);
+XR_FUNC XrThread *xr_thread_obj_spawn_vm(struct XrVMRuntime *isolate, struct XrCoroutine *coro,
+                                         const char *name, size_t stack_size);
 
 /* Block until the thread finishes; returns the closure's return value. Idempotent
  * after the first successful join (subsequent calls return the cached retval). */

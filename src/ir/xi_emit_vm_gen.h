@@ -102,6 +102,7 @@
     X(ITER_NEXT, xi_emit_iter) \
     X(ITER_VALID, xi_emit_iter) \
     X(GO, xi_emit_go) \
+    X(THREAD_SPAWN, xi_emit_thread_spawn) \
     X(GEN_CALL, xi_emit_gen_call) \
     X(AWAIT, xi_emit_await) \
     X(CHAN_SEND, xi_emit_chan_send) \
