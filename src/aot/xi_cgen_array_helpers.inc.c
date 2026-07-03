@@ -861,9 +861,12 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
             return arg_index == 0;
         case XI_INDEX_SET:
             return arg_index == 0;
-        case XI_BYTES_LOAD_U16_LE:
-        case XI_BYTES_LOAD_U32_LE:
-        case XI_BYTES_LOAD_U64_LE:
+        case XI_BYTES_LOAD_U16:
+        case XI_BYTES_LOAD_U32:
+        case XI_BYTES_LOAD_U64:
+        case XI_BYTES_STORE_U16:
+        case XI_BYTES_STORE_U32:
+        case XI_BYTES_STORE_U64:
         case XI_ARRAY_DATA_PTR:
         case XI_BYTES_COPY_WITHIN:
         case XI_BYTES_REPEAT_FROM:
@@ -2272,10 +2275,6 @@ static bool cg_array_bytes_load_le_unchecked_trusted_nothrow(XiCgenCtx *ctx, con
         return false;
 
     switch ((XiOp) v->op) {
-        case XI_BYTES_LOAD_U16_LE:
-        case XI_BYTES_LOAD_U32_LE:
-        case XI_BYTES_LOAD_U64_LE:
-            break;
         default:
             return false;
     }

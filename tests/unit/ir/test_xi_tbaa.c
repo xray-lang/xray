@@ -63,8 +63,8 @@ TEST(is_memory_load) {
     assert(!xi_is_memory_load(XI_CONST));
     assert(!xi_is_memory_load(XI_CALL));
     assert(!xi_is_memory_load(XI_IMPORT_REF));
-    assert(!xi_is_memory_load(XI_BYTES_LOAD_U16_LE));
-    assert(!xi_is_memory_load(XI_BYTES_LOAD_U32_LE));
+    assert(!xi_is_memory_load(XI_BYTES_LOAD_U16));
+    assert(!xi_is_memory_load(XI_BYTES_LOAD_U32));
 }
 
 TEST(is_memory_store) {
@@ -84,6 +84,7 @@ TEST(is_memory_store) {
     assert(!xi_is_memory_store(XI_CALL));
     assert(!xi_is_memory_store(XI_TUPLE_NEW));
     assert(!xi_is_memory_store(XI_BYTES_COPY_WITHIN));
+    assert(xi_is_memory_store(XI_BYTES_STORE_U16));
 }
 
 TEST(is_memory_op) {

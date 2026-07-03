@@ -144,6 +144,7 @@ static bool cg_coro_builtin_field_needs_xrt_bridge(const XiValue *builtin, const
         return true;
     switch ((int) builtin->aux_int) {
         case XR_GLOBAL_VAR_ORDERING:
+        case XR_GLOBAL_VAR_ENDIAN:
         case XR_GLOBAL_VAR_SEND_RESULT:
         case XR_GLOBAL_VAR_TASK_STATUS:
             return false;
@@ -1609,9 +1610,11 @@ static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc
             const char *ctype = cg_coro_decl_ctype(ctx, f, &phi->value);
             fprintf(out, "    %s ", ctype);
             emit_phi_ref(ctx, out, phi);
-            if (strcmp(ctype, "XrAotAdtValue") == 0)
-                fprintf(out, " = xrt_adt_value_zero();\n");
-            else
+            if (cg_value_plan_is_aggregate(ctx, &phi->value)) {
+                fprintf(out, " = ");
+                emit_value_plan_zero_expr(ctx, out, &phi->value);
+                fprintf(out, ";\n");
+            } else
                 fprintf(out, rep == XR_REP_TAGGED ? " = XR_NULL_VAL;\n" : " = 0;\n");
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
@@ -1629,9 +1632,11 @@ static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc
             const char *ctype = cg_coro_decl_ctype(ctx, f, v);
             fprintf(out, "    %s ", ctype);
             emit_vref(out, v);
-            if (strcmp(ctype, "XrAotAdtValue") == 0)
-                fprintf(out, " = xrt_adt_value_zero();\n");
-            else
+            if (cg_value_plan_is_aggregate(ctx, v)) {
+                fprintf(out, " = ");
+                emit_value_plan_zero_expr(ctx, out, v);
+                fprintf(out, ";\n");
+            } else
                 fprintf(out, rep == XR_REP_TAGGED ? " = XR_NULL_VAL;\n" : " = 0;\n");
         }
     }

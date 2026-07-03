@@ -638,6 +638,7 @@ static XrEnumType *aot_runtime_register_prelude_enum(XrAotRuntime *runtime, int 
 
 static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
     char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease", "SeqCst"};
+    char *endian_members[] = {"Native", "LE", "BE"};
     char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
     char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
     char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout", "Pending"};
@@ -649,6 +650,8 @@ static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
 
     return aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_ORDERING, "Ordering",
                                              ordering_members, 5, NULL) &&
+           aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_ENDIAN, "Endian",
+                                             endian_members, 3, NULL) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_RECV, "Recv", recv_members, 4,
                                              recv_payloads) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_SEND_RESULT, "SendResult",
@@ -681,8 +684,9 @@ static bool aot_value_is_runtime_instance(XrValue value);
 
 static bool aot_builtin_index_is_prelude_enum(int32_t index) {
     return index == XR_GLOBAL_VAR_ORDERING || index == XR_GLOBAL_VAR_RECV ||
-           index == XR_GLOBAL_VAR_SEND_RESULT || index == XR_GLOBAL_VAR_TASK_RESULT ||
-           index == XR_GLOBAL_VAR_TASK_OUTCOME || index == XR_GLOBAL_VAR_TASK_STATUS;
+           index == XR_GLOBAL_VAR_ENDIAN || index == XR_GLOBAL_VAR_SEND_RESULT ||
+           index == XR_GLOBAL_VAR_TASK_RESULT || index == XR_GLOBAL_VAR_TASK_OUTCOME ||
+           index == XR_GLOBAL_VAR_TASK_STATUS;
 }
 
 static XrValue aot_runtime_script_builtin_lazy(XrAotRuntime *runtime, int32_t index) {

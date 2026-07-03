@@ -45,7 +45,7 @@ fn show_bytes_load_oob() {
     let bytes = Bytes(4, 1)
     let view: ByteSpan = bytes
     try {
-        let value: uint32 = view.loadLE<uint32>(2)
+        let value: uint32 = view.load<uint32>(2, Endian.LE)
         print(int(value))
     } catch panic (p) {
         print(p.message)

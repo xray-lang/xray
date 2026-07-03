@@ -279,15 +279,57 @@ XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, XiEmitReg dst)
 }
 
 static void emit_builtin_bytes_load_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst, OpCode op) {
-    if (v->nargs != 2) {
+    if (v->nargs != 3) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    XiEmitReg bytes = reg_of(ctx, v->args[0]);
-    XiEmitReg offset = reg_of(ctx, v->args[1]);
-    if (ctx->status != XI_EMIT_OK)
+    uint16_t expected_args = 3;
+    if (ctx->next_reg + 1 + expected_args > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
-    emit_inst(ctx, CREATE_ABC(op, dst, bytes, offset));
+    }
+    XiEmitReg base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg = (base + 1 + expected_args);
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    for (uint16_t a = 0; a < expected_args; a++) {
+        XiEmitReg src = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        XiEmitReg target = (XiEmitReg) (base + 1 + a);
+        if (src != target)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, src, 0));
+    }
+    emit_inst(ctx, CREATE_ABC(op, base, 0, 0));
+    if (dst != NO_REG && dst != base)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
+}
+
+static void emit_builtin_bytes_store_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst, OpCode op) {
+    if (v->nargs != 4) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint16_t expected_args = 4;
+    if (ctx->next_reg + 1 + expected_args > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg = (base + 1 + expected_args);
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    for (uint16_t a = 0; a < expected_args; a++) {
+        XiEmitReg src = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        XiEmitReg target = (XiEmitReg) (base + 1 + a);
+        if (src != target)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, src, 0));
+    }
+    emit_inst(ctx, CREATE_ABC(op, base, 0, 0));
+    if (dst != NO_REG && dst != base)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
 }
 
 static void emit_builtin_bytes_window_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst, OpCode op,
@@ -313,7 +355,7 @@ static void emit_builtin_bytes_window_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, src, 0));
     }
     emit_inst(ctx, CREATE_ABC(op, base, 0, 0));
-    if (dst != base)
+    if (dst != NO_REG && dst != base)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
 }
 
@@ -338,16 +380,28 @@ static void emit_builtin_bytes_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
 }
 
-XR_FUNC void xi_emit_bytes_load_u16_le(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U16_LE);
+XR_FUNC void xi_emit_bytes_load_u16(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U16);
 }
 
-XR_FUNC void xi_emit_bytes_load_u32_le(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U32_LE);
+XR_FUNC void xi_emit_bytes_load_u32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U32);
 }
 
-XR_FUNC void xi_emit_bytes_load_u64_le(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U64_LE);
+XR_FUNC void xi_emit_bytes_load_u64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U64);
+}
+
+XR_FUNC void xi_emit_bytes_store_u16(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTES_STORE_U16);
+}
+
+XR_FUNC void xi_emit_bytes_store_u32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTES_STORE_U32);
+}
+
+XR_FUNC void xi_emit_bytes_store_u64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTES_STORE_U64);
 }
 
 /* Unsafe container data pointer: R[dst] = (uintptr_t)Array/Span.data. */
@@ -583,16 +637,16 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_builtin_string_bytes_span(ctx, v, dst);
         return;
     }
-    if (bname && strcmp(bname, "bytes_load_u16_le") == 0) {
-        emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U16_LE);
+    if (bname && strcmp(bname, "bytes_load_u16") == 0) {
+        emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U16);
         return;
     }
-    if (bname && strcmp(bname, "bytes_load_u32_le") == 0) {
-        emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U32_LE);
+    if (bname && strcmp(bname, "bytes_load_u32") == 0) {
+        emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U32);
         return;
     }
-    if (bname && strcmp(bname, "bytes_load_u64_le") == 0) {
-        emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U64_LE);
+    if (bname && strcmp(bname, "bytes_load_u64") == 0) {
+        emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U64);
         return;
     }
     if (bname && strcmp(bname, "bytes_copy_within") == 0) {

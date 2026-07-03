@@ -58,8 +58,8 @@ packet[5] = 6
 packet[6] = 7
 packet[7] = 8
 let packetView: ByteSpan = packet
-let packet32: uint32 = packetView.loadLE<uint32>(0)
-let packet64: uint64 = packetView.loadLE<uint64>(0)
+let packet32: uint32 = packetView.load<uint32>(0, Endian.LE)
+let packet64: uint64 = packetView.load<uint64>(0, Endian.LE)
 print(int(packet32))
 print(int(packet64))
 

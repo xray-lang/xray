@@ -3,6 +3,6 @@ let bytes = Bytes(8, 1)
 let view: ByteSpan = bytes
 let offset = 4294967296
 print("before-range")
-let value: uint32 = view.loadLE<uint32>(offset)
+let value: uint32 = view.load<uint32>(offset, Endian.LE)
 print(int(value))
 print("unreachable")

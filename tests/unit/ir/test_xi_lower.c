@@ -469,9 +469,10 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
     XiFunc *f = lower_source("let src = Bytes(8)\n"
                              "let view: ByteSpan = src\n"
                              "let dst = Bytes.withCapacity(8)\n"
-                             "let h = view.loadLE<uint16>(0)\n"
-                             "let a = view.loadLE<uint32>(0)\n"
-                             "let b = view.loadLE<uint64>(0)\n"
+                             "let h = view.load<uint16>(0, Endian.LE)\n"
+                             "let a = view.load<uint32>(0, Endian.LE)\n"
+                             "let b = view.load<uint64>(0, Endian.LE)\n"
+                             "view.store<uint16>(6, h, Endian.LE)\n"
                              "unsafe {\n"
                              "    dst.appendFromUnchecked(view, 0, 2)\n"
                              "    dst.repeatFromUnchecked(2, 4)\n"
@@ -480,16 +481,17 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
                              "print(a)\n"
                              "print(b)\n");
     assert(f != NULL);
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U16_LE) && "loadLE<uint16> should lower to Bytes op");
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U32_LE) && "loadLE<uint32> should lower to Bytes op");
-    assert(func_tree_has_op(f, XI_BYTES_LOAD_U64_LE) && "loadLE<uint64> should lower to Bytes op");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U16) && "load<uint16> should lower to Bytes op");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U32) && "load<uint32> should lower to Bytes op");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U64) && "load<uint64> should lower to Bytes op");
+    assert(func_tree_has_op(f, XI_BYTES_STORE_U16) && "store<uint16> should lower to Bytes op");
     assert(func_tree_find_method(f, "appendFromUnchecked") &&
            "appendFromUnchecked should remain an explicit method call");
     assert(func_tree_find_method(f, "repeatFromUnchecked") &&
            "repeatFromUnchecked should remain an explicit method call");
     assert(!func_tree_has_builtin_name(f, "bytes_load_u16_le") &&
            !func_tree_has_builtin_name(f, "bytes_load_u32_le") &&
-           "loadLE should not lower through string builtin");
+           "load should not lower through string builtin");
     xi_func_free(f);
 }
 

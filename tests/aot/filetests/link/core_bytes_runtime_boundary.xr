@@ -9,12 +9,14 @@ bytes[6] = 7
 bytes[7] = 8
 print(bytes.length)
 let view: ByteSpan = bytes
-let u16: uint16 = view.loadLE<uint16>(0)
-let u32: uint32 = view.loadLE<uint32>(0)
-let u64: uint64 = view.loadLE<uint64>(0)
+let u16: uint16 = view.load<uint16>(0, Endian.LE)
+let u32: uint32 = view.load<uint32>(0, Endian.LE)
+let u64: uint64 = view.load<uint64>(0, Endian.LE)
+view.store<uint16>(6, 0x0a09, Endian.LE)
 print(int(u16))
 print(int(u32))
 print(int(u64))
+print(bytes[6])
 
 let dst = Bytes.withCapacity(6)
 print(dst.length)

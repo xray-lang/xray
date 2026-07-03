@@ -977,6 +977,8 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_unknown(NULL);
     } else if (base_len == 8 && strncmp(s, "Ordering", 8) == 0) {
         type = xr_type_new_enum(X, "Ordering");
+    } else if (base_len == 6 && strncmp(s, "Endian", 6) == 0) {
+        type = xr_type_new_enum(X, "Endian");
     } else if (base_len == 4 && strncmp(s, "Recv", 4) == 0) {
         type = xr_type_new_enum(X, "Recv");
     } else if (base_len == 10 && strncmp(s, "SendResult", 10) == 0) {

@@ -288,8 +288,11 @@ static inline void xrt_array_data_grow(xrt_array_t *a, int64_t new_cap) {
     }
     if (a->data && old_bytes > 0) {
         memcpy(tmp, a->data, old_bytes);
-        if (a->data_storage == XR_ARRAY_DATA_HEAP)
+        if (a->data_storage == XR_ARRAY_DATA_HEAP) {
             XRT_FREE_ALIGNED(a->data);
+        } else if (a->data_storage == XR_ARRAY_DATA_INLINE) {
+            memset(a->data, 0, old_bytes);
+        }
     }
     if (new_bytes > old_bytes)
         memset((uint8_t *) tmp + old_bytes, 0, new_bytes - old_bytes);

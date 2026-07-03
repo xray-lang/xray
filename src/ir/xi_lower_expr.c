@@ -33,6 +33,7 @@
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
+#include "../shared/xr_array_core.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xconstants.h"
 #include "../runtime/value/xstruct_layout.h"
@@ -713,6 +714,7 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
             {"DateTime", XR_GLOBAL_VAR_DATETIME},
             {"Atomic", XR_GLOBAL_VAR_ATOMIC},
             {"Ordering", XR_GLOBAL_VAR_ORDERING},
+            {"Endian", XR_GLOBAL_VAR_ENDIAN},
             {"Recv", XR_GLOBAL_VAR_RECV},
             {"SendResult", XR_GLOBAL_VAR_SEND_RESULT},
             {"TaskResult", XR_GLOBAL_VAR_TASK_RESULT},
@@ -3047,21 +3049,37 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (xi_type_is_bytes(recv->type) && ma->name) {
             uint16_t bytes_op = 0;
             uint16_t expected_args = 0;
-            bool load_le_unchecked = strcmp(ma->name, "loadLEUnchecked") == 0;
-            if ((strcmp(ma->name, "loadLE") == 0 || load_le_unchecked) && n == 1 &&
-                call->type_arg_count == 1 && call->type_args && call->type_args[0]) {
+            bool bytes_typed_load = strcmp(ma->name, "load") == 0;
+            bool bytes_typed_store = strcmp(ma->name, "store") == 0;
+            if (bytes_typed_load && (n == 1 || n == 2) && call->type_arg_count == 1 &&
+                call->type_args && call->type_args[0]) {
                 XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
                 if (target && XR_TYPE_IS_INT(target) && target->native_width == XR_NATIVE_U16) {
-                    bytes_op = XI_BYTES_LOAD_U16_LE;
-                    expected_args = 2;
+                    bytes_op = XI_BYTES_LOAD_U16;
+                    expected_args = 3;
                 } else if (target && XR_TYPE_IS_INT(target) &&
                            target->native_width == XR_NATIVE_U32) {
-                    bytes_op = XI_BYTES_LOAD_U32_LE;
-                    expected_args = 2;
+                    bytes_op = XI_BYTES_LOAD_U32;
+                    expected_args = 3;
                 } else if (target && XR_TYPE_IS_INT(target) &&
                            target->native_width == XR_NATIVE_U64) {
-                    bytes_op = XI_BYTES_LOAD_U64_LE;
-                    expected_args = 2;
+                    bytes_op = XI_BYTES_LOAD_U64;
+                    expected_args = 3;
+                }
+            } else if (bytes_typed_store && (n == 2 || n == 3) && call->type_arg_count == 1 &&
+                       call->type_args && call->type_args[0]) {
+                XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
+                if (target && XR_TYPE_IS_INT(target) && target->native_width == XR_NATIVE_U16) {
+                    bytes_op = XI_BYTES_STORE_U16;
+                    expected_args = 4;
+                } else if (target && XR_TYPE_IS_INT(target) &&
+                           target->native_width == XR_NATIVE_U32) {
+                    bytes_op = XI_BYTES_STORE_U32;
+                    expected_args = 4;
+                } else if (target && XR_TYPE_IS_INT(target) &&
+                           target->native_width == XR_NATIVE_U64) {
+                    bytes_op = XI_BYTES_STORE_U64;
+                    expected_args = 4;
                 }
             }
             if (bytes_op) {
@@ -3075,15 +3093,19 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                         arg_vals[i] =
                             xi_lower_checktype_for_type(l, node, arg_vals[i], l->type_int);
                 }
-                XiValue *v =
-                    xi_value_new(l->func, l->cur_block, bytes_op, result_type, expected_args);
+                XiValue *default_endian = NULL;
+                if ((bytes_typed_load && n == 1) || (bytes_typed_store && n == 2))
+                    default_endian =
+                        xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
+                XrType *op_type = bytes_typed_store ? l->type_unit : result_type;
+                XiValue *v = xi_value_new(l->func, l->cur_block, bytes_op, op_type, expected_args);
                 if (!v)
                     return NULL;
                 v->args[0] = recv;
                 for (int i = 0; i < n; i++)
                     v->args[i + 1] = arg_vals[i];
-                if (load_le_unchecked)
-                    v->aux_int = 1;
+                if (default_endian)
+                    v->args[expected_args - 1] = default_endian;
                 v->line = (uint32_t) node->line;
                 return v;
             }

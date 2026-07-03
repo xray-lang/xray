@@ -73,10 +73,6 @@ static bool inline_value_is_nothrow_lowlevel(const XiValue *v) {
     if (!v)
         return false;
     switch (v->op) {
-        case XI_BYTES_LOAD_U16_LE:
-        case XI_BYTES_LOAD_U32_LE:
-        case XI_BYTES_LOAD_U64_LE:
-            return (v->aux_int & 1) != 0;
         default:
             return false;
     }

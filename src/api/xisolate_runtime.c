@@ -78,6 +78,7 @@ static void isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
         return;
 
     char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease", "SeqCst"};
+    char *endian_members[] = {"Native", "LE", "BE"};
     char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
     char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
     char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout", "Pending"};
@@ -89,6 +90,7 @@ static void isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
 
     XrEnumType *ordering =
         runtime_register_prelude_enum(isolate, "Ordering", ordering_members, 5, NULL);
+    XrEnumType *endian = runtime_register_prelude_enum(isolate, "Endian", endian_members, 3, NULL);
     XrEnumType *recv =
         runtime_register_prelude_enum(isolate, "Recv", recv_members, 4, recv_payloads);
     XrEnumType *send_result =
@@ -102,6 +104,8 @@ static void isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
 
     if (ordering)
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_ORDERING, XR_FROM_PTR(ordering));
+    if (endian)
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_ENDIAN, XR_FROM_PTR(endian));
     if (recv)
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_RECV, XR_FROM_PTR(recv));
     if (send_result)

@@ -9,8 +9,8 @@ b[6] = 7
 b[7] = 8
 
 let view: ByteSpan = b
-let u32: uint32 = view.loadLE<uint32>(0)
-let u64: uint64 = view.loadLE<uint64>(0)
+let u32: uint32 = view.load<uint32>(0, Endian.LE)
+let u64: uint64 = view.load<uint64>(0, Endian.LE)
 print(int(u32))
 print(int(u64))
 

@@ -174,6 +174,13 @@ static void xr_prelude_register_builtin_enums(XrVMRuntime *X) {
     if (ordering_et)
         bind_builtin_value(X, XR_GLOBAL_VAR_ORDERING, XR_FROM_PTR(ordering_et));
 
+    static const char *endian_members[] = {"Native", "LE", "BE"};
+    static const int endian_values[] = {0, 1, 2};
+    XrEnumType *endian_et =
+        make_prelude_enum(X, "Endian", endian_members, endian_values, 3, NULL, false);
+    if (endian_et)
+        bind_builtin_value(X, XR_GLOBAL_VAR_ENDIAN, XR_FROM_PTR(endian_et));
+
     static const char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
     static const int recv_values[] = {0, 1, 2, 3};
     static const int recv_payload_counts[] = {1, 0, 0, 0};

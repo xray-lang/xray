@@ -2370,9 +2370,10 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
                       "        dst.wildRepeatAtUnchecked(330, 8, 18)\n"
                       "        dst.setLengthUnchecked(10)\n"
                       "    }\n"
-                      "    let v16: uint16 = view.loadLE<uint16>(0)\n"
-                      "    let v32: uint32 = view.loadLE<uint32>(0)\n"
-                      "    let v64: uint64 = view.loadLE<uint64>(0)\n"
+                      "    let v16: uint16 = view.load<uint16>(0, Endian.LE)\n"
+                      "    let v32: uint32 = view.load<uint32>(0, Endian.LE)\n"
+                      "    let v64: uint64 = view.load<uint64>(0, Endian.LE)\n"
+                      "    view.store<uint16>(8, v16, Endian.LE)\n"
                       "    return int(v16) + int(v32) + int(v64) + dst[5] + dst[9]\n"
                       "}\n"
                       "print(run())\n";
@@ -2394,12 +2395,14 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
     assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
            "run function body should be bounded");
 
-    assert(count_between(fn_body, fn_end, "xrt_bytes_load_u16_le_raw(") > 0 &&
-           "ByteSpan.loadLE<uint16> must lower to the raw AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_load_u32_le_raw(") > 0 &&
-           "ByteSpan.loadLE<uint32> must lower to the raw AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_load_u64_le_raw(") > 0 &&
-           "ByteSpan.loadLE<uint64> must lower to the raw AOT helper");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u16_checked_raw(") > 0 &&
+           "ByteSpan.load<uint16> must lower to the span AOT helper");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u32_checked_raw(") > 0 &&
+           "ByteSpan.load<uint32> must lower to the span AOT helper");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u64_checked_raw(") > 0 &&
+           "ByteSpan.load<uint64> must lower to the span AOT helper");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_store_u16_checked_raw(") > 0 &&
+           "ByteSpan.store<uint16> must lower to the span AOT helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_append_from_unchecked_raw(") > 0 &&
            "Bytes.appendFromUnchecked must lower to the raw AOT helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_repeat_from_unchecked_raw(") > 0 &&

@@ -954,95 +954,131 @@ vmcase(OP_ARRAY_RESIZE) {
     vmbreak;
 }
 
-vmcase(OP_BYTES_LOAD_U32_LE) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    int c = GETARG_C(i);
-    if (XR_IS_SPAN_REF(R(b)) && XR_IS_INT(R(c))) {
-        XrSpanView *span = XR_TO_SPAN_REF(R(b));
-        if (!span || span->elem_type != XR_ELEM_U8)
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU32LE receiver must be Bytes");
-        bool ok = false;
-        uint32_t value = xr_array_core_bytes_load_u32_le(span->data, span->length, span->elem_type,
-                                                         XR_TO_INT(R(c)), &ok);
-        if (!ok)
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU32LE offset out of bounds");
-        R(a) = xr_int((xr_Integer) value);
-        vmbreak;
-    }
-    if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU32LE(offset) expects Bytes and integer");
-    }
-    XrArray *arr = XR_TO_ARRAY(R(b));
-    if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU32LE receiver must be Bytes");
-    bool ok = false;
-    uint32_t value = xr_array_load_u32_le(arr, XR_TO_INT(R(c)), &ok);
-    if (!ok)
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU32LE offset out of bounds");
-    R(a) = xr_int((xr_Integer) value);
-    vmbreak;
-}
+#define VM_PARSE_ENDIAN_ARG(value, out_endian)                                                     \
+    do {                                                                                           \
+        XrValue _endian_value = (value);                                                           \
+        if (XR_IS_INT(_endian_value)) {                                                            \
+            (out_endian) = XR_TO_INT(_endian_value);                                               \
+        } else if (XR_IS_ENUM_VALUE(_endian_value)) {                                              \
+            XrEnumValue *_endian_enum = (XrEnumValue *) XR_TO_PTR(_endian_value);                  \
+            if (!_endian_enum || !XR_IS_INT(_endian_enum->raw_value)) {                            \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Endian value must have int backing");      \
+            }                                                                                      \
+            (out_endian) = XR_TO_INT(_endian_enum->raw_value);                                     \
+        } else {                                                                                   \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan load/store expects Endian");          \
+        }                                                                                          \
+        if ((out_endian) < XR_ENDIAN_NATIVE || (out_endian) > XR_ENDIAN_BE) {                      \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid Endian value");                        \
+        }                                                                                          \
+    } while (0)
 
-vmcase(OP_BYTES_LOAD_U16_LE) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    int c = GETARG_C(i);
-    if (XR_IS_SPAN_REF(R(b)) && XR_IS_INT(R(c))) {
-        XrSpanView *span = XR_TO_SPAN_REF(R(b));
-        if (!span || span->elem_type != XR_ELEM_U8)
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U16_RECEIVER_MSG);
-        bool ok = false;
-        uint16_t value = xr_array_core_bytes_load_u16_le(span->data, span->length, span->elem_type,
-                                                         XR_TO_INT(R(c)), &ok);
-        if (!ok)
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U16_OOB_MSG);
-        R(a) = xr_int((xr_Integer) value);
-        vmbreak;
+#define VM_BYTES_LOAD_CASE(opcode, load_fn, width_name)                                            \
+    vmcase(opcode) {                                                                               \
+        int a = GETARG_A(i);                                                                       \
+        XrValue _recv = R(a + 1);                                                                  \
+        XrValue _offset = R(a + 2);                                                                \
+        if (!XR_IS_INT(_offset)) {                                                                 \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<T>() expects integer offset");   \
+        }                                                                                          \
+        int64_t _endian = XR_ENDIAN_NATIVE;                                                        \
+        VM_PARSE_ENDIAN_ARG(R(a + 3), _endian);                                                    \
+        void *_data = NULL;                                                                        \
+        int64_t _length = 0;                                                                       \
+        uint8_t _elem_type = XR_ELEM_ANY;                                                          \
+        if (XR_IS_SPAN_REF(_recv)) {                                                               \
+            XrSpanView *_span = XR_TO_SPAN_REF(_recv);                                             \
+            if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
+                                 "ByteSpan.load<" width_name ">() expects ByteSpan");              \
+            }                                                                                      \
+            _data = _span->data;                                                                   \
+            _length = _span->length;                                                               \
+            _elem_type = _span->elem_type;                                                         \
+        } else if (XR_IS_ARRAY(_recv)) {                                                           \
+            XrArray *_arr = XR_TO_ARRAY(_recv);                                                    \
+            if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
+                                 "ByteSpan.load<" width_name ">() expects ByteSpan");              \
+            }                                                                                      \
+            _data = _arr->data;                                                                    \
+            _length = _arr->length;                                                                \
+            _elem_type = _arr->elem_type;                                                          \
+        } else {                                                                                   \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
+                             "ByteSpan.load<" width_name ">() expects ByteSpan");                  \
+        }                                                                                          \
+        bool _ok = false;                                                                          \
+        uint64_t _value =                                                                          \
+            (uint64_t) load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok);     \
+        if (!_ok) {                                                                                \
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,                                           \
+                             "ByteSpan.load<" width_name ">() offset out of bounds");              \
+        }                                                                                          \
+        R(a) = xr_int((xr_Integer) _value);                                                        \
+        vmbreak;                                                                                   \
     }
-    if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U16_EXPECTS_MSG);
-    }
-    XrArray *arr = XR_TO_ARRAY(R(b));
-    if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U16_RECEIVER_MSG);
-    bool ok = false;
-    uint16_t value = xr_array_load_u16_le(arr, XR_TO_INT(R(c)), &ok);
-    if (!ok)
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U16_OOB_MSG);
-    R(a) = xr_int((xr_Integer) value);
-    vmbreak;
-}
 
-vmcase(OP_BYTES_LOAD_U64_LE) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    int c = GETARG_C(i);
-    if (XR_IS_SPAN_REF(R(b)) && XR_IS_INT(R(c))) {
-        XrSpanView *span = XR_TO_SPAN_REF(R(b));
-        if (!span || span->elem_type != XR_ELEM_U8)
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU64LE receiver must be Bytes");
-        bool ok = false;
-        uint64_t value = xr_array_core_bytes_load_u64_le(span->data, span->length, span->elem_type,
-                                                         XR_TO_INT(R(c)), &ok);
-        if (!ok)
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU64LE offset out of bounds");
-        R(a) = xr_int((xr_Integer) value);
-        vmbreak;
+#define VM_BYTES_STORE_CASE(opcode, store_fn, value_type, width_name)                              \
+    vmcase(opcode) {                                                                               \
+        int a = GETARG_A(i);                                                                       \
+        XrValue _recv = R(a + 1);                                                                  \
+        XrValue _offset = R(a + 2);                                                                \
+        XrValue _value = R(a + 3);                                                                 \
+        if (!XR_IS_INT(_offset) || !XR_IS_INT(_value)) {                                           \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
+                             "ByteSpan.store<T>() expects integer offset and value");              \
+        }                                                                                          \
+        int64_t _endian = XR_ENDIAN_NATIVE;                                                        \
+        VM_PARSE_ENDIAN_ARG(R(a + 4), _endian);                                                    \
+        void *_data = NULL;                                                                        \
+        int64_t _length = 0;                                                                       \
+        uint8_t _elem_type = XR_ELEM_ANY;                                                          \
+        if (XR_IS_SPAN_REF(_recv)) {                                                               \
+            XrSpanView *_span = XR_TO_SPAN_REF(_recv);                                             \
+            if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
+                                 "ByteSpan.store<" width_name ">() expects ByteSpan");             \
+            }                                                                                      \
+            if ((_span->reserved & XR_SPAN_VIEW_READONLY) != 0) {                                  \
+                VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");   \
+            }                                                                                      \
+            _data = _span->data;                                                                   \
+            _length = _span->length;                                                               \
+            _elem_type = _span->elem_type;                                                         \
+        } else if (XR_IS_ARRAY(_recv)) {                                                           \
+            XrArray *_arr = XR_TO_ARRAY(_recv);                                                    \
+            if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
+                                 "ByteSpan.store<" width_name ">() expects ByteSpan");             \
+            }                                                                                      \
+            _data = _arr->data;                                                                    \
+            _length = _arr->length;                                                                \
+            _elem_type = _arr->elem_type;                                                          \
+        } else {                                                                                   \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
+                             "ByteSpan.store<" width_name ">() expects ByteSpan");                 \
+        }                                                                                          \
+        bool _ok = store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                        \
+                            (value_type) XR_TO_INT(_value), _endian);                              \
+        if (!_ok) {                                                                                \
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,                                           \
+                             "ByteSpan.store<" width_name ">() offset out of bounds");             \
+        }                                                                                          \
+        R(a) = xr_null();                                                                          \
+        vmbreak;                                                                                   \
     }
-    if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU64LE(offset) expects Bytes and integer");
-    }
-    XrArray *arr = XR_TO_ARRAY(R(b));
-    if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU64LE receiver must be Bytes");
-    bool ok = false;
-    uint64_t value = xr_array_load_u64_le(arr, XR_TO_INT(R(c)), &ok);
-    if (!ok)
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU64LE offset out of bounds");
-    R(a) = xr_int((xr_Integer) value);
-    vmbreak;
-}
+
+VM_BYTES_LOAD_CASE(OP_BYTES_LOAD_U16, xr_array_core_bytes_load_u16, "uint16")
+VM_BYTES_LOAD_CASE(OP_BYTES_LOAD_U32, xr_array_core_bytes_load_u32, "uint32")
+VM_BYTES_LOAD_CASE(OP_BYTES_LOAD_U64, xr_array_core_bytes_load_u64, "uint64")
+VM_BYTES_STORE_CASE(OP_BYTES_STORE_U16, xr_array_core_bytes_store_u16, uint16_t, "uint16")
+VM_BYTES_STORE_CASE(OP_BYTES_STORE_U32, xr_array_core_bytes_store_u32, uint32_t, "uint32")
+VM_BYTES_STORE_CASE(OP_BYTES_STORE_U64, xr_array_core_bytes_store_u64, uint64_t, "uint64")
+
+#undef VM_BYTES_STORE_CASE
+#undef VM_BYTES_LOAD_CASE
+#undef VM_PARSE_ENDIAN_ARG
 
 /* FFI raw-pointer access. B (load) / A (store) holds an address-width int;
  * C is the XrFFIType width of the pointee. No bounds/null check (unsafe). */

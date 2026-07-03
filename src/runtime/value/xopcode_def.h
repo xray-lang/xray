@@ -176,9 +176,15 @@
     _(ARRAY_CLEAR, FMT_A, KOP_A_INOUT, "R[A]:Array.clear()")                                       \
     _(ARRAY_RESERVE, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.reserve(R[B])")                           \
     _(ARRAY_RESIZE, FMT_ABC, KOP_ABC_INPLACE, "R[A]:Array.resize(R[B], R[C])")                     \
-    _(BYTES_LOAD_U16_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = Bytes.loadU16LE(R[B], R[C])")               \
-    _(BYTES_LOAD_U32_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = Bytes.loadU32LE(R[B], R[C])")               \
-    _(BYTES_LOAD_U64_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = Bytes.loadU64LE(R[B], R[C])")               \
+    _(BYTES_LOAD_U16, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<uint16>(R[A+1], R[A+2], R[A+3])")    \
+    _(BYTES_LOAD_U32, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<uint32>(R[A+1], R[A+2], R[A+3])")    \
+    _(BYTES_LOAD_U64, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<uint64>(R[A+1], R[A+2], R[A+3])")    \
+    _(BYTES_STORE_U16, FMT_A, KOP_A_INOUT,                                                         \
+      "ByteSpan.store<uint16>(R[A+1], R[A+2], R[A+3], R[A+4])")                                    \
+    _(BYTES_STORE_U32, FMT_A, KOP_A_INOUT,                                                         \
+      "ByteSpan.store<uint32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                    \
+    _(BYTES_STORE_U64, FMT_A, KOP_A_INOUT,                                                         \
+      "ByteSpan.store<uint64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                    \
     _(ARRAY_DATA_PTR, FMT_ABC, KOP_ABC_BIN, "R[A] = raw data pointer of Array/Span R[B]")          \
     _(STRING_BYTES_SPAN, FMT_ABC, KOP_ABC_BIN, "R[A] = borrowed ByteSpan of string R[B], C=slot")  \
     _(BYTES_COPY_WITHIN, FMT_A, KOP_A_INOUT, "R[A].copyWithin(R[A+1], R[A+2], R[A+3])")            \

@@ -12,7 +12,7 @@ let view: ByteSpan = bytes
 
 fn show_load_u32() {
     try {
-        let value: uint32 = view.loadLE<uint32>(dyn.badOffset)
+        let value: uint32 = view.load<uint32>(dyn.badOffset, Endian.LE)
         print(int(value))
     } catch panic (p) {
         print(p.message)
@@ -22,7 +22,7 @@ fn show_load_u32() {
 
 fn show_load_u64() {
     try {
-        let value: uint64 = view.loadLE<uint64>(dyn.badOffset)
+        let value: uint64 = view.load<uint64>(dyn.badOffset, Endian.LE)
         print(int(value))
     } catch panic (p) {
         print(p.message)

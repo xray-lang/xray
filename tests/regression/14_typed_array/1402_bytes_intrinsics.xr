@@ -13,8 +13,8 @@ fn test_bytes_intrinsics_and_capacity() {
     b[7] = 8
 
     let view: ByteSpan = b
-    let u32: uint32 = view.loadLE<uint32>(0)
-    let u64: uint64 = view.loadLE<uint64>(0)
+    let u32: uint32 = view.load<uint32>(0, Endian.LE)
+    let u64: uint64 = view.load<uint64>(0, Endian.LE)
     assert_eq(int(u32), 67305985)
     assert_eq(int(u64), 578437695752307201)
 
