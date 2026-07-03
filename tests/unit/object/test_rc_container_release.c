@@ -156,6 +156,44 @@ TEST(weak_map_does_not_retain_key_and_purges_value) {
     teardown();
 }
 
+TEST(weak_map_purge_releases_recursive_value_after_registry_unlock) {
+    setup();
+    XrMap *first = xr_map_new(main_coro);
+    XrMap *second = xr_map_new(main_coro);
+    first->flags |= XR_MAP_FLAG_WEAK;
+    second->flags |= XR_MAP_FLAG_WEAK;
+
+    XrArray *key1 = xr_array_new(main_coro);
+    XrArray *key2 = xr_array_new(main_coro);
+    XrArray *leaf = xr_array_new(main_coro);
+
+    xr_rc_retain_value(xr_value_from_array(key2));
+    xr_map_set(second, xr_value_from_array(key2), xr_value_from_array(leaf));
+    ASSERT_EQ_INT(key2->hdr.refcount, 0);
+    ASSERT_EQ_INT(second->count, 1);
+
+    xr_rc_retain_value(xr_value_from_array(key1));
+    xr_map_set(first, xr_value_from_array(key1), xr_value_from_array(key2));
+    ASSERT_EQ_INT(key1->hdr.refcount, 0);
+    ASSERT_EQ_INT(key2->hdr.refcount, 0);
+    ASSERT_EQ_INT(first->count, 1);
+
+    XrCoroHeap *heap = test_heap();
+    ASSERT_NOT_NULL(heap);
+    xr_rc_release_value(heap, xr_value_from_array(key1));
+    ASSERT_TRUE(is_dead(&key1->hdr));
+    ASSERT_TRUE(is_dead(&key2->hdr));
+    ASSERT_TRUE(is_dead(&leaf->hdr));
+    ASSERT_EQ_INT(first->count, 0);
+    ASSERT_EQ_INT(second->count, 0);
+
+    xr_rc_release_value(heap, xr_value_from_map(first));
+    xr_rc_release_value(heap, xr_value_from_map(second));
+    ASSERT_TRUE(is_dead(&first->hdr));
+    ASSERT_TRUE(is_dead(&second->hdr));
+    teardown();
+}
+
 TEST(weak_set_does_not_retain_element) {
     setup();
     XrSet *set = xr_set_new(main_coro);
@@ -358,6 +396,7 @@ int main(void) {
     RUN_TEST(map_destroy_releases_key_and_value);
     RUN_TEST(set_destroy_releases_value);
     RUN_TEST(weak_map_does_not_retain_key_and_purges_value);
+    RUN_TEST(weak_map_purge_releases_recursive_value_after_registry_unlock);
     RUN_TEST(weak_set_does_not_retain_element);
     RUN_TEST(tuple_instance_destroy_releases_elements);
     RUN_TEST(dynamic_instance_destroy_releases_overflow_fields);
