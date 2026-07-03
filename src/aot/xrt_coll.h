@@ -2857,6 +2857,14 @@ static inline XrValue xrt_closure_new(void *fn, int nupvals) {
     return xr_mkptr(c, XR_TAG_CLOSURE);
 }
 
+static inline XrValue xrt_closure_call0(XrValue callback) {
+    if (callback.tag != XR_TAG_CLOSURE || !callback.ptr)
+        return XR_NULL_VAL;
+    xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
+    typedef XrValue (*xrt_closure_fn0_t)(xrt_closure_t *);
+    return ((xrt_closure_fn0_t) cl->fn)(cl);
+}
+
 #ifndef xrt_closure_stack_new
 #define xrt_closure_stack_new(fn_expr, nupvals_expr)                                               \
     ({                                                                                             \
@@ -2940,6 +2948,9 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
             break;
         case XRT_ARC_KIND_SYS_BARRIER:
             xrt_sys_barrier_destroy_builtin(obj);
+            break;
+        case XRT_ARC_KIND_SYS_ONCE:
+            xrt_sys_once_destroy_builtin(obj);
             break;
         default:
             break;

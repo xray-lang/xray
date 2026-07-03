@@ -972,6 +972,14 @@ module sys {
     builtin_kind: "XR_BK_SYSBARRIER"
   }
 
+  native_class Once {
+    super_slot: "objectClass"
+    core_slot: "sysOnceClass"
+    native_body: "g_sys_once_body_desc"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: "XR_BK_SYSONCE"
+  }
+
   class_method Mutex.lock {
     vm: "sys_mutex_lock"
     argc: 0
@@ -1032,6 +1040,11 @@ module sys {
     argc: 0
   }
 
+  class_method Once.call {
+    vm: "sys_once_call"
+    argc: 1
+  }
+
   fn Mutex {
     signature: "(): Mutex"
     doc: "Create an OS-domain mutex"
@@ -1075,6 +1088,18 @@ module sys {
     aot: "xrt_sys_barrier_new"
     argc: 1
     arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn Once {
+    signature: "(): Once"
+    doc: "Create an OS-domain once gate"
+    vm: "sys_once_new"
+    aot: "xrt_sys_once_new"
+    argc: 0
+    arg_spec: ""
     aot_direct: true
     link_object: false
     layer: "system"
@@ -1150,6 +1175,12 @@ module sys {
     signature: "(): bool"
     receiver: "Barrier"
     doc: "Wait until all parties have arrived"
+  }
+
+  type_method Once.call {
+    signature: "(body: fn(): ()): ()"
+    receiver: "Once"
+    doc: "Run the closure exactly once"
   }
 }
 

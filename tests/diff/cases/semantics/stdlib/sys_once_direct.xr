@@ -1,0 +1,11 @@
+// sys.Once calls the first closure exactly once.
+
+import sys
+
+shared const counter = Atomic<int>(0)
+let once = sys.Once()
+
+once.call(() -> { counter.fetchAdd(1) })
+once.call(() -> { counter.fetchAdd(10) })
+once.call(() -> { counter.fetchAdd(100) })
+print(counter.load())

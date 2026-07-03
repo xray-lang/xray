@@ -428,8 +428,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"RwLock", XLSP_SYM_FUNCTION, "fn(): RwLock", "Create an OS-domain read-write lock", NULL, 0},
     {"Condvar", XLSP_SYM_FUNCTION, "fn(): Condvar", "Create an OS-domain condition variable", NULL, 0},
     {"Barrier", XLSP_SYM_FUNCTION, "fn(parties: int): Barrier", "Create a reusable OS-domain barrier", NULL, 0},
+    {"Once", XLSP_SYM_FUNCTION, "fn(): Once", "Create an OS-domain once gate", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 4
+#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 5
 
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {

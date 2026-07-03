@@ -307,6 +307,7 @@ enum {
     SYMBOL_WAITFOR,
     SYMBOL_SIGNAL,
     SYMBOL_BROADCAST,
+    SYMBOL_CALL,
 
     SYMBOL_BUILTIN_COUNT  // sentinel
 };

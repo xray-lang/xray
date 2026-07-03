@@ -64,6 +64,12 @@ static const XaBuiltinMember g_gen_mutex_members[] = {
 };
 #define GEN_MUTEX_MEMBER_COUNT 3
 
+// Once methods
+static const XaBuiltinMember g_gen_once_members[] = {
+    {"call", "(body: fn(): ()): ()", "Run the closure exactly once", true, false},
+};
+#define GEN_ONCE_MEMBER_COUNT 1
+
 // RwLock methods
 static const XaBuiltinMember g_gen_rwlock_members[] = {
     {"rdlock", "(): ()", "Acquire the read side of the read-write lock", true, false},
@@ -516,8 +522,9 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"RwLock", "(): RwLock", "Create an OS-domain read-write lock", true, false},
     {"Condvar", "(): Condvar", "Create an OS-domain condition variable", true, false},
     {"Barrier", "(parties: int): Barrier", "Create a reusable OS-domain barrier", true, false},
+    {"Once", "(): Once", "Create an OS-domain once gate", true, false},
 };
-#define GEN_SYS_FUNCTION_COUNT 4
+#define GEN_SYS_FUNCTION_COUNT 5
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {

@@ -375,6 +375,7 @@ static void xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "RwLock", sys_rwlock_new);
     XRS_EXPORT(module, isolate, "Condvar", sys_condvar_new);
     XRS_EXPORT(module, isolate, "Barrier", sys_barrier_new);
+    XRS_EXPORT(module, isolate, "Once", sys_once_new);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_SYS */
 
