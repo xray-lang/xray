@@ -1,0 +1,13 @@
+import sys
+
+fn worker() -> int {
+    return 1
+}
+
+fn main() {
+    let t = sys.Thread.spawn(fn() -> int {
+        let y = await go worker()
+        return y
+    })
+    print(t)
+}

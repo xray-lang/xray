@@ -20,6 +20,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xanalyzer_ast_visitor.h"
 #include "xtype_ref_resolve.h"
 #include "xanalyzer_mono.h"
 #include "../../toolchain/xcompiler_session.h"
@@ -175,6 +176,58 @@ static void xa_check_spawn_call_boundary_args(XaInferContext *ctx, AstNode *boun
     }
 }
 
+typedef struct XaThreadSpawnSyncScan {
+    XaInferContext *ctx;
+    bool reported;
+} XaThreadSpawnSyncScan;
+
+static void xa_thread_spawn_sync_scan_pre(AstNode *node, void *ud) {
+    XaThreadSpawnSyncScan *scan = (XaThreadSpawnSyncScan *) ud;
+    if (!scan || scan->reported || !scan->ctx || !node)
+        return;
+    const char *feature = NULL;
+    if (node->type == AST_AWAIT_EXPR)
+        feature = "await";
+    else if (node->type == AST_YIELD_STMT)
+        feature = "yield";
+    if (!feature)
+        return;
+
+    XrLocation loc = {.file = scan->ctx->file_path, .line = node->line, .column = node->column};
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "sys.Thread.spawn body cannot suspend; %s is not allowed in an OS thread body",
+             feature);
+    xa_analyzer_add_diagnostic(scan->ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_AWAIT_TYPE,
+                               msg, &loc);
+    scan->reported = true;
+}
+
+static AstNode *xa_thread_spawn_inline_body(AstNode *body) {
+    if (!body)
+        return NULL;
+    if (body->type == AST_FUNCTION_DECL)
+        return body->as.function_decl.body;
+    if (body->type == AST_FUNCTION_EXPR)
+        return body->as.function_expr.body;
+    if (body->type == AST_CALL_EXPR) {
+        AstNode *callee = body->as.call_expr.callee;
+        if (callee && callee->type == AST_FUNCTION_DECL)
+            return callee->as.function_decl.body;
+        if (callee && callee->type == AST_FUNCTION_EXPR)
+            return callee->as.function_expr.body;
+    }
+    return NULL;
+}
+
+static void xa_check_thread_spawn_sync_body(XaInferContext *ctx, AstNode *body) {
+    AstNode *inline_body = xa_thread_spawn_inline_body(body);
+    if (!inline_body)
+        return;
+    XaThreadSpawnSyncScan scan = {.ctx = ctx, .reported = false};
+    xa_ast_walk(inline_body, xa_thread_spawn_sync_scan_pre, NULL, &scan);
+}
+
 static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node,
                                               CallExprNode *call) {
     xa_freestanding_report_unavailable(ctx, node, "sys.Thread.spawn", "OS threads are hosted-only");
@@ -195,6 +248,7 @@ static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node
     if (body && body->type == AST_CALL_EXPR)
         xa_check_spawn_call_boundary_args(ctx, node, &body->as.call_expr);
     check_coro_capture(ctx, body, node->line);
+    xa_check_thread_spawn_sync_body(ctx, body);
 
     XrType *result_type = xr_type_new_unit(NULL);
     if (body_type && XR_TYPE_IS_FUNCTION(body_type) && body_type->function.return_type)
