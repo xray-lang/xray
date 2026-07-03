@@ -349,6 +349,25 @@ TEST(parse_build_native_freestanding_profile) {
     xr_cli_invocation_free(&inv);
 }
 
+TEST(parse_build_native_linker_script) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native",        "--profile",      "freestanding",
+                    "--linker-script", "/tmp/kernel.ld", "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 6, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "profile", NULL), "freestanding");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "linker-script", NULL), "/tmp/kernel.ld");
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
 TEST(parse_build_cross_toolchain_options) {
     const XrCliCommandSpec *spec = xr_cli_find_command("build");
     ASSERT_NOT_NULL(spec);
@@ -671,6 +690,7 @@ RUN_TEST(parse_cmd_short_flag);
 RUN_TEST(parse_build_native_verbose);
 RUN_TEST(parse_build_native_debug_strip);
 RUN_TEST(parse_build_native_freestanding_profile);
+RUN_TEST(parse_build_native_linker_script);
 RUN_TEST(parse_build_cross_toolchain_options);
 RUN_TEST(parse_toolchain_doctor_with_zig);
 RUN_TEST(parse_fmt_branch_arrow_options);

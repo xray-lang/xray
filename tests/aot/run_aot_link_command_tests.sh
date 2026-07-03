@@ -331,6 +331,25 @@ else
     sed 's/^/      /' "$FREESTANDING_EXPORT_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_LINKER_SCRIPT="$WORK/freestanding.ld"
+printf '%s\n' 'SECTIONS { . = 0x100000; .text : { *(.text*) } }' \
+    >"$FREESTANDING_LINKER_SCRIPT"
+FREESTANDING_LINKER_SCRIPT_BIN="$WORK/freestanding_linker_script"
+FREESTANDING_LINKER_SCRIPT_LOG="$WORK/freestanding_linker_script.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --linker-script "$FREESTANDING_LINKER_SCRIPT" \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_LINKER_SCRIPT_BIN" \
+        "$FREESTANDING_EXPORT_SRC" >"$FREESTANDING_LINKER_SCRIPT_LOG" 2>&1; then
+    expect_log_contains "$FREESTANDING_LINKER_SCRIPT_LOG" \
+        "-Wl,-T,$FREESTANDING_LINKER_SCRIPT" \
+        "freestanding-profile/linker-script: passes linker script"
+    expect_log_contains "$FREESTANDING_LINKER_SCRIPT_LOG" "-nostdlib" \
+        "freestanding-profile/linker-script: keeps freestanding link flags"
+else
+    record_fail "freestanding-profile/linker-script: build failed"
+    sed 's/^/      /' "$FREESTANDING_LINKER_SCRIPT_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_EXPORT_OBJ="$WORK/freestanding_export.o"
 FREESTANDING_EXPORT_REAL_LOG="$WORK/freestanding_export_real.log"
 if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
@@ -544,6 +563,17 @@ if "$XRAY" build --profile freestanding -o "$WORK/freestanding_non_native" \
 else
     expect_log_contains "$FREESTANDING_NON_NATIVE_LOG" "--profile freestanding requires --native" \
         "freestanding-profile: requires native backend"
+fi
+
+LINKER_SCRIPT_NON_NATIVE_LOG="$WORK/linker_script_non_native.log"
+if "$XRAY" build --linker-script "$FREESTANDING_LINKER_SCRIPT" \
+        -o "$WORK/linker_script_non_native" \
+        "$FREESTANDING_EXPORT_SRC" >"$LINKER_SCRIPT_NON_NATIVE_LOG" 2>&1; then
+    record_fail "linker-script: requires native backend"
+    sed 's/^/      /' "$LINKER_SCRIPT_NON_NATIVE_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$LINKER_SCRIPT_NON_NATIVE_LOG" "--linker-script requires --native" \
+        "linker-script: requires native backend"
 fi
 
 FREESTANDING_QUOTED_STDLIB_SRC="$WORK/freestanding_quoted_stdlib.xr"
