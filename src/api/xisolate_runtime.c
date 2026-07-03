@@ -68,6 +68,7 @@ static XrEnumType *runtime_register_prelude_enum(XrVMRuntime *isolate, const cha
         type->enum_class->field_count = (uint16_t) (1 + max_payload);
         type->enum_class->own_field_count = (uint16_t) (1 + max_payload);
         type->enum_class->builtin_kind = XR_BK_ADT_ENUM;
+        type->enum_class->builtin_data = type;
     }
     return type;
 }

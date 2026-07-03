@@ -56,6 +56,22 @@
 /* ========== Container helpers (static) ========== */
 
 static void format_array(XrVMRuntime *isolate, XrStrBuf *sb, XrArray *arr, int depth) {
+    if (arr && arr->adt_enum_name && arr->adt_member_name) {
+        xr_strbuf_append_cstr(sb, arr->adt_enum_name, strlen(arr->adt_enum_name));
+        xr_strbuf_append_cstr(sb, ".", 1);
+        xr_strbuf_append_cstr(sb, arr->adt_member_name, strlen(arr->adt_member_name));
+        if (arr->length > 1) {
+            xr_strbuf_append_cstr(sb, "(", 1);
+            for (int64_t i = 1; i < arr->length; i++) {
+                if (i > 1)
+                    xr_strbuf_append_cstr(sb, ", ", 2);
+                xr_value_to_strbuf(isolate, sb, xr_array_get_element(arr, (int) i), depth + 1);
+            }
+            xr_strbuf_append_cstr(sb, ")", 1);
+        }
+        return;
+    }
+
     xr_strbuf_append_cstr(sb, "[", 1);
     int len = arr->length;
     int limit = (len > XR_FORMAT_MAX_ELEMENTS) ? XR_FORMAT_MAX_ELEMENTS : len;

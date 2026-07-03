@@ -429,6 +429,8 @@ XR_FUNC XrInstance *xr_enum_adt_construct_core(XrRuntimeCore *core, struct XrCor
     XR_DCHECK(enum_type != NULL, "adt_construct: NULL enum_type");
     XR_DCHECK(enum_type->is_adt, "adt_construct: enum is not ADT");
     XR_DCHECK(member_index < enum_type->member_count, "adt_construct: member_index out of bounds");
+    if (!xr_enum_type_ensure_adt_class(enum_type))
+        return NULL;
 
     int expected_payload = enum_type->payload_counts[member_index];
     int actual_payload = nargs < expected_payload ? nargs : expected_payload;
