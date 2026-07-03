@@ -1,0 +1,6 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects catch panic
+not_contains=CRASH
+not_contains=setjmp
+not_contains=longjmp

@@ -1,0 +1,5 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects shared const declaration
+not_contains=xrt_shared
+not_contains=CRASH

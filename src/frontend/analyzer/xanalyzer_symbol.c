@@ -683,6 +683,7 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     }
 
     dst->module_name = src->module_name;
+    dst->import_member_name = src->import_member_name;
     dst->file_path = src->file_path;
     dst->assign_count = src->assign_count;
     dst->is_const_foldable = src->is_const_foldable;

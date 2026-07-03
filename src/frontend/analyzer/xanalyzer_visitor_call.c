@@ -1176,9 +1176,22 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (call->callee && call->callee->type == AST_VARIABLE) {
         const char *fn_name = call->callee->as.variable.name;
         fn_sym = xa_lookup_visible_symbol(ctx, fn_name);
-        if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION) {
+        if (fn_sym) {
             fn_links = xa_analyzer_get_links(ctx->analyzer, fn_sym);
-
+            if (fn_sym->is_imported && fn_links && fn_links->module_name &&
+                !xa_freestanding_stdlib_member_allowed(
+                    fn_links->module_name,
+                    fn_links->import_member_name ? fn_links->import_member_name : fn_sym->name)) {
+                const char *member =
+                    fn_links->import_member_name ? fn_links->import_member_name : fn_sym->name;
+                char feature[192];
+                snprintf(feature, sizeof(feature), "%s.%s", fn_links->module_name, member);
+                xa_freestanding_report_unavailable(
+                    ctx, node, feature,
+                    "allocator hooks are not part of the freestanding mem allowlist yet");
+            }
+        }
+        if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION) {
             // FFI: calling an @extern function is unsafe — it crosses into a
             // foreign C ABI with no Xray safety guarantees. Permit it only
             // inside an `unsafe { }` region (Rust model).

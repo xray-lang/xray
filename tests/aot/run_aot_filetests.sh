@@ -216,6 +216,16 @@ expect_args() {
     sed -n 's/^args=//p' "$1" 2>/dev/null | sed -n '1p'
 }
 
+expect_status() {
+    local status
+    status="$(sed -n 's/^status=//p' "$1" 2>/dev/null | sed -n '1p')"
+    if [ -z "$status" ]; then
+        printf '%s\n' "pass"
+    else
+        printf '%s\n' "$status"
+    fi
+}
+
 probe_dump_support() {
     local probe_src="$WORK/probe.xr"
     local probe_c="$WORK/probe.c"
@@ -255,13 +265,16 @@ check_expect() {
         value="${line#*=}"
         if [ "$key" = "$line" ]; then
             echo "FAIL (bad expect directive: $(rel_path "$expect"):$line_no)"
-            echo "    expected args=, contains=, not_contains=, regex=, not_regex=, c_contains=, c_regex=, or skip="
+            echo "    expected args=, status=, contains=, not_contains=, regex=, not_regex=, c_contains=, c_regex=, or skip="
             FAIL=$((FAIL + 1))
             return 1
         fi
 
         case "$key" in
             args)
+                continue
+                ;;
+            status)
                 continue
                 ;;
             skip)
@@ -381,7 +394,7 @@ run_one() {
     local mode="$1"
     local xr_file="$2"
     local case_key="${3:-}"
-    local test_name base dump c_out expect extra_args rel safe args_key
+    local test_name base dump c_out expect extra_args expected_status rel safe args_key
     local cache_dir cached_dump cached_c tmp_dump tmp_c
 
     base="$(basename "$xr_file" .xr)"
@@ -390,8 +403,31 @@ run_one() {
     c_out="$WORK/${mode}_${base}.c"
     expect="${xr_file%.xr}.expect"
     extra_args="$(expect_args "$expect")"
+    expected_status="$(expect_status "$expect")"
 
     printf '  %-9s %-48s' "$mode" "$test_name"
+
+    case "$expected_status" in
+        pass|fail)
+            ;;
+        *)
+            echo "FAIL (unknown expected status: $expected_status)"
+            FAIL=$((FAIL + 1))
+            return 1
+            ;;
+    esac
+
+    if [ "$expected_status" = "fail" ]; then
+        rm -f "$dump" "$c_out"
+        if run_dump_command "$c_out" "$dump" "$xr_file" "$extra_args"; then
+            echo "FAIL (dump command unexpectedly succeeded)"
+            show_excerpt "$dump"
+            FAIL=$((FAIL + 1))
+            return 1
+        fi
+        check_expect "$expect" "$dump" "$c_out"
+        return $?
+    fi
 
     rel="$(rel_path "$xr_file")"
     safe="$(safe_case_name "$rel")"

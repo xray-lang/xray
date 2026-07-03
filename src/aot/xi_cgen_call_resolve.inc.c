@@ -133,7 +133,7 @@ static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, cons
 
     if ((callee->op == XI_BOX || callee->op == XI_UNBOX || xi_copy_is_identity_alias(callee) ||
          callee->op == XI_MOVE) &&
-        callee->nargs >= 1) {
+        callee->nargs >= 1 && callee->args && callee->args[0]) {
         CgStaticFunctionCall inner = cg_resolve_static_function_call(ctx, current, callee->args[0]);
         if (inner.func)
             return inner;
@@ -160,7 +160,7 @@ static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, cons
         if (local)
             return cg_static_function_call(local, cg_module_prefix_for_func(ctx, local));
         if ((!current || current->module == ctx->module) && slot >= 0 && slot < ctx->nshared &&
-            ctx->shared_funcs[slot])
+            ctx->shared_funcs && ctx->shared_funcs[slot])
             return cg_static_function_call(ctx->shared_funcs[slot], NULL);
         const XiFunc *module_init = current && current->module ? current->module->init
                                     : ctx->module              ? ctx->module->init
