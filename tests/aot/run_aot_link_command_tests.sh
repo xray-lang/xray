@@ -375,6 +375,25 @@ else
     sed 's/^/      /' "$FREESTANDING_EXPORT_REAL_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_RAWPTR_NULL_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_null.xr"
+FREESTANDING_RAWPTR_NULL_OBJ="$WORK/freestanding_rawptr_null.o"
+FREESTANDING_RAWPTR_NULL_LOG="$WORK/freestanding_rawptr_null.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_RAWPTR_NULL_OBJ" \
+        "$FREESTANDING_RAWPTR_NULL_SRC" >"$FREESTANDING_RAWPTR_NULL_LOG" 2>&1; then
+    FREESTANDING_RAWPTR_NULL_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_RAWPTR_NULL_OBJ")"
+    if [ -z "$FREESTANDING_RAWPTR_NULL_UNDEFINED" ]; then
+        record_pass "freestanding-profile/rawptr-null: no undefined symbols"
+    else
+        record_fail "freestanding-profile/rawptr-null: unexpected undefined symbols"
+        nm -u "$FREESTANDING_RAWPTR_NULL_OBJ" 2>&1 | sed '/^[[:space:]]*$/d' | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/rawptr-null: object build failed"
+    sed 's/^/      /' "$FREESTANDING_RAWPTR_NULL_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_HOOK_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_panic_hook.xr"
 FREESTANDING_HOOK_OBJ="$WORK/freestanding_panic_hook.o"
 FREESTANDING_HOOK_REAL_LOG="$WORK/freestanding_panic_hook.log"

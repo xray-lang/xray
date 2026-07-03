@@ -18,6 +18,21 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
             fprintf(out, "INT64_C(%" PRId64 ")", v->aux_int);
         if (boxed)
             fprintf(out, ")");
+    } else if (v->type->kind == XR_KIND_POINTER) {
+        if (boxed) {
+            fprintf(out, "XR_FROM_INT(");
+            if (v->aux_int == INT64_MIN)
+                fprintf(out, "INT64_MIN");
+            else
+                fprintf(out, "INT64_C(%" PRId64 ")", v->aux_int);
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "(void *)(uintptr_t)");
+            if (v->aux_int == INT64_MIN)
+                fprintf(out, "INT64_MIN");
+            else
+                fprintf(out, "INT64_C(%" PRId64 ")", v->aux_int);
+        }
     } else if (v->type->kind == XR_KIND_FLOAT) {
         double d;
         memcpy(&d, &v->aux_int, sizeof(double));

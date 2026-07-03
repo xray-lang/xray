@@ -298,6 +298,37 @@ static XrType *xa_static_capacity_method_type(XaInferContext *ctx, AstNode *obje
     return NULL;
 }
 
+static XrType *xa_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *object) {
+    if (!ctx || !object || object->type != AST_NEW_EXPR)
+        return NULL;
+    NewExprNode *ne = &object->as.new_expr;
+    if (ne->module_name || !ne->class_name || ne->type_arg_count != 1 || !ne->type_args ||
+        !ne->type_args[0])
+        return NULL;
+    bool is_mut = false;
+    if (strcmp(ne->class_name, "RawPtr") == 0) {
+        is_mut = false;
+    } else if (strcmp(ne->class_name, "RawMut") == 0) {
+        is_mut = true;
+    } else {
+        return NULL;
+    }
+    XrType *pointee = xr_tref_resolve(ctx->analyzer->isolate, ne->type_args[0]);
+    if (!pointee)
+        pointee = xr_type_new_unknown(ctx->analyzer->isolate);
+    return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
+}
+
+static XrType *xa_raw_pointer_static_method_type(XaInferContext *ctx, AstNode *object,
+                                                 const char *name) {
+    XrType *ptr_type = xa_raw_pointer_type_namespace(ctx, object);
+    if (!ptr_type)
+        return NULL;
+    if (name && strcmp(name, "null") == 0)
+        return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, ptr_type, false);
+    return xr_type_new_unknown(ctx->analyzer->isolate);
+}
+
 static void add_index_type_error(XaInferContext *ctx, AstNode *node, XrType *index_type,
                                  XrType *expected_type) {
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -886,6 +917,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
 
     MemberAccessNode *ma = &node->as.member_access;
+
+    XrType *raw_pointer_static_fn = xa_raw_pointer_static_method_type(ctx, ma->object, ma->name);
+    if (raw_pointer_static_fn)
+        return raw_pointer_static_fn;
+
     XrType *obj_type = xa_visit_infer_expr(ctx, ma->object);
 
     XrType *static_capacity_fn = xa_static_capacity_method_type(ctx, ma->object, ma->name);

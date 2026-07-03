@@ -27,6 +27,27 @@
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
 
+static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *object) {
+    if (!ctx || !object || object->type != AST_NEW_EXPR)
+        return NULL;
+    NewExprNode *ne = &object->as.new_expr;
+    if (ne->module_name || !ne->class_name || ne->type_arg_count != 1 || !ne->type_args ||
+        !ne->type_args[0])
+        return NULL;
+    bool is_mut = false;
+    if (strcmp(ne->class_name, "RawPtr") == 0) {
+        is_mut = false;
+    } else if (strcmp(ne->class_name, "RawMut") == 0) {
+        is_mut = true;
+    } else {
+        return NULL;
+    }
+    XrType *pointee = xr_tref_resolve(ctx->analyzer->isolate, ne->type_args[0]);
+    if (!pointee)
+        pointee = xr_type_new_unknown(ctx->analyzer->isolate);
+    return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
+}
+
 static bool xa_object_literal_bool_field(AstNode *node, const char *field_name, bool *out_value) {
     if (!node || node->type != AST_OBJECT_LITERAL || !field_name || !out_value)
         return false;
@@ -881,7 +902,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *ma = &call->callee->as.member_access;
         method_name = ma->name;
-        callee_obj_type = xa_visit_infer_expr(ctx, ma->object);
+        callee_obj_type = xa_call_raw_pointer_type_namespace(ctx, ma->object);
+        if (!callee_obj_type)
+            callee_obj_type = xa_visit_infer_expr(ctx, ma->object);
 
         // Enforce private/protected visibility on user-class method calls.
         if (method_name && callee_obj_type && XR_TYPE_IS_INSTANCE(callee_obj_type) &&

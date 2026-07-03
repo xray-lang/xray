@@ -1,0 +1,15 @@
+// RawPtr<T>.null() / RawMut<T>.null() are typed raw-pointer constants.
+// The VM stores raw pointers as address ints; AOT stores them as native pointers.
+import mem
+
+let p = RawPtr<uint8>.null()
+let q = RawMut<uint8>.null()
+let r: RawPtr<uint8> = q
+
+print(p.isNull())
+print(q.isNull())
+print(r.isNull())
+print(mem.addressOf(p))
+print(mem.addressOf(q))
+print(mem.addressOf(r))
+print("ok")

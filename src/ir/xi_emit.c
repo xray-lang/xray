@@ -393,7 +393,8 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     switch (ty->kind) {
-        case XR_KIND_INT: {
+        case XR_KIND_INT:
+        case XR_KIND_POINTER: {
             int64_t val = v->aux_int;
             if (val >= LOADI_MIN && val <= LOADI_MAX) {
                 emit_inst(ctx, CREATE_AsBx(OP_LOADI, dst, (int) val));
