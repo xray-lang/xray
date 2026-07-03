@@ -352,6 +352,13 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         var->symbol_id = sym->id;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (var->storage_mode == XR_STORAGE_SHARED && xa_freestanding_profile_enabled(ctx->analyzer)) {
+        xa_freestanding_report_unavailable(
+            ctx, node,
+            node->type == AST_CONST_DECL ? "shared const declaration" : "shared let declaration",
+            "shared storage still requires module initialization; static data sections are a "
+            "future freestanding M3 step");
+    }
 
     // Variable declarations must have a type annotation or initializer.
     if (!var->initializer && !links->declared_type) {
