@@ -1,0 +1,7 @@
+import sys
+
+let workerName = "worker"
+let t = sys.Thread.spawn(ThreadOptions{ name: workerName }, fn() -> int {
+    return 1
+})
+print(t.join())

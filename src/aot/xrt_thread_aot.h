@@ -20,6 +20,7 @@
 typedef struct xrt_thread_aot_entry {
     xrt_thread_object_t *thread;
     const XrAotCoroDesc *desc;
+    const char *name;
     void *frame;
 } xrt_thread_aot_entry_t;
 
@@ -45,14 +46,15 @@ static void *xrt_thread_aot_entry(void *arg) {
 
     xrt_thread_object_t *thread = entry->thread;
     const XrAotCoroDesc *desc = entry->desc;
+    const char *name = entry->name ? entry->name : (desc ? desc->name : NULL);
     void *frame = entry->frame;
     XRT_FREE(entry);
 
     if (!thread)
         return NULL;
 
-    if (desc && desc->name)
-        xr_thread_set_name(xr_thread_self(), desc->name);
+    if (name)
+        xr_thread_set_name(xr_thread_self(), name);
 
     XrAotResult result =
         desc && desc->resume ? desc->resume(frame, NULL) : xr_aot_error(XR_NULL_VAL, false);
@@ -75,7 +77,7 @@ static void *xrt_thread_aot_entry(void *arg) {
 }
 
 static inline XrValue xrt_thread_spawn_aot(const XrAotCoroDesc *desc, void *frame,
-                                           size_t stack_size) {
+                                           size_t stack_size, const char *name) {
     if (!desc || !desc->resume || !frame) {
         xrt_thread_aot_release_frame(desc, frame);
         xrt_thread_aot_set_pending_error("sys.Thread.spawn: failed to allocate thread frame");
@@ -101,6 +103,7 @@ static inline XrValue xrt_thread_spawn_aot(const XrAotCoroDesc *desc, void *fram
     }
     entry->thread = thread;
     entry->desc = desc;
+    entry->name = name;
     entry->frame = frame;
 
     XrValue handle = xrt_thread_box(thread);
@@ -113,8 +116,9 @@ static inline XrValue xrt_thread_spawn_aot(const XrAotCoroDesc *desc, void *fram
         xrt_thread_aot_set_pending_error("sys.Thread.spawn: OS thread creation failed");
         return XR_NULL_VAL;
     }
-    if (desc->name)
-        xr_thread_set_name(thread->handle, desc->name);
+    const char *thread_name = name ? name : desc->name;
+    if (thread_name)
+        xr_thread_set_name(thread->handle, thread_name);
     return handle;
 }
 #endif

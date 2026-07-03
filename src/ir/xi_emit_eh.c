@@ -345,6 +345,14 @@ XR_FUNC void xi_emit_thread_spawn(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
     emit_inst(ctx, CREATE_ABC(OP_THREAD_SPAWN, dst, dst, nargs));
 
+    const char *thread_name = xi_thread_spawn_name(v);
+    if (thread_name) {
+        int name_k = add_const_string(ctx, thread_name);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABx(OP_NOP, 1, (uint32_t) name_k));
+    }
+
     int64_t stack_size = xi_thread_spawn_stack_size(v);
     if (stack_size > 0) {
         int stack_k = add_const_int(ctx, stack_size);
