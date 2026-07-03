@@ -20,6 +20,14 @@ mem.set(q, 5, 128)
 unsafe { print(q[0]) }
 unsafe { print(q[127]) }
 
+// zeroed allocation
+let z = mem.allocZeroed(8)
+print(z.isNull())
+unsafe { print(z[0]) }
+unsafe { print(z[7]) }
+unsafe { z[3] = 11 }
+unsafe { print(z[3]) }
+
 // realloc keeps existing bytes
 let r = mem.realloc(p, 64)
 print(r.isNull())
@@ -28,4 +36,5 @@ unsafe { print(r[15]) }
 
 mem.free(r)
 mem.free(q)
+mem.free(z)
 print("ok")

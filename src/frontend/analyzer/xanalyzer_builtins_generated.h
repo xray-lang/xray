@@ -382,6 +382,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"prefetch", "(ptr: RawPtr<uint8>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false},
     {"cacheLineSize", "(): int", "CPU cache line size in bytes", true, false},
     {"alloc", "(n: int): RawMut<uint8>", "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free", true, false},
+    {"allocZeroed", "(n: int): RawMut<uint8>", "Allocate n zero-initialized bytes (calloc). NULL on OOM; pair with mem.free", true, false},
     {"allocAligned", "(n: int, align: int): RawMut<uint8>", "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure", true, false},
     {"realloc", "(ptr: RawMut<uint8>, n: int): RawMut<uint8>", "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM", true, false},
     {"free", "(ptr: RawMut<uint8>): ()", "Free a buffer from mem.alloc/allocAligned/realloc", true, false},
@@ -406,7 +407,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"subOverflows", "(a: int, b: int): bool", "Whether signed 64-bit subtraction of a and b overflows", true, false},
     {"mulOverflows", "(a: int, b: int): bool", "Whether signed 64-bit multiplication of a and b overflows", true, false},
 };
-#define GEN_MEM_FUNCTION_COUNT 34
+#define GEN_MEM_FUNCTION_COUNT 35
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {

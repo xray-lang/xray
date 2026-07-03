@@ -2555,6 +2555,18 @@ module mem {
     layer: "core"
   }
 
+  fn allocZeroed {
+    signature: "(n: int): RawMut<uint8>"
+    doc: "Allocate n zero-initialized bytes (calloc). NULL on OOM; pair with mem.free"
+    vm: "mem_alloc_zeroed"
+    aot: "xrt_mem_alloc_zeroed"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
   fn allocAligned {
     signature: "(n: int, align: int): RawMut<uint8>"
     doc: "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure"

@@ -445,7 +445,7 @@ if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-comm
     sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" \
-        "freestanding profile rejects mem.alloc" \
+        "freestanding profile rejects mem.allocZeroed" \
         "freestanding-profile/mem: rejects selective allocator import"
 fi
 

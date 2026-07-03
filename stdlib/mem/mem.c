@@ -362,6 +362,12 @@ static XrValue mem_alloc(XrVMRuntime *isolate, XrValue *args, int argc) {
     return mem_ptr_result(malloc(n));
 }
 
+static XrValue mem_alloc_zeroed(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    size_t n = (argc >= 1 && XR_IS_INT(args[0])) ? (size_t) XR_TO_INT(args[0]) : 0;
+    return mem_ptr_result(calloc(1, n));
+}
+
 static XrValue mem_alloc_aligned(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
