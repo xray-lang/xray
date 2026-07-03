@@ -1,0 +1,6 @@
+@weak
+fn weak_without_export() -> int32 {
+    return 1
+}
+
+print(weak_without_export())

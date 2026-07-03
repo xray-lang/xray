@@ -1,0 +1,5 @@
+@section("")
+@c_export("xr_bad_section")
+fn bad_section() -> int32 {
+    return 1
+}

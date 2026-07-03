@@ -1059,6 +1059,13 @@ typedef struct XiFunc {
     bool c_export;
     const char *c_export_symbol;
 
+    /* AOT linker/layout attributes. For @c_export functions these apply to
+     * the generated public C wrapper; otherwise they apply to the internal AOT
+     * function definition. */
+    const char *aot_section;
+    bool aot_weak;
+    bool aot_used;
+
     /* True when params[0] is a borrowed method receiver. */
     bool receiver_borrowed;
 

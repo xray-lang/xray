@@ -1,0 +1,1 @@
+@weak requires @c_export so the weak symbol has a stable C name

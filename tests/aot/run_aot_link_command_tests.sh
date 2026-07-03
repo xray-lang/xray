@@ -394,6 +394,66 @@ else
     sed 's/^/      /' "$FREESTANDING_EXPORT_REAL_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_ATTR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_symbol_attrs.xr"
+FREESTANDING_ATTR_OBJ="$WORK/freestanding_symbol_attrs.o"
+FREESTANDING_ATTR_LOG="$WORK/freestanding_symbol_attrs.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_ATTR_OBJ" \
+        "$FREESTANDING_ATTR_SRC" >"$FREESTANDING_ATTR_LOG" 2>&1; then
+    FREESTANDING_ATTR_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_ATTR_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_ATTR_C" ]; then
+        expect_log_contains "$FREESTANDING_ATTR_C" "XRT_ATTR_SECTION(\"__TEXT,.xray_boot\")" \
+            "freestanding-profile/symbol-attrs: emits boot section attribute"
+        expect_log_contains "$FREESTANDING_ATTR_C" "XRT_ATTR_SECTION(\"__TEXT,.xray_hook\") XRT_ATTR_WEAK XRT_ATTR_USED int32_t xray_hook_score" \
+            "freestanding-profile/symbol-attrs: emits weak used hook export"
+    else
+        record_fail "freestanding-profile/symbol-attrs: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_ATTR_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_ATTR_NM="$WORK/freestanding_symbol_attrs.nm"
+    if nm -m "$FREESTANDING_ATTR_OBJ" >"$FREESTANDING_ATTR_NM" 2>/dev/null; then
+        if grep -E 'weak external.*_?xray_hook_score$' "$FREESTANDING_ATTR_NM" >/dev/null; then
+            record_pass "freestanding-profile/symbol-attrs: hook export is weak"
+        else
+            record_fail "freestanding-profile/symbol-attrs: hook export is not weak"
+            sed 's/^/      /' "$FREESTANDING_ATTR_NM" | sed -n '1,80p'
+        fi
+    elif nm -g "$FREESTANDING_ATTR_OBJ" >"$FREESTANDING_ATTR_NM" 2>/dev/null; then
+        if grep -Eq '[[:space:]][WwVv][[:space:]]+_?xray_hook_score$' "$FREESTANDING_ATTR_NM"; then
+            record_pass "freestanding-profile/symbol-attrs: hook export is weak"
+        else
+            record_fail "freestanding-profile/symbol-attrs: hook export is not weak"
+            sed 's/^/      /' "$FREESTANDING_ATTR_NM" | sed -n '1,80p'
+        fi
+    else
+        record_fail "freestanding-profile/symbol-attrs: nm failed"
+    fi
+    FREESTANDING_ATTR_SECTIONS="$WORK/freestanding_symbol_attrs.sections"
+    if otool -l "$FREESTANDING_ATTR_OBJ" >"$FREESTANDING_ATTR_SECTIONS" 2>/dev/null; then
+        if grep -Fq "sectname .xray_boot" "$FREESTANDING_ATTR_SECTIONS" &&
+           grep -Fq "sectname .xray_hook" "$FREESTANDING_ATTR_SECTIONS"; then
+            record_pass "freestanding-profile/symbol-attrs: object contains custom sections"
+        else
+            record_fail "freestanding-profile/symbol-attrs: object missing custom sections"
+            sed 's/^/      /' "$FREESTANDING_ATTR_SECTIONS" | sed -n '1,120p'
+        fi
+    elif objdump -h "$FREESTANDING_ATTR_OBJ" >"$FREESTANDING_ATTR_SECTIONS" 2>/dev/null; then
+        if grep -Fq ".xray_boot" "$FREESTANDING_ATTR_SECTIONS" &&
+           grep -Fq ".xray_hook" "$FREESTANDING_ATTR_SECTIONS"; then
+            record_pass "freestanding-profile/symbol-attrs: object contains custom sections"
+        else
+            record_fail "freestanding-profile/symbol-attrs: object missing custom sections"
+            sed 's/^/      /' "$FREESTANDING_ATTR_SECTIONS" | sed -n '1,120p'
+        fi
+    else
+        record_fail "freestanding-profile/symbol-attrs: section dump failed"
+    fi
+else
+    record_fail "freestanding-profile/symbol-attrs: object build failed"
+    sed 's/^/      /' "$FREESTANDING_ATTR_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_RAWPTR_NULL_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_null.xr"
 FREESTANDING_RAWPTR_NULL_OBJ="$WORK/freestanding_rawptr_null.o"
 FREESTANDING_RAWPTR_NULL_LOG="$WORK/freestanding_rawptr_null.log"

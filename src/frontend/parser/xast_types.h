@@ -246,6 +246,9 @@ typedef enum {
     ATTR_REPR_C,        // @repr(C) — struct laid out per C ABI
     ATTR_REPR_PACKED,   // @repr(packed) — struct with no inter-field padding
     ATTR_ALIGN,         // @align(N) — struct alignment override (N in timeout)
+    ATTR_SECTION,       // @section("name") — place AOT function/C export in section
+    ATTR_WEAK,          // @weak — emit weak AOT C export symbol
+    ATTR_USED,          // @used — force AOT function/C export emission
 } AttributeKind;
 
 // Destructuring pattern types (flat only, no nesting)

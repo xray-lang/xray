@@ -708,6 +708,12 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
             } else if (a->kind == ATTR_C_EXPORT) {
                 l.func->c_export = true;
                 l.func->c_export_symbol = a->str_arg ? a->str_arg : fdecl->name;
+            } else if (a->kind == ATTR_SECTION) {
+                l.func->aot_section = a->str_arg;
+            } else if (a->kind == ATTR_WEAK) {
+                l.func->aot_weak = true;
+            } else if (a->kind == ATTR_USED) {
+                l.func->aot_used = true;
             }
         }
     }
