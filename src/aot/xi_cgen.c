@@ -1533,6 +1533,8 @@ static bool emit_struct_aggregate_box_expr(XiCgenCtx *ctx, FILE *out, const XiFu
                                            const XiValue *value, const char *prefix);
 static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix);
+static bool emit_thread_spawn_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                         const XiValue *v, const char *prefix, bool in_coro);
 #include "xi_cgen_abi_helpers.inc.c"
 #include "xi_cgen_value_helpers.inc.c"
 #include "xi_cgen_method_symbols.inc.c"
@@ -3995,6 +3997,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
 
     if (emit_class_native_ctor_value_stmt(ctx, out, f, prefix, v))
+        return;
+
+    if (emit_thread_spawn_value_stmt(ctx, out, f, v, prefix, false))
         return;
 
     if ((v->op == XI_GET_SHARED && cg_value_only_used_by_layout_struct_new(f, v)) ||
