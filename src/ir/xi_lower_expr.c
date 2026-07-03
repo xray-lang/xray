@@ -5707,7 +5707,9 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
     /* Struct with layout: emit XI_STRUCT_NEW + XI_STRUCT_SET.
      * Emitter decides stack vs heap based on local use-scan. */
     if (cls) {
-        XrStructLayout *slayout = xi_lower_lookup_struct_layout(l, sname);
+        XrStructLayout *slayout = xi_lower_type_struct_layout(l, result_type);
+        if (!slayout)
+            slayout = xi_lower_lookup_struct_layout(l, sname);
 
         if (slayout) {
             XiValue *inst = xi_value_new(l->func, l->cur_block, XI_STRUCT_NEW, result_type, 1);

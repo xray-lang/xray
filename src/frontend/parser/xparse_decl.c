@@ -821,8 +821,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
     bool has_computed = false;
     int count = 0;
     int capacity = 0;
-    bool is_map = false;                // Legacy branch marker; object literals are not Maps.
-    bool separator_determined = false;  // Whether separator has been determined
+    bool is_map = false;  // Legacy branch marker; object literals are not Maps.
 
     do {
         // Expand capacity
@@ -932,7 +931,6 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         // the `#{ k: v }` prefix form. The unified arrow `->` is reserved
         // for function / branch arrows and is rejected here with a hint.
         if (xr_parser_match(parser, TK_COLON)) {
-            separator_determined = true;
         } else if (xr_parser_check(parser, TK_ARROW)) {
             xr_parser_error(
                 parser,
@@ -940,7 +938,6 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             return xr_ast_literal_null(parser->compiler_session, line);
         } else if (shorthand_name &&
                    (xr_parser_check(parser, TK_COMMA) || xr_parser_check(parser, TK_RBRACE))) {
-            separator_determined = true;
             values[count] = xr_ast_variable(parser->compiler_session, shorthand_name, line);
             count++;
             continue;
@@ -1600,7 +1597,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
             {
                 // Single variable declaration: let a or let a = expr or let a: Type = expr
                 // Single variable declaration: let a or let a = expr or let a: Type = expr
-                XrType *var_type = NULL;
+                XrTypeRef *var_type = NULL;
                 if (xr_parser_match(parser, TK_COLON)) {
                     var_type = xr_parse_type_annotation(parser);
                 }
@@ -1691,7 +1688,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
         int name_length = parser->previous.length;
 
         // Parse optional type annotation (: Type)
-        XrType *type_annotation = NULL;
+        XrTypeRef *type_annotation = NULL;
         if (xr_parser_match(parser, TK_COLON)) {
             type_annotation = xr_parse_type_annotation(parser);
         }

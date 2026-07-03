@@ -1204,7 +1204,7 @@ static AstNode *try_parse_generic_call(Parser *parser, AstNode *callee) {
     parser->panic_mode = 1;
 
     // Try to parse type arguments
-    XrType *type_args[16];
+    XrTypeRef *type_args[16];
     int type_arg_count = 0;
 
     // Already consumed '<', now parse type list
@@ -1212,7 +1212,7 @@ static AstNode *try_parse_generic_call(Parser *parser, AstNode *callee) {
         if (type_arg_count >= 16)
             break;
 
-        XrType *type = xr_parse_type_annotation(parser);
+        XrTypeRef *type = xr_parse_type_annotation(parser);
         if (!type || parser->had_error) {
             // Not valid type args, restore and return NULL
             *parser = checkpoint;
@@ -1268,7 +1268,7 @@ static AstNode *try_parse_generic_call(Parser *parser, AstNode *callee) {
     // generic type arguments drive element/key/value layout.
     if (callee->type == AST_VARIABLE && xr_is_construct_only_type_name(callee->as.variable.name)) {
         return xr_ast_new_expr(parser->compiler_session, NULL, callee->as.variable.name, arguments,
-                               arg_count, (XrTypeRef **) type_args, type_arg_count, line);
+                               arg_count, type_args, type_arg_count, line);
     }
 
     return xr_ast_call_expr_generic(parser->compiler_session, callee, arguments, arg_count,
@@ -1343,7 +1343,7 @@ AstNode *xr_parse_is(Parser *parser, AstNode *left) {
     // Allow bare container types for runtime type checks
     bool saved = parser->allow_bare_container;
     parser->allow_bare_container = true;
-    XrType *type = xr_parse_type_annotation(parser);
+    XrTypeRef *type = xr_parse_type_annotation(parser);
     parser->allow_bare_container = saved;
     if (!type) {
         xr_parser_error(parser, "expected type after 'is'");
@@ -1400,7 +1400,7 @@ AstNode *xr_parse_as_cast(Parser *parser, AstNode *left) {
     }
     // Check for safe cast: as Type? (XrTypeRef uses XR_TREF_OPTIONAL kind)
     bool is_safe = xr_tref_is_nullable(target_type);
-    return xr_ast_as_expr(parser->compiler_session, left, (XrType *) target_type, is_safe, line);
+    return xr_ast_as_expr(parser->compiler_session, left, target_type, is_safe, line);
 }
 
 // Parse optional chain: obj?.prop, obj?.method(), func?.()

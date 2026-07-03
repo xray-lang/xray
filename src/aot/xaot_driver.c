@@ -42,6 +42,7 @@
 #include "xaot_prepare.h"
 #include "xaot_verify.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xanalyzer_mono.h"
 #include "../toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -901,6 +902,35 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
             fprintf(stderr, "Error: semantic analysis failed for '%s'\n", spec->source_path);
             goto fail_free_analyzer;
         }
+        spec->export_symbols =
+            xa_analyzer_collect_export_symbols(shared_analyzer, (XrAstNode *) spec->ast);
+        xa_analyzer_clear_diagnostics(shared_analyzer);
+    }
+
+    /* Mirror the VM compiler entry: monomorphize after the first graph-aware
+     * analysis, then analyze again so cloned declarations have concrete
+     * signatures and value-struct layouts before Xi lowering. */
+    for (int ti = 0; ti < nmodules; ti++) {
+        int idx = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[idx];
+        if (spec->ast)
+            xa_mono_pass((AstNode *) spec->ast, X);
+    }
+
+    for (int ti = 0; ti < nmodules; ti++) {
+        int idx = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[idx];
+        if (!spec->ast || !spec->source_path)
+            continue;
+        xa_analyzer_analyze(shared_analyzer, spec->source_path, (XrAstNode *) spec->ast);
+        int file_errors = report_analyzer_diagnostics(shared_analyzer, spec->source_path);
+        if (file_errors > 0) {
+            fprintf(stderr, "Error: post-monomorphization analysis failed for '%s'\n",
+                    spec->source_path);
+            goto fail_free_analyzer;
+        }
+        if (spec->export_symbols)
+            xr_hashmap_free(spec->export_symbols);
         spec->export_symbols =
             xa_analyzer_collect_export_symbols(shared_analyzer, (XrAstNode *) spec->ast);
         xa_analyzer_clear_diagnostics(shared_analyzer);
