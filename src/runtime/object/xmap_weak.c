@@ -46,3 +46,41 @@ uint32_t xr_map_purge_weak_target(XrMap *map, XrObjHeader *target, XrCoroHeap *o
     }
     return removed;
 }
+
+// Tombstone an entry without releasing its value; hand the value to `sink`.
+static void weak_map_tombstone_collect(XrMap *map, uint32_t eidx, XrWeakValueSink sink, void *ctx) {
+    XrMapEntry *e = &map->entries[eidx];
+    if (sink)
+        sink(ctx, e->value);
+    e->key = xr_null();
+    e->value = xr_null();
+    e->key_tt = XR_MAP_ENTRY_NIL_KEY;
+
+    for (uint32_t slot = 0; slot < map->indices_size; slot++) {
+        if (map->indices[slot] == (int32_t) eidx) {
+            map->indices[slot] = XR_MAP_IX_EMPTY;
+            xr_swiss_ctrl_set(map->ctrl, map->indices_size, slot, XR_SWISS_CTRL_DELETED);
+            break;
+        }
+    }
+    if (map->count > 0)
+        map->count--;
+}
+
+uint32_t xr_map_purge_weak_target_collect(XrMap *map, XrObjHeader *target, XrWeakValueSink sink,
+                                          void *ctx) {
+    if (!map || !target || !(map->flags & XR_MAP_FLAG_WEAK) || xr_map_isdummy(map) ||
+        !map->entries || (map->hdr.extra & XR_OBJ_DEAD))
+        return 0;
+
+    uint32_t removed = 0;
+    for (uint32_t i = 0; i < map->nentries; i++) {
+        XrMapEntry *e = &map->entries[i];
+        if (e->key_tt == XR_MAP_ENTRY_NIL_KEY || !XR_IS_PTR(e->key) ||
+            XR_VALUE_GCPTR(e->key) != target)
+            continue;
+        weak_map_tombstone_collect(map, i, sink, ctx);
+        removed++;
+    }
+    return removed;
+}

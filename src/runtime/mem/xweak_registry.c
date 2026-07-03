@@ -10,6 +10,7 @@
 
 #include "xweak_registry.h"
 #include "../core/xr_runtime_core.h"
+#include "xcoro_heap.h"
 #include "../object/xmap.h"
 #include "../object/xset.h"
 #include "../xisolate_api.h"
@@ -138,6 +139,53 @@ void xr_weak_registry_unregister_set(XrVMRuntime *isolate, XrSet *set) {
     xr_amutex_unlock(&registry->lock);
 }
 
+// Collects removed weak-map values so they can be released AFTER the registry
+// lock is dropped. Releasing inline under the lock could recurse (a value's
+// destruction re-enters xr_weak_registry_target_dying) and self-deadlock on the
+// non-recursive registry lock.
+typedef struct {
+    XrValue inline_buf[32];
+    XrValue *values;
+    uint32_t count;
+    uint32_t cap;
+    bool heap_alloc;
+} WeakPurgeSink;
+
+static void weak_purge_sink_init(WeakPurgeSink *s) {
+    s->values = s->inline_buf;
+    s->count = 0;
+    s->cap = (uint32_t) (sizeof(s->inline_buf) / sizeof(s->inline_buf[0]));
+    s->heap_alloc = false;
+}
+
+static void weak_purge_sink_push(void *ctx, XrValue value) {
+    if (!XR_IS_PTR(value))
+        return;  // nothing to release for non-pointer values
+    WeakPurgeSink *s = (WeakPurgeSink *) ctx;
+    if (s->count == s->cap) {
+        uint32_t new_cap = s->cap * 2u;
+        XrValue *grown;
+        if (s->heap_alloc) {
+            grown = (XrValue *) xr_realloc(s->values, sizeof(XrValue) * new_cap);
+        } else {
+            grown = (XrValue *) xr_malloc(sizeof(XrValue) * new_cap);
+            if (grown)
+                memcpy(grown, s->values, sizeof(XrValue) * s->count);
+        }
+        if (!grown)
+            return;  // OOM: drop this value (leaks one ref; never crashes)
+        s->values = grown;
+        s->cap = new_cap;
+        s->heap_alloc = true;
+    }
+    s->values[s->count++] = value;
+}
+
+static void weak_purge_sink_free(WeakPurgeSink *s) {
+    if (s->heap_alloc)
+        xr_free(s->values);
+}
+
 void xr_weak_registry_target_dying(XrVMRuntime *isolate, XrObjHeader *target,
                                    XrCoroHeap *owner_heap) {
     if (!isolate || !target || !(target->extra & XR_OBJ_WEAKABLE))
@@ -146,39 +194,26 @@ void xr_weak_registry_target_dying(XrVMRuntime *isolate, XrObjHeader *target,
     if (!registry)
         return;
 
-    XrMap *stack_maps[64];
-    XrSet *stack_sets[64];
-    XrMap **maps = stack_maps;
-    XrSet **sets = stack_sets;
-    uint32_t map_count = 0;
-    uint32_t set_count = 0;
+    WeakPurgeSink sink;
+    weak_purge_sink_init(&sink);
 
+    // Purge under the lock so a concurrent unregister/destroy cannot free or
+    // relocate a container mid-iteration (P1-2 UAF). WeakSet purge releases
+    // nothing (the dying element IS the target), so it runs directly. WeakMap
+    // purge would release each entry's VALUE, which can recurse back into this
+    // function and self-deadlock — so we only tombstone + collect here and
+    // release the collected values after dropping the lock.
     xr_amutex_lock(&registry->lock);
-    map_count = registry->map_count;
-    set_count = registry->set_count;
-    if (map_count > (uint32_t) (sizeof(stack_maps) / sizeof(stack_maps[0])))
-        maps = (XrMap **) xr_malloc(sizeof(XrMap *) * map_count);
-    if (set_count > (uint32_t) (sizeof(stack_sets) / sizeof(stack_sets[0])))
-        sets = (XrSet **) xr_malloc(sizeof(XrSet *) * set_count);
-    if (maps && map_count > 0)
-        memcpy(maps, registry->maps, sizeof(XrMap *) * map_count);
-    else
-        map_count = 0;
-    if (sets && set_count > 0)
-        memcpy(sets, registry->sets, sizeof(XrSet *) * set_count);
-    else
-        set_count = 0;
+    for (uint32_t i = 0; i < registry->map_count; i++)
+        xr_map_purge_weak_target_collect(registry->maps[i], target, weak_purge_sink_push, &sink);
+    for (uint32_t i = 0; i < registry->set_count; i++)
+        xr_set_purge_weak_target(registry->sets[i], target);
     xr_amutex_unlock(&registry->lock);
 
-    for (uint32_t i = 0; i < map_count; i++)
-        xr_map_purge_weak_target(maps[i], target, owner_heap);
-    for (uint32_t i = 0; i < set_count; i++)
-        xr_set_purge_weak_target(sets[i], target);
+    for (uint32_t i = 0; i < sink.count; i++)
+        xr_rc_release_value(owner_heap, sink.values[i]);
 
-    if (maps != stack_maps)
-        xr_free(maps);
-    if (sets != stack_sets)
-        xr_free(sets);
+    weak_purge_sink_free(&sink);
 }
 
 void xr_weak_registry_destroy(XrVMRuntime *isolate) {

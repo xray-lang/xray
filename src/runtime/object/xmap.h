@@ -117,6 +117,17 @@ XR_FUNC XrMap *xr_map_with_capacity(struct XrCoroutine *coro, uint32_t capacity_
 XR_FUNC uint32_t xr_map_purge_weak_target(XrMap *map, XrObjHeader *target,
                                           struct XrCoroHeap *owner_heap);
 
+// Receives each removed weak-map value so the caller can release it OUTSIDE any
+// lock. Releasing a value inline can recurse (value destruction -> weak-registry
+// purge), so the weak registry must defer releases to after it drops its lock.
+typedef void (*XrWeakValueSink)(void *ctx, XrValue value);
+
+// Like xr_map_purge_weak_target, but instead of releasing removed values inline
+// it hands each one to `sink`. Lets the caller tombstone under a lock (so the
+// map cannot be freed mid-iteration) and release values afterwards.
+XR_FUNC uint32_t xr_map_purge_weak_target_collect(XrMap *map, XrObjHeader *target,
+                                                  XrWeakValueSink sink, void *ctx);
+
 struct XrCoroHeap;
 // Pre-size entries[]/indices[] for `count` entries, charging external-byte
 // accounting to `heap` (used by deep-copy, which runs off the destination coro).
