@@ -1,0 +1,7 @@
+import mem
+
+@c_export("xray_bad_alloc")
+fn xray_bad_alloc(n: int) -> int {
+    let p = mem.alloc(n)
+    return mem.addressOf(p)
+}

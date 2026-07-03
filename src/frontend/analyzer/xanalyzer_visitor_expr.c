@@ -905,6 +905,14 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 // Look up member (function or constant) in module type table
                 const char *sig = xa_builtin_get_module_func_signature(mod_name, ma->name);
                 if (sig) {
+                    if (xa_freestanding_profile_enabled(ctx->analyzer) &&
+                        !xa_freestanding_stdlib_member_allowed(mod_name, ma->name)) {
+                        char feature[192];
+                        snprintf(feature, sizeof(feature), "%s.%s", mod_name, ma->name);
+                        xa_freestanding_report_unavailable(
+                            ctx, node, feature,
+                            "allocator hooks are not part of the freestanding mem allowlist yet");
+                    }
                     XrType *mod_result = NULL;
                     // Constant property: signature is ": type" (no parens)
                     if (sig[0] == ':') {

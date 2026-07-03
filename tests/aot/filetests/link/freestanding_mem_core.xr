@@ -1,0 +1,33 @@
+import mem
+
+@c_export("xray_mem_addr_roundtrip")
+fn xray_mem_addr_roundtrip(addr: int) -> int {
+    let p = mem.fromAddress(addr)
+    return mem.addressOf(p)
+}
+
+@c_export("xray_mem_bits")
+fn xray_mem_bits(x: int, n: int) -> int {
+    return mem.popcount(x) + mem.leadingZeros(x) + mem.trailingZeros(x) +
+        mem.rotateLeft(x, n) + mem.rotateRight(x, n) + mem.addWrapping(x, n) +
+        mem.subWrapping(x, n) + mem.mulWrapping(x, n)
+}
+
+@c_export("xray_mem_bulk")
+fn xray_mem_bulk(dst: int, src: int, n: int) -> int {
+    let d = mem.fromAddress(dst)
+    let s = mem.fromAddress(src)
+    mem.copy(d, s, n)
+    mem.move(d, s, n)
+    mem.set(d, 0, n)
+    return mem.compare(d, s, n)
+}
+
+@c_export("xray_mem_mmio_shape")
+fn xray_mem_mmio_shape(addr: int) -> int {
+    let p = mem.fromAddress(addr)
+    mem.prefetch(p, 1)
+    mem.volatileStore(p, 305419896, 4)
+    mem.fence(4)
+    return mem.volatileLoad(p, 4)
+}

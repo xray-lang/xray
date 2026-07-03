@@ -392,6 +392,63 @@ else
     sed 's/^/      /' "$FREESTANDING_HOOK_REAL_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_MEM_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_core.xr"
+FREESTANDING_MEM_OBJ="$WORK/freestanding_mem_core.o"
+FREESTANDING_MEM_REAL_LOG="$WORK/freestanding_mem_core.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_MEM_OBJ" \
+        "$FREESTANDING_MEM_SRC" >"$FREESTANDING_MEM_REAL_LOG" 2>&1; then
+    FREESTANDING_MEM_KEPT_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_MEM_REAL_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_MEM_KEPT_C" ]; then
+        expect_log_contains "$FREESTANDING_MEM_KEPT_C" "#include \"xrt_core_freestanding.h\"" \
+            "freestanding-profile/mem: generated C uses freestanding prelude"
+        expect_log_not_contains "$FREESTANDING_MEM_KEPT_C" "#include \"xrt_mem.h\"" \
+            "freestanding-profile/mem: generated C avoids hosted mem helper"
+    else
+        record_fail "freestanding-profile/mem: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_MEM_REAL_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_MEM_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_MEM_OBJ")"
+    FREESTANDING_MEM_UNEXPECTED="$(printf '%s\n' "$FREESTANDING_MEM_UNDEFINED" |
+        sed '/^[[:space:]]*$/d' |
+        grep -Ev '^(memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_MEM_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/mem: undefined symbols stay in memcpy family"
+    else
+        record_fail "freestanding-profile/mem: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_MEM_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/mem: core object build failed"
+    sed 's/^/      /' "$FREESTANDING_MEM_REAL_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_MEM_ALLOC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_alloc_reject.xr"
+FREESTANDING_MEM_ALLOC_LOG="$WORK/freestanding_mem_alloc_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_mem_alloc_reject" \
+        "$FREESTANDING_MEM_ALLOC_SRC" >"$FREESTANDING_MEM_ALLOC_LOG" 2>&1; then
+    record_fail "freestanding-profile/mem: rejects allocator member"
+    sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_MEM_ALLOC_LOG" "freestanding profile rejects mem.alloc" \
+        "freestanding-profile/mem: rejects allocator member"
+fi
+
+FREESTANDING_MEM_ALLOC_SELECTIVE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_alloc_selective_reject.xr"
+FREESTANDING_MEM_ALLOC_SELECTIVE_LOG="$WORK/freestanding_mem_alloc_selective_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_mem_alloc_selective_reject" \
+        "$FREESTANDING_MEM_ALLOC_SELECTIVE_SRC" >"$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" 2>&1; then
+    record_fail "freestanding-profile/mem: rejects selective allocator import"
+    sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" \
+        "freestanding profile rejects mem.alloc" \
+        "freestanding-profile/mem: rejects selective allocator import"
+fi
+
 FREESTANDING_NON_NATIVE_LOG="$WORK/freestanding_non_native.log"
 if "$XRAY" build --profile freestanding -o "$WORK/freestanding_non_native" \
         "$FREESTANDING_EXPORT_SRC" >"$FREESTANDING_NON_NATIVE_LOG" 2>&1; then
