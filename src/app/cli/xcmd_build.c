@@ -646,6 +646,7 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
     char lib_path[512];
     bool needs_runtime;
     bool needs_aot_core;
+    bool freestanding_profile;
     uint32_t i;
     int in;
 
@@ -660,6 +661,8 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
 
     needs_runtime = xaot_link_manifest_needs_runtime(manifest);
     needs_aot_core = xaot_cli_manifest_needs_aot_core(manifest);
+    freestanding_profile =
+        xaot_link_manifest_contains(manifest, XAOT_LINK_DEFINE, "XRAY_PROFILE_FREESTANDING=1");
     if (needs_runtime && !target->is_native) {
         snprintf(err, err_size,
                  "cross target '%s' cannot consume runtime objects from AOT link manifest yet",
@@ -688,7 +691,10 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
     if (!xaot_cli_link_add_arg(cmd, opt_flag, err, err_size) ||
         !xaot_cli_link_add_arg(cmd, "-ffp-contract=off", err, err_size))
         return false;
-    if (shared_library) {
+    if (shared_library && freestanding_profile) {
+        if (!xaot_cli_link_add_arg(cmd, "-r", err, err_size))
+            return false;
+    } else if (shared_library) {
 #ifdef XR_OS_MACOS
         if (!xaot_cli_link_add_arg(cmd, "-dynamiclib", err, err_size))
             return false;

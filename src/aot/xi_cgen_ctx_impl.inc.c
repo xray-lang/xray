@@ -75,6 +75,11 @@ XR_FUNC void xi_cgen_ctx_set_emit_main(XiCgenCtx *ctx, bool emit_main) {
         ctx->emit_main = emit_main;
 }
 
+XR_FUNC void xi_cgen_ctx_set_freestanding_profile(XiCgenCtx *ctx, bool freestanding) {
+    if (ctx)
+        ctx->freestanding_profile = freestanding;
+}
+
 XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx) {
     return ctx && ctx->error;
 }

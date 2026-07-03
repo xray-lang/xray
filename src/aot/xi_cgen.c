@@ -497,6 +497,7 @@ struct XiCgenCtx {
     XiModule **all_modules; /* full modules array for resolved-index lookups */
     int all_nmodules;
     bool emit_main;
+    bool freestanding_profile;
     bool error; /* set on fatal codegen errors (unknown builtin, etc.) */
     XiCgenStats stats;
     XiCgenCoroFrameStats coro_frame_stats;
