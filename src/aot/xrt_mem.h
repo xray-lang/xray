@@ -120,6 +120,10 @@ static inline XrValue xrt_mem_alloc(XrValue n) {
     return xr_mkptr(malloc((size_t) xrt_mem_int_arg(n)), XR_TAG_PTR);
 }
 
+static inline XrValue xrt_mem_alloc_zeroed(XrValue n) {
+    return xr_mkptr(calloc(1, (size_t) xrt_mem_int_arg(n)), XR_TAG_PTR);
+}
+
 static inline XrValue xrt_mem_alloc_aligned(XrValue n, XrValue align) {
     size_t a = (size_t) xrt_mem_int_arg(align);
     size_t sz = (size_t) xrt_mem_int_arg(n);

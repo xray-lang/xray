@@ -282,6 +282,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", NULL, 0},
     {"cacheLineSize", XLSP_SYM_FUNCTION, "fn(): int", "CPU cache line size in bytes", NULL, 0},
     {"alloc", XLSP_SYM_FUNCTION, "fn(n: int): RawMut<uint8>", "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free", NULL, 0},
+    {"allocZeroed", XLSP_SYM_FUNCTION, "fn(n: int): RawMut<uint8>", "Allocate n zero-initialized bytes (calloc). NULL on OOM; pair with mem.free", NULL, 0},
     {"allocAligned", XLSP_SYM_FUNCTION, "fn(n: int, align: int): RawMut<uint8>", "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure", NULL, 0},
     {"realloc", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, n: int): RawMut<uint8>", "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM", NULL, 0},
     {"free", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>): ()", "Free a buffer from mem.alloc/allocAligned/realloc", NULL, 0},
@@ -306,7 +307,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"subOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit subtraction of a and b overflows", NULL, 0},
     {"mulOverflows", XLSP_SYM_FUNCTION, "fn(a: int, b: int): bool", "Whether signed 64-bit multiplication of a and b overflows", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 34
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 35
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {

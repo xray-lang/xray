@@ -1,7 +1,7 @@
-import { alloc } from "mem"
+import { allocZeroed } from "mem"
 
 @c_export("xray_bad_alloc_selective")
 fn xray_bad_alloc_selective(n: int) -> int {
-    let p = alloc(n)
+    let p = allocZeroed(n)
     return n + 1
 }
