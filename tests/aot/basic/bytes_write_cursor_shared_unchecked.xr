@@ -7,8 +7,7 @@ src[3] = 68
 let out = Bytes.withCapacity(8)
 out.resize(8)
 out[0:4].copyFrom(src)
-let view: ByteSpan = out
-view.repeatFrom(4, 4, 4)
+out[0:8].repeatFrom(4, 4, 4)
 
 print(out.length)
 

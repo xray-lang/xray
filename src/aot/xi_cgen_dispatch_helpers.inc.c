@@ -5477,15 +5477,26 @@ static void xicgen_bytes_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     fprintf(out, ")");
 }
 
+static void xicgen_emit_byte_span_operand(XiCgenCtx *ctx, FILE *out, const XiValue *arg,
+                                          const char *message) {
+    if (cg_span_value_u8_info(ctx, arg, NULL)) {
+        emit_span_ref_expr(out, arg);
+        return;
+    }
+    fprintf(out, "xrt_byte_span_from_value(");
+    emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
+    fprintf(out, ", \"%s\")", message);
+}
+
 static void xicgen_bytes_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                    const char *prefix) {
     (void) f;
     (void) prefix;
-    (void) ctx;
     fprintf(out, "xrt_span_bytes_copy_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
-    emit_span_ref_expr(out, v->args[1]);
+    xicgen_emit_byte_span_operand(ctx, out, v->args[1],
+                                  "ByteSpan.copyFrom(src) source must be ByteSpan");
     fprintf(out, ")");
 }
 
@@ -5498,7 +5509,8 @@ static void xicgen_bytes_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     fprintf(out, "xrt_span_bytes_compare_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
-    emit_span_ref_expr(out, v->args[1]);
+    xicgen_emit_byte_span_operand(ctx, out, v->args[1],
+                                  "ByteSpan.compare(other) operand must be ByteSpan");
     fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
 }
@@ -5512,7 +5524,8 @@ static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiF
     fprintf(out, "xrt_span_bytes_common_prefix_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
-    emit_span_ref_expr(out, v->args[1]);
+    xicgen_emit_byte_span_operand(ctx, out, v->args[1],
+                                  "ByteSpan.commonPrefix(other) operand must be ByteSpan");
     fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
 }
