@@ -1,9 +1,9 @@
-// sys.Once calls the first closure exactly once.
+// sys.OsOnce calls the first closure exactly once.
 
 import sys
 
 let counter = 0
-let once = sys.Once()
+let once = sys.OsOnce()
 
 once.call(() -> { counter = counter + 1 })
 once.call(() -> { counter = counter + 10 })

@@ -24,8 +24,8 @@ fn report(name, ok, detail) {
 // C1: Basic ws:// connect
 fn test_connect() {
     let conn = ws.connect(URL, null)
-    if (conn.error) {
-        report("C1 connect", false, conn.error)
+    if (conn!.error) {
+        report("C1 connect", false, conn!.error)
         return
     }
     let open = ws.isOpen(conn)
@@ -36,8 +36,8 @@ fn test_connect() {
 // C2: Text echo
 fn test_text_echo() {
     let conn = ws.connect(URL, null)
-    if (conn.error) {
-        report("C2 text echo", false, conn.error)
+    if (conn!.error) {
+        report("C2 text echo", false, conn!.error)
         return
     }
     let msg = "Hello from xray client!"
@@ -51,8 +51,8 @@ fn test_text_echo() {
 // C3: Multiple messages
 fn test_multiple_messages() {
     let conn = ws.connect(URL, null)
-    if (conn.error) {
-        report("C3 multiple messages", false, conn.error)
+    if (conn!.error) {
+        report("C3 multiple messages", false, conn!.error)
         return
     }
     let count = 10
@@ -73,8 +73,8 @@ fn test_multiple_messages() {
 // C4: State API
 fn test_state_api() {
     let conn = ws.connect(URL, null)
-    if (conn.error) {
-        report("C4 state API", false, conn.error)
+    if (conn!.error) {
+        report("C4 state API", false, conn!.error)
         return
     }
     let s1 = ws.state(conn) == "open"
@@ -88,8 +88,8 @@ fn test_state_api() {
 // C5: Close changes state
 fn test_close_state() {
     let conn = ws.connect(URL, null)
-    if (conn.error) {
-        report("C5 close state", false, conn.error)
+    if (conn!.error) {
+        report("C5 close state", false, conn!.error)
         return
     }
     ws.close(conn, null, null)
@@ -101,15 +101,15 @@ fn test_close_state() {
 // C6: Connection failure
 fn test_connection_failure() {
     let conn = ws.connect("ws://127.0.0.1:19999", null)
-    let ok = conn.error != null
+    let ok = conn!.error != null
     report("C6 connection failure", ok, ok ? null : "should have error")
 }
 
 // C7: Ping
 fn test_ping() {
     let conn = ws.connect(URL, null)
-    if (conn.error) {
-        report("C7 ping", false, conn.error)
+    if (conn!.error) {
+        report("C7 ping", false, conn!.error)
         return
     }
     let ok = ws.ping(conn)

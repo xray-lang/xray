@@ -245,13 +245,6 @@ static void xr_stdlib_vm_bind_math_generated(XrVMRuntime *isolate, XrModule *mod
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_MEM
 static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "collectCycles", mem_collect_cycles);
-    XRS_EXPORT(module, isolate, "disableCycleCollection", mem_disable_cycle_collection);
-    XRS_EXPORT(module, isolate, "enableCycleCollection", mem_enable_cycle_collection);
-    XRS_EXPORT(module, isolate, "isCycleCollectionEnabled", mem_is_cycle_collection_enabled);
-    XRS_EXPORT(module, isolate, "liveBytes", mem_live_bytes);
-    XRS_EXPORT(module, isolate, "liveObjects", mem_live_objects);
-    XRS_EXPORT(module, isolate, "info", mem_info);
     XRS_EXPORT(module, isolate, "fence", mem_fence);
     XRS_EXPORT(module, isolate, "prefetch", mem_prefetch);
     XRS_EXPORT(module, isolate, "cacheFlush", mem_cache_flush);
@@ -274,18 +267,6 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "compare", mem_compare);
     XRS_EXPORT(module, isolate, "volatileLoad", mem_volatile_load);
     XRS_EXPORT(module, isolate, "volatileStore", mem_volatile_store);
-    XRS_EXPORT(module, isolate, "popcount", mem_popcount);
-    XRS_EXPORT(module, isolate, "leadingZeros", mem_leading_zeros);
-    XRS_EXPORT(module, isolate, "trailingZeros", mem_trailing_zeros);
-    XRS_EXPORT(module, isolate, "byteswap", mem_byteswap);
-    XRS_EXPORT(module, isolate, "rotateLeft", mem_rotate_left);
-    XRS_EXPORT(module, isolate, "rotateRight", mem_rotate_right);
-    XRS_EXPORT(module, isolate, "addWrapping", mem_add_wrapping);
-    XRS_EXPORT(module, isolate, "subWrapping", mem_sub_wrapping);
-    XRS_EXPORT(module, isolate, "mulWrapping", mem_mul_wrapping);
-    XRS_EXPORT(module, isolate, "addOverflows", mem_add_overflows);
-    XRS_EXPORT(module, isolate, "subOverflows", mem_sub_overflows);
-    XRS_EXPORT(module, isolate, "mulOverflows", mem_mul_overflows);
     xr_module_add_export(isolate, module, "PROT_NONE", xr_int(XR_MEM_PROT_NONE));
     xr_module_add_export(isolate, module, "PROT_READ", xr_int(XR_MEM_PROT_READ));
     xr_module_add_export(isolate, module, "PROT_WRITE", xr_int(XR_MEM_PROT_WRITE));
@@ -355,6 +336,7 @@ static void xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "clock", os_clock);
     XRS_EXPORT_YIELDABLE(module, isolate, "sleep", os_sleep);
     XRS_EXPORT(module, isolate, "exec", os_exec);
+    XRS_EXPORT(module, isolate, "spawn", os_spawn);
     xr_module_add_export(isolate, module, "platform", xrs_string_value_c(isolate, get_platform()));
     xr_module_add_export(isolate, module, "arch", xrs_string_value_c(isolate, get_arch()));
     xr_module_add_export(isolate, module, "sep", xrs_string_value_c(isolate, get_sep()));
@@ -380,13 +362,25 @@ static void xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *mo
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_REGEX */
 
+#ifdef XR_STDLIB_VM_BIND_MODULE_RUNTIME
+static void xr_stdlib_vm_bind_runtime_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT(module, isolate, "collectCycles", runtime_collect_cycles);
+    XRS_EXPORT(module, isolate, "disableCycleCollection", runtime_disable_cycle_collection);
+    XRS_EXPORT(module, isolate, "enableCycleCollection", runtime_enable_cycle_collection);
+    XRS_EXPORT(module, isolate, "isCycleCollectionEnabled", runtime_is_cycle_collection_enabled);
+    XRS_EXPORT(module, isolate, "liveBytes", runtime_live_bytes);
+    XRS_EXPORT(module, isolate, "liveObjects", runtime_live_objects);
+    XRS_EXPORT(module, isolate, "info", runtime_info);
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_RUNTIME */
+
 #ifdef XR_STDLIB_VM_BIND_MODULE_SYS
 static void xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "Mutex", sys_mutex_new);
-    XRS_EXPORT(module, isolate, "RwLock", sys_rwlock_new);
-    XRS_EXPORT(module, isolate, "Condvar", sys_condvar_new);
-    XRS_EXPORT(module, isolate, "Barrier", sys_barrier_new);
-    XRS_EXPORT(module, isolate, "Once", sys_once_new);
+    XRS_EXPORT(module, isolate, "OsMutex", sys_mutex_new);
+    XRS_EXPORT(module, isolate, "OsRwLock", sys_rwlock_new);
+    XRS_EXPORT(module, isolate, "OsCondvar", sys_condvar_new);
+    XRS_EXPORT(module, isolate, "OsBarrier", sys_barrier_new);
+    XRS_EXPORT(module, isolate, "OsOnce", sys_once_new);
     XRS_EXPORT(module, isolate, "cpuCount", sys_cpu_count);
     XRS_EXPORT(module, isolate, "threadYield", sys_thread_yield);
     XRS_EXPORT(module, isolate, "sleepMs", sys_sleep_ms);

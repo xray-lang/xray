@@ -15,6 +15,7 @@
  */
 
 #include "xpkg_client.h"
+#include "xlockfile.h"
 #include "../base/xmalloc.h"
 #include "../base/xfileio.h"
 #include "../base/xjson.h"
@@ -35,6 +36,7 @@
 #endif
 #include "../os/os_fs.h"
 #include "../os/os_proc.h"
+#include "../shared/xr_compress_core.h"
 
 // Thread-local config for multi-Isolate support
 static XR_THREAD_LOCAL XrPkgClientConfig tls_config = {
@@ -96,6 +98,143 @@ static int exec_command(const char *prog, char *const argv[]) {
         return -1;
     }
     return code;
+}
+
+static void *pkg_compress_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return xr_malloc(size);
+}
+
+static void pkg_compress_free(void *ctx, void *ptr) {
+    (void) ctx;
+    xr_free(ptr);
+}
+
+/*
+ * A tar entry name is safe to extract iff it stays inside the destination
+ * directory: it must be a relative path with no ".." component and no absolute
+ * / drive-letter prefix. Rejecting these blocks the classic malicious-package
+ * path-traversal ("../../etc/cron.d/x") escape.
+ */
+static bool pkg_tar_entry_name_safe(const char *name) {
+    if (!name || !name[0])
+        return false;
+    if (name[0] == '/' || name[0] == '\\')
+        return false;  // absolute path (POSIX or Windows UNC)
+    if (name[1] == ':')
+        return false;  // Windows drive letter ("C:...")
+    const char *p = name;
+    while (*p) {
+        const char *seg = p;
+        while (*p && *p != '/' && *p != '\\')
+            p++;
+        size_t seg_len = (size_t) (p - seg);
+        if (seg_len == 2 && seg[0] == '.' && seg[1] == '.')
+            return false;  // parent-directory escape
+        if (*p)
+            p++;  // skip separator
+    }
+    return true;
+}
+
+/*
+ * Validate every entry in a .tar.gz before extraction. Decompresses the gzip
+ * layer with the built-in inflate and walks the tar headers, rejecting the
+ * whole archive if any entry would escape the destination (path traversal) or
+ * is a symlink/hardlink (which could redirect a later write outside the tree).
+ * Returns false (reject) on any unsafe entry or on a malformed/undecompressable
+ * archive — extraction only proceeds when every entry is provably contained.
+ */
+static bool pkg_tarball_entries_safe(const char *tarball) {
+    size_t gz_size = 0;
+    char *gz = xr_file_read_all(tarball, "rb", &gz_size);
+    if (!gz)
+        return false;
+
+    size_t tar_len = 0;
+    uint8_t *tar = xr_compress_core_gunzip_alloc(
+        (const uint8_t *) gz, gz_size, xr_gzip_original_size((const uint8_t *) gz, gz_size),
+        &tar_len, pkg_compress_alloc, pkg_compress_free, NULL);
+    xr_free(gz);
+    if (!tar)
+        return false;  // cannot decompress -> refuse to hand it to the system tar
+
+    bool safe = true;
+    char long_name[4096];
+    bool have_long = false;
+    size_t off = 0;
+    while (off + 512 <= tar_len) {
+        const uint8_t *h = tar + off;
+
+        bool all_zero = true;
+        for (int i = 0; i < 512; i++) {
+            if (h[i]) {
+                all_zero = false;
+                break;
+            }
+        }
+        if (all_zero)
+            break;  // end-of-archive marker
+
+        // size: 12-byte octal field at offset 124.
+        uint64_t size = 0;
+        for (int i = 0; i < 12; i++) {
+            char c = (char) h[124 + i];
+            if (c >= '0' && c <= '7')
+                size = size * 8 + (uint64_t) (c - '0');
+            else
+                break;  // stop at space/NUL terminator
+        }
+        char typeflag = (char) h[156];
+        size_t data_blocks = (size_t) ((size + 511) / 512);
+        off += 512;
+
+        if (typeflag == 'L') {
+            // GNU long name: the real path lives in this entry's data and
+            // applies to the NEXT header.
+            size_t copy = (size < sizeof(long_name) - 1) ? (size_t) size : sizeof(long_name) - 1;
+            if (off + copy <= tar_len) {
+                memcpy(long_name, tar + off, copy);
+                long_name[copy] = '\0';
+                have_long = true;
+            }
+            off += data_blocks * 512;
+            continue;
+        }
+        if (typeflag == '1' || typeflag == '2') {
+            safe = false;  // hard/symbolic link: reject (escape vector)
+            break;
+        }
+
+        const char *entry_name;
+        char name_buf[512];
+        if (have_long) {
+            entry_name = long_name;
+            have_long = false;
+        } else {
+            // ustar: full path is prefix(offset 345) + '/' + name(offset 0).
+            char prefix[156];
+            memcpy(prefix, h + 345, 155);
+            prefix[155] = '\0';
+            char name[101];
+            memcpy(name, h, 100);
+            name[100] = '\0';
+            if (prefix[0])
+                snprintf(name_buf, sizeof(name_buf), "%s/%s", prefix, name);
+            else
+                snprintf(name_buf, sizeof(name_buf), "%s", name);
+            entry_name = name_buf;
+        }
+
+        if (!pkg_tar_entry_name_safe(entry_name)) {
+            safe = false;
+            break;
+        }
+        off += data_blocks * 512;
+    }
+
+    xr_free(tar);
+    return safe;
 }
 
 /*
@@ -494,7 +633,8 @@ bool xr_pkg_client_download(const char *owner, const char *name, const char *ver
 }
 
 bool xr_pkg_client_install(const char *owner, const char *name, const char *version,
-                           const char *dest_dir) {
+                           const char *dest_dir, const char *expected_checksum, char *out_checksum,
+                           size_t out_checksum_cap) {
     if (!owner || !name || !version || !dest_dir)
         return false;
 
@@ -529,6 +669,32 @@ bool xr_pkg_client_install(const char *owner, const char *name, const char *vers
         return false;
     }
 
+    // 1b. Integrity check (end-to-end, independent of transport TLS). Compute
+    // the tarball's sha256; if the caller supplied a locked checksum it MUST
+    // match (reject tampering / MITM / cache poisoning), otherwise record the
+    // computed value for trust-on-first-use.
+    char computed_checksum[80];
+    if (!xr_lockfile_checksum_file(tarball, computed_checksum)) {
+        fprintf(stderr, "Failed to compute checksum: %s\n", tarball);
+        remove(tarball);
+        return false;
+    }
+    bool checksum_available = (strncmp(computed_checksum, "sha256:", 7) == 0);
+    if (expected_checksum && expected_checksum[0] &&
+        strncmp(expected_checksum, "sha256:", 7) == 0 && checksum_available) {
+        if (strcmp(expected_checksum, computed_checksum) != 0) {
+            fprintf(stderr,
+                    "Checksum mismatch for %s/%s@%s\n  expected: %s\n  actual:   %s\n"
+                    "Refusing to install (possible tampering).\n",
+                    owner, name, version, expected_checksum, computed_checksum);
+            remove(tarball);
+            return false;
+        }
+    }
+    if (out_checksum && out_checksum_cap > 0) {
+        snprintf(out_checksum, out_checksum_cap, "%s", computed_checksum);
+    }
+
     // 2. Create destination directory (safe, no shell injection)
     char pkg_dir[512];
     snprintf(pkg_dir, sizeof(pkg_dir), "%s/%s/%s/%s", dest_dir, owner, name, version);
@@ -538,7 +704,17 @@ bool xr_pkg_client_install(const char *owner, const char *name, const char *vers
         return false;
     }
 
-    // 3. Extract (safe, using fork/exec instead of system())
+    // 3. Reject malicious archives (path traversal / links) before extracting.
+    if (!pkg_tarball_entries_safe(tarball)) {
+        fprintf(stderr,
+                "Refusing to install %s/%s@%s: archive contains unsafe paths "
+                "(path traversal or link escape)\n",
+                owner, name, version);
+        remove(tarball);
+        return false;
+    }
+
+    // 4. Extract (safe, using fork/exec instead of system())
     if (!extract_tarball(tarball, pkg_dir, tls_config.verbose)) {
         fprintf(stderr, "Extract failed: %s\n", tarball);
         return false;
@@ -865,11 +1041,15 @@ bool xr_pkg_client_download(const char *owner, const char *name, const char *ver
     return false;
 }
 bool xr_pkg_client_install(const char *owner, const char *name, const char *version,
-                           const char *dest) {
+                           const char *dest, const char *expected_checksum, char *out_checksum,
+                           size_t out_checksum_cap) {
     (void) owner;
     (void) name;
     (void) version;
     (void) dest;
+    (void) expected_checksum;
+    (void) out_checksum;
+    (void) out_checksum_cap;
     return false;
 }
 bool xr_pkg_client_publish(const char *tarball, const char *token, const XrPkgPublishInfo *info) {

@@ -49,8 +49,8 @@ fn test_file_stat() {
     io.writeFile(tmp, "test content")
     let st = io.stat(tmp)
     assert(st != null)
-    assert_eq(st.size, 12)
-    assert_eq(st.isFile, true)
+    assert_eq(st!.size, 12)
+    assert_eq(st!.isFile, true)
     io.remove(tmp)
 }
 

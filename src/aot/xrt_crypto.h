@@ -100,8 +100,9 @@ static inline XrValue xrt_crypto_encrypt(const char *key, int64_t key_len, const
     size_t input_len = (size_t) plain_len;
     size_t padded_len = 0;
     size_t hex_len = 0;
-    if (!xr_crypto_core_aes_encrypt_plan(input_len, &padded_len, &hex_len))
+    if (!xr_crypto_core_aead_encrypt_plan(input_len, &padded_len, &hex_len))
         return XR_NULL_VAL;
+    size_t raw_len = XR_AEAD_OVERHEAD + padded_len;  // IV + ciphertext + tag
 
     uint8_t iv[16];
     xr_random_bytes(iv, 16);
@@ -112,10 +113,9 @@ static inline XrValue xrt_crypto_encrypt(const char *key, int64_t key_len, const
     if (!padded)
         return XR_NULL_VAL;
 
-    uint8_t stack_cipher[4096];
-    uint8_t *cipher =
-        (padded_len <= sizeof(stack_cipher)) ? stack_cipher : (uint8_t *) XRT_MALLOC(padded_len);
-    if (!cipher) {
+    uint8_t stack_raw[4096];
+    uint8_t *raw = (raw_len <= sizeof(stack_raw)) ? stack_raw : (uint8_t *) XRT_MALLOC(raw_len);
+    if (!raw) {
         if (padded != stack_plain)
             XRT_FREE(padded);
         return XR_NULL_VAL;
@@ -123,21 +123,21 @@ static inline XrValue xrt_crypto_encrypt(const char *key, int64_t key_len, const
 
     XrValue result = xrt_str_alloc(hex_len);
     char *hex = xr_str_buf(result);
-    if (!xr_crypto_core_aes_encrypt_hex((const uint8_t *) key, (size_t) key_len,
-                                        (const uint8_t *) plain, input_len, iv, padded, padded_len,
-                                        cipher, padded_len, hex, hex_len + 1)) {
+    if (!xr_crypto_core_aead_encrypt_hex((const uint8_t *) key, (size_t) key_len,
+                                         (const uint8_t *) plain, input_len, iv, padded, padded_len,
+                                         raw, raw_len, hex, hex_len + 1)) {
         xrt_release(result);
         if (padded != stack_plain)
             XRT_FREE(padded);
-        if (cipher != stack_cipher)
-            XRT_FREE(cipher);
+        if (raw != stack_raw)
+            XRT_FREE(raw);
         return XR_NULL_VAL;
     }
 
     if (padded != stack_plain)
         XRT_FREE(padded);
-    if (cipher != stack_cipher)
-        XRT_FREE(cipher);
+    if (raw != stack_raw)
+        XRT_FREE(raw);
     return result;
 }
 
@@ -149,7 +149,7 @@ static inline XrValue xrt_crypto_decrypt(const char *key, int64_t key_len, const
 
     size_t raw_len = 0;
     size_t cipher_len = 0;
-    if (!xr_crypto_core_aes_decrypt_plan((size_t) cipher_hex_len, &raw_len, &cipher_len))
+    if (!xr_crypto_core_aead_decrypt_plan((size_t) cipher_hex_len, &raw_len, &cipher_len))
         return XR_NULL_VAL;
 
     uint8_t stack_raw[4096];
@@ -168,9 +168,9 @@ static inline XrValue xrt_crypto_decrypt(const char *key, int64_t key_len, const
 
     XrValue result = XR_NULL_VAL;
     size_t plain_out_len = 0;
-    if (xr_crypto_core_aes_decrypt_hex((const uint8_t *) key, (size_t) key_len, cipher_hex,
-                                       (size_t) cipher_hex_len, raw, raw_len, plain, cipher_len,
-                                       &plain_out_len)) {
+    if (xr_crypto_core_aead_decrypt_hex((const uint8_t *) key, (size_t) key_len, cipher_hex,
+                                        (size_t) cipher_hex_len, raw, raw_len, plain, cipher_len,
+                                        &plain_out_len)) {
         result = xrt_str_alloc(plain_out_len);
         memcpy(xr_str_buf(result), plain, plain_out_len);
         xr_str_buf(result)[plain_out_len] = '\0';

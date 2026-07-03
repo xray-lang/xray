@@ -337,8 +337,10 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     // visible in every compilation unit.
     xa_register_prelude_enums(analyzer);
 
-    // Default options
-    analyzer->strict_null_checks = false;
+    // Default options. Strict null checks are ON by default: a possibly-null
+    // value must be narrowed before member/index/call access (best-practice
+    // null safety; no silent runtime null-panic escapes the type checker).
+    analyzer->strict_null_checks = true;
     analyzer->strict_mode = false;
     analyzer->infer_return_types = true;
     analyzer->build_profile = XA_ANALYZER_BUILD_PROFILE_HOSTED;

@@ -1735,11 +1735,18 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         snprintf(msg, sizeof(msg), "Expected %d argument(s), but got %d", param_count, arg_count);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
                                    msg, &loc);
-    } else if (!is_variadic && arg_count < param_count && min_params < param_count && !fn_links &&
-               call->callee && call->callee->type == AST_VARIABLE) {
+    } else if (!is_variadic && arg_count < param_count && min_params < param_count &&
+               call->callee && call->callee->type == AST_VARIABLE && fn_sym &&
+               fn_sym->kind != XA_SYM_FUNCTION) {
         // Default arguments are filled at the call site only for direct calls
         // to a named function (C1). A call through a function-typed *value*
-        // carries no default expressions, so every argument must be passed.
+        // (a `let` binding, parameter, capture, ...) carries no default
+        // expressions, so every argument must be passed. The symbol-kind
+        // check is the discriminator: a named function resolves to
+        // XA_SYM_FUNCTION (its defaults were spliced in above when
+        // available), while a function-typed value resolves to a variable
+        // symbol whose links carry no param_defaults. Builtins resolve to
+        // no symbol at all and keep their optional-argument semantics.
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[160];
         snprintf(msg, sizeof(msg),

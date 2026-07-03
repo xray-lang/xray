@@ -276,6 +276,17 @@ static const char *xr_builtin_symbol_names[] = {
     "broadcast",
     "call",
     "detach",
+    // Int bit-manipulation methods (task 153; shared core xr_bits_core.h)
+    "popcount",
+    "leadingZeros",
+    "trailingZeros",
+    "byteswap",
+    "rotateLeft",
+    "rotateRight",
+    // Int overflow predicates (task 153; shared core xr_arith_core.h)
+    "addOverflows",
+    "subOverflows",
+    "mulOverflows",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

@@ -309,6 +309,18 @@ enum {
     SYMBOL_BROADCAST,
     SYMBOL_CALL,
     SYMBOL_DETACH,
+    // Int bit-manipulation methods (moved from mem.* module functions;
+    // semantics live in src/shared/xr_bits_core.h — task 153).
+    SYMBOL_POPCOUNT,
+    SYMBOL_LEADING_ZEROS,
+    SYMBOL_TRAILING_ZEROS,
+    SYMBOL_BYTESWAP,
+    SYMBOL_ROTATE_LEFT,
+    SYMBOL_ROTATE_RIGHT,
+    // Int overflow predicates (moved from mem.*; src/shared/xr_arith_core.h).
+    SYMBOL_ADD_OVERFLOWS,
+    SYMBOL_SUB_OVERFLOWS,
+    SYMBOL_MUL_OVERFLOWS,
 
     SYMBOL_BUILTIN_COUNT  // sentinel
 };

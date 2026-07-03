@@ -27,6 +27,8 @@
 #include "../symbol/xsymbol_table.h"
 #include "../../coro/xcoroutine.h"
 #include "../../shared/xr_int_arith.h"
+#include "../../shared/xr_bits_core.h"
+#include "../../shared/xr_arith_core.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -228,6 +230,95 @@ static inline XrValue xr_int_wrapping_mul_method(XrVMRuntime *iso, XrValue self,
     if (argc < 1 || !XR_IS_INT(args[0]))
         return self;
     return xr_int(xr_i64_mul_wrap(XR_TO_INT(self), XR_TO_INT(args[0])));
+}
+
+/* --- Bit-manipulation methods (task 153: moved from mem.*; the single
+ * semantic source stays src/shared/xr_bits_core.h so VM, AOT and the old
+ * mem bindings all agree bit-for-bit). All pure, no GC. --- */
+
+/* int.popcount() -> number of set bits in the 64-bit two's-complement value. */
+static inline XrValue xr_int_popcount_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+                                             int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
+    return xr_int(xr_bits_core_popcount(XR_TO_INT(self)));
+}
+
+/* int.leadingZeros() -> count of leading zero bits (0 -> 64). */
+static inline XrValue xr_int_leading_zeros_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+                                                  int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
+    return xr_int(xr_bits_core_leading_zeros(XR_TO_INT(self)));
+}
+
+/* int.trailingZeros() -> count of trailing zero bits (0 -> 64). */
+static inline XrValue xr_int_trailing_zeros_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+                                                   int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
+    return xr_int(xr_bits_core_trailing_zeros(XR_TO_INT(self)));
+}
+
+/* int.byteswap() -> value with byte order reversed. */
+static inline XrValue xr_int_byteswap_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+                                             int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
+    return xr_int(xr_bits_core_byteswap(XR_TO_INT(self)));
+}
+
+/* int.rotateLeft(n) -> value rotated left by n bits (n mod 64). */
+static inline XrValue xr_int_rotate_left_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+                                                int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return self;
+    return xr_int(xr_bits_core_rotate_left(XR_TO_INT(self), XR_TO_INT(args[0])));
+}
+
+/* int.rotateRight(n) -> value rotated right by n bits (n mod 64). */
+static inline XrValue xr_int_rotate_right_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+                                                 int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return self;
+    return xr_int(xr_bits_core_rotate_right(XR_TO_INT(self), XR_TO_INT(args[0])));
+}
+
+/* --- Overflow predicates (task 153: moved from mem.*; semantic source
+ * src/shared/xr_arith_core.h). Complement checkedAdd/...: the checked
+ * family returns the value (or null), these only report the flag. --- */
+
+/* int.addOverflows(other) -> whether signed self + other overflows. */
+static inline XrValue xr_int_add_overflows_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+                                                  int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    return xr_bool(xr_arith_core_add_overflows(XR_TO_INT(self), XR_TO_INT(args[0])) != 0);
+}
+
+/* int.subOverflows(other) -> whether signed self - other overflows. */
+static inline XrValue xr_int_sub_overflows_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+                                                  int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    return xr_bool(xr_arith_core_sub_overflows(XR_TO_INT(self), XR_TO_INT(args[0])) != 0);
+}
+
+/* int.mulOverflows(other) -> whether signed self * other overflows. */
+static inline XrValue xr_int_mul_overflows_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+                                                  int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    return xr_bool(xr_arith_core_mul_overflows(XR_TO_INT(self), XR_TO_INT(args[0])) != 0);
 }
 
 struct XrVMRuntime;

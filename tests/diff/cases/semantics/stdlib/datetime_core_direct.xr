@@ -29,7 +29,7 @@ let before_epoch_1001 = datetime.fromTimestampMs(-1001)
 print(before_epoch_1001.timestamp)
 print(before_epoch_1001.millisecond)
 
-let parsed = datetime.parse("2024-01-15T10:30:45.123Z")
+let parsed = datetime.parse("2024-01-15T10:30:45.123Z")!
 print(parsed.year)
 print(parsed.month)
 print(parsed.day)
@@ -39,7 +39,7 @@ print(parsed.second)
 print(parsed.millisecond)
 print(parsed.toISOString())
 
-let date_only = datetime.parse("2024-01-15", "date")
+let date_only = datetime.parse("2024-01-15", "date")!
 print(date_only.year)
 print(date_only.month)
 print(date_only.day)

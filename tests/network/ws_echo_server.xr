@@ -36,10 +36,10 @@ ws.serve(8765, fn(conn) {
         if (msg == null || msg.error) {
             break
         }
-        if (msg.data) {
+        if (msg!.data) {
             messageCount = messageCount + 1
             // Echo back with prefix
-            ws.send(conn, "Echo: " + msg.data, null)
+            ws.send(conn, "Echo: " + msg!.data, null)
         }
     }
 })

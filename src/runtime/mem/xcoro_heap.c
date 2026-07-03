@@ -422,7 +422,7 @@ XR_FUNC void xr_coro_heap_recycle_obj(XrCoroHeap *heap, XrObjHeader *obj) {
      * coro_heap_update_alloc_stats add done at allocation. Small blocks return to the
      * size-class freelist (a later same-class alloc re-adds via
      * coro_heap_update_alloc_stats); large/mmap blocks are returned to the OS. Without
-     * this, totalbytes (mem.liveBytes/info) accumulated every small-object
+     * this, totalbytes (runtime.liveBytes/info) accumulated every small-object
      * allocation instead of tracking the live set. */
     heap->totalbytes -= (int64_t) obj->objsize;
 

@@ -427,6 +427,15 @@ void xr_aot_runtime_config_init(XrAotRuntimeConfig *cfg) {
     memset(cfg, 0, sizeof(*cfg));
 }
 
+/* Process-wide "current" standalone AOT runtime. Standalone binaries create
+ * exactly one runtime in main() before any user code runs, so a relaxed
+ * atomic pointer is sufficient; VM-hosted execution never registers one. */
+static _Atomic(XrAotRuntime *) g_aot_runtime_current;
+
+XrAotRuntime *xr_aot_runtime_current(void) {
+    return atomic_load_explicit(&g_aot_runtime_current, memory_order_acquire);
+}
+
 XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
     XrAotRuntimeConfig local_cfg;
     if (cfg) {
@@ -464,6 +473,7 @@ XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
         xr_runtime_start(runtime->scheduler);
     }
 
+    atomic_store_explicit(&g_aot_runtime_current, runtime, memory_order_release);
     return runtime;
 
 fail:
@@ -474,6 +484,8 @@ fail:
 void xr_aot_runtime_delete(XrAotRuntime *runtime) {
     if (!runtime)
         return;
+    XrAotRuntime *expected = runtime;
+    atomic_compare_exchange_strong(&g_aot_runtime_current, &expected, NULL);
     if (runtime->scheduler) {
         xr_scheduler_runtime_delete(runtime->scheduler);
         runtime->scheduler = NULL;

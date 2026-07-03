@@ -74,8 +74,14 @@ XR_FUNC void xr_pkg_search_result_free(XrPkgSearchResult *result);
 
 XR_FUNC bool xr_pkg_client_download(const char *owner, const char *name, const char *version,
                                     const char *dest_dir);
+// Install a package. If `expected_checksum` is non-NULL/non-empty, the
+// downloaded tarball is verified against it and installation is refused on
+// mismatch (supply-chain tamper detection). If `out_checksum` is non-NULL
+// (buffer >= 80 bytes), the computed "sha256:<hex>" of the tarball is written
+// there so the caller can record it in the lockfile (trust-on-first-use).
 XR_FUNC bool xr_pkg_client_install(const char *owner, const char *name, const char *version,
-                                   const char *dest_dir);
+                                   const char *dest_dir, const char *expected_checksum,
+                                   char *out_checksum, size_t out_checksum_cap);
 
 /* ========== Publish API ========== */
 

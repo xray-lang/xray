@@ -22,10 +22,10 @@ print(base64.decode("A") == null)
 
 let bs = base64.decodeToBytes("SGVs")
 print(bs != null)
-print(bs.length)
-print(bs[0])
-print(bs[1])
-print(bs[2])
+print(bs!.length)
+print(bs![0])
+print(bs![1])
+print(bs![2])
 
 let raw = Bytes(3)
 raw[0] = 72

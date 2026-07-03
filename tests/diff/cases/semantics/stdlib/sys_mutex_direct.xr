@@ -1,10 +1,10 @@
 // anchor: sys-mutex-direct
-// OS-domain sys.Mutex is a non-generic native handle. This single-thread case
+// OS-domain sys.OsMutex is a non-generic native handle. This single-thread case
 // pins constructor + lock/unlock/tryLock in both VM and standalone AOT.
 
 import sys
 
-let m = sys.Mutex()
+let m = sys.OsMutex()
 print(m.tryLock())
 m.unlock()
 

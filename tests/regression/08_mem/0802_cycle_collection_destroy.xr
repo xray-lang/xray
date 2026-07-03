@@ -10,7 +10,7 @@
 //      corrupt the roots array of subsequent rounds.
 //   4. Set-mediated cycles are traversed and reclaimed.
 
-import mem
+import runtime
 
 class Node {
     name: string
@@ -43,7 +43,7 @@ fn test_cycle_with_containers_reclaimed() {
     }
     a.table.set("peer", b)
     b.table.set("peer", a)
-    mem.collectCycles()
+    runtime.collectCycles()
     assert(true) // no crash / no leak (ASan)
 }
 
@@ -61,7 +61,7 @@ fn test_live_child_survives_dead_cycle() {
     b.next = a
     a.table.set("kept", keeper)
 
-    mem.collectCycles()
+    runtime.collectCycles()
 
     // keeper must still be fully usable: the cycle's destructor dropped
     // exactly one reference (the table edge), not two.
@@ -84,13 +84,13 @@ fn test_survivor_retracked_after_collect() {
     b.next = a
     h.node = a
 
-    mem.collectCycles() // a/b are scanned, survive (external ref), leave roots
+    runtime.collectCycles() // a/b are scanned, survive (external ref), leave roots
 
     // Drop the external reference: a must be re-added to cycle roots
     // (requires _rsv to have been restored to the sentinel after round 1).
     h.node = null
 
-    mem.collectCycles() // round 2 reclaims the now-dead cycle
+    runtime.collectCycles() // round 2 reclaims the now-dead cycle
     assert(true)
 }
 
@@ -103,7 +103,7 @@ fn test_stale_root_index_does_not_corrupt() {
     s1.next = s2
     s2.next = s1
     h1.node = s1
-    mem.collectCycles()
+    runtime.collectCycles()
 
     // Round 2: track fresh candidates, then mutate the survivors so their
     // (formerly stale) root indices are exercised against the new array.
@@ -113,7 +113,7 @@ fn test_stale_root_index_does_not_corrupt() {
     c2.next = c1
     s1.next = null   // drops s2's in-cycle ref → s2 RC churn
     h1.node = null   // drops s1
-    mem.collectCycles()
+    runtime.collectCycles()
     assert(true)
 }
 
@@ -142,7 +142,7 @@ fn test_set_mediated_cycle_reclaimed() {
     let y = SetNode(2)
     x.peers.add(y)
     y.peers.add(x)
-    mem.collectCycles()
+    runtime.collectCycles()
     assert(true)
 }
 
@@ -158,7 +158,7 @@ fn test_many_collect_rounds() {
         b.next = c
         c.next = a
         a.items.push(round)
-        mem.collectCycles()
+        runtime.collectCycles()
     }
     assert(true)
 }
@@ -183,6 +183,6 @@ fn build_deep_cycle(n: int) {
 @test
 fn test_deep_cycle_no_stack_overflow() {
     build_deep_cycle(50000)
-    mem.collectCycles() // must not overflow the stack
+    runtime.collectCycles() // must not overflow the stack
     assert(true)
 }

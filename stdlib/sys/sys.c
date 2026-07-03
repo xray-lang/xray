@@ -183,31 +183,31 @@ static XrNativeBodyDesc g_sys_once_body_desc = {
 
 static XrClass *sys_mutex_class(XrVMRuntime *isolate) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
-    XR_DCHECK(core != NULL && core->sysMutexClass != NULL, "sys.Mutex class not registered");
+    XR_DCHECK(core != NULL && core->sysMutexClass != NULL, "sys.OsMutex class not registered");
     return core ? core->sysMutexClass : NULL;
 }
 
 static XrClass *sys_rwlock_class(XrVMRuntime *isolate) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
-    XR_DCHECK(core != NULL && core->sysRwLockClass != NULL, "sys.RwLock class not registered");
+    XR_DCHECK(core != NULL && core->sysRwLockClass != NULL, "sys.OsRwLock class not registered");
     return core ? core->sysRwLockClass : NULL;
 }
 
 static XrClass *sys_condvar_class(XrVMRuntime *isolate) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
-    XR_DCHECK(core != NULL && core->sysCondvarClass != NULL, "sys.Condvar class not registered");
+    XR_DCHECK(core != NULL && core->sysCondvarClass != NULL, "sys.OsCondvar class not registered");
     return core ? core->sysCondvarClass : NULL;
 }
 
 static XrClass *sys_barrier_class(XrVMRuntime *isolate) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
-    XR_DCHECK(core != NULL && core->sysBarrierClass != NULL, "sys.Barrier class not registered");
+    XR_DCHECK(core != NULL && core->sysBarrierClass != NULL, "sys.OsBarrier class not registered");
     return core ? core->sysBarrierClass : NULL;
 }
 
 static XrClass *sys_once_class(XrVMRuntime *isolate) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
-    XR_DCHECK(core != NULL && core->sysOnceClass != NULL, "sys.Once class not registered");
+    XR_DCHECK(core != NULL && core->sysOnceClass != NULL, "sys.OsOnce class not registered");
     return core ? core->sysOnceClass : NULL;
 }
 
@@ -263,49 +263,49 @@ static XrSysOnceBody *sys_once_body(XrVMRuntime *isolate, XrValue self) {
 
 static XrValue sys_mutex_invalid_receiver(XrVMRuntime *isolate) {
     XrValue exc = xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH,
-                                     "sys.Mutex method called with non-Mutex receiver");
+                                     "sys.OsMutex method called with non-OsMutex receiver");
     xr_vm_throw_exception(isolate, exc);
     return xr_null();
 }
 
 static XrValue sys_rwlock_invalid_receiver(XrVMRuntime *isolate) {
     XrValue exc = xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH,
-                                     "sys.RwLock method called with non-RwLock receiver");
+                                     "sys.OsRwLock method called with non-OsRwLock receiver");
     xr_vm_throw_exception(isolate, exc);
     return xr_null();
 }
 
 static XrValue sys_condvar_invalid_receiver(XrVMRuntime *isolate) {
     XrValue exc = xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH,
-                                     "sys.Condvar method called with non-Condvar receiver");
+                                     "sys.OsCondvar method called with non-OsCondvar receiver");
     xr_vm_throw_exception(isolate, exc);
     return xr_null();
 }
 
 static XrValue sys_condvar_invalid_mutex(XrVMRuntime *isolate) {
     XrValue exc =
-        xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH, "sys.Condvar requires a sys.Mutex");
+        xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH, "sys.OsCondvar requires a sys.OsMutex");
     xr_vm_throw_exception(isolate, exc);
     return xr_null();
 }
 
 static XrValue sys_barrier_invalid_receiver(XrVMRuntime *isolate) {
     XrValue exc = xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH,
-                                     "sys.Barrier method called with non-Barrier receiver");
+                                     "sys.OsBarrier method called with non-OsBarrier receiver");
     xr_vm_throw_exception(isolate, exc);
     return xr_null();
 }
 
 static XrValue sys_barrier_invalid_parties(XrVMRuntime *isolate) {
     XrValue exc =
-        xr_panic_info_newf(isolate, XR_ERR_INVALID_ARG_TYPE, "sys.Barrier parties must be > 0");
+        xr_panic_info_newf(isolate, XR_ERR_INVALID_ARG_TYPE, "sys.OsBarrier parties must be > 0");
     xr_vm_throw_exception(isolate, exc);
     return xr_null();
 }
 
 static XrValue sys_once_invalid_receiver(XrVMRuntime *isolate) {
     XrValue exc = xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH,
-                                     "sys.Once method called with non-Once receiver");
+                                     "sys.OsOnce method called with non-OsOnce receiver");
     xr_vm_throw_exception(isolate, exc);
     return xr_null();
 }
@@ -317,7 +317,7 @@ static XrValue sys_mutex_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     XrInstance *instance = xr_instance_new(isolate, sys_mutex_class(isolate));
     if (!instance) {
         XrValue exc =
-            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.Mutex allocation failed");
+            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.OsMutex allocation failed");
         xr_vm_throw_exception(isolate, exc);
         return xr_null();
     }
@@ -331,7 +331,7 @@ static XrValue sys_rwlock_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     XrInstance *instance = xr_instance_new(isolate, sys_rwlock_class(isolate));
     if (!instance) {
         XrValue exc =
-            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.RwLock allocation failed");
+            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.OsRwLock allocation failed");
         xr_vm_throw_exception(isolate, exc);
         return xr_null();
     }
@@ -345,7 +345,7 @@ static XrValue sys_condvar_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     XrInstance *instance = xr_instance_new(isolate, sys_condvar_class(isolate));
     if (!instance) {
         XrValue exc =
-            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.Condvar allocation failed");
+            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.OsCondvar allocation failed");
         xr_vm_throw_exception(isolate, exc);
         return xr_null();
     }
@@ -360,7 +360,7 @@ static XrValue sys_barrier_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     XrInstance *instance = xr_instance_new(isolate, sys_barrier_class(isolate));
     if (!instance) {
         XrValue exc =
-            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.Barrier allocation failed");
+            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.OsBarrier allocation failed");
         xr_vm_throw_exception(isolate, exc);
         return xr_null();
     }
@@ -377,7 +377,7 @@ static XrValue sys_once_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     XrInstance *instance = xr_instance_new(isolate, sys_once_class(isolate));
     if (!instance) {
         XrValue exc =
-            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.Once allocation failed");
+            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.OsOnce allocation failed");
         xr_vm_throw_exception(isolate, exc);
         return xr_null();
     }
@@ -527,7 +527,7 @@ static XrValue sys_once_call(XrVMRuntime *isolate, XrValue self, XrValue *args, 
     if (!body)
         return sys_once_invalid_receiver(isolate);
 
-    XrClosure *closure = xr_vm_closure_from_arg(isolate, args[0], "sys.Once.call");
+    XrClosure *closure = xr_vm_closure_from_arg(isolate, args[0], "sys.OsOnce.call");
     if (!closure)
         return xr_null();
 
@@ -572,36 +572,36 @@ static XrValue sys_pin_to_cpu(XrVMRuntime *isolate, XrValue *args, int argc) {
     return xr_bool(xr_thread_pin_to_cpu((unsigned int) cpu) == 0);
 }
 
-#define XR_STDLIB_VM_BIND_CLASS_CONDVAR 1
-#define XR_STDLIB_VM_BIND_CLASS_BARRIER 1
-#define XR_STDLIB_VM_BIND_CLASS_ONCE 1
-#define XR_STDLIB_VM_BIND_CLASS_MUTEX 1
-#define XR_STDLIB_VM_BIND_CLASS_RW_LOCK 1
+#define XR_STDLIB_VM_BIND_CLASS_OS_CONDVAR 1
+#define XR_STDLIB_VM_BIND_CLASS_OS_BARRIER 1
+#define XR_STDLIB_VM_BIND_CLASS_OS_ONCE 1
+#define XR_STDLIB_VM_BIND_CLASS_OS_MUTEX 1
+#define XR_STDLIB_VM_BIND_CLASS_OS_RW_LOCK 1
 #include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
-#undef XR_STDLIB_VM_BIND_CLASS_RW_LOCK
-#undef XR_STDLIB_VM_BIND_CLASS_MUTEX
-#undef XR_STDLIB_VM_BIND_CLASS_ONCE
-#undef XR_STDLIB_VM_BIND_CLASS_BARRIER
-#undef XR_STDLIB_VM_BIND_CLASS_CONDVAR
+#undef XR_STDLIB_VM_BIND_CLASS_OS_RW_LOCK
+#undef XR_STDLIB_VM_BIND_CLASS_OS_MUTEX
+#undef XR_STDLIB_VM_BIND_CLASS_OS_ONCE
+#undef XR_STDLIB_VM_BIND_CLASS_OS_BARRIER
+#undef XR_STDLIB_VM_BIND_CLASS_OS_CONDVAR
 
 void xr_sys_mutex_register_class(XrVMRuntime *isolate) {
-    xr_stdlib_vm_register_mutex_class_generated(isolate);
+    xr_stdlib_vm_register_os_mutex_class_generated(isolate);
 }
 
 void xr_sys_rwlock_register_class(XrVMRuntime *isolate) {
-    xr_stdlib_vm_register_rw_lock_class_generated(isolate);
+    xr_stdlib_vm_register_os_rw_lock_class_generated(isolate);
 }
 
 void xr_sys_condvar_register_class(XrVMRuntime *isolate) {
-    xr_stdlib_vm_register_condvar_class_generated(isolate);
+    xr_stdlib_vm_register_os_condvar_class_generated(isolate);
 }
 
 void xr_sys_barrier_register_class(XrVMRuntime *isolate) {
-    xr_stdlib_vm_register_barrier_class_generated(isolate);
+    xr_stdlib_vm_register_os_barrier_class_generated(isolate);
 }
 
 void xr_sys_once_register_class(XrVMRuntime *isolate) {
-    xr_stdlib_vm_register_once_class_generated(isolate);
+    xr_stdlib_vm_register_os_once_class_generated(isolate);
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_SYS 1

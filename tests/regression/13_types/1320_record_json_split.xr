@@ -41,7 +41,7 @@ fn test_json_decode_record() {
     let user = Json.decode<User>(data)
     assert(user != null)
     assert_eq(typeof(user), "Record")
-    assert_eq(user.id, 9)
-    assert_eq(user.name, "Ray")
+    assert_eq(user!.id, 9)
+    assert_eq(user!.name, "Ray")
 }
 

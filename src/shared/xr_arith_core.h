@@ -5,18 +5,18 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_arith_core.h - Runtime-neutral wrapping / overflow-checked integer math.
+ * xr_arith_core.h - Runtime-neutral signed-overflow predicates.
  *
  * KEY CONCEPT:
- *   Single semantic source for the mem.* fixed-width arithmetic intrinsics.
- *   Both the VM binding (stdlib/mem/mem.c) and the AOT freestanding wrapper
- *   (src/aot/xrt_mem.h) call these, so VM and AOT produce identical results
- *   by construction. All operate on the 64-bit signed `int` domain.
+ *   Single semantic source for the int.addOverflows/subOverflows/mulOverflows
+ *   methods (task 153). The VM method (xint_methods.h), the AOT dispatch
+ *   (xrt_method.h) and the AOT cgen direct lowering all call these, so VM
+ *   and AOT produce identical results by construction. All operate on the
+ *   64-bit signed `int` domain.
  *
- *   Wrapping ops compute in the unsigned domain and reinterpret, giving
- *   two's-complement wraparound with no undefined behavior. Overflow
- *   predicates report whether the *signed* operation would step outside
- *   [INT64_MIN, INT64_MAX].
+ *   Wrapping arithmetic lives in xr_int_arith.h (xr_i64_*_wrap) — the
+ *   wrapping helpers that used to live here were duplicates and were
+ *   deleted when mem.addWrapping/... moved to int methods.
  *
  *   Self-contained: depends only on <stdint.h>, so it stays includable from
  *   the freestanding AOT runtime.
@@ -26,21 +26,6 @@
 #define XRAY_SHARED_XR_ARITH_CORE_H
 
 #include <stdint.h>
-
-/* Two's-complement wrapping addition (wraps modulo 2^64). */
-static inline int64_t xr_arith_core_add_wrapping(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a + (uint64_t) b);
-}
-
-/* Two's-complement wrapping subtraction (wraps modulo 2^64). */
-static inline int64_t xr_arith_core_sub_wrapping(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a - (uint64_t) b);
-}
-
-/* Two's-complement wrapping multiplication (wraps modulo 2^64). */
-static inline int64_t xr_arith_core_mul_wrapping(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a * (uint64_t) b);
-}
 
 /* Whether signed 64-bit `a + b` overflows [INT64_MIN, INT64_MAX]. */
 static inline int xr_arith_core_add_overflows(int64_t a, int64_t b) {

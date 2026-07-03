@@ -9,7 +9,7 @@ fn return_int(x: Json) -> int {
 let dyn: Json = { "goodBool": true, "badBool": 1, "goodInt": 7, "badInt": 3.5 }
 let m: Map<bool, int> = #{}
 m.set(dyn.goodBool, dyn.goodInt)
-print("map=" + m.get(true).toString())
+print("map=" + m.get(true)!.toString())
 
 try {
     print(m.has(dyn.badBool).toString())

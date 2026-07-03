@@ -981,9 +981,10 @@ static XrValue crypto_uuid(XrVMRuntime *isolate, XrValue *args, int nargs) {
 
 /*
  * crypto.encrypt(key, plaintext) -> hex string
- * AES-256-CBC with PKCS7 padding.
- * Key is SHA-256 hashed to 32 bytes. IV is randomly generated and
- * prepended to the ciphertext. Output is hex-encoded (iv + ciphertext).
+ * Authenticated encryption: AES-256-CBC (PKCS7) then HMAC-SHA256 over
+ * IV||ciphertext (Encrypt-then-MAC). The user key is stretched into
+ * independent cipher/MAC subkeys. Output is hex(IV(16) || ciphertext || tag(32)),
+ * so any tampering is detected on decrypt instead of silently corrupting data.
  */
 static XrValue crypto_encrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
@@ -993,9 +994,10 @@ static XrValue crypto_encrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
 
     size_t padded_len = 0;
     size_t hex_len = 0;
-    if (!xr_crypto_core_aes_encrypt_plan(plain_str->length, &padded_len, &hex_len) ||
+    if (!xr_crypto_core_aead_encrypt_plan(plain_str->length, &padded_len, &hex_len) ||
         hex_len > UINT32_MAX)
         return xr_null();
+    size_t raw_len = XR_AEAD_OVERHEAD + padded_len;  // IV + ciphertext + tag
 
     uint8_t iv[16];
     xr_random_bytes(iv, 16);
@@ -1006,10 +1008,9 @@ static XrValue crypto_encrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (!padded)
         return xr_null();
 
-    uint8_t stack_cipher[4096];
-    uint8_t *cipher =
-        (padded_len <= sizeof(stack_cipher)) ? stack_cipher : (uint8_t *) xr_malloc(padded_len);
-    if (!cipher) {
+    uint8_t stack_raw[4096];
+    uint8_t *raw = (raw_len <= sizeof(stack_raw)) ? stack_raw : (uint8_t *) xr_malloc(raw_len);
+    if (!raw) {
         if (padded != stack_plain)
             xr_free(padded);
         return xr_null();
@@ -1020,19 +1021,19 @@ static XrValue crypto_encrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (!hex) {
         if (padded != stack_plain)
             xr_free(padded);
-        if (cipher != stack_cipher)
-            xr_free(cipher);
+        if (raw != stack_raw)
+            xr_free(raw);
         return xr_null();
     }
 
-    if (!xr_crypto_core_aes_encrypt_hex((const uint8_t *) XR_STRING_CHARS(key_str), key_str->length,
-                                        (const uint8_t *) XR_STRING_CHARS(plain_str),
-                                        plain_str->length, iv, padded, padded_len, cipher,
-                                        padded_len, hex, hex_len + 1)) {
+    if (!xr_crypto_core_aead_encrypt_hex(
+            (const uint8_t *) XR_STRING_CHARS(key_str), key_str->length,
+            (const uint8_t *) XR_STRING_CHARS(plain_str), plain_str->length, iv, padded, padded_len,
+            raw, raw_len, hex, hex_len + 1)) {
         if (padded != stack_plain)
             xr_free(padded);
-        if (cipher != stack_cipher)
-            xr_free(cipher);
+        if (raw != stack_raw)
+            xr_free(raw);
         if (hex != stack_hex)
             xr_free(hex);
         return xr_null();
@@ -1042,8 +1043,8 @@ static XrValue crypto_encrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
 
     if (padded != stack_plain)
         xr_free(padded);
-    if (cipher != stack_cipher)
-        xr_free(cipher);
+    if (raw != stack_raw)
+        xr_free(raw);
     if (hex != stack_hex)
         xr_free(hex);
     return result;
@@ -1051,8 +1052,9 @@ static XrValue crypto_encrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
 
 /*
  * crypto.decrypt(key, ciphertext_hex) -> plaintext string
- * Reverse of crypto.encrypt: hex decode, extract IV, AES-256-CBC decrypt,
- * remove PKCS7 padding.
+ * Reverse of crypto.encrypt: verify the HMAC-SHA256 tag in constant time
+ * FIRST (returns null on any mismatch — tamper/wrong key), then AES-256-CBC
+ * decrypt and strip PKCS7 padding.
  */
 static XrValue crypto_decrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
@@ -1062,7 +1064,7 @@ static XrValue crypto_decrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
 
     size_t raw_len = 0;
     size_t cipher_len = 0;
-    if (!xr_crypto_core_aes_decrypt_plan(cipher_hex_str->length, &raw_len, &cipher_len))
+    if (!xr_crypto_core_aead_decrypt_plan(cipher_hex_str->length, &raw_len, &cipher_len))
         return xr_null();
 
     uint8_t stack_raw[4096];
@@ -1080,9 +1082,10 @@ static XrValue crypto_decrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
     }
 
     size_t plain_len = 0;
-    if (!xr_crypto_core_aes_decrypt_hex((const uint8_t *) XR_STRING_CHARS(key_str), key_str->length,
-                                        XR_STRING_CHARS(cipher_hex_str), cipher_hex_str->length,
-                                        raw, raw_len, plain, cipher_len, &plain_len) ||
+    if (!xr_crypto_core_aead_decrypt_hex((const uint8_t *) XR_STRING_CHARS(key_str),
+                                         key_str->length, XR_STRING_CHARS(cipher_hex_str),
+                                         cipher_hex_str->length, raw, raw_len, plain, cipher_len,
+                                         &plain_len) ||
         plain_len > UINT32_MAX) {
         if (raw != stack_raw)
             xr_free(raw);

@@ -8,14 +8,14 @@ import os
 fn test_username() {
     let name = os.username()
     assert(name != null)
-    assert(name.length > 0)
+    assert(name!.length > 0)
 }
 
 @test
 fn test_homedir() {
     let home = os.homedir()
     assert(home != null)
-    assert(home.length > 0)
+    assert(home!.length > 0)
 }
 
 @test
@@ -25,7 +25,7 @@ fn test_homedir_skips_empty_home_env() {
 
     let home = os.homedir()
     assert(home != null)
-    assert(home.length > 0)
+    assert(home!.length > 0)
 
     if (oldHome != null) {
         os.setenv("HOME", oldHome ?? "")
@@ -104,8 +104,8 @@ fn test_clock() {
 fn test_exec_echo() {
     let result = os.exec("echo hello")
     assert(result != null)
-    assert_eq(result.stdout, "hello\n")
-    assert_eq(result.exitCode, 0)
+    assert_eq(result!.stdout, "hello\n")
+    assert_eq(result!.exitCode, 0)
 }
 
 @test
@@ -116,15 +116,15 @@ fn test_exec_stderr() {
     }
     let result = os.exec("echo error_msg >&2")
     assert(result != null)
-    assert_eq(result.stderr, "error_msg\n")
-    assert_eq(result.exitCode, 0)
+    assert_eq(result!.stderr, "error_msg\n")
+    assert_eq(result!.exitCode, 0)
 }
 
 @test
 fn test_exec_exit_code() {
     let result = os.exec("exit 42")
     assert(result != null)
-    assert_eq(result.exitCode, 42)
+    assert_eq(result!.exitCode, 42)
 }
 
 @test
@@ -133,11 +133,11 @@ fn test_exec_command_output() {
         // Windows echo adds \r\n; printf not available
         let result = os.exec("echo abc")
         assert(result != null)
-        assert(result.stdout.length > 0)
+        assert(result!.stdout.length > 0)
     } else {
         let result = os.exec("printf 'abc'")
         assert(result != null)
-        assert_eq(result.stdout, "abc")
+        assert_eq(result!.stdout, "abc")
     }
 }
 

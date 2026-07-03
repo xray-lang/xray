@@ -15,21 +15,6 @@
 
 // ======== Builtin Type Members ========
 
-// Barrier methods
-static const XaBuiltinMember g_gen_barrier_members[] = {
-    {"wait", "(): bool", "Wait until all parties have arrived", true, false},
-};
-#define GEN_BARRIER_MEMBER_COUNT 1
-
-// Condvar methods
-static const XaBuiltinMember g_gen_condvar_members[] = {
-    {"wait", "(m: Mutex): ()", "Wait on the condition variable with an already-locked mutex", true, false},
-    {"waitFor", "(m: Mutex, timeoutNs: int): bool", "Wait on the condition variable until signalled or timeout elapses", true, false},
-    {"signal", "(): ()", "Wake one waiter", true, false},
-    {"broadcast", "(): ()", "Wake all waiters", true, false},
-};
-#define GEN_CONDVAR_MEMBER_COUNT 4
-
 // DateTime methods
 static const XaBuiltinMember g_gen_datetime_members[] = {
     {"format", "(pattern?: string): string", "Format datetime to string", true, false},
@@ -56,28 +41,43 @@ static const XaBuiltinMember g_gen_datetime_members[] = {
 };
 #define GEN_DATETIME_MEMBER_COUNT 21
 
-// Mutex methods
-static const XaBuiltinMember g_gen_mutex_members[] = {
+// OsBarrier methods
+static const XaBuiltinMember g_gen_osbarrier_members[] = {
+    {"wait", "(): bool", "Wait until all parties have arrived", true, false},
+};
+#define GEN_OSBARRIER_MEMBER_COUNT 1
+
+// OsCondvar methods
+static const XaBuiltinMember g_gen_oscondvar_members[] = {
+    {"wait", "(m: OsMutex): ()", "Wait on the condition variable with an already-locked mutex", true, false},
+    {"waitFor", "(m: OsMutex, timeoutNs: int): bool", "Wait on the condition variable until signalled or timeout elapses", true, false},
+    {"signal", "(): ()", "Wake one waiter", true, false},
+    {"broadcast", "(): ()", "Wake all waiters", true, false},
+};
+#define GEN_OSCONDVAR_MEMBER_COUNT 4
+
+// OsMutex methods
+static const XaBuiltinMember g_gen_osmutex_members[] = {
     {"lock", "(): ()", "Lock the mutex", true, false},
     {"unlock", "(): ()", "Unlock the mutex", true, false},
     {"tryLock", "(): bool", "Try to lock the mutex", true, false},
 };
-#define GEN_MUTEX_MEMBER_COUNT 3
+#define GEN_OSMUTEX_MEMBER_COUNT 3
 
-// Once methods
-static const XaBuiltinMember g_gen_once_members[] = {
+// OsOnce methods
+static const XaBuiltinMember g_gen_osonce_members[] = {
     {"call", "(body: fn(): ()): ()", "Run the closure exactly once", true, false},
 };
-#define GEN_ONCE_MEMBER_COUNT 1
+#define GEN_OSONCE_MEMBER_COUNT 1
 
-// RwLock methods
-static const XaBuiltinMember g_gen_rwlock_members[] = {
+// OsRwLock methods
+static const XaBuiltinMember g_gen_osrwlock_members[] = {
     {"rdlock", "(): ()", "Acquire the read side of the read-write lock", true, false},
     {"rdunlock", "(): ()", "Release the read side of the read-write lock", true, false},
     {"wrlock", "(): ()", "Acquire the write side of the read-write lock", true, false},
     {"wrunlock", "(): ()", "Release the write side of the read-write lock", true, false},
 };
-#define GEN_RWLOCK_MEMBER_COUNT 4
+#define GEN_OSRWLOCK_MEMBER_COUNT 4
 
 // ======== C Module Declarations ========
 
@@ -371,13 +371,6 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 
 // mem module functions
 static const XaBuiltinMember g_gen_mem_functions[] = {
-    {"collectCycles", "(): int", "Run cycle collection + whole-block reclaim, return cycle collection count", true, false},
-    {"disableCycleCollection", "(): ()", "Pause the automatic cycle collector", true, false},
-    {"enableCycleCollection", "(): ()", "Resume the automatic cycle collector", true, false},
-    {"isCycleCollectionEnabled", "(): bool", "Check if automatic cycle collection is enabled", true, false},
-    {"liveBytes", "(): int", "Get live memory usage in bytes", true, false},
-    {"liveObjects", "(): int", "Get live object count", true, false},
-    {"info", "(): Map", "Get memory-model runtime info as Map", true, false},
     {"fence", "(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false},
     {"prefetch", "(ptr: RawPtr<uint8>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false},
     {"cacheFlush", "(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false},
@@ -400,25 +393,13 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"compare", "(a: RawPtr<uint8>, b: RawPtr<uint8>, n: int): int", "Compare n bytes at a and b (memcmp: <0, 0, >0)", true, false},
     {"volatileLoad", "(ptr: RawPtr<uint8>, size: int): int", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false},
     {"volatileStore", "(ptr: RawMut<uint8>, v: int, size: int): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false},
-    {"popcount", "(x: int): int", "Number of set bits in the 64-bit value", true, false},
-    {"leadingZeros", "(x: int): int", "Count of leading zero bits (0 -> 64)", true, false},
-    {"trailingZeros", "(x: int): int", "Count of trailing zero bits (0 -> 64)", true, false},
-    {"byteswap", "(x: int): int", "Reverse the byte order of the 64-bit value", true, false},
-    {"rotateLeft", "(x: int, n: int): int", "Rotate the 64-bit value left by n bits (n mod 64)", true, false},
-    {"rotateRight", "(x: int, n: int): int", "Rotate the 64-bit value right by n bits (n mod 64)", true, false},
-    {"addWrapping", "(a: int, b: int): int", "Two's-complement wrapping addition (wraps mod 2^64)", true, false},
-    {"subWrapping", "(a: int, b: int): int", "Two's-complement wrapping subtraction (wraps mod 2^64)", true, false},
-    {"mulWrapping", "(a: int, b: int): int", "Two's-complement wrapping multiplication (wraps mod 2^64)", true, false},
-    {"addOverflows", "(a: int, b: int): bool", "Whether signed 64-bit addition of a and b overflows", true, false},
-    {"subOverflows", "(a: int, b: int): bool", "Whether signed 64-bit subtraction of a and b overflows", true, false},
-    {"mulOverflows", "(a: int, b: int): bool", "Whether signed 64-bit multiplication of a and b overflows", true, false},
     // Module constants (is_method=false)
     {"PROT_NONE", ": int", "No access protection for mem.pageAlloc/pageProtect", false, false},
     {"PROT_READ", ": int", "Readable page protection bit for mem.pageAlloc/pageProtect", false, false},
     {"PROT_WRITE", ": int", "Writable page protection bit for mem.pageAlloc/pageProtect", false, false},
     {"PROT_EXEC", ": int", "Executable page protection bit for mem.pageAlloc/pageProtect", false, false},
 };
-#define GEN_MEM_FUNCTION_COUNT 45
+#define GEN_MEM_FUNCTION_COUNT 26
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {
@@ -502,13 +483,14 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"clock", "(): float", "Get process CPU time in seconds", true, false},
     {"sleep", "(ms: int): ()", "Sleep for milliseconds", true, false},
     {"exec", "(cmd: string): ExecResult?", "Execute shell command", true, false},
+    {"spawn", "(program: string, args: Array<string>): ExecResult?", "Execute a program without a shell (injection-safe argv)", true, false},
     // Module constants (is_method=false)
     {"platform", ": string", "Current operating system name", false, false},
     {"arch", ": string", "Current CPU architecture name", false, false},
     {"sep", ": string", "Platform path separator", false, false},
     {"eol", ": string", "Platform end-of-line string", false, false},
 };
-#define GEN_OS_FUNCTION_COUNT 28
+#define GEN_OS_FUNCTION_COUNT 29
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
@@ -528,13 +510,25 @@ static const XaBuiltinMember g_gen_regex_functions[] = {
 };
 #define GEN_REGEX_FUNCTION_COUNT 13
 
+// runtime module functions
+static const XaBuiltinMember g_gen_runtime_functions[] = {
+    {"collectCycles", "(): int", "Run cycle collection + whole-block reclaim, return cycle collection count", true, false},
+    {"disableCycleCollection", "(): ()", "Pause the automatic cycle collector", true, false},
+    {"enableCycleCollection", "(): ()", "Resume the automatic cycle collector", true, false},
+    {"isCycleCollectionEnabled", "(): bool", "Check if automatic cycle collection is enabled", true, false},
+    {"liveBytes", "(): int", "Get live memory usage in bytes", true, false},
+    {"liveObjects", "(): int", "Get live object count", true, false},
+    {"info", "(): Map", "Get memory-model runtime info as Map", true, false},
+};
+#define GEN_RUNTIME_FUNCTION_COUNT 7
+
 // sys module functions
 static const XaBuiltinMember g_gen_sys_functions[] = {
-    {"Mutex", "(): Mutex", "Create an OS-domain mutex", true, false},
-    {"RwLock", "(): RwLock", "Create an OS-domain read-write lock", true, false},
-    {"Condvar", "(): Condvar", "Create an OS-domain condition variable", true, false},
-    {"Barrier", "(parties: int): Barrier", "Create a reusable OS-domain barrier", true, false},
-    {"Once", "(): Once", "Create an OS-domain once gate", true, false},
+    {"OsMutex", "(): OsMutex", "Create an OS-domain mutex", true, false},
+    {"OsRwLock", "(): OsRwLock", "Create an OS-domain read-write lock", true, false},
+    {"OsCondvar", "(): OsCondvar", "Create an OS-domain condition variable", true, false},
+    {"OsBarrier", "(parties: int): OsBarrier", "Create a reusable OS-domain barrier", true, false},
+    {"OsOnce", "(): OsOnce", "Create an OS-domain once gate", true, false},
     {"cpuCount", "(): int", "Return the number of CPUs available to OS-thread work", true, false},
     {"threadYield", "(): ()", "Yield the current OS thread to another runnable OS thread", true, false},
     {"sleepMs", "(ms: int): ()", "Block the current OS thread for at least ms milliseconds", true, false},
@@ -642,6 +636,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT},
     {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT},
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0},
+    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0},
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0},
     {"toml", g_gen_toml_functions, GEN_TOML_FUNCTION_COUNT, NULL, 0},
@@ -649,7 +644,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
     {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 19
+#define GEN_BUILTIN_MODULE_COUNT 20
 
 /* clang-format on */
 

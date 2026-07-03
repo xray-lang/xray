@@ -23,4 +23,13 @@ class int {
     wrappingAdd(other: int) -> int
     wrappingSub(other: int) -> int
     wrappingMul(other: int) -> int
+    addOverflows(other: int) -> bool
+    subOverflows(other: int) -> bool
+    mulOverflows(other: int) -> bool
+    popcount() -> int
+    leadingZeros() -> int
+    trailingZeros() -> int
+    byteswap() -> int
+    rotateLeft(n: int) -> int
+    rotateRight(n: int) -> int
 }

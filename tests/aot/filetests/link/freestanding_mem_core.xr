@@ -8,9 +8,12 @@ fn xray_mem_addr_roundtrip(addr: int) -> int {
 
 @c_export("xray_mem_bits")
 fn xray_mem_bits(x: int, n: int) -> int {
-    return mem.popcount(x) + mem.leadingZeros(x) + mem.trailingZeros(x) +
-        mem.rotateLeft(x, n) + mem.rotateRight(x, n) + mem.addWrapping(x, n) +
-        mem.subWrapping(x, n) + mem.mulWrapping(x, n)
+    // Bit/wrapping intrinsics are int methods (task 153); the freestanding
+    // cgen lowers them straight to the shared cores already inlined in
+    // xrt_core_freestanding.h, so no new undefined symbols appear.
+    return x.popcount() + x.leadingZeros() + x.trailingZeros() +
+        x.rotateLeft(n) + x.rotateRight(n) + x.wrappingAdd(n) +
+        x.wrappingSub(n) + x.wrappingMul(n)
 }
 
 @c_export("xray_mem_bulk")

@@ -28,6 +28,7 @@ XR_FUNC struct XrModule *xr_load_module_path(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_base64(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_regex(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_mem(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_runtime(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_sync(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_sys(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_probe(struct XrVMRuntime *isolate);

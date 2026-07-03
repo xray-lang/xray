@@ -1,0 +1,48 @@
+// anchor: int-bits-methods
+// int bit-manipulation methods (task 153: moved from mem.*). VM dispatch
+// (xint_methods.h), AOT method dispatch (xrt_method.h) and the AOT cgen
+// direct lowering all call src/shared/xr_bits_core.h, so every line below
+// must print identically under both backends (including the sign-bit and
+// modulo-64 rotate edge cases).
+
+// popcount
+print((0).popcount())
+print((255).popcount())
+print((1023).popcount())
+print((-1).popcount())
+
+// leadingZeros (0 -> 64)
+print((0).leadingZeros())
+print((1).leadingZeros())
+print((256).leadingZeros())
+print((-1).leadingZeros())
+
+// trailingZeros (0 -> 64)
+print((0).trailingZeros())
+print((8).trailingZeros())
+print((1024).trailingZeros())
+print((-1).trailingZeros())
+
+// byteswap
+print((1).byteswap())
+print((255).byteswap())
+print((-1).byteswap())
+
+// rotateLeft (n taken modulo 64)
+print((1).rotateLeft(4))
+print((1).rotateLeft(0))
+print((1).rotateLeft(64))
+print((1).rotateLeft(68))
+
+// rotateRight (n taken modulo 64; sign-bit path)
+print((16).rotateRight(4))
+print((1).rotateRight(1))
+print((1).rotateRight(64))
+
+// non-literal receivers exercise the same lowering through locals
+let x: int = 12345
+let n: int = 8
+print(x.popcount())
+print(x.rotateLeft(n))
+print(x.rotateLeft(n).rotateRight(n))
+print(x.byteswap().byteswap())

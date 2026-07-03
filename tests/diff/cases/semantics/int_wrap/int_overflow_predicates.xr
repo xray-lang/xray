@@ -1,0 +1,31 @@
+// anchor: int-overflow-predicates
+// int signed-overflow predicates (task 153: moved from mem.*). The checked*
+// family returns the value (or null); these only report the flag. Semantics
+// live in src/shared/xr_arith_core.h, shared by the VM binding, the AOT
+// method dispatch and the AOT cgen direct lowering. Values use MAX
+// (9223372036854775807) and 2^62 (4611686018427387904) to avoid the
+// INT64_MIN literal, keeping every expected result unambiguous.
+
+// addOverflows
+print((1).addOverflows(2))
+print((9223372036854775807).addOverflows(1))
+print((9223372036854775807).addOverflows(9223372036854775807))
+
+// subOverflows
+print((5).subOverflows(3))
+print((9223372036854775807).subOverflows(-1))
+print((0).subOverflows(9223372036854775807))
+
+// mulOverflows
+print((3).mulOverflows(4))
+print((9223372036854775807).mulOverflows(2))
+print((4611686018427387904).mulOverflows(4))
+print((0).mulOverflows(9223372036854775807))
+
+// non-literal receivers + agreement with the checked* family
+let max: int = 9223372036854775807
+let one: int = 1
+print(max.addOverflows(one))
+print(max.addOverflows(one) == (max.checkedAdd(one) == null))
+print(one.addOverflows(one) == (one.checkedAdd(one) == null))
+print(max.mulOverflows(2) == (max.checkedMul(2) == null))

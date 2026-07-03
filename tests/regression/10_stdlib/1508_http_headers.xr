@@ -18,7 +18,7 @@ fn test_common_headers() {
     let h = #{"Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive"}
-    assert(h.get("Content-Type").indexOf("text/html") >= 0)
+    assert(h.get("Content-Type")!.indexOf("text/html") >= 0)
     assert_eq(h.get("Cache-Control"), "no-cache")
 }
 

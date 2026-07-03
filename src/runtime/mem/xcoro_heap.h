@@ -124,8 +124,8 @@ typedef struct XrCoroHeap {
     XrRegionHeap region;
 
     // === Allocation accounting ===
-    int64_t totalbytes;                 // Total allocated bytes (mem.liveBytes / mem.info stats)
-    uint8_t is_collecting;              // Re-entry guard (teardown / reset)
+    int64_t totalbytes;     // Total allocated bytes (runtime.liveBytes / runtime.info stats)
+    uint8_t is_collecting;  // Re-entry guard (teardown / reset)
     uint8_t cycle_collection_disabled;  // mem.disableCycleCollection/enableCycleCollection counter:
                                         // gates the automatic cycle collector (xr_cycle_add_root
                                         // auto-trigger)
@@ -171,7 +171,7 @@ typedef struct XrCoroHeap {
     // === Cycle collector (Bacon-Rajan trial deletion) ===
     // Potential cycle roots: objects whose type is XR_OBJ_CYCLE_CANDIDATE and
     // whose RC was decremented but did not reach zero. The collector runs on
-    // mem.collectCycles() and frees dead cycles that pure RC cannot reclaim.
+    // runtime.collectCycles() and frees dead cycles that pure RC cannot reclaim.
     XrObjHeader **cycle_roots;         // growable array of potential roots (NULL until first add)
     uint32_t cycle_root_count;         // number of entries in cycle_roots
     uint32_t cycle_root_cap;           // capacity of cycle_roots array
@@ -228,7 +228,7 @@ XR_FUNC void xr_coro_heap_recycler_destroy(XrCoroHeap *heap);
     ((Type *) ((XrObjHeader *) xr_coro_heap_new_obj((heap), (type), sizeof(Type)) + 1))
 
 // Cycle collection: runs the Bacon-Rajan trial deletion collector on
-// accumulated cycle_roots, then clears the roots list. Called by mem.collectCycles().
+// accumulated cycle_roots, then clears the roots list. Called by runtime.collectCycles().
 XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap);
 
 /* Whole-block reclaim: return fully-dead Region blocks to the heap's free pool
