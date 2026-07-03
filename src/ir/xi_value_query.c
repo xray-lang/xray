@@ -46,6 +46,10 @@ XR_FUNC bool xi_type_is_task(const XrType *type) {
     return xi_type_is_named_instance(type, "Task");
 }
 
+XR_FUNC bool xi_type_is_thread(const XrType *type) {
+    return xi_type_is_named_instance(type, "Thread");
+}
+
 /* Strip BOX/UNBOX/COPY identity wrappers so the test sees the carried type. */
 static const XiValue *xi_value_unwrap_identity(const XiValue *v) {
     while (v && (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v)) &&
@@ -62,6 +66,11 @@ XR_FUNC bool xi_value_type_is_channel(const XiValue *v) {
 XR_FUNC bool xi_value_type_is_task(const XiValue *v) {
     v = xi_value_unwrap_identity(v);
     return v && xi_type_is_task(v->type);
+}
+
+XR_FUNC bool xi_value_type_is_thread(const XiValue *v) {
+    v = xi_value_unwrap_identity(v);
+    return v && xi_type_is_thread(v->type);
 }
 
 XR_FUNC bool xi_value_type_is_atomic(const XiValue *v) {

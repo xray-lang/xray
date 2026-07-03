@@ -53,6 +53,7 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
         case XR_TAG_SYS_CONDVAR:
         case XR_TAG_SYS_BARRIER:
         case XR_TAG_SYS_ONCE:
+        case XR_TAG_THREAD:
         case XR_TAG_RANGE:
         case XR_TAG_ENUM:
         case XR_TAG_ITERATOR:
@@ -534,6 +535,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         return xrt_sys_condvar_method_0(recv, sym);
     if (recv.tag == XR_TAG_SYS_BARRIER)
         return xrt_sys_barrier_method_0(recv, sym);
+    if (recv.tag == XR_TAG_THREAD)
+        return xrt_thread_method_0(recv, sym);
     if (recv.tag == XR_TAG_I64) {
         if (sym == XRT_SYM_ABS)
             return XR_FROM_INT(xr_i64_abs_wrap(recv.i));

@@ -275,6 +275,7 @@ static const char *xr_builtin_symbol_names[] = {
     "signal",
     "broadcast",
     "call",
+    "detach",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \
