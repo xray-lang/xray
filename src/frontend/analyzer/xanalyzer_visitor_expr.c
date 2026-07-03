@@ -2886,7 +2886,16 @@ bool xa_boundary_arg_is_shared_const(XaInferContext *ctx, AstNode *arg_node) {
 
 void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node, AstNode *arg_node,
                                     XrType *arg_type, const char *boundary_label) {
-    if (!ctx || !ctx->analyzer || !arg_node || !xa_boundary_transfer_type_needs_explicit(arg_type))
+    if (!ctx || !ctx->analyzer || !arg_node)
+        return;
+    if (xa_type_contains_span_view(arg_type)) {
+        char context[160];
+        snprintf(context, sizeof(context), "send Span view across %s",
+                 boundary_label ? boundary_label : "coroutine boundary");
+        xa_check_span_value_escape(ctx, arg_node, arg_type, context);
+        return;
+    }
+    if (!xa_boundary_transfer_type_needs_explicit(arg_type))
         return;
     if (arg_node->type == AST_MOVE_EXPR || xa_boundary_arg_is_explicit_copy(arg_node) ||
         xa_boundary_arg_is_shared_const(ctx, arg_node))

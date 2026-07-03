@@ -1,0 +1,12 @@
+fn worker(view: ByteSpan) -> int {
+    return view.length
+}
+
+fn bad() {
+    let bytes = Bytes(4)
+    let view: ByteSpan = bytes[0:2]
+    let task = go worker(move view)
+    print(await task)
+}
+
+bad()

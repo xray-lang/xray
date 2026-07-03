@@ -213,7 +213,7 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
     return NULL;
 }
 
-static bool xa_type_contains_span_view(XrType *type) {
+XR_FUNC bool xa_type_contains_span_view(XrType *type) {
     if (!type || XR_TYPE_IS_UNKNOWN(type) || XR_TYPE_IS_NULL(type))
         return false;
     if (XR_TYPE_IS_SPAN(type))
@@ -233,6 +233,21 @@ static bool xa_type_contains_span_view(XrType *type) {
         }
     }
     return false;
+}
+
+XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, XrType *value_type,
+                                        const char *escape_context) {
+    if (!ctx || !ctx->analyzer || !loc_node || !xa_type_contains_span_view(value_type))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "cannot %s; Span is a borrowed view, keep it local or copy the owner data into an "
+             "Array",
+             escape_context ? escape_context : "let Span view escape");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
 }
 
 static void xa_update_borrowed_alias_root(XaInferContext *ctx, XaSymbol *sym, AstNode *value,

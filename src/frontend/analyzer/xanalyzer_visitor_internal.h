@@ -104,6 +104,9 @@ XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *ta
 XR_FUNC XaSymbol *xa_in_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr);
 XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type);
 XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *expr);
+XR_FUNC bool xa_type_contains_span_view(XrType *type);
+XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, XrType *value_type,
+                                        const char *escape_context);
 XR_FUNC bool xa_method_name_mutates_receiver(const char *name);
 XR_FUNC bool xa_type_contains_float(XrType *type);
 XR_FUNC void xa_report_float_modulo_error(XaInferContext *ctx, AstNode *node, XrType *left,
