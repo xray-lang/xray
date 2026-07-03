@@ -937,8 +937,7 @@
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify)
-  :lowering-policy special)
+  :targets (vm-bytecode aot-verify))
 
 ; Synchronous: constructs a coroutine-backed iterator over a generator function.
 ; It does NOT suspend the caller (the producer is pull-driven by the iterator),

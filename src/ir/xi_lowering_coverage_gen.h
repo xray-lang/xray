@@ -23,9 +23,9 @@ typedef enum {
     XI_LOWER_TEMPLATE_WIDEN = 5,
 } XiLowerTemplateKind;
 
-enum { XI_LOWERING_ENTRY_COUNT = 135 };
+enum { XI_LOWERING_ENTRY_COUNT = 136 };
 enum { XI_LOWERING_PATTERNED_ENTRY_COUNT = 33 };
-enum { XI_LOWERING_CUSTOM_ENTRY_COUNT = 102 };
+enum { XI_LOWERING_CUSTOM_ENTRY_COUNT = 103 };
 enum { XI_LOWERING_MAIN_BACKEND_ENTRY_COUNT = 101 };
 enum { XI_LOWERING_MAIN_BACKEND_PATTERNED_ENTRY_COUNT = 33 };
 enum { XI_LOWERING_REJECTED_TARGET_COUNT = 1 };
@@ -36,7 +36,7 @@ enum { XI_LOWERING_AOT_C_STMT_ENTRY_COUNT = 9 };
 enum { XI_LOWERING_AOT_C_STMT_PATTERNED_ENTRY_COUNT = 0 };
 enum { XI_LOWERING_AOT_VERIFY_ENTRY_COUNT = 0 };
 enum { XI_LOWERING_AOT_VERIFY_PATTERNED_ENTRY_COUNT = 0 };
-enum { XI_LOWERING_VM_BYTECODE_ENTRY_COUNT = 134 };
+enum { XI_LOWERING_VM_BYTECODE_ENTRY_COUNT = 135 };
 enum { XI_LOWERING_VM_BYTECODE_PATTERNED_ENTRY_COUNT = 33 };
 
 #define XI_LOWERING_COVERAGE_ENTRIES(X) \
@@ -133,6 +133,7 @@ enum { XI_LOWERING_VM_BYTECODE_PATTERNED_ENTRY_COUNT = 33 };
     X(ITER_NEXT, "xi.iter.next", XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE, 0) \
     X(ITER_VALID, "xi.iter.valid", XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE, 0) \
     X(GO, "xi.go", XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE, 0) \
+    X(THREAD_SPAWN, "xi.thread.spawn", XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE, 0) \
     X(GEN_CALL, "xi.gen.call", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0) \
     X(AWAIT, "xi.await", XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE, 0) \
     X(CHAN_SEND, "xi.chan.send", XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE, 0) \
@@ -272,6 +273,7 @@ static inline uint32_t xi_lowering_generated_targets(uint16_t op) {
         case XI_ITER_NEXT: return XI_LOWER_TARGET_VM_BYTECODE;
         case XI_ITER_VALID: return XI_LOWER_TARGET_VM_BYTECODE;
         case XI_GO: return XI_LOWER_TARGET_VM_BYTECODE;
+        case XI_THREAD_SPAWN: return XI_LOWER_TARGET_VM_BYTECODE;
         case XI_GEN_CALL: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE;
         case XI_AWAIT: return XI_LOWER_TARGET_VM_BYTECODE;
         case XI_CHAN_SEND: return XI_LOWER_TARGET_VM_BYTECODE;
@@ -415,6 +417,7 @@ static inline uint32_t xi_lowering_required_targets(uint16_t op) {
         case XI_ITER_NEXT: return XI_LOWER_TARGET_VM_BYTECODE;
         case XI_ITER_VALID: return XI_LOWER_TARGET_VM_BYTECODE;
         case XI_GO: return XI_LOWER_TARGET_VM_BYTECODE;
+        case XI_THREAD_SPAWN: return XI_LOWER_TARGET_VM_BYTECODE;
         case XI_GEN_CALL: return XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C;
         case XI_AWAIT: return XI_LOWER_TARGET_VM_BYTECODE;
         case XI_CHAN_SEND: return XI_LOWER_TARGET_VM_BYTECODE;
@@ -558,6 +561,7 @@ static inline uint32_t xi_lowering_rejected_targets(uint16_t op) {
         case XI_ITER_NEXT: return 0;
         case XI_ITER_VALID: return 0;
         case XI_GO: return 0;
+        case XI_THREAD_SPAWN: return 0;
         case XI_GEN_CALL: return 0;
         case XI_AWAIT: return 0;
         case XI_CHAN_SEND: return 0;
@@ -701,6 +705,7 @@ static inline XiLowerTemplateKind xi_lowering_template_kind(uint16_t op) {
         case XI_ITER_NEXT: return XI_LOWER_TEMPLATE_CUSTOM;
         case XI_ITER_VALID: return XI_LOWER_TEMPLATE_CUSTOM;
         case XI_GO: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_THREAD_SPAWN: return XI_LOWER_TEMPLATE_CUSTOM;
         case XI_GEN_CALL: return XI_LOWER_TEMPLATE_CUSTOM;
         case XI_AWAIT: return XI_LOWER_TEMPLATE_CUSTOM;
         case XI_CHAN_SEND: return XI_LOWER_TEMPLATE_CUSTOM;

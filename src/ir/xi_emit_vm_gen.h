@@ -204,6 +204,7 @@ static inline bool xi_emit_vm_requires_fresh_dst(uint16_t op) {
         case XI_CALL_METHOD: return true;
         case XI_CALL_METHOD_DIRECT: return true;
         case XI_GO: return true;
+        case XI_THREAD_SPAWN: return true;
         case XI_GEN_CALL: return true;
         case XI_CHAN_RECV: return true;
         case XI_CHAN_TRY_RECV: return true;
