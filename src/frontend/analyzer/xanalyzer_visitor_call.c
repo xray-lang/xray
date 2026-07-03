@@ -977,6 +977,13 @@ static void xa_check_borrowed_mutator_arg_escape(XaInferContext *ctx, AstNode *c
     if (!ctx || !call_node || !arg_node ||
         !xa_method_stores_argument(receiver_type, method_name, slot))
         return;
+    if (xa_type_contains_span_view(arg_type)) {
+        char context[160];
+        snprintf(context, sizeof(context), "pass Span view to mutating method '%s'",
+                 method_name ? method_name : "?");
+        xa_check_span_value_escape(ctx, arg_node, arg_type, context);
+        return;
+    }
     if (!xa_type_needs_borrow_escape_guard(arg_type))
         return;
     XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, arg_node);
@@ -1114,6 +1121,13 @@ static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *c
     if (!ctx || !call_node || !callee_links || !callee_links->param_escapes || slot < 0 ||
         slot >= callee_links->param_escape_count || !callee_links->param_escapes[slot])
         return;
+    if (xa_type_contains_span_view(arg_type)) {
+        char context[160];
+        snprintf(context, sizeof(context), "pass Span view to escaping parameter %d of '%s'",
+                 slot + 1, callee_name ? callee_name : "callee");
+        xa_check_span_value_escape(ctx, arg_node ? arg_node : call_node, arg_type, context);
+        return;
+    }
     if (!xa_type_needs_borrow_escape_guard(arg_type))
         return;
     XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, arg_node);
