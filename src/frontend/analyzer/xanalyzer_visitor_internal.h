@@ -69,6 +69,11 @@ XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, X
                                        bool is_write);
 XR_FUNC bool xa_type_is_threadsafe_shared_ref(const XrType *type);
 XR_FUNC const char *xa_threadsafe_shared_ref_label(const XrType *type);
+XR_FUNC bool xa_freestanding_profile_enabled(XaAnalyzer *analyzer);
+XR_FUNC bool xa_freestanding_stdlib_module_known(const char *module_name);
+XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name);
+XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *node,
+                                                const char *feature, const char *suggestion);
 
 // Expression visitors (defined in xanalyzer_visitor_expr.c)
 XR_FUNC XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node);

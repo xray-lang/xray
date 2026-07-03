@@ -122,6 +122,11 @@ typedef struct {
     XiCgenCoroFrameStats coro_frame_stats;
 } XaotBuildResult;
 
+typedef enum XaotBuildProfile {
+    XAOT_BUILD_PROFILE_HOSTED = 0,
+    XAOT_BUILD_PROFILE_FREESTANDING,
+} XaotBuildProfile;
+
 /* Full AOT pipeline: Source → AST → Xi IR → C.
  * Supports single and multi-module bundles.
  * Returns 0 on success, non-zero on failure.
@@ -134,7 +139,7 @@ typedef struct {
  * Caller frees the result via xaot_build_result_free(). */
 XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildResult *result);
 XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit_program_main,
-                          XaotBuildResult *result);
+                          XaotBuildProfile profile, XaotBuildResult *result);
 XR_FUNC void xaot_build_result_free(XaotBuildResult *result);
 
 #endif  // XAOT_DRIVER_H

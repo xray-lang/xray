@@ -789,6 +789,13 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
     XrType *right = xa_visit_infer_expr(ctx, node->as.binary.right);
     ctx->expected_type = saved_expected;
 
+    if (xa_freestanding_profile_enabled(ctx->analyzer) && node->type == AST_BINARY_ADD &&
+        (XR_TYPE_IS_STRING(left) || XR_TYPE_IS_STRING(right))) {
+        xa_freestanding_report_unavailable(
+            ctx, node, "string concatenation",
+            "use static string literals or write into an explicit user buffer");
+    }
+
     // Deterministic result types: language rules independent of operand types
     switch (node->type) {
         // Comparison → always bool
@@ -1670,6 +1677,9 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_map(ctx->analyzer->isolate, xr_type_new_unknown(NULL),
                                xr_type_new_unknown(NULL));
 
+    xa_freestanding_report_unavailable(ctx, node, "Map literal",
+                                       "dynamic containers require hosted allocation");
+
     MapLiteralNode *map = &node->as.map_literal;
     if (map->count == 0) {
         // Empty map: use expected type if available
@@ -1737,6 +1747,9 @@ static void object_union_add(const char **names, XrType **types, int *n, const c
 XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
+
+    xa_freestanding_report_unavailable(ctx, node, "object literal",
+                                       "use a declared struct literal for fixed layout data");
 
     ObjectLiteralNode *obj = &node->as.object_literal;
     XrType *expected = ctx->expected_type;
@@ -1895,6 +1908,9 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
 XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
+
+    xa_freestanding_report_unavailable(ctx, node, "class construction",
+                                       "use structs or explicit raw-memory APIs in this profile");
 
     NewExprNode *ne = &node->as.new_expr;
 
@@ -2435,6 +2451,9 @@ XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node) {
 XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_function(NULL, NULL, 0, xr_type_new_unknown(NULL), false);
+
+    xa_freestanding_report_unavailable(ctx, node, "anonymous function/closure",
+                                       "use a top-level function symbol");
 
     FunctionDeclNode *fn = &node->as.function_expr;
     const char **type_param_names = NULL;
@@ -3025,6 +3044,9 @@ XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_task(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
 
+    xa_freestanding_report_unavailable(ctx, node, "go expression",
+                                       "the coroutine scheduler is hosted-only");
+
     GoExprNode *go = &node->as.go_expr;
 
     // Infer the type of the expression being spawned
@@ -3054,6 +3076,9 @@ XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
 XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
+
+    xa_freestanding_report_unavailable(ctx, node, "await expression",
+                                       "the coroutine scheduler is hosted-only");
 
     AwaitExprNode *await = &node->as.await_expr;
 
