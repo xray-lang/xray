@@ -1,0 +1,14 @@
+@section("__TEXT,.xray_boot")
+@used
+@c_export("xray_boot_score")
+fn boot_score(x: int32) -> int32 {
+    return x + 3
+}
+
+@section("__TEXT,.xray_hook")
+@weak
+@used
+@c_export("xray_hook_score")
+fn hook_score() -> int32 {
+    return 7
+}

@@ -4956,6 +4956,24 @@ static void emit_func_attr_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f)
         fprintf(out, "XRT_FN_PURE ");
 }
 
+static bool cg_func_attrs_apply_to_internal(const XiFunc *f) {
+    return f && !f->c_export && (f->aot_section || f->aot_used);
+}
+
+static void emit_aot_symbol_attrs(FILE *out, const XiFunc *f, bool c_export_wrapper) {
+    if (!f)
+        return;
+    if (f->aot_section) {
+        fprintf(out, "XRT_ATTR_SECTION(");
+        emit_c_string_literal(out, f->aot_section);
+        fprintf(out, ") ");
+    }
+    if (c_export_wrapper && f->aot_weak)
+        fprintf(out, "XRT_ATTR_WEAK ");
+    if (f->aot_used)
+        fprintf(out, "XRT_ATTR_USED ");
+}
+
 static void emit_cfn_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                     const char *prefix) {
     fprintf(out, "%s%s ", cg_linkage(ctx), cg_cfn_value_c_type(f->return_type, true));
@@ -5058,7 +5076,9 @@ static bool cg_func_can_have_c_export_stub(XiCgenCtx *ctx, const XiFunc *f) {
     return cg_cfn_xray_func_signature_supported(f);
 }
 
-static void emit_c_export_stub_signature(FILE *out, const XiFunc *f) {
+static void emit_c_export_stub_signature(FILE *out, const XiFunc *f, bool with_attrs) {
+    if (with_attrs)
+        emit_aot_symbol_attrs(out, f, true);
     fprintf(out, "%s %s(", cg_cfn_value_c_type(f->return_type, true), f->c_export_symbol);
     if (f->nparams == 0) {
         fprintf(out, "void");
@@ -5085,7 +5105,7 @@ static void emit_c_export_header_func(XiCgenCtx *ctx, FILE *out, const XiFunc *f
             ctx->error = true;
             return;
         }
-        emit_c_export_stub_signature(out, f);
+        emit_c_export_stub_signature(out, f, false);
         fprintf(out, ";\n");
         if (count)
             (*count)++;
@@ -5138,7 +5158,7 @@ static void emit_c_export_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFun
         return;
     }
 
-    emit_c_export_stub_signature(out, f);
+    emit_c_export_stub_signature(out, f, true);
     fprintf(out, " {\n");
 
     ret_type = f->return_type;
@@ -5230,6 +5250,8 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     bool has_cl = (f->ncaptures > 0);
     uint16_t sig_nparams = (uint16_t) (f->nparams + (f->is_vararg ? 1 : 0));
     fprintf(out, "%s", cg_func_linkage(ctx, f, prefix));
+    if (cg_func_attrs_apply_to_internal(f))
+        emit_aot_symbol_attrs(out, f, false);
     emit_func_attr_qualifier(ctx, out, f);
     if (!emit_class_native_return_type(ctx, out, prefix, f))
         fprintf(out, "%s", cg_func_return_abi_c_type(ctx, f));
@@ -5387,6 +5409,8 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
      * the coro codegen, so their forward declaration must match; only plain
      * functions participate in cross-module external linkage. */
     fprintf(out, "%s", needs_aot_coro ? "static " : cg_func_linkage(ctx, f, prefix));
+    if (!needs_aot_coro && cg_func_attrs_apply_to_internal(f))
+        emit_aot_symbol_attrs(out, f, false);
     emit_func_attr_qualifier(ctx, out, f);
     if (needs_aot_coro) {
         fprintf(out, "XrValue");
@@ -5413,7 +5437,7 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, ";\n");
     }
     if (cg_func_can_have_c_export_stub(ctx, f)) {
-        emit_c_export_stub_signature(out, f);
+        emit_c_export_stub_signature(out, f, false);
         fprintf(out, ";\n");
     }
 

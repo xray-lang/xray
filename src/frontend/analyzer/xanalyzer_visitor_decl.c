@@ -438,6 +438,27 @@ static void xa_summary_mark_call_expr(XaParamEscapeSummary *summary, AstNode *ex
     }
 }
 
+static void xa_validate_aot_symbol_attrs(XaInferContext *ctx, AstNode *node,
+                                         XrAttribute *section_attr, XrAttribute *weak_attr,
+                                         XrAttribute *c_export_attr) {
+    if (!ctx || !ctx->analyzer)
+        return;
+
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+
+    if (section_attr && (!section_attr->str_arg || section_attr->str_arg[0] == '\0')) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@section requires a non-empty section name", &loc);
+    }
+
+    if (weak_attr && !c_export_attr) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "@weak requires @c_export so the weak symbol has a stable C name", &loc);
+    }
+}
+
 static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr) {
     if (!summary || !expr)
         return;
@@ -1640,6 +1661,8 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
 
     // FFI: mark @extern functions so call sites can require `unsafe { }`.
     XrAttribute *c_export_attr = xa_function_attr(fn, ATTR_C_EXPORT);
+    XrAttribute *section_attr = xa_function_attr(fn, ATTR_SECTION);
+    XrAttribute *weak_attr = xa_function_attr(fn, ATTR_WEAK);
     links->is_extern = xa_function_attr(fn, ATTR_EXTERN) != NULL;
     links->is_c_export = c_export_attr != NULL;
     links->c_export_symbol =
@@ -1649,6 +1672,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     if (c_export_attr)
         xa_validate_c_export_function_abi(ctx, node, fn, sym, param_types, return_type,
                                           c_export_attr, links->is_extern);
+    xa_validate_aot_symbol_attrs(ctx, node, section_attr, weak_attr, c_export_attr);
 
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);

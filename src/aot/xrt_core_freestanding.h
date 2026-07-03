@@ -40,6 +40,9 @@
 #define XR_ASSUME_ALIGNED(p, n) __builtin_assume_aligned((p), (n))
 #define XRT_FN_CONST __attribute__((const))
 #define XRT_FN_PURE __attribute__((pure))
+#define XRT_ATTR_SECTION(name) __attribute__((section(name)))
+#define XRT_ATTR_WEAK __attribute__((weak))
+#define XRT_ATTR_USED __attribute__((used))
 #define XRT_RESTRICT __restrict__
 #elif defined(_MSC_VER)
 #define XR_LIKELY(x) (x)
@@ -49,6 +52,9 @@
 #define XR_ASSUME_ALIGNED(p, n) (p)
 #define XRT_FN_CONST
 #define XRT_FN_PURE
+#define XRT_ATTR_SECTION(name)
+#define XRT_ATTR_WEAK
+#define XRT_ATTR_USED
 #define XRT_RESTRICT __restrict
 #else
 #define XR_LIKELY(x) (x)
@@ -58,6 +64,9 @@
 #define XR_ASSUME_ALIGNED(p, n) (p)
 #define XRT_FN_CONST
 #define XRT_FN_PURE
+#define XRT_ATTR_SECTION(name)
+#define XRT_ATTR_WEAK
+#define XRT_ATTR_USED
 #define XRT_RESTRICT
 #endif
 

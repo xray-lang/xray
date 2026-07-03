@@ -146,6 +146,24 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
                             "@c_export requires a C symbol string, e.g. @c_export(\"xray_add\")");
         }
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @c_export");
+    } else if (name_token.length == 7 && memcmp(name_token.start, "section", 7) == 0) {
+        // @section("name") — place a module-level AOT function/C export into a
+        // named linker section. The section name is open text, so it uses a
+        // string arg just like @c_export.
+        attr->kind = ATTR_SECTION;
+        xr_parser_consume(parser, TK_LPAREN, "expected '(' after @section");
+        if (xr_parser_check(parser, TK_LITERAL_STRING)) {
+            xr_parser_advance(parser);
+            attr->str_arg = xr_attr_string_arg(parser);
+        } else {
+            xr_parser_error(
+                parser, "@section requires a section name string, e.g. @section(\".text.boot\")");
+        }
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @section");
+    } else if (name_token.length == 4 && memcmp(name_token.start, "weak", 4) == 0) {
+        attr->kind = ATTR_WEAK;
+    } else if (name_token.length == 4 && memcmp(name_token.start, "used", 4) == 0) {
+        attr->kind = ATTR_USED;
     } else if (name_token.length == 4 && memcmp(name_token.start, "repr", 4) == 0) {
         // @repr(C) / @repr(packed) — layout control. The variant is a closed
         // compiler-known set, hence a bare identifier rather than a string.
@@ -198,6 +216,22 @@ static bool attrs_has(XrAttribute **attrs, int count, AttributeKind kind) {
     return false;
 }
 
+static bool attrs_has_symbol_layout_attr(XrAttribute **attrs, int count) {
+    for (int i = 0; i < count; i++) {
+        if (!attrs[i])
+            continue;
+        switch (attrs[i]->kind) {
+            case ATTR_SECTION:
+            case ATTR_WEAK:
+            case ATTR_USED:
+                return true;
+            default:
+                break;
+        }
+    }
+    return false;
+}
+
 // Parse attributed declaration: @test fn ..., @native class ..., etc.
 static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     XrAttribute **attributes = NULL;
@@ -213,8 +247,13 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
 
     bool is_native = attrs_has(attributes, attr_count, ATTR_NATIVE);
     bool is_c_export = attrs_has(attributes, attr_count, ATTR_C_EXPORT);
+    bool has_symbol_layout_attr = attrs_has_symbol_layout_attr(attributes, attr_count);
     if (is_c_export && parser->scope_depth > 0) {
         xr_parser_error(parser, "@c_export can only annotate a module-level function");
+        return NULL;
+    }
+    if (has_symbol_layout_attr && parser->scope_depth > 0) {
+        xr_parser_error(parser, "@section/@weak/@used can only annotate a module-level function");
         return NULL;
     }
 
@@ -222,6 +261,10 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     if (xr_parser_check(parser, TK_CLASS) || xr_parser_check(parser, TK_FINAL)) {
         if (is_c_export) {
             xr_parser_error(parser, "@c_export can only annotate a module-level function");
+            return NULL;
+        }
+        if (has_symbol_layout_attr) {
+            xr_parser_error(parser, "@section/@weak/@used can only annotate a function");
             return NULL;
         }
         bool is_final = xr_parser_match(parser, TK_FINAL);
@@ -250,6 +293,10 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     if (xr_parser_match(parser, TK_STRUCT)) {
         if (is_c_export) {
             xr_parser_error(parser, "@c_export can only annotate a module-level function");
+            return NULL;
+        }
+        if (has_symbol_layout_attr) {
+            xr_parser_error(parser, "@section/@weak/@used can only annotate a function");
             return NULL;
         }
         parser->parsing_native_class = is_native;
