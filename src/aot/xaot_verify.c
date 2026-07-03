@@ -265,6 +265,7 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
                 case XI_CALL_BUILTIN:
                 case XI_CLOSURE_NEW:
                 case XI_GO:
+                case XI_THREAD_SPAWN:
                 case XI_AWAIT:
                 case XI_PRINT:
                     return set_error(errbuf, errbuf_len,

@@ -1,12 +1,7 @@
-// Built-in Thread<T> type (sys.Thread); implemented by the runtime.
+// sys.Thread is compiler-defined, not a native constructor surface.
 //
-// A real OS thread (not a coroutine): the body closure runs to completion on
-// its own execution context. `join()` blocks the caller until it finishes and
-// returns the closure's value; `detach()` releases it to run unwaited.
-// Constructed via the native `call` static, i.e. `Thread<T>(body)`.
-
-@native
-class Thread<T> {
-    join() -> T
-    detach()
-}
+// Task 147 selected the language/IR construct form:
+//     sys.Thread.spawn(fn() -> T { ... }) -> sys.Thread<T>
+//
+// Do not declare `@native class Thread<T>` here. A native method accepting a
+// closure would bypass the same capture/move rules that protect `go`.

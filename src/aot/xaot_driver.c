@@ -328,6 +328,7 @@ static void scan_func_features(XiFunc *f, const XiFunc *module_init, XaotFeature
                     fs->need_coro = true;
                     break;
                 case XI_GO:
+                case XI_THREAD_SPAWN:
                     fs->need_coro = true;
                     fs->need_task = true;
                     fs->need_netpoll = true;

@@ -986,6 +986,12 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_GO_EXPR: {
             xfmt_write_indent(ctx);
             GoExprNode *go = &node->as.go_expr;
+            if (go->spawn_kind == XR_SPAWN_THREAD) {
+                xfmt_write_str(ctx, "sys.Thread.spawn(");
+                xfmt_emit_expression(ctx, go->expr);
+                xfmt_write_char(ctx, ')');
+                break;
+            }
             xfmt_write_str(ctx, "go");
             if (go->name) {
                 xfmt_write_char(ctx, '(');

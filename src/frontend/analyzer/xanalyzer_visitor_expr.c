@@ -3044,10 +3044,12 @@ XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_task(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
 
-    xa_freestanding_report_unavailable(ctx, node, "go expression",
-                                       "the coroutine scheduler is hosted-only");
-
     GoExprNode *go = &node->as.go_expr;
+    bool is_thread_spawn = go->spawn_kind == XR_SPAWN_THREAD;
+
+    xa_freestanding_report_unavailable(
+        ctx, node, is_thread_spawn ? "sys.Thread.spawn" : "go expression",
+        is_thread_spawn ? "OS threads are hosted-only" : "the coroutine scheduler is hosted-only");
 
     // Infer the type of the expression being spawned
     XrType *result_type = xr_type_new_unit(NULL);
@@ -3067,6 +3069,14 @@ XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
         // capture shared const; heap-shaped values must cross as explicit
         // copy(...), move, or shared const arguments.
         check_coro_capture(ctx, go->expr, node->line);
+    }
+
+    if (is_thread_spawn) {
+        XrType **args = (XrType **) xr_malloc(sizeof(XrType *));
+        if (!args)
+            return xr_type_new_named_instance(ctx->analyzer->isolate, "Thread");
+        args[0] = result_type ? result_type : xr_type_new_unknown(NULL);
+        return xr_type_new_generic_instance(ctx->analyzer->isolate, "Thread", NULL, args, 1);
     }
 
     // go expr returns Task<T> where T is the result type

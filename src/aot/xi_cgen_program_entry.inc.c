@@ -85,6 +85,7 @@ static void cg_builtin_init_scan_value(CgBuiltinInitPlan *plan, const XiValue *v
             plan->runtime_caps |= XR_AOT_CAP_CORO;
             break;
         case XI_GO:
+        case XI_THREAD_SPAWN:
             plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_TASK;
             break;
         case XI_GEN_CALL:

@@ -416,6 +416,9 @@ XR_FUNC AstNode *xr_ast_type_alias(XrCompilerSession *session, const char *name,
 XR_FUNC AstNode *xr_ast_go_expr(XrCompilerSession *session, AstNode *expr, const char *name,
                                 uint8_t link_mode, int line);
 
+// Create sys.Thread.spawn expression node; analyzer reuses go capture checks.
+XR_FUNC AstNode *xr_ast_thread_spawn_expr(XrCompilerSession *session, AstNode *expr, int line);
+
 // Create await expression node
 XR_FUNC AstNode *xr_ast_await_expr(XrCompilerSession *session, AstNode *expr, AstNode *timeout,
                                    AstNode *into, bool is_any, bool is_all, bool is_any_success,

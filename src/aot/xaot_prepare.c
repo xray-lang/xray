@@ -497,6 +497,7 @@ static bool array_value_has_uncacheable_use(const XiValue *value) {
                 case XI_CALL_METHOD:
                 case XI_CALL_METHOD_DIRECT:
                 case XI_GO:
+                case XI_THREAD_SPAWN:
                 case XI_SET_SHARED:
                     if (value_arg_matches(cur, target, 0))
                         return true;
@@ -2453,6 +2454,7 @@ static bool func_attr_op_is_call_like(uint16_t op) {
         case XI_CALL_BUILTIN:
         case XI_CLOSURE_NEW:
         case XI_GO:
+        case XI_THREAD_SPAWN:
         case XI_AWAIT:
         case XI_PRINT:
             return true;

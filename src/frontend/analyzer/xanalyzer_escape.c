@@ -349,6 +349,31 @@ static bool ea_is_channel_send(AstNode *callee) {
                     strcmp(name, "sendTimeout") == 0);
 }
 
+static bool ea_is_sys_thread_spawn(AstNode *callee) {
+    if (!callee || callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *spawn = &callee->as.member_access;
+    if (!spawn->name || strcmp(spawn->name, "spawn") != 0 || !spawn->object ||
+        spawn->object->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *thread = &spawn->object->as.member_access;
+    if (!thread->name || strcmp(thread->name, "Thread") != 0 || !thread->object ||
+        thread->object->type != AST_VARIABLE)
+        return false;
+    const char *module_name = thread->object->as.variable.name;
+    return module_name && strcmp(module_name, "sys") == 0;
+}
+
+static AstNode *ea_thread_spawn_body_arg(CallExprNode *call) {
+    if (!call)
+        return NULL;
+    if (call->arg_count == 1)
+        return call->arguments[0];
+    if (call->arg_count == 2)
+        return call->arguments[1];
+    return NULL;
+}
+
 /*
  * Walk a function body that executes on a NEW coroutine, with go-closure
  * capture tracking enabled. Covers both spawn forms:
@@ -393,6 +418,32 @@ static void ea_walk_function_expr_closure(EaContext *ctx, FunctionDeclNode *fn) 
     ctx->in_fn_closure = old_in_closure;
     ctx->fn_scope_boundary = old_closure_boundary;
     ea_pop_scope(ctx);
+}
+
+static void ea_walk_go_like_spawn(EaContext *ctx, AstNode *expr) {
+    if (expr && expr->type == AST_CALL_EXPR) {
+        CallExprNode *call = &expr->as.call_expr;
+        ea_check_move_args(ctx, call->arguments, call->arg_count);
+        ea_check_go_shared_let_args(ctx, call->arguments, call->arg_count);
+
+        AstNode *callee = call->callee;
+        if (callee && callee->type == AST_FUNCTION_EXPR) {
+            ea_walk_go_closure(ctx, &callee->as.function_decl);
+        } else if (callee && callee->type == AST_VARIABLE) {
+            AstNode *bound = ea_lookup_bound_fn(ctx, callee->as.variable.name);
+            if (bound && bound->type == AST_FUNCTION_EXPR) {
+                ea_walk_go_closure(ctx, &bound->as.function_decl);
+            } else {
+                ea_walk(ctx, callee);
+            }
+        } else {
+            ea_walk(ctx, callee);
+        }
+    } else if (expr && expr->type == AST_FUNCTION_EXPR) {
+        ea_walk_go_closure(ctx, &expr->as.function_decl);
+    } else if (expr) {
+        ea_walk(ctx, expr);
+    }
 }
 
 static void ea_walk(EaContext *ctx, AstNode *node) {
@@ -444,49 +495,19 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
 
         // ---- go expression: check arguments for move + closure captures ----
         case AST_GO_EXPR: {
-            AstNode *expr = node->as.go_expr.expr;
-            if (expr && expr->type == AST_CALL_EXPR) {
-                CallExprNode *call = &expr->as.call_expr;
-                ea_check_move_args(ctx, call->arguments, call->arg_count);
-                ea_check_go_shared_let_args(ctx, call->arguments, call->arg_count);
-
-                AstNode *callee = call->callee;
-                if (callee && callee->type == AST_FUNCTION_EXPR) {
-                    /* Inline go closure: go fn() { body }() */
-                    ea_walk_go_closure(ctx, &callee->as.function_decl);
-                } else if (callee && callee->type == AST_VARIABLE) {
-                    /* Variable-bound closure: go f() where f = fn() {...}.
-                     * Recover the bound closure literal and enforce the same
-                     * capture rules as the inline form. If the
-                     * binding cannot be resolved statically (closure passed in
-                     * as a parameter, stored in a container, etc.), fall back
-                     * to walking the callee — the runtime deep-copy fallback
-                     * (fix B) guarantees memory safety in that case. */
-                    AstNode *bound = ea_lookup_bound_fn(ctx, callee->as.variable.name);
-                    if (bound && bound->type == AST_FUNCTION_EXPR) {
-                        ea_walk_go_closure(ctx, &bound->as.function_decl);
-                    } else {
-                        ea_walk(ctx, callee);
-                    }
-                } else {
-                    ea_walk(ctx, callee);
-                }
-            } else if (expr && expr->type == AST_FUNCTION_EXPR) {
-                /* go { block }: the parser wraps the block in a bare
-                 * FUNCTION_EXPR (no call). It runs on a new coroutine, so it
-                 * needs the same capture enforcement as the call form —
-                 * walking it as a plain function would silently allow
-                 * capturing locals across the coroutine boundary. */
-                ea_walk_go_closure(ctx, &expr->as.function_decl);
-            } else if (expr) {
-                ea_walk(ctx, expr);
-            }
+            ea_walk_go_like_spawn(ctx, node->as.go_expr.expr);
             break;
         }
 
         // ---- Call expression: check for channel send boundary pattern ----
         case AST_CALL_EXPR: {
             CallExprNode *call = &node->as.call_expr;
+            if (ea_is_sys_thread_spawn(call->callee)) {
+                if (call->arg_count == 2)
+                    ea_walk(ctx, call->arguments[0]);
+                ea_walk_go_like_spawn(ctx, ea_thread_spawn_body_arg(call));
+                break;
+            }
             ea_walk(ctx, call->callee);
             if (ea_is_channel_send(call->callee)) {
                 ea_check_move_args(ctx, call->arguments, call->arg_count);
