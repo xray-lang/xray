@@ -499,6 +499,19 @@ else
         "freestanding-profile: rejects top-level const declarations"
 fi
 
+FREESTANDING_ENUM_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_reject.xr"
+FREESTANDING_ENUM_LOG="$WORK/freestanding_enum_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_enum_reject" \
+        "$FREESTANDING_ENUM_SRC" >"$FREESTANDING_ENUM_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects enum value channel"
+    sed 's/^/      /' "$FREESTANDING_ENUM_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_ENUM_LOG" \
+        "freestanding profile rejects enum declaration" \
+        "freestanding-profile: rejects enum value channel"
+fi
+
 FREESTANDING_HOOK_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_panic_hook.xr"
 FREESTANDING_HOOK_OBJ="$WORK/freestanding_panic_hook.o"
 FREESTANDING_HOOK_REAL_LOG="$WORK/freestanding_panic_hook.log"

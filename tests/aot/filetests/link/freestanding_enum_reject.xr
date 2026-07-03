@@ -1,0 +1,17 @@
+enum FsErr {
+    Bad
+}
+
+fn mayFail(n: int) -> int {
+    if (n == 0) {
+        throw FsErr.Bad
+    }
+    return n
+}
+
+@c_export("xray_enum_reject")
+fn xray_enum_reject(n: int) -> int {
+    let out = 0
+    try { out = mayFail(n) } catch (e) { out = -1 }
+    return out
+}
