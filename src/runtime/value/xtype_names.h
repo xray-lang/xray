@@ -75,6 +75,7 @@
 #define TYPE_NAME_JSON "Json"
 #define TYPE_NAME_RECORD "Record"
 #define TYPE_NAME_STRINGBUILDER "StringBuilder"
+#define TYPE_NAME_BUFFER "Buffer"
 #define TYPE_NAME_UNKNOWN "unknown"
 #define TYPE_NAME_BIGINT "BigInt"
 #define TYPE_NAME_CLOSURE "closure"
@@ -180,9 +181,10 @@ typedef enum {
     XR_TID_SEMAPHORE,       // 39
     XR_TID_EVENTCOUNT,      // 40
     XR_TID_THREAD,          // 41
+    XR_TID_BUFFER,          // 42
     // Analyzer-only type IDs (not returned by typeof at runtime)
-    XR_TID_WEAKMAP,  // 42
-    XR_TID_WEAKSET,  // 43
+    XR_TID_WEAKMAP,  // 43
+    XR_TID_WEAKSET,  // 44
     // char and Record are runtime-visible scalar/struct names outside the
     // concurrency block.
     XR_TID_CHAR,

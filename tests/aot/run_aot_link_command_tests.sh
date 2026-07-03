@@ -606,27 +606,16 @@ else
 fi
 
 FREESTANDING_MEM_ALLOC_HOOK_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_alloc_hook.xr"
-FREESTANDING_MEM_ALLOC_HOOK_OBJ="$WORK/freestanding_mem_alloc_hook.o"
 FREESTANDING_MEM_ALLOC_HOOK_REAL_LOG="$WORK/freestanding_mem_alloc_hook.log"
-if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
-        --dump-link-command \
-        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_MEM_ALLOC_HOOK_OBJ" \
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_mem_alloc_hook" \
         "$FREESTANDING_MEM_ALLOC_HOOK_SRC" >"$FREESTANDING_MEM_ALLOC_HOOK_REAL_LOG" 2>&1; then
-    FREESTANDING_MEM_ALLOC_HOOK_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_MEM_ALLOC_HOOK_OBJ")"
-    FREESTANDING_MEM_ALLOC_HOOK_UNEXPECTED="$(printf '%s\n' "$FREESTANDING_MEM_ALLOC_HOOK_UNDEFINED" |
-        sed '/^[[:space:]]*$/d' |
-        grep -Ev '^(xr_hook_alloc|xr_hook_free|memset)$' || true)"
-    if [ -z "$FREESTANDING_MEM_ALLOC_HOOK_UNEXPECTED" ] &&
-        printf '%s\n' "$FREESTANDING_MEM_ALLOC_HOOK_UNDEFINED" | grep -qx 'xr_hook_alloc' &&
-        printf '%s\n' "$FREESTANDING_MEM_ALLOC_HOOK_UNDEFINED" | grep -qx 'xr_hook_free'; then
-        record_pass "freestanding-profile/mem: allocator path depends only on alloc/free hooks"
-    else
-        record_fail "freestanding-profile/mem: allocator path has unexpected undefined symbols"
-        nm -u "$FREESTANDING_MEM_ALLOC_HOOK_OBJ" 2>&1 | sed '/^[[:space:]]*$/d' | sed 's/^/      /'
-    fi
-else
-    record_fail "freestanding-profile/mem: allocator hook object build failed"
+    record_fail "freestanding-profile/mem: rejects RAII allocator path"
     sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_HOOK_REAL_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_MEM_ALLOC_HOOK_REAL_LOG" \
+        "freestanding profile rejects mem.allocZeroed" \
+        "freestanding-profile/mem: rejects RAII allocator path"
 fi
 
 FREESTANDING_MEM_ALLOC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_alloc_reject.xr"
@@ -634,11 +623,11 @@ FREESTANDING_MEM_ALLOC_LOG="$WORK/freestanding_mem_alloc_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
         --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_mem_alloc_reject" \
         "$FREESTANDING_MEM_ALLOC_SRC" >"$FREESTANDING_MEM_ALLOC_LOG" 2>&1; then
-    record_fail "freestanding-profile/mem: rejects realloc member"
+    record_fail "freestanding-profile/mem: rejects managed alloc member"
     sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_LOG" | sed -n '1,120p'
 else
-    expect_log_contains "$FREESTANDING_MEM_ALLOC_LOG" "freestanding profile rejects mem.realloc" \
-        "freestanding-profile/mem: rejects realloc member"
+    expect_log_contains "$FREESTANDING_MEM_ALLOC_LOG" "freestanding profile rejects mem.alloc" \
+        "freestanding-profile/mem: rejects managed alloc member"
 fi
 
 FREESTANDING_MEM_ALLOC_SELECTIVE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_alloc_selective_reject.xr"
@@ -646,12 +635,12 @@ FREESTANDING_MEM_ALLOC_SELECTIVE_LOG="$WORK/freestanding_mem_alloc_selective_rej
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
         --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_mem_alloc_selective_reject" \
         "$FREESTANDING_MEM_ALLOC_SELECTIVE_SRC" >"$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" 2>&1; then
-    record_fail "freestanding-profile/mem: rejects selective realloc import"
+    record_fail "freestanding-profile/mem: rejects selective managed alloc import"
     sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" \
-        "freestanding profile rejects mem.realloc" \
-        "freestanding-profile/mem: rejects selective realloc import"
+        "freestanding profile rejects mem.allocZeroed" \
+        "freestanding-profile/mem: rejects selective managed alloc import"
 fi
 
 FREESTANDING_MEM_PAGE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_page_reject.xr"

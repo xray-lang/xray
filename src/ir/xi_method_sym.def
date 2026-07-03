@@ -160,6 +160,8 @@ XI_METHOD_SYM(ROTATE_RIGHT,   233, ROTATE_RIGHT,   "rotateRight")
 XI_METHOD_SYM(ADD_OVERFLOWS,  234, ADD_OVERFLOWS,  "addOverflows")
 XI_METHOD_SYM(SUB_OVERFLOWS,  235, SUB_OVERFLOWS,  "subOverflows")
 XI_METHOD_SYM(MUL_OVERFLOWS,  236, MUL_OVERFLOWS,  "mulOverflows")
+XI_METHOD_SYM(AS_SPAN,        237, AS_SPAN,        "asSpan")
+XI_METHOD_SYM(PTR_UNCHECKED,  238, PTR_UNCHECKED,  "ptrUnchecked")
 
 /* --- DateTime methods --- */
 XI_METHOD_SYM(FORMAT,      88,  FORMAT,       "format")

@@ -95,8 +95,10 @@ XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
         return true;
     if (strcmp(module_name, "mem") != 0)
         return true;
-    return strcmp(member_name, "realloc") != 0 && strcmp(member_name, "pageAlloc") != 0 &&
-           strcmp(member_name, "pageProtect") != 0 && strcmp(member_name, "pageFree") != 0;
+    return strcmp(member_name, "alloc") != 0 && strcmp(member_name, "allocZeroed") != 0 &&
+           strcmp(member_name, "allocAligned") != 0 && strcmp(member_name, "realloc") != 0 &&
+           strcmp(member_name, "pageAlloc") != 0 && strcmp(member_name, "pageProtect") != 0 &&
+           strcmp(member_name, "pageFree") != 0;
 }
 
 XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *node,

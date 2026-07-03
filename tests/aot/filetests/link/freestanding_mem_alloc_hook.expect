@@ -1,13 +1,6 @@
 args=--profile freestanding
-contains=xaot-plan v0
-contains="runtime_objects": []
-contains="stdlib_objects": []
-contains="system_libs": []
-contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
-c_contains=#include "xrt_core_freestanding.h"
-c_contains=xrt_mem_alloc_zeroed
-c_contains=xrt_mem_alloc_aligned
-c_contains=xrt_mem_free
-c_not_contains=#include "xrt_mem.h"
-not_contains=xray_rt_coro
-not_contains=xray_core
+status=fail
+contains=freestanding profile rejects mem.allocZeroed
+not_contains=unresolved AOT import
+not_contains=unsupported AOT indirect call
+not_contains=CRASH

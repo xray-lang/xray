@@ -88,6 +88,7 @@ typedef struct XrayCoreClasses {
     XrClass *sysOnceClass;
     XrClass *netConnClass;
     XrClass *netListenerClass;
+    XrClass *memBufferClass;
 
     // Tuples: one XrClass per arity (lazy-built on first use). Each class
     // declares N untyped fields whose slot is tuple element i. Arities

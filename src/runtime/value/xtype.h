@@ -78,7 +78,7 @@ typedef enum XrTypeKind {
     XR_KIND_CHAR,         // Unicode scalar value. Immediate value (tag XR_TAG_CHAR), not
                           // a uint32; appended last to keep existing kind values stable.
     XR_KIND_RECORD,       // Sealed/open structural record; shares ObjectShape metadata with Json.
-    XR_KIND_SPAN,  // Typed bounded view over contiguous storage. Runtime value is Array view.
+    XR_KIND_SPAN,         // Typed bounded value view over contiguous storage.
     XR_KIND_COUNT
 } XrTypeKind;
 

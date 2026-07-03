@@ -15,6 +15,15 @@
 
 // ======== Builtin Type Members ========
 
+// Buffer methods
+static const XaBuiltinMember g_gen_buffer_members[] = {
+    {"length", "(): int", "Return the buffer length in bytes", true, false},
+    {"asSpan", "(): ByteSpan", "Borrow this buffer as a mutable ByteSpan value", true, false},
+    {"ptrUnchecked", "(): RawMut<uint8>", "Return the underlying raw pointer; unsafe escape hatch", true, false},
+    {"resize", "(n: int): bool", "Resize this buffer; returns false on allocation failure", true, false},
+};
+#define GEN_BUFFER_MEMBER_COUNT 4
+
 // DateTime methods
 static const XaBuiltinMember g_gen_datetime_members[] = {
     {"format", "(pattern?: string): string", "Format datetime to string", true, false},
@@ -377,11 +386,9 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"cacheInvalidate", "(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false},
     {"nontemporalStore", "(ptr: RawMut<uint8>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false},
     {"cacheLineSize", "(): int", "CPU cache line size in bytes", true, false},
-    {"alloc", "(n: int): RawMut<uint8>", "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free", true, false},
-    {"allocZeroed", "(n: int): RawMut<uint8>", "Allocate n zero-initialized bytes (calloc). NULL on OOM; pair with mem.free", true, false},
-    {"allocAligned", "(n: int, align: int): RawMut<uint8>", "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure", true, false},
-    {"realloc", "(ptr: RawMut<uint8>, n: int): RawMut<uint8>", "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM", true, false},
-    {"free", "(ptr: RawMut<uint8>): ()", "Free a buffer from mem.alloc/allocAligned/realloc", true, false},
+    {"alloc", "(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false},
+    {"allocZeroed", "(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false},
+    {"allocAligned", "(n: int, align: int): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false},
     {"pageAlloc", "(bytes: int, prot?: int): RawMut<uint8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", true, false},
     {"pageProtect", "(ptr: RawMut<uint8>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", true, false},
     {"pageFree", "(ptr: RawMut<uint8>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false},
@@ -399,7 +406,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"PROT_WRITE", ": int", "Writable page protection bit for mem.pageAlloc/pageProtect", false, false},
     {"PROT_EXEC", ": int", "Executable page protection bit for mem.pageAlloc/pageProtect", false, false},
 };
-#define GEN_MEM_FUNCTION_COUNT 26
+#define GEN_MEM_FUNCTION_COUNT 24
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {

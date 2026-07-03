@@ -4,24 +4,20 @@
 import mem
 
 let buf = mem.allocZeroed(96)
-if (buf.isNull()) {
-    print("alloc failed")
-} else {
-    unsafe { buf[0] = 11 }
-    unsafe { buf[63] = 12 }
-    unsafe { buf[64] = 13 }
+let p = unsafe { buf.ptrUnchecked() }
+unsafe { p[0] = 11 }
+unsafe { p[63] = 12 }
+unsafe { p[64] = 13 }
 
-    mem.cacheFlush(buf, 96)
-    unsafe { print(buf[0]) }
-    unsafe { print(buf[63]) }
+mem.cacheFlush(p, 96)
+unsafe { print(p[0]) }
+unsafe { print(p[63]) }
 
-    let mid = unsafe { buf.offset(32) }
-    mem.cacheInvalidate(mid, 32)
-    unsafe { print(buf[64]) }
+let mid = unsafe { p.offset(32) }
+mem.cacheInvalidate(mid, 32)
+unsafe { print(p[64]) }
 
-    mem.cacheFlush(buf, 0)
-    mem.cacheInvalidate(buf, -1)
+mem.cacheFlush(p, 0)
+mem.cacheInvalidate(p, -1)
 
-    mem.free(buf)
-    print("cache-maintained")
-}
+print("cache-maintained")

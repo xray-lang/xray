@@ -1,8 +1,8 @@
 import mem
-import { realloc } from "mem"
+import { allocZeroed } from "mem"
 
-@c_export("xray_bad_realloc_selective")
-fn xray_bad_realloc_selective(n: int) -> int {
-    let p = realloc(mem.fromAddress(0), n)
-    return n + 1
+@c_export("xray_bad_alloc_selective")
+fn xray_bad_alloc_selective(n: int) -> int {
+    let b = allocZeroed(n)
+    return b.length
 }

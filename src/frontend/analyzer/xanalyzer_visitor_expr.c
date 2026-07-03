@@ -1237,6 +1237,12 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
     }
+    if (xr_type_is_named_class(obj_type, "Buffer") && ma->name &&
+        strcmp(ma->name, "ptrUnchecked") == 0 && ctx->unsafe_depth == 0) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   "Buffer.ptrUnchecked() must be inside an unsafe block", &loc);
+    }
     if (obj_type->kind == XR_KIND_CHANNEL) {
         if (prop_sym == SYMBOL_CANCELLED)
             return xr_type_new_bool(NULL);

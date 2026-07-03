@@ -113,6 +113,42 @@ static inline void xrt_coll_release(XrValue v);
 #define XRT_ARC_KIND_SYS_BARRIER 7u
 #define XRT_ARC_KIND_SYS_ONCE 8u
 #define XRT_ARC_KIND_THREAD 9u
+#define XRT_ARC_KIND_BUFFER 10u
+
+typedef struct xrt_buffer_object {
+    void *data;
+    int64_t length;
+    size_t align;
+} xrt_buffer_object_t;
+
+static inline void xrt_buffer_free_data(void *data, size_t align) {
+    if (!data)
+        return;
+#if defined(XRT_USE_XR_MALLOC)
+    if (align)
+        xr_free_aligned(data, align);
+    else
+        XRT_FREE(data);
+#elif defined(_WIN32)
+    if (align)
+        _aligned_free(data);
+    else
+        XRT_FREE(data);
+#else
+    (void) align;
+    XRT_FREE(data);
+#endif
+}
+
+static inline void xrt_buffer_destroy_builtin(void *obj) {
+    xrt_buffer_object_t *buf = (xrt_buffer_object_t *) obj;
+    if (!buf)
+        return;
+    xrt_buffer_free_data(buf->data, buf->align);
+    buf->data = NULL;
+    buf->length = 0;
+    buf->align = 0;
+}
 
 /* =========================================================================
  * Bump allocator
@@ -248,7 +284,8 @@ static inline int xrt_arc_value_has_header(XrValue v) {
     return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_CLOSURE || v.tag == XR_TAG_CELL ||
            v.tag == XR_TAG_STRUCT_REF || v.tag == XR_TAG_REGEX || v.tag == XR_TAG_DATETIME ||
            v.tag == XR_TAG_SYS_MUTEX || v.tag == XR_TAG_SYS_RWLOCK || v.tag == XR_TAG_SYS_CONDVAR ||
-           v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE || v.tag == XR_TAG_THREAD;
+           v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE || v.tag == XR_TAG_THREAD ||
+           v.tag == XR_TAG_BUFFER;
 }
 
 /* ARC retain: acquire a new owning reference (0-based: rc++ adds one ref).

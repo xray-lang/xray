@@ -287,6 +287,8 @@ static const char *xr_builtin_symbol_names[] = {
     "addOverflows",
     "subOverflows",
     "mulOverflows",
+    "asSpan",
+    "ptrUnchecked",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \
