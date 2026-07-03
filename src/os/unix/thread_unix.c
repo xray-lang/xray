@@ -8,9 +8,9 @@
  * xthread_unix.c - POSIX implementation of xthread.h.
  *
  * Thin pthread wrapper. Most calls are 1:1; the only translation
- * is xr_cond_wait_for_ns: pthread_cond_timedwait takes an absolute
- * deadline expressed in CLOCK_REALTIME timespec, so we compose
- * `now + timeout` here.
+ * is xr_cond_wait_for_ns: it converts a relative timeout into the
+ * platform's timed-wait primitive using a MONOTONIC clock, so the
+ * wait is immune to wall-clock (CLOCK_REALTIME) jumps.
  */
 
 #include "../os_thread.h"
@@ -152,7 +152,21 @@ bool xr_mutex_trylock(xr_mutex_t *m) {
 // === Condition variable ===
 
 void xr_cond_init(xr_cond_t *c) {
+#if defined(XR_OS_MACOS)
+    // macOS lacks pthread_condattr_setclock; xr_cond_wait_for_ns uses the
+    // relative-timeout variant (pthread_cond_timedwait_relative_np) instead,
+    // which is inherently monotonic and immune to wall-clock jumps.
     pthread_cond_init(c, NULL);
+#else
+    // Linux/BSD: bind the condvar to CLOCK_MONOTONIC so relative timeouts
+    // computed in xr_cond_wait_for_ns are not skewed by NTP/manual wall-clock
+    // adjustments. The deadline clock and the init clock MUST match.
+    pthread_condattr_t attr;
+    pthread_condattr_init(&attr);
+    pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+    pthread_cond_init(c, &attr);
+    pthread_condattr_destroy(&attr);
+#endif
 }
 
 void xr_cond_destroy(xr_cond_t *c) {
@@ -164,12 +178,23 @@ void xr_cond_wait(xr_cond_t *c, xr_mutex_t *m) {
 }
 
 bool xr_cond_wait_for_ns(xr_cond_t *c, xr_mutex_t *m, uint64_t timeout_ns) {
+#if defined(XR_OS_MACOS)
+    // Relative timeout is naturally monotonic; no absolute deadline math and
+    // no dependency on the (unavailable) CLOCK_MONOTONIC condattr.
+    struct timespec rel;
+    rel.tv_sec = (time_t) (timeout_ns / 1000000000ULL);
+    rel.tv_nsec = (long) (timeout_ns % 1000000000ULL);
+    return pthread_cond_timedwait_relative_np(c, m, &rel) == 0;
+#else
+    // Deadline is interpreted against CLOCK_MONOTONIC (set in xr_cond_init),
+    // so a wall-clock rollback can never stall the wait past its true timeout.
     struct timespec deadline;
-    clock_gettime(CLOCK_REALTIME, &deadline);
+    clock_gettime(CLOCK_MONOTONIC, &deadline);
     uint64_t total_ns = (uint64_t) deadline.tv_nsec + timeout_ns;
     deadline.tv_sec += (time_t) (total_ns / 1000000000ULL);
     deadline.tv_nsec = (long) (total_ns % 1000000000ULL);
     return pthread_cond_timedwait(c, m, &deadline) == 0;
+#endif
 }
 
 void xr_cond_signal(xr_cond_t *c) {

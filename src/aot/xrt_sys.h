@@ -186,8 +186,17 @@ static inline void xrt_sys_rwlock_wrunlock_native(xr_rwlock_t *rwlock) {
 static inline void xrt_sys_condvar_init(xr_cond_t *cond) {
 #if defined(XR_OS_WINDOWS)
     InitializeConditionVariable(cond);
-#else
+#elif defined(XR_OS_MACOS)
+    // macOS lacks pthread_condattr_setclock; the timed wait uses the
+    // relative-timeout variant, which is inherently monotonic.
     pthread_cond_init(cond, NULL);
+#else
+    // Bind to CLOCK_MONOTONIC so relative timeouts survive wall-clock jumps.
+    pthread_condattr_t attr;
+    pthread_condattr_init(&attr);
+    pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+    pthread_cond_init(cond, &attr);
+    pthread_condattr_destroy(&attr);
 #endif
 }
 
@@ -216,9 +225,16 @@ static inline bool xrt_sys_condvar_wait_for_ns_native(xr_cond_t *cond, xr_mutex_
     else
         ms = (DWORD) ((timeout_ns + 999999ULL) / 1000000ULL);
     return SleepConditionVariableSRW(cond, mutex, ms, 0) != 0;
+#elif defined(XR_OS_MACOS)
+    // Relative timeout is naturally monotonic and immune to wall-clock jumps.
+    struct timespec rel;
+    rel.tv_sec = (time_t) (timeout_ns / 1000000000ULL);
+    rel.tv_nsec = (long) (timeout_ns % 1000000000ULL);
+    return pthread_cond_timedwait_relative_np(cond, mutex, &rel) == 0;
 #else
+    // Deadline interpreted against CLOCK_MONOTONIC (matches condvar_init).
     struct timespec deadline;
-    clock_gettime(CLOCK_REALTIME, &deadline);
+    clock_gettime(CLOCK_MONOTONIC, &deadline);
     uint64_t total_ns = (uint64_t) deadline.tv_nsec + timeout_ns;
     deadline.tv_sec += (time_t) (total_ns / 1000000000ULL);
     deadline.tv_nsec = (long) (total_ns % 1000000000ULL);
