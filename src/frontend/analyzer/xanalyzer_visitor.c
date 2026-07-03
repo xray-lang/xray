@@ -829,12 +829,26 @@ static void xa_report_non_enum_catch_type(XaInferContext *ctx, XrCatchClause *cc
                                &loc);
 }
 
+static void xa_report_freestanding_catch_panic(XaInferContext *ctx, XrCatchClause *cc) {
+    if (!ctx || !ctx->analyzer || !cc || !cc->is_panic ||
+        !xa_freestanding_profile_enabled(ctx->analyzer))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = cc->var_line, .column = cc->var_column};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+                               "freestanding profile rejects catch panic; freestanding panic is "
+                               "halt-only via xr_hook_panic",
+                               &loc);
+}
+
 static XrType *xa_resolve_catch_binding_type(XaInferContext *ctx, XrCatchClause *cc,
                                              bool report_diagnostics) {
     if (!ctx || !cc)
         return xr_type_new_unknown(NULL);
 
     if (cc->is_panic) {
+        if (report_diagnostics)
+            xa_report_freestanding_catch_panic(ctx, cc);
         if (cc->type)
             return xr_tref_resolve_in_analyzer(ctx->analyzer, cc->type);
         return xr_type_new_named_instance(ctx->analyzer->isolate, "PanicInfo");
