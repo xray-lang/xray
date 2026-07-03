@@ -6,6 +6,7 @@ class Array<T> {
     size: int
     capacity: int
     isEmpty: bool
+    span() -> Span<T>
     push(value: T)
     pushUnchecked(value: T)
     getUnchecked(index: int) -> T

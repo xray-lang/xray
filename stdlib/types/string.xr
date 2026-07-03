@@ -1,10 +1,12 @@
 // Built-in string type — implementation in src/runtime/object/xstring_methods.c
 //
-// Every method declared here must exist in the VM method table
-// (xstring_methods.c) with matching semantics; methods also supported by
-// the AOT dispatch (src/aot/xrt_method.h + xi_method_sym.def) compile to
-// native code, while VM-only methods fail AOT codegen with an explicit
-// "unsupported AOT method" error (never a silent null).
+// Most methods declared here exist in the VM method table
+// (xstring_methods.c) with matching semantics. Compiler-lowered view
+// constructors such as bytes() may bypass the bound-method table to preserve
+// zero-allocation value semantics. Methods also supported by the AOT dispatch
+// (src/aot/xrt_method.h + xi_method_sym.def) compile to native code, while
+// VM-only methods fail AOT codegen with an explicit "unsupported AOT method"
+// error (never a silent null).
 
 @native
 class string {
@@ -39,8 +41,10 @@ class string {
     padStart(length: int, pad?: string) -> string
     padEnd(length: int, pad?: string) -> string
     match(pattern: Regex) -> Array<string>?
-    // UTF-8 byte bridge — round-trips with Bytes.toString().
+    // Owned UTF-8 byte bridge — round-trips with Bytes.toString().
     toBytes() -> Bytes
+    // Borrowed UTF-8 bytes; readonly because strings are immutable.
+    bytes() -> ByteSpan
     translate(table: Map<string, string>) -> string
     // Iteration protocol — iterator() yields each character, while
     // entriesIterator() yields (charIndex, character) tuples. Both

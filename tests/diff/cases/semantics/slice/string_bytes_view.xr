@@ -1,0 +1,14 @@
+// anchor: slice-string-bytes-view
+let text = "ABCD"
+let bytes = text.bytes()
+print(bytes.length)
+print(bytes[0])
+print(bytes[1])
+
+let mid = bytes[1:3]
+print(mid.length)
+print(mid[0])
+print(mid[1])
+
+let owned = copy(mid)
+print(owned[0])

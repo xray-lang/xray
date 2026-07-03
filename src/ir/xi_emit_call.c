@@ -362,6 +362,28 @@ XR_FUNC void xi_emit_array_data_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_ARRAY_DATA_PTR, dst, arr, 0));
 }
 
+static void emit_builtin_string_bytes_span(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs != 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg str = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint16_t span_slot = 0;
+    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSpanView), &span_slot))
+        return;
+    if (ctx->next_reg + 1 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg slot_reg = (XiEmitReg) ctx->next_reg++;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, slot_reg, span_slot));
+    emit_inst(ctx, CREATE_ABC(OP_STRING_BYTES_SPAN, dst, str, slot_reg));
+}
+
 /* FFI raw-pointer load: R[dst] = load(aux, R[addr]), aux in C operand. */
 XR_FUNC void xi_emit_ptr_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs != 1) {
@@ -555,6 +577,10 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
     if (bname && strcmp(bname, "Bytes") == 0) {
         emit_builtin_bytes_new(ctx, v, dst);
+        return;
+    }
+    if (bname && strcmp(bname, "string_bytes_span") == 0) {
+        emit_builtin_string_bytes_span(ctx, v, dst);
         return;
     }
     if (bname && strcmp(bname, "bytes_load_u16_le") == 0) {

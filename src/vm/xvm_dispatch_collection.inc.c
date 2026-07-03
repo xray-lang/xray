@@ -62,8 +62,11 @@
 
 #define VM_SPAN_SET_ELEMENT(span, idx, val)                                                        \
     do {                                                                                           \
+        if (((span)->reserved & XR_SPAN_VIEW_READONLY) != 0) {                                     \
+            VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");       \
+        }                                                                                          \
         if (xr_typed_set((span)->data, (int32_t) (idx), (val), (span)->elem_type) &&               \
-            (span)->guard) {                                                                       \
+            (span)->contains_refs && (span)->guard) {                                              \
             XrArray *_span_owner = (XrArray *) (span)->guard;                                      \
             XR_ARRAY_MARK_REFS(_span_owner, (val));                                                \
         }                                                                                          \
@@ -894,6 +897,27 @@ vmcase(OP_ARRAY_DATA_PTR) {
     vmbreak;
 }
 
+vmcase(OP_STRING_BYTES_SPAN) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    if (!XR_IS_STRING(R(b)) || !XR_IS_INT(R(c))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "string.bytes() expects a string receiver");
+    }
+    XrString *str = XR_TO_STRING(R(b));
+    XrSpanView *span = VM_SPAN_SLOT(R(c));
+    span->data = str ? (void *) str->data : NULL;
+    span->length = str ? str->length : 0;
+    span->elem_type = XR_ELEM_U8;
+    span->elem_size = 1;
+    span->elem_tid = 0;
+    span->contains_refs = 0;
+    span->reserved = XR_SPAN_VIEW_READONLY;
+    span->guard = str;
+    R(a) = xr_span_ref(span);
+    vmbreak;
+}
+
 vmcase(OP_ARRAY_CLEAR) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a))) {
@@ -1666,7 +1690,7 @@ vmcase(OP_SLICE) {
         span->elem_size = src_span->elem_size;
         span->elem_tid = src_span->elem_tid;
         span->contains_refs = src_span->contains_refs;
-        span->reserved = 0;
+        span->reserved = src_span->reserved;
         span->guard = src_span->guard;
         R(a) = xr_span_ref(span);
         vmbreak;
