@@ -166,6 +166,9 @@ vmcase(OP_TYPENAME) {
             type_name = cls->name;
     }
     // For struct refs, extract class pointer from struct area header
+    if (type_name == NULL && XR_IS_SPAN_REF(val)) {
+        type_name = "Span";
+    }
     if (type_name == NULL && val.tag == XR_TAG_STRUCT_REF && val.ptr) {
         XrClass *cls = *(XrClass **) val.ptr;
         if (cls && cls->name)
@@ -300,6 +303,33 @@ vmcase(OP_COPY) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     XrValue _src = R(b);
+    if (XR_IS_SPAN_REF(_src)) {
+        XrSpanView *span = XR_TO_SPAN_REF(_src);
+        if (!span || span->length < 0 || span->length > INT32_MAX ||
+            span->elem_type >= XR_ELEM_COUNT || (span->length > 0 && !span->data)) {
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Span copy length exceeds VM array limit");
+        }
+        XrArray *arr = xr_array_with_capacity_typed(VM_CURRENT_CORO, (int32_t) span->length,
+                                                    (XrArrayElemType) span->elem_type);
+        if (!arr)
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Span copy failed");
+        arr->elem_tid = span->elem_tid;
+        if (arr->elem_type == XR_ELEM_ANY) {
+            XrValue *items = (XrValue *) span->data;
+            for (int64_t idx = 0; idx < span->length; idx++)
+                xr_array_push(arr, xr_deep_copy_to_coro(isolate, items[idx], VM_CURRENT_CORO));
+            arr->contains_refs = span->contains_refs;
+        } else {
+            if (span->length > 0) {
+                if (!arr->data)
+                    VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Span copy failed");
+                memcpy(arr->data, span->data, (size_t) span->length * span->elem_size);
+            }
+            arr->length = span->length;
+        }
+        R(a) = xr_value_from_array(arr);
+        vmbreak;
+    }
     // Fast path: flat-copyable struct (alloc + memcpy, no recursion)
     if (XR_IS_PTR(_src) && XR_HEAP_TYPE(_src) == XR_TINSTANCE) {
         XrInstance *_inst = (XrInstance *) XR_TO_PTR(_src);

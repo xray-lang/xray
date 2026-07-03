@@ -25,3 +25,8 @@ let gcopy = copy(grid)
 grid[0].push(99)
 print(grid[0].length)
 print(gcopy[0].length)
+
+let window = copy(grid[0:1])
+grid[0].push(100)
+print(grid[0].length)
+print(window[0].length)

@@ -171,7 +171,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
     }
 
     // Struct ref: stored field write or setter method
-    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj)) {
+    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
         uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
         XrStructLayout *slayout = NULL;
         uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
@@ -782,6 +782,15 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
                  "tuple has no named field '%s'; use .N (zero-based) instead", name ? name : "?");
     }
 
+    // Frame-local Span property access
+    if (XR_IS_SPAN_REF(obj)) {
+        XrSpanView *span = XR_TO_SPAN_REF(obj);
+        if (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_SIZE) {
+            base[a] = xr_int((xr_Integer) (span ? span->length : 0));
+            return XR_DISP_NEXT;
+        }
+    }
+
     // Array property access
     if (XR_IS_ARRAY(obj)) {
         XrArray *array = XR_TO_ARRAY(obj);
@@ -933,7 +942,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
     }
 
     // Struct ref: getter/method lookup when field not found in layout
-    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj)) {
+    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
         uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
         XrStructLayout *slayout = xr_vm_struct_ref_layout(isolate, obj);
         XrClass *scls =
