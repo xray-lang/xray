@@ -144,6 +144,7 @@
     X(BYTES_SPAN_FILL, xi_emit_bytes_span_fill) \
     X(BYTES_SPAN_COPY, xi_emit_bytes_span_copy) \
     X(BYTES_SPAN_COMPARE, xi_emit_bytes_span_compare) \
+    X(BYTES_SPAN_COMMON_PREFIX, xi_emit_bytes_span_common_prefix) \
     X(SPAN_AS_BYTES, xi_emit_span_as_bytes) \
     X(SPAN_REINTERPRET, xi_emit_span_reinterpret) \
     X(BYTES_COPY_WITHIN, xi_emit_bytes_copy_within) \

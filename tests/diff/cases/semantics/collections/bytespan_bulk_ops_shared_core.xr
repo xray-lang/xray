@@ -27,3 +27,8 @@ print(srcView.compare(dstView[0:4]))
 let prefix: ByteSpan = dstView[2:5]
 print(prefix.compare(srcView))
 print(srcView.compare(prefix))
+
+print(dstView[2:6].commonPrefix(srcView))
+print(dstView[2:5].commonPrefix(srcView))
+print(dstView[0:4].commonPrefix(srcView))
+print(dstView[0:0].commonPrefix(srcView))

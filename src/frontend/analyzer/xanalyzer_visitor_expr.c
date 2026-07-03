@@ -240,6 +240,10 @@ static XrType *xa_bytespan_method_type(XaInferContext *ctx, XrType *receiver, co
         XrType *params[1] = {xr_type_new_bytespan(X)};
         return xr_type_new_function(X, params, 1, xr_type_new_int(X), false);
     }
+    if (strcmp(name, "commonPrefix") == 0) {
+        XrType *params[1] = {xr_type_new_bytespan(X)};
+        return xr_type_new_function(X, params, 1, xr_type_new_int(X), false);
+    }
     if (strcmp(name, "reinterpret") == 0) {
         XrType *ret_elem = xr_type_new_type_param(X, "T", 0);
         XrType *fn = xr_type_new_function(X, NULL, 0, xr_type_new_span(X, ret_elem), false);

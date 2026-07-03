@@ -416,6 +416,10 @@ XR_FUNC void xi_emit_bytes_span_compare(EmitCtx *ctx, XiValue *v, XiEmitReg dst)
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_SPAN_COMPARE, 2);
 }
 
+XR_FUNC void xi_emit_bytes_span_common_prefix(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_SPAN_COMMON_PREFIX, 2);
+}
+
 XR_FUNC void xi_emit_span_as_bytes(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs != 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);

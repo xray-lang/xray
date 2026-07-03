@@ -1285,6 +1285,7 @@ static bool xicgen_op_arg_keeps_span_noescape(XiCgenCtx *ctx, const XiFunc *curr
             return arg_index == 0;
         case XI_BYTES_SPAN_COPY:
         case XI_BYTES_SPAN_COMPARE:
+        case XI_BYTES_SPAN_COMMON_PREFIX:
             return arg_index == 0 || arg_index == 1;
         case XI_BYTES_COPY_FROM:
             return arg_index == 1;
@@ -5515,6 +5516,20 @@ static void xicgen_bytes_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
     fprintf(out, "xrt_span_bytes_compare_checked_raw(");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ", ");
+    emit_span_ref_expr(out, v->args[1]);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+}
+
+static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                            const XiValue *v, const char *prefix) {
+    (void) f;
+    (void) prefix;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "xrt_span_bytes_common_prefix_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     emit_span_ref_expr(out, v->args[1]);
