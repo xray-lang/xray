@@ -71,6 +71,20 @@ static bool xa_type_is_bytespan(XrType *type) {
     return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
 }
 
+static bool xa_type_is_pod_span_elem(XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_CHAR:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static bool xa_type_is_raw_u8_ptr(XrType *type) {
     if (!type || !XR_TYPE_IS_POINTER(type) || !type->container.element_type)
         return false;
@@ -226,6 +240,15 @@ static XrType *xa_bytespan_method_type(XaInferContext *ctx, XrType *receiver, co
         XrType *params[1] = {xr_type_new_bytespan(X)};
         return xr_type_new_function(X, params, 1, xr_type_new_int(X), false);
     }
+    if (strcmp(name, "reinterpret") == 0) {
+        XrType *ret_elem = xr_type_new_type_param(X, "T", 0);
+        XrType *fn = xr_type_new_function(X, NULL, 0, xr_type_new_span(X, ret_elem), false);
+        if (fn) {
+            const char *names[1] = {"T"};
+            xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
+        }
+        return fn;
+    }
     if (strcmp(name, "commonPrefixUnchecked") == 0) {
         XrType *params[3] = {xr_type_new_int(X), xr_type_new_int(X), xr_type_new_int(X)};
         return xr_type_new_function(X, params, 3, xr_type_new_int(X), false);
@@ -236,6 +259,12 @@ static XrType *xa_bytespan_method_type(XaInferContext *ctx, XrType *receiver, co
 static XrType *xa_span_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
     if (!receiver || !XR_TYPE_IS_SPAN(receiver) || !receiver->container.element_type || !name)
         return NULL;
+    if (strcmp(name, "asBytes") == 0) {
+        if (!xa_type_is_pod_span_elem(receiver->container.element_type))
+            return NULL;
+        XrVMRuntime *X = ctx->analyzer->isolate;
+        return xr_type_new_function(X, NULL, 0, xr_type_new_bytespan(X), false);
+    }
     if (strcmp(name, "getUnchecked") != 0)
         return NULL;
     XrVMRuntime *X = ctx->analyzer->isolate;

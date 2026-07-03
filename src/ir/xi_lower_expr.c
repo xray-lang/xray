@@ -34,6 +34,7 @@
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../shared/xr_array_core.h"
+#include "../shared/xr_elem_type.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xconstants.h"
 #include "../runtime/value/xstruct_layout.h"
@@ -1370,6 +1371,64 @@ static int64_t xi_pointer_pointee_size(struct XrType *ptr_type) {
         default:
             return 1;
     }
+}
+
+static bool xi_type_is_pod_span_elem(struct XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_CHAR:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static XrArrayElemType xi_pod_span_elem_type(struct XrType *type) {
+    if (!xi_type_is_pod_span_elem(type))
+        return XR_ELEM_ANY;
+    switch (type->kind) {
+        case XR_KIND_INT:
+            switch (type->native_width) {
+                case XR_NATIVE_I8:
+                    return XR_ELEM_I8;
+                case XR_NATIVE_U8:
+                    return XR_ELEM_U8;
+                case XR_NATIVE_I16:
+                    return XR_ELEM_I16;
+                case XR_NATIVE_U16:
+                    return XR_ELEM_U16;
+                case XR_NATIVE_I32:
+                    return XR_ELEM_I32;
+                case XR_NATIVE_U32:
+                    return XR_ELEM_U32;
+                case XR_NATIVE_U64:
+                    return XR_ELEM_U64;
+                default:
+                    return XR_ELEM_I64;
+            }
+        case XR_KIND_FLOAT:
+            return type->native_width == XR_NATIVE_F32 ? XR_ELEM_F32 : XR_ELEM_F64;
+        case XR_KIND_BOOL:
+            return XR_ELEM_BOOL;
+        case XR_KIND_CHAR:
+            return XR_ELEM_CHAR;
+        default:
+            return XR_ELEM_ANY;
+    }
+}
+
+static int64_t xi_pack_span_elem_aux(struct XrType *type) {
+    XrArrayElemType elem_type = xi_pod_span_elem_type(type);
+    if (elem_type == XR_ELEM_ANY || elem_type >= XR_ELEM_COUNT)
+        return 0;
+    uint8_t elem_size = XR_ELEM_SIZES[elem_type];
+    uint8_t elem_tid = xr_type_to_tid(type);
+    return (int64_t) ((uint8_t) elem_type) | ((int64_t) elem_size << 8) |
+           ((int64_t) elem_tid << 16);
 }
 
 /* XrFFIType width code of a raw pointer's pointee (carried on PTR_LOAD/STORE). */
@@ -3096,6 +3155,19 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             }
         }
 
+        if (recv->type && XR_TYPE_IS_SPAN(recv->type) && ma->name &&
+            strcmp(ma->name, "asBytes") == 0 && n == 0) {
+            struct XrType *elem = recv->type->container.element_type;
+            if (xi_type_is_pod_span_elem(elem)) {
+                XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_AS_BYTES, result_type, 1);
+                if (!v)
+                    return NULL;
+                v->args[0] = recv;
+                v->line = (uint32_t) node->line;
+                return v;
+            }
+        }
+
         if (xi_type_is_bytes(recv->type) && ma->name) {
             uint16_t bytes_op = 0;
             uint16_t expected_args = 0;
@@ -3161,6 +3233,20 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             }
 
             if (XR_TYPE_IS_SPAN(recv->type)) {
+                if (strcmp(ma->name, "reinterpret") == 0 && n == 0 && call->type_arg_count == 1 &&
+                    call->type_args && call->type_args[0]) {
+                    XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
+                    if (xi_type_is_pod_span_elem(target)) {
+                        XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_REINTERPRET,
+                                                  result_type, 1);
+                        if (!v)
+                            return NULL;
+                        v->args[0] = recv;
+                        v->aux_int = xi_pack_span_elem_aux(target);
+                        v->line = (uint32_t) node->line;
+                        return v;
+                    }
+                }
                 if (strcmp(ma->name, "fill") == 0 && n == 1) {
                     XiValue *v =
                         xi_value_new(l->func, l->cur_block, XI_BYTES_SPAN_FILL, recv->type, 2);

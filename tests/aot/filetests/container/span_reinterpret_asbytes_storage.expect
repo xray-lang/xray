@@ -1,0 +1,2 @@
+c_contains=xrt_span_as_bytes_checked_raw(
+c_contains=xrt_span_reinterpret_checked_raw(

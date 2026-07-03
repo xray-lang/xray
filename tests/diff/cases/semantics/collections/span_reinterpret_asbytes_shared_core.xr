@@ -1,0 +1,33 @@
+// anchor: span-reinterpret-asbytes-shared-core
+let words = Array<uint32>(2, 0)
+let wordSpan: Span<uint32> = words
+let wordBytes: ByteSpan = wordSpan.asBytes()
+
+print(wordBytes.length)
+wordBytes.fill(1)
+print(int(words[0]))
+print(int(words[1]))
+
+let bytes = Bytes(6)
+let raw: ByteSpan = bytes
+raw.fill(0)
+
+let pairs: Span<uint16> = raw.reinterpret<uint16>()
+print(pairs.length)
+pairs[1] = 0x7777
+print(bytes[2])
+print(bytes[3])
+
+let roundtrip: ByteSpan = pairs.asBytes()
+print(roundtrip.length)
+roundtrip.fill(9)
+print(int(pairs[0]))
+print(int(pairs[2]))
+
+try {
+    let bad: Span<uint32> = raw[0:5].reinterpret<uint32>()
+    print(bad.length)
+} catch panic (p) {
+    print(p.message)
+    print(p.code)
+}

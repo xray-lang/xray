@@ -1280,6 +1280,8 @@ static bool xicgen_op_arg_keeps_span_noescape(XiCgenCtx *ctx, const XiFunc *curr
         case XI_BYTES_STORE_U32:
         case XI_BYTES_STORE_U64:
         case XI_BYTES_SPAN_FILL:
+        case XI_SPAN_AS_BYTES:
+        case XI_SPAN_REINTERPRET:
             return arg_index == 0;
         case XI_BYTES_SPAN_COPY:
         case XI_BYTES_SPAN_COMPARE:
@@ -5518,6 +5520,30 @@ static void xicgen_bytes_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     emit_span_ref_expr(out, v->args[1]);
     fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
+}
+
+static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                 const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    fprintf(out, "xrt_span_as_bytes_checked_raw(");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ")");
+}
+
+static void xicgen_span_reinterpret(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                    const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    uint8_t elem_type = (uint8_t) (v->aux_int & 0xff);
+    uint8_t elem_size = (uint8_t) ((v->aux_int >> 8) & 0xff);
+    uint8_t elem_tid = (uint8_t) ((v->aux_int >> 16) & 0xff);
+    fprintf(out, "xrt_span_reinterpret_checked_raw(");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ", (uint8_t)%u, (uint8_t)%u, (uint8_t)%u)", (unsigned) elem_type,
+            (unsigned) elem_size, (unsigned) elem_tid);
 }
 
 static void xicgen_bytes_copy_within(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

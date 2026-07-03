@@ -416,6 +416,57 @@ XR_FUNC void xi_emit_bytes_span_compare(EmitCtx *ctx, XiValue *v, XiEmitReg dst)
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_SPAN_COMPARE, 2);
 }
 
+XR_FUNC void xi_emit_span_as_bytes(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs != 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint16_t span_slot = 0;
+    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSpanView), &span_slot))
+        return;
+    if (ctx->next_reg + 1 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg slot_reg = (XiEmitReg) ctx->next_reg++;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, slot_reg, span_slot));
+    emit_inst(ctx, CREATE_ABC(OP_SPAN_AS_BYTES, dst, src, slot_reg));
+}
+
+XR_FUNC void xi_emit_span_reinterpret(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs != 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint16_t span_slot = 0;
+    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSpanView), &span_slot))
+        return;
+    if (ctx->next_reg + 4 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg = (XiEmitReg) (base + 4);
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    uint8_t elem_type = (uint8_t) (v->aux_int & 0xff);
+    uint8_t elem_size = (uint8_t) ((v->aux_int >> 8) & 0xff);
+    uint8_t elem_tid = (uint8_t) ((v->aux_int >> 16) & 0xff);
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, base, span_slot));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 1), elem_type));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 2), elem_size));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 3), elem_tid));
+    emit_inst(ctx, CREATE_ABC(OP_SPAN_REINTERPRET, dst, src, base));
+}
+
 /* Unsafe container data pointer: R[dst] = (uintptr_t)Array/Span.data. */
 XR_FUNC void xi_emit_array_data_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs != 1) {

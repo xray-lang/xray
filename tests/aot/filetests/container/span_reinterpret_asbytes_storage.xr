@@ -1,0 +1,5 @@
+fn views(words: Span<uint32>, raw: ByteSpan) -> int {
+    let bytes: ByteSpan = words.asBytes()
+    let pairs: Span<uint16> = raw.reinterpret<uint16>()
+    return bytes.length + pairs.length
+}

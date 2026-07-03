@@ -628,6 +628,47 @@ static inline bool xrt_span_is_readonly(xr_span_t span) {
     return (span.flags & XRT_SPAN_FLAG_READONLY) != 0;
 }
 
+static inline xr_span_t xrt_span_as_bytes_checked_raw(xr_span_t span) {
+    if (span.elem_type == XR_ELEM_ANY || span.elem_type >= XR_ELEM_COUNT || span.elem_size == 0)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.asBytes() requires POD Span element type");
+    if (span.length < 0 ||
+        (span.elem_size > 0 && span.length > INT64_MAX / (int64_t) span.elem_size))
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.asBytes() byte length overflow");
+    xr_span_t out = span;
+    out.length = span.length * (int64_t) span.elem_size;
+    out.elem_type = XR_ELEM_U8;
+    out.elem_size = 1;
+    out.elem_tid = 0;
+    out.contains_refs = 0;
+    out.flags = span.flags & XRT_SPAN_FLAG_READONLY;
+    return out;
+}
+
+static inline xr_span_t xrt_span_reinterpret_checked_raw(xr_span_t span, uint8_t elem_type,
+                                                         uint8_t elem_size, uint8_t elem_tid) {
+    if (elem_type == XR_ELEM_ANY || elem_type >= XR_ELEM_COUNT || elem_size == 0)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.reinterpret<T>() requires POD target type");
+    if (XR_ELEM_SIZES[elem_type] != elem_size)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.reinterpret<T>() target metadata mismatch");
+    if (span.elem_type != XR_ELEM_U8 || span.elem_size != 1)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "ByteSpan.reinterpret<T>() expects ByteSpan receiver");
+    if (span.length < 0)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        "ByteSpan.reinterpret<T>() byte length overflow");
+    if (span.length % (int64_t) elem_size != 0)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                        "ByteSpan.reinterpret<T>() length is not divisible by target size");
+    xr_span_t out = span;
+    out.length = span.length / (int64_t) elem_size;
+    out.elem_type = elem_type;
+    out.elem_size = elem_size;
+    out.elem_tid = elem_tid;
+    out.contains_refs = 0;
+    out.flags = span.flags & XRT_SPAN_FLAG_READONLY;
+    return out;
+}
+
 static inline XrValue xrt_span_to_owned_array(xr_span_t span) {
     int64_t len = span.length < 0 ? 0 : span.length;
     XrValue outv = xrt_array_new_typed(len, span.elem_type);
