@@ -60,48 +60,55 @@ static HANDLE live_pop(DWORD pid) {
     return h;
 }
 
+// Write one already-quoted argument body into `buf`, escaping per the
+// Microsoft CommandLineToArgvW contract: a run of backslashes is only
+// doubled when it precedes a literal `"` or the closing quote; ordinary
+// backslashes are emitted verbatim. The caller writes the surrounding quotes.
+static void append_escaped_arg(char *buf, size_t *pos, const char *arg) {
+    size_t backslashes = 0;
+    for (const char *p = arg; *p; p++) {
+        if (*p == '\\') {
+            backslashes++;
+            buf[(*pos)++] = '\\';
+        } else if (*p == '"') {
+            for (size_t k = 0; k < backslashes; k++)
+                buf[(*pos)++] = '\\';
+            buf[(*pos)++] = '\\';
+            buf[(*pos)++] = '"';
+            backslashes = 0;
+        } else {
+            backslashes = 0;
+            buf[(*pos)++] = *p;
+        }
+    }
+    for (size_t k = 0; k < backslashes; k++)
+        buf[(*pos)++] = '\\';
+}
+
 // Quote-and-join argv into a single command line. Each argument is
 // wrapped in double quotes; embedded quotes and trailing backslashes
 // are escaped per Microsoft's CommandLineToArgvW contract.
 static char *build_command_line(const char *prog, const char *const argv[]) {
-    size_t cap = 0;
-    cap += strlen(prog) + 4;
+    size_t cap = strlen(prog) * 2 + 3;
     for (int i = 0; argv[i] != NULL; i++) {
-        cap += strlen(argv[i]) * 2 + 4;
+        cap += strlen(argv[i]) * 2 + 3;
     }
     char *buf = (char *) malloc(cap + 1);  // xr:allow-raw-alloc
     if (!buf) {
         return NULL;
     }
     size_t pos = 0;
-    // CreateProcess uses argv[0] from the command line; if the
-    // caller passed a separate `prog` we put `prog` first.
-    int start = 0;
-    if (argv[0] != NULL && strcmp(argv[0], prog) == 0) {
-        start = 0;  // argv already starts with prog
-    } else {
-        // Emit prog as the first token explicitly.
+    if (argv[0] == NULL || strcmp(argv[0], prog) != 0) {
         buf[pos++] = '"';
-        for (const char *p = prog; *p; p++) {
-            if (*p == '"' || *p == '\\') {
-                buf[pos++] = '\\';
-            }
-            buf[pos++] = *p;
-        }
+        append_escaped_arg(buf, &pos, prog);
         buf[pos++] = '"';
-        start = 0;
     }
-    for (int i = start; argv[i] != NULL; i++) {
+    for (int i = 0; argv[i] != NULL; i++) {
         if (pos > 0) {
             buf[pos++] = ' ';
         }
         buf[pos++] = '"';
-        for (const char *p = argv[i]; *p; p++) {
-            if (*p == '"' || *p == '\\') {
-                buf[pos++] = '\\';
-            }
-            buf[pos++] = *p;
-        }
+        append_escaped_arg(buf, &pos, argv[i]);
         buf[pos++] = '"';
     }
     buf[pos] = '\0';
