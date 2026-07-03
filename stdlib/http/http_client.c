@@ -322,8 +322,16 @@ void xr_http_result_free(XrHttpResult *result) {
 
 /* ========== Build Request ========== */
 
+// A header is credential-bearing and MUST NOT cross an origin boundary on a
+// redirect (curl CVE-2022-27774 class of leak). Cookies are handled separately
+// by the host-scoped cookie jar, so only these explicit auth headers matter.
+static bool http_header_is_sensitive(const XrHttpHeader *h) {
+    return (h->name_len == 13 && strncasecmp(h->name, "Authorization", 13) == 0) ||
+           (h->name_len == 19 && strncasecmp(h->name, "Proxy-Authorization", 19) == 0);
+}
+
 static char *build_request(XrVMRuntime *isolate, const XrHttpRequestConfig *config,
-                           const XrHttpUrl *url, size_t *out_len) {
+                           const XrHttpUrl *url, size_t *out_len, bool strip_sensitive) {
     // Estimate buffer size
     size_t buf_size = 1024;
     if (config->body_len > 0) {
@@ -383,6 +391,11 @@ static char *build_request(XrVMRuntime *isolate, const XrHttpRequestConfig *conf
 
     for (int i = 0; i < config->header_count; i++) {
         XrHttpHeader *h = &config->headers[i];
+        // Cross-origin redirect: drop credential headers so they are not
+        // forwarded to a different host/scheme/port than the one they were set
+        // for. The buffer was sized for all headers, so skipping only shrinks it.
+        if (strip_sensitive && http_header_is_sensitive(h))
+            continue;
         memcpy(p, h->name, h->name_len);
         p += h->name_len;
         *p++ = ':';
@@ -495,7 +508,24 @@ static bool is_redirect_status(int status) {
 
 // Internal request function (single request, no redirect handling)
 static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequestConfig *config,
-                                             const char *url_str);
+                                             const char *url_str, bool strip_auth);
+
+// Two URLs share an origin iff scheme (https-ness), host (case-insensitive) and
+// port all match. A redirect across origins must not carry credential headers.
+static bool http_same_origin(const char *url_a, const char *url_b) {
+    XrHttpUrl a, b;
+    if (xr_http_url_parse(url_a, &a) != 0)
+        return false;
+    if (xr_http_url_parse(url_b, &b) != 0) {
+        xr_http_url_free(&a);
+        return false;
+    }
+    bool same = (a.is_https == b.is_https) && (a.port == b.port) && a.host && b.host &&
+                strcasecmp(a.host, b.host) == 0;
+    xr_http_url_free(&a);
+    xr_http_url_free(&b);
+    return same;
+}
 
 /* ========== Main Request Function ========== */
 
@@ -514,10 +544,13 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
 
     char *current_url = xr_strdup(config->url);
     int redirect_count = 0;
+    // Once a redirect crosses an origin boundary, credential headers are dropped
+    // for the remainder of the chain (they must never reach a foreign origin).
+    bool strip_auth = false;
 
     while (current_url) {
         // Execute single request
-        result = xr_http_request_internal(X, config, current_url);
+        result = xr_http_request_internal(X, config, current_url, strip_auth);
 
         // Check if redirect needed
         if (follow_redirects && is_redirect_status(result.status_code) &&
@@ -551,6 +584,10 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
                 }
 
                 if (new_url) {
+                    // Cross-origin redirect: strip credentials from now on.
+                    if (!strip_auth && !http_same_origin(current_url, new_url))
+                        strip_auth = true;
+
                     // Free current result, continue redirect
                     xr_http_result_free(&result);
                     xr_free(current_url);
@@ -579,7 +616,7 @@ XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) 
 
 // Internal request function implementation
 static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequestConfig *config,
-                                             const char *url_str) {
+                                             const char *url_str, bool strip_auth) {
     XrHttpResult result;
     memset(&result, 0, sizeof(result));
 
@@ -618,7 +655,7 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
     // Build request
     {
         size_t request_len;
-        request_buf = build_request(X, config, &url, &request_len);
+        request_buf = build_request(X, config, &url, &request_len, strip_auth);
         if (!request_buf) {
             result.error = XR_HTTP_ERR_MEMORY;
             result.error_msg = xr_strdup("Memory allocation failed");
