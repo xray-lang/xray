@@ -38,6 +38,7 @@
 #include <stdatomic.h>
 
 #include "../base/xdefs.h"
+#include "../base/xconstants.h"
 #include "../os/os_thread.h"
 #include "../runtime/mem/xobj_header.h"
 #include "../runtime/value/xvalue.h"
@@ -62,6 +63,8 @@ typedef struct XrThread {
     struct XrVMRuntime *isolate;
     struct XrRuntimeCore *core;
     const char *name;
+    uint32_t affinity_cpus[XR_THREAD_AFFINITY_MAX];
+    uint8_t affinity_count;
     _Atomic(int) state;     /* XrThreadState */
     _Atomic(bool) finished; /* entry set the return slot */
     _Atomic(bool) failed;
@@ -74,7 +77,8 @@ typedef struct XrThread {
  * are best-effort (0/NULL = platform default). Returns NULL on allocation/spawn
  * failure. The returned handle is a system-heap shared object. */
 XR_FUNC XrThread *xr_thread_obj_spawn_vm(struct XrVMRuntime *isolate, struct XrCoroutine *coro,
-                                         const char *name, size_t stack_size);
+                                         const char *name, size_t stack_size,
+                                         const uint32_t *affinity_cpus, uint16_t affinity_count);
 
 /* Block until the thread finishes; returns the closure's return value. Idempotent
  * after the first successful join (subsequent calls return the cached retval). */

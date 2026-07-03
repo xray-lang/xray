@@ -67,6 +67,11 @@
 // bitmaps or per-NUMA sharding (tracked separately, not yet implemented).
 #define XR_MAX_WORKERS 64
 
+// Max CPU hints accepted by sys.Thread.spawn ThreadOptions.affinity.
+// Affinity is best-effort, so this bounds metadata size rather than
+// representing a platform capability limit.
+#define XR_THREAD_AFFINITY_MAX 32
+
 // Per-worker local run queue capacity
 #define XR_LOCAL_QUEUE_SIZE 256
 

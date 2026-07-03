@@ -1,0 +1,7 @@
+import sys
+
+let cpu = 0
+let t = sys.Thread.spawn(ThreadOptions{ affinity: [cpu] }, fn() -> int {
+    return 1
+})
+print(t.join())

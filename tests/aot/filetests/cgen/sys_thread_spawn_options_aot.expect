@@ -1,3 +1,6 @@
 c_contains=xrt_thread_spawn_aot(&
-c_contains=, 65536, "xray-test-worker");
+c_contains=static const uint32_t _thread_affinity_
+c_contains={0u};
+c_contains=, 65536, "xray-test-worker", _thread_affinity_
+c_contains=, 1);
 c_not_contains=unsupported coroutine Xi op THREAD_SPAWN

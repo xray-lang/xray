@@ -21,6 +21,8 @@
 #include "../vm/xvm.h"
 #include "../vm/xvm_coro_api.h"
 
+#include <string.h>
+
 static void thread_throw(XrVMRuntime *isolate, XrErrorCode code, const char *message) {
     if (!isolate || !message)
         return;
@@ -36,6 +38,15 @@ static void thread_release_ref(XrThread *thread) {
         xr_shared_destroy_core(core, &thread->hdr);
 }
 
+static void thread_apply_affinity(const uint32_t *cpus, uint8_t count) {
+    if (!cpus || count == 0)
+        return;
+    for (uint8_t i = 0; i < count; i++) {
+        if (xr_thread_pin_to_cpu(cpus[i]) == 0)
+            return;
+    }
+}
+
 static void *thread_entry_vm(void *arg) {
     XrThread *thread = (XrThread *) arg;
     if (!thread)
@@ -45,6 +56,7 @@ static void *thread_entry_vm(void *arg) {
         xray_vm_enter(thread->isolate);
     if (thread->name)
         xr_thread_set_name(xr_thread_self(), thread->name);
+    thread_apply_affinity(thread->affinity_cpus, thread->affinity_count);
 
     XrValue out = xr_null();
     XrCoroRunKind kind = xr_vm_coro_run_to_completion(thread->coro, &out);
@@ -67,7 +79,8 @@ static void *thread_entry_vm(void *arg) {
 }
 
 XrThread *xr_thread_obj_spawn_vm(struct XrVMRuntime *isolate, struct XrCoroutine *coro,
-                                 const char *name, size_t stack_size) {
+                                 const char *name, size_t stack_size, const uint32_t *affinity_cpus,
+                                 uint16_t affinity_count) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
     if (!core || !core->sys_heap || !coro) {
         if (coro)
@@ -88,6 +101,13 @@ XrThread *xr_thread_obj_spawn_vm(struct XrVMRuntime *isolate, struct XrCoroutine
     thread->isolate = isolate;
     thread->core = core;
     thread->name = name;
+    thread->affinity_count = 0;
+    if (affinity_cpus && affinity_count > 0) {
+        uint16_t count =
+            affinity_count < XR_THREAD_AFFINITY_MAX ? affinity_count : XR_THREAD_AFFINITY_MAX;
+        thread->affinity_count = (uint8_t) count;
+        memcpy(thread->affinity_cpus, affinity_cpus, (size_t) count * sizeof(uint32_t));
+    }
     thread->retval = xr_null();
     thread->error = xr_null();
     thread->error_is_value = false;
