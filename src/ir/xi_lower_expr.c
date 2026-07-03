@@ -2562,6 +2562,45 @@ static bool lower_is_channel_send_boundary_method(const char *method) {
                       strcmp(method, "sendTimeout") == 0);
 }
 
+static XrType *xi_raw_pointer_type_namespace(XiLower *l, AstNode *object) {
+    if (!l || !object || object->type != AST_NEW_EXPR)
+        return NULL;
+    NewExprNode *ne = &object->as.new_expr;
+    if (ne->module_name || !ne->class_name || ne->type_arg_count != 1 || !ne->type_args ||
+        !ne->type_args[0])
+        return NULL;
+    bool is_mut = false;
+    if (strcmp(ne->class_name, "RawPtr") == 0) {
+        is_mut = false;
+    } else if (strcmp(ne->class_name, "RawMut") == 0) {
+        is_mut = true;
+    } else {
+        return NULL;
+    }
+    XrType *pointee = xr_tref_resolve(l->isolate, ne->type_args[0]);
+    if (!pointee)
+        pointee = xr_type_new_unknown(l->isolate);
+    return xr_type_new_pointer(l->isolate, pointee, is_mut);
+}
+
+static XiValue *lower_raw_pointer_static_call(XiLower *l, AstNode *node, CallExprNode *call) {
+    if (!l || !node || !call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    if (!ma->name || strcmp(ma->name, "null") != 0 || call->arg_count != 0)
+        return NULL;
+    XrType *ptr_type = xi_raw_pointer_type_namespace(l, ma->object);
+    if (!ptr_type)
+        return NULL;
+    XrType *result_type = xi_lower_node_type(l, node);
+    if (!result_type || xi_lower_type_is_unknown(result_type))
+        result_type = ptr_type;
+    XiValue *v = xi_const_int(l->func, l->cur_block, 0, result_type);
+    if (v)
+        v->line = (uint32_t) node->line;
+    return v;
+}
+
 static XiValue *lower_channel_send_boundary_call(XiLower *l, AstNode *node, CallExprNode *call,
                                                  const char *method, XiValue *recv) {
     if (!recv || !recv->type || recv->type->kind != XR_KIND_CHANNEL ||
@@ -2622,6 +2661,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
     if (lower_call_is_sys_thread_spawn(call))
         return lower_thread_spawn_call(l, node, call);
+
+    XiValue *raw_pointer_static = lower_raw_pointer_static_call(l, node, call);
+    if (raw_pointer_static)
+        return raw_pointer_static;
 
     /* Method call: callee is obj.method — emit XI_CALL_METHOD (→ OP_INVOKE).
      * This is required for builtin methods (set.size, array.push, etc.)

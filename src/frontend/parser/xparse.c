@@ -1317,8 +1317,13 @@ AstNode *xr_parse_recoverable(Parser *parser) {
 // Try parsing generic type args <T1, T2, ...>
 // Uses lookahead to detect identifier<...>( pattern, avoiding confusion with comparison
 // Uses space sensitivity: foo<T>() is generic, foo < T is comparison
-// Returns: number of type args parsed, 0 means not a generic call
-static int try_parse_generic_type_args(Parser *parser, XrType **type_args, int capacity) {
+static bool is_raw_pointer_type_name(const char *name) {
+    return name && (strcmp(name, "RawPtr") == 0 || strcmp(name, "RawMut") == 0);
+}
+
+// Returns: number of type args parsed, 0 means not a generic call/type namespace.
+static int try_parse_generic_type_args(Parser *parser, XrType **type_args, int capacity,
+                                       bool allow_dot_follow) {
     // disambiguation: if '<' has leading space, treat as comparison
     if (parser->current.type == TK_LT && parser->current.has_leading_space) {
         return 0;  // Space before '<' means comparison, not generic
@@ -1365,8 +1370,10 @@ static int try_parse_generic_type_args(Parser *parser, XrType **type_args, int c
         goto rollback;
     }
 
-    // Must be followed by ( for generic call or { for generic struct literal
-    if (!xr_parser_check(parser, TK_LPAREN) && !xr_parser_check(parser, TK_LBRACE)) {
+    // Must be followed by ( for generic call, { for generic struct literal,
+    // or (for selected builtins) . for type namespace access.
+    if (!xr_parser_check(parser, TK_LPAREN) && !xr_parser_check(parser, TK_LBRACE) &&
+        !(allow_dot_follow && xr_parser_check(parser, TK_DOT))) {
         goto rollback;
     }
 
@@ -1447,9 +1454,15 @@ AstNode *xr_parse_variable(Parser *parser) {
 
     // Try parsing generic type args <T1, T2, ...>
     XrType *type_args[16];  // Max 16 type args
-    int type_arg_count = try_parse_generic_type_args(parser, type_args, 16);
+    int type_arg_count =
+        try_parse_generic_type_args(parser, type_args, 16, is_raw_pointer_type_name(name));
 
     if (type_arg_count > 0) {
+        if (xr_parser_check(parser, TK_DOT) && is_raw_pointer_type_name(name)) {
+            return xr_ast_new_expr(parser->compiler_session, NULL, name, NULL, 0,
+                                   (XrTypeRef **) type_args, type_arg_count, line);
+        }
+
         // Check if this is a generic struct literal: Name<T1, T2>{field: value}
         if (xr_parser_check(parser, TK_LBRACE)) {
             xr_parser_advance(parser);  // Consume {
