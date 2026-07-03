@@ -473,10 +473,8 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
                              "let a = view.load<uint32>(0, Endian.LE)\n"
                              "let b = view.load<uint64>(0, Endian.LE)\n"
                              "view.store<uint16>(6, h, Endian.LE)\n"
-                             "unsafe {\n"
-                             "    dst.appendFromUnchecked(view, 0, 2)\n"
-                             "    dst.repeatFromUnchecked(2, 4)\n"
-                             "}\n"
+                             "dst.appendFrom(view[0:2])\n"
+                             "dst.repeatFrom(2, 4)\n"
                              "print(h)\n"
                              "print(a)\n"
                              "print(b)\n");
@@ -485,10 +483,10 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
     assert(func_tree_has_op(f, XI_BYTES_LOAD_U32) && "load<uint32> should lower to Bytes op");
     assert(func_tree_has_op(f, XI_BYTES_LOAD_U64) && "load<uint64> should lower to Bytes op");
     assert(func_tree_has_op(f, XI_BYTES_STORE_U16) && "store<uint16> should lower to Bytes op");
-    assert(func_tree_find_method(f, "appendFromUnchecked") &&
-           "appendFromUnchecked should remain an explicit method call");
-    assert(func_tree_find_method(f, "repeatFromUnchecked") &&
-           "repeatFromUnchecked should remain an explicit method call");
+    assert(func_tree_find_method(f, "appendFrom") &&
+           "appendFrom should remain an explicit method call");
+    assert(func_tree_find_method(f, "repeatFrom") &&
+           "repeatFrom should remain an explicit method call");
     assert(!func_tree_has_builtin_name(f, "bytes_load_u16_le") &&
            !func_tree_has_builtin_name(f, "bytes_load_u32_le") &&
            "load should not lower through string builtin");

@@ -1,1 +1,1 @@
-Bytes.repeatFromUnchecked() must be inside an unsafe block
+Bytes has no member 'repeatFromUnchecked'

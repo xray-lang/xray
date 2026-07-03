@@ -59,9 +59,7 @@ fn show_bytes_copy_within_oob() {
         bytes.pushUnchecked(1)
     }
     try {
-        unsafe {
-            bytes.repeatFromUnchecked(2, 4)
-        }
+        bytes.repeatFrom(2, 4)
         print(bytes[0])
     } catch panic (p) {
         print(p.message)

@@ -1,9 +1,9 @@
 fn fill(out: Bytes, src: Bytes) -> int {
+    out.resize(4)
     unsafe {
         let p = out.dataMutPtrUnchecked()
         let sp = src.dataPtrUnchecked()
         p.copyFromNonOverlappingUnchecked(sp, 4)
-        out.setLengthUnchecked(4)
     }
     return out[2]
 }

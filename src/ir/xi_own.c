@@ -143,21 +143,12 @@ static bool low_level_byte_method_arg_is_borrowed(const XiValue *user, uint16_t 
     if (!type_is_u8_contiguous_view(user->args[0] ? user->args[0]->type : NULL))
         return false;
 
-    /* Bytes append/write cursor methods copy from src during the call and
-     * never store it. Treat the source buffer as a borrowed argument so ARC
-     * does not retain/release it inside hot copy loops. */
+    /* Bytes append copies from src during the call and never stores it. Treat
+     * the source buffer as borrowed so ARC does not retain/release it inside
+     * hot copy loops. */
     if (strcmp(method, "appendFrom") == 0)
         return arg_idx == 1 && user->nargs > 1 &&
                type_is_u8_contiguous_view(user->args[1] ? user->args[1]->type : NULL);
-    if (strcmp(method, "appendFromUnchecked") == 0)
-        return arg_idx == 1 && user->nargs > 1 &&
-               type_is_u8_contiguous_view(user->args[1] ? user->args[1]->type : NULL);
-    if (strcmp(method, "writeFromUnchecked") == 0)
-        return arg_idx == 2 && user->nargs > 2 &&
-               type_is_u8_contiguous_view(user->args[2] ? user->args[2]->type : NULL);
-    if (strcmp(method, "wildCopyFromNonOverlappingUnchecked") == 0)
-        return arg_idx == 2 && user->nargs > 2 &&
-               type_is_u8_contiguous_view(user->args[2] ? user->args[2]->type : NULL);
 
     return false;
 }

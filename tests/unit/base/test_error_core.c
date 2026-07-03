@@ -76,37 +76,6 @@ TEST(error_core_defines_bytes_messages) {
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG,
                   "Bytes.repeatFrom receiver must be Bytes");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG, "Bytes.repeatFrom range/grow failed");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_APPEND_FROM_UNCHECKED_EXPECTS_MSG,
-                  "Bytes.appendFromUnchecked(src, srcOffset, count) expects ByteSpan and integers");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_APPEND_FROM_UNCHECKED_OPERANDS_MSG,
-                  "Bytes.appendFromUnchecked receiver/source must use byte storage");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_APPEND_FROM_UNCHECKED_OOB_MSG,
-                  "Bytes.appendFromUnchecked range/capacity precondition failed");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_UNCHECKED_EXPECTS_MSG,
-                  "Bytes.repeatFromUnchecked(distance, count) expects integer distance and count");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_UNCHECKED_RECEIVER_MSG,
-                  "Bytes.repeatFromUnchecked receiver must be Bytes");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_UNCHECKED_OOB_MSG,
-                  "Bytes.repeatFromUnchecked range/capacity precondition failed");
-    ASSERT_STR_EQ(
-        XR_ERROR_CORE_BYTES_WRITE_FROM_UNCHECKED_EXPECTS_MSG,
-        "Bytes.writeFromUnchecked(dstOffset, src, srcOffset, count) expects ByteSpan and integers");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_WRITE_FROM_UNCHECKED_OPERANDS_MSG,
-                  "Bytes.writeFromUnchecked receiver/source must use byte storage");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_WRITE_FROM_UNCHECKED_OOB_MSG,
-                  "Bytes.writeFromUnchecked range/capacity precondition failed");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_AT_UNCHECKED_EXPECTS_MSG,
-                  "Bytes.repeatAtUnchecked(dstOffset, distance, count) expects integers");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_AT_UNCHECKED_RECEIVER_MSG,
-                  "Bytes.repeatAtUnchecked receiver must be Bytes");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_AT_UNCHECKED_OOB_MSG,
-                  "Bytes.repeatAtUnchecked range/capacity precondition failed");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_SET_LENGTH_UNCHECKED_EXPECTS_MSG,
-                  "Bytes.setLengthUnchecked(length) expects integer length");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_SET_LENGTH_UNCHECKED_RECEIVER_MSG,
-                  "Bytes.setLengthUnchecked receiver must be Bytes");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_SET_LENGTH_UNCHECKED_OOB_MSG,
-                  "Bytes.setLengthUnchecked range/capacity precondition failed");
 }
 
 TEST(error_core_defines_array_messages) {

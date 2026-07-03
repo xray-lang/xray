@@ -21,9 +21,7 @@ fn test_bytes_intrinsics_and_capacity() {
     let dst = Bytes.withCapacity(6)
     assert_eq(dst.length, 0)
     assert_eq(dst.capacity, 6)
-    unsafe {
-        dst.appendFromUnchecked(view, 1, 3)
-    }
+    dst.appendFrom(view[1:4])
     assert_eq(dst.length, 3)
     assert_eq(dst[0], 2)
     assert_eq(dst[1], 3)
@@ -34,10 +32,8 @@ fn test_bytes_intrinsics_and_capacity() {
     seed[0] = 65
     seed[1] = 66
     seed[2] = 67
-    unsafe {
-        rep.appendFromUnchecked(seed, 0, 3)
-        rep.repeatFromUnchecked(3, 6)
-    }
+    rep.appendFrom(seed)
+    rep.repeatFrom(3, 6)
     assert_eq(rep[0], 65)
     assert_eq(rep[1], 66)
     assert_eq(rep[2], 67)

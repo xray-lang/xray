@@ -1,23 +1,15 @@
 fn makeCursorBytes() -> Bytes {
-    let src = Bytes.withCapacity(4)
-    unsafe {
-        src.pushUnchecked(65)
-        src.pushUnchecked(66)
-        src.pushUnchecked(67)
-        src.pushUnchecked(68)
-    }
+    let src = Bytes(4)
+    src[0] = 65
+    src[1] = 66
+    src[2] = 67
+    src[3] = 68
 
     let out = Bytes.withCapacity(8)
-    unsafe {
-        out.writeFromUnchecked(0, src, 0, 4)
-        out.repeatAtUnchecked(4, 4, 4)
-    }
-
-    print(out.length)
-
-    unsafe {
-        out.setLengthUnchecked(8)
-    }
+    out.resize(8)
+    out[0:4].copyFrom(src)
+    let view: ByteSpan = out
+    view.repeatFrom(4, 4, 4)
 
     return out
 }

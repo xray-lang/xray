@@ -793,8 +793,6 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             return xrt_array_reserve_value(recv, arg0);
         if (sym == XRT_SYM_APPEND_FROM)
             return xrt_bytes_append_from_value(recv, arg0);
-        if (sym == XRT_SYM_SET_LENGTH_UNCHECKED)
-            return xrt_bytes_set_length_unchecked_value(recv, arg0);
         if (sym == XRT_SYM_RESIZE)
             return xrt_array_resize_value(
                 recv, arg0, a->elem_type == XR_ELEM_CHAR ? XR_FROM_CHAR(0) : XR_FROM_INT(0));
@@ -1045,8 +1043,6 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         return xrt_array_resize_value(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REPEATFROM)
         return xrt_bytes_repeat_from_tail_value(recv, arg0, arg1);
-    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REPEAT_FROM_UNCHECKED)
-        return xrt_bytes_repeat_from_unchecked_value(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         return xrt_array_fill_value(recv, arg0, arg1, XR_FROM_INT(a->length));
@@ -1067,14 +1063,6 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
 
 static inline XrValue xrt_method_3(XrValue recv, int sym, XrValue arg0, XrValue arg1,
                                    XrValue arg2) {
-    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_APPEND_FROM_UNCHECKED)
-        return xrt_bytes_append_from_unchecked_value(recv, arg0, arg1, arg2);
-    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REPEAT_AT_UNCHECKED)
-        return xrt_bytes_repeat_at_unchecked_value(recv, arg0, arg1, arg2);
-    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_WILD_REPEAT_AT_UNCHECKED)
-        return xrt_bytes_wild_repeat_at_unchecked_value(recv, arg0, arg1, arg2);
-    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_COMMON_PREFIX_UNCHECKED)
-        return xrt_bytes_common_prefix_unchecked_value(recv, arg0, arg1, arg2);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL)
         return xrt_array_fill_value(recv, arg0, arg1, arg2);
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
@@ -1082,11 +1070,6 @@ static inline XrValue xrt_method_3(XrValue recv, int sym, XrValue arg0, XrValue 
 
 static inline XrValue xrt_method_4(XrValue recv, int sym, XrValue arg0, XrValue arg1, XrValue arg2,
                                    XrValue arg3) {
-    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_WRITE_FROM_UNCHECKED)
-        return xrt_bytes_write_from_unchecked_value(recv, arg0, arg1, arg2, arg3);
-    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_WILD_COPY_FROM_NONOVERLAPPING_UNCHECKED)
-        return xrt_bytes_wild_copy_from_nonoverlapping_unchecked_value(recv, arg0, arg1, arg2,
-                                                                       arg3);
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
