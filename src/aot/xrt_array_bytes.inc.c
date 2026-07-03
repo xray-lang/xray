@@ -326,6 +326,54 @@ static inline void xrt_span_bytes_store_u64_checked_raw(xr_span_t span, int64_t 
                         "ByteSpan.store<uint64>() offset out of bounds");
 }
 
+static inline xr_span_t xrt_span_bytes_fill_checked_raw(xr_span_t span, int64_t value) {
+    if (span.elem_type != XR_ELEM_U8)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.fill(value) expects ByteSpan");
+    if (xrt_span_is_readonly(span))
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+    if (span.length > 0 && !span.data)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "ByteSpan.fill(value) range out of bounds");
+    if (span.length > 0)
+        memset(span.data, (uint8_t) value, (size_t) span.length);
+    return span;
+}
+
+static inline xr_span_t xrt_span_bytes_copy_checked_raw(xr_span_t dst, xr_span_t src) {
+    if (dst.elem_type != XR_ELEM_U8)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.copyFrom(src) receiver must be ByteSpan");
+    if (src.elem_type != XR_ELEM_U8)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.copyFrom(src) source must be ByteSpan");
+    if (xrt_span_is_readonly(dst))
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+    if (!xr_array_core_bytes_copy_from(dst.data, dst.length, dst.elem_type, src.data, src.length,
+                                       src.elem_type, 0, 0, src.length, false))
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "ByteSpan.copyFrom(src) range out of bounds");
+    return dst;
+}
+
+static inline int64_t xrt_span_bytes_compare_checked_raw(xr_span_t left, xr_span_t right) {
+    if (left.elem_type != XR_ELEM_U8)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.compare(other) receiver must be ByteSpan");
+    if (right.elem_type != XR_ELEM_U8)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.compare(other) operand must be ByteSpan");
+    int64_t n = left.length < right.length ? left.length : right.length;
+    int cmp = 0;
+    if (n > 0) {
+        if (!left.data || !right.data)
+            xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.compare(other) span has no data");
+        cmp = memcmp(left.data, right.data, (size_t) n);
+    }
+    if (cmp < 0)
+        return -1;
+    if (cmp > 0)
+        return 1;
+    if (left.length < right.length)
+        return -1;
+    if (left.length > right.length)
+        return 1;
+    return 0;
+}
+
 static inline xr_span_t xrt_byte_span_from_value(XrValue recv, const char *message) {
     if (!XR_IS_ARRAY(recv) || !recv.ptr)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, message);

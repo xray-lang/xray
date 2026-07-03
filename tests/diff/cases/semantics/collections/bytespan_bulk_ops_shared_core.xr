@@ -1,0 +1,29 @@
+// anchor: bytespan-bulk-ops-shared-core
+let dst = Bytes(8)
+let src = Bytes(4)
+
+let dstView: ByteSpan = dst
+let srcView: ByteSpan = src
+
+dstView.fill(1)
+srcView.fill(7)
+srcView.store<uint16>(1, 0x0908, Endian.LE)
+
+let copied: ByteSpan = dstView[2:6].copyFrom(srcView)
+print(dst[0])
+print(dst[1])
+print(dst[2])
+print(dst[3])
+print(dst[4])
+print(dst[5])
+print(dst[6])
+print(dst[7])
+print(copied.length)
+
+print(dstView[2:6].compare(srcView))
+print(dstView[0:4].compare(srcView))
+print(srcView.compare(dstView[0:4]))
+
+let prefix: ByteSpan = dstView[2:5]
+print(prefix.compare(srcView))
+print(srcView.compare(prefix))

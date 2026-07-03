@@ -1080,6 +1080,108 @@ VM_BYTES_STORE_CASE(OP_BYTES_STORE_U64, xr_array_core_bytes_store_u64, uint64_t,
 #undef VM_BYTES_LOAD_CASE
 #undef VM_PARSE_ENDIAN_ARG
 
+#define VM_BYTESPAN_VIEW(value, out_data, out_length, out_readonly, message)                       \
+    do {                                                                                           \
+        XrValue _span_value = (value);                                                             \
+        if (XR_IS_SPAN_REF(_span_value)) {                                                         \
+            XrSpanView *_span = XR_TO_SPAN_REF(_span_value);                                       \
+            if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                 \
+            }                                                                                      \
+            (out_data) = _span->data;                                                              \
+            (out_length) = _span->length;                                                          \
+            (out_readonly) = ((_span->reserved & XR_SPAN_VIEW_READONLY) != 0);                     \
+        } else if (XR_IS_ARRAY(_span_value)) {                                                     \
+            XrArray *_arr = XR_TO_ARRAY(_span_value);                                              \
+            if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                 \
+            }                                                                                      \
+            (out_data) = _arr->data;                                                               \
+            (out_length) = _arr->length;                                                           \
+            (out_readonly) = false;                                                                \
+        } else {                                                                                   \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                     \
+        }                                                                                          \
+    } while (0)
+
+vmcase(OP_BYTES_SPAN_FILL) {
+    int a = GETARG_A(i);
+    void *dst_data = NULL;
+    int64_t dst_length = 0;
+    bool dst_readonly = false;
+    VM_BYTESPAN_VIEW(R(a), dst_data, dst_length, dst_readonly,
+                     "ByteSpan.fill(value) expects ByteSpan");
+    if (dst_readonly) {
+        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+    }
+    if (!XR_IS_INT(R(a + 1))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.fill(value) expects integer byte value");
+    }
+    if (!xr_array_core_bytes_fill_value(dst_data, dst_length, R(a + 1))) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "ByteSpan.fill(value) range out of bounds");
+    }
+    vmbreak;
+}
+
+vmcase(OP_BYTES_SPAN_COPY) {
+    int a = GETARG_A(i);
+    void *dst_data = NULL;
+    void *src_data = NULL;
+    int64_t dst_length = 0;
+    int64_t src_length = 0;
+    bool dst_readonly = false;
+    bool src_readonly = false;
+    VM_BYTESPAN_VIEW(R(a), dst_data, dst_length, dst_readonly,
+                     "ByteSpan.copyFrom(src) receiver must be ByteSpan");
+    VM_BYTESPAN_VIEW(R(a + 1), src_data, src_length, src_readonly,
+                     "ByteSpan.copyFrom(src) source must be ByteSpan");
+    (void) src_readonly;
+    if (dst_readonly) {
+        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+    }
+    if (!xr_array_core_bytes_copy_from(dst_data, dst_length, XR_ELEM_U8, src_data, src_length,
+                                       XR_ELEM_U8, 0, 0, src_length, false)) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "ByteSpan.copyFrom(src) range out of bounds");
+    }
+    vmbreak;
+}
+
+vmcase(OP_BYTES_SPAN_COMPARE) {
+    int a = GETARG_A(i);
+    void *left_data = NULL;
+    void *right_data = NULL;
+    int64_t left_length = 0;
+    int64_t right_length = 0;
+    bool left_readonly = false;
+    bool right_readonly = false;
+    VM_BYTESPAN_VIEW(R(a), left_data, left_length, left_readonly,
+                     "ByteSpan.compare(other) receiver must be ByteSpan");
+    VM_BYTESPAN_VIEW(R(a + 1), right_data, right_length, right_readonly,
+                     "ByteSpan.compare(other) operand must be ByteSpan");
+    (void) left_readonly;
+    (void) right_readonly;
+    int64_t n = left_length < right_length ? left_length : right_length;
+    int cmp = 0;
+    if (n > 0) {
+        if (!left_data || !right_data) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.compare(other) span has no data");
+        }
+        cmp = memcmp(left_data, right_data, (size_t) n);
+    }
+    if (cmp == 0) {
+        if (left_length < right_length)
+            cmp = -1;
+        else if (left_length > right_length)
+            cmp = 1;
+    } else {
+        cmp = cmp < 0 ? -1 : 1;
+    }
+    R(a) = xr_int(cmp);
+    vmbreak;
+}
+
+#undef VM_BYTESPAN_VIEW
+
 /* FFI raw-pointer access. B (load) / A (store) holds an address-width int;
  * C is the XrFFIType width of the pointee. No bounds/null check (unsafe). */
 vmcase(OP_PTR_LOAD) {

@@ -1,0 +1,5 @@
+contains=function 1 name=bulk module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
+regex=array-storage [0-9]+ func=bulk value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
+c_contains=xrt_span_bytes_fill_checked_raw(
+c_contains=xrt_span_bytes_copy_checked_raw(
+c_contains=xrt_span_bytes_compare_checked_raw(
