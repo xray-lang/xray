@@ -2603,6 +2603,7 @@ static bool cg_borrowed_array_slot_user_is_borrow(const XiCgenCtx *ctx_ro, const
             return arg_index == 0;
         case XI_BYTES_SPAN_COPY:
         case XI_BYTES_SPAN_COMPARE:
+        case XI_BYTES_SPAN_COMMON_PREFIX:
             return arg_index == 0 || arg_index == 1;
         case XI_CALL: {
             if (arg_index == 0)

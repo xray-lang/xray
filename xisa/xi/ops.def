@@ -567,6 +567,15 @@
   :observable (span-compare)
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.bytes.span.common.prefix
+  :class memory-read
+  :arity 2
+  :own-use borrow
+  :effects (may-throw memory-read)
+  :requires (bytespan bounds)
+  :observable (span-common-prefix)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.span.as.bytes
   :class memory-read
   :arity 1

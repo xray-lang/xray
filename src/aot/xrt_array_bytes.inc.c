@@ -374,6 +374,24 @@ static inline int64_t xrt_span_bytes_compare_checked_raw(xr_span_t left, xr_span
     return 0;
 }
 
+static inline int64_t xrt_span_bytes_common_prefix_checked_raw(xr_span_t left, xr_span_t right) {
+    if (left.elem_type != XR_ELEM_U8)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "ByteSpan.commonPrefix(other) receiver must be ByteSpan");
+    if (right.elem_type != XR_ELEM_U8)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
+                        "ByteSpan.commonPrefix(other) operand must be ByteSpan");
+    int64_t n = left.length < right.length ? left.length : right.length;
+    if (n > 0 && (!left.data || !right.data))
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.commonPrefix(other) span has no data");
+    const uint8_t *l = (const uint8_t *) left.data;
+    const uint8_t *r = (const uint8_t *) right.data;
+    int64_t prefix = 0;
+    while (prefix < n && l[prefix] == r[prefix])
+        prefix++;
+    return prefix;
+}
+
 static inline xr_span_t xrt_byte_span_from_value(XrValue recv, const char *message) {
     if (!XR_IS_ARRAY(recv) || !recv.ptr)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, message);

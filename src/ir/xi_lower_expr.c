@@ -3277,6 +3277,16 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     v->line = (uint32_t) node->line;
                     return v;
                 }
+                if (strcmp(ma->name, "commonPrefix") == 0 && n == 1) {
+                    XiValue *v = xi_value_new(l->func, l->cur_block, XI_BYTES_SPAN_COMMON_PREFIX,
+                                              l->type_int, 2);
+                    if (!v)
+                        return NULL;
+                    v->args[0] = recv;
+                    v->args[1] = arg_vals[0];
+                    v->line = (uint32_t) node->line;
+                    return v;
+                }
             }
         }
 

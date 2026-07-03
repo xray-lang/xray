@@ -1311,6 +1311,33 @@ vmcase(OP_BYTES_SPAN_COMPARE) {
     vmbreak;
 }
 
+vmcase(OP_BYTES_SPAN_COMMON_PREFIX) {
+    int a = GETARG_A(i);
+    void *left_data = NULL;
+    void *right_data = NULL;
+    int64_t left_length = 0;
+    int64_t right_length = 0;
+    bool left_readonly = false;
+    bool right_readonly = false;
+    VM_BYTESPAN_VIEW(R(a), left_data, left_length, left_readonly,
+                     "ByteSpan.commonPrefix(other) receiver must be ByteSpan");
+    VM_BYTESPAN_VIEW(R(a + 1), right_data, right_length, right_readonly,
+                     "ByteSpan.commonPrefix(other) operand must be ByteSpan");
+    (void) left_readonly;
+    (void) right_readonly;
+    int64_t n = left_length < right_length ? left_length : right_length;
+    if (n > 0 && (!left_data || !right_data)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.commonPrefix(other) span has no data");
+    }
+    const uint8_t *left = (const uint8_t *) left_data;
+    const uint8_t *right = (const uint8_t *) right_data;
+    int64_t prefix = 0;
+    while (prefix < n && left[prefix] == right[prefix])
+        prefix++;
+    R(a) = xr_int(prefix);
+    vmbreak;
+}
+
 #undef VM_BYTESPAN_VIEW
 
 /* FFI raw-pointer access. B (load) / A (store) holds an address-width int;
