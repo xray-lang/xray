@@ -538,6 +538,35 @@
   :observable (u64-wrap)
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.bytes.span.fill
+  :class memory-write
+  :arity 2
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (side-effect may-throw memory-write)
+  :requires (bytespan bounds)
+  :observable (span-fill)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bytes.span.copy
+  :class memory-write
+  :arity 2
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (side-effect may-throw memory-read memory-write)
+  :requires (bytespan bounds overlap-safe)
+  :observable (span-copy)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bytes.span.compare
+  :class memory-read
+  :arity 2
+  :own-use borrow
+  :effects (may-throw memory-read)
+  :requires (bytespan bounds)
+  :observable (span-compare)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.bytes.copy.within
   :class memory-write
   :arity 4

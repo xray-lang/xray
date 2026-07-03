@@ -214,6 +214,18 @@ static XrType *xa_bytespan_method_type(XaInferContext *ctx, XrType *receiver, co
         }
         return fn;
     }
+    if (strcmp(name, "fill") == 0) {
+        XrType *params[1] = {xr_type_new_int_width(X, XR_NATIVE_U8)};
+        return xr_type_new_function(X, params, 1, xr_type_new_bytespan(X), false);
+    }
+    if (strcmp(name, "copyFrom") == 0) {
+        XrType *params[1] = {xr_type_new_bytespan(X)};
+        return xr_type_new_function(X, params, 1, xr_type_new_bytespan(X), false);
+    }
+    if (strcmp(name, "compare") == 0) {
+        XrType *params[1] = {xr_type_new_bytespan(X)};
+        return xr_type_new_function(X, params, 1, xr_type_new_int(X), false);
+    }
     if (strcmp(name, "commonPrefixUnchecked") == 0) {
         XrType *params[3] = {xr_type_new_int(X), xr_type_new_int(X), xr_type_new_int(X)};
         return xr_type_new_function(X, params, 3, xr_type_new_int(X), false);

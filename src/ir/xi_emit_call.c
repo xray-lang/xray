@@ -404,6 +404,18 @@ XR_FUNC void xi_emit_bytes_store_u64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTES_STORE_U64);
 }
 
+XR_FUNC void xi_emit_bytes_span_fill(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_SPAN_FILL, 2);
+}
+
+XR_FUNC void xi_emit_bytes_span_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_SPAN_COPY, 2);
+}
+
+XR_FUNC void xi_emit_bytes_span_compare(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_SPAN_COMPARE, 2);
+}
+
 /* Unsafe container data pointer: R[dst] = (uintptr_t)Array/Span.data. */
 XR_FUNC void xi_emit_array_data_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs != 1) {

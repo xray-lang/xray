@@ -1279,7 +1279,11 @@ static bool xicgen_op_arg_keeps_span_noescape(XiCgenCtx *ctx, const XiFunc *curr
         case XI_BYTES_STORE_U16:
         case XI_BYTES_STORE_U32:
         case XI_BYTES_STORE_U64:
+        case XI_BYTES_SPAN_FILL:
             return arg_index == 0;
+        case XI_BYTES_SPAN_COPY:
+        case XI_BYTES_SPAN_COMPARE:
+            return arg_index == 0 || arg_index == 1;
         case XI_BYTES_COPY_FROM:
             return arg_index == 1;
         case XI_CALL: {
@@ -5476,6 +5480,44 @@ static void xicgen_bytes_store_u64(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
     fprintf(out, ")");
+}
+
+static void xicgen_bytes_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                   const char *prefix) {
+    (void) f;
+    (void) prefix;
+    (void) ctx;
+    fprintf(out, "xrt_span_bytes_fill_checked_raw(");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+    fprintf(out, ")");
+}
+
+static void xicgen_bytes_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                   const char *prefix) {
+    (void) f;
+    (void) prefix;
+    (void) ctx;
+    fprintf(out, "xrt_span_bytes_copy_checked_raw(");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ", ");
+    emit_span_ref_expr(out, v->args[1]);
+    fprintf(out, ")");
+}
+
+static void xicgen_bytes_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      const char *prefix) {
+    (void) f;
+    (void) prefix;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "xrt_span_bytes_compare_checked_raw(");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ", ");
+    emit_span_ref_expr(out, v->args[1]);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
 }
 
 static void xicgen_bytes_copy_within(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

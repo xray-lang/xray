@@ -141,6 +141,9 @@
     X(BYTES_STORE_U16, xi_emit_bytes_store_u16) \
     X(BYTES_STORE_U32, xi_emit_bytes_store_u32) \
     X(BYTES_STORE_U64, xi_emit_bytes_store_u64) \
+    X(BYTES_SPAN_FILL, xi_emit_bytes_span_fill) \
+    X(BYTES_SPAN_COPY, xi_emit_bytes_span_copy) \
+    X(BYTES_SPAN_COMPARE, xi_emit_bytes_span_compare) \
     X(BYTES_COPY_WITHIN, xi_emit_bytes_copy_within) \
     X(BYTES_COPY_FROM, xi_emit_bytes_copy_from) \
     X(BYTES_REPEAT_FROM, xi_emit_bytes_repeat_from) \

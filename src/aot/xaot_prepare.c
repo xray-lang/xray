@@ -1212,10 +1212,14 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
         case XI_BYTES_STORE_U16:
         case XI_BYTES_STORE_U32:
         case XI_BYTES_STORE_U64:
+        case XI_BYTES_SPAN_FILL:
         case XI_ARRAY_DATA_PTR:
         case XI_BYTES_COPY_WITHIN:
         case XI_BYTES_REPEAT_FROM:
             return arg_index == 0;
+        case XI_BYTES_SPAN_COPY:
+        case XI_BYTES_SPAN_COMPARE:
+            return arg_index == 0 || arg_index == 1;
         case XI_BYTES_COPY_FROM:
             return arg_index == 0 || arg_index == 1;
         case XI_LOAD_FIELD: {
