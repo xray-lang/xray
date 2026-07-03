@@ -1,5 +1,6 @@
 c_contains=#include "xrt_thread_aot.h"
 c_contains=xrt_thread_spawn_aot(&
+c_contains=NULL, 0);
 c_contains=_aot_frame_new
 c_contains=_aot_desc
 c_not_contains=unsupported coroutine Xi op THREAD_SPAWN

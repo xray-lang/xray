@@ -1,1 +1,1 @@
-sys.Thread.spawn ThreadOptions currently supports only stackSize/name
+sys.Thread.spawn ThreadOptions currently supports only stackSize/name/affinity

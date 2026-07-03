@@ -361,6 +361,15 @@ XR_FUNC void xi_emit_thread_spawn(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABx(OP_NOP, 7, (uint32_t) stack_k));
     }
 
+    const uint32_t *affinity_cpus = xi_thread_spawn_affinity_cpus(v);
+    uint16_t affinity_count = xi_thread_spawn_affinity_count(v);
+    for (uint16_t i = 0; i < affinity_count; i++) {
+        int cpu_k = add_const_int(ctx, affinity_cpus[i]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABx(OP_NOP, 8, (uint32_t) cpu_k));
+    }
+
     bool has_transfer_modes = false;
     for (uint16_t i = 0; i < nargs; i++) {
         if (xi_go_arg_transfer_mode(v, i) != XR_TRANSFER_SHARE) {

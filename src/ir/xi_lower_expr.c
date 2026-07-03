@@ -2197,6 +2197,18 @@ static XiThreadSpawnOptions lower_thread_spawn_options(CallExprNode *call) {
             opts.stack_size = n > 0 ? n : 0;
         } else if (strcmp(name, "name") == 0 && value->type == AST_LITERAL_STRING) {
             opts.name = value->as.literal.raw_value.string_val;
+        } else if (strcmp(name, "affinity") == 0 && value->type == AST_ARRAY_LITERAL) {
+            ArrayLiteralNode *arr = &value->as.array_literal;
+            int count = arr->count < XR_THREAD_AFFINITY_MAX ? arr->count : XR_THREAD_AFFINITY_MAX;
+            for (int ai = 0; ai < count; ai++) {
+                AstNode *elem = arr->elements ? arr->elements[ai] : NULL;
+                if (!elem || elem->type != AST_LITERAL_INT)
+                    continue;
+                int64_t cpu = elem->as.literal.raw_value.int_val;
+                if (cpu < 0)
+                    continue;
+                opts.affinity_cpus[opts.affinity_count++] = (uint32_t) cpu;
+            }
         }
     }
     return opts;
@@ -2208,7 +2220,7 @@ static bool lower_thread_spawn_attach_options(XiLower *l, XiValue *v,
     if (!l || !v)
         return false;
     bool has_modes = modes && mode_count > 0;
-    bool has_options = opts && (opts->name || opts->stack_size > 0);
+    bool has_options = opts && (opts->name || opts->stack_size > 0 || opts->affinity_count > 0);
     if (!has_modes && !has_options)
         return true;
 
@@ -2222,6 +2234,9 @@ static bool lower_thread_spawn_attach_options(XiLower *l, XiValue *v,
         payload->name = opts->name ? arena_strdup(l->func, opts->name) : NULL;
         if (opts->name && !payload->name)
             return false;
+        payload->affinity_count = opts->affinity_count;
+        memcpy(payload->affinity_cpus, opts->affinity_cpus,
+               (size_t) opts->affinity_count * sizeof(uint32_t));
     }
     if (has_modes) {
         payload->transfer_modes = (uint8_t *) xi_func_arena_alloc(

@@ -41,6 +41,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "../base/xdefs.h"
+#include "../base/xconstants.h"
 #include "../runtime/value/xtransfer_mode.h"
 
 /* Forward declarations for types defined in other modules */
@@ -615,6 +616,8 @@ typedef enum {
 typedef struct XiThreadSpawnOptions {
     const char *name;
     int64_t stack_size;
+    uint32_t affinity_cpus[XR_THREAD_AFFINITY_MAX];
+    uint16_t affinity_count;
     uint8_t *transfer_modes;
 } XiThreadSpawnOptions;
 
@@ -722,6 +725,20 @@ static inline const char *xi_thread_spawn_name(const XiValue *v) {
         return NULL;
     const XiThreadSpawnOptions *opts = (const XiThreadSpawnOptions *) v->aux;
     return opts ? opts->name : NULL;
+}
+
+static inline uint16_t xi_thread_spawn_affinity_count(const XiValue *v) {
+    if (!v || v->op != XI_THREAD_SPAWN || v->aux_kind != XI_AUX_KIND_THREAD_SPAWN)
+        return 0;
+    const XiThreadSpawnOptions *opts = (const XiThreadSpawnOptions *) v->aux;
+    return opts ? opts->affinity_count : 0;
+}
+
+static inline const uint32_t *xi_thread_spawn_affinity_cpus(const XiValue *v) {
+    if (!v || v->op != XI_THREAD_SPAWN || v->aux_kind != XI_AUX_KIND_THREAD_SPAWN)
+        return NULL;
+    const XiThreadSpawnOptions *opts = (const XiThreadSpawnOptions *) v->aux;
+    return (opts && opts->affinity_count > 0) ? opts->affinity_cpus : NULL;
 }
 
 static inline uint8_t xi_go_arg_transfer_mode(const XiValue *go, uint16_t arg_index) {

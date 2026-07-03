@@ -1180,6 +1180,18 @@ static bool emit_thread_spawn_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc
     }
 
     emit_value_source_line(ctx, out, v);
+    const uint32_t *affinity_cpus = xi_thread_spawn_affinity_cpus(v);
+    uint16_t affinity_count = xi_thread_spawn_affinity_count(v);
+    if (affinity_count > 0 && affinity_cpus) {
+        fprintf(out, "    static const uint32_t _thread_affinity_%u[%u] = {", v->id,
+                (unsigned) affinity_count);
+        for (uint16_t i = 0; i < affinity_count; i++) {
+            if (i > 0)
+                fprintf(out, ", ");
+            fprintf(out, "%uu", (unsigned) affinity_cpus[i]);
+        }
+        fprintf(out, "};\n");
+    }
     fprintf(out, "    void *_thread_frame_%u = ", v->id);
     emit_fname_suffix(ctx, out, thread_prefix, target, "_aot_frame_new");
     fprintf(out, "(");
@@ -1198,7 +1210,11 @@ static bool emit_thread_spawn_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc
         xicgen_emit_c_string_literal(out, thread_name);
     else
         fprintf(out, "NULL");
-    fprintf(out, ");\n");
+    if (affinity_count > 0 && affinity_cpus) {
+        fprintf(out, ", _thread_affinity_%u, %u);\n", v->id, (unsigned) affinity_count);
+    } else {
+        fprintf(out, ", NULL, 0);\n");
+    }
     if (in_coro) {
         fprintf(out, "    if (XR_UNLIKELY(XR_IS_NULL(");
         emit_vref(out, v);

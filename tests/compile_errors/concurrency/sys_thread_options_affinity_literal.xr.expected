@@ -1,0 +1,1 @@
+sys.Thread.spawn ThreadOptions.affinity must contain only non-negative integer literals

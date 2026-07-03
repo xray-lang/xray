@@ -25,6 +25,7 @@
 #include "xanalyzer_mono.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xchecks.h"
+#include "../../base/xconstants.h"
 #include "../../base/xhashmap.h"
 
 static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *object) {
@@ -180,6 +181,45 @@ static bool xa_thread_spawn_options_is_string_literal(AstNode *node) {
     return node && node->type == AST_LITERAL_STRING;
 }
 
+static void xa_check_thread_spawn_affinity_option(XaInferContext *ctx, AstNode *node,
+                                                  AstNode *value) {
+    if (!ctx || !node)
+        return;
+    XrLocation floc = {.file = ctx->file_path,
+                       .line = value ? value->line : node->line,
+                       .column = value ? value->column : node->column};
+    if (!value || value->type != AST_ARRAY_LITERAL) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "sys.Thread.spawn ThreadOptions.affinity must be an array literal of non-negative "
+            "integer literals",
+            &floc);
+        return;
+    }
+
+    ArrayLiteralNode *arr = &value->as.array_literal;
+    if (arr->count > XR_THREAD_AFFINITY_MAX) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "sys.Thread.spawn ThreadOptions.affinity supports at most 32 CPU hints", &floc);
+        return;
+    }
+    for (int i = 0; i < arr->count; i++) {
+        AstNode *elem = arr->elements ? arr->elements[i] : NULL;
+        int64_t cpu = 0;
+        if (!xa_thread_spawn_options_is_int_literal(elem, &cpu) || cpu < 0) {
+            XrLocation eloc = {.file = ctx->file_path,
+                               .line = elem ? elem->line : value->line,
+                               .column = elem ? elem->column : value->column};
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                "sys.Thread.spawn ThreadOptions.affinity must contain only non-negative integer "
+                "literals",
+                &eloc);
+        }
+    }
+}
+
 static void xa_check_thread_spawn_options(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return;
@@ -187,7 +227,8 @@ static void xa_check_thread_spawn_options(XaInferContext *ctx, AstNode *node) {
     if (node->type != AST_STRUCT_LITERAL) {
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "sys.Thread.spawn options must be ThreadOptions{ stackSize: <int>, name: <string> }",
+            "sys.Thread.spawn options must be ThreadOptions{ stackSize: <int>, name: <string>, "
+            "affinity: [<int>, ...] }",
             &loc);
         return;
     }
@@ -204,13 +245,15 @@ static void xa_check_thread_spawn_options(XaInferContext *ctx, AstNode *node) {
         const char *name = sl->field_names ? sl->field_names[i] : NULL;
         if (value)
             xa_visit_infer_expr(ctx, value);
-        if (!name || (strcmp(name, "stackSize") != 0 && strcmp(name, "name") != 0)) {
+        if (!name || (strcmp(name, "stackSize") != 0 && strcmp(name, "name") != 0 &&
+                      strcmp(name, "affinity") != 0)) {
             XrLocation floc = {.file = ctx->file_path,
                                .line = value ? value->line : node->line,
                                .column = value ? value->column : node->column};
             xa_analyzer_add_diagnostic(
                 ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                "sys.Thread.spawn ThreadOptions currently supports only stackSize/name", &floc);
+                "sys.Thread.spawn ThreadOptions currently supports only stackSize/name/affinity",
+                &floc);
             continue;
         }
         if (strcmp(name, "stackSize") == 0) {
@@ -225,13 +268,17 @@ static void xa_check_thread_spawn_options(XaInferContext *ctx, AstNode *node) {
                                            "non-negative integer literal",
                                            &floc);
             }
-        } else if (!xa_thread_spawn_options_is_string_literal(value)) {
-            XrLocation floc = {.file = ctx->file_path,
-                               .line = value ? value->line : node->line,
-                               .column = value ? value->column : node->column};
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                "sys.Thread.spawn ThreadOptions.name must be a string literal", &floc);
+        } else if (strcmp(name, "name") == 0) {
+            if (!xa_thread_spawn_options_is_string_literal(value)) {
+                XrLocation floc = {.file = ctx->file_path,
+                                   .line = value ? value->line : node->line,
+                                   .column = value ? value->column : node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                    "sys.Thread.spawn ThreadOptions.name must be a string literal", &floc);
+            }
+        } else if (strcmp(name, "affinity") == 0) {
+            xa_check_thread_spawn_affinity_option(ctx, node, value);
         }
     }
 }

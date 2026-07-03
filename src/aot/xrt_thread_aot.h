@@ -11,7 +11,10 @@
 #ifndef XRT_THREAD_AOT_H
 #define XRT_THREAD_AOT_H
 
+#include "../base/xconstants.h"
 #include "xrt_sys.h"
+
+#include <string.h>
 
 #ifdef XRT_ENABLE_SYS_THREAD
 #include "xrt_exception.h"
@@ -21,6 +24,8 @@ typedef struct xrt_thread_aot_entry {
     xrt_thread_object_t *thread;
     const XrAotCoroDesc *desc;
     const char *name;
+    uint32_t affinity_cpus[XR_THREAD_AFFINITY_MAX];
+    uint8_t affinity_count;
     void *frame;
 } xrt_thread_aot_entry_t;
 
@@ -39,6 +44,15 @@ static inline void xrt_thread_aot_set_pending_error(const char *message) {
     XRT_THREAD_SET_PENDING_ERROR(xrt_exception_new_value(XR_ERR_RUNTIME, message, strlen(message)));
 }
 
+static inline void xrt_thread_apply_affinity(const uint32_t *cpus, uint8_t count) {
+    if (!cpus || count == 0)
+        return;
+    for (uint8_t i = 0; i < count; i++) {
+        if (xr_thread_pin_to_cpu(cpus[i]) == 0)
+            return;
+    }
+}
+
 static void *xrt_thread_aot_entry(void *arg) {
     xrt_thread_aot_entry_t *entry = (xrt_thread_aot_entry_t *) arg;
     if (!entry)
@@ -47,6 +61,9 @@ static void *xrt_thread_aot_entry(void *arg) {
     xrt_thread_object_t *thread = entry->thread;
     const XrAotCoroDesc *desc = entry->desc;
     const char *name = entry->name ? entry->name : (desc ? desc->name : NULL);
+    uint32_t affinity_cpus[XR_THREAD_AFFINITY_MAX];
+    uint8_t affinity_count = entry->affinity_count;
+    memcpy(affinity_cpus, entry->affinity_cpus, (size_t) affinity_count * sizeof(uint32_t));
     void *frame = entry->frame;
     XRT_FREE(entry);
 
@@ -55,6 +72,7 @@ static void *xrt_thread_aot_entry(void *arg) {
 
     if (name)
         xr_thread_set_name(xr_thread_self(), name);
+    xrt_thread_apply_affinity(affinity_cpus, affinity_count);
 
     XrAotResult result =
         desc && desc->resume ? desc->resume(frame, NULL) : xr_aot_error(XR_NULL_VAL, false);
@@ -77,7 +95,8 @@ static void *xrt_thread_aot_entry(void *arg) {
 }
 
 static inline XrValue xrt_thread_spawn_aot(const XrAotCoroDesc *desc, void *frame,
-                                           size_t stack_size, const char *name) {
+                                           size_t stack_size, const char *name,
+                                           const uint32_t *affinity_cpus, size_t affinity_count) {
     if (!desc || !desc->resume || !frame) {
         xrt_thread_aot_release_frame(desc, frame);
         xrt_thread_aot_set_pending_error("sys.Thread.spawn: failed to allocate thread frame");
@@ -104,6 +123,13 @@ static inline XrValue xrt_thread_spawn_aot(const XrAotCoroDesc *desc, void *fram
     entry->thread = thread;
     entry->desc = desc;
     entry->name = name;
+    entry->affinity_count = 0;
+    if (affinity_cpus && affinity_count > 0) {
+        size_t count =
+            affinity_count < XR_THREAD_AFFINITY_MAX ? affinity_count : XR_THREAD_AFFINITY_MAX;
+        entry->affinity_count = (uint8_t) count;
+        memcpy(entry->affinity_cpus, affinity_cpus, count * sizeof(uint32_t));
+    }
     entry->frame = frame;
 
     XrValue handle = xrt_thread_box(thread);
