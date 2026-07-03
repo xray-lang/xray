@@ -1,0 +1,3 @@
+fn repeat(input: in ByteSpan) {
+    input.repeatFrom(1, 1, 1)
+}

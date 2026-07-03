@@ -2191,6 +2191,7 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
             return XR_REP_I64;
         case XI_BYTES_SPAN_FILL:
         case XI_BYTES_SPAN_COPY:
+        case XI_BYTES_SPAN_REPEAT:
         case XI_SPAN_AS_BYTES:
         case XI_SPAN_REINTERPRET:
             return sr_type_native_boundary_rep(v->type);
@@ -2310,6 +2311,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             *out = (arg_idx == 1 || arg_idx == 2) ? XR_REP_I64 : XR_REP_TAGGED;
             return true;
         case XI_BYTES_SPAN_FILL:
+        case XI_BYTES_SPAN_REPEAT:
             *out = arg_idx == 0 && user->nargs >= 1 && user->args[0]
                        ? sr_type_native_boundary_rep(user->args[0]->type)
                        : XR_REP_I64;

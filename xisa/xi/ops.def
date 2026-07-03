@@ -576,6 +576,16 @@
   :observable (span-common-prefix)
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.bytes.span.repeat
+  :class memory-write
+  :arity 4
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (side-effect may-throw memory-read memory-write)
+  :requires (bytespan bounds overlap-repeat)
+  :observable (span-repeat)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.span.as.bytes
   :class memory-read
   :arity 1
