@@ -52,6 +52,13 @@ static int pack_go_aux(int link_mode) {
     return link_mode & XI_GO_AUX_LINK_MASK;
 }
 
+static int64_t pack_thread_spawn_aux(int64_t stack_size) {
+    if (stack_size <= 0)
+        return 0;
+    int64_t masked = stack_size & XI_THREAD_SPAWN_AUX_STACK_SIZE_MASK;
+    return masked << XI_THREAD_SPAWN_AUX_STACK_SIZE_SHIFT;
+}
+
 static XaSymbol *xi_lower_lookup_class_symbol(XiLower *l, const char *name) {
     if (!l || !l->analyzer || !name)
         return NULL;
@@ -2172,7 +2179,26 @@ static AstNode *lower_thread_spawn_body_arg(CallExprNode *call) {
     return NULL;
 }
 
-static XiValue *lower_thread_spawn_expr(XiLower *l, AstNode *node, AstNode *expr) {
+static int64_t lower_thread_spawn_stack_size(CallExprNode *call) {
+    if (!call || call->arg_count != 2 || !call->arguments[0] ||
+        call->arguments[0]->type != AST_STRUCT_LITERAL)
+        return 0;
+    StructLiteralNode *sl = &call->arguments[0]->as.struct_literal;
+    if (!sl->struct_name || strcmp(sl->struct_name, "ThreadOptions") != 0)
+        return 0;
+    for (int i = 0; i < sl->field_count; i++) {
+        const char *name = sl->field_names ? sl->field_names[i] : NULL;
+        AstNode *value = sl->field_values ? sl->field_values[i] : NULL;
+        if (!name || strcmp(name, "stackSize") != 0 || !value || value->type != AST_LITERAL_INT)
+            continue;
+        int64_t n = value->as.literal.raw_value.int_val;
+        return n > 0 ? n : 0;
+    }
+    return 0;
+}
+
+static XiValue *lower_thread_spawn_expr(XiLower *l, AstNode *node, AstNode *expr,
+                                        int64_t stack_size) {
     struct XrType *result_type = xi_lower_node_type(l, node);
     if (!expr)
         return NULL;
@@ -2204,7 +2230,7 @@ static XiValue *lower_thread_spawn_expr(XiLower *l, AstNode *node, AstNode *expr
             memcpy(modes, args.modes, (size_t) n * sizeof(uint8_t));
             v->aux = modes;
         }
-        v->aux_int = (int64_t) pack_go_aux(XR_LINK_NONE);
+        v->aux_int = pack_thread_spawn_aux(stack_size);
         v->flags |= XI_FLAG_SIDE_EFFECT;
         v->line = (uint32_t) node->line;
         return v;
@@ -2217,7 +2243,7 @@ static XiValue *lower_thread_spawn_expr(XiLower *l, AstNode *node, AstNode *expr
     if (!v)
         return NULL;
     v->args[0] = callee;
-    v->aux_int = (int64_t) pack_go_aux(XR_LINK_NONE);
+    v->aux_int = pack_thread_spawn_aux(stack_size);
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
     return v;
@@ -2226,11 +2252,8 @@ static XiValue *lower_thread_spawn_expr(XiLower *l, AstNode *node, AstNode *expr
 static XiValue *lower_thread_spawn_call(XiLower *l, AstNode *node, CallExprNode *call) {
     if (!call)
         return NULL;
-    if (call->arg_count == 2 && call->arguments[0]) {
-        if (!xi_lower_expr(l, call->arguments[0]))
-            return NULL;
-    }
-    return lower_thread_spawn_expr(l, node, lower_thread_spawn_body_arg(call));
+    return lower_thread_spawn_expr(l, node, lower_thread_spawn_body_arg(call),
+                                   lower_thread_spawn_stack_size(call));
 }
 
 /* Lower Coro.method(args...) → XI_CORO_OP.

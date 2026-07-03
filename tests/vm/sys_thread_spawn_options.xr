@@ -1,0 +1,6 @@
+import sys
+
+let t = sys.Thread.spawn(ThreadOptions{ stackSize: 65536 }, fn() -> int {
+    return 6 * 7
+})
+print(t.join())
