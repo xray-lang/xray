@@ -8,8 +8,7 @@ fn makeCursorBytes() -> Bytes {
     let out = Bytes.withCapacity(8)
     out.resize(8)
     out[0:4].copyFrom(src)
-    let view: ByteSpan = out
-    view.repeatFrom(4, 4, 4)
+    out[0:8].repeatFrom(4, 4, 4)
 
     return out
 }

@@ -2140,7 +2140,7 @@ TEST(cgen_parallel_for_allows_atomic_i64_direct_body) {
     xi_func_free(ir);
 }
 
-TEST(cgen_parallel_for_allows_unchecked_bytes_append_from_array_slot) {
+TEST(cgen_parallel_for_allows_safe_bytes_append_from_array_slot) {
     const char *src = "fn run(n: int) {\n"
                       "    let seed = Bytes.withCapacity(4)\n"
                       "    unsafe {\n"
@@ -2152,11 +2152,9 @@ TEST(cgen_parallel_for_allows_unchecked_bytes_append_from_array_slot) {
                       "    outs.push(Bytes.withCapacity(8))\n"
                       "    outs.push(Bytes.withCapacity(8))\n"
                       "    parallel for i in 0..n workers 2 worker wid {\n"
-                      "        unsafe {\n"
-                      "            let out = outs.getUnchecked(wid)\n"
-                      "            out.resize(0)\n"
-                      "            out.appendFromUnchecked(src, 0, 2)\n"
-                      "        }\n"
+                      "        let out = outs.getUnchecked(wid)\n"
+                      "        out.resize(0)\n"
+                      "        out.appendFrom(src[0:2])\n"
                       "    }\n"
                       "}\n"
                       "run(1)\n";
@@ -2167,16 +2165,16 @@ TEST(cgen_parallel_for_allows_unchecked_bytes_append_from_array_slot) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL);
-    assert(!had_error && "parallel for AOT body should allow unchecked Bytes append on Bytes "
-                         "values loaded from arrays");
+    assert(!had_error && "parallel for AOT body should allow safe Bytes append on Bytes values "
+                         "loaded from arrays");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
-           "unchecked Bytes append body should still use the AOT runtime executor");
-    assert(contains(code, "xrt_bytes_append_from_unchecked_trusted_raw(") &&
-           "appendFromUnchecked should lower to the trusted raw Bytes helper");
+           "safe Bytes append body should still use the AOT runtime executor");
+    assert(contains(code, "xrt_bytes_append_from_span_raw(") &&
+           "appendFrom should lower to the raw Bytes+ByteSpan helper");
     assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
            "borrow-only Array<Bytes>.getUnchecked slot loads should not retain every item");
-    assert(!contains(code, "xrt_method_3(") &&
-           "appendFromUnchecked must not fall back to dynamic method dispatch");
+    assert(!contains(code, "xrt_method_1(") &&
+           "appendFrom must not fall back to dynamic method dispatch");
     const char *body = strstr(code, "static XR_AINLINE void test_run_parallel_for_");
     const char *body_end = body ? next_static_after(body) : NULL;
     assert(body != NULL && body_end != NULL && "parallel for body should be bounded");
@@ -2198,9 +2196,7 @@ TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
                       "    if (out.capacity < mark + 2) {\n"
                       "        return FastResult.Err(-1)\n"
                       "    }\n"
-                      "    unsafe {\n"
-                      "        out.appendFromUnchecked(src, 0, 2)\n"
-                      "    }\n"
+                      "    out.appendFrom(src[0:2])\n"
                       "    return FastResult.Ok(out.length - mark)\n"
                       "}\n"
                       "fn run(n: int) {\n"
@@ -2213,17 +2209,15 @@ TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
                       "    shared const outs: Array<Bytes> = []\n"
                       "    outs.push(Bytes.withCapacity(8))\n"
                       "    parallel for i in 0..n workers 2 {\n"
-                      "        unsafe {\n"
-                      "            let out = outs.getUnchecked(0)\n"
-                      "            out.resize(0)\n"
-                      "            let result = writePrepared(src, out)\n"
-                      "            match (result) {\n"
-                      "                FastResult.Ok(written) -> {\n"
-                      "                    assert(written == 2)\n"
-                      "                }\n"
-                      "                FastResult.Err(code) -> {\n"
-                      "                    assert(code == 0)\n"
-                      "                }\n"
+                      "        let out = outs.getUnchecked(0)\n"
+                      "        out.resize(0)\n"
+                      "        let result = writePrepared(src, out)\n"
+                      "        match (result) {\n"
+                      "            FastResult.Ok(written) -> {\n"
+                      "                assert(written == 2)\n"
+                      "            }\n"
+                      "            FastResult.Err(code) -> {\n"
+                      "                assert(code == 0)\n"
                       "            }\n"
                       "        }\n"
                       "    }\n"
@@ -2240,8 +2234,8 @@ TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
            "parallel for AOT body should allow prepared helper calls on Bytes loaded from arrays");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
            "prepared helper body should still use the AOT runtime executor");
-    assert(contains(code, "xrt_bytes_append_from_unchecked_trusted_raw(") &&
-           "prepared helper should keep the trusted raw Bytes append lowering");
+    assert(contains(code, "xrt_bytes_append_from_span_raw(") &&
+           "prepared helper should keep the raw Bytes+ByteSpan append lowering");
     assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
            "borrow-only Array<Bytes>.getUnchecked should survive through prepared helper calls");
 
@@ -2356,24 +2350,18 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
                       "    let view: ByteSpan = src\n"
                       "    let dst = Bytes.withCapacity(460)\n"
                       "    dst.reserve(460)\n"
-                      "    unsafe {\n"
-                      "        dst.appendFromUnchecked(view, 0, 4)\n"
-                      "        dst.repeatFromUnchecked(2, 2)\n"
-                      "        dst.wildRepeatAtUnchecked(6, 2, 2)\n"
-                      "        dst.wildCopyFromNonOverlappingUnchecked(8, dst, 6, 2)\n"
-                      "        dst.wildCopyFromNonOverlappingUnchecked(32, view, 0, 16)\n"
-                      "        dst.wildRepeatAtUnchecked(16, 4, 96)\n"
-                      "        dst.wildCopyFromNonOverlappingUnchecked(112, dst, 0, 96)\n"
-                      "        dst.wildCopyFromNonOverlappingUnchecked(208, dst, 0, 104)\n"
-                      "        dst.wildCopyFromNonOverlappingUnchecked(312, dst, 0, 112)\n"
-                      "        dst.wildRepeatAtUnchecked(330, 8, 18)\n"
-                      "        dst.setLengthUnchecked(10)\n"
-                      "    }\n"
+                      "    dst.appendFrom(view[0:4])\n"
+                      "    dst.repeatFrom(2, 2)\n"
+                      "    dst.appendFrom(view[0:4])\n"
+                      "    let dstView: ByteSpan = dst\n"
+                      "    dstView.repeatFrom(6, 2, 2)\n"
+                      "    dstView[8:10].copyFrom(dstView[6:8])\n"
+                      "    let prefix = dstView[0:2].commonPrefix(dstView[4:6])\n"
                       "    let v16: uint16 = view.load<uint16>(0, Endian.LE)\n"
                       "    let v32: uint32 = view.load<uint32>(0, Endian.LE)\n"
                       "    let v64: uint64 = view.load<uint64>(0, Endian.LE)\n"
                       "    view.store<uint16>(8, v16, Endian.LE)\n"
-                      "    return int(v16) + int(v32) + int(v64) + dst[5] + dst[9]\n"
+                      "    return int(v16) + int(v32) + int(v64) + dst[5] + dst[9] + prefix\n"
                       "}\n"
                       "print(run())\n";
 
@@ -2402,42 +2390,25 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
            "ByteSpan.load<uint64> must lower to the span AOT helper");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_store_u16_checked_raw(") > 0 &&
            "ByteSpan.store<uint16> must lower to the span AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_append_from_unchecked_raw(") > 0 &&
-           "Bytes.appendFromUnchecked must lower to the raw AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_repeat_from_unchecked_raw(") > 0 &&
-           "Bytes.repeatFromUnchecked must lower to the raw AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_wild_repeat_at_unchecked_trusted_raw(") > 0 &&
-           "Bytes.wildRepeatAtUnchecked must lower to the trusted raw AOT helper");
-    assert(count_between(fn_body, fn_end,
-                         "xrt_bytes_wild_copy_from_nonoverlapping_unchecked_trusted_raw(") > 0 &&
-           "Bytes.wildCopyFromNonOverlappingUnchecked must lower to the trusted raw AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_wild_repeat4_96_trusted_raw(") > 0 &&
-           "fixed distance/count wildRepeatAtUnchecked must lower to the fixed-window helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_wild_repeat18_ge8_trusted_raw(") > 0 &&
-           "fixed-count 18 wildRepeatAtUnchecked with distance >= 8 must lower to the branchless "
-           "short-match helper");
-    assert(
-        count_between(fn_body, fn_end, "xrt_bytes_wild_copy_16_nonoverlap_trusted_raw(") > 0 &&
-        "fixed-count 16 wildCopyFromNonOverlappingUnchecked must lower to the fixed-window helper");
-    assert(
-        count_between(fn_body, fn_end, "xrt_bytes_wild_copy_96_nonoverlap_trusted_raw(") > 0 &&
-        "fixed-count 96 wildCopyFromNonOverlappingUnchecked must lower to the fixed-window helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_wild_copy_104_nonoverlap_trusted_raw(") > 0 &&
-           "fixed-count 104 wildCopyFromNonOverlappingUnchecked must lower to the fixed-window "
-           "helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_wild_copy_112_nonoverlap_trusted_raw(") > 0 &&
-           "fixed-count 112 wildCopyFromNonOverlappingUnchecked must lower to the fixed-window "
-           "helper");
+    assert(count_between(fn_body, fn_end, "xrt_bytes_append_from_span_raw(") > 0 &&
+           "Bytes.appendFrom must lower to the raw Bytes+ByteSpan helper");
+    assert(count_between(fn_body, fn_end, "xrt_bytes_repeat_from_tail_raw(") > 0 &&
+           "Bytes.repeatFrom must lower to the raw tail repeat helper");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_repeat_from_checked_raw(") > 0 &&
+           "ByteSpan.repeatFrom must lower to the checked raw span helper");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_copy_checked_raw(") > 0 &&
+           "ByteSpan.copyFrom must lower to the checked raw span helper");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_common_prefix_checked_raw(") > 0 &&
+           "ByteSpan.commonPrefix must lower to the checked raw span helper");
     assert(count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") > 0 &&
            "Bytes.reserve must lower to the raw AOT helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_load_u16_le_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_bytes_load_u32_le_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_bytes_load_u64_le_value(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_bytes_append_from_unchecked_value(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_bytes_repeat_from_unchecked_value(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_bytes_wild_repeat_at_unchecked_value(") == 0 &&
-           count_between(fn_body, fn_end,
-                         "xrt_bytes_wild_copy_from_nonoverlapping_unchecked_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_bytes_append_from_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_bytes_repeat_from_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_span_bytes_copy_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_span_bytes_common_prefix_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_array_reserve_value(") == 0 &&
            "Bytes hot path must not call boxed value helpers");
     assert(count_between(fn_body, fn_end, "xrt_method_") == 0 &&
@@ -2492,13 +2463,13 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
                       "    src[0] = 7\n"
                       "    src[1] = 9\n"
                       "    let out = Bytes(4)\n"
+                      "    out.resize(2)\n"
                       "    let sum = 0\n"
                       "    unsafe {\n"
                       "        let p = out.dataMutPtrUnchecked()\n"
                       "        p[0] = 0\n"
                       "        let sp = src.dataPtrUnchecked()\n"
                       "        p.copyFromNonOverlappingUnchecked(sp, 2)\n"
-                      "        out.setLengthUnchecked(2)\n"
                       "        let view: ByteSpan = out\n"
                       "        let rp = view.dataPtrUnchecked()\n"
                       "        sum = int(rp[0]) + int(rp[1])\n"
@@ -7679,7 +7650,7 @@ int main(void) {
     run_cgen_parallel_for_rejects_throwing_body();
     run_cgen_parallel_for_allows_proven_nothrow_helper_body();
     run_cgen_parallel_for_allows_atomic_i64_direct_body();
-    run_cgen_parallel_for_allows_unchecked_bytes_append_from_array_slot();
+    run_cgen_parallel_for_allows_safe_bytes_append_from_array_slot();
     run_cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper();
     run_cgen_parallel_for_rejects_throwing_helper_body();
     run_cgen_typed_array_uses_raw_storage_fast_path();

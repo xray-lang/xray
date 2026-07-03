@@ -470,76 +470,32 @@ static void test_bytes_raw_helpers_share_core_rules(void) {
     ASSERT_EQ_INT(((uint8_t *) safe_append->data)[7], 66,
                   "repeatFrom repeats second source byte at tail");
 
-    XrValue single_value = xrt_array_new_typed_exact(16, XR_ELEM_U8);
-    xrt_array_t *single = (xrt_array_t *) single_value.ptr;
-    xrt_array_push(single_value, XR_FROM_INT(90));
-    xrt_bytes_repeat_from_unchecked_raw(single, 1, 8);
-    ASSERT_EQ_INT(single->length, 9, "repeatFromUnchecked appends repeated bytes");
-    for (int64_t i = 0; i < 9; i++)
-        ASSERT_EQ_INT(((uint8_t *) single->data)[i], 90,
-                      "repeatFromUnchecked handles distance-one expansion");
-
-    XrValue writer_value = xrt_array_new_typed_exact(16, XR_ELEM_U8);
-    xrt_array_t *writer = (xrt_array_t *) writer_value.ptr;
-    XrValue writer_src_value = xrt_array_new_typed_exact(8, XR_ELEM_U8);
-    xrt_array_t *writer_src = (xrt_array_t *) writer_src_value.ptr;
-    for (int64_t i = 0; i < 4; i++)
-        xrt_array_push(writer_src_value, XR_FROM_INT(65 + i));
-    xrt_bytes_write_from_unchecked_raw(writer, 0, writer_src, 0, 4);
-    xrt_bytes_repeat_at_unchecked_raw(writer, 4, 4, 4);
-    xrt_bytes_set_length_unchecked_raw(writer, 8);
-    ASSERT_EQ_INT(writer->length, 8, "setLengthUnchecked commits logical length");
-    ASSERT_EQ_INT(((uint8_t *) writer->data)[0], 65, "writeFromUnchecked writes first byte");
-    ASSERT_EQ_INT(((uint8_t *) writer->data)[4], 65, "repeatAtUnchecked repeats from offset");
-    ASSERT_EQ_INT(((uint8_t *) writer->data)[7], 68, "repeatAtUnchecked writes last byte");
-
-    XrValue wild_value = xrt_array_new_typed_exact(20, XR_ELEM_U8);
-    xrt_array_t *wild = (xrt_array_t *) wild_value.ptr;
-    for (int64_t i = 0; i < 4; i++)
-        xrt_array_push(wild_value, XR_FROM_INT(65 + i));
-    xrt_bytes_wild_repeat_at_unchecked_raw(wild, 4, 4, 8);
-    xrt_bytes_wild_copy_from_nonoverlapping_unchecked_raw(wild, 12, wild, 4, 8);
-    ASSERT_EQ_INT(wild->length, 4, "wild cursor writes do not commit logical length");
-    xrt_bytes_set_length_unchecked_raw(wild, 20);
-    ASSERT_EQ_INT(((uint8_t *) wild->data)[12], 65,
-                  "wildCopyFromNonOverlappingUnchecked reads physical tail");
-    ASSERT_EQ_INT(((uint8_t *) wild->data)[19], 68,
-                  "wildCopyFromNonOverlappingUnchecked copies the final byte");
-
-    XrValue fixed_src_value = xrt_array_new_typed_exact(112, XR_ELEM_U8);
-    xrt_array_t *fixed_src = (xrt_array_t *) fixed_src_value.ptr;
-    for (int64_t i = 0; i < 112; i++)
-        xrt_array_push(fixed_src_value, XR_FROM_INT(i));
-    XrValue fixed_dst_value = xrt_array_new_typed_exact(344, XR_ELEM_U8);
-    xrt_array_t *fixed_dst = (xrt_array_t *) fixed_dst_value.ptr;
-    xrt_bytes_wild_copy_16_nonoverlap_trusted_raw(fixed_dst, 0, fixed_src, 0);
-    xrt_bytes_wild_copy_96_nonoverlap_trusted_raw(fixed_dst, 16, fixed_src, 0);
-    xrt_bytes_wild_copy_104_nonoverlap_trusted_raw(fixed_dst, 112, fixed_src, 0);
-    xrt_bytes_wild_copy_112_nonoverlap_trusted_raw(fixed_dst, 216, fixed_src, 0);
-    xrt_array_t borrowed_src;
-    xrt_array_stack_borrow_slice_view_init(&borrowed_src, fixed_src_value, 0, 16);
-    xrt_bytes_wild_copy_from_nonoverlapping_unchecked_raw(fixed_dst, 328, &borrowed_src, 0, 16);
-    xrt_bytes_set_length_unchecked_raw(fixed_dst, 344);
-    ASSERT_EQ_INT(((uint8_t *) fixed_dst->data)[15], 15,
-                  "fixed 16-byte wild copy writes the final byte");
-    ASSERT_EQ_INT(((uint8_t *) fixed_dst->data)[111], 95,
-                  "fixed 96-byte wild copy writes the final byte");
-    ASSERT_EQ_INT(((uint8_t *) fixed_dst->data)[215], 103,
-                  "fixed 104-byte wild copy writes the final byte");
-    ASSERT_EQ_INT(((uint8_t *) fixed_dst->data)[327], 111,
-                  "fixed 112-byte wild copy writes the final byte");
-    ASSERT_EQ_INT(((uint8_t *) fixed_dst->data)[343], 15,
-                  "wildCopyFromNonOverlappingUnchecked accepts borrowed readable source");
+    XrValue span_ops_value = xrt_array_new_typed_exact(16, XR_ELEM_U8);
+    xrt_array_t *span_ops = (xrt_array_t *) span_ops_value.ptr;
+    for (int64_t i = 0; i < 12; i++)
+        xrt_array_push(span_ops_value, XR_FROM_INT(65 + i));
+    xr_span_t span_all = xrt_span_from_array_slice(span_ops_value, 0, 12);
+    xrt_span_bytes_repeat_from_checked_raw(span_all, 4, 4, 4);
+    ASSERT_EQ_INT(((uint8_t *) span_ops->data)[4], 65,
+                  "ByteSpan.repeatFrom writes first repeated byte");
+    ASSERT_EQ_INT(((uint8_t *) span_ops->data)[7], 68,
+                  "ByteSpan.repeatFrom writes through overlap");
+    xr_span_t copy_dst = xrt_span_from_array_slice(span_ops_value, 8, 12);
+    xr_span_t copy_src = xrt_span_from_array_slice(span_ops_value, 4, 8);
+    xrt_span_bytes_copy_checked_raw(copy_dst, copy_src);
+    ASSERT_EQ_INT(((uint8_t *) span_ops->data)[8], 65,
+                  "ByteSpan.copyFrom writes first source byte");
+    ASSERT_EQ_INT(((uint8_t *) span_ops->data)[11], 68,
+                  "ByteSpan.copyFrom writes the final source byte");
+    ASSERT_EQ_INT(
+        xrt_span_bytes_common_prefix_checked_raw(xrt_span_from_array_slice(span_ops_value, 0, 4),
+                                                 xrt_span_from_array_slice(span_ops_value, 8, 12)),
+        4, "ByteSpan.commonPrefix compares safe span slices");
 
     free_test_array(a);
     free_test_array(dst);
     free_test_array(rep);
-    free_test_array(single);
-    free_test_array(writer);
-    free_test_array(writer_src);
-    free_test_array(wild);
-    free_test_array(fixed_src);
-    free_test_array(fixed_dst);
+    free_test_array(span_ops);
 }
 
 static XrValue dummy_closure_body(xrt_closure_t *cl) {
