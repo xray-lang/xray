@@ -316,6 +316,8 @@ if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-comm
         "freestanding-profile: defines profile macro"
     expect_log_contains "$FREESTANDING_EXPORT_LOG" "-ffreestanding" \
         "freestanding-profile: passes freestanding compile flag"
+    expect_log_contains "$FREESTANDING_EXPORT_LOG" "-fno-stack-protector" \
+        "freestanding-profile: disables hosted stack protector runtime"
     expect_log_contains "$FREESTANDING_EXPORT_LOG" "-nostdlib" \
         "freestanding-profile: passes nostdlib link flag"
     expect_log_not_contains "$FREESTANDING_EXPORT_LOG" "-lm" \
@@ -390,6 +392,35 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
 else
     record_fail "freestanding-profile: panic hook object build failed"
     sed 's/^/      /' "$FREESTANDING_HOOK_REAL_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_WRITE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_write_hook.xr"
+FREESTANDING_WRITE_OBJ="$WORK/freestanding_write_hook.o"
+FREESTANDING_WRITE_REAL_LOG="$WORK/freestanding_write_hook.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_WRITE_OBJ" \
+        "$FREESTANDING_WRITE_SRC" >"$FREESTANDING_WRITE_REAL_LOG" 2>&1; then
+    FREESTANDING_WRITE_KEPT_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_WRITE_REAL_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_WRITE_KEPT_C" ]; then
+        expect_log_not_contains "$FREESTANDING_WRITE_KEPT_C" "printf(" \
+            "freestanding-profile/write hook: generated C avoids printf"
+        expect_log_not_contains "$FREESTANDING_WRITE_KEPT_C" "putchar(" \
+            "freestanding-profile/write hook: generated C avoids putchar"
+    else
+        record_fail "freestanding-profile/write hook: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_WRITE_REAL_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_WRITE_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_WRITE_OBJ")"
+    if [ "$FREESTANDING_WRITE_UNDEFINED" = "xr_hook_write" ]; then
+        record_pass "freestanding-profile: print path depends only on write hook"
+    else
+        record_fail "freestanding-profile: print path has unexpected undefined symbols"
+        nm -u "$FREESTANDING_WRITE_OBJ" 2>&1 | sed '/^[[:space:]]*$/d' | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile: write hook object build failed"
+    sed 's/^/      /' "$FREESTANDING_WRITE_REAL_LOG" | sed -n '1,120p'
 fi
 
 FREESTANDING_MEM_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_core.xr"

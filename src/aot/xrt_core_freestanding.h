@@ -332,6 +332,7 @@ static inline void xrt_release(XrValue v) {
 }
 
 XRT_COLD XRT_NORETURN void xr_hook_panic(const char *message, size_t len);
+void xr_hook_write(const char *bytes, size_t len);
 
 static inline size_t xrt_freestanding_strlen(const char *s) {
     size_t len = 0;
@@ -353,6 +354,80 @@ static inline XRT_COLD XRT_NORETURN void xrt_freestanding_trap(const char *messa
     for (;;) {
     }
 #endif
+}
+
+static inline void xrt_write_bytes(const char *bytes, size_t len) {
+    if (bytes && len > 0)
+        xr_hook_write(bytes, len);
+}
+
+static inline void xrt_write_char(char c) {
+    xr_hook_write(&c, 1);
+}
+
+static inline void xrt_write_cstr(const char *s) {
+    xrt_write_bytes(s, xrt_freestanding_strlen(s));
+}
+
+static inline void xrt_print_u64(uint64_t value) {
+    char buf[20];
+    size_t pos = sizeof(buf);
+    do {
+        buf[--pos] = (char) ('0' + (value % 10u));
+        value /= 10u;
+    } while (value != 0);
+    xrt_write_bytes(buf + pos, sizeof(buf) - pos);
+}
+
+static inline void xrt_print_i64(int64_t value) {
+    if (value < 0) {
+        xrt_write_char('-');
+        xrt_print_u64((uint64_t) (-(value + 1)) + 1u);
+    } else {
+        xrt_print_u64((uint64_t) value);
+    }
+}
+
+static inline void xrt_print_char(uint32_t cp) {
+    char buf[4];
+    size_t len = 0;
+    if (cp <= 0x7Fu) {
+        buf[len++] = (char) cp;
+    } else if (cp <= 0x7FFu) {
+        buf[len++] = (char) (0xC0u | (cp >> 6));
+        buf[len++] = (char) (0x80u | (cp & 0x3Fu));
+    } else if (cp <= 0xFFFFu) {
+        buf[len++] = (char) (0xE0u | (cp >> 12));
+        buf[len++] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+        buf[len++] = (char) (0x80u | (cp & 0x3Fu));
+    } else {
+        buf[len++] = (char) (0xF0u | (cp >> 18));
+        buf[len++] = (char) (0x80u | ((cp >> 12) & 0x3Fu));
+        buf[len++] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+        buf[len++] = (char) (0x80u | (cp & 0x3Fu));
+    }
+    xrt_write_bytes(buf, len);
+}
+
+static inline void xrt_print(XrValue v) {
+    if (XR_IS_INT(v)) {
+        xrt_print_i64(v.i);
+    } else if (XR_IS_BOOL(v)) {
+        xrt_write_cstr(v.i ? "true" : "false");
+    } else if (XR_IS_NULL(v)) {
+        xrt_write_cstr("null");
+    } else if (XR_IS_CHAR(v)) {
+        xrt_print_char((uint32_t) v.i);
+    } else if (XR_IS_STR(v)) {
+        xrt_write_bytes(xr_str_data(v), (size_t) xr_str_len(v));
+    } else {
+        xrt_freestanding_trap("freestanding print supports only scalar/string values");
+    }
+}
+
+static inline void xrt_println(XrValue v) {
+    xrt_print(v);
+    xrt_write_char('\n');
 }
 
 static inline int64_t xrt_i64_add(int64_t a, int64_t b) {

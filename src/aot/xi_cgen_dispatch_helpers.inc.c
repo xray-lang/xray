@@ -1834,6 +1834,31 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) 
     bool newline = (flags & 2) != 0;
     const XiValue *native_int = xicgen_native_int_print_source(ctx, v);
 
+    if (ctx && ctx->freestanding_profile) {
+        if (add_space)
+            fprintf(out, "(xrt_write_char(' '), ");
+        if (native_int) {
+            if (xicgen_type_is_unsigned_int(native_int->type)) {
+                fprintf(out, "xrt_print_u64((uint64_t)");
+                emit_value_as_rep_ctx(ctx, out, native_int, XR_REP_I64);
+                fprintf(out, ")");
+            } else {
+                fprintf(out, "xrt_print_i64((int64_t)");
+                emit_value_as_rep_ctx(ctx, out, native_int, XR_REP_I64);
+                fprintf(out, ")");
+            }
+            if (newline)
+                fprintf(out, ", xrt_write_char('\\n')");
+        } else {
+            fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ")");
+        }
+        if (add_space)
+            fprintf(out, ")");
+        return;
+    }
+
     if (add_space)
         fprintf(out, "(putchar(' '), ");
     if (native_int) {
