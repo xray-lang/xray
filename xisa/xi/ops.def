@@ -567,6 +567,26 @@
   :observable (span-compare)
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.span.as.bytes
+  :class memory-read
+  :arity 1
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (may-throw)
+  :requires (span pod)
+  :observable (span-as-bytes)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.span.reinterpret
+  :class memory-read
+  :arity 1
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (may-throw)
+  :requires (bytespan pod aligned-length)
+  :observable (span-reinterpret)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.bytes.copy.within
   :class memory-write
   :arity 4

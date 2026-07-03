@@ -782,6 +782,14 @@ static bool xa_call_is_bytespan_typed_store(CallExprNode *call, XrType *receiver
     return ma->name && strcmp(ma->name, "store") == 0;
 }
 
+static bool xa_call_is_bytespan_reinterpret(CallExprNode *call, XrType *receiver_type) {
+    if (!call || !receiver_type || !xa_type_is_bytespan_view(receiver_type) || !call->callee ||
+        call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    return ma->name && strcmp(ma->name, "reinterpret") == 0;
+}
+
 static bool xa_call_is_rawptr_load_le_unchecked(CallExprNode *call, XrType *receiver_type) {
     if (!call || !receiver_type || !xa_type_is_raw_u8_ptr_view(receiver_type) || !call->callee ||
         call->callee->type != AST_MEMBER_ACCESS)
@@ -794,6 +802,20 @@ static bool xa_type_is_supported_load_le_result(XrType *type) {
     return type && XR_TYPE_IS_INT(type) &&
            (type->native_width == XR_NATIVE_U16 || type->native_width == XR_NATIVE_U32 ||
             type->native_width == XR_NATIVE_U64);
+}
+
+static bool xa_type_is_pod_span_elem(XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_CHAR:
+            return true;
+        default:
+            return false;
+    }
 }
 
 static XrType *xa_bytes_typed_type_arg(XaInferContext *ctx, AstNode *node, CallExprNode *call,
@@ -823,6 +845,28 @@ static XrType *xa_bytes_typed_type_arg(XaInferContext *ctx, AstNode *node, CallE
 static XrType *xa_load_le_return_type(XaInferContext *ctx, AstNode *node, CallExprNode *call,
                                       const char *label) {
     return xa_bytes_typed_type_arg(ctx, node, call, label);
+}
+
+static XrType *xa_bytespan_reinterpret_return_type(XaInferContext *ctx, AstNode *node,
+                                                   CallExprNode *call) {
+    if (!ctx || !call)
+        return xr_type_new_unknown(NULL);
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   "ByteSpan.reinterpret<T>() expects exactly one type argument",
+                                   &loc);
+        return xr_type_new_unknown(NULL);
+    }
+    XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+    if (!xa_type_is_pod_span_elem(target)) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
+                                   "ByteSpan.reinterpret<T>() requires POD T", &loc);
+        return xr_type_new_unknown(NULL);
+    }
+    return xr_type_new_span(ctx->analyzer->isolate, target);
 }
 
 static XrType *xa_csv_parse_return_type(XaInferContext *ctx, CallExprNode *call) {
@@ -2138,6 +2182,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         (void) xa_bytes_typed_type_arg(ctx, node, call, "ByteSpan.store<T>()");
         return_type = xr_type_new_unit(ctx->analyzer->isolate);
     }
+
+    if (xa_call_is_bytespan_reinterpret(call, callee_obj_type))
+        return_type = xa_bytespan_reinterpret_return_type(ctx, node, call);
 
     if (xa_call_is_rawptr_load_le_unchecked(call, callee_obj_type))
         return_type = xa_load_le_return_type(ctx, node, call, "RawPtr.loadLEUnchecked<T>()");

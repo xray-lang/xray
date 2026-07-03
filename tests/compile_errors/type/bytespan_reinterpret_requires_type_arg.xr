@@ -1,0 +1,3 @@
+let bytes = Bytes(4)
+let view: ByteSpan = bytes
+let words = view.reinterpret()

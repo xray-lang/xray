@@ -918,6 +918,137 @@ vmcase(OP_STRING_BYTES_SPAN) {
     vmbreak;
 }
 
+#define VM_SPAN_VIEW(value, out_data, out_length, out_elem_type, out_elem_size, out_elem_tid,      \
+                     out_contains_refs, out_reserved, out_guard, message)                          \
+    do {                                                                                           \
+        XrValue _span_value = (value);                                                             \
+        if (XR_IS_SPAN_REF(_span_value)) {                                                         \
+            XrSpanView *_span = XR_TO_SPAN_REF(_span_value);                                       \
+            if (!_span) {                                                                          \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                 \
+            }                                                                                      \
+            (out_data) = _span->data;                                                              \
+            (out_length) = _span->length;                                                          \
+            (out_elem_type) = _span->elem_type;                                                    \
+            (out_elem_size) = _span->elem_size;                                                    \
+            (out_elem_tid) = _span->elem_tid;                                                      \
+            (out_contains_refs) = _span->contains_refs;                                            \
+            (out_reserved) = _span->reserved;                                                      \
+            (out_guard) = _span->guard;                                                            \
+        } else if (XR_IS_ARRAY(_span_value)) {                                                     \
+            XrArray *_arr = XR_TO_ARRAY(_span_value);                                              \
+            if (!_arr) {                                                                           \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                 \
+            }                                                                                      \
+            (out_data) = _arr->data;                                                               \
+            (out_length) = _arr->length;                                                           \
+            (out_elem_type) = _arr->elem_type;                                                     \
+            (out_elem_size) = _arr->elem_size;                                                     \
+            (out_elem_tid) = _arr->elem_tid;                                                       \
+            (out_contains_refs) = _arr->contains_refs;                                             \
+            (out_reserved) = 0;                                                                    \
+            (out_guard) = _arr;                                                                    \
+        } else {                                                                                   \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                     \
+        }                                                                                          \
+    } while (0)
+
+vmcase(OP_SPAN_AS_BYTES) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    if (!XR_IS_INT(R(c))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.asBytes() missing Span frame slot");
+    }
+    void *data = NULL;
+    int64_t length = 0;
+    uint8_t elem_type = XR_ELEM_ANY;
+    uint8_t elem_size = 0;
+    uint8_t elem_tid = 0;
+    uint8_t contains_refs = 0;
+    uint32_t reserved = 0;
+    void *guard = NULL;
+    VM_SPAN_VIEW(R(b), data, length, elem_type, elem_size, elem_tid, contains_refs, reserved, guard,
+                 "Span.asBytes() expects Span");
+    (void) elem_tid;
+    (void) contains_refs;
+    if (elem_type == XR_ELEM_ANY || elem_type >= XR_ELEM_COUNT || elem_size == 0) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.asBytes() requires POD Span element type");
+    }
+    if (length < 0 || (elem_size > 0 && length > INT64_MAX / (int64_t) elem_size)) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.asBytes() byte length overflow");
+    }
+    XrSpanView *span = VM_SPAN_SLOT(R(c));
+    span->data = data;
+    span->length = length * (int64_t) elem_size;
+    span->elem_type = XR_ELEM_U8;
+    span->elem_size = 1;
+    span->elem_tid = 0;
+    span->contains_refs = 0;
+    span->reserved = reserved & XR_SPAN_VIEW_READONLY;
+    span->guard = guard;
+    R(a) = xr_span_ref(span);
+    vmbreak;
+}
+
+vmcase(OP_SPAN_REINTERPRET) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    if (!XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1)) || !XR_IS_INT(R(c + 2)) || !XR_IS_INT(R(c + 3))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.reinterpret<T>() missing metadata");
+    }
+    uint8_t target_elem_type = (uint8_t) XR_TO_INT(R(c + 1));
+    uint8_t target_elem_size = (uint8_t) XR_TO_INT(R(c + 2));
+    uint8_t target_elem_tid = (uint8_t) XR_TO_INT(R(c + 3));
+    if (target_elem_type == XR_ELEM_ANY || target_elem_type >= XR_ELEM_COUNT ||
+        target_elem_size == 0) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "ByteSpan.reinterpret<T>() requires POD target type");
+    }
+    if (XR_ELEM_SIZES[target_elem_type] != target_elem_size) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "ByteSpan.reinterpret<T>() target metadata mismatch");
+    }
+    void *data = NULL;
+    int64_t length = 0;
+    uint8_t elem_type = XR_ELEM_ANY;
+    uint8_t elem_size = 0;
+    uint8_t elem_tid = 0;
+    uint8_t contains_refs = 0;
+    uint32_t reserved = 0;
+    void *guard = NULL;
+    VM_SPAN_VIEW(R(b), data, length, elem_type, elem_size, elem_tid, contains_refs, reserved, guard,
+                 "ByteSpan.reinterpret<T>() expects ByteSpan");
+    (void) elem_tid;
+    (void) contains_refs;
+    if (elem_type != XR_ELEM_U8 || elem_size != 1) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "ByteSpan.reinterpret<T>() expects ByteSpan receiver");
+    }
+    if (length < 0) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                         "ByteSpan.reinterpret<T>() byte length overflow");
+    }
+    if (length % (int64_t) target_elem_size != 0) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                         "ByteSpan.reinterpret<T>() length is not divisible by target size");
+    }
+    XrSpanView *span = VM_SPAN_SLOT(R(c));
+    span->data = data;
+    span->length = length / (int64_t) target_elem_size;
+    span->elem_type = target_elem_type;
+    span->elem_size = target_elem_size;
+    span->elem_tid = target_elem_tid;
+    span->contains_refs = 0;
+    span->reserved = reserved & XR_SPAN_VIEW_READONLY;
+    span->guard = guard;
+    R(a) = xr_span_ref(span);
+    vmbreak;
+}
+
+#undef VM_SPAN_VIEW
+
 vmcase(OP_ARRAY_CLEAR) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a))) {
