@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 // Regression: WorkQueue.pop blocks a coroutine and resumes it when a task arrives.
 
 import time

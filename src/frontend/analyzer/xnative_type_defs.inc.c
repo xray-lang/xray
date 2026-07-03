@@ -148,8 +148,8 @@ static const char xr_native_def_resultgroup[] =
     "// Built-in ResultGroup type; implemented by the runtime.\n// First VM prototype supports "
     "integer associative reduction.\n\n@native\nclass ResultGroup {\n    length: int\n    "
     "pendingCount: int\n    batchSize: int\n    isClosed: bool\n    add(value: int) -> bool\n    "
-    "flush()\n    reset(count: int) -> bool\n    recv(): int?\n    tryRecv(): (int?, bool)\n    "
-    "close()\n}\n";
+    "flush() -> ()\n    reset(count: int) -> bool\n    recv() -> int?\n    tryRecv() -> (int?, "
+    "bool)\n    close() -> ()\n}\n";
 
 static const char xr_native_def_semaphore[] =
     "// Built-in Semaphore type; implemented by the runtime.\n\n@native\nclass Semaphore {\n    "

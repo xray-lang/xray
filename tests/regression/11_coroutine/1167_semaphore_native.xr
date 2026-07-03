@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 @test
 fn test_semaphore_permits_and_close() {
     shared const sem = Semaphore(0)

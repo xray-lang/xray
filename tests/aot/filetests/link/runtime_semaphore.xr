@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 shared const sem = Semaphore(1)
 
 print(sem.tryAcquire())

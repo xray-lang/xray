@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 shared const rg: ResultGroup = ResultGroup(2)
 
 assert_true(rg.add(4))

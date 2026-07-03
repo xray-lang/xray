@@ -271,9 +271,27 @@ static XaSymbol *resolve_type_symbol(XaAnalyzer *analyzer, const char *name) {
 
     XaScope *start = analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
     XaSymbol *sym = xa_scope_lookup(start, name);
-    if (!sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_ENUM))
+    if (!sym)
         return NULL;
-    return sym;
+    if (sym->kind == XA_SYM_CLASS || sym->kind == XA_SYM_ENUM)
+        return sym;
+    if (sym->kind == XA_SYM_IMPORT) {
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+        XrType *type = links ? links->type : NULL;
+        if (links && links->module_name && strcmp(links->module_name, "sync") == 0) {
+            const char *class_name = links->import_member_name ? links->import_member_name : name;
+            if (strcmp(class_name, "Semaphore") == 0 || strcmp(class_name, "CountdownLatch") == 0 ||
+                strcmp(class_name, "EventCount") == 0 || strcmp(class_name, "WorkQueue") == 0 ||
+                strcmp(class_name, "ResultGroup") == 0) {
+                return sym;
+            }
+        }
+        if (type && (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE ||
+                     type->kind == XR_KIND_INTERFACE || type->kind == XR_KIND_ENUM)) {
+            return sym;
+        }
+    }
+    return NULL;
 }
 
 static XrType *resolve_type_ref_symbol_type(XaAnalyzer *analyzer, const char *name) {
@@ -282,7 +300,20 @@ static XrType *resolve_type_ref_symbol_type(XaAnalyzer *analyzer, const char *na
         return NULL;
 
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
-    if (!links || !links->type)
+    if (!links)
+        return NULL;
+
+    if (sym->kind == XA_SYM_IMPORT && links->module_name &&
+        strcmp(links->module_name, "sync") == 0) {
+        const char *class_name = links->import_member_name ? links->import_member_name : name;
+        if (strcmp(class_name, "Semaphore") == 0 || strcmp(class_name, "CountdownLatch") == 0 ||
+            strcmp(class_name, "EventCount") == 0 || strcmp(class_name, "WorkQueue") == 0 ||
+            strcmp(class_name, "ResultGroup") == 0) {
+            return xr_type_new_named_instance(analyzer->isolate, class_name);
+        }
+    }
+
+    if (!links->type)
         return NULL;
 
     if (sym->kind == XA_SYM_ENUM)
@@ -291,8 +322,13 @@ static XrType *resolve_type_ref_symbol_type(XaAnalyzer *analyzer, const char *na
         return links->type;
     if (links->type->kind == XR_KIND_INSTANCE)
         return links->type;
-    if (links->type->kind == XR_KIND_CLASS)
-        return xr_type_new_instance(analyzer->isolate, links->class_info);
+    if (links->type->kind == XR_KIND_CLASS) {
+        if (links->class_info)
+            return xr_type_new_instance(analyzer->isolate, links->class_info);
+        if (links->type->instance.class_name)
+            return xr_type_new_named_instance(analyzer->isolate, links->type->instance.class_name);
+        return xr_type_new_instance(analyzer->isolate, NULL);
+    }
     return NULL;
 }
 
@@ -315,7 +351,33 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
     if (tref->kind == XR_TREF_GENERIC && tref->name) {
         XaSymbol *sym = resolve_type_symbol(analyzer, tref->name);
         XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
+        const char *sync_class_name = NULL;
+        if (sym && sym->kind == XA_SYM_IMPORT && links && links->module_name &&
+            strcmp(links->module_name, "sync") == 0) {
+            const char *class_name =
+                links->import_member_name ? links->import_member_name : tref->name;
+            if (strcmp(class_name, "Semaphore") == 0 || strcmp(class_name, "CountdownLatch") == 0 ||
+                strcmp(class_name, "EventCount") == 0 || strcmp(class_name, "WorkQueue") == 0 ||
+                strcmp(class_name, "ResultGroup") == 0) {
+                sync_class_name = class_name;
+            }
+        }
         XrType *head = links ? links->type : NULL;
+        if (sync_class_name) {
+            int nargs = tref->nchildren;
+            XrType *stack_args[8];
+            XrType **args =
+                (nargs <= 8) ? stack_args : (XrType **) xr_malloc(sizeof(XrType *) * nargs);
+            if (args) {
+                for (int i = 0; i < nargs; i++)
+                    args[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
+                XrType *result = xr_type_new_generic_instance(analyzer->isolate, sync_class_name,
+                                                              NULL, args, nargs);
+                if (args != stack_args)
+                    xr_free(args);
+                return result;
+            }
+        }
         if (head && (head->kind == XR_KIND_INTERFACE || head->kind == XR_KIND_CLASS ||
                      head->kind == XR_KIND_INSTANCE)) {
             int nargs = tref->nchildren;

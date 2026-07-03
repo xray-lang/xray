@@ -32,6 +32,36 @@
 /* Forward declaration */
 static void lower_stmts(XiLower *l, AstNode **stmts, int count);
 
+static int xi_lower_sync_runtime_class_global_index(const char *name) {
+    if (!name)
+        return -1;
+    if (strcmp(name, "WorkQueue") == 0)
+        return XR_GLOBAL_VAR_WORKQUEUE;
+    if (strcmp(name, "ResultGroup") == 0)
+        return XR_GLOBAL_VAR_RESULTGROUP;
+    if (strcmp(name, "CountdownLatch") == 0)
+        return XR_GLOBAL_VAR_COUNTDOWNLATCH;
+    if (strcmp(name, "Semaphore") == 0)
+        return XR_GLOBAL_VAR_SEMAPHORE;
+    if (strcmp(name, "EventCount") == 0)
+        return XR_GLOBAL_VAR_EVENTCOUNT;
+    return -1;
+}
+
+static XiValue *xi_lower_emit_sync_runtime_builtin_class(XiLower *l, const char *name, int line) {
+    int index = xi_lower_sync_runtime_class_global_index(name);
+    if (index < 0)
+        return NULL;
+    struct XrType *type = xr_type_new_class(NULL, name);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, type, 0);
+    if (v) {
+        v->aux_int = index;
+        v->aux = (void *) name;
+        v->line = (uint32_t) line;
+    }
+    return v;
+}
+
 XiValue *xi_lower_bool_condition(XiLower *l, XiValue *cond) {
     if (!cond || !cond->type)
         return cond;
@@ -3924,6 +3954,28 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
     for (int i = 0; i < imp->member_count; i++) {
         ImportMember *m = &imp->members[i];
         const char *local_name = m->alias ? m->alias : m->name;
+
+        if (imp->module_name && strcmp(imp->module_name, "sync") == 0 &&
+            xi_lower_sync_runtime_class_global_index(m->name) >= 0) {
+            struct XrType *type = xr_type_new_class(NULL, m->name);
+            XiValue *v = xi_lower_emit_sync_runtime_builtin_class(l, m->name, (int) node->line);
+            if (!v)
+                return;
+
+            int var_id = xi_lower_var_create(l, m->symbol_id, local_name, type);
+            if (var_id >= 0 && var_id < l->var_count)
+                l->vars[var_id].type = type;
+            xi_lower_braun_write(l, var_id, l->cur_block, v);
+
+            if (l->is_program && l->shared_map[var_id] >= 0) {
+                XiTopBinding b;
+                b.slot = l->shared_map[var_id];
+                b.name = l->vars[var_id].name;
+                b.type = type;
+                xi_lower_emit_top_store(l, b, v);
+            }
+            continue;
+        }
 
         /* Create XI_IMPORT_REF carrying module path and member name */
         struct XrType *type = xr_type_new_unknown(NULL);

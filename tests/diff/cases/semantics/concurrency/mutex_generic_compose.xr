@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 // Mutex<T> as a pure-Xray generic class composing the builtin coroutine-aware
 // Semaphore(1) as its lock, with closure-based critical sections. Exercises
 // generic class + generic method + closure arg + defer + a coroutine-aware

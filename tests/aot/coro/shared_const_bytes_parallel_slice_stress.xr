@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 let WORKERS = process.args.length > 0 ? (int(process.args[0]) ?? 8) : 8
 let SIZE = process.args.length > 1 ? (int(process.args[1]) ?? 1048576) : 1048576
 let ITERS = process.args.length > 2 ? (int(process.args[2]) ?? 10) : 10

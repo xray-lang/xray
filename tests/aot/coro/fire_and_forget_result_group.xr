@@ -1,3 +1,4 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 shared const results: ResultGroup = ResultGroup(1)
 
 fn worker() {

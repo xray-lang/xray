@@ -995,6 +995,54 @@ static void remove_file_symbols(XaScope *scope, const char *file, XaAnalyzer *an
     }
 }
 
+static bool xa_path_is_sync_stdlib_module(const char *file) {
+    if (!file)
+        return false;
+    const char *suffix = "stdlib/sync/sync.xr";
+    size_t flen = strlen(file);
+    size_t slen = strlen(suffix);
+    return flen >= slen && strcmp(file + flen - slen, suffix) == 0;
+}
+
+static void xa_register_native_class_symbol(XaAnalyzer *analyzer, XaScope *scope, const char *file,
+                                            const char *name) {
+    if (!analyzer || !scope || !name)
+        return;
+    if (xa_scope_lookup_local(scope, name))
+        return;
+
+    XaSymbol *sym = xa_symbol_new(name, XA_SYM_CLASS);
+    if (!sym)
+        return;
+    sym->location.line = 0;
+    sym->is_builtin = true;
+    sym->is_const = true;
+    sym->is_exported = true;
+    xa_scope_add_symbol(scope, sym);
+
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+    if (links) {
+        links->type = xr_type_new_class(analyzer->isolate, name);
+        links->declared_type = links->type;
+        links->is_definitely_assigned = true;
+        links->file_path = file;
+        if (strcmp(name, "WorkQueue") == 0) {
+            const char *type_param_names[] = {"T"};
+            xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL, 1);
+        }
+    }
+}
+
+static void xa_register_sync_native_class_symbols(XaAnalyzer *analyzer, const char *file,
+                                                  XaScope *scope) {
+    if (!xa_path_is_sync_stdlib_module(file))
+        return;
+    static const char *names[] = {"Semaphore", "CountdownLatch", "EventCount", "WorkQueue",
+                                  "ResultGroup"};
+    for (int i = 0; i < (int) (sizeof(names) / sizeof(names[0])); i++)
+        xa_register_native_class_symbol(analyzer, scope, file, names[i]);
+}
+
 void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast) {
     if (!analyzer || !ast)
         return;
@@ -1016,6 +1064,7 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     // own top-level scopes so private names cannot collide across modules.
     analyzer->current_file = file;
     analyzer->current_scope = file_scope;
+    xa_register_sync_native_class_symbols(analyzer, file, file_scope);
 
     // Use the visitor-based analysis
     xa_analyze_ast(analyzer, ast);
