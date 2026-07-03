@@ -11,5 +11,6 @@ XR_FUNC void xr_sys_mutex_register_class(struct XrVMRuntime *isolate);
 XR_FUNC void xr_sys_rwlock_register_class(struct XrVMRuntime *isolate);
 XR_FUNC void xr_sys_condvar_register_class(struct XrVMRuntime *isolate);
 XR_FUNC void xr_sys_barrier_register_class(struct XrVMRuntime *isolate);
+XR_FUNC void xr_sys_once_register_class(struct XrVMRuntime *isolate);
 
 #endif /* XRAY_STDLIB_SYS_H */

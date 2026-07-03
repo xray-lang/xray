@@ -274,6 +274,7 @@ static const char *xr_builtin_symbol_names[] = {
     "waitFor",
     "signal",
     "broadcast",
+    "call",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

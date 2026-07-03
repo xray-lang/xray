@@ -52,6 +52,7 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
         case XR_TAG_SYS_RWLOCK:
         case XR_TAG_SYS_CONDVAR:
         case XR_TAG_SYS_BARRIER:
+        case XR_TAG_SYS_ONCE:
         case XR_TAG_RANGE:
         case XR_TAG_ENUM:
         case XR_TAG_ITERATOR:
@@ -891,6 +892,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         return xrt_datetime_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_SYS_CONDVAR)
         return xrt_sys_condvar_method_1(recv, sym, arg0);
+    if (recv.tag == XR_TAG_SYS_ONCE)
+        return xrt_sys_once_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_POW) {
         double exp = (arg0.tag == XR_TAG_F64) ? arg0.f : (double) arg0.i;
         return XR_FROM_FLOAT(pow(recv.f, exp));

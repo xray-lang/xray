@@ -85,6 +85,7 @@ typedef struct XrayCoreClasses {
     XrClass *sysRwLockClass;
     XrClass *sysCondvarClass;
     XrClass *sysBarrierClass;
+    XrClass *sysOnceClass;
     XrClass *netConnClass;
     XrClass *netListenerClass;
 

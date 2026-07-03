@@ -19,6 +19,8 @@
 #include <time.h>
 #endif
 
+static inline XrValue xrt_closure_call0(XrValue callback);
+
 typedef struct xrt_sys_mutex_object {
     xr_mutex_t mutex;
 } xrt_sys_mutex_object_t;
@@ -38,6 +40,26 @@ typedef struct xrt_sys_barrier_object {
     int64_t arrived;
     int64_t generation;
 } xrt_sys_barrier_object_t;
+
+typedef struct xrt_sys_once_object {
+    xr_once_t once;
+} xrt_sys_once_object_t;
+
+static XR_THREAD_LOCAL XrValue xrt_sys_once_callback = {.tag = XR_TAG_NULL};
+
+static inline void xrt_sys_once_trampoline(void) {
+    (void) xrt_closure_call0(xrt_sys_once_callback);
+}
+
+#if defined(XR_OS_WINDOWS)
+static BOOL CALLBACK xrt_sys_once_win_thunk(PINIT_ONCE once, PVOID param, PVOID *ctx) {
+    (void) once;
+    (void) param;
+    (void) ctx;
+    xrt_sys_once_trampoline();
+    return TRUE;
+}
+#endif
 
 static inline void xrt_sys_mutex_init(xr_mutex_t *mutex) {
 #if defined(XR_OS_WINDOWS)
@@ -186,6 +208,23 @@ static inline void xrt_sys_condvar_broadcast_native(xr_cond_t *cond) {
 #endif
 }
 
+static inline void xrt_sys_once_init(xr_once_t *once) {
+#if defined(XR_OS_WINDOWS)
+    InitOnceInitialize(once);
+#else
+    xr_once_t init = XR_ONCE_INITIALIZER;
+    *once = init;
+#endif
+}
+
+static inline void xrt_sys_once_call_native(xr_once_t *once) {
+#if defined(XR_OS_WINDOWS)
+    InitOnceExecuteOnce(once, xrt_sys_once_win_thunk, NULL, NULL);
+#else
+    pthread_once(once, xrt_sys_once_trampoline);
+#endif
+}
+
 static inline int xrt_sys_mutex_is(XrValue value) {
     return value.tag == XR_TAG_SYS_MUTEX && value.ptr != NULL;
 }
@@ -200,6 +239,10 @@ static inline int xrt_sys_condvar_is(XrValue value) {
 
 static inline int xrt_sys_barrier_is(XrValue value) {
     return value.tag == XR_TAG_SYS_BARRIER && value.ptr != NULL;
+}
+
+static inline int xrt_sys_once_is(XrValue value) {
+    return value.tag == XR_TAG_SYS_ONCE && value.ptr != NULL;
 }
 
 static inline xrt_sys_mutex_object_t *xrt_sys_mutex_ptr(XrValue value) {
@@ -218,6 +261,10 @@ static inline xrt_sys_barrier_object_t *xrt_sys_barrier_ptr(XrValue value) {
     return xrt_sys_barrier_is(value) ? (xrt_sys_barrier_object_t *) value.ptr : NULL;
 }
 
+static inline xrt_sys_once_object_t *xrt_sys_once_ptr(XrValue value) {
+    return xrt_sys_once_is(value) ? (xrt_sys_once_object_t *) value.ptr : NULL;
+}
+
 static inline XrValue xrt_sys_mutex_box(xrt_sys_mutex_object_t *mutex) {
     return mutex ? xr_mkptr(mutex, XR_TAG_SYS_MUTEX) : XR_NULL_VAL;
 }
@@ -232,6 +279,10 @@ static inline XrValue xrt_sys_condvar_box(xrt_sys_condvar_object_t *condvar) {
 
 static inline XrValue xrt_sys_barrier_box(xrt_sys_barrier_object_t *barrier) {
     return barrier ? xr_mkptr(barrier, XR_TAG_SYS_BARRIER) : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_sys_once_box(xrt_sys_once_object_t *once) {
+    return once ? xr_mkptr(once, XR_TAG_SYS_ONCE) : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_sys_mutex_new(void) {
@@ -274,6 +325,13 @@ static inline XrValue xrt_sys_barrier_new(XrValue parties_value) {
     return xrt_sys_barrier_box(barrier);
 }
 
+static inline XrValue xrt_sys_once_new(void) {
+    xrt_sys_once_object_t *once = (xrt_sys_once_object_t *) xrt_arc_alloc(sizeof(*once));
+    xrt_sys_once_init(&once->once);
+    xrt_arc_mark_builtin(once, XRT_ARC_KIND_SYS_ONCE);
+    return xrt_sys_once_box(once);
+}
+
 static inline void xrt_sys_mutex_destroy_builtin(void *obj) {
     if (!obj)
         return;
@@ -301,6 +359,10 @@ static inline void xrt_sys_barrier_destroy_builtin(void *obj) {
     xrt_sys_barrier_object_t *barrier = (xrt_sys_barrier_object_t *) obj;
     xrt_sys_condvar_destroy(&barrier->cond);
     xrt_sys_mutex_destroy(&barrier->mutex);
+}
+
+static inline void xrt_sys_once_destroy_builtin(void *obj) {
+    (void) obj;
 }
 
 static inline XrValue xrt_sys_mutex_method_0(XrValue recv, int sym) {
@@ -399,6 +461,18 @@ static inline XrValue xrt_sys_condvar_method_2(XrValue recv, int sym, XrValue ar
     uint64_t timeout_ns = (arg1.tag == XR_TAG_I64 && arg1.i > 0) ? (uint64_t) arg1.i : 0u;
     return XR_FROM_BOOL(
         xrt_sys_condvar_wait_for_ns_native(&condvar->cond, &mutex->mutex, timeout_ns));
+}
+
+static inline XrValue xrt_sys_once_method_1(XrValue recv, int sym, XrValue arg0) {
+    xrt_sys_once_object_t *once = xrt_sys_once_ptr(recv);
+    if (!once || sym != XRT_SYM_CALL || arg0.tag != XR_TAG_CLOSURE)
+        return XR_NULL_VAL;
+
+    XrValue previous = xrt_sys_once_callback;
+    xrt_sys_once_callback = arg0;
+    xrt_sys_once_call_native(&once->once);
+    xrt_sys_once_callback = previous;
+    return XR_NULL_VAL;
 }
 
 #endif /* XRT_SYS_H */

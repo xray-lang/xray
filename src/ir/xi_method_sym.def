@@ -114,6 +114,7 @@ XI_METHOD_SYM(WAIT,       222, WAIT,       "wait")
 XI_METHOD_SYM(WAITFOR,    223, WAITFOR,    "waitFor")
 XI_METHOD_SYM(SIGNAL,     224, SIGNAL,     "signal")
 XI_METHOD_SYM(BROADCAST,  225, BROADCAST,  "broadcast")
+XI_METHOD_SYM(CALL,       226, CALL,       "call")
 XI_METHOD_SYM(TO_ARRAY,    79,  TO_ARRAY,     "toArray")
 XI_METHOD_SYM(ADD,         74,  ADD,          "add")
 
