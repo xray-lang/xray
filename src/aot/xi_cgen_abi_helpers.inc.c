@@ -62,6 +62,10 @@ static bool cg_value_rep_is_struct_aggregate(XaotValueRep rep) {
     return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_STRUCT) != 0;
 }
 
+static bool cg_value_rep_is_span_aggregate(XaotValueRep rep) {
+    return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_SPAN) != 0;
+}
+
 static bool cg_value_plan_is_adt_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     const XaotValuePlan *plan = cg_value_plan(ctx, v);
     return plan && cg_value_rep_is_adt_aggregate(plan->rep);
@@ -72,7 +76,16 @@ static bool cg_value_plan_is_struct_aggregate(XiCgenCtx *ctx, const XiValue *v) 
     return plan && cg_value_rep_is_struct_aggregate(plan->rep);
 }
 
+static bool cg_value_plan_is_span_aggregate(XiCgenCtx *ctx, const XiValue *v) {
+    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    return plan && cg_value_rep_is_span_aggregate(plan->rep);
+}
+
 static void emit_aggregate_zero_expr(FILE *out, XaotValueRep rep) {
+    if (cg_value_rep_is_span_aggregate(rep)) {
+        fprintf(out, "xrt_span_empty()");
+        return;
+    }
     if (cg_value_rep_is_struct_aggregate(rep)) {
         fprintf(out, "((%s){0})", rep.c_type ? rep.c_type : "XrValue");
         return;

@@ -3354,7 +3354,9 @@ static void emit_debug_source_var_declarations(XiCgenCtx *ctx, FILE *out, const 
         fprintf(out, "    %s ", info.ctype);
         emit_debug_source_var_c_name(out, &info);
         fprintf(out, " = ");
-        if (strcmp(info.ctype, "XrAotAdtValue") == 0)
+        if (strcmp(info.ctype, "xr_span_t") == 0)
+            fprintf(out, "xrt_span_empty()");
+        else if (strcmp(info.ctype, "XrAotAdtValue") == 0)
             fprintf(out, "xrt_adt_value_zero()");
         else if (strncmp(info.ctype, "xrt_struct_", 11) == 0)
             fprintf(out, "((%s){0})", info.ctype);
@@ -3381,7 +3383,13 @@ static void emit_debug_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *
     fprintf(out, "    ");
     emit_debug_source_var_c_name(out, &info);
     fprintf(out, " = ");
-    if (cg_value_plan_is_struct_aggregate(ctx, storage_v)) {
+    if (strcmp(info.ctype, "xr_span_t") == 0) {
+        if (cg_value_plan_is_span_aggregate(ctx, storage_v)) {
+            emit_vref(out, storage_v);
+        } else {
+            fprintf(out, "xrt_span_empty()");
+        }
+    } else if (cg_value_plan_is_struct_aggregate(ctx, storage_v)) {
         emit_vref(out, storage_v);
     } else if (strcmp(info.ctype, "XrAotAdtValue") == 0) {
         if (cg_value_plan_is_aggregate(ctx, storage_v)) {

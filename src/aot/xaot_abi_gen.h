@@ -14,6 +14,7 @@ typedef enum {
     XAOT_ABI_CLASS_SCALAR = 0,
     XAOT_ABI_CLASS_VOID = 1,
     XAOT_ABI_CLASS_POINTER = 2,
+    XAOT_ABI_CLASS_AGGREGATE = 3,
     XAOT_ABI_CLASS_COUNT
 } XaotAbiClass;
 
@@ -34,7 +35,7 @@ typedef struct {
     X(UNIT, "unit", XR_KIND_UNIT, XAOT_ABI_CLASS_VOID, XAOT_REP_VOID, false, false, false) \
     X(STRING, "string", XR_KIND_STRING, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(ARRAY, "array", XR_KIND_ARRAY, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
-    X(SPAN, "span", XR_KIND_SPAN, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
+    X(SPAN, "span", XR_KIND_SPAN, XAOT_ABI_CLASS_AGGREGATE, XAOT_REP_SPAN, false, false, true) \
     X(MAP, "map", XR_KIND_MAP, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(SET, "set", XR_KIND_SET, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(TUPLE, "tuple", XR_KIND_TUPLE, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
@@ -69,8 +70,8 @@ static inline const XaotAbiInfo *xaot_abi_for_type_kind(XrTypeKind kind) {
          XAOT_REP_PTR, false,
          false, true},
         {"span", XR_KIND_SPAN,
-         XAOT_ABI_CLASS_POINTER,
-         XAOT_REP_PTR, false,
+         XAOT_ABI_CLASS_AGGREGATE,
+         XAOT_REP_SPAN, false,
          false, true},
         {"map", XR_KIND_MAP,
          XAOT_ABI_CLASS_POINTER,
@@ -128,6 +129,9 @@ static inline bool xaot_abi_type_can_use_typed_boundary(const XrType *type) {
     if (!abi || !abi->typed_boundary || (type->is_nullable && !abi->allows_nullable))
         return false;
     storage = xaot_abi_storage_rep_for_type(type);
+    const XaotRepInfo *rep_info = xaot_rep_info(abi->default_rep);
+    if (rep_info && rep_info->dynamic_kind == XAOT_DYNAMIC_AGGREGATE)
+        return true;
     return storage == XR_REP_I64 || storage == XR_REP_F64 || storage == XR_REP_PTR ||
            storage == XR_REP_RAWPTR;
 }

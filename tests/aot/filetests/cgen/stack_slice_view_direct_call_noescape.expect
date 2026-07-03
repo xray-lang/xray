@@ -1,3 +1,4 @@
-c_contains=xrt_array_stack_slice_view(
-c_contains=xrt_array_stack_slice_view_release(
+c_contains=xrt_span_from_array_slice(
+c_not_contains=xrt_array_stack_slice_view(
+c_not_contains=xrt_array_stack_slice_view_release(
 c_not_contains=xrt_slice(

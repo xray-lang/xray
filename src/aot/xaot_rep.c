@@ -38,6 +38,12 @@ static XaotValueRep value_rep_make(const XrType *type, XaotRep rep) {
         out.kind = XAOT_VALUE_PTR;
         return out;
     }
+    if (info->dynamic_kind == XAOT_DYNAMIC_AGGREGATE) {
+        out.kind = XAOT_VALUE_AGGREGATE;
+        if (type && type->kind == XR_KIND_SPAN)
+            out.flags |= XAOT_VALUE_FLAG_SPAN;
+        return out;
+    }
     out.kind = XAOT_VALUE_SCALAR;
     return out;
 }
@@ -172,6 +178,8 @@ XR_FUNC XaotValueRep xaot_value_rep_for_value(const XiValue *value) {
     if ((value->type && XR_TYPE_IS_UNIT(value->type)) ||
         xi_generated_op_result_kind(value->op) == XI_GEN_RESULT_VOID)
         return value_rep_make(value->type, XAOT_REP_VOID);
+    if (value->type && value->type->kind == XR_KIND_SPAN)
+        return value_rep_make(value->type, XAOT_REP_SPAN);
     if (trace_fixed_array_field_ref(value))
         return fixed_array_view_rep(value);
     if (fixed_array_elem_rep_for_value(value, &rep))
