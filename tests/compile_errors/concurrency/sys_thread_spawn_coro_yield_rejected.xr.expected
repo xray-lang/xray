@@ -1,0 +1,1 @@
+sys.Thread.spawn body cannot suspend; Coro.yield() is not allowed in an OS thread body

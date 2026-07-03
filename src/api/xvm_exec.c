@@ -15,6 +15,7 @@
 #include "../base/xlog.h"
 #include "../base/xmalloc.h"
 #include "../coro/xcoroutine.h"
+#include "../coro/xthread_obj.h"
 #include "../coro/xworker.h"
 #include "../runtime/closure/xclosure.h"
 #include "../runtime/value/xchunk.h"
@@ -105,8 +106,8 @@ int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
 
 // Free bytecode
 void xr_free_code(XrVMRuntime *isolate, XrProto *proto) {
-    (void) isolate;
     if (proto != NULL) {
+        xr_thread_obj_drain_isolate(isolate);
         xr_vm_proto_free(proto);
     }
 }

@@ -12,14 +12,18 @@
 
 #include "xcoroutine.h"
 #include "xdeep_copy.h"
+#include "xmachine.h"
+#include "xworker_internal.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/object/xnative_type.h"
 #include "../runtime/object/xpanic_info.h"
 #include "../runtime/xshared.h"
 #include "../runtime/xisolate_api.h"
+#include "../runtime/xisolate_internal.h"
 #include "../vm/xvm.h"
 #include "../vm/xvm_coro_api.h"
+#include "../vm/xvm_worker_state.h"
 
 #include <string.h>
 
@@ -47,6 +51,67 @@ static void thread_apply_affinity(const uint32_t *cpus, uint8_t count) {
     }
 }
 
+static void thread_runtime_enter(XrVMRuntime *isolate) {
+    if (isolate)
+        atomic_fetch_add_explicit(&isolate->sys_thread_count, 1, memory_order_acq_rel);
+}
+
+static void thread_runtime_leave(XrVMRuntime *isolate) {
+    if (isolate)
+        atomic_fetch_sub_explicit(&isolate->sys_thread_count, 1, memory_order_acq_rel);
+}
+
+void xr_thread_obj_drain_isolate(struct XrVMRuntime *isolate) {
+    if (!isolate)
+        return;
+    while (atomic_load_explicit(&isolate->sys_thread_count, memory_order_acquire) != 0)
+        xr_thread_yield();
+}
+
+static bool thread_bind_vm_tls(XrThread *thread, XrWorker *worker, XrMachine *machine) {
+    if (!thread || !thread->isolate || !thread->coro || !worker || !machine)
+        return false;
+
+    XrRuntime *runtime = (XrRuntime *) thread->isolate->vm.scheduler;
+    if (!runtime)
+        return false;
+
+    xr_machine_init(machine, -1, runtime);
+    machine->thread = xr_thread_self();
+    atomic_store_explicit(&machine->state, M_RUNNING, memory_order_release);
+    atomic_store_explicit(&machine->current_coro, thread->coro, memory_order_relaxed);
+
+    memset(worker, 0, sizeof(*worker));
+    worker->p.id = -1;
+    worker->p.runtime = runtime;
+    worker->m = machine;
+
+    XrVMContext *machine_ctx = xr_vm_machine_ctx(machine, thread->isolate);
+    if (!machine_ctx)
+        return false;
+    machine_ctx->current_coro = thread->coro;
+
+    tls_current_worker = worker;
+    tls_current_machine = machine;
+    return true;
+}
+
+static void thread_unbind_vm_tls(XrWorker *worker, XrMachine *machine) {
+    if (machine) {
+        XrVMContext *machine_ctx = NULL;
+        if (machine->backend_storage)
+            machine_ctx = xr_vm_machine_ctx(machine, NULL);
+        if (machine_ctx)
+            machine_ctx->current_coro = NULL;
+        atomic_store_explicit(&machine->current_coro, (XrCoroutine *) NULL, memory_order_relaxed);
+    }
+    if (tls_current_worker == worker)
+        tls_current_worker = NULL;
+    if (tls_current_machine == machine)
+        tls_current_machine = NULL;
+    xr_machine_destroy(machine);
+}
+
 static void *thread_entry_vm(void *arg) {
     XrThread *thread = (XrThread *) arg;
     if (!thread)
@@ -58,8 +123,13 @@ static void *thread_entry_vm(void *arg) {
         xr_thread_set_name(xr_thread_self(), thread->name);
     thread_apply_affinity(thread->affinity_cpus, thread->affinity_count);
 
+    XrWorker worker;
+    XrMachine machine;
+    bool bound_vm_tls = thread_bind_vm_tls(thread, &worker, &machine);
+
     XrValue out = xr_null();
-    XrCoroRunKind kind = xr_vm_coro_run_to_completion(thread->coro, &out);
+    XrCoroRunKind kind =
+        bound_vm_tls ? xr_vm_coro_run_to_completion(thread->coro, &out) : XR_CORO_RUN_ERROR;
     if (kind == XR_CORO_RUN_DONE) {
         thread->retval = out;
         atomic_store_explicit(&thread->failed, false, memory_order_release);
@@ -71,10 +141,14 @@ static void *thread_entry_vm(void *arg) {
     }
     atomic_store_explicit(&thread->finished, true, memory_order_release);
 
-    if (thread->isolate)
+    XrVMRuntime *isolate = thread->isolate;
+    if (bound_vm_tls)
+        thread_unbind_vm_tls(&worker, &machine);
+    if (isolate)
         xray_vm_exit();
 
     thread_release_ref(thread);
+    thread_runtime_leave(isolate);
     return NULL;
 }
 
@@ -116,11 +190,13 @@ XrThread *xr_thread_obj_spawn_vm(struct XrVMRuntime *isolate, struct XrCoroutine
     atomic_store_explicit(&thread->failed, false, memory_order_relaxed);
 
     xr_shared_retain(&thread->hdr); /* OS entry owns the handle until exit. */
+    thread_runtime_enter(isolate);
     if (!xr_thread_create_ex(&thread->handle, thread_entry_vm, thread, stack_size)) {
         thread->coro = NULL;
         xr_coro_destroy(coro);
         thread_release_ref(thread); /* entry ref */
         thread_release_ref(thread); /* returned-handle ref */
+        thread_runtime_leave(isolate);
         thread_throw(isolate, XR_ERR_RUNTIME, "sys.Thread.spawn: OS thread creation failed");
         return NULL;
     }

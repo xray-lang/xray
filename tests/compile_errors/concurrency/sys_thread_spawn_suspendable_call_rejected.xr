@@ -1,0 +1,17 @@
+import sys
+
+fn worker() -> int {
+    return 1
+}
+
+fn suspends() -> int {
+    let y = await go worker()
+    return y
+}
+
+fn main() {
+    let t = sys.Thread.spawn(fn() -> int {
+        return suspends()
+    })
+    print(t)
+}

@@ -21,6 +21,10 @@ XR_FUNC bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots);
 XR_FUNC XrCoroutine *xr_coro_create_vm_closure(XrVMRuntime *X, XrClosure *closure, XrValue *args,
                                                const uint8_t *arg_modes, int arg_count,
                                                const char *name, const char *file, int line);
+XR_FUNC XrCoroutine *xr_coro_create_vm_closure_owned(XrVMRuntime *X, XrClosure *closure,
+                                                     XrValue *args, const uint8_t *arg_modes,
+                                                     int arg_count, const char *name,
+                                                     const char *file, int line);
 XR_FUNC XrCoroutine *xr_coro_create_vm_cfunc(XrVMRuntime *X, XrCoroCFuncEntry cfunc, XrValue *args,
                                              int argc, const char *name);
 XR_FUNC XrCoroRunKind xr_vm_coro_run_to_completion(XrCoroutine *coro, XrValue *out);
