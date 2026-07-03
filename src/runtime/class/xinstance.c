@@ -228,10 +228,33 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
         return NULL;
     }
 
-    // Search existing transitions
-    for (XrClassTransition *t = klass->transitions; t; t = t->next) {
+    // Fast path: lock-free search. XrClass is isolate-shared metadata and the
+    // transition list only ever grows with immortal, immutable nodes published
+    // via a release-store on the head. An acquire-load lets concurrent worker
+    // threads traverse safely without touching a lock, so dynamic field access
+    // stays lock-free on the hot path (P1-3).
+    for (XrClassTransition *t = atomic_load_explicit(&klass->transitions, memory_order_acquire); t;
+         t = t->next) {
         if (t->symbol == symbol)
             return t->target;
+    }
+
+    // Slow path: serialize creation so two workers adding the same field to the
+    // same shape cannot fork the transition chain (which would break shape
+    // identity for inline caches / instanceof).
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(X);
+    if (core)
+        xr_amutex_lock(&core->metadata_lock);
+
+    // Double-check under the lock: another worker may have installed this exact
+    // transition between our lock-free miss and acquiring the lock.
+    for (XrClassTransition *t = atomic_load_explicit(&klass->transitions, memory_order_acquire); t;
+         t = t->next) {
+        if (t->symbol == symbol) {
+            if (core)
+                xr_amutex_unlock(&core->metadata_lock);
+            return t->target;
+        }
     }
 
     // Create child class: inherits all parent fields + one new field
@@ -239,10 +262,16 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
     uint16_t child_fc = parent_fc + 1;
 
     XrClass *child = (XrClass *) xr_calloc(1, sizeof(XrClass));
-    if (!child)
+    if (!child) {
+        if (core)
+            xr_amutex_unlock(&core->metadata_lock);
         return NULL;
+    }
 
-    // Copy key fields from parent
+    // Copy key fields from parent. The all-zero XrObjHeader from xr_calloc
+    // intentionally matches xr_class_new_dynamic_root: dynamic-layout shapes are
+    // permanent metadata identified by XR_CLASS_DYNAMIC_LAYOUT + builtin_kind,
+    // not by hdr.type, and are never GC-managed or freed.
     child->name = klass->name;
     child->super = klass->super;
     child->flags = klass->flags;
@@ -250,12 +279,14 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
     child->in_object_capacity = klass->in_object_capacity;
     child->transition_parent = klass;
     child->transition_symbol = symbol;
-    child->transitions = NULL;
+    atomic_store_explicit(&child->transitions, NULL, memory_order_relaxed);
 
     // Build field descriptor array: parent fields + new field
     child->fields = (XrFieldDescriptor *) xr_malloc(sizeof(XrFieldDescriptor) * child_fc);
     if (!child->fields) {
         xr_free(child);
+        if (core)
+            xr_amutex_unlock(&core->metadata_lock);
         return NULL;
     }
     if (parent_fc > 0 && klass->fields) {
@@ -281,6 +312,8 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
     if (!child->field_symbol_to_index) {
         xr_free(child->fields);
         xr_free(child);
+        if (core)
+            xr_amutex_unlock(&core->metadata_lock);
         return NULL;
     }
     for (int i = 0; i < new_cap; i++)
@@ -293,19 +326,25 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
             child->field_symbol_to_index[s] = i;
     }
 
-    // Register transition on parent
+    // Register transition on parent.
     XrClassTransition *trans = (XrClassTransition *) xr_malloc(sizeof(XrClassTransition));
     if (!trans) {
         xr_free(child->field_symbol_to_index);
         xr_free(child->fields);
         xr_free(child);
+        if (core)
+            xr_amutex_unlock(&core->metadata_lock);
         return NULL;
     }
     trans->symbol = symbol;
     trans->target = child;
-    trans->next = klass->transitions;
-    klass->transitions = trans;
+    trans->next = atomic_load_explicit(&klass->transitions, memory_order_relaxed);
+    // Publish with release: any reader that acquire-loads the new head is
+    // guaranteed to see the fully constructed `child` and `trans->next` chain.
+    atomic_store_explicit(&klass->transitions, trans, memory_order_release);
 
+    if (core)
+        xr_amutex_unlock(&core->metadata_lock);
     return child;
 }
 
