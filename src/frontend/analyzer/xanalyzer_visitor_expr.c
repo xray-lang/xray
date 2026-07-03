@@ -144,6 +144,14 @@ static XrType *xa_bytes_method_type(XaInferContext *ctx, XrType *receiver, const
     XrType *t_int = xr_type_new_int(X);
     XrType *t_bytes = xr_type_new_bytes(X);
     XrType *t_bytespan = xr_type_new_bytespan(X);
+    if (strcmp(name, "appendFrom") == 0) {
+        XrType *params[1] = {t_bytespan};
+        return xr_type_new_function(X, params, 1, t_bytes, false);
+    }
+    if (strcmp(name, "repeatFrom") == 0) {
+        XrType *params[2] = {t_int, t_int};
+        return xr_type_new_function(X, params, 2, t_bytes, false);
+    }
     if (strcmp(name, "appendFromUnchecked") == 0) {
         XrType *params[3] = {t_bytespan, t_int, t_int};
         return xr_type_new_function(X, params, 3, t_bytes, false);

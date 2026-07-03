@@ -1,0 +1,3 @@
+fn append(input: in Bytes, src: ByteSpan) {
+    input.appendFrom(src)
+}

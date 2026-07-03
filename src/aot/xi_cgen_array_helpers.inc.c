@@ -890,13 +890,17 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
             const char *method = (const char *) user->aux;
             if (!method)
                 return false;
-            if (arg_index == 0 && (strcmp(method, "push") == 0 || strcmp(method, "reserve") == 0 ||
-                                   strcmp(method, "commonPrefixUnchecked") == 0 ||
-                                   strcmp(method, "writeFromUnchecked") == 0 ||
-                                   strcmp(method, "repeatAtUnchecked") == 0 ||
-                                   strcmp(method, "wildCopyFromNonOverlappingUnchecked") == 0 ||
-                                   strcmp(method, "wildRepeatAtUnchecked") == 0 ||
-                                   strcmp(method, "setLengthUnchecked") == 0))
+            if (arg_index == 0 &&
+                (strcmp(method, "push") == 0 || strcmp(method, "reserve") == 0 ||
+                 strcmp(method, "appendFrom") == 0 || strcmp(method, "repeatFrom") == 0 ||
+                 strcmp(method, "commonPrefixUnchecked") == 0 ||
+                 strcmp(method, "writeFromUnchecked") == 0 ||
+                 strcmp(method, "repeatAtUnchecked") == 0 ||
+                 strcmp(method, "wildCopyFromNonOverlappingUnchecked") == 0 ||
+                 strcmp(method, "wildRepeatAtUnchecked") == 0 ||
+                 strcmp(method, "setLengthUnchecked") == 0))
+                return true;
+            if (arg_index == 1 && strcmp(method, "appendFrom") == 0)
                 return true;
             if (arg_index == 2 && strcmp(method, "writeFromUnchecked") == 0)
                 return true;
@@ -1985,6 +1989,52 @@ static bool emit_bytes_append_from_unchecked_expr(XiCgenCtx *ctx, FILE *out, con
     emit_value_as_rep(out, call->args[2], XR_REP_I64);
     fprintf(out, ", ");
     emit_value_as_rep(out, call->args[3], XR_REP_I64);
+    fprintf(out, ")");
+    emit_bytes_array_result_suffix(out, boxed);
+    return true;
+}
+
+static bool emit_bytes_append_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                        const char *prefix, const XiValue *call) {
+    CgArrayElemInfo dst_info;
+    if (!call || call->nargs != 2)
+        return false;
+    if (!cg_array_value_u8_unchecked_info(ctx, f, call->args[0], &dst_info,
+                                          CG_ARRAY_STORAGE_MUTABLE) ||
+        !cg_span_value_u8_info(ctx, call->args[1], NULL))
+        return false;
+
+    bool boxed = cg_rep(call) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "xr_mkptr(");
+    fprintf(out, "xrt_bytes_append_from_span_raw(");
+    emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
+    fprintf(out, ", ");
+    emit_span_ref_expr(out, call->args[1]);
+    fprintf(out, ")");
+    emit_bytes_array_result_suffix(out, boxed);
+    return true;
+}
+
+static bool emit_bytes_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                        const char *prefix, const XiValue *call) {
+    CgArrayElemInfo info;
+    if (!call || call->nargs != 3)
+        return false;
+    if (!cg_array_value_u8_unchecked_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
+        return false;
+    if (!cg_bytes_unchecked_int_arg(call->args[1]) || !cg_bytes_unchecked_int_arg(call->args[2]))
+        return false;
+
+    bool boxed = cg_rep(call) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "xr_mkptr(");
+    fprintf(out, "xrt_bytes_repeat_from_tail_raw(");
+    emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, call->args[1], XR_REP_I64);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, call->args[2], XR_REP_I64);
     fprintf(out, ")");
     emit_bytes_array_result_suffix(out, boxed);
     return true;

@@ -829,6 +829,14 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
             XrBoundMethod *bm = xr_bound_method_new(
                 isolate, obj, xr_array_get_handler(isolate, SYMBOL_PUSH_UNCHECKED));
             base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_APPEND_FROM) {
+            XrBoundMethod *bm = xr_bound_method_new(
+                isolate, obj, xr_array_get_handler(isolate, SYMBOL_APPEND_FROM));
+            base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_REPEATFROM) {
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_REPEATFROM));
+            base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_APPEND_FROM_UNCHECKED) {
             XrBoundMethod *bm = xr_bound_method_new(
                 isolate, obj, xr_array_get_handler(isolate, SYMBOL_APPEND_FROM_UNCHECKED));

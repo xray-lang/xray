@@ -1869,6 +1869,7 @@ static bool sr_is_typed_array_native_receiver_method(const XiValue *v) {
     const char *method = (const char *) v->aux;
     return strcmp(method, "push") == 0 || strcmp(method, "pushUnchecked") == 0 ||
            strcmp(method, "reserve") == 0 || strcmp(method, "resize") == 0 ||
+           strcmp(method, "appendFrom") == 0 || strcmp(method, "repeatFrom") == 0 ||
            strcmp(method, "appendFromUnchecked") == 0 ||
            strcmp(method, "repeatFromUnchecked") == 0 ||
            strcmp(method, "writeFromUnchecked") == 0 || strcmp(method, "repeatAtUnchecked") == 0 ||

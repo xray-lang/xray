@@ -1098,6 +1098,66 @@ bool xr_array_bytes_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distan
                                            distance, count);
 }
 
+bool xr_array_bytes_append_from_span(XrArray *dst, const void *src_data, int64_t src_length,
+                                     const void *src_guard) {
+    if (!dst || dst->elem_type != XR_ELEM_U8 || xr_array_is_slice(dst))
+        return false;
+    if (src_length < 0 || src_length > INT32_MAX || dst->length > INT32_MAX - src_length)
+        return false;
+    if (src_length > 0 && !src_data)
+        return false;
+
+    bool aliases_dst = false;
+    int64_t src_offset = 0;
+    if (src_length > 0 && src_guard == dst && dst->data) {
+        const uint8_t *base = (const uint8_t *) dst->data;
+        const uint8_t *src = (const uint8_t *) src_data;
+        if (src < base || src > base + dst->length || src_length > dst->length)
+            return false;
+        src_offset = (int64_t) (src - base);
+        if (src_offset > dst->length - src_length)
+            return false;
+        aliases_dst = true;
+    }
+
+    int64_t old_length = dst->length;
+    int64_t new_length = old_length + src_length;
+    if (new_length > dst->capacity) {
+        xr_array_ensure_capacity(dst, (int) new_length);
+        if (dst->capacity < new_length || (new_length > 0 && !dst->data))
+            return false;
+    }
+    if (src_length > 0) {
+        const uint8_t *src =
+            aliases_dst ? (const uint8_t *) dst->data + src_offset : (const uint8_t *) src_data;
+        uint8_t *dst_data = (uint8_t *) dst->data + old_length;
+        xr_array_core_copy_or_move_bytes(dst_data, src, src_length);
+    }
+    dst->length = (int32_t) new_length;
+    return true;
+}
+
+bool xr_array_bytes_repeat_from_tail(XrArray *arr, int64_t distance, int64_t count) {
+    if (!arr || arr->elem_type != XR_ELEM_U8 || xr_array_is_slice(arr))
+        return false;
+    if (distance <= 0 || count < 0 || distance > arr->length)
+        return false;
+    if (count > INT32_MAX || arr->length > INT32_MAX - count)
+        return false;
+    int64_t dst = arr->length;
+    int64_t new_length = dst + count;
+    if (new_length > arr->capacity) {
+        xr_array_ensure_capacity(arr, (int) new_length);
+        if (arr->capacity < new_length || (new_length > 0 && !arr->data))
+            return false;
+    }
+    if (!xr_array_core_bytes_repeat_from(arr->data, new_length, arr->elem_type, dst, distance,
+                                         count))
+        return false;
+    arr->length = (int32_t) new_length;
+    return true;
+}
+
 bool xr_array_bytes_append_from_unchecked(XrArray *dst, XrArray *src, int64_t src_offset,
                                           int64_t count) {
     if (!dst || !src || dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)

@@ -243,6 +243,83 @@ static XrValue m_index_of(XrVMRuntime *iso, XrValue self, XrValue *args, int arg
     return xr_int((xr_Integer) xr_array_index_of(array_self(self), args[0]));
 }
 
+static bool bytespan_arg(XrValue value, const void **data, int64_t *length, const void **guard) {
+    if (XR_IS_SPAN_REF(value)) {
+        XrSpanView *span = XR_TO_SPAN_REF(value);
+        if (!span || span->elem_type != XR_ELEM_U8)
+            return false;
+        if (data)
+            *data = span->data;
+        if (length)
+            *length = span->length;
+        if (guard)
+            *guard = span->guard;
+        return true;
+    }
+    if (XR_IS_ARRAY(value)) {
+        XrArray *arr = XR_TO_ARRAY(value);
+        if (!arr || arr->elem_type != XR_ELEM_U8)
+            return false;
+        if (data)
+            *data = arr->data;
+        if (length)
+            *length = arr->length;
+        if (guard)
+            *guard = arr;
+        return true;
+    }
+    return false;
+}
+
+static XrValue m_append_from(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    XrArray *dst = array_self(self);
+    const void *src_data = NULL;
+    const void *src_guard = NULL;
+    int64_t src_length = 0;
+    if (argc != 1 || !bytespan_arg(args[0], &src_data, &src_length, &src_guard)) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_APPEND_FROM_EXPECTS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!dst || dst->elem_type != XR_ELEM_U8) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_APPEND_FROM_OPERANDS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!xr_array_bytes_append_from_span(dst, src_data, src_length, src_guard)) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
+                                         XR_ERROR_CORE_BYTES_APPEND_FROM_OOB_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    return self;
+}
+
+static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    XrArray *arr = array_self(self);
+    if (argc != 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1])) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!arr || arr->elem_type != XR_ELEM_U8) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
+                                         XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    if (!xr_array_bytes_repeat_from_tail(arr, XR_TO_INT(args[0]), XR_TO_INT(args[1]))) {
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
+                                         XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG);
+        xr_vm_unwind_with_trace(iso, exc);
+        return xr_null();
+    }
+    return self;
+}
+
 static XrValue m_append_from_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrArray *dst = array_self(self);
     if (argc < 3 || !XR_IS_ARRAY(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2])) {
@@ -660,6 +737,8 @@ void xr_array_register_native_type(XrVMRuntime *isolate) {
         {"isEmpty", m_is_empty, 0},
         {"includes", m_includes, 1},
         {"indexOf", m_index_of, 1},
+        {"appendFrom", m_append_from, 1},
+        {"repeatFrom", m_repeat_from, 2},
         {"appendFromUnchecked", m_append_from_unchecked, 3},
         {"repeatFromUnchecked", m_repeat_from_unchecked, 2},
         {"writeFromUnchecked", m_write_from_unchecked, 4},
