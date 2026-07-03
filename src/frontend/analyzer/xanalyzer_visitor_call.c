@@ -314,29 +314,176 @@ static void xa_check_spawn_call_boundary_args(XaInferContext *ctx, AstNode *boun
 
 typedef struct XaThreadSpawnSyncScan {
     XaInferContext *ctx;
+    XaSymbol *call_stack[32];
+    char feature_buf[128];
+    int call_depth;
+    int nested_function_depth;
+    bool report;
+    bool found;
     bool reported;
 } XaThreadSpawnSyncScan;
 
-static void xa_thread_spawn_sync_scan_pre(AstNode *node, void *ud) {
-    XaThreadSpawnSyncScan *scan = (XaThreadSpawnSyncScan *) ud;
-    if (!scan || scan->reported || !scan->ctx || !node)
-        return;
-    const char *feature = NULL;
-    if (node->type == AST_AWAIT_EXPR)
-        feature = "await";
-    else if (node->type == AST_YIELD_STMT)
-        feature = "yield";
-    if (!feature)
-        return;
+static AstNode *xa_thread_spawn_inline_body(AstNode *body);
 
-    XrLocation loc = {.file = scan->ctx->file_path, .line = node->line, .column = node->column};
-    char msg[160];
+static XaScope *xa_find_function_scope_for_symbol(XaScope *scope, XaSymbol *sym) {
+    if (!scope || !sym)
+        return NULL;
+    if (scope->function_symbol == sym)
+        return scope;
+    for (int i = 0; i < scope->child_count; i++) {
+        XaScope *found = xa_find_function_scope_for_symbol(scope->children[i], sym);
+        if (found)
+            return found;
+    }
+    return NULL;
+}
+
+static AstNode *xa_symbol_function_body(XaInferContext *ctx, XaSymbol *sym) {
+    if (!ctx || !ctx->analyzer || !sym || sym->kind != XA_SYM_FUNCTION)
+        return NULL;
+    XaScope *scope = xa_find_function_scope_for_symbol(ctx->analyzer->global_scope, sym);
+    AstNode *fn_node = scope ? (AstNode *) scope->ast_node : NULL;
+    if (!fn_node)
+        return NULL;
+    if (fn_node->type == AST_FUNCTION_DECL)
+        return fn_node->as.function_decl.body;
+    if (fn_node->type == AST_FUNCTION_EXPR)
+        return fn_node->as.function_expr.body;
+    return NULL;
+}
+
+static bool xa_thread_spawn_call_is_coro_yield(CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    if (!ma->name || strcmp(ma->name, "yield") != 0 || !ma->object ||
+        ma->object->type != AST_VARIABLE)
+        return false;
+    const char *module_name = ma->object->as.variable.name;
+    return module_name && strcmp(module_name, "Coro") == 0;
+}
+
+static void xa_report_thread_spawn_suspend(XaThreadSpawnSyncScan *scan, AstNode *site,
+                                           const char *feature) {
+    if (!scan || scan->reported || !scan->ctx || !site || !feature)
+        return;
+    XrLocation loc = {.file = scan->ctx->file_path, .line = site->line, .column = site->column};
+    char msg[192];
     snprintf(msg, sizeof(msg),
              "sys.Thread.spawn body cannot suspend; %s is not allowed in an OS thread body",
              feature);
     xa_analyzer_add_diagnostic(scan->ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_AWAIT_TYPE,
                                msg, &loc);
     scan->reported = true;
+}
+
+static bool xa_thread_spawn_body_may_suspend(XaInferContext *ctx, AstNode *body,
+                                             XaSymbol **call_stack, int call_depth);
+
+static bool xa_thread_spawn_symbol_may_suspend(XaInferContext *ctx, XaSymbol *sym,
+                                               XaSymbol **call_stack, int call_depth) {
+    if (!ctx || !sym || sym->kind != XA_SYM_FUNCTION || sym->is_builtin)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (links && links->is_extern)
+        return false;
+    for (int i = 0; i < call_depth; i++) {
+        if (call_stack[i] == sym)
+            return false;
+    }
+    if (call_depth >= 32)
+        return false;
+    AstNode *body = xa_symbol_function_body(ctx, sym);
+    if (!body)
+        return false;
+    call_stack[call_depth] = sym;
+    bool result = xa_thread_spawn_body_may_suspend(ctx, body, call_stack, call_depth + 1);
+    call_stack[call_depth] = NULL;
+    return result;
+}
+
+static bool xa_thread_spawn_inline_call_may_suspend(XaInferContext *ctx, CallExprNode *call,
+                                                    XaSymbol **call_stack, int call_depth,
+                                                    const char **out_feature) {
+    if (out_feature)
+        *out_feature = NULL;
+    if (!ctx || !call)
+        return false;
+    if (xa_thread_spawn_call_is_coro_yield(call)) {
+        if (out_feature)
+            *out_feature = "Coro.yield()";
+        return true;
+    }
+
+    AstNode *callee = call->callee;
+    AstNode *inline_body = xa_thread_spawn_inline_body(callee);
+    if (inline_body && xa_thread_spawn_body_may_suspend(ctx, inline_body, call_stack, call_depth)) {
+        if (out_feature)
+            *out_feature = "call to suspendable inline function";
+        return true;
+    }
+
+    if (callee && callee->type == AST_VARIABLE) {
+        const char *name = callee->as.variable.name;
+        XaSymbol *sym = name ? xa_lookup_visible_symbol(ctx, name) : NULL;
+        if (sym && xa_thread_spawn_symbol_may_suspend(ctx, sym, call_stack, call_depth)) {
+            if (out_feature) {
+                *out_feature = NULL;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+static void xa_thread_spawn_sync_scan_pre(AstNode *node, void *ud) {
+    XaThreadSpawnSyncScan *scan = (XaThreadSpawnSyncScan *) ud;
+    if (!scan || scan->found || scan->reported || !scan->ctx || !node)
+        return;
+    if (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR ||
+        node->type == AST_METHOD_DECL) {
+        scan->nested_function_depth++;
+        return;
+    }
+    if (scan->nested_function_depth > 0)
+        return;
+
+    const char *feature = NULL;
+    if (node->type == AST_AWAIT_EXPR)
+        feature = "await";
+    else if (node->type == AST_YIELD_STMT)
+        feature = "yield";
+    else if (node->type == AST_CALL_EXPR) {
+        CallExprNode *call = &node->as.call_expr;
+        const char *call_feature = NULL;
+        if (xa_thread_spawn_inline_call_may_suspend(scan->ctx, call, scan->call_stack,
+                                                    scan->call_depth, &call_feature)) {
+            feature = call_feature;
+            if (!feature && call->callee && call->callee->type == AST_VARIABLE) {
+                snprintf(scan->feature_buf, sizeof(scan->feature_buf),
+                         "call to suspendable function '%s'",
+                         call->callee->as.variable.name ? call->callee->as.variable.name : "?");
+                feature = scan->feature_buf;
+            }
+        }
+    }
+    if (!feature)
+        return;
+
+    scan->found = true;
+    if (scan->report)
+        xa_report_thread_spawn_suspend(scan, node, feature);
+}
+
+static void xa_thread_spawn_sync_scan_post(AstNode *node, void *ud) {
+    XaThreadSpawnSyncScan *scan = (XaThreadSpawnSyncScan *) ud;
+    if (!scan || !node)
+        return;
+    if ((node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR ||
+         node->type == AST_METHOD_DECL) &&
+        scan->nested_function_depth > 0) {
+        scan->nested_function_depth--;
+    }
 }
 
 static AstNode *xa_thread_spawn_inline_body(AstNode *body) {
@@ -356,12 +503,33 @@ static AstNode *xa_thread_spawn_inline_body(AstNode *body) {
     return NULL;
 }
 
+static bool xa_thread_spawn_body_may_suspend(XaInferContext *ctx, AstNode *body,
+                                             XaSymbol **call_stack, int call_depth) {
+    if (!ctx || !body)
+        return false;
+    XaThreadSpawnSyncScan scan = {.ctx = ctx,
+                                  .call_depth = call_depth,
+                                  .nested_function_depth = 0,
+                                  .report = false,
+                                  .found = false,
+                                  .reported = false};
+    for (int i = 0; i < call_depth && i < 32; i++)
+        scan.call_stack[i] = call_stack[i];
+    xa_ast_walk(body, xa_thread_spawn_sync_scan_pre, xa_thread_spawn_sync_scan_post, &scan);
+    return scan.found;
+}
+
 static void xa_check_thread_spawn_sync_body(XaInferContext *ctx, AstNode *body) {
     AstNode *inline_body = xa_thread_spawn_inline_body(body);
     if (!inline_body)
         return;
-    XaThreadSpawnSyncScan scan = {.ctx = ctx, .reported = false};
-    xa_ast_walk(inline_body, xa_thread_spawn_sync_scan_pre, NULL, &scan);
+    XaThreadSpawnSyncScan scan = {.ctx = ctx,
+                                  .call_depth = 0,
+                                  .nested_function_depth = 0,
+                                  .report = true,
+                                  .found = false,
+                                  .reported = false};
+    xa_ast_walk(inline_body, xa_thread_spawn_sync_scan_pre, xa_thread_spawn_sync_scan_post, &scan);
 }
 
 static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node,

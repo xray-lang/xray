@@ -874,8 +874,8 @@ XR_FUNC XrDispatchAction vm_thread_spawn(XrVMRuntime *isolate, XrVMContext *vm_c
     }
 
     XrValue *args = (c > 0) ? &base[b + 1] : NULL;
-    XrCoroutine *coro = xr_coro_create_vm_closure(isolate, closure, args, c > 0 ? arg_modes : NULL,
-                                                  c, thread_name, NULL, 0);
+    XrCoroutine *coro = xr_coro_create_vm_closure_owned(
+        isolate, closure, args, c > 0 ? arg_modes : NULL, c, thread_name, NULL, 0);
     if (!coro) {
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD,
                  "sys.Thread.spawn: failed to create thread coroutine");

@@ -87,6 +87,10 @@ XR_FUNC XrValue xr_thread_obj_join(XrThread *thread);
 /* Detach: the OS thread's resources are reclaimed on exit; must not be joined. */
 XR_FUNC void xr_thread_obj_detach(XrThread *thread);
 
+/* Wait until all VM sys.Thread entries owned by `isolate` have left their OS
+ * thread entry function. Used during isolate teardown before VM heaps/TLS die. */
+XR_FUNC void xr_thread_obj_drain_isolate(struct XrVMRuntime *isolate);
+
 XR_FUNC void xr_obj_destroy_thread(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 XR_FUNC void xr_thread_register_native_type(struct XrVMRuntime *isolate);
 

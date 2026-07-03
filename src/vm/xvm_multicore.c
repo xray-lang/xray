@@ -9,6 +9,7 @@
  */
 
 #include "xvm_internal.h"
+#include "../coro/xthread_obj.h"
 #include "../coro/xworker.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xisolate_internal.h"
@@ -37,6 +38,8 @@ void xray_vm_multicore_init(XrVMRuntime *X, int num_workers) {
 void xray_vm_multicore_destroy(XrVMRuntime *X) {
     if (!X || !X->vm.scheduler)
         return;
+
+    xr_thread_obj_drain_isolate(X);
 
     XrRuntime *runtime = (XrRuntime *) X->vm.scheduler;
     bool stats_enabled = xr_sched_stats_enabled(runtime);

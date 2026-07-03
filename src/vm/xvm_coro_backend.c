@@ -77,7 +77,8 @@ static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrVMRuntime *X, XrC
                                           XrValue *args, int arg_count, bool copy_args);
 static bool vm_backend_bind_closure_entry_modes(XrCoroutine *coro, XrVMRuntime *X,
                                                 XrClosure *closure, XrValue *args,
-                                                const uint8_t *arg_modes, int arg_count);
+                                                const uint8_t *arg_modes, int arg_count,
+                                                bool force_private_closure);
 static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
                                         int arg_count);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
@@ -262,7 +263,7 @@ static XrCoroutine *vm_backend_alloc_shell(XrVMRuntime *X, bool use_runtime_pool
 // Create bootstrap main coroutine before script execution.
 XrCoroutine *xr_coro_create_bootstrap(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "coro_create_bootstrap: NULL isolate");
-    XrCoroutine *coro = vm_backend_alloc_shell(X, false);
+    XrCoroutine *coro = vm_backend_alloc_shell(X, true);
     if (!coro)
         return NULL;
 
@@ -335,7 +336,46 @@ XrCoroutine *xr_coro_create_vm_closure(XrVMRuntime *X, XrClosure *closure, XrVal
         return NULL;
     }
 
-    if (!vm_backend_bind_closure_entry_modes(coro, X, closure, args, arg_modes, arg_count)) {
+    if (!vm_backend_bind_closure_entry_modes(coro, X, closure, args, arg_modes, arg_count, false)) {
+        xr_coro_free(coro);
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+    if (xr_coro_name(coro) && !xr_coro_set_source(coro, file, line)) {
+        xr_coro_free(coro);
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+    if (xr_coro_name(coro) &&
+        !xr_coro_set_spawn_origin(coro, (XrCoroutine *) X->vm.current_coro, file, line)) {
+        xr_coro_free(coro);
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+
+    return coro;
+}
+
+XrCoroutine *xr_coro_create_vm_closure_owned(XrVMRuntime *X, XrClosure *closure, XrValue *args,
+                                             const uint8_t *arg_modes, int arg_count,
+                                             const char *name, const char *file, int line) {
+    XR_DCHECK(X != NULL, "coro_create_vm_closure_owned: NULL isolate");
+    XR_DCHECK(closure != NULL, "coro_create_vm_closure_owned: NULL closure");
+    XR_DCHECK(arg_count >= 0, "coro_create_vm_closure_owned: negative arg_count");
+    XR_DCHECK(arg_count == 0 || args != NULL,
+              "coro_create_vm_closure_owned: NULL args with count > 0");
+
+    XrCoroutine *coro = vm_backend_alloc_shell(X, false);
+    if (!coro)
+        return NULL;
+
+    if (!xr_coro_init_shell(coro, X, name, true)) {
+        xr_coro_free(coro);
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+
+    if (!vm_backend_bind_closure_entry_modes(coro, X, closure, args, arg_modes, arg_count, true)) {
         xr_coro_free(coro);
         xr_coro_discard_uninitialized(coro);
         return NULL;
@@ -483,9 +523,50 @@ static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrVMRuntime *X, XrC
     return true;
 }
 
+/*
+ * P0-1 defense-in-depth: decide whether a `go`-spawned closure must receive a
+ * private deep copy of its captured environment.
+ *
+ * Compile-time escape analysis rejects go-closures that capture mutable locals,
+ * but indirect forms (closure returned from a function, stored in a container,
+ * passed as a parameter, then `go f()`) can slip past the static check. If such
+ * a closure were shared by pointer between the spawning coroutine and the child,
+ * both would run non-atomic RC dup/drop on the same captured objects on
+ * different M-threads — the exact refcount race that leads to UAF/double-free.
+ *
+ * The signed-RC invariant makes the test cheap and precise:
+ *   rc <  0  → shared / managed (channel, task, ...) / immortal object. Its
+ *              dup/drop are atomic or no-ops, so it is safe to reference from
+ *              multiple coroutines. Do NOT copy.
+ *   rc >= 0  → thread-local private object (capture cell, private Array/Map/
+ *              instance). Sharing it across coroutines is the unsafe case, so
+ *              the child must get its own copy.
+ * Closures with no captures, or that only capture primitives / shared objects,
+ * take the zero-cost fast path (no copy, plain retain) — this covers the common
+ * `go topLevelFn(args)` and `go closureOverSharedConst()` shapes.
+ */
+static bool vm_closure_needs_private_copy(const XrClosure *closure) {
+    if (!closure)
+        return false;
+    for (uint16_t i = 0; i < closure->upval_count; i++) {
+        XrValue uv = closure->upvals[i];
+        if (!XR_IS_PTR(uv))
+            continue;
+        XrObjHeader *h = XR_VALUE_GCPTR(uv);
+        if (!h)
+            continue;
+        int32_t rc = atomic_load_explicit(&h->refcount, memory_order_relaxed);
+        if (rc < 0)
+            continue;  // shared / managed / immortal: safe to share by pointer
+        return true;   // thread-local private capture: child needs its own copy
+    }
+    return false;
+}
+
 static bool vm_backend_bind_closure_entry_modes(XrCoroutine *coro, XrVMRuntime *X,
                                                 XrClosure *closure, XrValue *args,
-                                                const uint8_t *arg_modes, int arg_count) {
+                                                const uint8_t *arg_modes, int arg_count,
+                                                bool force_private_closure) {
     if (!coro || !closure)
         return false;
     if (!vm_backend_ensure_state(coro))
@@ -495,9 +576,29 @@ static bool vm_backend_bind_closure_entry_modes(XrCoroutine *coro, XrVMRuntime *
         return false;
     vm_backend_clear_entry_state(coro);
     state->entry_type = XR_CORO_ENTRY_CLOSURE;
-    state->entry.closure = closure;
-    xr_rc_retain((XrObjHeader *) closure);
-    state->entry_closure_owner = xr_current_coro_heap();
+
+    if (X && (force_private_closure || vm_closure_needs_private_copy(closure))) {
+        /* Give the child its own copy of the captured environment so no private
+         * mutable object is shared across the coroutine boundary. sys.Thread
+         * also forces a copy for no-capture closures because detach lets the
+         * spawner's heap die while the OS thread is still entering the VM.
+         * deep_copy targets the child's heap: private captures become private
+         * copies, shared/managed upvals are retained/shared exactly as arg
+         * transfer does. The copy is uniquely owned by the child, so it is
+         * released against the child heap in vm_entry_reset_no_free. */
+        XrValue copied = xr_deep_copy_to_coro(X, xr_value_from_closure(closure), coro);
+        if (!XR_IS_PTR(copied) || !xr_value_is_closure(copied)) {
+            vm_backend_clear_entry_state(coro);
+            return false;  // OOM during copy → fail the spawn (never fall back to unsafe sharing)
+        }
+        state->entry.closure = xr_value_to_closure(copied);
+        state->entry_closure_owner = coro->heap;  // child owns the copy
+    } else {
+        state->entry.closure = closure;
+        xr_rc_retain((XrObjHeader *) closure);
+        state->entry_closure_owner = xr_current_coro_heap();
+    }
+
     if (!vm_entry_copy_args(coro, X, state, args, arg_modes, arg_count, false)) {
         vm_backend_clear_entry_state(coro);
         return false;

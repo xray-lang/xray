@@ -1,0 +1,9 @@
+import sys
+
+fn main() {
+    let t = sys.Thread.spawn(fn() -> int {
+        Coro.yield()
+        return 1
+    })
+    print(t)
+}

@@ -86,6 +86,7 @@ struct XrVMRuntime {
     struct XrCoroutine *main_coro;  // Main coroutine (owns large RC heap)
     struct XrTask *deferred_tasks;  // Runtime-owned Task shells awaiting isolate teardown
     size_t deferred_task_count;
+    _Atomic size_t sys_thread_count;  // Running VM sys.Thread entries using this isolate
 
     // Global state
     XrGlobalsTable *globals;  // Dynamic global variables table

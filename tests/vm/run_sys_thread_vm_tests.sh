@@ -30,7 +30,8 @@ expect_output() {
     local out="$WORK/$name.out"
     local err="$WORK/$name.err"
 
-    if "$XRAY" run "$src" >"$out" 2>"$err" && [ "$(cat "$out")" = "$expected" ]; then
+    if "$XRAY" run "$src" >"$out" 2>"$err" && [ "$(cat "$out")" = "$expected" ] &&
+        [ ! -s "$err" ]; then
         record_pass "$name output"
     else
         record_fail "$name output"
@@ -53,7 +54,9 @@ ARRAY_SRC="$PROJECT_DIR/tests/vm/sys_thread_join_array.xr"
 OPTIONS_SRC="$PROJECT_DIR/tests/vm/sys_thread_spawn_options.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
-expect_output "detach" "$DETACH_SRC" "detached"
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    expect_output "detach_$i" "$DETACH_SRC" "detached"
+done
 expect_output "join_array" "$ARRAY_SRC" "42"
 expect_output "spawn_options" "$OPTIONS_SRC" "42"
 

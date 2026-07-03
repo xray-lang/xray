@@ -40,6 +40,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../vm/xvm_profiler.h"
 #include "../vm/xvm_internal.h"
+#include "../coro/xthread_obj.h"
 #include "../../stdlib/stdlib_cache.h"
 #include "../os/os_time.h"
 #include <stdio.h>
@@ -136,6 +137,7 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     uint64_t teardown_start_ns = xr_time_monotonic_ns();
     uint64_t stage_start_ns = teardown_start_ns;
     uint64_t profiler_ms = 0;
+    uint64_t sys_thread_drain_ms = 0;
     uint64_t runtime_ms = 0;
     uint64_t tls_exit_ms = 0;
     uint64_t main_coro_ms = 0;
@@ -150,6 +152,14 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     uint64_t string_pool_ms = 0;
     uint64_t stdlib_cache_ms = 0;
     uint64_t config_ms = 0;
+
+    /* Detached VM sys.Thread entries still execute against this isolate even
+     * after user code has returned. Drain them before tearing down scheduler,
+     * profiler, TLS, coroutine heaps, or the shared runtime core they may still
+     * touch. */
+    stage_start_ns = xr_time_monotonic_ns();
+    xr_thread_obj_drain_isolate(isolate);
+    sys_thread_drain_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     /* Drain the per-isolate profiler before any structure that
      * powers the report (opcode info, isolate pointer) goes away.
@@ -264,18 +274,19 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     if (teardown_stats) {
         fprintf(stderr,
                 "Isolate teardown: profiler_ms=%llu runtime_ms=%llu tls_exit_ms=%llu "
-                "main_coro_ms=%llu lifecycle_cleanup_ms=%llu vm_cleanup_ms=%llu "
+                "sys_thread_drain_ms=%llu main_coro_ms=%llu "
+                "lifecycle_cleanup_ms=%llu vm_cleanup_ms=%llu "
                 "tmp_strbuf_ms=%llu globals_ms=%llu coro_storage_ms=%llu "
                 "gc_cleanup_ms=%llu deferred_tasks_ms=%llu sys_heap_ms=%llu "
                 "string_pool_ms=%llu stdlib_cache_ms=%llu config_ms=%llu total_ms=%llu\n",
                 (unsigned long long) profiler_ms, (unsigned long long) runtime_ms,
-                (unsigned long long) tls_exit_ms, (unsigned long long) main_coro_ms,
-                (unsigned long long) lifecycle_cleanup_ms, (unsigned long long) vm_cleanup_ms,
-                (unsigned long long) tmp_strbuf_ms, (unsigned long long) globals_ms,
-                (unsigned long long) coro_storage_ms, (unsigned long long) gc_cleanup_ms,
-                (unsigned long long) deferred_tasks_ms, (unsigned long long) sys_heap_ms,
-                (unsigned long long) string_pool_ms, (unsigned long long) stdlib_cache_ms,
-                (unsigned long long) config_ms,
+                (unsigned long long) tls_exit_ms, (unsigned long long) sys_thread_drain_ms,
+                (unsigned long long) main_coro_ms, (unsigned long long) lifecycle_cleanup_ms,
+                (unsigned long long) vm_cleanup_ms, (unsigned long long) tmp_strbuf_ms,
+                (unsigned long long) globals_ms, (unsigned long long) coro_storage_ms,
+                (unsigned long long) gc_cleanup_ms, (unsigned long long) deferred_tasks_ms,
+                (unsigned long long) sys_heap_ms, (unsigned long long) string_pool_ms,
+                (unsigned long long) stdlib_cache_ms, (unsigned long long) config_ms,
                 (unsigned long long) isolate_teardown_elapsed_ms(teardown_start_ns));
     }
 
