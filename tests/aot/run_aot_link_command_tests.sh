@@ -449,6 +449,19 @@ else
         "freestanding-profile/mem: rejects selective allocator import"
 fi
 
+FREESTANDING_MEM_PAGE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_page_reject.xr"
+FREESTANDING_MEM_PAGE_LOG="$WORK/freestanding_mem_page_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_mem_page_reject" \
+        "$FREESTANDING_MEM_PAGE_SRC" >"$FREESTANDING_MEM_PAGE_LOG" 2>&1; then
+    record_fail "freestanding-profile/mem: rejects page allocator member"
+    sed 's/^/      /' "$FREESTANDING_MEM_PAGE_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_MEM_PAGE_LOG" \
+        "freestanding profile rejects mem.pageAlloc" \
+        "freestanding-profile/mem: rejects page allocator member"
+fi
+
 FREESTANDING_NON_NATIVE_LOG="$WORK/freestanding_non_native.log"
 if "$XRAY" build --profile freestanding -o "$WORK/freestanding_non_native" \
         "$FREESTANDING_EXPORT_SRC" >"$FREESTANDING_NON_NATIVE_LOG" 2>&1; then

@@ -117,6 +117,10 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"mem", "allocAligned", 2, "xrt_mem_alloc_aligned", "vv", CG_AOT_RET_VALUE, NULL},
     {"mem", "realloc", 2, "xrt_mem_realloc", "vv", CG_AOT_RET_VALUE, NULL},
     {"mem", "free", 1, "xrt_mem_free", "v", CG_AOT_RET_VALUE, NULL},
+    {"mem", "pageAlloc", 1, "xrt_mem_page_alloc_default", "v", CG_AOT_RET_VALUE, NULL},
+    {"mem", "pageAlloc", 2, "xrt_mem_page_alloc", "vv", CG_AOT_RET_VALUE, NULL},
+    {"mem", "pageProtect", 3, "xrt_mem_page_protect", "vvv", CG_AOT_RET_VALUE, NULL},
+    {"mem", "pageFree", 2, "xrt_mem_page_free", "vv", CG_AOT_RET_VALUE, NULL},
     {"mem", "fromAddress", 1, "xrt_mem_from_address", "v", CG_AOT_RET_VALUE, NULL},
     {"mem", "addressOf", 1, "xrt_mem_address_of", "v", CG_AOT_RET_VALUE, NULL},
     {"mem", "copy", 3, "xrt_mem_copy", "vvv", CG_AOT_RET_VALUE, NULL},
@@ -198,6 +202,10 @@ static const CgAotStdlibConst g_aot_stdlib_generated_consts[] = {
     {"log", "WARN", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(30)},
     {"log", "ERROR", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(40)},
     {"log", "FATAL", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(50)},
+    {"mem", "PROT_NONE", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(0)},
+    {"mem", "PROT_READ", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(1)},
+    {"mem", "PROT_WRITE", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(2)},
+    {"mem", "PROT_EXEC", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(4)},
 };
 #define CG_AOT_STDLIB_GENERATED_CONST_COUNT ((int) (sizeof(g_aot_stdlib_generated_consts) / sizeof(g_aot_stdlib_generated_consts[0])))
 

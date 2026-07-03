@@ -2543,6 +2543,46 @@ module mem {
     layer: "core"
   }
 
+  const PROT_NONE {
+    signature: ": int"
+    doc: "No access protection for mem.pageAlloc/pageProtect"
+    vm: "mem.PROT_NONE"
+    vm_value: "xr_int(XR_MEM_PROT_NONE)"
+    aot_const: "int64"
+    value: 0
+    layer: "core"
+  }
+
+  const PROT_READ {
+    signature: ": int"
+    doc: "Readable page protection bit for mem.pageAlloc/pageProtect"
+    vm: "mem.PROT_READ"
+    vm_value: "xr_int(XR_MEM_PROT_READ)"
+    aot_const: "int64"
+    value: 1
+    layer: "core"
+  }
+
+  const PROT_WRITE {
+    signature: ": int"
+    doc: "Writable page protection bit for mem.pageAlloc/pageProtect"
+    vm: "mem.PROT_WRITE"
+    vm_value: "xr_int(XR_MEM_PROT_WRITE)"
+    aot_const: "int64"
+    value: 2
+    layer: "core"
+  }
+
+  const PROT_EXEC {
+    signature: ": int"
+    doc: "Executable page protection bit for mem.pageAlloc/pageProtect"
+    vm: "mem.PROT_EXEC"
+    vm_value: "xr_int(XR_MEM_PROT_EXEC)"
+    aot_const: "int64"
+    value: 4
+    layer: "core"
+  }
+
   fn alloc {
     signature: "(n: int): RawMut<uint8>"
     doc: "Allocate n uninitialized bytes (malloc). NULL on OOM; pair with mem.free"
@@ -2598,6 +2638,54 @@ module mem {
     aot: "xrt_mem_free"
     argc: 1
     arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn pageAlloc {
+    signature: "(bytes: int, prot?: int): RawMut<uint8>"
+    doc: "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree"
+    vm: "mem_page_alloc"
+    aot: "xrt_mem_page_alloc_default"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn pageAlloc {
+    signature: "(bytes: int, prot?: int): RawMut<uint8>"
+    doc: "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree"
+    vm: "mem_page_alloc"
+    aot: "xrt_mem_page_alloc"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn pageProtect {
+    signature: "(ptr: RawMut<uint8>, bytes: int, prot: int): bool"
+    doc: "Change anonymous page protection bits; returns false on OS failure"
+    vm: "mem_page_protect"
+    aot: "xrt_mem_page_protect"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn pageFree {
+    signature: "(ptr: RawMut<uint8>, bytes: int): bool"
+    doc: "Release anonymous pages from mem.pageAlloc; returns false on OS failure"
+    vm: "mem_page_free"
+    aot: "xrt_mem_page_free"
+    argc: 2
+    arg_spec: "vv"
     aot_direct: true
     link_object: false
     layer: "core"

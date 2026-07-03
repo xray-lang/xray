@@ -260,6 +260,9 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "allocAligned", mem_alloc_aligned);
     XRS_EXPORT(module, isolate, "realloc", mem_realloc);
     XRS_EXPORT(module, isolate, "free", mem_free);
+    XRS_EXPORT(module, isolate, "pageAlloc", mem_page_alloc);
+    XRS_EXPORT(module, isolate, "pageProtect", mem_page_protect);
+    XRS_EXPORT(module, isolate, "pageFree", mem_page_free);
     XRS_EXPORT(module, isolate, "fromAddress", mem_from_address);
     XRS_EXPORT(module, isolate, "addressOf", mem_address_of);
     XRS_EXPORT(module, isolate, "copy", mem_copy);
@@ -280,6 +283,10 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "addOverflows", mem_add_overflows);
     XRS_EXPORT(module, isolate, "subOverflows", mem_sub_overflows);
     XRS_EXPORT(module, isolate, "mulOverflows", mem_mul_overflows);
+    xr_module_add_export(isolate, module, "PROT_NONE", xr_int(XR_MEM_PROT_NONE));
+    xr_module_add_export(isolate, module, "PROT_READ", xr_int(XR_MEM_PROT_READ));
+    xr_module_add_export(isolate, module, "PROT_WRITE", xr_int(XR_MEM_PROT_WRITE));
+    xr_module_add_export(isolate, module, "PROT_EXEC", xr_int(XR_MEM_PROT_EXEC));
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_MEM */
 

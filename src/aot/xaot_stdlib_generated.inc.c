@@ -263,6 +263,14 @@ static bool xaot_stdlib_generated_symbol_is_constant(const char *symbol) {
         return true;
     if (strcmp(symbol, "log.FATAL") == 0)
         return true;
+    if (strcmp(symbol, "mem.PROT_NONE") == 0)
+        return true;
+    if (strcmp(symbol, "mem.PROT_READ") == 0)
+        return true;
+    if (strcmp(symbol, "mem.PROT_WRITE") == 0)
+        return true;
+    if (strcmp(symbol, "mem.PROT_EXEC") == 0)
+        return true;
     return false;
 }
 

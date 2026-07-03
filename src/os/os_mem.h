@@ -54,7 +54,7 @@ XR_FUNC void *xr_mem_map(size_t size, int prot);
 
 // Release a region previously returned by xr_mem_map. `size` must
 // match the original allocation on POSIX; Windows ignores it.
-XR_FUNC void xr_mem_unmap(void *ptr, size_t size);
+XR_FUNC bool xr_mem_unmap(void *ptr, size_t size);
 
 // Change the protection bits on an existing region. Returns true
 // on success. On Windows, the previous protection is discarded.

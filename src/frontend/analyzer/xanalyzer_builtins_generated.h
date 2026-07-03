@@ -386,6 +386,9 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"allocAligned", "(n: int, align: int): RawMut<uint8>", "Allocate n bytes aligned to align (power-of-two >= sizeof(void*); posix_memalign). NULL on failure", true, false},
     {"realloc", "(ptr: RawMut<uint8>, n: int): RawMut<uint8>", "Resize a mem.alloc buffer to n bytes (realloc). NULL on OOM", true, false},
     {"free", "(ptr: RawMut<uint8>): ()", "Free a buffer from mem.alloc/allocAligned/realloc", true, false},
+    {"pageAlloc", "(bytes: int, prot?: int): RawMut<uint8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", true, false},
+    {"pageProtect", "(ptr: RawMut<uint8>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", true, false},
+    {"pageFree", "(ptr: RawMut<uint8>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false},
     {"fromAddress", "(addr: int): RawMut<uint8>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", true, false},
     {"addressOf", "(ptr: RawPtr<uint8>): int", "Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", true, false},
     {"copy", "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false},
@@ -406,8 +409,13 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"addOverflows", "(a: int, b: int): bool", "Whether signed 64-bit addition of a and b overflows", true, false},
     {"subOverflows", "(a: int, b: int): bool", "Whether signed 64-bit subtraction of a and b overflows", true, false},
     {"mulOverflows", "(a: int, b: int): bool", "Whether signed 64-bit multiplication of a and b overflows", true, false},
+    // Module constants (is_method=false)
+    {"PROT_NONE", ": int", "No access protection for mem.pageAlloc/pageProtect", false, false},
+    {"PROT_READ", ": int", "Readable page protection bit for mem.pageAlloc/pageProtect", false, false},
+    {"PROT_WRITE", ": int", "Writable page protection bit for mem.pageAlloc/pageProtect", false, false},
+    {"PROT_EXEC", ": int", "Executable page protection bit for mem.pageAlloc/pageProtect", false, false},
 };
-#define GEN_MEM_FUNCTION_COUNT 35
+#define GEN_MEM_FUNCTION_COUNT 42
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {

@@ -51,10 +51,9 @@ void *xr_mem_map(size_t size, int prot) {
     return VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, prot_to_win(prot));
 }
 
-void xr_mem_unmap(void *ptr, size_t size) {
+bool xr_mem_unmap(void *ptr, size_t size) {
     (void) size;
-    if (ptr)
-        VirtualFree(ptr, 0, MEM_RELEASE);
+    return ptr && VirtualFree(ptr, 0, MEM_RELEASE) != 0;
 }
 
 bool xr_mem_protect(void *ptr, size_t size, int prot) {

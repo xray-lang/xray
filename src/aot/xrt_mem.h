@@ -19,10 +19,29 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <sys/mman.h>
+#ifndef MAP_ANONYMOUS
+#ifdef MAP_ANON
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+#endif
+#endif
+
 #include "xrt_value.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_sync_core.h"
+
+#define XRT_MEM_PROT_NONE 0
+#define XRT_MEM_PROT_READ 1
+#define XRT_MEM_PROT_WRITE 2
+#define XRT_MEM_PROT_EXEC 4
 
 static inline int64_t xrt_mem_int_arg(XrValue v) {
     return XR_IS_INT(v) ? XR_TO_INT(v) : 0;
@@ -142,6 +161,82 @@ static inline XrValue xrt_mem_realloc(XrValue ptr, XrValue n) {
 static inline XrValue xrt_mem_free(XrValue ptr) {
     free(ptr.ptr);
     return XR_NULL_VAL;
+}
+
+#ifdef _WIN32
+static inline DWORD xrt_mem_page_prot_to_win(int64_t prot) {
+    bool r = (prot & XRT_MEM_PROT_READ) != 0;
+    bool w = (prot & XRT_MEM_PROT_WRITE) != 0;
+    bool x = (prot & XRT_MEM_PROT_EXEC) != 0;
+    if (!r && !w && !x)
+        return PAGE_NOACCESS;
+    if (x && w)
+        return PAGE_EXECUTE_READWRITE;
+    if (x && r)
+        return PAGE_EXECUTE_READ;
+    if (x)
+        return PAGE_EXECUTE;
+    if (w)
+        return PAGE_READWRITE;
+    return PAGE_READONLY;
+}
+#else
+static inline int xrt_mem_page_prot_to_posix(int64_t prot) {
+    int out = 0;
+    if (prot & XRT_MEM_PROT_READ)
+        out |= PROT_READ;
+    if (prot & XRT_MEM_PROT_WRITE)
+        out |= PROT_WRITE;
+    if (prot & XRT_MEM_PROT_EXEC)
+        out |= PROT_EXEC;
+    return out ? out : PROT_NONE;
+}
+#endif
+
+static inline XrValue xrt_mem_page_alloc(XrValue bytes, XrValue prot) {
+    int64_t n = xrt_mem_int_arg(bytes);
+    if (n <= 0)
+        return xr_mkptr(NULL, XR_TAG_PTR);
+#ifdef _WIN32
+    void *p = VirtualAlloc(NULL, (size_t) n, MEM_RESERVE | MEM_COMMIT,
+                           xrt_mem_page_prot_to_win(xrt_mem_int_arg(prot)));
+#else
+    void *p = mmap(NULL, (size_t) n, xrt_mem_page_prot_to_posix(xrt_mem_int_arg(prot)),
+                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p == MAP_FAILED)
+        p = NULL;
+#endif
+    return xr_mkptr(p, XR_TAG_PTR);
+}
+
+static inline XrValue xrt_mem_page_alloc_default(XrValue bytes) {
+    return xrt_mem_page_alloc(bytes, XR_FROM_INT(XRT_MEM_PROT_READ | XRT_MEM_PROT_WRITE));
+}
+
+static inline XrValue xrt_mem_page_protect(XrValue ptr, XrValue bytes, XrValue prot) {
+    int64_t n = xrt_mem_int_arg(bytes);
+    if (!ptr.ptr || n <= 0)
+        return XR_FROM_BOOL(false);
+#ifdef _WIN32
+    DWORD old;
+    return XR_FROM_BOOL(VirtualProtect(ptr.ptr, (size_t) n,
+                                       xrt_mem_page_prot_to_win(xrt_mem_int_arg(prot)), &old) != 0);
+#else
+    return XR_FROM_BOOL(
+        mprotect(ptr.ptr, (size_t) n, xrt_mem_page_prot_to_posix(xrt_mem_int_arg(prot))) == 0);
+#endif
+}
+
+static inline XrValue xrt_mem_page_free(XrValue ptr, XrValue bytes) {
+    int64_t n = xrt_mem_int_arg(bytes);
+    if (!ptr.ptr || n <= 0)
+        return XR_FROM_BOOL(false);
+#ifdef _WIN32
+    (void) n;
+    return XR_FROM_BOOL(VirtualFree(ptr.ptr, 0, MEM_RELEASE) != 0);
+#else
+    return XR_FROM_BOOL(munmap(ptr.ptr, (size_t) n) == 0);
+#endif
 }
 
 /* Address <-> pointer bridge (mem.fromAddress / mem.addressOf). fromAddress

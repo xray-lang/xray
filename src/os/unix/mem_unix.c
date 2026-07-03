@@ -47,9 +47,8 @@ void *xr_mem_map(size_t size, int prot) {
     return p;
 }
 
-void xr_mem_unmap(void *ptr, size_t size) {
-    if (ptr)
-        munmap(ptr, size);
+bool xr_mem_unmap(void *ptr, size_t size) {
+    return ptr && munmap(ptr, size) == 0;
 }
 
 bool xr_mem_protect(void *ptr, size_t size, int prot) {
