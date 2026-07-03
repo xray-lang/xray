@@ -499,6 +499,15 @@ static XrValue mem_volatile_store(XrVMRuntime *isolate, XrValue *args, int argc)
     return xr_null();
 }
 
+/*
+ * Non-temporal store (mem.nontemporalStore): semantically a sized store. The VM
+ * has no cache hierarchy contract, so it performs the same native-order write
+ * as volatileStore; AOT may use target-specific streaming stores.
+ */
+static XrValue mem_nontemporal_store(XrVMRuntime *isolate, XrValue *args, int argc) {
+    return mem_volatile_store(isolate, args, argc);
+}
+
 #define XR_STDLIB_VM_BIND_MODULE_MEM 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_MEM

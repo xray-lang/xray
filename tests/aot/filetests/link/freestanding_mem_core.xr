@@ -29,6 +29,7 @@ fn xray_mem_mmio_shape(addr: int) -> int {
     mem.prefetch(p, 1)
     mem.cacheFlush(p, 64)
     mem.cacheInvalidate(p, 64)
+    mem.nontemporalStore(p, 0x55aa55aa, 4)
     mem.volatileStore(p, 305419896, 4)
     mem.fence(4)
     return mem.volatileLoad(p, 4)

@@ -336,6 +336,56 @@ static inline XrValue xrt_mem_volatile_store(XrValue ptr, XrValue value, XrValue
     return XR_NULL_VAL;
 }
 
+static inline void xrt_mem_nontemporal_store_raw(void *p, uint64_t value, int64_t size) {
+    int streamed = 0;
+#if (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__))
+    uintptr_t addr = (uintptr_t) p;
+    if (size == 4 && (addr & 3u) == 0) {
+        uint32_t v32 = (uint32_t) value;
+        __asm__ __volatile__("movnti %1, %0" : "=m"(*(uint32_t *) p) : "r"(v32) : "memory");
+        streamed = 1;
+    }
+#if defined(__x86_64__)
+    else if (size == 8 && (addr & 7u) == 0) {
+        uint64_t v64 = (uint64_t) value;
+        __asm__ __volatile__("movnti %1, %0" : "=m"(*(uint64_t *) p) : "r"(v64) : "memory");
+        streamed = 1;
+    }
+#endif
+    else
+#endif
+    {
+        switch (size) {
+            case 1:
+                *(volatile uint8_t *) p = (uint8_t) value;
+                break;
+            case 2:
+                *(volatile uint16_t *) p = (uint16_t) value;
+                break;
+            case 4:
+                *(volatile uint32_t *) p = (uint32_t) value;
+                break;
+            case 8:
+                *(volatile uint64_t *) p = (uint64_t) value;
+                break;
+            default:
+                break;
+        }
+    }
+#if (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__))
+    if (streamed)
+        __asm__ __volatile__("sfence" ::: "memory");
+    else
+#endif
+        xr_sync_core_fence(4);
+}
+
+static inline XrValue xrt_mem_nontemporal_store(XrValue ptr, XrValue value, XrValue size) {
+    xrt_mem_nontemporal_store_raw(ptr.ptr, (uint64_t) xrt_mem_int_arg(value),
+                                  xrt_mem_int_arg(size));
+    return XR_NULL_VAL;
+}
+
 static inline XrValue xrt_mem_prefetch(XrValue ptr, XrValue rw) {
 #if defined(__GNUC__) || defined(__clang__)
     /* __builtin_prefetch requires compile-time-constant rw/locality args, so
