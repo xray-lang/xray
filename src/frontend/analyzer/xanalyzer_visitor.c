@@ -2929,10 +2929,12 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_expr(ctx, sl->end);
             /* Slice of Array<T>/Span<T> returns Span<T>; string slices stay string. */
             if (src && XR_TYPE_IS_ARRAY(src)) {
+                xa_check_span_borrow_source_stable(ctx, node, sl->source, "slice expression");
                 XrType *elem = src->container.element_type ? src->container.element_type
                                                            : xr_type_new_unknown(NULL);
                 result = xr_type_new_span(ctx->analyzer->isolate, elem);
             } else if (src && XR_TYPE_IS_SPAN(src)) {
+                xa_check_span_borrow_source_stable(ctx, node, sl->source, "slice expression");
                 XrType *elem = src->container.element_type ? src->container.element_type
                                                            : xr_type_new_unknown(NULL);
                 result = xr_type_new_span(ctx->analyzer->isolate, elem);
