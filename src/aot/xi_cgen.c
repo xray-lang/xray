@@ -2164,6 +2164,26 @@ static bool emit_native_nonnegative_const_shr_expr(XiCgenCtx *ctx, FILE *out, co
     return true;
 }
 
+static bool emit_native_const_shr_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (!v || v->op != XI_SHR || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
+        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
+        return false;
+
+    int64_t shift = 0;
+    if (!cg_shift_const_int_value(v->args[1], &shift) || shift < 0 || shift >= 64)
+        return false;
+
+    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "XR_FROM_INT(");
+    fprintf(out, "(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, " >> INT64_C(%" PRId64 "))", shift);
+    if (boxed)
+        fprintf(out, ")");
+    return true;
+}
+
 static bool emit_native_range_safe_const_shl_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     if (!v || v->op != XI_SHL || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
         cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
@@ -2190,19 +2210,41 @@ static bool emit_native_range_safe_const_shl_expr(XiCgenCtx *ctx, FILE *out, con
     return true;
 }
 
-/* Shifts cannot generally use raw C << / >>: out-of-range counts, negative
- * right-shift inputs, and shifting into the sign bit are not portable enough
- * for Xray's defined semantics. Proven nonnegative right shifts with a
- * 0..63 constant count, and left shifts whose range cannot overflow the
- * signed result, are equivalent and can use native C directly; all other
- * cases route through xrt_i64_shl / xrt_i64_shr. */
+static bool emit_native_wrapping_const_shl_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (!v || v->op != XI_SHL || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
+        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
+        return false;
+
+    int64_t shift = 0;
+    if (!cg_shift_const_int_value(v->args[1], &shift) || shift < 0 || shift >= 64)
+        return false;
+
+    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "XR_FROM_INT(");
+    fprintf(out, "((int64_t)((uint64_t)(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, ") << UINT64_C(%" PRIu64 ")))", (uint64_t) shift);
+    if (boxed)
+        fprintf(out, ")");
+    return true;
+}
+
+/* Shifts cannot generally use raw C << / >> because dynamic counts are taken
+ * mod 64 in Xray. Const-count arithmetic right shifts use the same C operation
+ * as xr_i64_shr_wrap after the mask is folded away. Const left shifts use the
+ * same unsigned-cast wrapping expression as the runtime helper. */
 static void emit_shift_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                  const char *fn) {
     if (emit_native_unsigned_const_shift_expr(ctx, out, v, v->op == XI_SHL ? "<<" : ">>"))
         return;
     if (emit_native_nonnegative_const_shr_expr(ctx, out, f, v))
         return;
+    if (emit_native_const_shr_expr(ctx, out, v))
+        return;
     if (emit_native_range_safe_const_shl_expr(ctx, out, v))
+        return;
+    if (emit_native_wrapping_const_shl_expr(ctx, out, v))
         return;
 
     /* Unsigned lhs with a non-constant count: logical shift (matches the
