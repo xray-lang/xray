@@ -450,6 +450,10 @@ XR_FUNC void xi_emit_span_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_SPAN_COPY, 2);
 }
 
+XR_FUNC void xi_emit_span_fill(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_window_op(ctx, v, dst, OP_SPAN_FILL, 2);
+}
+
 XR_FUNC void xi_emit_span_compare(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_SPAN_COMPARE, 2);
 }

@@ -1052,6 +1052,41 @@ vmcase(OP_SPAN_COPY) {
     vmbreak;
 }
 
+vmcase(OP_SPAN_FILL) {
+    int a = GETARG_A(i);
+    void *span_data = NULL;
+    int64_t span_length = 0;
+    uint8_t span_elem_type = XR_ELEM_ANY;
+    uint8_t span_elem_size = 0;
+    uint8_t span_elem_tid = 0;
+    uint8_t span_contains_refs = 0;
+    uint32_t span_reserved = 0;
+    void *span_guard = NULL;
+    XrValue fill_value = R(a + 1);
+    VM_SPAN_VIEW(R(a), span_data, span_length, span_elem_type, span_elem_size, span_elem_tid,
+                 span_contains_refs, span_reserved, span_guard,
+                 "Span.fill(value) receiver must be Span");
+    (void) span_elem_tid;
+    (void) span_contains_refs;
+    (void) span_guard;
+    if (span_elem_type == XR_ELEM_ANY || span_elem_type >= XR_ELEM_COUNT || span_elem_size == 0) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.fill(value) receiver must be POD Span");
+    }
+    if (span_reserved & XR_SPAN_VIEW_READONLY) {
+        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+    }
+    if (span_length < 0 || span_length > INT64_MAX / (int64_t) span_elem_size) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.fill(value) byte length overflow");
+    }
+    if (span_length > 0 && !span_data) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.fill(value) range out of bounds");
+    }
+    if (!xr_typed_fill(span_data, span_length, fill_value, span_elem_type)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.fill(value) value type mismatch");
+    }
+    vmbreak;
+}
+
 vmcase(OP_SPAN_COMPARE) {
     int a = GETARG_A(i);
     void *left_data = NULL;

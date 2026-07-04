@@ -1285,6 +1285,7 @@ static bool xicgen_op_arg_keeps_span_noescape(XiCgenCtx *ctx, const XiFunc *curr
         case XI_BYTES_SPAN_FILL:
         case XI_BYTES_SPAN_REPEAT:
         case XI_SPAN_AS_BYTES:
+        case XI_SPAN_FILL:
         case XI_SPAN_REINTERPRET:
             return arg_index == 0;
         case XI_SPAN_COPY:
@@ -5677,6 +5678,47 @@ static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, "xrt_span_as_bytes_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ")");
+}
+
+static void xicgen_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    (void) f;
+    (void) prefix;
+    CgArrayElemInfo info;
+    if (!cg_span_elem_info_from_value(ctx, v->args[0], &info) || info.rep == XR_REP_TAGGED) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, "({ xr_span_t _s = ");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out,
+            "; if (XR_UNLIKELY(xrt_span_is_readonly(_s))) "
+            "xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+    fprintf(out,
+            "if (XR_UNLIKELY(_s.elem_type != %s || _s.elem_size != "
+            "(uint8_t)sizeof(%s))) xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
+            "\"Span.fill(value) element type mismatch\"); ",
+            info.elem_name, info.ctype);
+    fprintf(out, "if (XR_UNLIKELY(_s.length < 0 || _s.length > INT64_MAX / "
+                 "(int64_t)_s.elem_size)) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                 "\"Span.fill(value) byte length overflow\"); ");
+    fprintf(out, "if (XR_UNLIKELY(_s.length > 0 && !_s.data)) "
+                 "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                 "\"Span.fill(value) range out of bounds\"); ");
+    if (cg_array_fill_value_is_zero_bits_literal(v->args[1])) {
+        fprintf(out,
+                "if (_s.length > 0) memset(_s.data, 0, "
+                "(size_t)_s.length * sizeof(%s)); _s; })",
+                info.ctype);
+        return;
+    }
+    fprintf(out, "%s _fill = ", info.ctype);
+    emit_typed_array_store_value(out, &info, v->args[1]);
+    fprintf(out,
+            "; for (int64_t _i = 0; _i < _s.length; _i++) "
+            "((%s*)_s.data)[_i] = _fill; _s; })",
+            info.ctype);
 }
 
 static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
