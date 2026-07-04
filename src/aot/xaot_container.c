@@ -109,7 +109,7 @@ XR_FUNC bool xaot_container_elem_plan_for_type(const XrType *type, XaotContainer
 static const XrType *array_elem_type_from_type(const XrType *type) {
     if (!type)
         return NULL;
-    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SPAN)
+    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW || type->kind == XR_KIND_SPAN)
         return type->container.element_type;
     if (type->kind == XR_KIND_FIXED_ARRAY)
         return type->fixed_array.element_type;

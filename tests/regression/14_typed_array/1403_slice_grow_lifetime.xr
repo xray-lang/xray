@@ -1,9 +1,9 @@
 /* Owned slice-copy lifetime across source grow (task 152 surface split).
  *
- * `Span<T>`/`ByteSpan` are now scoped fast borrowed views, so they may not stay
- * live across owner growth. Long-lived non-copying slices belong to
- * `View<T>`/`ByteView` once that tier lands. Until then, `copy(slice)` is the
- * explicit owned snapshot path and must survive source growth independently.
+ * `Span<T>`/`ByteSpan` are scoped fast borrowed views, so they may not stay live
+ * across owner growth. Long-lived non-copying slices belong to `View<T>`/
+ * `ByteView`; `copy(slice)` is the explicit owned snapshot path and must survive
+ * source growth independently.
  *
  * Covers POD element buffers (Bytes / typed Array<int>) and ANY buffers (object
  * arrays), including the `copy(slice)` target-typed view path.

@@ -1,9 +1,3 @@
-fn make_bytes() -> Bytes {
-    let b = Bytes(0)
-    b.push(1)
-    b.push(2)
-    return b
-}
-
-let view = make_bytes().span()
+let bytes = Bytes([1, 2])
+let view: ByteSpan = bytes.span()
 print(view.length)

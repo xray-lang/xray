@@ -35,6 +35,7 @@ typedef struct {
     X(UNIT, "unit", XR_KIND_UNIT, XAOT_ABI_CLASS_VOID, XAOT_REP_VOID, false, false, false) \
     X(STRING, "string", XR_KIND_STRING, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(ARRAY, "array", XR_KIND_ARRAY, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
+    X(VIEW, "view", XR_KIND_VIEW, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(SPAN, "span", XR_KIND_SPAN, XAOT_ABI_CLASS_AGGREGATE, XAOT_REP_SPAN, false, false, true) \
     X(MAP, "map", XR_KIND_MAP, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(SET, "set", XR_KIND_SET, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
@@ -66,6 +67,10 @@ static inline const XaotAbiInfo *xaot_abi_for_type_kind(XrTypeKind kind) {
          XAOT_REP_PTR, false,
          false, true},
         {"array", XR_KIND_ARRAY,
+         XAOT_ABI_CLASS_POINTER,
+         XAOT_REP_PTR, false,
+         false, true},
+        {"view", XR_KIND_VIEW,
          XAOT_ABI_CLASS_POINTER,
          XAOT_REP_PTR, false,
          false, true},

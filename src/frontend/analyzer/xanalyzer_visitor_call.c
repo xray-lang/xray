@@ -959,8 +959,6 @@ static XaSymbol *xa_call_root_variable_symbol(XaInferContext *ctx, AstNode *expr
 static bool xa_method_call_creates_span_borrow(XrType *receiver_type, const char *method_name) {
     if (!receiver_type || !method_name)
         return false;
-    if (XR_TYPE_IS_ARRAY(receiver_type) && strcmp(method_name, "span") == 0)
-        return true;
     if (XR_TYPE_IS_STRING(receiver_type) && strcmp(method_name, "bytes") == 0)
         return true;
     if (xr_type_is_named_class(receiver_type, "Buffer") && strcmp(method_name, "asSpan") == 0)
@@ -989,20 +987,20 @@ static bool xa_expr_needs_contextual_view_type(AstNode *expr) {
     if (!call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return false;
     const char *name = call->callee->as.member_access.name;
-    return name && (strcmp(name, "span") == 0 || strcmp(name, "bytes") == 0 ||
-                    strcmp(name, "asSpan") == 0 || strcmp(name, "asBytes") == 0 ||
-                    strcmp(name, "reinterpret") == 0);
+    return name && (strcmp(name, "bytes") == 0 || strcmp(name, "asSpan") == 0 ||
+                    strcmp(name, "asBytes") == 0 || strcmp(name, "reinterpret") == 0);
 }
 
 static bool xa_type_is_bytes_like_view_or_owner(XrType *type) {
-    if (!type || (!XR_TYPE_IS_ARRAY(type) && !XR_TYPE_IS_SPAN(type)))
+    if (!type || (!XR_TYPE_IS_ARRAY(type) && !XR_TYPE_IS_VIEW(type) && !XR_TYPE_IS_SPAN(type)))
         return false;
     XrType *elem = type->container.element_type;
     return elem && XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
 }
 
 static XrType *xa_copy_owned_return_type(XaInferContext *ctx, XrType *arg_type) {
-    if (!ctx || !ctx->analyzer || !arg_type || !XR_TYPE_IS_SPAN(arg_type))
+    if (!ctx || !ctx->analyzer || !arg_type ||
+        (!XR_TYPE_IS_SPAN(arg_type) && !XR_TYPE_IS_VIEW(arg_type)))
         return NULL;
     if (xa_type_is_bytes_like_view_or_owner(arg_type))
         return xr_type_new_bytes(ctx->analyzer->isolate);
@@ -1612,6 +1610,20 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                          "Cannot call mutating method '%s' on 'in' parameter '%s' (readonly "
                          "reference)",
                          method_name, in_param->name ? in_param->name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+            }
+        }
+        if (method_name && callee_obj_type &&
+            (XR_TYPE_IS_SPAN(callee_obj_type) || XR_TYPE_IS_VIEW(callee_obj_type)) &&
+            xa_method_name_mutates_receiver(method_name)) {
+            XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
+            if (root && root->is_const) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[192];
+                snprintf(msg, sizeof(msg), "Cannot call mutating method '%s' on const view '%s'",
+                         method_name, root->name ? root->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
             }

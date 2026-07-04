@@ -47,6 +47,13 @@ static bool xa_type_is_byte_array_or_span(XrType *type) {
     return elem && XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
 }
 
+static bool xa_type_is_byte_array_or_view(XrType *type) {
+    if (!type || (!XR_TYPE_IS_ARRAY(type) && !XR_TYPE_IS_VIEW(type)))
+        return false;
+    XrType *elem = type->container.element_type;
+    return elem && XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+}
+
 static XrType *xa_span_type_from_view_source(XaInferContext *ctx, XrType *src) {
     if (!ctx || !ctx->analyzer || !src)
         return xr_type_new_unknown(NULL);
@@ -59,8 +66,20 @@ static XrType *xa_span_type_from_view_source(XaInferContext *ctx, XrType *src) {
     return xr_type_new_span(ctx->analyzer->isolate, elem);
 }
 
-static void xa_report_view_expr_requires_target(XaInferContext *ctx, AstNode *node,
-                                                const char *kind) {
+static XrType *xa_storage_view_type_from_source(XaInferContext *ctx, XrType *src) {
+    if (!ctx || !ctx->analyzer || !src)
+        return xr_type_new_unknown(NULL);
+    if (!XR_TYPE_IS_ARRAY(src) && !XR_TYPE_IS_VIEW(src))
+        return xr_type_new_unknown(NULL);
+    XrType *elem =
+        src->container.element_type ? src->container.element_type : xr_type_new_unknown(NULL);
+    if (xa_type_is_byte_array_or_view(src))
+        return xr_type_new_byteview(ctx->analyzer->isolate);
+    return xr_type_new_view(ctx->analyzer->isolate, elem);
+}
+
+XR_FUNC void xa_report_view_expr_requires_target(XaInferContext *ctx, AstNode *node,
+                                                 const char *kind) {
     if (!ctx || !ctx->analyzer || !node)
         return;
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -78,6 +97,20 @@ static bool xa_span_target_matches_source(XrType *target, XrType *src) {
     if (!target || !src || !XR_TYPE_IS_SPAN(target))
         return false;
     if (!XR_TYPE_IS_ARRAY(src) && !XR_TYPE_IS_SPAN(src))
+        return false;
+    XrType *target_elem = target->container.element_type;
+    XrType *src_elem = src->container.element_type;
+    if (!target_elem || !src_elem)
+        return true;
+    if (XR_TYPE_IS_UNKNOWN(target_elem) || XR_TYPE_IS_UNKNOWN(src_elem))
+        return true;
+    return xr_type_assignable(target_elem, src_elem) && xr_type_assignable(src_elem, target_elem);
+}
+
+static bool xa_view_target_matches_source(XrType *target, XrType *src) {
+    if (!target || !src || !XR_TYPE_IS_VIEW(target))
+        return false;
+    if (!XR_TYPE_IS_ARRAY(src) && !XR_TYPE_IS_VIEW(src))
         return false;
     XrType *target_elem = target->container.element_type;
     XrType *src_elem = src->container.element_type;
@@ -267,7 +300,9 @@ static XrType *xa_parallel_local_source_element_type(XaInferContext *ctx,
         return xr_type_new_unknown(NULL);
 
     XrType *source_type = xa_visit_infer_expr(ctx, local->source);
-    if (source_type && (XR_TYPE_IS_ARRAY(source_type) || XR_TYPE_IS_SPAN(source_type)) &&
+    if (source_type &&
+        (XR_TYPE_IS_ARRAY(source_type) || XR_TYPE_IS_VIEW(source_type) ||
+         XR_TYPE_IS_SPAN(source_type)) &&
         source_type->container.element_type) {
         return source_type->container.element_type;
     }
@@ -275,7 +310,8 @@ static XrType *xa_parallel_local_source_element_type(XaInferContext *ctx,
     XrLocation loc = {
         .file = ctx->file_path, .line = local->source->line, .column = local->source->column};
     char msg[256];
-    snprintf(msg, sizeof(msg), "%s local '%s' source must be Array<T> or Span<T>, got '%s'",
+    snprintf(msg, sizeof(msg),
+             "%s local '%s' source must be Array<T>, View<T>, or Span<T>, got '%s'",
              owner_label ? owner_label : "parallel", local->name ? local->name : "?",
              xr_type_to_string(source_type));
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
@@ -1146,6 +1182,7 @@ XR_FUNC void xa_validate_hashable_key_type(XaInferContext *ctx, XrType *type,
             break;
         case XR_KIND_ARRAY:
         case XR_KIND_SPAN:
+        case XR_KIND_VIEW:
         case XR_KIND_CHANNEL:
             xa_validate_hashable_key_type(ctx, type->container.element_type, generic_links, context,
                                           loc);
@@ -1317,12 +1354,16 @@ XrType *resolve_class_to_type_param(XrVMRuntime *X, XrType *type, const char **t
     }
 
     // Recurse into containers
-    if ((type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SPAN) &&
+    if ((type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW || type->kind == XR_KIND_SPAN) &&
         type->container.element_type) {
         XrType *e =
             resolve_class_to_type_param(X, type->container.element_type, tp_names, tp_count);
         if (e != type->container.element_type) {
-            return type->kind == XR_KIND_SPAN ? xr_type_new_span(X, e) : xr_type_new_array(X, e);
+            if (type->kind == XR_KIND_SPAN)
+                return xr_type_new_span(X, e);
+            if (type->kind == XR_KIND_VIEW)
+                return xr_type_new_view(X, e);
+            return xr_type_new_array(X, e);
         }
     }
     if (type->kind == XR_KIND_MAP) {
@@ -1504,8 +1545,16 @@ XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_type, const
                                             arg_type->container.element_type, tp_name, depth + 1);
     }
 
-    // Span<T> vs Span<int>/Array<int> -> T = int
-    if (XR_TYPE_IS_SPAN(param_type) && (XR_TYPE_IS_SPAN(arg_type) || XR_TYPE_IS_ARRAY(arg_type))) {
+    // Span<T> vs Span<int> -> T = int. Owner-to-span conversion is produced
+    // only by target-typed slice/view-producing expressions.
+    if (XR_TYPE_IS_SPAN(param_type) && XR_TYPE_IS_SPAN(arg_type)) {
+        return xa_infer_type_param_from_arg(param_type->container.element_type,
+                                            arg_type->container.element_type, tp_name, depth + 1);
+    }
+
+    // View<T> vs View<int> -> T = int. Owner-to-view conversion is produced by
+    // target-typed slice expressions, not by generic argument matching.
+    if (XR_TYPE_IS_VIEW(param_type) && XR_TYPE_IS_VIEW(arg_type)) {
         return xa_infer_type_param_from_arg(param_type->container.element_type,
                                             arg_type->container.element_type, tp_name, depth + 1);
     }
@@ -2977,7 +3026,7 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_expr(ctx, sl->end);
             /* Array/Span slices are target-typed view-producing expressions.
              * They no longer choose Span/View/owned semantics by themselves. */
-            if (src && (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_SPAN(src))) {
+            if (src && (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_SPAN(src) || XR_TYPE_IS_VIEW(src))) {
                 XrType *target = ctx->expected_type;
                 if (target && XR_TYPE_IS_SPAN(target)) {
                     xa_check_span_borrow_source_stable(ctx, node, sl->source, "slice expression");
@@ -2985,6 +3034,21 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                                  ? xa_span_type_from_view_source(ctx, src)
                                  : target;
                     if (!xa_span_target_matches_source(result, src)) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        char msg[256];
+                        snprintf(
+                            msg, sizeof(msg),
+                            "slice source type '%s' is not compatible with target view type '%s'",
+                            xr_type_to_string(src), xr_type_to_string(result));
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                    }
+                } else if (target && XR_TYPE_IS_VIEW(target)) {
+                    result = XR_TYPE_IS_UNKNOWN(target->container.element_type)
+                                 ? xa_storage_view_type_from_source(ctx, src)
+                                 : target;
+                    if (!xa_view_target_matches_source(result, src)) {
                         XrLocation loc = {
                             .file = ctx->file_path, .line = node->line, .column = node->column};
                         char msg[256];
@@ -3830,7 +3894,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             } else if (fi->collection && fi->collection->type == AST_RANGE) {
                 item_type = xr_type_new_int(NULL);
             } else if (coll_type) {
-                if (XR_TYPE_IS_ARRAY(coll_type) || XR_TYPE_IS_SPAN(coll_type)) {
+                if (XR_TYPE_IS_ARRAY(coll_type) || XR_TYPE_IS_VIEW(coll_type) ||
+                    XR_TYPE_IS_SPAN(coll_type)) {
                     if (coll_type->container.element_type) {
                         item_type = coll_type->container.element_type;
                     }
@@ -4102,7 +4167,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 index_type = xa_visit_infer_expr(ctx, is->index);
             XrType *value_expected = NULL;
             if (array_type) {
-                if ((XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_SPAN(array_type)) &&
+                if ((XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_VIEW(array_type) ||
+                     XR_TYPE_IS_SPAN(array_type)) &&
                     array_type->container.element_type) {
                     value_expected = array_type->container.element_type;
                 } else if (XR_TYPE_IS_MAP(array_type) && array_type->map.value_type) {
@@ -4155,6 +4221,18 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                          in_param->name ? in_param->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+            }
+            if (array_type && (XR_TYPE_IS_SPAN(array_type) || XR_TYPE_IS_VIEW(array_type))) {
+                XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, is->array);
+                if (root && root->is_const) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    char msg[192];
+                    snprintf(msg, sizeof(msg), "Cannot assign through const view '%s'",
+                             root->name ? root->name : "?");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+                }
             }
             // Tuples are immutable: reject index-based assignment
             if (array_type && XR_TYPE_IS_TUPLE(array_type)) {
@@ -4224,8 +4302,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                            "sealed Record index assignment requires a string "
                                            "literal key",
                                            &loc);
-            } else if (array_type &&
-                       (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_SPAN(array_type))) {
+            } else if (array_type && (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_VIEW(array_type) ||
+                                      XR_TYPE_IS_SPAN(array_type))) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type)) {

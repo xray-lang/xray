@@ -128,7 +128,7 @@ static bool type_is_u8_contiguous_view(const XrType *type) {
         }
         return false;
     }
-    if (type->kind != XR_KIND_ARRAY && type->kind != XR_KIND_SPAN)
+    if (type->kind != XR_KIND_ARRAY && type->kind != XR_KIND_VIEW && type->kind != XR_KIND_SPAN)
         return false;
     const XrType *elem = type->container.element_type;
     return elem && elem->kind == XR_KIND_INT && elem->native_width == XR_NATIVE_U8 &&

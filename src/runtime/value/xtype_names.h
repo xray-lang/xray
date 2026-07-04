@@ -55,6 +55,8 @@
 #define TYPE_NAME_BYTES "Bytes"
 #define TYPE_NAME_SPAN "Span"
 #define TYPE_NAME_BYTESPAN "ByteSpan"
+#define TYPE_NAME_VIEW "View"
+#define TYPE_NAME_BYTEVIEW "ByteView"
 
 /* ========== Runtime Types ========== */
 

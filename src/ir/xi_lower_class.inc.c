@@ -115,7 +115,8 @@ static XrStructLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNo
         if (!type || type->kind == XR_KIND_UNKNOWN)
             return NULL;
         int native = xr_type_kind_to_native(type->kind, type->native_width);
-        if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SPAN))
+        if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW ||
+                           type->kind == XR_KIND_SPAN))
             native = XR_NATIVE_ARRAY_REF;
         if (native < 0 && type->kind == XR_KIND_MAP)
             native = XR_NATIVE_MAP_REF;

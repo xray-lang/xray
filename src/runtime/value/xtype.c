@@ -208,6 +208,15 @@ XrType *xr_type_new_span(XrVMRuntime *X, XrType *element_type) {
     return type;
 }
 
+XrType *xr_type_new_view(XrVMRuntime *X, XrType *element_type) {
+    XR_DCHECK(element_type != NULL, "type_new_view: NULL element_type");
+    XrType *type = type_alloc(X, XR_KIND_VIEW);
+    if (!type)
+        return NULL;
+    type->container.element_type = element_type;
+    return type;
+}
+
 XrType *xr_type_new_map(XrVMRuntime *X, XrType *key_type, XrType *value_type) {
     XR_DCHECK(key_type != NULL, "type_new_map: NULL key_type");
     XR_DCHECK(value_type != NULL, "type_new_map: NULL value_type");
@@ -457,6 +466,13 @@ XrType *xr_type_new_bytespan(XrVMRuntime *X) {
     if (!elem)
         return NULL;
     return xr_type_new_span(X, elem);
+}
+
+XrType *xr_type_new_byteview(XrVMRuntime *X) {
+    XrType *elem = xr_type_new_int_width(X, XR_NATIVE_U8);
+    if (!elem)
+        return NULL;
+    return xr_type_new_view(X, elem);
 }
 
 XrType *xr_type_new_regex(XrVMRuntime *X) {
@@ -948,6 +964,7 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
     switch (type->kind) {
         case XR_KIND_ARRAY:
         case XR_KIND_SPAN:
+        case XR_KIND_VIEW:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
         case XR_KIND_POINTER:
@@ -1373,6 +1390,18 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                xr_type_assignable(source->container.element_type, target->container.element_type);
     }
 
+    // View compatibility is explicit and target-typed: only View<T> flows into
+    // View<T>. Array<T>/Bytes owner-to-view conversion is produced by slice.
+    if (XR_TYPE_IS_VIEW(target) && XR_TYPE_IS_VIEW(source)) {
+        if (!target->container.element_type || !source->container.element_type)
+            return true;
+        if (XR_TYPE_IS_UNKNOWN(target->container.element_type) ||
+            XR_TYPE_IS_UNKNOWN(source->container.element_type))
+            return true;
+        return xr_type_assignable(target->container.element_type, source->container.element_type) &&
+               xr_type_assignable(source->container.element_type, target->container.element_type);
+    }
+
     // Map type compatibility (invariant, with unknown element fallback)
     if (XR_TYPE_IS_MAP(target) && XR_TYPE_IS_MAP(source)) {
         if (!target->map.key_type || !source->map.key_type)
@@ -1612,8 +1641,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
         return false;
 
     // Check type-specific data
-    if (a->kind == XR_KIND_ARRAY || a->kind == XR_KIND_SPAN || a->kind == XR_KIND_SET ||
-        a->kind == XR_KIND_CHANNEL) {
+    if (a->kind == XR_KIND_ARRAY || a->kind == XR_KIND_SPAN || a->kind == XR_KIND_VIEW ||
+        a->kind == XR_KIND_SET || a->kind == XR_KIND_CHANNEL) {
         return xr_type_equals(a->container.element_type, b->container.element_type);
     }
     if (a->kind == XR_KIND_POINTER) {

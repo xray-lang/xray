@@ -3,8 +3,9 @@
 static const char xr_native_def_array[] =
     "// Built-in Array<T> type — implementation in "
     "src/runtime/object/xarray_methods.c\n\n@native\nclass Array<T> {\n    length: int\n    size: "
-    "int\n    capacity: int\n    isEmpty: bool\n    span() -> Span<T>\n    push(value: T)\n    "
-    "pushUnchecked(value: T)\n    getUnchecked(index: int) -> T\n    setUnchecked(index: int, "
+    "int\n    capacity: int\n    isEmpty: bool\n    push(value: T)\n    pushUnchecked(value: T)\n  "
+    "  "
+    "getUnchecked(index: int) -> T\n    setUnchecked(index: int, "
     "value: T)\n    dataPtrUnchecked() -> RawPtr<T>\n    dataMutPtrUnchecked() -> RawMut<T>\n    "
     "pop() -> T?\n    shift() -> T?\n    unshift(value: T)\n    clear()\n    reserve(capacity: "
     "int) -> Array<T>\n    resize(length: int, fill: T) -> Array<T>\n    splice(start: int, "

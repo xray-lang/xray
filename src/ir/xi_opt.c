@@ -1618,6 +1618,7 @@ static XrRep sr_type_native_boundary_rep(const struct XrType *type) {
             return XR_REP_RAWPTR;
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
+        case XR_KIND_VIEW:
         case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:
@@ -1693,7 +1694,7 @@ static bool sr_field_receiver_uses_native_rep(const XiValue *receiver) {
 static const XrType *sr_array_elem_type(const XrType *type) {
     if (!type)
         return NULL;
-    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SPAN)
+    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW || type->kind == XR_KIND_SPAN)
         return type->container.element_type;
     if (type->kind == XR_KIND_FIXED_ARRAY)
         return type->fixed_array.element_type;
@@ -1723,7 +1724,7 @@ static XrRep sr_typed_array_elem_rep(const XrType *type) {
 static bool sr_type_has_static_typed_array_storage(const XrType *type) {
     if (!type || type->is_nullable)
         return false;
-    if (type->kind != XR_KIND_ARRAY && type->kind != XR_KIND_SPAN)
+    if (type->kind != XR_KIND_ARRAY && type->kind != XR_KIND_VIEW && type->kind != XR_KIND_SPAN)
         return false;
     return sr_typed_array_elem_rep(type) != XR_REP_TAGGED;
 }
@@ -1820,8 +1821,9 @@ static bool sr_is_static_collection_length_field(const XiValue *v) {
     const XiValue *receiver = sr_unwrap_identity_value(v->args[0]);
     if (!receiver || !receiver->type)
         return false;
-    return receiver->type->kind == XR_KIND_ARRAY || receiver->type->kind == XR_KIND_SPAN ||
-           receiver->type->kind == XR_KIND_MAP || receiver->type->kind == XR_KIND_SET;
+    return receiver->type->kind == XR_KIND_ARRAY || receiver->type->kind == XR_KIND_VIEW ||
+           receiver->type->kind == XR_KIND_SPAN || receiver->type->kind == XR_KIND_MAP ||
+           receiver->type->kind == XR_KIND_SET;
 }
 
 static bool sr_type_is_native_map_key(const XrType *type) {
