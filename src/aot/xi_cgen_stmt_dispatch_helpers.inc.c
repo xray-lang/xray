@@ -156,6 +156,8 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     if (xicgen_err_check_after_proven_nothrow(ctx, f, v) ||
         cg_array_err_check_after_unchecked_fill_push(ctx, f, v) ||
         cg_array_err_check_after_unchecked_bytes_trusted(ctx, f, v) ||
+        cg_array_err_check_after_index_get_trusted(ctx, f, v) ||
+        cg_array_err_check_after_bytes_append_trusted(ctx, f, v) ||
         cg_array_err_check_after_typed_push(ctx, f, v) ||
         cg_array_err_check_after_inline_hof(ctx, f, prefix, v) ||
         xicgen_atomic_err_check_after_direct_nothrow(v) ||

@@ -3254,6 +3254,11 @@ static bool xicgen_value_is_nothrow_native_scalar(const XiFunc *f, const XiValue
     return false;
 }
 
+static bool xicgen_span_slice_is_nothrow(XiCgenCtx *ctx, const XiValue *value) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    return v && v->op == XI_SLICE && v->nargs >= 3 && cg_value_plan_is_span_aggregate(ctx, v);
+}
+
 static bool xicgen_runtime_method_call_is_direct_nothrow(const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1 ||
@@ -3299,6 +3304,8 @@ static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *cu
         return true;
     if (cg_array_call_is_bytes_append_trusted_nothrow(ctx, current, v))
         return true;
+    if (cg_array_call_is_bytes_repeat_trusted_nothrow(ctx, current, v))
+        return true;
     if (cg_array_call_is_typed_fill_trusted_nothrow(ctx, current, v))
         return true;
     if (cg_array_builtin_call_is_trusted_nothrow(ctx, current, v))
@@ -3325,6 +3332,10 @@ static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current
     if (!v)
         return false;
     if (xicgen_value_is_nothrow_native_scalar(current, v))
+        return true;
+    if (xicgen_span_slice_is_nothrow(ctx, v))
+        return true;
+    if (cg_array_index_get_trusted_nothrow(ctx, current, v))
         return true;
     if (cg_array_bytes_load_trusted_nothrow(ctx, current, v))
         return true;
@@ -6773,6 +6784,8 @@ static const XiValue *xicgen_find_par_for_unsupported_body_value_depth(XiCgenCtx
             if (xicgen_err_check_after_proven_nothrow(ctx, body, value))
                 continue;
             if (cg_array_err_check_after_bytes_load_trusted(ctx, body, value))
+                continue;
+            if (cg_array_err_check_after_index_get_trusted(ctx, body, value))
                 continue;
             if (cg_array_err_check_after_unchecked_bytes_trusted(ctx, body, value))
                 continue;
