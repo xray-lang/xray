@@ -2,14 +2,15 @@
 let dst = Bytes(8)
 let src = Bytes(4)
 
-let dstView: ByteSpan = dst
-let srcView: ByteSpan = src
+let dstView: ByteSpan = dst[:]
+let srcView: ByteSpan = src[:]
 
 dstView.fill(1)
 srcView.fill(7)
 srcView.store<uint16>(1, 0x0908, Endian.LE)
 
-let copied: ByteSpan = dstView[2:6].copyFrom(srcView)
+let copiedWindow: ByteSpan = dstView[2:6]
+let copied: ByteSpan = copiedWindow.copyFrom(srcView)
 print(dst[0])
 print(dst[1])
 print(dst[2])
@@ -20,21 +21,26 @@ print(dst[6])
 print(dst[7])
 print(copied.length)
 
-print(dstView[2:6].compare(srcView))
-print(dstView[0:4].compare(srcView))
-print(srcView.compare(dstView[0:4]))
+let dstMid: ByteSpan = dstView[2:6]
+let dstHead: ByteSpan = dstView[0:4]
+print(dstMid.compare(srcView))
+print(dstHead.compare(srcView))
+print(srcView.compare(dstHead))
 
 let prefix: ByteSpan = dstView[2:5]
 print(prefix.compare(srcView))
 print(srcView.compare(prefix))
 
-print(dstView[2:6].commonPrefix(srcView))
-print(dstView[2:5].commonPrefix(srcView))
-print(dstView[0:4].commonPrefix(srcView))
-print(dstView[0:0].commonPrefix(srcView))
+let dstPrefixFull: ByteSpan = dstView[2:6]
+let dstPrefixShort: ByteSpan = dstView[2:5]
+let dstEmpty: ByteSpan = dstView[0:0]
+print(dstPrefixFull.commonPrefix(srcView))
+print(dstPrefixShort.commonPrefix(srcView))
+print(dstHead.commonPrefix(srcView))
+print(dstEmpty.commonPrefix(srcView))
 
 let rep = Bytes(10)
-let repView: ByteSpan = rep
+let repView: ByteSpan = rep[:]
 repView.store<uint16>(0, 0x4241, Endian.LE)
 repView.repeatFrom(2, 2, 6)
 print(rep[0])

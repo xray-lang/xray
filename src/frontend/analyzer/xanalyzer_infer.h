@@ -65,6 +65,10 @@ typedef struct XaInferContext {
     // Propagated from declaration to initializer expression
     XrType *expected_type;
 
+    // `copy(view-producing-expr)` is the one context where a slice may first be
+    // typed as a Span without an explicit Span target; the copy result is owned.
+    bool allow_view_expr_for_copy;
+
     // The variable being declared is not visible inside its own initializer.
     // This lets `let copy = copy(x)` call the outer/builtin `copy` while still
     // reporting `let x = x` as an unresolved self-reference when no outer x exists.

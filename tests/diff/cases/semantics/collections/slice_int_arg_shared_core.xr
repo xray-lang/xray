@@ -6,5 +6,6 @@ let dyn: Json = {
 
 let arr = [10, 20, 30]
 print("before-slice")
-print(arr[dyn.badStart:dyn.end].length)
+let view: Span<int> = arr[dyn.badStart:dyn.end]
+print(view.length)
 print("unreachable")

@@ -23,5 +23,5 @@ unsafe {
     bytes.pushUnchecked(8)
 }
 
-let view: ByteSpan = bytes
+let view: ByteSpan = bytes[:]
 print(readRaw(view))

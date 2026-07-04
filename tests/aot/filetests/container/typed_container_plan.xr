@@ -61,7 +61,7 @@ fn local_arrays() -> int {
 
     let bag = ArrayBag(values)
 
-    let mid = values[0:2]
+    let mid: Span<int> = values[0:2]
     let mapped = values.map(fn(x: int) -> int { return x + 10 })
     let kept = values.filter(fn(x: int) -> bool { return x > 1 })
 

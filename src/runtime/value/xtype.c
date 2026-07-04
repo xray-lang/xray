@@ -1360,9 +1360,10 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                xr_type_assignable(source->container.element_type, target->container.element_type);
     }
 
-    // Span compatibility. Array<T> can flow into Span<T> as an owner-to-view
-    // conversion; a Span<T> never flows back into Array<T>.
-    if (XR_TYPE_IS_SPAN(target) && (XR_TYPE_IS_ARRAY(source) || XR_TYPE_IS_SPAN(source))) {
+    // Span compatibility is explicit and target-typed: only Span<T> flows into
+    // Span<T>. Array<T>/Bytes owner-to-view conversion is produced by slice or a
+    // typed view-producing expression, not by general assignment.
+    if (XR_TYPE_IS_SPAN(target) && XR_TYPE_IS_SPAN(source)) {
         if (!target->container.element_type || !source->container.element_type)
             return true;
         if (XR_TYPE_IS_UNKNOWN(target->container.element_type) ||

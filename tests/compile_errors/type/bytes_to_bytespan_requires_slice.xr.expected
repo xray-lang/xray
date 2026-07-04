@@ -1,0 +1,2 @@
+Type 'Array<uint8>' is not assignable to type 'ByteSpan'
+

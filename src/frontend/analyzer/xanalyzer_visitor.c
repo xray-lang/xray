@@ -40,6 +40,54 @@ static bool xa_type_is_known_unassignable(XrType *target, XrType *source) {
     return !xr_type_assignable(target, source);
 }
 
+static bool xa_type_is_byte_array_or_span(XrType *type) {
+    if (!type || (!XR_TYPE_IS_ARRAY(type) && !XR_TYPE_IS_SPAN(type)))
+        return false;
+    XrType *elem = type->container.element_type;
+    return elem && XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+}
+
+static XrType *xa_span_type_from_view_source(XaInferContext *ctx, XrType *src) {
+    if (!ctx || !ctx->analyzer || !src)
+        return xr_type_new_unknown(NULL);
+    if (!XR_TYPE_IS_ARRAY(src) && !XR_TYPE_IS_SPAN(src))
+        return xr_type_new_unknown(NULL);
+    XrType *elem =
+        src->container.element_type ? src->container.element_type : xr_type_new_unknown(NULL);
+    if (xa_type_is_byte_array_or_span(src))
+        return xr_type_new_bytespan(ctx->analyzer->isolate);
+    return xr_type_new_span(ctx->analyzer->isolate, elem);
+}
+
+static void xa_report_view_expr_requires_target(XaInferContext *ctx, AstNode *node,
+                                                const char *kind) {
+    if (!ctx || !ctx->analyzer || !node)
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[360];
+    snprintf(msg, sizeof(msg),
+             "%s result requires an explicit target type; use ': ByteSpan' or ': Span<T>' for a "
+             "scoped fast view, ': ByteView' or ': View<T>' for a long-lived view, or copy(...) "
+             "for owned data",
+             kind ? kind : "view expression");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE, msg,
+                               &loc);
+}
+
+static bool xa_span_target_matches_source(XrType *target, XrType *src) {
+    if (!target || !src || !XR_TYPE_IS_SPAN(target))
+        return false;
+    if (!XR_TYPE_IS_ARRAY(src) && !XR_TYPE_IS_SPAN(src))
+        return false;
+    XrType *target_elem = target->container.element_type;
+    XrType *src_elem = src->container.element_type;
+    if (!target_elem || !src_elem)
+        return true;
+    if (XR_TYPE_IS_UNKNOWN(target_elem) || XR_TYPE_IS_UNKNOWN(src_elem))
+        return true;
+    return xr_type_assignable(target_elem, src_elem) && xr_type_assignable(src_elem, target_elem);
+}
+
 XR_FUNC const char *xa_threadsafe_shared_ref_label(const XrType *type) {
     if (!type)
         return NULL;
@@ -2927,17 +2975,33 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_expr(ctx, sl->start);
             if (sl->end)
                 xa_visit_infer_expr(ctx, sl->end);
-            /* Slice of Array<T>/Span<T> returns Span<T>; string slices stay string. */
-            if (src && XR_TYPE_IS_ARRAY(src)) {
-                xa_check_span_borrow_source_stable(ctx, node, sl->source, "slice expression");
-                XrType *elem = src->container.element_type ? src->container.element_type
-                                                           : xr_type_new_unknown(NULL);
-                result = xr_type_new_span(ctx->analyzer->isolate, elem);
-            } else if (src && XR_TYPE_IS_SPAN(src)) {
-                xa_check_span_borrow_source_stable(ctx, node, sl->source, "slice expression");
-                XrType *elem = src->container.element_type ? src->container.element_type
-                                                           : xr_type_new_unknown(NULL);
-                result = xr_type_new_span(ctx->analyzer->isolate, elem);
+            /* Array/Span slices are target-typed view-producing expressions.
+             * They no longer choose Span/View/owned semantics by themselves. */
+            if (src && (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_SPAN(src))) {
+                XrType *target = ctx->expected_type;
+                if (target && XR_TYPE_IS_SPAN(target)) {
+                    xa_check_span_borrow_source_stable(ctx, node, sl->source, "slice expression");
+                    result = XR_TYPE_IS_UNKNOWN(target->container.element_type)
+                                 ? xa_span_type_from_view_source(ctx, src)
+                                 : target;
+                    if (!xa_span_target_matches_source(result, src)) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        char msg[256];
+                        snprintf(
+                            msg, sizeof(msg),
+                            "slice source type '%s' is not compatible with target view type '%s'",
+                            xr_type_to_string(src), xr_type_to_string(result));
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                    }
+                } else if (ctx->allow_view_expr_for_copy) {
+                    xa_check_span_borrow_source_stable(ctx, node, sl->source, "slice expression");
+                    result = xa_span_type_from_view_source(ctx, src);
+                } else {
+                    xa_report_view_expr_requires_target(ctx, node, "slice");
+                    result = xr_type_new_unknown(NULL);
+                }
             } else if (src && XR_TYPE_IS_STRING(src)) {
                 result = xr_type_new_string(NULL);
             } else {

@@ -17,7 +17,7 @@ src[3] = 40
 let bytes = Bytes.withCapacity(4)
 print(fill(bytes, src))
 
-let view: ByteSpan = bytes
+let view: ByteSpan = bytes[:]
 unsafe {
     let p = view.dataPtrUnchecked()
     print(p[1])

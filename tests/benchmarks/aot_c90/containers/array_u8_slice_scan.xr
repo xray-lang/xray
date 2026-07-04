@@ -6,7 +6,7 @@ fn run(n: int) -> int {
         i = i + 1
     }
 
-    let mid = bytes[17:n - 17]
+    let mid: ByteSpan = bytes[17:n - 17]
     let sum = 0
     i = 0
     while (i < mid.length) {

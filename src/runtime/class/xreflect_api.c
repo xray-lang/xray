@@ -324,6 +324,12 @@ XrValue xr_reflect_elementType(XrVMRuntime *isolate, XrValue self, XrValue *args
     if (nargs < 1)
         return tid_to_string_value(isolate, 0);
     XrValue obj = args[0];
+    if (XR_IS_SPAN_REF(obj)) {
+        XrSpanView *span = XR_TO_SPAN_REF(obj);
+        if (span && span->elem_tid == 0 && span->elem_type == XR_ELEM_U8)
+            return tid_to_string_value(isolate, XR_TID_UINT8);
+        return tid_to_string_value(isolate, span ? span->elem_tid : 0);
+    }
     if (!XR_IS_PTR(obj))
         return tid_to_string_value(isolate, 0);
     uint8_t type = XR_HEAP_TYPE(obj);
@@ -372,6 +378,25 @@ XrValue xr_reflect_typeOf(XrVMRuntime *isolate, XrValue self, XrValue *args, int
     if (nargs < 1)
         return tid_to_string_value(isolate, 0);
     XrValue obj = args[0];
+
+    if (XR_IS_SPAN_REF(obj)) {
+        XrSpanView *span = XR_TO_SPAN_REF(obj);
+        char buf[128];
+        int n = 0;
+        if (span->elem_tid == XR_TID_UINT8 ||
+            (span->elem_tid == 0 && span->elem_type == XR_ELEM_U8)) {
+            n = snprintf(buf, sizeof(buf), TYPE_NAME_BYTESPAN);
+        } else if (span->elem_tid != 0) {
+            n = snprintf(buf, sizeof(buf), "Span<%s>", xr_typeid_name((XrTypeId) span->elem_tid));
+        } else {
+            n = snprintf(buf, sizeof(buf), "Span");
+        }
+        if (n <= 0)
+            return tid_to_string_value(isolate, 0);
+        size_t len = (size_t) n;
+        uint32_t hash = xr_string_hash(buf, len);
+        return XR_FROM_PTR(xr_string_intern(isolate, buf, len, hash));
+    }
 
     // Non-pointer types: return base type name
     if (!XR_IS_PTR(obj)) {
