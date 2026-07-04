@@ -1342,10 +1342,13 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
                 lower_pattern_bindings(l, ev, sub);
         }
         if (ap->rest_name) {
-            struct XrType *rest_type = (subject->type && (XR_TYPE_IS_ARRAY(subject->type) ||
-                                                          XR_TYPE_IS_SPAN(subject->type)))
-                                           ? subject->type
-                                           : l->type_any;
+            struct XrType *rest_type = l->type_any;
+            if (subject->type && XR_TYPE_IS_SPAN(subject->type)) {
+                rest_type = subject->type;
+            } else if (subject->type && XR_TYPE_IS_ARRAY(subject->type)) {
+                struct XrType *elem = subject->type->container.element_type;
+                rest_type = xr_type_new_span(l->isolate, elem ? elem : xr_type_new_unknown(NULL));
+            }
             XiValue *start = xi_const_int(l->func, l->cur_block, ap->count, l->type_int);
             XiValue *end = lower_match_array_len(l, subject);
             XiValue *slice = xi_value_new(l->func, l->cur_block, XI_SLICE, rest_type, 3);

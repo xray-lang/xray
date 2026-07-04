@@ -11,11 +11,13 @@ unsafe { pp[15] = 99 }
 unsafe { print(pp[0]) }
 unsafe { print(pp[15]) }
 
-let ps = p.asSpan()
-print(ps.length)
-ps[0] = 43
-print(ps[0])
-unsafe { print(pp[0]) }
+{
+    let ps = p.asSpan()
+    print(ps.length)
+    ps[0] = 43
+    print(ps[0])
+    unsafe { print(pp[0]) }
+}
 
 // aligned allocation
 let q = mem.allocAligned(128, 64)
