@@ -956,6 +956,21 @@ static XaSymbol *xa_call_root_variable_symbol(XaInferContext *ctx, AstNode *expr
     return NULL;
 }
 
+static bool xa_method_call_creates_span_borrow(XrType *receiver_type, const char *method_name) {
+    if (!receiver_type || !method_name)
+        return false;
+    if (XR_TYPE_IS_ARRAY(receiver_type) && strcmp(method_name, "span") == 0)
+        return true;
+    if (XR_TYPE_IS_STRING(receiver_type) && strcmp(method_name, "bytes") == 0)
+        return true;
+    if (xr_type_is_named_class(receiver_type, "Buffer") && strcmp(method_name, "asSpan") == 0)
+        return true;
+    if (XR_TYPE_IS_SPAN(receiver_type) &&
+        (strcmp(method_name, "asBytes") == 0 || strcmp(method_name, "reinterpret") == 0))
+        return true;
+    return false;
+}
+
 static void xa_check_ref_argument_not_readonly(XaInferContext *ctx, AstNode *call_node,
                                                AstNode *arg_node, int slot, uint8_t mode) {
     if (!ctx || !ctx->analyzer || mode != XR_PARAM_REF || !arg_node)
@@ -1498,6 +1513,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         callee_obj_type = xa_call_raw_pointer_type_namespace(ctx, ma->object);
         if (!callee_obj_type)
             callee_obj_type = xa_visit_infer_expr(ctx, ma->object);
+
+        if (xa_method_call_creates_span_borrow(callee_obj_type, method_name)) {
+            xa_check_span_borrow_source_stable(ctx, call->callee, ma->object, method_name);
+        }
 
         // Enforce private/protected visibility on user-class method calls.
         if (method_name && callee_obj_type && XR_TYPE_IS_INSTANCE(callee_obj_type) &&

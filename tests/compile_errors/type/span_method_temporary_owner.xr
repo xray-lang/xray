@@ -1,0 +1,9 @@
+fn make_bytes() -> Bytes {
+    let b = Bytes(0)
+    b.push(1)
+    b.push(2)
+    return b
+}
+
+let view = make_bytes().span()
+print(view.length)

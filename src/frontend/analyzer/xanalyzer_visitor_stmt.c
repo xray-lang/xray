@@ -235,6 +235,54 @@ XR_FUNC bool xa_type_contains_span_view(XrType *type) {
     return false;
 }
 
+static bool xa_call_expr_is_borrowed_view(AstNode *expr) {
+    if (!expr || expr->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &expr->as.call_expr;
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    const char *name = call->callee->as.member_access.name;
+    return name && (strcmp(name, "span") == 0 || strcmp(name, "bytes") == 0 ||
+                    strcmp(name, "asSpan") == 0 || strcmp(name, "asBytes") == 0 ||
+                    strcmp(name, "reinterpret") == 0);
+}
+
+XR_FUNC bool xa_expr_has_stable_borrow_owner(AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_VARIABLE:
+            case AST_THIS_EXPR:
+                return true;
+            case AST_MEMBER_ACCESS:
+                expr = expr->as.member_access.object;
+                break;
+            case AST_INDEX_GET:
+                expr = expr->as.index_get.array;
+                break;
+            case AST_SLICE_EXPR:
+                expr = expr->as.slice_expr.source;
+                break;
+            case AST_OPTIONAL_CHAIN:
+                expr = expr->as.optional_chain.object;
+                break;
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            case AST_CALL_EXPR:
+                if (!xa_call_expr_is_borrowed_view(expr))
+                    return false;
+                expr = expr->as.call_expr.callee->as.member_access.object;
+                break;
+            default:
+                return false;
+        }
+    }
+    return false;
+}
+
 XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, XrType *value_type,
                                         const char *escape_context) {
     if (!ctx || !ctx->analyzer || !loc_node || !xa_type_contains_span_view(value_type))
@@ -246,6 +294,21 @@ XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, 
              "cannot %s; Span is a borrowed view, keep it local or copy the owner data into an "
              "Array",
              escape_context ? escape_context : "let Span view escape");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
+XR_FUNC void xa_check_span_borrow_source_stable(XaInferContext *ctx, AstNode *loc_node,
+                                                AstNode *source, const char *operation) {
+    if (!ctx || !ctx->analyzer || !loc_node || !source || xa_expr_has_stable_borrow_owner(source))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "cannot create Span view from temporary owner in %s; bind the owner to a local before "
+             "borrowing it",
+             operation ? operation : "borrow expression");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
 }
