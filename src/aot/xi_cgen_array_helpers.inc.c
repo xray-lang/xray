@@ -1963,11 +1963,21 @@ static bool emit_bytes_append_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc 
     bool boxed = cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
-    fprintf(out, "xrt_bytes_append_from_span_raw(");
+    fprintf(out, "({ xrt_array_t *_dst = ");
     emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
-    fprintf(out, ", ");
+    fprintf(out, "; xr_span_t _src = ");
     emit_span_ref_expr(out, call->args[1]);
-    fprintf(out, ")");
+    fprintf(out,
+            "; xrt_array_t *_res = _dst; if (XR_LIKELY(_dst && _dst->elem_type == XR_ELEM_U8 "
+            "&& _src.elem_type == XR_ELEM_U8 && _dst->data_storage != XR_ARRAY_DATA_BORROWED "
+            "&& _src.length >= 0 && _src.length <= INT64_MAX - _dst->length)) { int64_t "
+            "_old_length = _dst->length; int64_t _new_length = _old_length + _src.length; if "
+            "(XR_LIKELY(_new_length <= _dst->capacity && _src.guard != _dst && (_new_length == "
+            "0 || _dst->data) && (_src.length == 0 || _src.data))) { if (_src.length > 0) { "
+            "uint8_t *_dp = (uint8_t*)_dst->data + _old_length; "
+            "xr_array_core_copy_or_move_bytes(_dp, _src.data, _src.length); } _dst->length = "
+            "_new_length; } else { _res = xrt_bytes_append_from_span_slow_raw(_dst, _src); } } "
+            "else { _res = xrt_bytes_append_from_span_slow_raw(_dst, _src); } _res; })");
     emit_bytes_array_result_suffix(out, boxed);
     return true;
 }

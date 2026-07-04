@@ -659,6 +659,63 @@ static inline bool xr_array_core_bytes_range_ok(int64_t length, uint8_t elem_typ
     return count <= length && offset <= length - count;
 }
 
+static inline int xr_array_core_common_prefix_diff_byte64(uint64_t diff) {
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    return __builtin_clzll(diff) >> 3;
+#else
+    return __builtin_ctzll(diff) >> 3;
+#endif
+#else
+    int n = 0;
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    while (((diff >> ((7 - n) * 8)) & UINT64_C(0xff)) == 0)
+        n++;
+#else
+    while (((diff >> (n * 8)) & UINT64_C(0xff)) == 0)
+        n++;
+#endif
+    return n;
+#endif
+}
+
+static inline int64_t xr_array_core_bytes_common_prefix(const void *left_data, int64_t left_length,
+                                                        uint8_t left_elem_type,
+                                                        const void *right_data,
+                                                        int64_t right_length,
+                                                        uint8_t right_elem_type, bool *ok) {
+    bool valid = left_length >= 0 && right_length >= 0 && left_elem_type == XR_ELEM_U8 &&
+                 right_elem_type == XR_ELEM_U8;
+    int64_t n = left_length < right_length ? left_length : right_length;
+    if (n < 0)
+        n = 0;
+    if (valid && n > 0 && (!left_data || !right_data))
+        valid = false;
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return 0;
+
+    const uint8_t *left = (const uint8_t *) left_data;
+    const uint8_t *right = (const uint8_t *) right_data;
+    int64_t i = 0;
+    while (i + 8 <= n) {
+        uint64_t lv;
+        uint64_t rv;
+        memcpy(&lv, left + i, sizeof(lv));
+        memcpy(&rv, right + i, sizeof(rv));
+        uint64_t diff = lv ^ rv;
+        if (diff)
+            return i + xr_array_core_common_prefix_diff_byte64(diff);
+        i += 8;
+    }
+    while (i < n && left[i] == right[i])
+        i++;
+    return i;
+}
+
 static inline bool xr_array_core_host_is_little_endian(void) {
     const uint16_t one = 1;
     return *((const uint8_t *) &one) == 1;

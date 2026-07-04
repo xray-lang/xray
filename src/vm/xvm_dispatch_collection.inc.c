@@ -1325,15 +1325,12 @@ vmcase(OP_BYTES_SPAN_COMMON_PREFIX) {
                      "ByteSpan.commonPrefix(other) operand must be ByteSpan");
     (void) left_readonly;
     (void) right_readonly;
-    int64_t n = left_length < right_length ? left_length : right_length;
-    if (n > 0 && (!left_data || !right_data)) {
+    bool ok = false;
+    int64_t prefix = xr_array_core_bytes_common_prefix(left_data, left_length, XR_ELEM_U8,
+                                                       right_data, right_length, XR_ELEM_U8, &ok);
+    if (!ok) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.commonPrefix(other) span has no data");
     }
-    const uint8_t *left = (const uint8_t *) left_data;
-    const uint8_t *right = (const uint8_t *) right_data;
-    int64_t prefix = 0;
-    while (prefix < n && left[prefix] == right[prefix])
-        prefix++;
     R(a) = xr_int(prefix);
     vmbreak;
 }
