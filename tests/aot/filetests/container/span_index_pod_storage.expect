@@ -1,0 +1,12 @@
+contains=function 1 name=bump_word module=0 depth=1 abi=native boundary=none params=3 ret=int64_t/scalar/i64
+contains=  param 0 class=agg-by-value kind=aggregate rep=span c_type=xr_span_t
+contains=  param 1 class=scalar kind=scalar rep=i64 c_type=int64_t
+contains=  param 2 class=scalar kind=scalar rep=u32 c_type=uint32_t
+regex=  value v[0-9]+ op=INDEX_GET kind=scalar rep=u32 c_type=uint32_t
+regex=  value v[0-9]+ op=INDEX_SET kind=void rep=void c_type=void
+regex=array-storage [0-9]+ func=bump_word value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U32/u32/uint32_t
+c_contains=xr_span_t p0
+c_contains=((uint32_t*)_s.data)[_idx]
+c_not_contains=xrt_index_get(
+c_not_contains=xrt_index_set(
+c_not_contains=XR_FROM_INT(
