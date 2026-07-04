@@ -2735,6 +2735,129 @@ static bool lower_is_direct_arg(AstNode *arg) {
     return arg && arg->type != AST_SPREAD_EXPR;
 }
 
+static bool lower_endian_member_index(const char *name, int64_t *out_index) {
+    if (!name || !out_index)
+        return false;
+    if (strcmp(name, "Native") == 0) {
+        *out_index = XR_ENDIAN_NATIVE;
+        return true;
+    }
+    if (strcmp(name, "LE") == 0) {
+        *out_index = XR_ENDIAN_LE;
+        return true;
+    }
+    if (strcmp(name, "BE") == 0) {
+        *out_index = XR_ENDIAN_BE;
+        return true;
+    }
+    return false;
+}
+
+static bool lower_endian_arg_const(AstNode *arg, int64_t *out_index) {
+    if (!arg || !out_index)
+        return false;
+    if (arg->type == AST_ENUM_ACCESS) {
+        EnumAccessNode *ea = &arg->as.enum_access;
+        return ea->enum_name && strcmp(ea->enum_name, "Endian") == 0 &&
+               lower_endian_member_index(ea->member_name, out_index);
+    }
+    if (arg->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &arg->as.member_access;
+    if (!ma->object || ma->object->type != AST_VARIABLE)
+        return false;
+    VariableNode *obj = &ma->object->as.variable;
+    if (!obj->name || strcmp(obj->name, "Endian") != 0)
+        return false;
+    return lower_endian_member_index(ma->name, out_index);
+}
+
+static XiValue *lower_bytes_int_arg(XiLower *l, AstNode *node, XiValue *arg) {
+    if (arg && arg->type && xr_is_json_coercion(l->type_int, arg->type))
+        return xi_lower_checktype_for_type(l, node, arg, l->type_int);
+    return arg;
+}
+
+static XiValue *lower_bytes_endian_arg(XiLower *l, AstNode *arg) {
+    int64_t endian = XR_ENDIAN_NATIVE;
+    if (lower_endian_arg_const(arg, &endian))
+        return xi_const_int(l->func, l->cur_block, endian, l->type_int);
+    return xi_lower_expr(l, arg);
+}
+
+static XiValue *lower_bytes_typed_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                       MemberAccessNode *ma, XiValue *recv,
+                                       struct XrType *result_type) {
+    if (!xi_type_is_bytes(recv->type) || !ma->name || !call->type_args || !call->type_args[0] ||
+        call->type_arg_count != 1)
+        return NULL;
+
+    bool bytes_typed_load = strcmp(ma->name, "load") == 0;
+    bool bytes_typed_store = strcmp(ma->name, "store") == 0;
+    int n = call->arg_count;
+    if ((!bytes_typed_load || (n != 1 && n != 2)) && (!bytes_typed_store || (n != 2 && n != 3)))
+        return NULL;
+    for (int i = 0; i < n; i++) {
+        if (!lower_is_direct_arg(call->arguments[i]))
+            return NULL;
+    }
+
+    XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
+    uint16_t bytes_op = 0;
+    if (target && XR_TYPE_IS_INT(target) && target->native_width == XR_NATIVE_U16) {
+        bytes_op = bytes_typed_load ? XI_BYTES_LOAD_U16 : XI_BYTES_STORE_U16;
+    } else if (target && XR_TYPE_IS_INT(target) && target->native_width == XR_NATIVE_U32) {
+        bytes_op = bytes_typed_load ? XI_BYTES_LOAD_U32 : XI_BYTES_STORE_U32;
+    } else if (target && XR_TYPE_IS_INT(target) && target->native_width == XR_NATIVE_U64) {
+        bytes_op = bytes_typed_load ? XI_BYTES_LOAD_U64 : XI_BYTES_STORE_U64;
+    } else {
+        return NULL;
+    }
+
+    XiValue *offset = xi_lower_expr(l, call->arguments[0]);
+    if (!offset)
+        return NULL;
+    offset = lower_bytes_int_arg(l, node, offset);
+    if (!offset)
+        return NULL;
+
+    XiValue *value = NULL;
+    if (bytes_typed_store) {
+        value = xi_lower_expr(l, call->arguments[1]);
+        if (!value)
+            return NULL;
+        value = lower_bytes_int_arg(l, node, value);
+        if (!value)
+            return NULL;
+    }
+
+    int endian_arg_index = bytes_typed_load ? 1 : 2;
+    bool has_explicit_endian = n > endian_arg_index;
+    XiValue *endian = has_explicit_endian
+                          ? lower_bytes_endian_arg(l, call->arguments[endian_arg_index])
+                          : xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
+    if (!endian)
+        return NULL;
+
+    uint16_t expected_args = bytes_typed_load ? 3 : 4;
+    XrType *op_type = bytes_typed_store ? l->type_unit : result_type;
+    if (bytes_typed_load && (!op_type || xi_lower_type_is_unknown(op_type)))
+        op_type = target;
+    XiValue *v = xi_value_new(l->func, l->cur_block, bytes_op, op_type, expected_args);
+    if (!v)
+        return NULL;
+    v->args[0] = recv;
+    v->args[1] = offset;
+    if (bytes_typed_store) {
+        v->args[2] = value;
+        v->args[3] = endian;
+    } else {
+        v->args[2] = endian;
+    }
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
 static bool lower_is_channel_send_boundary_method(const char *method) {
     return method && (strcmp(method, "send") == 0 || strcmp(method, "trySend") == 0 ||
                       strcmp(method, "sendTimeout") == 0);
@@ -2936,6 +3059,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (chan_send)
             return chan_send;
 
+        struct XrType *result_type = xi_lower_node_type(l, node);
+
+        XiValue *bytes_typed = lower_bytes_typed_call(l, node, call, ma, recv, result_type);
+        if (bytes_typed)
+            return bytes_typed;
+
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
         XiLowerArgList args;
         xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
@@ -2944,8 +3073,6 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return NULL;
         XiValue **arg_vals = args.items;
         int n = args.count;
-
-        struct XrType *result_type = xi_lower_node_type(l, node);
 
         if (lower_value_is_whole_module_import(l, recv, "math") &&
             lower_math_call_arity_ok(ma->name, n))
@@ -5826,6 +5953,17 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     /* Resolve XrTypeRef kind to runtime XrTypeId.
      * AsExprNode.type is XrTypeRef*, not XrType*. */
     XrTypeRef *tref = as->type;
+    struct XrType *cast_type = tref ? xr_tref_resolve(l->isolate, tref) : NULL;
+    if (!as->is_safe && cast_type) {
+        if (XR_TYPE_IS_INT(cast_type) && val->type && XR_TYPE_IS_INT(val->type) &&
+            cast_type->native_width != 0) {
+            return xi_lower_narrow_for_static_type(l, node, val, cast_type);
+        }
+        if (XR_TYPE_IS_FLOAT(cast_type) && val->type && XR_TYPE_IS_FLOAT(val->type) &&
+            cast_type->native_width == XR_NATIVE_F32) {
+            return xi_lower_narrow_for_static_type(l, node, val, cast_type);
+        }
+    }
     int tid = -1;
     const char *tname = "unknown";
     if (tref) {
