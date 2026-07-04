@@ -1,11 +1,9 @@
 fn main() {
     let bytes = Bytes(0)
     bytes.push(7)
-    {
-        let view: ByteSpan = bytes[:]
-        print(view.length)
-        print(view[0])
-    }
+    let view: ByteSpan = bytes[:]
+    print(view.length)
+    print(view[0])
     bytes.push(9)
     print(bytes.length)
     print(bytes[1])

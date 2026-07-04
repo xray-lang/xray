@@ -23,6 +23,7 @@ XaInferContext *xa_infer_context_new(XaAnalyzer *analyzer) {
     ctx->analyzer = analyzer;
     ctx->flow = xa_flow_builder_new();
     ctx->cache = xa_flow_cache_new();
+    ctx->current_block_stmt_index = -1;
 
     // Initialize flow graph with start node (critical for type narrowing)
     if (ctx->flow) {
