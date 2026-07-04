@@ -1046,6 +1046,23 @@ TEST(struct_field_store_narrows_native_width) {
     xi_func_free(f);
 }
 
+TEST(as_to_native_width_int_lowers_to_narrow) {
+    XiFunc *f = lower_source("fn run(i: int) -> int {\n"
+                             "    let v = i as uint16\n"
+                             "    return int(v)\n"
+                             "}\n"
+                             "print(run(65537))\n");
+    assert(f != NULL);
+    assert(func_tree_has_op(f, XI_NARROW_U16) &&
+           "int as uint16 should lower to native-width narrowing");
+    assert(!func_tree_has_op(f, XI_AS) && "numeric width cast should not use tagged XI_AS");
+    XiValue *narrow = func_tree_find_op(f, XI_NARROW_U16);
+    assert(narrow && narrow->type && narrow->type->kind == XR_KIND_INT &&
+           narrow->type->native_width == XR_NATIVE_U16 &&
+           "NARROW_U16 result type should carry the cast target width");
+    xi_func_free(f);
+}
+
 TEST(force_unwrap) {
     XiFunc *f = lower_source("let x: int? = 42\n"
                              "let y = x!\n"
@@ -1786,6 +1803,7 @@ int main(void) {
     run_struct_literal();
     run_struct_literal_inside_function();
     run_struct_field_store_narrows_native_width();
+    run_as_to_native_width_int_lowers_to_narrow();
     run_force_unwrap();
     run_destructure_decl();
     run_multi_assign();

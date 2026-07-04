@@ -2140,10 +2140,23 @@ static bool emit_typed_array_fill_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
     const char *conv_suffix = emit_conversion_prefix(out, call->type, XR_REP_TAGGED, cg_rep(call));
     fprintf(out, "({ xrt_array_t *_a = ");
     emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
-    if (call->nargs == 2 && info.elem_name && strcmp(info.elem_name, "XR_ELEM_ANY") != 0 &&
+    if (info.elem_name && strcmp(info.elem_name, "XR_ELEM_ANY") != 0 &&
         cg_array_fill_value_is_zero_bits_literal(call->args[1])) {
-        fprintf(out, "; if (_a->length > 0) memset(_a->data, 0, "
-                     "(size_t)_a->length * (size_t)_a->elem_size); xr_mkptr(_a, XR_TAG_ARRAY); })");
+        fprintf(out, "; int64_t _start = ");
+        if (call->nargs >= 3)
+            emit_value_as_rep_ctx(ctx, out, call->args[2], XR_REP_I64);
+        else
+            fprintf(out, "0");
+        fprintf(out, "; int64_t _end = ");
+        if (call->nargs >= 4)
+            emit_value_as_rep_ctx(ctx, out, call->args[3], XR_REP_I64);
+        else
+            fprintf(out, "_a->length");
+        fprintf(out, "; XrArrayCoreRange _r = xr_array_core_fill_range(_a->length, _start, _end); "
+                     "if (_r.count > 0) memset((uint8_t*)_a->data + "
+                     "(size_t)_r.start * (size_t)_a->elem_size, 0, "
+                     "(size_t)_r.count * (size_t)_a->elem_size); "
+                     "xr_mkptr(_a, XR_TAG_ARRAY); })");
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
