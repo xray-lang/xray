@@ -2090,9 +2090,48 @@ static bool sr_select_value_arms_need_tagged(const XiValue *v, const XiRepPolicy
            sr_def_rep(v->args[2], policy) == XR_REP_TAGGED;
 }
 
+static bool sr_def_rep_memory_op(const XiValue *v, XrRep *out) {
+    if (!v || !out)
+        return false;
+    switch (v->op) {
+        case XI_INDEX_GET:
+            *out = v->nargs >= 1 && v->args[0] && sr_value_has_static_index_storage(v->args[0])
+                       ? sr_typed_array_elem_rep(v->args[0]->type)
+                       : XR_REP_TAGGED;
+            return true;
+        case XI_BYTES_LOAD_U16:
+        case XI_BYTES_LOAD_U32:
+        case XI_BYTES_LOAD_U64:
+        case XI_SPAN_COMPARE:
+        case XI_BYTES_SPAN_COMPARE:
+        case XI_BYTES_SPAN_COMMON_PREFIX:
+            *out = XR_REP_I64;
+            return true;
+        case XI_BYTES_SPAN_FILL:
+        case XI_BYTES_SPAN_COPY:
+        case XI_BYTES_SPAN_REPEAT:
+        case XI_SPAN_AS_BYTES:
+        case XI_SPAN_COPY:
+        case XI_SPAN_REINTERPRET:
+            *out = sr_type_native_boundary_rep(v->type);
+            return true;
+        case XI_ARRAY_DATA_PTR:
+            *out = XR_REP_RAWPTR;
+            return true;
+        case XI_PTR_LOAD:
+            *out = sr_type_native_boundary_rep(v->type);
+            return true;
+        default:
+            return false;
+    }
+}
+
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
     if (!v || !v->type)
         return XR_REP_TAGGED;
+    XrRep memory_rep = XR_REP_TAGGED;
+    if (sr_def_rep_memory_op(v, &memory_rep))
+        return memory_rep;
     switch (v->op) {
         case XI_PARAM: {
             if (sr_param_uses_default_sentinel(v))
@@ -2178,28 +2217,6 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
             return XR_REP_TAGGED;
         case XI_STRUCT_GET:
             return sr_type_scalar_rep(v->type);
-        case XI_INDEX_GET:
-            if (v->nargs >= 1 && v->args[0] && sr_value_has_static_index_storage(v->args[0]))
-                return sr_typed_array_elem_rep(v->args[0]->type);
-            return XR_REP_TAGGED;
-        case XI_BYTES_LOAD_U16:
-        case XI_BYTES_LOAD_U32:
-        case XI_BYTES_LOAD_U64:
-            return XR_REP_I64;
-        case XI_BYTES_SPAN_FILL:
-        case XI_BYTES_SPAN_COPY:
-        case XI_BYTES_SPAN_REPEAT:
-        case XI_SPAN_AS_BYTES:
-        case XI_SPAN_COPY:
-        case XI_SPAN_REINTERPRET:
-            return sr_type_native_boundary_rep(v->type);
-        case XI_BYTES_SPAN_COMPARE:
-        case XI_BYTES_SPAN_COMMON_PREFIX:
-            return XR_REP_I64;
-        case XI_ARRAY_DATA_PTR:
-            return XR_REP_RAWPTR;
-        case XI_PTR_LOAD:
-            return sr_type_native_boundary_rep(v->type);
         case XI_PHI:
             if (policy && !policy->force_phi_tagged)
                 return sr_type_native_boundary_rep(v->type);
@@ -2321,6 +2338,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
                        : XR_REP_TAGGED;
             return true;
         case XI_SPAN_COPY:
+        case XI_SPAN_COMPARE:
         case XI_BYTES_SPAN_COPY:
         case XI_BYTES_SPAN_COMPARE:
         case XI_BYTES_SPAN_COMMON_PREFIX:

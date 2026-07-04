@@ -1159,7 +1159,7 @@ static bool xicgen_method_arg_keeps_span_noescape(const XiValue *user, uint16_t 
     if (arg_index == 0 && (strcmp(method, "getUnchecked") == 0 || strcmp(method, "load") == 0 ||
                            strcmp(method, "store") == 0 || strcmp(method, "commonPrefix") == 0 ||
                            strcmp(method, "repeatFrom") == 0 || strcmp(method, "copyFrom") == 0 ||
-                           strcmp(method, "fill") == 0))
+                           strcmp(method, "compare") == 0 || strcmp(method, "fill") == 0))
         return true;
     if (arg_index == 1 && strcmp(method, "appendFrom") == 0)
         return true;
@@ -1288,6 +1288,7 @@ static bool xicgen_op_arg_keeps_span_noescape(XiCgenCtx *ctx, const XiFunc *curr
         case XI_SPAN_REINTERPRET:
             return arg_index == 0;
         case XI_SPAN_COPY:
+        case XI_SPAN_COMPARE:
         case XI_BYTES_SPAN_COPY:
         case XI_BYTES_SPAN_COMPARE:
         case XI_BYTES_SPAN_COMMON_PREFIX:
@@ -5688,6 +5689,20 @@ static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     fprintf(out, ", ");
     emit_span_ref_expr(out, v->args[1]);
     fprintf(out, ")");
+}
+
+static void xicgen_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                const char *prefix) {
+    (void) f;
+    (void) prefix;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "xrt_span_compare_checked_raw(");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ", ");
+    emit_span_ref_expr(out, v->args[1]);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
 }
 
 static void xicgen_span_reinterpret(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

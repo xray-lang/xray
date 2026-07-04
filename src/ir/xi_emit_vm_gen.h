@@ -148,6 +148,7 @@
     X(BYTES_SPAN_REPEAT, xi_emit_bytes_span_repeat) \
     X(SPAN_AS_BYTES, xi_emit_span_as_bytes) \
     X(SPAN_COPY, xi_emit_span_copy) \
+    X(SPAN_COMPARE, xi_emit_span_compare) \
     X(SPAN_REINTERPRET, xi_emit_span_reinterpret) \
     X(BYTES_COPY_WITHIN, xi_emit_bytes_copy_within) \
     X(BYTES_COPY_FROM, xi_emit_bytes_copy_from) \

@@ -1,0 +1,3 @@
+fn compare_words(left: Span<uint32>, right: Span<uint32>) -> int {
+    return left.compare(right)
+}

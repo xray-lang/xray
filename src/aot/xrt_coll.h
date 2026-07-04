@@ -670,6 +670,36 @@ static inline xr_span_t xrt_span_copy_checked_raw(xr_span_t dst, xr_span_t src) 
     return dst;
 }
 
+static inline int64_t xrt_span_compare_checked_raw(xr_span_t left, xr_span_t right) {
+    if (left.elem_type == XR_ELEM_ANY || left.elem_type >= XR_ELEM_COUNT || left.elem_size == 0)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.compare(other) receiver must be POD Span");
+    if (right.elem_type == XR_ELEM_ANY || right.elem_type >= XR_ELEM_COUNT || right.elem_size == 0)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.compare(other) operand must be POD Span");
+    if (left.elem_type != right.elem_type || left.elem_size != right.elem_size)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.compare(other) element type mismatch");
+    if (left.length < 0 || right.length < 0 || left.length > INT64_MAX / (int64_t) left.elem_size ||
+        right.length > INT64_MAX / (int64_t) right.elem_size)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.compare(other) byte length overflow");
+    int64_t left_bytes = left.length * (int64_t) left.elem_size;
+    int64_t right_bytes = right.length * (int64_t) right.elem_size;
+    int64_t n = left_bytes < right_bytes ? left_bytes : right_bytes;
+    int cmp = 0;
+    if (n > 0) {
+        if (!left.data || !right.data)
+            xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.compare(other) span has no data");
+        cmp = memcmp(left.data, right.data, (size_t) n);
+    }
+    if (cmp < 0)
+        return -1;
+    if (cmp > 0)
+        return 1;
+    if (left.length < right.length)
+        return -1;
+    if (left.length > right.length)
+        return 1;
+    return 0;
+}
+
 static inline xr_span_t xrt_span_reinterpret_checked_raw(xr_span_t span, uint8_t elem_type,
                                                          uint8_t elem_size, uint8_t elem_tid) {
     if (elem_type == XR_ELEM_ANY || elem_type >= XR_ELEM_COUNT || elem_size == 0)
