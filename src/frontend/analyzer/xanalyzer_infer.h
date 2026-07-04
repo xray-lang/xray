@@ -97,6 +97,12 @@ typedef struct XaInferContext {
     // Active local Span/ByteSpan views keyed by the owning mutable container.
     // Used to reject owner grow/free mutations while borrowed views are live.
     XaActiveSpanBorrow *active_span_borrows;
+
+    // Current statement cursor inside xa_visit_block_stmt. Used by Span borrow
+    // liveness to allow owner mutations after the borrowed view's last use in a
+    // straight-line block.
+    AstNode *current_block_node;
+    int current_block_stmt_index;
 } XaInferContext;
 
 // API: Context lifecycle

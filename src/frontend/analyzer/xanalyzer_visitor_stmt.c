@@ -327,6 +327,410 @@ static XaActiveSpanBorrow *xa_active_span_borrow_for_view(XaInferContext *ctx, X
     return NULL;
 }
 
+static bool xa_node_uses_symbol_name(AstNode *node, const char *name);
+
+static bool xa_node_array_uses_symbol_name(AstNode **nodes, int count, const char *name) {
+    if (!nodes || count <= 0 || !name)
+        return false;
+    for (int i = 0; i < count; i++) {
+        if (xa_node_uses_symbol_name(nodes[i], name))
+            return true;
+    }
+    return false;
+}
+
+static bool xa_parallel_locals_use_symbol_name(XrParallelLocalBinding *locals, int count,
+                                               const char *name) {
+    if (!locals || count <= 0 || !name)
+        return false;
+    for (int i = 0; i < count; i++) {
+        if (xa_node_uses_symbol_name(locals[i].source, name))
+            return true;
+    }
+    return false;
+}
+
+static bool xa_block_uses_symbol_name_from(AstNode *node, const char *name, int start_index) {
+    if (!node || !name)
+        return false;
+    AstNode **statements = NULL;
+    int count = 0;
+    if (node->type == AST_BLOCK) {
+        statements = node->as.block.statements;
+        count = node->as.block.count;
+    } else if (node->type == AST_PROGRAM) {
+        statements = node->as.program.statements;
+        count = node->as.program.count;
+    } else {
+        return xa_node_uses_symbol_name(node, name);
+    }
+    if (start_index < 0)
+        start_index = 0;
+    for (int i = start_index; i < count; i++) {
+        AstNode *stmt = statements[i];
+        if (!stmt)
+            continue;
+        if ((stmt->type == AST_VAR_DECL || stmt->type == AST_CONST_DECL) &&
+            stmt->as.var_decl.name && strcmp(stmt->as.var_decl.name, name) == 0) {
+            return xa_node_uses_symbol_name(stmt->as.var_decl.initializer, name);
+        }
+        if (xa_node_uses_symbol_name(stmt, name))
+            return true;
+    }
+    return false;
+}
+
+static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
+    if (!node || !name)
+        return false;
+
+    switch (node->type) {
+        case AST_VARIABLE:
+            return node->as.variable.name && strcmp(node->as.variable.name, name) == 0;
+
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_NULLISH_COALESCE:
+            return xa_node_uses_symbol_name(node->as.binary.left, name) ||
+                   xa_node_uses_symbol_name(node->as.binary.right, name);
+
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+        case AST_FORCE_UNWRAP:
+            return xa_node_uses_symbol_name(node->as.unary.operand, name);
+
+        case AST_GROUPING:
+            return xa_node_uses_symbol_name(node->as.grouping, name);
+
+        case AST_EXPR_STMT:
+            return xa_node_uses_symbol_name(node->as.expr_stmt, name);
+        case AST_PRINT_STMT:
+            return xa_node_array_uses_symbol_name(node->as.print_stmt.exprs,
+                                                  node->as.print_stmt.expr_count, name);
+        case AST_BLOCK:
+            return xa_block_uses_symbol_name_from(node, name, 0);
+
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+            return xa_node_uses_symbol_name(node->as.var_decl.initializer, name);
+        case AST_ASSIGNMENT:
+            return xa_node_uses_symbol_name(node->as.assignment.value, name);
+        case AST_COMPOUND_ASSIGNMENT:
+            return (node->as.compound_assignment.name &&
+                    strcmp(node->as.compound_assignment.name, name) == 0) ||
+                   xa_node_uses_symbol_name(node->as.compound_assignment.object, name) ||
+                   xa_node_uses_symbol_name(node->as.compound_assignment.value, name);
+        case AST_INC:
+        case AST_DEC:
+            return node->as.inc.name && strcmp(node->as.inc.name, name) == 0;
+        case AST_DESTRUCTURE_DECL:
+            return xa_node_uses_symbol_name(node->as.destructure_decl.initializer, name);
+        case AST_DESTRUCTURE_ASSIGN:
+            return xa_node_uses_symbol_name(node->as.destructure_assign.value, name);
+
+        case AST_IF_STMT:
+            return xa_node_uses_symbol_name(node->as.if_stmt.condition, name) ||
+                   xa_node_uses_symbol_name(node->as.if_stmt.then_branch, name) ||
+                   xa_node_uses_symbol_name(node->as.if_stmt.else_branch, name);
+        case AST_WHILE_STMT:
+            return xa_node_uses_symbol_name(node->as.while_stmt.condition, name) ||
+                   xa_node_uses_symbol_name(node->as.while_stmt.body, name);
+        case AST_FOR_STMT:
+            return xa_node_uses_symbol_name(node->as.for_stmt.initializer, name) ||
+                   xa_node_uses_symbol_name(node->as.for_stmt.condition, name) ||
+                   xa_node_uses_symbol_name(node->as.for_stmt.increment, name) ||
+                   xa_node_uses_symbol_name(node->as.for_stmt.body, name);
+        case AST_FOR_IN_STMT:
+            return xa_node_uses_symbol_name(node->as.for_in_stmt.collection, name) ||
+                   xa_node_uses_symbol_name(node->as.for_in_stmt.body, name);
+        case AST_PARALLEL_FOR_STMT:
+            return xa_parallel_locals_use_symbol_name(node->as.parallel_for_stmt.locals,
+                                                      node->as.parallel_for_stmt.local_count,
+                                                      name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_for_stmt.range, name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_for_stmt.worker_count, name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_for_stmt.body, name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_for_stmt.final_body, name);
+
+        case AST_FUNCTION_DECL:
+        case AST_FUNCTION_EXPR:
+            return xa_node_uses_symbol_name(node->as.function_decl.body, name);
+        case AST_CALL_EXPR:
+            return xa_node_uses_symbol_name(node->as.call_expr.callee, name) ||
+                   xa_node_array_uses_symbol_name(node->as.call_expr.arguments,
+                                                  node->as.call_expr.arg_count, name);
+        case AST_PARALLEL_REDUCE_EXPR:
+            return xa_parallel_locals_use_symbol_name(node->as.parallel_reduce_expr.locals,
+                                                      node->as.parallel_reduce_expr.local_count,
+                                                      name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_reduce_expr.range, name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_reduce_expr.worker_count, name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_reduce_expr.initial, name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_reduce_expr.combine, name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_reduce_expr.body, name);
+        case AST_PARALLEL_COLLECT_EXPR:
+            return xa_parallel_locals_use_symbol_name(node->as.parallel_collect_expr.locals,
+                                                      node->as.parallel_collect_expr.local_count,
+                                                      name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_collect_expr.range, name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_collect_expr.worker_count, name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_collect_expr.into, name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_collect_expr.body, name) ||
+                   xa_node_uses_symbol_name(node->as.parallel_collect_expr.final_body, name);
+        case AST_RETURN_STMT:
+            return xa_node_array_uses_symbol_name(node->as.return_stmt.values,
+                                                  node->as.return_stmt.value_count, name);
+
+        case AST_ARRAY_LITERAL:
+            return xa_node_array_uses_symbol_name(node->as.array_literal.elements,
+                                                  node->as.array_literal.count, name);
+        case AST_TUPLE_LITERAL:
+            return xa_node_array_uses_symbol_name(node->as.tuple_literal.elements,
+                                                  node->as.tuple_literal.count, name);
+        case AST_SPREAD_EXPR:
+            return xa_node_uses_symbol_name(node->as.spread_expr.expr, name);
+        case AST_INDEX_GET:
+            return xa_node_uses_symbol_name(node->as.index_get.array, name) ||
+                   xa_node_uses_symbol_name(node->as.index_get.index, name);
+        case AST_INDEX_SET:
+            return xa_node_uses_symbol_name(node->as.index_set.array, name) ||
+                   xa_node_uses_symbol_name(node->as.index_set.index, name) ||
+                   xa_node_uses_symbol_name(node->as.index_set.value, name);
+        case AST_SLICE_EXPR:
+            return xa_node_uses_symbol_name(node->as.slice_expr.source, name) ||
+                   xa_node_uses_symbol_name(node->as.slice_expr.start, name) ||
+                   xa_node_uses_symbol_name(node->as.slice_expr.end, name);
+        case AST_MEMBER_ACCESS:
+            return xa_node_uses_symbol_name(node->as.member_access.object, name);
+        case AST_MEMBER_SET:
+            return xa_node_uses_symbol_name(node->as.member_set.object, name) ||
+                   xa_node_uses_symbol_name(node->as.member_set.value, name);
+        case AST_TEMPLATE_STRING:
+            return xa_node_array_uses_symbol_name(node->as.template_str.parts,
+                                                  node->as.template_str.part_count, name);
+        case AST_OBJECT_LITERAL:
+            return xa_node_array_uses_symbol_name(node->as.object_literal.keys,
+                                                  node->as.object_literal.count, name) ||
+                   xa_node_array_uses_symbol_name(node->as.object_literal.values,
+                                                  node->as.object_literal.count, name);
+        case AST_MAP_LITERAL:
+            return xa_node_array_uses_symbol_name(node->as.map_literal.keys,
+                                                  node->as.map_literal.count, name) ||
+                   xa_node_array_uses_symbol_name(node->as.map_literal.values,
+                                                  node->as.map_literal.count, name);
+        case AST_SET_LITERAL:
+            return xa_node_array_uses_symbol_name(node->as.set_literal.elements,
+                                                  node->as.set_literal.count, name);
+        case AST_STRUCT_LITERAL:
+            return xa_node_array_uses_symbol_name(node->as.struct_literal.field_values,
+                                                  node->as.struct_literal.field_count, name);
+
+        case AST_TERNARY:
+            return xa_node_uses_symbol_name(node->as.ternary.condition, name) ||
+                   xa_node_uses_symbol_name(node->as.ternary.true_expr, name) ||
+                   xa_node_uses_symbol_name(node->as.ternary.false_expr, name);
+        case AST_OPTIONAL_CHAIN:
+            return xa_node_uses_symbol_name(node->as.optional_chain.object, name) ||
+                   xa_node_uses_symbol_name(node->as.optional_chain.index, name);
+        case AST_RANGE:
+            return xa_node_uses_symbol_name(node->as.range.start, name) ||
+                   xa_node_uses_symbol_name(node->as.range.end, name);
+        case AST_IS_EXPR:
+            return xa_node_uses_symbol_name(node->as.is_expr.expr, name);
+        case AST_AS_EXPR:
+            return xa_node_uses_symbol_name(node->as.as_expr.expr, name);
+        case AST_NEW_EXPR:
+            return xa_node_array_uses_symbol_name(node->as.new_expr.arguments,
+                                                  node->as.new_expr.arg_count, name);
+        case AST_SUPER_CALL:
+            return xa_node_array_uses_symbol_name(node->as.super_call.arguments,
+                                                  node->as.super_call.arg_count, name);
+
+        case AST_CLASS_DECL:
+        case AST_STRUCT_DECL:
+            return xa_node_array_uses_symbol_name(node->as.class_decl.fields,
+                                                  node->as.class_decl.field_count, name) ||
+                   xa_node_array_uses_symbol_name(node->as.class_decl.methods,
+                                                  node->as.class_decl.method_count, name);
+        case AST_FIELD_DECL:
+            return xa_node_uses_symbol_name(node->as.field_decl.initializer, name);
+        case AST_METHOD_DECL:
+            return xa_node_array_uses_symbol_name(node->as.method_decl.base_args,
+                                                  node->as.method_decl.base_arg_count, name) ||
+                   xa_node_array_uses_symbol_name(node->as.method_decl.default_values,
+                                                  node->as.method_decl.param_count, name) ||
+                   xa_node_uses_symbol_name(node->as.method_decl.body, name);
+
+        case AST_ENUM_DECL:
+            return xa_node_array_uses_symbol_name(node->as.enum_decl.members,
+                                                  node->as.enum_decl.member_count, name) ||
+                   xa_node_array_uses_symbol_name(node->as.enum_decl.methods,
+                                                  node->as.enum_decl.method_count, name);
+        case AST_ENUM_MEMBER:
+            return xa_node_uses_symbol_name(node->as.enum_member.value, name);
+        case AST_ENUM_CONVERT:
+            return xa_node_uses_symbol_name(node->as.enum_convert.value_expr, name);
+        case AST_ENUM_INDEX:
+            return xa_node_uses_symbol_name(node->as.enum_index.collection, name) ||
+                   xa_node_uses_symbol_name(node->as.enum_index.index_expr, name);
+
+        case AST_TRY_CATCH: {
+            TryCatchNode *tc = &node->as.try_catch;
+            if (xa_node_uses_symbol_name(tc->try_body, name))
+                return true;
+            for (int i = 0; i < tc->catch_count; i++) {
+                if (tc->catch_clauses[i] &&
+                    xa_node_uses_symbol_name(tc->catch_clauses[i]->body, name))
+                    return true;
+            }
+            return false;
+        }
+        case AST_THROW_STMT:
+            return xa_node_uses_symbol_name(node->as.throw_stmt.expression, name);
+        case AST_EXPORT_STMT:
+            return xa_node_uses_symbol_name(node->as.export_stmt.declaration, name);
+
+        case AST_MATCH_EXPR:
+            return xa_node_uses_symbol_name(node->as.match_expr.expr, name) ||
+                   xa_node_array_uses_symbol_name(node->as.match_expr.arms,
+                                                  node->as.match_expr.arm_count, name);
+        case AST_MATCH_ARM:
+            return xa_node_uses_symbol_name(node->as.match_arm.pattern, name) ||
+                   xa_node_uses_symbol_name(node->as.match_arm.guard, name) ||
+                   xa_node_uses_symbol_name(node->as.match_arm.body, name);
+        case AST_PATTERN_LITERAL:
+            return xa_node_uses_symbol_name(node->as.pattern_literal.value, name);
+        case AST_PATTERN_RANGE:
+            return xa_node_uses_symbol_name(node->as.pattern_range.start, name) ||
+                   xa_node_uses_symbol_name(node->as.pattern_range.end, name);
+        case AST_PATTERN_MULTI:
+            return xa_node_array_uses_symbol_name(node->as.pattern_multi.patterns,
+                                                  node->as.pattern_multi.count, name);
+        case AST_PATTERN_TUPLE:
+            return xa_node_array_uses_symbol_name(node->as.pattern_tuple.patterns,
+                                                  node->as.pattern_tuple.count, name);
+        case AST_PATTERN_ADT:
+            return xa_node_uses_symbol_name(node->as.pattern_adt.variant, name) ||
+                   xa_node_array_uses_symbol_name(node->as.pattern_adt.patterns,
+                                                  node->as.pattern_adt.count, name);
+        case AST_PATTERN_OBJECT:
+            return xa_node_array_uses_symbol_name(node->as.pattern_object.patterns,
+                                                  node->as.pattern_object.count, name);
+        case AST_PATTERN_ARRAY:
+            return xa_node_array_uses_symbol_name(node->as.pattern_array.patterns,
+                                                  node->as.pattern_array.count, name);
+
+        case AST_GO_EXPR:
+            return xa_node_uses_symbol_name(node->as.go_expr.expr, name);
+        case AST_AWAIT_EXPR:
+            return xa_node_uses_symbol_name(node->as.await_expr.expr, name) ||
+                   xa_node_uses_symbol_name(node->as.await_expr.timeout, name) ||
+                   xa_node_uses_symbol_name(node->as.await_expr.into, name);
+        case AST_CHANNEL_NEW:
+            return xa_node_uses_symbol_name(node->as.channel_new.buffer_size, name);
+        case AST_SELECT_STMT:
+            return xa_node_array_uses_symbol_name(node->as.select_stmt.cases,
+                                                  node->as.select_stmt.case_count, name);
+        case AST_SELECT_CASE:
+            return xa_node_uses_symbol_name(node->as.select_case.channel, name) ||
+                   xa_node_uses_symbol_name(node->as.select_case.value, name) ||
+                   xa_node_uses_symbol_name(node->as.select_case.body, name);
+        case AST_YIELD_STMT:
+            return xa_node_uses_symbol_name(node->as.yield_stmt.value, name);
+        case AST_DEFER_STMT:
+            return xa_node_uses_symbol_name(node->as.defer_stmt.expr, name);
+        case AST_SCOPE_BLOCK:
+            return xa_node_uses_symbol_name(node->as.scope_block.body, name);
+        case AST_MOVE_EXPR:
+            return xa_node_uses_symbol_name(node->as.move_expr.expr, name);
+        case AST_UNSAFE_EXPR:
+            return xa_node_uses_symbol_name(node->as.unsafe_expr.operand, name);
+        case AST_PROGRAM:
+            return xa_node_array_uses_symbol_name(node->as.program.statements,
+                                                  node->as.program.count, name);
+
+        default:
+            return false;
+    }
+}
+
+static bool xa_active_span_borrow_may_be_live_after_mutation(XaInferContext *ctx,
+                                                             XaActiveSpanBorrow *borrow) {
+    if (!ctx || !ctx->analyzer || !borrow || !borrow->view_symbol || !borrow->view_symbol->name)
+        return true;
+    if (ctx->loop_depth > 0)
+        return true;
+    XaScope *scope = ctx->analyzer->current_scope;
+    if (!scope || borrow->view_scope != scope)
+        return true;
+    AstNode *block_node = ctx->current_block_node;
+    int stmt_index = ctx->current_block_stmt_index;
+    if (!block_node || stmt_index < 0)
+        return true;
+    AstNode **statements = NULL;
+    int count = 0;
+    if (block_node->type == AST_BLOCK) {
+        statements = block_node->as.block.statements;
+        count = block_node->as.block.count;
+    } else if (block_node->type == AST_PROGRAM) {
+        statements = block_node->as.program.statements;
+        count = block_node->as.program.count;
+    } else {
+        return true;
+    }
+    if (stmt_index >= count)
+        return true;
+
+    const char *name = borrow->view_symbol->name;
+    if (xa_node_uses_symbol_name(statements[stmt_index], name))
+        return true;
+    return xa_block_uses_symbol_name_from(block_node, name, stmt_index + 1);
+}
+
+XR_FUNC void xa_visit_inline_statement_sequence_with_cursor(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !node)
+        return;
+    AstNode **statements = NULL;
+    int count = 0;
+    if (node->type == AST_BLOCK) {
+        statements = node->as.block.statements;
+        count = node->as.block.count;
+    } else if (node->type == AST_PROGRAM) {
+        statements = node->as.program.statements;
+        count = node->as.program.count;
+    } else {
+        xa_visit_infer_stmt(ctx, node);
+        return;
+    }
+
+    AstNode *saved_block = ctx->current_block_node;
+    int saved_index = ctx->current_block_stmt_index;
+    ctx->current_block_node = node;
+    for (int i = 0; i < count; i++) {
+        ctx->current_block_stmt_index = i;
+        xa_visit_infer_stmt(ctx, statements[i]);
+    }
+    ctx->current_block_node = saved_block;
+    ctx->current_block_stmt_index = saved_index;
+}
+
 XR_FUNC XaSymbol *xa_span_borrow_owner_receiver_symbol(XaInferContext *ctx, AstNode *expr,
                                                        XrType *receiver_type) {
     if (!ctx || !xa_type_can_own_span_view(receiver_type))
@@ -434,6 +838,8 @@ XR_FUNC void xa_check_active_span_borrow_owner_mutation(XaInferContext *ctx, Ast
         return;
     for (XaActiveSpanBorrow *b = ctx->active_span_borrows; b; b = b->next) {
         if (b->owner_symbol != owner_sym)
+            continue;
+        if (!xa_active_span_borrow_may_be_live_after_mutation(ctx, b))
             continue;
         XrLocation loc = {
             .file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
@@ -1125,10 +1531,7 @@ void xa_visit_block_stmt(XaInferContext *ctx, AstNode *node) {
 
     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
 
-    BlockNode *block = &node->as.block;
-    for (int i = 0; i < block->count; i++) {
-        xa_visit_infer_stmt(ctx, block->statements[i]);
-    }
+    xa_visit_inline_statement_sequence_with_cursor(ctx, node);
 
     xa_clear_active_span_borrows_in_scope(ctx, ctx->analyzer->current_scope);
     xa_analyzer_exit_scope(ctx->analyzer);

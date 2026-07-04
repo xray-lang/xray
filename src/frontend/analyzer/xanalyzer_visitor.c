@@ -3088,15 +3088,9 @@ void xa_visit_function_body_unified(XaInferContext *ctx, AstNode *body) {
     // Collect body declarations (idempotent: safe on both new and reused scopes)
     xa_visit_collect(ctx, body);
 
-    // Visit body statements directly (skip xa_visit_block_stmt)
-    if (body->type == AST_BLOCK) {
-        BlockNode *blk = &body->as.block;
-        for (int si = 0; si < blk->count; si++) {
-            xa_visit_infer_stmt(ctx, blk->statements[si]);
-        }
-    } else {
-        xa_visit_infer_stmt(ctx, body);
-    }
+    // Visit body statements directly (skip xa_visit_block_stmt) while still
+    // exposing a statement cursor for Span last-use analysis.
+    xa_visit_inline_statement_sequence_with_cursor(ctx, body);
 }
 
 /* Generator return-type recognition. A generator function declares
@@ -3129,9 +3123,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
 
     switch (node->type) {
         case AST_PROGRAM:
-            for (int i = 0; i < node->as.program.count; i++) {
-                xa_visit_infer_stmt(ctx, node->as.program.statements[i]);
-            }
+            xa_visit_inline_statement_sequence_with_cursor(ctx, node);
             break;
         case AST_BLOCK:
             xa_visit_block_stmt(ctx, node);

@@ -116,6 +116,7 @@ XR_FUNC void xa_clear_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol 
 XR_FUNC void xa_clear_active_span_borrows_in_scope(XaInferContext *ctx, XaScope *scope);
 XR_FUNC void xa_check_active_span_borrow_owner_mutation(XaInferContext *ctx, AstNode *loc_node,
                                                         XaSymbol *owner_sym, const char *operation);
+XR_FUNC void xa_visit_inline_statement_sequence_with_cursor(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, XrType *value_type,
                                         const char *escape_context);
 XR_FUNC void xa_check_span_borrow_source_stable(XaInferContext *ctx, AstNode *loc_node,
