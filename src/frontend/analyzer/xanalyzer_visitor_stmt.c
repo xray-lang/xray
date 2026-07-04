@@ -740,6 +740,12 @@ XR_FUNC XaSymbol *xa_span_borrow_owner_receiver_symbol(XaInferContext *ctx, AstN
 
 XR_FUNC XaSymbol *xa_span_borrow_owner_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
     while (ctx && expr) {
+        XrType *expr_type = xa_analyzer_get_node_type(ctx->analyzer, expr);
+        if (xa_type_can_own_span_view(expr_type)) {
+            XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, expr);
+            if (root)
+                return root;
+        }
         switch (expr->type) {
             case AST_VARIABLE: {
                 XaSymbol *sym = expr->as.variable.name
@@ -1246,8 +1252,7 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType *var_type = xa_analyzer_get_type(ctx->analyzer, sym);
-    if (xa_type_can_own_span_view(var_type))
-        xa_check_active_span_borrow_owner_mutation(ctx, node, sym, "reassigning the owner");
+    xa_check_active_span_borrow_owner_mutation(ctx, node, sym, "reassigning the owner");
 
     // Bidirectional inference: propagate target type to value expression
     XrType *saved_expected = ctx->expected_type;

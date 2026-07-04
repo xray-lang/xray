@@ -1,0 +1,26 @@
+class Box {
+    bytes: Bytes = Bytes(0)
+}
+
+fn fieldOwnerAfterLastUse() {
+    let box = Box()
+    box.bytes.push(7)
+    let view: ByteSpan = box.bytes[:]
+    print(view.length)
+    print(view[0])
+    box.bytes.push(9)
+    print(box.bytes.length)
+}
+
+fn indexOwnerAfterLastUse() {
+    let chunks: Array<Bytes> = [Bytes(0)]
+    chunks[0].push(3)
+    let view: ByteSpan = chunks[0][:]
+    print(view.length)
+    print(view[0])
+    chunks[0].push(4)
+    print(chunks[0].length)
+}
+
+fieldOwnerAfterLastUse()
+indexOwnerAfterLastUse()
