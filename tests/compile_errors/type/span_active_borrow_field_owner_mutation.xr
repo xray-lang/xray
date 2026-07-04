@@ -1,0 +1,13 @@
+class Box {
+    bytes: Bytes = Bytes(0)
+}
+
+fn main() {
+    let box = Box()
+    box.bytes.push(1)
+    let view: ByteSpan = box.bytes[:]
+    box.bytes.push(2)
+    print(view.length)
+}
+
+main()
