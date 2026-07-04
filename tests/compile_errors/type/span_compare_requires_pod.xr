@@ -1,0 +1,5 @@
+let left = ["a", "b"]
+let right = ["a", "c"]
+let leftSpan: Span<string> = left[:]
+let rightSpan: Span<string> = right[:]
+leftSpan.compare(rightSpan)

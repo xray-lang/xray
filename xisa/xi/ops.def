@@ -606,6 +606,15 @@
   :observable (span-copy)
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.span.compare
+  :class memory-read
+  :arity 2
+  :own-use borrow
+  :effects (may-throw memory-read)
+  :requires (span pod same-element bounds)
+  :observable (span-compare)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.span.reinterpret
   :class memory-read
   :arity 1

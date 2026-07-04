@@ -1052,6 +1052,74 @@ vmcase(OP_SPAN_COPY) {
     vmbreak;
 }
 
+vmcase(OP_SPAN_COMPARE) {
+    int a = GETARG_A(i);
+    void *left_data = NULL;
+    void *right_data = NULL;
+    int64_t left_length = 0;
+    int64_t right_length = 0;
+    uint8_t left_elem_type = XR_ELEM_ANY;
+    uint8_t right_elem_type = XR_ELEM_ANY;
+    uint8_t left_elem_size = 0;
+    uint8_t right_elem_size = 0;
+    uint8_t left_elem_tid = 0;
+    uint8_t right_elem_tid = 0;
+    uint8_t left_contains_refs = 0;
+    uint8_t right_contains_refs = 0;
+    uint32_t left_reserved = 0;
+    uint32_t right_reserved = 0;
+    void *left_guard = NULL;
+    void *right_guard = NULL;
+    VM_SPAN_VIEW(R(a), left_data, left_length, left_elem_type, left_elem_size, left_elem_tid,
+                 left_contains_refs, left_reserved, left_guard,
+                 "Span.compare(other) receiver must be Span");
+    VM_SPAN_VIEW(R(a + 1), right_data, right_length, right_elem_type, right_elem_size,
+                 right_elem_tid, right_contains_refs, right_reserved, right_guard,
+                 "Span.compare(other) operand must be Span");
+    (void) left_elem_tid;
+    (void) right_elem_tid;
+    (void) left_contains_refs;
+    (void) right_contains_refs;
+    (void) left_reserved;
+    (void) right_reserved;
+    (void) left_guard;
+    (void) right_guard;
+    if (left_elem_type == XR_ELEM_ANY || left_elem_type >= XR_ELEM_COUNT || left_elem_size == 0) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.compare(other) receiver must be POD Span");
+    }
+    if (right_elem_type == XR_ELEM_ANY || right_elem_type >= XR_ELEM_COUNT ||
+        right_elem_size == 0) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.compare(other) operand must be POD Span");
+    }
+    if (left_elem_type != right_elem_type || left_elem_size != right_elem_size) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.compare(other) element type mismatch");
+    }
+    if (left_length < 0 || right_length < 0 || left_length > INT64_MAX / (int64_t) left_elem_size ||
+        right_length > INT64_MAX / (int64_t) right_elem_size) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.compare(other) byte length overflow");
+    }
+    int64_t left_bytes = left_length * (int64_t) left_elem_size;
+    int64_t right_bytes = right_length * (int64_t) right_elem_size;
+    int64_t n = left_bytes < right_bytes ? left_bytes : right_bytes;
+    int cmp = 0;
+    if (n > 0) {
+        if (!left_data || !right_data) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.compare(other) span has no data");
+        }
+        cmp = memcmp(left_data, right_data, (size_t) n);
+    }
+    if (cmp == 0) {
+        if (left_length < right_length)
+            cmp = -1;
+        else if (left_length > right_length)
+            cmp = 1;
+    } else {
+        cmp = cmp < 0 ? -1 : 1;
+    }
+    R(a) = xr_int(cmp);
+    vmbreak;
+}
+
 vmcase(OP_SPAN_REINTERPRET) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
