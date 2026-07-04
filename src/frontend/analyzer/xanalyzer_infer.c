@@ -43,6 +43,11 @@ void xa_infer_context_free(XaInferContext *ctx) {
         xa_flow_cache_free(ctx->cache);
     if (ctx->return_types)
         xr_free(ctx->return_types);
+    while (ctx->active_span_borrows) {
+        XaActiveSpanBorrow *next = ctx->active_span_borrows->next;
+        xr_free(ctx->active_span_borrows);
+        ctx->active_span_borrows = next;
+    }
 
     xr_free(ctx);
 }
