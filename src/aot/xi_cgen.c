@@ -2479,6 +2479,9 @@ static bool cg_method_receiver_accepts_borrowed_ref(const XiValue *user, uint16_
     return strcmp(method, "resize") == 0 || strcmp(method, "reserve") == 0 ||
            strcmp(method, "clear") == 0 || strcmp(method, "appendFrom") == 0 ||
            strcmp(method, "repeatFrom") == 0 || strcmp(method, "pushUnchecked") == 0 ||
+           strcmp(method, "writeFromUnchecked") == 0 ||
+           strcmp(method, "copyWithinNonOverlappingUnchecked") == 0 ||
+           strcmp(method, "repeatAtUnchecked") == 0 || strcmp(method, "setLengthUnchecked") == 0 ||
            strcmp(method, "repeatUnchecked") == 0;
 }
 

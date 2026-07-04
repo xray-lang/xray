@@ -1163,6 +1163,8 @@ static bool xicgen_method_arg_keeps_span_noescape(const XiValue *user, uint16_t 
         return true;
     if (arg_index == 1 && strcmp(method, "appendFrom") == 0)
         return true;
+    if (arg_index == 2 && strcmp(method, "writeFromUnchecked") == 0)
+        return true;
     return false;
 }
 
@@ -2967,6 +2969,18 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
         return true;
     if (nargs == 2 && method && strcmp(method, "repeatFrom") == 0 &&
         emit_bytes_repeat_from_expr(ctx, out, f, prefix, v))
+        return true;
+    if (nargs == 4 && method && strcmp(method, "writeFromUnchecked") == 0 &&
+        emit_bytes_write_from_unchecked_expr(ctx, out, f, prefix, v))
+        return true;
+    if (nargs == 3 && method && strcmp(method, "copyWithinNonOverlappingUnchecked") == 0 &&
+        emit_bytes_copy_within_nonoverlap_unchecked_expr(ctx, out, f, prefix, v))
+        return true;
+    if (nargs == 3 && method && strcmp(method, "repeatAtUnchecked") == 0 &&
+        emit_bytes_repeat_at_unchecked_expr(ctx, out, f, prefix, v))
+        return true;
+    if (nargs == 1 && method && strcmp(method, "setLengthUnchecked") == 0 &&
+        emit_bytes_set_length_unchecked_expr(ctx, out, f, prefix, v))
         return true;
     if (method && strcmp(method, "fill") == 0 && nargs >= 1 && nargs <= 3 &&
         emit_typed_array_fill_expr(ctx, out, f, prefix, v))
@@ -5577,11 +5591,11 @@ static void xicgen_bytes_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         emit_span_ref_expr(out, v->args[1]);
         fprintf(out,
                 "; if (xrt_span_is_readonly(_dst)) xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
-                "\"cannot write through readonly Span\"); bool _ok = "
-                "xr_array_core_bytes_copy_from(_dst.data, _dst.length, XR_ELEM_U8, _src.data, "
-                "_src.length, XR_ELEM_U8, 0, 0, _src.length, false); if (!_ok) "
-                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, \"ByteSpan.copyFrom(src) range out "
-                "of bounds\"); _dst; })");
+                "\"cannot write through readonly Span\"); if (XR_UNLIKELY(_src.length < 0 || "
+                "_dst.length < 0 || _src.length > _dst.length || (_src.length > 0 && "
+                "(!_dst.data || !_src.data)))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                "\"ByteSpan.copyFrom(src) range out of bounds\"); "
+                "xr_array_core_copy_or_move_bytes(_dst.data, _src.data, _src.length); _dst; })");
         return;
     }
     fprintf(out, "xrt_span_bytes_copy_checked_raw(");
@@ -5684,12 +5698,13 @@ static void xicgen_bytes_span_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         fprintf(out, "; int64_t _count = ");
         emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_I64);
         fprintf(out, "; if (xrt_span_is_readonly(_span)) xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
-                     "\"cannot write through readonly Span\"); bool _ok = "
-                     "xr_array_core_bytes_repeat_from(_span.data, _span.length, XR_ELEM_U8, "
-                     "_dst_offset, _distance, _count); if (!_ok) "
-                     "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                     "\"ByteSpan.repeatFrom(dstOffset, distance, count) range out of bounds\"); "
-                     "_span; })");
+                     "\"cannot write through readonly Span\"); if (XR_UNLIKELY(_span.length < 0 "
+                     "|| _dst_offset < 0 || _distance <= 0 || _count < 0 || _distance > "
+                     "_dst_offset || _dst_offset > _span.length || _count > _span.length - "
+                     "_dst_offset || (_count > 0 && !_span.data))) xrt_throw_error("
+                     "XR_ERR_INDEX_OUT_OF_BOUNDS, \"ByteSpan.repeatFrom(dstOffset, distance, "
+                     "count) range out of bounds\"); xr_array_core_bytes_repeat_copy("
+                     "_span.data, _dst_offset, _distance, _count); _span; })");
         return;
     }
     fprintf(out, "xrt_span_bytes_repeat_from_checked_raw(");

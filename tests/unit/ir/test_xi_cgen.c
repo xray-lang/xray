@@ -2551,6 +2551,11 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
                       "    dst.reserve(460)\n"
                       "    dst.appendFrom(view[0:4])\n"
                       "    dst.repeatFrom(2, 2)\n"
+                      "    unsafe {\n"
+                      "        dst.writeFromUnchecked(4, view, 0, 4)\n"
+                      "        dst.copyWithinNonOverlappingUnchecked(12, 4, 4)\n"
+                      "        dst.repeatAtUnchecked(8, 4, 4)\n"
+                      "    }\n"
                       "    dst.appendFrom(view[0:4])\n"
                       "    let dstView: ByteSpan = dst\n"
                       "    dstView.repeatFrom(6, 2, 2)\n"
@@ -2589,16 +2594,30 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
            "ByteSpan.load<uint64>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_store_u16_checked_raw(") > 0 &&
            "ByteSpan.store<uint16> must lower to the span AOT helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_copy_nonoverlap_bytes(") > 0 &&
+           "Bytes.appendFrom must lower to the inline Bytes+ByteSpan non-overlap fast path");
     assert(count_between(fn_body, fn_end, "xr_array_core_copy_or_move_bytes(") > 0 &&
-           "Bytes.appendFrom must lower to the inline Bytes+ByteSpan fast path");
+           "ByteSpan.copyFrom must lower to the direct overlap-safe copy helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_append_from_span_raw(") == 0 &&
            "Bytes.appendFrom hot path must not call the large raw helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_repeat_from_tail_raw(") > 0 &&
            "Bytes.repeatFrom must lower to the raw tail repeat helper");
-    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_from(") > 0 &&
-           "ByteSpan.repeatFrom must lower to the static core repeat helper");
-    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_copy_from(") > 0 &&
-           "ByteSpan.copyFrom must lower to the static core copy helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_copy_or_move_bytes(") > 1 &&
+           "Bytes.writeFromUnchecked must lower to the direct ByteSpan copy helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_copy_nonoverlap_bytes(") > 1 &&
+           "Bytes.copyWithinNonOverlappingUnchecked must lower to direct non-overlap copy");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_copy(") > 0 &&
+           "ByteSpan.repeatFrom and Bytes.repeatAtUnchecked must lower to direct repeat-copy");
+    assert(count_between(fn_body, fn_end, "writeFromUnchecked") == 0 &&
+           "Bytes.writeFromUnchecked hot path must not keep method dispatch text");
+    assert(count_between(fn_body, fn_end, "copyWithinNonOverlappingUnchecked") == 0 &&
+           "Bytes.copyWithinNonOverlappingUnchecked hot path must not keep method dispatch text");
+    assert(count_between(fn_body, fn_end, "repeatAtUnchecked") == 0 &&
+           "Bytes.repeatAtUnchecked hot path must not keep method dispatch text");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_from(") == 0 &&
+           "static ByteSpan.repeatFrom hot path must not keep the generic repeat wrapper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_copy_from(") == 0 &&
+           "static ByteSpan.copyFrom hot path must not keep the generic copy wrapper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_common_prefix_raw(") > 0 &&
            "ByteSpan.commonPrefix must lower to the trusted static core prefix helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_slice_range(") > 0 &&

@@ -598,6 +598,22 @@ TEST(array_core_bytes_copy_uses_shared_range_and_overlap_rules) {
         xr_array_core_bytes_copy_from(dst, 6, XR_ELEM_U8, src, 4, XR_ELEM_I64, 0, 0, 1, false));
 }
 
+TEST(array_core_copy_nonoverlap_bytes_handles_all_small_counts) {
+    uint8_t src[24];
+    for (int i = 0; i < 24; i++)
+        src[i] = (uint8_t) (i + 11);
+
+    for (int count = 1; count <= 16; count++) {
+        uint8_t dst[24];
+        memset(dst, 0xCD, sizeof(dst));
+        xr_array_core_copy_nonoverlap_bytes(dst + 3, src + 2, count);
+        for (int i = 0; i < count; i++)
+            ASSERT_EQ_INT(dst[3 + i], src[2 + i]);
+        ASSERT_EQ_INT(dst[2], 0xCD);
+        ASSERT_EQ_INT(dst[3 + count], 0xCD);
+    }
+}
+
 TEST(array_core_bytes_repeat_from_matches_lz_style_overlap) {
     uint8_t rep[9] = {65, 66, 67, 0, 0, 0, 0, 0, 0};
     ASSERT_TRUE(xr_array_core_bytes_repeat_from(rep, 9, XR_ELEM_U8, 3, 3, 6));
@@ -756,6 +772,7 @@ RUN_TEST(array_core_shift_right_one_handles_empty_and_invalid_data);
 RUN_TEST(array_core_typed_index_of_matches_boxed_tags);
 RUN_TEST(array_core_bytes_loads_little_endian_and_rejects_invalid_ranges);
 RUN_TEST(array_core_bytes_copy_uses_shared_range_and_overlap_rules);
+RUN_TEST(array_core_copy_nonoverlap_bytes_handles_all_small_counts);
 RUN_TEST(array_core_bytes_repeat_from_matches_lz_style_overlap);
 RUN_TEST(array_core_bytes_common_prefix_uses_min_length_and_word_chunks);
 RUN_TEST(array_core_sort_typed_buffers_in_place);

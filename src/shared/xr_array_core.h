@@ -13,6 +13,7 @@
 
 #include "xr_elem_type.h"
 #include "xr_typed_ops.h"
+#include "../base/xdefs.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -897,7 +898,7 @@ static inline bool xr_array_core_bytes_copy_within(void *data, int64_t length, u
 }
 
 static inline void xr_array_core_copy_nonoverlap_bytes(void *dst, const void *src, int64_t count);
-static inline void xr_array_core_copy_or_move_bytes(void *dst, const void *src, int64_t count);
+static XR_AINLINE void xr_array_core_copy_or_move_bytes(void *dst, const void *src, int64_t count);
 
 static inline bool xr_array_core_bytes_copy_from(void *dst_data, int64_t dst_length,
                                                  uint8_t dst_elem_type, const void *src_data,
@@ -931,20 +932,50 @@ static inline bool xr_array_core_memory_ranges_overlap(const void *a, int64_t a_
     return a_begin < b_end && b_begin < a_end;
 }
 
-static inline void xr_array_core_copy_nonoverlap_bytes(void *dst, const void *src, int64_t count) {
+static XR_AINLINE void xr_array_core_copy_nonoverlap_bytes(void *dst, const void *src,
+                                                           int64_t count) {
     if (count <= 0)
         return;
     if (count <= 16) {
         uint8_t *dp = (uint8_t *) dst;
         const uint8_t *sp = (const uint8_t *) src;
-        for (int64_t i = 0; i < count; i++)
-            dp[i] = sp[i];
+        if (count >= 8) {
+            uint64_t first;
+            memcpy(&first, sp, sizeof(first));
+            memcpy(dp, &first, sizeof(first));
+            if (count > 8) {
+                uint64_t last;
+                memcpy(&last, sp + count - 8, sizeof(last));
+                memcpy(dp + count - 8, &last, sizeof(last));
+            }
+            return;
+        }
+        if (count >= 4) {
+            uint32_t first;
+            memcpy(&first, sp, sizeof(first));
+            memcpy(dp, &first, sizeof(first));
+            if (count > 4) {
+                uint32_t last;
+                memcpy(&last, sp + count - 4, sizeof(last));
+                memcpy(dp + count - 4, &last, sizeof(last));
+            }
+            return;
+        }
+        if (count >= 2) {
+            uint16_t first;
+            memcpy(&first, sp, sizeof(first));
+            memcpy(dp, &first, sizeof(first));
+            if (count > 2)
+                dp[2] = sp[2];
+            return;
+        }
+        dp[0] = sp[0];
         return;
     }
     memcpy(dst, src, (size_t) count);
 }
 
-static inline void xr_array_core_copy_or_move_bytes(void *dst, const void *src, int64_t count) {
+static XR_AINLINE void xr_array_core_copy_or_move_bytes(void *dst, const void *src, int64_t count) {
     if (count <= 0)
         return;
     if (xr_array_core_memory_ranges_overlap(dst, count, src, count))
@@ -953,7 +984,7 @@ static inline void xr_array_core_copy_or_move_bytes(void *dst, const void *src, 
         xr_array_core_copy_nonoverlap_bytes(dst, src, count);
 }
 
-static inline uint64_t xr_array_core_repeat_pattern64(const uint8_t *sp, int64_t distance) {
+static XR_AINLINE uint64_t xr_array_core_repeat_pattern64(const uint8_t *sp, int64_t distance) {
     uint8_t pattern[8];
     switch (distance) {
         case 2:
@@ -985,8 +1016,8 @@ static inline uint64_t xr_array_core_repeat_pattern64(const uint8_t *sp, int64_t
     return value;
 }
 
-static inline void xr_array_core_bytes_repeat_copy(void *data, int64_t dst_offset, int64_t distance,
-                                                   int64_t count) {
+static XR_AINLINE void xr_array_core_bytes_repeat_copy(void *data, int64_t dst_offset,
+                                                       int64_t distance, int64_t count) {
     if (count <= 0)
         return;
     uint8_t *dp = (uint8_t *) data + dst_offset;

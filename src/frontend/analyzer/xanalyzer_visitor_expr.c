@@ -163,6 +163,22 @@ static XrType *xa_bytes_method_type(XaInferContext *ctx, XrType *receiver, const
         XrType *params[2] = {t_int, t_int};
         return xr_type_new_function(X, params, 2, t_bytes, false);
     }
+    if (strcmp(name, "writeFromUnchecked") == 0) {
+        XrType *params[4] = {t_int, t_bytespan, t_int, t_int};
+        return xr_type_new_function(X, params, 4, t_bytes, false);
+    }
+    if (strcmp(name, "copyWithinNonOverlappingUnchecked") == 0) {
+        XrType *params[3] = {t_int, t_int, t_int};
+        return xr_type_new_function(X, params, 3, t_bytes, false);
+    }
+    if (strcmp(name, "repeatAtUnchecked") == 0) {
+        XrType *params[3] = {t_int, t_int, t_int};
+        return xr_type_new_function(X, params, 3, t_bytes, false);
+    }
+    if (strcmp(name, "setLengthUnchecked") == 0) {
+        XrType *params[1] = {t_int};
+        return xr_type_new_function(X, params, 1, t_bytes, false);
+    }
     if (strcmp(name, "resize") == 0) {
         XrType *params[2] = {t_int, xr_type_new_int_width(X, XR_NATIVE_U8)};
         XrType *fn = xr_type_new_function(X, params, 2, t_bytes, false);
@@ -1307,7 +1323,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (XR_TYPE_IS_ARRAY(obj_type) && ma->name && ctx->unsafe_depth == 0 &&
         (strcmp(ma->name, "pushUnchecked") == 0 || strcmp(ma->name, "getUnchecked") == 0 ||
          strcmp(ma->name, "setUnchecked") == 0 || strcmp(ma->name, "dataPtrUnchecked") == 0 ||
-         strcmp(ma->name, "dataMutPtrUnchecked") == 0)) {
+         strcmp(ma->name, "dataMutPtrUnchecked") == 0 ||
+         strcmp(ma->name, "writeFromUnchecked") == 0 ||
+         strcmp(ma->name, "copyWithinNonOverlappingUnchecked") == 0 ||
+         strcmp(ma->name, "repeatAtUnchecked") == 0 ||
+         strcmp(ma->name, "setLengthUnchecked") == 0)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
         snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",

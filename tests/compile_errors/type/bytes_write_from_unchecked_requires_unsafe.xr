@@ -1,3 +1,4 @@
 let out = Bytes.withCapacity(4)
 let src = Bytes(4)
-out.writeFromUnchecked(0, src, 0, 1)
+let view: ByteSpan = src[:]
+out.writeFromUnchecked(0, view, 0, 1)
