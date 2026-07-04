@@ -623,10 +623,20 @@ TEST(array_core_bytes_repeat_from_matches_lz_style_overlap) {
     for (int i = 0; i < 21; i++)
         ASSERT_EQ_INT(period4[i], 3 + (i % 4));
 
+    uint8_t period5[25] = {'a', 'b', 'c', 'd', 'e'};
+    ASSERT_TRUE(xr_array_core_bytes_repeat_from(period5, 25, XR_ELEM_U8, 5, 5, 20));
+    for (int i = 0; i < 25; i++)
+        ASSERT_EQ_INT(period5[i], "abcde"[i % 5]);
+
     uint8_t period6[18] = {'h', 'e', 'l', 'l', 'o', ' '};
     ASSERT_TRUE(xr_array_core_bytes_repeat_from(period6, 18, XR_ELEM_U8, 6, 6, 12));
     for (int i = 0; i < 18; i++)
         ASSERT_EQ_INT(period6[i], "hello "[i % 6]);
+
+    uint8_t period7[35] = {'p', 'a', 't', 't', 'e', 'r', 'n'};
+    ASSERT_TRUE(xr_array_core_bytes_repeat_from(period7, 35, XR_ELEM_U8, 7, 7, 28));
+    for (int i = 0; i < 35; i++)
+        ASSERT_EQ_INT(period7[i], "pattern"[i % 7]);
 
     uint8_t period8[48] = {10, 11, 12, 13, 14, 15, 16, 17};
     ASSERT_TRUE(xr_array_core_bytes_repeat_from(period8, 48, XR_ELEM_U8, 8, 8, 40));

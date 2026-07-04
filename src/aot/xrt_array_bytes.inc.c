@@ -612,8 +612,7 @@ static inline xrt_array_t *xrt_bytes_repeat_from_tail_raw(xrt_array_t *a, int64_
         xrt_array_reserve_trusted_raw(a, new_length);
     if (new_length > a->capacity || (new_length > 0 && !a->data))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG);
-    if (!xr_array_core_bytes_repeat_from(a->data, new_length, a->elem_type, dst, distance, count))
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG);
+    xr_array_core_bytes_repeat_copy(a->data, dst, distance, count);
     a->length = new_length;
     return a;
 }

@@ -693,21 +693,12 @@ static inline int xr_array_core_common_prefix_diff_byte64(uint64_t diff) {
 #endif
 }
 
-static inline int64_t xr_array_core_bytes_common_prefix(const void *left_data, int64_t left_length,
-                                                        uint8_t left_elem_type,
-                                                        const void *right_data,
-                                                        int64_t right_length,
-                                                        uint8_t right_elem_type, bool *ok) {
-    bool valid = left_length >= 0 && right_length >= 0 && left_elem_type == XR_ELEM_U8 &&
-                 right_elem_type == XR_ELEM_U8;
+static inline int64_t xr_array_core_bytes_common_prefix_raw(const void *left_data,
+                                                            int64_t left_length,
+                                                            const void *right_data,
+                                                            int64_t right_length) {
     int64_t n = left_length < right_length ? left_length : right_length;
-    if (n < 0)
-        n = 0;
-    if (valid && n > 0 && (!left_data || !right_data))
-        valid = false;
-    if (ok)
-        *ok = valid;
-    if (!valid)
+    if (n <= 0)
         return 0;
 
     const uint8_t *left = (const uint8_t *) left_data;
@@ -726,6 +717,25 @@ static inline int64_t xr_array_core_bytes_common_prefix(const void *left_data, i
     while (i < n && left[i] == right[i])
         i++;
     return i;
+}
+
+static inline int64_t xr_array_core_bytes_common_prefix(const void *left_data, int64_t left_length,
+                                                        uint8_t left_elem_type,
+                                                        const void *right_data,
+                                                        int64_t right_length,
+                                                        uint8_t right_elem_type, bool *ok) {
+    bool valid = left_length >= 0 && right_length >= 0 && left_elem_type == XR_ELEM_U8 &&
+                 right_elem_type == XR_ELEM_U8;
+    int64_t n = left_length < right_length ? left_length : right_length;
+    if (n < 0)
+        n = 0;
+    if (valid && n > 0 && (!left_data || !right_data))
+        valid = false;
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return 0;
+    return xr_array_core_bytes_common_prefix_raw(left_data, left_length, right_data, right_length);
 }
 
 static inline bool xr_array_core_host_is_little_endian(void) {
@@ -999,8 +1009,16 @@ static inline void xr_array_core_bytes_repeat_copy(void *data, int64_t dst_offse
         return;
     }
     if (distance < 8) {
-        for (int64_t i = 0; i < count; i++)
-            dp[i] = sp[i % distance];
+        xr_array_core_copy_nonoverlap_bytes(dp, sp, distance);
+        int64_t copied = distance;
+        while (copied < count) {
+            int64_t chunk = copied;
+            int64_t remaining = count - copied;
+            if (chunk > remaining)
+                chunk = remaining;
+            xr_array_core_copy_nonoverlap_bytes(dp + copied, dp, chunk);
+            copied += chunk;
+        }
         return;
     }
     if (count <= 16) {

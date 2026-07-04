@@ -3331,6 +3331,8 @@ static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current
     const XiValue *v = cg_unwrap_identity_value(value);
     if (!v)
         return false;
+    if (v->op == XI_ARRAY_DATA_PTR || v->op == XI_PTR_LOAD)
+        return true;
     if (xicgen_value_is_nothrow_native_scalar(current, v))
         return true;
     if (xicgen_span_slice_is_nothrow(ctx, v))
@@ -5371,7 +5373,8 @@ static void xicgen_bytes_box_array_result(FILE *out, bool boxed) {
 }
 
 static bool xicgen_emit_span_bytes_load(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                        const char *core_helper, const char *ctype,
+                                        const char *core_helper, const char *le_unchecked_helper,
+                                        const char *ctype, int64_t byte_width,
                                         const char *bounds_message) {
     CgArrayElemInfo info;
     if (!v || v->nargs != 3 || !cg_span_value_u8_info(ctx, v->args[0], &info))
@@ -5379,6 +5382,22 @@ static bool xicgen_emit_span_bytes_load(XiCgenCtx *ctx, FILE *out, const XiValue
     (void) info;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    int64_t endian = XR_ENDIAN_NATIVE;
+    if (le_unchecked_helper && xicgen_value_is_const_endian(v->args[2], &endian) &&
+        endian == XR_ENDIAN_LE) {
+        fprintf(out, "({ xr_span_t _s = ");
+        emit_span_ref_expr(out, v->args[0]);
+        fprintf(out, "; int64_t _off = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out,
+                "; if (XR_UNLIKELY(!_s.data || _off < 0 || _s.length < INT64_C(%" PRId64 ") || "
+                "_off > _s.length - INT64_C(%" PRId64 "))) "
+                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, \"%s\"); %s _v = (%s)%s(_s, _off); "
+                "(int64_t)_v; })",
+                byte_width, byte_width, bounds_message, ctype, ctype, le_unchecked_helper);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
     fprintf(out, "({ xr_span_t _s = ");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _off = ");
@@ -5416,7 +5435,8 @@ static void xicgen_bytes_load_u16(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
                                   const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_load(ctx, out, v, "xr_array_core_bytes_load_u16", "uint16_t",
+    if (xicgen_emit_span_bytes_load(ctx, out, v, "xr_array_core_bytes_load_u16",
+                                    "xrt_span_bytes_load_u16_le_unchecked_raw", "uint16_t", 2,
                                     "ByteSpan.load<uint16>() offset out of bounds"))
         return;
     const char *conv_suffix =
@@ -5435,7 +5455,8 @@ static void xicgen_bytes_load_u32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
                                   const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_load(ctx, out, v, "xr_array_core_bytes_load_u32", "uint32_t",
+    if (xicgen_emit_span_bytes_load(ctx, out, v, "xr_array_core_bytes_load_u32",
+                                    "xrt_span_bytes_load_u32_le_unchecked_raw", "uint32_t", 4,
                                     "ByteSpan.load<uint32>() offset out of bounds"))
         return;
     const char *conv_suffix =
@@ -5454,7 +5475,8 @@ static void xicgen_bytes_load_u64(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
                                   const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_emit_span_bytes_load(ctx, out, v, "xr_array_core_bytes_load_u64", "uint64_t",
+    if (xicgen_emit_span_bytes_load(ctx, out, v, "xr_array_core_bytes_load_u64",
+                                    "xrt_span_bytes_load_u64_le_unchecked_raw", "uint64_t", 8,
                                     "ByteSpan.load<uint64>() offset out of bounds"))
         return;
     const char *conv_suffix =
@@ -5631,11 +5653,11 @@ static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiF
             return;
         }
         fprintf(out,
-                "; bool _ok = false; int64_t _prefix = "
-                "xr_array_core_bytes_common_prefix(_left_data, _left_len, XR_ELEM_U8, "
-                "_right_data, _right_len, XR_ELEM_U8, &_ok); if (!_ok) "
+                "; int64_t _prefix = 0; if (XR_UNLIKELY(_left_len < 0 || _right_len < 0 || "
+                "(_left_len > 0 && !_left_data) || (_right_len > 0 && !_right_data))) "
                 "xrt_throw_error(XR_ERR_TYPE_MISMATCH, \"ByteSpan.commonPrefix(other) span has "
-                "no data\"); _prefix; })");
+                "no data\"); else _prefix = xr_array_core_bytes_common_prefix_raw(_left_data, "
+                "_left_len, _right_data, _right_len); _prefix; })");
         emit_conversion_suffix(out, conv_suffix);
         return;
     }

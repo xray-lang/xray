@@ -2345,8 +2345,8 @@ TEST(cgen_parallel_for_allows_prepared_bytes_load_helper) {
     assert(!had_error && "parallel for AOT body should allow prepared ByteSpan typed loads");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
            "prepared load helper body should still use the AOT runtime executor");
-    assert(contains(code, "xr_array_core_bytes_load_u32(") &&
-           "prepared load helper should keep the static ByteSpan typed load lowering");
+    assert(contains(code, "xrt_span_bytes_load_u32_le_unchecked_raw(") &&
+           "prepared LE load helper should keep the trusted static ByteSpan typed load lowering");
     assert(!contains(code, "BYTES_LOAD_U32") &&
            "prepared ByteSpan load must not be rejected by parallel body validation");
 
@@ -2404,8 +2404,8 @@ TEST(cgen_parallel_for_allows_prepared_common_prefix_helper) {
     assert(!had_error && "parallel for AOT body should allow prepared ByteSpan commonPrefix");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
            "prepared commonPrefix helper body should still use the AOT runtime executor");
-    assert(contains(code, "xr_array_core_bytes_common_prefix(") &&
-           "prepared commonPrefix helper should keep the static ByteSpan lowering");
+    assert(contains(code, "xr_array_core_bytes_common_prefix_raw(") &&
+           "prepared commonPrefix helper should keep the trusted static ByteSpan lowering");
     assert(!contains(code, "BYTES_SPAN_COMMON_PREFIX") &&
            "prepared commonPrefix must not be rejected by parallel body validation");
 
@@ -2581,12 +2581,12 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
     assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
            "run function body should be bounded");
 
-    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_load_u16(") > 0 &&
-           "ByteSpan.load<uint16> must lower to the static core load helper");
-    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_load_u32(") > 0 &&
-           "ByteSpan.load<uint32> must lower to the static core load helper");
-    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_load_u64(") > 0 &&
-           "ByteSpan.load<uint64> must lower to the static core load helper");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u16_le_unchecked_raw(") > 0 &&
+           "ByteSpan.load<uint16>(Endian.LE) must lower to the trusted LE load helper");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u32_le_unchecked_raw(") > 0 &&
+           "ByteSpan.load<uint32>(Endian.LE) must lower to the trusted LE load helper");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u64_le_unchecked_raw(") > 0 &&
+           "ByteSpan.load<uint64>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_store_u16_checked_raw(") > 0 &&
            "ByteSpan.store<uint16> must lower to the span AOT helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_copy_or_move_bytes(") > 0 &&
@@ -2599,8 +2599,8 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
            "ByteSpan.repeatFrom must lower to the static core repeat helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_copy_from(") > 0 &&
            "ByteSpan.copyFrom must lower to the static core copy helper");
-    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_common_prefix(") > 0 &&
-           "ByteSpan.commonPrefix must lower to the static core prefix helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_common_prefix_raw(") > 0 &&
+           "ByteSpan.commonPrefix must lower to the trusted static core prefix helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_slice_range(") > 0 &&
            "ByteSpan.commonPrefix over slices should inline slice range planning");
     assert(count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") > 0 &&
@@ -3094,6 +3094,8 @@ TEST(cgen_rawptr_load_le_unchecked_uses_pointer_helper) {
            count_between(fn, fn_end, "xrt_bytes_load_u32_le_") == 0 &&
            count_between(fn, fn_end, "xrt_bytes_load_u64_le_") == 0 &&
            "RawPtr loadLE must not route back through Bytes/ByteSpan helpers");
+    assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
+           "RawPtr.loadLEUnchecked hot path must not keep a dead ERR_CHECK");
     assert(!contains(code, "loadLEUnchecked") &&
            "RawPtr.loadLEUnchecked method name must not survive as dynamic dispatch");
 
