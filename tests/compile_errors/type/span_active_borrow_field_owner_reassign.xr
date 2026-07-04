@@ -1,0 +1,14 @@
+class Pair {
+    left: Bytes = Bytes(0)
+    right: Bytes = Bytes(0)
+}
+
+fn main() {
+    let box = Pair()
+    box.left.push(1)
+    let view: ByteSpan = box.left[:]
+    box.left = Bytes(0)
+    print(view.length)
+}
+
+main()

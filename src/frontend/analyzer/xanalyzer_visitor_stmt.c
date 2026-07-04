@@ -327,7 +327,163 @@ static XaActiveSpanBorrow *xa_active_span_borrow_for_view(XaInferContext *ctx, X
     return NULL;
 }
 
+static bool xa_path_copy(char *dst, size_t dst_size, const char *src) {
+    if (!dst || dst_size == 0 || !src)
+        return false;
+    int n = snprintf(dst, dst_size, "%s", src);
+    return n >= 0 && (size_t) n < dst_size;
+}
+
+static bool xa_path_append(char *dst, size_t dst_size, const char *suffix) {
+    if (!dst || dst_size == 0 || !suffix)
+        return false;
+    size_t len = strlen(dst);
+    if (len >= dst_size)
+        return false;
+    int n = snprintf(dst + len, dst_size - len, "%s", suffix);
+    return n >= 0 && (size_t) n < dst_size - len;
+}
+
+static bool xa_index_path_segment(AstNode *index, char *buf, size_t buf_size) {
+    if (!index || !buf || buf_size == 0)
+        return false;
+    while (index && (index->type == AST_GROUPING || index->type == AST_FORCE_UNWRAP))
+        index = index->type == AST_GROUPING ? index->as.grouping : index->as.unary.operand;
+    if (!index || index->type != AST_LITERAL_INT)
+        return false;
+    int n = snprintf(buf, buf_size, "[%lld]", (long long) index->as.literal.raw_value.int_val);
+    return n >= 0 && (size_t) n < buf_size;
+}
+
+static bool xa_path_is_same_or_nested(const char *path, const char *prefix) {
+    if (!path || !prefix)
+        return true;
+    size_t len = strlen(prefix);
+    if (strncmp(path, prefix, len) != 0)
+        return false;
+    return path[len] == '\0' || path[len] == '.' || path[len] == '[';
+}
+
+static bool xa_owner_paths_may_overlap(const char *borrow_path, const char *mutation_path) {
+    if (!borrow_path || !mutation_path)
+        return true;
+    return xa_path_is_same_or_nested(borrow_path, mutation_path) ||
+           xa_path_is_same_or_nested(mutation_path, borrow_path);
+}
+
+static XaSymbol *xa_root_path_for_expr(XaInferContext *ctx, AstNode *expr, char *path_buf,
+                                       size_t path_buf_size, bool *out_precise,
+                                       bool follow_active_view) {
+    if (!ctx || !expr || !path_buf || path_buf_size == 0)
+        return NULL;
+    if (out_precise)
+        *out_precise = true;
+
+    while (expr && (expr->type == AST_GROUPING || expr->type == AST_FORCE_UNWRAP))
+        expr = expr->type == AST_GROUPING ? expr->as.grouping : expr->as.unary.operand;
+    if (!expr)
+        return NULL;
+
+    switch (expr->type) {
+        case AST_VARIABLE: {
+            XaSymbol *sym = expr->as.variable.name
+                                ? xa_lookup_visible_symbol(ctx, expr->as.variable.name)
+                                : NULL;
+            XaActiveSpanBorrow *active =
+                follow_active_view ? xa_active_span_borrow_for_view(ctx, sym) : NULL;
+            if (active) {
+                if (active->owner_path) {
+                    xa_path_copy(path_buf, path_buf_size, active->owner_path);
+                } else if (active->owner_symbol && active->owner_symbol->name) {
+                    xa_path_copy(path_buf, path_buf_size, active->owner_symbol->name);
+                    if (out_precise)
+                        *out_precise = false;
+                }
+                return active->owner_symbol;
+            }
+            if (!sym || !sym->name || !xa_path_copy(path_buf, path_buf_size, sym->name))
+                return NULL;
+            return sym;
+        }
+        case AST_MEMBER_ACCESS: {
+            MemberAccessNode *ma = &expr->as.member_access;
+            bool precise = true;
+            XaSymbol *root = xa_root_path_for_expr(ctx, ma->object, path_buf, path_buf_size,
+                                                   &precise, follow_active_view);
+            if (!root)
+                return NULL;
+            if (precise && ma->name) {
+                if (!xa_path_append(path_buf, path_buf_size, ".") ||
+                    !xa_path_append(path_buf, path_buf_size, ma->name))
+                    precise = false;
+            }
+            if (out_precise)
+                *out_precise = precise;
+            return root;
+        }
+        case AST_INDEX_GET: {
+            IndexGetNode *ig = &expr->as.index_get;
+            bool precise = true;
+            XaSymbol *root = xa_root_path_for_expr(ctx, ig->array, path_buf, path_buf_size,
+                                                   &precise, follow_active_view);
+            if (!root)
+                return NULL;
+            char segment[64];
+            if (precise && xa_index_path_segment(ig->index, segment, sizeof(segment))) {
+                if (!xa_path_append(path_buf, path_buf_size, segment))
+                    precise = false;
+            } else {
+                xa_path_copy(path_buf, path_buf_size, root->name ? root->name : "");
+                precise = false;
+            }
+            if (out_precise)
+                *out_precise = precise;
+            return root;
+        }
+        case AST_SLICE_EXPR:
+            return xa_root_path_for_expr(ctx, expr->as.slice_expr.source, path_buf, path_buf_size,
+                                         out_precise, follow_active_view);
+        case AST_OPTIONAL_CHAIN:
+            return xa_root_path_for_expr(ctx, expr->as.optional_chain.object, path_buf,
+                                         path_buf_size, out_precise, follow_active_view);
+        case AST_CALL_EXPR:
+            if (xa_call_expr_is_borrowed_view(expr) && expr->as.call_expr.callee &&
+                expr->as.call_expr.callee->type == AST_MEMBER_ACCESS) {
+                return xa_root_path_for_expr(
+                    ctx, expr->as.call_expr.callee->as.member_access.object, path_buf,
+                    path_buf_size, out_precise, follow_active_view);
+            }
+            return NULL;
+        default:
+            return NULL;
+    }
+}
+
 static bool xa_node_uses_symbol_name(AstNode *node, const char *name);
+
+static bool xa_block_node_statements(AstNode *node, AstNode ***out_statements, int *out_count) {
+    if (out_statements)
+        *out_statements = NULL;
+    if (out_count)
+        *out_count = 0;
+    if (!node)
+        return false;
+    if (node->type == AST_BLOCK) {
+        if (out_statements)
+            *out_statements = node->as.block.statements;
+        if (out_count)
+            *out_count = node->as.block.count;
+        return true;
+    }
+    if (node->type == AST_PROGRAM) {
+        if (out_statements)
+            *out_statements = node->as.program.statements;
+        if (out_count)
+            *out_count = node->as.program.count;
+        return true;
+    }
+    return false;
+}
 
 static bool xa_node_array_uses_symbol_name(AstNode **nodes, int count, const char *name) {
     if (!nodes || count <= 0 || !name)
@@ -355,15 +511,8 @@ static bool xa_block_uses_symbol_name_from(AstNode *node, const char *name, int 
         return false;
     AstNode **statements = NULL;
     int count = 0;
-    if (node->type == AST_BLOCK) {
-        statements = node->as.block.statements;
-        count = node->as.block.count;
-    } else if (node->type == AST_PROGRAM) {
-        statements = node->as.program.statements;
-        count = node->as.program.count;
-    } else {
+    if (!xa_block_node_statements(node, &statements, &count))
         return xa_node_uses_symbol_name(node, name);
-    }
     if (start_index < 0)
         start_index = 0;
     for (int i = start_index; i < count; i++) {
@@ -677,28 +826,32 @@ static bool xa_active_span_borrow_may_be_live_after_mutation(XaInferContext *ctx
         return true;
     if (ctx->loop_depth > 0)
         return true;
-    XaScope *scope = ctx->analyzer->current_scope;
-    if (!scope || borrow->view_scope != scope)
-        return true;
+    const char *name = borrow->view_symbol->name;
+    if (ctx->block_cursor_depth > 0) {
+        int deepest = ctx->block_cursor_depth - 1;
+        for (int depth = deepest; depth >= 0; depth--) {
+            AstNode *block_node = ctx->block_cursor_nodes[depth];
+            int stmt_index = ctx->block_cursor_indices[depth];
+            AstNode **statements = NULL;
+            int count = 0;
+            if (!xa_block_node_statements(block_node, &statements, &count) || stmt_index < 0 ||
+                stmt_index >= count)
+                return true;
+            if (depth == deepest && xa_node_uses_symbol_name(statements[stmt_index], name))
+                return true;
+            if (xa_block_uses_symbol_name_from(block_node, name, stmt_index + 1))
+                return true;
+        }
+        return false;
+    }
+
     AstNode *block_node = ctx->current_block_node;
     int stmt_index = ctx->current_block_stmt_index;
-    if (!block_node || stmt_index < 0)
-        return true;
     AstNode **statements = NULL;
     int count = 0;
-    if (block_node->type == AST_BLOCK) {
-        statements = block_node->as.block.statements;
-        count = block_node->as.block.count;
-    } else if (block_node->type == AST_PROGRAM) {
-        statements = block_node->as.program.statements;
-        count = block_node->as.program.count;
-    } else {
+    if (!xa_block_node_statements(block_node, &statements, &count) || stmt_index < 0 ||
+        stmt_index >= count)
         return true;
-    }
-    if (stmt_index >= count)
-        return true;
-
-    const char *name = borrow->view_symbol->name;
     if (xa_node_uses_symbol_name(statements[stmt_index], name))
         return true;
     return xa_block_uses_symbol_name_from(block_node, name, stmt_index + 1);
@@ -722,11 +875,21 @@ XR_FUNC void xa_visit_inline_statement_sequence_with_cursor(XaInferContext *ctx,
 
     AstNode *saved_block = ctx->current_block_node;
     int saved_index = ctx->current_block_stmt_index;
+    int saved_depth = ctx->block_cursor_depth;
+    int cursor_slot = -1;
+    if (ctx->block_cursor_depth < XA_BLOCK_CURSOR_MAX) {
+        cursor_slot = ctx->block_cursor_depth++;
+        ctx->block_cursor_nodes[cursor_slot] = node;
+        ctx->block_cursor_indices[cursor_slot] = -1;
+    }
     ctx->current_block_node = node;
     for (int i = 0; i < count; i++) {
         ctx->current_block_stmt_index = i;
+        if (cursor_slot >= 0)
+            ctx->block_cursor_indices[cursor_slot] = i;
         xa_visit_infer_stmt(ctx, statements[i]);
     }
+    ctx->block_cursor_depth = saved_depth;
     ctx->current_block_node = saved_block;
     ctx->current_block_stmt_index = saved_index;
 }
@@ -738,55 +901,6 @@ XR_FUNC XaSymbol *xa_span_borrow_owner_receiver_symbol(XaInferContext *ctx, AstN
     return xa_root_variable_symbol_for_expr(ctx, expr);
 }
 
-XR_FUNC XaSymbol *xa_span_borrow_owner_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
-    while (ctx && expr) {
-        XrType *expr_type = xa_analyzer_get_node_type(ctx->analyzer, expr);
-        if (xa_type_can_own_span_view(expr_type)) {
-            XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, expr);
-            if (root)
-                return root;
-        }
-        switch (expr->type) {
-            case AST_VARIABLE: {
-                XaSymbol *sym = expr->as.variable.name
-                                    ? xa_lookup_visible_symbol(ctx, expr->as.variable.name)
-                                    : NULL;
-                XaActiveSpanBorrow *active = xa_active_span_borrow_for_view(ctx, sym);
-                if (active)
-                    return active->owner_symbol;
-                XrType *type = sym ? xa_analyzer_get_type(ctx->analyzer, sym) : NULL;
-                return xa_type_can_own_span_view(type) ? sym : NULL;
-            }
-            case AST_MEMBER_ACCESS:
-                expr = expr->as.member_access.object;
-                break;
-            case AST_INDEX_GET:
-                expr = expr->as.index_get.array;
-                break;
-            case AST_SLICE_EXPR:
-                expr = expr->as.slice_expr.source;
-                break;
-            case AST_OPTIONAL_CHAIN:
-                expr = expr->as.optional_chain.object;
-                break;
-            case AST_GROUPING:
-                expr = expr->as.grouping;
-                break;
-            case AST_FORCE_UNWRAP:
-                expr = expr->as.unary.operand;
-                break;
-            case AST_CALL_EXPR:
-                if (!xa_call_expr_is_borrowed_view(expr))
-                    return NULL;
-                expr = expr->as.call_expr.callee->as.member_access.object;
-                break;
-            default:
-                return NULL;
-        }
-    }
-    return NULL;
-}
-
 XR_FUNC void xa_clear_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol *view_sym) {
     if (!ctx || !view_sym)
         return;
@@ -795,6 +909,7 @@ XR_FUNC void xa_clear_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol 
         XaActiveSpanBorrow *cur = *link;
         if (cur->view_symbol == view_sym) {
             *link = cur->next;
+            xr_free(cur->owner_path);
             xr_free(cur);
             continue;
         }
@@ -810,11 +925,95 @@ XR_FUNC void xa_clear_active_span_borrows_in_scope(XaInferContext *ctx, XaScope 
         XaActiveSpanBorrow *cur = *link;
         if (cur->view_scope == scope) {
             *link = cur->next;
+            xr_free(cur->owner_path);
             xr_free(cur);
             continue;
         }
         link = &cur->next;
     }
+}
+
+XR_FUNC XaSymbol *xa_span_borrow_owner_path_for_expr(XaInferContext *ctx, AstNode *expr,
+                                                     char *path_buf, size_t path_buf_size) {
+    if (!ctx || !expr)
+        return NULL;
+    char local_path[512];
+    if (!path_buf || path_buf_size == 0) {
+        path_buf = local_path;
+        path_buf_size = sizeof(local_path);
+    }
+    path_buf[0] = '\0';
+
+    XrType *expr_type = xa_analyzer_get_node_type(ctx->analyzer, expr);
+    if (xa_type_can_own_span_view(expr_type) || xa_type_contains_span_view(expr_type)) {
+        bool precise = true;
+        XaSymbol *root = xa_root_path_for_expr(ctx, expr, path_buf, path_buf_size, &precise, true);
+        if (root)
+            return root;
+    }
+    return NULL;
+}
+
+XR_FUNC XaSymbol *xa_span_borrow_owner_path_for_owner_expr(XaInferContext *ctx, AstNode *expr,
+                                                           char *path_buf, size_t path_buf_size) {
+    if (!ctx || !expr)
+        return NULL;
+    char local_path[512];
+    if (!path_buf || path_buf_size == 0) {
+        path_buf = local_path;
+        path_buf_size = sizeof(local_path);
+    }
+    path_buf[0] = '\0';
+
+    XrType *expr_type = xa_analyzer_get_node_type(ctx->analyzer, expr);
+    if (!xa_type_can_own_span_view(expr_type))
+        return NULL;
+    bool precise = true;
+    return xa_root_path_for_expr(ctx, expr, path_buf, path_buf_size, &precise, false);
+}
+
+XR_FUNC XaSymbol *xa_span_borrow_owner_path_for_member_write(XaInferContext *ctx, AstNode *object,
+                                                             const char *member,
+                                                             XrType *member_type, char *path_buf,
+                                                             size_t path_buf_size) {
+    if (!ctx || !object || !member || !xa_type_can_own_span_view(member_type) || !path_buf ||
+        path_buf_size == 0)
+        return NULL;
+    path_buf[0] = '\0';
+    bool precise = true;
+    XaSymbol *root = xa_root_path_for_expr(ctx, object, path_buf, path_buf_size, &precise, true);
+    if (!root)
+        return NULL;
+    if (precise) {
+        if (!xa_path_append(path_buf, path_buf_size, ".") ||
+            !xa_path_append(path_buf, path_buf_size, member)) {
+            xa_path_copy(path_buf, path_buf_size, root->name ? root->name : "");
+        }
+    } else {
+        xa_path_copy(path_buf, path_buf_size, root->name ? root->name : "");
+    }
+    return root;
+}
+
+XR_FUNC XaSymbol *xa_span_borrow_owner_path_for_index_write(XaInferContext *ctx, AstNode *array,
+                                                            AstNode *index, XrType *element_type,
+                                                            char *path_buf, size_t path_buf_size) {
+    if (!ctx || !array || !xa_type_can_own_span_view(element_type) || !path_buf ||
+        path_buf_size == 0)
+        return NULL;
+    path_buf[0] = '\0';
+    bool precise = true;
+    XaSymbol *root = xa_root_path_for_expr(ctx, array, path_buf, path_buf_size, &precise, true);
+    if (!root)
+        return NULL;
+    char segment[64];
+    if (precise && xa_index_path_segment(index, segment, sizeof(segment))) {
+        if (!xa_path_append(path_buf, path_buf_size, segment))
+            xa_path_copy(path_buf, path_buf_size, root->name ? root->name : "");
+    } else {
+        xa_path_copy(path_buf, path_buf_size, root->name ? root->name : "");
+    }
+    return root;
 }
 
 XR_FUNC void xa_register_active_span_borrow(XaInferContext *ctx, XaSymbol *view_sym, AstNode *value,
@@ -824,26 +1023,33 @@ XR_FUNC void xa_register_active_span_borrow(XaInferContext *ctx, XaSymbol *view_
     xa_clear_active_span_borrow_for_view(ctx, view_sym);
     if (!value || !xa_type_contains_span_view(value_type))
         return;
-    XaSymbol *owner = xa_span_borrow_owner_symbol_for_expr(ctx, value);
+    char owner_path[512];
+    XaSymbol *owner =
+        xa_span_borrow_owner_path_for_expr(ctx, value, owner_path, sizeof(owner_path));
     if (!owner || owner == view_sym)
         return;
     XaActiveSpanBorrow *borrow = xr_calloc(1, sizeof(XaActiveSpanBorrow));
     if (!borrow)
         return;
     borrow->owner_symbol = owner;
+    if (owner_path[0] != '\0')
+        borrow->owner_path = xr_strdup(owner_path);
     borrow->view_symbol = view_sym;
     borrow->view_scope = view_sym->scope;
     borrow->next = ctx->active_span_borrows;
     ctx->active_span_borrows = borrow;
 }
 
-XR_FUNC void xa_check_active_span_borrow_owner_mutation(XaInferContext *ctx, AstNode *loc_node,
-                                                        XaSymbol *owner_sym,
-                                                        const char *operation) {
+XR_FUNC void xa_check_active_span_borrow_owner_path_mutation(XaInferContext *ctx, AstNode *loc_node,
+                                                             XaSymbol *owner_sym,
+                                                             const char *owner_path,
+                                                             const char *operation) {
     if (!ctx || !ctx->analyzer || !owner_sym || !loc_node)
         return;
     for (XaActiveSpanBorrow *b = ctx->active_span_borrows; b; b = b->next) {
         if (b->owner_symbol != owner_sym)
+            continue;
+        if (!xa_owner_paths_may_overlap(b->owner_path, owner_path))
             continue;
         if (!xa_active_span_borrow_may_be_live_after_mutation(ctx, b))
             continue;
@@ -860,6 +1066,14 @@ XR_FUNC void xa_check_active_span_borrow_owner_mutation(XaInferContext *ctx, Ast
                                    msg, &loc);
         return;
     }
+}
+
+XR_FUNC void xa_check_active_span_borrow_owner_mutation(XaInferContext *ctx, AstNode *loc_node,
+                                                        XaSymbol *owner_sym,
+                                                        const char *operation) {
+    const char *owner_path = owner_sym && owner_sym->name ? owner_sym->name : NULL;
+    xa_check_active_span_borrow_owner_path_mutation(ctx, loc_node, owner_sym, owner_path,
+                                                    operation);
 }
 
 XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, XrType *value_type,

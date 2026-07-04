@@ -1556,11 +1556,16 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_check_span_borrow_source_stable(ctx, call->callee, ma->object, method_name);
         }
 
-        if (method_name && xa_method_name_mutates_receiver(method_name)) {
-            XaSymbol *owner =
-                xa_span_borrow_owner_receiver_symbol(ctx, ma->object, callee_obj_type);
+        if (method_name && xa_method_name_mutates_receiver(method_name) &&
+            xa_type_can_own_span_view(callee_obj_type)) {
+            char owner_path[512] = {0};
+            XaSymbol *owner = xa_span_borrow_owner_path_for_owner_expr(ctx, ma->object, owner_path,
+                                                                       sizeof(owner_path));
+            if (!owner)
+                owner = xa_span_borrow_owner_receiver_symbol(ctx, ma->object, callee_obj_type);
             if (owner)
-                xa_check_active_span_borrow_owner_mutation(ctx, call->callee, owner, method_name);
+                xa_check_active_span_borrow_owner_path_mutation(
+                    ctx, call->callee, owner, owner_path[0] ? owner_path : NULL, method_name);
         }
 
         // Enforce private/protected visibility on user-class method calls.

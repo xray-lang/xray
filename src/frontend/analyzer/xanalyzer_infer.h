@@ -29,10 +29,13 @@ typedef struct XaLoopScope {
 
 typedef struct XaActiveSpanBorrow {
     struct XaSymbol *owner_symbol;
+    char *owner_path;
     struct XaSymbol *view_symbol;
     struct XaScope *view_scope;
     struct XaActiveSpanBorrow *next;
 } XaActiveSpanBorrow;
+
+#define XA_BLOCK_CURSOR_MAX 64
 
 // Inference context (for a single file/function)
 typedef struct XaInferContext {
@@ -103,6 +106,12 @@ typedef struct XaInferContext {
     // straight-line block.
     AstNode *current_block_node;
     int current_block_stmt_index;
+
+    // Stack of active statement cursors. This lets Span liveness look past an
+    // inner branch/block to the continuation of its parent blocks.
+    AstNode *block_cursor_nodes[XA_BLOCK_CURSOR_MAX];
+    int block_cursor_indices[XA_BLOCK_CURSOR_MAX];
+    int block_cursor_depth;
 } XaInferContext;
 
 // API: Context lifecycle

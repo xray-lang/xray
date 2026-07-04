@@ -108,7 +108,6 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
 XR_FUNC bool xa_type_contains_span_view(XrType *type);
 XR_FUNC bool xa_expr_has_stable_borrow_owner(AstNode *expr);
 XR_FUNC bool xa_type_can_own_span_view(XrType *type);
-XR_FUNC XaSymbol *xa_span_borrow_owner_symbol_for_expr(XaInferContext *ctx, AstNode *expr);
 XR_FUNC XaSymbol *xa_span_borrow_owner_receiver_symbol(XaInferContext *ctx, AstNode *expr,
                                                        XrType *receiver_type);
 XR_FUNC void xa_report_view_expr_requires_target(XaInferContext *ctx, AstNode *node,
@@ -119,6 +118,21 @@ XR_FUNC void xa_clear_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol 
 XR_FUNC void xa_clear_active_span_borrows_in_scope(XaInferContext *ctx, XaScope *scope);
 XR_FUNC void xa_check_active_span_borrow_owner_mutation(XaInferContext *ctx, AstNode *loc_node,
                                                         XaSymbol *owner_sym, const char *operation);
+XR_FUNC void xa_check_active_span_borrow_owner_path_mutation(XaInferContext *ctx, AstNode *loc_node,
+                                                             XaSymbol *owner_sym,
+                                                             const char *owner_path,
+                                                             const char *operation);
+XR_FUNC XaSymbol *xa_span_borrow_owner_path_for_expr(XaInferContext *ctx, AstNode *expr,
+                                                     char *path_buf, size_t path_buf_size);
+XR_FUNC XaSymbol *xa_span_borrow_owner_path_for_owner_expr(XaInferContext *ctx, AstNode *expr,
+                                                           char *path_buf, size_t path_buf_size);
+XR_FUNC XaSymbol *xa_span_borrow_owner_path_for_member_write(XaInferContext *ctx, AstNode *object,
+                                                             const char *member,
+                                                             XrType *member_type, char *path_buf,
+                                                             size_t path_buf_size);
+XR_FUNC XaSymbol *xa_span_borrow_owner_path_for_index_write(XaInferContext *ctx, AstNode *array,
+                                                            AstNode *index, XrType *element_type,
+                                                            char *path_buf, size_t path_buf_size);
 XR_FUNC void xa_visit_inline_statement_sequence_with_cursor(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, XrType *value_type,
                                         const char *escape_context);
