@@ -1,0 +1,3 @@
+import { runPolicy } from "./_aot_inline_policy_lib"
+
+print(runPolicy(8))
