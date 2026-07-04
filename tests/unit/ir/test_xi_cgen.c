@@ -2595,12 +2595,14 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
            "Bytes.appendFrom hot path must not call the large raw helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_repeat_from_tail_raw(") > 0 &&
            "Bytes.repeatFrom must lower to the raw tail repeat helper");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_repeat_from_checked_raw(") > 0 &&
-           "ByteSpan.repeatFrom must lower to the checked raw span helper");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_copy_checked_raw(") > 0 &&
-           "ByteSpan.copyFrom must lower to the checked raw span helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_from(") > 0 &&
+           "ByteSpan.repeatFrom must lower to the static core repeat helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_copy_from(") > 0 &&
+           "ByteSpan.copyFrom must lower to the static core copy helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_common_prefix(") > 0 &&
            "ByteSpan.commonPrefix must lower to the static core prefix helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_slice_range(") > 0 &&
+           "ByteSpan.commonPrefix over slices should inline slice range planning");
     assert(count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") > 0 &&
            "Bytes.reserve must lower to the raw AOT helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_load_u16_le_value(") == 0 &&
@@ -2618,6 +2620,10 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
            "static ByteSpan.load hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_common_prefix_checked_raw(") == 0 &&
            "static ByteSpan.commonPrefix hot path must not keep dynamic span checks");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_repeat_from_checked_raw(") == 0 &&
+           "static ByteSpan.repeatFrom hot path must not keep dynamic span checks");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_copy_checked_raw(") == 0 &&
+           "static ByteSpan.copyFrom hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_method_") == 0 &&
            count_between(fn_body, fn_end, "xrt_index_get(") == 0 &&
            "Bytes hot path must not fall back to dynamic dispatch");
