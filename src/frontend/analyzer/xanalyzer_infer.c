@@ -46,6 +46,7 @@ void xa_infer_context_free(XaInferContext *ctx) {
         xr_free(ctx->return_types);
     while (ctx->active_span_borrows) {
         XaActiveSpanBorrow *next = ctx->active_span_borrows->next;
+        xr_free(ctx->active_span_borrows->owner_path);
         xr_free(ctx->active_span_borrows);
         ctx->active_span_borrows = next;
     }

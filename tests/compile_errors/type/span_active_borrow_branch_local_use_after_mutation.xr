@@ -1,0 +1,11 @@
+fn main() {
+    let bytes = Bytes(0)
+    bytes.push(1)
+    let view: ByteSpan = bytes[:]
+    if (true) {
+        bytes.push(2)
+        print(view.length)
+    }
+}
+
+main()

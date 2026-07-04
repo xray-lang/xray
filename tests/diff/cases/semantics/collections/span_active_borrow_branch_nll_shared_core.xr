@@ -1,0 +1,17 @@
+fn branchAfterLastUse(flag: bool) {
+    let bytes = Bytes(0)
+    bytes.push(1)
+    let view: ByteSpan = bytes[:]
+    if (flag) {
+        print(view.length)
+        bytes.push(2)
+        print(bytes.length)
+    } else {
+        bytes.push(3)
+        print(bytes.length)
+    }
+    print(bytes.length)
+}
+
+branchAfterLastUse(true)
+branchAfterLastUse(false)

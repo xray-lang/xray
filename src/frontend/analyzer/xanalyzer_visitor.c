@@ -3336,6 +3336,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     }
                 }
             }
+            char owner_path[512] = {0};
+            XaSymbol *owner = xa_span_borrow_owner_path_for_member_write(
+                ctx, ms->object, ms->member, member_type, owner_path, sizeof(owner_path));
+            if (owner) {
+                xa_check_active_span_borrow_owner_path_mutation(
+                    ctx, node, owner, owner_path[0] ? owner_path : NULL, "reassigning owner field");
+            }
             XrType *value_type = xa_visit_infer_expr(ctx, ms->value);
             ctx->expected_type = saved_expected;
             xa_assign_check_type(ctx, node, member_type, value_type, ms->member, "member");
@@ -4184,6 +4191,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     if (!value_expected && XR_TYPE_IS_JSON(array_type))
                         value_expected = xr_type_new_json(ctx->analyzer->isolate);
                 }
+            }
+            char owner_path[512] = {0};
+            XaSymbol *owner = xa_span_borrow_owner_path_for_index_write(
+                ctx, is->array, is->index, value_expected, owner_path, sizeof(owner_path));
+            if (owner) {
+                xa_check_active_span_borrow_owner_path_mutation(ctx, node, owner,
+                                                                owner_path[0] ? owner_path : NULL,
+                                                                "reassigning owner element");
             }
             XrType *value_type = NULL;
             if (is->value) {

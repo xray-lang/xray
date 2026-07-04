@@ -1,0 +1,33 @@
+class Pair {
+    left: Bytes = Bytes(0)
+    right: Bytes = Bytes(0)
+}
+
+fn disjointField() {
+    let box = Pair()
+    box.left.push(1)
+    box.right.push(9)
+    let view: ByteSpan = box.left[:]
+    box.right = Bytes(0)
+    box.right.push(10)
+    print(view.length)
+    print(view[0])
+    print(box.right.length)
+    print(box.right[0])
+}
+
+fn disjointIndex() {
+    let chunks: Array<Bytes> = [Bytes(0), Bytes(0)]
+    chunks[0].push(3)
+    chunks[1].push(7)
+    let view: ByteSpan = chunks[0][:]
+    chunks[1] = Bytes(0)
+    chunks[1].push(8)
+    print(view.length)
+    print(view[0])
+    print(chunks[1].length)
+    print(chunks[1][0])
+}
+
+disjointField()
+disjointIndex()
