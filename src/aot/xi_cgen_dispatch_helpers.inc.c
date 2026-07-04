@@ -2030,6 +2030,7 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) 
     bool add_space = (flags & 1) != 0;
     bool newline = (flags & 2) != 0;
     const XiValue *native_int = xicgen_native_int_print_source(ctx, v);
+    bool print_span = !native_int && v->args[0] && cg_value_plan_is_span_aggregate(ctx, v->args[0]);
 
     if (ctx && ctx->freestanding_profile) {
         if (add_space)
@@ -2048,7 +2049,13 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) 
                 fprintf(out, ", xrt_write_char('\\n')");
         } else {
             fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
-            emit_vref(out, v->args[0]);
+            if (print_span) {
+                fprintf(out, "xr_mkptr(");
+                emit_span_array_view_ptr_expr(out, v->args[0]);
+                fprintf(out, ", XR_TAG_ARRAY)");
+            } else {
+                emit_vref(out, v->args[0]);
+            }
             fprintf(out, ")");
         }
         if (add_space)
@@ -2072,7 +2079,13 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) 
             fprintf(out, ", putchar('\\n')");
     } else {
         fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
-        emit_vref(out, v->args[0]);
+        if (print_span) {
+            fprintf(out, "xr_mkptr(");
+            emit_span_array_view_ptr_expr(out, v->args[0]);
+            fprintf(out, ", XR_TAG_ARRAY)");
+        } else {
+            emit_vref(out, v->args[0]);
+        }
         fprintf(out, ")");
     }
     if (add_space)

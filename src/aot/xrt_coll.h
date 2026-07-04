@@ -31,6 +31,8 @@
 #include "../shared/xr_typed_ops.h"
 #include <string.h>
 
+static inline XrValue xrt_value_clone_for_coro(XrValue val);
+
 /* =========================================================================
  * Array runtime
  * ========================================================================= */
@@ -701,12 +703,14 @@ static inline XrValue xrt_span_to_owned_array(xr_span_t span) {
     out->contains_refs = span.contains_refs;
     if (len <= 0 || !span.data || !out->data)
         return outv;
-    size_t bytes = (size_t) len * (size_t) span.elem_size;
-    memcpy(out->data, span.data, bytes);
     if (span.elem_type == XR_ELEM_ANY) {
-        XrValue *items = (XrValue *) out->data;
+        XrValue *src_items = (XrValue *) span.data;
+        XrValue *dst_items = (XrValue *) out->data;
         for (int64_t i = 0; i < len; i++)
-            xrt_retain(items[i]);
+            dst_items[i] = xrt_value_clone_for_coro(src_items[i]);
+    } else {
+        size_t bytes = (size_t) len * (size_t) span.elem_size;
+        memcpy(out->data, span.data, bytes);
     }
     return outv;
 }

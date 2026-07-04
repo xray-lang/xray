@@ -8,9 +8,10 @@ let dyn: Json = {
 
 let bytes = Bytes(8, 1)
 let src = Bytes(8, 2)
-let view: ByteSpan = bytes
 
 fn show_load_u32() {
+    let loadBytes = Bytes(8, 1)
+    let view: ByteSpan = loadBytes
     try {
         let value: uint32 = view.load<uint32>(dyn.badOffset, Endian.LE)
         print(int(value))
@@ -21,6 +22,8 @@ fn show_load_u32() {
 }
 
 fn show_load_u64() {
+    let loadBytes = Bytes(8, 1)
+    let view: ByteSpan = loadBytes
     try {
         let value: uint64 = view.load<uint64>(dyn.badOffset, Endian.LE)
         print(int(value))
