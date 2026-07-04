@@ -1142,6 +1142,12 @@ static const XiValue *xicgen_stack_slice_source_value(const XiValue *arg) {
     return slice && slice->op == XI_SLICE && slice->nargs >= 3 ? slice : NULL;
 }
 
+static bool xicgen_slice_can_inline_bytes_common_prefix(XiCgenCtx *ctx, const XiValue *arg) {
+    const XiValue *slice = xicgen_stack_slice_source_value(arg);
+    return slice && cg_span_value_u8_info(ctx, slice, NULL) &&
+           cg_span_value_u8_info(ctx, slice->args[0], NULL);
+}
+
 static bool xicgen_direct_call_param_noescape(XiCgenCtx *ctx, const XiFunc *current,
                                               const XiFunc *target, uint16_t param_index,
                                               uint8_t depth);
@@ -1515,6 +1521,11 @@ static bool xicgen_proxy_value_only_feeds_stack_slice_direct_call(XiCgenCtx *ctx
                         continue;
                     }
                 }
+                if (user->op == XI_BYTES_SPAN_COMMON_PREFIX && a <= 1 &&
+                    xicgen_slice_can_inline_bytes_common_prefix(ctx, slice)) {
+                    saw_stack_call = true;
+                    continue;
+                }
                 if (cg_unwrap_identity_value(user) == slice &&
                     xicgen_proxy_value_only_feeds_stack_slice_direct_call(ctx, f, user, slice,
                                                                           (uint8_t) (depth + 1))) {
@@ -1567,6 +1578,11 @@ static bool xicgen_slice_value_only_used_by_stack_slice_direct_call(XiCgenCtx *c
                         saw_stack_call = true;
                         continue;
                     }
+                }
+                if (user->op == XI_BYTES_SPAN_COMMON_PREFIX && a <= 1 &&
+                    xicgen_slice_can_inline_bytes_common_prefix(ctx, target)) {
+                    saw_stack_call = true;
+                    continue;
                 }
                 if (cg_unwrap_identity_value(user) == target &&
                     xicgen_proxy_value_only_feeds_stack_slice_direct_call(ctx, f, user, target,
@@ -5504,6 +5520,21 @@ static void xicgen_bytes_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                                    const char *prefix) {
     (void) f;
     (void) prefix;
+    if (cg_span_value_u8_info(ctx, v->args[0], NULL) &&
+        cg_span_value_u8_info(ctx, v->args[1], NULL)) {
+        fprintf(out, "({ xr_span_t _dst = ");
+        emit_span_ref_expr(out, v->args[0]);
+        fprintf(out, "; xr_span_t _src = ");
+        emit_span_ref_expr(out, v->args[1]);
+        fprintf(out,
+                "; if (xrt_span_is_readonly(_dst)) xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
+                "\"cannot write through readonly Span\"); bool _ok = "
+                "xr_array_core_bytes_copy_from(_dst.data, _dst.length, XR_ELEM_U8, _src.data, "
+                "_src.length, XR_ELEM_U8, 0, 0, _src.length, false); if (!_ok) "
+                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, \"ByteSpan.copyFrom(src) range out "
+                "of bounds\"); _dst; })");
+        return;
+    }
     fprintf(out, "xrt_span_bytes_copy_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
@@ -5527,6 +5558,34 @@ static void xicgen_bytes_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     emit_conversion_suffix(out, conv_suffix);
 }
 
+static bool xicgen_emit_byte_span_data_len_expr(XiCgenCtx *ctx, FILE *out, const XiValue *arg,
+                                                const char *name) {
+    const XiValue *slice = xicgen_stack_slice_source_value(arg);
+    if (slice && xicgen_slice_can_inline_bytes_common_prefix(ctx, slice)) {
+        fprintf(out, "xr_span_t _%s_src = ", name);
+        emit_span_ref_expr(out, slice->args[0]);
+        fprintf(out, "; XrArrayCoreRange _%s_range = xr_array_core_slice_range(_%s_src.length, ",
+                name, name);
+        emit_value_as_rep_ctx(ctx, out, slice->args[1], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, slice->args[2], XR_REP_I64);
+        fprintf(out,
+                "); const void *_%s_data = (_%s_range.count > 0 && _%s_src.data) ? "
+                "(const void *)((const uint8_t *)_%s_src.data + _%s_range.start) : "
+                "_%s_src.data; int64_t _%s_len = _%s_range.count; ",
+                name, name, name, name, name, name, name, name);
+        return true;
+    }
+    if (cg_span_value_u8_info(ctx, arg, NULL)) {
+        fprintf(out, "xr_span_t _%s = ", name);
+        emit_span_ref_expr(out, arg);
+        fprintf(out, "; const void *_%s_data = _%s.data; int64_t _%s_len = _%s.length; ", name,
+                name, name, name);
+        return true;
+    }
+    return false;
+}
+
 static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                             const XiValue *v, const char *prefix) {
     (void) f;
@@ -5535,14 +5594,19 @@ static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiF
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
     if (cg_span_value_u8_info(ctx, v->args[0], NULL) &&
         cg_span_value_u8_info(ctx, v->args[1], NULL)) {
-        fprintf(out, "({ xr_span_t _left = ");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, "; xr_span_t _right = ");
-        emit_span_ref_expr(out, v->args[1]);
+        fprintf(out, "({ ");
+        if (!xicgen_emit_byte_span_data_len_expr(ctx, out, v->args[0], "left") ||
+            !xicgen_emit_byte_span_data_len_expr(ctx, out, v->args[1], "right")) {
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+            fprintf(out, "; })");
+            emit_conversion_suffix(out, conv_suffix);
+            return;
+        }
         fprintf(out,
                 "; bool _ok = false; int64_t _prefix = "
-                "xr_array_core_bytes_common_prefix(_left.data, _left.length, XR_ELEM_U8, "
-                "_right.data, _right.length, XR_ELEM_U8, &_ok); if (!_ok) "
+                "xr_array_core_bytes_common_prefix(_left_data, _left_len, XR_ELEM_U8, "
+                "_right_data, _right_len, XR_ELEM_U8, &_ok); if (!_ok) "
                 "xrt_throw_error(XR_ERR_TYPE_MISMATCH, \"ByteSpan.commonPrefix(other) span has "
                 "no data\"); _prefix; })");
         emit_conversion_suffix(out, conv_suffix);
@@ -5561,7 +5625,24 @@ static void xicgen_bytes_span_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                      const char *prefix) {
     (void) f;
     (void) prefix;
-    (void) ctx;
+    if (cg_span_value_u8_info(ctx, v->args[0], NULL)) {
+        fprintf(out, "({ xr_span_t _span = ");
+        emit_span_ref_expr(out, v->args[0]);
+        fprintf(out, "; int64_t _dst_offset = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, "; int64_t _distance = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+        fprintf(out, "; int64_t _count = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_I64);
+        fprintf(out, "; if (xrt_span_is_readonly(_span)) xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
+                     "\"cannot write through readonly Span\"); bool _ok = "
+                     "xr_array_core_bytes_repeat_from(_span.data, _span.length, XR_ELEM_U8, "
+                     "_dst_offset, _distance, _count); if (!_ok) "
+                     "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                     "\"ByteSpan.repeatFrom(dstOffset, distance, count) range out of bounds\"); "
+                     "_span; })");
+        return;
+    }
     fprintf(out, "xrt_span_bytes_repeat_from_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
