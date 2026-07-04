@@ -2169,8 +2169,8 @@ TEST(cgen_parallel_for_allows_safe_bytes_append_from_array_slot) {
                          "loaded from arrays");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
            "safe Bytes append body should still use the AOT runtime executor");
-    assert(contains(code, "xrt_bytes_append_from_span_raw(") &&
-           "appendFrom should lower to the raw Bytes+ByteSpan helper");
+    assert(contains(code, "_src.guard != _dst") &&
+           "appendFrom should expose the non-alias fast path");
     assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
            "borrow-only Array<Bytes>.getUnchecked slot loads should not retain every item");
     assert(!contains(code, "xrt_method_1(") &&
@@ -2234,8 +2234,8 @@ TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
            "parallel for AOT body should allow prepared helper calls on Bytes loaded from arrays");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
            "prepared helper body should still use the AOT runtime executor");
-    assert(contains(code, "xrt_bytes_append_from_span_raw(") &&
-           "prepared helper should keep the raw Bytes+ByteSpan append lowering");
+    assert(contains(code, "_src.guard != _dst") &&
+           "prepared helper should keep the inline Bytes+ByteSpan append fast path");
     assert(!contains(code, "xrt_value_to_owned(((XrValue*)_a->data)") &&
            "borrow-only Array<Bytes>.getUnchecked should survive through prepared helper calls");
 
@@ -2292,8 +2292,8 @@ TEST(cgen_parallel_for_allows_prepared_dynamic_bytes_append_helper) {
     assert(!had_error && "parallel for AOT body should allow prepared dynamic Bytes append helper");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
            "dynamic prepared helper body should still use the AOT runtime executor");
-    assert(contains(code, "xrt_bytes_append_from_span_raw(") &&
-           "dynamic prepared helper should keep the raw Bytes+ByteSpan append lowering");
+    assert(contains(code, "_src.guard != _dst") &&
+           "dynamic prepared helper should keep the inline Bytes+ByteSpan append fast path");
     assert(!contains(code, "xrt_method_1(") &&
            "dynamic appendFrom must not fall back to method dispatch");
 
@@ -2345,8 +2345,8 @@ TEST(cgen_parallel_for_allows_prepared_bytes_load_helper) {
     assert(!had_error && "parallel for AOT body should allow prepared ByteSpan typed loads");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
            "prepared load helper body should still use the AOT runtime executor");
-    assert(contains(code, "xrt_span_bytes_load_u32_checked_raw(") &&
-           "prepared load helper should keep the raw ByteSpan typed load lowering");
+    assert(contains(code, "xr_array_core_bytes_load_u32(") &&
+           "prepared load helper should keep the static ByteSpan typed load lowering");
     assert(!contains(code, "BYTES_LOAD_U32") &&
            "prepared ByteSpan load must not be rejected by parallel body validation");
 
@@ -2404,8 +2404,8 @@ TEST(cgen_parallel_for_allows_prepared_common_prefix_helper) {
     assert(!had_error && "parallel for AOT body should allow prepared ByteSpan commonPrefix");
     assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
            "prepared commonPrefix helper body should still use the AOT runtime executor");
-    assert(contains(code, "xrt_span_bytes_common_prefix_checked_raw(") &&
-           "prepared commonPrefix helper should keep the raw ByteSpan lowering");
+    assert(contains(code, "xr_array_core_bytes_common_prefix(") &&
+           "prepared commonPrefix helper should keep the static ByteSpan lowering");
     assert(!contains(code, "BYTES_SPAN_COMMON_PREFIX") &&
            "prepared commonPrefix must not be rejected by parallel body validation");
 
@@ -2581,24 +2581,26 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
     assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
            "run function body should be bounded");
 
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u16_checked_raw(") > 0 &&
-           "ByteSpan.load<uint16> must lower to the span AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u32_checked_raw(") > 0 &&
-           "ByteSpan.load<uint32> must lower to the span AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u64_checked_raw(") > 0 &&
-           "ByteSpan.load<uint64> must lower to the span AOT helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_load_u16(") > 0 &&
+           "ByteSpan.load<uint16> must lower to the static core load helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_load_u32(") > 0 &&
+           "ByteSpan.load<uint32> must lower to the static core load helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_load_u64(") > 0 &&
+           "ByteSpan.load<uint64> must lower to the static core load helper");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_store_u16_checked_raw(") > 0 &&
            "ByteSpan.store<uint16> must lower to the span AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_append_from_span_raw(") > 0 &&
-           "Bytes.appendFrom must lower to the raw Bytes+ByteSpan helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_copy_or_move_bytes(") > 0 &&
+           "Bytes.appendFrom must lower to the inline Bytes+ByteSpan fast path");
+    assert(count_between(fn_body, fn_end, "xrt_bytes_append_from_span_raw(") == 0 &&
+           "Bytes.appendFrom hot path must not call the large raw helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_repeat_from_tail_raw(") > 0 &&
            "Bytes.repeatFrom must lower to the raw tail repeat helper");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_repeat_from_checked_raw(") > 0 &&
            "ByteSpan.repeatFrom must lower to the checked raw span helper");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_copy_checked_raw(") > 0 &&
            "ByteSpan.copyFrom must lower to the checked raw span helper");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_common_prefix_checked_raw(") > 0 &&
-           "ByteSpan.commonPrefix must lower to the checked raw span helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_common_prefix(") > 0 &&
+           "ByteSpan.commonPrefix must lower to the static core prefix helper");
     assert(count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") > 0 &&
            "Bytes.reserve must lower to the raw AOT helper");
     assert(count_between(fn_body, fn_end, "xrt_bytes_load_u16_le_value(") == 0 &&
@@ -2610,6 +2612,12 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
            count_between(fn_body, fn_end, "xrt_span_bytes_common_prefix_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_array_reserve_value(") == 0 &&
            "Bytes hot path must not call boxed value helpers");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u16_checked_raw(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_span_bytes_load_u32_checked_raw(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_span_bytes_load_u64_checked_raw(") == 0 &&
+           "static ByteSpan.load hot path must not keep dynamic span checks");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_common_prefix_checked_raw(") == 0 &&
+           "static ByteSpan.commonPrefix hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_method_") == 0 &&
            count_between(fn_body, fn_end, "xrt_index_get(") == 0 &&
            "Bytes hot path must not fall back to dynamic dispatch");

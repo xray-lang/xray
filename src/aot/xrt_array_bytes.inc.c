@@ -381,14 +381,11 @@ static inline int64_t xrt_span_bytes_common_prefix_checked_raw(xr_span_t left, x
     if (right.elem_type != XR_ELEM_U8)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
                         "ByteSpan.commonPrefix(other) operand must be ByteSpan");
-    int64_t n = left.length < right.length ? left.length : right.length;
-    if (n > 0 && (!left.data || !right.data))
+    bool ok = false;
+    int64_t prefix = xr_array_core_bytes_common_prefix(
+        left.data, left.length, left.elem_type, right.data, right.length, right.elem_type, &ok);
+    if (!ok)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "ByteSpan.commonPrefix(other) span has no data");
-    const uint8_t *l = (const uint8_t *) left.data;
-    const uint8_t *r = (const uint8_t *) right.data;
-    int64_t prefix = 0;
-    while (prefix < n && l[prefix] == r[prefix])
-        prefix++;
     return prefix;
 }
 
@@ -547,7 +544,7 @@ static inline xrt_array_t *xrt_bytes_repeat_from_raw(xrt_array_t *a, int64_t dst
     return a;
 }
 
-static inline xrt_array_t *xrt_bytes_append_from_span_raw(xrt_array_t *dst, xr_span_t src) {
+static inline xrt_array_t *xrt_bytes_append_from_span_slow_raw(xrt_array_t *dst, xr_span_t src) {
     if (!dst || dst->elem_type != XR_ELEM_U8 || src.elem_type != XR_ELEM_U8)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_APPEND_FROM_OPERANDS_MSG);
     if (dst->data_storage == XR_ARRAY_DATA_BORROWED || src.length < 0 ||
@@ -581,6 +578,25 @@ static inline xrt_array_t *xrt_bytes_append_from_span_raw(xrt_array_t *dst, xr_s
     }
     dst->length = new_length;
     return dst;
+}
+
+static inline xrt_array_t *xrt_bytes_append_from_span_raw(xrt_array_t *dst, xr_span_t src) {
+    if (XR_LIKELY(dst && dst->elem_type == XR_ELEM_U8 && src.elem_type == XR_ELEM_U8 &&
+                  dst->data_storage != XR_ARRAY_DATA_BORROWED && src.length >= 0 &&
+                  src.length <= INT64_MAX - dst->length)) {
+        int64_t old_length = dst->length;
+        int64_t new_length = old_length + src.length;
+        if (XR_LIKELY(new_length <= dst->capacity && src.guard != dst &&
+                      (new_length == 0 || dst->data) && (src.length == 0 || src.data))) {
+            if (src.length > 0) {
+                uint8_t *dp = (uint8_t *) dst->data + old_length;
+                xr_array_core_copy_or_move_bytes(dp, src.data, src.length);
+            }
+            dst->length = new_length;
+            return dst;
+        }
+    }
+    return xrt_bytes_append_from_span_slow_raw(dst, src);
 }
 
 static inline xrt_array_t *xrt_bytes_repeat_from_tail_raw(xrt_array_t *a, int64_t distance,

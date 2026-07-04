@@ -1,3 +1,4 @@
-c_contains=xrt_bytes_append_from_span_raw
+c_contains=_src.guard != _dst
+c_contains=xr_array_core_copy_or_move_bytes(
 c_contains=xrt_bytes_repeat_from_tail_raw
 c_not_contains=xrt_method_
