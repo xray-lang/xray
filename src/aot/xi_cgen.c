@@ -679,6 +679,7 @@ static bool cg_func_stable_cname(const XiCgenCtx *ctx, const XiFunc *f, const ch
                                  char *buf, size_t bufsz);
 static bool cg_func_needs_external_linkage(const XiCgenCtx *ctx, const XiFunc *f,
                                            const char *prefix);
+static bool cg_func_should_force_inline(const XiFunc *f);
 
 static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
     return f && (f->native_callback_kind == XI_NATIVE_CALLBACK_PAR_FOR_I64 ||
@@ -696,7 +697,7 @@ static const char *cg_func_linkage(const XiCgenCtx *ctx, const XiFunc *f, const 
     if (cg_func_needs_external_linkage(ctx, f, prefix))
         return "";
     if (ctx && ctx->extern_linkage)
-        return "static XR_AINLINE ";
+        return cg_func_should_force_inline(f) ? "static XR_AINLINE " : "static ";
     return cg_linkage(ctx);
 }
 
@@ -4268,6 +4269,47 @@ static bool cg_block_has_backedge(const XiBlock *blk) {
         default:
             return false;
     }
+}
+
+static uint32_t cg_func_value_count(const XiFunc *f) {
+    if (!f)
+        return 0;
+    uint32_t total = 0;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        total += blk->nvalues;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next)
+            total++;
+    }
+    return total;
+}
+
+static bool cg_func_has_backedge(const XiFunc *f) {
+    if (!f)
+        return false;
+    xi_ensure_rpo((XiFunc *) f);
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        if (cg_block_has_backedge(f->blocks[bi]))
+            return true;
+    }
+    return false;
+}
+
+static bool cg_func_should_force_inline(const XiFunc *f) {
+    enum {
+        CG_FORCE_INLINE_VALUE_LIMIT = 48
+    };
+    if (!f)
+        return false;
+    /* Keep separate-compilation helpers inlineable when they are tiny, but do
+     * not force loops into large callers/coroutine resume functions. Clang can
+     * otherwise spill hot loop state every iteration, as seen in xlz4's block
+     * roundtrip checksum path. */
+    if (cg_func_has_backedge(f))
+        return false;
+    return cg_func_value_count(f) <= CG_FORCE_INLINE_VALUE_LIMIT;
 }
 
 static bool cg_sync_backedge_heartbeat_enabled(XiCgenCtx *ctx, const XiFunc *f) {
