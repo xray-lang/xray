@@ -10,7 +10,7 @@ xs.push(4)
 print(xs.length)
 print(xs[2])
 print(xs.join("|"))
-let view = xs[1:3]
+let view: Span<int> = xs[1:3]
 print(view.length)
 
 let scores: Map<string, int> = #{"a": 1}

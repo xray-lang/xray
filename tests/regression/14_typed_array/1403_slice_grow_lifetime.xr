@@ -1,19 +1,16 @@
-/* Slice/view lifetime across source grow (task 143/144 M2).
+/* Owned slice-copy lifetime across source grow (task 152 surface split).
  *
- * A zero-copy slice must stay valid (and observe a stable snapshot) after the
- * source array grows and reallocates its backing buffer. Before the storage
- * block fix this dangled: the slice cached `source->data` and the grow freed
- * that buffer (heap-use-after-free under ASan; freed at xrt_coll.h:155 /
- * xarray.c grow). After the fix the POD buffer is a refcounted storage block, so
- * the slice keeps the old storage alive and reads a frozen snapshot.
+ * `Span<T>`/`ByteSpan` are now scoped fast borrowed views, so they may not stay
+ * live across owner growth. Long-lived non-copying slices belong to
+ * `View<T>`/`ByteView` once that tier lands. Until then, `copy(slice)` is the
+ * explicit owned snapshot path and must survive source growth independently.
  *
  * Covers POD element buffers (Bytes / typed Array<int>) and ANY buffers (object
- * arrays), which carry XrValue refs that the storage block owns and releases at
- * refcount zero (with per-element dup on fork).
+ * arrays), including the `copy(slice)` target-typed view path.
  */
 
 @test
-fn test_bytes_slice_survives_source_grow() {
+fn test_bytes_copy_survives_source_grow() {
     let b = Bytes(4)
     b[0] = 1
     b[1] = 2
@@ -26,7 +23,7 @@ fn test_bytes_slice_survives_source_grow() {
         b.push(200)
     }
 
-    let s = b[1:4]
+    let s: Bytes = copy(b[1:4])
     print(s[0])  // 2
     print(s[2])  // 4
 
@@ -35,25 +32,25 @@ fn test_bytes_slice_survives_source_grow() {
         b.push(7)
     }
 
-    // The slice must still be valid and observe the snapshot taken at slice time.
+    // The copy must still be valid and observe the snapshot taken at copy time.
     print(s[0])  // 2
     print(s[2])  // 4
 
     s[1] = 99
     print(s[1])  // 99
 
-    print("bytes slice survived grow")
+    print("bytes copy survived grow")
 
     // expect: 2
     // expect: 4
     // expect: 2
     // expect: 4
     // expect: 99
-    // expect: bytes slice survived grow
+    // expect: bytes copy survived grow
 }
 
 @test
-fn test_typed_int_slice_survives_source_grow() {
+fn test_typed_int_copy_survives_source_grow() {
     let a = Array<int>(4, 0)
     a[0] = 10
     a[1] = 20
@@ -64,7 +61,7 @@ fn test_typed_int_slice_survives_source_grow() {
         a.push(100 + i)
     }
 
-    let s = a[1:4]
+    let s: Array<int> = copy(a[1:4])
     print(s[0])  // 20
     print(s[1])  // 30
     print(s[2])  // 40
@@ -80,7 +77,7 @@ fn test_typed_int_slice_survives_source_grow() {
     s[1] = 999
     print(s[1])  // 999
 
-    print("typed int slice survived grow")
+    print("typed int copy survived grow")
 
     // expect: 20
     // expect: 30
@@ -89,18 +86,18 @@ fn test_typed_int_slice_survives_source_grow() {
     // expect: 30
     // expect: 40
     // expect: 999
-    // expect: typed int slice survived grow
+    // expect: typed int copy survived grow
 }
 
 @test
-fn test_any_object_slice_survives_source_grow() {
+fn test_any_object_copy_survives_source_grow() {
     let a = ["a", "b", "c", "d"]
 
     for (let i = 0; i < 64; i++) {
         a.push("x")
     }
 
-    let s = a[1:4]
+    let s: Array<string> = copy(a[1:4])
     print(s[0])  // b
     print(s[1])  // c
     print(s[2])  // d
@@ -113,7 +110,7 @@ fn test_any_object_slice_survives_source_grow() {
     print(s[1])  // c
     print(s[2])  // d
 
-    print("any object slice survived grow")
+    print("any object copy survived grow")
 
     // expect: b
     // expect: c
@@ -121,5 +118,5 @@ fn test_any_object_slice_survives_source_grow() {
     // expect: b
     // expect: c
     // expect: d
-    // expect: any object slice survived grow
+    // expect: any object copy survived grow
 }

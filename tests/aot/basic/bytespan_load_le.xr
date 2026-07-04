@@ -34,7 +34,7 @@ unsafe {
     bytes.pushUnchecked(8)
 }
 
-let view: ByteSpan = bytes
+let view: ByteSpan = bytes[:]
 print(read16(view, 0))
 print(read16(view, 3))
 print(read32(view, 0))

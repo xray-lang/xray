@@ -12,7 +12,7 @@ fn test_bytes_intrinsics_and_capacity() {
     b[6] = 7
     b[7] = 8
 
-    let view: ByteSpan = b
+    let view: ByteSpan = b[:]
     let u32: uint32 = view.load<uint32>(0, Endian.LE)
     let u64: uint64 = view.load<uint64>(0, Endian.LE)
     assert_eq(int(u32), 67305985)
@@ -32,7 +32,7 @@ fn test_bytes_intrinsics_and_capacity() {
     seed[0] = 65
     seed[1] = 66
     seed[2] = 67
-    rep.appendFrom(seed)
+    rep.appendFrom(seed[:])
     rep.repeatFrom(3, 6)
     assert_eq(rep[0], 65)
     assert_eq(rep[1], 66)

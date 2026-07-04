@@ -2,9 +2,12 @@
 let arr = [1, 2, 3, 4]
 let str = "abcd"
 
-print(arr[-2:])
+let arrTail: Span<int> = arr[-2:]
+print(arrTail)
 print(str[-2:])
-print(arr[:-1])
+let arrDropLast: Span<int> = arr[:-1]
+print(arrDropLast)
 print(str[:-1])
-print(arr[-3:-1])
+let arrMiddle: Span<int> = arr[-3:-1]
+print(arrMiddle)
 print(str[-3:-1])

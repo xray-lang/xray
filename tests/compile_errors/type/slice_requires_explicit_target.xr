@@ -1,0 +1,3 @@
+let bytes = Bytes(8, 1)
+let view = bytes[0:4]
+

@@ -1,7 +1,7 @@
 fn run() {
     let bytes = Bytes(0)
     bytes.push(1)
-    let view: ByteSpan = bytes
+    let view: ByteSpan = bytes[:]
     bytes.push(2)
     print(view.length)
 }

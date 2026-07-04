@@ -971,6 +971,46 @@ static bool xa_method_call_creates_span_borrow(XrType *receiver_type, const char
     return false;
 }
 
+static bool xa_call_is_copy_builtin(const CallExprNode *call) {
+    return call && call->arg_count == 1 && call->callee && call->callee->type == AST_VARIABLE &&
+           call->callee->as.variable.name && strcmp(call->callee->as.variable.name, "copy") == 0;
+}
+
+static bool xa_expr_needs_contextual_view_type(AstNode *expr) {
+    if (!expr)
+        return false;
+    if (expr->type == AST_SLICE_EXPR)
+        return true;
+    if (expr->type == AST_GROUPING)
+        return xa_expr_needs_contextual_view_type(expr->as.grouping);
+    if (expr->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &expr->as.call_expr;
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    const char *name = call->callee->as.member_access.name;
+    return name && (strcmp(name, "span") == 0 || strcmp(name, "bytes") == 0 ||
+                    strcmp(name, "asSpan") == 0 || strcmp(name, "asBytes") == 0 ||
+                    strcmp(name, "reinterpret") == 0);
+}
+
+static bool xa_type_is_bytes_like_view_or_owner(XrType *type) {
+    if (!type || (!XR_TYPE_IS_ARRAY(type) && !XR_TYPE_IS_SPAN(type)))
+        return false;
+    XrType *elem = type->container.element_type;
+    return elem && XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+}
+
+static XrType *xa_copy_owned_return_type(XaInferContext *ctx, XrType *arg_type) {
+    if (!ctx || !ctx->analyzer || !arg_type || !XR_TYPE_IS_SPAN(arg_type))
+        return NULL;
+    if (xa_type_is_bytes_like_view_or_owner(arg_type))
+        return xr_type_new_bytes(ctx->analyzer->isolate);
+    XrType *elem = arg_type->container.element_type ? arg_type->container.element_type
+                                                    : xr_type_new_unknown(NULL);
+    return xr_type_new_array(ctx->analyzer->isolate, elem);
+}
+
 static void xa_check_ref_argument_not_readonly(XaInferContext *ctx, AstNode *call_node,
                                                AstNode *arg_node, int slot, uint8_t mode) {
     if (!ctx || !ctx->analyzer || mode != XR_PARAM_REF || !arg_node)
@@ -1600,7 +1640,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
      * the callee's parameter signature (set in the detailed loop below).
      * Visiting them eagerly without context triggers spurious E0365. */
     for (int i = 0; i < call->arg_count; i++) {
-        if (call->arguments[i] && call->arguments[i]->type != AST_FUNCTION_EXPR)
+        if (call->arguments[i] && call->arguments[i]->type != AST_FUNCTION_EXPR &&
+            !xa_expr_needs_contextual_view_type(call->arguments[i]))
             xa_visit_infer_expr(ctx, call->arguments[i]);
     }
 
@@ -1978,10 +2019,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
         XrType *param_type = param_types ? param_types[slot] : NULL;
         XrType *saved_expected = ctx->expected_type;
+        bool saved_copy_view = ctx->allow_view_expr_for_copy;
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
             ctx->expected_type = param_type;
         }
+        if (xa_call_is_copy_builtin(call) && slot == 0)
+            ctx->allow_view_expr_for_copy = true;
         XrType *arg_type = xa_visit_infer_expr(ctx, arg_node);
+        ctx->allow_view_expr_for_copy = saved_copy_view;
         ctx->expected_type = saved_expected;
         if (effective_arg_types && slot < arg_count)
             effective_arg_types[slot] = arg_type;
@@ -2194,11 +2239,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
      * without this the result is unknown and cannot be passed to a typed
      * parameter (breaks `shared const c = copy(obj)` feeding a typed callee).
      * Guard on unknown so a user-defined copy with a concrete signature wins. */
-    if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
-        strcmp(call->callee->as.variable.name, "copy") == 0 && arg_count == 1 &&
-        effective_arg_types && effective_arg_types[0] &&
-        (!return_type || XR_TYPE_IS_UNKNOWN(return_type))) {
-        return_type = effective_arg_types[0];
+    if (xa_call_is_copy_builtin(call) && arg_count == 1 && effective_arg_types &&
+        effective_arg_types[0] && (!return_type || XR_TYPE_IS_UNKNOWN(return_type))) {
+        XrType *owned = xa_copy_owned_return_type(ctx, effective_arg_types[0]);
+        return_type = owned ? owned : effective_arg_types[0];
     }
 
     if (xa_call_is_bytespan_typed_load(call, callee_obj_type))

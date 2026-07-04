@@ -21,7 +21,7 @@ print(ints[3])
 // rejected at compile time (see tests/compile_errors/type/span_owner_method),
 // so only read semantics are exercised here.
 let source = [10, 20, 30, 40, 50]
-let view = source[1:4]
+let view: Span<int> = source[1:4]
 print(view.length)
 print(view[0])
 print(view[2])

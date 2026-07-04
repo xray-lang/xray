@@ -10,5 +10,5 @@ unsafe {
     bytes.pushUnchecked(7)
     bytes.pushUnchecked(11)
 }
-let view: ByteSpan = bytes
+let view: ByteSpan = bytes[:]
 print(pair(view))
