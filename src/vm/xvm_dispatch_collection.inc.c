@@ -991,6 +991,67 @@ vmcase(OP_SPAN_AS_BYTES) {
     vmbreak;
 }
 
+vmcase(OP_SPAN_COPY) {
+    int a = GETARG_A(i);
+    void *dst_data = NULL;
+    void *src_data = NULL;
+    int64_t dst_length = 0;
+    int64_t src_length = 0;
+    uint8_t dst_elem_type = XR_ELEM_ANY;
+    uint8_t src_elem_type = XR_ELEM_ANY;
+    uint8_t dst_elem_size = 0;
+    uint8_t src_elem_size = 0;
+    uint8_t dst_elem_tid = 0;
+    uint8_t src_elem_tid = 0;
+    uint8_t dst_contains_refs = 0;
+    uint8_t src_contains_refs = 0;
+    uint32_t dst_reserved = 0;
+    uint32_t src_reserved = 0;
+    void *dst_guard = NULL;
+    void *src_guard = NULL;
+    VM_SPAN_VIEW(R(a), dst_data, dst_length, dst_elem_type, dst_elem_size, dst_elem_tid,
+                 dst_contains_refs, dst_reserved, dst_guard,
+                 "Span.copyFrom(src) receiver must be Span");
+    VM_SPAN_VIEW(R(a + 1), src_data, src_length, src_elem_type, src_elem_size, src_elem_tid,
+                 src_contains_refs, src_reserved, src_guard,
+                 "Span.copyFrom(src) source must be Span");
+    (void) dst_elem_tid;
+    (void) src_elem_tid;
+    (void) dst_contains_refs;
+    (void) src_contains_refs;
+    (void) src_reserved;
+    (void) dst_guard;
+    (void) src_guard;
+    if (dst_elem_type == XR_ELEM_ANY || dst_elem_type >= XR_ELEM_COUNT || dst_elem_size == 0) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.copyFrom(src) receiver must be POD Span");
+    }
+    if (src_elem_type == XR_ELEM_ANY || src_elem_type >= XR_ELEM_COUNT || src_elem_size == 0) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.copyFrom(src) source must be POD Span");
+    }
+    if (dst_elem_type != src_elem_type || dst_elem_size != src_elem_size) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.copyFrom(src) element type mismatch");
+    }
+    if (dst_reserved & XR_SPAN_VIEW_READONLY) {
+        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+    }
+    if (dst_length < 0 || src_length < 0 || dst_length > INT64_MAX / (int64_t) dst_elem_size ||
+        src_length > INT64_MAX / (int64_t) src_elem_size) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.copyFrom(src) byte length overflow");
+    }
+    int64_t dst_bytes = dst_length * (int64_t) dst_elem_size;
+    int64_t src_bytes = src_length * (int64_t) src_elem_size;
+    if (src_bytes > dst_bytes) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.copyFrom(src) range out of bounds");
+    }
+    if (src_bytes > 0) {
+        if (!dst_data || !src_data) {
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.copyFrom(src) range out of bounds");
+        }
+        memmove(dst_data, src_data, (size_t) src_bytes);
+    }
+    vmbreak;
+}
+
 vmcase(OP_SPAN_REINTERPRET) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
