@@ -5035,10 +5035,18 @@ TEST(cgen_nonnegative_const_shr_uses_native_op) {
                       "fn checkedLeft(n: int, s: int) -> int {\n"
                       "    return n << s\n"
                       "}\n"
+                      "fn wrapLeft(n: int) -> int {\n"
+                      "    return n << 8\n"
+                      "}\n"
+                      "fn wrapRight(n: int) -> int {\n"
+                      "    return n >> 8\n"
+                      "}\n"
                       "print(fast(240))\n"
                       "print(widen(240))\n"
                       "print(checked(-8, 1))\n"
-                      "print(checkedLeft(8, 1))\n";
+                      "print(checkedLeft(8, 1))\n"
+                      "print(wrapLeft(-1))\n"
+                      "print(wrapRight(-256))\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -5075,6 +5083,23 @@ TEST(cgen_nonnegative_const_shr_uses_native_op) {
     const char *checked_left_end = next_static_after(checked_left);
     assert(count_between(checked_left, checked_left_end, "xrt_i64_shl(") == 1 &&
            "unproven left shift must keep the runtime helper semantics");
+
+    const char *wrap_left = strstr(code, "static int64_t test_wrapLeft_");
+    assert(wrap_left != NULL && "wrapLeft function should be generated");
+    const char *wrap_left_end = next_static_after(wrap_left);
+    assert(count_between(wrap_left, wrap_left_end, "((int64_t)((uint64_t)(") == 1 &&
+           count_between(wrap_left, wrap_left_end, "<< UINT64_C(8)") == 1 &&
+           "constant signed left shift should use wrapping unsigned C expression");
+    assert(count_between(wrap_left, wrap_left_end, "xrt_i64_shl(") == 0 &&
+           "constant signed left shift must not call the runtime helper");
+
+    const char *wrap_right = strstr(code, "static int64_t test_wrapRight_");
+    assert(wrap_right != NULL && "wrapRight function should be generated");
+    const char *wrap_right_end = next_static_after(wrap_right);
+    assert(count_between(wrap_right, wrap_right_end, " >> INT64_C(8)") == 1 &&
+           "constant signed right shift should use native arithmetic C shift");
+    assert(count_between(wrap_right, wrap_right_end, "xrt_i64_shr(") == 0 &&
+           "constant signed right shift must not call the runtime helper");
 
     printf("  Generated integer shift fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
