@@ -1,0 +1,5 @@
+import mem
+
+let buffer = mem.alloc(8)
+let view = buffer.asSpan()
+print(view.length)

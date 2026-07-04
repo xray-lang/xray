@@ -48,6 +48,8 @@ static const char *xi_type_name(const struct XrType *type) {
             return "void";
         case XR_KIND_ARRAY:
             return "array";
+        case XR_KIND_VIEW:
+            return "view";
         case XR_KIND_SPAN:
             return "span";
         case XR_KIND_MAP:

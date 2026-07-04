@@ -12,7 +12,7 @@ unsafe { print(pp[0]) }
 unsafe { print(pp[15]) }
 
 {
-    let ps = p.asSpan()
+    let ps: ByteSpan = p.asSpan()
     print(ps.length)
     ps[0] = 43
     print(ps[0])

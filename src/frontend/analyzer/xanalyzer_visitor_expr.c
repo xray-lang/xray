@@ -93,16 +93,16 @@ static bool xa_type_is_raw_u8_ptr(XrType *type) {
 }
 
 static bool xa_type_has_collection_size_alias(XrType *type) {
-    return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SPAN(type) || XR_TYPE_IS_MAP(type) ||
-                    type->kind == XR_KIND_SET);
+    return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type) ||
+                    XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET);
 }
 
 static bool xa_symbol_is_collection_length(SymbolId sym, XrType *type) {
     if (!type)
         return false;
     if (sym == SYMBOL_LENGTH) {
-        return XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SPAN(type) || XR_TYPE_IS_STRING(type) ||
-               XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET;
+        return XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type) ||
+               XR_TYPE_IS_STRING(type) || XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET;
     }
     if (sym == SYMBOL_SIZE)
         return xa_type_has_collection_size_alias(type);
@@ -117,6 +117,17 @@ static void xa_report_span_member_error(XaInferContext *ctx, AstNode *node, XrTy
     char msg[192];
     snprintf(msg, sizeof(msg), "Span view has no member '%s'; use length/size or indexed access",
              name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
+static void xa_report_view_member_error(XaInferContext *ctx, AstNode *node, XrType *type,
+                                        const char *name) {
+    if (!ctx || !ctx->analyzer || !node || !type || !XR_TYPE_IS_VIEW(type) || !name)
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[192];
+    snprintf(msg, sizeof(msg), "View has no member '%s'; use length/size or indexed access", name);
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
 }
@@ -162,23 +173,50 @@ static XrType *xa_bytes_method_type(XaInferContext *ctx, XrType *receiver, const
     return NULL;
 }
 
-static XrType *xa_string_view_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
+static bool xa_has_view_target_context(XaInferContext *ctx) {
+    return ctx && ((ctx->expected_type && !XR_TYPE_IS_UNKNOWN(ctx->expected_type)) ||
+                   ctx->allow_view_expr_for_copy);
+}
+
+static XrType *xa_string_view_method_type(XaInferContext *ctx, XrType *receiver, const char *name,
+                                          AstNode *node) {
     if (!receiver || !XR_TYPE_IS_STRING(receiver) || !name)
         return NULL;
     if (strcmp(name, "bytes") != 0)
         return NULL;
+    if (!xa_has_view_target_context(ctx)) {
+        xa_report_view_expr_requires_target(ctx, node, "string.bytes()");
+        return xr_type_new_unknown(NULL);
+    }
     XrVMRuntime *X = ctx->analyzer->isolate;
     return xr_type_new_function(X, NULL, 0, xr_type_new_bytespan(X), false);
 }
 
-static XrType *xa_array_view_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
+static XrType *xa_array_view_method_type(XaInferContext *ctx, XrType *receiver, const char *name,
+                                         AstNode *node) {
     if (!receiver || !XR_TYPE_IS_ARRAY(receiver) || !name || strcmp(name, "span") != 0)
         return NULL;
-    XrVMRuntime *X = ctx->analyzer->isolate;
-    XrType *elem = receiver->container.element_type;
-    if (!elem)
-        elem = xr_type_new_unknown(X);
-    return xr_type_new_function(X, NULL, 0, xr_type_new_span(X, elem), false);
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                               "Array.span() has been removed; use a target-typed slice such as "
+                               "'const s: Span<T> = arr[:]'",
+                               &loc);
+    return xr_type_new_unknown(NULL);
+}
+
+static bool xa_contextual_view_method_without_target(XaInferContext *ctx, XrType *receiver,
+                                                     const char *name, AstNode *node) {
+    if (!receiver || !name)
+        return false;
+    bool is_view_method =
+        (xr_type_is_named_class(receiver, "Buffer") && strcmp(name, "asSpan") == 0) ||
+        (XR_TYPE_IS_SPAN(receiver) &&
+         (strcmp(name, "asBytes") == 0 || strcmp(name, "reinterpret") == 0));
+    if (!is_view_method || xa_has_view_target_context(ctx))
+        return false;
+    xa_report_view_expr_requires_target(ctx, node, name);
+    return true;
 }
 
 static XrType *xa_bytespan_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
@@ -1284,15 +1322,18 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             return xr_type_new_bool(NULL);
     }
 
+    if (xa_contextual_view_method_without_target(ctx, obj_type, ma->name, node))
+        return xr_type_new_unknown(NULL);
+
     XrType *bytes_method = xa_bytes_method_type(ctx, obj_type, ma->name);
     if (bytes_method)
         return bytes_method;
 
-    XrType *string_view_method = xa_string_view_method_type(ctx, obj_type, ma->name);
+    XrType *string_view_method = xa_string_view_method_type(ctx, obj_type, ma->name, node);
     if (string_view_method)
         return string_view_method;
 
-    XrType *array_view_method = xa_array_view_method_type(ctx, obj_type, ma->name);
+    XrType *array_view_method = xa_array_view_method_type(ctx, obj_type, ma->name, node);
     if (array_view_method)
         return array_view_method;
 
@@ -1311,6 +1352,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     XrType *ptr_method = xa_pointer_method_type(ctx, obj_type, ma->name, node);
     if (ptr_method)
         return ptr_method;
+
+    if (XR_TYPE_IS_VIEW(obj_type)) {
+        xa_report_view_member_error(ctx, node, obj_type, ma->name);
+        return xr_type_new_unknown(NULL);
+    }
 
     if (XR_TYPE_IS_SPAN(obj_type)) {
         xa_report_span_member_error(ctx, node, obj_type, ma->name);
@@ -1533,7 +1579,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
         return pointee ? pointee : xr_type_new_unknown(NULL);
     }
 
-    if ((XR_TYPE_IS_ARRAY(container) || XR_TYPE_IS_SPAN(container)) &&
+    if ((XR_TYPE_IS_ARRAY(container) || XR_TYPE_IS_VIEW(container) || XR_TYPE_IS_SPAN(container)) &&
         container->container.element_type) {
         if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
             add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
@@ -1768,7 +1814,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
     if (arr->count == 0) {
         // Empty array: use expected type if available
         if (ctx->expected_type &&
-            (XR_TYPE_IS_ARRAY(ctx->expected_type) || XR_TYPE_IS_SPAN(ctx->expected_type)) &&
+            (XR_TYPE_IS_ARRAY(ctx->expected_type) || XR_TYPE_IS_VIEW(ctx->expected_type) ||
+             XR_TYPE_IS_SPAN(ctx->expected_type)) &&
             ctx->expected_type->container.element_type) {
             return xr_type_new_array(ctx->analyzer->isolate,
                                      ctx->expected_type->container.element_type);
@@ -1782,7 +1829,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
     XrType *saved_expected = ctx->expected_type;
     XrType *expected_array = NULL;
     if (ctx->expected_type &&
-        (XR_TYPE_IS_ARRAY(ctx->expected_type) || XR_TYPE_IS_SPAN(ctx->expected_type)) &&
+        (XR_TYPE_IS_ARRAY(ctx->expected_type) || XR_TYPE_IS_VIEW(ctx->expected_type) ||
+         XR_TYPE_IS_SPAN(ctx->expected_type)) &&
         ctx->expected_type->container.element_type) {
         target_elem_type = ctx->expected_type->container.element_type;
         expected_array = XR_TYPE_IS_ARRAY(ctx->expected_type)
@@ -1801,7 +1849,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             // Spread source must be an array; splice its element type in.
             ctx->expected_type = expected_array;
             XrType *src = xa_visit_infer_expr(ctx, child->as.spread_expr.expr);
-            if (src && (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_SPAN(src)) &&
+            if (src && (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_VIEW(src) || XR_TYPE_IS_SPAN(src)) &&
                 src->container.element_type) {
                 contributed = src->container.element_type;
             } else {
@@ -2564,7 +2612,8 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
     if (node->as.optional_chain.index) {
         xa_visit_infer_expr(ctx, node->as.optional_chain.index);
 
-        if ((XR_TYPE_IS_ARRAY(base_type) || XR_TYPE_IS_SPAN(base_type)) &&
+        if ((XR_TYPE_IS_ARRAY(base_type) || XR_TYPE_IS_VIEW(base_type) ||
+             XR_TYPE_IS_SPAN(base_type)) &&
             base_type->container.element_type) {
             XrType *result =
                 xr_type_copy(ctx->analyzer->isolate, base_type->container.element_type);
@@ -2921,6 +2970,7 @@ bool xa_boundary_transfer_type_needs_explicit(const XrType *type) {
         return false;
     switch (type->kind) {
         case XR_KIND_ARRAY:
+        case XR_KIND_VIEW:
         case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:

@@ -1013,7 +1013,8 @@ static void verify_narrow_before_typed_store(VerifyCtx *ctx, const XiFunc *f) {
 
             /* Check if the collection is a typed array */
             struct XrType *coll_type = v->args[0]->type;
-            if (!coll_type || (coll_type->kind != XR_KIND_ARRAY && coll_type->kind != XR_KIND_SPAN))
+            if (!coll_type || (coll_type->kind != XR_KIND_ARRAY &&
+                               coll_type->kind != XR_KIND_VIEW && coll_type->kind != XR_KIND_SPAN))
                 continue;
 
             struct XrType *elem = coll_type->container.element_type;

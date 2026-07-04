@@ -1009,6 +1009,9 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     } else if (base_len == strlen(TYPE_NAME_BYTESPAN) &&
                strncmp(s, TYPE_NAME_BYTESPAN, strlen(TYPE_NAME_BYTESPAN)) == 0) {
         type = xr_type_new_bytespan(X);
+    } else if (base_len == strlen(TYPE_NAME_BYTEVIEW) &&
+               strncmp(s, TYPE_NAME_BYTEVIEW, strlen(TYPE_NAME_BYTEVIEW)) == 0) {
+        type = xr_type_new_byteview(X);
     } else if (base_len == 5 && strncmp(s, TYPE_NAME_NEVER, 5) == 0) {
         type = xr_type_new_never(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_NULL, 4) == 0) {
@@ -1045,6 +1048,11 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         const char *inner = s + strlen(TYPE_NAME_SPAN) + 1;
         size_t inner_len = base_len - strlen(TYPE_NAME_SPAN) - 2;
         type = xr_type_new_span(X, parse_type_str(X, inner, inner_len));
+    } else if (base_len >= strlen(TYPE_NAME_VIEW) + 2 &&
+               strncmp(s, TYPE_NAME_VIEW "<", strlen(TYPE_NAME_VIEW) + 1) == 0) {
+        const char *inner = s + strlen(TYPE_NAME_VIEW) + 1;
+        size_t inner_len = base_len - strlen(TYPE_NAME_VIEW) - 2;
+        type = xr_type_new_view(X, parse_type_str(X, inner, inner_len));
     } else if (base_len >= 4 && strncmp(s, TYPE_NAME_MAP "<", 4) == 0) {
         // Map<K, V>: find comma separator at depth 0
         const char *inner = s + 4;

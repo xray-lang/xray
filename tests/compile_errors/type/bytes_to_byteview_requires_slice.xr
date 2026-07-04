@@ -1,0 +1,2 @@
+let bytes = Bytes(0)
+let view: ByteView = bytes

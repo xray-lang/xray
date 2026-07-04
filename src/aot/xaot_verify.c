@@ -78,8 +78,8 @@ static bool verify_container_plan(const XaotContainerTypePlan *type_plan, char *
     if ((plan->flags & XAOT_CONTAINER_TYPED_STORAGE) == 0)
         return set_error(errbuf, errbuf_len, "AOT container plan lacks typed storage flag");
     if (plan->kind == XAOT_CONTAINER_ARRAY) {
-        if (plan->type->kind != XR_KIND_ARRAY && plan->type->kind != XR_KIND_SPAN &&
-            plan->type->kind != XR_KIND_FIXED_ARRAY)
+        if (plan->type->kind != XR_KIND_ARRAY && plan->type->kind != XR_KIND_VIEW &&
+            plan->type->kind != XR_KIND_SPAN && plan->type->kind != XR_KIND_FIXED_ARRAY)
             return set_error(errbuf, errbuf_len, "AOT array container plan has wrong type");
         if ((plan->flags & XAOT_CONTAINER_RAW_DATA) == 0)
             return set_error(errbuf, errbuf_len, "AOT array container plan lacks raw data flag");

@@ -101,6 +101,7 @@ XR_FUNC const char *get_typeof_arg_name(AstNode *node);
 XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *target_type,
                                   XrType *value_type, const char *target_name,
                                   const char *target_kind);
+XR_FUNC XaSymbol *xa_root_variable_symbol_for_expr(XaInferContext *ctx, AstNode *expr);
 XR_FUNC XaSymbol *xa_in_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr);
 XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type);
 XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *expr);
@@ -110,6 +111,8 @@ XR_FUNC bool xa_type_can_own_span_view(XrType *type);
 XR_FUNC XaSymbol *xa_span_borrow_owner_symbol_for_expr(XaInferContext *ctx, AstNode *expr);
 XR_FUNC XaSymbol *xa_span_borrow_owner_receiver_symbol(XaInferContext *ctx, AstNode *expr,
                                                        XrType *receiver_type);
+XR_FUNC void xa_report_view_expr_requires_target(XaInferContext *ctx, AstNode *node,
+                                                 const char *kind);
 XR_FUNC void xa_register_active_span_borrow(XaInferContext *ctx, XaSymbol *view_sym, AstNode *value,
                                             XrType *value_type);
 XR_FUNC void xa_clear_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol *view_sym);

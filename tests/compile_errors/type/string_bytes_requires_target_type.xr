@@ -1,0 +1,3 @@
+let text = "ABCD"
+let view = text.bytes()
+print(view.length)

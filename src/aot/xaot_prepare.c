@@ -58,6 +58,7 @@ static bool native_ref_field_type(const XrType *type, uint8_t *out_native) {
                 *out_native = XR_NATIVE_STRING;
             return true;
         case XR_KIND_ARRAY:
+        case XR_KIND_VIEW:
         case XR_KIND_SPAN:
             if (out_native)
                 *out_native = XR_NATIVE_ARRAY_REF;

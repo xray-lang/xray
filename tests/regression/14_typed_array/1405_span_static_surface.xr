@@ -17,7 +17,7 @@ fn test_span_static_surface() {
     assert_eq(s[0], 20)
     s[1] = 99
     assert_eq(s[1], 99)
-    let whole: Span<int> = a.span()
+    let whole: Span<int> = a[:]
     assert_eq(whole.length, 4)
     assert_eq(whole[2], 99)
     whole[0] = 11

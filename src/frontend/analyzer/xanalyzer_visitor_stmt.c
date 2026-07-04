@@ -149,6 +149,7 @@ XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type) {
     }
     switch (type->kind) {
         case XR_KIND_SPAN:
+        case XR_KIND_VIEW:
         case XR_KIND_ARRAY:
         case XR_KIND_MAP:
         case XR_KIND_SET:
@@ -242,9 +243,8 @@ static bool xa_call_expr_is_borrowed_view(AstNode *expr) {
     if (!call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return false;
     const char *name = call->callee->as.member_access.name;
-    return name && (strcmp(name, "span") == 0 || strcmp(name, "bytes") == 0 ||
-                    strcmp(name, "asSpan") == 0 || strcmp(name, "asBytes") == 0 ||
-                    strcmp(name, "reinterpret") == 0);
+    return name && (strcmp(name, "bytes") == 0 || strcmp(name, "asSpan") == 0 ||
+                    strcmp(name, "asBytes") == 0 || strcmp(name, "reinterpret") == 0);
 }
 
 XR_FUNC bool xa_expr_has_stable_borrow_owner(AstNode *expr) {
@@ -291,7 +291,7 @@ XR_FUNC bool xa_type_can_own_span_view(XrType *type) {
     return xr_type_is_named_class(type, "Buffer");
 }
 
-static XaSymbol *xa_root_variable_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
+XR_FUNC XaSymbol *xa_root_variable_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
     while (expr) {
         switch (expr->type) {
             case AST_VARIABLE:

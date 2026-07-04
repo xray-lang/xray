@@ -1037,7 +1037,8 @@ static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *
 /* Read array element at index `idx` (caller must have verified bounds). */
 static XiValue *lower_match_elem_get(XiLower *l, XiValue *subject, int idx) {
     struct XrType *et =
-        (subject->type && (XR_TYPE_IS_ARRAY(subject->type) || XR_TYPE_IS_SPAN(subject->type)))
+        (subject->type && (XR_TYPE_IS_ARRAY(subject->type) || XR_TYPE_IS_VIEW(subject->type) ||
+                           XR_TYPE_IS_SPAN(subject->type)))
             ? subject->type->container.element_type
             : NULL;
     XiValue *iv = xi_const_int(l->func, l->cur_block, idx, l->type_int);
@@ -1344,6 +1345,8 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
         if (ap->rest_name) {
             struct XrType *rest_type = l->type_any;
             if (subject->type && XR_TYPE_IS_SPAN(subject->type)) {
+                rest_type = subject->type;
+            } else if (subject->type && XR_TYPE_IS_VIEW(subject->type)) {
                 rest_type = subject->type;
             } else if (subject->type && XR_TYPE_IS_ARRAY(subject->type)) {
                 struct XrType *elem = subject->type->container.element_type;
@@ -2271,8 +2274,8 @@ static bool is_index_iterable_collection(XiLower *l, AstNode *coll_node) {
     struct XrType *t = xi_lower_node_type(l, coll_node);
     if (!t || t->kind == XR_KIND_UNKNOWN)
         return true; /* unknown: assume builtin for backward compat */
-    return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_SPAN || t->kind == XR_KIND_SET ||
-           t->kind == XR_KIND_STRING;
+    return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_VIEW || t->kind == XR_KIND_SPAN ||
+           t->kind == XR_KIND_SET || t->kind == XR_KIND_STRING;
 }
 
 static void lower_for_in_channel_loop(XiLower *l, AstNode *node, XiValue *coll) {
@@ -3085,7 +3088,8 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
      * annotation on a container literal (e.g. let a: Array<int> = [1,2]).
      * Only the annotation distinguishes typed from untyped containers. */
     if (node->as.var_decl.type_annotation && type) {
-        if (init_val->op == XI_ARRAY_NEW && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SPAN(type)) &&
+        if (init_val->op == XI_ARRAY_NEW &&
+            (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type)) &&
             type->container.element_type) {
             uint8_t tid = xr_type_to_tid(type->container.element_type);
             init_val->aux_int = (int64_t) ((tid << 2) | ((uint8_t) init_val->aux_int & 0x03));
@@ -3465,7 +3469,9 @@ static int parallel_stmt_append_synthetic_capture(XiFunc *func, XiValue *value,
 }
 
 static struct XrType *parallel_lane_element_type(XiLower *l, struct XrType *source_type) {
-    if (source_type && (XR_TYPE_IS_ARRAY(source_type) || XR_TYPE_IS_SPAN(source_type)) &&
+    if (source_type &&
+        (XR_TYPE_IS_ARRAY(source_type) || XR_TYPE_IS_VIEW(source_type) ||
+         XR_TYPE_IS_SPAN(source_type)) &&
         source_type->container.element_type)
         return source_type->container.element_type;
     return l ? l->type_any : NULL;

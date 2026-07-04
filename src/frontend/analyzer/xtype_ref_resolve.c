@@ -42,8 +42,12 @@ static XrType *resolve_named(XrVMRuntime *X, const char *name) {
 
     if (strcmp(name, TYPE_NAME_BYTESPAN) == 0)
         return xr_type_new_bytespan(X);
+    if (strcmp(name, TYPE_NAME_BYTEVIEW) == 0)
+        return xr_type_new_byteview(X);
     if (strcmp(name, TYPE_NAME_SPAN) == 0)
         return xr_type_new_span(X, xr_type_new_unknown(NULL));
+    if (strcmp(name, TYPE_NAME_VIEW) == 0)
+        return xr_type_new_view(X, xr_type_new_unknown(NULL));
 
     /* Prelude lookup (Array, Map, Set, Channel, Json, Bytes, ...) */
     const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
@@ -111,6 +115,8 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
         result = xr_type_new_array(X, args[0]);
     } else if (strcmp(name, TYPE_NAME_SPAN) == 0 && nargs >= 1) {
         result = xr_type_new_span(X, args[0]);
+    } else if (strcmp(name, TYPE_NAME_VIEW) == 0 && nargs >= 1) {
+        result = xr_type_new_view(X, args[0]);
     } else if (strcmp(name, "Set") == 0 && nargs >= 1) {
         result = xr_type_new_set(X, args[0]);
     } else if (strcmp(name, "Channel") == 0 && nargs >= 1) {

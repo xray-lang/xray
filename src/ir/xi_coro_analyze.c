@@ -716,6 +716,7 @@ XR_FUNC bool xi_coro_type_needs_boundary_clone(const XrType *type) {
         return true;
     switch (type->kind) {
         case XR_KIND_ARRAY:
+        case XR_KIND_VIEW:
         case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:

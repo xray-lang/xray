@@ -78,7 +78,8 @@ typedef enum XrTypeKind {
     XR_KIND_CHAR,         // Unicode scalar value. Immediate value (tag XR_TAG_CHAR), not
                           // a uint32; appended last to keep existing kind values stable.
     XR_KIND_RECORD,       // Sealed/open structural record; shares ObjectShape metadata with Json.
-    XR_KIND_SPAN,         // Typed bounded value view over contiguous storage.
+    XR_KIND_SPAN,         // Scoped borrowed value view over contiguous storage.
+    XR_KIND_VIEW,         // Long-lived storage-backed non-owning view.
     XR_KIND_COUNT
 } XrTypeKind;
 
@@ -91,11 +92,12 @@ static inline bool xr_kind_is_primitive(XrTypeKind k) {
            k == XR_KIND_CHAR;
 }
 static inline bool xr_kind_is_container(XrTypeKind k) {
-    return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET || k == XR_KIND_SPAN;
+    return k == XR_KIND_ARRAY || k == XR_KIND_VIEW || k == XR_KIND_MAP || k == XR_KIND_SET ||
+           k == XR_KIND_SPAN;
 }
 static inline bool xr_kind_is_builtin_iterable(XrTypeKind k) {
-    return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET || k == XR_KIND_SPAN ||
-           k == XR_KIND_STRING;
+    return k == XR_KIND_ARRAY || k == XR_KIND_VIEW || k == XR_KIND_MAP || k == XR_KIND_SET ||
+           k == XR_KIND_SPAN || k == XR_KIND_STRING;
 }
 static inline bool xr_kind_has_object_shape(XrTypeKind k) {
     return k == XR_KIND_RECORD || k == XR_KIND_JSON;
@@ -268,6 +270,7 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_NUMERIC(t) (xr_kind_is_numeric((t)->kind))
 #define XR_TYPE_IS_PRIMITIVE(t) (xr_kind_is_primitive((t)->kind))
 #define XR_TYPE_IS_ARRAY(t) ((t)->kind == XR_KIND_ARRAY)
+#define XR_TYPE_IS_VIEW(t) ((t)->kind == XR_KIND_VIEW)
 #define XR_TYPE_IS_MAP(t) ((t)->kind == XR_KIND_MAP)
 #define XR_TYPE_IS_SET(t) ((t)->kind == XR_KIND_SET)
 #define XR_TYPE_IS_SPAN(t) ((t)->kind == XR_KIND_SPAN)
@@ -315,6 +318,7 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
          * AOT optimization, not needed for correctness. */
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
+        case XR_KIND_VIEW:
         case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:
@@ -415,6 +419,7 @@ static inline uint8_t xr_type_to_slot_type(XrType *type) {
             return XR_SLOT_BOOL;
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
+        case XR_KIND_VIEW:
         case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:
@@ -470,6 +475,7 @@ static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
             return XR_TAG_NULL;
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
+        case XR_KIND_VIEW:
         case XR_KIND_SPAN:
         case XR_KIND_MAP:
         case XR_KIND_SET:
@@ -518,6 +524,7 @@ static inline uint8_t xr_type_element_gc_tag(XrType *type) {
         return XR_SLOT_ANY;
     switch (type->kind) {
         case XR_KIND_ARRAY:
+        case XR_KIND_VIEW:
         case XR_KIND_SPAN:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
@@ -533,6 +540,8 @@ static inline uint8_t xr_type_element_gc_tag(XrType *type) {
 XR_FUNC XrType *xr_type_new_array(XrVMRuntime *X, XrType *element_type);
 XR_FUNC XrType *xr_type_new_span(XrVMRuntime *X, XrType *element_type);
 XR_FUNC XrType *xr_type_new_bytespan(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_view(XrVMRuntime *X, XrType *element_type);
+XR_FUNC XrType *xr_type_new_byteview(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_map(XrVMRuntime *X, XrType *key_type, XrType *value_type);
 XR_FUNC XrType *xr_type_new_set(XrVMRuntime *X, XrType *element_type);
 XR_FUNC XrType *xr_type_new_channel(XrVMRuntime *X, XrType *element_type);

@@ -2028,11 +2028,17 @@ vmcase(OP_SLICE) {
     int64_t start = XR_TO_INT(R(c));
     int64_t end = XR_TO_INT(R(c + 1));
 
-    // Array slice: frame-local borrowed Span value, zero heap allocation.
+    // Array slice: either frame-local borrowed Span value (R[C+2] is a span
+    // slot), or storage-backed heap View (R[C+2] is null).
     if (XR_IS_ARRAY(source)) {
         XrArray *arr = XR_TO_ARRAY(source);
         if (!XR_IS_INT(R(c + 2))) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "array slice missing Span frame slot");
+            XrArray *slice = xr_array_slice(VM_CURRENT_CORO, arr, start, end);
+            if (!slice) {
+                VM_RUNTIME_ERROR(XR_ERR_RUNTIME, "array view slice allocation failed");
+            }
+            R(a) = XR_FROM_PTR(slice);
+            vmbreak;
         }
         xr_array_normalize_slice(arr->length, &start, &end);
         XrSpanView *span = VM_SPAN_SLOT(R(c + 2));

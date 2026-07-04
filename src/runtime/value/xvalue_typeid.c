@@ -193,6 +193,7 @@ uint8_t xr_type_to_tid(const XrType *type) {
         case XR_KIND_CHAR:
             return XR_TID_CHAR;
         case XR_KIND_ARRAY:
+        case XR_KIND_VIEW:
         case XR_KIND_SPAN:
             return XR_TID_ARRAY;
         case XR_KIND_MAP:

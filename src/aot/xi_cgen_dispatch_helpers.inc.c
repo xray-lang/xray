@@ -6789,6 +6789,8 @@ static const char *xicgen_type_label_noalloc(const XrType *type) {
             return "null";
         case XR_KIND_ARRAY:
             return "Array";
+        case XR_KIND_VIEW:
+            return "View";
         case XR_KIND_MAP:
             return "Map";
         case XR_KIND_SET:

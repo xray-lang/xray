@@ -418,11 +418,19 @@ XrValue xr_reflect_typeOf(XrVMRuntime *isolate, XrValue self, XrValue *args, int
     switch (heap_type) {
         case XR_TARRAY: {
             XrArray *arr = XR_TO_ARRAY(obj);
+            bool is_slice = xr_array_is_slice(arr);
+            const char *container_name = is_slice ? "View" : "Array";
+            if (arr->elem_tid == XR_TID_UINT8 ||
+                (arr->elem_tid == 0 && arr->elem_type == XR_ELEM_U8)) {
+                n = snprintf(buf, sizeof(buf), "%s",
+                             is_slice ? TYPE_NAME_BYTEVIEW : "Array<uint8>");
+                break;
+            }
             if (arr->elem_tid != 0) {
-                n = snprintf(buf, sizeof(buf), "Array<%s>",
+                n = snprintf(buf, sizeof(buf), "%s<%s>", container_name,
                              xr_typeid_name((XrTypeId) arr->elem_tid));
             } else {
-                n = snprintf(buf, sizeof(buf), "Array");
+                n = snprintf(buf, sizeof(buf), "%s", container_name);
             }
             break;
         }

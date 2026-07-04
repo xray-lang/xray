@@ -1,0 +1,52 @@
+fn keepBytes(bytes: Bytes) -> ByteView {
+    let view: ByteView = bytes[1:4]
+    return view
+}
+
+fn keepInts(values: Array<int>) -> View<int> {
+    let view: View<int> = values[1:3]
+    return view
+}
+
+let bytes = Bytes(0)
+bytes.push(1)
+bytes.push(2)
+bytes.push(3)
+bytes.push(4)
+
+let bv: ByteView = bytes[1:4]
+print(bv.length)
+print(bv[0])
+bv[1] = 8
+print(bytes[2])
+bytes.push(9)
+print(bv.length)
+print(bv[1])
+
+let keptBytes = keepBytes(bytes)
+print(keptBytes.length)
+print(keptBytes[0])
+
+let owned: Bytes = copy(bv)
+print(owned.length)
+print(owned[1])
+
+let values: Array<int> = [10, 20, 30, 40]
+let iv: View<int> = values[1:3]
+print(iv.length)
+print(iv[0])
+iv[1] = 300
+print(values[2])
+values.push(50)
+print(iv.length)
+print(iv[1])
+
+let keptInts = keepInts(values)
+print(keptInts.length)
+print(keptInts[1])
+
+let total = 0
+for (x in iv) {
+    total += x
+}
+print(total)
