@@ -895,9 +895,15 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
                 return false;
             if (arg_index == 0 &&
                 (strcmp(method, "push") == 0 || strcmp(method, "reserve") == 0 ||
-                 strcmp(method, "appendFrom") == 0 || strcmp(method, "repeatFrom") == 0))
+                 strcmp(method, "appendFrom") == 0 || strcmp(method, "repeatFrom") == 0 ||
+                 strcmp(method, "writeFromUnchecked") == 0 ||
+                 strcmp(method, "copyWithinNonOverlappingUnchecked") == 0 ||
+                 strcmp(method, "repeatAtUnchecked") == 0 ||
+                 strcmp(method, "setLengthUnchecked") == 0))
                 return true;
             if (arg_index == 1 && strcmp(method, "appendFrom") == 0)
+                return true;
+            if (arg_index == 2 && strcmp(method, "writeFromUnchecked") == 0)
                 return true;
             return false;
         }
@@ -1928,7 +1934,8 @@ static bool emit_typed_array_reserve_expr(XiCgenCtx *ctx, FILE *out, const XiFun
     if (!cg_array_value_storage_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
         return false;
 
-    bool boxed = cg_rep(call) == XR_REP_TAGGED;
+    bool value_used = call->uses != 0;
+    bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
     fprintf(out, "xrt_array_reserve_trusted_raw(");
@@ -1963,7 +1970,8 @@ static bool emit_bytes_append_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc 
         !cg_span_value_u8_info(ctx, call->args[1], NULL))
         return false;
 
-    bool boxed = cg_rep(call) == XR_REP_TAGGED;
+    bool value_used = call->uses != 0;
+    bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
     fprintf(out, "({ xrt_array_t *_dst = ");
@@ -1994,7 +2002,8 @@ static bool emit_bytes_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc 
     if (!cg_bytes_unchecked_int_arg(call->args[1]) || !cg_bytes_unchecked_int_arg(call->args[2]))
         return false;
 
-    bool boxed = cg_rep(call) == XR_REP_TAGGED;
+    bool value_used = call->uses != 0;
+    bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
     fprintf(out, "xrt_bytes_repeat_from_tail_raw(");
@@ -2004,6 +2013,124 @@ static bool emit_bytes_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const XiFunc 
     fprintf(out, ", ");
     emit_value_as_rep(out, call->args[2], XR_REP_I64);
     fprintf(out, ")");
+    emit_bytes_array_result_suffix(out, boxed);
+    return true;
+}
+
+static bool emit_bytes_write_from_unchecked_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                 const char *prefix, const XiValue *call) {
+    CgArrayElemInfo dst_info;
+    if (!call || call->nargs != 5)
+        return false;
+    if (!cg_array_value_u8_unchecked_info(ctx, f, call->args[0], &dst_info,
+                                          CG_ARRAY_STORAGE_MUTABLE) ||
+        !cg_span_value_u8_info(ctx, call->args[2], NULL))
+        return false;
+    if (!cg_bytes_unchecked_int_arg(call->args[1]) || !cg_bytes_unchecked_int_arg(call->args[3]) ||
+        !cg_bytes_unchecked_int_arg(call->args[4]))
+        return false;
+
+    bool value_used = call->uses != 0;
+    bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "xr_mkptr(");
+    fprintf(out, "({ xrt_array_t *_dst = ");
+    emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
+    fprintf(out, "; xr_span_t _src = ");
+    emit_span_ref_expr(out, call->args[2]);
+    fprintf(out, "; int64_t _dst_offset = ");
+    emit_value_as_rep(out, call->args[1], XR_REP_I64);
+    fprintf(out, "; int64_t _src_offset = ");
+    emit_value_as_rep(out, call->args[3], XR_REP_I64);
+    fprintf(out, "; int64_t _count = ");
+    emit_value_as_rep(out, call->args[4], XR_REP_I64);
+    fprintf(out, "; if (_count > 0) xr_array_core_copy_or_move_bytes((uint8_t*)_dst->data + "
+                 "_dst_offset, (const uint8_t*)_src.data + _src_offset, _count); ");
+    fprintf(out, value_used ? "_dst; })" : "(void)_dst; })");
+    emit_bytes_array_result_suffix(out, boxed);
+    return true;
+}
+
+static bool emit_bytes_copy_within_nonoverlap_unchecked_expr(XiCgenCtx *ctx, FILE *out,
+                                                             const XiFunc *f, const char *prefix,
+                                                             const XiValue *call) {
+    CgArrayElemInfo info;
+    if (!call || call->nargs != 4)
+        return false;
+    if (!cg_array_value_u8_unchecked_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
+        return false;
+    if (!cg_bytes_unchecked_int_arg(call->args[1]) || !cg_bytes_unchecked_int_arg(call->args[2]) ||
+        !cg_bytes_unchecked_int_arg(call->args[3]))
+        return false;
+
+    bool value_used = call->uses != 0;
+    bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "xr_mkptr(");
+    fprintf(out, "({ xrt_array_t *_dst = ");
+    emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
+    fprintf(out, "; int64_t _dst_offset = ");
+    emit_value_as_rep(out, call->args[1], XR_REP_I64);
+    fprintf(out, "; int64_t _src_offset = ");
+    emit_value_as_rep(out, call->args[2], XR_REP_I64);
+    fprintf(out, "; int64_t _count = ");
+    emit_value_as_rep(out, call->args[3], XR_REP_I64);
+    fprintf(out, "; if (_count > 0) xr_array_core_copy_nonoverlap_bytes((uint8_t*)_dst->data + "
+                 "_dst_offset, (const uint8_t*)_dst->data + _src_offset, _count); ");
+    fprintf(out, value_used ? "_dst; })" : "(void)_dst; })");
+    emit_bytes_array_result_suffix(out, boxed);
+    return true;
+}
+
+static bool emit_bytes_repeat_at_unchecked_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                const char *prefix, const XiValue *call) {
+    CgArrayElemInfo info;
+    if (!call || call->nargs != 4)
+        return false;
+    if (!cg_array_value_u8_unchecked_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
+        return false;
+    if (!cg_bytes_unchecked_int_arg(call->args[1]) || !cg_bytes_unchecked_int_arg(call->args[2]) ||
+        !cg_bytes_unchecked_int_arg(call->args[3]))
+        return false;
+
+    bool value_used = call->uses != 0;
+    bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "xr_mkptr(");
+    fprintf(out, "({ xrt_array_t *_dst = ");
+    emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
+    fprintf(out, "; xr_array_core_bytes_repeat_copy(_dst->data, ");
+    emit_value_as_rep(out, call->args[1], XR_REP_I64);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, call->args[2], XR_REP_I64);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, call->args[3], XR_REP_I64);
+    fprintf(out, "); ");
+    fprintf(out, value_used ? "_dst; })" : "(void)_dst; })");
+    emit_bytes_array_result_suffix(out, boxed);
+    return true;
+}
+
+static bool emit_bytes_set_length_unchecked_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                 const char *prefix, const XiValue *call) {
+    CgArrayElemInfo info;
+    if (!call || call->nargs != 2)
+        return false;
+    if (!cg_array_value_u8_unchecked_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
+        return false;
+    if (!cg_bytes_unchecked_int_arg(call->args[1]))
+        return false;
+
+    bool value_used = call->uses != 0;
+    bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "xr_mkptr(");
+    fprintf(out, "({ xrt_array_t *_dst = ");
+    emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
+    fprintf(out, "; _dst->length = ");
+    emit_value_as_rep(out, call->args[1], XR_REP_I64);
+    fprintf(out, "; ");
+    fprintf(out, value_used ? "_dst; })" : "(void)_dst; })");
     emit_bytes_array_result_suffix(out, boxed);
     return true;
 }
@@ -2027,6 +2154,30 @@ static bool cg_array_call_is_unchecked_bytes_trusted_nothrow(XiCgenCtx *ctx, con
                                             CG_ARRAY_STORAGE_MUTABLE) &&
                 cg_array_elem_info_is_u8(&dst_info)) ||
                cg_array_value_type_is_u8_contiguous(ctx, v->args[0]);
+    }
+    if (strcmp(method, "writeFromUnchecked") == 0 && v->nargs == 5) {
+        return cg_array_value_u8_unchecked_info(ctx, f, v->args[0], &dst_info,
+                                                CG_ARRAY_STORAGE_MUTABLE) &&
+               cg_span_value_u8_info(ctx, v->args[2], NULL) &&
+               cg_bytes_unchecked_int_arg(v->args[1]) && cg_bytes_unchecked_int_arg(v->args[3]) &&
+               cg_bytes_unchecked_int_arg(v->args[4]);
+    }
+    if (strcmp(method, "copyWithinNonOverlappingUnchecked") == 0 && v->nargs == 4) {
+        return cg_array_value_u8_unchecked_info(ctx, f, v->args[0], &dst_info,
+                                                CG_ARRAY_STORAGE_MUTABLE) &&
+               cg_bytes_unchecked_int_arg(v->args[1]) && cg_bytes_unchecked_int_arg(v->args[2]) &&
+               cg_bytes_unchecked_int_arg(v->args[3]);
+    }
+    if (strcmp(method, "repeatAtUnchecked") == 0 && v->nargs == 4) {
+        return cg_array_value_u8_unchecked_info(ctx, f, v->args[0], &dst_info,
+                                                CG_ARRAY_STORAGE_MUTABLE) &&
+               cg_bytes_unchecked_int_arg(v->args[1]) && cg_bytes_unchecked_int_arg(v->args[2]) &&
+               cg_bytes_unchecked_int_arg(v->args[3]);
+    }
+    if (strcmp(method, "setLengthUnchecked") == 0 && v->nargs == 2) {
+        return cg_array_value_u8_unchecked_info(ctx, f, v->args[0], &dst_info,
+                                                CG_ARRAY_STORAGE_MUTABLE) &&
+               cg_bytes_unchecked_int_arg(v->args[1]);
     }
     return false;
 }

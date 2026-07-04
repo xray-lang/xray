@@ -1,1 +1,1 @@
-Bytes has no member 'writeFromUnchecked'
+Bytes.writeFromUnchecked() must be inside an unsafe block
