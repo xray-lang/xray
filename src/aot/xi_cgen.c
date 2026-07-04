@@ -288,6 +288,17 @@ static bool cg_ownership_op_is_noop(const XiValue *v) {
     return arg && cg_type_has_no_aot_arc_header(arg->type);
 }
 
+static bool cg_method_name_is(const XiValue *v, const char *name, int symbol) {
+    if (!v || !name)
+        return false;
+    const char *method = v->aux ? (const char *) v->aux : NULL;
+    if (method && strcmp(method, name) == 0)
+        return true;
+    if (v->aux_int <= 0)
+        return false;
+    return (int) (v->aux_int >> 1) == symbol;
+}
+
 /* Check whether an op is void-like (produces no named result). */
 static bool cg_is_void_like(const XiValue *v) {
     if (!v)
