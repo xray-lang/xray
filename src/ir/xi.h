@@ -292,6 +292,7 @@ typedef enum {
     XI_BYTES_SPAN_COMMON_PREFIX,
     XI_BYTES_SPAN_REPEAT,
     XI_SPAN_AS_BYTES,    /* args[0]=Span<T>; result ByteSpan; aux unused */
+    XI_SPAN_COPY,        /* args[0]=Span<T> dst, args[1]=Span<T> src; result dst */
     XI_SPAN_REINTERPRET, /* args[0]=ByteSpan; result Span<T>; aux packs elem metadata */
     XI_BYTES_COPY_WITHIN,
     XI_BYTES_COPY_FROM,

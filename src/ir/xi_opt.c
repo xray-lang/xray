@@ -2188,6 +2188,7 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_BYTES_SPAN_COPY:
         case XI_BYTES_SPAN_REPEAT:
         case XI_SPAN_AS_BYTES:
+        case XI_SPAN_COPY:
         case XI_SPAN_REINTERPRET:
             return sr_type_native_boundary_rep(v->type);
         case XI_BYTES_SPAN_COMPARE:
@@ -2317,6 +2318,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
                        ? sr_type_native_boundary_rep(user->args[0]->type)
                        : XR_REP_TAGGED;
             return true;
+        case XI_SPAN_COPY:
         case XI_BYTES_SPAN_COPY:
         case XI_BYTES_SPAN_COMPARE:
         case XI_BYTES_SPAN_COMMON_PREFIX:

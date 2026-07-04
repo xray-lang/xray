@@ -1287,6 +1287,7 @@ static bool xicgen_op_arg_keeps_span_noescape(XiCgenCtx *ctx, const XiFunc *curr
         case XI_SPAN_AS_BYTES:
         case XI_SPAN_REINTERPRET:
             return arg_index == 0;
+        case XI_SPAN_COPY:
         case XI_BYTES_SPAN_COPY:
         case XI_BYTES_SPAN_COMPARE:
         case XI_BYTES_SPAN_COMMON_PREFIX:
@@ -5661,6 +5662,18 @@ static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     (void) prefix;
     fprintf(out, "xrt_span_as_bytes_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ")");
+}
+
+static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    fprintf(out, "xrt_span_copy_checked_raw(");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ", ");
+    emit_span_ref_expr(out, v->args[1]);
     fprintf(out, ")");
 }
 

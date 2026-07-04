@@ -1,0 +1,4 @@
+fn copy_words(dst: Span<uint32>, src: Span<uint32>) -> int {
+    let copied: Span<uint32> = dst[1:3].copyFrom(src)
+    return copied.length
+}

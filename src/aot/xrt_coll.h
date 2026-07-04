@@ -644,6 +644,30 @@ static inline xr_span_t xrt_span_as_bytes_checked_raw(xr_span_t span) {
     return out;
 }
 
+static inline xr_span_t xrt_span_copy_checked_raw(xr_span_t dst, xr_span_t src) {
+    if (dst.elem_type == XR_ELEM_ANY || dst.elem_type >= XR_ELEM_COUNT || dst.elem_size == 0)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.copyFrom(src) receiver must be POD Span");
+    if (src.elem_type == XR_ELEM_ANY || src.elem_type >= XR_ELEM_COUNT || src.elem_size == 0)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.copyFrom(src) source must be POD Span");
+    if (dst.elem_type != src.elem_type || dst.elem_size != src.elem_size)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.copyFrom(src) element type mismatch");
+    if (xrt_span_is_readonly(dst))
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+    if (dst.length < 0 || src.length < 0 || dst.length > INT64_MAX / (int64_t) dst.elem_size ||
+        src.length > INT64_MAX / (int64_t) src.elem_size)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.copyFrom(src) byte length overflow");
+    int64_t dst_bytes = dst.length * (int64_t) dst.elem_size;
+    int64_t src_bytes = src.length * (int64_t) src.elem_size;
+    if (src_bytes > dst_bytes)
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.copyFrom(src) range out of bounds");
+    if (src_bytes > 0) {
+        if (!dst.data || !src.data)
+            xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.copyFrom(src) range out of bounds");
+        memmove(dst.data, src.data, (size_t) src_bytes);
+    }
+    return dst;
+}
+
 static inline xr_span_t xrt_span_reinterpret_checked_raw(xr_span_t span, uint8_t elem_type,
                                                          uint8_t elem_size, uint8_t elem_tid) {
     if (elem_type == XR_ELEM_ANY || elem_type >= XR_ELEM_COUNT || elem_size == 0)

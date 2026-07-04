@@ -803,6 +803,12 @@
   :vm-bytecode (driver xi_emit_span_as_bytes)
   :aot-c (driver xicgen_span_as_bytes))
 
+(lower xi.span.copy
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_span_copy)
+  :aot-c (driver xicgen_span_copy))
+
 (lower xi.span.reinterpret
   :match ()
   :required-targets (vm-bytecode aot-c)

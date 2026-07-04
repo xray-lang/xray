@@ -446,6 +446,10 @@ XR_FUNC void xi_emit_span_as_bytes(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_SPAN_AS_BYTES, dst, src, slot_reg));
 }
 
+XR_FUNC void xi_emit_span_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_window_op(ctx, v, dst, OP_SPAN_COPY, 2);
+}
+
 XR_FUNC void xi_emit_span_reinterpret(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs != 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
