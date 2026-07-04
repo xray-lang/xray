@@ -191,6 +191,7 @@
     _(BYTES_SPAN_COMMON_PREFIX, FMT_A, KOP_A_USE, "R[A] = R[A].commonPrefix(R[A+1])")              \
     _(BYTES_SPAN_REPEAT, FMT_A, KOP_A_INOUT, "R[A].repeatFrom(R[A+1], R[A+2], R[A+3])")            \
     _(SPAN_AS_BYTES, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].asBytes(), C=slot")                        \
+    _(SPAN_FILL, FMT_A, KOP_A_INOUT, "R[A].fill(R[A+1])")                                          \
     _(SPAN_COPY, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1])")                                      \
     _(SPAN_COMPARE, FMT_A, KOP_A_USE, "R[A] = R[A].compare(R[A+1])")                               \
     _(SPAN_REINTERPRET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].reinterpret<T>(), C=slot/meta")         \

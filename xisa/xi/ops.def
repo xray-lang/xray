@@ -596,6 +596,16 @@
   :observable (span-as-bytes)
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.span.fill
+  :class memory-write
+  :arity 2
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (side-effect may-throw memory-write)
+  :requires (span pod bounds)
+  :observable (span-fill)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.span.copy
   :class memory-write
   :arity 2

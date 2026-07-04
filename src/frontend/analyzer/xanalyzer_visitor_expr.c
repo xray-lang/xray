@@ -287,6 +287,13 @@ static XrType *xa_span_method_type(XaInferContext *ctx, XrType *receiver, const 
         XrVMRuntime *X = ctx->analyzer->isolate;
         return xr_type_new_function(X, NULL, 0, xr_type_new_bytespan(X), false);
     }
+    if (strcmp(name, "fill") == 0) {
+        if (!xa_type_is_pod_span_elem(receiver->container.element_type))
+            return NULL;
+        XrVMRuntime *X = ctx->analyzer->isolate;
+        XrType *params[1] = {receiver->container.element_type};
+        return xr_type_new_function(X, params, 1, receiver, false);
+    }
     if (strcmp(name, "copyFrom") == 0) {
         if (!xa_type_is_pod_span_elem(receiver->container.element_type))
             return NULL;

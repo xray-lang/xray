@@ -1216,6 +1216,7 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
         case XI_BYTES_SPAN_FILL:
         case XI_BYTES_SPAN_REPEAT:
         case XI_SPAN_AS_BYTES:
+        case XI_SPAN_FILL:
         case XI_SPAN_REINTERPRET:
         case XI_ARRAY_DATA_PTR:
         case XI_BYTES_COPY_WITHIN:

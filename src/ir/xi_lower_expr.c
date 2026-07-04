@@ -3296,6 +3296,20 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
 
         if (recv->type && XR_TYPE_IS_SPAN(recv->type) && ma->name &&
+            strcmp(ma->name, "fill") == 0 && n == 1 && !xi_type_is_bytes(recv->type)) {
+            struct XrType *elem = recv->type->container.element_type;
+            if (xi_type_is_pod_span_elem(elem)) {
+                XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_FILL, recv->type, 2);
+                if (!v)
+                    return NULL;
+                v->args[0] = recv;
+                v->args[1] = arg_vals[0];
+                v->line = (uint32_t) node->line;
+                return v;
+            }
+        }
+
+        if (recv->type && XR_TYPE_IS_SPAN(recv->type) && ma->name &&
             strcmp(ma->name, "copyFrom") == 0 && n == 1 && !xi_type_is_bytes(recv->type)) {
             struct XrType *elem = recv->type->container.element_type;
             if (xi_type_is_pod_span_elem(elem)) {

@@ -113,6 +113,7 @@
     X(BYTES_SPAN_COMMON_PREFIX, "xi.bytes.span.common.prefix", xicgen_bytes_span_common_prefix) \
     X(BYTES_SPAN_REPEAT, "xi.bytes.span.repeat", xicgen_bytes_span_repeat) \
     X(SPAN_AS_BYTES, "xi.span.as.bytes", xicgen_span_as_bytes) \
+    X(SPAN_FILL, "xi.span.fill", xicgen_span_fill) \
     X(SPAN_COPY, "xi.span.copy", xicgen_span_copy) \
     X(SPAN_COMPARE, "xi.span.compare", xicgen_span_compare) \
     X(SPAN_REINTERPRET, "xi.span.reinterpret", xicgen_span_reinterpret) \

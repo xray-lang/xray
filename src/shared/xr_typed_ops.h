@@ -117,6 +117,105 @@ static inline bool xr_typed_set(void *data, int32_t index, XrValue value, uint8_
     }
 }
 
+/* Fill a typed buffer with one boxed value. Returns false when the element
+ * type cannot store the value or the buffer metadata is invalid. */
+static inline bool xr_typed_fill(void *data, int64_t length, XrValue value, uint8_t elem_type) {
+    if (length < 0)
+        return false;
+    if (length == 0)
+        return true;
+    if (!data)
+        return false;
+    switch (elem_type) {
+        case XR_ELEM_ANY: {
+            XrValue *dst = (XrValue *) data;
+            for (int64_t i = 0; i < length; i++)
+                dst[i] = value;
+            return true;
+        }
+        case XR_ELEM_I8:
+            memset(data, (int8_t) xr_value_to_int64_coerce(value), (size_t) length);
+            return true;
+        case XR_ELEM_U8:
+            memset(data, (uint8_t) xr_value_to_int64_coerce(value), (size_t) length);
+            return true;
+        case XR_ELEM_BOOL: {
+            bool falsy = XR_IS_FALSE(value) || XR_IS_NULL(value) ||
+                         (XR_IS_INT(value) && XR_TO_INT(value) == 0) ||
+                         (XR_IS_FLOAT(value) && XR_TO_FLOAT(value) == 0.0);
+            memset(data, falsy ? 0 : 1, (size_t) length);
+            return true;
+        }
+        case XR_ELEM_I16: {
+            int16_t fill = (int16_t) xr_value_to_int64_coerce(value);
+            int16_t *dst = (int16_t *) data;
+            for (int64_t i = 0; i < length; i++)
+                dst[i] = fill;
+            return true;
+        }
+        case XR_ELEM_U16: {
+            uint16_t fill = (uint16_t) xr_value_to_int64_coerce(value);
+            uint16_t *dst = (uint16_t *) data;
+            for (int64_t i = 0; i < length; i++)
+                dst[i] = fill;
+            return true;
+        }
+        case XR_ELEM_I32: {
+            int32_t fill = (int32_t) xr_value_to_int64_coerce(value);
+            int32_t *dst = (int32_t *) data;
+            for (int64_t i = 0; i < length; i++)
+                dst[i] = fill;
+            return true;
+        }
+        case XR_ELEM_U32: {
+            uint32_t fill = (uint32_t) xr_value_to_int64_coerce(value);
+            uint32_t *dst = (uint32_t *) data;
+            for (int64_t i = 0; i < length; i++)
+                dst[i] = fill;
+            return true;
+        }
+        case XR_ELEM_I64: {
+            int64_t fill = xr_value_to_int64_coerce(value);
+            int64_t *dst = (int64_t *) data;
+            for (int64_t i = 0; i < length; i++)
+                dst[i] = fill;
+            return true;
+        }
+        case XR_ELEM_U64: {
+            uint64_t fill = (uint64_t) xr_value_to_int64_coerce(value);
+            uint64_t *dst = (uint64_t *) data;
+            for (int64_t i = 0; i < length; i++)
+                dst[i] = fill;
+            return true;
+        }
+        case XR_ELEM_F32: {
+            float fill = (float) xr_value_to_f64_coerce(value);
+            float *dst = (float *) data;
+            for (int64_t i = 0; i < length; i++)
+                dst[i] = fill;
+            return true;
+        }
+        case XR_ELEM_F64: {
+            double fill = xr_value_to_f64_coerce(value);
+            double *dst = (double *) data;
+            for (int64_t i = 0; i < length; i++)
+                dst[i] = fill;
+            return true;
+        }
+        case XR_ELEM_CHAR: {
+            if (!XR_IS_CHAR(value))
+                return false;
+            uint32_t fill = XR_TO_CHAR(value);
+            uint32_t *dst = (uint32_t *) data;
+            for (int64_t i = 0; i < length; i++)
+                dst[i] = fill;
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
 /* Canonical scalar bit patterns for typed hash/equality users.
  * This is deliberately storage-shape only: callers keep their own hash,
  * allocation, and error policy. */

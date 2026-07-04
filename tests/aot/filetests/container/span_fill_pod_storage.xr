@@ -1,0 +1,9 @@
+fn fill_words(dst: Span<uint32>, value: uint32) -> int {
+    let filled: Span<uint32> = dst.fill(value)
+    return filled.length
+}
+
+fn zero_words(dst: Span<uint32>) -> int {
+    dst.fill(0)
+    return dst.length
+}

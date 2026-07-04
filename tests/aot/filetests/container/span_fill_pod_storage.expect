@@ -1,0 +1,5 @@
+contains=function 1 name=fill_words module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
+contains=function 2 name=zero_words module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
+c_contains=for (int64_t _i = 0; _i < _s.length; _i++)
+c_contains=memset(_s.data, 0,
+c_not_contains=xrt_array_fill_value(
