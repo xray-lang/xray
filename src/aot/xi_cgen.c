@@ -5354,12 +5354,9 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
             fprintf(out, "(_cl");
             for (uint16_t i = 0; i < boxed_total; i++) {
                 fprintf(out, ", ");
-                XrRep param_rep = cg_func_param_abi_rep(ctx, f, i);
-                const XrType *param_type = f->params && f->params[i] ? f->params[i]->type : NULL;
-                const char *param_suffix =
-                    emit_conversion_prefix(out, param_type, XR_REP_TAGGED, param_rep);
-                fprintf(out, "p%u", i);
-                emit_conversion_suffix(out, param_suffix);
+                char param_expr[32];
+                snprintf(param_expr, sizeof(param_expr), "p%u", i);
+                emit_boxed_value_as_func_param_abi(ctx, out, f, i, param_expr);
             }
             fprintf(out, ")");
             if (ret_is_aggregate)

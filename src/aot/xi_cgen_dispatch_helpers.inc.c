@@ -3265,6 +3265,8 @@ static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *cu
         return true;
     if (cg_array_call_is_unchecked_bytes_trusted_nothrow(ctx, current, v))
         return true;
+    if (cg_array_call_is_bytes_append_trusted_nothrow(ctx, current, v))
+        return true;
     if (cg_array_call_is_typed_fill_trusted_nothrow(ctx, current, v))
         return true;
     if (cg_array_builtin_call_is_trusted_nothrow(ctx, current, v))
@@ -3292,7 +3294,9 @@ static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current
         return false;
     if (xicgen_value_is_nothrow_native_scalar(current, v))
         return true;
-    if (cg_array_bytes_load_le_unchecked_trusted_nothrow(ctx, current, v))
+    if (cg_array_bytes_load_trusted_nothrow(ctx, current, v))
+        return true;
+    if (cg_span_common_prefix_trusted_nothrow(ctx, v))
         return true;
     return xicgen_call_is_nothrow_direct_depth(ctx, current, v, depth);
 }
@@ -6511,6 +6515,8 @@ static const XiValue *xicgen_find_par_for_unsupported_call_value(XiCgenCtx *ctx,
         return NULL;
     if (cg_array_call_is_unchecked_bytes_trusted_nothrow(ctx, current, call))
         return NULL;
+    if (cg_array_call_is_bytes_append_trusted_nothrow(ctx, current, call))
+        return NULL;
     if (cg_array_call_is_typed_fill_trusted_nothrow(ctx, current, call))
         return NULL;
     if (cg_array_builtin_call_is_trusted_nothrow(ctx, current, call))
@@ -6571,15 +6577,19 @@ static const XiValue *xicgen_find_par_for_unsupported_body_value_depth(XiCgenCtx
                 continue;
             if (cg_div_mod_is_trusted_nothrow(body, value))
                 continue;
-            if (cg_array_bytes_load_le_unchecked_trusted_nothrow(ctx, body, value))
+            if (cg_array_bytes_load_trusted_nothrow(ctx, body, value))
                 continue;
             if (cg_array_builtin_call_is_trusted_nothrow(ctx, body, value))
                 continue;
             if (xicgen_atomic_err_check_after_direct_nothrow(value))
                 continue;
-            if (cg_array_err_check_after_bytes_load_le_unchecked_trusted(ctx, body, value))
+            if (xicgen_err_check_after_proven_nothrow(ctx, body, value))
+                continue;
+            if (cg_array_err_check_after_bytes_load_trusted(ctx, body, value))
                 continue;
             if (cg_array_err_check_after_unchecked_bytes_trusted(ctx, body, value))
+                continue;
+            if (cg_array_err_check_after_bytes_append_trusted(ctx, body, value))
                 continue;
             if (cg_array_err_check_after_typed_fill_trusted(ctx, body, value))
                 continue;

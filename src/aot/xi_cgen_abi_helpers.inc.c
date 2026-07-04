@@ -66,6 +66,20 @@ static bool cg_value_rep_is_span_aggregate(XaotValueRep rep) {
     return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_SPAN) != 0;
 }
 
+static bool cg_type_is_byte_span(const XrType *type) {
+    const XrType *elem;
+    if (!type || type->kind != XR_KIND_SPAN || !type->container.element_type)
+        return false;
+    elem = type->container.element_type;
+    return elem->kind == XR_KIND_INT && elem->native_width == XR_NATIVE_U8;
+}
+
+static const XrType *cg_func_param_type(const XiFunc *f, uint16_t arg_index) {
+    if (!f || arg_index >= f->nparams || !f->params || !f->params[arg_index])
+        return NULL;
+    return f->params[arg_index]->type;
+}
+
 static bool cg_value_plan_is_adt_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     const XaotValuePlan *plan = cg_value_plan(ctx, v);
     return plan && cg_value_rep_is_adt_aggregate(plan->rep);
@@ -438,6 +452,37 @@ static void emit_conversion_suffix(FILE *out, const char *suffix) {
         fprintf(out, "%s", suffix);
 }
 
+static XaotValueRep cg_func_param_abi_value_rep(XiCgenCtx *ctx, const XiFunc *f,
+                                                uint16_t param_idx) {
+    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
+    if (!plan || param_idx >= plan->abi.nparams || !plan->abi.params)
+        return xaot_value_rep_for_type(cg_func_param_type(f, param_idx));
+    return xaot_abi_slot_value_rep(&plan->abi.params[param_idx]);
+}
+
+static bool cg_func_param_abi_is_byte_span_aggregate(XiCgenCtx *ctx, const XiFunc *f,
+                                                     uint16_t param_idx) {
+    XaotValueRep rep = cg_func_param_abi_value_rep(ctx, f, param_idx);
+    return cg_value_rep_is_span_aggregate(rep) &&
+           cg_type_is_byte_span(cg_func_param_type(f, param_idx));
+}
+
+static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                               uint16_t param_idx, const char *boxed_expr) {
+    const XrType *param_type = cg_func_param_type(f, param_idx);
+    if (cg_func_param_abi_is_byte_span_aggregate(ctx, f, param_idx)) {
+        fprintf(out,
+                "xrt_byte_span_from_value(%s, \"ByteSpan argument expects Bytes or ByteSpan\")",
+                boxed_expr ? boxed_expr : "XR_NULL_VAL");
+        return;
+    }
+
+    XrRep param_rep = cg_func_param_abi_rep(ctx, f, param_idx);
+    const char *param_suffix = emit_conversion_prefix(out, param_type, XR_REP_TAGGED, param_rep);
+    fprintf(out, "%s", boxed_expr ? boxed_expr : "XR_NULL_VAL");
+    emit_conversion_suffix(out, param_suffix);
+}
+
 static bool cg_value_box_inner_native_rep(XiCgenCtx *ctx, const XiValue *v, XrRep *out_rep) {
     if (!v || v->op != XI_BOX || v->nargs < 1 || !v->args[0])
         return false;
@@ -630,6 +675,14 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     if (slot_rep.kind == XAOT_VALUE_AGGREGATE) {
         if (arg_plan && xaot_value_reps_equal(arg_plan->rep, slot_rep)) {
             emit_vref(out, arg);
+            return;
+        }
+        if (arg_plan && arg_plan->rep.kind != XAOT_VALUE_AGGREGATE &&
+            cg_value_rep_is_span_aggregate(slot_rep) &&
+            cg_type_is_byte_span(cg_func_param_type(target, arg_index))) {
+            fprintf(out, "xrt_byte_span_from_value(");
+            emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
+            fprintf(out, ", \"ByteSpan argument expects Bytes or ByteSpan\")");
             return;
         }
         fprintf(stderr,
