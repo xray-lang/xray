@@ -283,6 +283,173 @@ XR_FUNC bool xa_expr_has_stable_borrow_owner(AstNode *expr) {
     return false;
 }
 
+XR_FUNC bool xa_type_can_own_span_view(XrType *type) {
+    if (!type || XR_TYPE_IS_UNKNOWN(type) || XR_TYPE_IS_NULL(type))
+        return false;
+    if (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_STRING(type))
+        return true;
+    return xr_type_is_named_class(type, "Buffer");
+}
+
+static XaSymbol *xa_root_variable_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_VARIABLE:
+                return expr->as.variable.name
+                           ? xa_lookup_visible_symbol(ctx, expr->as.variable.name)
+                           : NULL;
+            case AST_MEMBER_ACCESS:
+                expr = expr->as.member_access.object;
+                break;
+            case AST_INDEX_GET:
+                expr = expr->as.index_get.array;
+                break;
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            default:
+                return NULL;
+        }
+    }
+    return NULL;
+}
+
+static XaActiveSpanBorrow *xa_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol *view_sym) {
+    if (!ctx || !view_sym)
+        return NULL;
+    for (XaActiveSpanBorrow *b = ctx->active_span_borrows; b; b = b->next) {
+        if (b->view_symbol == view_sym)
+            return b;
+    }
+    return NULL;
+}
+
+XR_FUNC XaSymbol *xa_span_borrow_owner_receiver_symbol(XaInferContext *ctx, AstNode *expr,
+                                                       XrType *receiver_type) {
+    if (!ctx || !xa_type_can_own_span_view(receiver_type))
+        return NULL;
+    return xa_root_variable_symbol_for_expr(ctx, expr);
+}
+
+XR_FUNC XaSymbol *xa_span_borrow_owner_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
+    while (ctx && expr) {
+        switch (expr->type) {
+            case AST_VARIABLE: {
+                XaSymbol *sym = expr->as.variable.name
+                                    ? xa_lookup_visible_symbol(ctx, expr->as.variable.name)
+                                    : NULL;
+                XaActiveSpanBorrow *active = xa_active_span_borrow_for_view(ctx, sym);
+                if (active)
+                    return active->owner_symbol;
+                XrType *type = sym ? xa_analyzer_get_type(ctx->analyzer, sym) : NULL;
+                return xa_type_can_own_span_view(type) ? sym : NULL;
+            }
+            case AST_MEMBER_ACCESS:
+                expr = expr->as.member_access.object;
+                break;
+            case AST_INDEX_GET:
+                expr = expr->as.index_get.array;
+                break;
+            case AST_SLICE_EXPR:
+                expr = expr->as.slice_expr.source;
+                break;
+            case AST_OPTIONAL_CHAIN:
+                expr = expr->as.optional_chain.object;
+                break;
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            case AST_CALL_EXPR:
+                if (!xa_call_expr_is_borrowed_view(expr))
+                    return NULL;
+                expr = expr->as.call_expr.callee->as.member_access.object;
+                break;
+            default:
+                return NULL;
+        }
+    }
+    return NULL;
+}
+
+XR_FUNC void xa_clear_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol *view_sym) {
+    if (!ctx || !view_sym)
+        return;
+    XaActiveSpanBorrow **link = &ctx->active_span_borrows;
+    while (*link) {
+        XaActiveSpanBorrow *cur = *link;
+        if (cur->view_symbol == view_sym) {
+            *link = cur->next;
+            xr_free(cur);
+            continue;
+        }
+        link = &cur->next;
+    }
+}
+
+XR_FUNC void xa_clear_active_span_borrows_in_scope(XaInferContext *ctx, XaScope *scope) {
+    if (!ctx || !scope)
+        return;
+    XaActiveSpanBorrow **link = &ctx->active_span_borrows;
+    while (*link) {
+        XaActiveSpanBorrow *cur = *link;
+        if (cur->view_scope == scope) {
+            *link = cur->next;
+            xr_free(cur);
+            continue;
+        }
+        link = &cur->next;
+    }
+}
+
+XR_FUNC void xa_register_active_span_borrow(XaInferContext *ctx, XaSymbol *view_sym, AstNode *value,
+                                            XrType *value_type) {
+    if (!ctx || !view_sym)
+        return;
+    xa_clear_active_span_borrow_for_view(ctx, view_sym);
+    if (!value || !xa_type_contains_span_view(value_type))
+        return;
+    XaSymbol *owner = xa_span_borrow_owner_symbol_for_expr(ctx, value);
+    if (!owner || owner == view_sym)
+        return;
+    XaActiveSpanBorrow *borrow = xr_calloc(1, sizeof(XaActiveSpanBorrow));
+    if (!borrow)
+        return;
+    borrow->owner_symbol = owner;
+    borrow->view_symbol = view_sym;
+    borrow->view_scope = view_sym->scope;
+    borrow->next = ctx->active_span_borrows;
+    ctx->active_span_borrows = borrow;
+}
+
+XR_FUNC void xa_check_active_span_borrow_owner_mutation(XaInferContext *ctx, AstNode *loc_node,
+                                                        XaSymbol *owner_sym,
+                                                        const char *operation) {
+    if (!ctx || !ctx->analyzer || !owner_sym || !loc_node)
+        return;
+    for (XaActiveSpanBorrow *b = ctx->active_span_borrows; b; b = b->next) {
+        if (b->owner_symbol != owner_sym)
+            continue;
+        XrLocation loc = {
+            .file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
+        char msg[256];
+        snprintf(
+            msg, sizeof(msg),
+            "cannot mutate owner '%s' while Span view '%s' is active; end the view scope before %s",
+            owner_sym->name ? owner_sym->name : "?",
+            b->view_symbol && b->view_symbol->name ? b->view_symbol->name : "?",
+            operation ? operation : "mutating the owner");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+        return;
+    }
+}
+
 XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, XrType *value_type,
                                         const char *escape_context) {
     if (!ctx || !ctx->analyzer || !loc_node || !xa_type_contains_span_view(value_type))
@@ -576,6 +743,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
 
     links->type = var_type;
     xa_update_borrowed_alias_root(ctx, sym, var->initializer, var_type);
+    xa_register_active_span_borrow(ctx, sym, var->initializer, var_type);
 
     /* Shared mutable runtime primitives require an immutable binding. */
     if (var_type && var_type->kind != XR_KIND_CHANNEL &&
@@ -672,6 +840,8 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType *var_type = xa_analyzer_get_type(ctx->analyzer, sym);
+    if (xa_type_can_own_span_view(var_type))
+        xa_check_active_span_borrow_owner_mutation(ctx, node, sym, "reassigning the owner");
 
     // Bidirectional inference: propagate target type to value expression
     XrType *saved_expected = ctx->expected_type;
@@ -687,6 +857,7 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
         links->assign_count++;
     }
     xa_update_borrowed_alias_root(ctx, sym, assign->value, value_type);
+    xa_register_active_span_borrow(ctx, sym, assign->value, value_type);
 
     xa_assign_check_type(ctx, node, var_type, value_type, assign->name, NULL);
 
@@ -838,6 +1009,7 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
         xa_visit_infer_stmt(ctx, for_stmt->increment);
     }
 
+    xa_clear_active_span_borrows_in_scope(ctx, ctx->analyzer->current_scope);
     xa_analyzer_exit_scope(ctx->analyzer);
 }
 
@@ -958,5 +1130,6 @@ void xa_visit_block_stmt(XaInferContext *ctx, AstNode *node) {
         xa_visit_infer_stmt(ctx, block->statements[i]);
     }
 
+    xa_clear_active_span_borrows_in_scope(ctx, ctx->analyzer->current_scope);
     xa_analyzer_exit_scope(ctx->analyzer);
 }

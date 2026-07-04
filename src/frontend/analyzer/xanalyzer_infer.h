@@ -27,6 +27,13 @@ typedef struct XaLoopScope {
     struct XaLoopScope *prev;
 } XaLoopScope;
 
+typedef struct XaActiveSpanBorrow {
+    struct XaSymbol *owner_symbol;
+    struct XaSymbol *view_symbol;
+    struct XaScope *view_scope;
+    struct XaActiveSpanBorrow *next;
+} XaActiveSpanBorrow;
+
 // Inference context (for a single file/function)
 typedef struct XaInferContext {
     XaAnalyzer *analyzer;
@@ -82,6 +89,10 @@ typedef struct XaInferContext {
     // scope are restricted so the future AOT lowering never inherits a data race.
     bool in_parallel_for_body;
     XaScope *parallel_for_scope;
+
+    // Active local Span/ByteSpan views keyed by the owning mutable container.
+    // Used to reject owner grow/free mutations while borrowed views are live.
+    XaActiveSpanBorrow *active_span_borrows;
 } XaInferContext;
 
 // API: Context lifecycle

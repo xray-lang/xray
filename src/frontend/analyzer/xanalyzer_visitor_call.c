@@ -1518,6 +1518,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_check_span_borrow_source_stable(ctx, call->callee, ma->object, method_name);
         }
 
+        if (method_name && xa_method_name_mutates_receiver(method_name)) {
+            XaSymbol *owner =
+                xa_span_borrow_owner_receiver_symbol(ctx, ma->object, callee_obj_type);
+            if (owner)
+                xa_check_active_span_borrow_owner_mutation(ctx, call->callee, owner, method_name);
+        }
+
         // Enforce private/protected visibility on user-class method calls.
         if (method_name && callee_obj_type && XR_TYPE_IS_INSTANCE(callee_obj_type) &&
             callee_obj_type->instance.class_name) {
