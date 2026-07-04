@@ -2019,16 +2019,40 @@ static bool cg_array_call_is_unchecked_bytes_trusted_nothrow(XiCgenCtx *ctx, con
     return false;
 }
 
-static bool cg_array_bytes_load_le_unchecked_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
-                                                             const XiValue *value) {
+static bool cg_array_call_is_bytes_append_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
+                                                          const XiValue *call) {
+    const XiValue *v = cg_unwrap_identity_value(call);
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || !v->aux)
+        return false;
+
+    const char *method = (const char *) v->aux;
+    CgArrayElemInfo dst_info;
+    return strcmp(method, "appendFrom") == 0 && v->nargs == 2 &&
+           cg_array_value_u8_unchecked_info(ctx, f, v->args[0], &dst_info,
+                                            CG_ARRAY_STORAGE_MUTABLE) &&
+           cg_span_value_u8_info(ctx, v->args[1], NULL);
+}
+
+static bool cg_array_bytes_load_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
+                                                const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
-    if (!v || v->nargs != 2 || (v->aux_int & 1) == 0)
+    if (!v || v->nargs != 3)
         return false;
 
     switch ((XiOp) v->op) {
+        case XI_BYTES_LOAD_U16:
+        case XI_BYTES_LOAD_U32:
+        case XI_BYTES_LOAD_U64:
+            break;
         default:
             return false;
     }
+
+    if (cg_span_value_u8_info(ctx, v->args[0], NULL))
+        return true;
+
+    if ((v->aux_int & 1) == 0)
+        return false;
 
     CgArrayElemInfo info;
     return (cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_READ) &&
@@ -2036,13 +2060,19 @@ static bool cg_array_bytes_load_le_unchecked_trusted_nothrow(XiCgenCtx *ctx, con
            cg_span_value_u8_info(ctx, v->args[0], NULL);
 }
 
-static bool cg_array_err_check_after_bytes_load_le_unchecked_trusted(XiCgenCtx *ctx,
-                                                                     const XiFunc *f,
-                                                                     const XiValue *check) {
+static bool cg_array_err_check_after_bytes_load_trusted(XiCgenCtx *ctx, const XiFunc *f,
+                                                        const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
-    return cg_array_bytes_load_le_unchecked_trusted_nothrow(
-        ctx, f, cg_class_native_prev_error_source_value(check));
+    return cg_array_bytes_load_trusted_nothrow(ctx, f,
+                                               cg_class_native_prev_error_source_value(check));
+}
+
+static bool cg_span_common_prefix_trusted_nothrow(XiCgenCtx *ctx, const XiValue *value) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    return v && v->op == XI_BYTES_SPAN_COMMON_PREFIX && v->nargs == 2 &&
+           cg_span_value_u8_info(ctx, v->args[0], NULL) &&
+           cg_span_value_u8_info(ctx, v->args[1], NULL);
 }
 
 static bool cg_array_err_check_after_unchecked_bytes_trusted(XiCgenCtx *ctx, const XiFunc *f,
@@ -2050,6 +2080,14 @@ static bool cg_array_err_check_after_unchecked_bytes_trusted(XiCgenCtx *ctx, con
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
     return cg_array_call_is_unchecked_bytes_trusted_nothrow(
+        ctx, f, cg_class_native_prev_error_source_value(check));
+}
+
+static bool cg_array_err_check_after_bytes_append_trusted(XiCgenCtx *ctx, const XiFunc *f,
+                                                          const XiValue *check) {
+    if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
+        return false;
+    return cg_array_call_is_bytes_append_trusted_nothrow(
         ctx, f, cg_class_native_prev_error_source_value(check));
 }
 

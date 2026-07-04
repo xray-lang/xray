@@ -2243,6 +2243,176 @@ TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
     xi_func_free(ir);
 }
 
+TEST(cgen_parallel_for_allows_prepared_dynamic_bytes_append_helper) {
+    const char *src = "enum FastResult<T> {\n"
+                      "    Ok(T),\n"
+                      "    Err(int)\n"
+                      "}\n"
+                      "fn appendRange(src: in ByteSpan, out: Bytes, start: int, len: int) -> "
+                      "FastResult<int> {\n"
+                      "    let mark = out.length\n"
+                      "    if (start < 0 || len < 0 || start + len > src.length || "
+                      "out.capacity < mark + len) {\n"
+                      "        return FastResult.Err(-1)\n"
+                      "    }\n"
+                      "    out.appendFrom(src[start:start + len])\n"
+                      "    return FastResult.Ok(len)\n"
+                      "}\n"
+                      "fn run(n: int) {\n"
+                      "    let seed = Bytes.withCapacity(4)\n"
+                      "    unsafe {\n"
+                      "        seed.pushUnchecked(1)\n"
+                      "        seed.pushUnchecked(2)\n"
+                      "    }\n"
+                      "    shared const src = seed\n"
+                      "    shared const outs: Array<Bytes> = []\n"
+                      "    outs.push(Bytes.withCapacity(8))\n"
+                      "    parallel for i in 0..n workers 2 {\n"
+                      "        let out = outs.getUnchecked(0)\n"
+                      "        out.resize(0)\n"
+                      "        let result = appendRange(src, out, 0, src.length)\n"
+                      "        match (result) {\n"
+                      "            FastResult.Ok(written) -> {\n"
+                      "                assert(written == src.length)\n"
+                      "            }\n"
+                      "            FastResult.Err(code) -> {\n"
+                      "                assert(code == 0)\n"
+                      "            }\n"
+                      "        }\n"
+                      "    }\n"
+                      "}\n"
+                      "run(1)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "parallel for AOT body should allow prepared dynamic Bytes append helper");
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "dynamic prepared helper body should still use the AOT runtime executor");
+    assert(contains(code, "xrt_bytes_append_from_span_raw(") &&
+           "dynamic prepared helper should keep the raw Bytes+ByteSpan append lowering");
+    assert(!contains(code, "xrt_method_1(") &&
+           "dynamic appendFrom must not fall back to method dispatch");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_allows_prepared_bytes_load_helper) {
+    const char *src = "enum FastResult<T> {\n"
+                      "    Ok(T),\n"
+                      "    Err(int)\n"
+                      "}\n"
+                      "fn readU32(src: in ByteSpan, pos: int) -> FastResult<int> {\n"
+                      "    if (pos < 0 || pos + 4 > src.length) {\n"
+                      "        return FastResult.Err(-1)\n"
+                      "    }\n"
+                      "    let value: uint32 = src.load<uint32>(pos, Endian.LE)\n"
+                      "    return FastResult.Ok(int(value))\n"
+                      "}\n"
+                      "fn run(n: int) {\n"
+                      "    let seed = Bytes.withCapacity(4)\n"
+                      "    unsafe {\n"
+                      "        seed.pushUnchecked(1)\n"
+                      "        seed.pushUnchecked(2)\n"
+                      "        seed.pushUnchecked(3)\n"
+                      "        seed.pushUnchecked(4)\n"
+                      "    }\n"
+                      "    shared const src = seed\n"
+                      "    parallel for i in 0..n workers 2 {\n"
+                      "        let result = readU32(src, 0)\n"
+                      "        match (result) {\n"
+                      "            FastResult.Ok(value) -> {\n"
+                      "                assert(value > 0)\n"
+                      "            }\n"
+                      "            FastResult.Err(code) -> {\n"
+                      "                assert(code == 0)\n"
+                      "            }\n"
+                      "        }\n"
+                      "    }\n"
+                      "}\n"
+                      "run(1)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "parallel for AOT body should allow prepared ByteSpan typed loads");
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "prepared load helper body should still use the AOT runtime executor");
+    assert(contains(code, "xrt_span_bytes_load_u32_checked_raw(") &&
+           "prepared load helper should keep the raw ByteSpan typed load lowering");
+    assert(!contains(code, "BYTES_LOAD_U32") &&
+           "prepared ByteSpan load must not be rejected by parallel body validation");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_parallel_for_allows_prepared_common_prefix_helper) {
+    const char *src = "enum FastResult<T> {\n"
+                      "    Ok(T),\n"
+                      "    Err(int)\n"
+                      "}\n"
+                      "fn prefix(src: in ByteSpan, left: int, right: int, len: int) -> "
+                      "FastResult<int> {\n"
+                      "    if (left < 0 || right < 0 || len < 0 || left + len > src.length || "
+                      "right + len > src.length) {\n"
+                      "        return FastResult.Err(-1)\n"
+                      "    }\n"
+                      "    return FastResult.Ok(src[left:left + len].commonPrefix(src[right:right "
+                      "+ len]))\n"
+                      "}\n"
+                      "fn run(n: int) {\n"
+                      "    let seed = Bytes.withCapacity(8)\n"
+                      "    unsafe {\n"
+                      "        seed.pushUnchecked(1)\n"
+                      "        seed.pushUnchecked(2)\n"
+                      "        seed.pushUnchecked(3)\n"
+                      "        seed.pushUnchecked(4)\n"
+                      "        seed.pushUnchecked(1)\n"
+                      "        seed.pushUnchecked(2)\n"
+                      "        seed.pushUnchecked(9)\n"
+                      "        seed.pushUnchecked(9)\n"
+                      "    }\n"
+                      "    shared const src = seed\n"
+                      "    parallel for i in 0..n workers 2 {\n"
+                      "        let result = prefix(src, 0, 4, 4)\n"
+                      "        match (result) {\n"
+                      "            FastResult.Ok(value) -> {\n"
+                      "                assert(value == 2)\n"
+                      "            }\n"
+                      "            FastResult.Err(code) -> {\n"
+                      "                assert(code == 0)\n"
+                      "            }\n"
+                      "        }\n"
+                      "    }\n"
+                      "}\n"
+                      "run(1)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+    assert(!had_error && "parallel for AOT body should allow prepared ByteSpan commonPrefix");
+    assert(contains(code, "xr_aot_parallel_for_range_i64(") &&
+           "prepared commonPrefix helper body should still use the AOT runtime executor");
+    assert(contains(code, "xrt_span_bytes_common_prefix_checked_raw(") &&
+           "prepared commonPrefix helper should keep the raw ByteSpan lowering");
+    assert(!contains(code, "BYTES_SPAN_COMMON_PREFIX") &&
+           "prepared commonPrefix must not be rejected by parallel body validation");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_parallel_for_rejects_throwing_helper_body) {
     const char *src = "fn fail(v: int) {\n"
                       "    assert(false)\n"
@@ -2453,6 +2623,76 @@ TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
            "borrowed Bytes.reserve receiver must not force parameter ARC");
 
     printf("  Generated borrowed Bytes reserve fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_direct_call_converts_bytes_to_bytespan_arg) {
+    const char *src = "fn sum(src: in ByteSpan) -> int {\n"
+                      "    let v: uint32 = src.load<uint32>(0, Endian.LE)\n"
+                      "    return int(v)\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    let bytes = Bytes(4)\n"
+                      "    bytes[0] = 1\n"
+                      "    bytes[1] = 2\n"
+                      "    bytes[2] = 3\n"
+                      "    bytes[3] = 4\n"
+                      "    return sum(bytes)\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "direct Bytes -> in ByteSpan calls should generate");
+    assert(contains(code, "xrt_byte_span_from_value(") &&
+           "direct call should convert the Bytes argument to a raw ByteSpan");
+    assert(contains(code, "test_sum_") && "helper should be emitted as a direct call target");
+    assert(!contains(code, "cannot pass non-aggregate") &&
+           "direct call argument ABI should not reject Bytes-to-ByteSpan conversion");
+
+    printf("  Generated direct Bytes-to-ByteSpan argument conversion %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_boxed_adapter_converts_bytespan_arg) {
+    const char *src = "fn apply(f: (ByteSpan) -> int, src: Bytes) -> int {\n"
+                      "    return f(src)\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    let bytes = Bytes(4)\n"
+                      "    bytes[0] = 1\n"
+                      "    bytes[1] = 2\n"
+                      "    bytes[2] = 3\n"
+                      "    bytes[3] = 4\n"
+                      "    return apply(fn(src: ByteSpan) -> int {\n"
+                      "        let v: uint32 = src.load<uint32>(0, Endian.LE)\n"
+                      "        return int(v)\n"
+                      "    }, bytes)\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    XiCgenStats stats = {0};
+    char *code = generate_c_with_status_and_cgen_stats(ir, "test", &had_error, &stats);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "boxed ByteSpan adapter should generate");
+    assert(stats.boxed_adapters >= 1 && "dynamic ByteSpan callback should keep a boxed adapter");
+    assert(contains(code, "xrt_byte_span_from_value(p0") &&
+           "boxed adapter should convert its boxed parameter to a raw ByteSpan");
+    assert(!contains(code, "_cl, p0)") &&
+           "boxed adapter must not pass XrValue directly to a raw ByteSpan ABI slot");
+
+    printf("  Generated boxed ByteSpan adapter conversion %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -5677,6 +5917,45 @@ TEST(cgen_semaphore_methods_use_native_helpers) {
     xi_func_free(ir);
 }
 
+TEST(cgen_sync_blocking_direct_methods_mark_aot_coroutines) {
+    const char *src = "import { CountdownLatch, Semaphore } from sync\n"
+                      "fn worker(sem: Semaphore, latch: CountdownLatch) -> int {\n"
+                      "    if (!sem.acquire()) {\n"
+                      "        return -1\n"
+                      "    }\n"
+                      "    latch.done()\n"
+                      "    return latch.wait() ? 1 : 0\n"
+                      "}\n"
+                      "fn main() {\n"
+                      "    shared const sem: Semaphore = Semaphore(0)\n"
+                      "    shared const latch: CountdownLatch = CountdownLatch(1)\n"
+                      "    let task = go worker(sem, latch)\n"
+                      "    sem.release()\n"
+                      "    print(await task)\n"
+                      "}\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT blocking sync methods should generate as coroutine calls");
+    assert(contains(code, "xr_aot_semaphore_acquire(ctx,") &&
+           "Semaphore.acquire should lower through the coroutine wait helper");
+    assert(contains(code, "xr_aot_countdown_latch_wait(ctx,") &&
+           "CountdownLatch.wait should lower through the coroutine wait helper");
+    assert(contains(code, "xr_aot_countdown_latch_done_i64(ctx,") &&
+           "CountdownLatch.done in the coroutine body should use the native int helper");
+    assert(contains(code, "xr_aot_semaphore_release_i64_sync(") &&
+           "main-thread Semaphore.release should still use the sync native helper");
+    assert(!contains(code, "unsupported AOT method") &&
+           "sync primitive direct calls must not fall through to unsupported method dispatch");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_runtime_managed_types_skip_arc) {
     XrType task_type = {.kind = XR_KIND_INSTANCE};
     XrType channel_type = {.kind = XR_KIND_CHANNEL};
@@ -7652,11 +7931,16 @@ int main(void) {
     run_cgen_parallel_for_allows_atomic_i64_direct_body();
     run_cgen_parallel_for_allows_safe_bytes_append_from_array_slot();
     run_cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper();
+    run_cgen_parallel_for_allows_prepared_dynamic_bytes_append_helper();
+    run_cgen_parallel_for_allows_prepared_bytes_load_helper();
+    run_cgen_parallel_for_allows_prepared_common_prefix_helper();
     run_cgen_parallel_for_rejects_throwing_helper_body();
     run_cgen_typed_array_uses_raw_storage_fast_path();
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();
     run_cgen_bytes_new_low_level_methods_use_raw_memory_helpers();
     run_cgen_borrowed_bytes_param_reserve_skips_arc();
+    run_cgen_direct_call_converts_bytes_to_bytespan_arg();
+    run_cgen_boxed_adapter_converts_bytespan_arg();
     run_cgen_array_data_ptr_unchecked_uses_raw_pointer_path();
     run_cgen_rawptr_parallel_for_capture_keeps_owner_alive();
     run_cgen_rawptr_load_le_unchecked_uses_pointer_helper();
@@ -7725,6 +8009,7 @@ int main(void) {
     run_cgen_event_count_advance_uses_i64_helper();
     run_cgen_countdown_latch_methods_use_native_helpers();
     run_cgen_semaphore_methods_use_native_helpers();
+    run_cgen_sync_blocking_direct_methods_mark_aot_coroutines();
     run_cgen_runtime_managed_types_skip_arc();
     run_cgen_coro_frame_release_uses_aot_arc();
     run_cgen_coro_go_clones_tagged_args();

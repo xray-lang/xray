@@ -33,8 +33,12 @@ XR_FUNC bool xi_op_is_coroutine(uint16_t op) {
 
 /* ========== Concurrency method-call recognizers ========== */
 
+static bool xi_value_is_method_call_like(const XiValue *v) {
+    return v && (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT);
+}
+
 XR_FUNC bool xi_value_is_channel_method_call(const XiValue *v, const char *method, int nargs) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1)
+    if (!xi_value_is_method_call_like(v) || v->nargs < 1)
         return false;
     const char *actual = (const char *) v->aux;
     if (!actual || strcmp(actual, method) != 0)
@@ -50,7 +54,7 @@ XR_FUNC bool xi_value_is_channel_method_call(const XiValue *v, const char *metho
 }
 
 XR_FUNC bool xi_value_is_task_method_call(const XiValue *v, const char *method, int nargs) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !xi_value_type_is_task(v->args[0]))
+    if (!xi_value_is_method_call_like(v) || v->nargs < 1 || !xi_value_type_is_task(v->args[0]))
         return false;
     const char *actual = (const char *) v->aux;
     if (!actual || strcmp(actual, method) != 0)
@@ -59,7 +63,8 @@ XR_FUNC bool xi_value_is_task_method_call(const XiValue *v, const char *method, 
 }
 
 XR_FUNC bool xi_value_is_work_queue_method_call(const XiValue *v, const char *method, int nargs) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !xi_value_type_is_work_queue(v->args[0]))
+    if (!xi_value_is_method_call_like(v) || v->nargs < 1 ||
+        !xi_value_type_is_work_queue(v->args[0]))
         return false;
     const char *actual = (const char *) v->aux;
     if (!actual || strcmp(actual, method) != 0)
@@ -68,7 +73,8 @@ XR_FUNC bool xi_value_is_work_queue_method_call(const XiValue *v, const char *me
 }
 
 XR_FUNC bool xi_value_is_result_group_method_call(const XiValue *v, const char *method, int nargs) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !xi_value_type_is_result_group(v->args[0]))
+    if (!xi_value_is_method_call_like(v) || v->nargs < 1 ||
+        !xi_value_type_is_result_group(v->args[0]))
         return false;
     const char *actual = (const char *) v->aux;
     if (!actual || strcmp(actual, method) != 0)
@@ -78,7 +84,7 @@ XR_FUNC bool xi_value_is_result_group_method_call(const XiValue *v, const char *
 
 XR_FUNC bool xi_value_is_countdown_latch_method_call(const XiValue *v, const char *method,
                                                      int nargs) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 ||
+    if (!xi_value_is_method_call_like(v) || v->nargs < 1 ||
         !xi_value_type_is_countdown_latch(v->args[0]))
         return false;
     const char *actual = (const char *) v->aux;
@@ -88,7 +94,7 @@ XR_FUNC bool xi_value_is_countdown_latch_method_call(const XiValue *v, const cha
 }
 
 XR_FUNC bool xi_value_is_semaphore_method_call(const XiValue *v, const char *method, int nargs) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !xi_value_type_is_semaphore(v->args[0]))
+    if (!xi_value_is_method_call_like(v) || v->nargs < 1 || !xi_value_type_is_semaphore(v->args[0]))
         return false;
     const char *actual = (const char *) v->aux;
     if (!actual || strcmp(actual, method) != 0)
@@ -97,7 +103,8 @@ XR_FUNC bool xi_value_is_semaphore_method_call(const XiValue *v, const char *met
 }
 
 XR_FUNC bool xi_value_is_event_count_method_call(const XiValue *v, const char *method, int nargs) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !xi_value_type_is_event_count(v->args[0]))
+    if (!xi_value_is_method_call_like(v) || v->nargs < 1 ||
+        !xi_value_type_is_event_count(v->args[0]))
         return false;
     const char *actual = (const char *) v->aux;
     if (!actual || strcmp(actual, method) != 0)
@@ -145,7 +152,7 @@ XR_FUNC bool xi_value_is_blocking_event_count_method_call(const XiValue *v) {
 /* A channel send/recv method whose blocking variant requires a coroutine
  * context, also accepting the legacy unknown-typed send/recv shapes. */
 static bool xi_channel_method_may_suspend(const XiValue *v) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1)
+    if (!xi_value_is_method_call_like(v) || v->nargs < 1)
         return false;
     const char *method = (const char *) v->aux;
     if (!method)
@@ -165,7 +172,8 @@ static bool xi_channel_method_may_suspend(const XiValue *v) {
 }
 
 static bool xi_work_queue_method_needs_coro(const XiValue *v) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !xi_value_type_is_work_queue(v->args[0]))
+    if (!xi_value_is_method_call_like(v) || v->nargs < 1 ||
+        !xi_value_type_is_work_queue(v->args[0]))
         return false;
     const char *method = (const char *) v->aux;
     return method && strcmp(method, "pop") == 0;
@@ -195,7 +203,7 @@ static bool xi_event_count_method_needs_coro(const XiValue *v) {
  * analysis never depends on the backend's import-resolution internals. */
 static bool xi_coro_is_time_sleep_call(const XiFunc *f, const XiValue *v,
                                        const XiCoroResolver *resolver) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs != 2)
+    if (!xi_value_is_method_call_like(v) || v->nargs != 2)
         return false;
     const char *method = (const char *) v->aux;
     if (!method || strcmp(method, "sleep") != 0)
@@ -335,7 +343,7 @@ static bool xi_coro_is_channel_recv_value(const XiValue *v) {
         return false;
     if (v->op == XI_CHAN_RECV || v->op == XI_CHAN_TRY_RECV)
         return true;
-    if (v->op != XI_CALL_METHOD || v->nargs < 1 || !xi_value_type_is_channel(v->args[0]))
+    if (!xi_value_is_method_call_like(v) || v->nargs < 1 || !xi_value_type_is_channel(v->args[0]))
         return false;
     const char *method = (const char *) v->aux;
     return method && strcmp(method, "recv") == 0;
@@ -681,6 +689,7 @@ static bool xi_coro_value_from_runtime_bridge(const XiValue *v) {
                 return true;
             return origin->nargs >= 1 && xi_value_type_is_task(origin->args[0]);
         case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
             return origin->nargs >= 1 && (xi_value_type_is_channel(origin->args[0]) ||
                                           xi_value_type_is_task(origin->args[0]));
         default:
