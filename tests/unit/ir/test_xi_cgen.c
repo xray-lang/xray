@@ -8193,7 +8193,7 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
                       "fn task_poll(task: Task<int>) -> TaskResult<int> {\n"
                       "    return task.poll()\n"
                       "}\n"
-                      "const ch = Channel<int>(0)\n"
+                      "shared ch = Channel<int>(0)\n"
                       "var blocked = go wait_for_value(ch)\n"
                       "blocked.cancel()\n"
                       "var cancelled_result = blocked.awaitResult()\n"

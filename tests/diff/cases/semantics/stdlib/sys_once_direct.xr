@@ -3,7 +3,7 @@
 import sys
 
 var counter = 0
-var once = sys.OsOnce()
+shared once = sys.OsOnce()
 
 once.call(() -> { counter = counter + 1 })
 once.call(() -> { counter = counter + 10 })

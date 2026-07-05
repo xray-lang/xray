@@ -53,21 +53,22 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 - 在 `match` 模式中表示**通配符**（见 §6.7）。
 - 在 `for-in` 中可用于忽略键或值：`for (_, v in m) { ... }`。
-- 在解构绑定中可用于忽略位置：`let (a, _) = (1, 2)`。
-- **不能**作为 `let _ = expr`、函数参数名或被引用的变量名；编译器会报"expected variable name"。
+- 在解构绑定中可用于忽略位置：`var (a, _) = (1, 2)`。
+- **不能**作为 `var _ = expr`、函数参数名或被引用的变量名；编译器会报"expected variable name"。
 - 多下划线名（如 `__tmp`）是普通标识符。
 
 ### 1.5 关键字
 
-xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
+xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
 
 #### 1.5.1 声明与流程控制
 
 | 关键字 | 用途 |
 |--|--|
-| `let` | 可变变量声明 |
+| `var` | 可变变量声明 |
 | `const` | 不可变变量声明 |
-| `shared` | 跨协程共享修饰符（与 `const`/`let` 组合） |
+| `shared` | 共享身份绑定（全局堆存储，词法作用域照常） |
+| `comptime` | 强制编译期求值的表达式前缀 |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
 | `yield` | 生成器产值语句 |
@@ -105,7 +106,7 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 
 #### 1.5.5 协程与并发
 
-`go` `await` `select` `defer` `scope` `unsafe`
+`go` `await` `select` `defer` `scope` `unsafe` `parallel`
 
 #### 1.5.6 类型名（保留）
 
@@ -154,7 +155,7 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 - 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
 - 字面量默认类型为 `int`（= `int64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
 - 范围：`int64` 表示范围 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
-- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `let x: int8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
+- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `var x: int8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
 
 ```xray
 42
@@ -438,21 +439,22 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 - In `match` patterns it represents a **wildcard** (see §6.7).
 - In `for-in`, it can ignore the key or the value: `for (_, v in m) { ... }`.
-- In destructuring binding it can ignore positions: `let (a, _) = (1, 2)`.
-- It **cannot** appear as `let _ = expr`, as a function-parameter name, or as a referenced variable; the compiler reports "expected variable name".
+- In destructuring binding it can ignore positions: `var (a, _) = (1, 2)`.
+- It **cannot** appear as `var _ = expr`, as a function-parameter name, or as a referenced variable; the compiler reports "expected variable name".
 - Multi-underscore names (such as `__tmp`) are ordinary identifiers.
 
 ### 1.5 Keywords
 
-Xray has **63 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
+Xray has **65 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
 
 #### 1.5.1 Declarations and Control Flow
 
 | Keyword | Purpose |
 |--|--|
-| `let` | mutable variable declaration |
+| `var` | mutable variable declaration |
 | `const` | immutable variable declaration |
-| `shared` | cross-coroutine shared modifier (combined with `const`/`let`) |
+| `shared` | shared identity binding (global-heap storage, ordinary lexical scope) |
+| `comptime` | expression prefix that forces compile-time evaluation |
 | `fn` | function declaration |
 | `return` | function return |
 | `yield` | generator value-yield statement |
@@ -490,7 +492,7 @@ Xray has **63 reserved keywords** in total; the authoritative source-of-truth ta
 
 #### 1.5.5 Coroutines and Concurrency
 
-`go` `await` `select` `defer` `scope` `unsafe`
+`go` `await` `select` `defer` `scope` `unsafe` `parallel`
 
 #### 1.5.6 Type Names (reserved)
 
@@ -539,7 +541,7 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 - Digit separators `_` exist purely for readability and may appear anywhere between digits.
 - Default literal type is `int` (= `int64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
 - Range: `int64` covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
-- When an integer literal appears directly in a narrow-integer context (variable initialization, assignment, argument, return value, collection element, and similar sites), its value must fit the target type; for example, `let x: int8 = 200` is a compile-time error. Non-literal expressions written into narrow integer targets are still narrowed with target-width wrap-around; see §2.3.1.
+- When an integer literal appears directly in a narrow-integer context (variable initialization, assignment, argument, return value, collection element, and similar sites), its value must fit the target type; for example, `var x: int8 = 200` is a compile-time error. Non-literal expressions written into narrow integer targets are still narrowed with target-width wrap-around; see §2.3.1.
 
 ```xray
 42

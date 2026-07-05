@@ -1,7 +1,7 @@
 // 测试2：Channel const 零拷贝共享
 // 作者：xingleixu@gmail.com
 // 
-// 验证：const 类型通过 Channel 传递时零拷贝，多个接收者共享同一数据
+// 验证：不可变值通过 Channel 传递时零拷贝，多个接收者共享同一数据
 print("========== 测试2：Channel const 零拷贝共享 ==========")
 
 fn recvValue(ch) {
@@ -12,7 +12,7 @@ fn recvValue(ch) {
 }
 
 fn test_const_string() {
-    var ch = Channel(1)
+    shared ch = Channel(1)
     // const 字符串（天生不可变）
     const msg = "Hello, World!"
     ch.send(msg)
@@ -24,7 +24,7 @@ fn test_const_string() {
 }
 
 fn test_const_array() {
-    var ch = Channel(1)
+    shared ch = Channel(1)
     // const 数组
     const data = [1, 2, 3, 4, 5]
     ch.send(data)
@@ -38,7 +38,7 @@ fn test_const_array() {
 }
 
 fn test_const_map() {
-    var ch = Channel(1)
+    shared ch = Channel(1)
     // const Map
     const config = { "host" => "localhost", "port" => 8080 }
     ch.send(config)
@@ -51,7 +51,7 @@ fn test_const_map() {
 }
 
 fn test_primitive_types() {
-    var ch = Channel(5)
+    shared ch = Channel(5)
     // 基本类型（天生不可变）
     var num = 42
     var pi = 3.14159

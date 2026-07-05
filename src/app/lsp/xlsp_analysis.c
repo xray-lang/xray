@@ -60,7 +60,8 @@ static const XlspDocEntry keyword_docs[] = {
     {"class", "```xray\nclass <name> { <members> }\n```\n\nDeclares a class."},
     {"go", "```xray\ngo <expr>\n```\n\nSpawns a new coroutine."},
     {"await", "```xray\nawait <task>\n```\n\nWaits for a coroutine to complete."},
-    {"Channel", "```xray\nChannel(size?)\n```\n\nCreates a channel for coroutine communication."},
+    {"Channel", "```xray\nshared ch = Channel(size?)\n```\n\nCreates a named shared channel handle "
+                "for coroutine communication."},
     {"shared", "```xray\nshared <name> = <value>\n```\n\nDeclares a variable shared "
                "across coroutines."},
     {"if", "```xray\nif (<cond>) { ... } else { ... }\n```\n\nConditional statement."},
@@ -75,7 +76,7 @@ static const XlspDocEntry keyword_docs[] = {
     {"true", "Boolean literal `true`."},
     {"false", "Boolean literal `false`."},
     {"null", "Null literal representing absence of value."},
-    {"new", "```xray\nnew <Class>(<args>)\n```\n\nCreates a new class instance."},
+    {"new", "`new` has been removed. Construct classes and structs with `ClassName(args)`."},
     {"this", "Reference to the current class instance."},
     {"super", "Reference to the parent class."},
     {NULL, NULL}};

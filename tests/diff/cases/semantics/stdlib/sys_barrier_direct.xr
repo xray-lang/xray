@@ -3,6 +3,6 @@
 
 import sys
 
-var b = sys.OsBarrier(1)
+shared b = sys.OsBarrier(1)
 print(b.wait())
 print(b.wait())

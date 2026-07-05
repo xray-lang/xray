@@ -2511,7 +2511,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
 
     xa_visit_add_symbol_checked(ctx, sym, 0);
 
-    /* Write back resolved symbol ID for Xi lowering (shared var key). */
+    /* Write back resolved symbol ID for Xi lowering (shared binding key). */
     cls->symbol_id = sym->id;
 
     // Create class info

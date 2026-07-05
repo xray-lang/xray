@@ -3,7 +3,7 @@
 
 import sys
 
-var rw = sys.OsRwLock()
+shared rw = sys.OsRwLock()
 rw.rdlock()
 print(true)
 rw.rdunlock()

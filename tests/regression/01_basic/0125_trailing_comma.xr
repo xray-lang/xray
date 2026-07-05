@@ -52,7 +52,7 @@ fn test_generic_trailing_comma() {
     assert(x == 42)
 }
 
-// 7. new expression with trailing comma
+// 7. constructor expression with trailing comma
 class Box {
     value: int
     constructor(v: int) {

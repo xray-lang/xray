@@ -2,6 +2,8 @@
 
 作者：xingleixu@gmail.com
 
+> 状态：历史手工语义草稿，不属于当前 CMake/CI 自动门禁。部分样例仍使用旧 Json 字面量、旧函数参数推断和旧协程传参写法；当前协程正确性门禁以 `tests/regression/11_coroutine`、`tests/diff/coro_regression_cases.txt` 和 backend diff 为准。本目录在 160 迁移中只同步 `Channel` 等同步/并发句柄必须通过 `shared` 创建命名的表面语义。
+
 ## 测试目标
 
 验证 xray 协程系统的以下特性：

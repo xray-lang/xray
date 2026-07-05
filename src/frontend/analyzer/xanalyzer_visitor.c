@@ -155,6 +155,16 @@ XR_FUNC const char *xa_threadsafe_shared_ref_label(const XrType *type) {
         return "Semaphore";
     if (xr_type_is_named_class(type, "EventCount"))
         return "EventCount";
+    if (xr_type_is_named_class(type, "OsMutex"))
+        return "OsMutex";
+    if (xr_type_is_named_class(type, "OsRwLock"))
+        return "OsRwLock";
+    if (xr_type_is_named_class(type, "OsCondvar"))
+        return "OsCondvar";
+    if (xr_type_is_named_class(type, "OsBarrier"))
+        return "OsBarrier";
+    if (xr_type_is_named_class(type, "OsOnce"))
+        return "OsOnce";
     return NULL;
 }
 

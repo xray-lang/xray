@@ -4,7 +4,7 @@
 
 import sys
 
-var m = sys.OsMutex()
+shared m = sys.OsMutex()
 print(m.tryLock())
 m.unlock()
 

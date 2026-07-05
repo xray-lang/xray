@@ -630,10 +630,10 @@ static bool scan_next_binding(const char **p_io, const char *content_begin, cons
 
 // Step 1 of instance-member completion: scan for `var x = <rhs>` forms
 // to either (a) emit a literal/constructor completion directly, or
-// (b) extract the class name for `new ClassName(...)`.
+// (b) extract the class name for `ClassName(...)`.
 // Output: *early_items = non-null for direct completions (caller returns it).
-//         *class_name_out = non-null char* when we found a `new Foo` RHS.
-static void scan_let_const_assignment(XrLspDocument *doc, const char *prefix,
+//         *class_name_out = non-null char* when we found a `Foo(...)` RHS.
+static void scan_var_const_assignment(XrLspDocument *doc, const char *prefix,
                                       XrJsonValue **early_items, const char **class_name_out) {
     *early_items = NULL;
     *class_name_out = NULL;
@@ -693,16 +693,29 @@ static void scan_let_const_assignment(XrLspDocument *doc, const char *prefix,
             return;
         }
 
-        // new ClassName(...) → capture class name for later member lookup.
-        if (strncmp(after, "new ", 4) == 0) {
-            after += 4;
-            while (*after == ' ' || *after == '\t')
-                after++;
+        // ClassName(...) / ClassName<T>(...) -> capture class name for later member lookup.
+        if (*after >= 'A' && *after <= 'Z') {
             const char *name_start = after;
             while ((*after >= 'a' && *after <= 'z') || (*after >= 'A' && *after <= 'Z') ||
                    (*after >= '0' && *after <= '9') || *after == '_')
                 after++;
-            if (after > name_start) {
+            const char *call_start = after;
+            while (*call_start == ' ' || *call_start == '\t')
+                call_start++;
+            if (*call_start == '<') {
+                int depth = 1;
+                call_start++;
+                while (*call_start && depth > 0) {
+                    if (*call_start == '<')
+                        depth++;
+                    else if (*call_start == '>')
+                        depth--;
+                    call_start++;
+                }
+                while (*call_start == ' ' || *call_start == '\t')
+                    call_start++;
+            }
+            if (after > name_start && *call_start == '(') {
                 static char found_class[64];
                 size_t len = (size_t) (after - name_start);
                 if (len < sizeof(found_class)) {
@@ -820,7 +833,7 @@ static void append_instance_method(XrJsonValue *items, XaAnalyzer *analyzer, XaS
     xjson_array_push(items, item);
 }
 
-// Instance-member completion via scanned class name (from `new ClassName(...)`).
+// Instance-member completion via scanned class name (from `ClassName(...)`).
 static XrJsonValue *complete_instance_members_by_name(XaAnalyzer *analyzer,
                                                       const char *class_name) {
     XrClassInfo *cls_info = xa_analyzer_get_class(analyzer, class_name);
@@ -1040,12 +1053,12 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
         return r;
 
     // Class-instance path via text scan for `var x = <rhs>` / `const x = <rhs>`.
-    // scan_let_const_assignment() handles literal RHS directly and extracts
-    // `new ClassName(...)` into class_name for a subsequent member lookup.
+    // scan_var_const_assignment() handles literal RHS directly and extracts
+    // `ClassName(...)` into class_name for a subsequent member lookup.
     if (doc->content && analyzer) {
         XrJsonValue *early = NULL;
         const char *class_name = NULL;
-        scan_let_const_assignment(doc, prefix, &early, &class_name);
+        scan_var_const_assignment(doc, prefix, &early, &class_name);
         if (early)
             return early;
 

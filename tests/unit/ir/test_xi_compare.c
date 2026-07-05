@@ -91,9 +91,6 @@ static XrProto *compile_legacy(const char *source) {
         return NULL;
     }
 
-    /* Use the context's built-in analyzer */
-    xa_analyzer_analyze(ctx->analyzer, "compare.xr", program);
-
     /* Re-enter the parse arena: legacy codegen desugars some AST nodes
      * (e.g. for-in, match) which calls ast_alloc and needs the arena. */
     XrCompilerSessionScope ast_scope;
@@ -1315,7 +1312,7 @@ TEST(cmp_try_catch) {
 TEST(cmp_slice) {
     run_compare((CompareSpec) {
         .source = "var arr = [1, 2, 3, 4, 5]\n"
-                  "var s = arr[1:3]\n"
+                  "var s: Span<int> = arr[1:3]\n"
                   "print(s)",
         .label = "array slice expression",
         .expect_xi_success = true,
@@ -1960,7 +1957,7 @@ TEST(cmp_yield_basic) {
 TEST(cmp_chan_new_unbuf) {
     /* Channel() creates an unbuffered channel; just type-check */
     run_compare((CompareSpec) {
-        .source = "const ch = Channel()\nprint(typeof(ch))",
+        .source = "shared ch = Channel()\nprint(typeof(ch))",
         .label = "Channel() -> unbuffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1970,7 +1967,7 @@ TEST(cmp_chan_new_unbuf) {
 
 TEST(cmp_chan_new_buffered) {
     run_compare((CompareSpec) {
-        .source = "const ch: Channel<int> = Channel(4)\nprint(typeof(ch))",
+        .source = "shared ch: Channel<int> = Channel(4)\nprint(typeof(ch))",
         .label = "Channel(N) -> buffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1981,7 +1978,7 @@ TEST(cmp_chan_new_buffered) {
 TEST(cmp_chan_send_recv_buffered) {
     /* Buffered channel: send then recv on same coro works without scheduling */
     run_compare((CompareSpec) {
-        .source = "const ch: Channel<int> = Channel(2)\n"
+        .source = "shared ch: Channel<int> = Channel(2)\n"
                   "ch.send(10)\n"
                   "ch.send(20)\n"
                   "print(ch.recv())\n"
@@ -1994,7 +1991,7 @@ TEST(cmp_chan_send_recv_buffered) {
 }
 
 TEST(cmp_chan_recv_match_uses_raw_opcode) {
-    const char *src = "const ch: Channel<int?> = Channel(2)\n"
+    const char *src = "shared ch: Channel<int?> = Channel(2)\n"
                       "ch.send(0)\n"
                       "ch.send(null)\n"
                       "var zero = match (ch.recv()) {\n"
@@ -2039,7 +2036,7 @@ TEST(cmp_go_with_chan) {
     /* go + channel: producer/consumer pattern */
     run_compare((CompareSpec) {
         .source = "fn producer(ch: Channel<int>) { ch.send(42) }\n"
-                  "const ch: Channel<int> = Channel(1)\n"
+                  "shared ch: Channel<int> = Channel(1)\n"
                   "var task = go producer(ch)\n"
                   "print(ch.recv())\n"
                   "await task",
@@ -2081,7 +2078,7 @@ TEST(cmp_select_recv) {
         .source = "fn producer(ch: Channel<int>) {\n"
                   "  ch.send(42)\n"
                   "}\n"
-                  "const ch: Channel<int> = Channel(1)\n"
+                  "shared ch: Channel<int> = Channel(1)\n"
                   "go producer(ch)\n"
                   "select {\n"
                   "  msg from ch -> {\n"

@@ -88,7 +88,7 @@
       "bullets": [
         "`print()` outputs with newline; there is no `println`",
         "arrow function parameter types may be inferred only when the context is known",
-        "`new Channel<T>(n)` constructs a channel; `Channel<T>` is used in type position",
+        "`shared ch = Channel<T>(n)` creates a named channel handle; `Channel<T>` is used in type position",
         "field increment such as `this.x++` is not supported; assign explicitly",
         "same-quote strings are allowed inside `${...}` interpolation"
       ]

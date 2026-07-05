@@ -260,7 +260,7 @@ select {
 
 `scope` 是**语句关键字**，建立一个新的词法作用域块。它服务两个目的：
 
-1. **纯词法作用域**：与 C/Rust `{ ... }` 局部块一致，块内 `let` 不影响外层同名变量。
+1. **纯词法作用域**：与 C/Rust `{ ... }` 局部块一致，块内 `var` 不影响外层同名变量。
 2. **结构化并发**（语义增强）：在 `scope` 块内 `go` 启动的协程，块退出前**自动等待**全部完成或取消。
 
 ```ebnf
@@ -707,7 +707,7 @@ select {
 
 `scope` is a **statement keyword** that introduces a new lexical block. It serves two purposes:
 
-1. **Pure lexical scope**: identical to a C/Rust `{ ... }` local block; `let` inside the block does not affect outer same-named variables.
+1. **Pure lexical scope**: identical to a C/Rust `{ ... }` local block; `var` inside the block does not affect outer same-named variables.
 2. **Structured concurrency** (semantic enhancement): coroutines started via `go` inside the block are **awaited automatically** before the block exits.
 
 ```ebnf

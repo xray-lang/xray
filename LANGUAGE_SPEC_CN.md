@@ -159,21 +159,22 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 - 在 `match` 模式中表示**通配符**（见 §6.7）。
 - 在 `for-in` 中可用于忽略键或值：`for (_, v in m) { ... }`。
-- 在解构绑定中可用于忽略位置：`let (a, _) = (1, 2)`。
-- **不能**作为 `let _ = expr`、函数参数名或被引用的变量名；编译器会报"expected variable name"。
+- 在解构绑定中可用于忽略位置：`var (a, _) = (1, 2)`。
+- **不能**作为 `var _ = expr`、函数参数名或被引用的变量名；编译器会报"expected variable name"。
 - 多下划线名（如 `__tmp`）是普通标识符。
 
 ### 1.5 关键字
 
-xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
+xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
 
 #### 1.5.1 声明与流程控制
 
 | 关键字 | 用途 |
 |--|--|
-| `let` | 可变变量声明 |
+| `var` | 可变变量声明 |
 | `const` | 不可变变量声明 |
-| `shared` | 跨协程共享修饰符（与 `const`/`let` 组合） |
+| `shared` | 共享身份绑定（全局堆存储，词法作用域照常） |
+| `comptime` | 强制编译期求值的表达式前缀 |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
 | `yield` | 生成器产值语句 |
@@ -211,7 +212,7 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 
 #### 1.5.5 协程与并发
 
-`go` `await` `select` `defer` `scope` `unsafe`
+`go` `await` `select` `defer` `scope` `unsafe` `parallel`
 
 #### 1.5.6 类型名（保留）
 
@@ -260,7 +261,7 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 - 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
 - 字面量默认类型为 `int`（= `int64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
 - 范围：`int64` 表示范围 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
-- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `let x: int8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
+- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `var x: int8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
 
 ```xray
 42
@@ -543,11 +544,11 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
 | `uint8`..`uint64` | 无符号对应 | — |
 
-- 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量），但直接字面量必须落在目标范围内（`let x: int8 = 200` 编译拒绝）。
+- 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量），但直接字面量必须落在目标范围内（`var x: int8 = 200` 编译拒绝）。
 - 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同宽窄整数运算保留该宽度并按该宽度环绕（`uint8 + uint8 -> uint8`）；异宽窄整数运算塌回 `int`；移位运算结果取左操作数宽度。
 - 静态类型为 `uint8`..`uint64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `uint64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
 - `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
-- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `let x: uint8 = 255 + 1` 得到 `0`。
+- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `var x: uint8 = 255 + 1` 得到 `0`。
 - 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `int64` 正范围的 `uint64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
 
 #### 2.3.2 浮点类型
@@ -561,7 +562,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 #### 2.3.3 `bool`
 
-`true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `let x: int = true`，也不能 `let b: bool = 1`）。
+`true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `var x: int = true`，也不能 `var b: bool = 1`）。
 
 **条件表达式规则**（`if` / `while` / `for` 条件 / 三元 `?:` / `match` 守卫）：
 
@@ -612,7 +613,7 @@ print(int(smile))         // 128512
 ```
 
 - char 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
-- `char` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`let n: uint32 = 'a'` 都会在分析期拒绝。
+- `char` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: uint32 = 'a'` 都会在分析期拒绝。
 - 显式转换：`int(c)` 得到 scalar code point；`char(n)` 从整数构造 char 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
 - 常用方法见 §14.4.1。
 
@@ -755,10 +756,10 @@ var s: Set<int> = #[1, 2, 3]
 
 #### 2.4.4 `Channel<T>`
 
-协程间通信通道。**必须**用 `const` 声明（见 §10.5）。
+协程间通信通道。命名通道句柄**必须**用 `shared` 创建（见 §10.5）。
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+shared ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Bytes`
@@ -798,7 +799,7 @@ var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 | 写法 | 类型 | 备注 |
 |---|---|---|
 | `{ name: "x", age: 1 }` | sealed anonymous `Record` | 标识符或字符串 key 后跟 `:` |
-| `let j: Json = { name: "x" }` | `Json` object | 只有显式 `Json` 期望类型时按动态 Json 解释 |
+| `var j: Json = { name: "x" }` | `Json` object | 只有显式 `Json` 期望类型时按动态 Json 解释 |
 | `{ x: y }`（`x` 是字段名，`y` 是变量名） | sealed anonymous `Record` | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
 | `#{"a": 1}` | `Map<K, V>` | `#` 前缀消歧，分隔符用 `:` |
 | `Point{x: 1.0, y: 2.0}` | `Point`（struct） | 类型名 + `{...}` 字面量 |
@@ -979,8 +980,8 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 > **结构化兼容方向**（duck typing）：字段更多的类型可赋给字段更少的类型。
 > ```xray
 > type User = { name: string }
-> let full = { name: "A", age: 18 }
-> let u: User = full       // OK：full 是 User 的超集
+> var full = { name: "A", age: 18 }
+> var u: User = full       // OK：full 是 User 的超集
 > ```
 
 #### 2.10.2 显式 `as`
@@ -1047,7 +1048,7 @@ Reflect.getAllTypes()       // 所有已注册类型
 | 级 | 运算符 | 结合性 | 说明 |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | 左 | 后缀：分组、索引、成员、可选链、调用、强制解包 |
-| 16 | 前缀 `-` `+` `!` `~` `move` `await` `go` `unsafe` | 右 | 一元前缀 + 协程/FFI 边界操作 |
+| 16 | 前缀 `-` `+` `!` `~` `move` `await` `go` `unsafe` `comptime` | 右 | 一元前缀 + 协程/FFI/编译期边界操作 |
 | 15 | `as` `is` | 左 | 类型转换 / 检查（`as T?` 安全形式靠目标类型可空，非独立 `as?` 运算符） |
 | 14 | `*` `/` `%` | 左 | 乘除取模 |
 | 13 | `+` `-` | 左 | 加减 |
@@ -1075,6 +1076,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
             | 'unsafe' Block
+            | 'comptime' Expression
             | PostfixExpr
 ```
 
@@ -1103,6 +1105,17 @@ unsafe {
 ```
 
 `unsafe` 不改变表达式的结果类型；多语句块的最后一个表达式语句产生块值，否则结果为 `()`。`unsafe` 也不关闭普通类型检查：`RawPtr<T>` 仍不可写，`RawMut<T>` 才能写入；空指针、越界、生命周期和对齐由调用方负责。
+
+#### `comptime expr`
+
+`comptime` 是表达式前缀，用来要求操作数在分析/编译阶段求值；求值失败时直接报编译错误，而不是退回运行期。当前已实现的保证范围是**整数常量表达式**：整数字面量、`const` 整数标识符、括号、整数一元/二元算术与位运算，可用于固定数组长度、repeat 初始化长度等静态整数位置。
+
+```xray
+const SCALE = comptime 8 * 4
+var buf: [uint8; comptime SCALE + 2] = [0; SCALE + 2]
+```
+
+`comptime { ... }` 块语法已被 parser 预留，但当前分析期会拒绝；完整 consteval 块、泛型 `ct_value` 和可求值函数体属于后续阶段。
 
 ### 3.3 二元表达式
 
@@ -1393,7 +1406,7 @@ var obj = { users }              // shorthand
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+shared ch: Channel<int> = Channel<int>(10)
 ```
 
 详见 §10.5。
@@ -1548,7 +1561,7 @@ ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```xray
 var p = Point(1.0, 2.0)
 var arr = Array<int>()
-var ch = Channel<int>(10)
+shared ch = Channel<int>(10)
 var m = Map<string, int>()
 ```
 
@@ -1612,7 +1625,7 @@ x++                    // 自增语句；不产生表达式值
 }
 ```
 
-`++` / `--` 是纯语句或 `for` 步进项，只能写作 `name++` / `name--`。它们等价于 `name = name + 1` / `name = name - 1`，没有返回值；`let y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译失败。
+`++` / `--` 是纯语句或 `for` 步进项，只能写作 `name++` / `name--`。它们等价于 `name = name + 1` / `name = name - 1`，没有返回值；`var y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译失败。
 
 **注**：块**不是表达式**——它没有值。如果需要从块求值，用 `match` 或包装成立即调用函数。
 
@@ -1905,7 +1918,9 @@ dump(some_obj)                 // 调试输出，含类型信息与结构布局
 ### 5.1 `var` / `const` / `shared`
 
 ```ebnf
-VarDecl ::= ('var' | 'const' | 'shared') Binding (',' Binding)*
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -1939,6 +1954,7 @@ const MAX_LEN: int = 1024
 - **必须**有初值。
 - 不能重新赋值（编译错误 `E0303`）。
 - 类型可推断或显式标注。
+- `const` 和 `var` 一样是单绑定声明；逗号并列声明已移除。需要多个名字时写多条声明，或使用解构：`const (a, b) = pair`。
 
 #### 5.1.3 `shared` — 共享身份绑定
 
@@ -2767,7 +2783,7 @@ export * from "./other"
 
 > 真值源：`src/frontend/parser/xparse_match.c`、`src/runtime/value/x_value_match.c`。
 
-模式出现在 `match` 表达式/语句与 `let` 解构中。
+模式出现在 `match` 表达式/语句与 `var` / `const` 解构中。
 
 ### 6.1 字面量模式
 
@@ -2912,7 +2928,7 @@ match (x) {
 
 - 匹配任意值，不绑定变量。
 - 通常作为最后的 default 分支。
-- 解构中可用于跳过位置：`let [_, b, _] = arr`。
+- 解构中可用于跳过位置：`var [_, b, _] = arr`。
 
 ### 6.8 变量绑定模式
 
@@ -2969,7 +2985,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 
 | 作用域 | 触发 | 示例 |
 |--|--|--|
-| 模块 | 每个 `.xr` 文件 | 顶层 `let` `fn` `class` |
+| 模块 | 每个 `.xr` 文件 | 顶层 `var` `const` `shared` `fn` `class` |
 | 函数 / 闭包 | `fn` / 箭头函数进入 | 参数 + 函数体 |
 | 块 | `{...}` | `if` `while` `for` `match` 分支体 |
 | `scope` 块 | `scope { ... }` 关键字 | 显式词法作用域 + 结构化并发（见 §10.7） |
@@ -2980,7 +2996,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 **提升规则**：
 
 - 顶层 `fn` `class` `struct` `interface` `enum` `type` **提升**至当前作用域顶部——可在定义前引用。
-- `let` / `const` **不提升**——必须在定义后使用。
+- `var` / `const` / `shared` **不提升**——必须在定义后使用。
 - 同名重复声明：同作用域内 2 个同名变量 → 编译错误（嵌套作用域可 shadow）。
 
 ```xray
@@ -3289,7 +3305,7 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 
 ```xray
 enum WorkerErr { Failed(string) }
-const err_ch = Channel<string>(1)
+shared err_ch = Channel<string>(1)
 
 go {
     try {
@@ -3972,7 +3988,7 @@ select {
 
 `scope` 是**语句关键字**，建立一个新的词法作用域块。它服务两个目的：
 
-1. **纯词法作用域**：与 C/Rust `{ ... }` 局部块一致，块内 `let` 不影响外层同名变量。
+1. **纯词法作用域**：与 C/Rust `{ ... }` 局部块一致，块内 `var` 不影响外层同名变量。
 2. **结构化并发**（语义增强）：在 `scope` 块内 `go` 启动的协程，块退出前**自动等待**全部完成或取消。
 
 ```ebnf
@@ -4289,7 +4305,7 @@ export * from "./product"
 
 **限制**：
 - 未标 `export` 的声明仅模块内可见（**私有**）。
-- `export let` 不被支持。可变绑定不能跨模块共享，使用 `export const` 代替。
+- `export var` 不被支持。可变绑定不能跨模块共享，使用 `export const` 代替。
 - 模块的内部状态在不同模块中互不冲突，即使同名。
 - 重导出与通配重导出常用于 `index.xr` 聚合子模块的公开 API。
 
@@ -4703,7 +4719,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `Json.encode(value)` | 显式 typed value → Json 边界转换 |
 | `Json.stringify(value, indent?)` | 序列化 |
 
-**字面量**：`{ name: "alice", age: 30 }` 默认是 sealed `Record`。显式写 `let j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。
+**字面量**：`{ name: "alice", age: 30 }` 默认是 sealed `Record`。显式写 `var j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。
 
 ### 14.12 `Range`
 
@@ -5256,7 +5272,6 @@ Bytecode  →  AOT (machine code)
 | 码 | 名称 | 禁止写法 | 正确写法 |
 |--|--|--|--|
 | `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` | `return (a, b)` |
-| `E0802` | `XR_ERR_SYN_LET_MULTI_REMOVED` | `let x, y = ...` | `let (x, y) = ...` |
 | `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | `for k, v in m`（裸 KV） | `for (k, v in m)` |
 | `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` | `-> ()` 或省略返回类型 |
 
@@ -5410,6 +5425,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
          |  ArrowFunction
+         |  ComptimeExpr
          |  MatchExpr
          |  '(' Expression ')'
          |  '(' Expression (',' Expression)+ ')'  // tuple
@@ -5426,7 +5442,9 @@ ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)*
 ArrowParam  ::= Identifier ':' Type
 // Note: arrow closures cannot declare an explicit return type;
-// use `fn(p: T) -> R { ... }` or annotate the binding (`let f: (T) -> R = ...`) instead.
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: (T) -> R = ...`) instead.
+
+ComptimeExpr ::= 'comptime' (Expression | Block)
 
 MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
@@ -5530,7 +5548,9 @@ YieldStmt ::= 'yield' Expression
 ### A.6 声明
 
 ```ebnf
-VarDecl ::= ('let' | 'const' | 'shared' ('const' | 'let')) Binding (',' Binding)*
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
@@ -5606,7 +5626,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-完整 63 个关键字按字母排序见 [§1.5](#15-关键字)。
+完整 65 个关键字按字母排序见 [§1.5](#15-关键字)。
 
 | 关键字 | 节 |
 |--|--|
@@ -5618,6 +5638,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `catch` | §8 |
 | `char` | §2.3.5 |
 | `class` | §5.3 |
+| `comptime` | §3.2 |
 | `const` | §5.1 |
 | `constructor` | §5.3 |
 | `continue` | §4.6 |
@@ -5639,12 +5660,12 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `int` `int8`..`int64` | §2.3.1 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
-| `let` | §5.1 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
 | `override` | §5.3 |
+| `parallel` | §10 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
 | `return` | §4.7 |
@@ -5662,6 +5683,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
 | `unsafe` | §3.2 |
+| `var` | §5.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
 

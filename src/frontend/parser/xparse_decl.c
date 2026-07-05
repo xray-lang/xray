@@ -1611,7 +1611,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
     /* Variable declaration
      *
      * Syntax design:
-     * 1. var a                - No initialization, null
+     * 1. var a                - No initialization, default value
      * 2. var a = 1            - Single variable declaration
      * 3. var (a, b) = value   - Tuple destructuring declaration
      * 4. var a, b = ...       - Forbidden obsolete multi-value declaration
@@ -1675,7 +1675,12 @@ AstNode *xr_parse_declaration(Parser *parser) {
         return NULL;
     }
 
-    // Constant declaration (supports comma separation)
+    /* Constant declaration.
+     *
+     * `const` uses the same single-binding shape as `var`. Destructuring is the
+     * explicit multi-name form; comma-separated declarations are intentionally
+     * rejected to keep declaration lowering uniform.
+     */
     if (xr_parser_match(parser, TK_CONST)) {
         // Check if destructure declaration
         if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE) ||
@@ -1685,29 +1690,14 @@ AstNode *xr_parse_declaration(Parser *parser) {
 
         AstNode *first_decl = xr_parse_single_var_declaration(parser, 1);  // 1 means constant
 
-        // Check if there are comma-separated following declarations
-        if (!xr_parser_check(parser, TK_COMMA)) {
-            return first_decl;
+        if (xr_parser_check(parser, TK_COMMA)) {
+            xr_parser_error(parser,
+                            "multi-const declaration is not supported; write separate const "
+                            "declarations or use tuple destructure: `const (a, b) = ...`");
+            return NULL;
         }
 
-        // Multiple declarations, create sequence node
-        AstNode **declarations =
-            (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *), (size_t) 16);
-        int decl_count = 0;
-        int decl_capacity = 16;
-        declarations[decl_count++] = first_decl;
-
-        while (xr_parser_match(parser, TK_COMMA)) {
-            XR_PARSE_PUSH(parser, declarations, decl_count, decl_capacity,
-                          xr_parse_single_var_declaration(parser, 1));
-        }
-
-        // Create sequence node
-        AstNode *seq = xr_ast_program(parser->compiler_session);
-        for (int i = 0; i < decl_count; i++) {
-            xr_ast_program_add(parser->compiler_session, seq, declarations[i]);
-        }
-        return seq;
+        return first_decl;
     }
 
     /* shared variable declaration (stored in global heap, pass by reference)

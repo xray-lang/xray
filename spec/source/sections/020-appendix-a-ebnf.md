@@ -112,6 +112,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
          |  ArrowFunction
+         |  ComptimeExpr
          |  MatchExpr
          |  '(' Expression ')'
          |  '(' Expression (',' Expression)+ ')'  // tuple
@@ -128,7 +129,9 @@ ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)*
 ArrowParam  ::= Identifier ':' Type
 // Note: arrow closures cannot declare an explicit return type;
-// use `fn(p: T) -> R { ... }` or annotate the binding (`let f: (T) -> R = ...`) instead.
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: (T) -> R = ...`) instead.
+
+ComptimeExpr ::= 'comptime' (Expression | Block)
 
 MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
@@ -232,7 +235,9 @@ YieldStmt ::= 'yield' Expression
 ### A.6 声明
 
 ```ebnf
-VarDecl ::= ('let' | 'const' | 'shared' ('const' | 'let')) Binding (',' Binding)*
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
@@ -414,6 +419,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
          |  ArrowFunction
+         |  ComptimeExpr
          |  MatchExpr
          |  '(' Expression ')'
          |  '(' Expression (',' Expression)+ ')'  // tuple
@@ -430,7 +436,9 @@ ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)*
 ArrowParam  ::= Identifier ':' Type
 // Note: arrow closures cannot declare an explicit return type;
-// use `fn(p: T) -> R { ... }` or annotate the binding (`let f: (T) -> R = ...`) instead.
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: (T) -> R = ...`) instead.
+
+ComptimeExpr ::= 'comptime' (Expression | Block)
 
 MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
@@ -534,7 +542,9 @@ YieldStmt ::= 'yield' Expression
 ### A.6 Declarations
 
 ```ebnf
-VarDecl ::= ('let' | 'const' | 'shared' ('const' | 'let')) Binding (',' Binding)*
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'

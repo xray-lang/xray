@@ -1,5 +1,5 @@
 fn main() {
-    var ch: Channel<int> = Channel(1)
+    shared ch: Channel<int> = Channel(1)
     var moved = move ch
     print(moved)
 }

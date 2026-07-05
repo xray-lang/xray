@@ -3,7 +3,7 @@
 // 测试：PanicInfo 子类的非 throw 使用（F036 回归）
 // 历史：vm_superinvoke 的 primitive parent ctor 路径返回 XR_DISP_NEXT，
 // OP_SUPERINVOKE 调度器未识别 NEXT，把它当作 "no catch reachable" 处理，
-// 导致 `let err = new HttpError(...)` 静默退出 1。修复：dispatcher 增加 NEXT 分支。
+// 导致 `var err = HttpError(...)` 静默退出 1。修复：dispatcher 增加 NEXT 分支。
 
 class HttpError extends PanicInfo {
     statusCode: int
@@ -24,8 +24,8 @@ class DbError extends PanicInfo {
 // ===== 直接构造 =====
 
 @test
-fn test_subclass_let_binding() {
-    // F036 核心：let 绑定 PanicInfo 子类不应崩溃
+fn test_subclass_var_binding() {
+    // F036 核心：var 绑定 PanicInfo 子类不应崩溃
     var err = HttpError("not found", 404)
     assert_eq(err.message, "not found")
     assert_eq(err.statusCode, 404)
@@ -33,7 +33,7 @@ fn test_subclass_let_binding() {
 
 @test
 fn test_subclass_as_expression() {
-    // 直接 new 不赋值
+    // 直接构造不赋值
     HttpError("expr-only", 500)
 }
 
@@ -79,7 +79,7 @@ fn test_subclass_status_code_access() {
     assert_eq(err.statusCode, 404)
 }
 
-// ===== 父类直接 new 不受影响 =====
+// ===== 父类直接构造不受影响 =====
 
 @test
 fn test_base_exception_direct() {

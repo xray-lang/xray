@@ -218,7 +218,7 @@ TEST(returns_partial_ast_on_error) {
 }
 
 TEST(resync_after_error_keeps_following_decls) {
-    // Panic-mode resynchronisation must let the parser recover at
+    // Panic-mode resynchronisation must allow the parser to recover at
     // the next statement boundary. With ONE bad declaration in the
     // middle, the surrounding two clean ones must still appear in
     // the AST. Without resync, a typo would silently hide every

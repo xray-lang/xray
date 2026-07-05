@@ -160,7 +160,7 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 
 ```xray
 enum WorkerErr { Failed(string) }
-const err_ch = Channel<string>(1)
+shared err_ch = Channel<string>(1)
 
 go {
     try {
@@ -537,7 +537,7 @@ try {
 }
 ```
 
-ADT enums let `match` check exhaustiveness at compile time.
+ADT enums allow `match` to check exhaustiveness at compile time.
 
 #### 8.1.5 Errors and coroutine boundaries
 
@@ -552,7 +552,7 @@ Ways to pass child coroutine errors:
 
 ```xray
 enum WorkerErr { Failed(string) }
-const err_ch = Channel<string>(1)
+shared err_ch = Channel<string>(1)
 
 go {
     try {

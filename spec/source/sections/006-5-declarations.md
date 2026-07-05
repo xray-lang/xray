@@ -13,7 +13,9 @@ order: 006
 ### 5.1 `var` / `const` / `shared`
 
 ```ebnf
-VarDecl ::= ('var' | 'const' | 'shared') Binding (',' Binding)*
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -47,6 +49,7 @@ const MAX_LEN: int = 1024
 - **必须**有初值。
 - 不能重新赋值（编译错误 `E0303`）。
 - 类型可推断或显式标注。
+- `const` 和 `var` 一样是单绑定声明；逗号并列声明已移除。需要多个名字时写多条声明，或使用解构：`const (a, b) = pair`。
 
 #### 5.1.3 `shared` — 共享身份绑定
 
@@ -880,7 +883,9 @@ export * from "./other"
 ### 5.1 `var` / `const` / `shared`
 
 ```ebnf
-VarDecl ::= ('var' | 'const' | 'shared') Binding (',' Binding)*
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -914,6 +919,7 @@ const MAX_LEN: int = 1024
 - Initializer is **required**.
 - Cannot be reassigned (compile error `E0303`).
 - The type may be inferred or annotated explicitly.
+- Like `var`, `const` is a single-binding declaration. Comma-separated declarations are removed; use separate declarations or destructure with `const (a, b) = pair`.
 
 #### 5.1.3 `shared` — shared identity binding
 

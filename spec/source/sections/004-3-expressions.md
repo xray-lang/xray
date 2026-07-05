@@ -17,7 +17,7 @@ order: 004
 | 级 | 运算符 | 结合性 | 说明 |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | 左 | 后缀：分组、索引、成员、可选链、调用、强制解包 |
-| 16 | 前缀 `-` `+` `!` `~` `move` `await` `go` `unsafe` | 右 | 一元前缀 + 协程/FFI 边界操作 |
+| 16 | 前缀 `-` `+` `!` `~` `move` `await` `go` `unsafe` `comptime` | 右 | 一元前缀 + 协程/FFI/编译期边界操作 |
 | 15 | `as` `is` | 左 | 类型转换 / 检查（`as T?` 安全形式靠目标类型可空，非独立 `as?` 运算符） |
 | 14 | `*` `/` `%` | 左 | 乘除取模 |
 | 13 | `+` `-` | 左 | 加减 |
@@ -45,6 +45,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
             | 'unsafe' Block
+            | 'comptime' Expression
             | PostfixExpr
 ```
 
@@ -73,6 +74,17 @@ unsafe {
 ```
 
 `unsafe` 不改变表达式的结果类型；多语句块的最后一个表达式语句产生块值，否则结果为 `()`。`unsafe` 也不关闭普通类型检查：`RawPtr<T>` 仍不可写，`RawMut<T>` 才能写入；空指针、越界、生命周期和对齐由调用方负责。
+
+#### `comptime expr`
+
+`comptime` 是表达式前缀，用来要求操作数在分析/编译阶段求值；求值失败时直接报编译错误，而不是退回运行期。当前已实现的保证范围是**整数常量表达式**：整数字面量、`const` 整数标识符、括号、整数一元/二元算术与位运算，可用于固定数组长度、repeat 初始化长度等静态整数位置。
+
+```xray
+const SCALE = comptime 8 * 4
+var buf: [uint8; comptime SCALE + 2] = [0; SCALE + 2]
+```
+
+`comptime { ... }` 块语法已被 parser 预留，但当前分析期会拒绝；完整 consteval 块、泛型 `ct_value` 和可求值函数体属于后续阶段。
 
 ### 3.3 二元表达式
 
@@ -363,7 +375,7 @@ var obj = { users }              // shorthand
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+shared ch: Channel<int> = Channel<int>(10)
 ```
 
 详见 §10.5。
@@ -518,7 +530,7 @@ ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```xray @id=expr-new
 var p = Point(1.0, 2.0)
 var arr = Array<int>()
-var ch = Channel<int>(10)
+shared ch = Channel<int>(10)
 var m = Map<string, int>()
 ```
 
@@ -571,7 +583,7 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | Level | Operators | Assoc. | Description |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | left | postfix: grouping, index, member, optional chain, call, force unwrap |
-| 16 | prefix `-` `+` `!` `~` `move` `await` `go` `unsafe` | right | unary prefix + coroutine/FFI boundary operators |
+| 16 | prefix `-` `+` `!` `~` `move` `await` `go` `unsafe` `comptime` | right | unary prefix + coroutine/FFI/compile-time boundary operators |
 | 15 | `as` `is` | left | type cast / check (`as T?` is the safe form via a nullable target type, not a separate `as?` operator) |
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
@@ -599,6 +611,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
             | 'unsafe' Block
+            | 'comptime' Expression
             | PostfixExpr
 ```
 
@@ -627,6 +640,17 @@ unsafe {
 ```
 
 `unsafe` does not change the expression's result type; in a multi-statement block, the trailing expression statement yields the block value, otherwise the result is `()`. `unsafe` also does not disable ordinary type checking: `RawPtr<T>` is still read-only, and writes require `RawMut<T>`; null pointers, bounds, lifetimes, and alignment remain the caller's responsibility.
+
+#### `comptime expr`
+
+`comptime` is an expression prefix that requires its operand to be evaluated during analysis/compilation. If evaluation fails, compilation fails instead of falling back to runtime. The implemented guarantee is currently limited to **integer constant expressions**: integer literals, `const` integer identifiers, grouping, integer unary/binary arithmetic, and bitwise operators. These values may feed static integer positions such as fixed-array lengths and repeat-initializer lengths.
+
+```xray
+const SCALE = comptime 8 * 4
+var buf: [uint8; comptime SCALE + 2] = [0; SCALE + 2]
+```
+
+The parser reserves `comptime { ... }` block syntax, but analysis rejects it for now; full consteval blocks, generic `ct_value`, and evaluable function bodies are future phases.
 
 ### 3.3 Binary Expressions
 
@@ -917,7 +941,7 @@ See §2.4.5 and §14.5.
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+shared ch: Channel<int> = Channel<int>(10)
 ```
 
 See §10.5.
@@ -1072,7 +1096,7 @@ Construction looks just like a function call: `TypeName(args)`. There is no `new
 ```xray @id=expr-new
 var p = Point(1.0, 2.0)
 var arr = Array<int>()
-var ch = Channel<int>(10)
+shared ch = Channel<int>(10)
 var m = Map<string, int>()
 ```
 

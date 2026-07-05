@@ -68,7 +68,7 @@ fn test_method_dispatch_via_inference() {
 // NetConn / NetListener are registered as prelude entries with the
 // XrClasses pre-installed by xr_prelude_register_all_native_types,
 // and the cfunc signatures advertise NetConn? / NetListener?, so a
-// user-side `let conn: NetConn? = net.dial(...)` annotation now
+// user-side `var conn: NetConn? = net.dial(...)` annotation now
 // type-checks and dispatches methods through the same path that
 // inference uses.
 // ============================================================

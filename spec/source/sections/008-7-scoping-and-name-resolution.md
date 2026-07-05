@@ -18,7 +18,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 
 | 作用域 | 触发 | 示例 |
 |--|--|--|
-| 模块 | 每个 `.xr` 文件 | 顶层 `let` `fn` `class` |
+| 模块 | 每个 `.xr` 文件 | 顶层 `var` `const` `shared` `fn` `class` |
 | 函数 / 闭包 | `fn` / 箭头函数进入 | 参数 + 函数体 |
 | 块 | `{...}` | `if` `while` `for` `match` 分支体 |
 | `scope` 块 | `scope { ... }` 关键字 | 显式词法作用域 + 结构化并发（见 §10.7） |
@@ -29,7 +29,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 **提升规则**：
 
 - 顶层 `fn` `class` `struct` `interface` `enum` `type` **提升**至当前作用域顶部——可在定义前引用。
-- `let` / `const` **不提升**——必须在定义后使用。
+- `var` / `const` / `shared` **不提升**——必须在定义后使用。
 - 同名重复声明：同作用域内 2 个同名变量 → 编译错误（嵌套作用域可 shadow）。
 
 ```xray
@@ -198,7 +198,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 
 | Scope | Triggered by | Example |
 |--|--|--|
-| Module | Each `.xr` file | top-level `let` `fn` `class` |
+| Module | Each `.xr` file | top-level `var` `const` `shared` `fn` `class` |
 | Function / closure | Entering `fn` / arrow function | parameters + function body |
 | Block | `{...}` | `if` `while` `for` `match` arm body |
 | `scope` block | `scope { ... }` keyword | explicit lexical scope + structured concurrency (see §10.7) |
@@ -209,7 +209,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 **Hoisting rules**:
 
 - Top-level `fn` `class` `struct` `interface` `enum` `type` are **hoisted** to the top of the current scope — they may be referenced before their textual definition.
-- `let` / `const` are **not hoisted** — they must appear before any use.
+- `var` / `const` / `shared` are **not hoisted** — they must appear before any use.
 - Duplicate names: declaring two same-named variables in the same scope is a compile error (nested scopes may shadow).
 
 ```xray
