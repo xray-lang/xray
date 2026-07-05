@@ -1638,6 +1638,92 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
 };
 
+static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
+    {
+        .name = "collectCycles",
+        .signature = "(): int",
+        .summary = "Run cycle collection + whole-block reclaim, return cycle collection count",
+    },
+    {
+        .name = "disableCycleCollection",
+        .signature = "(): ()",
+        .summary = "Pause the automatic cycle collector",
+    },
+    {
+        .name = "enableCycleCollection",
+        .signature = "(): ()",
+        .summary = "Resume the automatic cycle collector",
+    },
+    {
+        .name = "info",
+        .signature = "(): Map",
+        .summary = "Get memory-model runtime info as Map",
+    },
+    {
+        .name = "isCycleCollectionEnabled",
+        .signature = "(): bool",
+        .summary = "Check if automatic cycle collection is enabled",
+    },
+    {
+        .name = "liveBytes",
+        .signature = "(): int",
+        .summary = "Get live memory usage in bytes",
+    },
+    {
+        .name = "liveObjects",
+        .signature = "(): int",
+        .summary = "Get live object count",
+    },
+};
+
+static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
+    {
+        .name = "OsBarrier",
+        .signature = "(parties: int): OsBarrier",
+        .summary = "Create a reusable OS-domain barrier",
+    },
+    {
+        .name = "OsCondvar",
+        .signature = "(): OsCondvar",
+        .summary = "Create an OS-domain condition variable",
+    },
+    {
+        .name = "OsMutex",
+        .signature = "(): OsMutex",
+        .summary = "Create an OS-domain mutex",
+    },
+    {
+        .name = "OsOnce",
+        .signature = "(): OsOnce",
+        .summary = "Create an OS-domain once gate",
+    },
+    {
+        .name = "OsRwLock",
+        .signature = "(): OsRwLock",
+        .summary = "Create an OS-domain read-write lock",
+    },
+    {
+        .name = "cpuCount",
+        .signature = "(): int",
+        .summary = "Return the number of CPUs available to OS-thread work",
+    },
+    {
+        .name = "pinToCpu",
+        .signature = "(cpu: int): bool",
+        .summary = "Best-effort pin of the current OS thread to a CPU index",
+    },
+    {
+        .name = "sleepMs",
+        .signature = "(ms: int): ()",
+        .summary = "Block the current OS thread for at least ms milliseconds",
+    },
+    {
+        .name = "threadYield",
+        .signature = "(): ()",
+        .summary = "Yield the current OS thread to another runnable OS thread",
+    },
+};
+
 static const XmcpGeneratedStdlibSymbol _symbols_time[] = {
     {
         .name = "clock",
@@ -3685,11 +3771,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     },
     {
         .module = "mem",
-        .summary = "Memory and cycle-collection introspection",
+        .summary = "Raw memory, Buffer, page allocation, volatile access, and memory primitives",
         .body =
             "# mem module\n"
             "\n"
-            "Memory and cycle-collection introspection for the current coroutine heap.\n"
+            "Raw memory and low-level memory primitives: RAII `Buffer` allocation, page allocation,\n"
+            "bulk copy/move/set/compare, volatile load/store, cache hints, and fences.\n"
+            "\n"
+            "Cycle-collection and heap introspection live in the `runtime` module:\n"
+            "`runtime.collectCycles()`, `runtime.liveBytes()`, `runtime.liveObjects()`, and\n"
+            "`runtime.info()`.\n"
             "\n"
             "Usage: `import mem` then call `mem.function()`.\n"
             "\n"
@@ -3903,6 +3994,81 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_regex) / sizeof(_symbols_regex[0])),
     },
     {
+        .module = "runtime",
+        .summary = "Runtime and heap introspection",
+        .body =
+            "# runtime module\n"
+            "\n"
+            "Runtime diagnostics and current coroutine heap introspection.\n"
+            "\n"
+            "Use `runtime.collectCycles()` to request cycle collection, and\n"
+            "`runtime.liveBytes()`, `runtime.liveObjects()`, or `runtime.info()` to inspect\n"
+            "live memory for the current coroutine heap.\n"
+            "\n"
+            "Usage: `import runtime` then call `runtime.function()`.\n"
+            "\n"
+            "## API\n"
+            "\n"
+            "| Symbol | Signature | Summary |\n"
+            "|--|--|--|\n"
+            "| `runtime.collectCycles` | `(): int` | Run cycle collection + whole-block reclaim, return cycle collection count |\n"
+            "| `runtime.disableCycleCollection` | `(): ()` | Pause the automatic cycle collector |\n"
+            "| `runtime.enableCycleCollection` | `(): ()` | Resume the automatic cycle collector |\n"
+            "| `runtime.info` | `(): Map` | Get memory-model runtime info as Map |\n"
+            "| `runtime.isCycleCollectionEnabled` | `(): bool` | Check if automatic cycle collection is enabled |\n"
+            "| `runtime.liveBytes` | `(): int` | Get live memory usage in bytes |\n"
+            "| `runtime.liveObjects` | `(): int` | Get live object count |\n"
+            "",
+        .symbols = _symbols_runtime,
+        .symbol_count = (int)(sizeof(_symbols_runtime) / sizeof(_symbols_runtime[0])),
+    },
+    {
+        .module = "sync",
+        .summary = "Coroutine-domain synchronization primitives",
+        .body =
+            "# sync module\n"
+            "\n"
+            "Coroutine-domain synchronization primitives: `Mutex<T>`, `RwLock<T>`, `Once`,\n"
+            "`Barrier`, `Condvar`, `CachePadded<T>`, and `fence(order)`.\n"
+            "\n"
+            "These primitives may suspend the current coroutine instead of blocking an OS\n"
+            "thread. They must be imported explicitly with `import sync` or named imports\n"
+            "from `sync`.\n"
+            "",
+        .symbols = NULL,
+        .symbol_count = 0,
+    },
+    {
+        .module = "sys",
+        .summary = "OS-thread-domain system primitives",
+        .body =
+            "# sys module\n"
+            "\n"
+            "OS-thread-domain system primitives, including `Thread.spawn`, `OsMutex`,\n"
+            "`OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, CPU/thread helpers, and blocking\n"
+            "sleep/yield operations.\n"
+            "\n"
+            "Use `sys.Os*` synchronization primitives for `sys.Thread` code and other\n"
+            "blocking OS-thread contexts. Coroutine-domain `sync.*` primitives are separate.\n"
+            "\n"
+            "## API\n"
+            "\n"
+            "| Symbol | Signature | Summary |\n"
+            "|--|--|--|\n"
+            "| `sys.OsBarrier` | `(parties: int): OsBarrier` | Create a reusable OS-domain barrier |\n"
+            "| `sys.OsCondvar` | `(): OsCondvar` | Create an OS-domain condition variable |\n"
+            "| `sys.OsMutex` | `(): OsMutex` | Create an OS-domain mutex |\n"
+            "| `sys.OsOnce` | `(): OsOnce` | Create an OS-domain once gate |\n"
+            "| `sys.OsRwLock` | `(): OsRwLock` | Create an OS-domain read-write lock |\n"
+            "| `sys.cpuCount` | `(): int` | Return the number of CPUs available to OS-thread work |\n"
+            "| `sys.pinToCpu` | `(cpu: int): bool` | Best-effort pin of the current OS thread to a CPU index |\n"
+            "| `sys.sleepMs` | `(ms: int): ()` | Block the current OS thread for at least ms milliseconds |\n"
+            "| `sys.threadYield` | `(): ()` | Yield the current OS thread to another runnable OS thread |\n"
+            "",
+        .symbols = _symbols_sys,
+        .symbol_count = (int)(sizeof(_symbols_sys) / sizeof(_symbols_sys[0])),
+    },
+    {
         .module = "time",
         .summary = "Time, timers, sleep",
         .body =
@@ -4054,7 +4220,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),
     },
 };
-XR_DATADEF const int xmcp_generated_stdlib_count = 23;
+XR_DATADEF const int xmcp_generated_stdlib_count = 26;
 
 XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "# Xray Language Cheatsheet\n"
@@ -4565,7 +4731,7 @@ XR_DATADEF const char xmcp_generated_stdlib_list[] =
     "| `csv` | CSV parsing and generation |\n"
     "| `datetime` | Date and time manipulation |\n"
     "| `encoding` | Character encoding conversion |\n"
-    "| `mem` | Memory and cycle-collection introspection |\n"
+    "| `mem` | Raw memory, Buffer, page allocation, volatile access, and memory primitives |\n"
     "| `http` | HTTP client/server, REST API, routing |\n"
     "| `io` | File I/O operations |\n"
     "| `log` | Structured logging system |\n"
@@ -4574,6 +4740,9 @@ XR_DATADEF const char xmcp_generated_stdlib_list[] =
     "| `os` | Operating system interface |\n"
     "| `path` | File path manipulation |\n"
     "| `regex` | Regular expressions |\n"
+    "| `runtime` | Runtime and heap introspection |\n"
+    "| `sync` | Coroutine-domain synchronization primitives |\n"
+    "| `sys` | OS-thread-domain system primitives |\n"
     "| `time` | Time, timers, sleep |\n"
     "| `toml` | TOML configuration parsing |\n"
     "| `url` | URL parsing and construction |\n"

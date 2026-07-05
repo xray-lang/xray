@@ -4096,8 +4096,10 @@ xray 的默认并发模型偏向**消息传递 + 显式共享身份 + 显式所�
 | Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
 | `shared` | 稳定共享身份 | 存储在全局堆，作用域仍按词法规则；并发可变安全由值的类型语义决定 |
 | `Atomic<T>` | 无锁原子包装 | 对 `int`/`float`/`bool` 提供 C11 原子操作 |
+| `sync.Mutex<T>` / `sync.RwLock<T>` | 协程域锁 | 需显式 `import sync`；等待时挂起协程，不阻塞 worker；不得在 `sys.Thread` 线程体中使用 |
+| `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` 等 | OS 线程域锁 | 需显式 `import sys`；阻塞当前 OS 线程，适合 `sys.Thread`、运行时组件和短临界区 |
 
-> **设计说明**：xray 不暴露 `Mutex`/`RwLock` 等通用锁原语。对于简单共享计数器、标志位等场景，`Atomic<T>` 是推荐选择；对于复杂互斥场景，使用 `Channel(1)` 模拟 lock/unlock。
+> **设计说明**：xray 不在 prelude 暴露裸 `Mutex`/`RwLock`。默认推荐 `Channel`、`shared`、`move` 与 `Atomic<T>`；确需锁时必须通过 `sync` 或 `sys` 显式选定执行域，避免把协程挂起锁和 OS 阻塞锁混用。
 
 #### `Atomic<T>` — 无锁原子类型
 
@@ -4895,7 +4897,10 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | 模块 | 关键 API |
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`、source 位置开关、异步写入模式 |
-| `mem` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
+| `runtime` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
+| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()`、`pageAlloc()`、`copy()` / `move()` / `set()` / `compare()`、`volatileLoad()` / `volatileStore()`、`fence()` 等裸内存能力 |
+| `sync` | `Mutex<T>` / `RwLock<T>` / `Once` / `Barrier` / `Condvar` / `CachePadded<T>` / `fence()` |
+| `sys` | `Thread.spawn()`、`OsMutex` / `OsRwLock` / `OsCondvar` / `OsBarrier` / `OsOnce`、`cpuCount()` / `sleepMs()` 等 OS 线程域能力 |
 
 ### 15.10 分布式
 
@@ -4911,7 +4916,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 文档中可能引用过、但当前 stdlib 中**确实没有**的模块（避免误导）：
 
-`fs` · `process` · `dns` · `random` · `strconv` · `sync` · `runtime` · `json`
+`fs` · `process` · `dns` · `random` · `strconv` · `json`
 
 这些功能或者归入其他模块（见上面各小节注），或者尚未实现。
 
