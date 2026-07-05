@@ -3,9 +3,9 @@
 
 @test
 fn test_json_stringify_catches_function() {
-    let f = fn() {}
-    let obj = { handler: f }
-    let caught = false
+    var f = fn() {}
+    var obj = { handler: f }
+    var caught = false
     try {
         Json.stringify(obj)
     } catch panic (e) {
@@ -16,10 +16,10 @@ fn test_json_stringify_catches_function() {
 
 @test
 fn test_json_stringify_catches_nested() {
-    let inner = fn() {}
-    let obj = { callback: inner }
-    let caught = false
-    let msg = ""
+    var inner = fn() {}
+    var obj = { callback: inner }
+    var caught = false
+    var msg = ""
     try {
         Json.stringify(obj)
     } catch panic (e) {
@@ -32,16 +32,16 @@ fn test_json_stringify_catches_nested() {
 
 @test
 fn test_json_stringify_normal_succeeds() {
-    let result = Json.stringify({a: 1, b: "hello"})
+    var result = Json.stringify({a: 1, b: "hello"})
     assert_eq(result.length > 0, true)
 }
 
 @test
 fn test_exception_after_catch_continues() {
-    let f = fn() {}
-    let obj = { handler: f }
-    let step1 = false
-    let step2 = false
+    var f = fn() {}
+    var obj = { handler: f }
+    var step1 = false
+    var step2 = false
     try {
         Json.stringify(obj)
     } catch panic (e) {
@@ -54,10 +54,10 @@ fn test_exception_after_catch_continues() {
 
 @test
 fn test_multiple_catch_blocks() {
-    let f = fn() {}
-    let count = 0
+    var f = fn() {}
+    var count = 0
     for (i in 0..3) {
-        let obj = { handler: f }
+        var obj = { handler: f }
         try {
             Json.stringify(obj)
         } catch panic (e) {

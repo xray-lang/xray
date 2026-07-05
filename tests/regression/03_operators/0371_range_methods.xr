@@ -6,33 +6,33 @@
 
 @test
 fn test_range_start_property() {
-    let r = 1..10
+    var r = 1..10
     assert_eq(r.start, 1)
 }
 
 @test
 fn test_range_end_property() {
-    let r = 1..10
+    var r = 1..10
     assert_eq(r.end, 10)
 }
 
 @test
 fn test_range_length_property() {
     // 半开区间 [1, 10) 的元素数 = 9
-    let r = 1..10
+    var r = 1..10
     assert_eq(r.length, 9)
 }
 
 @test
 fn test_range_length_empty() {
-    let r = 5..5
+    var r = 5..5
     assert_eq(r.length, 0)
 }
 
 @test
 fn test_range_length_matches_iteration() {
     // length 与 for-in 迭代次数必须一致
-    let count = 0
+    var count = 0
     for (i in 0..7) {
         count = count + 1
     }
@@ -71,7 +71,7 @@ fn test_includes_above_end() {
 
 @test
 fn test_includes_empty_range() {
-    let r = 5..5
+    var r = 5..5
     assert_eq(r.includes(5), false)
     assert_eq(r.includes(4), false)
 }
@@ -81,9 +81,9 @@ fn test_includes_empty_range() {
 @test
 fn test_includes_matches_iteration() {
     // 对 [0, 5) 内的每个候选值，includes(x) 必须 ⇔ x 在 for-in 中出现
-    let i = -2
+    var i = -2
     while (i < 8) {
-        let by_for = false
+        var by_for = false
         for (j in 0..5) {
             if (j == i) {
                 by_for = true

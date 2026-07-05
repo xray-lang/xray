@@ -17,33 +17,33 @@ fn worker(n: int) -> int {
     // Keep many locals live so worker has high maxstacksize (~20+).
     // This pushes middle()'s base_offset far enough that wide()'s
     // register file (30+ slots) extends past the slab's 64 slots.
-    let v0 = n + 0
-    let v1 = v0 + 1
-    let v2 = v1 + 1
-    let v3 = v2 + 1
-    let v4 = v3 + 1
-    let v5 = v4 + 1
-    let v6 = v5 + 1
-    let v7 = v6 + 1
-    let v8 = v7 + 1
-    let v9 = v8 + 1
-    let chain = big.Chain()
-    let r = chain.middle(v9)
+    var v0 = n + 0
+    var v1 = v0 + 1
+    var v2 = v1 + 1
+    var v3 = v2 + 1
+    var v4 = v3 + 1
+    var v5 = v4 + 1
+    var v6 = v5 + 1
+    var v7 = v6 + 1
+    var v8 = v7 + 1
+    var v9 = v8 + 1
+    var chain = big.Chain()
+    var r = chain.middle(v9)
     return r + v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9
 }
 
 @test
 fn test_invoke_grows_combined_slab() {
     // Spawn in coroutine: pooled coros start with [stack:64][frames:4].
-    let t1 = go worker(0)
-    let t2 = go worker(100)
-    let t3 = go worker(200)
-    let r1 = await t1
-    let r2 = await t2
-    let r3 = await t3
+    var t1 = go worker(0)
+    var t2 = go worker(100)
+    var t3 = go worker(200)
+    var r1 = await t1
+    var r2 = await t2
+    var r3 = await t3
     // Linearity: differences should be equal due to the additive seed.
-    let d12 = r2 - r1
-    let d23 = r3 - r2
+    var d12 = r2 - r1
+    var d23 = r3 - r2
     assert_eq(d12, d23)
     assert(r1 > 0)
     assert(r2 > r1)
@@ -51,17 +51,17 @@ fn test_invoke_grows_combined_slab() {
 
 @test
 fn test_invoke_main_coro() {
-    let r = worker(0)
+    var r = worker(0)
     assert(r > 0)
 }
 
 @test
 fn test_repeated_go_reuses_slab() {
     // Repeatedly spawn so pooled slabs are recycled.
-    let i = 0
+    var i = 0
     while (i < 32) {
-        let t = go worker(i)
-        let r = await t
+        var t = go worker(i)
+        var r = await t
         assert(r > 0)
         i = i + 1
     }

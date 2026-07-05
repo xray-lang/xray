@@ -8,7 +8,7 @@ fn part(n: int) -> string {
     return "p" + string(n)
 }
 
-let s = "a" + part(1) + "b" + part(2) + true + null + Mode.Ready
+var s = "a" + part(1) + "b" + part(2) + true + null + Mode.Ready
 print(s)
 
 print("${42}")

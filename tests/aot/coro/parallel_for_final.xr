@@ -1,6 +1,6 @@
 fn main() {
-    shared const partials: Array<int> = []
-    let w = 0
+    shared partials: Array<int> = []
+    var w = 0
     while (w < 4) {
         partials.push(0)
         w = w + 1
@@ -16,7 +16,7 @@ fn main() {
         acc = acc + 1
     }
 
-    let total = 0
+    var total = 0
     w = 0
     while (w < 4) {
         unsafe {
@@ -26,7 +26,7 @@ fn main() {
     }
     print(total)
 
-    shared const ranges: Array<int> = []
+    shared ranges: Array<int> = []
     w = 0
     while (w < 2) {
         ranges.push(0)

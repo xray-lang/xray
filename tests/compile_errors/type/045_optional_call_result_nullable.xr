@@ -4,5 +4,5 @@ fn bump(x: int) -> int {
     return x + 1
 }
 
-let f: IntFn? = bump
-let value: int = f?.(41)
+var f: IntFn? = bump
+var value: int = f?.(41)

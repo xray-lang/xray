@@ -32,11 +32,11 @@ fn sumArray(values: Array<int>) -> int {
 }
 
 fn run(rounds: int) -> int {
-    let pair = Pair{a: 11, b: 17}
-    let box = Box(23)
-    let values = [3, 5, 7, 9]
-    let total = 0
-    for (let i = 0; i < rounds; i++) {
+    var pair = Pair{a: 11, b: 17}
+    var box = Box(23)
+    var values = [3, 5, 7, 9]
+    var total = 0
+    for (var i = 0; i < rounds; i++) {
         total = total + wrapPair(pair)
         total = total + readBox(box)
         total = total + sumArray(values)
@@ -46,7 +46,7 @@ fn run(rounds: int) -> int {
 }
 
 fn main() {
-    let result = run(180000)
+    var result = run(180000)
     print("borrow_param_rc=${result}")
 }
 

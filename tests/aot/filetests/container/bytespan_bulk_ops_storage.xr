@@ -1,9 +1,9 @@
 fn bulk(dst: ByteSpan, src: ByteSpan) -> int {
     dst.fill(1)
     src.fill(7)
-    let window: ByteSpan = dst[2:6]
+    var window: ByteSpan = dst[2:6]
     window.copyFrom(src)
     dst.repeatFrom(6, 4, 2)
-    let check: ByteSpan = dst[2:6]
+    var check: ByteSpan = dst[2:6]
     return check.compare(src) + check.commonPrefix(src)
 }

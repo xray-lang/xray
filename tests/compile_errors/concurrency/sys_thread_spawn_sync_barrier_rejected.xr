@@ -1,8 +1,8 @@
 import sys
 import sync
 
-let t = sys.Thread.spawn(fn() -> int {
-    let b = sync.Barrier(1)
+var t = sys.Thread.spawn(fn() -> int {
+    var b = sync.Barrier(1)
     if (b.wait()) {
         return 1
     }

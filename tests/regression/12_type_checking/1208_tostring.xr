@@ -39,48 +39,48 @@ fn test_tostring() {
     assert_eq(string(42) + " items", "42 items")
 
     // === 4. Array toString ===
-    let arr = [1, 2, 3]
+    var arr = [1, 2, 3]
     assert_eq(string(arr), "[1, 2, 3]")
     assert_eq("arr: " + string(arr), "arr: [1, 2, 3]")
-    let nested = [[1, 2], [3, 4]]
+    var nested = [[1, 2], [3, 4]]
     assert_eq(string(nested), "[[1, 2], [3, 4]]")
 
     // === 5. Map toString ===
-    let m = #{"a": 1}
-    let ms = string(m)
+    var m = #{"a": 1}
+    var ms = string(m)
     assert(ms.indexOf("\"a\": 1") >= 0)
 
     // === 6. Set toString ===
-    let st = #[1, 2, 3]
-    let ss = string(st)
+    var st = #[1, 2, 3]
+    var ss = string(st)
     assert(ss.indexOf("#[") == 0)
 
     // === 7. Json toString ===
-    let obj = { name: "Alice", age: 30 }
-    let js = string(obj)
+    var obj = { name: "Alice", age: 30 }
+    var js = string(obj)
     assert(js.indexOf("name") >= 0)
     assert(js.indexOf("Alice") >= 0)
 
     // === 8. Bytes toString (Bytes is Array<uint8>) ===
-    let buf = Bytes(3, 0)
+    var buf = Bytes(3, 0)
     assert_eq(string(buf), "[0, 0, 0]")
 
     // === 9. Channel toString ===
-    shared const ch = Channel(5)
-    let cs = string(ch)
+    shared ch = Channel(5)
+    var cs = string(ch)
     assert(cs.indexOf("Channel") == 0)
 
     // === 10. Function toString ===
-    let fs = string(myFunc)
+    var fs = string(myFunc)
     assert(fs.indexOf("fn") == 0)
 
     // === 11. Class and Instance toString ===
     assert(string(Dog).indexOf("class") == 0)
-    let dog = Dog("Rex")
+    var dog = Dog("Rex")
     assert(string(dog).indexOf("Dog") >= 0)
 
     // === 12. Custom toString on Instance ===
-    let p = Point(3, 4)
+    var p = Point(3, 4)
     assert_eq(p.toString(), "(3, 4)")
 
     // === 13. Enum toString ===
@@ -88,8 +88,8 @@ fn test_tostring() {
     assert_eq("color: " + string(Color.Green), "color: Color.Green")
 
     // === 14. Template string auto conversion ===
-    let x = 42
-    let arr2 = [1, 2]
+    var x = 42
+    var arr2 = [1, 2]
     assert_eq("x=${x}", "x=42")
     assert_eq("arr=${arr2}", "arr=[1, 2]")
 }

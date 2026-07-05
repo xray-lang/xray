@@ -1,5 +1,5 @@
 fn main() {
-    let flag: bool? = true
+    var flag: bool? = true
     if (flag) {
         print("bad")
     }

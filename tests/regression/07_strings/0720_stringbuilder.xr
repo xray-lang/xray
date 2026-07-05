@@ -6,7 +6,7 @@
 
 @test
 fn test_basic_append() {
-    let sb = StringBuilder()
+    var sb = StringBuilder()
     sb.append("Hello")
     sb.append(" ")
     sb.append("World")
@@ -15,7 +15,7 @@ fn test_basic_append() {
 
 @test
 fn test_chain_append() {
-    let sb = StringBuilder()
+    var sb = StringBuilder()
     sb.append("a").append("b").append("c")
     assert_eq(sb.toString(), "abc")
 }
@@ -24,7 +24,7 @@ fn test_chain_append() {
 
 @test
 fn test_append_int() {
-    let sb = StringBuilder()
+    var sb = StringBuilder()
     sb.append("num: ")
     sb.append(42)
     assert_eq(sb.toString(), "num: 42")
@@ -32,27 +32,27 @@ fn test_append_int() {
 
 @test
 fn test_append_float() {
-    let sb = StringBuilder()
+    var sb = StringBuilder()
     sb.append("pi: ")
     sb.append(3.14)
-    let result = sb.toString()
+    var result = sb.toString()
     assert_eq(result.startsWith("pi: 3.14"), true)
 }
 
 @test
 fn test_mixed_types() {
-    let sb = StringBuilder()
+    var sb = StringBuilder()
     sb.append("count=")
     sb.append(100)
     sb.append(", ok=")
     sb.append(true)
-    let result = sb.toString()
+    var result = sb.toString()
     assert_eq(result.includes("100"), true)
 }
 
 @test
 fn test_append_char() {
-    let sb = StringBuilder()
+    var sb = StringBuilder()
     sb.append("hex=")
     sb.append("0123456789abcdef"[10])
     sb.append(", unicode=")
@@ -64,7 +64,7 @@ fn test_append_char() {
 
 @test
 fn test_loop_append() {
-    let sb = StringBuilder()
+    var sb = StringBuilder()
     for (i in 0..5) {
         sb.append("x")
     }
@@ -73,7 +73,7 @@ fn test_loop_append() {
 
 @test
 fn test_loop_numbers() {
-    let sb = StringBuilder()
+    var sb = StringBuilder()
     for (i in 1..4) {
         if (i > 1) {
             sb.append(",")
@@ -87,7 +87,7 @@ fn test_loop_numbers() {
 
 @test
 fn test_clear() {
-    let sb = StringBuilder()
+    var sb = StringBuilder()
     sb.append("test")
     sb.clear()
     sb.append("new")
@@ -96,7 +96,7 @@ fn test_clear() {
 
 @test
 fn test_clear_then_reuse() {
-    let sb = StringBuilder()
+    var sb = StringBuilder()
     sb.append("first")
     assert_eq(sb.toString(), "first")
     sb.clear()
@@ -108,7 +108,7 @@ fn test_clear_then_reuse() {
 
 @test
 fn test_empty() {
-    let sb = StringBuilder()
+    var sb = StringBuilder()
     assert_eq(sb.toString(), "")
 }
 
@@ -116,7 +116,7 @@ fn test_empty() {
 
 @test
 fn test_large_append() {
-    let sb = StringBuilder()
+    var sb = StringBuilder()
     for (i in 0..100) {
         sb.append("a")
     }

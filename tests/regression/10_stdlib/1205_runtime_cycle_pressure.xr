@@ -10,10 +10,10 @@ import runtime
 @test
 fn test_nested_object_survival() {
     runtime.disableCycleCollection()
-    let containers: Array<Json> = []
-    for (let i = 0; i < 200; i++) {
-        let inner_map: Json = {"key": "value_" + string(i), "idx": i}
-        let inner_arr: Json = [i, i * 2, i * 3]
+    var containers: Array<Json> = []
+    for (var i = 0; i < 200; i++) {
+        var inner_map: Json = {"key": "value_" + string(i), "idx": i}
+        var inner_arr: Json = [i, i * 2, i * 3]
         containers.push({"map": inner_map,
             "arr": inner_arr,
             "name": "container_" + string(i)})
@@ -23,8 +23,8 @@ fn test_nested_object_survival() {
     runtime.collectCycles()
 
     // Verify all nested data is intact
-    for (let i = 0; i < 200; i++) {
-        let c = containers[i]
+    for (var i = 0; i < 200; i++) {
+        var c = containers[i]
         assert_eq(c["map"]["idx"], i)
         assert_eq(c["arr"][1], i * 2)
         assert_eq(c["name"], "container_" + string(i))
@@ -37,22 +37,22 @@ fn test_nested_object_survival() {
 @test
 fn test_alloc_interleaved_with_gc() {
     runtime.disableCycleCollection()
-    let phase1: Array<Json> = []
-    for (let i = 0; i < 100; i++) {
+    var phase1: Array<Json> = []
+    for (var i = 0; i < 100; i++) {
         phase1.push({"id": i, "data": "phase1_" + string(i)})
     }
 
     runtime.collectCycles()
 
-    let phase2: Array<Json> = []
-    for (let i = 0; i < 100; i++) {
+    var phase2: Array<Json> = []
+    for (var i = 0; i < 100; i++) {
         phase2.push({"id": i + 100, "data": "phase2_" + string(i)})
     }
 
     runtime.collectCycles()
 
     // Verify both phases intact
-    for (let i = 0; i < 100; i++) {
+    for (var i = 0; i < 100; i++) {
         assert_eq(phase1[i]["id"], i)
         assert_eq(phase2[i]["id"], i + 100)
     }
@@ -64,10 +64,10 @@ fn test_alloc_interleaved_with_gc() {
 @test
 fn test_deep_reference_chain() {
     runtime.disableCycleCollection()
-    let head: Json = {"value": 0, "next": null}
-    let current: Json = head
-    for (let i = 1; i < 50; i++) {
-        let node: Json = {"value": i, "next": null}
+    var head: Json = {"value": 0, "next": null}
+    var current: Json = head
+    for (var i = 1; i < 50; i++) {
+        var node: Json = {"value": i, "next": null}
         current["next"] = node
         current = node
     }
@@ -76,7 +76,7 @@ fn test_deep_reference_chain() {
 
     // Walk the chain and verify
     current = head
-    let count = 0
+    var count = 0
     while (current != null) {
         assert_eq(current["value"], count)
         current = current["next"]
@@ -91,14 +91,14 @@ fn test_deep_reference_chain() {
 @test
 fn test_high_churn_with_live_roots() {
     runtime.disableCycleCollection()
-    let live: Array<string> = []
-    for (let i = 0; i < 50; i++) {
+    var live: Array<string> = []
+    for (var i = 0; i < 50; i++) {
         live.push("persistent_" + string(i))
     }
 
-    for (let round = 0; round < 20; round++) {
-        let temp: Array<Array<int>> = []
-        for (let j = 0; j < 200; j++) {
+    for (var round = 0; round < 20; round++) {
+        var temp: Array<Array<int>> = []
+        for (var j = 0; j < 200; j++) {
             temp.push([j, j + 1, j + 2])
         }
         // temp goes out of scope
@@ -107,7 +107,7 @@ fn test_high_churn_with_live_roots() {
     runtime.collectCycles()
 
     // Live roots must survive all the churn
-    for (let i = 0; i < 50; i++) {
+    for (var i = 0; i < 50; i++) {
         assert_eq(live[i], "persistent_" + string(i))
     }
 }
@@ -117,9 +117,9 @@ fn test_high_churn_with_live_roots() {
 @test
 fn test_multiple_gc_cycles() {
     runtime.disableCycleCollection()
-    for (let cycle = 0; cycle < 10; cycle++) {
-        let data: Array<Json> = []
-        for (let i = 0; i < 100; i++) {
+    for (var cycle = 0; cycle < 10; cycle++) {
+        var data: Array<Json> = []
+        for (var i = 0; i < 100; i++) {
             data.push({"cycle": cycle, "idx": i})
         }
         runtime.collectCycles()

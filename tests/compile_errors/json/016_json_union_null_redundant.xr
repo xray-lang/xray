@@ -1,1 +1,1 @@
-let data: Json | null = null
+var data: Json | null = null

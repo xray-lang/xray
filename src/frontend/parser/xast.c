@@ -320,10 +320,13 @@ AstNode *xr_ast_var_decl(XrCompilerSession *session, const char *name, AstNode *
 AstNode *xr_ast_var_decl_with_mode(XrCompilerSession *session, const char *name,
                                    AstNode *initializer, bool is_const, uint8_t storage_mode,
                                    int line) {
-    AstNode *node = alloc_node(session, is_const ? AST_CONST_DECL : AST_VAR_DECL, line);
+    AstNodeType type = storage_mode == XR_STORAGE_SHARED
+                           ? AST_SHARED_DECL
+                           : (is_const ? AST_CONST_DECL : AST_VAR_DECL);
+    AstNode *node = alloc_node(session, type, line);
     node->as.var_decl.name = ast_strdup(session, name);
     node->as.var_decl.initializer = initializer;
-    node->as.var_decl.is_const = is_const;
+    node->as.var_decl.is_const = type == AST_CONST_DECL;
     node->as.var_decl.storage_mode = storage_mode;
     node->as.var_decl.type_annotation = NULL;
     return node;
@@ -739,6 +742,17 @@ AstNode *xr_ast_as_expr(XrCompilerSession *session, AstNode *expr, XrTypeRef *ty
     node->as.as_expr.expr = expr;
     node->as.as_expr.type = type;
     node->as.as_expr.is_safe = is_safe;
+    return node;
+}
+
+AstNode *xr_ast_comptime_expr(XrCompilerSession *session, AstNode *expr, int line, int column) {
+    AstNode *node = alloc_node(session, AST_COMPTIME_EXPR, line);
+    node->column = column;
+    node->as.comptime_expr.expr = expr;
+    if (expr && expr->end_line > 0) {
+        node->end_line = expr->end_line;
+        node->end_column = expr->end_column;
+    }
     return node;
 }
 
@@ -1503,6 +1517,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "VarDecl";
         case AST_CONST_DECL:
             return "ConstDecl";
+        case AST_SHARED_DECL:
+            return "SharedDecl";
         case AST_VARIABLE:
             return "Variable";
         case AST_ASSIGNMENT:
@@ -1538,6 +1554,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "FunctionExpr";
         case AST_CALL_EXPR:
             return "CallExpr";
+        case AST_COMPTIME_EXPR:
+            return "ComptimeExpr";
         case AST_RETURN_STMT:
             return "ReturnStmt";
         case AST_ARRAY_LITERAL:
@@ -1725,6 +1743,7 @@ void xr_ast_print(AstNode *node, int indent) {
 
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             printf("%*s  name: %s\n", indent * 2, "", node->as.var_decl.name);
             if (node->as.var_decl.initializer != NULL) {
                 printf("%*s  initializer:\n", indent * 2, "");
@@ -1939,6 +1958,11 @@ void xr_ast_print(AstNode *node, int indent) {
             }
             break;
 
+        case AST_COMPTIME_EXPR:
+            printf("\n");
+            xr_ast_print(node->as.comptime_expr.expr, indent + 1);
+            break;
+
         case AST_RETURN_STMT:
             printf(" [%d values]\n", node->as.return_stmt.value_count);
             for (int i = 0; i < node->as.return_stmt.value_count; i++) {
@@ -2126,7 +2150,7 @@ AstNode *xr_ast_import_stmt_ex(XrCompilerSession *session, const char *module_na
 
 // Create export statement node
 // export fn add() {}
-// export let PI = 3.14
+// export const PI = 3.14
 // export class User {}
 AstNode *xr_ast_export_stmt(XrCompilerSession *session, AstNode *declaration,
                             const char *export_name, int line) {
@@ -2177,7 +2201,7 @@ AstNode *xr_ast_export_reexport(XrCompilerSession *session, const char *from_pat
 /* ========== Destructuring Implementation ========== */
 
 // Create array destructuring pattern
-// let [a, b, c] = arr
+// var [a, b, c] = arr
 XrDestructurePattern *xr_pattern_array(XrCompilerSession *session, XrDestructurePattern **elements,
                                        int count) {
     (void) session;
@@ -2190,7 +2214,7 @@ XrDestructurePattern *xr_pattern_array(XrCompilerSession *session, XrDestructure
 }
 
 // Create tuple destructuring pattern
-// let (a, b, c) = tuple — element_count == 0 represents the unit
+// var (a, b, c) = tuple — element_count == 0 represents the unit
 // pattern `()`, count == 1 the unary form `(x,)`. Storage shape
 // matches array pattern so visitors that walk children can reuse
 // the array.elements traversal; the PATTERN_TUPLE tag tells the
@@ -2207,7 +2231,7 @@ XrDestructurePattern *xr_pattern_tuple(XrCompilerSession *session, XrDestructure
 }
 
 // Create object destructuring pattern (curly braces)
-// let {name, age} = person or let {name: userName} = person
+// var {name, age} = person or var {name: userName} = person
 XrDestructurePattern *xr_pattern_object(XrCompilerSession *session, char **fields,
                                         XrDestructurePattern **patterns, int count,
                                         bool use_shorthand) {
@@ -2245,7 +2269,7 @@ XrDestructurePattern *xr_pattern_skip(XrCompilerSession *session) {
 }
 
 // Create destructuring declaration node
-// let [a, b] = arr or const {x, y} = obj
+// var [a, b] = arr or const {x, y} = obj
 AstNode *xr_ast_destructure_decl(XrCompilerSession *session, XrDestructurePattern *pattern,
                                  AstNode *initializer, bool is_const, int line) {
     AstNode *node = alloc_node(session, AST_DESTRUCTURE_DECL, line);

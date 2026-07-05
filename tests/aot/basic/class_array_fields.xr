@@ -6,8 +6,8 @@ class IntBag {
     }
 
     sum() -> int {
-        let i = 0
-        let total = 0
+        var i = 0
+        var total = 0
         while (i < this.values.length) {
             total = total + this.values[i]
             i = i + 1
@@ -22,8 +22,8 @@ class IntBag {
 }
 
 fn make_values(n: int) -> Array<int> {
-    let values: Array<int> = []
-    let i = 0
+    var values: Array<int> = []
+    var i = 0
     while (i < n) {
         values.push(i + 1)
         i = i + 1
@@ -31,7 +31,7 @@ fn make_values(n: int) -> Array<int> {
     return values
 }
 
-let bag = IntBag(make_values(5))
+var bag = IntBag(make_values(5))
 print(bag.sum())
 print(bag.append(6))
 print(bag.sum())

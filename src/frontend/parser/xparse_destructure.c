@@ -9,8 +9,8 @@
  *
  * KEY CONCEPT:
  *   Flat (non-nested) destructuring only:
- *     - Array: let [a, b, c] = expr        (positional)
- *     - Object: let {x, y: local} = expr   (field-name extraction)
+ *     - Array: var [a, b, c] = expr        (positional)
+ *     - Object: var {x, y: local} = expr   (field-name extraction)
  *   No nesting, no rest (...), no Map destructuring.
  */
 
@@ -211,7 +211,7 @@ XrDestructurePattern *xr_parse_destructure_pattern(Parser *parser) {
     }
 }
 
-// Parse destructuring declaration: let [a, b] = expr  or  const {x, y} = expr
+// Parse destructuring declaration: var [a, b] = expr  or  const {x, y} = expr
 AstNode *xr_parse_destructure_declaration(Parser *parser, bool is_const) {
     XR_DCHECK(parser != NULL, "parse_destructure_declaration: NULL parser");
     int line = parser->previous.line;

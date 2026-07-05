@@ -9,7 +9,7 @@ enum OtherErr { Msg(string) }
 // 1. Single catch — existing syntax unchanged
 @test
 fn test_single_catch() {
-    let msg = ""
+    var msg = ""
     try {
         throw CatchErr.Msg("single")
     } catch (e) {
@@ -21,7 +21,7 @@ fn test_single_catch() {
 // 2. Typed catch — catch (e: CatchErr)
 @test
 fn test_typed_catch_exception() {
-    let msg = ""
+    var msg = ""
     try {
         throw CatchErr.Msg("typed")
     } catch (e: CatchErr) {
@@ -33,8 +33,8 @@ fn test_typed_catch_exception() {
 // 3. Typed catch + defer cleanup (defer runs at function exit, after catch)
 @test
 fn test_typed_catch_defer() {
-    let msg = ""
-    let fin = false
+    var msg = ""
+    var fin = false
     fn work() {
         defer { fin = true }
         try {
@@ -51,7 +51,7 @@ fn test_typed_catch_defer() {
 // 4. Multi-catch: typed then catch-all
 @test
 fn test_multi_catch_typed_then_catchall() {
-    let result = ""
+    var result = ""
     try {
         throw CatchErr.Msg("multi")
     } catch (e: CatchErr) {
@@ -65,7 +65,7 @@ fn test_multi_catch_typed_then_catchall() {
 // 5. Multi-catch: all typed (CatchErr matches first)
 @test
 fn test_multi_catch_all_typed() {
-    let result = ""
+    var result = ""
     try {
         throw CatchErr.Msg("first")
     } catch (e: CatchErr) {
@@ -77,8 +77,8 @@ fn test_multi_catch_all_typed() {
 // 6. Multi-catch with defer cleanup
 @test
 fn test_multi_catch_defer() {
-    let result = ""
-    let fin = false
+    var result = ""
+    var fin = false
     fn work() {
         defer { fin = true }
         try {
@@ -97,7 +97,7 @@ fn test_multi_catch_defer() {
 // 7. Nested multi-catch with rethrow
 @test
 fn test_nested_multi_catch_rethrow() {
-    let log: Array<string> = []
+    var log: Array<string> = []
     try {
         try {
             throw CatchErr.Msg("inner")
@@ -117,8 +117,8 @@ fn test_nested_multi_catch_rethrow() {
 // 8. Sequential multi-catch blocks
 @test
 fn test_sequential_multi_catch() {
-    let a = ""
-    let b = ""
+    var a = ""
+    var b = ""
     try {
         throw CatchErr.Msg("first")
     } catch (e: CatchErr) {
@@ -136,7 +136,7 @@ fn test_sequential_multi_catch() {
 // 9. Catch-all only (untyped)
 @test
 fn test_catchall_only() {
-    let msg = ""
+    var msg = ""
     try {
         throw CatchErr.Msg("any")
     } catch (e) {
@@ -148,7 +148,7 @@ fn test_catchall_only() {
 // 10. Multi-catch: catch-all catches when typed enum doesn't match
 @test
 fn test_multi_catch_fallthrough_to_catchall() {
-    let result = ""
+    var result = ""
     try {
         throw CatchErr.Msg("fall")
     } catch (e: OtherErr) {

@@ -8,7 +8,7 @@ order: 021
 
 ## 附录 B. 关键字索引
 
-完整 63 个关键字按字母排序见 [§1.5](#15-关键字)。
+完整 65 个关键字按字母排序见 [§1.5](#15-关键字)。
 
 | 关键字 | 节 |
 |--|--|
@@ -20,6 +20,7 @@ order: 021
 | `catch` | §8 |
 | `char` | §2.3.5 |
 | `class` | §5.3 |
+| `comptime` | §3.2 |
 | `const` | §5.1 |
 | `constructor` | §5.3 |
 | `continue` | §4.6 |
@@ -41,12 +42,12 @@ order: 021
 | `int` `int8`..`int64` | §2.3.1 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
-| `let` | §5.1 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
 | `override` | §5.3 |
+| `parallel` | §10 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
 | `return` | §4.7 |
@@ -64,6 +65,7 @@ order: 021
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
 | `unsafe` | §3.2 |
+| `var` | §5.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
 <!-- /xr-spec:cn -->
@@ -73,7 +75,7 @@ order: 021
 
 ## Appendix B. Keyword Index
 
-The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
+The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
 
 | Keyword | Section |
 |--|--|
@@ -85,6 +87,7 @@ The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `catch` | §8 |
 | `char` | §2.3.5 |
 | `class` | §5.3 |
+| `comptime` | §3.2 |
 | `const` | §5.1 |
 | `constructor` | §5.3 |
 | `continue` | §4.6 |
@@ -106,12 +109,12 @@ The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `int` `int8`..`int64` | §2.3.1 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
-| `let` | §5.1 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
 | `override` | §5.3 |
+| `parallel` | §10 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
 | `return` | §4.7 |
@@ -129,6 +132,7 @@ The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
 | `unsafe` | §3.2 |
+| `var` | §5.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
 <!-- /xr-spec:en -->

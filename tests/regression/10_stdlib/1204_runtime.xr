@@ -5,21 +5,21 @@ import runtime
 // @test runtime.isCycleCollectionEnabled returns bool
 @test
 fn test_mem_is_cycle_collection_enabled() {
-    let running = runtime.isCycleCollectionEnabled()
+    var running = runtime.isCycleCollectionEnabled()
     assert_eq(typeof(running), "bool")
 }
 
 // @test runtime.liveBytes returns non-negative
 @test
 fn test_mem_live_bytes() {
-    let bytes = runtime.liveBytes()
+    var bytes = runtime.liveBytes()
     assert(bytes >= 0)
 }
 
 // @test runtime.liveObjects returns non-negative
 @test
 fn test_mem_live_objects() {
-    let objs = runtime.liveObjects()
+    var objs = runtime.liveObjects()
     assert(objs >= 0)
 }
 
@@ -33,7 +33,7 @@ fn test_mem_collect_cycles() {
 // @test runtime.info()["cycleCollections"] returns non-negative
 @test
 fn test_mem_cycle_collections() {
-    let c = runtime.info()["cycleCollections"]
+    var c = runtime.info()["cycleCollections"]
     assert(c >= 0)
 }
 
@@ -41,12 +41,12 @@ fn test_mem_cycle_collections() {
 @test
 fn test_alloc_increases_memory() {
     runtime.collectCycles()
-    let before = runtime.liveBytes()
-    let arr: Array<string> = []
-    for (let i = 0; i < 100; i++) {
+    var before = runtime.liveBytes()
+    var arr: Array<string> = []
+    for (var i = 0; i < 100; i++) {
         arr.push("item_" + string(i))
     }
-    let after = runtime.liveBytes()
+    var after = runtime.liveBytes()
     assert(after >= before)
 }
 

@@ -5,7 +5,7 @@
 
 
 // === Json literal ===
-let user: Json = {
+var user: Json = {
     name: "Alice",
     age: 30,
     email: "alice@example.com",
@@ -29,20 +29,20 @@ print("updated age: ${user.age}")
 print("added phone: ${user.phone}")
 
 // === Null safety (missing fields return null) ===
-let missing = user.salary
+var missing = user.salary
 print("missing field: ${missing}")
 print("missing == null: ${missing == null}")
 
 // === JSON parse and stringify ===
-let text = '{"x": 1, "y": 2, "label": "origin"}'
-let parsed = Json.parse(text)
+var text = '{"x": 1, "y": 2, "label": "origin"}'
+var parsed = Json.parse(text)
 print("parsed: x=${parsed.x}, y=${parsed.y}")
 
-let back = Json.stringify(parsed)
+var back = Json.stringify(parsed)
 print("stringified: ${back}")
 
 // === Build JSON dynamically ===
-let config: Json = {}
+var config: Json = {}
 config.host = "localhost"
 config.port = 8080
 config.debug = true
@@ -50,8 +50,8 @@ config.allowed = ["GET", "POST"]
 print("config: ${Json.stringify(config)}")
 
 // === Iterate JSON keys (via instance methods) ===
-let keys = Json.keys(user)
+var keys = Json.keys(user)
 print("user keys: ${keys}")
 
-let values = Json.values(config)
+var values = Json.values(config)
 print("config values: ${values}")

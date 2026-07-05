@@ -19,35 +19,35 @@ class Pair<A, B> {
 
 @test
 fn test_reified_generics() {
-    let arr = [1, 2, 3]
+    var arr = [1, 2, 3]
     assert_eq(Reflect.elementType(arr), "any")
 
-    let map = #{"a": 1, "b": 2}
+    var map = #{"a": 1, "b": 2}
     assert_eq(Reflect.keyType(map), "any")
     assert_eq(Reflect.valueType(map), "any")
 
-    let set = Set()
+    var set = Set()
     assert_eq(Reflect.elementType(set), "any")
 
     // === Test 2: Typed Array ===
-    let int_arr: Array<int> = [10, 20, 30]
+    var int_arr: Array<int> = [10, 20, 30]
     assert_eq(Reflect.elementType(int_arr), "int")
 
-    let float_arr: Array<float> = [1.0, 2.0]
+    var float_arr: Array<float> = [1.0, 2.0]
     assert_eq(Reflect.elementType(float_arr), "float")
 
-    let str_arr: Array<string> = ["hello", "world"]
+    var str_arr: Array<string> = ["hello", "world"]
     assert_eq(Reflect.elementType(str_arr), "string")
 
-    let bool_arr: Array<bool> = [true, false]
+    var bool_arr: Array<bool> = [true, false]
     assert_eq(Reflect.elementType(bool_arr), "bool")
 
-    let byte_arr: Array<uint8> = [65, 66]
+    var byte_arr: Array<uint8> = [65, 66]
     assert_eq(Reflect.elementType(byte_arr), "uint8")
     assert_eq(Reflect.typeOf(byte_arr), "Array<uint8>")
 
     // === Test 3: Empty typed containers ===
-    let empty_int: Array<int> = []
+    var empty_int: Array<int> = []
     assert_eq(Reflect.elementType(empty_int), "int")
 
     // === Test 4: Non-container types return "any" ===
@@ -57,8 +57,8 @@ fn test_reified_generics() {
     assert_eq(Reflect.valueType("hello"), "any")
 
     // === Test 5: Slice preserves elem_tid ===
-    let src: Array<int> = [1, 2, 3, 4, 5]
-    let sliced: Span<int> = src[1:4]
+    var src: Array<int> = [1, 2, 3, 4, 5]
+    var sliced: Span<int> = src[1:4]
     assert_eq(Reflect.elementType(sliced), "int")
 
     // === Test 6: Reflect.typeOf - full generic type strings ===
@@ -68,32 +68,32 @@ fn test_reified_generics() {
     assert_eq(Reflect.typeOf(arr), "Array")
 
     // Map typeOf
-    let typed_map: Map<string, int> = #{"x": 1}
+    var typed_map: Map<string, int> = #{"x": 1}
     assert_eq(Reflect.typeOf(typed_map), "Map<string, int>")
     assert_eq(Reflect.typeOf(map), "Map")
 
     // Set typeOf
-    let typed_set: Set<string> = Set()
+    var typed_set: Set<string> = Set()
     assert_eq(Reflect.typeOf(typed_set), "Set<string>")
     assert_eq(Reflect.typeOf(set), "Set")
 
     // Channel typeOf
-    let typed_channel = Channel<int>(1)
+    shared typed_channel = Channel<int>(1)
     assert_eq(Reflect.elementType(typed_channel), "int")
     assert_eq(Reflect.typeOf(typed_channel), "Channel<int>")
     typed_channel.close()
 
-    let annotated_channel: Channel<string> = Channel(1)
+    shared annotated_channel: Channel<string> = Channel(1)
     assert_eq(Reflect.elementType(annotated_channel), "string")
     assert_eq(Reflect.typeOf(annotated_channel), "Channel<string>")
     annotated_channel.close()
 
-    let zero_channel = Channel<bool>()
+    shared zero_channel = Channel<bool>()
     assert_eq(Reflect.elementType(zero_channel), "bool")
     assert_eq(Reflect.typeOf(zero_channel), "Channel<bool>")
     zero_channel.close()
 
-    let annotated_zero: Channel<float> = Channel()
+    shared annotated_zero: Channel<float> = Channel()
     assert_eq(Reflect.elementType(annotated_zero), "float")
     assert_eq(Reflect.typeOf(annotated_zero), "Channel<float>")
     annotated_zero.close()
@@ -113,27 +113,27 @@ fn test_reified_generics() {
     // Slice from typed array preserves typeOf
     assert_eq(Reflect.typeOf(sliced), "Span<int>")
 
-    let mapped_bytes = byte_arr.map(fn(x: uint8) -> int { return x + 1 })
+    var mapped_bytes = byte_arr.map(fn(x: uint8) -> int { return x + 1 })
     assert_eq(Reflect.elementType(mapped_bytes), "int")
     assert_eq(mapped_bytes[0], 66)
 
     // === Test 8: User-defined generic class reified ===
 
-    let int_box = Box<int>(42)
+    var int_box = Box<int>(42)
     assert_eq(Reflect.typeOf(int_box), "Box<int>")
 
-    let str_box = Box<string>("hello")
+    var str_box = Box<string>("hello")
     assert_eq(Reflect.typeOf(str_box), "Box<string>")
 
     // Non-generic instance
-    let plain_box = Box(99)
+    var plain_box = Box(99)
     assert_eq(Reflect.typeOf(plain_box), "Box")
 
     // Two type params
 
-    let pair = Pair<int, string>(1, "one")
+    var pair = Pair<int, string>(1, "one")
     assert_eq(Reflect.typeOf(pair), "Pair<int, string>")
 
-    let plain_pair = Pair(1, 2)
+    var plain_pair = Pair(1, 2)
     assert_eq(Reflect.typeOf(plain_pair), "Pair")
 }

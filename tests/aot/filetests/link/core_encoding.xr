@@ -2,7 +2,7 @@ import encoding
 import { LE as directLE, BE as directBE } from "encoding"
 
 print(encoding.hexEncode("Hello"))
-let decoded = encoding.hexDecode("48656c6c6f")
+var decoded = encoding.hexDecode("48656c6c6f")
 if (decoded != null) {
     print(decoded.length)
     print(decoded[0])
@@ -11,7 +11,7 @@ if (decoded != null) {
 print(encoding.hexDecodeString("48656C6C6F"))
 print(encoding.hexDecode("gg") == null)
 print(encoding.hexDecode("abc") == null)
-let empty = encoding.hexDecode("")
+var empty = encoding.hexDecode("")
 if (empty != null) {
     print(empty.length)
 }
@@ -25,7 +25,7 @@ print(encoding.BE)
 print(directLE)
 print(directBE)
 
-let u16le = encoding.utf16Encode("AB")
+var u16le = encoding.utf16Encode("AB")
 print(u16le.length)
 print(u16le[0])
 print(u16le[1])
@@ -33,13 +33,13 @@ print(u16le[2])
 print(u16le[3])
 print(encoding.utf16Decode(u16le))
 
-let u16be = encoding.utf16Encode("AB", encoding.BE)
+var u16be = encoding.utf16Encode("AB", encoding.BE)
 print(u16be[0])
 print(u16be[1])
 print(encoding.utf16Decode(u16be, encoding.BE))
 print(encoding.utf16Decode(u16be, encoding.BE, false))
 
-let bom = Bytes(4)
+var bom = Bytes(4)
 bom[0] = 254
 bom[1] = 255
 bom[2] = 0

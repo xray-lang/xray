@@ -1,5 +1,5 @@
 fn main() {
-    let total = parallel reduce i in 0..8 workers 4 worker wid
+    var total = parallel reduce i in 0..8 workers 4 worker wid
         local acc = wid
         init 0
         combine (a: int, b: int) -> a + b {
@@ -9,8 +9,8 @@ fn main() {
 
     print(total)
 
-    let captured = 10
-    let total2 = parallel reduce i in 0..4 workers 2 worker wid
+    var captured = 10
+    var total2 = parallel reduce i in 0..4 workers 2 worker wid
         local acc = captured + wid
         init 0
         combine (a: int, b: int) -> a + b {
@@ -20,7 +20,7 @@ fn main() {
 
     print(total2)
 
-    let empty = parallel reduce i in 5..5 workers 4
+    var empty = parallel reduce i in 5..5 workers 4
         local acc = 99
         init 123
         combine (a: int, b: int) -> a + b {

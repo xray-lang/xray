@@ -55,14 +55,14 @@ fn test_mem_disable_enable() {
 @test
 fn test_mem_disable_prevents_gc() {
     runtime.disableCycleCollection()
-    let before_count = runtime.info()["cycleCollections"]
+    var before_count = runtime.info()["cycleCollections"]
     // Allocate a bunch of objects
-    let arr: Array<Json> = []
-    for (let i = 0; i < 500; i++) {
+    var arr: Array<Json> = []
+    for (var i = 0; i < 500; i++) {
         arr.push({"idx": i, "data": "item_" + string(i)})
     }
     // Automatic cycle collection must not have run while disabled
-    let after_count = runtime.info()["cycleCollections"]
+    var after_count = runtime.info()["cycleCollections"]
     assert_eq(before_count, after_count)
     assert(arr.length == 500)
     runtime.enableCycleCollection()
@@ -71,7 +71,7 @@ fn test_mem_disable_prevents_gc() {
 // @test runtime.info contains the RC-native keys
 @test
 fn test_mem_info_keys() {
-    let info = runtime.info()
+    var info = runtime.info()
     // Live memory + object stats
     assert(info["liveBytes"] >= 0)
     assert(info["liveKB"] >= 0.0)
@@ -91,8 +91,8 @@ fn test_mem_info_keys() {
 fn test_mem_collect_returns_count() {
     // Under RC the cycle counter never decreases. A cycle-free program may
     // report the same count across collects — assert monotonicity, not growth.
-    let count1 = runtime.collectCycles()
-    let count2 = runtime.collectCycles()
+    var count1 = runtime.collectCycles()
+    var count2 = runtime.collectCycles()
     assert(count2 >= count1)
 }
 
@@ -100,19 +100,19 @@ fn test_mem_collect_returns_count() {
 @test
 fn test_mem_live_bytes_decreases_after_collect() {
     runtime.collectCycles()
-    let baseline = runtime.liveBytes()
+    var baseline = runtime.liveBytes()
     // Create objects in a scope that makes them collectable
     fn make_garbage() {
-        let temp: Array<Json> = []
-        for (let i = 0; i < 200; i++) {
+        var temp: Array<Json> = []
+        for (var i = 0; i < 200; i++) {
             temp.push({"garbage": i})
         }
     }
     make_garbage()
-    let after_alloc = runtime.liveBytes()
+    var after_alloc = runtime.liveBytes()
     assert(after_alloc >= baseline)
     runtime.collectCycles()
-    let after_collect = runtime.liveBytes()
+    var after_collect = runtime.liveBytes()
     // Memory should not grow after collecting the garbage
     assert(after_collect <= after_alloc)
 }
@@ -120,9 +120,9 @@ fn test_mem_live_bytes_decreases_after_collect() {
 // @test runtime.liveObjects tracks allocations
 @test
 fn test_mem_live_objects_tracks_alloc() {
-    let before = runtime.liveObjects()
-    let arr: Array<Json> = []
-    for (let i = 0; i < 10; i++) {
+    var before = runtime.liveObjects()
+    var arr: Array<Json> = []
+    for (var i = 0; i < 10; i++) {
         arr.push({"k": i})
     }
     // Xray reclaims by reference counting: a value is freed at its LAST use, not
@@ -131,7 +131,7 @@ fn test_mem_live_objects_tracks_alloc() {
     // (and its 10 elements) by this line and the live-object count would read
     // back as `before`. The touch below extends arr's lifetime across the
     // measurement so the just-allocated objects are still counted.
-    let after = runtime.liveObjects()
+    var after = runtime.liveObjects()
     assert(arr.length == 10)
     assert(after > before)
 }

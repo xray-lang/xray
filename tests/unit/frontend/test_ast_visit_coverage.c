@@ -99,6 +99,7 @@ static bool is_expression_node(AstNodeType t) {
         case AST_OPTIONAL_CHAIN:
         case AST_FORCE_UNWRAP:
         case AST_AS_EXPR:
+        case AST_COMPTIME_EXPR:
         case AST_IS_EXPR:
         case AST_RANGE:
         /* Unary */
@@ -181,6 +182,7 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
 
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             check_node(ctx, node->as.var_decl.initializer);
             break;
 
@@ -256,6 +258,10 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
             check_node(ctx, node->as.call_expr.callee);
             for (int i = 0; i < node->as.call_expr.arg_count; i++)
                 check_node(ctx, node->as.call_expr.arguments[i]);
+            break;
+
+        case AST_COMPTIME_EXPR:
+            check_node(ctx, node->as.comptime_expr.expr);
             break;
 
         case AST_MEMBER_ACCESS:
@@ -584,78 +590,78 @@ static bool assert_all_typed(const char *source, const char *label) {
 /* ========== Tests ========== */
 
 TEST(literals_and_arithmetic) {
-    return assert_all_typed("let a = 42\n"
-                            "let b = 3.14\n"
-                            "let c = \"hello\"\n"
-                            "let d = true\n"
-                            "let e = null\n"
-                            "let f = a + b * 2 - 1\n"
-                            "let g = a % 3\n",
+    return assert_all_typed("var a = 42\n"
+                            "var b = 3.14\n"
+                            "var c = \"hello\"\n"
+                            "var d = true\n"
+                            "var e = null\n"
+                            "var f = a + b * 2 - 1\n"
+                            "var g = a % 3\n",
                             "literals_and_arithmetic");
 }
 
 TEST(comparison_and_logical) {
-    return assert_all_typed("let x = 10\n"
-                            "let a = x > 5 && x < 20\n"
-                            "let b = x == 10 || x != 0\n"
-                            "let c = x >= 5 && x <= 15\n",
+    return assert_all_typed("var x = 10\n"
+                            "var a = x > 5 && x < 20\n"
+                            "var b = x == 10 || x != 0\n"
+                            "var c = x >= 5 && x <= 15\n",
                             "comparison_and_logical");
 }
 
 TEST(bitwise_ops) {
-    return assert_all_typed("let x = 0xFF\n"
-                            "let a = x & 0x0F\n"
-                            "let b = x | 0xF0\n"
-                            "let c = x ^ 0xAA\n"
-                            "let d = x << 2\n"
-                            "let e = x >> 1\n"
-                            "let f = ~x\n",
+    return assert_all_typed("var x = 0xFF\n"
+                            "var a = x & 0x0F\n"
+                            "var b = x | 0xF0\n"
+                            "var c = x ^ 0xAA\n"
+                            "var d = x << 2\n"
+                            "var e = x >> 1\n"
+                            "var f = ~x\n",
                             "bitwise_ops");
 }
 
 TEST(unary_and_grouping) {
-    return assert_all_typed("let x = 42\n"
-                            "let a = -x\n"
-                            "let b = !true\n"
-                            "let c = (x + 1) * 2\n",
+    return assert_all_typed("var x = 42\n"
+                            "var a = -x\n"
+                            "var b = !true\n"
+                            "var c = (x + 1) * 2\n",
                             "unary_and_grouping");
 }
 
 TEST(ternary_and_nullish) {
-    return assert_all_typed("let x = 10\n"
-                            "let a = x > 5 ? \"big\" : \"small\"\n"
-                            "let y: int? = null\n"
-                            "let b = y ?? 42\n",
+    return assert_all_typed("var x = 10\n"
+                            "var a = x > 5 ? \"big\" : \"small\"\n"
+                            "var y: int? = null\n"
+                            "var b = y ?? 42\n",
                             "ternary_and_nullish");
 }
 
 TEST(array_literal) {
-    return assert_all_typed("let arr = [1, 2, 3]\n"
+    return assert_all_typed("var arr = [1, 2, 3]\n"
                             "print(arr)\n",
                             "array_literal");
 }
 
 TEST(map_literal) {
-    return assert_all_typed("let m = #{\"a\": 1, \"b\": 2}\n"
+    return assert_all_typed("var m = #{\"a\": 1, \"b\": 2}\n"
                             "print(m)\n",
                             "map_literal");
 }
 
 TEST(set_literal) {
-    return assert_all_typed("let s = #[1, 2, 3]\n"
+    return assert_all_typed("var s = #[1, 2, 3]\n"
                             "print(s)\n",
                             "set_literal");
 }
 
 TEST(object_literal) {
-    return assert_all_typed("let o = {a: 1, b: \"hello\"}\n"
+    return assert_all_typed("var o = {a: 1, b: \"hello\"}\n"
                             "print(o)\n",
                             "object_literal");
 }
 
 TEST(template_string) {
-    return assert_all_typed("let name = \"world\"\n"
-                            "let s = \"hello ${name}!\"\n"
+    return assert_all_typed("var name = \"world\"\n"
+                            "var s = \"hello ${name}!\"\n"
                             "print(s)\n",
                             "template_string");
 }
@@ -664,19 +670,19 @@ TEST(function_decl_and_call) {
     return assert_all_typed("fn add(a: int, b: int) -> int {\n"
                             "    return a + b\n"
                             "}\n"
-                            "let r = add(1, 2)\n"
+                            "var r = add(1, 2)\n"
                             "print(r)\n",
                             "function_decl_and_call");
 }
 
 TEST(function_expr) {
-    return assert_all_typed("let double = fn(x: int) -> int { return x * 2\n }"
+    return assert_all_typed("var double = fn(x: int) -> int { return x * 2\n }"
                             "print(double(5))\n",
                             "function_expr");
 }
 
 TEST(if_else) {
-    return assert_all_typed("let x = 10\n"
+    return assert_all_typed("var x = 10\n"
                             "if (x > 5) {\n"
                             "    print(\"big\")\n"
                             "} else {\n"
@@ -686,7 +692,7 @@ TEST(if_else) {
 }
 
 TEST(while_loop) {
-    return assert_all_typed("let i = 0\n"
+    return assert_all_typed("var i = 0\n"
                             "while (i < 10) {\n"
                             "    print(i)\n"
                             "    i = i + 1\n"
@@ -695,7 +701,7 @@ TEST(while_loop) {
 }
 
 TEST(for_in_loop) {
-    return assert_all_typed("let arr = [1, 2, 3]\n"
+    return assert_all_typed("var arr = [1, 2, 3]\n"
                             "for (item in arr) {\n"
                             "    print(item)\n"
                             "}\n",
@@ -704,7 +710,7 @@ TEST(for_in_loop) {
 
 TEST(try_catch) {
     return assert_all_typed("try {\n"
-                            "    let x = 1 + 2\n"
+                            "    var x = 1 + 2\n"
                             "    print(x)\n"
                             "} catch (e) {\n"
                             "    print(e)\n"
@@ -722,7 +728,7 @@ TEST(class_basic) {
                             "        return \"woof\"\n"
                             "    }\n"
                             "}\n"
-                            "let d = Dog(\"Rex\")\n"
+                            "var d = Dog(\"Rex\")\n"
                             "print(d.bark())\n",
                             "class_basic");
 }
@@ -732,14 +738,14 @@ TEST(enum_basic) {
                             "    Red = \"red\",\n"
                             "    Blue = \"blue\"\n"
                             "}\n"
-                            "let c = Color.Red\n"
+                            "var c = Color.Red\n"
                             "print(c)\n",
                             "enum_basic");
 }
 
 TEST(match_expr) {
-    return assert_all_typed("let x = 2\n"
-                            "let result = match (x) {\n"
+    return assert_all_typed("var x = 2\n"
+                            "var result = match (x) {\n"
                             "    1 -> \"one\"\n"
                             "    2 -> \"two\"\n"
                             "    _ -> \"other\"\n"
@@ -749,23 +755,23 @@ TEST(match_expr) {
 }
 
 TEST(destructure) {
-    return assert_all_typed("let arr = [1, 2, 3]\n"
-                            "let [a, b, c] = arr\n"
+    return assert_all_typed("var arr = [1, 2, 3]\n"
+                            "var [a, b, c] = arr\n"
                             "print(a)\n",
                             "destructure");
 }
 
 TEST(multi_var_decl) {
-    return assert_all_typed("let a = 1\n"
-                            "let b = 2\n"
-                            "let c = a + b\n"
+    return assert_all_typed("var a = 1\n"
+                            "var b = 2\n"
+                            "var c = a + b\n"
                             "print(c)\n",
                             "multi_var_decl");
 }
 
 TEST(print_stmt) {
-    return assert_all_typed("let x = 42\n"
-                            "let y = \"hello\"\n"
+    return assert_all_typed("var x = 42\n"
+                            "var y = \"hello\"\n"
                             "print(x, y, x + 1)\n",
                             "print_stmt");
 }
@@ -778,18 +784,18 @@ TEST(throw_stmt) {
 }
 
 TEST(channel_and_go) {
-    return assert_all_typed("let ch = Channel(1)\n"
+    return assert_all_typed("var ch = Channel(1)\n"
                             "go fn() {\n"
                             "    ch.send(42)\n"
                             "}\n"
-                            "let v = ch.recv()\n"
+                            "var v = ch.recv()\n"
                             "print(v)\n",
                             "channel_and_go");
 }
 
 TEST(slice_expr) {
-    return assert_all_typed("let arr = [1, 2, 3, 4, 5]\n"
-                            "let s = arr[1:3]\n"
+    return assert_all_typed("var arr = [1, 2, 3, 4, 5]\n"
+                            "var s = arr[1:3]\n"
                             "print(s)\n",
                             "slice_expr");
 }
@@ -804,20 +810,20 @@ TEST(defer_stmt) {
 }
 
 TEST(nested_expressions) {
-    return assert_all_typed("let x = 10\n"
-                            "let y = (x > 5 ? x * 2 : x / 2) + 1\n"
-                            "let arr = [1, 2, 3]\n"
-                            "let z = arr[(x > 5) ? 0 : 1]\n"
+    return assert_all_typed("var x = 10\n"
+                            "var y = (x > 5 ? x * 2 : x / 2) + 1\n"
+                            "var arr = [1, 2, 3]\n"
+                            "var z = arr[(x > 5) ? 0 : 1]\n"
                             "print(y, z)\n",
                             "nested_expressions");
 }
 
 TEST(closure_capture) {
     return assert_all_typed("fn make_adder(n: int) -> int {\n"
-                            "    let inner = fn(x: int) -> int { return x + n\n }"
+                            "    var inner = fn(x: int) -> int { return x + n\n }"
                             "    return inner(10)\n"
                             "}\n"
-                            "let r = make_adder(5)\n"
+                            "var r = make_adder(5)\n"
                             "print(r)\n",
                             "closure_capture");
 }

@@ -7,7 +7,7 @@
 @test
 fn test_closure_basic() {
     fn makeCounter() ->() -> int {
-        let count = 0
+        var count = 0
         fn increment() -> int {
             count++
             return count
@@ -15,7 +15,7 @@ fn test_closure_basic() {
         return increment
     }
     
-    let counter = makeCounter()
+    var counter = makeCounter()
     assert_eq(counter(), 1)
     assert_eq(counter(), 2)
     assert_eq(counter(), 3)
@@ -24,7 +24,7 @@ fn test_closure_basic() {
 @test
 fn test_closure_multiple_instances() {
     fn makeCounter() ->() -> int {
-        let count = 0
+        var count = 0
         fn increment() -> int {
             count++
             return count
@@ -32,8 +32,8 @@ fn test_closure_multiple_instances() {
         return increment
     }
     
-    let c1 = makeCounter()
-    let c2 = makeCounter()
+    var c1 = makeCounter()
+    var c2 = makeCounter()
     
     assert_eq(c1(), 1)
     assert_eq(c1(), 2)
@@ -53,8 +53,8 @@ fn test_capture_param() {
         return add
     }
     
-    let add5 = makeAdder(5)
-    let add10 = makeAdder(10)
+    var add5 = makeAdder(5)
+    var add10 = makeAdder(10)
     
     assert_eq(add5(3), 8)
     assert_eq(add10(3), 13)
@@ -70,7 +70,7 @@ fn test_capture_multiple_params() {
         return isInRange
     }
     
-    let inRange = makeRange(5, 10)
+    var inRange = makeRange(5, 10)
     assert_eq(inRange(3), false)
     assert_eq(inRange(5), true)
     assert_eq(inRange(7), true)
@@ -82,7 +82,7 @@ fn test_capture_multiple_params() {
 
 @test
 fn test_modify_outer() {
-    let x = 10
+    var x = 10
     
     fn modify() {
         x = 20
@@ -96,7 +96,7 @@ fn test_modify_outer() {
 @test
 fn test_accumulator() {
     fn makeAccumulator() ->(int) -> int {
-        let total = 0
+        var total = 0
         fn add(n: int) -> int {
             total += n
             return total
@@ -104,7 +104,7 @@ fn test_accumulator() {
         return add
     }
     
-    let acc = makeAccumulator()
+    var acc = makeAccumulator()
     assert_eq(acc(5), 5)
     assert_eq(acc(10), 15)
     assert_eq(acc(3), 18)
@@ -124,7 +124,7 @@ fn test_nested_closure() {
         return middle
     }
     
-    let f = outer(1)(2)
+    var f = outer(1)(2)
     assert_eq(f(3), 6)
 }
 
@@ -143,7 +143,7 @@ fn test_deeply_nested() {
         return level2
     }
     
-    let result = level1(1)(2)(3)(4)
+    var result = level1(1)(2)(3)(4)
     assert_eq(result, 10)
 }
 
@@ -158,8 +158,8 @@ fn test_multiplier_factory() {
         return multiply
     }
     
-    let double = createMultiplier(2)
-    let triple = createMultiplier(3)
+    var double = createMultiplier(2)
+    var triple = createMultiplier(3)
     
     assert_eq(double(5), 10)
     assert_eq(triple(5), 15)
@@ -174,8 +174,8 @@ fn test_greeting_factory() {
         return greet
     }
     
-    let hello = createGreeter("Hello")
-    let hi = createGreeter("Hi")
+    var hello = createGreeter("Hello")
+    var hi = createGreeter("Hi")
     
     assert_eq(hello("Alice"), "Hello, Alice!")
     assert_eq(hi("Bob"), "Hi, Bob!")
@@ -185,9 +185,9 @@ fn test_greeting_factory() {
 
 @test
 fn test_closure_captures_value() {
-    let funcs: Array<() -> int> = []
-    for (let i = 0; i < 3; i++) {
-        let val = i  // 每次循环创建新变量
+    var funcs: Array<() -> int> = []
+    for (var i = 0; i < 3; i++) {
+        var val = i  // 每次循环创建新变量
         fn capture() -> int {
             return val
         }
@@ -210,7 +210,7 @@ fn test_closure_no_capture() {
         return inner
     }
     
-    let f = outer()
+    var f = outer()
     assert_eq(f(), 42)
 }
 
@@ -225,7 +225,7 @@ fn test_closure_capture_const() {
         return inner
     }
     
-    let f = getClosure()
+    var f = getClosure()
     assert_eq(f(), 100)
 }
 

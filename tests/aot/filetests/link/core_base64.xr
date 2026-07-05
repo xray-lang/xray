@@ -7,13 +7,13 @@ print(base64.decodeUrl("QUI"))
 print(base64.decode("A"))
 print(base64.isValid("SGVsbG8="))
 
-let bytes = Bytes(3)
+var bytes = Bytes(3)
 bytes[0] = 72
 bytes[1] = 101
 bytes[2] = 108
 print(base64.encodeBytes(bytes))
 
-let decoded = base64.decodeToBytes("SGVs")
+var decoded = base64.decodeToBytes("SGVs")
 if (decoded != null) {
     print(decoded.length)
     print(decoded[0])

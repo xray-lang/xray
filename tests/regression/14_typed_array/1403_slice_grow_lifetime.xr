@@ -11,7 +11,7 @@
 
 @test
 fn test_bytes_copy_survives_source_grow() {
-    let b = Bytes(4)
+    var b = Bytes(4)
     b[0] = 1
     b[1] = 2
     b[2] = 3
@@ -19,16 +19,16 @@ fn test_bytes_copy_survives_source_grow() {
 
     // Spill the backing store to the system heap BEFORE slicing, so the slice
     // points into a heap buffer (the case that actually freed on a later grow).
-    for (let i = 0; i < 64; i++) {
+    for (var i = 0; i < 64; i++) {
         b.push(200)
     }
 
-    let s: Bytes = copy(b[1:4])
+    var s: Bytes = copy(b[1:4])
     print(s[0])  // 2
     print(s[2])  // 4
 
     // Grow far past capacity -> realloc/fork of the backing store.
-    for (let i = 0; i < 4096; i++) {
+    for (var i = 0; i < 4096; i++) {
         b.push(7)
     }
 
@@ -51,22 +51,22 @@ fn test_bytes_copy_survives_source_grow() {
 
 @test
 fn test_typed_int_copy_survives_source_grow() {
-    let a = Array<int>(4, 0)
+    var a = Array<int>(4, 0)
     a[0] = 10
     a[1] = 20
     a[2] = 30
     a[3] = 40
 
-    for (let i = 0; i < 64; i++) {
+    for (var i = 0; i < 64; i++) {
         a.push(100 + i)
     }
 
-    let s: Array<int> = copy(a[1:4])
+    var s: Array<int> = copy(a[1:4])
     print(s[0])  // 20
     print(s[1])  // 30
     print(s[2])  // 40
 
-    for (let i = 0; i < 4096; i++) {
+    for (var i = 0; i < 4096; i++) {
         a.push(i)
     }
 
@@ -91,18 +91,18 @@ fn test_typed_int_copy_survives_source_grow() {
 
 @test
 fn test_any_object_copy_survives_source_grow() {
-    let a = ["a", "b", "c", "d"]
+    var a = ["a", "b", "c", "d"]
 
-    for (let i = 0; i < 64; i++) {
+    for (var i = 0; i < 64; i++) {
         a.push("x")
     }
 
-    let s: Array<string> = copy(a[1:4])
+    var s: Array<string> = copy(a[1:4])
     print(s[0])  // b
     print(s[1])  // c
     print(s[2])  // d
 
-    for (let i = 0; i < 4096; i++) {
+    for (var i = 0; i < 4096; i++) {
         a.push("y")
     }
 

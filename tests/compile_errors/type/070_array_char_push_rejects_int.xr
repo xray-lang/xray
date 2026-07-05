@@ -1,2 +1,2 @@
-let chars: Array<char> = []
+var chars: Array<char> = []
 chars.push(65)

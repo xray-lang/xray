@@ -87,11 +87,11 @@ static void free_token_trivia(Token *t) {
 TEST(trailing_line_comment_same_line) {
     // `;` and `// trailing` are on the same source line -> attach.
     Token a, b;
-    scan_pair("let;// trailing\n", &a, &b);
+    scan_pair("var;// trailing\n", &a, &b);
 
-    // First scan returns TK_LET (no leading, no trailing -- comment
+    // First scan returns TK_VAR (no leading, no trailing -- comment
     // is on the SAME line but BEHIND the next token).
-    ASSERT_EQ_INT(a.type, TK_LET);
+    ASSERT_EQ_INT(a.type, TK_VAR);
     ASSERT_NULL(a.leading_trivia);
     ASSERT_NULL(a.trailing_trivia);
 
@@ -111,9 +111,9 @@ TEST(trailing_line_comment_after_horizontal_whitespace) {
     // Whitespace / tabs between the token and `//` are skipped
     // transparently and do not disqualify the trailing attachment.
     Scanner s;
-    Token a = first_token_with_trivia(&s, "let  \t//note\n");
+    Token a = first_token_with_trivia(&s, "var  \t//note\n");
 
-    ASSERT_EQ_INT(a.type, TK_LET);
+    ASSERT_EQ_INT(a.type, TK_VAR);
     ASSERT_NOT_NULL(a.trailing_trivia);
     ASSERT_EQ_INT(a.trailing_trivia->type, TRIVIA_LINE_COMMENT);
     ASSERT_TRUE(trivia_text_eq(a.trailing_trivia, "note"));
@@ -123,12 +123,12 @@ TEST(trailing_line_comment_after_horizontal_whitespace) {
 
 TEST(comment_after_newline_is_leading_of_next) {
     // Comment lives on line 2, separated from the previous token by a
-    // newline. It must NOT attach as trailing to `let`; it must attach
+    // newline. It must NOT attach as trailing to `var`; it must attach
     // as leading to `;`.
     Token a, b;
-    scan_pair("let\n// next-line\n;\n", &a, &b);
+    scan_pair("var\n// next-line\n;\n", &a, &b);
 
-    ASSERT_EQ_INT(a.type, TK_LET);
+    ASSERT_EQ_INT(a.type, TK_VAR);
     ASSERT_NULL(a.leading_trivia);
     ASSERT_NULL(a.trailing_trivia);
 
@@ -144,9 +144,9 @@ TEST(comment_after_newline_is_leading_of_next) {
 TEST(trailing_inline_block_comment_same_line) {
     // /* ... */ that BEGINS and ENDS on the same line -> trailing.
     Token a, b;
-    scan_pair("let /* hi */;\n", &a, &b);
+    scan_pair("var /* hi */;\n", &a, &b);
 
-    ASSERT_EQ_INT(a.type, TK_LET);
+    ASSERT_EQ_INT(a.type, TK_VAR);
     ASSERT_NOT_NULL(a.trailing_trivia);
     ASSERT_EQ_INT(a.trailing_trivia->type, TRIVIA_BLOCK_COMMENT);
     ASSERT_TRUE(trivia_text_eq(a.trailing_trivia, " hi "));
@@ -160,9 +160,9 @@ TEST(trailing_inline_block_comment_same_line) {
 
 TEST(trailing_nested_inline_block_comment_same_line) {
     Token a, b;
-    scan_pair("let /* outer /* inner */ done */;\n", &a, &b);
+    scan_pair("var /* outer /* inner */ done */;\n", &a, &b);
 
-    ASSERT_EQ_INT(a.type, TK_LET);
+    ASSERT_EQ_INT(a.type, TK_VAR);
     ASSERT_NOT_NULL(a.trailing_trivia);
     ASSERT_EQ_INT(a.trailing_trivia->type, TRIVIA_BLOCK_COMMENT);
     ASSERT_TRUE(trivia_text_eq(a.trailing_trivia, " outer /* inner */ done "));
@@ -179,9 +179,9 @@ TEST(multiline_block_comment_is_leading_of_next) {
     // the preceding token. It belongs to the following token's
     // leading trivia, exactly like a line comment after `\n`.
     Token a, b;
-    scan_pair("let /* first\n   second */ ;\n", &a, &b);
+    scan_pair("var /* first\n   second */ ;\n", &a, &b);
 
-    ASSERT_EQ_INT(a.type, TK_LET);
+    ASSERT_EQ_INT(a.type, TK_VAR);
     ASSERT_NULL(a.trailing_trivia);
 
     ASSERT_EQ_INT(b.type, TK_SEMICOLON);
@@ -194,9 +194,9 @@ TEST(multiline_block_comment_is_leading_of_next) {
 
 TEST(multiline_nested_block_comment_is_leading_of_next) {
     Token a, b;
-    scan_pair("let /* outer\n  /* inner */\n  done */ ;\n", &a, &b);
+    scan_pair("var /* outer\n  /* inner */\n  done */ ;\n", &a, &b);
 
-    ASSERT_EQ_INT(a.type, TK_LET);
+    ASSERT_EQ_INT(a.type, TK_VAR);
     ASSERT_NULL(a.trailing_trivia);
 
     ASSERT_EQ_INT(b.type, TK_SEMICOLON);
@@ -250,10 +250,10 @@ TEST(collect_trivia_off_disables_trailing) {
     // comments, matching pre-L-06 behaviour and keeping non-formatter
     // call sites zero-cost.
     Scanner s;
-    xr_scanner_init(&s, "let // c\n;");  // collect_trivia = false
+    xr_scanner_init(&s, "var // c\n;");  // collect_trivia = false
     Token a = xr_scanner_scan(&s);
 
-    ASSERT_EQ_INT(a.type, TK_LET);
+    ASSERT_EQ_INT(a.type, TK_VAR);
     ASSERT_NULL(a.leading_trivia);
     ASSERT_NULL(a.trailing_trivia);
 }

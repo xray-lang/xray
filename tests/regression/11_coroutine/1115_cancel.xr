@@ -15,10 +15,10 @@ fn quick_task(x: int) -> int {
 @test
 fn test_cancel() {
     // Test 1: cancel a task that cannot self-complete (blocked on channel)
-    const ch = Channel<int>(0)
-    let t1 = go blocked_task(ch)
+    shared ch = Channel<int>(0)
+    var t1 = go blocked_task(ch)
     t1.cancel()
-    let r1 = t1.awaitResult()
+    var r1 = t1.awaitResult()
     print("t1 cancelled:", match (r1) {
         TaskResult.Cancelled -> true
         _ -> false
@@ -27,8 +27,8 @@ fn test_cancel() {
     ch.close()
 
     // Test 2: cancel an already-completed task is no-op
-    let t2 = go quick_task(21)
-    let r2 = await t2
+    var t2 = go quick_task(21)
+    var r2 = await t2
     t2.cancel()
     print("t2 success:", match (t2.poll()) {
         TaskResult.Success(_) -> true

@@ -127,6 +127,10 @@ static bool verify_array_storage_plan(const XaotBundle *bundle, const XaotArrayS
     if (!value_plan)
         return set_error(errbuf, errbuf_len, "AOT array storage value has no value plan");
     container_plan = xaot_bundle_find_container_plan(bundle, plan->value->type);
+    if ((!container_plan || container_plan->plan.kind != XAOT_CONTAINER_ARRAY ||
+         (container_plan->plan.flags & XAOT_CONTAINER_RAW_DATA) == 0) &&
+        (plan->value->op == XI_SLICE || plan->value->op == XI_PHI))
+        container_plan = xaot_bundle_find_container_plan(bundle, plan->origin->type);
     if (!container_plan || container_plan->plan.kind != XAOT_CONTAINER_ARRAY ||
         (container_plan->plan.flags & XAOT_CONTAINER_RAW_DATA) == 0)
         return set_error(errbuf, errbuf_len, "AOT array storage value has no array plan");

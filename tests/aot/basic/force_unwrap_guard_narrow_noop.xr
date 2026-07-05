@@ -2,7 +2,7 @@ fn unwrapAfterGuard(value: int?) -> int {
     if (value == null) {
         return -1
     }
-    let narrowed = value!
+    var narrowed = value!
     return narrowed * 2
 }
 

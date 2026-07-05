@@ -15,12 +15,12 @@ import net
 // Accept one client and echo back whatever it sends, then close.
 // `lst` and the accepted `conn` cross `go` boundaries here.
 fn acceptEcho(lst: NetListener) {
-    let conn = net.accept(lst)!
+    var conn = net.accept(lst)!
     go serveEcho(conn)
 }
 
 fn serveEcho(c: NetConn) {
-    let data = net.read(c)!
+    var data = net.read(c)!
     net.write(c, data)
     net.close(c)
 }
@@ -31,13 +31,13 @@ fn serveNativeCopyEcho(c: NetConn) {
 }
 
 fn acceptNativeCopyEcho(lst: NetListener) {
-    let conn = net.accept(lst)!
+    var conn = net.accept(lst)!
     go serveNativeCopyEcho(conn)
 }
 
 fn acceptRelay(lst: NetListener) {
-    let src = net.accept(lst)!
-    let dst = net.accept(lst)!
+    var src = net.accept(lst)!
+    var dst = net.accept(lst)!
     net.copy(src, dst)
     net.close(src)
     net.close(dst)
@@ -45,10 +45,10 @@ fn acceptRelay(lst: NetListener) {
 
 @test
 fn test_loopback_echo() {
-    let maybeLst = net.listen(0, 8)
+    var maybeLst = net.listen(0, 8)
     if (maybeLst == null) { return }
-    let lst = maybeLst!
-    let port = lst.port()
+    var lst = maybeLst!
+    var port = lst.port()
     assert_true(port > 0)
 
     // Listener handle passed into a child coroutine (Gap 008 path).
@@ -56,13 +56,13 @@ fn test_loopback_echo() {
 
     // Dial / write / read are yieldable; their results must be delivered
     // to the caller's registers (Gap 007 path).
-    let c = net.dial("127.0.0.1", port)!
+    var c = net.dial("127.0.0.1", port)!
     assert_true(net.fd(c) >= 0)
 
-    let n = net.write(c, "hello")
+    var n = net.write(c, "hello")
     assert_eq(n, 5)
 
-    let resp = net.read(c)!
+    var resp = net.read(c)!
     assert_eq(resp, "hello")
 
     net.close(c)
@@ -71,19 +71,19 @@ fn test_loopback_echo() {
 
 @test
 fn test_loopback_binary_high_bytes() {
-    let maybeLst = net.listen(0, 8)
+    var maybeLst = net.listen(0, 8)
     if (maybeLst == null) { return }
-    let lst = maybeLst!
-    let port = lst.port()
+    var lst = maybeLst!
+    var port = lst.port()
     assert_true(port > 0)
 
     go acceptEcho(lst)
 
-    let c = net.dial("127.0.0.1", port)!
+    var c = net.dial("127.0.0.1", port)!
     // "é€" = 0xC3 0xA9 0xE2 0x82 0xAC — contains high bytes.
     net.write(c, "é€")
 
-    let resp = net.read(c)!
+    var resp = net.read(c)!
     assert_eq(resp.byteLength, 5)
     assert_eq(resp.byteAt(0)!.ord(), 195)
     assert_eq(resp.byteAt(1)!.ord(), 169)
@@ -97,18 +97,18 @@ fn test_loopback_binary_high_bytes() {
 
 @test
 fn test_native_copy_self_loopback() {
-    let maybeLst = net.listen(0, 8)
+    var maybeLst = net.listen(0, 8)
     if (maybeLst == null) { return }
-    let lst = maybeLst!
-    let port = lst.port()
+    var lst = maybeLst!
+    var port = lst.port()
     assert_true(port > 0)
 
     go acceptNativeCopyEcho(lst)
 
-    let c = net.dial("127.0.0.1", port)!
+    var c = net.dial("127.0.0.1", port)!
     net.write(c, "native")
 
-    let resp = net.read(c)!
+    var resp = net.read(c)!
     assert_eq(resp, "native")
 
     net.close(c)
@@ -117,19 +117,19 @@ fn test_native_copy_self_loopback() {
 
 @test
 fn test_native_copy_loopback() {
-    let maybeLst = net.listen(0, 8)
+    var maybeLst = net.listen(0, 8)
     if (maybeLst == null) { return }
-    let lst = maybeLst!
-    let port = lst.port()
+    var lst = maybeLst!
+    var port = lst.port()
     assert_true(port > 0)
 
     go acceptRelay(lst)
 
-    let src = net.dial("127.0.0.1", port)!
-    let dst = net.dial("127.0.0.1", port)!
+    var src = net.dial("127.0.0.1", port)!
+    var dst = net.dial("127.0.0.1", port)!
 
     net.write(src, "relay")
-    let resp = net.read(dst)!
+    var resp = net.read(dst)!
     assert_eq(resp, "relay")
 
     net.close(src)

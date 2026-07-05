@@ -19,7 +19,7 @@
     {
       "heading": "Echo server",
       "code": [
-        "import net\n\nfn serve(conn: NetConn) {\n    defer net.close(conn)\n    net.copy(conn, conn)\n}\n\nlet listener = net.listen(9001, 1024)!\nwhile (true) {\n    let conn = net.accept(listener)\n    if (conn != null) {\n        go serve(conn!)\n    }\n}"
+        "import net\n\nfn serve(conn: NetConn) {\n    defer net.close(conn)\n    net.copy(conn, conn)\n}\n\nvar listener = net.listen(9001, 1024)!\nwhile (true) {\n    var conn = net.accept(listener)\n    if (conn != null) {\n        go serve(conn!)\n    }\n}"
       ]
     },
     {

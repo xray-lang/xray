@@ -18,7 +18,7 @@ struct CBox {
 }
 
 fn sample_score() -> int {
-    let s = Sample{x: 41, y: 2.5, ok: true, byte: 300}
+    var s = Sample{x: 41, y: 2.5, ok: true, byte: 200}
     s.x = s.x + 1
     s.byte = s.byte + 1
     if (s.ok) {
@@ -28,10 +28,10 @@ fn sample_score() -> int {
 }
 
 fn c_repr_score() -> int {
-    let p = CPoint{x: 10, y: 20}
+    var p = CPoint{x: 10, y: 20}
     p.x = p.x + 2
 
-    let b = CBox{p: CPoint{x: 1, y: 2}, tag: 3}
+    var b = CBox{p: CPoint{x: 1, y: 2}, tag: 3}
     b.p.x = b.p.x + b.tag
 
     return p.x + p.y + b.p.x + b.p.y + b.tag

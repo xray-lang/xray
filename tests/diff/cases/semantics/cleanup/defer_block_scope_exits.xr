@@ -71,8 +71,8 @@ fn panic_case() {
     defer print("panic-root")
     try {
         defer print("panic-try")
-        let z = 0
-        let q = 10 / z
+        var z = 0
+        var q = 10 / z
         print(q)
     } catch panic (p) {
         print("panic-caught")

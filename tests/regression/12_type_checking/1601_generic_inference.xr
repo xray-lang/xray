@@ -18,12 +18,12 @@ fn pair<T, U>(a: T, b: U) -> (T, U) {
 fn test_generic_inference() {
 
     // Test basic type inference
-    let n = identity(42)
+    var n = identity(42)
     print(n)
     // Should be 42
     print(n + 1)
     // Should be 43 (proves n is int)
-    let s = identity("hello")
+    var s = identity("hello")
     print(s)
     // Should be "hello"
     print(s.length)
@@ -31,18 +31,18 @@ fn test_generic_inference() {
     // Should be 5 (proves s is string)
     // Generic function with array
 
-    let nums = [1, 2, 3]
-    let f = first(nums)
+    var nums = [1, 2, 3]
+    var f = first(nums)
     print(f)
     // Should be 1
-    let strs = ["a", "b", "c"]
-    let fs = first(strs)
+    var strs = ["a", "b", "c"]
+    var fs = first(strs)
     print(fs)
 
     // Should be "a"
     // Generic function with multiple params
 
-    let (pa, pb) = pair(1, "two")
+    var (pa, pb) = pair(1, "two")
     print(pa, pb)
     // Should be 1 two
     print("Generic inference test completed")

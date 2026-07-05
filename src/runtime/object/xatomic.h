@@ -14,7 +14,7 @@
  *
  * INVARIANTS:
  *   - T must be int, float, or bool (compiler-enforced)
- *   - Must be declared as `shared const` (container immutable, value atomic)
+ *   - Must be declared as `shared` (container immutable, value atomic)
  *   - All operations are lock-free via C11 atomics
  *   - Float atomicity via int64_t bit-cast (all platforms support 64-bit CAS)
  *   - Deep copy = incref (XR_COPY_SHARED_REF), never cloned

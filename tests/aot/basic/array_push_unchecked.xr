@@ -1,4 +1,4 @@
-let bytes = Bytes.withCapacity(4)
+var bytes = Bytes.withCapacity(4)
 unsafe {
     bytes.pushUnchecked(7)
     bytes.pushUnchecked(9)

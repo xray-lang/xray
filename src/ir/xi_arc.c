@@ -239,7 +239,7 @@ XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f) {
  * object's single owning reference ESCAPES through the copy. Leaving it a
  * borrow then makes ARC both release the source (freeing the unique object)
  * and dup the escaping copy (touching freed memory): a use-after-free for the
- * textbook `let b = a; return b`.
+ * textbook `var b = a; return b`.
  *
  * The fix is to make such a copy an explicit MOVE. XI_MOVE consumes its source
  * (own-use = consume) and produces an untracked alias (result-ownership =
@@ -305,7 +305,7 @@ static void arc_copy_to_move(XiFunc *f) {
                 /* Value-type structs copy-on-assign: XI_COPY makes an
                  * INDEPENDENT struct, not a pointer alias. Turning it into a
                  * move would make a callee mutate the caller's struct (the
-                 * `let q = p; f(q)` value-semantics contract). Only reference
+                 * `var q = p; f(q)` value-semantics contract). Only reference
                  * types (array/string/map/set/reference instances/closures)
                  * alias on copy and can transfer ownership through a move. */
                 if ((v->type && v->type->is_value_type) ||
@@ -1499,7 +1499,7 @@ static void arc_insert_rec(XiFunc *f) {
 XR_FUNC void xi_arc_insert(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_arc_insert: NULL func");
     /* Promote escaping borrow-copies to moves BEFORE computing borrow
-     * signatures, so a parameter forwarded through `let b = a; return b` is
+     * signatures, so a parameter forwarded through `var b = a; return b` is
      * seen as consumed (owned), not borrowed. */
     arc_copy_to_move(f);
     /* Cache all callee borrow signatures on the pre-ARC IR before any function

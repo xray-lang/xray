@@ -3,4 +3,4 @@ class Counter {
     constructor() { this.id = 1 }
     bump() { this.id = 2 }
 }
-let c = Counter()
+var c = Counter()

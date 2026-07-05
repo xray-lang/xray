@@ -18,14 +18,14 @@ import net
 fn startEchoServer(port: int) {
     ws.serve(port, fn(conn) {
         while (ws.isOpen(conn)) {
-            let msg = ws.recv(conn, null)
+            var msg = ws.recv(conn, null)
             if (msg == null) {
                 break
             }
             if (msg!.error != null) {
                 break
             }
-            let data = msg!.data
+            var data = msg!.data
             if (data != null) {
                 ws.send(conn, data, msg!.binary)
             }
@@ -37,11 +37,11 @@ fn startEchoServer(port: int) {
 fn test_ws_self_connect() {
     // `passed` MUST stay the first declared local so it maps to variable #0 —
     // the exact slot the temporary `&&` phi wrongly coalesced onto.
-    let passed = 0
-    let failed = 0
-    let url = "ws://127.0.0.1:9189"
+    var passed = 0
+    var failed = 0
+    var url = "ws://127.0.0.1:9189"
 
-    let probe = net.listen(9189, 1)
+    var probe = net.listen(9189, 1)
     if (probe == null) {
         return
     }
@@ -51,13 +51,13 @@ fn test_ws_self_connect() {
     time.sleep(300)
 
     // I1: single echo. The `&&` over a nullable response is the miscompile site.
-    let conn1 = ws.connect(url, null)
+    var conn1 = ws.connect(url, null)
     if (conn1 == null) {
         ws.stopServer()
         return
     } else {
         ws.send(conn1, "hello self", false)
-        let resp = ws.recv(conn1, 5000)
+        var resp = ws.recv(conn1, 5000)
         if (resp != null && resp.data == "hello self") {
             passed = passed + 1
         } else {
@@ -67,16 +67,16 @@ fn test_ws_self_connect() {
     }
 
     // I2: 20-message round trip; inner counter read after the loop.
-    let conn2 = ws.connect(url, null)
+    var conn2 = ws.connect(url, null)
     if (conn2 == null) {
         failed = failed + 1
     } else {
-        let count = 20
-        let success = 0
-        for (let i = 0; i < count; i = i + 1) {
-            let m = "self-msg-" + i.toString()
+        var count = 20
+        var success = 0
+        for (var i = 0; i < count; i = i + 1) {
+            var m = "self-msg-" + i.toString()
             ws.send(conn2, m, false)
-            let resp = ws.recv(conn2, 5000)
+            var resp = ws.recv(conn2, 5000)
             if (resp != null && resp.data == m) {
                 success = success + 1
             }
@@ -90,17 +90,17 @@ fn test_ws_self_connect() {
     }
 
     // I3: three sequential clients, five messages each.
-    let allOk = true
-    for (let c = 0; c < 3; c = c + 1) {
-        let conn = ws.connect(url, null)
+    var allOk = true
+    for (var c = 0; c < 3; c = c + 1) {
+        var conn = ws.connect(url, null)
         if (conn == null) {
             allOk = false
             break
         }
-        for (let i = 0; i < 5; i = i + 1) {
-            let m = "client" + c.toString() + "-" + i.toString()
+        for (var i = 0; i < 5; i = i + 1) {
+            var m = "client" + c.toString() + "-" + i.toString()
             ws.send(conn, m, false)
-            let resp = ws.recv(conn, 5000)
+            var resp = ws.recv(conn, 5000)
             if (resp == null || resp.data != m) {
                 allOk = false
                 break

@@ -1,15 +1,15 @@
-shared const counter: Atomic<int> = Atomic<int>(0)
+shared counter: Atomic<int> = Atomic<int>(0)
 
 fn next() -> int {
     return counter.fetchAdd(1, Ordering.Relaxed)
 }
 
 fn nextSlot(width: int) -> int {
-    let index = counter.fetchAdd(1, Ordering.Relaxed)
+    var index = counter.fetchAdd(1, Ordering.Relaxed)
     if (index >= 64) {
         return index
     }
-    let slot = index % width
+    var slot = index % width
     return slot * width
 }
 

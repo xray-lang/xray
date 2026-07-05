@@ -4,9 +4,9 @@
 import runtime
 
 fn churn_self_capture(count: int) {
-    let i = 0
+    var i = 0
     while (i < count) {
-        let f = fn() -> int {
+        var f = fn() -> int {
             if (false) {
                 return f()
             }
@@ -19,8 +19,8 @@ fn churn_self_capture(count: int) {
 @test
 fn test_self_capture_closure_reclaimed_each_iteration() {
     runtime.collectCycles()
-    let base_objects = runtime.liveObjects()
-    let base_bytes = runtime.liveBytes()
+    var base_objects = runtime.liveObjects()
+    var base_bytes = runtime.liveBytes()
 
     churn_self_capture(10000)
 

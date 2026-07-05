@@ -28,10 +28,18 @@ XR_FUNC bool xi_type_is_channel(const XrType *type) {
     return false;
 }
 
+static bool xi_type_name_is_sync_handle(const char *name) {
+    return name && (strcmp(name, "Atomic") == 0 || strcmp(name, "WorkQueue") == 0 ||
+                    strcmp(name, "ResultGroup") == 0 || strcmp(name, "CountdownLatch") == 0 ||
+                    strcmp(name, "Semaphore") == 0 || strcmp(name, "EventCount") == 0);
+}
+
 XR_FUNC bool xi_type_is_named_instance(const XrType *type, const char *name) {
     if (!type || !name)
         return false;
     if (type->kind == XR_KIND_INSTANCE)
+        return type->instance.class_name && strcmp(type->instance.class_name, name) == 0;
+    if (type->kind == XR_KIND_CLASS && xi_type_name_is_sync_handle(name))
         return type->instance.class_name && strcmp(type->instance.class_name, name) == 0;
     if (type->kind == XR_KIND_UNION) {
         for (uint8_t i = 0; i < type->union_type.member_count; i++) {
@@ -52,7 +60,9 @@ XR_FUNC bool xi_type_is_thread(const XrType *type) {
 
 /* Strip BOX/UNBOX/COPY identity wrappers so the test sees the carried type. */
 static const XiValue *xi_value_unwrap_identity(const XiValue *v) {
-    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v)) &&
+    while (v &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
+            v->op == XI_MOVE) &&
            v->nargs >= 1)
         v = v->args[0];
     return v;

@@ -29,9 +29,9 @@ struct Color {
 fn test_struct_static_getter() {
 
     // === Static factory methods ===
-    let r = Color.red()
-    let g = Color.green()
-    let b = Color.blue()
+    var r = Color.red()
+    var g = Color.green()
+    var b = Color.blue()
 
     assert(r.r == 255)
     assert(r.g == 0)
@@ -50,7 +50,7 @@ fn test_struct_static_getter() {
     assert(g.hex() == "rgb(0,255,0)")
 
     // === Static result is independent copy ===
-    let r2 = Color.red()
+    var r2 = Color.red()
     r2.r = 128
     assert(r.r == 255)
     assert(r2.r == 128)

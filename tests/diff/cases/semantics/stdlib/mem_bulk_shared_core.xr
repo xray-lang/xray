@@ -8,8 +8,8 @@ import mem
 
 print(mem.cacheLineSize())
 
-let src = unsafe { malloc(8) }
-let dst = unsafe { malloc(8) }
+var src = unsafe { malloc(8) }
+var dst = unsafe { malloc(8) }
 
 // set: fill src with 7
 mem.set(src, 7, 8)
@@ -32,7 +32,7 @@ print(mem.compare(src, dst, 8) != 0)
 mem.set(dst, 1, 8)
 unsafe { dst[0] = 5 }
 unsafe { dst[1] = 6 }
-let mid = unsafe { dst.offset(2) }
+var mid = unsafe { dst.offset(2) }
 mem.move(mid, dst, 4)
 unsafe { print(dst[2]) }
 unsafe { print(dst[3]) }

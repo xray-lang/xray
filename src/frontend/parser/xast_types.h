@@ -85,6 +85,7 @@ typedef enum {
     AST_OPTIONAL_CHAIN,    // obj?.prop / obj?[i] / func?.()
     AST_FORCE_UNWRAP,      // expr! (force unwrap nullable)
     AST_AS_EXPR,           // expr as Type (explicit type cast)
+    AST_COMPTIME_EXPR,     // comptime expr / comptime { ... }
     AST_RANGE,             // 1..10
 
     // Type check
@@ -103,9 +104,10 @@ typedef enum {
     AST_PRINT_STMT,  // print statement (builtin)
     AST_BLOCK,       // { ... }
 
-    // Variable nodes
-    AST_VAR_DECL,             // let x = 10
+    // Binding nodes
+    AST_VAR_DECL,             // var x = 10
     AST_CONST_DECL,           // const PI = 3.14
+    AST_SHARED_DECL,          // shared counter = Atomic<int>(0)
     AST_VARIABLE,             // x
     AST_ASSIGNMENT,           // x = 10
     AST_COMPOUND_ASSIGNMENT,  // x += 10, x -= 5, etc.
@@ -172,7 +174,7 @@ typedef enum {
     AST_EXPORT_STMT,  // export
 
     // Destructuring
-    AST_DESTRUCTURE_DECL,    // let [a, b] = arr
+    AST_DESTRUCTURE_DECL,    // var [a, b] = arr
     AST_DESTRUCTURE_ASSIGN,  // [a, b] = [b, a]
 
     // Match expression

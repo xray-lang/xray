@@ -1,11 +1,11 @@
 /*
-** shared 变量与 move 语义测试
+** shared 变量与 var move 语义测试
 ** 作者：xingleixu@gmail.com
 **
 ** 测试内容：
-**   - shared const: 全局堆，引用计数共享，并发读取
-**   - shared let: 全局堆，可通过 move 显式转移所有权
-**   - move var: 显式所有权转移（用于 go / ch.send）
+**   - shared: 全局堆，引用计数共享，并发读取
+**   - shared: 全局堆，稳定共享身份，可直接跨协程传递
+**   - move var: 普通局部变量显式所有权转移（用于 go / ch.send）
 **   - 普通变量: 通过 copy(...) 显式深拷贝后传递给协程
 */
 
@@ -23,47 +23,47 @@ fn recvJson(ch: Channel<Json>) -> Json {
     }
 }
 
-// Test 1: shared const — concurrent read (zero-copy via refcount)
+// Test 1: shared — concurrent read (zero-copy via refcount)
 @test
 fn test_shared_const() {
-    print("=== Test shared const ===")
+    print("=== Test shared ===")
 
-    shared const config: Json = {
+    shared config: Json = {
         name: "test",
         value: 42
     }
     print(config)
 
-    // Multiple coroutines read the same shared const (zero-copy)
-    let t1 = go fn(c: Json) -> int {
+    // Multiple coroutines read the same shared (zero-copy)
+    var t1 = go fn(c: Json) -> int {
         return int(c.value)
     }(config)
 
-    let t2 = go fn(c: Json) -> int {
+    var t2 = go fn(c: Json) -> int {
         return int(c.value) * 2
     }(config)
 
-    let r1 = await t1
-    let r2 = await t2
+    var r1 = await t1
+    var r2 = await t2
     print("coro1:", r1)
     print("coro2:", r2)
     print("results:", r1, r2)  // 42 84
 }
 
-// Test 2: move with go — ownership transfer to coroutine
+// Test 2: move with go — ownership transfer of a local var to coroutine
 @test
 fn test_move_go() {
     print("=== Test move go ===")
 
-    shared let data: Json = { count: 10 }
+    var data: Json = { count: 10 }
 
-    // 'move data' transfers ownership to child coroutine (zero-copy)
-    let task = go fn(d: Json) -> int {
+    // 'move data' transfers local ownership to child coroutine
+    var task = go fn(d: Json) -> int {
         print("child got:", d.count)
         return int(d.count) + 1
     }(move data)
 
-    let result = await task
+    var result = await task
     print("child result:", result)  // 11
     // data is no longer usable here (compile error if referenced)
 }
@@ -73,14 +73,14 @@ fn test_move_go() {
 fn test_move_channel_send() {
     print("=== Test move channel send ===")
 
-    shared const ch: Channel<Array<int>> = Channel(1)
-    shared let payload = [10, 20, 30]
+    shared ch: Channel<Array<int>> = Channel(1)
+    var payload = [10, 20, 30]
 
     // send with move: transfers ownership through channel
     ch.send(move payload)
     // payload is no longer usable here (compile error if referenced)
 
-    let received = recvArray(ch)
+    var received = recvArray(ch)
     print("received:", received)   // [10, 20, 30]
     ch.close()
 }
@@ -90,15 +90,15 @@ fn test_move_channel_send() {
 fn test_normal_copy() {
     print("=== Test normal copy ===")
 
-    let arr = [1, 2, 3]
+    var arr = [1, 2, 3]
 
     // Explicit copy: coroutine gets a deep copy
-    let task = go fn(data: Array<int>) {
+    var task = go fn(data: Array<int>) {
         data.push(4)  // does not affect original
         return data.length
     }(copy(arr))
 
-    let result = await task
+    var result = await task
     print("original:", arr)        // [1, 2, 3] (unchanged)
     print("coro result:", result)  // 4
 }
@@ -108,11 +108,11 @@ fn test_normal_copy() {
 fn test_move_pipeline() {
     print("=== Test move pipeline ===")
 
-    shared const ch: Channel<Json> = Channel(1)
-    shared let msg: Json = { step: 0 }
+    shared ch: Channel<Json> = Channel(1)
+    var msg: Json = { step: 0 }
 
     // Stage 1: modify and move-send
-    let t1 = go fn(c: Channel<Json>, d: Json) {
+    var t1 = go fn(c: Channel<Json>, d: Json) {
         d.step = int(d.step) + 1
         print("stage1:", d.step)
         c.send(move d)
@@ -122,14 +122,14 @@ fn test_move_pipeline() {
     // msg is no longer usable here (moved in go call above)
 
     // Stage 2: receive and process
-    let t2 = go fn(c: Channel<Json>) -> int {
-        let d = recvJson(c)
+    var t2 = go fn(c: Channel<Json>) -> int {
+        var d = recvJson(c)
         d.step = int(d.step) + 1
         print("stage2:", d.step)
         return int(d.step)
     }(ch)
 
-    let final_step = await t2
+    var final_step = await t2
     print("final step:", final_step)  // 2
     ch.close()
 }

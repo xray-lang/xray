@@ -1,5 +1,5 @@
 fn main() {
-    let xs = parallel for i in 0..8 workers 4 worker wid
+    var xs = parallel for i in 0..8 workers 4 worker wid
         local acc = wid
         collect {
         acc = acc + i
@@ -16,7 +16,7 @@ fn main() {
     print(xs[6])
     print(xs[7])
 
-    let empty = parallel for i in 5..5 workers 4
+    var empty = parallel for i in 5..5 workers 4
         local acc = 99
         collect {
         acc = acc + i

@@ -3,8 +3,8 @@ fn makeLane(fill: int) -> Array<int> {
 }
 
 fn main() {
-    shared const partials: Array<int> = []
-    let w = 0
+    shared partials: Array<int> = []
+    var w = 0
     while (w < 4) {
         partials.push(0)
         w = w + 1
@@ -18,7 +18,7 @@ fn main() {
             buf.pushUnchecked(wid)
         }
         acc = acc + buf.length + table.length
-        let i = begin
+        var i = begin
         while (i < end) {
             acc = acc + 1
             i = i + 1
@@ -28,7 +28,7 @@ fn main() {
         }
     }
 
-    let total = 0
+    var total = 0
     w = 0
     while (w < 4) {
         unsafe {
@@ -38,7 +38,7 @@ fn main() {
     }
     print(total)
 
-    let reduced = parallel range reduce begin, end in 0..16 workers 4 worker wid
+    var reduced = parallel range reduce begin, end in 0..16 workers 4 worker wid
         local acc = wid
         local buf = Bytes.withCapacity(4)
         local table = makeLane(wid)
@@ -48,7 +48,7 @@ fn main() {
             buf.pushUnchecked(wid)
         }
         acc = acc + buf.length + table.length
-        let i = begin
+        var i = begin
         while (i < end) {
             acc = acc + 1
             i = i + 1

@@ -1,5 +1,5 @@
 fn run() -> float {
-    let values: Array<float32> = []
+    var values: Array<float32> = []
     values.push(1.25)
     values.push(2.5)
     values.push(3.75)

@@ -3,19 +3,19 @@
 use std::collections::HashMap;
 
 fn run(n: i64) -> i64 {
-    let mut m: HashMap<String, i64> = HashMap::new();
+    var mut m: HashMap<String, i64> = HashMap::new();
 
-    let mut i: i64 = 0;
+    var mut i: i64 = 0;
     while i < n {
-        let key = format!("user:{}", (i * 7) % n);
+        var key = format!("user:{}", (i * 7) % n);
         m.insert(key, i);
         i += 1;
     }
 
-    let mut sum: i64 = 0;
+    var mut sum: i64 = 0;
     i = 0;
     while i < n {
-        let key = format!("user:{}", i);
+        var key = format!("user:{}", i);
         if let Some(v) = m.get(&key) {
             sum += *v;
         }

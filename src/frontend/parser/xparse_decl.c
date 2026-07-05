@@ -572,7 +572,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
         if (params[i] && params[i]->pattern != NULL) {
             AstNode *param_var = xr_ast_variable(parser->compiler_session, params[i]->name, line);
 
-            // Create destructure decl: let [x, y] = __param0
+            // Create destructure decl: var [x, y] = __param0
             AstNode *destructure_decl = xr_ast_destructure_decl(
                 parser->compiler_session, params[i]->pattern, param_var, false, line);
             // Don't free pattern here, it's now owned by destructure_decl
@@ -1534,7 +1534,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
                     char buf[128];
                     snprintf(
                         buf, sizeof(buf),
-                        "':=' is not supported. Use 'let %.*s = ...' to declare variables in Xray",
+                        "':=' is not supported. Use 'var %.*s = ...' to declare variables in Xray",
                         name_token.length, name_token.start);
                     xr_parser_error_at_current(parser, buf);
                     return NULL;
@@ -1545,11 +1545,6 @@ AstNode *xr_parse_declaration(Parser *parser) {
         if (name_token.length == 8 && memcmp(name_token.start, "function", 8) == 0) {
             xr_parser_error_at_current(
                 parser, "unknown keyword 'function'. Use 'fn' to define functions in Xray");
-            return NULL;
-        }
-        if (name_token.length == 3 && memcmp(name_token.start, "var", 3) == 0) {
-            xr_parser_error_at_current(
-                parser, "unknown keyword 'var'. Use 'let' to declare variables in Xray");
             return NULL;
         }
         if (name_token.length == 3 && memcmp(name_token.start, "def", 3) == 0) {
@@ -1603,7 +1598,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
             if (xr_parser_check(parser, TK_NAME)) {
                 char buf[128];
                 snprintf(buf, sizeof(buf),
-                         "C-style declaration not supported. Use 'let %.*s: %.*s = ...' in Xray",
+                         "C-style declaration not supported. Use 'var %.*s: %.*s = ...' in Xray",
                          parser->current.length, parser->current.start, saved.length, saved.start);
                 *parser = checkpoint;
                 xr_parser_error_at_current(parser, buf);
@@ -1616,13 +1611,13 @@ AstNode *xr_parse_declaration(Parser *parser) {
     /* Variable declaration
      *
      * Syntax design:
-     * 1. let a                - No initialization, null
-     * 2. let a = 1            - Single variable declaration
-     * 3. let (a, b) = value   - Tuple destructuring declaration
-     * 4. let a, b = ...       - Forbidden obsolete multi-value declaration
-     * 5. let a=1, b=2         - Forbidden; write separate declarations
+     * 1. var a                - No initialization, default value
+     * 2. var a = 1            - Single variable declaration
+     * 3. var (a, b) = value   - Tuple destructuring declaration
+     * 4. var a, b = ...       - Forbidden obsolete multi-value declaration
+     * 5. var a=1, b=2         - Forbidden; write separate declarations
      */
-    if (xr_parser_match(parser, TK_LET)) {
+    if (xr_parser_match(parser, TK_VAR)) {
         // Check if destructure declaration
         if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE) ||
             xr_parser_check(parser, TK_LPAREN)) {
@@ -1640,17 +1635,16 @@ AstNode *xr_parse_declaration(Parser *parser) {
             first_name[parser->current.length] = '\0';
             xr_parser_advance(parser);
 
-            // `let a, b = ...` (bare multi-variable) is the obsolete
-            // multi-value form. Tuple destructure `let (a, b) = ...`
+            // `var a, b = ...` (bare multi-variable) is the obsolete
+            // multi-value form. Tuple destructure `var (a, b) = ...`
             // is the canonical replacement.
             if (xr_parser_check(parser, TK_COMMA)) {
                 xr_parser_error(parser, "multi-variable declaration is not supported; "
-                                        "use tuple destructure: `let (a, b) = ...`");
+                                        "use tuple destructure: `var (a, b) = ...`");
                 return NULL;
             }
             {
-                // Single variable declaration: let a or let a = expr or let a: Type = expr
-                // Single variable declaration: let a or let a = expr or let a: Type = expr
+                // Single variable declaration: var a or var a = expr or var a: Type = expr
                 XrTypeRef *var_type = NULL;
                 if (xr_parser_match(parser, TK_COLON)) {
                     var_type = xr_parse_type_annotation(parser);
@@ -1681,7 +1675,12 @@ AstNode *xr_parse_declaration(Parser *parser) {
         return NULL;
     }
 
-    // Constant declaration (supports comma separation)
+    /* Constant declaration.
+     *
+     * `const` uses the same single-binding shape as `var`. Destructuring is the
+     * explicit multi-name form; comma-separated declarations are intentionally
+     * rejected to keep declaration lowering uniform.
+     */
     if (xr_parser_match(parser, TK_CONST)) {
         // Check if destructure declaration
         if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE) ||
@@ -1691,48 +1690,22 @@ AstNode *xr_parse_declaration(Parser *parser) {
 
         AstNode *first_decl = xr_parse_single_var_declaration(parser, 1);  // 1 means constant
 
-        // Check if there are comma-separated following declarations
-        if (!xr_parser_check(parser, TK_COMMA)) {
-            return first_decl;
-        }
-
-        // Multiple declarations, create sequence node
-        AstNode **declarations =
-            (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *), (size_t) 16);
-        int decl_count = 0;
-        int decl_capacity = 16;
-        declarations[decl_count++] = first_decl;
-
-        while (xr_parser_match(parser, TK_COMMA)) {
-            XR_PARSE_PUSH(parser, declarations, decl_count, decl_capacity,
-                          xr_parse_single_var_declaration(parser, 1));
-        }
-
-        // Create sequence node
-        AstNode *seq = xr_ast_program(parser->compiler_session);
-        for (int i = 0; i < decl_count; i++) {
-            xr_ast_program_add(parser->compiler_session, seq, declarations[i]);
-        }
-        return seq;
-    }
-
-    /* shared variable declaration (stored in global heap, pass by reference)
-     * Syntax: shared let x = value or shared const x = value
-     *
-     * shared const: can be read concurrently by coroutine closures
-     * shared let: can only be accessed serially via Channel
-     */
-    if (xr_parser_match(parser, TK_SHARED)) {
-        bool is_const = false;
-        if (xr_parser_match(parser, TK_CONST)) {
-            is_const = true;
-        } else if (!xr_parser_match(parser, TK_LET)) {
-            xr_parser_error(parser, "expected 'let' or 'const' after 'shared'");
+        if (xr_parser_check(parser, TK_COMMA)) {
+            xr_parser_error(parser,
+                            "multi-const declaration is not supported; write separate const "
+                            "declarations or use tuple destructure: `const (a, b) = ...`");
             return NULL;
         }
 
+        return first_decl;
+    }
+
+    /* shared variable declaration (stored in global heap, pass by reference)
+     * Syntax: shared x = value or shared x: Type = value
+     */
+    if (xr_parser_match(parser, TK_SHARED)) {
         // Parse variable name
-        xr_parser_consume(parser, TK_NAME, "expected variable name");
+        xr_parser_consume(parser, TK_NAME, "expected shared binding name");
         char *name =
             (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
         memcpy(name, parser->previous.start, parser->previous.length);
@@ -1752,7 +1725,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
         AstNode *initializer = xr_parse_precedence(parser, PREC_TERNARY);
 
         AstNode *decl = xr_ast_var_decl_with_mode(parser->compiler_session, name, initializer,
-                                                  is_const, XR_STORAGE_SHARED, line);
+                                                  false, XR_STORAGE_SHARED, line);
         decl->column = column;
         if (initializer && initializer->end_line > 0) {
             decl->end_line = initializer->end_line;

@@ -1,7 +1,7 @@
 // range_inclusive.xr
 // VM/AOT differential coverage for inclusive range `..=`.
 
-let inc = 1..=3
+var inc = 1..=3
 print(inc)
 print(inc.length)
 print(inc.includes(3))
@@ -9,23 +9,23 @@ print(inc.includes(4))
 print(inc[0])
 print(inc[2])
 
-let total = 0
+var total = 0
 for (i in 1..=3) {
     total = total + i
 }
 print(total)
 
-let half_total = 0
+var half_total = 0
 for (i in 1..3) {
     half_total = half_total + i
 }
 print(half_total)
 
-let max = 9223372036854775807
-let min = -9223372036854775807 - 1
+var max = 9223372036854775807
+var min = -9223372036854775807 - 1
 print((min..=max).length)
 
-let boundary_count = 0
+var boundary_count = 0
 for (i in max..=max) {
     boundary_count = boundary_count + 1
     continue

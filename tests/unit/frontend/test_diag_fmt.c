@@ -94,13 +94,13 @@ TEST(diag_level_values) {
 /* ========== Line Operations on Multi-line Source ========== */
 
 TEST(diag_line_operations) {
-    const char *src = "fn main() {\n    let x = 42\n    print(x)\n}";
-    // Line 2: "    let x = 42"
+    const char *src = "fn main() {\n    var x = 42\n    print(x)\n}";
+    // Line 2: "    var x = 42"
     const char *line2_start = xr_diag_find_line_start(src, src + 16);
     const char *line2_end = xr_diag_find_line_end(line2_start);
 
     int line_len = (int) (line2_end - line2_start);
-    ASSERT_EQ_INT(line_len, 14);  // "    let x = 42"
+    ASSERT_EQ_INT(line_len, 14);  // "    var x = 42"
 }
 
 /* ========== Main ========== */

@@ -23,8 +23,8 @@ print((4611686018427387904).mulOverflows(4))
 print((0).mulOverflows(9223372036854775807))
 
 // non-literal receivers + agreement with the checked* family
-let max: int = 9223372036854775807
-let one: int = 1
+var max: int = 9223372036854775807
+var one: int = 1
 print(max.addOverflows(one))
 print(max.addOverflows(one) == (max.checkedAdd(one) == null))
 print(one.addOverflows(one) == (one.checkedAdd(one) == null))

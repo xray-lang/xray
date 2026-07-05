@@ -40,7 +40,7 @@ fn r13() -> string {
 }
 
 // defer-based cleanup that runs even when the body throws.
-let g8 = false
+var g8 = false
 fn fn8() {
     defer { g8 = true }
     throw AppErr.Msg("x")
@@ -49,7 +49,7 @@ fn fn8() {
 @test
 fn test_basic_catch() {
     print("1. try-catch")
-    let got = ""
+    var got = ""
     try { throw AppErr.Msg("e1") } catch (e) {
         match (e) { AppErr.Msg(s) -> { got = s } }
     }
@@ -60,9 +60,9 @@ fn test_basic_catch() {
 @test
 fn test_nested_rethrow() {
     print("2. nested catch re-throw")
-    let i6 = false
-    let o6 = false
-    let outer_msg = ""
+    var i6 = false
+    var o6 = false
+    var outer_msg = ""
     try {
         try {
             throw AppErr.Msg("inner")
@@ -83,7 +83,7 @@ fn test_nested_rethrow() {
 @test
 fn test_cross_function() {
     print("3. cross function")
-    let captured = ""
+    var captured = ""
     try { thr7() } catch (e) {
         match (e) { AppErr.Msg(s) -> { captured = s } }
     }
@@ -94,8 +94,8 @@ fn test_cross_function() {
 @test
 fn test_constructed_message() {
     print("4. constructed messages")
-    let m1 = ""
-    let m2 = ""
+    var m1 = ""
+    var m2 = ""
     try { throw AppErr.Msg("str") } catch (e) {
         match (e) { AppErr.Msg(s) -> { m1 = s } }
     }
@@ -110,7 +110,7 @@ fn test_constructed_message() {
 @test
 fn test_deep_call_stack() {
     print("5. deep call stack")
-    let captured = ""
+    var captured = ""
     try { d1() } catch (e) {
         match (e) { AppErr.Msg(s) -> { captured = s } }
     }
@@ -121,8 +121,8 @@ fn test_deep_call_stack() {
 @test
 fn test_rethrow_chain() {
     print("6. re-throw chain with derived message")
-    let n11 = 0
-    let final_msg = ""
+    var n11 = 0
+    var final_msg = ""
     try {
         try {
             try {
@@ -161,7 +161,7 @@ fn test_return_in_catch() {
 @test
 fn test_sequential() {
     print("9. sequential try-catch")
-    let s14: Array<string> = []
+    var s14: Array<string> = []
     try { s14.push("a"); throw AppErr.Msg("x") } catch (e) { s14.push("b") }
     try { s14.push("c"); throw AppErr.Msg("y") } catch (e) { s14.push("d") }
     assert_eq(s14.length, 4)
@@ -175,8 +175,8 @@ fn test_sequential() {
 @test
 fn test_catch_rethrow_propagates() {
     print("10. catch rethrow propagates to outer")
-    let a20: Array<string> = []
-    let outer_msg = ""
+    var a20: Array<string> = []
+    var outer_msg = ""
     try {
         try {
             throw AppErr.Msg("a")
@@ -207,7 +207,7 @@ fn test_defer_runs_on_throw() {
 @test
 fn test_defer_lifo_cleanup() {
     print("12. defer LIFO cleanup on error path")
-    let order: Array<string> = []
+    var order: Array<string> = []
     fn body() {
         defer { order.push("close-1") }
         defer { order.push("close-2") }

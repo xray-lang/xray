@@ -2,5 +2,5 @@ class Account {
     protected owner: string
     constructor() { this.owner = "x" }
 }
-let a = Account()
+var a = Account()
 print(a.owner)

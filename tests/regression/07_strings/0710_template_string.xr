@@ -6,15 +6,15 @@
 
 @test
 fn test_basic_interpolation() {
-    let name = "World"
-    let s = "Hello, ${name}!"
+    var name = "World"
+    var s = "Hello, ${name}!"
     assert_eq(s, "Hello, World!")
 }
 
 @test
 fn test_number_interpolation() {
-    let x = 42
-    let s = "The answer is ${x}"
+    var x = 42
+    var s = "The answer is ${x}"
     assert_eq(s, "The answer is 42")
 }
 
@@ -22,16 +22,16 @@ fn test_number_interpolation() {
 
 @test
 fn test_expression_interpolation() {
-    let a = 10
-    let b = 20
-    let s = "Sum: ${a + b}"
+    var a = 10
+    var b = 20
+    var s = "Sum: ${a + b}"
     assert_eq(s, "Sum: 30")
 }
 
 @test
 fn test_method_call_interpolation() {
-    let name = "alice"
-    let s = "Hello, ${name.toUpperCase()}!"
+    var name = "alice"
+    var s = "Hello, ${name.toUpperCase()}!"
     assert_eq(s, "Hello, ALICE!")
 }
 
@@ -39,10 +39,10 @@ fn test_method_call_interpolation() {
 
 @test
 fn test_multi_variable() {
-    let first = "John"
-    let last = "Doe"
-    let age = 30
-    let s = "${first} ${last}, age ${age}"
+    var first = "John"
+    var last = "Doe"
+    var age = 30
+    var s = "${first} ${last}, age ${age}"
     assert_eq(s, "John Doe, age 30")
 }
 
@@ -50,41 +50,41 @@ fn test_multi_variable() {
 
 @test
 fn test_nested_quotes() {
-    let name = "test"
-    let s = "He said \"Hello, ${name}\""
+    var name = "test"
+    var s = "He said \"Hello, ${name}\""
     assert_eq(s.includes("Hello"), true)
 }
 
 @test
 fn test_same_quote_in_interpolation() {
-    let s = "${"x"}"
+    var s = "${"x"}"
     assert_eq(s, "x")
 }
 
 @test
 fn test_same_quote_with_inner_brace() {
-    let s = "value=${"a}b"}"
+    var s = "value=${"a}b"}"
     assert_eq(s, "value=a}b")
 }
 
 @test
 fn test_same_quote_map_index() {
-    let m = #{"k": "value"}
-    let s = "${m["k"]}"
+    var m = #{"k": "value"}
+    var s = "${m["k"]}"
     assert_eq(s, "value")
 }
 
 @test
 fn test_nested_template_in_interpolation() {
-    let name = "Ada"
-    let s = "outer ${"inner ${name}"}"
+    var name = "Ada"
+    var s = "outer ${"inner ${name}"}"
     assert_eq(s, "outer inner Ada")
 }
 
 @test
 fn test_single_quote_literal_in_interpolation() {
-    let close = "${'}'}"
-    let quote = "${'"'}"
+    var close = "${'}'}"
+    var quote = "${'"'}"
     assert_eq(close, "}")
     assert_eq(quote, "\"")
 }
@@ -93,13 +93,13 @@ fn test_single_quote_literal_in_interpolation() {
 
 @test
 fn test_empty_template() {
-    let s = ""
+    var s = ""
     assert_eq(s, "")
 }
 
 @test
 fn test_no_interpolation() {
-    let s = "plain text"
+    var s = "plain text"
     assert_eq(s, "plain text")
 }
 
@@ -107,15 +107,15 @@ fn test_no_interpolation() {
 
 @test
 fn test_bool_interpolation() {
-    let flag = true
-    let s = "Flag is ${flag}"
+    var flag = true
+    var s = "Flag is ${flag}"
     assert_eq(s, "Flag is true")
 }
 
 @test
 fn test_null_interpolation() {
-    let x = null
-    let s = "Value is ${x}"
+    var x = null
+    var s = "Value is ${x}"
     assert_eq(s, "Value is null")
 }
 
@@ -123,8 +123,8 @@ fn test_null_interpolation() {
 
 @test
 fn test_multiline() {
-    let name = "Alice"
-    let s = "Hello,
+    var name = "Alice"
+    var s = "Hello,
 ${name}!"
     assert_eq(s.includes("Alice"), true)
 }

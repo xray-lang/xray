@@ -1080,6 +1080,14 @@ static bool cg_array_data_cache_for_value(XiCgenCtx *ctx, const XiValue *array_v
             *out_origin = plan->value;
         return true;
     }
+    if (v && v->op == XI_PHI) {
+        const XiValue *cached = cg_array_single_cacheable_value(ctx, array_value, 0);
+        if (cached) {
+            if (out_origin)
+                *out_origin = cached;
+            return true;
+        }
+    }
     const XaotArrayStoragePlan *storage = xaot_bundle_find_array_storage_plan(bundle, v);
     if (storage && storage->origin) {
         plan = xaot_bundle_find_array_cache_plan(bundle, storage->origin);
@@ -2277,9 +2285,17 @@ static bool cg_array_err_check_after_index_get_trusted(XiCgenCtx *ctx, const XiF
 
 static bool cg_span_common_prefix_trusted_nothrow(XiCgenCtx *ctx, const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
-    return v && v->op == XI_BYTES_SPAN_COMMON_PREFIX && v->nargs == 2 &&
-           cg_span_value_u8_info(ctx, v->args[0], NULL) &&
-           cg_span_value_u8_info(ctx, v->args[1], NULL);
+    if (!v || v->op != XI_BYTES_SPAN_COMMON_PREFIX || v->nargs != 2)
+        return false;
+    const XiValue *lhs = cg_unwrap_identity_value(v->args[0]);
+    const XiValue *rhs = cg_unwrap_identity_value(v->args[1]);
+    bool lhs_ok = cg_span_value_u8_info(ctx, v->args[0], NULL) ||
+                  (lhs && lhs->op == XI_SLICE && lhs->nargs >= 3 &&
+                   cg_span_value_u8_info(ctx, lhs->args[0], NULL));
+    bool rhs_ok = cg_span_value_u8_info(ctx, v->args[1], NULL) ||
+                  (rhs && rhs->op == XI_SLICE && rhs->nargs >= 3 &&
+                   cg_span_value_u8_info(ctx, rhs->args[0], NULL));
+    return lhs_ok && rhs_ok;
 }
 
 static bool cg_array_err_check_after_unchecked_bytes_trusted(XiCgenCtx *ctx, const XiFunc *f,

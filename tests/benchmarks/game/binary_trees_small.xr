@@ -23,26 +23,26 @@ fn checksum(node: Json) : int {
 }
 
 fn run(maxDepth: int) : void {
-    let minDepth = 4
+    var minDepth = 4
     // Stretch tree
-    let stretchDepth = maxDepth + 1
-    let stretchTree = makeTree(stretchDepth)
+    var stretchDepth = maxDepth + 1
+    var stretchTree = makeTree(stretchDepth)
     print("stretch tree of depth ${stretchDepth}\t check: ${checksum(stretchTree)}")
     // Long-lived tree
-    let longLivedTree = makeTree(maxDepth)
+    var longLivedTree = makeTree(maxDepth)
     // Iterations
-    let depth = minDepth
+    var depth = minDepth
     while (depth <= maxDepth) {
-        let iterations = 1
-        let j = 0
+        var iterations = 1
+        var j = 0
         while (j < maxDepth - depth + minDepth) {
             iterations = iterations * 2
             j = j + 1
         }
-        let check = 0
-        let i = 1
+        var check = 0
+        var i = 1
         while (i <= iterations) {
-            let tree = makeTree(depth)
+            var tree = makeTree(depth)
             check = check + checksum(tree)
             i = i + 1
         }
@@ -53,5 +53,5 @@ fn run(maxDepth: int) : void {
 }
 
 // 小规模测试，深度 10
-let maxDepth = 10
+var maxDepth = 10
 run(maxDepth)

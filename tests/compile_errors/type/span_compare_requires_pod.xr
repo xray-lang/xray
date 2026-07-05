@@ -1,5 +1,5 @@
-let left = ["a", "b"]
-let right = ["a", "c"]
-let leftSpan: Span<string> = left[:]
-let rightSpan: Span<string> = right[:]
+var left = ["a", "b"]
+var right = ["a", "c"]
+var leftSpan: Span<string> = left[:]
+var rightSpan: Span<string> = right[:]
 leftSpan.compare(rightSpan)

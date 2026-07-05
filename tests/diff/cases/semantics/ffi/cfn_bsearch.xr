@@ -8,10 +8,10 @@ fn zeroCmp(a: RawPtr<uint8>, b: RawPtr<uint8>) -> int32 {
     return 0
 }
 
-let p = unsafe { malloc(1) }
+var p = unsafe { malloc(1) }
 unsafe {
     p[0] = 42
-    let found = bsearch(p, p, 1, 1, zeroCmp)
+    var found = bsearch(p, p, 1, 1, zeroCmp)
     print(found.isNull())
 }
 unsafe { free(p) }

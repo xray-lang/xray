@@ -1,0 +1,6 @@
+fn readSize() -> int {
+    return 1
+}
+
+const N = comptime readSize()
+print(N)

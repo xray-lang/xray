@@ -1,13 +1,13 @@
 // DAP native debug fixture: breakpoint inside main at line 10.
 fn compute(a: int, b: int) -> int {
-    let s = a + b
+    var s = a + b
     return s
 }
 
 fn main() {
-    let x = 10
-    let y = 32
-    let z = compute(x, y)
+    var x = 10
+    var y = 32
+    var z = compute(x, y)
     print(z)
 }
 

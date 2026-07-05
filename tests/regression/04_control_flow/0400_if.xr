@@ -6,7 +6,7 @@
 
 @test
 fn test_if_true() {
-    let result = 0
+    var result = 0
     if (true) {
         result = 1
     }
@@ -15,7 +15,7 @@ fn test_if_true() {
 
 @test
 fn test_if_false() {
-    let result = 0
+    var result = 0
     if (false) {
         result = 1
     }
@@ -24,8 +24,8 @@ fn test_if_false() {
 
 @test
 fn test_if_expression() {
-    let x = 10
-    let result = 0
+    var x = 10
+    var result = 0
     if (x > 5) {
         result = 1
     }
@@ -36,7 +36,7 @@ fn test_if_expression() {
 
 @test
 fn test_if_else_true() {
-    let result = ""
+    var result = ""
     if (true) {
         result = "yes"
     } else {
@@ -47,7 +47,7 @@ fn test_if_else_true() {
 
 @test
 fn test_if_else_false() {
-    let result = ""
+    var result = ""
     if (false) {
         result = "yes"
     } else {
@@ -58,8 +58,8 @@ fn test_if_else_false() {
 
 @test
 fn test_if_else_expression() {
-    let x = 3
-    let result = ""
+    var x = 3
+    var result = ""
     if (x > 5) {
         result = "big"
     } else {
@@ -72,8 +72,8 @@ fn test_if_else_expression() {
 
 @test
 fn test_elseif_first() {
-    let x = 1
-    let result = ""
+    var x = 1
+    var result = ""
     if (x == 1) {
         result = "one"
     } else if (x == 2) {
@@ -86,8 +86,8 @@ fn test_elseif_first() {
 
 @test
 fn test_elseif_second() {
-    let x = 2
-    let result = ""
+    var x = 2
+    var result = ""
     if (x == 1) {
         result = "one"
     } else if (x == 2) {
@@ -100,8 +100,8 @@ fn test_elseif_second() {
 
 @test
 fn test_elseif_else() {
-    let x = 3
-    let result = ""
+    var x = 3
+    var result = ""
     if (x == 1) {
         result = "one"
     } else if (x == 2) {
@@ -114,8 +114,8 @@ fn test_elseif_else() {
 
 @test
 fn test_multiple_elseif() {
-    let score = 75
-    let grade = ""
+    var score = 75
+    var grade = ""
     if (score >= 90) {
         grade = "A"
     } else if (score >= 80) {
@@ -134,9 +134,9 @@ fn test_multiple_elseif() {
 
 @test
 fn test_nested_if() {
-    let x = 5
-    let y = 10
-    let result = ""
+    var x = 5
+    var y = 10
+    var result = ""
     
     if (x > 0) {
         if (y > 5) {
@@ -152,10 +152,10 @@ fn test_nested_if() {
 
 @test
 fn test_deep_nested() {
-    let a = 1
-    let b = 2
-    let c = 3
-    let result = 0
+    var a = 1
+    var b = 2
+    var c = 3
+    var result = 0
     
     if (a > 0) {
         if (b > 0) {
@@ -171,7 +171,7 @@ fn test_deep_nested() {
 
 @test
 fn test_explicit_bool_condition() {
-    let result = ""
+    var result = ""
     if (true) { result = "yes" } else { result = "no" }
     assert_eq(result, "yes")
     if (false) { result = "yes" } else { result = "no" }
@@ -180,11 +180,11 @@ fn test_explicit_bool_condition() {
 
 @test
 fn test_nullable_presence_condition() {
-    let s: string? = null
-    let result = ""
+    var s: string? = null
+    var result = ""
     if (s) { result = "present" } else { result = "absent" }
     assert_eq(result, "absent")
-    let empty: string? = ""
+    var empty: string? = ""
     if (empty) { result = "present" } else { result = "absent" }
     assert_eq(result, "present")
 }
@@ -193,9 +193,9 @@ fn test_nullable_presence_condition() {
 
 @test
 fn test_and_condition() {
-    let x = 5
-    let y = 10
-    let result = false
+    var x = 5
+    var y = 10
+    var result = false
     if (x > 0 && y > 0) {
         result = true
     }
@@ -204,9 +204,9 @@ fn test_and_condition() {
 
 @test
 fn test_or_condition() {
-    let x = -5
-    let y = 10
-    let result = false
+    var x = -5
+    var y = 10
+    var result = false
     if (x > 0 || y > 0) {
         result = true
     }
@@ -215,8 +215,8 @@ fn test_or_condition() {
 
 @test
 fn test_not_condition() {
-    let flag = false
-    let result = 0
+    var flag = false
+    var result = 0
     if (!flag) {
         result = 1
     }
@@ -227,7 +227,7 @@ fn test_not_condition() {
 
 @test
 fn test_empty_if_body() {
-    let x = 10
+    var x = 10
     if (x < 5) {
         // 空体
     }
@@ -236,8 +236,8 @@ fn test_empty_if_body() {
 
 @test
 fn test_if_only_once() {
-    let count = 0
-    let x = 10
+    var count = 0
+    var x = 10
     
     if (x > 5) {
         count++

@@ -187,7 +187,7 @@ order: 015
 | `Json.encode(value)` | 显式 typed value → Json 边界转换 |
 | `Json.stringify(value, indent?)` | 序列化 |
 
-**字面量**：`{ name: "alice", age: 30 }` 默认是 sealed `Record`。显式写 `let j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。
+**字面量**：`{ name: "alice", age: 30 }` 默认是 sealed `Record`。显式写 `var j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。
 
 ### 14.12 `Range`
 
@@ -241,7 +241,7 @@ order: 015
 
 ### 14.19 `Atomic<T>` 方法
 
-`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。必须声明为 `shared const`，禁止 `move`。
+`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。必须声明为 `shared`，禁止 `move`。
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
@@ -443,7 +443,7 @@ The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScr
 | `Json.encode(value)` | explicit typed value → Json boundary conversion |
 | `Json.stringify(value, indent?)` | serialization |
 
-**Literal**: `{ name: "alice", age: 30 }` defaults to sealed `Record`. It becomes a dynamic Json object only with an explicit `Json` annotation such as `let j: Json = {...}`; use `Json.encode(value)` when a typed value crosses a JSON boundary.
+**Literal**: `{ name: "alice", age: 30 }` defaults to sealed `Record`. It becomes a dynamic Json object only with an explicit `Json` annotation such as `var j: Json = {...}`; use `Json.encode(value)` when a typed value crosses a JSON boundary.
 
 ### 14.12 `Range`
 
@@ -497,7 +497,7 @@ These types are registered by the prelude; instances are constructed by factory 
 
 ### 14.19 `Atomic<T>` Methods
 
-`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Must be declared as `shared const`; `move` is prohibited.
+`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Must be declared as `shared`; `move` is prohibited.
 
 | Method | Signature | Description |
 |--|--|--|

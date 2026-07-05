@@ -19,7 +19,7 @@ fn test_struct_nested() {
 
 
     // === Basic nested construction ===
-    let r = Rect{
+    var r = Rect{
         origin: Point{x: 0.0, y: 0.0},
         size: Point{x: 100.0, y: 50.0}
     }
@@ -30,7 +30,7 @@ fn test_struct_nested() {
     assert(r.area() == 5000.0)
 
     // === Copy of nested struct is deep ===
-    let r2 = r
+    var r2 = r
     r2.origin.x = 10.0
     r2.size.x = 200.0
     assert(r.origin.x == 0.0)

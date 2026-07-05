@@ -2,7 +2,7 @@ class ScoreBag {
     scores: Map<string, int>
 
     constructor() {
-        let scores: Map<string, int> = #{}
+        var scores: Map<string, int> = #{}
         this.scores = scores
     }
 
@@ -24,7 +24,7 @@ class ScoreBag {
     }
 }
 
-let bag = ScoreBag()
+var bag = ScoreBag()
 print(bag.put("alice", 9))
 print(bag.put("bob", 7))
 print(bag.score("alice"))

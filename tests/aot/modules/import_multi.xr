@@ -2,7 +2,7 @@
 import { Rect, add, mul } from "./shape_lib"
 
 // Cross-module class: construct, invoke methods, access fields
-let r = Rect(5, 3)
+var r = Rect(5, 3)
 print(r.area())       // 15
 print(r.perimeter())  // 16
 print(r.w)            // 5

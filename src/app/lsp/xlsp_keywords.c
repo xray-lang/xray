@@ -14,7 +14,7 @@
 // xray language keywords
 const char *xr_keywords[] = {
     // Declarations
-    "let", "const", "fn", "class", "interface", "enum", "type",
+    "var", "const", "fn", "class", "interface", "enum", "type",
     // Control flow
     "if", "else", "while", "for", "in", "is", "to", "break", "continue", "return", "match",
     "default",

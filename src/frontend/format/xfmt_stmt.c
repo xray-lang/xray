@@ -71,7 +71,7 @@ static void fmt_for_stmt(XrFmtContext *ctx, AstNode *node) {
         ctx->line_start = 0;
         if (f->initializer->type == AST_VAR_DECL || f->initializer->type == AST_CONST_DECL) {
             VarDeclNode *decl = &f->initializer->as.var_decl;
-            xfmt_write_str(ctx, decl->is_const ? "const " : "let ");
+            xfmt_write_str(ctx, decl->is_const ? "const " : "var ");
             xfmt_write_str(ctx, decl->name);
             if (decl->initializer) {
                 xfmt_write_str(ctx, " = ");
@@ -307,6 +307,7 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
     switch (node->type) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             xfmt_emit_var_decl(ctx, node);
             break;
 

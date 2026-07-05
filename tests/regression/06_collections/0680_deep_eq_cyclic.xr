@@ -8,9 +8,9 @@ fn deep_eq_many_shared_arrays() {
     // Build two parallel arrays where each element is itself a fresh
     // 3-element array. Use 200 elements -- well beyond the old 64-pair
     // cap -- so deep_compare must visit > 64 distinct (a, b) pairs.
-    let a: Array<Array<int>> = []
-    let b: Array<Array<int>> = []
-    for (let i = 0; i < 200; i++) {
+    var a: Array<Array<int>> = []
+    var b: Array<Array<int>> = []
+    for (var i = 0; i < 200; i++) {
         a.push([i, i + 1, i + 2])
         b.push([i, i + 1, i + 2])
     }
@@ -24,24 +24,24 @@ fn deep_eq_many_shared_arrays() {
 @test
 fn deep_eq_nested_maps() {
     // Same idea for maps: 100 keys, each holding a small array.
-    let m1 = #{}
-    let m2 = #{}
-    for (let k = 0; k < 100; k++) {
-        let key = "k" + k.toString()
+    var m1 = #{}
+    var m2 = #{}
+    for (var k = 0; k < 100; k++) {
+        var key = "k" + k.toString()
         m1.set(key, [k, k * 2])
         m2.set(key, [k, k * 2])
     }
     assert(m1 == m2, "100-entry parallel maps must compare equal")
 
-    let inner = m2.get("k50")
+    var inner = m2.get("k50")
     inner[0] = 999
     assert(m1 != m2, "value mutation must break map equality")
 }
 
 @test
 fn deep_eq_self_referential_json() {
-    let a: Json = {}
-    let b: Json = {}
+    var a: Json = {}
+    var b: Json = {}
     a["self"] = a
     b["self"] = b
     assert(a == b, "isomorphic Json self cycles must compare equal")
@@ -53,10 +53,10 @@ fn deep_eq_self_referential_json() {
 
 @test
 fn deep_eq_mutually_referential_json() {
-    let a1: Json = {}
-    let a2: Json = {}
-    let b1: Json = {}
-    let b2: Json = {}
+    var a1: Json = {}
+    var a2: Json = {}
+    var b1: Json = {}
+    var b2: Json = {}
     a1["next"] = a2
     a2["next"] = a1
     b1["next"] = b2

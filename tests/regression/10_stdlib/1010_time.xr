@@ -10,7 +10,7 @@ import time
 
 @test
 fn test_time_now() {
-    let t = time.now()
+    var t = time.now()
     assert_eq(t > 0, true)
     // 时间戳应该是一个很大的数（毫秒级）
     assert_eq(t > 1000000000000, true)  // 大于 2001 年的时间戳
@@ -21,13 +21,13 @@ fn test_time_now() {
 
 @test
 fn test_time_clock() {
-    let start = time.clock()
+    var start = time.clock()
     // 做一些简单计算
-    let sum = 0
+    var sum = 0
     for (i in 0..100) {
         sum = sum + i
     }
-    let end = time.clock()
+    var end = time.clock()
     assert_eq(end >= start, true)
 }
 
@@ -36,8 +36,8 @@ fn test_time_clock() {
 
 @test
 fn test_time_monotonic() {
-    let t1 = time.monotonic()
-    let t2 = time.monotonic()
+    var t1 = time.monotonic()
+    var t2 = time.monotonic()
     assert_eq(t2 >= t1, true)
 }
 
@@ -46,9 +46,9 @@ fn test_time_monotonic() {
 
 @test
 fn test_time_sleep() {
-    let start = time.monotonic()
+    var start = time.monotonic()
     time.sleep(10)  // 睡眠 10 毫秒
-    let end = time.monotonic()
+    var end = time.monotonic()
     assert_eq(end >= start, true)
 }
 

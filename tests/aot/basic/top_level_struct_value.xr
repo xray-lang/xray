@@ -3,6 +3,6 @@ struct Pair {
     b: int
 }
 
-let pair = Pair{a: 7, b: 5}
+var pair = Pair{a: 7, b: 5}
 
 print(pair.a + pair.b)

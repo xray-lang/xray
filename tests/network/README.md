@@ -59,9 +59,9 @@ done
 ```xray
 import ws
 
-let conn = ws.connect(url)      // 连接 WebSocket，返回连接对象
+var conn = ws.connect(url)      // 连接 WebSocket，返回连接对象
 ws.send(conn, message)          // 发送消息
-let msg = ws.recv(conn)         // 接收消息
+var msg = ws.recv(conn)         // 接收消息
 ws.close(conn)                  // 关闭连接
 ws.ping(conn)                   // 发送 ping
 ws.state(conn)                  // 获取状态: "open", "closed" 等
@@ -84,7 +84,7 @@ ws.hasError(conn)               // 检查是否有错误
 ## 响应对象属性
 
 ```xray
-let resp = http.get("https://example.com")
+var resp = http.get("https://example.com")
 
 resp.status    // int: HTTP 状态码 (200, 404, 500...)
 resp.ok        // bool: 是否成功 (status 在 200-299)

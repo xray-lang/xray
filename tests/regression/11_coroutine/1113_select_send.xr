@@ -16,7 +16,7 @@ fn recv_ok(r: Recv<int>) -> bool {
 
 @test
 fn test_select_send() {
-    shared const ch = Channel(2)
+    shared ch = Channel(2)
     
     // 发送分支：val to ch -> ...
     select {
@@ -37,10 +37,10 @@ fn test_select_send() {
     }
     
     // 接收并验证（使用 Recv<T>）
-    let r1 = ch.tryRecv()
-    let r2 = ch.tryRecv()
-    let v1 = recv_value(r1)
-    let v2 = recv_value(r2)
+    var r1 = ch.tryRecv()
+    var r2 = ch.tryRecv()
+    var v1 = recv_value(r1)
+    var v2 = recv_value(r2)
     print(v1)  // 100
     print(v2)  // 200
     print(recv_ok(r1) && recv_ok(r2))  // true

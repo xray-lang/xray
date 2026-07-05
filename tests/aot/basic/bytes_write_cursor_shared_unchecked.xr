@@ -1,14 +1,14 @@
-let src = Bytes(4)
+var src = Bytes(4)
 src[0] = 65
 src[1] = 66
 src[2] = 67
 src[3] = 68
 
-let out = Bytes.withCapacity(8)
+var out = Bytes.withCapacity(8)
 out.resize(8)
-let prefix: ByteSpan = out[0:4]
+var prefix: ByteSpan = out[0:4]
 prefix.copyFrom(src[:])
-let full: ByteSpan = out[0:8]
+var full: ByteSpan = out[0:8]
 full.repeatFrom(4, 4, 4)
 
 print(out.length)

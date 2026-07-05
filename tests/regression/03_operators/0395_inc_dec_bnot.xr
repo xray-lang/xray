@@ -6,14 +6,14 @@
 
 @test
 fn test_post_increment() {
-    let x = 5
+    var x = 5
     x++
     assert_eq(x, 6)
 }
 
 @test
 fn test_multiple_increment() {
-    let x = 0
+    var x = 0
     x++
     x++
     x++
@@ -24,14 +24,14 @@ fn test_multiple_increment() {
 
 @test
 fn test_post_decrement() {
-    let x = 5
+    var x = 5
     x--
     assert_eq(x, 4)
 }
 
 @test
 fn test_multiple_decrement() {
-    let x = 10
+    var x = 10
     x--
     x--
     x--
@@ -42,7 +42,7 @@ fn test_multiple_decrement() {
 
 @test
 fn test_inc_dec_mixed() {
-    let x = 5
+    var x = 5
     x++
     x++
     x--
@@ -53,8 +53,8 @@ fn test_inc_dec_mixed() {
 
 @test
 fn test_inc_in_loop() {
-    let count = 0
-    let i = 0
+    var count = 0
+    var i = 0
     while (i < 5) {
         count++
         i++
@@ -66,14 +66,14 @@ fn test_inc_in_loop() {
 
 @test
 fn test_float_increment() {
-    let x = 1.5
+    var x = 1.5
     x++
     assert_eq(x, 2.5)
 }
 
 @test
 fn test_float_decrement() {
-    let x = 3.5
+    var x = 3.5
     x--
     assert_eq(x, 2.5)
 }
@@ -97,7 +97,7 @@ fn test_bitwise_not_patterns() {
 
 @test
 fn test_double_bitwise_not() {
-    let x = 42
+    var x = 42
     assert_eq(~~x, x)
 }
 
@@ -105,8 +105,8 @@ fn test_double_bitwise_not() {
 
 @test
 fn test_bnot_in_expression() {
-    let x = 5
-    let y = ~x + 10
+    var x = 5
+    var y = ~x + 10
     assert_eq(y, 4)  // -6 + 10 = 4
 }
 

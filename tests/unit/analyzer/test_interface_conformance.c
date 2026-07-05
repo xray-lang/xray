@@ -187,7 +187,7 @@ static void test_iterable_int_satisfied_by_array_int(void) {
                       "    return 0\n"
                       "}\n"
                       "fn main() -> int {\n"
-                      "    let xs: Array<int> = [1, 2, 3]\n"
+                      "    var xs: Array<int> = [1, 2, 3]\n"
                       "    return consume<Array<int>>(xs)\n"
                       "}\n";
     int total = 0;
@@ -200,7 +200,7 @@ static void test_iterable_int_rejects_array_string(void) {
                       "    return 0\n"
                       "}\n"
                       "fn main() -> int {\n"
-                      "    let xs: Array<string> = [\"a\"]\n"
+                      "    var xs: Array<string> = [\"a\"]\n"
                       "    return consume<Array<string>>(xs)\n"
                       "}\n";
     int total = 0;
@@ -215,7 +215,7 @@ static void test_indexable_string_int_rejects_array_int(void) {
                       "    return 0\n"
                       "}\n"
                       "fn main() -> int {\n"
-                      "    let xs: Array<int> = [1, 2]\n"
+                      "    var xs: Array<int> = [1, 2]\n"
                       "    return consume<Array<int>>(xs)\n"
                       "}\n";
     int total = 0;
@@ -228,7 +228,7 @@ static void test_indexable_int_int_accepts_array_int(void) {
                       "    return 0\n"
                       "}\n"
                       "fn main() -> int {\n"
-                      "    let xs: Array<int> = [1, 2]\n"
+                      "    var xs: Array<int> = [1, 2]\n"
                       "    return consume<Array<int>>(xs)\n"
                       "}\n";
     int total = 0;

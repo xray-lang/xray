@@ -13,8 +13,8 @@
  *
  * USAGE:
  *   import compress
- *   let compressed = compress.gzip(data)
- *   let original = compress.gunzip(compressed)
+ *   var compressed = compress.gzip(data)
+ *   var original = compress.gunzip(compressed)
  *
  * ====================================================================
  * DESIGN NOTE — this module is the CANONICAL compression entry point.

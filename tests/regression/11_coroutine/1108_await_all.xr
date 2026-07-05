@@ -7,12 +7,12 @@ fn compute(n: int) -> int {
 @test
 fn test_await_all() {
     // 创建多个协程
-    let t1 = go compute(2)
-    let t2 = go compute(3)
-    let t3 = go compute(4)
+    var t1 = go compute(2)
+    var t2 = go compute(3)
+    var t3 = go compute(4)
 
     // await all 等待所有协程，返回结果数组
-    let results = await all [t1, t2, t3]
+    var results = await all [t1, t2, t3]
 
     // 打印结果
     print(results[0])  // 4
@@ -20,7 +20,7 @@ fn test_await_all() {
     print(results[2])  // 16
 
     // 计算总和
-    let sum = results[0] + results[1] + results[2]
+    var sum = results[0] + results[1] + results[2]
     print(sum)  // 29
 
     print("done")

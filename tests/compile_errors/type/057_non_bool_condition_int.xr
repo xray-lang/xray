@@ -1,5 +1,5 @@
 fn main() {
-    let n = 1
+    var n = 1
     if (n) {
         print("bad")
     }

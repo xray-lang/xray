@@ -29,7 +29,7 @@
  *          registration, struct layout)
  *
  *     - xa_visit_collect_var_decl
- *         (top-level let/const symbol)
+ *         (top-level var/const/shared symbol)
  *
  *     - build_class_vtable / xa_link_class_inheritance
  *         (Pass 1.5 entry point: resolve base class names to
@@ -590,6 +590,7 @@ static void xa_summary_mark_capture_refs(XaParamEscapeSummary *summary, AstNode 
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             xa_summary_mark_capture_refs(summary, node->as.var_decl.initializer);
             xa_summary_set_alias(summary, node->as.var_decl.name, -1);
             break;
@@ -1091,6 +1092,7 @@ static bool xa_method_body_mutates_receiver(AstNode *node, XrClassInfo *receiver
                                                    receiver_info);
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             return xa_method_body_mutates_receiver(node->as.var_decl.initializer, receiver_info);
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++) {
@@ -1230,6 +1232,8 @@ static bool xa_method_body_mutates_receiver(AstNode *node, XrClassInfo *receiver
                    xa_method_body_mutates_receiver(node->as.ternary.false_expr, receiver_info);
         case AST_MOVE_EXPR:
             return xa_method_body_mutates_receiver(node->as.move_expr.expr, receiver_info);
+        case AST_COMPTIME_EXPR:
+            return xa_method_body_mutates_receiver(node->as.comptime_expr.expr, receiver_info);
         case AST_UNSAFE_EXPR:
             return xa_method_body_mutates_receiver(node->as.unsafe_expr.operand, receiver_info);
         case AST_AWAIT_EXPR:
@@ -2063,6 +2067,7 @@ static bool stmt_contains_this(AstNode *stmt) {
             return contains_this_expr(stmt->as.expr_stmt);
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             return contains_this_expr(stmt->as.var_decl.initializer);
         case AST_ASSIGNMENT:
             return contains_this_expr(stmt->as.assignment.value);
@@ -2506,7 +2511,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
 
     xa_visit_add_symbol_checked(ctx, sym, 0);
 
-    /* Write back resolved symbol ID for Xi lowering (shared var key). */
+    /* Write back resolved symbol ID for Xi lowering (shared binding key). */
     cls->symbol_id = sym->id;
 
     // Create class info
@@ -3122,14 +3127,20 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
         return;
 
     VarDeclNode *var = &node->as.var_decl;
+    bool is_shared = node->type == AST_SHARED_DECL || var->storage_mode == XR_STORAGE_SHARED;
+    bool is_const = node->type == AST_CONST_DECL;
+    var->is_const = is_const;
+    var->storage_mode = is_shared ? XR_STORAGE_SHARED : XR_STORAGE_NORMAL;
 
     XaSymbol *sym =
         var->symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, var->symbol_id) : NULL;
     if (!sym) {
         sym = xa_symbol_new(var->name, XA_SYM_VARIABLE);
         sym->location.line = node->line;
-        sym->is_const = (node->type == AST_CONST_DECL);
-        sym->is_shared = (var->storage_mode == 1);  // XR_STORAGE_SHARED
+        sym->is_const = is_const;
+        sym->is_readonly_binding = is_const;
+        sym->is_shared = is_shared;
+        sym->is_rebindable = !is_const && !is_shared;
 
         xa_visit_add_symbol_checked(ctx, sym, 0);
 
@@ -3137,15 +3148,17 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
          * instead of name-based lookup (eliminates scope ambiguity). */
         var->symbol_id = sym->id;
     } else {
-        sym->is_const = (node->type == AST_CONST_DECL);
-        sym->is_shared = (var->storage_mode == 1);
+        sym->is_const = is_const;
+        sym->is_readonly_binding = is_const;
+        sym->is_shared = is_shared;
+        sym->is_rebindable = !is_const && !is_shared;
     }
 
     // Type will be inferred in pass 2
     // Keep NULL when no annotation (distinguishes "no annotation" from "annotated as any")
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    if (links && sym->is_const)
-        links->const_initializer = var->initializer;
+    if (links)
+        links->const_initializer = sym->is_const ? var->initializer : NULL;
     links->declared_type = var->type_annotation
                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, var->type_annotation)
                                : NULL;
@@ -3154,8 +3167,8 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
         xa_validate_hashable_key_type(ctx, links->declared_type, NULL, "type annotation", &loc);
     }
 
-    // Mark const types as immutable for concurrency safety
-    if (sym->is_shared && sym->is_const && links->declared_type) {
+    // Mark const annotated types as immutable for readonly safety.
+    if (sym->is_const && links->declared_type) {
         links->declared_type->is_const = true;
     }
 

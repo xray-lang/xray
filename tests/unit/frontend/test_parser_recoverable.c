@@ -178,8 +178,8 @@ TEST(clean_source_no_errors) {
     Parser parser;
     DiagSink sink;
     XrArena *arena = NULL;
-    AstNode *ast = parse_recoverable("let a = 1;\n"
-                                     "let b = 2;\n"
+    AstNode *ast = parse_recoverable("var a = 1;\n"
+                                     "var b = 2;\n"
                                      "fn f() { return a + b; }\n",
                                      &parser, &sink, 0, &arena);
 
@@ -200,12 +200,12 @@ TEST(returns_partial_ast_on_error) {
     setup();
     Parser parser;
     DiagSink sink;
-    // Deliberately broken: `let x =` has no expression. The parser
+    // Deliberately broken: `var x =` has no expression. The parser
     // must report it AND keep going for the next two decls.
     XrArena *arena = NULL;
-    AstNode *ast = parse_recoverable("let x =\n"
-                                     "let y = 2;\n"
-                                     "let z = 3;\n",
+    AstNode *ast = parse_recoverable("var x =\n"
+                                     "var y = 2;\n"
+                                     "var z = 3;\n",
                                      &parser, &sink, 0, &arena);
 
     ASSERT_NOT_NULL(ast);
@@ -218,7 +218,7 @@ TEST(returns_partial_ast_on_error) {
 }
 
 TEST(resync_after_error_keeps_following_decls) {
-    // Panic-mode resynchronisation must let the parser recover at
+    // Panic-mode resynchronisation must allow the parser to recover at
     // the next statement boundary. With ONE bad declaration in the
     // middle, the surrounding two clean ones must still appear in
     // the AST. Without resync, a typo would silently hide every
@@ -227,9 +227,9 @@ TEST(resync_after_error_keeps_following_decls) {
     Parser parser;
     DiagSink sink;
     XrArena *arena = NULL;
-    AstNode *ast = parse_recoverable("let good_before = 1;\n"
-                                     "let *** = ;\n"  // pure garbage -- multiple syntax errors
-                                     "let good_after = 3;\n",
+    AstNode *ast = parse_recoverable("var good_before = 1;\n"
+                                     "var *** = ;\n"  // pure garbage -- multiple syntax errors
+                                     "var good_after = 3;\n",
                                      &parser, &sink, 0, &arena);
 
     ASSERT_NOT_NULL(ast);
@@ -254,9 +254,9 @@ TEST(multiple_errors_collected) {
     Parser parser;
     DiagSink sink;
     XrArena *arena = NULL;
-    AstNode *ast = parse_recoverable("let a = ;\n"   // error 1
-                                     "let b = ;\n"   // error 2
-                                     "let c = ;\n",  // error 3
+    AstNode *ast = parse_recoverable("var a = ;\n"   // error 1
+                                     "var b = ;\n"   // error 2
+                                     "var c = ;\n",  // error 3
                                      &parser, &sink, 0, &arena);
 
     ASSERT_NOT_NULL(ast);
@@ -290,14 +290,14 @@ TEST(max_errors_caps_callback_count) {
     DiagSink sink;
     // 8 broken decls; cap at 3.
     XrArena *arena = NULL;
-    AstNode *ast = parse_recoverable("let a = ;\n"
-                                     "let b = ;\n"
-                                     "let c = ;\n"
-                                     "let d = ;\n"
-                                     "let e = ;\n"
-                                     "let f = ;\n"
-                                     "let g = ;\n"
-                                     "let h = ;\n",
+    AstNode *ast = parse_recoverable("var a = ;\n"
+                                     "var b = ;\n"
+                                     "var c = ;\n"
+                                     "var d = ;\n"
+                                     "var e = ;\n"
+                                     "var f = ;\n"
+                                     "var g = ;\n"
+                                     "var h = ;\n",
                                      &parser, &sink, 3, &arena);
 
     ASSERT_NOT_NULL(ast);
@@ -313,16 +313,16 @@ TEST(broken_function_body_does_not_eat_following_decls) {
     // A specific LSP-killer scenario: a half-typed function body
     // would historically swallow everything until EOF because the
     // resync set lacked `}` or `fn`. This test asserts the modern
-    // resync set does the right thing: the let following `fn f`
+    // resync set does the right thing: the var following `fn f`
     // still lands in the AST.
     setup();
     Parser parser;
     DiagSink sink;
     XrArena *arena = NULL;
     AstNode *ast = parse_recoverable("fn f() {\n"
-                                     "    let oops =\n"  // missing expression + missing `;`
+                                     "    var oops =\n"  // missing expression + missing `;`
                                      "}\n"
-                                     "let after = 99;\n",
+                                     "var after = 99;\n",
                                      &parser, &sink, 0, &arena);
 
     ASSERT_NOT_NULL(ast);
@@ -373,9 +373,9 @@ TEST(error_coordinates_in_source_bounds) {
     setup();
     Parser parser;
     DiagSink sink;
-    const char *src = "let a = 1;\n"
-                      "let b = ;\n"  // error here at line 2
-                      "let c = 3;\n";
+    const char *src = "var a = 1;\n"
+                      "var b = ;\n"  // error here at line 2
+                      "var c = 3;\n";
     XrArena *arena = NULL;
     AstNode *ast = parse_recoverable(src, &parser, &sink, 0, &arena);
 
@@ -400,7 +400,7 @@ TEST(deep_expression_reports_error_instead_of_crashing) {
     // the host C stack.
     setup();
     const int depth = XR_PARSER_MAX_DEPTH + 1;
-    const char *prefix = "let x = ";
+    const char *prefix = "var x = ";
     const char *suffix = "1;\n";
     size_t prefix_len = strlen(prefix);
     size_t suffix_len = strlen(suffix);

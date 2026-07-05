@@ -5,8 +5,8 @@ fn fail_with_enum() -> int {
     return 0
 }
 
-let task = go fail_with_enum()
-let result = task.awaitResult()
+var task = go fail_with_enum()
+var result = task.awaitResult()
 
 match (result) {
     TaskResult.Failed(err) -> {

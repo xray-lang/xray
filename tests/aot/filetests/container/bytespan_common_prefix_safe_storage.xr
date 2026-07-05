@@ -1,5 +1,5 @@
 fn common(src: ByteSpan, left: int, right: int, maxCount: int) -> int {
-    let a: ByteSpan = src[left:left + maxCount]
-    let b: ByteSpan = src[right:right + maxCount]
+    var a: ByteSpan = src[left:left + maxCount]
+    var b: ByteSpan = src[right:right + maxCount]
     return a.commonPrefix(b)
 }

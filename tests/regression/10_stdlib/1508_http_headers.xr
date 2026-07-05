@@ -4,7 +4,7 @@ import http
 
 @test
 fn test_request_headers() {
-    let h = #{"Content-Type": "application/json",
+    var h = #{"Content-Type": "application/json",
         "Accept": "*/*",
         "User-Agent": "xray-http/1.0",
         "Authorization": "Bearer token123"}
@@ -15,7 +15,7 @@ fn test_request_headers() {
 
 @test
 fn test_common_headers() {
-    let h = #{"Content-Type": "text/html; charset=utf-8",
+    var h = #{"Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive"}
     assert(h.get("Content-Type")!.indexOf("text/html") >= 0)
@@ -24,14 +24,14 @@ fn test_common_headers() {
 
 @test
 fn test_empty_headers() {
-    let h = #{}
+    var h = #{}
     assert_eq(h.get("X-Not-Exist"), null)
 }
 
 @test
 fn test_multi_value_header_split() {
-    let header = "text/html, application/json, text/plain"
-    let values = header.split(", ")
+    var header = "text/html, application/json, text/plain"
+    var values = header.split(", ")
     assert_eq(values.length, 3)
     assert_eq(values[0], "text/html")
     assert_eq(values[2], "text/plain")

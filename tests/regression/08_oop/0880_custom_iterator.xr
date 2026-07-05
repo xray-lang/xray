@@ -18,7 +18,7 @@ class CustomRangeIter {
     }
     
     next() -> int {
-        let val = this.current
+        var val = this.current
         this.current = this.current + 1
         return val
     }
@@ -40,7 +40,7 @@ class CustomRange {
 
 @test
 fn test_basic_range_iterator() {
-    let sum = 0
+    var sum = 0
     for (i in CustomRange(1, 6)) {
         sum = sum + i
     }
@@ -49,7 +49,7 @@ fn test_basic_range_iterator() {
 
 @test
 fn test_empty_range() {
-    let count = 0
+    var count = 0
     for (i in CustomRange(5, 5)) {
         count = count + 1
     }
@@ -58,7 +58,7 @@ fn test_empty_range() {
 
 @test
 fn test_single_element_range() {
-    let result = 0
+    var result = 0
     for (i in CustomRange(42, 43)) {
         result = i
     }
@@ -87,7 +87,7 @@ class StepIterator {
     }
     
     next() -> int {
-        let val = this.current
+        var val = this.current
         this.current = this.current + this.step
         return val
     }
@@ -111,7 +111,7 @@ class StepRange {
 
 @test
 fn test_step_range_forward() {
-    let values: Array<int> = []
+    var values: Array<int> = []
     for (i in StepRange(0, 10, 2)) {
         values.push(i)
     }
@@ -125,7 +125,7 @@ fn test_step_range_forward() {
 
 @test
 fn test_step_range_backward() {
-    let values: Array<int> = []
+    var values: Array<int> = []
     for (i in StepRange(10, 0, -2)) {
         values.push(i)
     }
@@ -157,8 +157,8 @@ class FibIterator {
     }
     
     next() -> int {
-        let val = this.a
-        let tmp = this.a + this.b
+        var val = this.a
+        var tmp = this.a + this.b
         this.a = this.b
         this.b = tmp
         this.count = this.count + 1
@@ -180,7 +180,7 @@ class Fibonacci {
 
 @test
 fn test_fibonacci_iterator() {
-    let values: Array<int> = []
+    var values: Array<int> = []
     for (n in Fibonacci(8)) {
         values.push(n)
     }
@@ -211,7 +211,7 @@ class CharIterator {
     }
     
     next() -> string {
-        let ch = this.str[this.index]
+        var ch = this.str[this.index]
         this.index = this.index + 1
         return string(ch)
     }
@@ -231,7 +231,7 @@ class Chars {
 
 @test
 fn test_char_iterator() {
-    let chars: Array<string> = []
+    var chars: Array<string> = []
     for (ch in Chars("hello")) {
         chars.push(ch)
     }
@@ -247,7 +247,7 @@ fn test_char_iterator() {
 
 @test
 fn test_nested_iteration() {
-    let pairs: Array<string> = []
+    var pairs: Array<string> = []
     for (i in CustomRange(1, 4)) {
         for (j in CustomRange(1, 4)) {
             pairs.push("${i},${j}")
@@ -263,7 +263,7 @@ fn test_nested_iteration() {
 
 @test
 fn test_iterator_with_break() {
-    let sum = 0
+    var sum = 0
     for (i in CustomRange(1, 100)) {
         if (i > 5) {
             break
@@ -275,7 +275,7 @@ fn test_iterator_with_break() {
 
 @test
 fn test_iterator_with_continue() {
-    let sum = 0
+    var sum = 0
     for (i in CustomRange(1, 11)) {
         if (i % 2 == 0) {
             continue
@@ -289,7 +289,7 @@ fn test_iterator_with_continue() {
 
 @test
 fn test_iterator_inline() {
-    let sum = 0
+    var sum = 0
     for (i in CustomRange(1, 6)) {
         sum = sum + i * i
     }
@@ -300,8 +300,8 @@ fn test_iterator_inline() {
 
 @test
 fn test_iterator_stored_in_variable() {
-    let r = CustomRange(1, 4)
-    let sum = 0
+    var r = CustomRange(1, 4)
+    var sum = 0
     for (i in r) {
         sum = sum + i
     }

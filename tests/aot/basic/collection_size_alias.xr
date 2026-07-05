@@ -1,11 +1,11 @@
-let values: Array<int> = []
+var values: Array<int> = []
 values.push(1)
 values.push(2)
 print(values.length)
 print(values.size)
 print(values.length + values.size)
 
-let seen: Set<int> = #[]
+var seen: Set<int> = #[]
 seen.add(1)
 seen.add(2)
 seen.add(1)
@@ -13,7 +13,7 @@ print(seen.length)
 print(seen.size)
 print(seen.length + seen.size)
 
-let scores: Map<string, int> = #{}
+var scores: Map<string, int> = #{}
 scores.set("a", 10)
 scores.set("b", 20)
 print(scores.length)

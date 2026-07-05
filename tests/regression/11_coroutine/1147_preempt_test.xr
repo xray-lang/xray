@@ -15,7 +15,7 @@ fn recv_int(ch: Channel<int>) -> int {
 }
 
 fn worker(id: int, ch: Channel<int>, iterations: int) {
-    for (let i = 0; i < iterations; i++) {
+    for (var i = 0; i < iterations; i++) {
         time.sleep(5)
     }
     ch.send(id)
@@ -23,27 +23,27 @@ fn worker(id: int, ch: Channel<int>, iterations: int) {
 
 @test
 fn test_preempt_test() {
-    shared const WORKER_COUNT = 4
-    shared const ITERATIONS = 3
-    shared const resultCh = Channel(WORKER_COUNT)
+    shared WORKER_COUNT = 4
+    shared ITERATIONS = 3
+    shared resultCh = Channel(WORKER_COUNT)
 
 
     print("启动 " + string(WORKER_COUNT) + " 个协程...")
-    for (let i = 0; i < WORKER_COUNT; i++) {
+    for (var i = 0; i < WORKER_COUNT; i++) {
         go worker(i, resultCh, ITERATIONS)
     }
     /* Collect IDs first; concurrent scheduling makes recv order
      * non-deterministic, so we sort before printing to keep stdout
      * stable across runs and across interp/JIT modes. */
-    let ids: Array<int> = []
-    let received = 0
-    for (let i = 0; i < WORKER_COUNT; i++) {
-        let id = recv_int(resultCh)
+    var ids: Array<int> = []
+    var received = 0
+    for (var i = 0; i < WORKER_COUNT; i++) {
+        var id = recv_int(resultCh)
         received++
         ids.push(id)
     }
     ids.sort()
-    for (let i = 0; i < ids.length; i++) {
+    for (var i = 0; i < ids.length; i++) {
         print("协程 " + string(ids[i]) + " 完成")
     }
     assert(received == WORKER_COUNT, "scheduling test failed: only " + string(received) + " coroutines completed")

@@ -34,22 +34,22 @@ print(probeSum(1, 2, 3))
 print(_probe.probeSum(10, 20, 30))
 // closure + defer inside an exported stdlib module function
 print(probeDeferValue(5))
-let addTen = probeMakeAdder(10)
+var addTen = probeMakeAdder(10)
 print(addTen(5))
 print(probeApply(7, probeMakeAdder(20)))
 print(probeApply(6, (v) -> v * 3))
 // plain class + functions constructing/consuming it
-let box = probeMakeBox("n", 5)
+var box = probeMakeBox("n", 5)
 print(probeReadBox(box))
 // namespace call returning a class, then a method
 print(_probe.probeMakeBox("m", 9).describe())
 // static method on a class exported from a pure-Xray stdlib module
 print(ProbeBox.tagged("s", 3).describe())
 // generic class with a closure-taking method
-let cell = ProbeCell<int>(21)
+var cell = ProbeCell<int>(21)
 print(cell.map((v) -> v * 2))
 // class containing arrays of another exported module class
-let bag = probeMakeBag()
+var bag = probeMakeBag()
 print(bag.labels())
-let nsBag: ProbeBag = _probe.probeMakeBag()
+var nsBag: ProbeBag = _probe.probeMakeBag()
 print(nsBag.labels())

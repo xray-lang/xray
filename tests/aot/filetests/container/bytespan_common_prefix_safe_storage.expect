@@ -1,6 +1,6 @@
 contains=xi-native
 contains=Generated:
-c_contains=xr_array_core_bytes_common_prefix(
+c_contains=xr_array_core_bytes_common_prefix_raw(
 c_contains=xr_array_core_slice_range(
 c_not_contains=xrt_span_from_span_slice(
 c_not_contains=xrt_span_bytes_common_prefix_checked_raw(

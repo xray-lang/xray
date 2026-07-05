@@ -13,7 +13,7 @@
 | `02_floats.xr` | 浮点数字面量（基本、科学计数法、下划线分隔）|
 | `03_strings.xr` | 字符串字面量（转义序列、Unicode、模板字符串）|
 | `04_operators.xr` | 所有运算符（算术、比较、逻辑、位运算、赋值）|
-| `05_keywords.xr` | 所有关键字（let、const、fn、class、if、for 等）|
+| `05_keywords.xr` | 所有关键字（var、const、fn、class、if、for 等）|
 | `06_edge_cases.xr` | 边界情况（空字符串、Unicode 标识符、极值）|
 | `07_regex.xr` | 正则表达式字面量（/pattern/flags）|
 
@@ -33,7 +33,7 @@
 | `11_edge_cases.xr` | 边界情况（空结构、深层嵌套、尾随逗号）|
 | `12_stdlib_usage.xr` | 标准库模块使用示例 |
 | `13_real_world.xr` | 真实世界示例（HTTP 服务器、并发模式）|
-| `14_multi_value.xr` | 多值返回、多值赋值 (`let a, b = f()`) |
+| `14_multi_value.xr` | 多值返回、元组解构 (`var (a, b) = f()`) |
 | `15_slice_scope.xr` | 切片表达式 (`arr[1:3]`)、scope 块 |
 | `16_attributes.xr` | 函数属性/装饰器 (`@test`) |
 | `17_type_check.xr` | is 类型检查表达式 (`x is int`) |
@@ -115,7 +115,7 @@ cp ../../tests/regression/**/*.xr corpus/parser/ 2>/dev/null || true
 ./build-fuzz/tests/fuzz/fuzz_lexer_standalone test.xr
 
 # 从 stdin 读取
-echo "let x = 1" | ./build-fuzz/tests/fuzz/fuzz_lexer_standalone
+echo "var x = 1" | ./build-fuzz/tests/fuzz/fuzz_lexer_standalone
 ```
 
 ## 语料库维护

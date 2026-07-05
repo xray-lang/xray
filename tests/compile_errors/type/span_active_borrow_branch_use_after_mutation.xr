@@ -1,7 +1,7 @@
 fn main() {
-    let bytes = Bytes(0)
+    var bytes = Bytes(0)
     bytes.push(1)
-    let view: ByteSpan = bytes[:]
+    var view: ByteSpan = bytes[:]
     if (true) {
         bytes.push(2)
     }

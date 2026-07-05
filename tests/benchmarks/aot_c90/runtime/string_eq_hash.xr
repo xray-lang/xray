@@ -1,15 +1,15 @@
 fn run(n: int) -> int {
-    let keys: Array<string> = []
-    let i = 0
+    var keys: Array<string> = []
+    var i = 0
     while (i < n) {
         keys.push("key-" + ((i * 31) % 1000).toString())
         i = i + 1
     }
 
-    let counts: Map<string, int> = #{}
+    var counts: Map<string, int> = #{}
     i = 0
     while (i < n) {
-        let k = keys[i]
+        var k = keys[i]
         if (counts.has(k)) {
             counts.set(k, counts.get(k) + 1)
         } else {
@@ -18,7 +18,7 @@ fn run(n: int) -> int {
         i = i + 1
     }
 
-    let eq = 0
+    var eq = 0
     i = 0
     while (i < n - 1) {
         if (keys[i] == keys[i + 1]) {

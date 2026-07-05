@@ -6,7 +6,7 @@ enum AppErr {
 }
 
 fn test_normal() -> int {
-    let result = 0
+    var result = 0
     try {
         result = 10
     } catch (e) {
@@ -16,7 +16,7 @@ fn test_normal() -> int {
 }
 
 fn test_caught() -> int {
-    let result = 0
+    var result = 0
     try {
         throw AppErr.Bad(7)
         result = 10
@@ -27,7 +27,7 @@ fn test_caught() -> int {
 }
 
 fn test_defer_cleanup() -> int {
-    let log: Array<int> = []
+    var log: Array<int> = []
     fn body() {
         defer { log.push(100) }
         throw AppErr.Bad(1)

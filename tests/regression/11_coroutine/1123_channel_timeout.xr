@@ -12,14 +12,14 @@
 @test
 fn test_channel_timeout() {
     print("test1: recvTimeout with data")
-    shared const ch1: Channel<int> = Channel(1)
+    shared ch1: Channel<int> = Channel(1)
     ch1.send(42)
-    let result1 = ch1.recvTimeout(1000)
-    let result1_value = match (result1) {
+    var result1 = ch1.recvTimeout(1000)
+    var result1_value = match (result1) {
         Recv.Value(v) -> v
         _ -> -1
     }
-    let result1_ok = match (result1) {
+    var result1_ok = match (result1) {
         Recv.Value(_) -> true
         _ -> false
     }
@@ -27,8 +27,8 @@ fn test_channel_timeout() {
 
     // 测试 2：recvTimeout 超时（Channel 无数据）
     print("test2: recvTimeout timeout")
-    shared const ch2: Channel<int> = Channel(1)
-    let result2 = ch2.recvTimeout(100)  // 100ms 超时
+    shared ch2: Channel<int> = Channel(1)
+    var result2 = ch2.recvTimeout(100)  // 100ms 超时
     match (result2) {
         Recv.Timeout -> print("  timeout")  // expect: timeout
         Recv.Value(v) -> print("  got:", v)
@@ -37,13 +37,13 @@ fn test_channel_timeout() {
 
     // 测试 3：sendTimeout 立即成功（Channel 有空间）
     print("test3: sendTimeout with space")
-    shared const ch3: Channel<int> = Channel(1)
-    let ok3 = ch3.sendTimeout(100, 1000)
+    shared ch3: Channel<int> = Channel(1)
+    var ok3 = ch3.sendTimeout(100, 1000)
     print("  success:", match (ok3) {
         SendResult.Sent -> true
         _ -> false
     })  // expect: true
-    let v3 = ch3.recv()
+    var v3 = ch3.recv()
     print("  value:", match (v3) {
         Recv.Value(v) -> v
         _ -> -1
@@ -51,9 +51,9 @@ fn test_channel_timeout() {
 
     // 测试 4：sendTimeout 超时（Channel 满）
     print("test4: sendTimeout timeout")
-    shared const ch4: Channel<int> = Channel(1)
+    shared ch4: Channel<int> = Channel(1)
     ch4.send(1)  // 填满 channel
-    let ok4 = ch4.sendTimeout(2, 100)  // 100ms 超时
+    var ok4 = ch4.sendTimeout(2, 100)  // 100ms 超时
     print("  success:", match (ok4) {
         SendResult.Sent -> true
         _ -> false
@@ -61,28 +61,26 @@ fn test_channel_timeout() {
 
     // 测试 5：生产者-消费者带超时
     print("test5: producer-consumer with timeout")
-    shared const ch5: Channel<int> = Channel(2)
+    shared ch5: Channel<int> = Channel(2)
 
     // 生产者
-    let producer = go {
+    var producer = go {
         for (i in 1..4) {
-            let sent = ch5.sendTimeout(i, 500)
-            if (match (sent) {
-                SendResult.Sent -> false
-                _ -> true
-            }) {
-                print("  producer timeout at", i)
+            match (ch5.sendTimeout(i, 500)) {
+                SendResult.Sent -> {}
+                _ -> {
+                    print("  producer timeout at", i)
+                }
             }
         }
         ch5.close()
     }
 
     // 消费者（慢）
-    let consumer = go {
-        let count = 0
+    var consumer = go fn() -> int {
+        var count = 0
         while (true) {
-            let recv = ch5.recvTimeout(200)
-            match (recv) {
+            match (ch5.recvTimeout(200)) {
                 Recv.Value(val) -> {
                     print("  consumed:", val)
                     count++
@@ -93,9 +91,9 @@ fn test_channel_timeout() {
             }
         }
         return count
-    }
+    }()
 
     await producer
-    let consumed = await consumer
+    var consumed = await consumer
     print("  total consumed:", consumed)
 }

@@ -1,4 +1,4 @@
-let xs = [1, 2, 3]
+var xs = [1, 2, 3]
 xs.reserve(-4)
 print(xs.length)
 xs.resize(5, 9)
@@ -8,7 +8,7 @@ print(xs[4])
 xs.resize(-2, 7)
 print(xs.length)
 
-let ints = Array<int>(2, 4)
+var ints = Array<int>(2, 4)
 ints.reserve(8)
 print(ints.length)
 print(ints.capacity >= 8)
@@ -20,13 +20,13 @@ print(ints[3])
 // Slices are borrowed views: grow methods (reserve/resize/push) are
 // rejected at compile time (see tests/compile_errors/type/span_owner_method),
 // so only read semantics are exercised here.
-let source = [10, 20, 30, 40, 50]
-let view: Span<int> = source[1:4]
+var source = [10, 20, 30, 40, 50]
+var view: Span<int> = source[1:4]
 print(view.length)
 print(view[0])
 print(view[2])
 print(source.length)
 
-let bytes = Bytes(3, 5)
+var bytes = Bytes(3, 5)
 bytes.resize(-9)
 print(bytes.length)

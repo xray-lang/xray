@@ -11,7 +11,7 @@ import regex
 // 测试基本正则字面量
 @test
 fn test_basic_regex_literal() {
-    let re = /hello/
+    var re = /hello/
     assert_eq(regex.test(re, "hello world"), true)
     assert_eq(regex.test(re, "goodbye"), false)
 }
@@ -19,7 +19,7 @@ fn test_basic_regex_literal() {
 // 测试数字匹配
 @test
 fn test_digit_pattern() {
-    let re = /[0-9]+/
+    var re = /[0-9]+/
     assert_eq(regex.test(re, "abc123"), true)
     assert_eq(regex.test(re, "abcdef"), false)
 }
@@ -27,7 +27,7 @@ fn test_digit_pattern() {
 // 测试字母匹配
 @test
 fn test_letter_pattern() {
-    let re = /[a-z]+/
+    var re = /[a-z]+/
     assert_eq(regex.test(re, "hello"), true)
     assert_eq(regex.test(re, "123"), false)
 }
@@ -35,8 +35,8 @@ fn test_letter_pattern() {
 // 测试捕获组
 @test
 fn test_capture_groups() {
-    let re = /([0-9]+)-([0-9]+)/
-    let result = regex.find(re, "测试: 123-456 结果")
+    var re = /([0-9]+)-([0-9]+)/
+    var result = regex.find(re, "测试: 123-456 结果")
     assert_eq(result != null, true)
     assert_eq(result.text, "123-456")
 }
@@ -44,7 +44,7 @@ fn test_capture_groups() {
 // 测试复杂模式（锚定全匹配）
 @test
 fn test_complex_pattern() {
-    let re = /^[a-zA-Z][a-zA-Z0-9_]*$/
+    var re = /^[a-zA-Z][a-zA-Z0-9_]*$/
     assert_eq(regex.test(re, "abc123"), true)
     assert_eq(regex.test(re, "_abc"), false)
     assert_eq(regex.test(re, "123abc"), false)
@@ -53,8 +53,8 @@ fn test_complex_pattern() {
 // 测试空 pattern
 @test
 fn test_word_boundary() {
-    let re = /world/
-    let result = regex.find(re, "hello world!")
+    var re = /world/
+    var result = regex.find(re, "hello world!")
     assert_eq(result != null, true)
     assert_eq(result.text, "world")
 }
@@ -62,24 +62,24 @@ fn test_word_boundary() {
 // 测试 replace
 @test
 fn test_replace() {
-    let re = /[0-9]+/
-    let result = regex.replace(re, "abc123def", "X")
+    var re = /[0-9]+/
+    var result = regex.replace(re, "abc123def", "X")
     assert_eq(result, "abcXdef")
 }
 
 // 测试 replaceAll
 @test
 fn test_replace_all() {
-    let re = /[0-9]+/
-    let result = regex.replaceAll(re, "a1b2c3", "X")
+    var re = /[0-9]+/
+    var result = regex.replaceAll(re, "a1b2c3", "X")
     assert_eq(result, "aXbXcX")
 }
 
 // 测试 split
 @test
 fn test_split() {
-    let re = /[,;]/
-    let parts = regex.split(re, "a,b;c")
+    var re = /[,;]/
+    var parts = regex.split(re, "a,b;c")
     assert_eq(parts.length, 3)
     assert_eq(parts[0], "a")
     assert_eq(parts[1], "b")

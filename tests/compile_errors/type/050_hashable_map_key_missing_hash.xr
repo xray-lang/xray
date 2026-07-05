@@ -4,4 +4,4 @@ class EqOnly {
     }
 }
 
-let m: Map<EqOnly, int> = #{}
+var m: Map<EqOnly, int> = #{}

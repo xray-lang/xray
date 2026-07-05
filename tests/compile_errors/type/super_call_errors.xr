@@ -24,7 +24,7 @@ class Dog2 extends Animal {
     breed: string
 
     constructor(name, breed) {
-        let x = this.name
+        var x = this.name
         // ERROR: this before super
         super(name)
         this.breed = breed

@@ -6,7 +6,7 @@ fn tryScopeCounter(n: int) -> Iterator<int> {
 
 @test
 fn test_array_for_in_variable_visible_inside_try() {
-    let sum = 0
+    var sum = 0
     try {
         for (x in [1, 2, 3]) {
             sum += x
@@ -19,7 +19,7 @@ fn test_array_for_in_variable_visible_inside_try() {
 
 @test
 fn test_generator_for_in_variable_visible_inside_try() {
-    let sum = 0
+    var sum = 0
     try {
         for (x in tryScopeCounter(4)) {
             sum += x

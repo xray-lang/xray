@@ -1,1 +1,1 @@
-let x: uint32 = 'a'
+var x: uint32 = 'a'

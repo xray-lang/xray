@@ -4,19 +4,19 @@
 
 @test
 fn test_map_destructure() {
-    let data = #{"name": "Alice", "age": 30, "city": "Beijing"}
-    let n = data["name"]
-    let a = data["age"]
+    var data = #{"name": "Alice", "age": 30, "city": "Beijing"}
+    var n = data["name"]
+    var a = data["age"]
     assert_eq(n, "Alice")
     assert_eq(a, 30)
 
-    let c = data["city"]
+    var c = data["city"]
     assert_eq(c, "Beijing")
 
-    let person = #{"first": "John", "last": "Doe", "id": 123}
-    let firstName = person["first"]
-    let lastName = person["last"]
-    let userId = person["id"]
+    var person = #{"first": "John", "last": "Doe", "id": 123}
+    var firstName = person["first"]
+    var lastName = person["last"]
+    var userId = person["id"]
     assert_eq(firstName, "John")
     assert_eq(lastName, "Doe")
     assert_eq(userId, 123)

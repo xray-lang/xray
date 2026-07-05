@@ -91,6 +91,7 @@ static bool cg_value_plan_is_struct_aggregate(XiCgenCtx *ctx, const XiValue *v) 
 }
 
 static bool cg_value_plan_is_span_aggregate(XiCgenCtx *ctx, const XiValue *v) {
+    v = cg_unwrap_identity_value(v);
     const XaotValuePlan *plan = cg_value_plan(ctx, v);
     return plan && cg_value_rep_is_span_aggregate(plan->rep);
 }

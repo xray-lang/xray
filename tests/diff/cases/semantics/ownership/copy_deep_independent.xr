@@ -1,32 +1,32 @@
 // copy(x): explicit deep copy is an independent recursive snapshot of the
 // source across VM/JIT/AOT, including promotion of a local value into a
-// `shared const` binding and deep copy of nested containers.
-let nums: Array<int> = [1, 2, 3]
-let dup = copy(nums)
+// `shared` binding and deep copy of nested containers.
+var nums: Array<int> = [1, 2, 3]
+var dup = copy(nums)
 nums.push(4)
 print(nums.length)
 print(dup.length)
 print(dup[0])
 
-let m: Map<string, int> = #{}
+var m: Map<string, int> = #{}
 m.set("a", 1)
-let mcopy = copy(m)
+var mcopy = copy(m)
 m.set("b", 2)
 print(m.length)
 print(mcopy.length)
 
-shared const ro = copy(nums)
+shared ro = copy(nums)
 nums.push(5)
 print(nums.length)
 print(ro.length)
 
-let grid: Array<Array<int>> = [[1, 2], [3, 4]]
-let gcopy = copy(grid)
+var grid: Array<Array<int>> = [[1, 2], [3, 4]]
+var gcopy = copy(grid)
 grid[0].push(99)
 print(grid[0].length)
 print(gcopy[0].length)
 
-let window = copy(grid[0:1])
+var window = copy(grid[0:1])
 grid[0].push(100)
 print(grid[0].length)
 print(window[0].length)

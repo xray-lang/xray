@@ -42,7 +42,7 @@ typedef struct {
     bool is_param;
     uint8_t param_passing_mode;
     // If this variable was initialized with a function-expression literal
-    // (`let f = fn() {...}`), points to that FUNCTION_EXPR node. Lets
+    // (`var f = fn() {...}`), points to that FUNCTION_EXPR node. Lets
     // `go f()` apply the same capture enforcement as an inline `go fn(){}()`
     // instead of silently skipping the check.
     AstNode *bound_fn_expr;
@@ -201,12 +201,11 @@ static void ea_register_params(EaContext *ctx, FunctionDeclNode *fn) {
 
 /*
  * Look up a variable captured by a go closure and enforce the explicit
- * sharing model: mutable non-shared captures are rejected (no auto-promote).
+ * sharing model: non-shared captures are rejected (no auto-promote).
  *
- *   - shared const       -> allowed (user declared read-only sharing intent)
- *   - shared let         -> ERROR (mutable shared state)
+ *   - shared          -> allowed (user declared shared identity)
  *   - function parameter -> ERROR (must pass via explicit go argument)
- *   - plain let/const    -> ERROR (must pass via explicit go argument)
+ *   - plain var/const    -> ERROR (must pass via explicit go argument)
  */
 static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char *name) {
     for (int d = ctx->go_scope_boundary - 1; d >= 0; d--) {
@@ -234,33 +233,25 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
                 AstNode *decl = scope->vars[i].decl_node;
                 if (!decl)
                     return;  // param or loop var — always safe (arg-passed/local)
-                if (decl->type != AST_VAR_DECL && decl->type != AST_CONST_DECL)
+                if (decl->type != AST_VAR_DECL && decl->type != AST_CONST_DECL &&
+                    decl->type != AST_SHARED_DECL)
                     return;
                 VarDeclNode *vd = &decl->as.var_decl;
-                if (vd->storage_mode == XR_STORAGE_SHARED) {
-                    // shared let capture is still forbidden (mutable shared state);
-                    // shared const capture is the only legal shared capture.
-                    if (vd->is_const)
-                        return;
-                    ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
-                                  "go closure cannot capture mutable 'shared let' variable '%s'\n"
-                                  "hint: pass it through an argument with 'move': go worker(move "
-                                  "%s)",
-                                  name);
+                if (decl->type == AST_SHARED_DECL) {
                     return;
                 }
                 if (vd->is_const) {
                     ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
                                   "go closure cannot capture const variable '%s'\n"
                                   "hint: pass copy(%s) through an explicit go argument, or declare "
-                                  "shared const for read-only sharing",
+                                  "shared for shared identity",
                                   name);
                     return;
                 }
                 ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
                               "go closure cannot capture mutable variable '%s'\n"
                               "hint: pass copy(%s) or move %s through an explicit go argument, or "
-                              "declare shared const for read-only sharing",
+                              "declare shared for shared identity",
                               name);
                 return;
             }
@@ -295,14 +286,14 @@ static void ea_walk_statements(EaContext *ctx, AstNode **stmts, int count);
 
 /*
  * Validate `move var` arguments seen by coroutine/channel boundaries:
- *   - shared let    -> allowed; already shared storage, ownership is explicit
- *   - plain let     -> allowed by move strategy B; go call paths consume the
+ *   - shared    -> rejected by the type checker; already shared identity
+ *   - plain var -> allowed by move strategy B; go call paths consume the
  *                      source at the boundary, channel paths keep their
  *                      existing send-side isolation
- *   - const/shared const/thread-safe primitives -> rejected by xa_visit_move_expr
+ *   - const/shared/thread-safe primitives -> rejected by xa_visit_move_expr
  */
 static void ea_note_move_arg(EaContext *ctx, AstNode *ref_node, const char *var_name) {
-    // Move strategy B allows mutable locals and shared lets; this pass only
+    // Move strategy B allows mutable locals; this pass only
     // keeps the cross-go capture discipline. The type checker handles const
     // and thread-safe runtime primitives, and records use-after-move state.
     (void) ctx;
@@ -331,44 +322,13 @@ static void ea_check_move_args(EaContext *ctx, AstNode **args, int arg_count) {
 }
 
 /*
- * Check go call arguments for shared let variables passed without 'move'.
- * Per the explicit-sharing model, shared let must use move to transfer
- * ownership across the coroutine boundary.
+ * Historical shared move checks are no longer needed: shared is a stable
+ * shared identity, not a movable owner slot.
  */
-static void ea_check_go_shared_let_args(EaContext *ctx, AstNode **args, int arg_count) {
-    for (int i = 0; i < arg_count; i++) {
-        AstNode *arg = args[i];
-        if (!arg)
-            continue;
-        // Already using move — skip (handled by ea_check_move_args)
-        if (arg->type == AST_MOVE_EXPR)
-            continue;
-        // Only check plain variable references
-        if (arg->type != AST_VARIABLE)
-            continue;
-        const char *name = arg->as.variable.name;
-        // Look up in ALL scopes (shared let may be in an outer scope)
-        AstNode *decl = NULL;
-        for (int d = ctx->depth; d >= 0; d--) {
-            EaScope *scope = &ctx->scopes[d];
-            for (int j = scope->count - 1; j >= 0; j--) {
-                if (scope->vars[j].name && strcmp(scope->vars[j].name, name) == 0) {
-                    decl = scope->vars[j].decl_node;
-                    goto found;
-                }
-            }
-        }
-    found:
-        if (!decl || decl->type != AST_VAR_DECL)
-            continue;
-        VarDeclNode *vd = &decl->as.var_decl;
-        if (vd->storage_mode == XR_STORAGE_SHARED && !vd->is_const) {
-            ea_emit_error(ctx, arg, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
-                          "'shared let' variable '%s' must use 'move' when passed to go\n"
-                          "hint: go fn(...)(move %s)",
-                          name);
-        }
-    }
+static void ea_check_go_shared_args(EaContext *ctx, AstNode **args, int arg_count) {
+    (void) ctx;
+    (void) args;
+    (void) arg_count;
 }
 
 /*
@@ -415,7 +375,7 @@ static AstNode *ea_thread_spawn_body_arg(CallExprNode *call) {
  *   go fn() { body }()   (inline closure callee)
  *   go { body }          (bare block, parsed as GO_EXPR -> FUNCTION_EXPR)
  * Both must enforce the explicit-sharing model: capturing locals across the
- * coroutine boundary is a compile error unless shared const / Channel.
+ * coroutine boundary is a compile error unless shared / Channel.
  */
 static void ea_walk_go_closure(EaContext *ctx, FunctionDeclNode *fn) {
     ea_push_scope(ctx);
@@ -459,7 +419,7 @@ static void ea_walk_go_like_spawn(EaContext *ctx, AstNode *expr) {
     if (expr && expr->type == AST_CALL_EXPR) {
         CallExprNode *call = &expr->as.call_expr;
         ea_check_move_args(ctx, call->arguments, call->arg_count);
-        ea_check_go_shared_let_args(ctx, call->arguments, call->arg_count);
+        ea_check_go_shared_args(ctx, call->arguments, call->arg_count);
 
         AstNode *callee = call->callee;
         if (callee && callee->type == AST_FUNCTION_EXPR) {
@@ -763,6 +723,10 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
 
         case AST_MOVE_EXPR:
             ea_walk(ctx, node->as.move_expr.expr);
+            break;
+
+        case AST_COMPTIME_EXPR:
+            ea_walk(ctx, node->as.comptime_expr.expr);
             break;
 
         case AST_UNSAFE_EXPR:

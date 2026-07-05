@@ -1,14 +1,14 @@
 // AOT test: string operations
-let a = "hello"
-let b = " world"
-let c = a + b
+var a = "hello"
+var b = " world"
+var c = a + b
 print(c)                // hello world
 
 // Multi-concat
 print("x" + "y" + "z") // xyz
 
 // String interpolation
-let n = 42
+var n = 42
 print("num=${n}")       // num=42
 
 // String length
@@ -16,8 +16,8 @@ print(a.length)         // 5
 print(c.length)         // 11
 
 // Repeated concat
-let s = "ab"
-let t = s + s + s
+var s = "ab"
+var t = s + s + s
 print(t)                // ababab
 print(t.length)         // 6
 

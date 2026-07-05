@@ -1,5 +1,5 @@
-let a: Array<int> = []
-let b: Array<bool> = []
+var a: Array<int> = []
+var b: Array<bool> = []
 a.reserve(8)
 b.reserve(8)
 

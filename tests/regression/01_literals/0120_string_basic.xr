@@ -6,27 +6,27 @@
 
 @test
 fn test_simple_string() {
-    let s = "hello"
+    var s = "hello"
     assert_eq(s, "hello")
 }
 
 @test
 fn test_empty_string() {
-    let s = ""
+    var s = ""
     assert_eq(s, "")
     assert_eq(s.length, 0)
 }
 
 @test
 fn test_single_char() {
-    let s = "x"
+    var s = "x"
     assert_eq(s, "x")
     assert_eq(s.length, 1)
 }
 
 @test
 fn test_spaces() {
-    let s = "hello world"
+    var s = "hello world"
     assert_eq(s, "hello world")
     assert_eq(s.length, 11)
 }
@@ -35,25 +35,25 @@ fn test_spaces() {
 
 @test
 fn test_escape_newline() {
-    let s = "line1\nline2"
+    var s = "line1\nline2"
     assert_eq(s.includes("\n"), true)
 }
 
 @test
 fn test_escape_tab() {
-    let s = "col1\tcol2"
+    var s = "col1\tcol2"
     assert_eq(s.includes("\t"), true)
 }
 
 @test
 fn test_escape_quote() {
-    let s = "say \"hello\""
+    var s = "say \"hello\""
     assert_eq(s.includes("\""), true)
 }
 
 @test
 fn test_escape_backslash() {
-    let s = "path\\to\\file"
+    var s = "path\\to\\file"
     assert_eq(s.includes("\\"), true)
 }
 
@@ -61,20 +61,20 @@ fn test_escape_backslash() {
 
 @test
 fn test_unicode_chinese() {
-    let s = "你好世界"
+    var s = "你好世界"
     assert_eq(s, "你好世界")
     assert_eq(s.length, 4)
 }
 
 @test
 fn test_unicode_emoji() {
-    let s = "hello 🌍"
+    var s = "hello 🌍"
     assert_eq(s.includes("🌍"), true)
 }
 
 @test
 fn test_unicode_mixed() {
-    let s = "Hello 世界 🎉"
+    var s = "Hello 世界 🎉"
     assert_eq(s.length > 5, true)
 }
 
@@ -82,23 +82,23 @@ fn test_unicode_mixed() {
 
 @test
 fn test_template_basic() {
-    let name = "Alice"
-    let s = "Hello, ${name}!"
+    var name = "Alice"
+    var s = "Hello, ${name}!"
     assert_eq(s, "Hello, Alice!")
 }
 
 @test
 fn test_template_expression() {
-    let a = 10
-    let b = 20
-    let s = "Sum: ${a + b}"
+    var a = 10
+    var b = 20
+    var s = "Sum: ${a + b}"
     assert_eq(s, "Sum: 30")
 }
 
 @test
 fn test_template_nested() {
-    let x = 5
-    let s = "Value: ${x * 2} (doubled)"
+    var x = 5
+    var s = "Value: ${x * 2} (doubled)"
     assert_eq(s.includes("10"), true)
 }
 
@@ -106,13 +106,13 @@ fn test_template_nested() {
 
 @test
 fn test_long_string() {
-    let s = "a".repeat(1000)
+    var s = "a".repeat(1000)
     assert_eq(s.length, 1000)
 }
 
 @test
 fn test_whitespace_only() {
-    let s = "   "
+    var s = "   "
     assert_eq(s.length, 3)
     assert_eq(s.trim(), "")
 }

@@ -43,7 +43,7 @@ enum Code : int {
     }
 }
 
-let c: Color = Color.fromInt(2)
+var c: Color = Color.fromInt(2)
 print(c.label())
 print(Color.describe(Color.Blue))
 print(forwardLabel())

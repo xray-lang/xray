@@ -3,6 +3,6 @@ struct Bag {
 }
 
 fn main() {
-    let bag = Bag{data: []}
+    var bag = Bag{data: []}
     print(bag.data.length)
 }

@@ -35,7 +35,7 @@ function serveSlowDiscard(socket, delayMs) {
 }
 
 function serveSource(socket, totalBytes) {
-    let remaining = totalBytes;
+    var remaining = totalBytes;
     function writeMore() {
         while (remaining > 0) {
             const data = remaining >= chunk.length ? chunk : chunk.subarray(0, remaining);

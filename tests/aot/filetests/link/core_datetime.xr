@@ -1,6 +1,6 @@
 import datetime
 
-let dt = datetime.createUTC(2024, 2, 29, 23, 45, 6)
+var dt = datetime.createUTC(2024, 2, 29, 23, 45, 6)
 print(dt.year)
 print(dt.toISOString())
 print(dt.format("YYYY/MM/DD HH:mm:ss"))

@@ -8,13 +8,13 @@ import { double_it, greet, MAGIC, Point } from "./modules/typed_lib"
 
 @test
 fn test_imported_fn_int() {
-    let r = double_it(21)
+    var r = double_it(21)
     assert_eq(r, 42)
 }
 
 @test
 fn test_imported_fn_string() {
-    let s = greet("xray")
+    var s = greet("xray")
     assert_eq(s, "Hello, xray")
 }
 
@@ -25,7 +25,7 @@ fn test_imported_const() {
 
 @test
 fn test_imported_class() {
-    let p = Point(3, 4)
+    var p = Point(3, 4)
     assert_eq(p.x, 3)
     assert_eq(p.y, 4)
 }
@@ -34,7 +34,7 @@ fn test_imported_class() {
 fn test_imported_class_with_new() {
     // Regression: previously threw "method 'constructor' called on unsupported type"
     // when constructing an imported class with the `new` keyword.
-    let p = Point(7, 24)
+    var p = Point(7, 24)
     assert_eq(p.x, 7)
     assert_eq(p.y, 24)
 }

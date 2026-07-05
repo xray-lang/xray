@@ -26,8 +26,8 @@ fn identity<T>(x: T) -> T {
     return x
 }
 
-let a = identity<int>(42)
-let b = identity("hello")               // 推断 T=string
+var a = identity<int>(42)
+var b = identity("hello")               // 推断 T=string
 
 // 泛型类
 class Box<T> {
@@ -36,8 +36,8 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-let b1 = Box<int>(42)
-let b2 = Box<string>("hi")
+var b1 = Box<int>(42)
+var b2 = Box<string>("hi")
 
 // 多参数泛型
 class Pair<K, V> {
@@ -116,9 +116,9 @@ Pair("key", 100)            // K=string, V=int
 在推断失败或需要明确时：
 
 ```xray @id=generics-explicit-instantiation
-let empty = Array<int>()              // 无元素可推
-let m = Map<string, int>()
-let result = identity<float>(0)            // 0 默认 int，强制 float
+var empty = Array<int>()              // 无元素可推
+var m = Map<string, int>()
+var result = identity<float>(0)            // 0 默认 int，强制 float
 ```
 
 ### 9.4 特化与 monomorphization
@@ -191,7 +191,7 @@ describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字�
 class Container<T> {
     items: Array<T>
 }
-let c = Container<int>()
+var c = Container<int>()
 print(Reflect.typeOf(c))       // "Container<int>"
 ```
 
@@ -221,8 +221,8 @@ fn identity<T>(x: T) -> T {
     return x
 }
 
-let a = identity<int>(42)
-let b = identity("hello")               // T inferred as string
+var a = identity<int>(42)
+var b = identity("hello")               // T inferred as string
 
 // Generic class
 class Box<T> {
@@ -231,8 +231,8 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-let b1 = Box<int>(42)
-let b2 = Box<string>("hi")
+var b1 = Box<int>(42)
+var b2 = Box<string>("hi")
 
 // Multi-parameter generic
 class Pair<K, V> {
@@ -315,9 +315,9 @@ The inference algorithm is **bidirectional**:
 When inference fails or precision is needed:
 
 ```xray @id=generics-explicit-instantiation
-let empty = Array<int>()              // no element to infer from
-let m = Map<string, int>()
-let result = identity<float>(0)            // 0 defaults to int; force float
+var empty = Array<int>()              // no element to infer from
+var m = Map<string, int>()
+var result = identity<float>(0)            // 0 defaults to int; force float
 ```
 
 ### 9.4 Specialization and Monomorphization
@@ -390,7 +390,7 @@ Because of monomorphization, every concrete instantiation has its own class/func
 class Container<T> {
     items: Array<T>
 }
-let c = Container<int>()
+var c = Container<int>()
 print(Reflect.typeOf(c))       // "Container<int>"
 ```
 

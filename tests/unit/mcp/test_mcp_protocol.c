@@ -117,7 +117,7 @@ static void test_server_load_knowledge(XmcpServer *server) {
 }
 
 /* Test wrappers for handlers that now return JSON-RPC errors via XmcpRpcError.
- * Tests that don't focus on the RPC error path use these wrappers and let any
+ * Tests that don't focus on the RPC error path use these wrappers and allow any
  * error pass through to assertions on `g_test_rpc_err`. */
 static XmcpRpcError g_test_rpc_err;
 
@@ -651,7 +651,7 @@ TEST(tools_call_validates_argument_types) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_format");
     XrJsonValue *args = xjson_new_object();
-    XJSON_SET_STRING(args, "code", "let x = 1\n");
+    XJSON_SET_STRING(args, "code", "var x = 1\n");
     XJSON_SET_STRING(args, "indentSize", "two");
     xjson_object_set(params, "arguments", args);
 
@@ -669,7 +669,7 @@ TEST(tools_call_validates_string_enums) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_analyze");
     XrJsonValue *args = xjson_new_object();
-    XJSON_SET_STRING(args, "code", "let x = 1\n");
+    XJSON_SET_STRING(args, "code", "var x = 1\n");
     XJSON_SET_STRING(args, "mode", "invalid");
     xjson_object_set(params, "arguments", args);
 
@@ -687,7 +687,7 @@ TEST(tools_call_validates_integer_ranges) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_format");
     XrJsonValue *args = xjson_new_object();
-    XJSON_SET_STRING(args, "code", "let x = 1\n");
+    XJSON_SET_STRING(args, "code", "var x = 1\n");
     XJSON_SET_INT(args, "indentSize", 0);
     xjson_object_set(params, "arguments", args);
 
@@ -783,7 +783,7 @@ TEST(tools_call_format_returns_structured_content) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_format");
     XrJsonValue *args = xjson_new_object();
-    XJSON_SET_STRING(args, "code", "let x=1\n");
+    XJSON_SET_STRING(args, "code", "var x=1\n");
     XJSON_SET_INT(args, "indentSize", 2);
     xjson_object_set(params, "arguments", args);
 
@@ -822,7 +822,7 @@ TEST(tools_call_format_syntax_errors_are_structured) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_format");
     XrJsonValue *args = xjson_new_object();
-    XJSON_SET_STRING(args, "code", "let x = ;\n");
+    XJSON_SET_STRING(args, "code", "var x = ;\n");
     xjson_object_set(params, "arguments", args);
 
     XrJsonValue *result = call_tools_call(&server, params);
@@ -891,7 +891,7 @@ TEST(tools_call_analyze_returns_structured_diagnostics) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_analyze");
     XrJsonValue *args = xjson_new_object();
-    XJSON_SET_STRING(args, "code", "let x = ;");
+    XJSON_SET_STRING(args, "code", "var x = ;");
     XJSON_SET_STRING(args, "mode", "syntax");
     xjson_object_set(params, "arguments", args);
 
@@ -1039,7 +1039,7 @@ TEST(tools_call_run_deadline_exceeded) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_run");
     XrJsonValue *args = xjson_new_object();
-    XJSON_SET_STRING(args, "code", "let i = 0\nwhile (i == 0) { let x = 1 }\n");
+    XJSON_SET_STRING(args, "code", "var i = 0\nwhile (i == 0) { var x = 1 }\n");
     XJSON_SET_INT(args, "timeoutMs", 50);
     xjson_object_set(params, "arguments", args);
 
@@ -1061,7 +1061,7 @@ TEST(tools_call_run_deadline_keeps_server_usable) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_run");
     XrJsonValue *args = xjson_new_object();
-    XJSON_SET_STRING(args, "code", "let i = 0\nwhile (i == 0) { let x = 1 }\n");
+    XJSON_SET_STRING(args, "code", "var i = 0\nwhile (i == 0) { var x = 1 }\n");
     XJSON_SET_INT(args, "timeoutMs", 50);
     xjson_object_set(params, "arguments", args);
 
@@ -1613,7 +1613,7 @@ TEST(prompts_get_code_review) {
     XJSON_SET_STRING(params, "name", "code-review");
 
     XrJsonValue *args = xjson_new_object();
-    XJSON_SET_STRING(args, "code", "let x = 1\nprint(x)");
+    XJSON_SET_STRING(args, "code", "var x = 1\nprint(x)");
     xjson_object_set(params, "arguments", args);
 
     XrJsonValue *result = call_prompts_get(&server, params);

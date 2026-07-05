@@ -1,7 +1,7 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-shared const sem = Semaphore(0)
-shared const ready = CountdownLatch(2)
-shared const counter = Atomic(0)
+shared sem = Semaphore(0)
+shared ready = CountdownLatch(2)
+shared counter = Atomic(0)
 
 fn worker(id: int) -> int {
     ready.done()
@@ -12,13 +12,13 @@ fn worker(id: int) -> int {
     return id
 }
 
-let t1 = go worker(7)
-let t2 = go worker(11)
+var t1 = go worker(7)
+var t2 = go worker(11)
 
 print(ready.wait())
 sem.release(2)
-let r1: int = await t1
-let r2: int = await t2
+var r1: int = await t1
+var r2: int = await t2
 print(r1 + r2)
 print(counter.load())
 print(sem.available)
@@ -28,9 +28,9 @@ print(sem.available)
 print(sem.tryAcquire())
 print(sem.available)
 
-shared const closedSem = Semaphore(0)
-shared const closeReady = CountdownLatch(1)
-let closedTask = go fn() -> int {
+shared closedSem = Semaphore(0)
+shared closeReady = CountdownLatch(1)
+var closedTask = go fn() -> int {
     closeReady.done()
     return closedSem.acquire() ? 1 : -1
 }()

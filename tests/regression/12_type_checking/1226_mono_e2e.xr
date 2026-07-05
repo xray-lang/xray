@@ -31,11 +31,11 @@ fn test_mono_e2e() {
 
     // === Multi-type-parameter monomorphization ===
 
-    let (p1a, p1b) = pair<int, float>(10, 2.5)
+    var (p1a, p1b) = pair<int, float>(10, 2.5)
     assert_eq(p1a, 10)
     assert_eq(p1b, 2.5)
 
-    let (p2a, p2b) = pair<string, int>("age", 30)
+    var (p2a, p2b) = pair<string, int>("age", 30)
     assert_eq(p2a, "age")
     assert_eq(p2b, 30)
 
@@ -46,11 +46,11 @@ fn test_mono_e2e() {
 
     // === Generic returning array ===
 
-    let wi = wrap<int>(77)
+    var wi = wrap<int>(77)
     assert_eq(wi[0], 77)
     assert_eq(wi.length, 1)
 
-    let ws = wrap<string>("mono")
+    var ws = wrap<string>("mono")
     assert_eq(ws[0], "mono")
 
     // === Nested generic calls ===

@@ -3,10 +3,10 @@ fn sender(ch: Channel<int>) -> int {
     return 1
 }
 
-const ch = Channel<int>(0)
+shared ch = Channel<int>(0)
 const task = go sender(ch)
-let v = ch.recv()
-let done = await task
+var v = ch.recv()
+var done = await task
 print(match (v) {
     Recv.Value(value) -> value + done
     _ -> -1

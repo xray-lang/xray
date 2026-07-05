@@ -41,8 +41,8 @@ fn test_function_factory() {
         return greet
     }
     
-    let hello = createGreeter("Hello")
-    let hi = createGreeter("Hi")
+    var hello = createGreeter("Hello")
+    var hi = createGreeter("Hi")
     
     assert_eq(hello("Alice"), "Hello, Alice!")
     assert_eq(hi("Bob"), "Hi, Bob!")
@@ -62,8 +62,8 @@ fn test_compose() {
     fn double(x: int) -> int { return x * 2 }
     fn addOne(x: int) -> int { return x + 1 }
     
-    let doubleThenAdd = compose(addOne, double)
-    let addThenDouble = compose(double, addOne)
+    var doubleThenAdd = compose(addOne, double)
+    var addThenDouble = compose(double, addOne)
     
     assert_eq(doubleThenAdd(5), 11)  // (5*2)+1
     assert_eq(addThenDouble(5), 12)  // (5+1)*2
@@ -84,7 +84,7 @@ fn test_partial() {
         return applied
     }
     
-    let add5 = partial(add, 5)
+    var add5 = partial(add, 5)
     assert_eq(add5(3), 8)
     assert_eq(add5(10), 15)
 }
@@ -93,10 +93,10 @@ fn test_partial() {
 
 @test
 fn test_callback() {
-    let received = 0
+    var received = 0
     
     fn processAsync(callback: (int) -> ()) {
-        let result = 42
+        var result = 42
         callback(result)
     }
     
@@ -113,7 +113,7 @@ fn test_callback() {
 @test
 fn test_custom_map() {
     fn myMap(arr: Array<int>, transform: (int) -> int) -> Array<int> {
-        let result: Array<int> = []
+        var result: Array<int> = []
         for (x in arr) {
             result.push(transform(x))
         }
@@ -122,8 +122,8 @@ fn test_custom_map() {
     
     fn double(x: int) -> int { return x * 2 }
     
-    let arr = [1, 2, 3]
-    let doubled = myMap(arr, double)
+    var arr = [1, 2, 3]
+    var doubled = myMap(arr, double)
     
     assert_eq(doubled[0], 2)
     assert_eq(doubled[1], 4)
@@ -133,7 +133,7 @@ fn test_custom_map() {
 @test
 fn test_custom_filter() {
     fn myFilter(arr: Array<int>, predicate: (int) -> bool) -> Array<int> {
-        let result: Array<int> = []
+        var result: Array<int> = []
         for (x in arr) {
             if (predicate(x)) {
                 result.push(x)
@@ -144,8 +144,8 @@ fn test_custom_filter() {
     
     fn isEven(x: int) -> bool { return x % 2 == 0 }
     
-    let arr = [1, 2, 3, 4, 5, 6]
-    let evens = myFilter(arr, isEven)
+    var arr = [1, 2, 3, 4, 5, 6]
+    var evens = myFilter(arr, isEven)
     
     assert_eq(evens.length, 3)
     assert_eq(evens[0], 2)
@@ -154,7 +154,7 @@ fn test_custom_filter() {
 @test
 fn test_custom_reduce() {
     fn myReduce(arr: Array<int>, reducer: (int, int) -> int, initial: int) -> int {
-        let acc = initial
+        var acc = initial
         for (x in arr) {
             acc = reducer(acc, x)
         }
@@ -164,7 +164,7 @@ fn test_custom_reduce() {
     fn addFn(a: int, b: int) -> int { return a + b }
     fn mulFn(a: int, b: int) -> int { return a * b }
     
-    let arr = [1, 2, 3, 4]
+    var arr = [1, 2, 3, 4]
     assert_eq(myReduce(arr, addFn, 0), 10)
     assert_eq(myReduce(arr, mulFn, 1), 24)
 }
@@ -178,7 +178,7 @@ fn test_pipe() {
     fn square(x: int) -> int { return x * x }
     
     // 手动管道
-    let x = 5
+    var x = 5
     x = double(x)   // 10
     x = addTen(x)   // 20
     x = square(x)   // 400
@@ -205,7 +205,7 @@ fn test_constant_function() {
         return constant
     }
     
-    let always42 = makeConstant(42)
+    var always42 = makeConstant(42)
     assert_eq(always42(), 42)
     assert_eq(always42(), 42)
 }

@@ -11,16 +11,16 @@ fn identity_copy(xs: Array<int>) -> Array<int> {
     return xs
 }
 
-let high = go(name: "compute") compute(5)
+var high = go(name: "compute") compute(5)
 print(await high)
 
-let xs = [1, 2]
-let copied = go mutate_copy(copy(xs))
+var xs = [1, 2]
+var copied = go mutate_copy(copy(xs))
 print(await copied)
 print(xs.length)
 
-let roundtrip = go identity_copy(copy(xs))
-let ys = await roundtrip
+var roundtrip = go identity_copy(copy(xs))
+var ys = await roundtrip
 ys.push(7)
 print(ys.length)
 print(xs.length)

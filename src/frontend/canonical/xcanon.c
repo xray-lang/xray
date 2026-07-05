@@ -253,7 +253,7 @@ static void canon_compound_var(XrCanonCtx *ctx, AstNode *node) {
 
 /* Desugar member compound assignment.
  *   obj.field += e  →  obj.field = obj.field + e    (simple receiver)
- *   f().field += e  →  { let __t = f(); __t.field = __t.field + e }
+ *   f().field += e  →  { var __t = f(); __t.field = __t.field + e }
  *
  * When the receiver is complex (call, binary, etc.) it is extracted
  * into a temp variable to ensure single evaluation and correct
@@ -291,7 +291,7 @@ static void canon_compound_member(XrCanonCtx *ctx, AstNode *node) {
         char *tmp = canon_temp_name(ctx);
         XR_DCHECK(tmp != NULL, "canon_compound_member: temp name alloc");
 
-        /* let __canon_N = obj */
+        /* var __canon_N = obj */
         AstNode *decl = xr_ast_var_decl(ctx->session, tmp, obj, false, line);
         XR_DCHECK(decl != NULL, "canon_compound_member: var_decl alloc");
 
@@ -361,7 +361,7 @@ static void canon_inc_dec(XrCanonCtx *ctx, AstNode *node) {
 /* ========== Index-set receiver extraction ========== */
 
 /* Desugar index-set with complex array or index expressions.
- *   f()[g()] = v  →  { let __t0 = f(); let __t1 = g(); __t0[__t1] = v }
+ *   f()[g()] = v  →  { var __t0 = f(); var __t1 = g(); __t0[__t1] = v }
  * This ensures correct left-to-right single evaluation of sub-expressions. */
 static void canon_index_set(XrCanonCtx *ctx, AstNode *node) {
     XR_DCHECK(node->type == AST_INDEX_SET, "canon_index_set: wrong node type");
@@ -469,7 +469,7 @@ static void canon_short_circuit(XrCanonCtx *ctx, AstNode *node) {
 
 /* Expand ?? into explicit null-check ternary.
  *   x ?? b          →  x == null ? b : x          (x is simple)
- *   f() ?? b        →  (let __t = f(); __t == null ? b : __t)
+ *   f() ?? b        →  (var __t = f(); __t == null ? b : __t)
  *
  * For simple LHS we emit the ternary directly (no temp needed since
  * variables/literals have no side effects and evaluate identically).
@@ -652,6 +652,7 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
 
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             canon_node(ctx, node->as.var_decl.initializer);
             break;
 
@@ -788,6 +789,10 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         /* ---- Grouping / force unwrap (unary layout) ---- */
         case AST_GROUPING:
             canon_node(ctx, node->as.grouping);
+            break;
+
+        case AST_COMPTIME_EXPR:
+            canon_node(ctx, node->as.comptime_expr.expr);
             break;
 
         case AST_FORCE_UNWRAP:

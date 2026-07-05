@@ -1,11 +1,11 @@
 // anchor: uint64-print-compare
 // Static uint64 print/format/compare must interpret the stored bits as unsigned.
 
-let max: uint64 = 9223372036854775807
-let high: uint64 = max + 1
-let all: uint64 = 0 - 1
-let zero: uint64 = 0
-let one: uint64 = 1
+var max: uint64 = 9223372036854775807
+var high: uint64 = max + 1
+var all: uint64 = 0 - 1
+var zero: uint64 = 0
+var one: uint64 = 1
 
 fn gt_zero(x: uint64) -> bool {
     return x > 0

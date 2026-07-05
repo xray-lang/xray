@@ -6,59 +6,59 @@ import base64
 
 @test
 fn test_encode_basic() {
-    let result = base64.encode("Hello, World!")
+    var result = base64.encode("Hello, World!")
     assert_eq(result, "SGVsbG8sIFdvcmxkIQ==")
 }
 
 @test
 fn test_decode_basic() {
-    let result = base64.decode("SGVsbG8sIFdvcmxkIQ==")
+    var result = base64.decode("SGVsbG8sIFdvcmxkIQ==")
     assert_eq(result, "Hello, World!")
 }
 
 @test
 fn test_roundtrip() {
-    let original = "xray language test 123!@#"
-    let encoded = base64.encode(original)
-    let decoded = base64.decode(encoded)
+    var original = "xray language test 123!@#"
+    var encoded = base64.encode(original)
+    var decoded = base64.decode(encoded)
     assert_eq(decoded, original)
 }
 
 @test
 fn test_encode_empty() {
-    let result = base64.encode("")
+    var result = base64.encode("")
     assert_eq(result, "")
 }
 
 @test
 fn test_decode_empty() {
-    let result = base64.decode("")
+    var result = base64.decode("")
     assert_eq(result, "")
 }
 
 @test
 fn test_encode_single_char() {
-    let result = base64.encode("A")
+    var result = base64.encode("A")
     assert_eq(result, "QQ==")
 }
 
 @test
 fn test_encode_two_chars() {
-    let result = base64.encode("AB")
+    var result = base64.encode("AB")
     assert_eq(result, "QUI=")
 }
 
 @test
 fn test_encode_three_chars() {
-    let result = base64.encode("ABC")
+    var result = base64.encode("ABC")
     assert_eq(result, "QUJD")
 }
 
 @test
 fn test_encode_chinese() {
-    let original = "你好世界"
-    let encoded = base64.encode(original)
-    let decoded = base64.decode(encoded)
+    var original = "你好世界"
+    var encoded = base64.encode(original)
+    var decoded = base64.decode(encoded)
     assert_eq(decoded, original)
 }
 
@@ -66,8 +66,8 @@ fn test_encode_chinese() {
 
 @test
 fn test_encode_url_basic() {
-    let original = "Hello, World!"
-    let encoded = base64.encodeUrl(original)
+    var original = "Hello, World!"
+    var encoded = base64.encodeUrl(original)
     // URL-safe should not contain + or /
     assert_eq(encoded.includes("+"), false)
     assert_eq(encoded.includes("/"), false)
@@ -77,9 +77,9 @@ fn test_encode_url_basic() {
 
 @test
 fn test_decode_url_roundtrip() {
-    let original = "test data with special chars: +/="
-    let encoded = base64.encodeUrl(original)
-    let decoded = base64.decodeUrl(encoded)
+    var original = "test data with special chars: +/="
+    var encoded = base64.encodeUrl(original)
+    var decoded = base64.decodeUrl(encoded)
     assert_eq(decoded, original)
 }
 
@@ -106,21 +106,21 @@ fn test_is_valid_empty() {
 
 @test
 fn test_decode_invalid_chars() {
-    let result = base64.decode("!!!invalid!!!")
+    var result = base64.decode("!!!invalid!!!")
     assert_eq(result, null)
 }
 
 @test
 fn test_decode_single_char() {
     // Single base64 char (6 bits) cannot form a byte
-    let result = base64.decode("A")
+    var result = base64.decode("A")
     assert_eq(result, null)
 }
 
 @test
 fn test_decode_excess_padding() {
     // More than 2 padding chars is invalid
-    let result = base64.decode("Q===")
+    var result = base64.decode("Q===")
     assert_eq(result, null)
 }
 
@@ -154,16 +154,16 @@ fn test_is_valid_three_chars() {
 @test
 fn test_url_safe_encode_decode_precise() {
     // Data that produces + and / in standard base64
-    let original = "subjects?_d"
-    let std_encoded = base64.encode(original)
-    let url_encoded = base64.encodeUrl(original)
+    var original = "subjects?_d"
+    var std_encoded = base64.encode(original)
+    var url_encoded = base64.encodeUrl(original)
 
     // URL-safe roundtrip
-    let decoded = base64.decodeUrl(url_encoded)
+    var decoded = base64.decodeUrl(url_encoded)
     assert_eq(decoded, original)
 
     // Standard roundtrip
-    let decoded2 = base64.decode(std_encoded)
+    var decoded2 = base64.decode(std_encoded)
     assert_eq(decoded2, original)
 }
 
@@ -171,17 +171,17 @@ fn test_url_safe_encode_decode_precise() {
 
 @test
 fn test_encode_bytes_basic() {
-    let bytes = Bytes(3)
+    var bytes = Bytes(3)
     bytes[0] = 72   // 'H'
     bytes[1] = 101  // 'e'
     bytes[2] = 108  // 'l'
-    let encoded = base64.encodeBytes(bytes)
+    var encoded = base64.encodeBytes(bytes)
     assert_eq(encoded, "SGVs")
 }
 
 @test
 fn test_decode_to_bytes_basic() {
-    let bytes = base64.decodeToBytes("SGVs")
+    var bytes = base64.decodeToBytes("SGVs")
     assert(bytes != null)
     assert_eq(bytes!.length, 3)
     assert_eq(bytes![0], 72)
@@ -191,14 +191,14 @@ fn test_decode_to_bytes_basic() {
 
 @test
 fn test_bytes_roundtrip() {
-    let original = Bytes(5)
+    var original = Bytes(5)
     original[0] = 0
     original[1] = 127
     original[2] = 255
     original[3] = 1
     original[4] = 128
-    let encoded = base64.encodeBytes(original)
-    let decoded = base64.decodeToBytes(encoded)
+    var encoded = base64.encodeBytes(original)
+    var decoded = base64.decodeToBytes(encoded)
     assert(decoded != null)
     assert_eq(decoded!.length, 5)
     assert_eq(decoded![0], 0)
@@ -210,14 +210,14 @@ fn test_bytes_roundtrip() {
 
 @test
 fn test_decode_to_bytes_invalid() {
-    let result = base64.decodeToBytes("!!!")
+    var result = base64.decodeToBytes("!!!")
     assert_eq(result, null)
 }
 
 @test
 fn test_encode_bytes_empty() {
-    let bytes = Bytes(0)
-    let encoded = base64.encodeBytes(bytes)
+    var bytes = Bytes(0)
+    var encoded = base64.encodeBytes(bytes)
     assert_eq(encoded, "")
 }
 
@@ -225,28 +225,28 @@ fn test_encode_bytes_empty() {
 
 @test
 fn test_long_string() {
-    let original = "a"
-    let long = ""
-    for (let i = 0; i < 1000; i++) {
+    var original = "a"
+    var long = ""
+    for (var i = 0; i < 1000; i++) {
         long = long + original
     }
-    let encoded = base64.encode(long)
-    let decoded = base64.decode(encoded)
+    var encoded = base64.encode(long)
+    var decoded = base64.decode(encoded)
     assert_eq(decoded, long)
 }
 
 @test
 fn test_binary_like_content() {
-    let original = "\t\n\r special chars"
-    let encoded = base64.encode(original)
-    let decoded = base64.decode(encoded)
+    var original = "\t\n\r special chars"
+    var encoded = base64.encode(original)
+    var decoded = base64.decode(encoded)
     assert_eq(decoded, original)
 }
 
 @test
 fn test_no_padding_decode() {
     // "QQ" without padding should decode same as "QQ=="
-    let with_pad = base64.decode("QQ==")
-    let without_pad = base64.decode("QQ")
+    var with_pad = base64.decode("QQ==")
+    var without_pad = base64.decode("QQ")
     assert_eq(with_pad, without_pad)
 }

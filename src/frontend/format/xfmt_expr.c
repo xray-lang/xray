@@ -833,6 +833,15 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_expression(ctx, node->as.range.end);
             break;
 
+        case AST_COMPTIME_EXPR:
+            xfmt_write_str(ctx, "comptime ");
+            if (node->as.comptime_expr.expr && node->as.comptime_expr.expr->type == AST_BLOCK) {
+                xfmt_emit_block(ctx, node->as.comptime_expr.expr);
+            } else {
+                xfmt_emit_expression(ctx, node->as.comptime_expr.expr);
+            }
+            break;
+
         case AST_PARALLEL_REDUCE_EXPR:
             fmt_parallel_reduce_expr(ctx, node);
             break;

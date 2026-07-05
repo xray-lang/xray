@@ -155,7 +155,7 @@ AstNode *xr_parse_for_statement(Parser *parser) {
     AstNode *initializer = NULL;
     if (xr_parser_match(parser, TK_SEMICOLON)) {
         initializer = NULL;
-    } else if (xr_parser_match(parser, TK_LET)) {
+    } else if (xr_parser_match(parser, TK_VAR)) {
         initializer = xr_parse_single_var_declaration(parser, 0);
         xr_parser_consume(parser, TK_SEMICOLON, "expected ';' after for initializer");
     } else {
@@ -200,8 +200,8 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
     /* Tuple destructuring head: `for ((x, y) in coll) { body }`.
      *
      * We consume the tuple pattern eagerly, synthesise a hidden iteration
-     * variable, and after the body is parsed prepend `let (...) = __tmp`
-     * to it. The result is identical to writing the destructuring `let`
+     * variable, and after the body is parsed prepend `var (...) = __tmp`
+     * to it. The result is identical to writing the destructuring `var`
      * by hand, so all downstream stages see only the canonical form. */
     XrDestructurePattern *tuple_pattern = NULL;
     char *tuple_tmp_name = NULL;
@@ -274,7 +274,7 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
     xr_parser_advance(parser);
     AstNode *body = xr_parse_block(parser);
 
-    /* Inject the synthesised destructuring `let` at the top of the
+    /* Inject the synthesised destructuring `var` at the top of the
      * loop body. We rebuild the body block in place: the new array
      * holds destructure_decl followed by the original statements,
      * preserving program order. */

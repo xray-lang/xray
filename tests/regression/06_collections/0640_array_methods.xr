@@ -4,8 +4,8 @@
 // ===== slice expression =====
 @test
 fn test_slice_basic() {
-    let arr = [1, 2, 3, 4, 5]
-    let s: Span<int> = arr[1:4]
+    var arr = [1, 2, 3, 4, 5]
+    var s: Span<int> = arr[1:4]
     assert_eq(s.length, 3)
     assert_eq(s[0], 2)
     assert_eq(s[2], 4)
@@ -13,35 +13,35 @@ fn test_slice_basic() {
 
 @test
 fn test_slice_from_start() {
-    let arr = [1, 2, 3, 4, 5]
-    let s: Span<int> = arr[:2]
+    var arr = [1, 2, 3, 4, 5]
+    var s: Span<int> = arr[:2]
     assert_eq(s.length, 2)
     assert_eq(s[0], 1)
 }
 
 @test
 fn test_slice_to_end() {
-    let arr = [1, 2, 3, 4, 5]
-    let s: Span<int> = arr[3:]
+    var arr = [1, 2, 3, 4, 5]
+    var s: Span<int> = arr[3:]
     assert_eq(s.length, 2)
     assert_eq(s[1], 5)
 }
 
 @test
 fn test_slice_negative_bounds() {
-    let arr = [1, 2, 3, 4, 5]
-    let s: Span<int> = arr[-4:-1]
+    var arr = [1, 2, 3, 4, 5]
+    var s: Span<int> = arr[-4:-1]
     assert_eq(s.length, 3)
     assert_eq(s[0], 2)
     assert_eq(s[2], 4)
-    let empty: Span<int> = arr[4:2]
+    var empty: Span<int> = arr[4:2]
     assert_eq(empty.length, 0)
 }
 
 @test
 fn test_slice_is_view() {
-    let arr = [10, 20, 30, 40]
-    let s: Span<int> = arr[1:3]
+    var arr = [10, 20, 30, 40]
+    var s: Span<int> = arr[1:3]
     arr[1] = 21
     assert_eq(s[0], 21)
     s[1] = 31
@@ -50,8 +50,8 @@ fn test_slice_is_view() {
 
 @test
 fn test_slice_copy_is_independent() {
-    let arr = [10, 20, 30, 40]
-    let s = copy(arr[1:3])
+    var arr = [10, 20, 30, 40]
+    var s = copy(arr[1:3])
     arr[1] = 21
     assert_eq(s[0], 20)
     s[1] = 31
@@ -61,9 +61,9 @@ fn test_slice_copy_is_independent() {
 // ===== concat =====
 @test
 fn test_concat_arrays() {
-    let a = [1, 2]
-    let b = [3, 4]
-    let c = a.concat(b)
+    var a = [1, 2]
+    var b = [3, 4]
+    var c = a.concat(b)
     assert_eq(c.length, 4)
     assert_eq(c[0], 1)
     assert_eq(c[3], 4)
@@ -72,8 +72,8 @@ fn test_concat_arrays() {
 // ===== find =====
 @test
 fn test_find_element() {
-    let arr = [10, 20, 30, 40]
-    let found = arr.find(fn(x) {
+    var arr = [10, 20, 30, 40]
+    var found = arr.find(fn(x) {
         return x > 25
     })
     assert_eq(found, 30)
@@ -81,8 +81,8 @@ fn test_find_element() {
 
 @test
 fn test_find_not_found() {
-    let arr = [1, 2, 3]
-    let found = arr.find(fn(x) {
+    var arr = [1, 2, 3]
+    var found = arr.find(fn(x) {
         return x > 100
     })
     assert_eq(found, null)
@@ -91,8 +91,8 @@ fn test_find_not_found() {
 // ===== findIndex =====
 @test
 fn test_find_index() {
-    let arr = ["a", "b", "c", "d"]
-    let idx = arr.findIndex(fn(x) {
+    var arr = ["a", "b", "c", "d"]
+    var idx = arr.findIndex(fn(x) {
         return x == "c"
     })
     assert_eq(idx, 2)
@@ -100,8 +100,8 @@ fn test_find_index() {
 
 @test
 fn test_find_index_not_found() {
-    let arr = [1, 2, 3]
-    let idx = arr.findIndex(fn(x) {
+    var arr = [1, 2, 3]
+    var idx = arr.findIndex(fn(x) {
         return x > 100
     })
     assert_eq(idx, -1)
@@ -109,7 +109,7 @@ fn test_find_index_not_found() {
 
 @test
 fn test_index_of_and_includes() {
-    let arr = [10, 20, 30]
+    var arr = [10, 20, 30]
     assert_eq(arr.indexOf(20), 1)
     assert_eq(arr.indexOf(99), -1)
     assert_eq(arr.includes(30), true)
@@ -119,8 +119,8 @@ fn test_index_of_and_includes() {
 // ===== every =====
 @test
 fn test_every_true() {
-    let arr = [2, 4, 6, 8]
-    let result = arr.every(fn(x) {
+    var arr = [2, 4, 6, 8]
+    var result = arr.every(fn(x) {
         return x % 2 == 0
     })
     assert_eq(result, true)
@@ -128,8 +128,8 @@ fn test_every_true() {
 
 @test
 fn test_every_false() {
-    let arr = [2, 3, 4, 6]
-    let result = arr.every(fn(x) {
+    var arr = [2, 3, 4, 6]
+    var result = arr.every(fn(x) {
         return x % 2 == 0
     })
     assert_eq(result, false)
@@ -138,8 +138,8 @@ fn test_every_false() {
 // ===== some =====
 @test
 fn test_some_true() {
-    let arr = [1, 3, 5, 6]
-    let result = arr.some(fn(x) {
+    var arr = [1, 3, 5, 6]
+    var result = arr.some(fn(x) {
         return x % 2 == 0
     })
     assert_eq(result, true)
@@ -147,8 +147,8 @@ fn test_some_true() {
 
 @test
 fn test_some_false() {
-    let arr = [1, 3, 5, 7]
-    let result = arr.some(fn(x) {
+    var arr = [1, 3, 5, 7]
+    var result = arr.some(fn(x) {
         return x % 2 == 0
     })
     assert_eq(result, false)
@@ -157,7 +157,7 @@ fn test_some_false() {
 // ===== fill =====
 @test
 fn test_fill() {
-    let arr = [1, 2, 3, 4, 5]
+    var arr = [1, 2, 3, 4, 5]
     arr.fill(0)
     assert_eq(arr[0], 0)
     assert_eq(arr[4], 0)
@@ -165,7 +165,7 @@ fn test_fill() {
 
 @test
 fn test_fill_range_and_negative_bounds() {
-    let arr = [1, 2, 3, 4, 5, 6]
+    var arr = [1, 2, 3, 4, 5, 6]
     arr.fill(9, 2, 5)
     assert_eq(arr[0], 1)
     assert_eq(arr[2], 9)
@@ -191,7 +191,7 @@ fn test_fill_range_and_negative_bounds() {
 // ===== sort =====
 @test
 fn test_sort_numbers() {
-    let arr = [3, 1, 4, 1, 5, 9, 2, 6]
+    var arr = [3, 1, 4, 1, 5, 9, 2, 6]
     arr.sort()
     assert_eq(arr[0], 1)
     assert_eq(arr[1], 1)
@@ -200,7 +200,7 @@ fn test_sort_numbers() {
 
 @test
 fn test_sort_strings() {
-    let arr = ["banana", "apple", "cherry"]
+    var arr = ["banana", "apple", "cherry"]
     arr.sort()
     assert_eq(arr[0], "apple")
     assert_eq(arr[2], "cherry")

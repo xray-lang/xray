@@ -1,6 +1,6 @@
 // 113 FFI: raw pointer dereference is unsafe.
 @extern("C") fn raw_addr() -> RawPtr<uint8>
 
-let p = unsafe { raw_addr() }
-let x = p.deref()
+var p = unsafe { raw_addr() }
+var x = p.deref()
 print(x)

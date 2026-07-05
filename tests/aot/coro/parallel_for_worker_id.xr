@@ -1,4 +1,4 @@
-shared const total = Atomic(0)
+shared total = Atomic(0)
 
 parallel for i in 0..5 workers 1 worker wid {
     total.fetchAdd(i + wid * 100, Ordering.Relaxed)

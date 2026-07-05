@@ -1,6 +1,6 @@
-let max: uint64 = 9223372036854775807
-let high: uint64 = max + 1
-let all: uint64 = 0 - 1
+var max: uint64 = 9223372036854775807
+var high: uint64 = max + 1
+var all: uint64 = 0 - 1
 
 fn gt_zero(x: uint64) -> bool {
     return x > 0

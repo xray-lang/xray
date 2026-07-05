@@ -1,13 +1,13 @@
 import regex
 
 fn regex_match_ok(pattern: string, text: string) -> bool {
-    let re = regex.compile(pattern)
+    var re = regex.compile(pattern)
     return regex.find(re, text) != null
 }
 
 @test
 fn test_inlined_regex_find_uses_current_args() {
-    for (let i = 0; i < 260; i++) {
+    for (var i = 0; i < 260; i++) {
         assert_eq(regex_match_ok("", "abc"), true)
     }
     assert_eq(regex_match_ok("a", ""), false)

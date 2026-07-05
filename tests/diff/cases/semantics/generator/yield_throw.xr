@@ -8,9 +8,9 @@ fn gen() -> Iterator<int> {
 }
 
 try {
-    let it = gen().iterator()
+    var it = gen().iterator()
     while (it.hasNext()) {
-        let x = it.next()
+        var x = it.next()
         print("x " + string(x))
     }
     print("after try")

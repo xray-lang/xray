@@ -1,5 +1,5 @@
 fn bump_word(words: Span<uint32>, index: int, delta: uint32) -> int {
-    let old = words[index]
+    var old = words[index]
     words[index] = old + delta
     return int(words[index])
 }

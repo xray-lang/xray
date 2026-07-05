@@ -73,8 +73,8 @@ typedef struct XaInferContext {
     bool allow_view_expr_for_copy;
 
     // The variable being declared is not visible inside its own initializer.
-    // This lets `let copy = copy(x)` call the outer/builtin `copy` while still
-    // reporting `let x = x` as an unresolved self-reference when no outer x exists.
+    // This lets `var copy = copy(x)` call the outer/builtin `copy` while still
+    // reporting `var x = x` as an unresolved self-reference when no outer x exists.
     uint32_t initializing_symbol_id;
 
     // Generic type inference context (for callback parameters)

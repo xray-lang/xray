@@ -38,7 +38,7 @@ typedef enum XrFlowFlags {
     XA_FLOW_CALL = 1 << 8,             // Function call (may affect types)
     XA_FLOW_RETURN = 1 << 9,           // Return statement
     XA_FLOW_THROW = 1 << 10,           // Throw statement
-    XA_FLOW_MOVE = 1 << 11,            // Variable moved (shared let send)
+    XA_FLOW_MOVE = 1 << 11,            // Variable moved (shared send)
 
     // Internal flags
     XA_FLOW_REFERENCED = 1 << 16,  // Has been referenced
@@ -148,7 +148,7 @@ XR_FUNC XrType *xa_flow_get_type_of_reference(XaFlowBuilder *builder, const char
                                               XrType *declared_type, XaFlowNode *flow_node,
                                               XaFlowCache *cache);
 
-// API: Move tracking for shared let variables (use-after-move detection)
+// API: Move tracking for shared variables (use-after-move detection)
 XR_FUNC XaFlowNode *xa_flow_create_move(XaFlowBuilder *builder, const char *name);
 XR_FUNC bool xa_flow_is_moved(XaFlowBuilder *builder, const char *name, XaFlowNode *at_node);
 

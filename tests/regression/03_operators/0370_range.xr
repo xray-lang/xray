@@ -6,7 +6,7 @@
 
 @test
 fn test_basic_range() {
-    let sum = 0
+    var sum = 0
     for (i in 0..5) {
         sum = sum + i
     }
@@ -15,7 +15,7 @@ fn test_basic_range() {
 
 @test
 fn test_range_start_one() {
-    let sum = 0
+    var sum = 0
     for (i in 1..5) {
         sum = sum + i
     }
@@ -26,7 +26,7 @@ fn test_range_start_one() {
 
 @test
 fn test_range_single() {
-    let count = 0
+    var count = 0
     for (i in 0..1) {
         count = count + 1
     }
@@ -35,7 +35,7 @@ fn test_range_single() {
 
 @test
 fn test_range_empty() {
-    let count = 0
+    var count = 0
     for (i in 5..5) {
         count = count + 1
     }
@@ -46,8 +46,8 @@ fn test_range_empty() {
 
 @test
 fn test_range_variable_end() {
-    let n = 5
-    let sum = 0
+    var n = 5
+    var sum = 0
     for (i in 0..n) {
         sum = sum + i
     }
@@ -56,9 +56,9 @@ fn test_range_variable_end() {
 
 @test
 fn test_range_both_variables() {
-    let start = 2
-    let end = 6
-    let sum = 0
+    var start = 2
+    var end = 6
+    var sum = 0
     for (i in start..end) {
         sum = sum + i
     }
@@ -69,7 +69,7 @@ fn test_range_both_variables() {
 
 @test
 fn test_nested_ranges() {
-    let count = 0
+    var count = 0
     for (i in 0..3) {
         for (j in 0..3) {
             count = count + 1
@@ -82,8 +82,8 @@ fn test_nested_ranges() {
 
 @test
 fn test_range_array_index() {
-    let arr = [10, 20, 30, 40, 50]
-    let sum = 0
+    var arr = [10, 20, 30, 40, 50]
+    var sum = 0
     for (i in 0..arr.length) {
         sum = sum + arr[i]
     }
@@ -94,8 +94,8 @@ fn test_range_array_index() {
 
 @test
 fn test_range_expression_end() {
-    let n = 3
-    let sum = 0
+    var n = 3
+    var sum = 0
     for (i in 0..(n * 2)) {
         sum = sum + i
     }

@@ -1,5 +1,5 @@
 // anchor: array-char-compact
-let chars: Array<char> = ['b', '中', '\u{1F600}']
+var chars: Array<char> = ['b', '中', '\u{1F600}']
 print(chars.length)
 print(typeof(chars[0]))
 print(chars[0])
@@ -24,11 +24,11 @@ chars.sort()
 print(chars.join(""))
 print(chars[0].ord())
 
-let made = Array<char>(3, 'k')
+var made = Array<char>(3, 'k')
 print(made.length)
 print(made.join(""))
 
-let from_string: Array<char> = []
+var from_string: Array<char> = []
 for (ch in "A中\u{1F600}") {
     from_string.push(ch)
 }

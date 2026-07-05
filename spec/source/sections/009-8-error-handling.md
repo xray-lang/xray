@@ -135,7 +135,7 @@ fn fetchUser(id: int) -> User {
 }
 
 try {
-    let user = fetchUser(-1)
+    var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
         HttpErr.NotFound(msg) -> log("404:", msg),
@@ -160,7 +160,7 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 
 ```xray
 enum WorkerErr { Failed(string) }
-const err_ch = Channel<string>(1)
+shared err_ch = Channel<string>(1)
 
 go {
     try {
@@ -171,7 +171,7 @@ go {
     }
 }
 
-let result = match (err_ch.recv()) {
+var result = match (err_ch.recv()) {
     Recv.Value(v) -> v
     _ -> "error"
 }
@@ -200,14 +200,14 @@ panic 通过有限的栈展开传播，生成 `PanicInfo` 对象携带堆栈信�
 
 ```xray
 try {
-    let arr: Array<int> = [1, 2, 3]
-    let v = arr[10]                          // 越界 → panic
+    var arr: Array<int> = [1, 2, 3]
+    var v = arr[10]                          // 越界 → panic
 } catch panic {
     log("runtime fault caught")
 }
 
 try {
-    let n = 10 / 0                           // 除零 → panic
+    var n = 10 / 0                           // 除零 → panic
 } catch panic {
     log("division by zero caught")
 }
@@ -253,10 +253,10 @@ class PanicInfo {
 
 ```xray
 fn fetch(url: string) -> string {
-    let conn = open(url)
+    var conn = open(url)
     defer conn.close()                       // 无论后续如何，conn 一定关闭
 
-    let data = conn.read()
+    var data = conn.read()
     if (data.isEmpty()) {
         throw FetchErr.Empty                 // defer 仍执行
     }
@@ -325,7 +325,7 @@ fn fetch(url: string) -> string {
 enum ConnErr { Refused, Timeout, Reset }
 
 fn fetchData(host: string) -> string {
-    let conn = connect(host)
+    var conn = connect(host)
     defer conn.close()
 
     if (!conn.isAlive()) { throw ConnErr.Timeout }
@@ -334,7 +334,7 @@ fn fetchData(host: string) -> string {
 
 fn main() {
     try {
-        let data = fetchData("api.example.com")
+        var data = fetchData("api.example.com")
         print(data)
     } catch (e: ConnErr) {
         match (e) {
@@ -354,15 +354,15 @@ main()
 enum ConfigErr { BadJson(string), BadField(string) }
 
 fn parseConfig(text: string) -> Config {
-    let json = parseJson(text)
-    let port = json["port"].toInt()
+    var json = parseJson(text)
+    var port = json["port"].toInt()
     if (port == null) { throw ConfigErr.BadField("port") }
     return Config(port: port!)
 }
 
 fn main() {
     try {
-        let cfg = parseConfig(configText)
+        var cfg = parseConfig(configText)
         startServer(cfg)
     } catch (e: ConfigErr) {
         match (e) {
@@ -378,8 +378,8 @@ main()
 #### 模式 3：`??` 提供默认值
 
 ```xray
-let port = config?.port ?? 8080
-let user = db.findUser(id) ?? guestUser
+var port = config?.port ?? 8080
+var user = db.findUser(id) ?? guestUser
 ```
 
 #### 模式 4：catch panic 兜底运行时故障
@@ -527,7 +527,7 @@ fn fetchUser(id: int) -> User {
 }
 
 try {
-    let user = fetchUser(-1)
+    var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
         HttpErr.NotFound(msg) -> log("404:", msg),
@@ -537,7 +537,7 @@ try {
 }
 ```
 
-ADT enums let `match` check exhaustiveness at compile time.
+ADT enums allow `match` to check exhaustiveness at compile time.
 
 #### 8.1.5 Errors and coroutine boundaries
 
@@ -552,7 +552,7 @@ Ways to pass child coroutine errors:
 
 ```xray
 enum WorkerErr { Failed(string) }
-const err_ch = Channel<string>(1)
+shared err_ch = Channel<string>(1)
 
 go {
     try {
@@ -563,7 +563,7 @@ go {
     }
 }
 
-let result = match (err_ch.recv()) {
+var result = match (err_ch.recv()) {
     Recv.Value(v) -> v
     _ -> "error"
 }
@@ -592,14 +592,14 @@ Panics propagate via limited stack unwinding and generate `PanicInfo` objects wi
 
 ```xray
 try {
-    let arr: Array<int> = [1, 2, 3]
-    let v = arr[10]                          // OOB → panic
+    var arr: Array<int> = [1, 2, 3]
+    var v = arr[10]                          // OOB → panic
 } catch panic {
     log("runtime fault caught")
 }
 
 try {
-    let n = 10 / 0                           // division by zero → panic
+    var n = 10 / 0                           // division by zero → panic
 } catch panic {
     log("division by zero caught")
 }
@@ -645,10 +645,10 @@ User code generally does not construct `PanicInfo` directly — use `throw <enum
 
 ```xray
 fn fetch(url: string) -> string {
-    let conn = open(url)
+    var conn = open(url)
     defer conn.close()                       // conn is guaranteed to close
 
-    let data = conn.read()
+    var data = conn.read()
     if (data.isEmpty()) {
         throw FetchErr.Empty                 // defer still runs
     }
@@ -717,7 +717,7 @@ Reference table:
 enum ConnErr { Refused, Timeout, Reset }
 
 fn fetchData(host: string) -> string {
-    let conn = connect(host)
+    var conn = connect(host)
     defer conn.close()
 
     if (!conn.isAlive()) { throw ConnErr.Timeout }
@@ -726,7 +726,7 @@ fn fetchData(host: string) -> string {
 
 fn main() {
     try {
-        let data = fetchData("api.example.com")
+        var data = fetchData("api.example.com")
         print(data)
     } catch (e: ConnErr) {
         match (e) {
@@ -746,15 +746,15 @@ main()
 enum ConfigErr { BadJson(string), BadField(string) }
 
 fn parseConfig(text: string) -> Config {
-    let json = parseJson(text)
-    let port = json["port"].toInt()
+    var json = parseJson(text)
+    var port = json["port"].toInt()
     if (port == null) { throw ConfigErr.BadField("port") }
     return Config(port: port!)
 }
 
 fn main() {
     try {
-        let cfg = parseConfig(configText)
+        var cfg = parseConfig(configText)
         startServer(cfg)
     } catch (e: ConfigErr) {
         match (e) {
@@ -770,8 +770,8 @@ main()
 #### Pattern 3: `??` for default values
 
 ```xray
-let port = config?.port ?? 8080
-let user = db.findUser(id) ?? guestUser
+var port = config?.port ?? 8080
+var user = db.findUser(id) ?? guestUser
 ```
 
 #### Pattern 4: catch panic for runtime fault fallback

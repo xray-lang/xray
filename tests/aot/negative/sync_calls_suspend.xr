@@ -5,5 +5,5 @@ fn make_worker() -> () -> int {
     }
 }
 
-let worker = make_worker()
+var worker = make_worker()
 print(worker())

@@ -15,7 +15,7 @@ fn test_arithmetic() {
 
 @test
 fn test_strings() {
-    let s = "Hello, World!"
+    var s = "Hello, World!"
     assert_eq(s.length, 13)
     assert_true(s.startsWith("Hello"))
     assert_true(s.endsWith("!"))
@@ -24,7 +24,7 @@ fn test_strings() {
 
 @test
 fn test_arrays() {
-    let arr = [1, 2, 3, 4, 5]
+    var arr = [1, 2, 3, 4, 5]
     assert_eq(arr.length, 5)
     assert_eq(arr[0], 1)
     assert_true(arr.includes(3))
@@ -33,7 +33,7 @@ fn test_arrays() {
 
 @test
 fn test_nullable() {
-    let x: int? = null
+    var x: int? = null
     assert_eq(x, null)
     assert_eq(x ?? 42, 42)
 
@@ -60,7 +60,7 @@ fn test_todo() {
 @test(timeout: 5000)
 fn test_with_timeout() {
     // This test has a 5-second timeout
-    let sum = 0
+    var sum = 0
     for (i in 0..1000) { sum = sum + i }
     assert_eq(sum, 499500)
 }

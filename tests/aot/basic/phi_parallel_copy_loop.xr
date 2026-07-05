@@ -1,8 +1,8 @@
 // AOT regression: loop PHI copies must use parallel assignment semantics.
 
 fn distance_to_pivot(limit: int, pivot: int) -> int {
-    let ip = 0
-    let anchor = 0
+    var ip = 0
+    var anchor = 0
     while (ip < limit) {
         if (ip == pivot) {
             return ip - anchor

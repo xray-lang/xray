@@ -22,14 +22,14 @@ fn test_json_parse_bool_null() {
 
 @test
 fn test_json_parse_object() {
-    let obj = Json.parse("{\"name\": \"Alice\", \"age\": 30}")
+    var obj = Json.parse("{\"name\": \"Alice\", \"age\": 30}")
     assert_eq(obj.name, "Alice")
     assert_eq(obj.age, 30)
 }
 
 @test
 fn test_json_parse_array() {
-    let arr = Json.parse("[1, 2, 3]")
+    var arr = Json.parse("[1, 2, 3]")
     assert_eq(arr.length, 3)
     assert_eq(arr[0], 1)
 }
@@ -50,8 +50,8 @@ fn test_json_stringify_array() {
 
 @test
 fn test_json_stringify_object() {
-    let obj = { name: "Bob" }
-    let s = Json.stringify(obj)
+    var obj = { name: "Bob" }
+    var s = Json.stringify(obj)
     assert_eq(s.includes("name"), true)
     assert_eq(s.includes("Bob"), true)
 }
@@ -59,8 +59,8 @@ fn test_json_stringify_object() {
 // ===== Json.encode =====
 @test
 fn test_json_encode_record() {
-    let user = { name: "Bob", scores: [10, 20] }
-    let encoded = Json.encode(user)
+    var user = { name: "Bob", scores: [10, 20] }
+    var encoded = Json.encode(user)
     assert_eq(typeof(encoded), "Json")
     assert_eq(encoded.name, "Bob")
     assert_eq(encoded.scores[1], 20)
@@ -68,13 +68,13 @@ fn test_json_encode_record() {
 
 @test
 fn test_json_encode_map_and_set() {
-    let m = #{"a": 1, "b": { ok: true }}
-    let encoded = Json.encode(m)
+    var m = #{"a": 1, "b": { ok: true }}
+    var encoded = Json.encode(m)
     assert_eq(encoded.a, 1)
     assert_eq(encoded.b.ok, true)
 
-    let s: Set<int> = #[1, 2, 3]
-    let arr = Json.encode(s)
+    var s: Set<int> = #[1, 2, 3]
+    var arr = Json.encode(s)
     assert_eq(arr.length, 3)
     assert_eq(arr[0], 1)
     assert_eq(arr[2], 3)
@@ -82,8 +82,8 @@ fn test_json_encode_map_and_set() {
 
 @test
 fn test_json_encode_non_serializable_throws() {
-    let f = fn() {}
-    let caught = false
+    var f = fn() {}
+    var caught = false
     try {
         Json.encode(f)
     } catch panic (e) {
@@ -106,23 +106,23 @@ fn test_json_is_valid() {
 // ===== Json.tryParse =====
 @test
 fn test_json_try_parse_success() {
-    let result = Json.tryParse("{\"x\": 1}")
+    var result = Json.tryParse("{\"x\": 1}")
     assert_eq(result.error, null)
     assert_eq(result.value.x, 1)
 }
 
 @test
 fn test_json_try_parse_failure() {
-    let result = Json.tryParse("invalid")
+    var result = Json.tryParse("invalid")
     assert_eq(result.error != null, true)
 }
 
 // ===== Roundtrip =====
 @test
 fn test_json_roundtrip() {
-    let original = [1, "two", true, null]
-    let s = Json.stringify(original)
-    let parsed = Json.parse(s)
+    var original = [1, "two", true, null]
+    var s = Json.stringify(original)
+    var parsed = Json.parse(s)
     assert_eq(parsed.length, 4)
     assert_eq(parsed[0], 1)
     assert_eq(parsed[1], "two")

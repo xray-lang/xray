@@ -5,23 +5,23 @@
 // Run: xray demos/01-basics/tuples.xr
 
 // === Literals ===
-let unit = ()                          // unit value, type: ()
-let single = (42,)                     // unary tuple needs trailing comma
-let pair = (1, "hello")                // arity 2, heterogeneous
-let triple = (true, 3.14, "go")        // arity 3
+var unit = ()                          // unit value, type: ()
+var single = (42,)                     // unary tuple needs trailing comma
+var pair = (1, "hello")                // arity 2, heterogeneous
+var triple = (true, 3.14, "go")        // arity 3
 print(pair)
 print(triple.0)
 print(triple.1)
 print(triple.2)
 
 // === Type annotations ===
-let p: (int, int) = (3, 4)
-let kv: (string, int) = ("score", 100)
+var p: (int, int) = (3, 4)
+var kv: (string, int) = ("score", 100)
 print("${p.0}, ${p.1}")
 print("${kv.0}=${kv.1}")
 
 // === .N field access (chained) ===
-let nested: ((int, int), string) = ((10, 20), "label")
+var nested: ((int, int), string) = ((10, 20), "label")
 print(nested.0.0)                      // 10
 print(nested.0.1)                      // 20
 print(nested.1)                        // label
@@ -30,21 +30,21 @@ print(nested.1)                        // label
 fn divmod(a: int, b: int) -> (int, int) {
     return (a / b, a % b)
 }
-let (q, r) = divmod(17, 5)
+var (q, r) = divmod(17, 5)
 print("17/5 = ${q} rem ${r}")
 
 // === Destructure with wildcard ===
-let (x, _) = divmod(20, 6)
+var (x, _) = divmod(20, 6)
 print("first slot only: ${x}")
 
 // === Tuple swap ===
-let a = 1
-let b = 2
+var a = 1
+var b = 2
 (a, b) = (b, a)
 print("after swap: a=${a}, b=${b}")
 
 // === for-in with tuple destructure ===
-let pairs: Array<(string, int)> = [("a", 1), ("b", 2), ("c", 3)]
+var pairs: Array<(string, int)> = [("a", 1), ("b", 2), ("c", 3)]
 for ((k, v) in pairs) {
     print("${k}=${v}")
 }
@@ -77,18 +77,18 @@ print(fst_first(((0, 9), 7)))
 
 // === Spread in function calls ===
 fn dist(x1: int, y1: int, x2: int, y2: int) -> int {
-    let dx = x2 - x1
-    let dy = y2 - y1
+    var dx = x2 - x1
+    var dy = y2 - y1
     return dx * dx + dy * dy
 }
-let p1 = (0, 0)
-let p2 = (3, 4)
+var p1 = (0, 0)
+var p2 = (3, 4)
 print("dist^2 = ${dist(...p1, ...p2)}")
 
 // === Spread in tuple literal (concatenation) ===
-let head = (1, 2)
-let tail = (3, 4, 5)
-let all = (...head, ...tail)
+var head = (1, 2)
+var tail = (3, 4, 5)
+var all = (...head, ...tail)
 print("concat.0 = ${all.0}, concat.4 = ${all.4}")
 
 // === User generic over tuples ===

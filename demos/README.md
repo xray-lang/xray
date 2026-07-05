@@ -50,7 +50,7 @@ Xray's core differentiator. **If it compiles, it's concurrency-safe.**
 | [goroutines.xr](05-concurrency/goroutines.xr) | go, await, await all, await any, Task |
 | [channels.xr](05-concurrency/channels.xr) | Channel, send/recv, producer-consumer, fan-out |
 | [select_and_scope.xr](05-concurrency/select_and_scope.xr) | select, defer, scope (structured concurrency) |
-| [shared_data.xr](05-concurrency/shared_data.xr) | shared const, Channel, parameter passing — the 3 sharing rules |
+| [shared_data.xr](05-concurrency/shared_data.xr) | shared, Channel, parameter passing — the 3 sharing rules |
 | [atomic.xr](05-concurrency/atomic.xr) | Atomic&lt;T&gt; for int/float/bool — load, store, add, CAS, toggle |
 
 ### 06 — Networking
@@ -72,33 +72,33 @@ Run tests with: `xray test demos/07-advanced/testing.xr`
 
 ```xray
 // Variables
-let x = 1              // mutable
+var x = 1              // mutable
 const PI = 3.14        // immutable
 
 // Functions (params MUST have type annotations)
 fn add(a: int, b: int) -> int { return a + b }
-let double = (x: int) -> x * 2
+var double = (x: int) -> x * 2
 
 // Tuples (heterogeneous, fixed arity, .N access)
-let p: (int, string) = (1, "hi")
+var p: (int, string) = (1, "hi")
 print(p.0); print(p.1)
 fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }
-let (q, r) = divmod(17, 5)
-let combined = (...p, true)         // spread → (1, "hi", true)
+var (q, r) = divmod(17, 5)
+var combined = (...p, true)         // spread → (1, "hi", true)
 
 // Concurrency
-let task = go compute(42)      // spawn coroutine
-let result = await task         // wait for result
-shared const ch = new Channel<int>(10)
+var task = go compute(42)      // spawn coroutine
+var result = await task         // wait for result
+shared ch = new Channel<int>(10)
 ch.send(val); match (ch.recv()) { Recv.Value(v) -> use(v); _ -> {} }
-shared const CFG = { ... }     // immutable cross-coroutine data
+shared CFG = { ... }     // immutable cross-coroutine data
 ```
 
 ## Concurrency Safety Rules
 
 | Mechanism | Purpose | How it works |
 |-----------|---------|-------------|
-| `shared const` | Immutable sharing | Zero-copy reads across coroutines |
+| `shared` | Immutable sharing | Zero-copy reads across coroutines |
 | `Channel` | Communication | Deep-copies values on send |
 | Function params | Pass data to `go` | Deep-copied to child coroutine |
 | `move` | Transfer ownership | Original becomes inaccessible |

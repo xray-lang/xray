@@ -1,4 +1,4 @@
-let b = Bytes(16)
+var b = Bytes(16)
 b[0] = 1
 b[1] = 2
 b[2] = 3
@@ -8,13 +8,13 @@ b[5] = 6
 b[6] = 7
 b[7] = 8
 
-let view: ByteSpan = b[:]
-let u32: uint32 = view.load<uint32>(0, Endian.LE)
-let u64: uint64 = view.load<uint64>(0, Endian.LE)
+var view: ByteSpan = b[:]
+var u32: uint32 = view.load<uint32>(0, Endian.LE)
+var u64: uint64 = view.load<uint64>(0, Endian.LE)
 print(int(u32))
 print(int(u64))
 
-let dst = Bytes.withCapacity(6)
+var dst = Bytes.withCapacity(6)
 print(dst.length)
 print(dst.capacity)
 dst.appendFrom(view[1:4])
@@ -22,8 +22,8 @@ print(dst[0])
 print(dst[1])
 print(dst[2])
 
-let rep = Bytes.withCapacity(9)
-let seed = Bytes(3)
+var rep = Bytes.withCapacity(9)
+var seed = Bytes(3)
 seed[0] = 65
 seed[1] = 66
 seed[2] = 67
@@ -36,18 +36,18 @@ print(rep[6])
 print(rep[7])
 print(rep[8])
 
-let xs = Array<int>(4, 9)
+var xs = Array<int>(4, 9)
 print(xs.length)
 print(xs[0])
 print(xs[3])
 
-let u: uint32 = 4294967295
-let wrapped = u + 1
+var u: uint32 = 4294967295
+var wrapped = u + 1
 print(wrapped)
 
-let assigned: uint32 = 4294967295 + 1
+var assigned: uint32 = 4294967295 + 1
 print(assigned)
 
-let byte: uint8 = 255
-let byte_wrapped = byte + 1
+var byte: uint8 = 255
+var byte_wrapped = byte + 1
 print(byte_wrapped)

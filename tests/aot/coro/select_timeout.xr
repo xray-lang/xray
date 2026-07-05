@@ -7,6 +7,6 @@ fn wait_timeout() -> int {
     return 0
 }
 
-let task = go wait_timeout()
-let result = await task
+var task = go wait_timeout()
+var result = await task
 print(result)

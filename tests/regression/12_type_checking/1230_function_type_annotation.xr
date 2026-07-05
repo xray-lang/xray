@@ -9,7 +9,7 @@ fn test_fn_type_basic() {
         return f(x)
     }
     
-    let result = apply(5, (n) -> n * 2)
+    var result = apply(5, (n) -> n * 2)
     assert_eq(result, 10)
 }
 
@@ -17,7 +17,7 @@ fn test_fn_type_basic() {
 
 @test
 fn test_fn_type_void() {
-    let count = 0
+    var count = 0
     
     fn forEach(arr: Array<int>, f: (int) -> ()) {
         for (item in arr) {
@@ -39,7 +39,7 @@ fn test_fn_type_no_params() {
         return f()
     }
     
-    let result = callIt(() -> 42)
+    var result = callIt(() -> 42)
     assert_eq(result, 42)
 }
 
@@ -63,7 +63,7 @@ fn test_fn_type_string_return() {
         return f(x)
     }
     
-    let result = transform(42, (n) -> "value: " + string(n))
+    var result = transform(42, (n) -> "value: " + string(n))
     assert_eq(result, "value: 42")
 }
 
@@ -75,7 +75,7 @@ fn test_fn_type_higher_order() {
         return (x) -> x + n
     }
     
-    let add5 = makeAdder(5)
+    var add5 = makeAdder(5)
     assert_eq(add5(10), 15)
     assert_eq(add5(0), 5)
 }
@@ -96,7 +96,7 @@ fn test_fn_type_nested() {
 
 @test
 fn test_fn_type_variable() {
-    let f: (int) -> int = (x) -> x * 3
+    var f: (int) -> int = (x) -> x * 3
     assert_eq(f(5), 15)
 }
 
@@ -122,11 +122,11 @@ fn test_tuple_type_unchanged() {
         return (a / b, true)
     }
     
-    let (result, ok) = divide(10, 3)
+    var (result, ok) = divide(10, 3)
     assert_eq(result, 3)
     assert_eq(ok, true)
     
-    let (result2, ok2) = divide(10, 0)
+    var (result2, ok2) = divide(10, 0)
     assert_eq(result2, 0)
     assert_eq(ok2, false)
 }

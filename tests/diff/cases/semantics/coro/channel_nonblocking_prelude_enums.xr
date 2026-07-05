@@ -22,18 +22,18 @@ fn has_value(r: Recv<int>) -> bool {
     }
 }
 
-shared const ch: Channel<int> = Channel(2)
+shared ch: Channel<int> = Channel(2)
 
-let s1 = ch.trySend(7)
-let s2 = ch.trySend(9)
-let s3 = ch.trySend(11)
+var s1 = ch.trySend(7)
+var s2 = ch.trySend(9)
+var s3 = ch.trySend(11)
 print(is_sent(s1))
 print(is_sent(s2))
 print(is_sent(s3))
 
-let r1 = ch.tryRecv()
-let r2 = ch.tryRecv()
-let r3 = ch.tryRecv()
+var r1 = ch.tryRecv()
+var r2 = ch.tryRecv()
+var r3 = ch.tryRecv()
 print(recv_value(r1))
 print(recv_value(r2))
 print(has_value(r3))

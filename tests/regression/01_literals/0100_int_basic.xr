@@ -13,7 +13,7 @@ fn test_positive_integers() {
 @test
 fn test_zero() {
     assert_eq(0, 0)
-    let x = 0
+    var x = 0
     assert_eq(x, 0)
 }
 
@@ -68,13 +68,13 @@ fn test_single_digit() {
 
 @test
 fn test_large_numbers() {
-    let billion = 1000000000
+    var billion = 1000000000
     assert_eq(billion, 1000000000)
     // Test max 48-bit signed integer (NaN Boxing limit)
-    let max_int = 140737488355327
+    var max_int = 140737488355327
     assert_eq(max_int > 0, true)
     // For larger numbers, use BigInt
-    let large = 9223372036854775807n
+    var large = 9223372036854775807n
     // INT64_MAX as BigInt
     assert_eq(large > 0n, true)
 }

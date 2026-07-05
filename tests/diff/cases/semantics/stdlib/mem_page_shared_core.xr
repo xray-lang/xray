@@ -3,14 +3,14 @@
 // nondeterministic, so assertions observe only data and boolean success.
 import mem
 
-let rw = mem.PROT_READ | mem.PROT_WRITE
+var rw = mem.PROT_READ | mem.PROT_WRITE
 print(mem.PROT_NONE)
 print(mem.PROT_READ)
 print(mem.PROT_WRITE)
 print(mem.PROT_EXEC)
 print(rw)
 
-let p = mem.pageAlloc(4096, rw)
+var p = mem.pageAlloc(4096, rw)
 print(p.isNull())
 unsafe { print(p[0]) }
 unsafe { p[0] = 17 }
@@ -20,7 +20,7 @@ unsafe { print(p[4095]) }
 print(mem.pageProtect(p, 4096, rw))
 print(mem.pageFree(p, 4096))
 
-let q = mem.pageAlloc(4096)
+var q = mem.pageAlloc(4096)
 print(q.isNull())
 unsafe { q[1] = 31 }
 unsafe { print(q[1]) }

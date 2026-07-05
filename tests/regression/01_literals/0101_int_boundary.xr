@@ -7,7 +7,7 @@
 fn test_sbx_boundary_positive() {
     // MAXARG_sBx = 32767, should use LOADI
     assert_eq(32767, 32767)
-    let x = 32767
+    var x = 32767
     assert_eq(x, 32767)
     assert_eq(x + 1, 32768)
 }
@@ -16,7 +16,7 @@ fn test_sbx_boundary_positive() {
 fn test_sbx_boundary_negative() {
     // -MAXARG_sBx = -32767, should use LOADI
     assert_eq(-32767, -32767)
-    let x = -32767
+    var x = -32767
     assert_eq(x, -32767)
     assert_eq(x - 1, -32768)
 }
@@ -24,7 +24,7 @@ fn test_sbx_boundary_negative() {
 @test
 fn test_beyond_sbx_positive() {
     // 32768 exceeds LOADI range, must use LOADK constant pool
-    let x = 32768
+    var x = 32768
     assert_eq(x, 32768)
     assert_eq(x > 0, true)
     assert_eq(x - 1, 32767)
@@ -33,7 +33,7 @@ fn test_beyond_sbx_positive() {
 @test
 fn test_beyond_sbx_negative() {
     // -32768 exceeds LOADI range, must use LOADK constant pool
-    let x = -32768
+    var x = -32768
     assert_eq(x, -32768)
     assert_eq(x < 0, true)
     assert_eq(x + 1, -32767)
@@ -54,20 +54,20 @@ fn test_sbx_zero_crossing() {
 @test
 fn test_large_constants() {
     // Values well beyond sBx range, always use LOADK
-    let a = 65535
+    var a = 65535
     assert_eq(a, 65535)
-    let b = -65535
+    var b = -65535
     assert_eq(b, -65535)
-    let c = 100000
+    var c = 100000
     assert_eq(c, 100000)
-    let d = -100000
+    var d = -100000
     assert_eq(d, -100000)
 }
 
 @test
 fn test_sbx_in_json() {
     // The original bug manifested when -32768 appeared in JSON context
-    let obj: Json = {"min": -32768, "max": 32767, "beyond": 32768}
+    var obj: Json = {"min": -32768, "max": 32767, "beyond": 32768}
     assert_eq(obj["min"], -32768)
     assert_eq(obj["max"], 32767)
     assert_eq(obj["beyond"], 32768)

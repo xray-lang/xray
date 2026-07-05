@@ -308,10 +308,10 @@ static void repl_maybe_echo_last_expr(XrVMRuntime *isolate, AstNode *program) {
     bool has_synth_scope =
         xr_compiler_session_push_arena(session, program->as.program.arena, "<repl>", &synth_scope);
 
-    /* Build `it = <expr>` or `let it = <expr>` depending on whether
+    /* Build `it = <expr>` or `var it = <expr>` depending on whether
      * the binding already exists.  Using assignment on subsequent
      * echoes avoids analyzer-side "name already declared" errors that
-     * would fire for repeated `let it = ...`. */
+     * would fire for repeated `var it = ...`. */
     AstNode *bind = NULL;
     if (repl_has_it_binding(isolate)) {
         bind = xr_ast_assignment(session, REPL_IT_NAME, expr, expr->line);
@@ -504,7 +504,7 @@ XrProto *xr_repl_compile(XrCompilerSession *session, XrVMRuntime *vm_host, const
  * whose single-line repr exceeds this are dropped to a new indented
  * line so the `name : type` header stays scannable.  72 picks a width
  * that fits comfortably in an 80-column terminal alongside the row
- * prefix `  let|const  <name> : <type> = `. */
+ * prefix `  var|const  <name> : <type> = `. */
 #define REPL_VARS_INLINE_WIDTH 72
 
 /* Hard cap on how much of a single value's repr we are willing to
@@ -550,7 +550,7 @@ static void print_vars_visitor(XrString *name, XrValue *value, void *ud) {
         truncated = true;
     }
 
-    const char *kw = repl_symbol_is_const(ctx->table, name) ? "const" : "let  ";
+    const char *kw = repl_symbol_is_const(ctx->table, name) ? "const" : "var  ";
 
     if (show_len <= REPL_VARS_INLINE_WIDTH && !truncated) {
         printf("  %s %s : %s = %.*s\n", kw, cname, type_name, show_len, raw);

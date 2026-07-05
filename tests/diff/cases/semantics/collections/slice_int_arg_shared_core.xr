@@ -1,11 +1,11 @@
 // anchor: slice-int-arg-shared-core
-let dyn: Json = {
+var dyn: Json = {
     "badStart": true,
     "end": 2
 }
 
-let arr = [10, 20, 30]
+var arr = [10, 20, 30]
 print("before-slice")
-let view: Span<int> = arr[dyn.badStart:dyn.end]
+var view: Span<int> = arr[dyn.badStart:dyn.end]
 print(view.length)
 print("unreachable")

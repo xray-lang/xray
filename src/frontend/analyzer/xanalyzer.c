@@ -463,6 +463,7 @@ static const char *get_export_decl_name(AstNode *decl) {
         case AST_STRUCT_DECL:
             return decl->as.class_decl.name;
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
         case AST_VAR_DECL:
             return decl->as.var_decl.name;
         case AST_ENUM_DECL:
@@ -490,7 +491,7 @@ XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *a
 
         ExportStmtNode *exp = &stmt->as.export_stmt;
 
-        /* Case 1: export fn/class/let/const ... */
+        /* Case 1: export fn/class/var/const ... */
         if (exp->declaration) {
             const char *name = get_export_decl_name(exp->declaration);
             if (name) {

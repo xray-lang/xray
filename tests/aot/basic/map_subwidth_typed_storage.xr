@@ -1,4 +1,4 @@
-let m: Map<uint8, int32> = #{}
+var m: Map<uint8, int32> = #{}
 m.set(255, 2147483647)
 m.set(255 + 1, 2147483647 + 1)
 m.set(1, -2147483648 - 1)
@@ -8,8 +8,8 @@ print(m.has(0))
 print(m.get(0))
 print(m.get(1))
 
-let keys = m.keys()
-let values = m.values()
+var keys = m.keys()
+var values = m.values()
 print(keys.length)
 print(keys[0] + keys[1] + keys[2])
 print(values[0] + values[1] + values[2])
@@ -21,12 +21,12 @@ class ByteMapBag {
     values: Map<uint8, int32>
 
     constructor() {
-        let values: Map<uint8, int32> = #{}
+        var values: Map<uint8, int32> = #{}
         this.values = values
     }
 
     fill(n: int) -> int {
-        let i = 0
+        var i = 0
         while (i < n) {
             this.values.set(i, i * 2 + 1)
             i = i + 1
@@ -35,8 +35,8 @@ class ByteMapBag {
     }
 
     scan(n: int) -> int {
-        let i = 0
-        let sum = 0
+        var i = 0
+        var sum = 0
         while (i < n) {
             if (this.values.has(i)) {
                 sum = sum + this.values.get(i)
@@ -47,8 +47,8 @@ class ByteMapBag {
     }
 
     prune(n: int) -> int {
-        let i = 0
-        let removed = 0
+        var i = 0
+        var removed = 0
         while (i < n) {
             if (this.values.delete(i)) {
                 removed = removed + 1
@@ -59,7 +59,7 @@ class ByteMapBag {
     }
 }
 
-let bag = ByteMapBag()
+var bag = ByteMapBag()
 print(bag.fill(5))
 print(bag.scan(5))
 print(bag.prune(5))

@@ -12,11 +12,11 @@ fn serveStream(conn: NetConn) {
 fn serveMessage(conn: NetConn) {
     defer net.close(conn)
     while (true) {
-        let data = net.read(conn, 65536)
+        var data = net.read(conn, 65536)
         if (data == null) {
             break
         }
-        let n = net.write(conn, data!)
+        var n = net.write(conn, data!)
         if (n <= 0) {
             break
         }
@@ -25,13 +25,13 @@ fn serveMessage(conn: NetConn) {
 
 fn serveBytes(conn: NetConn) {
     defer net.close(conn)
-    let buf = Bytes(65536)
+    var buf = Bytes(65536)
     while (true) {
-        let n = net.readInto(conn, buf)
+        var n = net.readInto(conn, buf)
         if (n <= 0) {
             break
         }
-        let written = net.writeBytes(conn, buf)
+        var written = net.writeBytes(conn, buf)
         if (written <= 0) {
             break
         }
@@ -41,7 +41,7 @@ fn serveBytes(conn: NetConn) {
 fn serveDiscard(conn: NetConn) {
     defer net.close(conn)
     while (true) {
-        let data = net.read(conn, 65536)
+        var data = net.read(conn, 65536)
         if (data == null) {
             break
         }
@@ -52,7 +52,7 @@ fn serveDiscard(conn: NetConn) {
 fn serveSlowDiscard(conn: NetConn, delayMs: int) {
     defer net.close(conn)
     while (true) {
-        let data = net.read(conn, 4096)
+        var data = net.read(conn, 4096)
         if (data == null) {
             break
         }
@@ -65,14 +65,14 @@ fn serveSlowDiscard(conn: NetConn, delayMs: int) {
 
 fn serveSource(conn: NetConn, totalBytes: int) {
     defer net.close(conn)
-    let chunk = "S".repeat(65536)
-    let remaining = totalBytes
+    var chunk = "S".repeat(65536)
+    var remaining = totalBytes
     while (remaining > 0) {
-        let data = chunk
+        var data = chunk
         if (remaining < 65536) {
             data = "S".repeat(remaining)
         }
-        let n = net.write(conn, data)
+        var n = net.write(conn, data)
         if (n <= 0) {
             break
         }
@@ -81,13 +81,13 @@ fn serveSource(conn: NetConn, totalBytes: int) {
 }
 
 fn serveProxy(client: NetConn, upstreamPort: int) {
-    let upstreamMaybe = net.dial("127.0.0.1", upstreamPort)
+    var upstreamMaybe = net.dial("127.0.0.1", upstreamPort)
     if (upstreamMaybe == null) {
         net.close(client)
         return
     }
 
-    let upstream = upstreamMaybe!
+    var upstream = upstreamMaybe!
     net.copyBidirectional(client, upstream)
     net.close(client)
     net.close(upstream)
@@ -113,29 +113,29 @@ fn handleConn(conn: NetConn, mode: string, extra: int) {
     }
 }
 
-let port = 9001
+var port = 9001
 if (process.args.length > 0) {
     port = int(process.args[0]) ?? 9001
 }
 
-let mode = "stream"
+var mode = "stream"
 if (process.args.length > 1) {
     mode = process.args[1]
 }
 
-let extra = 67108864
+var extra = 67108864
 if (process.args.length > 2) {
     extra = int(process.args[2]) ?? extra
 }
 
-let listener = net.listen(port, 1024)
+var listener = net.listen(port, 1024)
 if (listener == null) {
     print("ERROR: Failed to listen on port " + string(port))
 } else {
     print("xray TCP benchmark server listening on port " + string(port) + " mode=" + mode)
 
     while (true) {
-        let conn = net.accept(listener)
+        var conn = net.accept(listener)
         if (conn == null) {
             continue
         }

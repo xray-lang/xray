@@ -1,32 +1,32 @@
 import io
 
-let root = io.tempDir() ?? ""
+var root = io.tempDir() ?? ""
 print(root.length > 0)
 
-let dir = root + "/paths"
+var dir = root + "/paths"
 print(io.mkdirp(dir))
 
-let file = dir + "/target.txt"
+var file = dir + "/target.txt"
 print(io.writeFile(file, "target"))
 
-let missing = dir + "/missing.txt"
+var missing = dir + "/missing.txt"
 print(io.realpath(missing) == null)
 print(io.readlink(missing) == null)
 
-let resolvedDir = io.realpath(dir) ?? ""
-let resolvedFile = io.realpath(file) ?? ""
+var resolvedDir = io.realpath(dir) ?? ""
+var resolvedFile = io.realpath(file) ?? ""
 print(resolvedDir.length > 0)
 print(resolvedFile.length > 0)
 
-let oldCwd = io.cwd()
+var oldCwd = io.cwd()
 print(io.chdir(dir))
 print((io.realpath(".") ?? "") == resolvedDir)
 print(io.chdir(oldCwd))
 
-let link = root + "/target-link.txt"
-let linkOk = io.symlink(file, link)
+var link = root + "/target-link.txt"
+var linkOk = io.symlink(file, link)
 if (linkOk) {
-    let target = io.readlink(link) ?? ""
+    var target = io.readlink(link) ?? ""
     print(target.length > 0)
     print((io.realpath(target) ?? "") == resolvedFile)
 } else {

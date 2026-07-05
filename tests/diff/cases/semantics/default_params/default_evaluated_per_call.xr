@@ -2,7 +2,7 @@
 // C1: default expressions are evaluated at the call site, once per omitted
 // call, and never when the argument is supplied. VM and AOT must agree.
 
-let counter = 0
+var counter = 0
 fn next() -> int {
     counter = counter + 1
     return counter

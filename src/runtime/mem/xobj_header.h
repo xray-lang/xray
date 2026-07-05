@@ -141,7 +141,7 @@ typedef struct XrClass XrClass;
  * scheduler/executor, not the compiler's per-coroutine RC. Only Coroutine,
  * Task, and CoroPool qualify (the executor holds them past the code handle's
  * death). Channel, Atomic, WorkQueue, and ResultGroup are pure shared DATA and
- * use the atomic shared-RC like `shared const` (compiler-tracked, last drop
+ * use the atomic shared-RC like `shared` (compiler-tracked, last drop
  * frees). The authoritative per-instance signal is the XR_OBJ_MANAGED flag,
  * set only on Coroutine/Task and on the timer-channel variant (whose embedded
  * node the timer wheel owns asynchronously). */
@@ -170,7 +170,7 @@ static inline bool xr_objtype_is_runtime_managed(XrObjType t) {
  *                 * MANAGED objects (Channel/Coroutine/Task/...) hand their
  *                   lifetime to the runtime/scheduler; the compiler-inserted
  *                   dup/drop are no-ops (the runtime counts via xshared.h).
- *                 * other shared objects (shared const) are inc/dec'd
+ *                 * other shared objects (shared) are inc/dec'd
  *                   atomically: more-negative = more refs; the last drop
  *                   (old == -1) frees.
  *

@@ -29,20 +29,20 @@ fn test_url_decode_unicode() {
 
 @test
 fn test_url_roundtrip_special() {
-    let special = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
-    let encoded = http.urlEncode(special)
+    var special = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
+    var encoded = http.urlEncode(special)
     assert_eq(http.urlDecode(encoded), special)
 }
 
 @test
 fn test_url_encode_empty() {
-    let e = http.urlEncode("")
+    var e = http.urlEncode("")
     assert_eq(e, "")
 }
 
 @test
 fn test_url_encode_pure_ascii() {
-    let ascii = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    var ascii = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     assert_eq(http.urlEncode(ascii), ascii)
 }
 

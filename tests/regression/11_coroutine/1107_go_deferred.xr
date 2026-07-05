@@ -14,22 +14,22 @@ fn test_deferred() {
     fn get_three() -> int { return 3 }
     
     // go 创建协程
-    let t1 = go get_one()
-    let t2 = go get_two()
-    let t3 = go get_three()
+    var t1 = go get_one()
+    var t2 = go get_two()
+    var t3 = go get_three()
     
     // await 获取结果
-    let r1 = await t1
+    var r1 = await t1
     print(r1)       // 1
     
-    let r2 = await t2
+    var r2 = await t2
     print(r2)       // 2
     
-    let r3 = await t3
+    var r3 = await t3
     print(r3)       // 3
     
     // 重复 await 返回相同结果
-    let r1_again = await t1
+    var r1_again = await t1
     print(r1_again) // 1
     
     print("end")

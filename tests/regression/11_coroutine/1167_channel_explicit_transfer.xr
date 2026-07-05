@@ -14,12 +14,12 @@ fn recv_array(ch: Channel<Array<int>>) -> Array<int> {
 
 @test
 fn test_channel_send_copy_preserves_source() {
-    let ch: Channel<Array<int>> = Channel(1)
-    let xs = [1, 2]
+    shared ch: Channel<Array<int>> = Channel(1)
+    var xs = [1, 2]
     ch.send(copy(xs))
     xs.push(3)
 
-    let got = recv_array(ch)
+    var got = recv_array(ch)
     got.push(99)
 
     assert_eq(xs.length, 3)
@@ -32,12 +32,12 @@ fn test_channel_send_copy_preserves_source() {
 
 @test
 fn test_channel_try_send_copy_preserves_source() {
-    let ch: Channel<Array<int>> = Channel(1)
-    let xs = [4, 5]
+    shared ch: Channel<Array<int>> = Channel(1)
+    var xs = [4, 5]
     assert(sent(ch.trySend(copy(xs))))
     xs.push(6)
 
-    let got = recv_array(ch)
+    var got = recv_array(ch)
     assert_eq(xs.length, 3)
     assert_eq(got.length, 2)
     assert_eq(got[0], 4)
@@ -47,12 +47,12 @@ fn test_channel_try_send_copy_preserves_source() {
 
 @test
 fn test_channel_send_timeout_copy_preserves_source() {
-    let ch: Channel<Array<int>> = Channel(1)
-    let xs = [7, 8]
+    shared ch: Channel<Array<int>> = Channel(1)
+    var xs = [7, 8]
     assert(sent(ch.sendTimeout(copy(xs), 0)))
     xs.push(9)
 
-    let got = recv_array(ch)
+    var got = recv_array(ch)
     assert_eq(xs.length, 3)
     assert_eq(got.length, 2)
     assert_eq(got[0], 7)
@@ -62,11 +62,11 @@ fn test_channel_send_timeout_copy_preserves_source() {
 
 @test
 fn test_channel_send_move_transfers_source() {
-    let ch: Channel<Array<int>> = Channel(1)
-    let xs = [10, 11]
+    shared ch: Channel<Array<int>> = Channel(1)
+    var xs = [10, 11]
     ch.send(move xs)
 
-    let got = recv_array(ch)
+    var got = recv_array(ch)
     assert_eq(got.length, 2)
     assert_eq(got[0], 10)
     assert_eq(got[1], 11)

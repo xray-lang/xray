@@ -19,7 +19,7 @@
  *   import regex
  *
  *   // Compile regex
- *   let re = regex.compile("\\d+")
+ *   var re = regex.compile("\\d+")
  *
  *   // Test match
  *   if (regex.test(re, "abc123")) {
@@ -27,20 +27,20 @@
  *   }
  *
  *   // Get match result
- *   let m = regex.match(re, "abc123def")
+ *   var m = regex.match(re, "abc123def")
  *   print(m.start, m.end)  // 3 6
  *
  *   // Capture groups
- *   let re2 = regex.compile("(\\w+)@(\\w+)")
- *   let m2 = regex.match(re2, "user@host")
+ *   var re2 = regex.compile("(\\w+)@(\\w+)")
+ *   var m2 = regex.match(re2, "user@host")
  *   print(m2.groups[1])  // "user"
  *   print(m2.groups[2])  // "host"
  *
  *   // Replace
- *   let result = regex.replace(re, "a1b2c3", "X")  // "aXbXcX"
+ *   var result = regex.replace(re, "a1b2c3", "X")  // "aXbXcX"
  *
  *   // Split
- *   let parts = regex.split(regex.compile(",\\s*"), "a, b, c")  // ["a", "b", "c"]
+ *   var parts = regex.split(regex.compile(",\\s*"), "a, b, c")  // ["a", "b", "c"]
  */
 
 #ifndef XREGEX_BINDING_H

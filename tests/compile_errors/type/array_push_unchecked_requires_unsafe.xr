@@ -1,2 +1,2 @@
-let bytes = Bytes.withCapacity(1)
+var bytes = Bytes.withCapacity(1)
 bytes.pushUnchecked(7)

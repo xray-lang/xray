@@ -23,28 +23,28 @@ fn test_property_concurrent_intern_safety() {
     
     fn intern_task(id: int) -> bool {
         // 创建多个字符串，触发驻留
-        let s1 = "intern_" + string(id) + "_a"
-        let s2 = "intern_" + string(id) + "_b"
-        let s3 = "intern_" + string(id) + "_c"
+        var s1 = "intern_" + string(id) + "_a"
+        var s2 = "intern_" + string(id) + "_b"
+        var s3 = "intern_" + string(id) + "_c"
         
         // 验证字符串内容正确
-        let expected1 = "intern_" + string(id) + "_a"
-        let expected2 = "intern_" + string(id) + "_b"
-        let expected3 = "intern_" + string(id) + "_c"
+        var expected1 = "intern_" + string(id) + "_a"
+        var expected2 = "intern_" + string(id) + "_b"
+        var expected3 = "intern_" + string(id) + "_c"
         
         return s1 == expected1 && s2 == expected2 && s3 == expected3
     }
     
-    let n = 50
-    let tasks: Array<Task> = []
-    for (let i = 0; i < n; i++) {
+    var n = 50
+    var tasks: Array<Task> = []
+    for (var i = 0; i < n; i++) {
         tasks.push(go intern_task(i))
     }
     
-    let results = await all tasks
+    var results = await all tasks
     
     // 验证所有协程的结果都正确
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         assert_eq(results[i], true)
     }
 }
@@ -57,21 +57,21 @@ fn test_property_concurrent_global_pool_readonly() {
     
     fn global_access_task(id: int) -> bool {
         // 访问全局池中的字面量
-        let s = "shared_literal_value"
+        var s = "shared_literal_value"
         // 验证与编译期字面量相等
         return s == "shared_literal_value"
     }
     
-    let n = 50
-    let tasks: Array<Task> = []
-    for (let i = 0; i < n; i++) {
+    var n = 50
+    var tasks: Array<Task> = []
+    for (var i = 0; i < n; i++) {
         tasks.push(go global_access_task(i))
     }
     
-    let results = await all tasks
+    var results = await all tasks
     
     // 验证所有协程都能正确访问全局池
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         assert_eq(results[i], true)
     }
 }
@@ -84,26 +84,26 @@ fn test_property_concurrent_local_pool_isolation() {
     
     fn local_pool_task(id: int) -> bool {
         // 创建本地字符串（运行期驻留到本地池）
-        let local1 = "local_" + string(id) + "_first"
-        let local2 = "local_" + string(id) + "_second"
+        var local1 = "local_" + string(id) + "_first"
+        var local2 = "local_" + string(id) + "_second"
         
         // 验证本地字符串内容正确
-        let expected1 = "local_" + string(id) + "_first"
-        let expected2 = "local_" + string(id) + "_second"
+        var expected1 = "local_" + string(id) + "_first"
+        var expected2 = "local_" + string(id) + "_second"
         
         return local1 == expected1 && local2 == expected2
     }
     
-    let n = 50
-    let tasks: Array<Task> = []
-    for (let i = 0; i < n; i++) {
+    var n = 50
+    var tasks: Array<Task> = []
+    for (var i = 0; i < n; i++) {
         tasks.push(go local_pool_task(i))
     }
     
-    let results = await all tasks
+    var results = await all tasks
     
     // 验证所有协程的本地池独立且正确
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         assert_eq(results[i], true)
     }
 }
@@ -116,28 +116,28 @@ fn test_property_concurrent_long_string_no_intern() {
     
     fn long_string_task(id: int) -> bool {
         // 创建超过64字节的长字符串（不驻留）
-        let long = "this_is_a_very_long_string_that_exceeds_64_bytes_" + string(id) + "_end_of_string_data"
+        var long = "this_is_a_very_long_string_that_exceeds_64_bytes_" + string(id) + "_end_of_string_data"
         
         // 验证长度超过64
-        let len_ok = long.length > 64
+        var len_ok = long.length > 64
         
         // 验证内容正确
-        let expected = "this_is_a_very_long_string_that_exceeds_64_bytes_" + string(id) + "_end_of_string_data"
-        let content_ok = long == expected
+        var expected = "this_is_a_very_long_string_that_exceeds_64_bytes_" + string(id) + "_end_of_string_data"
+        var content_ok = long == expected
         
         return len_ok && content_ok
     }
     
-    let n = 50
-    let tasks: Array<Task> = []
-    for (let i = 0; i < n; i++) {
+    var n = 50
+    var tasks: Array<Task> = []
+    for (var i = 0; i < n; i++) {
         tasks.push(go long_string_task(i))
     }
     
-    let results = await all tasks
+    var results = await all tasks
     
     // 验证所有协程的长字符串都正确
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         assert_eq(results[i], true)
     }
 }
@@ -150,30 +150,30 @@ fn test_property_concurrent_mixed_operations() {
     
     fn mixed_task(id: int) -> bool {
         // 混合操作：驻留、拼接、比较
-        let s1 = "prefix_" + string(id)
-        let s2 = "_suffix"
-        let combined = s1 + s2
+        var s1 = "prefix_" + string(id)
+        var s2 = "_suffix"
+        var combined = s1 + s2
         
         // 创建相同内容的字符串进行比较
-        let expected = "prefix_" + string(id) + "_suffix"
-        let compare_ok = combined == expected
+        var expected = "prefix_" + string(id) + "_suffix"
+        var compare_ok = combined == expected
         
         // 长度验证
-        let len_ok = combined.length == expected.length
+        var len_ok = combined.length == expected.length
         
         return compare_ok && len_ok
     }
     
-    let n = 50
-    let tasks: Array<Task> = []
-    for (let i = 0; i < n; i++) {
+    var n = 50
+    var tasks: Array<Task> = []
+    for (var i = 0; i < n; i++) {
         tasks.push(go mixed_task(i))
     }
     
-    let results = await all tasks
+    var results = await all tasks
     
     // 验证所有协程的混合操作都正确
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         assert_eq(results[i], true)
     }
 }
@@ -186,29 +186,29 @@ fn test_property_concurrent_string_compare() {
     
     fn compare_task(id: int) -> bool {
         // 创建相同内容的字符串
-        let a = "compare_" + string(id)
-        let b = "compare_" + string(id)
+        var a = "compare_" + string(id)
+        var b = "compare_" + string(id)
         
         // 创建不同内容的字符串
-        let c = "compare_" + string(id + 1)
+        var c = "compare_" + string(id + 1)
         
         // 验证比较结果
-        let eq_ok = a == b
-        let neq_ok = a != c
+        var eq_ok = a == b
+        var neq_ok = a != c
         
         return eq_ok && neq_ok
     }
     
-    let n = 50
-    let tasks: Array<Task> = []
-    for (let i = 0; i < n; i++) {
+    var n = 50
+    var tasks: Array<Task> = []
+    for (var i = 0; i < n; i++) {
         tasks.push(go compare_task(i))
     }
     
-    let results = await all tasks
+    var results = await all tasks
     
     // 验证所有协程的比较结果都正确
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         assert_eq(results[i], true)
     }
 }
@@ -221,24 +221,24 @@ fn test_property_concurrent_intern_consistency() {
     
     fn consistency_task(id: int) -> bool {
         // 多次创建相同内容的字符串
-        let s1 = "consistent_value"
-        let s2 = "consistent_value"
-        let s3 = "consistent_value"
+        var s1 = "consistent_value"
+        var s2 = "consistent_value"
+        var s3 = "consistent_value"
         
         // 驻留字符串应该相等
         return s1 == s2 && s2 == s3
     }
     
-    let n = 50
-    let tasks: Array<Task> = []
-    for (let i = 0; i < n; i++) {
+    var n = 50
+    var tasks: Array<Task> = []
+    for (var i = 0; i < n; i++) {
         tasks.push(go consistency_task(i))
     }
     
-    let results = await all tasks
+    var results = await all tasks
     
     // 验证所有协程的驻留一致性
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         assert_eq(results[i], true)
     }
 }
@@ -251,27 +251,27 @@ fn test_property_concurrent_stress_200() {
     
     fn stress_task(id: int) -> bool {
         // 创建多个字符串
-        let s1 = "stress_" + string(id) + "_first"
-        let s2 = "stress_" + string(id) + "_second"
+        var s1 = "stress_" + string(id) + "_first"
+        var s2 = "stress_" + string(id) + "_second"
         
         // 拼接
-        let combined = s1 + "_" + s2
+        var combined = s1 + "_" + s2
         
         // 验证
-        let expected = "stress_" + string(id) + "_first_stress_" + string(id) + "_second"
+        var expected = "stress_" + string(id) + "_first_stress_" + string(id) + "_second"
         return combined == expected
     }
     
-    let n = 100
-    let tasks: Array<Task> = []
-    for (let i = 0; i < n; i++) {
+    var n = 100
+    var tasks: Array<Task> = []
+    for (var i = 0; i < n; i++) {
         tasks.push(go stress_task(i))
     }
     
-    let results = await all tasks
+    var results = await all tasks
     
     // 验证所有协程都正确完成
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         assert_eq(results[i], true)
     }
 }

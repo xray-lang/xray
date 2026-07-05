@@ -6,8 +6,8 @@ import toml
 
 @test
 fn test_parse_basic() {
-    let data = "name = \"Alice\"\nage = 30\nactive = true"
-    let obj = toml.parse(data)
+    var data = "name = \"Alice\"\nage = 30\nactive = true"
+    var obj = toml.parse(data)
     assert_eq(obj["name"], "Alice")
     assert_eq(obj["age"], 30)
     assert_eq(obj["active"], true)
@@ -17,8 +17,8 @@ fn test_parse_basic() {
 
 @test
 fn test_parse_table() {
-    let data = "[server]\nhost = \"localhost\"\nport = 8080"
-    let obj = toml.parse(data)
+    var data = "[server]\nhost = \"localhost\"\nport = 8080"
+    var obj = toml.parse(data)
     assert_eq(obj["server"]["host"], "localhost")
     assert_eq(obj["server"]["port"], 8080)
 }
@@ -27,8 +27,8 @@ fn test_parse_table() {
 
 @test
 fn test_parse_array() {
-    let data = "ports = [80, 443, 8080]"
-    let obj = toml.parse(data)
+    var data = "ports = [80, 443, 8080]"
+    var obj = toml.parse(data)
     assert_eq(obj["ports"][0], 80)
     assert_eq(obj["ports"][2], 8080)
 }
@@ -37,8 +37,8 @@ fn test_parse_array() {
 
 @test
 fn test_parse_inline_table() {
-    let data = "point = { x = 10, y = 20 }"
-    let obj = toml.parse(data)
+    var data = "point = { x = 10, y = 20 }"
+    var obj = toml.parse(data)
     assert_eq(obj["point"]["x"], 10)
 }
 
@@ -46,8 +46,8 @@ fn test_parse_inline_table() {
 
 @test
 fn test_parse_number_formats() {
-    let data = "hex = 0xDEADBEEF\noct = 0o755\nbin = 0b11010110"
-    let obj = toml.parse(data)
+    var data = "hex = 0xDEADBEEF\noct = 0o755\nbin = 0b11010110"
+    var obj = toml.parse(data)
     assert_eq(obj["hex"], 3735928559)
     assert_eq(obj["oct"], 493)
     assert_eq(obj["bin"], 214)
@@ -57,8 +57,8 @@ fn test_parse_number_formats() {
 
 @test
 fn test_stringify() {
-    let config: Json = {"name": "xray", "version": 1}
-    let result = toml.stringify(config)
+    var config: Json = {"name": "xray", "version": 1}
+    var result = toml.stringify(config)
     assert(result.length > 0)
 }
 
@@ -66,8 +66,8 @@ fn test_stringify() {
 
 @test
 fn test_parse_nested_table() {
-    let data = "[database]\n[database.primary]\nhost = \"db1\"\n[database.replica]\nhost = \"db2\""
-    let obj = toml.parse(data)
+    var data = "[database]\n[database.primary]\nhost = \"db1\"\n[database.replica]\nhost = \"db2\""
+    var obj = toml.parse(data)
     assert_eq(obj["database"]["primary"]["host"], "db1")
     assert_eq(obj["database"]["replica"]["host"], "db2")
 }

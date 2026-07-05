@@ -244,7 +244,7 @@ TEST(doc_comment_before_function) {
 TEST(block_comment_before_statement) {
     setup();
     const char *src = "/* block comment */\n"
-                      "let x = 5\n";
+                      "var x = 5\n";
     char *out = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "/* block comment */"));
@@ -272,7 +272,7 @@ TEST(comment_before_class) {
 TEST(string_escape_roundtrip) {
     setup();
     /* Escaped characters must survive: \n \t \\ \" */
-    const char *src = "let s = \"hello\\nworld\\t\\\\end\\\"\"\n";
+    const char *src = "var s = \"hello\\nworld\\t\\\\end\\\"\"\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     /* Re-parse the formatted output — must still be valid. */
@@ -287,9 +287,9 @@ TEST(string_escape_roundtrip) {
 TEST(template_string_roundtrip) {
     setup();
     /* Modern syntax uses double quotes with ${} interpolation. */
-    const char *src = "let name = \"world\"\n"
-                      "let m = #{\"k\": \"value\"}\n"
-                      "let s = \"hello ${name} ${\"literal\"} ${m[\"k\"]}\"\n";
+    const char *src = "var name = \"world\"\n"
+                      "var m = #{\"k\": \"value\"}\n"
+                      "var s = \"hello ${name} ${\"literal\"} ${m[\"k\"]}\"\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     char *fmt2 = parse_and_format(fmt1, "<test>");
@@ -302,7 +302,7 @@ TEST(template_string_roundtrip) {
 
 TEST(unicode_string_roundtrip) {
     setup();
-    const char *src = "let emoji = \"\\u{1F600}\"\n";
+    const char *src = "var emoji = \"\\u{1F600}\"\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     char *fmt2 = parse_and_format(fmt1, "<test>");
@@ -315,7 +315,7 @@ TEST(unicode_string_roundtrip) {
 
 TEST(empty_string_roundtrip) {
     setup();
-    const char *src = "let e = \"\"\n";
+    const char *src = "var e = \"\"\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1, "\"\""));
@@ -346,11 +346,11 @@ TEST(arrow_return_type_emitted) {
 
 TEST(object_destructure_rename_roundtrip) {
     setup();
-    const char *src = "let { name: localName, age } = user\n"
+    const char *src = "var { name: localName, age } = user\n"
                       "{ name: otherName, age } = user\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
-    ASSERT_TRUE(contains(fmt1, "let {name: localName, age} = user"));
+    ASSERT_TRUE(contains(fmt1, "var {name: localName, age} = user"));
     ASSERT_TRUE(contains(fmt1, "{name: otherName, age} = user"));
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
@@ -448,8 +448,8 @@ TEST(branch_arrows_aligned_idempotent) {
 TEST(select_branch_arrows_default_aligned) {
     setup();
     const char *src = "fn main() {\n"
-                      "    let ch1 = Channel<int>(1)\n"
-                      "    let ch2 = Channel<int>(1)\n"
+                      "    var ch1 = Channel<int>(1)\n"
+                      "    var ch2 = Channel<int>(1)\n"
                       "    select {\n"
                       "        v from ch1 -> { print(v) }\n"
                       "        100 to ch2 -> { print(\"sent\") }\n"
@@ -571,7 +571,7 @@ TEST(array_literal_wraps_when_too_long) {
     setup();
     /* Force a short line length so wrapping is unambiguous. */
     const char *src =
-        "let items = [\"alpha\", \"beta\", \"gamma\", \"delta\", \"epsilon\", \"zeta\"]\n";
+        "var items = [\"alpha\", \"beta\", \"gamma\", \"delta\", \"epsilon\", \"zeta\"]\n";
     XrFmtConfig cfg = xfmt_default_config;
     cfg.wrap_long_lines = 1;
     cfg.max_line_length = 40;
@@ -586,7 +586,7 @@ TEST(array_literal_wraps_when_too_long) {
 
 TEST(array_literal_inline_when_short) {
     setup();
-    const char *src = "let items = [1, 2, 3]\n";
+    const char *src = "var items = [1, 2, 3]\n";
     XrFmtConfig cfg = xfmt_default_config;
     cfg.wrap_long_lines = 1;
     cfg.max_line_length = 100;
@@ -616,7 +616,7 @@ TEST(call_args_wrap_when_too_long) {
 
 TEST(no_trailing_comma_when_disabled) {
     setup();
-    const char *src = "let items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\n";
+    const char *src = "var items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\n";
     XrFmtConfig cfg = xfmt_default_config;
     cfg.wrap_long_lines = 1;
     cfg.max_line_length = 30;
@@ -635,7 +635,7 @@ TEST(wrap_long_lines_default_off) {
     /* Even with an absurdly long single line, default config must NOT wrap.
      * This guards against silent corpus-wide reformat. */
     const char *src =
-        "let x = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]\n";
+        "var x = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]\n";
     char *out = format_with_config(src, NULL);
     ASSERT_NOT_NULL(out);
     ASSERT_FALSE(contains(out, "\n    1,"));
@@ -649,42 +649,42 @@ TEST(wrap_long_lines_default_off) {
 
 TEST(trailing_comments_aligned_when_enabled) {
     setup();
-    const char *src = "let radius = 5  // sphere radius\n"
-                      "let mass = 100  // kg\n"
-                      "let temp = 273  // Kelvin\n";
+    const char *src = "var radius = 5  // sphere radius\n"
+                      "var mass = 100  // kg\n"
+                      "var temp = 273  // Kelvin\n";
     XrFmtConfig cfg = xfmt_default_config;
     cfg.align_trailing_comments = 1;
     char *out = format_with_config(src, &cfg);
     ASSERT_NOT_NULL(out);
-    /* Widest code is `let mass = 100` and `let temp = 273` (14 chars). All
+    /* Widest code is `var mass = 100` and `var temp = 273` (14 chars). All
      * lines pad to col 16 (target = max + 2). */
-    ASSERT_TRUE(contains(out, "let radius = 5  // sphere radius"));
-    ASSERT_TRUE(contains(out, "let mass = 100  // kg"));
-    ASSERT_TRUE(contains(out, "let temp = 273  // Kelvin"));
+    ASSERT_TRUE(contains(out, "var radius = 5  // sphere radius"));
+    ASSERT_TRUE(contains(out, "var mass = 100  // kg"));
+    ASSERT_TRUE(contains(out, "var temp = 273  // Kelvin"));
     free(out);
     teardown();
 }
 
 TEST(trailing_comments_default_unchanged) {
     setup();
-    const char *src = "let x = 1  // first\n"
-                      "let yyyy = 22  // second\n";
+    const char *src = "var x = 1  // first\n"
+                      "var yyyy = 22  // second\n";
     char *out = format_with_config(src, NULL);
     ASSERT_NOT_NULL(out);
     /* Default: each comment two spaces after its own code, NOT aligned. */
-    ASSERT_TRUE(contains(out, "let x = 1  // first"));
-    ASSERT_TRUE(contains(out, "let yyyy = 22  // second"));
+    ASSERT_TRUE(contains(out, "var x = 1  // first"));
+    ASSERT_TRUE(contains(out, "var yyyy = 22  // second"));
     /* Specifically: NO over-padding on the short line. */
-    ASSERT_FALSE(contains(out, "let x = 1      // first"));
+    ASSERT_FALSE(contains(out, "var x = 1      // first"));
     free(out);
     teardown();
 }
 
 TEST(trailing_comments_idempotent) {
     setup();
-    const char *src = "let a = 1  // a\n"
-                      "let bb = 22  // b\n"
-                      "let ccc = 333  // c\n";
+    const char *src = "var a = 1  // a\n"
+                      "var bb = 22  // b\n"
+                      "var ccc = 333  // c\n";
     XrFmtConfig cfg = xfmt_default_config;
     cfg.align_trailing_comments = 1;
     char *fmt1 = format_with_config(src, &cfg);
@@ -704,8 +704,8 @@ TEST(trailing_comments_idempotent) {
 TEST(trailing_comments_string_safe) {
     setup();
     /* `//` inside a string literal must NOT be treated as a trailing comment. */
-    const char *src = "let url = \"https://example.com\"  // homepage\n"
-                      "let path = \"/abc\"  // root\n";
+    const char *src = "var url = \"https://example.com\"  // homepage\n"
+                      "var path = \"/abc\"  // root\n";
     XrFmtConfig cfg = xfmt_default_config;
     cfg.align_trailing_comments = 1;
     char *out = format_with_config(src, &cfg);

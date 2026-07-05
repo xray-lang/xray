@@ -54,14 +54,15 @@ typedef struct {
 } XlspDocEntry;
 
 static const XlspDocEntry keyword_docs[] = {
-    {"let", "```xray\nlet <name> = <value>\n```\n\nDeclares a mutable variable."},
+    {"var", "```xray\nvar <name> = <value>\n```\n\nDeclares a mutable variable."},
     {"const", "```xray\nconst <name> = <value>\n```\n\nDeclares an immutable constant."},
     {"fn", "```xray\nfn <name>(<params>) { <body> }\n```\n\nDeclares a function."},
     {"class", "```xray\nclass <name> { <members> }\n```\n\nDeclares a class."},
     {"go", "```xray\ngo <expr>\n```\n\nSpawns a new coroutine."},
     {"await", "```xray\nawait <task>\n```\n\nWaits for a coroutine to complete."},
-    {"Channel", "```xray\nChannel(size?)\n```\n\nCreates a channel for coroutine communication."},
-    {"shared", "```xray\nshared const|let <name> = <value>\n```\n\nDeclares a variable shared "
+    {"Channel", "```xray\nshared ch = Channel(size?)\n```\n\nCreates a named shared channel handle "
+                "for coroutine communication."},
+    {"shared", "```xray\nshared <name> = <value>\n```\n\nDeclares a variable shared "
                "across coroutines."},
     {"if", "```xray\nif (<cond>) { ... } else { ... }\n```\n\nConditional statement."},
     {"else", "```xray\nif (<cond>) { ... } else { ... }\n```\n\nAlternate branch of if statement."},
@@ -75,7 +76,7 @@ static const XlspDocEntry keyword_docs[] = {
     {"true", "Boolean literal `true`."},
     {"false", "Boolean literal `false`."},
     {"null", "Null literal representing absence of value."},
-    {"new", "```xray\nnew <Class>(<args>)\n```\n\nCreates a new class instance."},
+    {"new", "`new` has been removed. Construct classes and structs with `ClassName(args)`."},
     {"this", "Reference to the current class instance."},
     {"super", "Reference to the parent class."},
     {NULL, NULL}};
@@ -619,7 +620,7 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
                          sym->name);
             } else {
                 snprintf(hover_buf, sizeof(hover_buf), "```xray\n%s %s: %s\n```\n\n%s",
-                         sym->is_const ? "const" : "let", sym->name, type_str,
+                         sym->is_const ? "const" : "var", sym->name, type_str,
                          sym->kind == XA_SYM_PARAMETER ? "(parameter)" : "(local variable)");
             }
             description = hover_buf;
@@ -775,17 +776,12 @@ static void symbol_extract_visitor(AstNode *node, void *ctx) {
             break;
 
         case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             if (node->as.var_decl.name) {
-                int kind = node->as.var_decl.is_const ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
+                int kind = node->type == AST_CONST_DECL ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
                 symbol_table_add(table, node->as.var_decl.name, kind, node->line - 1, 0,
                                  node->line - 1, (int) strlen(node->as.var_decl.name));
-            }
-            break;
-
-        case AST_CONST_DECL:
-            if (node->as.var_decl.name) {
-                symbol_table_add(table, node->as.var_decl.name, LSP_SYMBOL_CONSTANT, node->line - 1,
-                                 0, node->line - 1, (int) strlen(node->as.var_decl.name));
             }
             break;
 
@@ -891,8 +887,8 @@ static void extract_symbols_lexer(XrLspDocument *doc, SymbolTable *table) {
                              (int) strlen(name));
             xr_free(name);
         }
-        // let <name> or const <name>
-        else if ((prev.type == TK_LET || prev.type == TK_CONST) && token.type == TK_NAME) {
+        // var <name> or const <name>
+        else if ((prev.type == TK_VAR || prev.type == TK_CONST) && token.type == TK_NAME) {
             char *name = strndup(token.start, token.length);
             int kind = (prev.type == TK_CONST) ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
             symbol_table_add(table, name, kind, token.line - 1, 0, token.line - 1,
@@ -1012,16 +1008,11 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
             break;
         }
 
-        case AST_VAR_DECL: {
-            int kind = node->as.var_decl.is_const ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL: {
+            int kind = node->type == AST_CONST_DECL ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
             XrJsonValue *sym = emit_decl_symbol(node, node->as.var_decl.name, kind);
-            if (sym)
-                xjson_array_push(symbols, sym);
-            break;
-        }
-
-        case AST_CONST_DECL: {
-            XrJsonValue *sym = emit_decl_symbol(node, node->as.var_decl.name, LSP_SYMBOL_CONSTANT);
             if (sym)
                 xjson_array_push(symbols, sym);
             break;

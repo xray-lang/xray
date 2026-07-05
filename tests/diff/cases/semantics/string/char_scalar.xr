@@ -1,8 +1,8 @@
 // anchor: string-char-scalar
-let a: char = 'A'
-let digit: char = '7'
-let ws: char = '\n'
-let face: char = '\u{1F600}'
+var a: char = 'A'
+var digit: char = '7'
+var ws: char = '\n'
+var face: char = '\u{1F600}'
 
 print(a)
 print(a.toString())
@@ -17,7 +17,7 @@ print(ws.isWhitespace())
 print(face)
 print(face.ord())
 
-let s = "aé😀z"
+var s = "aé😀z"
 print(s.length)
 print(s[0])
 print(s[1])
@@ -36,7 +36,7 @@ for (i, ch in s) {
     print(ch)
 }
 
-let e = s.entries()
+var e = s.entries()
 print(e.length)
 print(e[1].0)
 print(e[1].1)

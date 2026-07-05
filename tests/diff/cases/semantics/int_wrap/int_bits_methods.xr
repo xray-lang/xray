@@ -40,8 +40,8 @@ print((1).rotateRight(1))
 print((1).rotateRight(64))
 
 // non-literal receivers exercise the same lowering through locals
-let x: int = 12345
-let n: int = 8
+var x: int = 12345
+var n: int = 8
 print(x.popcount())
 print(x.rotateLeft(n))
 print(x.rotateLeft(n).rotateRight(n))

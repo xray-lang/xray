@@ -3,18 +3,18 @@
 // render as "null" (not its raw numeric payload) and non-null values must
 // round-trip, identically in VM and AOT.
 
-let i: int? = null
-let f: float? = null
-let b: bool? = null
+var i: int? = null
+var f: float? = null
+var b: bool? = null
 print(i)              // null
 print(f)              // null
 print(b)              // null
 print(string(i))      // null
 print("i=" + string(i))
 
-let i2: int? = 5
-let f2: float? = 1.5
-let b2: bool? = true
+var i2: int? = 5
+var f2: float? = 1.5
+var b2: bool? = true
 print(i2)             // 5
 print(f2)             // 1.5
 print(b2)             // true

@@ -6,7 +6,7 @@
       "heading_level": 2,
       "heading": "Basics",
       "fences": [
-        "decl-let",
+        "decl-var",
         "decl-const",
         "decl-fn-basic",
         "expr-lambda-forms"
@@ -60,11 +60,11 @@
       "heading_level": 2,
       "heading": "Safety: compile pass = concurrency safe",
       "bullets": [
-        "`shared const`: zero-copy read across coroutines",
+        "`shared`: stable shared identity on the global heap",
         "`Channel<T>`: communication with well-defined ownership semantics",
-        "`Atomic<T>`: lock-free atomic ops for `int`/`float`/`bool` (must be `shared const`)",
-        "`move`: explicit ownership transfer for `shared let`",
-        "ordinary `let` variables cannot be captured by `go` closures"
+        "`Atomic<T>`: lock-free atomic ops for `int`/`float`/`bool` (must be `shared`)",
+        "`move`: explicit ownership transfer for rebindable local `var` values",
+        "ordinary `var` variables cannot be captured by `go` closures"
       ]
     },
     {
@@ -88,7 +88,7 @@
       "bullets": [
         "`print()` outputs with newline; there is no `println`",
         "arrow function parameter types may be inferred only when the context is known",
-        "`new Channel<T>(n)` constructs a channel; `Channel<T>` is used in type position",
+        "`shared ch = Channel<T>(n)` creates a named channel handle; `Channel<T>` is used in type position",
         "field increment such as `this.x++` is not supported; assign explicitly",
         "same-quote strings are allowed inside `${...}` interpolation"
       ]

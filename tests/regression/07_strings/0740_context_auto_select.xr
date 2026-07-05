@@ -15,9 +15,9 @@ fn context_inner_task(x: string) -> string {
 }
 
 fn context_outer_task(x: string) -> string {
-    let prefix = "outer_" + string(x) + "_"
-    let t = go context_inner_task(x)
-    let inner_result = await t
+    var prefix = "outer_" + string(x) + "_"
+    var t = go context_inner_task(x)
+    var inner_result = await t
     return prefix + inner_result
 }
 
@@ -27,13 +27,13 @@ fn context_outer_task(x: string) -> string {
 fn test_single_thread_context() {
     // 在主线程中执行字符串拼接
     // 应该使用 Isolate 的 vm_ctx.tmp_strbuf
-    let result = "hello" + " " + "world"
+    var result = "hello" + " " + "world"
     assert_eq(result, "hello world")
     
     // 多次拼接，验证缓冲区重用正确
-    let s1 = "a" + "b"
-    let s2 = "c" + "d"
-    let s3 = "e" + "f"
+    var s1 = "a" + "b"
+    var s2 = "c" + "d"
+    var s3 = "e" + "f"
     assert_eq(s1, "ab")
     assert_eq(s2, "cd")
     assert_eq(s3, "ef")
@@ -42,8 +42,8 @@ fn test_single_thread_context() {
 @test
 fn test_single_thread_long_concat() {
     // 测试长字符串拼接（使用 XrStrBuf 路径）
-    let base = "x".repeat(100)
-    let result = base + base
+    var base = "x".repeat(100)
+    var result = base + base
     assert_eq(result.length, 200)
     
     // 验证内容正确
@@ -60,22 +60,22 @@ fn test_multicore_context_isolation() {
     
     fn concat_task(id: int) -> string {
         // 每个协程执行独立的字符串拼接
-        let prefix = "task_" + string(id) + "_"
-        let result = prefix + "data"
+        var prefix = "task_" + string(id) + "_"
+        var result = prefix + "data"
         return result
     }
     
-    let n = 10
-    let tasks: Array<Task> = []
-    for (let i = 0; i < n; i++) {
+    var n = 10
+    var tasks: Array<Task> = []
+    for (var i = 0; i < n; i++) {
         tasks.push(go concat_task(i))
     }
     
-    let results = await all tasks
+    var results = await all tasks
     
     // 验证每个协程的结果独立且正确
-    for (let i = 0; i < n; i++) {
-        let expected = "task_" + string(i) + "_data"
+    for (var i = 0; i < n; i++) {
+        var expected = "task_" + string(i) + "_data"
         assert_eq(results[i], expected)
     }
 }
@@ -86,23 +86,23 @@ fn test_multicore_concurrent_long_concat() {
     // 验证 Worker 间的缓冲区隔离
     
     fn long_concat_task(id: int) -> string {
-        let base = "x".repeat(50)
-        let result = base + "_" + string(id) + "_" + base
+        var base = "x".repeat(50)
+        var result = base + "_" + string(id) + "_" + base
         return result
     }
     
-    let n = 20
-    let tasks: Array<Task> = []
-    for (let i = 0; i < n; i++) {
+    var n = 20
+    var tasks: Array<Task> = []
+    for (var i = 0; i < n; i++) {
         tasks.push(go long_concat_task(i))
     }
     
-    let results = await all tasks
+    var results = await all tasks
     
     // 验证每个结果的长度和内容
-    for (let i = 0; i < n; i++) {
-        let id_str = string(i)
-        let expected_len = 50 + 1 + id_str.length + 1 + 50
+    for (var i = 0; i < n; i++) {
+        var id_str = string(i)
+        var expected_len = 50 + 1 + id_str.length + 1 + 50
         assert_eq(results[i].length, expected_len)
         
         // 验证包含正确的 id
@@ -115,18 +115,18 @@ fn test_context_switch_correctness() {
     // 测试上下文切换时缓冲区选择的正确性
     // 主线程和协程交替执行字符串拼接
     
-    let main_result = "main_" + "start"
+    var main_result = "main_" + "start"
     
     fn coro_task() -> string {
         return "coro_" + "result"
     }
     
-    let t = go coro_task()
+    var t = go coro_task()
     
     // 主线程继续拼接
     main_result = main_result + "_end"
     
-    let coro_result = await t
+    var coro_result = await t
     
     assert_eq(main_result, "main_start_end")
     assert_eq(coro_result, "coro_result")
@@ -136,8 +136,8 @@ fn test_context_switch_correctness() {
 fn test_nested_coro_context() {
     // 测试嵌套协程的上下文选择
 
-    let t = go context_outer_task("test")
-    let result = await t
+    var t = go context_outer_task("test")
+    var result = await t
     
     assert_eq(result, "outer_test_inner_test")
 }
@@ -150,31 +150,31 @@ fn test_property_concurrent_concat_correctness() {
     
     fn random_concat_task(seed: int) -> string {
         // 使用 seed 生成确定性的拼接序列
-        let result = ""
-        let count = (seed % 10) + 1
-        for (let i = 0; i < count; i++) {
+        var result = ""
+        var count = (seed % 10) + 1
+        for (var i = 0; i < count; i++) {
             result = result + "s" + string(seed) + "_" + string(i) + "_"
         }
         return result
     }
     
     // 创建多个并发任务
-    let n = 50
-    let tasks: Array<Task> = []
-    for (let i = 0; i < n; i++) {
+    var n = 50
+    var tasks: Array<Task> = []
+    for (var i = 0; i < n; i++) {
         tasks.push(go random_concat_task(i))
     }
     
-    let results = await all tasks
+    var results = await all tasks
     
     // 验证每个结果
-    for (let i = 0; i < n; i++) {
-        let count = (i % 10) + 1
+    for (var i = 0; i < n; i++) {
+        var count = (i % 10) + 1
         
         // 验证结果包含正确数量的片段
-        let expected_parts = count
-        let actual_parts = 0
-        for (let j = 0; j < count; j++) {
+        var expected_parts = count
+        var actual_parts = 0
+        for (var j = 0; j < count; j++) {
             if (results[i].includes("s" + string(i) + "_" + string(j) + "_")) {
                 actual_parts = actual_parts + 1
             }
@@ -189,27 +189,27 @@ fn test_property_buffer_reuse_safety() {
     
     fn sequential_concat_task(id: int) -> Array<string> {
         // 执行多次拼接，每次都应该得到正确结果
-        let results: Array<string> = []
-        for (let i = 0; i < 5; i++) {
-            let s = "id" + string(id) + "_iter" + string(i)
+        var results: Array<string> = []
+        for (var i = 0; i < 5; i++) {
+            var s = "id" + string(id) + "_iter" + string(i)
             results.push(s)
         }
         return results
     }
     
-    let n = 20
-    let tasks: Array<Task> = []
-    for (let i = 0; i < n; i++) {
+    var n = 20
+    var tasks: Array<Task> = []
+    for (var i = 0; i < n; i++) {
         tasks.push(go sequential_concat_task(i))
     }
     
-    let all_results = await all tasks
+    var all_results = await all tasks
     
     // 验证每个协程的每次拼接结果
-    for (let i = 0; i < n; i++) {
-        let results = all_results[i]
-        for (let j = 0; j < 5; j++) {
-            let expected = "id" + string(i) + "_iter" + string(j)
+    for (var i = 0; i < n; i++) {
+        var results = all_results[i]
+        for (var j = 0; j < 5; j++) {
+            var expected = "id" + string(i) + "_iter" + string(j)
             assert_eq(results[j], expected)
         }
     }

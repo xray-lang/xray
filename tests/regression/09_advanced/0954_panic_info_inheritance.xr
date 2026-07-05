@@ -3,7 +3,7 @@
 // 测试：PanicInfo 子类的非 throw 使用（F036 回归）
 // 历史：vm_superinvoke 的 primitive parent ctor 路径返回 XR_DISP_NEXT，
 // OP_SUPERINVOKE 调度器未识别 NEXT，把它当作 "no catch reachable" 处理，
-// 导致 `let err = new HttpError(...)` 静默退出 1。修复：dispatcher 增加 NEXT 分支。
+// 导致 `var err = HttpError(...)` 静默退出 1。修复：dispatcher 增加 NEXT 分支。
 
 class HttpError extends PanicInfo {
     statusCode: int
@@ -24,22 +24,22 @@ class DbError extends PanicInfo {
 // ===== 直接构造 =====
 
 @test
-fn test_subclass_let_binding() {
-    // F036 核心：let 绑定 PanicInfo 子类不应崩溃
-    let err = HttpError("not found", 404)
+fn test_subclass_var_binding() {
+    // F036 核心：var 绑定 PanicInfo 子类不应崩溃
+    var err = HttpError("not found", 404)
     assert_eq(err.message, "not found")
     assert_eq(err.statusCode, 404)
 }
 
 @test
 fn test_subclass_as_expression() {
-    // 直接 new 不赋值
+    // 直接构造不赋值
     HttpError("expr-only", 500)
 }
 
 @test
 fn test_subclass_multiple_fields() {
-    let err = DbError("query failed", "users")
+    var err = DbError("query failed", "users")
     assert_eq(err.message, "query failed")
     assert_eq(err.table, "users")
 }
@@ -51,13 +51,13 @@ fn test_subclass_passed_to_function() {
     fn handle(e: PanicInfo) -> string {
         return e.message
     }
-    let err = HttpError("bad request", 400)
+    var err = HttpError("bad request", 400)
     assert_eq(handle(err), "bad request")
 }
 
 @test
 fn test_subclass_stored_in_array() {
-    let errors: Array<PanicInfo> = []
+    var errors: Array<PanicInfo> = []
     errors.push(HttpError("err1", 500))
     errors.push(DbError("err2", "logs"))
     assert_eq(errors.length, 2)
@@ -69,21 +69,21 @@ fn test_subclass_stored_in_array() {
 
 @test
 fn test_subclass_message_access() {
-    let err = HttpError("server error", 503)
+    var err = HttpError("server error", 503)
     assert_eq(err.message, "server error")
 }
 
 @test
 fn test_subclass_status_code_access() {
-    let err = HttpError("not found", 404)
+    var err = HttpError("not found", 404)
     assert_eq(err.statusCode, 404)
 }
 
-// ===== 父类直接 new 不受影响 =====
+// ===== 父类直接构造不受影响 =====
 
 @test
 fn test_base_exception_direct() {
-    let e = PanicInfo("hello")
+    var e = PanicInfo("hello")
     assert_eq(e.message, "hello")
 }
 
@@ -93,6 +93,6 @@ class EmptyError extends PanicInfo {}
 
 @test
 fn test_empty_subclass() {
-    let e = EmptyError("empty")
+    var e = EmptyError("empty")
     assert_eq(e.message, "empty")
 }

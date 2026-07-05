@@ -1,6 +1,6 @@
 @test
 fn test_fixed_array_local_length_index_and_set() {
-    let key: [uint8; 4] = [1, 2, 3, 4]
+    var key: [uint8; 4] = [1, 2, 3, 4]
 
     assert(key.length == 4)
     assert(key.size == 4)

@@ -114,7 +114,7 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     // Native XrClasses for Logger / DateTime / Regex / NetConn /
     // NetListener are registered up front inside the prelude module
     // loader (xr_prelude_register_all_native_types), so user code can
-    // write `let dt: DateTime = ...` and `r.test(...)` without a
+    // write `var dt: DateTime = ...` and `r.test(...)` without a
     // separate stdlib import.
 
     // Source cache is owned by the compiler session and only borrowed by VM error display.

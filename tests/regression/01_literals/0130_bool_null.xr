@@ -5,14 +5,14 @@
 @test
 fn test_bool_true() {
     assert_eq(true, true)
-    let b = true
+    var b = true
     assert_eq(b, true)
 }
 
 @test
 fn test_bool_false() {
     assert_eq(false, false)
-    let b = false
+    var b = false
     assert_eq(b, false)
 }
 
@@ -51,23 +51,23 @@ fn test_bool_not() {
 // ===== null 基础 =====
 @test
 fn test_null_basic() {
-    let x = null
+    var x = null
     assert_eq(x, null)
     assert_eq(x == null, true)
 }
 
 @test
 fn test_null_comparison() {
-    let x = null
-    let y = null
+    var x = null
+    var y = null
     assert_eq(x == y, true)
     assert_eq(x != null, false)
 }
 
 @test
 fn test_null_vs_value() {
-    let x = null
-    let y: int? = 0
+    var x = null
+    var y: int? = 0
     assert_eq(x == y, false)
     assert_eq(x != y, true)
 }
@@ -89,19 +89,19 @@ fn test_explicit_bool_condition() {
 
 @test
 fn test_nullable_presence_condition() {
-    let s: string? = null
+    var s: string? = null
     if (s) {
         assert(false)
     } else {
         assert(true)
     }
-    let empty: string? = ""
+    var empty: string? = ""
     if (empty) {
         assert(true)
     } else {
         assert(false)
     }
-    let zero: int? = 0
+    var zero: int? = 0
     if (zero) {
         assert(true)
     } else {
@@ -112,19 +112,19 @@ fn test_nullable_presence_condition() {
 // ===== 空值合并 =====
 @test
 fn test_nullish_coalesce() {
-    let x = null
+    var x = null
     assert_eq(x ?? "default", "default")
-    let y = "value"
+    var y = "value"
     assert_eq(y ?? "default", "value")
-    let z = 0
+    var z = 0
     assert_eq(z ?? 100, 0)
 }
 
 // ===== 可选链 =====
 @test
 fn test_optional_chain() {
-    let obj = null
+    var obj = null
     assert_eq(obj?.property, null)
-    let data = { "name": "test" }
+    var data = { "name": "test" }
     assert_eq(data?.name, "test")
 }

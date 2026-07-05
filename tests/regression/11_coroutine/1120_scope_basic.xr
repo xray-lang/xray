@@ -31,7 +31,7 @@ fn nested_task(arr: Array<string>) {
 
 @test
 fn test_scope_basic() {
-    shared const results: Array<string> = []
+    shared results: Array<string> = []
 
 
 
@@ -58,7 +58,7 @@ fn test_scope_basic() {
 
     print("=== 嵌套 scope 测试 ===")
 
-    shared const outer_results: Array<string> = []
+    shared outer_results: Array<string> = []
 
 
 

@@ -15,8 +15,8 @@ class Account {
     richerThan(other: Account) -> bool { return this.balance > other.balance }
 }
 
-let a = Account(100, "alice", 1)
-let b = Account(50, "bob", 2)
+var a = Account(100, "alice", 1)
+var b = Account(50, "bob", 2)
 print(a.getBalance())
 print(a.ownerName())
 print(a.id)

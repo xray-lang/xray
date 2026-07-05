@@ -1,5 +1,5 @@
 fn safeAppendRepeat(src: ByteSpan) -> Bytes {
-    let out = Bytes(0)
+    var out = Bytes(0)
     out.appendFrom(src)
     out.repeatFrom(src.length, src.length)
     return out

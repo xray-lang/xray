@@ -10,7 +10,7 @@ fn sent(r: SendResult) -> bool {
 }
 
 fn spin_until_sent(ch: Channel<int>, out: Channel<int>) {
-    let ok = false
+    var ok = false
     while (!ok) {
         ok = sent(ch.trySend(42))
     }
@@ -18,22 +18,22 @@ fn spin_until_sent(ch: Channel<int>, out: Channel<int>) {
 }
 
 fn drain_one(ch: Channel<int>) {
-    let ignored = ch.recv()
+    var ignored = ch.recv()
 }
 
-shared const data: Channel<int> = Channel(1)
-shared const out: Channel<int> = Channel(1)
+shared data: Channel<int> = Channel(1)
+shared out: Channel<int> = Channel(1)
 
 assert_eq(sent(data.trySend(7)), true)
 
 go spin_until_sent(data, out)
 go drain_one(data)
 
-let done = match (out.recvTimeout(1000)) {
+var done = match (out.recvTimeout(1000)) {
     Recv.Value(v) -> v
     _ -> -1
 }
-let value = match (data.recvTimeout(1000)) {
+var value = match (data.recvTimeout(1000)) {
     Recv.Value(v) -> v
     _ -> -1
 }

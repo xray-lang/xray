@@ -107,6 +107,10 @@ typedef struct AsExprNode {
     bool is_safe;  // true = safe cast (returns null on failure)
 } AsExprNode;
 
+typedef struct ComptimeExprNode {
+    AstNode *expr;
+} ComptimeExprNode;
+
 /* ========== Aggregate / Indexed Exprs ========== */
 
 // Array literal node

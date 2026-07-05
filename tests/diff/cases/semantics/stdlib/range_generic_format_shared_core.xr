@@ -1,7 +1,7 @@
-let r = 2..9
+var r = 2..9
 print(string(r))
 print("left=" + r)
 print(r + "=right")
 
-let empty = 5..5
+var empty = 5..5
 print("empty=" + empty)

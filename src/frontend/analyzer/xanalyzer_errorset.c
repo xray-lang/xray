@@ -283,6 +283,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             break;
 
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             es_walk_expr(ctx, node->as.var_decl.initializer);
             break;
 

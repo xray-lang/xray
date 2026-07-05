@@ -21,9 +21,9 @@ fn matrixA(i, j) {
 
 // 矩阵乘向量：v = A * u
 fn Au(u, v, n) {
-    for (let i = 0; i < n; i++) {
-        let sum = 0.0
-        for (let j = 0; j < n; j++) {
+    for (var i = 0; i < n; i++) {
+        var sum = 0.0
+        for (var j = 0; j < n; j++) {
             sum = sum + matrixA(i, j) * u[j]
         }
         v[i] = sum
@@ -32,9 +32,9 @@ fn Au(u, v, n) {
 
 // 转置矩阵乘向量：v = A^T * u
 fn Atu(u, v, n) {
-    for (let i = 0; i < n; i++) {
-        let sum = 0.0
-        for (let j = 0; j < n; j++) {
+    for (var i = 0; i < n; i++) {
+        var sum = 0.0
+        for (var j = 0; j < n; j++) {
             sum = sum + matrixA(j, i) * u[j]
         }
         v[i] = sum
@@ -50,8 +50,8 @@ fn AtAu(u, v, w, n) {
 
 // 计算向量点积
 fn dot(u, v, n) {
-    let sum = 0.0
-    for (let i = 0; i < n; i++) {
+    var sum = 0.0
+    for (var i = 0; i < n; i++) {
         sum = sum + u[i] * v[i]
     }
     return sum
@@ -60,31 +60,31 @@ fn dot(u, v, n) {
 // 计算谱范数
 fn spectralnorm(n) {
     // 初始化向量
-    let u = []
-    let v = []
-    let w = []
-    for (let i = 0; i < n; i++) {
+    var u = []
+    var v = []
+    var w = []
+    for (var i = 0; i < n; i++) {
         u.push(1.0)
         v.push(0.0)
         w.push(0.0)
     }
     // 幂迭代：执行 10 次
-    for (let iter = 0; iter < 10; iter++) {
+    for (var iter = 0; iter < 10; iter++) {
         AtAu(u, v, w, n)
         // v = A^T * A * u
         AtAu(v, u, w, n)
         // u = A^T * A * v
     }
     // 计算 sqrt((u · v) / (v · v))
-    let vBv = dot(u, v, n)
-    let vv = dot(v, v, n)
+    var vBv = dot(u, v, n)
+    var vv = dot(v, v, n)
     return (vBv / vv).sqrt()
 }
 
 // 运行基准测试
-let n = 500
+var n = 500
 if (process.args.length > 0) {
     n = int(process.args[0])
 }
-let result = spectralnorm(n)
+var result = spectralnorm(n)
 print(result)

@@ -11,7 +11,7 @@ fn recvInt(ch: Channel<int>) -> int {
 // ===== Array Generic Inference =====
 @test
 fn test_array_type_annotation() {
-    let arr: Array<int> = [1, 2, 3]
+    var arr: Array<int> = [1, 2, 3]
     assert_eq(arr.length, 3)
     arr.push(4)
     assert_eq(arr.length, 4)
@@ -20,14 +20,14 @@ fn test_array_type_annotation() {
 @test
 fn test_array_infer_from_elements() {
     // Type should be inferred as Array<int>
-    let arr = [1, 2, 3]
+    var arr = [1, 2, 3]
     arr.push(4)
     assert_eq(arr[3], 4)
 }
 
 @test
 fn test_array_empty_with_annotation() {
-    let arr: Array<string> = []
+    var arr: Array<string> = []
     arr.push("hello")
     arr.push("world")
     assert_eq(arr.length, 2)
@@ -36,7 +36,7 @@ fn test_array_empty_with_annotation() {
 // ===== Map Generic Inference =====
 @test
 fn test_map_type_annotation() {
-    let m: Map<string, int> = #{}
+    var m: Map<string, int> = #{}
     m.set("a", 1)
     m.set("b", 2)
     assert_eq(m.get("a"), 1)
@@ -45,14 +45,14 @@ fn test_map_type_annotation() {
 
 @test
 fn test_map_infer_from_literal() {
-    let m = #{"name": "Alice", "city": "Beijing"}
+    var m = #{"name": "Alice", "city": "Beijing"}
     assert_eq(m.get("name"), "Alice")
 }
 
 // ===== Set Generic Inference =====
 @test
 fn test_set_type_annotation() {
-    let s: Set<int> = #[]
+    var s: Set<int> = #[]
     s.add(1)
     s.add(2)
     s.add(1)
@@ -62,7 +62,7 @@ fn test_set_type_annotation() {
 
 @test
 fn test_set_infer_from_literal() {
-    let s = #[1, 2, 3]
+    var s = #[1, 2, 3]
     assert(s.has(1))
     assert(!s.has(4))
 }
@@ -70,17 +70,17 @@ fn test_set_infer_from_literal() {
 // ===== Channel Generic Inference =====
 @test
 fn test_channel_basic() {
-    shared const ch = Channel(1)
+    shared ch = Channel(1)
     ch.send(42)
-    let val = recvInt(ch)
+    var val = recvInt(ch)
     assert_eq(val, 42)
 }
 
 // ===== Container Method Return Types =====
 @test
 fn test_array_map_return_type() {
-    let arr = [1, 2, 3]
-    let doubled = arr.map(fn(x) {
+    var arr = [1, 2, 3]
+    var doubled = arr.map(fn(x) {
         return x * 2
     })
     // doubled should be Array<int>
@@ -90,8 +90,8 @@ fn test_array_map_return_type() {
 
 @test
 fn test_array_filter_return_type() {
-    let arr = ["apple", "banana", "cherry"]
-    let filtered = arr.filter(fn(s) {
+    var arr = ["apple", "banana", "cherry"]
+    var filtered = arr.filter(fn(s) {
         return s.length > 5
     })
     // filtered should be Array<string>
@@ -101,37 +101,37 @@ fn test_array_filter_return_type() {
 
 @test
 fn test_array_slice_return_type() {
-    let arr = [1, 2, 3, 4, 5]
-    let sliced: Span<int> = arr[1:4]
+    var arr = [1, 2, 3, 4, 5]
+    var sliced: Span<int> = arr[1:4]
     assert_eq(typeof(sliced), "Span")
     assert_eq(sliced.length, 3)
 }
 
 @test
 fn test_map_keys_return_type() {
-    let m = #{"a": 1, "b": 2}
-    let keys = m.keys()
+    var m = #{"a": 1, "b": 2}
+    var keys = m.keys()
     assert_eq(typeof(keys), "Array")
 }
 
 @test
 fn test_map_values_return_type() {
-    let m = #{"a": 1, "b": 2}
-    let values = m.values()
+    var m = #{"a": 1, "b": 2}
+    var values = m.values()
     assert_eq(typeof(values), "Array")
 }
 
 // ===== Nested Generic Types =====
 @test
 fn test_array_of_arrays() {
-    let matrix: Array<Array<int>> = [[1, 2], [3, 4]]
+    var matrix: Array<Array<int>> = [[1, 2], [3, 4]]
     assert_eq(matrix[0][0], 1)
     assert_eq(matrix[1][1], 4)
 }
 
 @test
 fn test_map_of_arrays() {
-    let groups = #{"odd": [1, 3, 5], "even": [2, 4, 6]}
+    var groups = #{"odd": [1, 3, 5], "even": [2, 4, 6]}
     assert_eq(groups.get("odd")![0], 1)
     assert_eq(groups.get("even")![2], 6)
 }
@@ -139,23 +139,23 @@ fn test_map_of_arrays() {
 // ===== Generic Function Calls =====
 @test
 fn test_array_concat() {
-    let a = [1, 2]
-    let b = [3, 4]
-    let c = a.concat(b)
+    var a = [1, 2]
+    var b = [3, 4]
+    var c = a.concat(b)
     assert_eq(c.length, 4)
     assert_eq(c[2], 3)
 }
 
 @test
 fn test_array_indexOf() {
-    let arr = ["a", "b", "c"]
+    var arr = ["a", "b", "c"]
     assert_eq(arr.indexOf("b"), 1)
     assert_eq(arr.indexOf("z"), -1)
 }
 
 @test
 fn test_array_includes() {
-    let arr = [1, 2, 3]
+    var arr = [1, 2, 3]
     assert(arr.includes(2))
     assert(!arr.includes(5))
 }

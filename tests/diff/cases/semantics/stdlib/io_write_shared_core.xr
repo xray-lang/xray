@@ -1,8 +1,8 @@
 // anchor: io-write-shared-core
 import io
 
-let root = io.tempDir() ?? ""
-let textFile = root + "/write.txt"
+var root = io.tempDir() ?? ""
+var textFile = root + "/write.txt"
 
 print(io.writeFile(textFile, ""))
 print(io.fileSize(textFile))
@@ -11,15 +11,15 @@ print(io.appendFile(textFile, ""))
 print(io.appendFile(textFile, "\nomega"))
 print(io.readFile(textFile) == "alpha\nomega")
 
-let bytesFile = root + "/bytes.bin"
-let bytes = Bytes(4)
+var bytesFile = root + "/bytes.bin"
+var bytes = Bytes(4)
 bytes[0] = 65
 bytes[1] = 0
 bytes[2] = 10
 bytes[3] = 255
 print(io.writeFileBytes(bytesFile, bytes))
 
-let readBytes = io.readFileBytes(bytesFile)
+var readBytes = io.readFileBytes(bytesFile)
 if (readBytes != null) {
     print(readBytes.length)
     print(readBytes[0])
