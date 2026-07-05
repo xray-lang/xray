@@ -1,4 +1,4 @@
-let m: Map<int, int> = #{}
+var m: Map<int, int> = #{}
 m.set(1, 10)
 m.set(2, 20)
 m.set(1, 30)
@@ -7,8 +7,8 @@ print(m.size)
 print(m.get(1))
 print(m.has(2))
 
-let keys = m.keys()
-let values = m.values()
+var keys = m.keys()
+var values = m.values()
 print(keys.length)
 print(keys[0] + keys[1])
 print(values[0] + values[1])
@@ -20,12 +20,12 @@ class IntMapBag {
     values: Map<int, int>
 
     constructor() {
-        let values: Map<int, int> = #{}
+        var values: Map<int, int> = #{}
         this.values = values
     }
 
     fill(n: int) -> int {
-        let i = 0
+        var i = 0
         while (i < n) {
             this.values.set(i, i * 2 + 1)
             i = i + 1
@@ -34,8 +34,8 @@ class IntMapBag {
     }
 
     scan(n: int) -> int {
-        let i = 0
-        let sum = 0
+        var i = 0
+        var sum = 0
         while (i < n) {
             if (this.values.has(i)) {
                 sum = sum + this.values.get(i)
@@ -46,8 +46,8 @@ class IntMapBag {
     }
 
     prune(n: int) -> int {
-        let i = 0
-        let removed = 0
+        var i = 0
+        var removed = 0
         while (i < n) {
             if (this.values.delete(i)) {
                 removed = removed + 1
@@ -58,7 +58,7 @@ class IntMapBag {
     }
 }
 
-let bag = IntMapBag()
+var bag = IntMapBag()
 print(bag.fill(5))
 print(bag.scan(5))
 print(bag.prune(5))

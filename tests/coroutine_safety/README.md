@@ -107,7 +107,7 @@ match (ch.tryRecv()) {
 - 使用命名协程便于调试：`go(name: "worker-1") task()`
 
 ```xray
-let t = go(name: "data-processor") processData(data)
+var t = go(name: "data-processor") processData(data)
 
 // 检查状态
 if (!t.done) {
@@ -115,6 +115,6 @@ if (!t.done) {
 }
 
 // 获取成功结果
-let result = await t
+var result = await t
 print("结果:", result)
 ```

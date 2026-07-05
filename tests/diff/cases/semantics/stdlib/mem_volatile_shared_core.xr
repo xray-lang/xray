@@ -7,7 +7,7 @@ import mem
 @extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
 @extern("C") fn free(p: RawMut<uint8>)
 
-let p = unsafe { malloc(16) }
+var p = unsafe { malloc(16) }
 mem.set(p, 0, 16)
 
 // 4-byte store/load round-trip (0x12345678)

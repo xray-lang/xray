@@ -317,7 +317,7 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
  * Parse export declaration
  * Supported syntax:
  * 1. export fn add() {}
- * 2. export let PI = 3.14
+ * 2. export const PI = 3.14
  * 3. export class User {}
  * 4. export { a, b as c } from "./file" (re-export)
  * 5. export * from "./file" (re-export all)
@@ -492,7 +492,7 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
         return NULL;
     } else {
         xr_parser_error_expected_name(
-            parser, "expected fn, class, let, const or variable name after 'export'");
+            parser, "expected fn, class, var, const, shared or variable name after 'export'");
         return NULL;
     }
 

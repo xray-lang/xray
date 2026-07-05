@@ -1,5 +1,5 @@
 // AOT test: array operations
-let arr = [1, 2, 3]
+var arr = [1, 2, 3]
 print(arr.length)       // 3
 print(arr[0])           // 1
 print(arr[1])           // 2
@@ -15,8 +15,8 @@ arr[0] = 10
 print(arr[0])           // 10
 
 // Sum via loop with dynamic indexing
-let total = 0
-let i = 0
+var total = 0
+var i = 0
 while (i < arr.length) {
     total = total + arr[i]
     i = i + 1

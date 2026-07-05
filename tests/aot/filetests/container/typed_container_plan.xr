@@ -1,16 +1,16 @@
-let bytes: Array<uint8> = []
+var bytes: Array<uint8> = []
 bytes.push(7)
 bytes.push(9)
 
-let values: Map<uint8, int32> = #{}
+var values: Map<uint8, int32> = #{}
 values.set(1, 11)
 values.set(2, 22)
 
-let seen: Set<uint16> = #[]
+var seen: Set<uint16> = #[]
 seen.add(1)
 seen.add(2)
 
-let chars: Array<char> = []
+var chars: Array<char> = []
 chars.push('A')
 chars.push('中')
 
@@ -22,9 +22,9 @@ class ArrayBag {
     }
 
     scan() -> int {
-        let arr = this.values
-        let total = 0
-        let i = 0
+        var arr = this.values
+        var total = 0
+        var i = 0
         while (i < arr.length) {
             total = total + arr[i]
             i = i + 1
@@ -33,17 +33,17 @@ class ArrayBag {
     }
 
     refill(n: int) -> int {
-        let next_values: Array<int> = []
+        var next_values: Array<int> = []
         this.values = next_values
 
-        let i = 0
+        var i = 0
         while (i < n) {
             this.values.push(i + 1)
             i = i + 1
         }
 
-        let arr = this.values
-        let total = 0
+        var arr = this.values
+        var total = 0
         i = 0
         while (i < arr.length) {
             total = total + arr[i]
@@ -54,18 +54,18 @@ class ArrayBag {
 }
 
 fn local_arrays() -> int {
-    let values: Array<int> = []
+    var values: Array<int> = []
     values.push(1)
     values.push(2)
     values.push(3)
 
-    let bag = ArrayBag(values)
+    var bag = ArrayBag(values)
 
-    let mid: Span<int> = values[0:2]
-    let mapped = values.map(fn(x: int) -> int { return x + 10 })
-    let kept = values.filter(fn(x: int) -> bool { return x > 1 })
+    var mid: Span<int> = values[0:2]
+    var mapped = values.map(fn(x: int) -> int { return x + 10 })
+    var kept = values.filter(fn(x: int) -> bool { return x > 1 })
 
-    let bytes = Bytes(3)
+    var bytes = Bytes(3)
     bytes[0] = 4
     bytes[1] = 5
     bytes[2] = 6
@@ -74,14 +74,14 @@ fn local_arrays() -> int {
 }
 
 fn loop_sum(n: int) -> int {
-    let values: Array<int> = []
-    let i = 0
+    var values: Array<int> = []
+    var i = 0
     while (i < n) {
         values.push(i)
         i = i + 1
     }
 
-    let total = 0
+    var total = 0
     i = 0
     while (i < values.length) {
         total = total + values[i]
@@ -91,14 +91,14 @@ fn loop_sum(n: int) -> int {
 }
 
 fn bytes_index(n: int) -> int {
-    let bytes = Bytes(n)
-    let i = 0
+    var bytes = Bytes(n)
+    var i = 0
     while (i < bytes.length) {
         bytes[i] = i * 3 + 1
         i = i + 1
     }
 
-    let total = 0
+    var total = 0
     i = 0
     while (i < bytes.length) {
         total = total + bytes[i]
@@ -108,7 +108,7 @@ fn bytes_index(n: int) -> int {
 }
 
 fn char_ord_sum() -> int {
-    let chars: Array<char> = []
+    var chars: Array<char> = []
     chars.push('A')
     chars.push('中')
     chars[0] = 'B'
@@ -134,5 +134,5 @@ class Bag {
     }
 }
 
-let bag = Bag()
+var bag = Bag()
 print(bytes[0] + values.get(1) + seen.length + chars.length + bag.fill() + local_arrays() + loop_sum(4) + bytes_index(4) + char_ord_sum())

@@ -171,7 +171,7 @@ xray 端用法相同：
 
 ```xray @id=modules-use
 import time
-let t = time.now()
+var t = time.now()
 time.sleep(100)
 ```
 <!-- /xr-spec:cn -->
@@ -346,7 +346,7 @@ Usage from Xray code is identical:
 
 ```xray @id=modules-use
 import time
-let t = time.now()
+var t = time.now()
 time.sleep(100)
 ```
 <!-- /xr-spec:en -->

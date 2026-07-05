@@ -24,35 +24,35 @@ fn recv_ok(r: Recv<int>) -> bool {
 @test
 fn test_channel() {
     // 创建缓冲 Channel（容量 3）
-    shared const ch: Channel<int> = Channel(3)
+    shared ch: Channel<int> = Channel(3)
     print(ch.capacity == 3)  // true
     
     // 非阻塞发送到缓冲区
-    let ok1 = ch.trySend(10)
-    let ok2 = ch.trySend(20)
-    let ok3 = ch.trySend(30)
+    var ok1 = ch.trySend(10)
+    var ok2 = ch.trySend(20)
+    var ok3 = ch.trySend(30)
     print(sent(ok1))  // true
     print(sent(ok2))  // true
     print(sent(ok3))  // true
     
     // 缓冲区已满，再次发送应失败
-    let ok4 = ch.trySend(40)
+    var ok4 = ch.trySend(40)
     print(sent(ok4))  // false
     
     // 非阻塞接收（返回 Recv<T>）
-    let r1 = ch.tryRecv()
-    let r2 = ch.tryRecv()
-    let r3 = ch.tryRecv()
-    let v1 = recv_value(r1)
-    let v2 = recv_value(r2)
-    let v3 = recv_value(r3)
+    var r1 = ch.tryRecv()
+    var r2 = ch.tryRecv()
+    var r3 = ch.tryRecv()
+    var v1 = recv_value(r1)
+    var v2 = recv_value(r2)
+    var v3 = recv_value(r3)
     print(v1)  // 10
     print(v2)  // 20
     print(v3)  // 30
     print(recv_ok(r1) && recv_ok(r2) && recv_ok(r3))  // true
     
     // 缓冲区为空，再次接收返回 Recv.Empty
-    let r4 = ch.tryRecv()
+    var r4 = ch.tryRecv()
     print(recv_ok(r4))  // false
     
     // 关闭 Channel

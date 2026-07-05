@@ -1,4 +1,4 @@
-shared const MAGIC: int = 41
+shared MAGIC: int = 41
 
 @c_export("xray_magic")
 fn xray_magic() -> int {

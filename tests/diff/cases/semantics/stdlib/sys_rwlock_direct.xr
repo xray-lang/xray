@@ -3,7 +3,7 @@
 
 import sys
 
-let rw = sys.OsRwLock()
+var rw = sys.OsRwLock()
 rw.rdlock()
 print(true)
 rw.rdunlock()

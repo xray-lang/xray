@@ -7,7 +7,7 @@ print(cube(3))      // 27
 print(square(10))   // 100
 
 // Use in expressions
-let a = square(4) + cube(2)
+var a = square(4) + cube(2)
 print(a)            // 16 + 8 = 24
 
 // Nested calls

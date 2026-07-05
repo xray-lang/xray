@@ -103,9 +103,10 @@ typedef enum {
     AST_PRINT_STMT,  // print statement (builtin)
     AST_BLOCK,       // { ... }
 
-    // Variable nodes
-    AST_VAR_DECL,             // let x = 10
+    // Binding nodes
+    AST_VAR_DECL,             // var x = 10
     AST_CONST_DECL,           // const PI = 3.14
+    AST_SHARED_DECL,          // shared counter = Atomic<int>(0)
     AST_VARIABLE,             // x
     AST_ASSIGNMENT,           // x = 10
     AST_COMPOUND_ASSIGNMENT,  // x += 10, x -= 5, etc.

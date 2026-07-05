@@ -11,10 +11,10 @@
 */
 // 翻转数组前 n 个元素（索引 0 到 n-1）
 fn flip(perm, n) {
-    let lo = 0
-    let hi = n - 1
+    var lo = 0
+    var hi = n - 1
     while (lo < hi) {
-        let tmp = perm[lo]
+        var tmp = perm[lo]
         perm[lo] = perm[hi]
         perm[hi] = tmp
         lo = lo + 1
@@ -24,8 +24,8 @@ fn flip(perm, n) {
 
 // 左旋转前 n 个元素（索引 0 到 n-1）
 fn rotate(perm, n) {
-    let first = perm[0]
-    for (let i = 0; i < n - 1; i++) {
+    var first = perm[0]
+    for (var i = 0; i < n - 1; i++) {
         perm[i] = perm[i + 1]
     }
     perm[n - 1] = first
@@ -34,14 +34,14 @@ fn rotate(perm, n) {
 // 计算单个排列的翻转次数
 fn countFlips(perm, n): int {
     // 复制数组
-    let work = []
-    for (let i = 0; i < n; i++) {
+    var work = []
+    for (var i = 0; i < n; i++) {
         work.push(perm[i])
     }
-    let flips = 0
+    var flips = 0
     // 当第一个元素不为 1 时继续翻转
     while (work[0] != 1) {
-        let k = work[0]
+        var k = work[0]
         flip(work, k)
         flips = flips + 1
     }
@@ -55,7 +55,7 @@ fn nextPermutation(perm, count, n) {
     // 旋转整个排列（前 n 个元素）
     rotate(perm, n)
     // 更新计数器（从 i=2 开始，对应 count[1]）
-    let i = 2
+    var i = 2
     while (count[i - 1] >= i - 1) {
         count[i - 1] = 0
         i = i + 1
@@ -72,20 +72,20 @@ fn nextPermutation(perm, count, n) {
 // 运行 fannkuch-redux 算法
 fn fannkuch(n) {
     // 初始化排列为 {1, 2, 3, ..., n}
-    let perm = []
+    var perm = []
     // count 数组初始化为 0（n+1 个元素以匹配索引）
-    let count = []
-    for (let i = 0; i < n; i++) {
+    var count = []
+    for (var i = 0; i < n; i++) {
         perm.push(i + 1)
         count.push(0)
     }
-    let maxFlips = 0
-    let checksum = 0
-    let permIndex = 0
+    var maxFlips = 0
+    var checksum = 0
+    var permIndex = 0
     // 遍历所有排列
-    let hasMore = true
+    var hasMore = true
     while (hasMore) {
-        let flips = countFlips(perm, n)
+        var flips = countFlips(perm, n)
         // 更新最大翻转次数
         if (flips > maxFlips) {
             maxFlips = flips
@@ -105,7 +105,7 @@ fn fannkuch(n) {
 }
 
 // 获取命令行参数或使用默认值
-let n = 10
+var n = 10
 if (process.args.length > 0) {
     n = int(process.args[0])
 }

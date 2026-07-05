@@ -10,8 +10,8 @@ fn failing() -> int {
     return 0
 }
 fn test_monitor_success() {
-    let t = go compute()
-    let r = t.awaitResult()
+    var t = go compute()
+    var r = t.awaitResult()
     match (r) {
         TaskResult.Success(value) -> assert(value == 42, "TaskResult.Success should carry result")
         _ -> assert(false, "successful task should return TaskResult.Success")
@@ -19,8 +19,8 @@ fn test_monitor_success() {
     assert(t.done, "task should be done after awaitResult")
 }
 fn test_monitor_fail() {
-    let t = go failing()
-    let r = t.awaitResult()
+    var t = go failing()
+    var r = t.awaitResult()
     match (r) {
         TaskResult.Failed(_) -> assert(true, "failed task should return TaskResult.Failed")
         _ -> assert(false, "failed task should not report success")
@@ -28,9 +28,9 @@ fn test_monitor_fail() {
     assert(t.done, "failed task should be done")
 }
 fn test_monitor_already_done() {
-    let t = go compute()
-    let r = await t
-    let observed = t.poll()
+    var t = go compute()
+    var r = await t
+    var observed = t.poll()
     match (observed) {
         TaskResult.Success(value) -> assert(value == 42, "poll should observe completed result")
         _ -> assert(false, "poll on completed task should return Success")

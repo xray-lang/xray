@@ -6,8 +6,8 @@
 
 @test
 fn test_for_in_array() {
-    let arr = [1, 2, 3, 4, 5]
-    let sum = 0
+    var arr = [1, 2, 3, 4, 5]
+    var sum = 0
     for (x in arr) {
         sum += x
     }
@@ -16,8 +16,8 @@ fn test_for_in_array() {
 
 @test
 fn test_for_in_empty_array() {
-    let arr: Array<int> = []
-    let count = 0
+    var arr: Array<int> = []
+    var count = 0
     for (x in arr) {
         count++
     }
@@ -26,8 +26,8 @@ fn test_for_in_empty_array() {
 
 @test
 fn test_for_in_single() {
-    let arr = [42]
-    let result = 0
+    var arr = [42]
+    var result = 0
     for (x in arr) {
         result = x
     }
@@ -36,8 +36,8 @@ fn test_for_in_single() {
 
 @test
 fn test_for_in_strings() {
-    let arr = ["a", "b", "c"]
-    let result = ""
+    var arr = ["a", "b", "c"]
+    var result = ""
     for (s in arr) {
         result += s
     }
@@ -48,7 +48,7 @@ fn test_for_in_strings() {
 
 @test
 fn test_for_in_range() {
-    let sum = 0
+    var sum = 0
     for (i in 0..5) {
         sum += i
     }
@@ -57,7 +57,7 @@ fn test_for_in_range() {
 
 @test
 fn test_for_in_range_start() {
-    let sum = 0
+    var sum = 0
     for (i in 3..6) {
         sum += i
     }
@@ -66,7 +66,7 @@ fn test_for_in_range_start() {
 
 @test
 fn test_for_in_range_empty() {
-    let count = 0
+    var count = 0
     for (i in 5..5) {
         count++
     }
@@ -75,7 +75,7 @@ fn test_for_in_range_empty() {
 
 @test
 fn test_for_in_range_one() {
-    let count = 0
+    var count = 0
     for (i in 5..6) {
         count++
     }
@@ -86,8 +86,8 @@ fn test_for_in_range_one() {
 
 @test
 fn test_for_in_map() {
-    let m = #{"a": 1, "b": 2, "c": 3}
-    let sum = 0
+    var m = #{"a": 1, "b": 2, "c": 3}
+    var sum = 0
     for (k, v in m) {
         sum += v
     }
@@ -96,8 +96,8 @@ fn test_for_in_map() {
 
 @test
 fn test_for_in_map_keys() {
-    let m = #{"x": 10, "y": 20}
-    let keys: Array<string> = []
+    var m = #{"x": 10, "y": 20}
+    var keys: Array<string> = []
     for (k, v in m) {
         keys.push(k)
     }
@@ -106,8 +106,8 @@ fn test_for_in_map_keys() {
 
 @test
 fn test_for_in_empty_map() {
-    let m = #{}
-    let count = 0
+    var m = #{}
+    var count = 0
     for (kv in m) {
         count++
     }
@@ -118,8 +118,8 @@ fn test_for_in_empty_map() {
 
 @test
 fn test_for_in_map_single_var_yields_key() {
-    let m: Map<string, int> = #{"a": 1, "b": 2, "c": 3}
-    let acc = ""
+    var m: Map<string, int> = #{"a": 1, "b": 2, "c": 3}
+    var acc = ""
     for (k in m) {
         acc += k
     }
@@ -129,8 +129,8 @@ fn test_for_in_map_single_var_yields_key() {
 
 @test
 fn test_for_in_json_single_var_yields_key() {
-    let j: Json = {x: 1, y: 2, z: 3}
-    let keys: Array<string> = []
+    var j: Json = {x: 1, y: 2, z: 3}
+    var keys: Array<string> = []
     for (k in j) {
         keys.push(k)
     }
@@ -144,9 +144,9 @@ fn test_for_in_json_single_var_yields_key() {
 
 @test
 fn test_iterator_array_manual() {
-    let arr = [10, 20, 30]
-    let it = arr.iterator()
-    let sum = 0
+    var arr = [10, 20, 30]
+    var it = arr.iterator()
+    var sum = 0
     while (it.hasNext()) {
         sum += it.next()
     }
@@ -155,8 +155,8 @@ fn test_iterator_array_manual() {
 
 @test
 fn test_iterator_string_manual() {
-    let it = "abc".iterator()
-    let acc = ""
+    var it = "abc".iterator()
+    var acc = ""
     while (it.hasNext()) {
         acc += it.next()
     }
@@ -165,9 +165,9 @@ fn test_iterator_string_manual() {
 
 @test
 fn test_iterator_map_manual_yields_keys() {
-    let m: Map<string, int> = #{"a": 1, "b": 2}
-    let it = m.iterator()
-    let acc = ""
+    var m: Map<string, int> = #{"a": 1, "b": 2}
+    var it = m.iterator()
+    var acc = ""
     while (it.hasNext()) {
         acc += it.next()
     }
@@ -176,11 +176,11 @@ fn test_iterator_map_manual_yields_keys() {
 
 @test
 fn test_entries_iterator_yields_tuples() {
-    let arr = [10, 20]
-    let it = arr.entriesIterator()
-    let acc = ""
+    var arr = [10, 20]
+    var it = arr.entriesIterator()
+    var acc = ""
     while (it.hasNext()) {
-        let pair = it.next()
+        var pair = it.next()
         acc += "${pair.0}=${pair.1};"
     }
     assert_eq(acc, "0=10;1=20;")
@@ -190,8 +190,8 @@ fn test_entries_iterator_yields_tuples() {
 
 @test
 fn test_for_in_array_index_elem() {
-    let arr = ["x", "y", "z"]
-    let indexed = ""
+    var arr = ["x", "y", "z"]
+    var indexed = ""
     for (i, e in arr) {
         indexed += "${i}:${e};"
     }
@@ -200,9 +200,9 @@ fn test_for_in_array_index_elem() {
 
 @test
 fn test_for_in_array_index_sum() {
-    let arr = [10, 20, 30, 40]
-    let idx_sum = 0
-    let elem_sum = 0
+    var arr = [10, 20, 30, 40]
+    var idx_sum = 0
+    var elem_sum = 0
     for (i, e in arr) {
         idx_sum += i
         elem_sum += e
@@ -213,8 +213,8 @@ fn test_for_in_array_index_sum() {
 
 @test
 fn test_for_in_array_index_empty() {
-    let arr: Array<int> = []
-    let count = 0
+    var arr: Array<int> = []
+    var count = 0
     for (i, e in arr) {
         count++
     }
@@ -223,8 +223,8 @@ fn test_for_in_array_index_empty() {
 
 @test
 fn test_for_in_array_entries_method() {
-    let arr = [100, 200, 300]
-    let acc = ""
+    var arr = [100, 200, 300]
+    var acc = ""
     for ((i, e) in arr.entries()) {
         acc += "${i}=${e},"
     }
@@ -235,8 +235,8 @@ fn test_for_in_array_entries_method() {
 
 @test
 fn test_for_in_string_index_char() {
-    let s = "abc"
-    let acc = ""
+    var s = "abc"
+    var acc = ""
     for (i, c in s) {
         acc += "${i}:${c};"
     }
@@ -245,9 +245,9 @@ fn test_for_in_string_index_char() {
 
 @test
 fn test_for_in_string_index_unicode() {
-    let s = "你好"
-    let count = 0
-    let last_idx = -1
+    var s = "你好"
+    var count = 0
+    var last_idx = -1
     for (i, c in s) {
         count++
         last_idx = i
@@ -258,8 +258,8 @@ fn test_for_in_string_index_unicode() {
 
 @test
 fn test_for_in_string_entries_method() {
-    let s = "hi"
-    let acc = ""
+    var s = "hi"
+    var acc = ""
     for ((i, c) in s.entries()) {
         acc += "${i}-${c}|"
     }
@@ -270,8 +270,8 @@ fn test_for_in_string_entries_method() {
 
 @test
 fn test_for_in_break() {
-    let arr = [1, 2, 3, 4, 5]
-    let sum = 0
+    var arr = [1, 2, 3, 4, 5]
+    var sum = 0
     for (x in arr) {
         if (x == 4) {
             break
@@ -283,8 +283,8 @@ fn test_for_in_break() {
 
 @test
 fn test_for_in_continue() {
-    let arr = [1, 2, 3, 4, 5]
-    let sum = 0
+    var arr = [1, 2, 3, 4, 5]
+    var sum = 0
     for (x in arr) {
         if (x % 2 == 0) {
             continue
@@ -298,8 +298,8 @@ fn test_for_in_continue() {
 
 @test
 fn test_for_in_nested_array() {
-    let matrix = [[1, 2], [3, 4], [5, 6]]
-    let sum = 0
+    var matrix = [[1, 2], [3, 4], [5, 6]]
+    var sum = 0
     for (row in matrix) {
         for (x in row) {
             sum += x
@@ -310,7 +310,7 @@ fn test_for_in_nested_array() {
 
 @test
 fn test_for_in_nested_range() {
-    let total = 0
+    var total = 0
     for (i in 0..3) {
         for (j in 0..3) {
             total++
@@ -323,8 +323,8 @@ fn test_for_in_nested_range() {
 
 @test
 fn test_for_in_collect() {
-    let arr = [1, 2, 3, 4]
-    let squares: Array<int> = []
+    var arr = [1, 2, 3, 4]
+    var squares: Array<int> = []
     for (x in arr) {
         squares.push(x * x)
     }
@@ -335,8 +335,8 @@ fn test_for_in_collect() {
 
 @test
 fn test_for_in_filter() {
-    let arr = [1, 2, 3, 4, 5, 6]
-    let evens: Array<int> = []
+    var arr = [1, 2, 3, 4, 5, 6]
+    var evens: Array<int> = []
     for (x in arr) {
         if (x % 2 == 0) {
             evens.push(x)
@@ -347,8 +347,8 @@ fn test_for_in_filter() {
 
 @test
 fn test_for_in_transform() {
-    let names = ["alice", "bob", "charlie"]
-    let upper: Array<string> = []
+    var names = ["alice", "bob", "charlie"]
+    var upper: Array<string> = []
     for (name in names) {
         upper.push(name.toUpperCase())
     }

@@ -6,8 +6,8 @@
 // is a separate known limitation; see docs/known_bugs.md.)
 fn inner() {
     defer print("inner-defer")
-    let z = 0
-    let q = 10 / z
+    var z = 0
+    var q = 10 / z
     print(q)
 }
 fn outer() {

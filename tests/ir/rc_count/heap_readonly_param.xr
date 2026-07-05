@@ -2,5 +2,5 @@ fn lenOf(a: Array<int>) -> int {
     return a.length
 }
 
-let xs: Array<int> = [1, 2, 3]
+var xs: Array<int> = [1, 2, 3]
 print(lenOf(xs))

@@ -10,10 +10,10 @@ fn return_int(x: Json) -> int {
     return x
 }
 
-let dyn: Json = { "badInt": 3.5, "badBool": 1 }
+var dyn: Json = { "badInt": 3.5, "badBool": 1 }
 
 try {
-    let value: int = dyn.badInt
+    var value: int = dyn.badInt
     print(value)
 } catch panic (p) {
     print(p.message)

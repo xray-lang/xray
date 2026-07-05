@@ -3,6 +3,6 @@ fn worker(n: int) -> int {
     return n + 1
 }
 
-let task = go worker(41)
-let result = await task
+var task = go worker(41)
+var result = await task
 print(result)

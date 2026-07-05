@@ -9,7 +9,7 @@ import datetime
 
 @test
 fn test_create_full_date() {
-    let dt = datetime.create(2024, 12, 25, 10, 30, 45)
+    var dt = datetime.create(2024, 12, 25, 10, 30, 45)
     assert_eq(dt.year, 2024)
     assert_eq(dt.month, 12)
     assert_eq(dt.day, 25)
@@ -20,7 +20,7 @@ fn test_create_full_date() {
 
 @test
 fn test_create_unix_epoch() {
-    let dt = datetime.create(1970, 1, 1, 0, 0, 0)
+    var dt = datetime.create(1970, 1, 1, 0, 0, 0)
     assert_eq(dt.year, 1970)
     assert_eq(dt.month, 1)
     assert_eq(dt.day, 1)
@@ -28,7 +28,7 @@ fn test_create_unix_epoch() {
 
 @test
 fn test_create_year_only() {
-    let dt = datetime.create(2000)
+    var dt = datetime.create(2000)
     assert_eq(dt.year, 2000)
     assert_eq(dt.month, 1)
     assert_eq(dt.day, 1)
@@ -36,7 +36,7 @@ fn test_create_year_only() {
 
 @test
 fn test_create_year_month() {
-    let dt = datetime.create(2024, 6)
+    var dt = datetime.create(2024, 6)
     assert_eq(dt.year, 2024)
     assert_eq(dt.month, 6)
     assert_eq(dt.day, 1)
@@ -48,13 +48,13 @@ fn test_create_year_month() {
 
 @test
 fn test_from_timestamp_zero() {
-    let dt = datetime.fromTimestamp(0)
+    var dt = datetime.fromTimestamp(0)
     assert_eq(dt.year, 1970)
 }
 
 @test
 fn test_from_timestamp_billion() {
-    let dt = datetime.fromTimestamp(1000000000)
+    var dt = datetime.fromTimestamp(1000000000)
     assert_eq(dt.year, 2001)
     assert_eq(dt.month, 9)
     assert_eq(dt.day, 9)
@@ -62,7 +62,7 @@ fn test_from_timestamp_billion() {
 
 @test
 fn test_from_timestamp_recent() {
-    let dt = datetime.fromTimestamp(1700000000)
+    var dt = datetime.fromTimestamp(1700000000)
     assert_eq(dt.year, 2023)
 }
 
@@ -72,16 +72,16 @@ fn test_from_timestamp_recent() {
 
 @test
 fn test_timestamp_positive() {
-    let dt = datetime.create(2024, 1, 1)
-    let ts = dt.timestamp
+    var dt = datetime.create(2024, 1, 1)
+    var ts = dt.timestamp
     assert_true(ts > 0)
 }
 
 @test
 fn test_timestamp_roundtrip() {
-    let original_ts = 1700000000
-    let dt = datetime.fromTimestamp(original_ts)
-    let result_ts = dt.timestamp
+    var original_ts = 1700000000
+    var dt = datetime.fromTimestamp(original_ts)
+    var result_ts = dt.timestamp
     assert_eq(result_ts, original_ts)
 }
 
@@ -91,20 +91,20 @@ fn test_timestamp_roundtrip() {
 
 @test
 fn test_now_returns_valid_date() {
-    let dt = datetime.now()
+    var dt = datetime.now()
     assert_true(dt.year >= 2024)
 }
 
 @test
 fn test_utc_returns_valid_date() {
-    let dt = datetime.utc()
+    var dt = datetime.utc()
     assert_true(dt.year >= 2024)
 }
 
 @test
 fn test_now_timestamp_positive() {
-    let dt = datetime.now()
-    let ts = dt.timestamp
+    var dt = datetime.now()
+    var ts = dt.timestamp
     assert_true(ts > 1700000000)
 }
 
@@ -114,13 +114,13 @@ fn test_now_timestamp_positive() {
 
 @test
 fn test_millisecond_default_zero() {
-    let dt = datetime.create(2024, 6, 15)
+    var dt = datetime.create(2024, 6, 15)
     assert_eq(dt.millisecond, 0)
 }
 
 @test
 fn test_from_timestamp_ms() {
-    let dt = datetime.fromTimestampMs(1700000000123)
+    var dt = datetime.fromTimestampMs(1700000000123)
     assert_eq(dt.timestamp, 1700000000)
     assert_eq(dt.millisecond, 123)
 }

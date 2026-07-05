@@ -2,7 +2,7 @@
 // Reverse Complement Benchmark - Xray 版本
 // 读取 FASTA 格式 DNA 序列，输出反向补码
 // DNA 补码映射表
-let COMP = { "A" => "T", "a" => "T", "T" => "A", "t" => "A", "C" => "G", "c" => "G", "G" => "C", "g" => "C", "U" => "A", "u" => "A", "M" => "K", "m" => "K", "R" => "Y", "r" => "Y", "W" => "W", "w" => "W", "S" => "S", "s" => "S", "Y" => "R", "y" => "R", "K" => "M", "k" => "M", "V" => "B", "v" => "B", "H" => "D", "h" => "D", "D" => "H", "d" => "H", "B" => "V", "b" => "V", "N" => "N", "n" => "N" }
+var COMP = { "A" => "T", "a" => "T", "T" => "A", "t" => "A", "C" => "G", "c" => "G", "G" => "C", "g" => "C", "U" => "A", "u" => "A", "M" => "K", "m" => "K", "R" => "Y", "r" => "Y", "W" => "W", "w" => "W", "S" => "S", "s" => "S", "Y" => "R", "y" => "R", "K" => "M", "k" => "M", "V" => "B", "v" => "B", "H" => "D", "h" => "D", "D" => "H", "d" => "H", "B" => "V", "b" => "V", "N" => "N", "n" => "N" }
 
 // 反向补码一个序列（优化版：使用 translateBytes 一次遍历）
 fn reverseComplement(seq: string): string {
@@ -12,10 +12,10 @@ fn reverseComplement(seq: string): string {
 
 // 按 60 字符宽度格式化输出
 fn printFormatted(seq: string) {
-    let i = 0
-    let len = seq.length
+    var i = 0
+    var len = seq.length
     while (i < len) {
-        let end = i + 60
+        var end = i + 60
         if (end > len) {
             end = len
         }
@@ -26,13 +26,13 @@ fn printFormatted(seq: string) {
 
 // 处理 FASTA 输入（使用 StringBuilder 优化）
 fn processFasta(input: string) {
-    let lines = input.split("
+    var lines = input.split("
 ")
-    let header = ""
-    let seqBuilder = StringBuilder()
-    let i = 0
+    var header = ""
+    var seqBuilder = StringBuilder()
+    var i = 0
     while (i < lines.length) {
-        let line = lines[i]
+        var line = lines[i]
         if (line.length > 0) {
             if (line.charAt(0) == ">") {
                 // 输出之前的序列
@@ -59,14 +59,14 @@ fn processFasta(input: string) {
 // 注意：此函数触发 StringBuilder + 长字符串 + 循环 Bug
 // 详见文档: docs/192_StringBuilder_长字符串循环Bug.md
 fn generateFasta(n: int): string {
-    let alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
-    let sb = StringBuilder()
+    var alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
+    var sb = StringBuilder()
     sb.append(">ONE Homo sapiens alu
 ")
-    let i = 0
+    var i = 0
     while (i < n) {
-        let start = i % alu.length
-        let end = start + 60
+        var start = i % alu.length
+        var end = start + 60
         if (end > alu.length) {
             end = alu.length
         }
@@ -77,10 +77,10 @@ fn generateFasta(n: int): string {
     }
     sb.append(">TWO IUB ambiguity codes
 ")
-    let iub = "ACGTMRWSYKVHDBN"
+    var iub = "ACGTMRWSYKVHDBN"
     i = 0
     while (i < n / 3) {
-        let j = 0
+        var j = 0
         while (j < 60 && i + j < n / 3) {
             sb.append(iub.charAt((i + j) % iub.length))
             j = j + 1
@@ -93,6 +93,6 @@ fn generateFasta(n: int): string {
 }
 
 // 主程序 - 性能基准测试（从命令行读取，默认 250000）
-let n = process.args.length > 0 ? int(process.args[0]) ?? 250000 : 250000
-let input = generateFasta(n)
+var n = process.args.length > 0 ? int(process.args[0]) ?? 250000 : 250000
+var input = generateFasta(n)
 processFasta(input)

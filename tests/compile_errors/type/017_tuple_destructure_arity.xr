@@ -3,6 +3,6 @@
 // the value being destructured. There is no rest pattern, so a
 // mismatch is always a static error.
 fn main() {
-    let (a, b) = (1, 2, 3)
+    var (a, b) = (1, 2, 3)
     print(a)
 }

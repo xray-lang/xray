@@ -4,8 +4,8 @@ fn spill_chain(depth: int) -> int {
     if (depth <= 0) {
         return 0
     }
-    let child = go spill_child(depth - 1)
-    let value = await child
+    var child = go spill_child(depth - 1)
+    var value = await child
     return value + 1
 }
 
@@ -15,7 +15,7 @@ fn spill_child(depth: int) -> int {
 
 @test
 fn test_inject_queue_spill_chain() {
-    let depth = 2048
-    let result = await go spill_child(depth)
+    var depth = 2048
+    var result = await go spill_child(depth)
     assert_eq(result, depth)
 }

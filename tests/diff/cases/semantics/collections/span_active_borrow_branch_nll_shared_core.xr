@@ -1,7 +1,7 @@
 fn branchAfterLastUse(flag: bool) {
-    let bytes = Bytes(0)
+    var bytes = Bytes(0)
     bytes.push(1)
-    let view: ByteSpan = bytes[:]
+    var view: ByteSpan = bytes[:]
     if (flag) {
         print(view.length)
         bytes.push(2)

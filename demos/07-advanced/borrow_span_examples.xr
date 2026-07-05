@@ -9,7 +9,7 @@ import mem
 fn sumBorrowed(data: in Array<int>) -> int {
     // data is borrowed for this call only.
     // It is not copied, and ownership stays with the caller.
-    let total = 0
+    var total = 0
     for (x in data) {
         total = total + x
     }
@@ -56,11 +56,11 @@ fn storeCopy(data: in Array<int>, holder: ref Holder) {
 
 // === 4. return a Span view, not a borrowed reference ===
 fn middleSpan() -> Span<int> {
-    let xs = [10, 20, 30, 40]
+    var xs = [10, 20, 30, 40]
 
     // xs[1:3] creates a bounded view over the array storage.
     // Span is a first-class view value, so it can be returned safely.
-    let view: Span<int> = xs[1:3]
+    var view: Span<int> = xs[1:3]
     return view
 }
 
@@ -85,12 +85,12 @@ fn takeBytes(data: Bytes) -> int {
 }
 
 fn moveExample() {
-    let payload = Bytes(8)
+    var payload = Bytes(8)
     payload[0] = 1
     payload[1] = 2
 
     // move transfers ownership without copying.
-    let len = takeBytes(move payload)
+    var len = takeBytes(move payload)
     print("moved bytes length: ${len}")
 
     // This would be a compile error:
@@ -104,7 +104,7 @@ fn moveExample() {
 fn rawPointerExample() {
     // Raw pointers are for low-level code. They can be stored and passed around,
     // but reading or writing through them must be inside unsafe.
-    let p = mem.alloc(4)
+    var p = mem.alloc(4)
 
     unsafe {
         p[0] = 42
@@ -117,28 +117,28 @@ fn rawPointerExample() {
 }
 
 // === Run the examples ===
-let nums = [1, 2, 3, 4]
+var nums = [1, 2, 3, 4]
 print("sumBorrowed: ${sumBorrowed(nums)}")
 print("nums still usable: ${nums.length}")
 
-let bytes = Bytes(4)
+var bytes = Bytes(4)
 bytes[0] = 9
 bytes[1] = 8
 fillZero(bytes)
 print("bytes after fillZero: ${bytes[0]}, ${bytes[1]}")
 
-let copied = copyForStorage(nums)
+var copied = copyForStorage(nums)
 print("copied length: ${copied.length}")
 
-let holder = Holder()
+var holder = Holder()
 storeCopy(nums, holder)
 print("holder length: ${holder.items.length}")
 
-let mid = middleSpan()
+var mid = middleSpan()
 print("middleSpan: ${mid[0]}, ${mid[1]}")
 
-let values = [2, 3, 4, 5]
-let view: Span<int> = values[1:4]
+var values = [2, 3, 4, 5]
+var view: Span<int> = values[1:4]
 scaleSpan(view, 10)
 print("scaled view: ${view[0]}, ${view[1]}, ${view[2]}")
 

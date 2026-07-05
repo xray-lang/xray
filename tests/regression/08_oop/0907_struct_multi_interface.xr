@@ -26,8 +26,8 @@ fn test_struct_multi_interface() {
 
 
     // === Direct usage ===
-    let a = Score{value: 95, label: "Math"}
-    let b = Score{value: 88, label: "English"}
+    var a = Score{value: 95, label: "Math"}
+    var b = Score{value: 88, label: "English"}
 
     assert(a.toString() == "Math: 95")
     assert(b.toString() == "English: 88")
@@ -35,7 +35,7 @@ fn test_struct_multi_interface() {
     assert(b.measure() == 88)
 
     // === Value semantics preserved ===
-    let c = a
+    var c = a
     c.value = 50
     assert(a.value == 95)
     assert(a.measure() == 95)

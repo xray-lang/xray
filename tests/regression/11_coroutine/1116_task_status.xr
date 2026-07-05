@@ -15,24 +15,24 @@ fn compute(x: int) -> int {
 @test
 fn test_main() {
     // Test 1: blocked task — done is deterministically false
-    const ch = Channel<int>(0)
-    let task = go blocked(ch)
+    shared ch = Channel<int>(0)
+    var task = go blocked(ch)
     print("before send:")
     print("  done:", task.done)
     print("  status:", task.status)
 
     ch.send(21)
-    let result = await task
+    var result = await task
     print("after await:")
     print("  done:", task.done)
     print("  result:", result)
     ch.close()
 
     // Test 2: cancel blocked task — cancelled is deterministically true
-    const ch2 = Channel<int>(0)
-    let task2 = go blocked(ch2)
+    shared ch2 = Channel<int>(0)
+    var task2 = go blocked(ch2)
     task2.cancel()
-    let result2 = task2.awaitResult()
+    var result2 = task2.awaitResult()
     print("after cancel:")
     print("  done:", task2.done)
     print("  status:", task2.status)
@@ -43,8 +43,8 @@ fn test_main() {
     ch2.close()
 
     // Test 3: completed task status
-    let task3 = go compute(21)
-    let result3 = await task3
+    var task3 = go compute(21)
+    var result3 = await task3
     print("completed:")
     print("  done:", task3.done)
     print("  status:", task3.status)

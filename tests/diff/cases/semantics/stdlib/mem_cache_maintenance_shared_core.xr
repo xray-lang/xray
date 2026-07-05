@@ -3,8 +3,8 @@
 // contents; unsupported platforms may lower them to a fence/no-op.
 import mem
 
-let buf = mem.allocZeroed(96)
-let p = unsafe { buf.ptrUnchecked() }
+var buf = mem.allocZeroed(96)
+var p = unsafe { buf.ptrUnchecked() }
 unsafe { p[0] = 11 }
 unsafe { p[63] = 12 }
 unsafe { p[64] = 13 }
@@ -13,7 +13,7 @@ mem.cacheFlush(p, 96)
 unsafe { print(p[0]) }
 unsafe { print(p[63]) }
 
-let mid = unsafe { p.offset(32) }
+var mid = unsafe { p.offset(32) }
 mem.cacheInvalidate(mid, 32)
 unsafe { print(p[64]) }
 

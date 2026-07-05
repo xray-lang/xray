@@ -26,13 +26,13 @@ function run(maxDepth) {
     const longLivedTree = makeTree(maxDepth);
 
     // Iterations
-    for (let depth = minDepth; depth <= maxDepth; depth += 2) {
-        let iterations = 1;
-        for (let j = 0; j < maxDepth - depth + minDepth; j++) {
+    for (var depth = minDepth; depth <= maxDepth; depth += 2) {
+        var iterations = 1;
+        for (var j = 0; j < maxDepth - depth + minDepth; j++) {
             iterations *= 2;
         }
-        let check = 0;
-        for (let i = 1; i <= iterations; i++) {
+        var check = 0;
+        for (var i = 1; i <= iterations; i++) {
             const tree = makeTree(depth);
             check += checksum(tree);
         }

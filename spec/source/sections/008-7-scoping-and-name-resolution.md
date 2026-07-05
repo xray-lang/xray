@@ -22,7 +22,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 | 函数 / 闭包 | `fn` / 箭头函数进入 | 参数 + 函数体 |
 | 块 | `{...}` | `if` `while` `for` `match` 分支体 |
 | `scope` 块 | `scope { ... }` 关键字 | 显式词法作用域 + 结构化并发（见 §10.7） |
-| `for` 头 | `for (let i=0; ...)` | `i` 仅循环体可见 |
+| `for` 头 | `for (var i=0; ...)` | `i` 仅循环体可见 |
 | `catch` 参数 | `catch (e)` | `e` 仅 catch 体可见 |
 | 类体 | `class` 定义 | 字段、方法 |
 
@@ -36,8 +36,8 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 main()                    // OK：使用提升后的 fn
 fn main() { ... }
 
-let y = x                 // 错误：x 未声明
-let x = 10
+var y = x                 // 错误：x 未声明
+var x = 10
 ```
 
 #### Shadow 规则
@@ -45,9 +45,9 @@ let x = 10
 嵌套块可 shadow 外层同名变量：
 
 ```xray
-let x = 1
+var x = 1
 {
-    let x = "hello"           // shadow：OK
+    var x = "hello"           // shadow：OK
     print(x)                 // "hello"
 }
 print(x)                     // 1
@@ -63,14 +63,14 @@ print(x)                     // 1
 
 ```xray
 fn make_counter() -> (() -> int) {
-    let count = 0
+    var count = 0
     return fn() -> int {
         count += 1                  // 修改外层 count
         return count
     }
 }
 
-let c = make_counter()
+var c = make_counter()
 print(c())      // 1
 print(c())      // 2
 ```
@@ -90,13 +90,13 @@ print(c())      // 2
 Xray **不**是全面 ownership/borrow checker 语言（不像 Rust）。但在**跨协程数据传递**中使用 move 语义：
 
 ```xray
-shared let big_buffer = Bytes(1024 * 1024)
+var big_buffer = Bytes(1024 * 1024)
 
-let t = go fn(b: Bytes) -> int {
+var t = go fn(b: Bytes) -> int {
     return process(b)
-}(big_buffer)             // 编译错误：shared let 不能直接传递，必须 move
+}(big_buffer)             // 编译错误：owned heap 值不能裸跨协程传递
 
-let t2 = go fn(b: Bytes) -> int {
+var t2 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big_buffer)        // OK：所有权转移
 
@@ -113,20 +113,19 @@ print(big_buffer.length)  // 编译错误：move 后访问
 
 "保证编译期消除数据竞争"是 xray 并发模型的核心设计原则。
 
-`go` 启动的协程**不能直接捕获**外层作用域的可变变量；数据必须通过**参数传递**进入协程。普通变量自动深拷贝；shared 变量按下表区分：
+`go` 启动的协程**不能直接捕获**外层作用域的可变变量；数据必须通过**参数传递**进入协程。普通局部引用值必须显式 `copy(...)` 或 `move`；`shared` 绑定是稳定共享身份，可直接跨协程使用：
 
 | 变量种类 | 跨协程传递规则 |
 |---|---|
-| 普通 `let` / `const`（局部） | 作为实参传递时**自动深拷贝**；不能被闭包捕获修改 |
+| 普通 `var` / `const`（局部） | 引用型 owned heap 值作为实参时必须显式 `copy(...)` 或 `move`；不能被闭包捕获修改 |
 | 函数参数 | ✅ 完全自由（已经是拷贝 / move 进来的） |
-| `shared const` | ✅ 跨协程零拷贝只读共享（可被闭包捕获） |
-| `shared let` | ⚠️ 必须用 `move` 实参前缀转移所有权；move 后原变量在编译期不可访问 |
+| `shared` | ✅ 可直接跨协程传递/捕获；绑定不可重新赋值，也不能 `move` |
 | `Channel<T>` | ✅ 可被闭包捕获（生命周期由 channel 自身管理） |
 | `this` / 闭包 upvalue（可变） | ❌ 不能跨协程；必须通过参数显式传递 |
 | 全局 `import` 的函数/类 | ✅ 不可变定义，可自由引用 |
 
 ```xray
-let local = 0
+var local = 0
 go { local += 1 }                        // ❌ 编译错误：不能捕获可变局部变量
 ```
 
@@ -134,29 +133,29 @@ go { local += 1 }                        // ❌ 编译错误：不能捕获可�
 
 ```xray
 // 方法 1：作为参数传值（普通变量自动深拷贝）
-let arr = [1, 2, 3]
-let t = go fn(data: Array<int>) -> int {
+var arr = [1, 2, 3]
+var t = go fn(data: Array<int>) -> int {
     data.push(4)            // 拷贝上修改，不影响原值
     return data.length
 }(arr)
 print(arr)                  // [1, 2, 3] 未变
 
-// 方法 2：shared const 零拷贝只读（可被捕获）
-shared const config = { rate: 100 }
-let t2 = go fn(c: Json) -> int {
+// 方法 2：shared 零拷贝只读（可被捕获）
+shared config = { rate: 100 }
+var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
 
 // 方法 3：move 转移所有权
-shared let big = Bytes(1024)
-let t3 = go fn(b: Bytes) -> int {
+shared big = Bytes(1024)
+var t3 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big)
 // big 在此处不可访问
 
 // 方法 4：Channel 通信（可被捕获）
-shared const ch = Channel<int>(10)
-let t4 = go fn(c: Channel<int>) -> int {
+shared ch = Channel<int>(10)
+var t4 = go fn(c: Channel<int>) -> int {
     return match (c.recv()) {
         Recv.Value(v) -> v
         _ -> 0
@@ -171,7 +170,7 @@ Xray 采用多层内存管理：
 
 | 存储 | 机制 | 释放时机 |
 |--|--|--|
-| 全局堆（`shared const`） | refcount | refcount 变 0 |
+| 全局堆（`shared`） | refcount | refcount 变 0 |
 | 局部堆（一般对象） | 引用计数 + 循环引用回收 | 最后引用释放；强引用环由 cycle collector 回收 |
 | 栈（`struct` 值、本地） | RAII | 作用域退出 |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
@@ -203,7 +202,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 | Function / closure | Entering `fn` / arrow function | parameters + function body |
 | Block | `{...}` | `if` `while` `for` `match` arm body |
 | `scope` block | `scope { ... }` keyword | explicit lexical scope + structured concurrency (see §10.7) |
-| `for` header | `for (let i=0; ...)` | `i` is visible only within the loop body |
+| `for` header | `for (var i=0; ...)` | `i` is visible only within the loop body |
 | `catch` parameter | `catch (e)` | `e` is visible only within the catch body |
 | Class body | `class` definition | fields, methods |
 
@@ -217,8 +216,8 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 main()                    // OK: uses the hoisted fn
 fn main() { ... }
 
-let y = x                 // error: x is not declared
-let x = 10
+var y = x                 // error: x is not declared
+var x = 10
 ```
 
 #### Shadow rules
@@ -226,9 +225,9 @@ let x = 10
 A nested block may shadow a same-named variable in an outer scope:
 
 ```xray
-let x = 1
+var x = 1
 {
-    let x = "hello"           // shadow: OK
+    var x = "hello"           // shadow: OK
     print(x)                 // "hello"
 }
 print(x)                     // 1
@@ -244,14 +243,14 @@ The default capture mode is **by reference**:
 
 ```xray
 fn make_counter() -> (() -> int) {
-    let count = 0
+    var count = 0
     return fn() -> int {
         count += 1                  // mutates the outer count
         return count
     }
 }
 
-let c = make_counter()
+var c = make_counter()
 print(c())      // 1
 print(c())      // 2
 ```
@@ -271,13 +270,13 @@ The compiler analyzes upvalues:
 Xray is **not** a full ownership/borrow-checked language (unlike Rust). However, **cross-coroutine data transfer** uses move semantics:
 
 ```xray
-shared let big_buffer = Bytes(1024 * 1024)
+var big_buffer = Bytes(1024 * 1024)
 
-let t = go fn(b: Bytes) -> int {
+var t = go fn(b: Bytes) -> int {
     return process(b)
-}(big_buffer)             // compile error: shared let cannot be passed directly, must move
+}(big_buffer)             // compile error: owned heap value cannot cross bare
 
-let t2 = go fn(b: Bytes) -> int {
+var t2 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big_buffer)        // OK: ownership transferred
 
@@ -294,20 +293,19 @@ print(big_buffer.length)  // compile error: accessed after move
 
 "Statically eliminating data races at compile time" is a core design principle of xray's concurrency model.
 
-A coroutine launched by `go` **cannot directly capture** mutable variables from the outer scope; data must enter the coroutine through **parameter passing**. Plain variables are deep-copied automatically; `shared` variables follow the rules below:
+A coroutine launched by `go` **cannot directly capture** mutable variables from the outer scope; data must enter the coroutine through **parameter passing**. Plain local reference values must use explicit `copy(...)` or `move`; `shared` bindings are stable shared identities and may cross coroutine boundaries directly:
 
 | Variable kind | Cross-coroutine transfer rule |
 |---|---|
-| Plain `let` / `const` (local) | **Deep-copied** automatically when passed as an argument; cannot be captured and mutated by closures |
+| Plain `var` / `const` (local) | Owned heap values must use explicit `copy(...)` or `move` when passed as arguments; cannot be captured and mutated by closures |
 | Function parameters | ✅ Fully free (already copied / moved in) |
-| `shared const` | ✅ Zero-copy read-only sharing across coroutines (capturable by closures) |
-| `shared let` | ⚠️ Must transfer ownership with a `move` argument prefix; the original variable becomes inaccessible after the move |
+| `shared` | ✅ May be passed/captured across coroutines directly; the binding cannot be reassigned or moved |
 | `Channel<T>` | ✅ May be captured by closures (lifetime managed by the channel itself) |
 | `this` / mutable closure upvalues | ❌ Cannot cross coroutines; must be passed explicitly through parameters |
 | Globally imported functions/classes | ✅ Immutable definitions, freely referenceable |
 
 ```xray
-let local = 0
+var local = 0
 go { local += 1 }                        // ❌ compile error: cannot capture mutable local
 ```
 
@@ -315,29 +313,29 @@ go { local += 1 }                        // ❌ compile error: cannot capture mu
 
 ```xray
 // Pattern 1: pass by value (plain variables are deep-copied)
-let arr = [1, 2, 3]
-let t = go fn(data: Array<int>) -> int {
+var arr = [1, 2, 3]
+var t = go fn(data: Array<int>) -> int {
     data.push(4)            // mutates the copy, original is unaffected
     return data.length
 }(arr)
 print(arr)                  // [1, 2, 3] unchanged
 
-// Pattern 2: shared const, zero-copy read-only (capturable)
-shared const config = { rate: 100 }
-let t2 = go fn(c: Json) -> int {
+// Pattern 2: shared, zero-copy read-only (capturable)
+shared config = { rate: 100 }
+var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
 
 // Pattern 3: move ownership
-shared let big = Bytes(1024)
-let t3 = go fn(b: Bytes) -> int {
+shared big = Bytes(1024)
+var t3 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big)
 // big is inaccessible from this point
 
 // Pattern 4: Channel communication (capturable)
-shared const ch = Channel<int>(10)
-let t4 = go fn(c: Channel<int>) -> int {
+shared ch = Channel<int>(10)
+var t4 = go fn(c: Channel<int>) -> int {
     return match (c.recv()) {
         Recv.Value(v) -> v
         _ -> 0
@@ -352,7 +350,7 @@ Xray uses a layered memory management strategy:
 
 | Storage | Mechanism | Reclamation |
 |--|--|--|
-| Global heap (`shared const`) | refcount | when refcount reaches 0 |
+| Global heap (`shared`) | refcount | when refcount reaches 0 |
 | Local heap (general objects) | reference counting + cycle collection | when the last reference is released; strong cycles are reclaimed by the cycle collector |
 | Stack (`struct` values, locals) | RAII | when scope exits |
 | Arena (low-level temporary allocations) | bulk free | at arena end |

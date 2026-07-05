@@ -1,4 +1,4 @@
 import mem
 
-let view: ByteSpan = mem.alloc(8).asSpan()
+var view: ByteSpan = mem.alloc(8).asSpan()
 print(view.length)

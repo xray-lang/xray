@@ -2,7 +2,7 @@ class BoolFloatMapBag {
     values: Map<bool, float32>
 
     constructor() {
-        let values: Map<bool, float32> = #{}
+        var values: Map<bool, float32> = #{}
         this.values = values
     }
 
@@ -13,8 +13,8 @@ class BoolFloatMapBag {
     }
 
     scan(rounds: int) -> float {
-        let r = 0
-        let sum = 0.0
+        var r = 0
+        var sum = 0.0
         while (r < rounds) {
             if (this.values.has(true)) {
                 sum = sum + this.values.get(true)
@@ -29,8 +29,8 @@ class BoolFloatMapBag {
 }
 
 fn class_map_bool_f32_field_loop_run(rounds: int) -> float {
-    let bag = BoolFloatMapBag()
-    let count = bag.fill()
+    var bag = BoolFloatMapBag()
+    var count = bag.fill()
     return bag.scan(rounds) + count
 }
 

@@ -4,8 +4,8 @@
 // 测试调度器在大量协程同时就绪时的处理效率
 import time
 
-let N = 10000    // 等待协程数
-let ROUNDS = 10  // 轮数
+var N = 10000    // 等待协程数
+var ROUNDS = 10  // 轮数
 if (process.args.length > 0) {
     N = int(process.args[0]) ?? N
 }
@@ -25,14 +25,14 @@ fn waiter(ch: Channel<int>) -> int {
     }
 }
 
-let start = time.monotonic()
-let total_woken = 0
+var start = time.monotonic()
+var total_woken = 0
 
-for (let r = 0; r < ROUNDS; r++) {
+for (var r = 0; r < ROUNDS; r++) {
     // 创建 channel 和 N 个等待者
-    shared const signal_ch = Channel(N)
-    let tasks: Array<Task> = []
-    for (let i = 0; i < N; i++) {
+    shared signal_ch = Channel(N)
+    var tasks: Array<Task> = []
+    for (var i = 0; i < N; i++) {
         tasks.push(go waiter(signal_ch))
     }
 
@@ -40,8 +40,8 @@ for (let r = 0; r < ROUNDS; r++) {
     time.sleep(1)
 
     // 一次性发送 N 个信号（惊群唤醒）
-    let send_start = time.monotonic()
-    for (let i = 0; i < N; i++) {
+    var send_start = time.monotonic()
+    for (var i = 0; i < N; i++) {
         signal_ch.send(i)
     }
 
@@ -53,8 +53,8 @@ for (let r = 0; r < ROUNDS; r++) {
     total_woken = total_woken + N
 }
 
-let elapsed = time.monotonic() - start
-let expected = N * ROUNDS
+var elapsed = time.monotonic() - start
+var expected = N * ROUNDS
 
 print("总唤醒数:", total_woken)
 print("预期:", expected)

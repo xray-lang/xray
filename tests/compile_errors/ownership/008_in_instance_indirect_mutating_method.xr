@@ -18,5 +18,5 @@ fn view(counter: in Counter) {
     counter.callBump()
 }
 
-let counter = Counter(1)
+var counter = Counter(1)
 view(counter)

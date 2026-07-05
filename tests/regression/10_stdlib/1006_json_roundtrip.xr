@@ -9,49 +9,49 @@
 
 @test
 fn test_roundtrip_null() {
-    let original = null
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = null
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed, original)
 }
 
 @test
 fn test_roundtrip_true() {
-    let original = true
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = true
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed, original)
 }
 
 @test
 fn test_roundtrip_false() {
-    let original = false
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = false
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed, original)
 }
 
 @test
 fn test_roundtrip_integer() {
-    let original = 42
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = 42
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed, original)
 }
 
 @test
 fn test_roundtrip_negative_integer() {
-    let original = -100
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = -100
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed, original)
 }
 
 @test
 fn test_roundtrip_float() {
-    let original = 3.14159
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = 3.14159
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     // 浮点数可能有精度损失，检查近似相等
     assert_eq(parsed > 3.14, true)
     assert_eq(parsed < 3.15, true)
@@ -59,17 +59,17 @@ fn test_roundtrip_float() {
 
 @test
 fn test_roundtrip_string() {
-    let original = "Hello, World!"
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = "Hello, World!"
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed, original)
 }
 
 @test
 fn test_roundtrip_empty_string() {
-    let original = ""
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = ""
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed, original)
 }
 
@@ -77,17 +77,17 @@ fn test_roundtrip_empty_string() {
 
 @test
 fn test_roundtrip_empty_array() {
-    let original: Array<int> = []
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original: Array<int> = []
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed.length, 0)
 }
 
 @test
 fn test_roundtrip_integer_array() {
-    let original = [1, 2, 3, 4, 5]
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = [1, 2, 3, 4, 5]
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed.length, 5)
     assert_eq(parsed[0], 1)
     assert_eq(parsed[4], 5)
@@ -95,9 +95,9 @@ fn test_roundtrip_integer_array() {
 
 @test
 fn test_roundtrip_string_array() {
-    let original = ["a", "b", "c"]
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = ["a", "b", "c"]
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed.length, 3)
     assert_eq(parsed[0], "a")
     assert_eq(parsed[2], "c")
@@ -105,9 +105,9 @@ fn test_roundtrip_string_array() {
 
 @test
 fn test_roundtrip_mixed_array() {
-    let original = [1, "two", true, null]
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = [1, "two", true, null]
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed.length, 4)
     assert_eq(parsed[0], 1)
     assert_eq(parsed[1], "two")
@@ -117,9 +117,9 @@ fn test_roundtrip_mixed_array() {
 
 @test
 fn test_roundtrip_nested_array() {
-    let original = [[1, 2], [3, 4]]
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = [[1, 2], [3, 4]]
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed.length, 2)
     assert_eq(parsed[0][0], 1)
     assert_eq(parsed[1][1], 4)
@@ -129,35 +129,35 @@ fn test_roundtrip_nested_array() {
 
 @test
 fn test_roundtrip_empty_object() {
-    let original: Json = {}
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original: Json = {}
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed != null, true)
 }
 
 @test
 fn test_roundtrip_simple_object() {
-    let original: Json = { name: "Alice", age: 30 }
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original: Json = { name: "Alice", age: 30 }
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed.name, "Alice")
     assert_eq(parsed.age, 30)
 }
 
 @test
 fn test_roundtrip_nested_object() {
-    let original: Json = { user: { name: "Bob", profile: { city: "NYC" } } }
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original: Json = { user: { name: "Bob", profile: { city: "NYC" } } }
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed.user.name, "Bob")
     assert_eq(parsed.user.profile.city, "NYC")
 }
 
 @test
 fn test_roundtrip_object_with_array() {
-    let original: Json = { numbers: [1, 2, 3], active: true }
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original: Json = { numbers: [1, 2, 3], active: true }
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed.numbers.length, 3)
     assert_eq(parsed.numbers[0], 1)
     assert_eq(parsed.active, true)
@@ -167,25 +167,25 @@ fn test_roundtrip_object_with_array() {
 
 @test
 fn test_roundtrip_chinese() {
-    let original = "你好世界"
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = "你好世界"
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed, original)
 }
 
 @test
 fn test_roundtrip_emoji() {
-    let original = "Hello 🌍"
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = "Hello 🌍"
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed, original)
 }
 
 @test
 fn test_roundtrip_mixed_unicode() {
-    let original: Json = { greeting: "你好", emoji: "🎉", text: "Hello" }
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original: Json = { greeting: "你好", emoji: "🎉", text: "Hello" }
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed.greeting, "你好")
     assert_eq(parsed.text, "Hello")
 }
@@ -194,26 +194,26 @@ fn test_roundtrip_mixed_unicode() {
 
 @test
 fn test_roundtrip_zero() {
-    let original = 0
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = 0
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed, 0)
 }
 
 @test
 fn test_roundtrip_large_integer() {
     // Use max 48-bit integer (NaN Boxing limit)
-    let original = 140737488355327
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = 140737488355327
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed, original)
 }
 
 @test
 fn test_roundtrip_small_float() {
-    let original = 0.000001
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = 0.000001
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     // 检查近似相等
     assert_eq(parsed > 0, true)
     assert_eq(parsed < 0.00001, true)
@@ -221,9 +221,9 @@ fn test_roundtrip_small_float() {
 
 @test
 fn test_roundtrip_scientific() {
-    let original = 1.5e10
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = 1.5e10
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed, original)
 }
 
@@ -231,7 +231,7 @@ fn test_roundtrip_scientific() {
 
 @test
 fn test_roundtrip_complex_structure() {
-    let original: Json = {
+    var original: Json = {
         id: 12345,
         name: "Test User",
         active: true,
@@ -242,8 +242,8 @@ fn test_roundtrip_complex_structure() {
             updated: null
         }
     }
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     
     assert_eq(parsed.id, 12345)
     assert_eq(parsed.name, "Test User")
@@ -256,13 +256,13 @@ fn test_roundtrip_complex_structure() {
 
 @test
 fn test_roundtrip_array_of_objects() {
-    let original: Json = [
+    var original: Json = [
         { id: 1, name: "First" },
         { id: 2, name: "Second" },
         { id: 3, name: "Third" }
     ]
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     
     assert_eq(parsed.length, 3)
     assert_eq(parsed[0].id, 1)
@@ -276,12 +276,12 @@ fn test_roundtrip_array_of_objects() {
 @test
 fn test_double_roundtrip() {
     // parse -> stringify -> parse -> stringify
-    let json1 = "{\"a\": 1, \"b\": [2, 3]}"
-    let obj1 = Json.parse(json1)
-    let json2 = Json.stringify(obj1)
-    let obj2 = Json.parse(json2)
-    let json3 = Json.stringify(obj2)
-    let obj3 = Json.parse(json3)
+    var json1 = "{\"a\": 1, \"b\": [2, 3]}"
+    var obj1 = Json.parse(json1)
+    var json2 = Json.stringify(obj1)
+    var obj2 = Json.parse(json2)
+    var json3 = Json.stringify(obj2)
+    var obj3 = Json.parse(json3)
     
     assert_eq(obj3.a, 1)
     assert_eq(obj3.b.length, 2)
@@ -293,18 +293,18 @@ fn test_double_roundtrip() {
 @test
 fn test_consistency_array() {
     // 同样的数据，多次 stringify 应该得到相同结果
-    let data = [1, 2, 3]
-    let json1 = Json.stringify(data)
-    let json2 = Json.stringify(data)
+    var data = [1, 2, 3]
+    var json1 = Json.stringify(data)
+    var json2 = Json.stringify(data)
     assert_eq(json1, json2)
 }
 
 @test
 fn test_consistency_object() {
     // 注意：对象键顺序可能不确定
-    let data: Json = { a: 1 }
-    let json1 = Json.stringify(data)
-    let json2 = Json.stringify(data)
+    var data: Json = { a: 1 }
+    var json1 = Json.stringify(data)
+    var json2 = Json.stringify(data)
     // 至少两次应该包含相同内容
     assert_eq(json1.includes("a"), true)
     assert_eq(json2.includes("a"), true)
@@ -314,26 +314,26 @@ fn test_consistency_object() {
 
 @test
 fn test_roundtrip_deep_nesting() {
-    let original = [[[[[1]]]]]
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = [[[[[1]]]]]
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed[0][0][0][0][0], 1)
 }
 
 @test
 fn test_roundtrip_many_keys() {
-    let original: Json = { a: 1, b: 2, c: 3, d: 4, e: 5 }
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original: Json = { a: 1, b: 2, c: 3, d: 4, e: 5 }
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed.a, 1)
     assert_eq(parsed.e, 5)
 }
 
 @test
 fn test_roundtrip_long_string() {
-    let original = "x".repeat(100)
-    let jsonStr = Json.stringify(original)
-    let parsed = Json.parse(jsonStr)
+    var original = "x".repeat(100)
+    var jsonStr = Json.stringify(original)
+    var parsed = Json.parse(jsonStr)
     assert_eq(parsed.length, 100)
     assert_eq(parsed, original)
 }
@@ -343,8 +343,8 @@ fn test_stringify_char_as_string() {
     assert_eq(Json.stringify('A'), "\"A\"")
     assert_eq(Json.stringify('\u{1F600}'), "\"😀\"")
 
-    let original: Json = { letter: 'A', emoji: '\u{1F600}' }
-    let parsed = Json.parse(Json.stringify(original))
+    var original: Json = { letter: 'A', emoji: '\u{1F600}' }
+    var parsed = Json.parse(Json.stringify(original))
     assert_eq(parsed.letter, "A")
     assert_eq(parsed.emoji, "😀")
 }

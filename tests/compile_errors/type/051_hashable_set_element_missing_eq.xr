@@ -4,4 +4,4 @@ class HashOnly {
     }
 }
 
-let s: Set<HashOnly> = #[]
+var s: Set<HashOnly> = #[]

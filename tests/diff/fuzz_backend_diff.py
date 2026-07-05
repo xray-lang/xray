@@ -92,7 +92,7 @@ class Gen:
 
     def decl(self, ty, value):
         name = self.fresh()
-        self.lines.append(f"let {name}: {ty} = {value}")
+        self.lines.append(f"var {name}: {ty} = {value}")
         self.vars[name] = ty
         return name
 

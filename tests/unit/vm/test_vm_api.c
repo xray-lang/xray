@@ -186,7 +186,7 @@ TEST(vm_deep_recursion_via_dostring) {
                       "  if (n <= 0) { return 0; }\n"
                       "  return dive(n - 1) + 1;\n"
                       "}\n"
-                      "let r = dive(200);\n"
+                      "var r = dive(200);\n"
                       "if (r != 200) { throw VmApiErr.CheckFailed; }\n";
 
     int rc = xray_vm_dostring(iso, src);
@@ -208,17 +208,17 @@ TEST(vm_large_maxstacksize_entry) {
      * the first instruction runs. */
     const char *src = "enum VmApiErr { CheckFailed }\n"
                       "fn wide() -> int {\n"
-                      "  let a01 = 1; let a02 = 2; let a03 = 3; let a04 = 4;\n"
-                      "  let a05 = 5; let a06 = 6; let a07 = 7; let a08 = 8;\n"
-                      "  let a09 = 9; let a10 = 10; let a11 = 11; let a12 = 12;\n"
-                      "  let a13 = 13; let a14 = 14; let a15 = 15; let a16 = 16;\n"
-                      "  let a17 = 17; let a18 = 18; let a19 = 19; let a20 = 20;\n"
-                      "  let a21 = 21; let a22 = 22; let a23 = 23; let a24 = 24;\n"
-                      "  let a25 = 25; let a26 = 26; let a27 = 27; let a28 = 28;\n"
-                      "  let a29 = 29; let a30 = 30; let a31 = 31; let a32 = 32;\n"
+                      "  var a01 = 1; var a02 = 2; var a03 = 3; var a04 = 4;\n"
+                      "  var a05 = 5; var a06 = 6; var a07 = 7; var a08 = 8;\n"
+                      "  var a09 = 9; var a10 = 10; var a11 = 11; var a12 = 12;\n"
+                      "  var a13 = 13; var a14 = 14; var a15 = 15; var a16 = 16;\n"
+                      "  var a17 = 17; var a18 = 18; var a19 = 19; var a20 = 20;\n"
+                      "  var a21 = 21; var a22 = 22; var a23 = 23; var a24 = 24;\n"
+                      "  var a25 = 25; var a26 = 26; var a27 = 27; var a28 = 28;\n"
+                      "  var a29 = 29; var a30 = 30; var a31 = 31; var a32 = 32;\n"
                       "  return a01 + a32;\n"
                       "}\n"
-                      "let r = wide();\n"
+                      "var r = wide();\n"
                       "if (r != 33) { throw VmApiErr.CheckFailed; }\n";
 
     int rc = xray_vm_dostring(iso, src);
@@ -239,13 +239,13 @@ TEST(vm_vararg_entry) {
      * Exercises the vararg branch of xr_vm_call_closure. */
     const char *src = "enum VmApiErr { CheckFailed }\n"
                       "fn sumAll(...nums) -> int {\n"
-                      "  let total = 0\n"
-                      "  for (let i = 0; i < nums.length; i = i + 1) {\n"
+                      "  var total = 0\n"
+                      "  for (var i = 0; i < nums.length; i = i + 1) {\n"
                       "    total = total + nums[i]\n"
                       "  }\n"
                       "  return total\n"
                       "}\n"
-                      "let r = sumAll(1, 2, 3, 4, 5)\n"
+                      "var r = sumAll(1, 2, 3, 4, 5)\n"
                       "if (r != 15) { throw VmApiErr.CheckFailed }\n";
 
     int rc = xray_vm_dostring(iso, src);
@@ -260,7 +260,7 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
     ASSERT_TRUE(fd >= 0);
     FILE *f = fdopen(fd, "w");
     ASSERT_NOT_NULL(f);
-    fputs("enum DebugErr { Bad(s: string) }\nlet answer = 40 + 2\nif (answer != 42) { throw "
+    fputs("enum DebugErr { Bad(s: string) }\nvar answer = 40 + 2\nif (answer != 42) { throw "
           "DebugErr.Bad(\"bad\") }\n",
           f);
     fclose(f);

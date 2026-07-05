@@ -4,13 +4,13 @@ fn ok() -> int {
     return 42
 }
 fn test_linked_go_basic() {
-    let t = go ok()
-    let r = await t
+    var t = go ok()
+    var r = await t
     assert(r == 42, "linked go should return result via await")
 }
 fn test_go_with_await_result() {
-    let t = go ok()
-    let result = t.awaitResult()
+    var t = go ok()
+    var result = t.awaitResult()
     assert(t.done, "awaitResult should complete the task")
     match (result) {
         TaskResult.Success(value) -> assert(value == 42, "awaitResult should carry the task value")
@@ -18,9 +18,9 @@ fn test_go_with_await_result() {
     }
 }
 fn test_linked_go_in_scope() {
-    let result = 0
+    var result = 0
     linked scope {
-        let t = go ok()
+        var t = go ok()
         result = await t
     }
     assert(result == 42, "linked go in linked scope should work")

@@ -1,6 +1,6 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-shared const latch = CountdownLatch(2)
-shared const counter = Atomic(0)
+shared latch = CountdownLatch(2)
+shared counter = Atomic(0)
 
 go fn() {
     counter.add(10)

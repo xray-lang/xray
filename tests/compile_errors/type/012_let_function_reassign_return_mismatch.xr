@@ -6,5 +6,5 @@ fn string_fn(x: int) -> string {
     return string(x)
 }
 
-let f = int_fn
+var f = int_fn
 f = string_fn

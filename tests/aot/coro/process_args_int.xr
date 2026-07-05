@@ -1,5 +1,5 @@
-let parsed = 77
-let fallback = 88
+var parsed = 77
+var fallback = 88
 
 if (process.args.length > 0) {
     parsed = int(process.args[0]) ?? parsed
@@ -14,8 +14,8 @@ fn echo_arg(value: int) -> int {
     return value
 }
 
-let parsed_task = go echo_arg(parsed)
-let fallback_task = go echo_arg(fallback)
+var parsed_task = go echo_arg(parsed)
+var fallback_task = go echo_arg(fallback)
 
 print(await parsed_task)
 print(await fallback_task)

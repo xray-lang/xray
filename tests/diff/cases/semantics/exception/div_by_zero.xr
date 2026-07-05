@@ -4,6 +4,6 @@
 // than aborting with SIGABRT (134), so VM and AOT agree on the observable exit
 // code and (empty) stdout. Float-result division follows IEEE; see
 // float_fmt/ieee_arithmetic.
-let z = 0
+var z = 0
 print(1 / z)
 print("unreachable")

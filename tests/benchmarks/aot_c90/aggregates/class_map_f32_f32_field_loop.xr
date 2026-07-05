@@ -2,12 +2,12 @@ class FloatMapBag {
     values: Map<float32, float32>
 
     constructor() {
-        let values: Map<float32, float32> = #{}
+        var values: Map<float32, float32> = #{}
         this.values = values
     }
 
     fill(n: int) -> int {
-        let i = 0
+        var i = 0
         while (i < n) {
             this.values.set(i + 0.5, i * 0.25 + 1.0)
             i = i + 1
@@ -16,12 +16,12 @@ class FloatMapBag {
     }
 
     scan(n: int, rounds: int) -> float {
-        let r = 0
-        let sum = 0.0
+        var r = 0
+        var sum = 0.0
         while (r < rounds) {
-            let i = 0
+            var i = 0
             while (i < n) {
-                let key = i + 0.5
+                var key = i + 0.5
                 if (this.values.has(key)) {
                     sum = sum + this.values.get(key)
                 }
@@ -34,8 +34,8 @@ class FloatMapBag {
 }
 
 fn class_map_f32_f32_field_loop_run(n: int, rounds: int) -> float {
-    let bag = FloatMapBag()
-    let count = bag.fill(n)
+    var bag = FloatMapBag()
+    var count = bag.fill(n)
     return bag.scan(n, rounds) + count
 }
 

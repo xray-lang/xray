@@ -10,5 +10,5 @@ class Labeler {
     }
 }
 
-let l = Labeler()
+var l = Labeler()
 print(l.mark(1))

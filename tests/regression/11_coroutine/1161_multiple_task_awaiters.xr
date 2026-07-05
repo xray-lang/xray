@@ -9,7 +9,7 @@ fn delayed_value() -> int {
 
 fn await_and_report(id: int, task: Task, ready: Channel<int>, out: Channel<int>) {
     ready.send(id)
-    let value = await task
+    var value = await task
     out.send(id * 100 + value)
 }
 
@@ -22,17 +22,17 @@ fn recv_int(ch: Channel<int>) -> int {
 
 @test
 fn test_multiple_task_awaiters() {
-    const ready = Channel<int>(2)
-    const out = Channel<int>(2)
-    let task = go delayed_value()
-    let a = go await_and_report(1, task, ready, out)
-    let b = go await_and_report(2, task, ready, out)
+    shared ready = Channel<int>(2)
+    shared out = Channel<int>(2)
+    var task = go delayed_value()
+    var a = go await_and_report(1, task, ready, out)
+    var b = go await_and_report(2, task, ready, out)
 
     recv_int(ready)
     recv_int(ready)
 
-    let first = recv_int(out)
-    let second = recv_int(out)
+    var first = recv_int(out)
+    var second = recv_int(out)
     print(first + second)
 
     await a

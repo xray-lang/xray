@@ -15,17 +15,17 @@ class Conn {
 fn leaf(n: int) -> int { return n + 1 }
 
 fn worker(id: int) -> int {
-    let c = Conn(id)
+    var c = Conn(id)
     defer c.close()                           // method-call defer, held across await
     defer print("defer-builtin " + string(id))
     print("before-await " + string(id))
-    let r = await go leaf(id)
+    var r = await go leaf(id)
     defer print("defer-after " + string(r))   // registered AFTER suspension
     print("after-await " + string(r))
     return r * 10
     // LIFO at exit: defer-after, defer-builtin, close conn
 }
 
-let t = go worker(7)
+var t = go worker(7)
 print(await t)
 print("done")

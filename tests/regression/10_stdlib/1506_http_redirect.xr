@@ -28,7 +28,7 @@ fn test_permanent_vs_temporary() {
 
 @test
 fn test_location_header() {
-    let resp = { status: 302, headers: #{"Location": "https://example.com/new"} }
+    var resp = { status: 302, headers: #{"Location": "https://example.com/new"} }
     assert_eq(resp.headers.get("Location"), "https://example.com/new")
 }
 

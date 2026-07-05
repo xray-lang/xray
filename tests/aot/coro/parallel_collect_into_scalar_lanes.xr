@@ -1,6 +1,6 @@
 const bias = 2
 
-let floats: Array<float> = []
+var floats: Array<float> = []
 floats.reserve(8)
 parallel for i in 0..4 workers 2 collect into floats {
     float(i + bias) + 0.5
@@ -9,7 +9,7 @@ print(floats.length)
 print(floats[0])
 print(floats[3])
 
-let flags: Array<bool> = []
+var flags: Array<bool> = []
 flags.reserve(8)
 parallel for i in 0..4 workers 2 collect into flags {
     ((i + bias) % 2) == 0
@@ -18,7 +18,7 @@ print(flags.length)
 print(flags[0])
 print(flags[1])
 
-let bytes: Array<uint8> = []
+var bytes: Array<uint8> = []
 bytes.reserve(8)
 fn byteValue() -> uint8 {
     return 2

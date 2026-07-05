@@ -3,7 +3,7 @@ fn first(key: [uint8; 4]) -> int {
 }
 
 fn run() -> int {
-    let key: [uint8; 4] = [1, 2, 3, 4]
+    var key: [uint8; 4] = [1, 2, 3, 4]
     key[1] = 9
     return key.length + first(key) + key[1]
 }

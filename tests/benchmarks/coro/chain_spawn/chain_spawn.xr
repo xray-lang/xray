@@ -4,7 +4,7 @@
 // 测试递归创建深度 + 调度器栈管理
 import time
 
-let DEPTH = 100000  // 链深度
+var DEPTH = 100000  // 链深度
 if (process.args.length > 0) {
     DEPTH = int(process.args[0]) ?? DEPTH
 }
@@ -17,8 +17,8 @@ fn chain(depth: int) -> int {
     if (depth <= 0) {
         return 0
     }
-    let child = go chain_child(depth - 1)
-    let result = await child
+    var child = go chain_child(depth - 1)
+    var result = await child
     return result + 1
 }
 
@@ -26,9 +26,9 @@ fn chain_child(depth: int) -> int {
     return chain(depth)
 }
 
-let start = time.monotonic()
-let result = await go chain_child(DEPTH)
-let elapsed = time.monotonic() - start
+var start = time.monotonic()
+var result = await go chain_child(DEPTH)
+var elapsed = time.monotonic() - start
 
 print("结果:", result)
 print("正确:", result == DEPTH)

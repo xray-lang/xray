@@ -39,7 +39,7 @@ order: 014
 | `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
 
 ```xray @id=builtin-typeof-is
-let x = 42
+var x = 42
 print(typeof(x))                // "int"
 print(x is int)                 // true
 print(typeof(x) == "int")       // true
@@ -114,7 +114,7 @@ These global functions and built-in constructor/static functions are usable with
 | `x is T` | expression | runtime type check; the analyzer may narrow types |
 
 ```xray @id=builtin-typeof-is
-let x = 42
+var x = 42
 print(typeof(x))                // "int"
 print(x is int)                 // true
 print(typeof(x) == "int")       // true

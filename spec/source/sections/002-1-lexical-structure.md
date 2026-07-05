@@ -270,9 +270,9 @@ CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 - char 字面量不支持 `${...}` 插值。
 
 ```xray
-let a: char = 'a'
-let zh: char = '中'
-let smile: char = '\u{1F600}'
+var a: char = 'a'
+var zh: char = '中'
+var smile: char = '\u{1F600}'
 ```
 
 ##### 反引号字符串（非法）
@@ -373,8 +373,8 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 例：
 
 ```xray
-let empty_map = #{}
-let primes = #[2, 3, 5, 7]
+var empty_map = #{}
+var primes = #[2, 3, 5, 7]
 ```
 
 #### 1.7.10 模式
@@ -655,9 +655,9 @@ CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 - Char literals do not support `${...}` interpolation.
 
 ```xray
-let a: char = 'a'
-let zh: char = '中'
-let smile: char = '\u{1F600}'
+var a: char = 'a'
+var zh: char = '中'
+var smile: char = '\u{1F600}'
 ```
 
 ##### Backtick strings (illegal)
@@ -758,8 +758,8 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 Examples:
 
 ```xray
-let empty_map = #{}
-let primes = #[2, 3, 5, 7]
+var empty_map = #{}
+var primes = #[2, 3, 5, 7]
 ```
 
 #### 1.7.10 Patterns

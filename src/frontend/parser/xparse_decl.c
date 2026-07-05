@@ -572,7 +572,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
         if (params[i] && params[i]->pattern != NULL) {
             AstNode *param_var = xr_ast_variable(parser->compiler_session, params[i]->name, line);
 
-            // Create destructure decl: let [x, y] = __param0
+            // Create destructure decl: var [x, y] = __param0
             AstNode *destructure_decl = xr_ast_destructure_decl(
                 parser->compiler_session, params[i]->pattern, param_var, false, line);
             // Don't free pattern here, it's now owned by destructure_decl

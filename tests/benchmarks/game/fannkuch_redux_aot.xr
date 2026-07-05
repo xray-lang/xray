@@ -3,10 +3,10 @@
 */
 
 fn flip(perm: Array<int>, n: int) {
-    let lo = 0
-    let hi = n - 1
+    var lo = 0
+    var hi = n - 1
     while (lo < hi) {
-        let tmp = perm[lo]
+        var tmp = perm[lo]
         perm[lo] = perm[hi]
         perm[hi] = tmp
         lo = lo + 1
@@ -15,21 +15,21 @@ fn flip(perm: Array<int>, n: int) {
 }
 
 fn rotate(perm: Array<int>, n: int) {
-    let first = perm[0]
-    for (let i = 0; i < n - 1; i++) {
+    var first = perm[0]
+    for (var i = 0; i < n - 1; i++) {
         perm[i] = perm[i + 1]
     }
     perm[n - 1] = first
 }
 
 fn countFlips(perm: Array<int>, n: int): int {
-    let work: Array<int> = []
-    for (let i = 0; i < n; i++) {
+    var work: Array<int> = []
+    for (var i = 0; i < n; i++) {
         work.push(perm[i])
     }
-    let flips = 0
+    var flips = 0
     while (work[0] != 1) {
-        let k = work[0]
+        var k = work[0]
         flip(work, k)
         flips = flips + 1
     }
@@ -38,7 +38,7 @@ fn countFlips(perm: Array<int>, n: int): int {
 
 fn nextPermutation(perm: Array<int>, count: Array<int>, n: int): bool {
     rotate(perm, n)
-    let i = 2
+    var i = 2
     while (count[i - 1] >= i - 1) {
         count[i - 1] = 0
         i = i + 1
@@ -52,18 +52,18 @@ fn nextPermutation(perm: Array<int>, count: Array<int>, n: int): bool {
 }
 
 fn fannkuch(n: int) {
-    let perm: Array<int> = []
-    let count: Array<int> = []
-    for (let i = 0; i < n; i++) {
+    var perm: Array<int> = []
+    var count: Array<int> = []
+    for (var i = 0; i < n; i++) {
         perm.push(i + 1)
         count.push(0)
     }
-    let maxFlips = 0
-    let checksum = 0
-    let permIndex = 0
-    let hasMore = true
+    var maxFlips = 0
+    var checksum = 0
+    var permIndex = 0
+    var hasMore = true
     while (hasMore) {
-        let flips = countFlips(perm, n)
+        var flips = countFlips(perm, n)
         if (flips > maxFlips) {
             maxFlips = flips
         }
@@ -79,5 +79,5 @@ fn fannkuch(n: int) {
     print("Pfannkuchen(" + n + ") = " + maxFlips)
 }
 
-let n = process.args.length > 0 ? int(process.args[0]) ?? 10 : 10
+var n = process.args.length > 0 ? int(process.args[0]) ?? 10 : 10
 fannkuch(n)

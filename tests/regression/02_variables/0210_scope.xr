@@ -4,9 +4,9 @@
 // ===== 块作用域 =====
 @test
 fn test_block_scope_basic() {
-    let x = 1
+    var x = 1
 {
-        let y = 2
+        var y = 2
         assert_eq(x, 1)
         // 外层可见
         assert_eq(y, 2)
@@ -16,11 +16,11 @@ fn test_block_scope_basic() {
 
 @test
 fn test_nested_blocks() {
-    let a = 1
+    var a = 1
 {
-        let b = 2
+        var b = 2
 {
-            let c = 3
+            var c = 3
             assert_eq(a + b + c, 6)
         }
         assert_eq(a + b, 3)
@@ -31,13 +31,13 @@ fn test_nested_blocks() {
 // ===== 变量遮蔽 =====
 @test
 fn test_shadow_same_scope_different_block() {
-    let x = 10
+    var x = 10
 {
-        let x = 20
+        var x = 20
         // 遮蔽外层 x
         assert_eq(x, 20)
 {
-            let x = 30
+            var x = 30
             // 再次遮蔽
             assert_eq(x, 30)
         }
@@ -48,10 +48,10 @@ fn test_shadow_same_scope_different_block() {
 
 @test
 fn test_shadow_with_different_type() {
-    let x = 10
+    var x = 10
     // int
 {
-        let x = "hello"
+        var x = "hello"
         // string（遮蔽）
         assert_eq(x, "hello")
     }
@@ -61,9 +61,9 @@ fn test_shadow_with_different_type() {
 // ===== 函数作用域 =====
 @test
 fn test_function_scope() {
-    let x = 100
+    var x = 100
     fn inner() -> int {
-        let x = 200
+        var x = 200
         return x
     }
     assert_eq(inner(), 200)
@@ -72,7 +72,7 @@ fn test_function_scope() {
 
 @test
 fn test_closure_captures_outer() {
-    let x = 10
+    var x = 10
     fn inner() -> int {
         return x
     }
@@ -81,7 +81,7 @@ fn test_closure_captures_outer() {
 
 @test
 fn test_closure_modifies_outer() {
-    let x = 10
+    var x = 10
     fn modify() {
         x = 20
     }
@@ -92,8 +92,8 @@ fn test_closure_modifies_outer() {
 // ===== 循环作用域 =====
 @test
 fn test_for_loop_scope() {
-    let sum = 0
-    for (let i = 0; i < 3; i++) {
+    var sum = 0
+    for (var i = 0; i < 3; i++) {
         sum += i
     }
     assert_eq(sum, 3)
@@ -101,10 +101,10 @@ fn test_for_loop_scope() {
 
 @test
 fn test_while_loop_scope() {
-    let i = 0
-    let sum = 0
+    var i = 0
+    var sum = 0
     while (i < 3) {
-        let temp = i * 2
+        var temp = i * 2
         sum += temp
         i++
     }
@@ -114,9 +114,9 @@ fn test_while_loop_scope() {
 // ===== if 作用域 =====
 @test
 fn test_if_scope() {
-    let result = 0
+    var result = 0
     if (true) {
-        let x = 10
+        var x = 10
         result = x
     }
     assert_eq(result, 10)
@@ -124,13 +124,13 @@ fn test_if_scope() {
 
 @test
 fn test_if_else_scope() {
-    let result = 0
-    let condition = false
+    var result = 0
+    var condition = false
     if (condition) {
-        let x = 10
+        var x = 10
         result = x
     } else {
-        let y = 20
+        var y = 20
         result = y
     }
     assert_eq(result, 20)
@@ -139,15 +139,15 @@ fn test_if_else_scope() {
 // ===== 边界条件 =====
 @test
 fn test_deeply_nested() {
-    let a = 1
+    var a = 1
 {
-        let b = 2
+        var b = 2
 {
-            let c = 3
+            var c = 3
 {
-                let d = 4
+                var d = 4
 {
-                    let e = 5
+                    var e = 5
                     assert_eq(a + b + c + d + e, 15)
                 }
             }

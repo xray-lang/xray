@@ -16,11 +16,11 @@ class Resource {
 }
 
 fn use_resources() {
-    let a = Resource("A")
+    var a = Resource("A")
     defer a.close()
-    let b = Resource("B")
+    var b = Resource("B")
     defer b.close()
-    let c = Resource("C")
+    var c = Resource("C")
     defer c.close()
     print("work")
 }

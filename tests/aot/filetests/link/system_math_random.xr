@@ -1,5 +1,5 @@
 import math
 
-let r = math.random()
+var r = math.random()
 print(r >= 0.0 && r < 1.0)
 print(math.randomInt(7, 7))

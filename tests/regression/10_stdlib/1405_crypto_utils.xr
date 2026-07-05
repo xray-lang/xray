@@ -34,15 +34,15 @@ fn test_timing_safe_equal_empty() {
 @test
 fn test_timing_safe_equal_hmac_verify() {
     // Typical usage: verify HMAC
-    let expected = crypto.hmac("sha256", "secret", "data")!
-    let actual = crypto.hmac("sha256", "secret", "data")!
+    var expected = crypto.hmac("sha256", "secret", "data")!
+    var actual = crypto.hmac("sha256", "secret", "data")!
     assert_true(crypto.timingSafeEqual(expected, actual))
 }
 
 @test
 fn test_timing_safe_equal_hmac_mismatch() {
-    let expected = crypto.hmac("sha256", "secret", "data")!
-    let tampered = crypto.hmac("sha256", "secret", "tampered")!
+    var expected = crypto.hmac("sha256", "secret", "data")!
+    var tampered = crypto.hmac("sha256", "secret", "tampered")!
     assert_true(!crypto.timingSafeEqual(expected, tampered))
 }
 

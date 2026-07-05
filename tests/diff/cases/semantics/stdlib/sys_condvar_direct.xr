@@ -3,8 +3,8 @@
 
 import sys
 
-let m = sys.OsMutex()
-let cv = sys.OsCondvar()
+var m = sys.OsMutex()
+var cv = sys.OsCondvar()
 
 m.lock()
 print(cv.waitFor(m, 1000000))

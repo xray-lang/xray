@@ -1279,6 +1279,28 @@ static bool cg_shared_function_target_can_elide(XiCgenCtx *ctx, const XiFunc *ta
     return target && target->ncaptures == 0 && !cg_func_needs_aot_coro_ctx(ctx, target);
 }
 
+static bool cg_static_function_value_use_is_direct_parallel_callback(const XiValue *user,
+                                                                     uint16_t arg_idx,
+                                                                     const XiFunc *target) {
+    if (!user || !target)
+        return false;
+    if (user->op == XI_PAR_FOR && arg_idx == 3 && user->aux_kind == XI_AUX_KIND_PAR_FOR) {
+        const XiParallelForData *data = (const XiParallelForData *) user->aux;
+        return data && data->body_func == target;
+    }
+    if (user->op == XI_PAR_COLLECT && arg_idx == 3 && user->aux_kind == XI_AUX_KIND_PAR_COLLECT) {
+        const XiParallelCollectData *data = (const XiParallelCollectData *) user->aux;
+        return data && data->body_func == target;
+    }
+    if (user->op == XI_PAR_REDUCE && (arg_idx == 4 || arg_idx == 5) &&
+        user->aux_kind == XI_AUX_KIND_PAR_REDUCE) {
+        const XiParallelReduceData *data = (const XiParallelReduceData *) user->aux;
+        return data && ((arg_idx == 4 && data->body_func == target) ||
+                        (arg_idx == 5 && data->combine_func == target));
+    }
+    return false;
+}
+
 static bool cg_shared_static_function_value_uses_are_direct(XiCgenCtx *ctx, const XiFunc *owner,
                                                             const XiValue *value,
                                                             const XiFunc *target, int depth) {
@@ -1319,6 +1341,13 @@ static bool cg_shared_static_function_value_uses_are_direct(XiCgenCtx *ctx, cons
                         if (ai != 0)
                             return false;
                         break;
+                    case XI_PAR_FOR:
+                    case XI_PAR_COLLECT:
+                    case XI_PAR_REDUCE:
+                        if (!cg_static_function_value_use_is_direct_parallel_callback(user, ai,
+                                                                                      target))
+                            return false;
+                        break;
                     default:
                         return false;
                 }
@@ -1326,6 +1355,36 @@ static bool cg_shared_static_function_value_uses_are_direct(XiCgenCtx *ctx, cons
         }
     }
     return true;
+}
+
+static bool cg_static_function_value_uses_are_parallel_callbacks(const XiFunc *owner,
+                                                                 const XiValue *value,
+                                                                 const XiFunc *target) {
+    if (!owner || !value || !target)
+        return false;
+    bool saw_callback = false;
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != value)
+                    continue;
+                if (cg_static_function_value_use_is_direct_parallel_callback(user, ai, target)) {
+                    saw_callback = true;
+                    continue;
+                }
+                if ((user->op == XI_RETAIN || user->op == XI_RELEASE) && ai == 0)
+                    continue;
+                return false;
+            }
+        }
+    }
+    return saw_callback;
 }
 
 static bool cg_shared_static_function_slot_uses_are_direct(XiCgenCtx *ctx, const XiFunc *owner,
@@ -2047,8 +2106,8 @@ static bool cg_widen_elided_into_narrow_arith(XiCgenCtx *ctx, const XiFunc *f, c
      * whose own rep is narrow (size <= 4, e.g. NARROW_U32 with a u32 plan) is
      * returned as-is by the first branch of cg_arith_narrow_src, so eliding
      * its declaration would emit a reference to a C temp that was never
-     * declared (repro: `let t: uint32 = seed + 1; return t + SHARED_CONST`
-     * where select_rep unboxes the shared const and the add turns clean). */
+     * declared (repro: `var t: uint32 = seed + 1; return t + SHARED_CONST`
+     * where select_rep unboxes the shared and the add turns clean). */
     if (size <= 4)
         return false;
     if (!cg_arith_narrow_src(ctx, f, v, NULL, NULL))
@@ -2323,6 +2382,10 @@ static void emit_codegen_abort_aot_result(FILE *out) {
 }
 
 #include "xi_cgen_array_builtin_helpers.inc.c"
+
+static bool cg_aot_compare_present_bool_map_get_const(XiCgenCtx *ctx, const XiValue *compare,
+                                                      const XiValue **out_get,
+                                                      bool *out_const_value);
 
 #include "xi_cgen_dispatch_helpers.inc.c"
 
@@ -3847,6 +3910,56 @@ static bool cg_call_method_is_typed_array_resize_zero_specialization(XiCgenCtx *
            cg_array_value_has_fresh_owned_origin(ctx, call->args[0]);
 }
 
+static bool cg_aot_const_bool_value(const XiValue *value, bool *out) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || v->op != XI_CONST || !v->type || v->type->kind != XR_KIND_BOOL || !out)
+        return false;
+    *out = v->aux_int != 0;
+    return true;
+}
+
+static const XiValue *cg_aot_present_direct_bool_map_get(XiCgenCtx *ctx, const XiValue *value) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (v && v->op == XI_BOX && v->nargs >= 1)
+        v = cg_unwrap_identity_value(v->args[0]);
+    if (!v || !cg_value_is_map_method(v, "get") || cg_rep(v) != XR_REP_I64)
+        return NULL;
+
+    CgMapElemInfo info;
+    if (!cg_map_type_direct_info_ctx(ctx, v->args[0] ? v->args[0]->type : NULL, &info))
+        return NULL;
+    if (strcmp(info.value.elem_name, "XR_ELEM_BOOL") != 0)
+        return NULL;
+    return cg_map_get_fusion_has(ctx, v) ? v : NULL;
+}
+
+static bool cg_aot_compare_present_bool_map_get_const(XiCgenCtx *ctx, const XiValue *compare,
+                                                      const XiValue **out_get,
+                                                      bool *out_const_value) {
+    if (!ctx || !compare || (compare->op != XI_EQ && compare->op != XI_NE) || compare->nargs < 2)
+        return false;
+
+    const XiValue *get = cg_aot_present_direct_bool_map_get(ctx, compare->args[0]);
+    bool const_value = false;
+    if (get && cg_aot_const_bool_value(compare->args[1], &const_value)) {
+        if (out_get)
+            *out_get = get;
+        if (out_const_value)
+            *out_const_value = const_value;
+        return true;
+    }
+
+    get = cg_aot_present_direct_bool_map_get(ctx, compare->args[1]);
+    if (get && cg_aot_const_bool_value(compare->args[0], &const_value)) {
+        if (out_get)
+            *out_get = get;
+        if (out_const_value)
+            *out_const_value = const_value;
+        return true;
+    }
+    return false;
+}
+
 static bool cg_native_box_use_consumes_native_rep(XiCgenCtx *ctx, const XiFunc *f,
                                                   const XiValue *user, uint16_t arg_index) {
     if (!ctx || !user)
@@ -3873,6 +3986,16 @@ static bool cg_native_box_use_consumes_native_rep(XiCgenCtx *ctx, const XiFunc *
                    cg_call_method_is_typed_array_resize_zero_specialization(ctx, f, user);
         case XI_CALL:
             return cg_native_box_direct_call_arg_is_native(ctx, f, user, arg_index);
+        case XI_EQ:
+        case XI_NE: {
+            const XiValue *get = NULL;
+            bool const_value = false;
+            if (!cg_aot_compare_present_bool_map_get_const(ctx, user, &get, &const_value))
+                return false;
+            return arg_index < user->nargs && user->args[arg_index] &&
+                   user->args[arg_index]->op == XI_BOX && user->args[arg_index]->nargs >= 1 &&
+                   cg_unwrap_identity_value(user->args[arg_index]->args[0]) == get;
+        }
         default:
             return false;
     }
@@ -4960,6 +5083,9 @@ static bool cg_func_has_unelided_closure_value_use(XiCgenCtx *ctx, const XiFunc 
             if (!cg_func_needs_aot_coro_ctx(ctx, owner) &&
                 xicgen_par_for_stack_closure_value_is_elided(ctx, owner, v))
                 continue;
+            if (!cg_func_needs_aot_coro_ctx(ctx, owner) &&
+                cg_static_function_value_uses_are_parallel_callbacks(owner, v, target))
+                continue;
             if (!cg_array_closure_value_only_used_by_inline_map(ctx, owner, prefix, v)) {
                 if (dbg) {
                     fprintf(stderr,
@@ -5132,7 +5258,8 @@ static void emit_aot_symbol_attrs(FILE *out, const XiFunc *f, bool c_export_wrap
 
 static void emit_cfn_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                     const char *prefix) {
-    fprintf(out, "%s%s ", cg_linkage(ctx), cg_cfn_value_c_type(f->return_type, true));
+    fprintf(out, "%s%s ", cg_func_linkage(ctx, f, prefix),
+            cg_cfn_value_c_type(f->return_type, true));
     emit_cfn_stub_fname(ctx, out, prefix, f);
     fprintf(out, "(");
     if (f->nparams == 0) {

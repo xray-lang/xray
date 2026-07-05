@@ -1,3 +1,3 @@
-let bytes = Bytes(2)
+var bytes = Bytes(2)
 const span: ByteSpan = bytes[:]
 span.fill(9)

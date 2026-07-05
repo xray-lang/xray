@@ -1,6 +1,6 @@
 fn makeBytes(n: int) -> Bytes {
-    let out = Bytes(0)
-    let i = 0
+    var out = Bytes(0)
+    var i = 0
     while (i < n) {
         out.push(i & 0xFF)
         i = i + 1
@@ -9,11 +9,11 @@ fn makeBytes(n: int) -> Bytes {
 }
 
 fn appendToSized(n: int) -> Bytes {
-    let out = Bytes(3)
+    var out = Bytes(3)
     out[0] = 100
     out[1] = 101
     out[2] = 102
-    let i = 0
+    var i = 0
     while (i < n) {
         out.push(i & 0xFF)
         i = i + 1
@@ -21,11 +21,11 @@ fn appendToSized(n: int) -> Bytes {
     return out
 }
 
-let a = makeBytes(16)
+var a = makeBytes(16)
 print(a.length)
 print(a[7])
 
-let b = appendToSized(5)
+var b = appendToSized(5)
 print(b.length)
 print(b[0])
 print(b[3])

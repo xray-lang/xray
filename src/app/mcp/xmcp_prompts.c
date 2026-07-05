@@ -49,7 +49,7 @@ static const XmcpPromptDef PROMPTS[] = {
       {"sourceLanguage", "Original language (e.g., Python, JavaScript, Go)", false}}},
     {"concurrency-pattern",
      "Recommend the best Xray concurrency pattern for a given task. "
-     "Covers channels, go/await, scope, select, and shared const.",
+     "Covers channels, go/await, scope, select, and shared.",
      1,
      {{"description", "Description of what the concurrent code should do", true}}},
     {"write-test",
@@ -80,7 +80,7 @@ static const char SYSTEM_PREAMBLE[] =
     "- Types: int, float, string, bool, Array<T>, Map<K,V>, Set<T>, "
     "Channel<T>, Json\n"
     "- Concurrency: go/await, Channel (must be const), scope, select, "
-    "shared const\n"
+    "shared\n"
     "- Safety: if it compiles, it's concurrency-safe\n"
     "- OOP: class (extends), struct (value type), interface (implements), "
     "enum\n"
@@ -102,8 +102,8 @@ static const char EXPLAIN_ERROR_SYSTEM[] =
     "2. Common causes\n"
     "3. How to fix it with a corrected code example\n"
     "Important Xray rules:\n"
-    "- Channel must be declared with const, not let\n"
-    "- go closures cannot capture let/const variables (pass as params)\n"
+    "- Channel must be declared with shared\n"
+    "- go closures cannot capture ordinary local var/const reference values (pass as params)\n"
     "- Arrow function params MUST have type annotations\n"
     "- Quotes inside ${} interpolation are allowed; nested strings are scanned as expressions\n";
 
@@ -123,10 +123,11 @@ static const char CONCURRENCY_SYSTEM[] =
     "2. Channel: producer-consumer, pipeline\n"
     "3. scope: structured concurrency (wait for all)\n"
     "4. select: multiplex channels with timeout\n"
-    "5. shared const: read-only shared config\n"
+    "5. shared: read-only shared config\n"
     "6. await all / await any: fan-out patterns\n"
     "Rules: Channel must be const. go arguments that transfer heap values must use "
-    "copy(...), move, or shared const. Cannot capture let variables in go closures.\n";
+    "copy(...), move, or shared. Cannot capture ordinary local var reference values in go "
+    "closures.\n";
 
 static const char WRITE_TEST_SYSTEM[] =
     "Generate @test functions for the given Xray code.\n"

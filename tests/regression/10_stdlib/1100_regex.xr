@@ -5,7 +5,7 @@ import regex
 // @test compile and test
 @test
 fn test_compile_and_test() {
-    let re = regex.compile("\\d+")
+    var re = regex.compile("\\d+")
     assert_eq(regex.test(re, "abc123"), true)
     assert_eq(regex.test(re, "no digits"), false)
 }
@@ -13,10 +13,10 @@ fn test_compile_and_test() {
 // @test instance methods
 @test
 fn test_instance_methods() {
-    let re = regex.compile("([a-z]+)(\\d+)")
+    var re = regex.compile("([a-z]+)(\\d+)")
     assert_eq(re.test("abc123"), true)
 
-    let found = re.find("abc123 xyz456")
+    var found = re.find("abc123 xyz456")
     assert(found != null)
     assert_eq(found.text, "abc123")
 
@@ -24,13 +24,13 @@ fn test_instance_methods() {
     assert_eq(re.findGroup("abc123 xyz456", 1), "abc")
     assert_eq(re.findGroup("abc123 xyz456", 2), "123")
 
-    let all = re.findAll("abc123 xyz456")
+    var all = re.findAll("abc123 xyz456")
     assert_eq(all.length, 2)
 
     assert_eq(re.replace("abc123 xyz456", "N"), "N xyz456")
 
-    let comma = regex.compile(",\\s*")
-    let parts = comma.split("a, b, c")
+    var comma = regex.compile(",\\s*")
+    var parts = comma.split("a, b, c")
     assert_eq(parts.length, 3)
     assert_eq(parts[2], "c")
 }
@@ -38,8 +38,8 @@ fn test_instance_methods() {
 // @test find with positions
 @test
 fn test_find() {
-    let re = regex.compile("\\d+")
-    let result = regex.find(re, "abc123def")
+    var re = regex.compile("\\d+")
+    var result = regex.find(re, "abc123def")
     assert(result != null)
     assert_eq(result.start, 3)
     assert_eq(result.end, 6)
@@ -49,10 +49,10 @@ fn test_find() {
 // @test capture groups
 @test
 fn test_capture_groups() {
-    let re = regex.compile("(\\w+)@(\\w+)")
-    let result = regex.find(re, "contact: user@host.com")
+    var re = regex.compile("(\\w+)@(\\w+)")
+    var result = regex.find(re, "contact: user@host.com")
     assert(result != null)
-    let groups = result.groups
+    var groups = result.groups
     assert_eq(groups[0], "user@host")
     assert_eq(groups[1], "user")
     assert_eq(groups[2], "host")
@@ -61,7 +61,7 @@ fn test_capture_groups() {
 // @test fullFind (entire string must match)
 @test
 fn test_full_find() {
-    let re = regex.compile("[a-z]+")
+    var re = regex.compile("[a-z]+")
     assert(regex.fullFind(re, "hello") != null)
     assert_eq(regex.fullFind(re, "hello123"), null)
 }
@@ -69,22 +69,22 @@ fn test_full_find() {
 // @test replace (first occurrence)
 @test
 fn test_replace() {
-    let re = regex.compile("\\s+")
+    var re = regex.compile("\\s+")
     assert_eq(regex.replace(re, "hello   world", "_"), "hello_world")
 }
 
 // @test replaceAll
 @test
 fn test_replace_all() {
-    let re = regex.compile("\\s+")
+    var re = regex.compile("\\s+")
     assert_eq(regex.replaceAll(re, "a   b   c", "-"), "a-b-c")
 }
 
 // @test split
 @test
 fn test_split() {
-    let re = regex.compile(",\\s*")
-    let parts = regex.split(re, "a, b, c, d")
+    var re = regex.compile(",\\s*")
+    var parts = regex.split(re, "a, b, c, d")
     assert_eq(parts.length, 4)
     assert_eq(parts[0], "a")
     assert_eq(parts[1], "b")
@@ -94,7 +94,7 @@ fn test_split() {
 // @test escape
 @test
 fn test_escape() {
-    let escaped = regex.escape("a.b*c?")
+    var escaped = regex.escape("a.b*c?")
     assert(escaped.includes("\\."))
     assert(escaped.includes("\\*"))
 }

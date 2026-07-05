@@ -1,20 +1,20 @@
 import datetime
 
-let dyn: Json = {
+var dyn: Json = {
     "floatYear": 2024.9,
     "boolMonth": true,
     "nullDay": null,
     "amount": true
 }
 
-let created = datetime.createUTC(dyn.floatYear, dyn.boolMonth, dyn.nullDay)
+var created = datetime.createUTC(dyn.floatYear, dyn.boolMonth, dyn.nullDay)
 print(created.year)
 print(created.month)
 print(created.day)
 print(created.hour)
 
-let base = datetime.createUTC(2024, 1, 2)
-let shifted = base.add(dyn.amount, "days")
+var base = datetime.createUTC(2024, 1, 2)
+var shifted = base.add(dyn.amount, "days")
 print(shifted.year)
 print(shifted.month)
 print(shifted.day)

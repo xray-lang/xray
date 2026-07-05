@@ -9,7 +9,7 @@ fn recv_has_value(r: Recv<int>) -> bool {
 
 // 生产者-消费者模式
 fn producer(ch: Channel<int>, id: int, count: int) -> int {
-    let i = 0
+    var i = 0
     while (i < count) {
         ch.trySend(id * 100 + i)
         i++
@@ -18,10 +18,10 @@ fn producer(ch: Channel<int>, id: int, count: int) -> int {
 }
 
 fn consumer(ch: Channel<int>, expected: int) -> int {
-    let received = 0
-    let i = 0
+    var received = 0
+    var i = 0
     while (i < expected) {
-        let msg = ch.tryRecv()
+        var msg = ch.tryRecv()
         if (recv_has_value(msg)) {
             received = received + 1
         }
@@ -32,20 +32,20 @@ fn consumer(ch: Channel<int>, expected: int) -> int {
 
 @test
 fn test_producer_consumer() {
-    shared const ch = Channel(10)
+    shared ch = Channel(10)
 
     // 启动多个生产者
-    let p1 = go producer(ch, 1, 3)
-    let p2 = go producer(ch, 2, 3)
+    var p1 = go producer(ch, 1, 3)
+    var p2 = go producer(ch, 2, 3)
 
     // 等待所有生产者完成
-    let producer_ids = await all [p1, p2]
+    var producer_ids = await all [p1, p2]
     print(producer_ids[0])  // 1
     print(producer_ids[1])  // 2
 
     // 消费者获取消息
-    let c1 = go consumer(ch, 6)
-    let received = await c1
+    var c1 = go consumer(ch, 6)
+    var received = await c1
     print(received)  // 6
 }
 
@@ -65,8 +65,8 @@ fn test_defer() {
 // select 多路复用示例
 @test
 fn test_select() {
-    shared const ch1 = Channel(1)
-    shared const ch2 = Channel(1)
+    shared ch1 = Channel(1)
+    shared ch2 = Channel(1)
 
     ch1.trySend(100)
 

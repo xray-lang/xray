@@ -27,12 +27,12 @@ class Dog extends Animal {
 }
 
 // Test basic string field access
-let a = Animal("Buddy")
+var a = Animal("Buddy")
 print(a.name)
 print(a.speak())
 
 // Test inherited + own string fields
-let d = Dog("Rex", "Labrador")
+var d = Dog("Rex", "Labrador")
 print(d.name)
 print(d.breed)
 print(d.speak())
@@ -51,7 +51,7 @@ class Person {
     }
 }
 
-let p = Person("Alice", 30)
+var p = Person("Alice", 30)
 print(p.name)
 print(p.age)
 print(p.greet())

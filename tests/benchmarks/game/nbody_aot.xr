@@ -10,12 +10,12 @@ const DAYS_PER_YEAR: float = 365.24
 type Body = { x: float, y: float, z: float, vx: float, vy: float, vz: float, mass: float }
 
 fn applyPair(bi: Body, bj: Body, dt: float) {
-    let dx = bi.x - bj.x
-    let dy = bi.y - bj.y
-    let dz = bi.z - bj.z
-    let dsq = dx*dx + dy*dy + dz*dz
-    let d = dsq.sqrt()
-    let mag = dt / (dsq * d)
+    var dx = bi.x - bj.x
+    var dy = bi.y - bj.y
+    var dz = bi.z - bj.z
+    var dsq = dx*dx + dy*dy + dz*dz
+    var d = dsq.sqrt()
+    var mag = dt / (dsq * d)
     bi.vx = bi.vx - dx * bj.mass * mag
     bi.vy = bi.vy - dy * bj.mass * mag
     bi.vz = bi.vz - dz * bj.mass * mag
@@ -43,12 +43,12 @@ fn advance(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body, dt: float) {
 }
 
 fn energy(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body): float {
-    let e = 0.5 * b0.mass * (b0.vx*b0.vx + b0.vy*b0.vy + b0.vz*b0.vz)
+    var e = 0.5 * b0.mass * (b0.vx*b0.vx + b0.vy*b0.vy + b0.vz*b0.vz)
     e = e + 0.5 * b1.mass * (b1.vx*b1.vx + b1.vy*b1.vy + b1.vz*b1.vz)
     e = e + 0.5 * b2.mass * (b2.vx*b2.vx + b2.vy*b2.vy + b2.vz*b2.vz)
     e = e + 0.5 * b3.mass * (b3.vx*b3.vx + b3.vy*b3.vy + b3.vz*b3.vz)
     e = e + 0.5 * b4.mass * (b4.vx*b4.vx + b4.vy*b4.vy + b4.vz*b4.vz)
-    let dx = b0.x - b1.x; let dy = b0.y - b1.y; let dz = b0.z - b1.z
+    var dx = b0.x - b1.x; var dy = b0.y - b1.y; var dz = b0.z - b1.z
     e = e - (b0.mass * b1.mass) / (dx*dx + dy*dy + dz*dz).sqrt()
     dx = b0.x - b2.x; dy = b0.y - b2.y; dz = b0.z - b2.z
     e = e - (b0.mass * b2.mass) / (dx*dx + dy*dy + dz*dz).sqrt()
@@ -72,32 +72,32 @@ fn energy(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body): float {
 }
 
 fn run(n: int) {
-    let sm = SOLAR_MASS
-    let dpy = DAYS_PER_YEAR
+    var sm = SOLAR_MASS
+    var dpy = DAYS_PER_YEAR
 
-    let sun: Body = { x: 0.0, y: 0.0, z: 0.0, vx: 0.0, vy: 0.0, vz: 0.0, mass: sm }
-    let jup: Body = { x: 4.84143144246472090e+00, y: -1.16032004402742839e+00, z: -1.03622044471123109e-01,
+    var sun: Body = { x: 0.0, y: 0.0, z: 0.0, vx: 0.0, vy: 0.0, vz: 0.0, mass: sm }
+    var jup: Body = { x: 4.84143144246472090e+00, y: -1.16032004402742839e+00, z: -1.03622044471123109e-01,
                       vx: 1.66007664274403694e-03 * dpy, vy: 7.69901118419740425e-03 * dpy, vz: -6.90460016972063023e-05 * dpy,
                       mass: 9.54791938424326609e-04 * sm }
-    let sat: Body = { x: 8.34336671824457987e+00, y: 4.12479856412430479e+00, z: -4.03523417114321381e-01,
+    var sat: Body = { x: 8.34336671824457987e+00, y: 4.12479856412430479e+00, z: -4.03523417114321381e-01,
                       vx: -2.76742510726862411e-03 * dpy, vy: 4.99852801234917238e-03 * dpy, vz: 2.30417297573763929e-05 * dpy,
                       mass: 2.85885980666130812e-04 * sm }
-    let ura: Body = { x: 1.28943695621391310e+01, y: -1.51111514016986312e+01, z: -2.23307578892655734e-01,
+    var ura: Body = { x: 1.28943695621391310e+01, y: -1.51111514016986312e+01, z: -2.23307578892655734e-01,
                       vx: 2.96460137564761618e-03 * dpy, vy: 2.37847173959480950e-03 * dpy, vz: -2.96589568540237556e-05 * dpy,
                       mass: 4.36624404335156298e-05 * sm }
-    let nep: Body = { x: 1.53796971148509165e+01, y: -2.59193146099879641e+01, z: 1.79258772950371181e-01,
+    var nep: Body = { x: 1.53796971148509165e+01, y: -2.59193146099879641e+01, z: 1.79258772950371181e-01,
                       vx: 2.68067772490389322e-03 * dpy, vy: 1.62824170038242295e-03 * dpy, vz: -9.51592254519715870e-05 * dpy,
                       mass: 5.15138902046611451e-05 * sm }
 
-    let px = jup.vx * jup.mass + sat.vx * sat.mass + ura.vx * ura.mass + nep.vx * nep.mass
-    let py = jup.vy * jup.mass + sat.vy * sat.mass + ura.vy * ura.mass + nep.vy * nep.mass
-    let pz = jup.vz * jup.mass + sat.vz * sat.mass + ura.vz * ura.mass + nep.vz * nep.mass
+    var px = jup.vx * jup.mass + sat.vx * sat.mass + ura.vx * ura.mass + nep.vx * nep.mass
+    var py = jup.vy * jup.mass + sat.vy * sat.mass + ura.vy * ura.mass + nep.vy * nep.mass
+    var pz = jup.vz * jup.mass + sat.vz * sat.mass + ura.vz * ura.mass + nep.vz * nep.mass
     sun.vx = -px / sm
     sun.vy = -py / sm
     sun.vz = -pz / sm
 
     print(energy(sun, jup, sat, ura, nep))
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         advance(sun, jup, sat, ura, nep, 0.01)
     }
     print(energy(sun, jup, sat, ura, nep))

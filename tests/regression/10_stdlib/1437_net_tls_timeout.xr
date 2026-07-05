@@ -5,7 +5,7 @@ import net
 import time
 
 fn acceptHold(lst: NetListener) {
-    let conn = net.accept(lst)
+    var conn = net.accept(lst)
     if (conn != null) {
         time.sleep(200)
         net.close(conn!)
@@ -18,15 +18,15 @@ fn test_dial_tls_handshake_timeout() {
         return
     }
 
-    let maybeLst = net.listen(0, 8)
+    var maybeLst = net.listen(0, 8)
     if (maybeLst == null) { return }
-    let lst = maybeLst!
-    let port = lst.port()
+    var lst = maybeLst!
+    var port = lst.port()
     go acceptHold(lst)
 
-    let start = time.monotonic()
-    let conn = net.dialTLS("localhost", port, 30)
-    let elapsed = time.monotonic() - start
+    var start = time.monotonic()
+    var conn = net.dialTLS("localhost", port, 30)
+    var elapsed = time.monotonic() - start
 
     assert_true(conn == null)
     assert_true(elapsed < 1000)
@@ -40,14 +40,14 @@ fn test_upgrade_tls_handshake_timeout() {
         return
     }
 
-    let maybeLst = net.listen(0, 8)
+    var maybeLst = net.listen(0, 8)
     if (maybeLst == null) { return }
-    let lst = maybeLst!
-    let port = lst.port()
+    var lst = maybeLst!
+    var port = lst.port()
     go acceptHold(lst)
 
-    let conn = net.dial("127.0.0.1", port)!
-    let tls = net.upgradeTLS(conn, "localhost", 30)
+    var conn = net.dial("127.0.0.1", port)!
+    var tls = net.upgradeTLS(conn, "localhost", 30)
 
     assert_true(tls == null)
     assert_eq(net.lastError(conn), "timeout")

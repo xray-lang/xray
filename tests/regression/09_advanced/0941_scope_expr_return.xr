@@ -20,8 +20,8 @@ fn child_slow() -> int {
 }
 
 fn count_success(outcomes: Array<TaskOutcome>) -> int {
-    let count = 0
-    for (let i = 0; i < outcomes.length; i++) {
+    var count = 0
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Success(_) -> { count = count + 1 }
             _ -> {}
@@ -31,8 +31,8 @@ fn count_success(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn count_failed(outcomes: Array<TaskOutcome>) -> int {
-    let count = 0
-    for (let i = 0; i < outcomes.length; i++) {
+    var count = 0
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(_) -> { count = count + 1 }
             _ -> {}
@@ -42,8 +42,8 @@ fn count_failed(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn count_cancelled(outcomes: Array<TaskOutcome>) -> int {
-    let count = 0
-    for (let i = 0; i < outcomes.length; i++) {
+    var count = 0
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Cancelled -> { count = count + 1 }
             _ -> {}
@@ -53,7 +53,7 @@ fn count_cancelled(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn has_scope_error(outcomes: Array<TaskOutcome>, expected: string) -> bool {
-    for (let i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(err) -> {
                 match (err) {
@@ -73,7 +73,7 @@ fn has_scope_error(outcomes: Array<TaskOutcome>, expected: string) -> bool {
 
 @test
 fn test_supervisor_scope_returns_outcomes() {
-    let outcomes = supervisor scope {
+    var outcomes = supervisor scope {
         go child_fail("err_a")
         go child_fail("err_b")
     }
@@ -85,7 +85,7 @@ fn test_supervisor_scope_returns_outcomes() {
 
 @test
 fn test_supervisor_scope_all_success() {
-    let outcomes = supervisor scope {
+    var outcomes = supervisor scope {
         go child_ok()
         go child_ok()
     }
@@ -95,7 +95,7 @@ fn test_supervisor_scope_all_success() {
 
 @test
 fn test_supervisor_scope_mixed() {
-    let outcomes = supervisor scope {
+    var outcomes = supervisor scope {
         go child_ok()
         go child_fail("mixed_err")
         go child_ok()
@@ -108,7 +108,7 @@ fn test_supervisor_scope_mixed() {
 
 @test
 fn test_supervisor_scope_single_failure() {
-    let outcomes = supervisor scope {
+    var outcomes = supervisor scope {
         go child_fail("single")
     }
     assert_eq(outcomes.length, 1)
@@ -118,8 +118,8 @@ fn test_supervisor_scope_single_failure() {
 
 @test
 fn test_supervisor_scope_cancelled() {
-    let outcomes = supervisor scope {
-        let task = go child_slow()
+    var outcomes = supervisor scope {
+        var task = go child_slow()
         task.cancel()
     }
     assert_eq(outcomes.length, 1)

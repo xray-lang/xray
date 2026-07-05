@@ -3,6 +3,6 @@
 
 import sys
 
-let b = sys.OsBarrier(1)
+var b = sys.OsBarrier(1)
 print(b.wait())
 print(b.wait())

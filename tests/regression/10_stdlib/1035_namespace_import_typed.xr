@@ -8,13 +8,13 @@ import "./modules/typed_lib" as typed_lib
 
 @test
 fn test_namespace_fn_call() {
-    let r = typed_lib.double_it(21)
+    var r = typed_lib.double_it(21)
     assert_eq(r, 42)
 }
 
 @test
 fn test_namespace_string_fn() {
-    let s = typed_lib.greet("world")
+    var s = typed_lib.greet("world")
     assert_eq(s, "Hello, world")
 }
 
@@ -25,7 +25,7 @@ fn test_namespace_const() {
 
 @test
 fn test_namespace_class() {
-    let p = typed_lib.Point(3, 4)
+    var p = typed_lib.Point(3, 4)
     assert_eq(p.x, 3)
     assert_eq(p.y, 4)
 }

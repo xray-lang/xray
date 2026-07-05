@@ -1,6 +1,6 @@
 fn readWhileOwnerGrows(view: ByteSpan, owner: Bytes) -> int {
-    let before = int(view[0])
-    let i = 0
+    var before = int(view[0])
+    var i = 0
     while (i < 4096) {
         owner.push(i & 0xFF)
         i = i + 1
@@ -8,7 +8,7 @@ fn readWhileOwnerGrows(view: ByteSpan, owner: Bytes) -> int {
     return before + int(view[0]) + view.length
 }
 
-let bytes = Bytes(4)
+var bytes = Bytes(4)
 bytes[0] = 1
 bytes[1] = 2
 bytes[2] = 3

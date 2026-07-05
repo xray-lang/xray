@@ -63,9 +63,9 @@ class Bird extends Animal {
 // Monomorphic call site: always Dog
 @test
 fn test_monomorphic_dispatch() {
-    let dog = Dog("Rex")
-    let total = 0
-    for (let i = 0; i < 10; i++) {
+    var dog = Dog("Rex")
+    var total = 0
+    for (var i = 0; i < 10; i++) {
         total += dog.legs()
     }
     assert_eq(total, 40)
@@ -75,9 +75,9 @@ fn test_monomorphic_dispatch() {
 // Polymorphic call site: Dog and Cat
 @test
 fn test_polymorphic_dispatch() {
-    let animals = [Dog("Rex"), Cat("Whiskers"), Dog("Buddy")]
-    let results: Array<string> = []
-    for (let i = 0; i < animals.length; i++) {
+    var animals = [Dog("Rex"), Cat("Whiskers"), Dog("Buddy")]
+    var results: Array<string> = []
+    for (var i = 0; i < animals.length; i++) {
         results.push(animals[i].speak())
     }
     assert_eq(results[0], "Rex says woof")
@@ -88,9 +88,9 @@ fn test_polymorphic_dispatch() {
 // Megamorphic: Dog, Cat, Bird
 @test
 fn test_megamorphic_dispatch() {
-    let animals = [Dog("D"), Cat("C"), Bird("B")]
-    let total_legs = 0
-    for (let i = 0; i < animals.length; i++) {
+    var animals = [Dog("D"), Cat("C"), Bird("B")]
+    var total_legs = 0
+    for (var i = 0; i < animals.length; i++) {
         total_legs += animals[i].legs()
     }
     assert_eq(total_legs, 10)  // 4 + 4 + 2
@@ -99,13 +99,13 @@ fn test_megamorphic_dispatch() {
 // Method with side effects through virtual dispatch
 @test
 fn test_virtual_dispatch_with_state() {
-    let dog = Dog("Max")
-    let results: Array<string> = []
-    for (let i = 0; i < 5; i++) {
+    var dog = Dog("Max")
+    var results: Array<string> = []
+    for (var i = 0; i < 5; i++) {
         results.push(dog.speak())
     }
     assert_eq(results.length, 5)
-    for (let i = 0; i < 5; i++) {
+    for (var i = 0; i < 5; i++) {
         assert_eq(results[i], "Max says woof")
     }
 }
@@ -113,8 +113,8 @@ fn test_virtual_dispatch_with_state() {
 // Mixed dispatch: base class and derived
 @test
 fn test_base_and_derived() {
-    let base = Animal("Generic")
-    let derived = Dog("Specific")
+    var base = Animal("Generic")
+    var derived = Dog("Specific")
     assert_eq(base.speak(), "Generic says ...")
     assert_eq(derived.speak(), "Specific says woof")
     assert_eq(base.legs(), 0)

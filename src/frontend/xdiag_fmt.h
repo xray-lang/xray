@@ -13,7 +13,7 @@
  *   error: expected expression
  *    --> src/main.xr:5:9
  *     |
- *   5 | let y = +
+ *   5 | var y = +
  *     |         ^ expected expression
  */
 

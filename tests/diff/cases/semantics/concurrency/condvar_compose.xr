@@ -27,7 +27,7 @@ class Condvar {
 
     _lockWaiters() {
         while (true) {
-            let (_, ok) = this._wlock.compareExchange(false, true, Ordering.AcquireRelease)
+            var (_, ok) = this._wlock.compareExchange(false, true, Ordering.AcquireRelease)
             if (ok) { break }
         }
     }
@@ -48,7 +48,7 @@ class Condvar {
 
     signal() {
         this._lockWaiters()
-        let wake = this._waiters > 0
+        var wake = this._waiters > 0
         if (wake) { this._waiters = this._waiters - 1 }
         this._wlock.store(false, Ordering.Release)
         if (wake) { this._sem.release(1) }
@@ -56,7 +56,7 @@ class Condvar {
 
     broadcast() {
         this._lockWaiters()
-        let n = this._waiters
+        var n = this._waiters
         this._waiters = 0
         this._wlock.store(false, Ordering.Release)
         if (n > 0) { this._sem.release(n) }
@@ -68,14 +68,14 @@ class Condvar {
 // the same monitor lock and signals. Output is deterministic regardless of which
 // coroutine is scheduled first, because the consumer checks the predicate first.
 
-shared const cv = Condvar()
-shared const box = Atomic<int>(-1)   // -1 = empty; guarded by cv's monitor lock
-shared const consumed = CountdownLatch(1)
+shared cv = Condvar()
+shared box = Atomic<int>(-1)   // -1 = empty; guarded by cv's monitor lock
+shared consumed = CountdownLatch(1)
 
 go {
     cv.lock()
     while (box.load() < 0) { cv.wait() }
-    let v = box.load()
+    var v = box.load()
     cv.unlock()
     print(v)              // 42
     consumed.done()
@@ -92,10 +92,10 @@ consumed.wait()
 // Three consumers park until a flag flips; one broadcast must release all of
 // them. The observable result (count of woken consumers) is order-independent.
 
-shared const cv2 = Condvar()
-shared const ready = Atomic<bool>(false)
-shared const woke = Atomic<int>(0)
-shared const all = CountdownLatch(3)
+shared cv2 = Condvar()
+shared ready = Atomic<bool>(false)
+shared woke = Atomic<int>(0)
+shared all = CountdownLatch(3)
 
 for (i in 0..3) {
     go {

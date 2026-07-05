@@ -8,8 +8,8 @@
 // boundary is rejected.
 
 fn main_logic() {
-    let counter = [0]
-    let t = go {
+    var counter = [0]
+    var t = go {
         counter.push(1)
         return 0
     }

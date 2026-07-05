@@ -1,9 +1,9 @@
-let ch = Channel<int>(1)
+shared ch = Channel<int>(1)
 
 print(ch.trySend(7))
 print(ch.trySend(8))
 
-let r1 = ch.tryRecv()
+var r1 = ch.tryRecv()
 print(match (r1) {
     Recv.Value(v) -> v
     _ -> -1
@@ -13,7 +13,7 @@ print(match (r1) {
     _ -> false
 })
 
-let r2 = ch.tryRecv()
+var r2 = ch.tryRecv()
 print(match (r2) {
     Recv.Value(_) -> true
     _ -> false

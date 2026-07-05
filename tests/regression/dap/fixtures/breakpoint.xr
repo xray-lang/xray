@@ -1,5 +1,5 @@
 // DAP test fixture: breakpoint test
-let x = 1
-let y = 2
-let z = x + y
+var x = 1
+var y = 2
+var z = x + y
 print(z)

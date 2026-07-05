@@ -198,7 +198,7 @@ TEST(parser_logical_and_or) {
 
 TEST(parser_let_decl) {
     setup();
-    AstNode *stmt = parse_first("let x = 10");
+    AstNode *stmt = parse_first("var x = 10");
     ASSERT_EQ_INT(stmt->type, AST_VAR_DECL);
     ASSERT_STR_EQ(stmt->as.var_decl.name, "x");
     ASSERT_NOT_NULL(stmt->as.var_decl.initializer);
@@ -245,7 +245,7 @@ TEST(parser_while_stmt) {
 
 TEST(parser_for_stmt) {
     setup();
-    AstNode *stmt = parse_first("for (let i = 0; i < 10; i++) {\n  print(i)\n}");
+    AstNode *stmt = parse_first("for (var i = 0; i < 10; i++) {\n  print(i)\n}");
     ASSERT_EQ_INT(stmt->type, AST_FOR_STMT);
     ASSERT_NOT_NULL(stmt->as.for_stmt.initializer);
     ASSERT_NOT_NULL(stmt->as.for_stmt.condition);
@@ -336,7 +336,7 @@ TEST(parser_index_get) {
 TEST(parser_object_literal) {
     setup();
     // Object literal in assignment context (bare {} is parsed as block)
-    AstNode *stmt = parse_first("let obj = {a: 1, b: 2}");
+    AstNode *stmt = parse_first("var obj = {a: 1, b: 2}");
     ASSERT_EQ_INT(stmt->type, AST_VAR_DECL);
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_NOT_NULL(init);
@@ -411,8 +411,8 @@ TEST(parser_empty_source) {
 
 TEST(parser_multiple_stmts) {
     setup();
-    AstNode *program = parse_ok("let x = 1\n"
-                                "let y = 2\n"
+    AstNode *program = parse_ok("var x = 1\n"
+                                "var y = 2\n"
                                 "print(x + y)");
     ASSERT_TRUE(program->as.program.count >= 3);
     ASSERT_EQ_INT(program->as.program.statements[0]->type, AST_VAR_DECL);
@@ -445,7 +445,7 @@ TEST(parser_member_access) {
 TEST(parser_tuple_unit_literal) {
     setup();
     /* `()` is the unit literal: a 0-arity AST_TUPLE_LITERAL. */
-    AstNode *stmt = parse_first("let u = ()");
+    AstNode *stmt = parse_first("var u = ()");
     ASSERT_EQ_INT(stmt->type, AST_VAR_DECL);
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_NOT_NULL(init);
@@ -458,7 +458,7 @@ TEST(parser_tuple_unary_literal) {
     setup();
     /* `(x,)` -- the trailing comma is what distinguishes a 1-tuple from
      * a parenthesised scalar. */
-    AstNode *stmt = parse_first("let u = (42,)");
+    AstNode *stmt = parse_first("var u = (42,)");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_TUPLE_LITERAL);
     ASSERT_EQ_INT(init->as.tuple_literal.count, 1);
@@ -467,7 +467,7 @@ TEST(parser_tuple_unary_literal) {
 
 TEST(parser_tuple_multi_literal) {
     setup();
-    AstNode *stmt = parse_first("let t = (1, \"hi\", true)");
+    AstNode *stmt = parse_first("var t = (1, \"hi\", true)");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_TUPLE_LITERAL);
     ASSERT_EQ_INT(init->as.tuple_literal.count, 3);
@@ -480,7 +480,7 @@ TEST(parser_tuple_multi_literal) {
 
 TEST(parser_tuple_nested_literal) {
     setup();
-    AstNode *stmt = parse_first("let n = ((1, 2), (3, 4))");
+    AstNode *stmt = parse_first("var n = ((1, 2), (3, 4))");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_TUPLE_LITERAL);
     ASSERT_EQ_INT(init->as.tuple_literal.count, 2);
@@ -493,7 +493,7 @@ TEST(parser_tuple_nested_literal) {
 TEST(parser_tuple_with_trailing_comma) {
     setup();
     /* Trailing comma is allowed for arity > 1 too. */
-    AstNode *stmt = parse_first("let t = (1, 2, 3,)");
+    AstNode *stmt = parse_first("var t = (1, 2, 3,)");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_TUPLE_LITERAL);
     ASSERT_EQ_INT(init->as.tuple_literal.count, 3);
@@ -503,7 +503,7 @@ TEST(parser_tuple_with_trailing_comma) {
 TEST(parser_tuple_type_over_16_elements) {
     setup();
     AstNode *stmt =
-        parse_first("let t: (int, int, int, int, int, int, int, int, int, int, "
+        parse_first("var t: (int, int, int, int, int, int, int, int, int, int, "
                     "int, int, int, int, int, int, int, int, int, int) = "
                     "(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)");
     ASSERT_EQ_INT(stmt->type, AST_VAR_DECL);
@@ -523,7 +523,7 @@ TEST(parser_grouping_still_works) {
     /* `(x)` without a trailing comma must remain a grouping, otherwise
      * every existing parenthesised expression would silently turn into
      * a 1-tuple. */
-    AstNode *stmt = parse_first("let g = (1 + 2)");
+    AstNode *stmt = parse_first("var g = (1 + 2)");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_GROUPING);
     teardown();
@@ -533,7 +533,7 @@ TEST(parser_arrow_fn_not_tuple) {
     setup();
     /* `(a, b) -> a + b` must still parse as a function expression,
      * not as a 2-tuple of variable references followed by `->`. */
-    AstNode *stmt = parse_first("let f = (a, b) -> a + b");
+    AstNode *stmt = parse_first("var f = (a, b) -> a + b");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     teardown();
@@ -552,9 +552,9 @@ TEST(parser_tuple_field_access) {
 
 TEST(parser_tuple_destructure_let) {
     setup();
-    /* `let (a, b) = pair` — produces AST_DESTRUCTURE_DECL whose
+    /* `var (a, b) = pair` — produces AST_DESTRUCTURE_DECL whose
      * pattern is PATTERN_TUPLE with two identifier sub-patterns. */
-    AstNode *stmt = parse_first("let (a, b) = pair");
+    AstNode *stmt = parse_first("var (a, b) = pair");
     ASSERT_EQ_INT(stmt->type, AST_DESTRUCTURE_DECL);
     XrDestructurePattern *p = stmt->as.destructure_decl.pattern;
     ASSERT_NOT_NULL(p);
@@ -571,7 +571,7 @@ TEST(parser_tuple_destructure_with_skip) {
     setup();
     /* `_` slots produce PATTERN_SKIP rather than PATTERN_IDENTIFIER,
      * matching the array-pattern convention. */
-    AstNode *stmt = parse_first("let (x, _, z) = triple");
+    AstNode *stmt = parse_first("var (x, _, z) = triple");
     XrDestructurePattern *p = stmt->as.destructure_decl.pattern;
     ASSERT_EQ_INT(p->type, PATTERN_TUPLE);
     ASSERT_EQ_INT(p->as.array.element_count, 3);
@@ -583,7 +583,7 @@ TEST(parser_tuple_destructure_const) {
     setup();
     AstNode *stmt = parse_first("const (a, b) = pair");
     ASSERT_EQ_INT(stmt->type, AST_DESTRUCTURE_DECL);
-    /* The is_const flag distinguishes `let` from `const`. */
+    /* The is_const flag distinguishes `var` from `const`. */
     ASSERT_TRUE(stmt->as.destructure_decl.is_const);
     teardown();
 }
@@ -592,7 +592,7 @@ TEST(parser_tuple_destructure_fn_param) {
     setup();
     /* `fn f((x, y): (int, int)) ...` — the parser hoists the
      * destructuring pattern off the param into a synthetic
-     * `let (x, y) = __param0` at the head of the function body and
+     * `var (x, y) = __param0` at the head of the function body and
      * nulls out param->pattern. Verify the pattern landed on the body
      * with the right shape. */
     AstNode *stmt = parse_first("fn f((x, y): (int, int)) -> int { return x + y }");
@@ -614,7 +614,7 @@ TEST(parser_tuple_destructure_for_in) {
     setup();
     /* `for ((k, v) in pairs) { body }` desugars at parse time to a
      * for-in loop over a synthesised hidden iterator variable, with a
-     * destructuring `let` injected at the top of the body block. */
+     * destructuring `var` injected at the top of the body block. */
     AstNode *stmt = parse_first("for ((k, v) in pairs) { print(k) }");
     ASSERT_EQ_INT(stmt->type, AST_FOR_IN_STMT);
     /* The injected destructure_decl is the first statement of the body. */
@@ -630,7 +630,7 @@ TEST(parser_tuple_destructure_for_in) {
 
 TEST(parser_object_destructure_rename) {
     setup();
-    AstNode *stmt = parse_first("let { name: localName, age } = user");
+    AstNode *stmt = parse_first("var { name: localName, age } = user");
     ASSERT_EQ_INT(stmt->type, AST_DESTRUCTURE_DECL);
     XrDestructurePattern *p = stmt->as.destructure_decl.pattern;
     ASSERT_NOT_NULL(p);

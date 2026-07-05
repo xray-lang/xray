@@ -1,4 +1,4 @@
-=== Test shared const ===
+=== Test shared ===
 {name: "test", value: 42}
 coro1: 42
 coro2: 84

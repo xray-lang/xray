@@ -1,5 +1,5 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-shared const event = EventCount(0)
+shared event = EventCount(0)
 
 print(event.advance())
 print(event.epoch)

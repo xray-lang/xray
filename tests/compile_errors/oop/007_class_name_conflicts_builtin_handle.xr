@@ -14,5 +14,5 @@ class ExecResult {
     }
 }
 
-let r = ExecResult("hi", 0)
+var r = ExecResult("hi", 0)
 print(r.out)

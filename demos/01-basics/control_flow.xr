@@ -4,7 +4,7 @@
 // Run: xray demos/01-basics/control_flow.xr
 
 // === if / else if / else ===
-let score = 85
+var score = 85
 if (score >= 90) {
     print("Grade: A")
 } else if (score >= 80) {
@@ -16,14 +16,14 @@ if (score >= 90) {
 }
 
 // === while loop ===
-let n = 1
+var n = 1
 while (n <= 5) {
     print("n = ${n}")
     n++
 }
 
 // === C-style for loop ===
-for (let i = 0; i < 5; i++) {
+for (var i = 0; i < 5; i++) {
     print("i = ${i}")
 }
 
@@ -33,13 +33,13 @@ for (i in 0..5) {
 }
 
 // === for-in with array ===
-let fruits = ["apple", "banana", "cherry"]
+var fruits = ["apple", "banana", "cherry"]
 for (fruit in fruits) {
     print("fruit: ${fruit}")
 }
 
 // === break and continue ===
-for (let i = 0; i < 10; i++) {
+for (var i = 0; i < 10; i++) {
     if (i == 3) { continue }
     if (i == 7) { break }
     print("loop: ${i}")

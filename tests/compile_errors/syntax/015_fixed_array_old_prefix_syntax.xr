@@ -3,6 +3,6 @@ struct BadFixedArray {
 }
 
 fn main() {
-    let x = BadFixedArray{data: [1, 2, 3, 4]}
+    var x = BadFixedArray{data: [1, 2, 3, 4]}
     print(x.data[0])
 }

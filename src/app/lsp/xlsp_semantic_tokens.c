@@ -200,11 +200,13 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
         }
 
         case AST_VAR_DECL:
-        case AST_CONST_DECL: {
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL: {
             const char *name = node->as.var_decl.name;
             if (name) {
                 int mods = XLSP_MOD_DECLARATION;
-                if (node->type == AST_CONST_DECL || node->as.var_decl.is_const) {
+                if (node->type == AST_CONST_DECL || node->as.var_decl.is_const ||
+                    node->type == AST_SHARED_DECL) {
                     mods |= XLSP_MOD_READONLY;
                 }
                 int col = node->column > 0 ? node->column - 1 : 0;

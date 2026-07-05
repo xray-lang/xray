@@ -64,8 +64,8 @@ fn test_xor_same() {
 
 @test
 fn test_xor_swap() {
-    let a = 5
-    let b = 3
+    var a = 5
+    var b = 3
     a = a ^ b
     b = a ^ b
     a = a ^ b
@@ -84,7 +84,7 @@ fn test_not_basic() {
 @test
 fn test_not_byte() {
     // ~0xFF 在 64 位上是很大的负数
-    let x = ~0xFF
+    var x = ~0xFF
     assert_eq(x < 0, true)
 }
 
@@ -92,17 +92,17 @@ fn test_not_byte() {
 
 @test
 fn test_shl_basic() {
-    let x = 1
-    let shift = 3
-    let result = x << shift
+    var x = 1
+    var shift = 3
+    var result = x << shift
     assert_eq(result, 8)
 }
 
 @test
 fn test_shr_basic() {
-    let x = 16
-    let shift = 2
-    let result = x >> shift
+    var x = 16
+    var shift = 2
+    var result = x >> shift
     assert_eq(result, 4)
 }
 
@@ -110,28 +110,28 @@ fn test_shr_basic() {
 
 @test
 fn test_check_bit() {
-    let flags = 0b1010
+    var flags = 0b1010
     assert_eq((flags & 0b0010) != 0, true)   // 第 1 位设置
     assert_eq((flags & 0b0001) != 0, false)  // 第 0 位未设置
 }
 
 @test
 fn test_set_bit() {
-    let flags = 0b0000
+    var flags = 0b0000
     flags = flags | 0b0100  // 设置第 2 位
     assert_eq(flags, 0b0100)
 }
 
 @test
 fn test_clear_bit() {
-    let flags = 0b1111
+    var flags = 0b1111
     flags = flags & ~0b0100  // 清除第 2 位
     assert_eq(flags, 0b1011)
 }
 
 @test
 fn test_toggle_bit() {
-    let flags = 0b1010
+    var flags = 0b1010
     flags = flags ^ 0b0010  // 切换第 1 位
     assert_eq(flags, 0b1000)
     flags = flags ^ 0b0010  // 再次切换
@@ -142,9 +142,9 @@ fn test_toggle_bit() {
 
 @test
 fn test_shift_large() {
-    let x = 1
-    let shift = 20
-    let result = x << shift
+    var x = 1
+    var shift = 20
+    var result = x << shift
     assert_eq(result > 0, true)
 }
 

@@ -115,7 +115,7 @@ cp ../../tests/regression/**/*.xr corpus/parser/ 2>/dev/null || true
 ./build-fuzz/tests/fuzz/fuzz_lexer_standalone test.xr
 
 # 从 stdin 读取
-echo "let x = 1" | ./build-fuzz/tests/fuzz/fuzz_lexer_standalone
+echo "var x = 1" | ./build-fuzz/tests/fuzz/fuzz_lexer_standalone
 ```
 
 ## 语料库维护

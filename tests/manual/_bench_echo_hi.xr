@@ -7,7 +7,7 @@ import time
 
 fn echoConn(c: NetConn) {
     while (true) {
-        let s = net.read(c)
+        var s = net.read(c)
         if (s == null) { break }
         net.write(c, s!)
     }
@@ -17,18 +17,18 @@ fn echoConn(c: NetConn) {
 fn server(lst: NetListener, ready: Channel<int>) {
     ready.send(1)
     while (true) {
-        let c = net.accept(lst)
+        var c = net.accept(lst)
         if (c == null) { break }
         go echoConn(c!)
     }
 }
 
 fn client(port: int, rounds: int, done: Channel<int>) {
-    let c = net.dial("127.0.0.1", port)!
-    let i = 0
+    var c = net.dial("127.0.0.1", port)!
+    var i = 0
     while (i < rounds) {
         net.write(c, "ping")
-        let r = net.read(c)
+        var r = net.read(c)
         if (r == null) { break }
         i = i + 1
     }
@@ -38,29 +38,29 @@ fn client(port: int, rounds: int, done: Channel<int>) {
 
 @test
 fn bench_echo_hi() {
-    let conns = 1000
-    let rounds = 50
-    let lst = net.listen(0, 1024)!
-    let port = lst.port()
+    var conns = 1000
+    var rounds = 50
+    var lst = net.listen(0, 1024)!
+    var port = lst.port()
 
-    let ready = Channel(1)
+    var ready = Channel(1)
     go server(lst, ready)
     ready.recv()
 
-    let done = Channel(conns)
-    let start = time.monotonic()
-    let i = 0
+    var done = Channel(conns)
+    var start = time.monotonic()
+    var i = 0
     while (i < conns) {
         go client(port, rounds, done)
         i = i + 1
     }
-    let got = 0
+    var got = 0
     while (got < conns) {
         done.recv()
         got = got + 1
     }
-    let elapsed = time.monotonic() - start
-    let total = conns * rounds
+    var elapsed = time.monotonic() - start
+    var total = conns * rounds
     print("BENCH_TOTAL")
     print(total)
     print("BENCH_ELAPSED_MS")

@@ -1,4 +1,4 @@
-let src = Bytes(6)
+var src = Bytes(6)
 src[0] = 10
 src[1] = 20
 src[2] = 30
@@ -6,7 +6,7 @@ src[3] = 40
 src[4] = 50
 src[5] = 60
 
-let out = Bytes.withCapacity(12)
+var out = Bytes.withCapacity(12)
 out.appendFrom(src[1:4])
 out.repeatFrom(2, 4)
 

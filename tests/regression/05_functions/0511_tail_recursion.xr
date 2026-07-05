@@ -184,7 +184,7 @@ fn test_mutual_tail_recursion() {
 fn test_non_tail_regular_call() {
     fn double(x: int) -> int { return x * 2 }
     fn add_then_double(a: int, b: int) -> int {
-        let sum = a + b
+        var sum = a + b
         return double(sum)
     }
 
@@ -206,7 +206,7 @@ fn test_method_tail_recursion() {
         }
     }
 
-    let acc = Accumulator()
+    var acc = Accumulator()
     assert_eq(acc.add(10), 55)
     assert_eq(acc.add(0), 55)
 }
@@ -237,7 +237,7 @@ fn test_method_cross_tail() {
         }
     }
 
-    let t = Toggler()
+    var t = Toggler()
     assert_eq(t.toggleOn(0), false)
     assert_eq(t.toggleOn(1), true)
     assert_eq(t.toggleOn(2), false)
@@ -277,7 +277,7 @@ fn test_deep_method_tail_recursion() {
         }
     }
 
-    let c = DeepCounter()
+    var c = DeepCounter()
     assert_eq(c.count(100000), 100000)
 }
 

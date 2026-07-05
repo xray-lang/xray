@@ -1,9 +1,9 @@
-let values: Array<int> = []
+var values: Array<int> = []
 values.push(1)
 values.push(2)
 values.push(3)
 
-let mapped = values.map(fn(x: int) -> int { return x + 2 })
+var mapped = values.map(fn(x: int) -> int { return x + 2 })
 mapped.push(9)
 
 print(mapped.length)

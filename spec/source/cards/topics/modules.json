@@ -29,7 +29,7 @@
     },
     {
       "heading": "Exports",
-      "body": "export declarations must appear at module top level. export let is not supported — use export const. Re-exports (named and wildcard) aggregate submodule APIs.",
+      "body": "export declarations must appear at module top level. export var is not supported — use export const. Re-exports (named and wildcard) aggregate submodule APIs.",
       "fences": [
         "modules-export"
       ]

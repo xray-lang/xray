@@ -26,7 +26,7 @@ fn test_addition() {
 
 @test
 fn test_with_assertions() {
-    let result = compute()
+    var result = compute()
     assert_eq(result, 42)
     assert(result > 0)
 }
@@ -73,8 +73,8 @@ xray 把断言函数作为**全局内置**（不需 `import test`）。完整签
 ```xray @id=testing-async
 @test
 fn test_async_fetch() {
-    let task = go fetch_data("http://...")
-    let result = await task
+    var task = go fetch_data("http://...")
+    var result = await task
     assert_eq(result.status, 200)
 }
 ```
@@ -143,7 +143,7 @@ fn test_addition() {
 
 @test
 fn test_with_assertions() {
-    let result = compute()
+    var result = compute()
     assert_eq(result, 42)
     assert(result > 0)
 }
@@ -190,8 +190,8 @@ A `@test` function body may use `go` / `await` / `await all` / `await any`:
 ```xray @id=testing-async
 @test
 fn test_async_fetch() {
-    let task = go fetch_data("http://...")
-    let result = await task
+    var task = go fetch_data("http://...")
+    var result = await task
     assert_eq(result.status, 200)
 }
 ```

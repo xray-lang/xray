@@ -219,7 +219,7 @@ XrJsonValue *xlsp_handle_td_completion_resolve(XrLspServer *server, XrJsonValue 
             } else {
                 XrType *type = xa_analyzer_get_type(analyzer, sym);
                 const char *type_str = type ? xr_type_to_string(type) : "unknown";
-                const char *kw = sym->is_const ? "const" : "var";
+                const char *kw = sym->is_shared ? "shared" : (sym->is_const ? "const" : "var");
                 snprintf(doc_str, sizeof(doc_str), "```xray\n%s %s: %s\n```", kw, name, type_str);
                 resolved = true;
             }

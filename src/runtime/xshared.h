@@ -12,15 +12,15 @@
  *   Support concurrent access from multiple coroutines.
  *
  * SHARED VARIABLE TYPES:
- *   shared const x = value
+ *   shared x = value
  *     - Atomic refcount, all coroutines can read concurrently
  *     - Immutable after creation, zero-copy sharing
- *     - Example: shared const config = { port: 8080 }
+ *     - Example: shared config = { port: 8080 }
  *
- *   shared let x = value
+ *   shared x = value
  *     - Only accessible via Channel for serialized read/write
  *     - Must send through channel, cannot be read directly
- *     - Example: shared let counter = 0; ch.send(counter)
+ *     - Example: shared counter = 0; ch.send(counter)
  *
  * SCOPING RULES:
  *   - Stored in global heap, but visibility is lexical scope only

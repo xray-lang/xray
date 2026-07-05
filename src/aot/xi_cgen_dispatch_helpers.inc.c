@@ -1144,8 +1144,12 @@ static const XiValue *xicgen_stack_slice_source_value(const XiValue *arg) {
 
 static bool xicgen_slice_can_inline_bytes_common_prefix(XiCgenCtx *ctx, const XiValue *arg) {
     const XiValue *slice = xicgen_stack_slice_source_value(arg);
-    return slice && cg_span_value_u8_info(ctx, slice, NULL) &&
-           cg_span_value_u8_info(ctx, slice->args[0], NULL);
+    return slice && cg_span_value_u8_info(ctx, slice->args[0], NULL);
+}
+
+static bool xicgen_value_is_u8_span_or_inline_slice(XiCgenCtx *ctx, const XiValue *arg) {
+    return cg_span_value_u8_info(ctx, arg, NULL) ||
+           xicgen_slice_can_inline_bytes_common_prefix(ctx, arg);
 }
 
 static bool xicgen_direct_call_param_noescape(XiCgenCtx *ctx, const XiFunc *current,
@@ -1166,6 +1170,22 @@ static bool xicgen_method_arg_keeps_span_noescape(const XiValue *user, uint16_t 
     if (arg_index == 2 && strcmp(method, "writeFromUnchecked") == 0)
         return true;
     return false;
+}
+
+static bool xicgen_call_method_is_common_prefix(const XiValue *value) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs != 2 ||
+        !v->aux)
+        return false;
+    return strcmp((const char *) v->aux, "commonPrefix") == 0;
+}
+
+static bool xicgen_call_method_is_copy_from(const XiValue *value) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs != 2 ||
+        !v->aux)
+        return false;
+    return strcmp((const char *) v->aux, "copyFrom") == 0;
 }
 
 static bool xicgen_rawptr_value_only_used_noescape(XiCgenCtx *ctx, const XiFunc *f,
@@ -1531,6 +1551,16 @@ static bool xicgen_proxy_value_only_feeds_stack_slice_direct_call(XiCgenCtx *ctx
                     saw_stack_call = true;
                     continue;
                 }
+                if (xicgen_call_method_is_common_prefix(user) && a <= 1 &&
+                    xicgen_slice_can_inline_bytes_common_prefix(ctx, slice)) {
+                    saw_stack_call = true;
+                    continue;
+                }
+                if (xicgen_call_method_is_copy_from(user) && a <= 1 &&
+                    xicgen_slice_can_inline_bytes_common_prefix(ctx, slice)) {
+                    saw_stack_call = true;
+                    continue;
+                }
                 if (cg_unwrap_identity_value(user) == slice &&
                     xicgen_proxy_value_only_feeds_stack_slice_direct_call(ctx, f, user, slice,
                                                                           (uint8_t) (depth + 1))) {
@@ -1585,6 +1615,16 @@ static bool xicgen_slice_value_only_used_by_stack_slice_direct_call(XiCgenCtx *c
                     }
                 }
                 if (user->op == XI_BYTES_SPAN_COMMON_PREFIX && a <= 1 &&
+                    xicgen_slice_can_inline_bytes_common_prefix(ctx, target)) {
+                    saw_stack_call = true;
+                    continue;
+                }
+                if (xicgen_call_method_is_common_prefix(user) && a <= 1 &&
+                    xicgen_slice_can_inline_bytes_common_prefix(ctx, target)) {
+                    saw_stack_call = true;
+                    continue;
+                }
+                if (xicgen_call_method_is_copy_from(user) && a <= 1 &&
                     xicgen_slice_can_inline_bytes_common_prefix(ctx, target)) {
                     saw_stack_call = true;
                     continue;
@@ -2345,6 +2385,19 @@ static void xicgen_checktype(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     XrRep out_rep = xicgen_value_c_storage_rep(ctx, f, v);
     int32_t tid = (int32_t) (v->aux_int >> 1);
     bool allow_null = (v->aux_int & 1) != 0;
+
+    if (cg_value_plan_is_span_aggregate(ctx, v)) {
+        if (cg_value_plan_is_span_aggregate(ctx, arg)) {
+            emit_vref(out, arg);
+            return;
+        }
+        if (cg_type_is_byte_span(v->type)) {
+            fprintf(out, "xrt_byte_span_from_value(");
+            emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
+            fprintf(out, ", \"ByteSpan argument expects Bytes or ByteSpan\")");
+            return;
+        }
+    }
 
     fprintf(out, "({ XrValue _ct = ");
     const char *arg_suffix =
@@ -3273,6 +3326,22 @@ static bool xicgen_span_slice_is_nothrow(XiCgenCtx *ctx, const XiValue *value) {
     return v && v->op == XI_SLICE && v->nargs >= 3 && cg_value_plan_is_span_aggregate(ctx, v);
 }
 
+static bool xicgen_byte_span_common_prefix_method_is_direct(XiCgenCtx *ctx, const XiValue *call) {
+    const XiValue *v = cg_unwrap_identity_value(call);
+    if (!xicgen_call_method_is_common_prefix(v))
+        return false;
+    return xicgen_value_is_u8_span_or_inline_slice(ctx, v->args[0]) &&
+           xicgen_value_is_u8_span_or_inline_slice(ctx, v->args[1]);
+}
+
+static bool xicgen_byte_span_copy_method_is_direct(XiCgenCtx *ctx, const XiValue *call) {
+    const XiValue *v = cg_unwrap_identity_value(call);
+    if (!xicgen_call_method_is_copy_from(v))
+        return false;
+    return xicgen_value_is_u8_span_or_inline_slice(ctx, v->args[0]) &&
+           xicgen_value_is_u8_span_or_inline_slice(ctx, v->args[1]);
+}
+
 static bool xicgen_runtime_method_call_is_direct_nothrow(const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1 ||
@@ -3357,7 +3426,23 @@ static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current
         return true;
     if (cg_span_common_prefix_trusted_nothrow(ctx, v))
         return true;
+    if (xicgen_byte_span_common_prefix_method_is_direct(ctx, v))
+        return true;
     return xicgen_call_is_nothrow_direct_depth(ctx, current, v, depth);
+}
+
+static bool xicgen_assert_is_parallel_body_safe(XiCgenCtx *ctx, const XiFunc *current,
+                                                const XiValue *value) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || v->op != XI_ASSERT || v->nargs < 1 || !v->args[0])
+        return false;
+
+    const XiValue *cond = cg_unwrap_identity_value(v->args[0]);
+    if (cond && cond->op == XI_CONST && cond->type && cond->type->kind == XR_KIND_BOOL) {
+        bool truth = cond->aux_int != 0;
+        return v->aux_int == 1 ? !truth : truth;
+    }
+    return xicgen_value_is_proven_nothrow(ctx, current, cond, 0);
 }
 
 static bool xicgen_err_check_after_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current,
@@ -4093,6 +4178,11 @@ static bool xicgen_emit_int_numeric_method(XiCgenCtx *ctx, FILE *out, const XiVa
     return false;
 }
 
+static void xicgen_bytes_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                   const char *prefix);
+static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                            const XiValue *v, const char *prefix);
+
 static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *method, uint16_t nargs) {
     if (xicgen_emit_int_numeric_method(ctx, out, v, method, nargs))
@@ -4149,6 +4239,14 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
+        return;
+    }
+    if (xicgen_byte_span_copy_method_is_direct(ctx, v)) {
+        xicgen_bytes_span_copy(ctx, out, f, v, NULL);
+        return;
+    }
+    if (xicgen_byte_span_common_prefix_method_is_direct(ctx, v)) {
+        xicgen_bytes_span_common_prefix(ctx, out, f, v, NULL);
         return;
     }
     if (sym < 0) {
@@ -4690,6 +4788,14 @@ static void xicgen_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                            const char *prefix) {
     (void) f;
     (void) prefix;
+    const XiValue *present_bool_get = NULL;
+    bool bool_const_value = false;
+    if (cg_aot_compare_present_bool_map_get_const(ctx, v, &present_bool_get, &bool_const_value)) {
+        fprintf(out, "((");
+        emit_value_as_rep_ctx(ctx, out, present_bool_get, XR_REP_I64);
+        fprintf(out, " != 0) %s %d)", v->op == XI_EQ ? "==" : "!=", bool_const_value ? 1 : 0);
+        return;
+    }
     if (xicgen_compare_uses_unsigned(v)) {
         fprintf(out, "((uint64_t)");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
@@ -5013,7 +5119,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         }
         /* A field access on a namespace module import (`import mod; mod.X`)
          * resolves to the target module's export shared slot. This lets pure-Xray
-         * module const/let exports (path.sep, ...) read xrt_shared_<mod>[slot]
+         * module const/var exports (path.sep, ...) read xrt_shared_<mod>[slot]
          * instead of a dynamic getprop on the module import object, which is null
          * at AOT. Named imports (`import { X } from mod`) already resolve this way
          * through the import ref (see xicgen_import_ref). */
@@ -5630,16 +5736,41 @@ static void xicgen_emit_byte_span_operand(XiCgenCtx *ctx, FILE *out, const XiVal
     fprintf(out, ", \"%s\")", message);
 }
 
+static bool xicgen_emit_byte_span_expr(XiCgenCtx *ctx, FILE *out, const XiValue *arg) {
+    const XiValue *slice = xicgen_stack_slice_source_value(arg);
+    if (slice && xicgen_slice_can_inline_bytes_common_prefix(ctx, slice)) {
+        fprintf(out, "xrt_span_from_span_slice(");
+        emit_span_ref_expr(out, slice->args[0]);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, slice->args[1], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, slice->args[2], XR_REP_I64);
+        fprintf(out, ")");
+        return true;
+    }
+    if (cg_span_value_u8_info(ctx, arg, NULL)) {
+        emit_span_ref_expr(out, arg);
+        return true;
+    }
+    return false;
+}
+
 static void xicgen_bytes_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                    const char *prefix) {
     (void) f;
     (void) prefix;
-    if (cg_span_value_u8_info(ctx, v->args[0], NULL) &&
-        cg_span_value_u8_info(ctx, v->args[1], NULL)) {
+    if (xicgen_value_is_u8_span_or_inline_slice(ctx, v->args[0]) &&
+        xicgen_value_is_u8_span_or_inline_slice(ctx, v->args[1])) {
         fprintf(out, "({ xr_span_t _dst = ");
-        emit_span_ref_expr(out, v->args[0]);
+        if (!xicgen_emit_byte_span_expr(ctx, out, v->args[0])) {
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+        }
         fprintf(out, "; xr_span_t _src = ");
-        emit_span_ref_expr(out, v->args[1]);
+        if (!xicgen_emit_byte_span_expr(ctx, out, v->args[1])) {
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+        }
         fprintf(out,
                 "; if (xrt_span_is_readonly(_dst)) xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
                 "\"cannot write through readonly Span\"); if (XR_UNLIKELY(_src.length < 0 || "
@@ -5700,14 +5831,21 @@ static bool xicgen_emit_byte_span_data_len_expr(XiCgenCtx *ctx, FILE *out, const
     return false;
 }
 
+static bool xicgen_can_emit_byte_span_data_len_expr(XiCgenCtx *ctx, const XiValue *arg) {
+    const XiValue *slice = xicgen_stack_slice_source_value(arg);
+    if (slice && xicgen_slice_can_inline_bytes_common_prefix(ctx, slice))
+        return true;
+    return cg_span_value_u8_info(ctx, arg, NULL);
+}
+
 static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                             const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-    if (cg_span_value_u8_info(ctx, v->args[0], NULL) &&
-        cg_span_value_u8_info(ctx, v->args[1], NULL)) {
+    if (xicgen_can_emit_byte_span_data_len_expr(ctx, v->args[0]) &&
+        xicgen_can_emit_byte_span_data_len_expr(ctx, v->args[1])) {
         fprintf(out, "({ ");
         if (!xicgen_emit_byte_span_data_len_expr(ctx, out, v->args[0], "left") ||
             !xicgen_emit_byte_span_data_len_expr(ctx, out, v->args[1], "right")) {
@@ -6807,6 +6945,8 @@ static const XiValue *xicgen_find_par_for_unsupported_call_value(XiCgenCtx *ctx,
         return NULL;
     if (cg_array_builtin_call_is_trusted_nothrow(ctx, current, call))
         return NULL;
+    if (xicgen_byte_span_common_prefix_method_is_direct(ctx, call))
+        return NULL;
     if (xicgen_enum_method_call_is_aggregate_adt_construct(ctx, current, call))
         return NULL;
 
@@ -6856,6 +6996,8 @@ static const XiValue *xicgen_find_par_for_unsupported_body_value_depth(XiCgenCtx
             if (!value)
                 continue;
             if ((value->flags & (XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND)) == 0)
+                continue;
+            if (xicgen_assert_is_parallel_body_safe(ctx, body, value))
                 continue;
             if (xicgen_value_is_proven_nothrow(ctx, body, value, 0))
                 continue;

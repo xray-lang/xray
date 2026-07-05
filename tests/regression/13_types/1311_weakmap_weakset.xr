@@ -9,9 +9,9 @@
 
 @test
 fn test_weakmap_weakset() {
-    let wm = WeakMap()
-    let key1 = { name: "alice" }
-    let key2 = { name: "bob" }
+    var wm = WeakMap()
+    var key1 = { name: "alice" }
+    var key2 = { name: "bob" }
     wm.set(key1, "value1")
     wm.set(key2, "value2")
     assert_eq(wm.get(key1), "value1")
@@ -20,7 +20,7 @@ fn test_weakmap_weakset() {
 
     // Test 2: has
     assert_eq(wm.has(key1), true)
-    let key3 = { name: "charlie" }
+    var key3 = { name: "charlie" }
     assert_eq(wm.has(key3), false)
     print("PASS: weakmap has")
 
@@ -32,7 +32,7 @@ fn test_weakmap_weakset() {
     print("PASS: weakmap delete")
 
     // Test 4: update value
-    let key4 = { kind: "config" }
+    var key4 = { kind: "config" }
     wm.set(key4, "old")
     assert_eq(wm.get(key4), "old")
     wm.set(key4, "new")
@@ -40,27 +40,27 @@ fn test_weakmap_weakset() {
     print("PASS: weakmap update")
 
     // Test 5: array as value
-    let key5 = { kind: "container" }
+    var key5 = { kind: "container" }
     wm.set(key5, [1, 2, 3])
-    let arr = wm.get(key5)
+    var arr = wm.get(key5)
     assert_eq(arr[0], 1)
     assert_eq(arr[1], 2)
     assert_eq(arr[2], 3)
     print("PASS: weakmap array value")
 
     // Test 6: nested object as value
-    let key6 = { outer: true }
+    var key6 = { outer: true }
     wm.set(key6, { inner: { deep: "value" } })
-    let val = wm.get(key6)
+    var val = wm.get(key6)
     assert_eq(val.inner.deep, "value")
     print("PASS: weakmap nested value")
 
     // ========== WeakSet tests ==========
 
     // Test 7: create and add/has
-    let ws = WeakSet()
-    let obj1 = { id: 1 }
-    let obj2 = { id: 2 }
+    var ws = WeakSet()
+    var obj1 = { id: 1 }
+    var obj2 = { id: 2 }
     assert_eq(ws.has(obj1), false)
     ws.add(obj1)
     ws.add(obj2)
@@ -75,8 +75,8 @@ fn test_weakmap_weakset() {
     print("PASS: weakset delete")
 
     // Test 9: no duplicates
-    let ws2 = WeakSet()
-    let obj3 = { unique: true }
+    var ws2 = WeakSet()
+    var obj3 = { unique: true }
     ws2.add(obj3)
     ws2.add(obj3)
     ws2.add(obj3)

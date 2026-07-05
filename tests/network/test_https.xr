@@ -6,7 +6,7 @@ import http
 
 print("Testing HTTPS...")
 
-let resp = http.get("https://httpbin.org/get")
+var resp = http.get("https://httpbin.org/get")
 if (resp.error) {
     print("Error: " + resp.error)
 } else {

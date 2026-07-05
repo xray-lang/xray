@@ -51,10 +51,10 @@ fn test_module_and_method_interop() {
 
 @test
 fn test_method_dispatch_via_inference() {
-    let listener = net.listen(0, 1)
+    var listener = net.listen(0, 1)
     if (listener == null) { return }
 
-    let l = listener!
+    var l = listener!
     assert_true(l.fd() >= 0)
     assert_true(l.port() > 0)
 
@@ -75,10 +75,10 @@ fn test_method_dispatch_via_inference() {
 
 @test
 fn test_explicit_typed_listener() {
-    let listener: NetListener? = net.listen(0, 1)
+    var listener: NetListener? = net.listen(0, 1)
     if (listener == null) { return }
 
-    let l: NetListener = listener!
+    var l: NetListener = listener!
     assert_true(l.fd() >= 0)
     assert_true(l.port() > 0)
     assert_true(!l.isClosed())

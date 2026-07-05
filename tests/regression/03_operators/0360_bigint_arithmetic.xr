@@ -6,15 +6,15 @@
 
 @test
 fn test_add_small() {
-    let a = 100n
-    let b = 200n
+    var a = 100n
+    var b = 200n
     assert_eq((a + b).toString(), "300")
 }
 
 @test
 fn test_add_large() {
-    let a = 999999999999999999999999999999n
-    let b = 1n
+    var a = 999999999999999999999999999999n
+    var b = 1n
     assert_eq((a + b).toString(), "1000000000000000000000000000000")
 }
 
@@ -22,15 +22,15 @@ fn test_add_large() {
 
 @test
 fn test_sub_basic() {
-    let a = 200n
-    let b = 100n
+    var a = 200n
+    var b = 100n
     assert_eq((a - b).toString(), "100")
 }
 
 @test
 fn test_sub_negative_result() {
-    let a = 100n
-    let b = 200n
+    var a = 100n
+    var b = 200n
     assert_eq((a - b).toString(), "-100")
 }
 
@@ -38,15 +38,15 @@ fn test_sub_negative_result() {
 
 @test
 fn test_mul_basic() {
-    let a = 100n
-    let b = 200n
+    var a = 100n
+    var b = 200n
     assert_eq((a * b).toString(), "20000")
 }
 
 @test
 fn test_mul_large() {
-    let a = 12345678901234567890n
-    let b = 2n
+    var a = 12345678901234567890n
+    var b = 2n
     assert_eq((a * b).toString(), "24691357802469135780")
 }
 
@@ -54,15 +54,15 @@ fn test_mul_large() {
 
 @test
 fn test_div_basic() {
-    let a = 100n
-    let b = 3n
+    var a = 100n
+    var b = 3n
     assert_eq((a / b).toString(), "33")
 }
 
 @test
 fn test_div_exact() {
-    let a = 100n
-    let b = 10n
+    var a = 100n
+    var b = 10n
     assert_eq((a / b).toString(), "10")
 }
 
@@ -70,15 +70,15 @@ fn test_div_exact() {
 
 @test
 fn test_mod_basic() {
-    let a = 100n
-    let b = 3n
+    var a = 100n
+    var b = 3n
     assert_eq((a % b).toString(), "1")
 }
 
 @test
 fn test_mod_no_remainder() {
-    let a = 100n
-    let b = 10n
+    var a = 100n
+    var b = 10n
     assert_eq((a % b).toString(), "0")
 }
 
@@ -86,12 +86,12 @@ fn test_mod_no_remainder() {
 
 @test
 fn test_negate_positive() {
-    let a = 999n
+    var a = 999n
     assert_eq((-a).toString(), "-999")
 }
 
 @test
 fn test_negate_negative() {
-    let a = -999n
+    var a = -999n
     assert_eq((-a).toString(), "999")
 }

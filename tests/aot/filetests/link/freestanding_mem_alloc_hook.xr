@@ -2,6 +2,6 @@ import mem
 
 @c_export("xray_alloc_hook_score")
 fn xray_alloc_hook_score(n: int) -> int {
-    let p = mem.allocZeroed(8)
+    var p = mem.allocZeroed(8)
     return n + p.length
 }

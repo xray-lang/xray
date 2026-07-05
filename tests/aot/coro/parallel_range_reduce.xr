@@ -4,13 +4,13 @@ struct Totals {
 }
 
 fn reduceTotals(n: int) -> int {
-    let zero = Totals{count: 0, sum: 0}
-    let total = parallel range reduce begin, end in 0..n workers 3 worker wid
+    var zero = Totals{count: 0, sum: 0}
+    var total = parallel range reduce begin, end in 0..n workers 3 worker wid
         init zero
         combine (a: Totals, b: Totals) -> Totals{count: a.count + b.count, sum: a.sum + b.sum} {
-        let count = 0
-        let sum = 0
-        let i = begin
+        var count = 0
+        var sum = 0
+        var i = begin
         while (i < end) {
             count = count + 1
             sum = sum + i
@@ -22,7 +22,7 @@ fn reduceTotals(n: int) -> int {
     return total.count + total.sum
 }
 
-let scalar = parallel range reduce begin, end in 0..10 workers 3
+var scalar = parallel range reduce begin, end in 0..10 workers 3
     init 0
     combine (a: int, b: int) -> a + b {
     end - begin

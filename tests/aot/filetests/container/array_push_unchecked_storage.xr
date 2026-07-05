@@ -5,6 +5,6 @@ fn write_bytes(out: Bytes) {
     }
 }
 
-let out = Bytes.withCapacity(2)
+var out = Bytes.withCapacity(2)
 write_bytes(out)
 print(out.length + out[0] + out[1])

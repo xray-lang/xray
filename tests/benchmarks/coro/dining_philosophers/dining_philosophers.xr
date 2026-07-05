@@ -4,8 +4,8 @@
 // 测试通道方案解决经典同步问题的效率
 import time
 
-let N = 5            // 哲学家数量
-let MEALS = 100000   // 每人进餐次数
+var N = 5            // 哲学家数量
+var MEALS = 100000   // 每人进餐次数
 if (process.args.length > 0) {
     N = int(process.args[0]) ?? N
 }
@@ -18,15 +18,15 @@ print("哲学家数:", N)
 print("每人进餐:", MEALS)
 
 // Fork = buffered channel(1) used as mutex: value present = available
-shared const forks: Array<Channel<int>> = []
-for (let i = 0; i < N; i++) {
+shared forks: Array<Channel<int>> = []
+for (var i = 0; i < N; i++) {
     forks.push(Channel(1))
 }
-for (let i = 0; i < N; i++) {
+for (var i = 0; i < N; i++) {
     forks[i].send(1)
 }
 
-shared const result_ch: Channel<int> = Channel(100)
+shared result_ch: Channel<int> = Channel(100)
 
 fn recv_int(ch: Channel<int>, fallback: int) -> int {
     return match (ch.recv()) {
@@ -38,7 +38,7 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 // Philosopher: alternates thinking and eating
 // Deadlock avoidance: last philosopher reverses fork order (break circular wait)
 fn philosopher(id: int, meals: int, first: Channel<int>, second: Channel<int>, out: Channel<int>) {
-    for (let i = 0; i < meals; i++) {
+    for (var i = 0; i < meals; i++) {
         first.recv()
         second.recv()
         second.send(1)
@@ -47,13 +47,13 @@ fn philosopher(id: int, meals: int, first: Channel<int>, second: Channel<int>, o
     out.send(meals)
 }
 
-let start = time.monotonic()
+var start = time.monotonic()
 
 // Launch all philosophers (extract channels to local vars before go)
-let tasks: Array<Task> = []
-for (let i = 0; i < N; i++) {
-    let left = forks[i]
-    let right = forks[(i + 1) % N]
+var tasks: Array<Task> = []
+for (var i = 0; i < N; i++) {
+    var left = forks[i]
+    var right = forks[(i + 1) % N]
     // Last philosopher reverses order (break circular wait)
     if (i == N - 1) {
         tasks.push(go philosopher(i, MEALS, right, left, result_ch))
@@ -63,8 +63,8 @@ for (let i = 0; i < N; i++) {
 }
 
 // 收集结果
-let total_meals = 0
-for (let i = 0; i < N; i++) {
+var total_meals = 0
+for (var i = 0; i < N; i++) {
     total_meals = total_meals + recv_int(result_ch, 0)
 }
 
@@ -72,7 +72,7 @@ for (t in tasks) {
     await t
 }
 
-let elapsed = time.monotonic() - start
+var elapsed = time.monotonic() - start
 result_ch.close()
 for (fork in forks) {
     fork.close()

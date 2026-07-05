@@ -6,13 +6,13 @@ import path
 
 @test
 fn test_sep() {
-    let s = path.sep
+    var s = path.sep
     assert(s == "/" || s == "\\")
 }
 
 @test
 fn test_delimiter() {
-    let d = path.delimiter
+    var d = path.delimiter
     assert(d == ":" || d == ";")
 }
 
@@ -20,25 +20,25 @@ fn test_delimiter() {
 
 @test
 fn test_join_basic() {
-    let result = path.join("foo", "bar")
+    var result = path.join("foo", "bar")
     assert_eq(result, "foo/bar")
 }
 
 @test
 fn test_join_multiple() {
-    let result = path.join("foo", "bar", "baz")
+    var result = path.join("foo", "bar", "baz")
     assert_eq(result, "foo/bar/baz")
 }
 
 @test
 fn test_join_with_slash() {
-    let result = path.join("/usr", "local", "bin")
+    var result = path.join("/usr", "local", "bin")
     assert_eq(result, "/usr/local/bin")
 }
 
 @test
 fn test_join_trailing_slash() {
-    let result = path.join("foo/", "bar")
+    var result = path.join("foo/", "bar")
     assert_eq(result, "foo/bar")
 }
 
@@ -51,19 +51,19 @@ fn test_join_long_prefix_absolute_reset() {
 
 @test
 fn test_dirname_basic() {
-    let result = path.dirname("/usr/local/bin/xray")
+    var result = path.dirname("/usr/local/bin/xray")
     assert_eq(result, "/usr/local/bin")
 }
 
 @test
 fn test_dirname_file_only() {
-    let result = path.dirname("file.txt")
+    var result = path.dirname("file.txt")
     assert_eq(result, ".")
 }
 
 @test
 fn test_dirname_root() {
-    let result = path.dirname("/")
+    var result = path.dirname("/")
     assert_eq(result, "/")
 }
 
@@ -71,19 +71,19 @@ fn test_dirname_root() {
 
 @test
 fn test_basename_basic() {
-    let result = path.basename("/usr/local/bin/xray")
+    var result = path.basename("/usr/local/bin/xray")
     assert_eq(result, "xray")
 }
 
 @test
 fn test_basename_with_ext() {
-    let result = path.basename("/home/user/file.txt")
+    var result = path.basename("/home/user/file.txt")
     assert_eq(result, "file.txt")
 }
 
 @test
 fn test_basename_no_dir() {
-    let result = path.basename("file.txt")
+    var result = path.basename("file.txt")
     assert_eq(result, "file.txt")
 }
 
@@ -91,31 +91,31 @@ fn test_basename_no_dir() {
 
 @test
 fn test_extname_basic() {
-    let result = path.extname("file.txt")
+    var result = path.extname("file.txt")
     assert_eq(result, ".txt")
 }
 
 @test
 fn test_extname_no_ext() {
-    let result = path.extname("Makefile")
+    var result = path.extname("Makefile")
     assert_eq(result, "")
 }
 
 @test
 fn test_extname_multiple_dots() {
-    let result = path.extname("archive.tar.gz")
+    var result = path.extname("archive.tar.gz")
     assert_eq(result, ".gz")
 }
 
 @test
 fn test_extname_dotfile() {
-    let result = path.extname(".gitignore")
+    var result = path.extname(".gitignore")
     assert_eq(result, "")
 }
 
 @test
 fn test_extname_trailing_separator() {
-    let result = path.extname("foo.txt/")
+    var result = path.extname("foo.txt/")
     assert_eq(result, ".txt")
 }
 
@@ -123,13 +123,13 @@ fn test_extname_trailing_separator() {
 
 @test
 fn test_normalize_dots() {
-    let result = path.normalize("/usr/local/../bin/./xray")
+    var result = path.normalize("/usr/local/../bin/./xray")
     assert_eq(result, "/usr/bin/xray")
 }
 
 @test
 fn test_normalize_double_slash() {
-    let result = path.normalize("/usr//local///bin")
+    var result = path.normalize("/usr//local///bin")
     assert_eq(result, "/usr/local/bin")
 }
 
@@ -150,7 +150,7 @@ fn test_is_absolute_false() {
 
 @test
 fn test_resolve_absolute() {
-    let result = path.resolve("/foo", "bar")
+    var result = path.resolve("/foo", "bar")
     assert_eq(result, "/foo/bar")
 }
 
@@ -163,7 +163,7 @@ fn test_resolve_absolute_reset_and_normalize() {
 
 @test
 fn test_resolve_returns_absolute() {
-    let result = path.resolve("foo")
+    var result = path.resolve("foo")
     assert(path.isAbsolute(result))
 }
 
@@ -171,13 +171,13 @@ fn test_resolve_returns_absolute() {
 
 @test
 fn test_relative_basic() {
-    let result = path.relative("/usr/local/bin", "/usr/local/lib")
+    var result = path.relative("/usr/local/bin", "/usr/local/lib")
     assert_eq(result, "../lib")
 }
 
 @test
 fn test_relative_same() {
-    let result = path.relative("/usr/local", "/usr/local")
+    var result = path.relative("/usr/local", "/usr/local")
     assert_eq(result, ".")
 }
 
@@ -186,25 +186,25 @@ fn test_relative_same() {
 @test
 fn test_relative_prefix_mismatch() {
     // BUG-4 regression: /foo vs /foobar should not treat /foo as common prefix
-    let result = path.relative("/foo", "/foobar")
+    var result = path.relative("/foo", "/foobar")
     assert_eq(result, "../foobar")
 }
 
 @test
 fn test_relative_child() {
-    let result = path.relative("/usr/local", "/usr/local/bin")
+    var result = path.relative("/usr/local", "/usr/local/bin")
     assert_eq(result, "bin")
 }
 
 @test
 fn test_relative_parent() {
-    let result = path.relative("/usr/local/bin", "/usr/local")
+    var result = path.relative("/usr/local/bin", "/usr/local")
     assert_eq(result, "..")
 }
 
 @test
 fn test_relative_deep() {
-    let result = path.relative("/a/b/c", "/a/x/y")
+    var result = path.relative("/a/b/c", "/a/x/y")
     assert_eq(result, "../../x/y")
 }
 
@@ -212,13 +212,13 @@ fn test_relative_deep() {
 
 @test
 fn test_normalize_relative_dotdot() {
-    let result = path.normalize("foo/bar/../../baz")
+    var result = path.normalize("foo/bar/../../baz")
     assert_eq(result, "baz")
 }
 
 @test
 fn test_normalize_absolute_dotdot_at_root() {
-    let result = path.normalize("/../foo")
+    var result = path.normalize("/../foo")
     assert_eq(result, "/foo")
 }
 
@@ -232,7 +232,7 @@ fn test_normalize_only_dot() {
 
 @test
 fn test_parse_basic() {
-    let p = path.parse("/home/user/file.txt")
+    var p = path.parse("/home/user/file.txt")
     assert_eq(p.base, "file.txt")
     assert_eq(p.ext, ".txt")
     assert_eq(p.name, "file")
@@ -242,7 +242,7 @@ fn test_parse_basic() {
 
 @test
 fn test_parse_trailing_separator() {
-    let p = path.parse("foo.txt/")
+    var p = path.parse("foo.txt/")
     assert_eq(p.base, "foo.txt")
     assert_eq(p.ext, ".txt")
     assert_eq(p.name, "foo")
@@ -255,14 +255,14 @@ fn test_parse_trailing_separator() {
 @test
 fn test_format_basic() {
     // path.format accepts a PathInfo handle produced by path.parse.
-    let obj = path.parse("/home/user/file.txt")
-    let result = path.format(obj)
+    var obj = path.parse("/home/user/file.txt")
+    var result = path.format(obj)
     assert_eq(result, "/home/user/file.txt")
 }
 
 @test
 fn test_format_relative_parse_result() {
-    let obj = path.parse("archive.tar")
-    let result = path.format(obj)
+    var obj = path.parse("archive.tar")
+    var result = path.format(obj)
     assert_eq(result, "./archive.tar")
 }

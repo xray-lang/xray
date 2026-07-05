@@ -6,5 +6,5 @@ class Person {
     }
 }
 
-let p = Person()
+var p = Person()
 p.age = "old"

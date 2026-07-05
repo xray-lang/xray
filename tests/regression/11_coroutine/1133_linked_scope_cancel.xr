@@ -12,14 +12,14 @@ fn ok() -> int {
     return 42
 }
 fn slow_ok() -> int {
-    let x = 0
-    for (let i = 0; i < 100; i++) {
+    var x = 0
+    for (var i = 0; i < 100; i++) {
         x = x + 1
     }
     return x
 }
 fn test_two_children() {
-    let caught = false
+    var caught = false
     try {
         linked scope {
             go ok()
@@ -31,7 +31,7 @@ fn test_two_children() {
     assert(caught, "linked scope should throw when child fails")
 }
 fn test_slow_sibling() {
-    let caught = false
+    var caught = false
     try {
         linked scope {
             go slow_ok()
@@ -43,7 +43,7 @@ fn test_slow_sibling() {
     assert(caught, "linked scope should throw even with slow sibling")
 }
 fn test_all_success() {
-    let caught = false
+    var caught = false
     try {
         linked scope {
             go ok()

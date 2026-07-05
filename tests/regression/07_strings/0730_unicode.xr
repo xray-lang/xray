@@ -60,7 +60,7 @@ fn test_byteLength_mixed() {
 
 @test
 fn test_index_ascii() {
-    let s = "Hello"
+    var s = "Hello"
     assert_eq(s[0], 'H')
     assert_eq(s[1], 'e')
     assert_eq(s[4], 'o')
@@ -68,7 +68,7 @@ fn test_index_ascii() {
 
 @test
 fn test_index_chinese() {
-    let s = "你好世界"
+    var s = "你好世界"
     assert_eq(s[0], '你')
     assert_eq(s[1], '好')
     assert_eq(s[3], '界')
@@ -76,7 +76,7 @@ fn test_index_chinese() {
 
 @test
 fn test_index_emoji() {
-    let s = "🎉🎊🌍"
+    var s = "🎉🎊🌍"
     assert_eq(s[0], '🎉')
     assert_eq(s[1], '🎊')
     assert_eq(s[2], '🌍')
@@ -84,7 +84,7 @@ fn test_index_emoji() {
 
 @test
 fn test_index_mixed() {
-    let s = "Hello世界🌍"
+    var s = "Hello世界🌍"
     assert_eq(s[0], 'H')
     assert_eq(s[5], '世')
     assert_eq(s[6], '界')
@@ -93,7 +93,7 @@ fn test_index_mixed() {
 
 @test
 fn test_index_out_of_bounds() {
-    let s = "abc"
+    var s = "abc"
     assert_eq(s[10], null)
     assert_eq(s[100], null)
 }
@@ -149,9 +149,9 @@ fn test_codePointAt_emoji() {
 
 @test
 fn test_iterate_mixed() {
-    let s = "Hi你好"
-    let chars: Array<string> = []
-    for (let i = 0; i < s.length; i++) {
+    var s = "Hi你好"
+    var chars: Array<string> = []
+    for (var i = 0; i < s.length; i++) {
         chars.push(string(s[i]))
     }
     assert_eq(chars.length, 4)
@@ -179,14 +179,14 @@ fn test_compare_emoji() {
 
 @test
 fn test_concat_mixed() {
-    let s = "Hello" + "世界"
+    var s = "Hello" + "世界"
     assert_eq(s, "Hello世界")
     assert_eq(s.length, 7)
 }
 
 @test
 fn test_concat_emoji() {
-    let s = "🎉" + "开始"
+    var s = "🎉" + "开始"
     assert_eq(s, "🎉开始")
     assert_eq(s.length, 3)
 }

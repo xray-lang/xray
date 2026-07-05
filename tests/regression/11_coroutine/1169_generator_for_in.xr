@@ -1,13 +1,13 @@
 // Generator value-yield: `yield expr` produces Iterator<T>, consumable by for-in.
 
 fn counter(n: int) -> Iterator<int> {
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         yield i
     }
 }
 
 fn rangeSum(n: int) -> int {
-    let sum = 0
+    var sum = 0
     for (x in counter(n)) {
         sum = sum + x
     }
@@ -15,7 +15,7 @@ fn rangeSum(n: int) -> int {
 }
 
 fn firstTwoTotal(n: int) -> int {
-    let sum = 0
+    var sum = 0
     for (x in counter(n)) {
         sum = sum + x
         if (x == 1) {

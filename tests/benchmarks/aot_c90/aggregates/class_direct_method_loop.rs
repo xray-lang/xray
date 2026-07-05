@@ -14,8 +14,8 @@ impl Counter {
     }
 
     fn bump(&mut self, n: i64) -> i64 {
-        let mut i: i64 = 0;
-        let mut sum: i64 = 0;
+        var mut i: i64 = 0;
+        var mut sum: i64 = 0;
         while i < n {
             self.value += self.step;
             sum += self.value;
@@ -26,7 +26,7 @@ impl Counter {
 }
 
 fn run(n: i64) -> i64 {
-    let mut c = Counter::new(1, 3);
+    var mut c = Counter::new(1, 3);
     c.bump(n)
 }
 

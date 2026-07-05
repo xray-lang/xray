@@ -9,7 +9,7 @@ fn readPair() -> DecodeResult<(int, int)> {
     return DecodeResult.Ok((12, 34))
 }
 
-let r = readPair()
+var r = readPair()
 match (r) {
     DecodeResult.Ok(p) -> {
         print(p.0)

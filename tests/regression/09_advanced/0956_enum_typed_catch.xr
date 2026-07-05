@@ -15,7 +15,7 @@ fn fail(kind: int) -> int {
 
 // Route by enum type: NetErr → "net", DiskErr → "disk".
 fn classify(kind: int) -> string {
-    let tag = "none"
+    var tag = "none"
     try {
         fail(kind)
     } catch (e: NetErr) {
@@ -44,7 +44,7 @@ fn test_typed_enum_no_throw() {
 // Typed enum catch followed by a catch-all: a non-matching enum must fall
 // through the typed clause into the catch-all rather than propagating.
 fn classify_with_default(kind: int) -> string {
-    let tag = "none"
+    var tag = "none"
     try {
         fail(kind)
     } catch (e: NetErr) {

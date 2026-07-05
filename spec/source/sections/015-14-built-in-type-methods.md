@@ -241,7 +241,7 @@ order: 015
 
 ### 14.19 `Atomic<T>` 方法
 
-`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。必须声明为 `shared const`，禁止 `move`。
+`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。必须声明为 `shared`，禁止 `move`。
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
@@ -497,7 +497,7 @@ These types are registered by the prelude; instances are constructed by factory 
 
 ### 14.19 `Atomic<T>` Methods
 
-`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Must be declared as `shared const`; `move` is prohibited.
+`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Must be declared as `shared`; `move` is prohibited.
 
 | Method | Signature | Description |
 |--|--|--|

@@ -19,5 +19,5 @@ fn same_items(items: Array<int>) -> Array<int> {
 
 print(choose(true, add_i64(21, 21)))
 print(echo_text("ptr"))
-let items: Array<int> = [1, 2, 3]
+var items: Array<int> = [1, 2, 3]
 print(same_items(items).length())

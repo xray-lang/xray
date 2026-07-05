@@ -700,7 +700,7 @@ XrType *xa_narrow_by_instanceof(XrType *type, const char *class_name, bool assum
 }
 
 // ============================================================================
-// Move tracking for shared let variables
+// Move tracking for explicit ownership transfer of local variables
 // ============================================================================
 
 XaFlowNode *xa_flow_create_move(XaFlowBuilder *builder, const char *name) {

@@ -4,7 +4,7 @@
 type IntFn = (int) -> int
 type FloatFn = (float) -> float
 
-let calls = 0
+var calls = 0
 
 fn bump(x: int) -> int {
     calls += 1
@@ -21,9 +21,9 @@ fn arg_side_effect() -> int {
     return 41
 }
 
-let active: IntFn? = bump
-let missing: IntFn? = null
-let promoted: FloatFn? = half
+var active: IntFn? = bump
+var missing: IntFn? = null
+var promoted: FloatFn? = half
 
 print(active?.(41))
 print(calls)

@@ -415,8 +415,8 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             } else {
                 kind = 6;
                 const char *type_str = type ? xr_type_to_string(type) : "unknown";
-                snprintf(detail_buf, sizeof(detail_buf), "%s: %s", sym->is_const ? "const" : "var",
-                         type_str);
+                const char *kw = sym->is_shared ? "shared" : (sym->is_const ? "const" : "var");
+                snprintf(detail_buf, sizeof(detail_buf), "%s: %s", kw, type_str);
                 detail = detail_buf;
             }
 
@@ -969,7 +969,7 @@ static XrJsonValue *complete_enum_instance(XrLspDocument *doc, XrLspPosition pos
     return make_enum_value_completions(enum_name);
 }
 
-// Variable assigned from an enum member: `let c = Color.Green; c.` → name/...
+// Variable assigned from an enum member: `var c = Color.Green; c.` → name/...
 static XrJsonValue *complete_variable_from_enum_assignment(XrLspDocument *doc, const char *prefix) {
     if (!doc->content || !doc->ast)
         return NULL;

@@ -8,21 +8,21 @@ fn recv_then_return(ch: Channel<int>, n: int) -> int {
     return n
 }
 
-let t1 = go square_after_yield(2)
-let t2 = go square_after_yield(3)
-let t3 = go square_after_yield(4)
-let results = await all [t1, t2, t3]
+var t1 = go square_after_yield(2)
+var t2 = go square_after_yield(3)
+var t3 = go square_after_yield(4)
+var results = await all [t1, t2, t3]
 print(results[0] + results[1] + results[2])
 
-let ch1 = Channel<int>(0)
-let ch2 = Channel<int>(1)
-let a = go recv_then_return(ch1, 10)
-let b = go recv_then_return(ch2, 20)
+shared ch1 = Channel<int>(0)
+shared ch2 = Channel<int>(1)
+var a = go recv_then_return(ch1, 10)
+var b = go recv_then_return(ch2, 20)
 ch2.send(1)
-let first = await any [a, b]
+var first = await any [a, b]
 print(first)
 ch1.send(1)
-let last = await a
+var last = await a
 print(last)
 ch1.close()
 ch2.close()

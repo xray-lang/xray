@@ -66,7 +66,7 @@ fn test_nested_return() {
         return null
     }
     
-    let result = findPair([1, 2, 3, 4], 5)
+    var result = findPair([1, 2, 3, 4], 5)
     assert_eq(result != null, true)
     assert_eq(result![0], 0)
     assert_eq(result![1], 3)
@@ -80,7 +80,7 @@ fn test_recursive_return() {
         if (low > high) {
             return -1
         }
-        let mid = (low + high) / 2
+        var mid = (low + high) / 2
         if (arr[mid] == target) {
             return mid
         }
@@ -90,7 +90,7 @@ fn test_recursive_return() {
         return binarySearch(arr, target, low, mid - 1)
     }
     
-    let arr = [1, 3, 5, 7, 9]
+    var arr = [1, 3, 5, 7, 9]
     assert_eq(binarySearch(arr, 5, 0, arr.length - 1), 2)
     assert_eq(binarySearch(arr, 4, 0, arr.length - 1), -1)
 }
@@ -99,7 +99,7 @@ fn test_recursive_return() {
 
 @test
 fn test_void_return() {
-    let executed = false
+    var executed = false
     
     fn process(flag: bool) {
         if (!flag) {

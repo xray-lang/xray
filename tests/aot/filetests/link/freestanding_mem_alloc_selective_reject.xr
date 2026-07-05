@@ -3,6 +3,6 @@ import { allocZeroed } from "mem"
 
 @c_export("xray_bad_alloc_selective")
 fn xray_bad_alloc_selective(n: int) -> int {
-    let b = allocZeroed(n)
+    var b = allocZeroed(n)
     return b.length
 }

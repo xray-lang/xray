@@ -1,8 +1,8 @@
 // anchor: ownership-shared-binding-boundaries
-shared const base: Array<int> = [1, 2]
-shared const alias = base
+shared base: Array<int> = [1, 2]
+shared alias = base
 print(alias.length)
 
-shared let owner: Array<int> = [3, 4]
-shared const frozen = move owner
+shared owner: Array<int> = [3, 4]
+shared frozen = owner
 print(frozen[1])

@@ -1,8 +1,8 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-shared const event = EventCount(0)
-shared const ready = CountdownLatch(1)
+shared event = EventCount(0)
+shared ready = CountdownLatch(1)
 
-let t = go fn() -> int {
+var t = go fn() -> int {
     ready.done()
     return event.wait(0, 0)
 }()

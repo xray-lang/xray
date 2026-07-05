@@ -88,7 +88,7 @@ TEST(graph_new_free) {
 
 TEST(graph_single_file_no_imports) {
     setup();
-    create_file("main.xr", "let x = 42\n");
+    create_file("main.xr", "var x = 42\n");
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
@@ -116,9 +116,9 @@ TEST(graph_single_file_no_imports) {
 
 TEST(graph_linear_deps) {
     setup();
-    create_file("a.xr", "import \"./b\"\nlet a = 1\n");
-    create_file("b.xr", "import \"./c\"\nlet b = 2\n");
-    create_file("c.xr", "let c = 3\n");
+    create_file("a.xr", "import \"./b\"\nvar a = 1\n");
+    create_file("b.xr", "import \"./c\"\nvar b = 2\n");
+    create_file("c.xr", "var c = 3\n");
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
@@ -148,9 +148,9 @@ TEST(graph_linear_deps) {
 TEST(graph_diamond_deps) {
     setup();
     create_file("main.xr", "import \"./left\"\nimport \"./right\"\n");
-    create_file("left.xr", "import \"./base\"\nlet l = 1\n");
-    create_file("right.xr", "import \"./base\"\nlet r = 2\n");
-    create_file("base.xr", "let b = 0\n");
+    create_file("left.xr", "import \"./base\"\nvar l = 1\n");
+    create_file("right.xr", "import \"./base\"\nvar r = 2\n");
+    create_file("base.xr", "var b = 0\n");
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
@@ -182,7 +182,7 @@ TEST(graph_diamond_deps) {
 
 TEST(graph_cycle_self) {
     setup();
-    create_file("self.xr", "import \"./self\"\nlet x = 1\n");
+    create_file("self.xr", "import \"./self\"\nvar x = 1\n");
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
@@ -206,8 +206,8 @@ TEST(graph_cycle_self) {
 
 TEST(graph_cycle_two) {
     setup();
-    create_file("a.xr", "import \"./b\"\nlet a = 1\n");
-    create_file("b.xr", "import \"./a\"\nlet b = 2\n");
+    create_file("a.xr", "import \"./b\"\nvar a = 1\n");
+    create_file("b.xr", "import \"./a\"\nvar b = 2\n");
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
@@ -262,7 +262,7 @@ TEST(graph_cycle_three) {
 TEST(graph_find_by_canonical) {
     setup();
     create_file("main.xr", "import \"./helper\"\n");
-    create_file("helper.xr", "let h = 1\n");
+    create_file("helper.xr", "var h = 1\n");
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);

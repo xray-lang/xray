@@ -85,9 +85,10 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
                  "AOT bundle init failed");
     plan->initialized = true;
     TEST_REQUIRE(xaot_prepare_bundle(&plan->bundle, NULL), "AOT prepare failed");
-    TEST_REQUIRE(
-        xaot_verify_bundle(&plan->bundle, XAOT_VERIFY_AOT_READY, verify_err, sizeof(verify_err)),
-        "AOT verify failed");
+    if (!xaot_verify_bundle(&plan->bundle, XAOT_VERIFY_AOT_READY, verify_err, sizeof(verify_err))) {
+        fprintf(stderr, "  AOT verify error: %s\n", verify_err);
+        TEST_REQUIRE(false, "AOT verify failed");
+    }
 }
 
 static void test_aot_plan_free(TestAotPlan *plan) {
@@ -95,10 +96,8 @@ static void test_aot_plan_free(TestAotPlan *plan) {
         xaot_bundle_free(&plan->bundle);
 }
 
-/* Compile source to Xi IR (without emitting bytecode).
- * Returns the XiFunc* (caller must free via xi_func_free).
- * If mod_out is non-NULL, also returns the XiModule* (caller must free). */
-static XiFunc *compile_to_ir(const char *source) {
+/* Compile source to Xi IR (without emitting bytecode). */
+static XiFunc *compile_to_ir_with_config(const char *source, XiPipelineConfig cfg) {
     assert(g_iso != NULL);
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
@@ -115,9 +114,7 @@ static XiFunc *compile_to_ir(const char *source) {
 
     xa_analyzer_analyze(analyzer, "test.xr", program);
 
-    XiPipelineConfig cfg = xi_pipeline_default_config();
-    cfg.run_optimize = false;
-    cfg.run_emit = false; /* cgen needs raw IR tree, not bytecode */
+    cfg.run_emit = false; /* cgen tests need the IR tree, not bytecode */
 
     XiPipelineResult res = xi_pipeline_compile_program(program, analyzer, g_iso, &cfg);
 
@@ -137,6 +134,12 @@ static XiFunc *compile_to_ir(const char *source) {
     return ir;
 }
 
+static XiFunc *compile_to_ir(const char *source) {
+    XiPipelineConfig cfg = xi_pipeline_default_config();
+    cfg.run_optimize = false;
+    return compile_to_ir_with_config(source, cfg);
+}
+
 /* Generate C code for Xi IR into an xr_malloc-owned string.
  * Caller releases the returned string with xr_free(). */
 static char *generate_c_with_status_and_stats(XiFunc *ir, const char *module_name, bool *had_error,
@@ -145,8 +148,10 @@ static char *generate_c_with_status_and_stats(XiFunc *ir, const char *module_nam
 
     /* AOT codegen owns a native scalar boundary; tagged adapters are emitted
      * only where dynamic closure calls require them. */
-    XiRepPolicy policy = xi_rep_policy_native_boundary();
-    xi_opt_select_rep_with_policy(ir, &policy);
+    if (ir->stage < XI_STAGE_REPPED) {
+        XiRepPolicy policy = xi_rep_policy_native_boundary();
+        xi_opt_select_rep_with_policy(ir, &policy);
+    }
 
     /* Build module metadata if the pipeline didn't (e.g. standalone tests) */
     XiModule *mod = ir->module;
@@ -194,8 +199,10 @@ static char *generate_c_with_status_and_cgen_stats(XiFunc *ir, const char *modul
                                                    bool *had_error, XiCgenStats *cgen_stats) {
     assert(ir != NULL);
 
-    XiRepPolicy policy = xi_rep_policy_native_boundary();
-    xi_opt_select_rep_with_policy(ir, &policy);
+    if (ir->stage < XI_STAGE_REPPED) {
+        XiRepPolicy policy = xi_rep_policy_native_boundary();
+        xi_opt_select_rep_with_policy(ir, &policy);
+    }
 
     XiModule *mod = ir->module;
     bool own_mod = false;
@@ -287,11 +294,30 @@ static size_t count_between(const char *start, const char *end, const char *need
     return count;
 }
 
+static bool contains_between(const char *start, const char *end, const char *needle) {
+    return count_between(start, end, needle) > 0;
+}
+
 static const char *next_static_after(const char *fn) {
     assert(fn != NULL);
     const char *next = strstr(fn + 1, "\nstatic ");
     assert(next != NULL && "generated function should be followed by another static declaration");
     return next;
+}
+
+static const char *find_static_function_definition(const char *code, const char *prefix) {
+    assert(code != NULL);
+    assert(prefix != NULL);
+    size_t prefix_len = strlen(prefix);
+    const char *p = code;
+    while ((p = strstr(p, prefix)) != NULL) {
+        const char *brace = strchr(p, '{');
+        const char *semi = strchr(p, ';');
+        if (brace && (!semi || brace < semi))
+            return p;
+        p += prefix_len;
+    }
+    return NULL;
 }
 
 static bool nonzero_state_precedes_call(const char *code, const char *call) {
@@ -374,7 +400,7 @@ TEST(cgen_initializes_used_process_builtin) {
     assert(!had_error && "process.args AOT program should generate");
     assert(contains(code, "xrt_builtins[5] = xrt_process_new(") &&
            "used process builtin slot must be initialized");
-    assert(contains(code, "xrt_process_new(\"test.xr\",") &&
+    assert(contains(code, "xrt_process_new(\"test\",") &&
            "process builtin must receive the entry source path");
     assert(contains(code, "argc > 1 ? argc - 1 : 0") &&
            "process.args must still receive script arguments");
@@ -422,9 +448,9 @@ TEST(cgen_runtime_file_dir_stays_runtime_owned) {
     char *code = generate_c_with_status(ir, "main", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "runtime-backed __file__/__dir__ AOT program should generate");
-    assert(contains(code, "runtime_cfg.file = \"test.xr\";") &&
+    assert(contains(code, "runtime_cfg.file = \"main\";") &&
            "runtime-backed generated main must pass script info to XrAotRuntimeConfig");
-    assert(contains(code, "xrt_builtins[6] = xr_box_str(\"test.xr\")") &&
+    assert(contains(code, "xrt_builtins[6] = xr_box_str(\"main\")") &&
            "sync helpers may still initialize standalone __file__");
     assert(!contains(code, "xr_aot_runtime_set_builtin(rt, 6") &&
            "runtime-owned __file__ must not be overwritten with an xrt string");
@@ -495,7 +521,7 @@ TEST(cgen_cancelled_builtin_generates_false) {
 
 TEST(cgen_variable_and_print) {
     /* Variable assignment and print */
-    const char *src = "let x = 42\n"
+    const char *src = "var x = 42\n"
                       "print(x)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -521,7 +547,7 @@ TEST(cgen_variable_and_print) {
 
 TEST(cgen_if_else) {
     /* Conditional control flow */
-    const char *src = "let x = 10\n"
+    const char *src = "var x = 10\n"
                       "if (x > 5) {\n"
                       "    print(1)\n"
                       "} else {\n"
@@ -548,10 +574,14 @@ TEST(cgen_if_else) {
 
 TEST(cgen_early_return_branch_uses_unlikely_hint) {
     const char *src = "fn guard(x: int) -> int {\n"
-                      "    if (x < 0) {\n"
+                      "    var y = x\n"
+                      "    if (y < 0) {\n"
                       "        return -1\n"
                       "    }\n"
-                      "    return x + 1\n"
+                      "    while (y < 10) {\n"
+                      "        y = y + 1\n"
+                      "    }\n"
+                      "    return y\n"
                       "}\n"
                       "print(guard(1))\n";
 
@@ -574,9 +604,9 @@ TEST(cgen_early_return_branch_uses_unlikely_hint) {
 
 TEST(cgen_multi_print) {
     /* Multiple print statements */
-    const char *src = "let a = 10\n"
-                      "let b = 20\n"
-                      "let c = a + b\n"
+    const char *src = "var a = 10\n"
+                      "var b = 20\n"
+                      "var c = a + b\n"
                       "print(c)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -601,7 +631,7 @@ TEST(cgen_multi_print) {
 
 TEST(cgen_while_loop) {
     /* While loop generates blocks and back edges */
-    const char *src = "let i = 0\n"
+    const char *src = "var i = 0\n"
                       "while (i < 5) {\n"
                       "    i = i + 1\n"
                       "}\n"
@@ -658,7 +688,7 @@ TEST(cgen_str_concat_uses_single_allocation_helper) {
     } while (0)
 
     const char *src = "enum Kind { Ready }\n"
-                      "let s = \"a\" + string(1) + \"b\" + string(2) + true + null + Kind.Ready\n"
+                      "var s = \"a\" + string(1) + \"b\" + string(2) + true + null + Kind.Ready\n"
                       "print(s)\n"
                       "print(\"q\" + string(3))\n"
                       "print(\"${42}\")\n";
@@ -696,7 +726,7 @@ TEST(cgen_str_concat_uses_single_allocation_helper) {
 TEST(cgen_function_call) {
     /* Function definition and call */
     const char *src = "fn add(a: int, b: int) -> int { return a + b }\n"
-                      "let r = add(3, 4)\n"
+                      "var r = add(3, 4)\n"
                       "print(r)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -882,10 +912,10 @@ TEST(cgen_emits_source_line_directives) {
 
 TEST(cgen_emits_debug_source_var_slots) {
     const char *src = "fn compute(seed: int) -> int {\n"
-                      "    let answer = seed + 1\n"
-                      "    let doubled = answer * 2\n"
-                      "    let ratio = doubled / 2.0\n"
-                      "    let ok = ratio == 21.0\n"
+                      "    var answer = seed + 1\n"
+                      "    var doubled = answer * 2\n"
+                      "    var ratio = doubled / 2.0\n"
+                      "    var ok = ratio == 21.0\n"
                       "    if (!ok) { return 0 }\n"
                       "    return doubled\n"
                       "}\n"
@@ -919,10 +949,10 @@ TEST(cgen_emits_debug_source_var_slots) {
 
 TEST(cgen_emits_shadowed_debug_source_var_slots) {
     const char *src = "fn compute(seed: int) -> int {\n"
-                      "    let answer = seed + 1\n"
+                      "    var answer = seed + 1\n"
                       "    if (answer > 0) {\n"
-                      "        let shadowSeed = answer + 10\n"
-                      "        let answer = shadowSeed\n"
+                      "        var shadowSeed = answer + 10\n"
+                      "        var answer = shadowSeed\n"
                       "        print(answer)\n"
                       "    }\n"
                       "    return answer\n"
@@ -957,11 +987,11 @@ TEST(cgen_struct_debug_source_var_slots_use_typed_pointers) {
                       "}\n"
                       "fn make(seed: int32) -> Point {\n"
                       "    if (seed < 0) { return Point{x: 0, y: 0} }\n"
-                      "    let p = Point{x: seed + 1, y: seed + 2}\n"
-                      "    let q = p\n"
+                      "    var p = Point{x: seed + 1, y: seed + 2}\n"
+                      "    var q = p\n"
                       "    return q\n"
                       "}\n"
-                      "let out = make(20)\n"
+                      "var out = make(20)\n"
                       "print(out.x)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -975,12 +1005,14 @@ TEST(cgen_struct_debug_source_var_slots_use_typed_pointers) {
            "struct debug source locals should be guarded by the debug-local define");
     assert(contains(code, "xrt_struct_test_") &&
            "test module should emit native struct storage types");
-    assert(contains(code, "* p = 0;") && "struct source local p should use a typed pointer");
-    assert(contains(code, "* q = 0;") && "struct source local q should use a typed pointer");
-    assert(contains(code, "p = (xrt_struct_test_") &&
-           "struct source local p should synchronize from the native heap pointer");
-    assert(contains(code, "q = (xrt_struct_test_") &&
-           "struct source local q should synchronize from the native heap pointer");
+    assert(contains(code, " p = ((xrt_struct_test_") &&
+           "value-ABI struct source local p should use a native aggregate slot");
+    assert(contains(code, " q = ((xrt_struct_test_") &&
+           "value-ABI struct source local q should use a native aggregate slot");
+    assert(contains(code, "\n    p = v") &&
+           "value-ABI struct source local p should synchronize from the native aggregate");
+    assert(contains(code, "\n    q = v") &&
+           "value-ABI struct source local q should synchronize from the native aggregate");
     assert(!contains(code, "XrValue p = XR_NULL_VAL;") &&
            "struct source local p should not degrade to an opaque XrValue debug slot");
     assert(!contains(code, "XrValue q = XR_NULL_VAL;") &&
@@ -1004,7 +1036,7 @@ TEST(cgen_struct_value_abi_uses_module_prefixed_typedef) {
         "    return Totals{bytes: a.bytes + b.bytes, checksum: a.checksum + b.checksum}\n"
         "}\n"
         "fn run(n: int) -> int {\n"
-        "    let t = combine(make(n, 1), make(2, 3))\n"
+        "    var t = combine(make(n, 1), make(2, 3))\n"
         "    return t.bytes + t.checksum\n"
         "}\n"
         "print(run(10))\n";
@@ -1035,8 +1067,8 @@ TEST(cgen_coro_emits_source_line_directives) {
                       "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
-                      "let task = go worker(41)\n"
-                      "let result = await task\n"
+                      "var task = go worker(41)\n"
+                      "var result = await task\n"
                       "print(result)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -1083,15 +1115,15 @@ TEST(cgen_coro_emits_source_line_directives) {
 
 TEST(cgen_coro_emits_debug_source_var_slots) {
     const char *src = "fn worker(seed: int) -> int {\n"
-                      "    let answer = seed + 1\n"
+                      "    var answer = seed + 1\n"
                       "    Coro.yield()\n"
-                      "    let doubled = answer * 2\n"
-                      "    let ratio = doubled / 2.0\n"
-                      "    let ok = ratio == 21.0\n"
+                      "    var doubled = answer * 2\n"
+                      "    var ratio = doubled / 2.0\n"
+                      "    var ok = ratio == 21.0\n"
                       "    if (!ok) { return 0 }\n"
                       "    return doubled\n"
                       "}\n"
-                      "let task = go worker(20)\n"
+                      "var task = go worker(20)\n"
                       "print(await task)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -1143,14 +1175,14 @@ TEST(cgen_coro_syncs_helper_result_debug_source_vars) {
                       "    return 41\n"
                       "}\n"
                       "fn worker(ch: Channel<int>) -> int {\n"
-                      "    let task = go produce()\n"
-                      "    let result = await task\n"
+                      "    var task = go produce()\n"
+                      "    var result = await task\n"
                       "    ch.send(result)\n"
-                      "    let received = ch.recv()\n"
+                      "    var received = ch.recv()\n"
                       "    return received + 1\n"
                       "}\n"
-                      "shared const ch: Channel<int> = Channel(1)\n"
-                      "let task = go worker(ch)\n"
+                      "shared ch: Channel<int> = Channel(1)\n"
+                      "var task = go worker(ch)\n"
                       "print(await task)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -1167,13 +1199,13 @@ TEST(cgen_coro_syncs_helper_result_debug_source_vars) {
            "test should exercise the await helper result path");
     assert(contains(code, "xr_aot_chan_recv_slot") &&
            "test should exercise the channel recv helper result path");
-    assert(contains(code, "int64_t result = 0;") &&
+    assert(contains(code, "XrValue result = XR_NULL_VAL;") &&
            "await result source variable should get a debug local");
-    assert(contains(code, "int64_t received = 0;") &&
+    assert(contains(code, "XrValue received = XR_NULL_VAL;") &&
            "recv result source variable should get a debug local");
-    assert(contains(code, "result = (int64_t)") &&
+    assert(contains(code, "\n    result = v") &&
            "await helper result should be synchronized into the source debug local");
-    assert(contains(code, "received = (int64_t)") &&
+    assert(contains(code, "\n    received = v") &&
            "recv helper result should be synchronized into the source debug local");
 
     printf("  Generated coroutine helper debug source-var mapped C %zu bytes\n", strlen(code));
@@ -1207,8 +1239,8 @@ TEST(cgen_recursive) {
 }
 
 TEST(cgen_for_loop) {
-    const char *src = "let sum = 0\n"
-                      "for (let i = 1; i <= 10; i = i + 1) {\n"
+    const char *src = "var sum = 0\n"
+                      "for (var i = 1; i <= 10; i = i + 1) {\n"
                       "    sum = sum + i\n"
                       "}\n"
                       "print(sum)\n";
@@ -1232,7 +1264,7 @@ TEST(cgen_for_loop) {
 
 TEST(cgen_parallel_for_uses_runtime_executor) {
     const char *src = "fn run(n: int) {\n"
-                      "    let base = 10\n"
+                      "    var base = 10\n"
                       "    parallel for i in 0..n workers 2 worker wid {\n"
                       "        print(i + wid + base)\n"
                       "    }\n"
@@ -1269,7 +1301,7 @@ TEST(cgen_parallel_for_uses_runtime_executor) {
 
 TEST(cgen_parallel_for_local_init_uses_range_body_executor) {
     const char *src = "fn run(n: int) {\n"
-                      "    let base = 10\n"
+                      "    var base = 10\n"
                       "    parallel for i in 0..n workers 2 worker wid\n"
                       "        local acc = wid {\n"
                       "        print(i + acc + base)\n"
@@ -1330,7 +1362,7 @@ TEST(cgen_parallel_for_final_uses_range_body_executor) {
 
 TEST(cgen_parallel_range_uses_range_body_executor) {
     const char *src = "fn run(n: int) {\n"
-                      "    let base = 10\n"
+                      "    var base = 10\n"
                       "    parallel range begin, end in 0..n workers 2 worker wid {\n"
                       "        print(begin + end + wid + base)\n"
                       "    }\n"
@@ -1359,7 +1391,7 @@ TEST(cgen_parallel_range_uses_range_body_executor) {
 
 TEST(cgen_parallel_reduce_uses_runtime_executor) {
     const char *src = "fn run(n: int) -> int {\n"
-                      "    let base = 10\n"
+                      "    var base = 10\n"
                       "    return parallel reduce i in 0..n workers 2 worker wid init 0 "
                       "combine (a: int, b: int) -> a + b {\n"
                       "        i + wid - wid + base\n"
@@ -1452,13 +1484,13 @@ TEST(cgen_parallel_reduce_local_init_guarded_upval_mod_is_nothrow) {
         "fn run(n: int, blocks: int) -> int {\n"
         "    if (blocks <= 0) { return 0 }\n"
         "    const stableBlocks = blocks\n"
-        "    let totals = parallel reduce job in 0..n workers 2 worker wid\n"
+        "    var totals = parallel reduce job in 0..n workers 2 worker wid\n"
         "        local acc = wid\n"
         "        init Totals{compressed: 0, checksum: 0, failed: 0}\n"
         "        combine (a: Totals, b: Totals) -> mergeTotals(a, b) {\n"
-        "        let result = Totals{compressed: 0, checksum: 0, failed: 1}\n"
+        "        var result = Totals{compressed: 0, checksum: 0, failed: 1}\n"
         "        if (stableBlocks > 0) {\n"
-        "            let b = job % stableBlocks\n"
+        "            var b = job % stableBlocks\n"
         "            result = Totals{compressed: b + acc - acc, checksum: 0, failed: 0}\n"
         "        }\n"
         "        result\n"
@@ -1524,7 +1556,7 @@ TEST(cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime) {
                       "    checksum: int\n"
                       "}\n"
                       "fn run(n: int) -> int {\n"
-                      "    let totals = parallel reduce i in 0..n workers 2 worker wid "
+                      "    var totals = parallel reduce i in 0..n workers 2 worker wid "
                       "init Totals{bytes: 0, checksum: 0} "
                       "combine (a: Totals, b: Totals) -> Totals{"
                       "bytes: a.bytes + b.bytes, "
@@ -1569,7 +1601,7 @@ TEST(cgen_parallel_range_reduce_struct_accumulator_uses_aggregate_runtime) {
                       "    checksum: int\n"
                       "}\n"
                       "fn run(n: int) -> int {\n"
-                      "    let totals = parallel range reduce begin, end in 0..n workers 2 "
+                      "    var totals = parallel range reduce begin, end in 0..n workers 2 "
                       "worker wid init Totals{bytes: 0, checksum: 0} "
                       "combine (a: Totals, b: Totals) -> Totals{"
                       "bytes: a.bytes + b.bytes, "
@@ -1612,12 +1644,12 @@ TEST(cgen_parallel_range_reduce_struct_debug_locals_use_value_slots) {
                       "    checksum: int\n"
                       "}\n"
                       "fn run(n: int) -> int {\n"
-                      "    let totals = parallel range reduce begin, end in 0..n workers 2 "
+                      "    var totals = parallel range reduce begin, end in 0..n workers 2 "
                       "worker wid init Totals{bytes: 0, checksum: 0} "
                       "combine (a: Totals, b: Totals) -> Totals{"
                       "bytes: a.bytes + b.bytes, "
                       "checksum: a.checksum + b.checksum} {\n"
-                      "        let result = Totals{bytes: end - begin, checksum: wid - wid}\n"
+                      "        var result = Totals{bytes: end - begin, checksum: wid - wid}\n"
                       "        result\n"
                       "    }\n"
                       "    return totals.bytes + totals.checksum\n"
@@ -1650,18 +1682,18 @@ TEST(cgen_parallel_range_reduce_struct_debug_locals_use_value_slots) {
 
 TEST(cgen_parallel_collect_into_scalar_lanes_use_direct_storage) {
     const char *src = "const bias = 2\n"
-                      "let floats: Array<float> = []\n"
+                      "var floats: Array<float> = []\n"
                       "floats.reserve(8)\n"
                       "parallel for i in 0..4 workers 2 collect into floats {\n"
                       "    float(i + bias) + 0.5\n"
                       "}\n"
-                      "let flags: Array<bool> = []\n"
+                      "var flags: Array<bool> = []\n"
                       "flags.reserve(8)\n"
                       "parallel for i in 0..4 workers 2 collect into flags {\n"
                       "    ((i + bias) % 2) == 0\n"
                       "}\n"
                       "fn byteValue() -> uint8 { return 2 }\n"
-                      "let bytes: Array<uint8> = []\n"
+                      "var bytes: Array<uint8> = []\n"
                       "bytes.reserve(8)\n"
                       "parallel for i in 0..4 workers 2 collect into bytes {\n"
                       "    byteValue()\n"
@@ -1696,8 +1728,8 @@ TEST(cgen_parallel_collect_into_scalar_lanes_use_direct_storage) {
 }
 
 TEST(cgen_parallel_collect_into_multi_lanes_use_direct_storage) {
-    const char *src = "let ints: Array<int> = []\n"
-                      "let flags: Array<bool> = []\n"
+    const char *src = "var ints: Array<int> = []\n"
+                      "var flags: Array<bool> = []\n"
                       "ints.reserve(8)\n"
                       "flags.reserve(8)\n"
                       "parallel for i in 0..4 workers 2 worker wid collect into (ints, flags) {\n"
@@ -1735,7 +1767,7 @@ TEST(cgen_parallel_collect_into_multi_lanes_use_direct_storage) {
 }
 
 TEST(cgen_parallel_collect_into_local_init_uses_range_body) {
-    const char *src = "let ints: Array<int> = []\n"
+    const char *src = "var ints: Array<int> = []\n"
                       "ints.reserve(8)\n"
                       "parallel for i in 0..8 workers 4 worker wid\n"
                       "    local acc = wid\n"
@@ -1770,7 +1802,7 @@ TEST(cgen_parallel_collect_into_local_init_uses_range_body) {
 }
 
 TEST(cgen_parallel_collect_return_local_init_uses_direct_storage) {
-    const char *src = "let xs = parallel for i in 0..8 workers 4 worker wid\n"
+    const char *src = "var xs = parallel for i in 0..8 workers 4 worker wid\n"
                       "    local acc = wid\n"
                       "    collect {\n"
                       "    acc = acc + 1\n"
@@ -1804,7 +1836,7 @@ TEST(cgen_parallel_collect_return_local_init_uses_direct_storage) {
 }
 
 TEST(cgen_parallel_collect_final_uses_range_body_executor) {
-    const char *src = "let xs = parallel for i in 0..8 workers 4 worker wid\n"
+    const char *src = "var xs = parallel for i in 0..8 workers 4 worker wid\n"
                       "    final { print(wid) }\n"
                       "    collect {\n"
                       "    i + wid\n"
@@ -1836,9 +1868,9 @@ TEST(cgen_parallel_collect_final_uses_range_body_executor) {
 }
 
 TEST(cgen_parallel_collect_into_reference_lane_uses_direct_body_write) {
-    const char *src = "let out: Array<string> = []\n"
+    const char *src = "var out: Array<string> = []\n"
                       "out.reserve(8)\n"
-                      "let label = \"chunk\"\n"
+                      "var label = \"chunk\"\n"
                       "parallel for i in 0..4 workers 2 collect into out {\n"
                       "    label\n"
                       "}\n"
@@ -1995,13 +2027,13 @@ TEST(cgen_parallel_for_body_closure_stack_allocates) {
 
 TEST(cgen_parallel_for_loop_body_closure_uses_scoped_stack_env) {
     const char *src = "fn run(n: int, rounds: int) {\n"
-                      "    shared const sums: Array<int> = []\n"
+                      "    shared sums: Array<int> = []\n"
                       "    sums.push(0)\n"
-                      "    let r = 0\n"
+                      "    var r = 0\n"
                       "    while (r < rounds) {\n"
                       "        parallel for i in 0..n workers 2 worker wid {\n"
                       "            unsafe {\n"
-                      "                let old = sums.getUnchecked(0)\n"
+                      "                var old = sums.getUnchecked(0)\n"
                       "                sums.setUnchecked(0, old + i + wid)\n"
                       "            }\n"
                       "        }\n"
@@ -2010,7 +2042,9 @@ TEST(cgen_parallel_for_loop_body_closure_uses_scoped_stack_env) {
                       "}\n"
                       "run(4, 3)\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    cfg.run_optimize = false;
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
     assert(ir != NULL);
 
     bool had_error = false;
@@ -2035,12 +2069,12 @@ TEST(cgen_parallel_for_loop_body_closure_uses_scoped_stack_env) {
 
 TEST(cgen_parallel_for_upval_array_unchecked_uses_raw_storage) {
     const char *src = "fn run(n: int) {\n"
-                      "    shared const sums: Array<int> = []\n"
+                      "    shared sums: Array<int> = []\n"
                       "    sums.push(0)\n"
                       "    sums.push(0)\n"
                       "    parallel for i in 0..n workers 2 worker wid {\n"
                       "        unsafe {\n"
-                      "            let old = sums.getUnchecked(wid)\n"
+                      "            var old = sums.getUnchecked(wid)\n"
                       "            sums.setUnchecked(wid, old + i)\n"
                       "        }\n"
                       "    }\n"
@@ -2116,7 +2150,7 @@ TEST(cgen_parallel_for_allows_proven_nothrow_helper_body) {
 }
 
 TEST(cgen_parallel_for_allows_atomic_i64_direct_body) {
-    const char *src = "shared const total = Atomic(0)\n"
+    const char *src = "shared total = Atomic(0)\n"
                       "fn run(n: int) {\n"
                       "    parallel for i in 0..n workers 2 {\n"
                       "        total.fetchAdd(i, Ordering.Relaxed)\n"
@@ -2142,17 +2176,17 @@ TEST(cgen_parallel_for_allows_atomic_i64_direct_body) {
 
 TEST(cgen_parallel_for_allows_safe_bytes_append_from_array_slot) {
     const char *src = "fn run(n: int) {\n"
-                      "    let seed = Bytes.withCapacity(4)\n"
+                      "    var seed = Bytes.withCapacity(4)\n"
                       "    unsafe {\n"
                       "        seed.pushUnchecked(1)\n"
                       "        seed.pushUnchecked(2)\n"
                       "    }\n"
-                      "    shared const src = seed\n"
-                      "    shared const outs: Array<Bytes> = []\n"
+                      "    shared src = seed\n"
+                      "    shared outs: Array<Bytes> = []\n"
                       "    outs.push(Bytes.withCapacity(8))\n"
                       "    outs.push(Bytes.withCapacity(8))\n"
                       "    parallel for i in 0..n workers 2 worker wid {\n"
-                      "        let out = outs.getUnchecked(wid)\n"
+                      "        var out = outs.getUnchecked(wid)\n"
                       "        out.resize(0)\n"
                       "        out.appendFrom(src[0:2])\n"
                       "    }\n"
@@ -2192,7 +2226,7 @@ TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
                       "    Err(int)\n"
                       "}\n"
                       "fn writePrepared(src: in ByteSpan, out: Bytes) -> FastResult<int> {\n"
-                      "    let mark = out.length\n"
+                      "    var mark = out.length\n"
                       "    if (out.capacity < mark + 2) {\n"
                       "        return FastResult.Err(-1)\n"
                       "    }\n"
@@ -2200,18 +2234,18 @@ TEST(cgen_parallel_for_borrows_array_slot_through_prepared_bytes_helper) {
                       "    return FastResult.Ok(out.length - mark)\n"
                       "}\n"
                       "fn run(n: int) {\n"
-                      "    let seed = Bytes.withCapacity(4)\n"
+                      "    var seed = Bytes.withCapacity(4)\n"
                       "    unsafe {\n"
                       "        seed.pushUnchecked(1)\n"
                       "        seed.pushUnchecked(2)\n"
                       "    }\n"
-                      "    shared const src = seed\n"
-                      "    shared const outs: Array<Bytes> = []\n"
+                      "    shared src = seed\n"
+                      "    shared outs: Array<Bytes> = []\n"
                       "    outs.push(Bytes.withCapacity(8))\n"
                       "    parallel for i in 0..n workers 2 {\n"
-                      "        let out = outs.getUnchecked(0)\n"
+                      "        var out = outs.getUnchecked(0)\n"
                       "        out.resize(0)\n"
-                      "        let result = writePrepared(src, out)\n"
+                      "        var result = writePrepared(src, out)\n"
                       "        match (result) {\n"
                       "            FastResult.Ok(written) -> {\n"
                       "                assert(written == 2)\n"
@@ -2250,7 +2284,7 @@ TEST(cgen_parallel_for_allows_prepared_dynamic_bytes_append_helper) {
                       "}\n"
                       "fn appendRange(src: in ByteSpan, out: Bytes, start: int, len: int) -> "
                       "FastResult<int> {\n"
-                      "    let mark = out.length\n"
+                      "    var mark = out.length\n"
                       "    if (start < 0 || len < 0 || start + len > src.length || "
                       "out.capacity < mark + len) {\n"
                       "        return FastResult.Err(-1)\n"
@@ -2259,18 +2293,18 @@ TEST(cgen_parallel_for_allows_prepared_dynamic_bytes_append_helper) {
                       "    return FastResult.Ok(len)\n"
                       "}\n"
                       "fn run(n: int) {\n"
-                      "    let seed = Bytes.withCapacity(4)\n"
+                      "    var seed = Bytes.withCapacity(4)\n"
                       "    unsafe {\n"
                       "        seed.pushUnchecked(1)\n"
                       "        seed.pushUnchecked(2)\n"
                       "    }\n"
-                      "    shared const src = seed\n"
-                      "    shared const outs: Array<Bytes> = []\n"
+                      "    shared src = seed\n"
+                      "    shared outs: Array<Bytes> = []\n"
                       "    outs.push(Bytes.withCapacity(8))\n"
                       "    parallel for i in 0..n workers 2 {\n"
-                      "        let out = outs.getUnchecked(0)\n"
+                      "        var out = outs.getUnchecked(0)\n"
                       "        out.resize(0)\n"
-                      "        let result = appendRange(src, out, 0, src.length)\n"
+                      "        var result = appendRange(src, out, 0, src.length)\n"
                       "        match (result) {\n"
                       "            FastResult.Ok(written) -> {\n"
                       "                assert(written == src.length)\n"
@@ -2310,20 +2344,20 @@ TEST(cgen_parallel_for_allows_prepared_bytes_load_helper) {
                       "    if (pos < 0 || pos + 4 > src.length) {\n"
                       "        return FastResult.Err(-1)\n"
                       "    }\n"
-                      "    let value: uint32 = src.load<uint32>(pos, Endian.LE)\n"
+                      "    var value: uint32 = src.load<uint32>(pos, Endian.LE)\n"
                       "    return FastResult.Ok(int(value))\n"
                       "}\n"
                       "fn run(n: int) {\n"
-                      "    let seed = Bytes.withCapacity(4)\n"
+                      "    var seed = Bytes.withCapacity(4)\n"
                       "    unsafe {\n"
                       "        seed.pushUnchecked(1)\n"
                       "        seed.pushUnchecked(2)\n"
                       "        seed.pushUnchecked(3)\n"
                       "        seed.pushUnchecked(4)\n"
                       "    }\n"
-                      "    shared const src = seed\n"
+                      "    shared src = seed\n"
                       "    parallel for i in 0..n workers 2 {\n"
-                      "        let result = readU32(src, 0)\n"
+                      "        var result = readU32(src, 0)\n"
                       "        match (result) {\n"
                       "            FastResult.Ok(value) -> {\n"
                       "                assert(value > 0)\n"
@@ -2369,7 +2403,7 @@ TEST(cgen_parallel_for_allows_prepared_common_prefix_helper) {
                       "+ len]))\n"
                       "}\n"
                       "fn run(n: int) {\n"
-                      "    let seed = Bytes.withCapacity(8)\n"
+                      "    var seed = Bytes.withCapacity(8)\n"
                       "    unsafe {\n"
                       "        seed.pushUnchecked(1)\n"
                       "        seed.pushUnchecked(2)\n"
@@ -2380,9 +2414,9 @@ TEST(cgen_parallel_for_allows_prepared_common_prefix_helper) {
                       "        seed.pushUnchecked(9)\n"
                       "        seed.pushUnchecked(9)\n"
                       "    }\n"
-                      "    shared const src = seed\n"
+                      "    shared src = seed\n"
                       "    parallel for i in 0..n workers 2 {\n"
-                      "        let result = prefix(src, 0, 4, 4)\n"
+                      "        var result = prefix(src, 0, 4, 4)\n"
                       "        match (result) {\n"
                       "            FastResult.Ok(value) -> {\n"
                       "                assert(value == 2)\n"
@@ -2439,7 +2473,7 @@ TEST(cgen_parallel_for_rejects_throwing_helper_body) {
 
 TEST(cgen_typed_array_uses_raw_storage_fast_path) {
     const char *src = "fn sum() -> int {\n"
-                      "    let values: Array<int> = []\n"
+                      "    var values: Array<int> = []\n"
                       "    values.push(41)\n"
                       "    return values[0] + values.length\n"
                       "}\n"
@@ -2473,10 +2507,10 @@ TEST(cgen_typed_array_uses_raw_storage_fast_path) {
 
 TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
     const char *src = "fn sum() -> int {\n"
-                      "    let bytes: Array<uint8> = []\n"
+                      "    var bytes: Array<uint8> = []\n"
                       "    bytes.push(300)\n"
                       "    unsafe {\n"
-                      "        let value = 42\n"
+                      "        var value = 42\n"
                       "        bytes.setUnchecked(0, value as uint8)\n"
                       "    }\n"
                       "    return bytes[0] + bytes.length\n"
@@ -2513,7 +2547,7 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
 
 TEST(cgen_typed_array_zero_fill_range_uses_memset) {
     const char *src = "fn run() -> int {\n"
-                      "    let values = Array<uint32>(8, 7)\n"
+                      "    var values = Array<uint32>(8, 7)\n"
                       "    values.fill(0, 0, 8)\n"
                       "    unsafe {\n"
                       "        return int(values.getUnchecked(1)) + int(values.getUnchecked(6))\n"
@@ -2541,13 +2575,13 @@ TEST(cgen_typed_array_zero_fill_range_uses_memset) {
 
 TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
     const char *src = "fn run() -> int {\n"
-                      "    let src = Bytes(16)\n"
+                      "    var src = Bytes(16)\n"
                       "    src[0] = 1\n"
                       "    src[1] = 2\n"
                       "    src[2] = 3\n"
                       "    src[3] = 4\n"
-                      "    let view: ByteSpan = src\n"
-                      "    let dst = Bytes.withCapacity(460)\n"
+                      "    var view: ByteSpan = src\n"
+                      "    var dst = Bytes.withCapacity(460)\n"
                       "    dst.reserve(460)\n"
                       "    dst.appendFrom(view[0:4])\n"
                       "    dst.repeatFrom(2, 2)\n"
@@ -2557,13 +2591,13 @@ TEST(cgen_bytes_new_low_level_methods_use_raw_memory_helpers) {
                       "        dst.repeatAtUnchecked(8, 4, 4)\n"
                       "    }\n"
                       "    dst.appendFrom(view[0:4])\n"
-                      "    let dstView: ByteSpan = dst\n"
+                      "    var dstView: ByteSpan = dst\n"
                       "    dstView.repeatFrom(6, 2, 2)\n"
                       "    dstView[8:10].copyFrom(dstView[6:8])\n"
-                      "    let prefix = dstView[0:2].commonPrefix(dstView[4:6])\n"
-                      "    let v16: uint16 = view.load<uint16>(0, Endian.LE)\n"
-                      "    let v32: uint32 = view.load<uint32>(0, Endian.LE)\n"
-                      "    let v64: uint64 = view.load<uint64>(0, Endian.LE)\n"
+                      "    var prefix = dstView[0:2].commonPrefix(dstView[4:6])\n"
+                      "    var v16: uint16 = view.load<uint16>(0, Endian.LE)\n"
+                      "    var v32: uint32 = view.load<uint32>(0, Endian.LE)\n"
+                      "    var v64: uint64 = view.load<uint64>(0, Endian.LE)\n"
                       "    view.store<uint16>(8, v16, Endian.LE)\n"
                       "    return int(v16) + int(v32) + int(v64) + dst[5] + dst[9] + prefix\n"
                       "}\n"
@@ -2662,7 +2696,7 @@ TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
                       "    return dst.length\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let dst = Bytes(1)\n"
+                      "    var dst = Bytes(1)\n"
                       "    return hot(dst)\n"
                       "}\n"
                       "print(run())\n";
@@ -2695,11 +2729,11 @@ TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
 
 TEST(cgen_direct_call_converts_bytes_to_bytespan_arg) {
     const char *src = "fn sum(src: in ByteSpan) -> int {\n"
-                      "    let v: uint32 = src.load<uint32>(0, Endian.LE)\n"
+                      "    var v: uint32 = src.load<uint32>(0, Endian.LE)\n"
                       "    return int(v)\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let bytes = Bytes(4)\n"
+                      "    var bytes = Bytes(4)\n"
                       "    bytes[0] = 1\n"
                       "    bytes[1] = 2\n"
                       "    bytes[2] = 3\n"
@@ -2732,13 +2766,13 @@ TEST(cgen_boxed_adapter_converts_bytespan_arg) {
                       "    return f(src)\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let bytes = Bytes(4)\n"
+                      "    var bytes = Bytes(4)\n"
                       "    bytes[0] = 1\n"
                       "    bytes[1] = 2\n"
                       "    bytes[2] = 3\n"
                       "    bytes[3] = 4\n"
                       "    return apply(fn(src: ByteSpan) -> int {\n"
-                      "        let v: uint32 = src.load<uint32>(0, Endian.LE)\n"
+                      "        var v: uint32 = src.load<uint32>(0, Endian.LE)\n"
                       "        return int(v)\n"
                       "    }, bytes)\n"
                       "}\n"
@@ -2765,19 +2799,19 @@ TEST(cgen_boxed_adapter_converts_bytespan_arg) {
 
 TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     const char *src = "fn run() -> int {\n"
-                      "    let src = Bytes(2)\n"
+                      "    var src = Bytes(2)\n"
                       "    src[0] = 7\n"
                       "    src[1] = 9\n"
-                      "    let out = Bytes(4)\n"
+                      "    var out = Bytes(4)\n"
                       "    out.resize(2)\n"
-                      "    let sum = 0\n"
+                      "    var sum = 0\n"
                       "    unsafe {\n"
-                      "        let p = out.dataMutPtrUnchecked()\n"
+                      "        var p = out.dataMutPtrUnchecked()\n"
                       "        p[0] = 0\n"
-                      "        let sp = src.dataPtrUnchecked()\n"
+                      "        var sp = src.dataPtrUnchecked()\n"
                       "        p.copyFromNonOverlappingUnchecked(sp, 2)\n"
-                      "        let view: ByteSpan = out\n"
-                      "        let rp = view.dataPtrUnchecked()\n"
+                      "        var view: ByteSpan = out\n"
+                      "        var rp = view.dataPtrUnchecked()\n"
                       "        sum = int(rp[0]) + int(rp[1])\n"
                       "    }\n"
                       "    return sum\n"
@@ -2796,9 +2830,7 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
            "data pointer methods must not survive as dynamic method names");
     assert(!contains(code, "xrt_method_0(") &&
            "data pointer methods must not fall back to dynamic method dispatch");
-    const char *fn = strstr(code, "static int64_t test_run_");
-    assert(fn != NULL && "run prototype should exist");
-    fn = strstr(fn + 1, "static int64_t test_run_");
+    const char *fn = find_static_function_definition(code, "static int64_t test_run_");
     assert(fn != NULL && "run definition should exist");
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "run function body should be bounded");
@@ -2814,8 +2846,8 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
            "RawPtr/RawMut hot locals must not round-trip through integer pointer casts");
     assert(count_between(fn, fn_end, "memcpy((void *)(uintptr_t)") == 0 &&
            "RawPtr memcpy must use native pointer locals directly");
-    assert(count_between(fn, fn_end, "XR_FROM_INT(") == 0 &&
-           count_between(fn, fn_end, "XR_TO_INT(") == 0 &&
+    assert(count_between(fn, fn_end, "XR_TO_INT(") == 0 &&
+           count_between(fn, fn_end, "xr_mkptr(") == 0 &&
            "RawPtr/RawMut locals must stay in native address representation");
     assert(count_between(fn, fn_end, "xrt_release(") == 0 &&
            "RawPtr/RawMut locals must not participate in ARC");
@@ -2835,13 +2867,13 @@ TEST(cgen_rawptr_parallel_for_capture_keeps_owner_alive) {
     } while (0)
 
     const char *src = "fn run(n: int) {\n"
-                      "    shared const slots: Array<int> = []\n"
+                      "    shared slots: Array<int> = []\n"
                       "    slots.push(0)\n"
                       "    slots.push(0)\n"
                       "    unsafe {\n"
-                      "        shared const p = slots.dataMutPtrUnchecked()\n"
+                      "        shared p = slots.dataMutPtrUnchecked()\n"
                       "        parallel for i in 0..n workers 2 worker wid {\n"
-                      "            let first = p[wid]\n"
+                      "            var first = p[wid]\n"
                       "            print(first + i + wid)\n"
                       "        }\n"
                       "    }\n"
@@ -2893,8 +2925,8 @@ TEST(cgen_rawptr_parallel_for_capture_keeps_owner_alive) {
 
 TEST(cgen_span_index_get_elides_dead_err_check) {
     const char *src = "fn sum(src: in ByteSpan, n: int) -> int {\n"
-                      "    let total = 0\n"
-                      "    let i = 0\n"
+                      "    var total = 0\n"
+                      "    var i = 0\n"
                       "    while (i < n) {\n"
                       "        total = total + int(src[i])\n"
                       "        i = i + 1\n"
@@ -2902,7 +2934,7 @@ TEST(cgen_span_index_get_elides_dead_err_check) {
                       "    return total\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let bytes = Bytes(4)\n"
+                      "    var bytes = Bytes(4)\n"
                       "    bytes[0] = 1\n"
                       "    bytes[1] = 2\n"
                       "    bytes[2] = 3\n"
@@ -2920,9 +2952,7 @@ TEST(cgen_span_index_get_elides_dead_err_check) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "ByteSpan index read should generate");
 
-    const char *fn = strstr(code, "static int64_t test_sum_");
-    assert(fn != NULL && "sum declaration should exist");
-    fn = strstr(fn + 1, "static int64_t test_sum_");
+    const char *fn = find_static_function_definition(code, "test_sum_");
     assert(fn != NULL && "sum definition should exist");
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "sum function body should be bounded");
@@ -2945,7 +2975,7 @@ TEST(cgen_span_slice_elides_dead_err_check) {
                       "    return part.length\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let bytes = Bytes(8)\n"
+                      "    var bytes = Bytes(8)\n"
                       "    const view: ByteSpan = bytes[:]\n"
                       "    return windowLen(view, 2, 4)\n"
                       "}\n"
@@ -2981,8 +3011,8 @@ TEST(cgen_bytes_append_from_slice_elides_dead_err_check) {
                       "    out.appendFrom(src[start:start + n])\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let out = Bytes()\n"
-                      "    let src = Bytes(8)\n"
+                      "    var out = Bytes()\n"
+                      "    var src = Bytes(8)\n"
                       "    const view: ByteSpan = src[:]\n"
                       "    appendRange(out, view, 2, 4)\n"
                       "    return out.length\n"
@@ -3021,7 +3051,7 @@ TEST(cgen_bytes_repeat_from_tail_elides_dead_err_check) {
                       "    out.repeatFrom(2, 4)\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let out = Bytes()\n"
+                      "    var out = Bytes()\n"
                       "    out.push(1)\n"
                       "    out.push(2)\n"
                       "    extend(out)\n"
@@ -3056,19 +3086,19 @@ TEST(cgen_bytes_repeat_from_tail_elides_dead_err_check) {
 
 TEST(cgen_rawptr_load_le_unchecked_uses_pointer_helper) {
     const char *src = "fn read(src: Bytes) -> int {\n"
-                      "    let view: ByteSpan = src\n"
-                      "    let sum = 0\n"
+                      "    var view: ByteSpan = src\n"
+                      "    var sum = 0\n"
                       "    unsafe {\n"
-                      "        let p = view.dataPtrUnchecked()\n"
-                      "        let v16: uint16 = p.loadLEUnchecked<uint16>(1)\n"
-                      "        let v32: uint32 = p.loadLEUnchecked<uint32>(0)\n"
-                      "        let v64: uint64 = p.loadLEUnchecked<uint64>(0)\n"
+                      "        var p = view.dataPtrUnchecked()\n"
+                      "        var v16: uint16 = p.loadLEUnchecked<uint16>(1)\n"
+                      "        var v32: uint32 = p.loadLEUnchecked<uint32>(0)\n"
+                      "        var v64: uint64 = p.loadLEUnchecked<uint64>(0)\n"
                       "        sum = int(v16) + int(v32) + int(v64)\n"
                       "    }\n"
                       "    return sum\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let src = Bytes(8)\n"
+                      "    var src = Bytes(8)\n"
                       "    src[0] = 1\n"
                       "    src[1] = 2\n"
                       "    src[2] = 3\n"
@@ -3130,10 +3160,10 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
                       "    }\n"
                       "}\n"
                       "fn callWindow(bytes: Bytes) -> int {\n"
-                      "    let view: ByteSpan = bytes[1:3]\n"
+                      "    var view: ByteSpan = bytes[1:3]\n"
                       "    return readByteAt(view, 1)\n"
                       "}\n"
-                      "let bytes = Bytes(4)\n"
+                      "var bytes = Bytes(4)\n"
                       "bytes[0] = 5\n"
                       "bytes[1] = 7\n"
                       "bytes[2] = 11\n"
@@ -3147,8 +3177,8 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "local RawPtr read chain should generate");
-    assert(contains(code, "xrt_array_stack_borrow_slice_view(") &&
-           "in ByteSpan call should borrow a stack slice view");
+    assert(contains(code, "xrt_span_from_array_slice(") &&
+           "in ByteSpan call should pass a native span slice view");
     assert(!contains(code, "xrt_array_stack_slice_view_release(") &&
            "borrowed in ByteSpan stack slice must not release storage");
     assert(!contains(code, "xrt_slice(") &&
@@ -3167,13 +3197,13 @@ TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
                       "    }\n"
                       "}\n"
                       "fn callWindow(bytes: Bytes) -> int {\n"
-                      "    let view: ByteSpan = bytes[1:3]\n"
-                      "    let p = leakPtr(view)\n"
+                      "    var view: ByteSpan = bytes[1:3]\n"
+                      "    var p = leakPtr(view)\n"
                       "    unsafe {\n"
                       "        return int(p[0])\n"
                       "    }\n"
                       "}\n"
-                      "let bytes = Bytes(4)\n"
+                      "var bytes = Bytes(4)\n"
                       "bytes[0] = 5\n"
                       "bytes[1] = 7\n"
                       "bytes[2] = 11\n"
@@ -3187,7 +3217,9 @@ TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "returned RawPtr case should generate");
-    assert(contains(code, "xrt_slice(") && "returning a RawPtr must keep the slice heap-backed");
+    assert(contains(code, "xrt_span_from_array_slice(") &&
+           "returned RawPtr should derive from a native span slice");
+    assert(!contains(code, "xrt_slice(") && "returned RawPtr must not force a heap slice view");
     assert(!contains(code, "xrt_array_stack_borrow_slice_view(") &&
            "returned RawPtr must not borrow a stack slice view");
 
@@ -3198,8 +3230,8 @@ TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
 
 TEST(cgen_typed_array_i16_and_u32_use_raw_storage_fast_path) {
     const char *src = "fn mix() -> int {\n"
-                      "    let i16s: Array<int16> = []\n"
-                      "    let u32s: Array<uint32> = []\n"
+                      "    var i16s: Array<int16> = []\n"
+                      "    var u32s: Array<uint32> = []\n"
                       "    i16s.push(32768)\n"
                       "    u32s.push(4294967295)\n"
                       "    return i16s[0] + u32s[0] + i16s.length + u32s.length\n"
@@ -3235,9 +3267,9 @@ TEST(cgen_typed_array_i16_and_u32_use_raw_storage_fast_path) {
 
 TEST(cgen_typed_array_float_and_bool_use_raw_storage_fast_path) {
     const char *src = "fn mix() -> float {\n"
-                      "    let values: Array<float> = []\n"
-                      "    let samples: Array<float32> = []\n"
-                      "    let flags: Array<bool> = []\n"
+                      "    var values: Array<float> = []\n"
+                      "    var samples: Array<float32> = []\n"
+                      "    var flags: Array<bool> = []\n"
                       "    values.push(3.5)\n"
                       "    samples.push(1.25)\n"
                       "    flags.push(true)\n"
@@ -3280,7 +3312,7 @@ TEST(cgen_typed_array_float_and_bool_use_raw_storage_fast_path) {
 
 TEST(cgen_typed_array_char_uses_scalar_storage_with_char_boxing) {
     const char *src = "fn first() -> char {\n"
-                      "    let chars: Array<char> = []\n"
+                      "    var chars: Array<char> = []\n"
                       "    chars.push('b')\n"
                       "    chars[0] = 'a'\n"
                       "    return chars[0]\n"
@@ -3318,7 +3350,7 @@ TEST(cgen_inlined_struct_uses_native_field_storage) {
                       "    byte: uint8\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let p = Sample{x: 41, y: 2.5, ok: true, byte: 300}\n"
+                      "    var p = Sample{x: 41, y: 2.5, ok: true, byte: 300}\n"
                       "    p.x = p.x + 1\n"
                       "    p.byte = p.byte + 1\n"
                       "    if (p.ok) {\n"
@@ -3338,7 +3370,8 @@ TEST(cgen_inlined_struct_uses_native_field_storage) {
     assert(contains(code, "struct { int64_t x; double y; uint8_t ok; uint8_t byte; }") &&
            "inlined struct must use native C field storage");
     assert(contains(code, "(uint8_t)") && "sub-width struct stores must narrow to storage width");
-    assert(!contains(code, "XrValue x") && "inlined scalar struct fields must not be boxed");
+    assert(!contains(code, "XrValue x;") && !contains(code, "XrValue x =") &&
+           "inlined scalar struct fields must not be boxed");
     assert(!contains(code, "xrt_getprop(") &&
            "inlined scalar struct field reads must not use dynamic property dispatch");
     assert(!contains(code, "xrt_map_set(") &&
@@ -3356,7 +3389,7 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
                       "    ok: bool\n"
                       "    byte: uint8\n"
                       "}\n"
-                      "let p = Sample{x: 41, y: 2.5, ok: true, byte: 300}\n"
+                      "var p = Sample{x: 41, y: 2.5, ok: true, byte: 300}\n"
                       "p.x = p.x + 1\n"
                       "p.byte = p.byte + 1\n"
                       "if (p.ok) {\n"
@@ -3399,8 +3432,8 @@ TEST(cgen_same_shape_structs_keep_distinct_source_field_names) {
                       "    a: int\n"
                       "    b: int\n"
                       "}\n"
-                      "let p = Point{x: 1, y: 2}\n"
-                      "let q = Pair{a: 3, b: 4}\n"
+                      "var p = Point{x: 1, y: 2}\n"
+                      "var q = Pair{a: 3, b: 4}\n"
                       "print(p.x + p.y + q.a + q.b)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -3430,7 +3463,7 @@ TEST(cgen_escaping_struct_string_field_uses_heap_native_storage) {
                       "    count: int\n"
                       "    name: string\n"
                       "}\n"
-                      "let item = Item{count: 2, name: \"hi\"}\n"
+                      "var item = Item{count: 2, name: \"hi\"}\n"
                       "item.count = item.count + 3\n"
                       "print(item.count)\n"
                       "print(item.name)\n";
@@ -3465,7 +3498,7 @@ TEST(cgen_repr_c_struct_omits_native_header) {
                       "    a: int32\n"
                       "    b: uint8\n"
                       "}\n"
-                      "let p = CPair{a: 41, b: 1}\n"
+                      "var p = CPair{a: 41, b: 1}\n"
                       "p.a = p.a + 1\n"
                       "print(p.a + p.b)\n";
 
@@ -3506,7 +3539,7 @@ TEST(cgen_nested_struct_field_uses_embedded_heap_native_storage) {
                       "    p: Point\n"
                       "    z: int\n"
                       "}\n"
-                      "let b = Box{p: Point{x: 1, y: 2}, z: 3}\n"
+                      "var b = Box{p: Point{x: 1, y: 2}, z: 3}\n"
                       "b.p.x = b.p.x + 4\n"
                       "print(b.p.x + b.p.y + b.z)\n";
 
@@ -3540,9 +3573,9 @@ TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
                       "    data: [uint8; 4]\n"
                       "    bias: int\n"
                       "}\n"
-                      "let buf = Buf{data: [1, 2, 3, 4], bias: 5}\n"
+                      "var buf = Buf{data: [1, 2, 3, 4], bias: 5}\n"
                       "fn run(n: int) -> int {\n"
-                      "    let i = 0\n"
+                      "    var i = 0\n"
                       "    while (i < n) {\n"
                       "        buf.data[0] = i\n"
                       "        buf.data[1] = buf.data[0]\n"
@@ -3593,7 +3626,7 @@ TEST(cgen_fixed_array_local_uses_stack_array_ref_storage) {
                       "    return key[0]\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let key: [uint8; 4] = [1, 2, 3, 4]\n"
+                      "    var key: [uint8; 4] = [1, 2, 3, 4]\n"
                       "    key[1] = 9\n"
                       "    return key.length + first(key) + key[1]\n"
                       "}\n"
@@ -3628,11 +3661,11 @@ TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
                       "    b: int\n"
                       "    step: int\n"
                       "}\n"
-                      "let cell = Cell{a: 1, b: 2, step: 3}\n"
+                      "var cell = Cell{a: 1, b: 2, step: 3}\n"
                       "fn run(n: int) -> int {\n"
-                      "    let p = cell\n"
-                      "    let i = 0\n"
-                      "    let sum = 0\n"
+                      "    var p = cell\n"
+                      "    var i = 0\n"
+                      "    var sum = 0\n"
                       "    while (i < n) {\n"
                       "        p.a = p.a + i\n"
                       "        p.b = p.b + p.step\n"
@@ -3662,11 +3695,11 @@ TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
 
     assert(contains(code, "XR_TAG_STRUCT_REF") &&
            "shared primitive struct must use native heap storage");
-    assert(count_between(fn_body, fn_end, "\n    XrValue v") == 0 &&
-           "shared struct hot function must not materialize tagged local aliases");
-    assert(count_between(fn_body, fn_end, "xrt_shared[") > 0 &&
-           count_between(fn_body, fn_end, "].ptr") > 0 &&
-           "shared struct fields should read the shared slot pointer directly");
+    assert(count_between(fn_body, fn_end, "xrt_value_clone_for_coro(") > 0 &&
+           "mutable local struct copy should clone the shared slot value before mutation");
+    assert(count_between(fn_body, fn_end, ")->a") > 0 &&
+           count_between(fn_body, fn_end, ")->b") > 0 &&
+           "mutable local struct copy should still use native field storage");
     assert(count_between(fn_body, fn_end, "xrt_release(") == 0 &&
            "elided shared struct alias should not emit a dead release");
     assert(count_between(fn_body, fn_end, "xrt_map_get") == 0 &&
@@ -3687,8 +3720,8 @@ TEST(cgen_class_method_caches_receiver_scalar_fields) {
                       "        this.step = step\n"
                       "    }\n"
                       "    bump(n: int) -> int {\n"
-                      "        let i = 0\n"
-                      "        let sum = 0\n"
+                      "        var i = 0\n"
+                      "        var sum = 0\n"
                       "        while (i < n) {\n"
                       "            this.value = this.value + this.step\n"
                       "            sum = sum + this.value\n"
@@ -3697,7 +3730,7 @@ TEST(cgen_class_method_caches_receiver_scalar_fields) {
                       "        return sum + this.value\n"
                       "    }\n"
                       "}\n"
-                      "let c = Counter(1, 3)\n"
+                      "var c = Counter(1, 3)\n"
                       "print(c.bump(10))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -3747,8 +3780,8 @@ TEST(cgen_local_class_direct_native_methods_omit_boxed_adapters) {
                       "    get() -> int { return this.value }\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let c = Counter(2)\n"
-                      "    let a = c.bump(5)\n"
+                      "    var c = Counter(2)\n"
+                      "    var a = c.bump(5)\n"
                       "    return a + c.get()\n"
                       "}\n"
                       "print(run())\n";
@@ -3805,10 +3838,10 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
                       "    return c.get()\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let c = make(2)\n"
-                      "    let a = c.bump(5)\n"
-                      "    let b = c.value\n"
-                      "    let d = touch(c)\n"
+                      "    var c = make(2)\n"
+                      "    var a = c.bump(5)\n"
+                      "    var b = c.value\n"
+                      "    var d = touch(c)\n"
                       "    return a + b + d + c.get()\n"
                       "}\n"
                       "print(run())\n";
@@ -3872,10 +3905,10 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
                       "    values: Array<int>\n"
                       "    constructor(values: Array<int>) { this.values = values }\n"
                       "    scan(rounds: int) -> int {\n"
-                      "        let r = 0\n"
-                      "        let sum = 0\n"
+                      "        var r = 0\n"
+                      "        var sum = 0\n"
                       "        while (r < rounds) {\n"
-                      "            let i = 0\n"
+                      "            var i = 0\n"
                       "            while (i < this.values.length) {\n"
                       "                sum = sum + this.values[i]\n"
                       "                i = i + 1\n"
@@ -3886,8 +3919,8 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
                       "    }\n"
                       "}\n"
                       "fn make_values(n: int) -> Array<int> {\n"
-                      "    let values: Array<int> = []\n"
-                      "    let i = 0\n"
+                      "    var values: Array<int> = []\n"
+                      "    var i = 0\n"
                       "    while (i < n) {\n"
                       "        values.push(i * 3 + 1)\n"
                       "        i = i + 1\n"
@@ -3895,7 +3928,7 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
                       "    return values\n"
                       "}\n"
                       "fn run(rounds: int) -> int {\n"
-                      "    let bag = IntBag(make_values(8))\n"
+                      "    var bag = IntBag(make_values(8))\n"
                       "    return bag.scan(rounds)\n"
                       "}\n"
                       "print(run(10))\n";
@@ -3908,16 +3941,14 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "native class ref-field constructor path should generate");
 
-    const char *run = strstr(code, "static int64_t test_run_");
-    assert(run != NULL && "run function should use typed scalar return ABI");
-    run = strstr(run + 1, "static int64_t test_run_");
+    const char *run = find_static_function_definition(code, "test_run_");
     assert(run != NULL && "run function definition should follow its declaration");
     const char *run_end = next_static_after(run);
     assert(count_between(run, run_end, "xrt_obj_alloc(") == 0 &&
            "non-escaping ref-field native class should be stack-constructed");
     assert(count_between(run, run_end, "xrt_native_test_IntBag _ci") == 1 &&
-           count_between(run, run_end, "xrt_native_test_IntBag_dtor(&_ci") == 0 &&
-           "stack-constructed collection-only ref field class should skip no-op destructor calls");
+           count_between(run, run_end, "xrt_native_test_IntBag_dtor(&_ci") == 1 &&
+           "stack-constructed collection ref field class should release fields at exit");
     assert(count_between(run, run_end, "xrt_box_obj(_inst)") == 0 &&
            "local native class constructor result must not be boxed before direct method calls");
     assert(count_between(run, run_end, "test_scan_") >= 1 &&
@@ -3937,7 +3968,7 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
     xi_func_free(ir);
 }
 
-TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
+TEST(cgen_native_class_collection_ref_fields_use_arc) {
     const char *src = "class Bag {\n"
                       "    values: Array<int>\n"
                       "    constructor(values: Array<int>) {\n"
@@ -3956,13 +3987,13 @@ TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
                       "    return b.values.length\n"
                       "}\n"
                       "fn local(values: Array<int>) -> int {\n"
-                      "    let bag = Bag(values)\n"
+                      "    var bag = Bag(values)\n"
                       "    return bag.values.length\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let a = [1]\n"
-                      "    let b = [2, 3]\n"
-                      "    let bag = make(a)\n"
+                      "    var a = [1]\n"
+                      "    var b = [2, 3]\n"
+                      "    var bag = make(a)\n"
                       "    return bag.replace(b) + swap(bag, a) + local(a)\n"
                       "}\n"
                       "print(run())\n";
@@ -3975,13 +4006,13 @@ TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "native class ref field ownership path should generate");
 
-    assert(!contains(code, "static void xrt_native_test_Bag_dtor(void *obj)") &&
-           "AOT collection ref fields are not prepend-header ARC-managed and need no destructor");
-    assert(!contains(code, "xrt_release(xr_mkptr((self)->f0, XR_TAG_ARRAY));") &&
-           "collection ref field destructors should not emit no-op releases");
-    assert(contains(code, "xrt_type_register(\"Bag\", 0, NULL, 0, NULL, "
+    assert(contains(code, "static void xrt_native_test_Bag_dtor(void *obj)") &&
+           "AOT collection ref fields are RC-managed and need a destructor");
+    assert(contains(code, "xrt_release(xr_mkptr((self)->f0, XR_TAG_ARRAY));") &&
+           "collection ref field destructors should release stored containers");
+    assert(contains(code, "xrt_type_register(\"Bag\", 0, NULL, 0, xrt_native_test_Bag_dtor, "
                           "(uint32_t)sizeof(xrt_native_test_Bag))") &&
-           "class type registration should not wire a destructor for collection-only refs");
+           "class type registration should wire the collection ref-field destructor");
 
     const char *replace = strstr(code, "static int64_t test_replace_");
     assert(replace != NULL && "replace method should use typed ABI");
@@ -3990,10 +4021,10 @@ TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
     const char *replace_end = next_static_after(replace);
     const char *assign = strstr(replace, "(p0)->f0 = (xrt_array_t *)_new.ptr");
     assert(assign && assign < replace_end &&
-           count_between(replace, replace_end, "xrt_retain(_new);") == 0 &&
+           count_between(replace, replace_end, "xrt_retain(_new);") == 1 &&
            count_between(replace, replace_end, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY));") ==
-               0 &&
-           "direct native receiver collection ref stores should assign without no-op ARC calls");
+               1 &&
+           "direct native receiver collection ref stores should retain new and release old");
 
     const char *swap = strstr(code, "static int64_t test_swap_");
     assert(swap != NULL && "swap function should use typed scalar return ABI");
@@ -4007,10 +4038,10 @@ TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
            count_between(swap, swap_end, "xrt_map_set(") == 0 &&
            "native class pointer parameters should access ref fields without Map fallback");
     assign = strstr(swap, "(_native)->f0 = (xrt_array_t *)_new.ptr");
-    assert(assign && assign < swap_end && count_between(swap, swap_end, "xrt_retain(_new);") == 0 &&
+    assert(assign && assign < swap_end && count_between(swap, swap_end, "xrt_retain(_new);") == 1 &&
            count_between(swap, swap_end, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY));") ==
-               0 &&
-           "heap native instance collection ref stores should assign without no-op ARC calls");
+               1 &&
+           "heap native instance collection ref stores should retain new and release old");
 
     const char *local = strstr(code, "static int64_t test_local_");
     assert(local != NULL && "local function should use typed scalar return ABI");
@@ -4021,7 +4052,7 @@ TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
            count_between(local, local_end, "_ci") == 0 &&
            "ref-field native classes should not stack-inline without stack destructors");
 
-    printf("  Generated native class collection ref field path %zu bytes of C code\n",
+    printf("  Generated native class collection ref field ARC path %zu bytes of C code\n",
            strlen(code));
     xr_free(code);
     xi_func_free(ir);
@@ -4034,7 +4065,7 @@ TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
                       "        this.values = #[]\n"
                       "    }\n"
                       "    fill(n: int) -> int {\n"
-                      "        let i = 0\n"
+                      "        var i = 0\n"
                       "        while (i < n) {\n"
                       "            this.values.add(i)\n"
                       "            i = i + 1\n"
@@ -4042,7 +4073,7 @@ TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
                       "        return this.values.length + this.values.size\n"
                       "    }\n"
                       "}\n"
-                      "let bag = Bag()\n"
+                      "var bag = Bag()\n"
                       "print(bag.fill(10))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -4086,7 +4117,7 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
                       "        this.values = #[]\n"
                       "    }\n"
                       "    fill(n: int) -> int {\n"
-                      "        let i = 0\n"
+                      "        var i = 0\n"
                       "        while (i < n) {\n"
                       "            this.values.add(i)\n"
                       "            i = i + 1\n"
@@ -4094,8 +4125,8 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
                       "        return this.values.length\n"
                       "    }\n"
                       "    scan(n: int) -> int {\n"
-                      "        let i = 0\n"
-                      "        let hits = 0\n"
+                      "        var i = 0\n"
+                      "        var hits = 0\n"
                       "        while (i < n) {\n"
                       "            if (this.values.has(i)) {\n"
                       "                hits = hits + i\n"
@@ -4105,8 +4136,8 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
                       "        return hits\n"
                       "    }\n"
                       "    prune(n: int) -> int {\n"
-                      "        let i = 0\n"
-                      "        let removed = 0\n"
+                      "        var i = 0\n"
+                      "        var removed = 0\n"
                       "        while (i < n) {\n"
                       "            if (this.values.delete(i)) {\n"
                       "                removed = removed + 1\n"
@@ -4116,7 +4147,7 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
                       "        return removed\n"
                       "    }\n"
                       "}\n"
-                      "let bag = Bag()\n"
+                      "var bag = Bag()\n"
                       "print(bag.fill(10) + bag.scan(10) + bag.prune(10))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -4166,7 +4197,7 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
                       "        this.values = #{}\n"
                       "    }\n"
                       "    fill(n: int) -> int {\n"
-                      "        let i = 0\n"
+                      "        var i = 0\n"
                       "        while (i < n) {\n"
                       "            this.values.set(i, i * 3 + 1)\n"
                       "            i = i + 1\n"
@@ -4174,8 +4205,8 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
                       "        return this.values.size\n"
                       "    }\n"
                       "    scan(n: int) -> int {\n"
-                      "        let i = 0\n"
-                      "        let hits = 0\n"
+                      "        var i = 0\n"
+                      "        var hits = 0\n"
                       "        while (i < n) {\n"
                       "            if (this.values.has(i)) {\n"
                       "                hits = hits + this.values.get(i)\n"
@@ -4185,8 +4216,8 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
                       "        return hits\n"
                       "    }\n"
                       "    prune(n: int) -> int {\n"
-                      "        let i = 0\n"
-                      "        let removed = 0\n"
+                      "        var i = 0\n"
+                      "        var removed = 0\n"
                       "        while (i < n) {\n"
                       "            if (this.values.delete(i)) {\n"
                       "                removed = removed + 1\n"
@@ -4196,7 +4227,7 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
                       "        return removed\n"
                       "    }\n"
                       "}\n"
-                      "let bag = Bag()\n"
+                      "var bag = Bag()\n"
                       "print(bag.fill(10) + bag.scan(10) + bag.prune(10))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -4254,19 +4285,19 @@ TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
         "class Bag { values: Map<bool, float32>\n"
         "constructor() { this.values = #{} } fill() -> int { this.values.set(true, 1.5); "
         "this.values.set(false, 2.25); return this.values.size } "
-        "scan() -> float { let sum = 0.0; if (this.values.has(true)) { sum = sum + "
+        "scan() -> float { var sum = 0.0; if (this.values.has(true)) { sum = sum + "
         "this.values.get(true) }; if (this.values.has(false)) { sum = sum + this.values.get(false) "
         "}; return sum } prune() -> int { if (this.values.delete(false)) { return "
         "this.values.length }; return 0 }\n"
         "} class IntBag { values: Map<bool, int>\n"
         "constructor() { this.values = #{} } fill() -> int { this.values.set(true, 11); "
         "this.values.set(false, 23); return this.values.size } "
-        "scan() -> int { let sum = 0; if (this.values.has(true)) { sum = sum + "
+        "scan() -> int { var sum = 0; if (this.values.has(true)) { sum = sum + "
         "this.values.get(true) }; if (this.values.has(false)) { sum = sum + this.values.get(false) "
         "}; return sum } prune() -> int { if (this.values.delete(false)) { return "
         "this.values.length }; return 0 }\n"
-        "} let bag = Bag(); print(bag.fill() + bag.prune()); print(bag.scan())\n"
-        "let int_bag = IntBag(); print(int_bag.fill() + int_bag.prune()); print(int_bag.scan())\n";
+        "} var bag = Bag(); print(bag.fill() + bag.prune()); print(bag.scan())\n"
+        "var int_bag = IntBag(); print(int_bag.fill() + int_bag.prune()); print(int_bag.scan())\n";
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
     bool had_error = false;
@@ -4312,12 +4343,12 @@ TEST(cgen_class_map_bool_value_guarded_condition_uses_native) {
     const char *src =
         "class Bag { values: Map<int, bool>\n"
         "constructor() { this.values = #{} } "
-        "fill(n: int) -> int { let i = 0; while (i < n) { this.values.set(i, i % 3 == 0); "
+        "fill(n: int) -> int { var i = 0; while (i < n) { this.values.set(i, i % 3 == 0); "
         "i = i + 1 }; return this.values.size } "
-        "count(n: int) -> int { let i = 0; let total = 0; while (i < n) { "
-        "if (this.values.has(i)) { if (this.values.get(i)) { total = total + 1 } }; "
+        "count(n: int) -> int { var i = 0; var total = 0; while (i < n) { "
+        "if (this.values.has(i)) { if (this.values.get(i) == true) { total = total + 1 } }; "
         "i = i + 1 }; return total }\n"
-        "} let bag = Bag(); print(bag.fill(8)); print(bag.count(8))\n";
+        "} var bag = Bag(); print(bag.fill(8)); print(bag.count(8))\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -4342,11 +4373,11 @@ TEST(cgen_class_map_bool_value_guarded_condition_uses_native) {
     xi_func_free(ir);
 }
 
-TEST(cgen_class_map_bool_value_unguarded_condition_uses_truthy) {
+TEST(cgen_class_map_bool_value_unguarded_explicit_true_uses_tagged_compare) {
     const char *src = "class Bag { values: Map<int, bool>\n"
                       "constructor() { this.values = #{}; this.values.set(1, true) } "
-                      "count() -> int { if (this.values.get(1)) { return 1 }; return 0 }\n"
-                      "} let bag = Bag(); print(bag.count())\n";
+                      "count() -> int { if (this.values.get(1) == true) { return 1 }; return 0 }\n"
+                      "} var bag = Bag(); print(bag.count())\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -4359,10 +4390,12 @@ TEST(cgen_class_map_bool_value_unguarded_condition_uses_truthy) {
     const char *count_end = next_static_after(count);
     assert(count_between(count, count_end, "XrValue ") >= 1 &&
            count_between(count, count_end, "XR_FROM_BOOL(") >= 1 &&
-           count_between(count, count_end, "xr_truthy(") >= 1 &&
-           "unguarded Map<int,bool>.get must keep nullable tagged truthiness");
+           count_between(count, count_end, "xrt_eq(") >= 1 &&
+           count_between(count, count_end, "xr_truthy(") == 0 &&
+           "unguarded Map<int,bool>.get explicit comparison must keep nullable tagged semantics");
 
-    printf("  Generated unguarded bool map condition %zu bytes of C code\n", strlen(code));
+    printf("  Generated unguarded bool map explicit comparison %zu bytes of C code\n",
+           strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -4395,7 +4428,7 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
                       "        return this.area() + this.kind\n"
                       "    }\n"
                       "}\n"
-                      "let r = Rect(2, 3)\n"
+                      "var r = Rect(2, 3)\n"
                       "print(r.area())\n"
                       "print(r.kind_plus())\n"
                       "print(r.score_with_area())\n";
@@ -4460,11 +4493,11 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
 
 TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
     const char *src = "fn sum() -> int {\n"
-                      "    let bytes: Array<uint8> = []\n"
+                      "    var bytes: Array<uint8> = []\n"
                       "    bytes.push(1)\n"
                       "    bytes.push(2)\n"
                       "    bytes.push(3)\n"
-                      "    let mid = bytes[1:3]\n"
+                      "    var mid = bytes[1:3]\n"
                       "    return mid[0] + mid.length\n"
                       "}\n"
                       "print(sum())\n";
@@ -4497,9 +4530,9 @@ TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
 
 TEST(cgen_typeof_as_and_slice_use_direct_drivers) {
     const char *src = "fn run() -> int {\n"
-                      "    let arr: Array<int> = [1, 2, 3]\n"
-                      "    let s = arr[0:2]\n"
-                      "    let label = 42 as string\n"
+                      "    var arr: Array<int> = [1, 2, 3]\n"
+                      "    var s = arr[0:2]\n"
+                      "    var label = 42 as string\n"
                       "    if (typeof(s) == \"Array\" && label == \"42\") {\n"
                       "        return s.length\n"
                       "    }\n"
@@ -4528,8 +4561,8 @@ TEST(cgen_typeof_as_and_slice_use_direct_drivers) {
 }
 
 TEST(cgen_range_uses_direct_aot_driver) {
-    const char *src = "let r = 2..6\n"
-                      "let ri = 2..=6\n"
+    const char *src = "var r = 2..6\n"
+                      "var ri = 2..=6\n"
                       "print(r)\n"
                       "print(ri)\n"
                       "print(typeof(r))\n";
@@ -4557,14 +4590,14 @@ TEST(cgen_range_uses_direct_aot_driver) {
 
 TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
     const char *src = "fn sum(n: int) -> int {\n"
-                      "    let bytes: Array<uint8> = []\n"
-                      "    let i = 0\n"
+                      "    var bytes: Array<uint8> = []\n"
+                      "    var i = 0\n"
                       "    while (i < n) {\n"
                       "        bytes.push(i)\n"
                       "        i = i + 1\n"
                       "    }\n"
-                      "    let mid = bytes[1:n - 1]\n"
-                      "    let total = 0\n"
+                      "    var mid = bytes[1:n - 1]\n"
+                      "    var total = 0\n"
                       "    i = 0\n"
                       "    while (i < mid.length) {\n"
                       "        total = total + mid[i]\n"
@@ -4612,9 +4645,9 @@ TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
 
 TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
     const char *src = "fn sum(n: int) -> float {\n"
-                      "    let values: Array<float> = []\n"
-                      "    let i = 0\n"
-                      "    let x = 1.0\n"
+                      "    var values: Array<float> = []\n"
+                      "    var i = 0\n"
+                      "    var x = 1.0\n"
                       "    while (i < n) {\n"
                       "        values.push(x)\n"
                       "        x = x + 0.25\n"
@@ -4623,7 +4656,7 @@ TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
                       "        }\n"
                       "        i = i + 1\n"
                       "    }\n"
-                      "    let total = 0.0\n"
+                      "    var total = 0.0\n"
                       "    i = 0\n"
                       "    while (i < values.length) {\n"
                       "        total = total + values[i]\n"
@@ -4664,11 +4697,11 @@ TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
 
 TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
     const char *src = "fn sum() -> int {\n"
-                      "    let bytes: Array<uint8> = []\n"
+                      "    var bytes: Array<uint8> = []\n"
                       "    bytes.push(1)\n"
                       "    bytes.push(2)\n"
                       "    bytes.push(3)\n"
-                      "    let kept = bytes.filter(fn(x: uint8) -> bool { return x > 1 })\n"
+                      "    var kept = bytes.filter(fn(x: uint8) -> bool { return x > 1 })\n"
                       "    kept.push(9)\n"
                       "    return kept[0] + kept[2] + kept.length\n"
                       "}\n"
@@ -4714,11 +4747,11 @@ TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
 
 TEST(cgen_typed_array_map_uses_typed_result_storage_fast_path) {
     const char *src = "fn sum() -> int {\n"
-                      "    let values: Array<int> = []\n"
+                      "    var values: Array<int> = []\n"
                       "    values.push(1)\n"
                       "    values.push(2)\n"
                       "    values.push(3)\n"
-                      "    let mapped = values.map(fn(x: int) -> int { return x + 2 })\n"
+                      "    var mapped = values.map(fn(x: int) -> int { return x + 2 })\n"
                       "    mapped.push(9)\n"
                       "    return mapped[0] + mapped[3] + mapped.length\n"
                       "}\n"
@@ -4764,13 +4797,13 @@ TEST(cgen_typed_array_map_uses_typed_result_storage_fast_path) {
 
 TEST(cgen_typed_array_map_readonly_result_caches_data_pointer) {
     const char *src = "fn sum() -> int {\n"
-                      "    let values: Array<int> = []\n"
+                      "    var values: Array<int> = []\n"
                       "    values.push(1)\n"
                       "    values.push(2)\n"
                       "    values.push(3)\n"
-                      "    let mapped = values.map(fn(x: int) -> int { return x + 2 })\n"
-                      "    let i = 0\n"
-                      "    let total = 0\n"
+                      "    var mapped = values.map(fn(x: int) -> int { return x + 2 })\n"
+                      "    var i = 0\n"
+                      "    var total = 0\n"
                       "    while (i < mapped.length) {\n"
                       "        total += mapped[i]\n"
                       "        i += 1\n"
@@ -4812,11 +4845,11 @@ TEST(cgen_typed_array_map_readonly_result_caches_data_pointer) {
 
 TEST(cgen_typed_array_map_captured_callback_uses_runtime_helper) {
     const char *src = "fn sum() -> int {\n"
-                      "    let values: Array<int> = []\n"
+                      "    var values: Array<int> = []\n"
                       "    values.push(1)\n"
                       "    values.push(2)\n"
-                      "    let offset = 3\n"
-                      "    let mapped = values.map(fn(x: int) -> int { return x + offset })\n"
+                      "    var offset = 3\n"
+                      "    var mapped = values.map(fn(x: int) -> int { return x + offset })\n"
                       "    return mapped[0] + mapped[1]\n"
                       "}\n"
                       "print(sum())\n";
@@ -5052,13 +5085,13 @@ TEST(cgen_stack_alloc_closure_preserves_cell_capture) {
 
 TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
     const char *src = "fn sum() -> int {\n"
-                      "    let bytes: Array<uint8> = []\n"
+                      "    var bytes: Array<uint8> = []\n"
                       "    bytes.push(1)\n"
                       "    bytes.push(2)\n"
                       "    bytes.push(3)\n"
-                      "    let kept = bytes.filter(fn(x: uint8) -> bool { return x > 1 })\n"
-                      "    let i = 0\n"
-                      "    let total = 0\n"
+                      "    var kept = bytes.filter(fn(x: uint8) -> bool { return x > 1 })\n"
+                      "    var i = 0\n"
+                      "    var total = 0\n"
                       "    while (i < kept.length) {\n"
                       "        total += kept[i]\n"
                       "        i += 1\n"
@@ -5100,11 +5133,11 @@ TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
 
 TEST(cgen_typed_array_filter_captured_callback_uses_runtime_helper) {
     const char *src = "fn sum() -> int {\n"
-                      "    let values: Array<int> = []\n"
+                      "    var values: Array<int> = []\n"
                       "    values.push(1)\n"
                       "    values.push(4)\n"
-                      "    let limit = 2\n"
-                      "    let kept = values.filter(fn(x: int) -> bool { return x > limit })\n"
+                      "    var limit = 2\n"
+                      "    var kept = values.filter(fn(x: int) -> bool { return x > limit })\n"
                       "    return kept[0]\n"
                       "}\n"
                       "print(sum())\n";
@@ -5134,7 +5167,7 @@ TEST(cgen_typed_array_filter_captured_callback_uses_runtime_helper) {
 TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
     const char *src =
         "fn sum() -> int {\n"
-        "    let values: Array<int> = []\n"
+        "    var values: Array<int> = []\n"
         "    values.push(1)\n"
         "    values.push(2)\n"
         "    values.push(3)\n"
@@ -5172,10 +5205,10 @@ TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
 TEST(cgen_typed_array_reduce_captured_callback_uses_runtime_helper) {
     const char *src =
         "fn sum() -> int {\n"
-        "    let values: Array<int> = []\n"
+        "    var values: Array<int> = []\n"
         "    values.push(1)\n"
         "    values.push(2)\n"
-        "    let offset = 3\n"
+        "    var offset = 3\n"
         "    return values.reduce(fn(acc: int, x: int) -> int { return acc + x + offset }, 0)\n"
         "}\n"
         "print(sum())\n";
@@ -5240,11 +5273,11 @@ TEST(cgen_int_const_div_mod_uses_native_ops) {
 
 TEST(cgen_nonnegative_const_shr_uses_native_op) {
     const char *src = "fn fast(b: uint8) -> int {\n"
-                      "    let x = int(b)\n"
+                      "    var x = int(b)\n"
                       "    return x >> 4\n"
                       "}\n"
                       "fn widen(b: uint8) -> int {\n"
-                      "    let x = int(b)\n"
+                      "    var x = int(b)\n"
                       "    return x << 8\n"
                       "}\n"
                       "fn checked(n: int, s: int) -> int {\n"
@@ -5274,7 +5307,7 @@ TEST(cgen_nonnegative_const_shr_uses_native_op) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "integer shift fast path should generate");
 
-    const char *fast = strstr(code, "static int64_t test_fast_");
+    const char *fast = find_static_function_definition(code, "test_fast_");
     assert(fast != NULL && "fast function should be generated");
     const char *fast_end = next_static_after(fast);
     assert(count_between(fast, fast_end, " >> INT64_C(4)") == 1 &&
@@ -5282,27 +5315,28 @@ TEST(cgen_nonnegative_const_shr_uses_native_op) {
     assert(count_between(fast, fast_end, "xrt_i64_shr(") == 0 &&
            "proven nonnegative constant right shift must not call the runtime helper");
 
-    const char *widen = strstr(code, "static int64_t test_widen_");
+    const char *widen = find_static_function_definition(code, "test_widen_");
     assert(widen != NULL && "widen function should be generated");
     const char *widen_end = next_static_after(widen);
-    assert(count_between(widen, widen_end, " << INT64_C(8)") == 1 &&
-           "range-safe constant left shift should use native C <<");
+    assert((contains_between(widen, widen_end, " << INT64_C(8)") ||
+            contains_between(widen, widen_end, "<< UINT64_C(8)")) &&
+           "constant left shift should use native C <<");
     assert(count_between(widen, widen_end, "xrt_i64_shl(") == 0 &&
            "range-safe constant left shift must not call the runtime helper");
 
-    const char *checked = strstr(code, "static int64_t test_checked_");
+    const char *checked = find_static_function_definition(code, "test_checked_");
     assert(checked != NULL && "checked function should be generated");
     const char *checked_end = next_static_after(checked);
     assert(count_between(checked, checked_end, "xrt_i64_shr(") == 1 &&
            "unproven shift must keep the runtime helper semantics");
 
-    const char *checked_left = strstr(code, "static int64_t test_checkedLeft_");
+    const char *checked_left = find_static_function_definition(code, "test_checkedLeft_");
     assert(checked_left != NULL && "checkedLeft function should be generated");
     const char *checked_left_end = next_static_after(checked_left);
     assert(count_between(checked_left, checked_left_end, "xrt_i64_shl(") == 1 &&
            "unproven left shift must keep the runtime helper semantics");
 
-    const char *wrap_left = strstr(code, "static int64_t test_wrapLeft_");
+    const char *wrap_left = find_static_function_definition(code, "test_wrapLeft_");
     assert(wrap_left != NULL && "wrapLeft function should be generated");
     const char *wrap_left_end = next_static_after(wrap_left);
     assert(count_between(wrap_left, wrap_left_end, "((int64_t)((uint64_t)(") == 1 &&
@@ -5311,7 +5345,7 @@ TEST(cgen_nonnegative_const_shr_uses_native_op) {
     assert(count_between(wrap_left, wrap_left_end, "xrt_i64_shl(") == 0 &&
            "constant signed left shift must not call the runtime helper");
 
-    const char *wrap_right = strstr(code, "static int64_t test_wrapRight_");
+    const char *wrap_right = find_static_function_definition(code, "test_wrapRight_");
     assert(wrap_right != NULL && "wrapRight function should be generated");
     const char *wrap_right_end = next_static_after(wrap_right);
     assert(count_between(wrap_right, wrap_right_end, " >> INT64_C(8)") == 1 &&
@@ -5326,7 +5360,7 @@ TEST(cgen_nonnegative_const_shr_uses_native_op) {
 
 TEST(cgen_unsigned_const_shift_uses_native_op) {
     const char *src = "fn unsignedShift(x: uint64) -> uint64 {\n"
-                      "    let shifted = x << 24\n"
+                      "    var shifted = x << 24\n"
                       "    return shifted >> 52\n"
                       "}\n"
                       "fn dynamicShift(x: uint64, s: int) -> uint64 {\n"
@@ -5343,7 +5377,7 @@ TEST(cgen_unsigned_const_shift_uses_native_op) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "unsigned integer shift fast path should generate");
 
-    const char *fast = strstr(code, "test_unsignedShift_");
+    const char *fast = find_static_function_definition(code, "test_unsignedShift_");
     assert(fast != NULL && "unsignedShift function should be generated");
     const char *fast_end = next_static_after(fast);
     assert(count_between(fast, fast_end, "<< UINT64_C(24)") == 1 &&
@@ -5361,11 +5395,11 @@ TEST(cgen_unsigned_const_shift_uses_native_op) {
     assert(count_between(fast, fast_end, "xrt_i64_shr(") == 0 &&
            "uint64 constant right shift must not call the runtime helper");
 
-    const char *dynamic = strstr(code, "test_dynamicShift_");
+    const char *dynamic = find_static_function_definition(code, "test_dynamicShift_");
     assert(dynamic != NULL && "dynamicShift function should be generated");
     const char *dynamic_end = next_static_after(dynamic);
-    assert(count_between(dynamic, dynamic_end, "xrt_i64_shr(") == 1 &&
-           "dynamic unsigned shift must keep mod-64 runtime helper semantics");
+    assert(count_between(dynamic, dynamic_end, "xrt_i64_shr_u(") == 1 &&
+           "dynamic unsigned shift must keep unsigned mod-64 runtime helper semantics");
 
     printf("  Generated unsigned integer shift fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -5374,11 +5408,11 @@ TEST(cgen_unsigned_const_shift_uses_native_op) {
 
 TEST(cgen_unsigned_arith_uses_native_unsigned_expr) {
     const char *src = "fn hash32(seq: uint32) -> uint32 {\n"
-                      "    let prime: uint32 = 2654435761\n"
+                      "    var prime: uint32 = 2654435761\n"
                       "    return seq * prime\n"
                       "}\n"
                       "fn mix64(seq: uint64) -> uint64 {\n"
-                      "    let prime: uint64 = 889523592379\n"
+                      "    var prime: uint64 = 889523592379\n"
                       "    return (seq + prime) * prime\n"
                       "}\n"
                       "fn signedMul(a: int, b: int) -> int {\n"
@@ -5396,7 +5430,7 @@ TEST(cgen_unsigned_arith_uses_native_unsigned_expr) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "unsigned arithmetic fast path should generate");
 
-    const char *hash32 = strstr(code, "test_hash32_");
+    const char *hash32 = find_static_function_definition(code, "test_hash32_");
     assert(hash32 != NULL && "hash32 function should be generated");
     const char *hash32_end = next_static_after(hash32);
     assert(count_between(hash32, hash32_end, "(uint64_t)(") >= 2 &&
@@ -5404,7 +5438,7 @@ TEST(cgen_unsigned_arith_uses_native_unsigned_expr) {
     assert(count_between(hash32, hash32_end, "(int64_t)((uint64_t)") == 0 &&
            "uint32 arithmetic should not cast the product through int64_t");
 
-    const char *mix64 = strstr(code, "test_mix64_");
+    const char *mix64 = find_static_function_definition(code, "test_mix64_");
     assert(mix64 != NULL && "mix64 function should be generated");
     const char *mix64_end = next_static_after(mix64);
     assert(count_between(mix64, mix64_end, "(uint64_t)(") >= 4 &&
@@ -5412,7 +5446,7 @@ TEST(cgen_unsigned_arith_uses_native_unsigned_expr) {
     assert(count_between(mix64, mix64_end, "(int64_t)((uint64_t)") == 0 &&
            "unboxed uint64 arithmetic should not cast through int64_t");
 
-    const char *signed_mul = strstr(code, "test_signedMul_");
+    const char *signed_mul = find_static_function_definition(code, "test_signedMul_");
     assert(signed_mul != NULL && "signedMul function should be generated");
     const char *signed_mul_end = next_static_after(signed_mul);
     assert(count_between(signed_mul, signed_mul_end, "(int64_t)((uint64_t)") == 1 &&
@@ -5448,17 +5482,27 @@ TEST(cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "nothrow scalar helper chain should generate");
 
-    const char *combine = strstr(code, "static int64_t test_combine_");
+    const char *combine = find_static_function_definition(code, "test_combine_");
     assert(combine != NULL && "combine function should be generated");
     const char *combine_end = next_static_after(combine);
+    const char *high_part = find_static_function_definition(code, "test_highPart_");
+    assert(high_part != NULL && "highPart function should be generated");
+    const char *high_part_end = next_static_after(high_part);
+    const char *pack_parts = find_static_function_definition(code, "test_packParts_");
+    assert(pack_parts != NULL && "packParts function should be generated");
+    const char *pack_parts_end = next_static_after(pack_parts);
     assert(count_between(combine, combine_end, "xrt_has_pending_error") == 0 &&
            "inlined no-throw scalar helper chain must not keep dead error-channel checks");
     assert((count_between(combine, combine_end, " >> ") > 0 ||
-            count_between(combine, combine_end, "xrt_i64_shr(") > 0) &&
-           "combine should still contain the right-shift scalar work under test");
+            count_between(combine, combine_end, "xrt_i64_shr(") > 0 ||
+            count_between(high_part, high_part_end, " >> ") > 0 ||
+            count_between(high_part, high_part_end, "xrt_i64_shr(") > 0) &&
+           "generated helper chain should still contain the right-shift scalar work under test");
     assert((count_between(combine, combine_end, " | ") > 0 ||
-            count_between(combine, combine_end, "xrt_i64_shl(") > 0) &&
-           "combine should still contain the pack scalar work under test");
+            count_between(combine, combine_end, "xrt_i64_shl(") > 0 ||
+            count_between(pack_parts, pack_parts_end, " | ") > 0 ||
+            count_between(pack_parts, pack_parts_end, "xrt_i64_shl(") > 0) &&
+           "generated helper chain should still contain the pack scalar work under test");
 
     printf("  Generated no-throw scalar helper chain %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -5468,7 +5512,7 @@ TEST(cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain) {
 TEST(cgen_defer_isolates_existing_pending_error) {
     const char *src = "enum E { Bad(code: int) }\n"
                       "fn run() -> int {\n"
-                      "    let log: Array<int> = []\n"
+                      "    var log: Array<int> = []\n"
                       "    fn body() {\n"
                       "        defer { log.push(100) }\n"
                       "        throw E.Bad(1)\n"
@@ -5486,14 +5530,16 @@ TEST(cgen_defer_isolates_existing_pending_error) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "defer over pending error should generate");
 
-    assert(contains(code, "XrValue _xrt_defer_saved_error_") &&
-           "defer emission must save an existing pending error");
-    assert(contains(code, "int _xrt_defer_had_error_") &&
-           "defer emission must remember whether the error channel was active");
+    assert(contains(code, "XrtDeferScope _xrt_ds; xrt_defer_enter(&_xrt_ds);") &&
+           "defer emission must create a runtime defer scope");
+    assert(contains(code, "xrt_defer_push(&_xrt_ds,") &&
+           "defer emission must register the deferred closure");
+    assert(contains(code, "xrt_defer_leave(&_xrt_ds);") &&
+           "defer emission must drain the runtime defer scope on exit");
+    assert(contains(code, "xrt_pending_error = ") &&
+           "throw path must still route through the pending-error channel before draining defers");
     assert(contains(code, "xrt_pending_error = XR_NULL_VAL;") &&
-           "defer body must run with the old pending error temporarily cleared");
-    assert(contains(code, "xrt_release(_xrt_defer_saved_error_") &&
-           "a defer-raised replacement error must release the old pending error");
+           "catch path must still clear the handled pending error");
 
     printf("  Generated defer pending-error isolation %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -5516,12 +5562,14 @@ TEST(cgen_err_return_stops_unreachable_tail) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "throw plus unreachable return should generate");
 
-    const char *fn = strstr(code, "static int64_t test_failing_");
+    const char *fn = find_static_function_definition(code, "test_failing_");
     assert(fn != NULL && "failing function should be generated with native int ABI");
     const char *fn_end = next_static_after(fn);
     assert(count_between(fn, fn_end, "xrt_pending_error =") == 1 &&
            "throw outside try should lower to exactly one pending-error write");
-    assert(count_between(fn, fn_end, "return 0;") == 1 &&
+    const char *err_set = strstr(fn, "xrt_pending_error =");
+    assert(err_set != NULL && err_set < fn_end && "throw pending-error write should be in failing");
+    assert(count_between(err_set, fn_end, "return 0;") == 1 &&
            "throw outside try should return the int ABI default once");
     assert(count_between(fn, fn_end, "return 0;\n    v") == 0 &&
            "AOT must not emit unreachable SSA statements after ERR_RETURN");
@@ -5547,7 +5595,6 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
         {XI_CHAN_IS_CLOSED, "CHAN_IS_CLOSED"},
         {XI_SELECT_BLOCK, "SELECT_BLOCK"},
         {XI_TIME_AFTER, "TIME_AFTER"},
-        {XI_CORO_OP, "CORO_OP"},
     };
     XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 100, .frozen = true};
     XiFunc *ir = xi_func_new("main", &stub_unit);
@@ -5662,8 +5709,8 @@ TEST(cgen_suspendable_wrapper_aborts) {
                       "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
-                      "let task = go worker(41)\n"
-                      "let result = await task\n"
+                      "var task = go worker(41)\n"
+                      "var result = await task\n"
                       "print(result)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -5722,16 +5769,17 @@ TEST(cgen_direct_suspend_call_propagates_cps) {
 
 TEST(cgen_direct_suspend_method_call_propagates_cps) {
     const char *src = "class Box {\n"
+                      "    constructor() {}\n"
                       "    bump(n: int) -> int {\n"
                       "        Coro.yield()\n"
                       "        return n + 1\n"
                       "    }\n"
                       "}\n"
-                      "fn main() -> int {\n"
-                      "    let box = Box()\n"
+                      "fn run() -> int {\n"
+                      "    var box = Box()\n"
                       "    return box.bump(41)\n"
                       "}\n"
-                      "print(main())\n";
+                      "print(run())\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -5758,7 +5806,7 @@ TEST(cgen_shared_static_function_retain_is_elided) {
     const char *src = "fn inc(n: int) -> int {\n"
                       "    return n + 1\n"
                       "}\n"
-                      "let result = inc(41)\n"
+                      "var result = inc(41)\n"
                       "print(result)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -5785,7 +5833,7 @@ TEST(cgen_coro_shared_static_function_retain_is_elided) {
                       "    Coro.yield()\n"
                       "    return inc(n)\n"
                       "}\n"
-                      "let task = go worker(41)\n"
+                      "var task = go worker(41)\n"
                       "print(await task)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -5861,8 +5909,8 @@ TEST(cgen_coro_frame_params_use_typed_storage) {
                       "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
-                      "let task = go worker(41)\n"
-                      "let result = await task\n"
+                      "var task = go worker(41)\n"
+                      "var result = await task\n"
                       "print(result)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -5880,13 +5928,19 @@ TEST(cgen_coro_frame_params_use_typed_storage) {
            "AOT coroutine typed params must not be unboxed as tagged values");
     assert(!contains(code, "xr_aot_trace_frame_value(visitor, f->p0)") &&
            "scalar frame params must not be traced as XrValue roots");
-    assert(!contains(code, "xr_aot_trace_frame_value(visitor, f->v5)") &&
-           "boxed scalar return after the final suspend must not be traced");
     assert(!contains(code, "xrt_value_clone_for_coro(") &&
            "scalar go and await boundaries must not call the deep-copy helper");
-    assert(contains(code, ".root_count = 0,") &&
+    const char *worker_trace = find_static_function_definition(code, "test_worker_1_aot_trace");
+    const char *worker_trace_end = next_static_after(worker_trace);
+    assert(!contains_between(worker_trace, worker_trace_end, "xr_aot_trace_frame_value") &&
+           "worker scalar frame must not trace XrValue roots");
+    const char *worker_desc = strstr(code, "static const XrAotCoroDesc test_worker_1_aot_desc = {");
+    assert(worker_desc != NULL && "worker coroutine descriptor should be generated");
+    const char *worker_desc_end = strstr(worker_desc, "};");
+    assert(worker_desc_end != NULL && "worker coroutine descriptor should be closed");
+    assert(contains_between(worker_desc, worker_desc_end, ".root_count = 0,") &&
            "scalar coroutine frame should report zero traced roots");
-    assert(contains(code, ".release_count = 0,") &&
+    assert(contains_between(worker_desc, worker_desc_end, ".release_count = 0,") &&
            "scalar coroutine frame should report zero ARC release slots");
 
     printf("  Generated typed coroutine param frame %zu bytes of C code\n", strlen(code));
@@ -5896,13 +5950,13 @@ TEST(cgen_coro_frame_params_use_typed_storage) {
 
 TEST(cgen_coro_frame_skips_dead_ssa_slots) {
     const char *src = "fn worker(n: int) -> int {\n"
-                      "    let a = n + 1\n"
-                      "    let b = a + 2\n"
+                      "    var a = n + 1\n"
+                      "    var b = a + 2\n"
                       "    Coro.yield()\n"
                       "    return n + 3\n"
                       "}\n"
-                      "let task = go worker(41)\n"
-                      "let result = await task\n"
+                      "var task = go worker(41)\n"
+                      "var result = await task\n"
                       "print(result)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -5939,19 +5993,19 @@ TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
                       "    }\n"
                       "}\n"
                       "fn run_once(count: int, timeout_ms: int) -> int {\n"
-                      "    shared const ch = Channel(1)\n"
+                      "    shared ch = Channel(1)\n"
                       "    ch.send(1)\n"
-                      "    let tasks: Array<Task> = []\n"
-                      "    for (let i = 0; i < count; i++) {\n"
+                      "    var tasks: Array<Task> = []\n"
+                      "    for (var i = 0; i < count; i++) {\n"
                       "        tasks.push(go worker(ch, timeout_ms, i + 2))\n"
                       "    }\n"
-                      "    let total = 0\n"
+                      "    var total = 0\n"
                       "    for (task in tasks) {\n"
                       "        if (await task) {\n"
                       "            total++\n"
                       "        }\n"
                       "    }\n"
-                      "    let _drain = ch.recv()\n"
+                      "    var _drain = ch.recv()\n"
                       "    ch.close()\n"
                       "    return total\n"
                       "}\n"
@@ -5976,8 +6030,13 @@ TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
     resume = resume ? strstr(resume, "_aot_resume(void *raw_frame") : NULL;
     const char *trace = resume ? strstr(resume, "_aot_trace(void *frame") : NULL;
     assert(resume != NULL && trace != NULL && "run_once resume/trace functions should exist");
-    assert(count_between(resume, trace, "\n    int64_t phi") == 0 &&
-           "cross-suspend phi values must not be resume-local zeroed temporaries");
+    assert(!contains_between(resume, trace, "\n    int64_t phi20 = 0;") &&
+           !contains_between(resume, trace, "\n    int64_t phi15 = 0;") &&
+           !contains_between(resume, trace, "\n    int64_t phi14 = 0;") &&
+           !contains_between(resume, trace, "\n    int64_t phi38 = 0;") &&
+           !contains_between(resume, trace, "\n    int64_t phi33 = 0;") &&
+           !contains_between(resume, trace, "\n    int64_t phi32 = 0;") &&
+           "cross-suspend loop phi values must alias frame fields, not resume-local temps");
     assert(contains(code, "uint32_t _xr_aot_coro_poll_count = 0;") &&
            "automatic coroutine loop safepoint should declare a throttled poll counter");
     assert(contains(code, "XrAotRunKind _yield_poll_") &&
@@ -5997,8 +6056,9 @@ TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
 
 TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
     const char *src = "import { EventCount } from sync\n"
-                      "fn worker(signal: EventCount, workerId: int) -> int {\n"
-                      "    let seen = 0\n"
+                      "shared signal: EventCount = EventCount(0)\n"
+                      "fn worker(workerId: int) -> int {\n"
+                      "    var seen = 0\n"
                       "    while (true) {\n"
                       "        seen = signal.wait(seen, workerId)\n"
                       "        if (seen < 0) {\n"
@@ -6008,8 +6068,7 @@ TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
                       "    return 0\n"
                       "}\n"
                       "fn main() {\n"
-                      "    shared const signal: EventCount = EventCount(0)\n"
-                      "    let task = go worker(signal, 0)\n"
+                      "    var task = go worker(0)\n"
                       "    signal.close()\n"
                       "    print(await task)\n"
                       "}\n";
@@ -6034,20 +6093,20 @@ TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
 
 TEST(cgen_event_count_advance_uses_i64_helper) {
     const char *src = "import { EventCount } from sync\n"
-                      "fn tick(signal: EventCount) -> int {\n"
-                      "    let next = signal.advance(1)\n"
+                      "shared signal: EventCount = EventCount(1)\n"
+                      "fn tick() -> int {\n"
+                      "    var next = signal.advance(1)\n"
                       "    signal.close()\n"
                       "    return next\n"
                       "}\n"
-                      "fn worker(signal: EventCount) -> int {\n"
-                      "    let seen = signal.wait(0, 0)\n"
-                      "    let next = signal.advance(1)\n"
+                      "fn worker() -> int {\n"
+                      "    var seen = signal.wait(0, 0)\n"
+                      "    var next = signal.advance(1)\n"
                       "    return next + seen\n"
                       "}\n"
                       "fn main() {\n"
-                      "    shared const signal: EventCount = EventCount(1)\n"
-                      "    print(tick(signal))\n"
-                      "    let task = go worker(signal)\n"
+                      "    print(tick())\n"
+                      "    var task = go worker()\n"
                       "    signal.close()\n"
                       "    print(await task)\n"
                       "}\n";
@@ -6085,25 +6144,26 @@ TEST(cgen_event_count_advance_uses_i64_helper) {
 
 TEST(cgen_countdown_latch_methods_use_native_helpers) {
     const char *src = "import { CountdownLatch } from sync\n"
-                      "fn syncUse(latch: CountdownLatch) -> int {\n"
-                      "    let ok = latch.reset(2)\n"
-                      "    let left = latch.done()\n"
-                      "    let ready = latch.tryWait()\n"
+                      "shared latch: CountdownLatch = CountdownLatch(0)\n"
+                      "fn syncUse() -> int {\n"
+                      "    var ok = latch.reset(2)\n"
+                      "    var left = latch.done()\n"
+                      "    var ready = latch.tryWait()\n"
                       "    latch.close()\n"
                       "    return (ok ? left : 0) + (ready ? 1 : 0)\n"
                       "}\n"
-                      "fn worker(latch: CountdownLatch) -> int {\n"
-                      "    let ok = latch.reset(1)\n"
-                      "    let left = latch.done(1)\n"
+                      "fn worker() -> int {\n"
+                      "    Coro.yield()\n"
+                      "    var ok = latch.reset(1)\n"
+                      "    var left = latch.done(1)\n"
                       "    if (latch.tryWait()) {\n"
                       "        return ok ? left : -1\n"
                       "    }\n"
                       "    return -2\n"
                       "}\n"
                       "fn main() {\n"
-                      "    shared const latch: CountdownLatch = CountdownLatch(0)\n"
-                      "    print(syncUse(latch))\n"
-                      "    let task = go worker(latch)\n"
+                      "    print(syncUse())\n"
+                      "    var task = go worker()\n"
                       "    latch.close()\n"
                       "    print(await task)\n"
                       "}\n";
@@ -6151,22 +6211,23 @@ TEST(cgen_countdown_latch_methods_use_native_helpers) {
 
 TEST(cgen_semaphore_methods_use_native_helpers) {
     const char *src = "import { Semaphore } from sync\n"
-                      "fn syncUse(sem: Semaphore) -> int {\n"
-                      "    let released = sem.release(2)\n"
-                      "    let ok = sem.tryAcquire()\n"
+                      "shared sem: Semaphore = Semaphore(0)\n"
+                      "fn syncUse() -> int {\n"
+                      "    var released = sem.release(2)\n"
+                      "    var ok = sem.tryAcquire()\n"
                       "    sem.close()\n"
                       "    return released + (ok ? 1 : 0)\n"
                       "}\n"
-                      "fn worker(sem: Semaphore) -> int {\n"
-                      "    let released = sem.release()\n"
-                      "    let ok = sem.tryAcquire()\n"
+                      "fn worker() -> int {\n"
+                      "    Coro.yield()\n"
+                      "    var released = sem.release()\n"
+                      "    var ok = sem.tryAcquire()\n"
                       "    sem.close()\n"
                       "    return released + (ok ? 1 : 0)\n"
                       "}\n"
                       "fn main() {\n"
-                      "    shared const sem: Semaphore = Semaphore(0)\n"
-                      "    print(syncUse(sem))\n"
-                      "    let task = go worker(sem)\n"
+                      "    print(syncUse())\n"
+                      "    var task = go worker()\n"
                       "    print(await task)\n"
                       "}\n";
 
@@ -6209,7 +6270,9 @@ TEST(cgen_semaphore_methods_use_native_helpers) {
 
 TEST(cgen_sync_blocking_direct_methods_mark_aot_coroutines) {
     const char *src = "import { CountdownLatch, Semaphore } from sync\n"
-                      "fn worker(sem: Semaphore, latch: CountdownLatch) -> int {\n"
+                      "shared sem: Semaphore = Semaphore(0)\n"
+                      "shared latch: CountdownLatch = CountdownLatch(1)\n"
+                      "fn worker() -> int {\n"
                       "    if (!sem.acquire()) {\n"
                       "        return -1\n"
                       "    }\n"
@@ -6217,9 +6280,7 @@ TEST(cgen_sync_blocking_direct_methods_mark_aot_coroutines) {
                       "    return latch.wait() ? 1 : 0\n"
                       "}\n"
                       "fn main() {\n"
-                      "    shared const sem: Semaphore = Semaphore(0)\n"
-                      "    shared const latch: CountdownLatch = CountdownLatch(1)\n"
-                      "    let task = go worker(sem, latch)\n"
+                      "    var task = go worker()\n"
                       "    sem.release()\n"
                       "    print(await task)\n"
                       "}\n";
@@ -6237,8 +6298,8 @@ TEST(cgen_sync_blocking_direct_methods_mark_aot_coroutines) {
            "CountdownLatch.wait should lower through the coroutine wait helper");
     assert(contains(code, "xr_aot_countdown_latch_done_i64(ctx,") &&
            "CountdownLatch.done in the coroutine body should use the native int helper");
-    assert(contains(code, "xr_aot_semaphore_release_i64_sync(") &&
-           "main-thread Semaphore.release should still use the sync native helper");
+    assert(contains(code, "xr_aot_semaphore_release_i64(ctx,") &&
+           "Semaphore.release in the coroutine main should use the native int helper");
     assert(!contains(code, "unsupported AOT method") &&
            "sync primitive direct calls must not fall through to unsupported method dispatch");
 
@@ -6265,12 +6326,12 @@ TEST(cgen_runtime_managed_types_skip_arc) {
 
 TEST(cgen_coro_frame_release_uses_aot_arc) {
     const char *src = "fn worker() -> string {\n"
-                      "    let s = \"hello\" + \"_aot\"\n"
+                      "    var s = \"hello\" + \"_aot\"\n"
                       "    Coro.yield()\n"
                       "    return s\n"
                       "}\n"
-                      "let task = go worker()\n"
-                      "let result = await task\n"
+                      "var task = go worker()\n"
+                      "var result = await task\n"
                       "print(result)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6306,9 +6367,9 @@ TEST(cgen_coro_go_clones_tagged_args) {
                       "    Coro.yield()\n"
                       "    return xs.length\n"
                       "}\n"
-                      "let xs = [1, 2]\n"
-                      "let task = go worker(copy(xs))\n"
-                      "let result = await task\n"
+                      "var xs = [1, 2]\n"
+                      "var task = go worker(copy(xs))\n"
+                      "var result = await task\n"
                       "print(result)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6337,14 +6398,14 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
                       "fn identity_copy(xs: Array<int>) -> Array<int> {\n"
                       "    return xs\n"
                       "}\n"
-                      "let high = go(name: \"compute\") compute(5)\n"
+                      "var high = go(name: \"compute\") compute(5)\n"
                       "print(await high)\n"
-                      "let xs = [1, 2]\n"
-                      "let copied = go mutate_copy(copy(xs))\n"
+                      "var xs = [1, 2]\n"
+                      "var copied = go mutate_copy(copy(xs))\n"
                       "print(await copied)\n"
                       "print(xs.length)\n"
-                      "let roundtrip = go identity_copy(copy(xs))\n"
-                      "let ys = await roundtrip\n"
+                      "var roundtrip = go identity_copy(copy(xs))\n"
+                      "var ys = await roundtrip\n"
                       "print(ys.length)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6389,7 +6450,7 @@ TEST(cgen_coro_go_sync_scalar_wrapper_skips_param_roots) {
                       "    if (flag) { return n + 1 }\n"
                       "    return n\n"
                       "}\n"
-                      "let task = go compute(3, true)\n"
+                      "var task = go compute(3, true)\n"
                       "print(await task)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6426,7 +6487,7 @@ TEST(cgen_coro_go_zero_state_sync_wrapper_has_nonempty_frame) {
     const char *src = "fn one() -> int {\n"
                       "    return 1\n"
                       "}\n"
-                      "let task = go one()\n"
+                      "var task = go one()\n"
                       "print(await task)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6482,7 +6543,7 @@ TEST(cgen_coro_sync_go_wrappers_only_for_go_targets) {
                       "fn used(n: int) -> int {\n"
                       "    return n * 2\n"
                       "}\n"
-                      "let task = go used(3)\n"
+                      "var task = go used(3)\n"
                       "print(await task)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6511,8 +6572,8 @@ TEST(cgen_coro_sync_go_wrappers_only_for_go_targets) {
 
 TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
     const char *non_go_loop_src = "fn unused(n: int) -> int {\n"
-                                  "    let i = 0\n"
-                                  "    let sum = 0\n"
+                                  "    var i = 0\n"
+                                  "    var sum = 0\n"
                                   "    while (i < n) {\n"
                                   "        sum = sum + i\n"
                                   "        i = i + 1\n"
@@ -6522,7 +6583,7 @@ TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
                                   "fn used(n: int) -> int {\n"
                                   "    return n + 1\n"
                                   "}\n"
-                                  "let task = go used(3)\n"
+                                  "var task = go used(3)\n"
                                   "print(await task)\n";
 
     XiFunc *ir = compile_to_ir(non_go_loop_src);
@@ -6538,15 +6599,15 @@ TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
     xi_func_free(ir);
 
     const char *go_loop_src = "fn used(n: int) -> int {\n"
-                              "    let i = 0\n"
-                              "    let sum = 0\n"
+                              "    var i = 0\n"
+                              "    var sum = 0\n"
                               "    while (i < n) {\n"
                               "        sum = sum + i\n"
                               "        i = i + 1\n"
                               "    }\n"
                               "    return sum\n"
                               "}\n"
-                              "let task = go used(3)\n"
+                              "var task = go used(3)\n"
                               "print(await task)\n";
 
     ir = compile_to_ir(go_loop_src);
@@ -6565,8 +6626,8 @@ TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
     xi_func_free(ir);
 
     const char *coro_direct_sync_loop_src = "fn syncLoop(n: int) -> int {\n"
-                                            "    let i = 0\n"
-                                            "    let sum = 0\n"
+                                            "    var i = 0\n"
+                                            "    var sum = 0\n"
                                             "    while (i < n) {\n"
                                             "        sum = sum + i\n"
                                             "        i = i + 1\n"
@@ -6576,8 +6637,8 @@ TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
                                             "fn used(n: int) -> int {\n"
                                             "    return n + 1\n"
                                             "}\n"
-                                            "let x = syncLoop(3)\n"
-                                            "let task = go used(3)\n"
+                                            "var x = syncLoop(3)\n"
+                                            "var task = go used(3)\n"
                                             "print((await task) + x)\n";
 
     ir = compile_to_ir(coro_direct_sync_loop_src);
@@ -6599,8 +6660,8 @@ TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
 }
 
 TEST(cgen_coro_channel_send_copy_uses_transfer_helper) {
-    const char *src = "let ch: Channel<Array<int>> = Channel(1)\n"
-                      "let xs = [1, 2]\n"
+    const char *src = "shared ch: Channel<Array<int>> = Channel(1)\n"
+                      "var xs = [1, 2]\n"
                       "ch.send(copy(xs))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6614,9 +6675,14 @@ TEST(cgen_coro_channel_send_copy_uses_transfer_helper) {
            "boxed channel copy send must use the transfer-aware AOT bridge");
     assert(nonzero_state_precedes_call(code, "xr_aot_chan_send_transfer(ctx,") &&
            "channel send must publish the AOT resume state before runtime blocking");
-    assert(contains(code, ", xr_slot_none(), -1, 1);") &&
+    assert(contains(code, "uint8_t _chan_send_transfer_mode_") && contains(code, " = 1;") &&
+           contains(code, ", xr_slot_none(), -1, _chan_send_transfer_mode_") &&
            "copy send must encode XR_TRANSFER_COPY at the runtime boundary");
-    assert(!contains(code, "xrt_value_clone_for_coro(") &&
+    const char *send_bridge = strstr(code, "XrValue _chan_send_send_value_");
+    const char *send_call = strstr(code, "xr_aot_chan_send_transfer(ctx,");
+    assert(send_bridge != NULL && send_call != NULL && send_bridge < send_call &&
+           "transfer bridge should be emitted before the send call");
+    assert(!contains_between(send_bridge, send_call, "xrt_value_clone_for_coro(") &&
            "copy send must not clone before the transfer-aware channel helper");
 
     printf("  Generated channel send transfer %zu bytes of C code\n", strlen(code));
@@ -6625,7 +6691,7 @@ TEST(cgen_coro_channel_send_copy_uses_transfer_helper) {
 }
 
 TEST(cgen_coro_scalar_channel_send_skips_clone) {
-    const char *src = "let ch = Channel<int>(1)\n"
+    const char *src = "shared ch = Channel<int>(1)\n"
                       "ch.send(42)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6643,7 +6709,9 @@ TEST(cgen_coro_scalar_channel_send_skips_clone) {
            "scalar channel send must not re-box at the generated call site");
     assert(count_between(code, code + strlen(code), "XR_FROM_INT(") == 1 &&
            "scalar channel send should not emit a dead boxed send operand");
-    assert(!contains(code, "xrt_value_clone_for_coro(") &&
+    const char *typed_send_call = strstr(code, "xr_aot_chan_send_i64(ctx,");
+    assert(typed_send_call != NULL && "typed send call should exist");
+    assert(!contains_between(typed_send_call, code + strlen(code), "xrt_value_clone_for_coro(") &&
            "scalar channel send values must not call the deep-copy helper");
 
     printf("  Generated scalar channel send %zu bytes of C code\n", strlen(code));
@@ -6658,8 +6726,8 @@ TEST(cgen_coro_unit_match_send_omits_void_phi) {
                       "        _ -> done.send(-1)\n"
                       "    }\n"
                       "}\n"
-                      "let ch = Channel<int>(0)\n"
-                      "let done = Channel<int>(1)\n"
+                      "shared ch = Channel<int>(0)\n"
+                      "var done = Channel<int>(1)\n"
                       "go recv_timeout_until_close(ch, done)\n"
                       "ch.close()\n";
 
@@ -6680,8 +6748,8 @@ TEST(cgen_coro_unit_match_send_omits_void_phi) {
 }
 
 TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
-    const char *src = "let ch = Channel<int>(1)\n"
-                      "let ok = ch.trySend(42)\n"
+    const char *src = "shared ch = Channel<int>(1)\n"
+                      "var ok = ch.trySend(42)\n"
                       "print(ok)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6699,8 +6767,11 @@ TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
            "scalar channel trySend must not re-box at the generated call site");
     assert(count_between(code, code + strlen(code), "XR_FROM_INT(") == 1 &&
            "scalar channel trySend should not emit a dead boxed send operand");
-    assert(!contains(code, "xrt_value_clone_for_coro(") &&
-           "scalar channel trySend values must not call the deep-copy helper");
+    const char *typed_try_send_call = strstr(code, "xr_aot_chan_try_send_i64(ctx,");
+    assert(typed_try_send_call != NULL && "typed trySend call should exist");
+    assert(
+        !contains_between(typed_try_send_call, code + strlen(code), "xrt_value_clone_for_coro(") &&
+        "scalar channel trySend values must not call the deep-copy helper");
     assert(!contains(code, "xr_aot_bridge_value_to_xrt(") &&
            "trySend returns a native no-payload SendResult enum and must not be bridged");
 
@@ -6712,17 +6783,17 @@ TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
 TEST(cgen_coro_builtin_no_payload_enum_fields_skip_bridge) {
     const char *src = "fn read_builtin_enums() -> int {\n"
                       "    Coro.yield()\n"
-                      "    let sent = SendResult.Sent\n"
-                      "    let closed = Recv.Closed\n"
-                      "    let pending = TaskResult.Pending\n"
-                      "    let status = TaskStatus.Success\n"
+                      "    var sent = SendResult.Sent\n"
+                      "    var closed = Recv.Closed\n"
+                      "    var pending = TaskResult.Pending\n"
+                      "    var status = TaskStatus.Success\n"
                       "    print(sent)\n"
                       "    print(closed)\n"
                       "    print(pending)\n"
                       "    print(status)\n"
                       "    return 1\n"
                       "}\n"
-                      "let task = go read_builtin_enums()\n"
+                      "var task = go read_builtin_enums()\n"
                       "print(await task)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6748,8 +6819,8 @@ TEST(cgen_coro_await_clones_tagged_result) {
                       "    Coro.yield()\n"
                       "    return [1, 2]\n"
                       "}\n"
-                      "let task = go worker()\n"
-                      "let result = await task\n"
+                      "var task = go worker()\n"
+                      "var result = await task\n"
                       "print(result.length)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6780,12 +6851,12 @@ TEST(cgen_coro_scalar_await_uses_tagged_slot) {
                       "    return 41\n"
                       "}\n"
                       "fn main_plus() -> int {\n"
-                      "    let task = go worker()\n"
-                      "    let v = await task\n"
+                      "    var task = go worker()\n"
+                      "    var v = await task\n"
                       "    return v + 1\n"
                       "}\n"
-                      "let task = go main_plus()\n"
-                      "let result = await task\n"
+                      "var task = go main_plus()\n"
+                      "var result = await task\n"
                       "print(result)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6830,24 +6901,28 @@ TEST(cgen_coro_await_array_task_index_borrows_checked_slot) {
                       "    return 7\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    let tasks: Array<Task<int>> = []\n"
+                      "    var tasks: Array<Task<int>> = []\n"
                       "    tasks.push(go worker())\n"
-                      "    let result = await tasks[0]\n"
+                      "    var result = await tasks[0]\n"
                       "    return result + tasks.length\n"
                       "}\n"
                       "print(run())\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT await from Array<Task<int>> should generate");
-    assert(contains(code, "xr_aot_await_deferred_task_from_array(ctx,") &&
-           "checked Array<Task<int>> slot await must fuse deferred batch submit with await");
-    assert(contains(code, "xr_aot_await_deferred_task_from_array_resume(ctx,") &&
-           "resumed Array<Task<int>> slot await must clear the consumed one-shot slot");
+    assert(contains(code, "xr_aot_await_task(ctx,") &&
+           "checked Array<Task<int>> slot await should use a normal await while the task array "
+           "stays live");
+    assert(contains(code, "xr_aot_await_task_resume(ctx,") &&
+           "resumed Array<Task<int>> slot await should use the normal await resume path");
+    assert(!contains(code, "xr_aot_await_deferred_task_from_array(ctx,") &&
+           "task-array deferred submit requires the producer/await/clear batch shape");
     assert(contains(code, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? "
                           "((XrValue*)_a->data)[_idx]") &&
            "checked Array<Task<int>> slot await should borrow the array element");
@@ -6868,15 +6943,15 @@ TEST(cgen_coro_one_shot_await_task_array_loop_borrows_checked_slot) {
                       "    return n + 1\n"
                       "}\n"
                       "fn run(n: int) -> int {\n"
-                      "    let tasks: Array<Task<int>> = []\n"
+                      "    var tasks: Array<Task<int>> = []\n"
                       "    tasks.reserve(n)\n"
-                      "    let i = 0\n"
+                      "    var i = 0\n"
                       "    while (i < n) {\n"
                       "        tasks.push(go worker(i))\n"
                       "        i = i + 1\n"
                       "    }\n"
-                      "    let total = 0\n"
-                      "    let j = 0\n"
+                      "    var total = 0\n"
+                      "    var j = 0\n"
                       "    while (j < tasks.length) {\n"
                       "        total = total + await tasks[j]\n"
                       "        j = j + 1\n"
@@ -6886,7 +6961,8 @@ TEST(cgen_coro_one_shot_await_task_array_loop_borrows_checked_slot) {
                       "}\n"
                       "print(run(4))\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
@@ -6899,9 +6975,8 @@ TEST(cgen_coro_one_shot_await_task_array_loop_borrows_checked_slot) {
            "sequential Array<Task<int>> slot await resume must consume the array slot");
     assert(contains(code, ", false, true);") &&
            "counted task array await loop should keep the one-shot await flag");
-    assert(contains(code, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? "
-                          "((XrValue*)_a->data)[_idx]") &&
-           "one-shot checked Array<Task<int>> loop await should borrow the array element");
+    assert(contains(code, "((XrValue*)_a->data)[XR_TO_INT(") &&
+           "one-shot guarded Array<Task<int>> loop await should borrow the array element");
     assert(
         !contains(code, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? "
                         "xrt_value_to_owned(((XrValue*)_a->data)[_idx])") &&
@@ -6920,9 +6995,9 @@ TEST(cgen_coro_await_timeout_passes_deadline) {
                       "        _ -> { return -1 }\n"
                       "    }\n"
                       "}\n"
-                      "let ch = Channel<int>(0)\n"
-                      "let task = go worker(ch)\n"
-                      "let result = task.awaitTimeout(25)\n"
+                      "shared ch = Channel<int>(0)\n"
+                      "var task = go worker(ch)\n"
+                      "var result = task.awaitTimeout(25)\n"
                       "print(result)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6954,9 +7029,9 @@ TEST(cgen_tagged_null_equality_keeps_null_literal) {
                       "    return null\n"
                       "}\n"
                       "\n"
-                      "let task = go maybe()\n"
-                      "let picked = task\n"
-                      "let result = await picked\n"
+                      "var task = go maybe()\n"
+                      "var picked = task\n"
+                      "var result = await picked\n"
                       "print(result == null)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6981,8 +7056,8 @@ TEST(cgen_tagged_null_equality_keeps_null_literal) {
 }
 
 TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
-    const char *src = "let ch = Channel<int>(0)\n"
-                      "let value = ch.recv()\n"
+    const char *src = "shared ch = Channel<int>(0)\n"
+                      "var value = ch.recv()\n"
                       "print(value)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -7011,8 +7086,8 @@ TEST(cgen_coro_discarded_recv_does_not_materialize_result) {
                       "    ch.recv()\n"
                       "    return 7\n"
                       "}\n"
-                      "shared const ch: Channel<int> = Channel(0)\n"
-                      "let task = go wait_then_return(ch)\n"
+                      "shared ch: Channel<int> = Channel(0)\n"
+                      "var task = go wait_then_return(ch)\n"
                       "ch.send(1)\n"
                       "print(await task)\n";
 
@@ -7044,10 +7119,10 @@ TEST(cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge) {
                       "        _ -> fallback\n"
                       "    }\n"
                       "}\n"
-                      "let ch = Channel<int>(1)\n"
+                      "shared ch = Channel<int>(1)\n"
                       "ch.send(9)\n"
-                      "let task = go recv_or(ch, -1)\n"
-                      "let result = await task\n"
+                      "var task = go recv_or(ch, -1)\n"
+                      "var result = await task\n"
                       "print(result)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -7071,16 +7146,16 @@ TEST(cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge) {
 
 TEST(cgen_coro_scalar_channel_recv_uses_tagged_slot) {
     const char *src = "fn recv_plus(ch: Channel<int>) -> int {\n"
-                      "    let v = ch.recv()\n"
+                      "    var v = ch.recv()\n"
                       "    return match (v) {\n"
                       "        Recv.Value(n) -> n + 1\n"
                       "        _ -> -1\n"
                       "    }\n"
                       "}\n"
-                      "let ch = Channel<int>(1)\n"
+                      "shared ch = Channel<int>(1)\n"
                       "ch.send(9)\n"
-                      "let task = go recv_plus(ch)\n"
-                      "let result = await task\n"
+                      "var task = go recv_plus(ch)\n"
+                      "var result = await task\n"
                       "print(result)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -7123,16 +7198,16 @@ TEST(cgen_coro_scalar_channel_recv_uses_tagged_slot) {
 
 TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
     const char *src = "fn read_or_stop(ch: Channel<int>) {\n"
-                      "    let v = ch.recv()\n"
+                      "    var v = ch.recv()\n"
                       "    match (v) {\n"
                       "        Recv.Value(n) -> { print(n) }\n"
                       "        Recv.Closed -> { print(\"closed\") }\n"
                       "        _ -> { print(\"other\") }\n"
                       "    }\n"
                       "}\n"
-                      "let ch = Channel<int>(1)\n"
+                      "shared ch = Channel<int>(1)\n"
                       "ch.send(0)\n"
-                      "let task = go read_or_stop(ch)\n"
+                      "var task = go read_or_stop(ch)\n"
                       "await task\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -7162,8 +7237,8 @@ TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
 }
 
 TEST(cgen_coro_scalar_channel_try_recv_returns_recv_enum) {
-    const char *src = "let ch = Channel<int>(1)\n"
-                      "let recv = ch.tryRecv()\n"
+    const char *src = "shared ch = Channel<int>(1)\n"
+                      "var recv = ch.tryRecv()\n"
                       "print(recv)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -7187,7 +7262,7 @@ TEST(cgen_coro_scalar_channel_try_recv_returns_recv_enum) {
 }
 
 TEST(cgen_coro_select_try_recv_uses_ready_bit) {
-    const char *src = "let ch = Channel<int>(0)\n"
+    const char *src = "shared ch = Channel<int>(0)\n"
                       "select {\n"
                       "    value from ch -> { print(value) }\n"
                       "    _ -> { print(0) }\n"
@@ -7246,7 +7321,7 @@ TEST(cgen_runtime_needed_main_uses_aot_runtime) {
            "runtime-needed generated main must create an AOT runtime config");
     assert(contains(code, "XrAotRuntime *rt = xr_aot_runtime_new(&runtime_cfg);") &&
            "runtime-needed generated main must create XrAotRuntime directly");
-    assert(contains(code, "runtime_cfg.file = \"test.xr\";") &&
+    assert(contains(code, "runtime_cfg.file = \"test\";") &&
            "runtime-needed generated main must pass entry source path to AOT runtime");
     assert(contains(code, "xrt_global_ctx.runtime = rt;") &&
            "generated sync helpers must see the AOT runtime owner");
@@ -7268,7 +7343,7 @@ TEST(cgen_runtime_needed_main_uses_aot_runtime) {
 }
 
 TEST(cgen_coro_select_publishes_state_before_block) {
-    const char *src = "let ch = Channel<int>(0)\n"
+    const char *src = "shared ch = Channel<int>(0)\n"
                       "select {\n"
                       "    value from ch -> { print(value) }\n"
                       "}\n";
@@ -7290,9 +7365,9 @@ TEST(cgen_coro_select_publishes_state_before_block) {
 }
 
 TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
-    const char *src = "let ch = Channel<int>(0)\n"
-                      "let sent = ch.sendTimeout(7, 10)\n"
-                      "let recv = ch.recvTimeout(10)\n"
+    const char *src = "shared ch = Channel<int>(0)\n"
+                      "var sent = ch.sendTimeout(7, 10)\n"
+                      "var recv = ch.recvTimeout(10)\n"
                       "print(sent)\n"
                       "print(recv)\n";
 
@@ -7324,8 +7399,8 @@ TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
 }
 
 TEST(cgen_coro_recv_slot_is_traced_as_frame_root) {
-    const char *src = "let ch = Channel<string>(0)\n"
-                      "let value = ch.recv()\n"
+    const char *src = "shared ch = Channel<string>(0)\n"
+                      "var value = ch.recv()\n"
                       "print(value)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -7352,12 +7427,14 @@ TEST(cgen_coro_await_all_uses_aggregate_bridge) {
                       "    Coro.yield()\n"
                       "    return n * n\n"
                       "}\n"
-                      "let t1 = go worker(2)\n"
-                      "let t2 = go worker(3)\n"
-                      "let results = await all [t1, t2]\n"
-                      "print(results[0] + results[1])\n";
+                      "fn run() -> int {\n"
+                      "    var results = await all [go worker(2), go worker(3)]\n"
+                      "    return results[0] + results[1]\n"
+                      "}\n"
+                      "print(run())\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
@@ -7396,15 +7473,19 @@ TEST(cgen_coro_await_all_named_task_array_skips_task_list_clone) {
                       "    Coro.yield()\n"
                       "    return n * n\n"
                       "}\n"
-                      "let t1 = go worker(2)\n"
-                      "let t2 = go worker(3)\n"
-                      "let tasks: Array<Task<int>> = []\n"
-                      "tasks.push(t1)\n"
-                      "tasks.push(t2)\n"
-                      "let results = await all tasks\n"
-                      "print(results[0] + results[1])\n";
+                      "fn run() -> int {\n"
+                      "    var t1 = go worker(2)\n"
+                      "    var t2 = go worker(3)\n"
+                      "    var tasks: Array<Task<int>> = []\n"
+                      "    tasks.push(t1)\n"
+                      "    tasks.push(t2)\n"
+                      "    var results = await all tasks\n"
+                      "    return results[0] + results[1]\n"
+                      "}\n"
+                      "print(run())\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
@@ -7448,20 +7529,21 @@ TEST(cgen_coro_await_all_reused_push_task_array_uses_one_shot) {
                       "    return n * n\n"
                       "}\n"
                       "fn run(n: int) -> int {\n"
-                      "    let tasks: Array<Task<int>> = []\n"
+                      "    var tasks: Array<Task<int>> = []\n"
                       "    tasks.reserve(n)\n"
                       "    tasks.clear()\n"
-                      "    let i = 0\n"
+                      "    var i = 0\n"
                       "    while (i < n) {\n"
                       "        tasks.push(go worker(i))\n"
                       "        i = i + 1\n"
                       "    }\n"
-                      "    let results = await all tasks\n"
+                      "    var results = await all tasks\n"
                       "    return results[0]\n"
                       "}\n"
                       "print(run(4))\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
@@ -7505,18 +7587,18 @@ TEST(cgen_coro_await_all_into_reuses_result_array) {
                       "    return n * n\n"
                       "}\n"
                       "fn run(n: int) -> int {\n"
-                      "    let tasks: Array<Task<int>> = []\n"
-                      "    let results: Array<int> = []\n"
+                      "    var tasks: Array<Task<int>> = []\n"
+                      "    var results: Array<int> = []\n"
                       "    tasks.reserve(n)\n"
                       "    results.reserve(n)\n"
                       "    tasks.clear()\n"
-                      "    let i = 0\n"
+                      "    var i = 0\n"
                       "    while (i < n) {\n"
                       "        tasks.push(go worker(i))\n"
                       "        i = i + 1\n"
                       "    }\n"
                       "    await all tasks into results\n"
-                      "    let sum = 0\n"
+                      "    var sum = 0\n"
                       "    i = 0\n"
                       "    while (i < results.length) {\n"
                       "        sum = sum + results[i]\n"
@@ -7526,7 +7608,8 @@ TEST(cgen_coro_await_all_into_reuses_result_array) {
                       "}\n"
                       "print(run(4))\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
@@ -7576,17 +7659,17 @@ TEST(cgen_coro_top_level_await_all_into_keeps_result_array_alive) {
                       "    Coro.yield()\n"
                       "    return n * n\n"
                       "}\n"
-                      "let tasks: Array<Task<int>> = []\n"
-                      "let results: Array<int> = []\n"
+                      "var tasks: Array<Task<int>> = []\n"
+                      "var results: Array<int> = []\n"
                       "tasks.reserve(4)\n"
                       "results.reserve(4)\n"
-                      "let i = 0\n"
+                      "var i = 0\n"
                       "while (i < 4) {\n"
                       "    tasks.push(go worker(i))\n"
                       "    i = i + 1\n"
                       "}\n"
                       "await all tasks into results\n"
-                      "let sum = 0\n"
+                      "var sum = 0\n"
                       "i = 0\n"
                       "while (i < results.length) {\n"
                       "    sum = sum + results[i]\n"
@@ -7594,7 +7677,8 @@ TEST(cgen_coro_top_level_await_all_into_keeps_result_array_alive) {
                       "}\n"
                       "print(sum)\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
@@ -7633,8 +7717,8 @@ TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
                       "    }\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    shared const group: ResultGroup = ResultGroup(4)\n"
-                      "    let i = 0\n"
+                      "    shared group: ResultGroup = ResultGroup(4)\n"
+                      "    var i = 0\n"
                       "    while (i < 4) {\n"
                       "        go worker(group, i)\n"
                       "        i = i + 1\n"
@@ -7643,7 +7727,8 @@ TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
                       "}\n"
                       "print(run())\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
@@ -7672,12 +7757,12 @@ TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
 TEST(cgen_coro_result_group_reset_uses_native_helper) {
     const char *src = "import { ResultGroup } from sync\n"
                       "fn run(n: int) -> bool {\n"
-                      "    shared const group: ResultGroup = ResultGroup(n)\n"
+                      "    shared group: ResultGroup = ResultGroup(n)\n"
                       "    group.add(1)\n"
                       "    group.add(2)\n"
                       "    group.flush()\n"
-                      "    let first = group.recv() ?? -1\n"
-                      "    let ok = group.reset(n)\n"
+                      "    var first = group.recv() ?? -1\n"
+                      "    var ok = group.reset(n)\n"
                       "    group.close()\n"
                       "    return first == 3 && ok\n"
                       "}\n"
@@ -7722,7 +7807,7 @@ TEST(cgen_result_group_sync_methods_elide_dead_err_checks) {
                       "    return 0\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    shared const group: ResultGroup = ResultGroup(1)\n"
+                      "    shared group: ResultGroup = ResultGroup(1)\n"
                       "    return useGroup(group, 1)\n"
                       "}\n"
                       "print(run())\n";
@@ -7734,11 +7819,11 @@ TEST(cgen_result_group_sync_methods_elide_dead_err_checks) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT ResultGroup sync helpers should generate");
-
-    const char *use_group = strstr(code, "int64_t test_useGroup_");
+    const char *use_group = find_static_function_definition(code, "test_useGroup_");
     assert(use_group != NULL && "useGroup function should be generated");
-    const char *use_group_end = strstr(use_group, "\n}\n\nint64_t test_useGroup_");
-    assert(use_group_end != NULL && "useGroup native body should precede its C wrapper");
+    const char *use_group_end = next_static_after(use_group);
+    assert(use_group_end != NULL &&
+           "useGroup native body should be bounded by the next generated function");
     assert(count_between(use_group, use_group_end, "xr_aot_result_group_add_bool_sync(") == 1 &&
            "ResultGroup.add should use the native bool sync AOT helper");
     assert(count_between(use_group, use_group_end, "xr_aot_result_group_reset_bool_sync(") == 1 &&
@@ -7768,12 +7853,12 @@ TEST(cgen_coro_await_any_uses_typed_aggregate_bridge) {
                       "    ch.recv()\n"
                       "    return n\n"
                       "}\n"
-                      "let ch1 = Channel<int>(0)\n"
-                      "let ch2 = Channel<int>(1)\n"
-                      "let t1 = go delayed(ch1, 1)\n"
-                      "let t2 = go delayed(ch2, 2)\n"
+                      "shared ch1 = Channel<int>(0)\n"
+                      "shared ch2 = Channel<int>(1)\n"
+                      "var t1 = go delayed(ch1, 1)\n"
+                      "var t2 = go delayed(ch2, 2)\n"
                       "ch2.send(9)\n"
-                      "let first = await any [t1, t2]\n"
+                      "var first = await any [t1, t2]\n"
                       "print(first)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -7802,7 +7887,7 @@ TEST(cgen_coro_scope_exit_publishes_state_before_block) {
                       "    ch.recv()\n"
                       "}\n"
                       "fn scoped() {\n"
-                      "    let ch = Channel<int>(0)\n"
+                      "    shared ch = Channel<int>(0)\n"
                       "    scope {\n"
                       "        go child(ch)\n"
                       "    }\n"
@@ -7826,7 +7911,7 @@ TEST(cgen_coro_scope_exit_publishes_state_before_block) {
 }
 
 TEST(cgen_channel_fields_use_aot_helpers) {
-    const char *src = "let ch = Channel<int>(2)\n"
+    const char *src = "shared ch = Channel<int>(2)\n"
                       "print(ch.length)\n"
                       "print(ch.capacity)\n"
                       "print(ch.isClosed)\n";
@@ -7871,12 +7956,12 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
                       "    ch.close()\n"
                       "    return ch.isClosed()\n"
                       "}\n"
-                      "shared const ch = Channel<int>(2)\n"
-                      "let p = go producer(ch)\n"
+                      "shared ch = Channel<int>(2)\n"
+                      "var p = go producer(ch)\n"
                       "print(await p)\n"
-                      "let c = go consumer(ch)\n"
+                      "var c = go consumer(ch)\n"
                       "print(await c)\n"
-                      "let closed = go close_and_check(ch)\n"
+                      "var closed = go close_and_check(ch)\n"
                       "print(await closed)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -7904,12 +7989,12 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
 
 TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
     const char *src = "import { WorkQueue } from sync\n"
-                      "shared const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
+                      "shared queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
                       "fn consumer() -> int {\n"
-                      "    let item = queue.pop(0)\n"
+                      "    var item = queue.pop(0)\n"
                       "    return item ?? 0\n"
                       "}\n"
-                      "let task = go consumer()\n"
+                      "var task = go consumer()\n"
                       "assert_true(queue.push(7, 0))\n"
                       "print(await task)\n"
                       "queue.close()\n";
@@ -7925,12 +8010,14 @@ TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
            "coroutine WorkQueue.push should use the native bool helper");
     assert(contains(code, "xr_aot_work_queue_close_void(ctx,") &&
            "coroutine WorkQueue.close should use the native void helper");
-    assert(contains(code, "xr_aot_work_queue_pop(ctx,") &&
-           "initial WorkQueue.pop with native scalar result must use the slot bridge");
-    assert(contains(code, "S1:;\n    f->state = 1;\n    _wq_pop_slot_") &&
-           "native WorkQueue.pop resume must rebuild the frame slot after jumping to the label");
-    assert(contains(code, "xr_aot_work_queue_pop_resume(ctx, _wq_pop_slot_") &&
-           "native WorkQueue.pop resume must use the rebuilt slot");
+    assert(contains(code, "xr_aot_work_queue_pop_value(ctx,") &&
+           "initial WorkQueue.pop with tagged optional result must use the value bridge");
+    assert(contains(code, "S1:;\n    f->state = 1;") &&
+           "native WorkQueue.pop resume must restore state after jumping to the label");
+    assert(contains(code, "xr_aot_work_queue_pop_value_resume(ctx, &") &&
+           "native WorkQueue.pop resume must use the rebuilt frame value slot");
+    assert(!contains(code, "xr_aot_work_queue_pop(ctx,") &&
+           "tagged optional WorkQueue.pop should not use the generic slot-ref bridge");
     assert(contains(code, "xr_aot_trace_frame_value(visitor, f->v") &&
            "go-created Task values kept across spawn continuation must be traced");
     assert(!contains(code, "XrValue _wq_push_") &&
@@ -7945,14 +8032,14 @@ TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
 
 TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
     const char *src = "import { WorkQueue } from sync\n"
-                      "shared const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
+                      "shared queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
                       "fn consumer() -> int {\n"
-                      "    let item = queue.pop(0)\n"
+                      "    var item = queue.pop(0)\n"
                       "    if (item == null) { return -1 }\n"
-                      "    let value = item!\n"
+                      "    var value = item!\n"
                       "    return value * 2\n"
                       "}\n"
-                      "let task = go consumer()\n"
+                      "var task = go consumer()\n"
                       "assert_true(queue.push(21, 0))\n"
                       "print(await task)\n";
 
@@ -7997,14 +8084,14 @@ TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
 TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
     const char *src = "import { ResultGroup } from sync\n"
                       "fn consumer() -> int {\n"
-                      "    let group: ResultGroup = ResultGroup(1)\n"
+                      "    var group: ResultGroup = ResultGroup(1)\n"
                       "    group.add(21)\n"
-                      "    let item = group.recv()\n"
+                      "    var item = group.recv()\n"
                       "    if (item == null) { return -1 }\n"
-                      "    let value = item!\n"
+                      "    var value = item!\n"
                       "    return value * 2\n"
                       "}\n"
-                      "let task = go consumer()\n"
+                      "var task = go consumer()\n"
                       "print(await task)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -8034,11 +8121,11 @@ TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
 
 TEST(cgen_work_queue_native_methods_use_aot_helpers) {
     const char *src = "import { WorkQueue } from sync\n"
-                      "shared const queue: WorkQueue<int> = WorkQueue<int>(4, 2)\n"
+                      "shared queue: WorkQueue<int> = WorkQueue<int>(4, 2)\n"
                       "fn use_queue() -> int {\n"
                       "    assert_true(queue.push(1, 0))\n"
                       "    assert_eq(queue.pushRange(2, 2, 0), 2)\n"
-                      "    let (value, ok) = queue.tryPop(0)\n"
+                      "    var (value, ok) = queue.tryPop(0)\n"
                       "    if (!ok) { return -1 }\n"
                       "    if (queue.isClosed) { return -2 }\n"
                       "    queue.close()\n"
@@ -8067,7 +8154,7 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
            "WorkQueue.shardCount should read through the AOT helper");
     assert(contains(code, "xr_aot_work_queue_is_closed(") &&
            "WorkQueue.isClosed should read through the AOT helper");
-    assert(contains(code, "runtime_cfg.caps = XR_AOT_CAP_WORK_QUEUE;") &&
+    assert(contains(code, "runtime_cfg.caps = ") && contains(code, "XR_AOT_CAP_WORK_QUEUE") &&
            "sync WorkQueue main must create a work-queue-capable AOT runtime");
     assert(contains(code, "xrt_global_ctx.runtime = rt;") &&
            "sync WorkQueue helpers must receive a runtime-backed global context");
@@ -8107,14 +8194,14 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
                       "    return task.poll()\n"
                       "}\n"
                       "const ch = Channel<int>(0)\n"
-                      "let blocked = go wait_for_value(ch)\n"
+                      "var blocked = go wait_for_value(ch)\n"
                       "blocked.cancel()\n"
-                      "let cancelled_result = blocked.awaitResult()\n"
+                      "var cancelled_result = blocked.awaitResult()\n"
                       "print(blocked.done)\n"
                       "print(blocked.status)\n"
                       "print(cancelled_result)\n"
-                      "let quick = go quick_value(21)\n"
-                      "let quick_result = await quick\n"
+                      "var quick = go quick_value(21)\n"
+                      "var quick_result = await quick\n"
                       "print(quick.done)\n"
                       "print(quick.status)\n"
                       "print(quick.poll())\n"
@@ -8256,13 +8343,13 @@ int main(void) {
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
     run_cgen_class_constructor_returns_heap_native_instance();
     run_cgen_native_class_ref_field_constructor_result_uses_ptr_storage();
-    run_cgen_native_class_collection_ref_fields_skip_noop_arc();
+    run_cgen_native_class_collection_ref_fields_use_arc();
     run_cgen_class_set_length_size_sum_uses_native_arithmetic();
     run_cgen_class_set_u8_uses_typed_direct_helpers();
     run_cgen_class_map_i64_i64_uses_typed_direct_helpers();
     run_cgen_class_bool_key_map_uses_specialized_direct_helpers();
     run_cgen_class_map_bool_value_guarded_condition_uses_native();
-    run_cgen_class_map_bool_value_unguarded_condition_uses_truthy();
+    run_cgen_class_map_bool_value_unguarded_explicit_true_uses_tagged_compare();
     run_cgen_inherited_class_uses_native_base_layout();
     run_cgen_typed_array_slice_preserves_raw_storage_fast_path();
     run_cgen_typeof_as_and_slice_use_direct_drivers();

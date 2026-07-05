@@ -38,13 +38,13 @@ struct Color {
 fn test_struct_literal() {
 
     // Struct literal with values
-    let p = Point{x: 3.0, y: 4.0}
+    var p = Point{x: 3.0, y: 4.0}
     assert(p.x == 3.0)
     assert(p.y == 4.0)
 
     // Struct literal with expressions
-    let a = 10.0
-    let p2 = Point{x: a + 1.0, y: a * 2.0}
+    var a = 10.0
+    var p2 = Point{x: a + 1.0, y: a * 2.0}
     assert(p2.x == 11.0)
     assert(p2.y == 20.0)
 
@@ -52,31 +52,31 @@ fn test_struct_literal() {
     assert(distance(Point{x: 3.0, y: 4.0}) == 25.0)
 
     // Struct literal in array
-    let points = [Point{x: 1.0, y: 2.0}, Point{x: 3.0, y: 4.0}]
+    var points = [Point{x: 1.0, y: 2.0}, Point{x: 3.0, y: 4.0}]
     assert(points[0].x == 1.0)
     assert(points[1].y == 4.0)
 
     // Struct with method + literal
 
-    let v = Vec2{x: 3.0, y: 4.0}
+    var v = Vec2{x: 3.0, y: 4.0}
     assert(v.mag_sq() == 25.0)
 
     // Struct literal assigned to existing variable
-    let p3 = Point{x: 0.0, y: 0.0}
+    var p3 = Point{x: 0.0, y: 0.0}
     p3 = Point{x: 5.0, y: 6.0}
     assert(p3.x == 5.0)
     assert(p3.y == 6.0)
 
     // Nested struct literal field values
 
-    let r = Rect{x: 0.0, y: 0.0, w: 100.0, h: 50.0}
+    var r = Rect{x: 0.0, y: 0.0, w: 100.0, h: 50.0}
     assert(r.area() == 5000.0)
     assert(r.x == 0.0)
     assert(r.w == 100.0)
 
     // Struct literal with int fields
 
-    let red = Color{r: 255, g: 0, b: 0}
+    var red = Color{r: 255, g: 0, b: 0}
     assert(red.r == 255)
     assert(red.g == 0)
 

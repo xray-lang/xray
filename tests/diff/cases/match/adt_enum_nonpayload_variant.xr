@@ -27,7 +27,7 @@ fn describe(s: Shape) -> string {
 // Bare non-payload variant construction flows through getprop; payload
 // variants flow through the call/construct path. Both must yield a tagged
 // instance that describe() can discriminate.
-let shapes = [Shape.Circle(3), Shape.Square(4), Shape.Point, Shape.Unknown]
+var shapes = [Shape.Circle(3), Shape.Square(4), Shape.Point, Shape.Unknown]
 for (sh in shapes) {
     print(describe(sh))
 }
@@ -48,6 +48,6 @@ print(radius_or(Shape.Square(2)))
 print(radius_or(Shape.Unknown))
 
 // Direct equality of two bare non-payload variants.
-let a = Shape.Point
-let b = Shape.Point
+var a = Shape.Point
+var b = Shape.Point
 print(describe(a) == describe(b))

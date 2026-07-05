@@ -25,7 +25,7 @@ foo()                  // 表达式语句
 x = 1                  // 赋值表达式作为语句
 x++                    // 自增语句；不产生表达式值
 {                      // 块
-    let y = 2
+    var y = 2
     y + 1              // 表达式但结果被丢弃
 }
 ```
@@ -66,7 +66,7 @@ WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
 ```
 
 ```xray @id=stmt-while
-let i = 0
+var i = 0
 while (i < 10) {
     print(i)
     i++
@@ -86,10 +86,10 @@ ForStep ::= Expression | Identifier ('++' | '--')
 ```
 
 ```xray @id=stmt-for-c
-for (let i = 0; i < 10; i++) {
+for (var i = 0; i < 10; i++) {
     print(i)
 }
-for (let j = 100; j > 90; j--) {
+for (var j = 100; j > 90; j--) {
     print(j)
 }
 ```
@@ -275,7 +275,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 ```xray @id=stmt-defer
 fn read_file(path: string) -> string {
-    let f = open(path)
+    var f = open(path)
     defer f.close()                  // 函数返回前必执行
     return f.readAll()
 }
@@ -337,7 +337,7 @@ foo()                  // expression statement
 x = 1                  // assignment expression as a statement
 x++                    // increment statement; produces no expression value
 {                      // block
-    let y = 2
+    var y = 2
     y + 1              // expression with discarded result
 }
 ```
@@ -378,7 +378,7 @@ WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
 ```
 
 ```xray @id=stmt-while
-let i = 0
+var i = 0
 while (i < 10) {
     print(i)
     i++
@@ -398,10 +398,10 @@ ForStep ::= Expression | Identifier ('++' | '--')
 ```
 
 ```xray @id=stmt-for-c
-for (let i = 0; i < 10; i++) {
+for (var i = 0; i < 10; i++) {
     print(i)
 }
-for (let j = 100; j > 90; j--) {
+for (var j = 100; j > 90; j--) {
     print(j)
 }
 ```
@@ -589,7 +589,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 ```xray @id=stmt-defer
 fn read_file(path: string) -> string {
-    let f = open(path)
+    var f = open(path)
     defer f.close()                  // always runs before the function returns
     return f.readAll()
 }

@@ -685,7 +685,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
 /* Resolve through XI_COPY chains to find the original source.
  * Stops at variable domain boundaries: when a COPY's var_id differs
  * from its source's var_id, the copy separates two coalescing domains
- * (e.g. `let temp = b`).  Resolving through it would merge the
+ * (e.g. `var temp = b`).  Resolving through it would merge the
  * domains, causing loop-carried variables to share a physical
  * register and corrupt each other on reassignment. */
 static XiValue *resolve_copy(XiValue *v) {
@@ -904,17 +904,41 @@ static const XiValue *xi_identity_root_value(const XiValue *v) {
     return cur;
 }
 
-static XiValue *xi_task_array_unwrap_identity(XiValue *v) {
+static XiValue *xi_task_array_unwrap_identity_depth(XiValue *v, uint8_t depth) {
     XiValue *cur = v;
-    for (uint8_t depth = 0; depth < 8; depth++) {
+    for (; depth < 8; depth++) {
         if (!cur || cur->nargs != 1)
-            return cur;
+            break;
         XiValue *src = cur->args[0];
         if (!xi_identity_keeps_task_view(src, cur))
-            return cur;
+            break;
         cur = src;
     }
-    return cur;
+
+    if (!cur || cur->op != XI_PHI || depth >= 8)
+        return cur;
+
+    XiValue *source = NULL;
+    for (uint16_t i = 0; i < cur->nargs; i++) {
+        XiValue *arg = cur->args[i];
+        if (!arg || arg == cur)
+            continue;
+        XiValue *root = xi_task_array_unwrap_identity_depth(arg, depth + 1);
+        if (!root || root == cur)
+            continue;
+        if (source && source != root)
+            return cur;
+        source = root;
+    }
+    if (!source)
+        return cur;
+    if (cur->type && source->type && !xr_type_equals(cur->type, source->type))
+        return cur;
+    return source;
+}
+
+static XiValue *xi_task_array_unwrap_identity(XiValue *v) {
+    return xi_task_array_unwrap_identity_depth(v, 0);
 }
 
 static XiValue *xi_task_array_unique_shared_init(XiFunc *f, int64_t slot) {
@@ -1738,9 +1762,50 @@ static const XiValue *sr_unwrap_identity_value(const XiValue *v) {
     return v;
 }
 
+static XrRep sr_value_typed_array_elem_rep_depth(const XiValue *value, uint8_t depth) {
+    const XiValue *v = sr_unwrap_identity_value(value);
+    if (!v || depth > 8)
+        return XR_REP_TAGGED;
+
+    XrRep own = sr_typed_array_elem_rep(v->type);
+    if (own != XR_REP_TAGGED)
+        return own;
+
+    if (v->op == XI_SLICE && v->nargs >= 1)
+        return sr_value_typed_array_elem_rep_depth(v->args[0], (uint8_t) (depth + 1));
+
+    if (v->op == XI_PHI) {
+        bool has_base = false;
+        XrRep first = XR_REP_TAGGED;
+        if (v->nargs == 0)
+            return XR_REP_TAGGED;
+        for (uint16_t i = 0; i < v->nargs; i++) {
+            const XiValue *arg = sr_unwrap_identity_value(v->args[i]);
+            if (arg == v)
+                continue;
+            XrRep arg_rep = sr_value_typed_array_elem_rep_depth(arg, (uint8_t) (depth + 1));
+            if (arg_rep == XR_REP_TAGGED)
+                return XR_REP_TAGGED;
+            if (!has_base) {
+                first = arg_rep;
+                has_base = true;
+            } else if (first != arg_rep) {
+                return XR_REP_TAGGED;
+            }
+        }
+        return has_base ? first : XR_REP_TAGGED;
+    }
+
+    return XR_REP_TAGGED;
+}
+
+static XrRep sr_value_typed_array_elem_rep(const XiValue *value) {
+    return sr_value_typed_array_elem_rep_depth(value, 0);
+}
+
 static bool sr_value_has_static_typed_array_storage_depth(const XiValue *value, uint8_t depth) {
     const XiValue *v = sr_unwrap_identity_value(value);
-    if (!v || depth > 8 || !sr_type_has_static_typed_array_storage(v->type))
+    if (!v || depth > 8)
         return false;
 
     /* Array<T>/Span<T> with a native element type is a language-level typed
@@ -1748,8 +1813,10 @@ static bool sr_value_has_static_typed_array_storage_depth(const XiValue *value, 
      * method result, import, or direct call.  AOT prepare/cgen still decides
      * whether a particular access can use raw storage; select_rep only keeps
      * the element value itself in its native register representation. */
+    if (sr_type_has_static_typed_array_storage(v->type))
+        return true;
     if (v->op == XI_SLICE && v->nargs >= 1)
-        return sr_value_has_static_typed_array_storage_depth(v->args[0], depth + 1);
+        return sr_value_has_static_typed_array_storage_depth(v->args[0], (uint8_t) (depth + 1));
     if (v->op == XI_PHI) {
         bool has_base = false;
         if (v->nargs == 0)
@@ -1758,13 +1825,13 @@ static bool sr_value_has_static_typed_array_storage_depth(const XiValue *value, 
             const XiValue *arg = sr_unwrap_identity_value(v->args[i]);
             if (arg == v)
                 continue;
-            if (!sr_value_has_static_typed_array_storage_depth(arg, depth + 1))
+            if (!sr_value_has_static_typed_array_storage_depth(arg, (uint8_t) (depth + 1)))
                 return false;
             has_base = true;
         }
         return has_base;
     }
-    return true;
+    return false;
 }
 
 static bool sr_value_has_static_typed_array_storage(const XiValue *value) {
@@ -1798,8 +1865,7 @@ static bool sr_value_has_static_index_storage(const XiValue *value) {
 }
 
 static bool sr_value_has_static_unboxed_array_elem_type(const XiValue *value) {
-    const XiValue *v = sr_unwrap_identity_value(value);
-    return v && sr_typed_array_elem_rep(v->type) != XR_REP_TAGGED;
+    return sr_value_typed_array_elem_rep(value) != XR_REP_TAGGED;
 }
 
 static bool sr_is_typed_array_length_field(const XiValue *v) {
@@ -2098,7 +2164,7 @@ static bool sr_def_rep_memory_op(const XiValue *v, XrRep *out) {
     switch (v->op) {
         case XI_INDEX_GET:
             *out = v->nargs >= 1 && v->args[0] && sr_value_has_static_index_storage(v->args[0])
-                       ? sr_typed_array_elem_rep(v->args[0]->type)
+                       ? sr_value_typed_array_elem_rep(v->args[0])
                        : XR_REP_TAGGED;
             return true;
         case XI_BYTES_LOAD_U16:
@@ -2127,6 +2193,104 @@ static bool sr_def_rep_memory_op(const XiValue *v, XrRep *out) {
         default:
             return false;
     }
+}
+
+static bool sr_rep_is_native_number(XrRep rep) {
+    return rep == XR_REP_I64 || rep == XR_REP_F64;
+}
+
+static XrRep sr_arith_native_result_rep_depth(const XiValue *v, const XiRepPolicy *policy,
+                                              uint8_t depth);
+
+static XrRep sr_value_numeric_rep_hint_depth(const XiValue *value, const XiRepPolicy *policy,
+                                             uint8_t depth) {
+    const XiValue *v = value;
+    while (v && (xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && v->nargs >= 1)
+        v = v->args[0];
+    if (!v || depth > 8 || v->op == XI_BOX)
+        return XR_REP_TAGGED;
+
+    XrRep memory_rep = XR_REP_TAGGED;
+    if (sr_def_rep_memory_op(v, &memory_rep) && sr_rep_is_native_number(memory_rep))
+        return memory_rep;
+
+    XrRep scalar = sr_type_scalar_rep(v->type);
+    if (sr_rep_is_native_number(scalar))
+        return scalar;
+
+    if (v->op == XI_PHI) {
+        if (policy && policy->force_phi_tagged)
+            return XR_REP_TAGGED;
+        bool has_base = false;
+        XrRep first = XR_REP_TAGGED;
+        for (uint16_t i = 0; i < v->nargs; i++) {
+            const XiValue *arg = v->args[i];
+            if (arg == v)
+                continue;
+            XrRep arg_rep = sr_value_numeric_rep_hint_depth(arg, policy, (uint8_t) (depth + 1));
+            if (!sr_rep_is_native_number(arg_rep))
+                return XR_REP_TAGGED;
+            if (!has_base) {
+                first = arg_rep;
+                has_base = true;
+            } else if (first != arg_rep) {
+                return XR_REP_TAGGED;
+            }
+        }
+        return has_base ? first : XR_REP_TAGGED;
+    }
+
+    return sr_arith_native_result_rep_depth(v, policy, (uint8_t) (depth + 1));
+}
+
+static XrRep sr_arith_native_result_rep_depth(const XiValue *v, const XiRepPolicy *policy,
+                                              uint8_t depth) {
+    if (!v || depth > 8)
+        return XR_REP_TAGGED;
+
+    XrRep type_rep = sr_type_scalar_rep(v->type);
+    if (type_rep != XR_REP_TAGGED)
+        return type_rep;
+
+    switch (v->op) {
+        case XI_NEG:
+            return sr_value_numeric_rep_hint_depth(v->args[0], policy, (uint8_t) (depth + 1));
+        case XI_BNOT:
+            return sr_value_numeric_rep_hint_depth(v->args[0], policy, (uint8_t) (depth + 1)) ==
+                           XR_REP_I64
+                       ? XR_REP_I64
+                       : XR_REP_TAGGED;
+        case XI_BAND:
+        case XI_BOR:
+        case XI_BXOR:
+        case XI_SHL:
+        case XI_SHR:
+        case XI_MOD: {
+            if (v->nargs < 2)
+                return XR_REP_TAGGED;
+            XrRep lhs = sr_value_numeric_rep_hint_depth(v->args[0], policy, (uint8_t) (depth + 1));
+            XrRep rhs = sr_value_numeric_rep_hint_depth(v->args[1], policy, (uint8_t) (depth + 1));
+            return lhs == XR_REP_I64 && rhs == XR_REP_I64 ? XR_REP_I64 : XR_REP_TAGGED;
+        }
+        case XI_ADD:
+        case XI_SUB:
+        case XI_MUL:
+        case XI_DIV: {
+            if (v->nargs < 2)
+                return XR_REP_TAGGED;
+            XrRep lhs = sr_value_numeric_rep_hint_depth(v->args[0], policy, (uint8_t) (depth + 1));
+            XrRep rhs = sr_value_numeric_rep_hint_depth(v->args[1], policy, (uint8_t) (depth + 1));
+            if (!sr_rep_is_native_number(lhs) || !sr_rep_is_native_number(rhs))
+                return XR_REP_TAGGED;
+            return lhs == XR_REP_F64 || rhs == XR_REP_F64 ? XR_REP_F64 : XR_REP_I64;
+        }
+        default:
+            return XR_REP_TAGGED;
+    }
+}
+
+static XrRep sr_arith_native_result_rep(const XiValue *v, const XiRepPolicy *policy) {
+    return sr_arith_native_result_rep_depth(v, policy, 0);
 }
 
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
@@ -2160,7 +2324,7 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_BNOT:
         case XI_SHL:
         case XI_SHR: {
-            return sr_type_scalar_rep(v->type);
+            return sr_arith_native_result_rep(v, policy);
         }
         case XI_EQ:
         case XI_NE:
@@ -2302,7 +2466,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
                     return true;
                 }
                 if (arg_idx == 2) {
-                    *out = sr_typed_array_elem_rep(user->args[0]->type);
+                    *out = sr_value_typed_array_elem_rep(user->args[0]);
                     return true;
                 }
             }
@@ -2446,7 +2610,7 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
                 return user->args[arg_idx]->type->kind == XR_KIND_POINTER ? XR_REP_RAWPTR
                                                                           : XR_REP_I64;
             }
-            return sr_type_scalar_rep(user->type);
+            return sr_arith_native_result_rep(user, policy);
         }
         case XI_EQ:
         case XI_NE:

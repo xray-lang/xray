@@ -17,7 +17,7 @@ const TEST_URL = "wss://ws.postman-echo.com/raw"
 fn test_connect() {
     print("[测试 1] 基本连接...")
     
-    let conn = ws.connect(TEST_URL, null)
+    var conn = ws.connect(TEST_URL, null)
     
     if (conn!.error) {
         print("  ❌ 连接失败: " + conn!.error)
@@ -38,15 +38,15 @@ fn test_send_recv() {
     print("")
     print("[测试 2] 发送和接收消息...")
     
-    let conn = ws.connect(TEST_URL, null)
+    var conn = ws.connect(TEST_URL, null)
     if (conn!.error) {
         print("  ❌ 连接失败: " + conn!.error)
         return false
     }
     
     // 发送消息
-    let testMsg = "Hello from xray WebSocket!"
-    let sent = ws.send(conn, testMsg, null)
+    var testMsg = "Hello from xray WebSocket!"
+    var sent = ws.send(conn, testMsg, null)
     if (!sent) {
         print("  ❌ 发送失败")
         ws.close(conn, null, null)
@@ -55,7 +55,7 @@ fn test_send_recv() {
     print("  ✓ 已发送: " + testMsg)
     
     // 接收回显
-    let msg = ws.recv(conn, null)
+    var msg = ws.recv(conn, null)
     if (msg!.error) {
         print("  ❌ 接收失败: " + msg!.error)
         ws.close(conn, null, null)
@@ -82,18 +82,18 @@ fn test_multiple_messages() {
     print("")
     print("[测试 3] 多条消息...")
     
-    let conn = ws.connect(TEST_URL, null)
+    var conn = ws.connect(TEST_URL, null)
     if (conn!.error) {
         print("  ❌ 连接失败: " + conn!.error)
         return false
     }
     
-    let messages = ["消息1", "消息2", "消息3", "Hello", "World"]
-    let success = 0
+    var messages = ["消息1", "消息2", "消息3", "Hello", "World"]
+    var success = 0
     
     for (msg in messages) {
         ws.send(conn, msg, null)
-        let resp = ws.recv(conn, null)
+        var resp = ws.recv(conn, null)
         if (resp!.data == msg) {
             success = success + 1
         }
@@ -117,7 +117,7 @@ fn test_state() {
     print("")
     print("[测试 4] 状态检查...")
     
-    let conn = ws.connect(TEST_URL, null)
+    var conn = ws.connect(TEST_URL, null)
     if (conn!.error) {
         print("  ❌ 连接失败: " + conn!.error)
         return false
@@ -144,7 +144,7 @@ fn test_state() {
     // 关闭后检查状态
     ws.close(conn, null, null)
     
-    let state = ws.state(conn)
+    var state = ws.state(conn)
     print("  关闭后状态: " + state)
     
     return true
@@ -155,13 +155,13 @@ fn test_ping() {
     print("")
     print("[测试 5] Ping 保活...")
     
-    let conn = ws.connect(TEST_URL, null)
+    var conn = ws.connect(TEST_URL, null)
     if (conn!.error) {
         print("  ❌ 连接失败: " + conn!.error)
         return false
     }
     
-    let pingOk = ws.ping(conn)
+    var pingOk = ws.ping(conn)
     if (pingOk) {
         print("  ✓ Ping 发送成功")
     } else {
@@ -179,7 +179,7 @@ fn test_connection_failure() {
     print("")
     print("[测试 6] 连接失败处理...")
     
-    let conn = ws.connect("ws://invalid.nonexistent.domain.xyz/ws", null)
+    var conn = ws.connect("ws://invalid.nonexistent.domain.xyz/ws", null)
     
     if (conn!.error) {
         print("  ✓ 正确处理连接失败")
@@ -194,8 +194,8 @@ fn test_connection_failure() {
 
 /* 运行所有测试 */
 fn main() {
-    let passed = 0
-    let total = 6
+    var passed = 0
+    var total = 6
     
     if (test_connect()) { passed = passed + 1 }
     if (test_send_recv()) { passed = passed + 1 }

@@ -68,7 +68,7 @@ class Point {
 
 @test
 fn test_factory_method() {
-    let p = Point.origin()
+    var p = Point.origin()
     assert_eq(p.x, 0)
     assert_eq(p.y, 0)
 }
@@ -94,8 +94,8 @@ class Item {
 @test
 fn test_mixed_static_instance() {
     Item.resetId()
-    let a = Item("Apple")
-    let b = Item("Banana")
+    var a = Item("Apple")
+    var b = Item("Banana")
     
     assert_eq(a.id, 1)
     assert_eq(b.id, 2)

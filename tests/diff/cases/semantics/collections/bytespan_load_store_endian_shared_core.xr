@@ -1,6 +1,6 @@
 // anchor: bytespan-load-store-endian-shared-core
-let bytes = Bytes(12)
-let view: ByteSpan = bytes[:]
+var bytes = Bytes(12)
+var view: ByteSpan = bytes[:]
 
 view.store<uint16>(0, 0x1234, Endian.LE)
 view.store<uint16>(2, 0x1234, Endian.BE)

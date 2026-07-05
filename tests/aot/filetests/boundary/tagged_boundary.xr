@@ -19,5 +19,5 @@ fn read_counter(c: Counter) -> int {
     return c.bump()
 }
 
-let c = make_counter(41)
+var c = make_counter(41)
 print(read_counter(c))

@@ -67,7 +67,7 @@ fn test_two_constraints_float() {
     fn passThrough<T: Comparable & Hashable>(x: T) -> T {
         return x
     }
-    let f = passThrough(3.14)
+    var f = passThrough(3.14)
     assert(f > 3.0 && f < 4.0)
 }
 
@@ -131,9 +131,9 @@ fn test_user_class_implements_comparable() {
     fn first<T: Comparable>(a: T, b: T) -> T {
         return a
     }
-    let p = CmpPoint(7)
-    let q = CmpPoint(3)
-    let r = first<CmpPoint>(p, q)
+    var p = CmpPoint(7)
+    var q = CmpPoint(3)
+    var r = first<CmpPoint>(p, q)
     assert_eq(r.x, 7)
 }
 
@@ -142,9 +142,9 @@ fn test_user_class_implements_comparable_implicit() {
     fn first<T: Comparable>(a: T, b: T) -> T {
         return a
     }
-    let p = CmpPoint(11)
-    let q = CmpPoint(2)
-    let r = first(p, q)
+    var p = CmpPoint(11)
+    var q = CmpPoint(2)
+    var r = first(p, q)
     assert_eq(r.x, 11)
 }
 

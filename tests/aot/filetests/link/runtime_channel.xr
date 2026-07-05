@@ -1,4 +1,4 @@
-let ch = Channel<int>(2)
+shared ch = Channel<int>(2)
 
 select {
     1 to ch -> { print("sent") }

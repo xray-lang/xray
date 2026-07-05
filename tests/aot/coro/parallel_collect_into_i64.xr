@@ -1,4 +1,4 @@
-let out: Array<int> = []
+var out: Array<int> = []
 out.reserve(16)
 out.push(999)
 

@@ -3,7 +3,7 @@
 // message is the user-visible text without the Exxxx prefix, and code is the
 // numeric runtime error code.
 fn show_index_read(i: int) {
-    let xs = [1, 2, 3]
+    var xs = [1, 2, 3]
     try {
         print(xs[i])
     } catch panic (p) {
@@ -13,7 +13,7 @@ fn show_index_read(i: int) {
 }
 
 fn show_index_write(i: int) {
-    let xs = [1, 2, 3]
+    var xs = [1, 2, 3]
     try {
         xs[i] = 9
         print(xs[0])
@@ -42,10 +42,10 @@ fn show_mod_zero() {
 }
 
 fn show_bytes_load_oob() {
-    let bytes = Bytes(4, 1)
-    let view: ByteSpan = bytes[:]
+    var bytes = Bytes(4, 1)
+    var view: ByteSpan = bytes[:]
     try {
-        let value: uint32 = view.load<uint32>(2, Endian.LE)
+        var value: uint32 = view.load<uint32>(2, Endian.LE)
         print(int(value))
     } catch panic (p) {
         print(p.message)
@@ -54,7 +54,7 @@ fn show_bytes_load_oob() {
 }
 
 fn show_bytes_copy_within_oob() {
-    let bytes = Bytes.withCapacity(4)
+    var bytes = Bytes.withCapacity(4)
     unsafe {
         bytes.pushUnchecked(1)
     }
@@ -69,7 +69,7 @@ fn show_bytes_copy_within_oob() {
 
 fn show_bytes_ctor_type_error() {
     try {
-        let bytes1 = Bytes("bad")
+        var bytes1 = Bytes("bad")
         print(bytes1.length)
     } catch panic (p) {
         print(p.message)
@@ -77,7 +77,7 @@ fn show_bytes_ctor_type_error() {
     }
 
     try {
-        let bytes2 = Bytes(2, "bad")
+        var bytes2 = Bytes(2, "bad")
         print(bytes2.length)
     } catch panic (p) {
         print(p.message)
@@ -86,9 +86,9 @@ fn show_bytes_ctor_type_error() {
 }
 
 fn show_slice_bounds_type_error() {
-    let xs = [1, 2, 3]
+    var xs = [1, 2, 3]
     try {
-        let view: Span<int> = xs["a":"b"]
+        var view: Span<int> = xs["a":"b"]
         print(view.length)
     } catch panic (p) {
         print(p.message)

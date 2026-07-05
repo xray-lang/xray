@@ -1,7 +1,7 @@
 import sys
 
 fn main() {
-    let t = sys.Thread.spawn(fn() -> int {
+    var t = sys.Thread.spawn(fn() -> int {
         Coro.yield()
         return 1
     })

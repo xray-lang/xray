@@ -1,13 +1,13 @@
 // anchor: span-copyfrom-pod-shared-core
-let dst = Array<uint32>(4, 0)
-let src = Array<uint32>(2, 0)
+var dst = Array<uint32>(4, 0)
+var src = Array<uint32>(2, 0)
 src[0] = 17
 src[1] = 42
 
-let dstSpan: Span<uint32> = dst[:]
-let srcSpan: Span<uint32> = src[:]
-let dstWindow: Span<uint32> = dstSpan[1:3]
-let copied: Span<uint32> = dstWindow.copyFrom(srcSpan)
+var dstSpan: Span<uint32> = dst[:]
+var srcSpan: Span<uint32> = src[:]
+var dstWindow: Span<uint32> = dstSpan[1:3]
+var copied: Span<uint32> = dstWindow.copyFrom(srcSpan)
 
 print(int(dst[0]))
 print(int(dst[1]))
@@ -15,14 +15,14 @@ print(int(dst[2]))
 print(int(dst[3]))
 print(copied.length)
 
-let overlap = Array<uint16>(4, 0)
+var overlap = Array<uint16>(4, 0)
 overlap[0] = 1
 overlap[1] = 2
 overlap[2] = 3
 overlap[3] = 4
-let overlapSpan: Span<uint16> = overlap[:]
-let overlapDst: Span<uint16> = overlapSpan[1:4]
-let overlapSrc: Span<uint16> = overlapSpan[0:3]
+var overlapSpan: Span<uint16> = overlap[:]
+var overlapDst: Span<uint16> = overlapSpan[1:4]
+var overlapSrc: Span<uint16> = overlapSpan[0:3]
 overlapDst.copyFrom(overlapSrc)
 print(int(overlap[0]))
 print(int(overlap[1]))
@@ -30,7 +30,7 @@ print(int(overlap[2]))
 print(int(overlap[3]))
 
 try {
-    let tooSmall: Span<uint32> = dstSpan[0:1]
+    var tooSmall: Span<uint32> = dstSpan[0:1]
     tooSmall.copyFrom(srcSpan)
     print(999)
 } catch panic (p) {

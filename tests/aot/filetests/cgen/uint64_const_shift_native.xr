@@ -1,5 +1,5 @@
 fn hashStep(seq: uint64) -> uint64 {
-    let mixed = seq << 24
+    var mixed = seq << 24
     return mixed >> 52
 }
 

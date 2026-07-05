@@ -24,8 +24,8 @@ fn slow() -> int {
 }
 
 fn count_success(outcomes: Array<TaskOutcome>) -> int {
-    let count = 0
-    for (let i = 0; i < outcomes.length; i++) {
+    var count = 0
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Success(_) -> { count = count + 1 }
             _ -> {}
@@ -35,8 +35,8 @@ fn count_success(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn count_failed(outcomes: Array<TaskOutcome>) -> int {
-    let count = 0
-    for (let i = 0; i < outcomes.length; i++) {
+    var count = 0
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(_) -> { count = count + 1 }
             _ -> {}
@@ -46,8 +46,8 @@ fn count_failed(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn count_cancelled(outcomes: Array<TaskOutcome>) -> int {
-    let count = 0
-    for (let i = 0; i < outcomes.length; i++) {
+    var count = 0
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Cancelled -> { count = count + 1 }
             _ -> {}
@@ -57,7 +57,7 @@ fn count_cancelled(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn has_failed_msg(outcomes: Array<TaskOutcome>, expected: string) -> bool {
-    for (let i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(err) -> {
                 match (err) {
@@ -76,7 +76,7 @@ fn has_failed_msg(outcomes: Array<TaskOutcome>, expected: string) -> bool {
 }
 
 fn test_outcomes_collected() {
-    let outcomes = supervisor scope {
+    var outcomes = supervisor scope {
         go ok()
         go failing1()
         go failing2()
@@ -89,7 +89,7 @@ fn test_outcomes_collected() {
 }
 
 fn test_all_success() {
-    let outcomes = supervisor scope {
+    var outcomes = supervisor scope {
         go ok()
         go ok()
     }
@@ -99,7 +99,7 @@ fn test_all_success() {
 }
 
 fn test_single_error() {
-    let outcomes = supervisor scope {
+    var outcomes = supervisor scope {
         go failing1()
     }
     assert_eq(outcomes.length, 1)
@@ -108,8 +108,8 @@ fn test_single_error() {
 }
 
 fn test_cancelled_child() {
-    let outcomes = supervisor scope {
-        let task = go slow()
+    var outcomes = supervisor scope {
+        var task = go slow()
         task.cancel()
     }
     assert_eq(outcomes.length, 1)

@@ -1,17 +1,17 @@
 fn run(n: int) -> int {
-    let m: Map<string, int> = #{}
+    var m: Map<string, int> = #{}
 
-    let i = 0
+    var i = 0
     while (i < n) {
-        let key = "user:" + ((i * 7) % n).toString()
+        var key = "user:" + ((i * 7) % n).toString()
         m.set(key, i)
         i = i + 1
     }
 
-    let sum = 0
+    var sum = 0
     i = 0
     while (i < n) {
-        let key = "user:" + i.toString()
+        var key = "user:" + i.toString()
         if (m.has(key)) {
             sum = sum + m.get(key)
         }

@@ -20,14 +20,14 @@ fn test_and_with_expressions() {
 
 @test
 fn test_and_short_circuit() {
-    let called = false
+    var called = false
     fn sideEffect() -> bool {
         called = true
         return true
     }
     
     // false && ... 不会执行右侧
-    let result = false && sideEffect()
+    var result = false && sideEffect()
     assert_eq(result, false)
     assert_eq(called, false)
 }
@@ -57,14 +57,14 @@ fn test_or_with_expressions() {
 
 @test
 fn test_or_short_circuit() {
-    let called = false
+    var called = false
     fn sideEffect() -> bool {
         called = true
         return true
     }
     
     // true || ... 不会执行右侧
-    let result = true || sideEffect()
+    var result = true || sideEffect()
     assert_eq(result, true)
     assert_eq(called, false)
 }
@@ -102,7 +102,7 @@ fn test_not_explicit() {
     assert_eq(!(1 != 0), false)        // 1 != 0
     assert_eq(!("".isEmpty()), false)  // empty string
     assert_eq(!("hi".isEmpty()), true) // non-empty
-    let n: int? = null
+    var n: int? = null
     assert_eq(!(n != null), true)      // null presence
 }
 
@@ -149,8 +149,8 @@ fn test_precedence_and_before_or() {
 @test
 fn test_with_nullable_presence() {
     // Logical operators require bool operands; use explicit presence checks
-    let a: string? = null
-    let b: string? = "value"
+    var a: string? = null
+    var b: string? = "value"
     assert_eq((a != null) || (b != null), true)
     assert_eq((b != null) || (a != null), true)
     assert_eq((a != null) && (b != null), false)
@@ -158,8 +158,8 @@ fn test_with_nullable_presence() {
 
 @test
 fn test_complex_condition() {
-    let x = 5
-    let y = 10
+    var x = 5
+    var y = 10
     assert_eq(x > 0 && y > 0 && x < y, true)
     assert_eq(x < 0 || y < 0 || x > y, false)
 }

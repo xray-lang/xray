@@ -14,8 +14,8 @@ fn build_message(prefix: string, n: int) -> string {
 }
 
 fn map_worker(seed: string) -> Map<string, string> {
-    let k = make_key(3)
-    let m: Map<string, string> = #{}
+    var k = make_key(3)
+    var m: Map<string, string> = #{}
     m.set(k, seed + "_value")
     Coro.yield()
     return m
@@ -23,8 +23,8 @@ fn map_worker(seed: string) -> Map<string, string> {
 
 @test
 fn test_lazy_string_map_set_content_keys() {
-    let key = make_key(1)
-    let m: Map<string, int> = #{}
+    var key = make_key(1)
+    var m: Map<string, int> = #{}
     m.set(key, 7)
     m.set(make_key(1), 11)
 
@@ -34,7 +34,7 @@ fn test_lazy_string_map_set_content_keys() {
     assert_eq(m.delete("k1"), true)
     assert_eq(m.has(make_key(1)), false)
 
-    let s: Set<string> = #[]
+    var s: Set<string> = #[]
     s.add(make_key(2))
     s.add("k2")
     assert_eq(s.length, 1)
@@ -45,20 +45,20 @@ fn test_lazy_string_map_set_content_keys() {
 
 @test
 fn test_lazy_string_channel_and_task_publish() {
-    let ch: Channel<string> = Channel(1)
-    let msg = build_message("msg", 4)
+    shared ch: Channel<string> = Channel(1)
+    var msg = build_message("msg", 4)
     ch.send(msg)
     assert_eq(recv_string(ch), "msg_4")
     ch.close()
 
-    let task = go build_message("task", 5)
+    var task = go build_message("task", 5)
     assert_eq(await task, "task_5")
 }
 
 @test
 fn test_lazy_string_nested_container_task_result() {
-    let task = go map_worker(build_message("seed", 6))
-    let out = await task
+    var task = go map_worker(build_message("seed", 6))
+    var out = await task
     assert_eq(out.get(make_key(3)), "seed_6_value")
     assert_eq(out.get("k3"), "seed_6_value")
 }

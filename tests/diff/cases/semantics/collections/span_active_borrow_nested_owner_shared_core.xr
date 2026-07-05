@@ -3,9 +3,9 @@ class Box {
 }
 
 fn fieldOwnerAfterLastUse() {
-    let box = Box()
+    var box = Box()
     box.bytes.push(7)
-    let view: ByteSpan = box.bytes[:]
+    var view: ByteSpan = box.bytes[:]
     print(view.length)
     print(view[0])
     box.bytes.push(9)
@@ -13,9 +13,9 @@ fn fieldOwnerAfterLastUse() {
 }
 
 fn indexOwnerAfterLastUse() {
-    let chunks: Array<Bytes> = [Bytes(0)]
+    var chunks: Array<Bytes> = [Bytes(0)]
     chunks[0].push(3)
-    let view: ByteSpan = chunks[0][:]
+    var view: ByteSpan = chunks[0][:]
     print(view.length)
     print(view[0])
     chunks[0].push(4)

@@ -3,7 +3,7 @@ enum AppErr {
 }
 
 fn worker() -> int {
-    let result = 0
+    var result = 0
     try {
         Coro.yield()
         throw AppErr.Bad(7)
@@ -13,5 +13,5 @@ fn worker() -> int {
     return result
 }
 
-let task = go worker()
+var task = go worker()
 print(await task)

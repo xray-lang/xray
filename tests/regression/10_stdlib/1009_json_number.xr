@@ -43,7 +43,7 @@ fn test_large_integers() {
     assert_eq(Json.parse("-140737488355327"), -140737488355327)
     
     // Large integers within int64 range are parsed as int64
-    let large = Json.parse("9007199254740992")
+    var large = Json.parse("9007199254740992")
     assert_eq(typeof(large), "int")
     assert_eq(large, 9007199254740992)
 }
@@ -72,7 +72,7 @@ fn test_float_precision() {
 @test
 fn test_negative_zero() {
     // 负零
-    let nz = Json.parse("-0.0")
+    var nz = Json.parse("-0.0")
     assert_eq(nz, 0.0)  // -0.0 == 0.0 在数值上相等
 }
 
@@ -142,7 +142,7 @@ fn test_very_large_floats() {
 @test
 fn test_max_precision_integers() {
     // Full 64-bit int range (Tagged Union)
-    let n = Json.parse("72057594037927935")
+    var n = Json.parse("72057594037927935")
     assert_eq(typeof(n), "int")
     assert_eq(n, 72057594037927935)
 }
@@ -168,15 +168,15 @@ fn test_trailing_zeros() {
 @test
 fn test_nines_pattern() {
     // Large integer nines pattern: beyond 48-bit, parsed as float
-    let n1 = Json.parse("9999999999999999999")
+    var n1 = Json.parse("9999999999999999999")
     assert_eq(typeof(n1), "float")
     assert_eq(n1 > 9e18, true)
     // Float nines patterns
-    let n2 = Json.parse("999999999999999999.9")
+    var n2 = Json.parse("999999999999999999.9")
     assert_eq(n2 > 9e17, true)
-    let n3 = Json.parse("99999999999999999.99")
+    var n3 = Json.parse("99999999999999999.99")
     assert_eq(n3 > 9e16, true)
-    let n4 = Json.parse("0.9999999999999999999")
+    var n4 = Json.parse("0.9999999999999999999")
     assert_eq(n4 > 0.999, true)
     assert_eq(n4 <= 1.0, true)
 }
@@ -185,7 +185,7 @@ fn test_nines_pattern() {
 
 @test
 fn test_numbers_in_array() {
-    let arr = Json.parse("[1, 2.5, -3, 1e10, -1.5e-3]")
+    var arr = Json.parse("[1, 2.5, -3, 1e10, -1.5e-3]")
     assert_eq(arr.length, 5)
     assert_eq(arr[0], 1)
     assert_eq(arr[1], 2.5)
@@ -198,7 +198,7 @@ fn test_numbers_in_array() {
 
 @test
 fn test_numbers_in_object() {
-    let obj = Json.parse("{\"intVal\": 42, \"floatVal\": 3.14, \"sci\": 1e10, \"neg\": -100}")
+    var obj = Json.parse("{\"intVal\": 42, \"floatVal\": 3.14, \"sci\": 1e10, \"neg\": -100}")
     assert_eq(obj.intVal, 42)
     assert_eq(obj.floatVal, 3.14)
     assert_eq(obj.sci, 1e10)
@@ -210,14 +210,14 @@ fn test_numbers_in_object() {
 @test
 fn test_overflow_to_infinity() {
     // 超大指数应该返回 Infinity
-    let inf = Json.parse("1e309")
+    var inf = Json.parse("1e309")
     assert_eq(inf > 1e308, true)  // 应该是 Infinity
 }
 
 @test
 fn test_underflow_to_zero() {
     // 超小指数应该返回 0
-    let zero = Json.parse("1e-400")
+    var zero = Json.parse("1e-400")
     assert_eq(zero, 0.0)
 }
 

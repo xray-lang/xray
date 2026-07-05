@@ -32,7 +32,7 @@ fn readConfig() -> string {
 }
 
 @test fn enum_throw_happy_path() {
-    let result = 0
+    var result = 0
     try {
         result = might_fail("hello")
     } catch (e) {
@@ -42,7 +42,7 @@ fn readConfig() -> string {
 }
 
 @test fn enum_throw_caught() {
-    let result = ""
+    var result = ""
     try {
         openFile("")
     } catch (e) {
@@ -52,7 +52,7 @@ fn readConfig() -> string {
 }
 
 @test fn enum_throw_propagation() {
-    let result = ""
+    var result = ""
     try {
         result = readConfig()
     } catch (e) {
@@ -72,7 +72,7 @@ fn readConfig() -> string {
         return "ok"
     }
 
-    let r1 = ""
+    var r1 = ""
     try {
         r1 = riskyOp(2)
     } catch (e) {
@@ -80,7 +80,7 @@ fn readConfig() -> string {
     }
     assert_eq(r1, "ok")
 
-    let r2 = ""
+    var r2 = ""
     try {
         r2 = riskyOp(0)
     } catch (e) {

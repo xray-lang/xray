@@ -5,7 +5,7 @@ struct Pair {
 }
 
 fn score() -> int {
-    let p = Pair{left: 40, right: 2, ok: true}
+    var p = Pair{left: 40, right: 2, ok: true}
     if (p.ok) {
         return p.left + p.right
     }

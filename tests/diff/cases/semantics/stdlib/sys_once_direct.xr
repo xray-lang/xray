@@ -2,8 +2,8 @@
 
 import sys
 
-let counter = 0
-let once = sys.OsOnce()
+var counter = 0
+var once = sys.OsOnce()
 
 once.call(() -> { counter = counter + 1 })
 once.call(() -> { counter = counter + 10 })

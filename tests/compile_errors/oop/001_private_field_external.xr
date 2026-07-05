@@ -2,5 +2,5 @@ class Account {
     private balance: int
     constructor(b: int) { this.balance = b }
 }
-let a = Account(100)
+var a = Account(100)
 print(a.balance)

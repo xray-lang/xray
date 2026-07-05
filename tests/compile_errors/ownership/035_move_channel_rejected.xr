@@ -1,5 +1,5 @@
 fn main() {
-    let ch: Channel<int> = Channel(1)
-    let moved = move ch
+    var ch: Channel<int> = Channel(1)
+    var moved = move ch
     print(moved)
 }

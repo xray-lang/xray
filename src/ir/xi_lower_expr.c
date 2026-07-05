@@ -2734,7 +2734,7 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
             }
             /* Strict dynamic→concrete argument boundary: a Json/dynamic value passed
              * into a concrete parameter is verified at runtime via OP_CHECKTYPE,
-             * exactly like the let-binding / return / map-key boundaries. This keeps
+             * exactly like the var-binding / return / map-key boundaries. This keeps
              * VM and AOT raising the same TypeError on mismatch instead of silently
              * coercing (e.g. Json int 1 into a `bool` parameter). */
             if (xr_is_json_coercion(pt, arg_vals[i]->type))

@@ -14,6 +14,6 @@ fn stash(data: in Array<int>, holder: ref Holder) {
     holder.stash(data)
 }
 
-let values: Array<int> = [1, 2, 3]
-let holder = Holder()
+var values: Array<int> = [1, 2, 3]
+var holder = Holder()
 stash(values, holder)

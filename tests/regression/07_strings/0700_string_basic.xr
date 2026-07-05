@@ -31,7 +31,7 @@ fn test_concat_with_numbers() {
 
 @test
 fn test_charAt() {
-    let s = "hello"
+    var s = "hello"
     assert_eq(s.charAt(0), "h")
     assert_eq(s.charAt(4), "o")
     assert_eq(s.charAt(-1), "o")
@@ -40,13 +40,13 @@ fn test_charAt() {
 
 @test
 fn test_charAt_empty() {
-    let s = ""
+    var s = ""
     assert_eq(s.charAt(0), null)
 }
 
 @test
 fn test_charAt_out_of_bounds() {
-    let s = "abc"
+    var s = "abc"
     assert_eq(s.charAt(10), null)
     assert_eq(s.charAt(-4), null)
 }
@@ -55,7 +55,7 @@ fn test_charAt_out_of_bounds() {
 
 @test
 fn test_substring() {
-    let s = "hello world"
+    var s = "hello world"
     assert_eq(s.substring(0, 5), "hello")
     assert_eq(s.substring(6, 11), "world")
     assert_eq(s.substring(0, 1), "h")
@@ -63,20 +63,20 @@ fn test_substring() {
 
 @test
 fn test_substring_full() {
-    let s = "test"
+    var s = "test"
     assert_eq(s.substring(0, 4), "test")
 }
 
 @test
 fn test_substring_empty() {
-    let s = "test"
+    var s = "test"
     assert_eq(s.substring(0, 0), "")
     assert_eq(s.substring(2, 2), "")
 }
 
 @test
 fn test_substring_bounds() {
-    let s = "abcdef"
+    var s = "abcdef"
     assert_eq(s.substring(-3, 3), "abc")
     assert_eq(s.substring(2, -1), "cdef")
     assert_eq(s.substring(0, 99), "abcdef")
@@ -88,7 +88,7 @@ fn test_substring_bounds() {
 
 @test
 fn test_indexOf() {
-    let s = "hello world"
+    var s = "hello world"
     assert_eq(s.indexOf("hello"), 0)
     assert_eq(s.indexOf("world"), 6)
     assert_eq(s.indexOf("o"), 4)
@@ -97,7 +97,7 @@ fn test_indexOf() {
 
 @test
 fn test_indexOf_empty() {
-    let s = "test"
+    var s = "test"
     assert_eq(s.indexOf(""), 0)
 }
 
@@ -105,7 +105,7 @@ fn test_indexOf_empty() {
 
 @test
 fn test_contains() {
-    let s = "hello world"
+    var s = "hello world"
     assert_eq(s.includes("hello"), true)
     assert_eq(s.includes("world"), true)
     assert_eq(s.includes("xyz"), false)
@@ -115,7 +115,7 @@ fn test_contains() {
 
 @test
 fn test_startsWith() {
-    let s = "hello world"
+    var s = "hello world"
     assert_eq(s.startsWith("hello"), true)
     assert_eq(s.startsWith("world"), false)
     assert_eq(s.startsWith(""), true)
@@ -123,7 +123,7 @@ fn test_startsWith() {
 
 @test
 fn test_endsWith() {
-    let s = "hello world"
+    var s = "hello world"
     assert_eq(s.endsWith("world"), true)
     assert_eq(s.endsWith("hello"), false)
     assert_eq(s.endsWith(""), true)
@@ -181,39 +181,39 @@ fn test_toFloat() {
 
 @test
 fn test_split() {
-    let s = "a,b,c,d"
-    let parts = s.split(",")
+    var s = "a,b,c,d"
+    var parts = s.split(",")
     assert_eq(parts.length, 4)
     assert_eq(parts[0], "a")
     assert_eq(parts[3], "d")
 
-    let edges = "a,,b,".split(",")
+    var edges = "a,,b,".split(",")
     assert_eq(edges.length, 4)
     assert_eq(edges[0], "a")
     assert_eq(edges[1], "")
     assert_eq(edges[2], "b")
     assert_eq(edges[3], "")
 
-    let chars = "ab".split("")
+    var chars = "ab".split("")
     assert_eq(chars.length, 2)
     assert_eq(chars[0], "a")
     assert_eq(chars[1], "b")
 
-    let empty = "".split("")
+    var empty = "".split("")
     assert_eq(empty.length, 0)
 }
 
 @test
 fn test_split_spaces() {
-    let s = "hello world test"
-    let words = s.split(" ")
+    var s = "hello world test"
+    var words = s.split(" ")
     assert_eq(words.length, 3)
 }
 
 @test
 fn test_split_no_delimiter() {
-    let s = "hello"
-    let parts = s.split(",")
+    var s = "hello"
+    var parts = s.split(",")
     assert_eq(parts.length, 1)
     assert_eq(parts[0], "hello")
 }
@@ -240,7 +240,7 @@ fn test_toLowerCase() {
 
 @test
 fn test_replace() {
-    let s = "hello world"
+    var s = "hello world"
     assert_eq(s.replace("world", "xray"), "hello xray")
     assert_eq(s.replace("xyz", "abc"), "hello world")
     assert_eq(s.replace("", "x"), "hello world")
@@ -250,7 +250,7 @@ fn test_replace() {
 
 @test
 fn test_replace_all() {
-    let s = "a-b-c-d"
+    var s = "a-b-c-d"
     assert_eq(s.replaceAll("-", "_"), "a_b_c_d")
     assert_eq("aaaa".replaceAll("aa", "X"), "XX")
     assert_eq("abc".replaceAll("b", ""), "ac")
@@ -285,7 +285,7 @@ fn test_comparison() {
 
 @test
 fn test_empty_string_operations() {
-    let s = ""
+    var s = ""
     assert_eq(s.length, 0)
     assert_eq(s.trim(), "")
     assert_eq(s.toUpperCase(), "")
@@ -294,7 +294,7 @@ fn test_empty_string_operations() {
 
 @test
 fn test_long_string() {
-    let s = "a".repeat(1000)
+    var s = "a".repeat(1000)
     assert_eq(s.length, 1000)
     assert_eq(s.charAt(500), "a")
 }

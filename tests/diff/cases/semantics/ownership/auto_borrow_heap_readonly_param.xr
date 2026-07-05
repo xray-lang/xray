@@ -6,11 +6,11 @@ fn first(m: Map<string, int>, k: string) -> int {
     return m[k]
 }
 
-let xs: Array<int> = [1, 2, 3]
+var xs: Array<int> = [1, 2, 3]
 print(lenOf(xs))
 xs.push(4)
 print(lenOf(xs))
 
-let m: Map<string, int> = #{}
+var m: Map<string, int> = #{}
 m.set("x", 7)
 print(first(m, "x"))

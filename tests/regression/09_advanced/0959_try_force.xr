@@ -23,7 +23,7 @@ fn maybeFailJson(should_throw: bool) -> Json {
 @test
 fn test_propagation_success_int() {
     print("1. success returns the value unchanged")
-    let a = maybeFailInt(false)
+    var a = maybeFailInt(false)
     assert_eq(a, 42)
     print("   PASS")
 }
@@ -31,7 +31,7 @@ fn test_propagation_success_int() {
 @test
 fn test_propagation_success_json() {
     print("2. success — composite type")
-    let obj = maybeFailJson(false)
+    var obj = maybeFailJson(false)
     assert_eq(obj.id, 99)
     assert_eq(obj.name, "Bob")
     print("   PASS")
@@ -40,9 +40,9 @@ fn test_propagation_success_json() {
 @test
 fn test_propagation_throw_caught() {
     print("3. throw propagates and is caught by surrounding try-catch")
-    let saw_catch = false
+    var saw_catch = false
     try {
-        let x = maybeFailInt(true)
+        var x = maybeFailInt(true)
         print("should not reach:", x)
     } catch (e) {
         saw_catch = true
@@ -58,9 +58,9 @@ fn test_propagation_nested_throw() {
     fn helper() -> Json {
         return maybeFailJson(true)
     }
-    let saw_catch = false
+    var saw_catch = false
     try {
-        let result = helper()
+        var result = helper()
         print("should not reach:", result)
     } catch (e) {
         saw_catch = true
@@ -73,8 +73,8 @@ fn test_propagation_nested_throw() {
 @test
 fn test_propagation_keeps_value_type() {
     print("5. value type is preserved (no widening)")
-    let v = maybeFailInt(false)
-    let next = v + 1
+    var v = maybeFailInt(false)
+    var next = v + 1
     assert_eq(next, 43)
     print("   PASS")
 }

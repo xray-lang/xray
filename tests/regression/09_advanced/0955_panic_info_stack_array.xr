@@ -11,24 +11,24 @@ fn mkzero() -> int { return 0 }
 
 @test
 fn test_new_exception_stack_is_array() {
-    let e = PanicInfo("hello")
+    var e = PanicInfo("hello")
     assert_eq(typeof(e.stack), "Array")
 }
 
 @test
 fn test_new_exception_stack_initially_empty() {
     // 直接 new 不经过 unwind 控制流，stack 为空数组
-    let e = PanicInfo("hello")
+    var e = PanicInfo("hello")
     assert_eq(e.stack.length, 0)
 }
 
 @test
 fn test_panic_stack_is_array() {
     fn inner() -> int {
-        let z = mkzero()
+        var z = mkzero()
         return 100 / z  // div-by-zero -> panic
     }
-    let stack_type = ""
+    var stack_type = ""
     try {
         inner()
     } catch panic (p) {
@@ -40,13 +40,13 @@ fn test_panic_stack_is_array() {
 @test
 fn test_panic_stack_has_frames() {
     fn level2() -> int {
-        let z = mkzero()
+        var z = mkzero()
         return 100 / z
     }
     fn level1() -> int {
         return level2()
     }
-    let frames = 0
+    var frames = 0
     try {
         level1()
     } catch panic (p) {
@@ -59,14 +59,14 @@ fn test_panic_stack_has_frames() {
 @test
 fn test_panic_stack_frames_are_strings() {
     fn inner() -> int {
-        let z = mkzero()
+        var z = mkzero()
         return 100 / z
     }
-    let all_strings = true
+    var all_strings = true
     try {
         inner()
     } catch panic (p) {
-        let idx = 0
+        var idx = 0
         while (idx < p.stack.length) {
             if (typeof(p.stack[idx]) != "string") {
                 all_strings = false
@@ -82,7 +82,7 @@ fn test_subclass_exception_stack_is_array() {
     class MyErr extends PanicInfo {
         constructor(m: string) { super(m) }
     }
-    let e = MyErr("hi")
+    var e = MyErr("hi")
     assert_eq(typeof(e.stack), "Array")
     assert_eq(e.stack.length, 0)
 }
@@ -91,12 +91,12 @@ fn test_subclass_exception_stack_is_array() {
 
 @test
 fn test_exception_code_default_zero() {
-    let e = PanicInfo("plain message")
+    var e = PanicInfo("plain message")
     assert_eq(e.code, 0)
 }
 
 @test
 fn test_exception_data_default_null() {
-    let e = PanicInfo("plain message")
+    var e = PanicInfo("plain message")
     assert_eq(e.data, null)
 }

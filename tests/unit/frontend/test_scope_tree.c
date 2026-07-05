@@ -100,6 +100,40 @@ static bool verify_parent_chain(XaScope *scope, XaScope *expected_parent) {
     return true;
 }
 
+static XaScope *source_file_scope(XaAnalyzer *analyzer) {
+    assert(analyzer != NULL);
+    assert(analyzer->files != NULL && "analysis must create a file scope");
+    assert(analyzer->files->file_scope != NULL);
+    return analyzer->files->file_scope;
+}
+
+static XaSymbol *lookup_local_in_subtree(XaScope *scope, const char *name) {
+    if (!scope)
+        return NULL;
+    XaSymbol *sym = xa_scope_lookup_local(scope, name);
+    if (sym)
+        return sym;
+    for (int i = 0; i < scope->child_count; i++) {
+        sym = lookup_local_in_subtree(scope->children[i], name);
+        if (sym)
+            return sym;
+    }
+    return NULL;
+}
+
+static XaScope *find_scope_of_kind(XaScope *scope, XaScopeKind kind) {
+    if (!scope)
+        return NULL;
+    if (scope->kind == kind)
+        return scope;
+    for (int i = 0; i < scope->child_count; i++) {
+        XaScope *found = find_scope_of_kind(scope->children[i], kind);
+        if (found)
+            return found;
+    }
+    return NULL;
+}
+
 #define TEST(name)                                                                                 \
     static void test_##name(void);                                                                 \
     static void run_##name(void) {                                                                 \
@@ -113,17 +147,19 @@ static bool verify_parent_chain(XaScope *scope, XaScope *expected_parent) {
 /* ========== Tests ========== */
 
 TEST(global_scope_exists) {
-    AnalysisResult r = analyze_source("let x = 1");
+    AnalysisResult r = analyze_source("var x = 1");
     assert(r.analyzer->global_scope != NULL);
     assert(r.analyzer->global_scope->kind == XA_SCOPE_GLOBAL);
-    /* 'x' should be in global scope */
-    XaSymbol *sym = xa_scope_lookup_local(r.analyzer->global_scope, "x");
-    assert(sym != NULL && "global var must be in global scope");
+    /* 'x' should be reachable from the global root. */
+    XaSymbol *sym = lookup_local_in_subtree(r.analyzer->global_scope, "x");
+    assert(sym != NULL && "global var must be reachable from global scope");
+    assert(sym->scope == source_file_scope(r.analyzer) &&
+           "source-level var must live in the file top-level scope");
     free_result(&r);
 }
 
 TEST(global_scope_is_root) {
-    AnalysisResult r = analyze_source("let x = 1\nlet y = 2");
+    AnalysisResult r = analyze_source("var x = 1\nvar y = 2");
     /* Global scope parent must be NULL (it's the root). */
     assert(r.analyzer->global_scope->parent == NULL);
     free_result(&r);
@@ -131,53 +167,45 @@ TEST(global_scope_is_root) {
 
 TEST(function_creates_child_scope) {
     AnalysisResult r = analyze_source("fn foo(a: int) -> int {\n"
-                                      "    let b = a + 1\n"
+                                      "    var b = a + 1\n"
                                       "    return b\n"
                                       "}\n");
-    XaScope *global = r.analyzer->global_scope;
-    assert(global->child_count >= 1 && "function must create a child scope");
+    XaScope *source = source_file_scope(r.analyzer);
+    assert(source->child_count >= 1 && "function must create a child scope");
 
-    /* Find the function scope */
-    bool found_func_scope = false;
-    for (int i = 0; i < global->child_count; i++) {
-        if (global->children[i]->kind == XA_SCOPE_FUNCTION) {
-            XaScope *fn_scope = global->children[i];
-            /* Parameter 'a' should be in function scope */
-            XaSymbol *a = xa_scope_lookup_local(fn_scope, "a");
-            assert(a != NULL && "param must be in function scope");
-            /* 'b' could be in function scope or a nested block scope */
-            XaSymbol *b = xa_scope_lookup(fn_scope, "b");
-            assert(b != NULL && "local var must be findable from function scope");
-            found_func_scope = true;
-            break;
-        }
-    }
-    assert(found_func_scope && "must have a function scope child");
+    XaScope *fn_scope = find_scope_of_kind(source, XA_SCOPE_FUNCTION);
+    assert(fn_scope != NULL && "must have a function scope child");
+    /* Parameter 'a' should be in function scope */
+    XaSymbol *a = xa_scope_lookup_local(fn_scope, "a");
+    assert(a != NULL && "param must be in function scope");
+    /* 'b' could be in function scope or a nested block scope */
+    XaSymbol *b = lookup_local_in_subtree(fn_scope, "b");
+    assert(b != NULL && "local var must be findable from function scope subtree");
     free_result(&r);
 }
 
 TEST(block_creates_child_scope) {
-    AnalysisResult r = analyze_source("let x = 1\n"
+    AnalysisResult r = analyze_source("var x = 1\n"
                                       "{\n"
-                                      "    let y = 2\n"
+                                      "    var y = 2\n"
                                       "}\n");
-    XaScope *global = r.analyzer->global_scope;
+    XaScope *source = source_file_scope(r.analyzer);
     /* 'y' must NOT be in global scope (it's block-scoped) */
-    XaSymbol *y_global = xa_scope_lookup_local(global, "y");
+    XaSymbol *y_global = xa_scope_lookup_local(source, "y");
     assert(y_global == NULL && "block-scoped var must not leak to global");
 
     /* 'x' must be in global scope */
-    XaSymbol *x = xa_scope_lookup_local(global, "x");
+    XaSymbol *x = xa_scope_lookup_local(source, "x");
     assert(x != NULL && "global var must be in global scope");
     free_result(&r);
 }
 
 TEST(if_creates_scopes) {
-    AnalysisResult r = analyze_source("let x = 1\n"
+    AnalysisResult r = analyze_source("var x = 1\n"
                                       "if (x > 0) {\n"
-                                      "    let a = 1\n"
+                                      "    var a = 1\n"
                                       "} else {\n"
-                                      "    let b = 2\n"
+                                      "    var b = 2\n"
                                       "}\n");
     XaScope *global = r.analyzer->global_scope;
     /* if/else blocks should create at least one child scope.
@@ -192,9 +220,9 @@ TEST(if_creates_scopes) {
 TEST(while_in_function_creates_scope) {
     /* While loops inside functions must create child scopes. */
     AnalysisResult r = analyze_source("fn loop_fn() -> int {\n"
-                                      "    let i = 0\n"
+                                      "    var i = 0\n"
                                       "    while (i < 10) {\n"
-                                      "        let temp = i\n"
+                                      "        var temp = i\n"
                                       "        i += 1\n"
                                       "    }\n"
                                       "    return i\n"
@@ -209,9 +237,9 @@ TEST(while_in_function_creates_scope) {
 
 TEST(nested_functions_nested_scopes) {
     AnalysisResult r = analyze_source("fn outer() -> int {\n"
-                                      "    let a = 1\n"
+                                      "    var a = 1\n"
                                       "    fn inner() -> int {\n"
-                                      "        let b = 2\n"
+                                      "        var b = 2\n"
                                       "        return a + b\n"
                                       "    }\n"
                                       "    return inner()\n"
@@ -226,24 +254,24 @@ TEST(function_isolation) {
     /* The hard invariant: function-scoped variables must NOT
      * be visible outside their function boundary. */
     AnalysisResult r = analyze_source("fn foo() -> int {\n"
-                                      "    let secret = 42\n"
+                                      "    var secret = 42\n"
                                       "    return secret\n"
                                       "}\n"
-                                      "let result = foo()\n");
-    XaScope *global = r.analyzer->global_scope;
+                                      "var result = foo()\n");
+    XaScope *source = source_file_scope(r.analyzer);
     /* 'secret' must NOT be in global scope */
-    assert(xa_scope_lookup_local(global, "secret") == NULL &&
+    assert(xa_scope_lookup_local(source, "secret") == NULL &&
            "function-local var must not leak to global scope");
     /* 'result' and 'foo' must be in global scope */
-    assert(xa_scope_lookup_local(global, "result") != NULL);
-    assert(xa_scope_lookup(global, "foo") != NULL);
+    assert(xa_scope_lookup_local(source, "result") != NULL);
+    assert(xa_scope_lookup_local(source, "foo") != NULL);
     free_result(&r);
 }
 
 TEST(parent_chain_valid) {
     AnalysisResult r = analyze_source("fn foo(x: int) -> int {\n"
                                       "    if (x > 0) {\n"
-                                      "        let y = x\n"
+                                      "        var y = x\n"
                                       "        return y\n"
                                       "    }\n"
                                       "    return 0\n"
@@ -260,43 +288,36 @@ TEST(class_creates_class_scope) {
                                       "        this.x = val\n"
                                       "    }\n"
                                       "}\n");
-    XaScope *global = r.analyzer->global_scope;
-    bool found_class = false;
-    for (int i = 0; i < global->child_count; i++) {
-        if (global->children[i]->kind == XA_SCOPE_CLASS) {
-            found_class = true;
-            break;
-        }
-    }
-    assert(found_class && "class must create a class scope");
+    XaScope *source = source_file_scope(r.analyzer);
+    assert(find_scope_of_kind(source, XA_SCOPE_CLASS) != NULL && "class must create a class scope");
     free_result(&r);
 }
 
 TEST(for_in_creates_scope) {
     AnalysisResult r = analyze_source("const arr = [1, 2, 3]\n"
                                       "for (item in arr) {\n"
-                                      "    let temp = item\n"
+                                      "    var temp = item\n"
                                       "}\n");
-    XaScope *global = r.analyzer->global_scope;
+    XaScope *source = source_file_scope(r.analyzer);
     /* for-in must create at least one child scope */
-    assert(global->child_count >= 1 && "for-in body must create a child scope");
-    assert(verify_parent_chain(global, NULL));
+    assert(source->child_count >= 1 && "for-in body must create a child scope");
+    assert(verify_parent_chain(r.analyzer->global_scope, NULL));
     free_result(&r);
 }
 
 TEST(shadowing_correct_scope) {
-    AnalysisResult r = analyze_source("let x = 1\n"
+    AnalysisResult r = analyze_source("var x = 1\n"
                                       "{\n"
-                                      "    let x = 2\n"
+                                      "    var x = 2\n"
                                       "}\n");
-    XaScope *global = r.analyzer->global_scope;
+    XaScope *source = source_file_scope(r.analyzer);
     /* Global scope 'x' should exist */
-    XaSymbol *x_global = xa_scope_lookup_local(global, "x");
+    XaSymbol *x_global = xa_scope_lookup_local(source, "x");
     assert(x_global != NULL);
     /* There should be a child scope with its own 'x' */
     bool found_shadow = false;
-    for (int i = 0; i < global->child_count; i++) {
-        XaSymbol *x_inner = xa_scope_lookup_local(global->children[i], "x");
+    for (int i = 0; i < source->child_count; i++) {
+        XaSymbol *x_inner = xa_scope_lookup_local(source->children[i], "x");
         if (x_inner != NULL && x_inner != x_global) {
             found_shadow = true;
             break;
@@ -308,11 +329,11 @@ TEST(shadowing_correct_scope) {
 
 TEST(complex_nesting_parent_chain) {
     AnalysisResult r = analyze_source("fn foo() -> int {\n"
-                                      "    let a = 1\n"
+                                      "    var a = 1\n"
                                       "    {\n"
-                                      "        let b = 2\n"
+                                      "        var b = 2\n"
                                       "        if (a > 0) {\n"
-                                      "            let c = 3\n"
+                                      "            var c = 3\n"
                                       "        }\n"
                                       "    }\n"
                                       "    return a\n"
@@ -369,17 +390,17 @@ TEST(scope_consistency_after_analysis) {
      *   2. All scopes are unique (no aliasing)
      *   3. All scopes are well-formed
      *   4. Symbol isolation holds */
-    AnalysisResult r = analyze_source("let g = 1\n"
+    AnalysisResult r = analyze_source("var g = 1\n"
                                       "fn outer(x: int) -> int {\n"
-                                      "    let a = x\n"
+                                      "    var a = x\n"
                                       "    fn inner(y: int) -> int {\n"
                                       "        return a + y\n"
                                       "    }\n"
                                       "    if (x > 0) {\n"
-                                      "        let b = 2\n"
+                                      "        var b = 2\n"
                                       "    }\n"
                                       "    for (i in [1, 2, 3]) {\n"
-                                      "        let c = i\n"
+                                      "        var c = i\n"
                                       "    }\n"
                                       "    return inner(a)\n"
                                       "}\n"
@@ -393,6 +414,7 @@ TEST(scope_consistency_after_analysis) {
                                       "    }\n"
                                       "}\n");
     XaScope *global = r.analyzer->global_scope;
+    XaScope *source = source_file_scope(r.analyzer);
 
     /* 1. Parent chain */
     assert(verify_parent_chain(global, NULL) && "parent chain must be valid after full analysis");
@@ -409,14 +431,14 @@ TEST(scope_consistency_after_analysis) {
     printf("    total scopes = %d\n", total);
 
     /* 5. Symbol isolation: function-local vars not in global */
-    assert(xa_scope_lookup_local(global, "a") == NULL);
-    assert(xa_scope_lookup_local(global, "b") == NULL);
-    assert(xa_scope_lookup_local(global, "c") == NULL);
+    assert(xa_scope_lookup_local(source, "a") == NULL);
+    assert(xa_scope_lookup_local(source, "b") == NULL);
+    assert(xa_scope_lookup_local(source, "c") == NULL);
 
     /* 6. Global symbols present */
-    assert(xa_scope_lookup(global, "g") != NULL);
-    assert(xa_scope_lookup(global, "outer") != NULL);
-    assert(xa_scope_lookup(global, "Foo") != NULL);
+    assert(xa_scope_lookup_local(source, "g") != NULL);
+    assert(xa_scope_lookup_local(source, "outer") != NULL);
+    assert(xa_scope_lookup_local(source, "Foo") != NULL);
 
     free_result(&r);
 }
@@ -426,10 +448,10 @@ TEST(reanalysis_scope_stability) {
      * scope tree (same count, valid parent chains).  This guards
      * against scope-creation side effects across analyses. */
     const char *source = "fn foo(x: int) -> int {\n"
-                         "    let y = x + 1\n"
+                         "    var y = x + 1\n"
                          "    return y\n"
                          "}\n"
-                         "let z = foo(1)\n";
+                         "var z = foo(1)\n";
 
     AnalysisResult r1 = analyze_source(source);
     int count1 = count_scopes(r1.analyzer->global_scope);

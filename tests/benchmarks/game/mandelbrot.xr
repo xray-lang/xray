@@ -22,20 +22,20 @@ const LIMIT_SQ = 4.0
  * 返回值: 集合内的点数
  */
 fn mandelbrot(size) {
-    let w = size
-    let h = size
-    let count = 0
-    let inv_w = 2.0 / w
-    let inv_h = 2.0 / h
-    for (let y = 0; y < h; y++) {
-        let Ci = inv_h * y - 1
-        for (let x = 0; x < w; x++) {
-            let Zr = 0.0
-            let Zi = 0.0
-            let Tr = 0.0
-            let Ti = 0.0
-            let Cr = inv_w * x - 1.5
-            let i = 0
+    var w = size
+    var h = size
+    var count = 0
+    var inv_w = 2.0 / w
+    var inv_h = 2.0 / h
+    for (var y = 0; y < h; y++) {
+        var Ci = inv_h * y - 1
+        for (var x = 0; x < w; x++) {
+            var Zr = 0.0
+            var Zi = 0.0
+            var Tr = 0.0
+            var Ti = 0.0
+            var Cr = inv_w * x - 1.5
+            var i = 0
             while (i < MAX_ITER && (Tr + Ti) <= LIMIT_SQ) {
                 Zi = 2 * Zr * Zi + Ci
                 Zr = Tr - Ti + Cr
@@ -52,11 +52,11 @@ fn mandelbrot(size) {
 }
 
 // 主程序
-let size = 1000
+var size = 1000
 if (process.args.length > 0) {
     size = int(process.args[0])
 }
-let count = mandelbrot(size)
+var count = mandelbrot(size)
 print("xray mandelbrot")
 print(size)
 print("Points in set:")

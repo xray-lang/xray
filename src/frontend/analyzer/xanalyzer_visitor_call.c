@@ -612,7 +612,8 @@ static void xa_thread_spawn_sync_scan_pre(AstNode *node, void *ud) {
     if (node->type == AST_BLOCK)
         scan->block_depth++;
 
-    if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
+    if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL ||
+        node->type == AST_SHARED_DECL) {
         VarDeclNode *var = &node->as.var_decl;
         const char *class_name =
             xa_thread_spawn_expr_sync_ctor_class(scan->ctx, var ? var->initializer : NULL);
@@ -1918,7 +1919,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                fn_sym->kind != XA_SYM_FUNCTION) {
         // Default arguments are filled at the call site only for direct calls
         // to a named function (C1). A call through a function-typed *value*
-        // (a `let` binding, parameter, capture, ...) carries no default
+        // (a `var` binding, parameter, capture, ...) carries no default
         // expressions, so every argument must be passed. The symbol-kind
         // check is the discriminator: a named function resolves to
         // XA_SYM_FUNCTION (its defaults were spliced in above when
@@ -2254,7 +2255,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     /* copy(x): the deep-copy builtin is an identity over types and must
      * preserve the argument's static type. It is registered as any->any, so
      * without this the result is unknown and cannot be passed to a typed
-     * parameter (breaks `shared const c = copy(obj)` feeding a typed callee).
+     * parameter (breaks `shared c = copy(obj)` feeding a typed callee).
      * Guard on unknown so a user-defined copy with a concrete signature wins. */
     if (xa_call_is_copy_builtin(call) && arg_count == 1 && effective_arg_types &&
         effective_arg_types[0] && (!return_type || XR_TYPE_IS_UNKNOWN(return_type))) {

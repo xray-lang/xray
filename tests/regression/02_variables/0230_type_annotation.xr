@@ -4,28 +4,28 @@
 // ===== 基本类型注解 =====
 @test
 fn test_int_annotation() {
-    let x: int = 42
+    var x: int = 42
     assert_eq(x, 42)
     assert_eq(typeof(x), "int")
 }
 
 @test
 fn test_float_annotation() {
-    let x: float = 3.14
+    var x: float = 3.14
     assert_eq(x > 3, true)
     assert_eq(typeof(x), "float")
 }
 
 @test
 fn test_string_annotation() {
-    let s: string = "hello"
+    var s: string = "hello"
     assert_eq(s, "hello")
     assert_eq(typeof(s), "string")
 }
 
 @test
 fn test_bool_annotation() {
-    let flag: bool = true
+    var flag: bool = true
     assert_eq(flag, true)
     assert_eq(typeof(flag), "bool")
 }
@@ -33,21 +33,21 @@ fn test_bool_annotation() {
 // ===== 集合类型注解 =====
 @test
 fn test_array_annotation() {
-    let arr: Array<int> = [1, 2, 3]
+    var arr: Array<int> = [1, 2, 3]
     assert_eq(arr.length, 3)
     assert_eq(typeof(arr), "Array")
 }
 
 @test
 fn test_map_annotation() {
-    let m: Map<string, int> = #{"a": 1}
+    var m: Map<string, int> = #{"a": 1}
     assert_eq(m.get("a"), 1)
     assert_eq(typeof(m), "Map")
 }
 
 @test
 fn test_set_annotation() {
-    let s: Set<int> = #[1, 2, 3]
+    var s: Set<int> = #[1, 2, 3]
     assert_eq(s.length, 3)
     assert_eq(typeof(s), "Set")
 }
@@ -81,7 +81,7 @@ fn test_class_field_annotation() {
             this.y = y
         }
     }
-    let p = Point(3, 4)
+    var p = Point(3, 4)
     assert_eq(p.x, 3)
     assert_eq(p.y, 4)
 }
@@ -89,8 +89,8 @@ fn test_class_field_annotation() {
 // ===== 复杂类型 =====
 @test
 fn test_nullable_type() {
-    let x: int = 10
-    let y: int? = null
+    var x: int = 10
+    var y: int? = null
     if (y == null) {
         y = x
     }

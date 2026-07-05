@@ -57,7 +57,7 @@ TEST(document_open) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "let x = 1\nlet y = 2\n";
+    const char *content = "var x = 1\nvar y = 2\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///test.xr", content, 1);
 
     ASSERT(doc != NULL);
@@ -145,10 +145,10 @@ TEST(position_to_offset) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    // "let x = 1\nlet y = 2\n"
-    // Line 0: "let x = 1\n" (10 chars)
-    // Line 1: "let y = 2\n" (10 chars)
-    const char *content = "let x = 1\nlet y = 2\n";
+    // "var x = 1\nvar y = 2\n"
+    // Line 0: "var x = 1\n" (10 chars)
+    // Line 1: "var y = 2\n" (10 chars)
+    const char *content = "var x = 1\nvar y = 2\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///test.xr", content, 1);
     ASSERT(doc != NULL);
 
@@ -156,7 +156,7 @@ TEST(position_to_offset) {
     uint32_t offset0 = xlsp_position_to_offset(doc, pos0);
     ASSERT_EQ(offset0, 0);
 
-    XrLspPosition pos1 = {0, 4};  // "let x" -> position of 'x'
+    XrLspPosition pos1 = {0, 4};  // "var x" -> position of 'x'
     uint32_t offset1 = xlsp_position_to_offset(doc, pos1);
     ASSERT_EQ(offset1, 4);
 
@@ -164,7 +164,7 @@ TEST(position_to_offset) {
     uint32_t offset2 = xlsp_position_to_offset(doc, pos2);
     ASSERT_EQ(offset2, 10);
 
-    XrLspPosition pos3 = {1, 4};  // "let y" -> position of 'y' on line 1
+    XrLspPosition pos3 = {1, 4};  // "var y" -> position of 'y' on line 1
     uint32_t offset3 = xlsp_position_to_offset(doc, pos3);
     ASSERT_EQ(offset3, 14);
 
@@ -175,7 +175,7 @@ TEST(offset_to_position) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "let x = 1\nlet y = 2\n";
+    const char *content = "var x = 1\nvar y = 2\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///test.xr", content, 1);
     ASSERT(doc != NULL);
 
@@ -202,13 +202,13 @@ TEST(position_roundtrip) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "fn main() {\n    let x = 1\n    print(x)\n}\n";
+    const char *content = "fn main() {\n    var x = 1\n    print(x)\n}\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///test.xr", content, 1);
     ASSERT(doc != NULL);
 
     // Test roundtrip for valid positions only (within line bounds)
     // Line 0: "fn main() {" (11 chars)
-    // Line 1: "    let x = 1" (13 chars)
+    // Line 1: "    var x = 1" (13 chars)
     // Line 2: "    print(x)" (12 chars)
     // Line 3: "}" (1 char)
     int line_lengths[] = {11, 13, 12, 1};
@@ -297,26 +297,26 @@ TEST(code_action_go_capture_to_shared_const) {
     ASSERT(server != NULL);
 
     // Line 0: fn t() {
-    // Line 1:     let counter = 0
+    // Line 1:     var counter = 0
     // Line 2:     go fn() { print(counter) }()
     // Line 3: }
     const char *content = "fn t() {\n"
-                          "    let counter = 0\n"
+                          "    var counter = 0\n"
                           "    go fn() { print(counter) }()\n"
                           "}\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///t.xr", content, 1);
     ASSERT(doc != NULL);
 
-    XrJsonValue *params = make_code_action_params(
-        "file:///t.xr", 2, 21, 28,
-        "go closure cannot capture mutable variable 'counter'\n"
-        "hint: use one of the following:\n"
-        "  1. pass through argument: go worker(counter)\n"
-        "  2. declare as 'shared const counter = ...' for concurrent reads");
+    XrJsonValue *params =
+        make_code_action_params("file:///t.xr", 2, 21, 28,
+                                "go closure cannot capture mutable variable 'counter'\n"
+                                "hint: use one of the following:\n"
+                                "  1. pass through argument: go worker(counter)\n"
+                                "  2. declare as 'shared counter = ...' for concurrent reads");
 
     XrJsonValue *actions = xlsp_handle_code_action(server, params);
     ASSERT(actions != NULL);
-    ASSERT(actions_contain_title_with(actions, "shared const", "counter"));
+    ASSERT(actions_contain_title_with(actions, "shared", "counter"));
 
     xjson_free(params);
     xjson_free(actions);
@@ -330,7 +330,7 @@ TEST(code_action_quickfix_skips_when_decl_missing) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    // Content deliberately does NOT contain `let counter`.
+    // Content deliberately does NOT contain `var counter`.
     const char *content = "fn t() {\n"
                           "    print(counter)\n"
                           "}\n";
@@ -344,7 +344,7 @@ TEST(code_action_quickfix_skips_when_decl_missing) {
     ASSERT(actions != NULL);
     // Must not include a quick-fix title pointing at 'counter' since the
     // declaration was not found.
-    ASSERT(!actions_contain_title_with(actions, "shared const", "counter"));
+    ASSERT(!actions_contain_title_with(actions, "shared", "counter"));
 
     xjson_free(params);
     xjson_free(actions);

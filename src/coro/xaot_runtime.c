@@ -20,6 +20,10 @@
 #include "../runtime/core/xr_script_info.h"
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xobj_destroy_ops.h"
+#include "../runtime/object/xarray.h"
+#include "../runtime/object/xmap.h"
+#include "../runtime/object/xset.h"
+#include "../runtime/object/xstring.h"
 #include "xblock.h"
 #include "xcoro_pool.h"
 #include "xcoroutine.h"
@@ -158,14 +162,214 @@ void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime) {
     xr_scope_transfer_enable_core(xr_aot_runtime_core(runtime));
 }
 
+#define XR_AOT_VALUE_TAG_STR 14
+#define XR_AOT_VALUE_TAG_STR_ARC 19
+#define XR_AOT_BRIDGE_MAX_DEPTH 64
+
+typedef struct XrAotStringView {
+    int64_t len;
+    uint32_t hash;
+    uint32_t flags;
+    char *data;
+} XrAotStringView;
+
+typedef struct XrAotArrayView {
+    XrObjHeader hdr;
+    XR_ARRAY_ABI_FIELDS;
+} XrAotArrayView;
+
+typedef struct XrAotMapView {
+    XrObjHeader hdr;
+    XR_MAP_ABI_FIELDS;
+    int64_t len;
+    int64_t cap;
+    int64_t growth_left;
+    void *keys;
+    void *values;
+    int64_t *order;
+    int64_t order_len;
+    int64_t order_cap;
+    uint8_t key_type;
+    uint8_t value_type;
+    uint8_t key_size;
+    uint8_t value_size;
+} XrAotMapView;
+
+typedef struct XrAotSetView {
+    XrObjHeader hdr;
+    XR_SET_ABI_FIELDS;
+    int64_t len;
+    int64_t cap;
+    int64_t growth_left;
+    void *items;
+    int64_t *order;
+    int64_t order_len;
+    int64_t order_cap;
+    uint8_t elem_type;
+    uint8_t elem_size;
+} XrAotSetView;
+
+static bool aot_value_is_aot_string(XrValue value) {
+    return value.tag == XR_AOT_VALUE_TAG_STR || value.tag == XR_AOT_VALUE_TAG_STR_ARC;
+}
+
+static bool aot_value_is_aot_native_object(XrValue value) {
+    return XR_IS_PTR(value) && value.ptr &&
+           (((const XrObjHeader *) value.ptr)->extra & XR_OBJ_AOT_NATIVE) != 0;
+}
+
+static XrValue aot_bridge_result_value_to_runtime(XrRuntimeCore *core, XrCoroutine *owner,
+                                                  XrValue value, uint8_t depth);
+
+static XrValue aot_bridge_string_to_runtime(XrRuntimeCore *core, XrValue value) {
+    if (!core || !aot_value_is_aot_string(value) || !value.ptr)
+        return value;
+    const XrAotStringView *src = (const XrAotStringView *) value.ptr;
+    if (!src->data || src->len < 0)
+        return XR_NULL_VAL;
+    XrString *dst = xr_string_intern_core(core, src->data, (size_t) src->len, src->hash);
+    return dst ? xr_string_value(dst) : XR_NULL_VAL;
+}
+
+static XrValue aot_bridge_array_to_runtime(XrRuntimeCore *core, XrCoroutine *owner,
+                                           const XrAotArrayView *src, uint8_t depth) {
+    if (!src || !owner || src->length < 0)
+        return XR_NULL_VAL;
+    uint8_t elem_type = src->elem_type < XR_ELEM_COUNT ? src->elem_type : XR_ELEM_ANY;
+    XrArray *dst =
+        xr_array_with_capacity_typed(owner, (int) src->length, (XrArrayElemType) elem_type);
+    if (!dst)
+        return XR_NULL_VAL;
+    dst->adt_enum_name = src->adt_enum_name;
+    dst->adt_member_name = src->adt_member_name;
+    if (elem_type == XR_ELEM_ANY) {
+        for (int64_t i = 0; i < src->length; i++) {
+            XrValue item = xr_typed_get(src->data, (int32_t) i, elem_type);
+            xr_array_push(dst, aot_bridge_result_value_to_runtime(core, owner, item, depth + 1));
+        }
+    } else if (src->length > 0 && src->data && dst->data) {
+        memcpy(dst->data, src->data, (size_t) src->length * (size_t) dst->elem_size);
+        dst->length = src->length;
+    }
+    return xr_value_from_array(dst);
+}
+
+static bool aot_map_slot_is_full(const XrAotMapView *src, int64_t slot) {
+    return src && src->ctrl && slot >= 0 && slot < src->cap && (src->ctrl[slot] & 0x80u) == 0;
+}
+
+static XrValue aot_bridge_map_to_runtime(XrRuntimeCore *core, XrCoroutine *owner,
+                                         const XrAotMapView *src, uint8_t depth) {
+    if (!src || !owner)
+        return XR_NULL_VAL;
+    uint32_t cap = src->key_type == XR_ELEM_ANY ? src->count : (uint32_t) src->len;
+    XrMap *dst = xr_map_with_capacity(owner, cap);
+    if (!dst)
+        return XR_NULL_VAL;
+    dst->key_tid = src->key_tid;
+    dst->value_tid = src->value_tid;
+    if ((src->flags & (XR_MAP_FLAG_DUMMY | XR_MAP_FLAG_WEAK)))
+        return xr_value_from_map(dst);
+
+    if (src->key_type == XR_ELEM_ANY) {
+        for (uint32_t i = 0; i < src->nentries; i++) {
+            XrMapEntry *entry = &src->entries[i];
+            if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+                continue;
+            XrValue key = aot_bridge_result_value_to_runtime(core, owner, entry->key, depth + 1);
+            XrValue value =
+                aot_bridge_result_value_to_runtime(core, owner, entry->value, depth + 1);
+            xr_map_set(dst, key, value);
+        }
+        return xr_value_from_map(dst);
+    }
+
+    for (int64_t oi = 0; oi < src->order_len; oi++) {
+        int64_t slot = src->order[oi];
+        if (!aot_map_slot_is_full(src, slot))
+            continue;
+        XrValue key = xr_typed_get(src->keys, (int32_t) slot, src->key_type);
+        XrValue value = xr_typed_get(src->values, (int32_t) slot, src->value_type);
+        key = aot_bridge_result_value_to_runtime(core, owner, key, depth + 1);
+        value = aot_bridge_result_value_to_runtime(core, owner, value, depth + 1);
+        xr_map_set(dst, key, value);
+    }
+    return xr_value_from_map(dst);
+}
+
+static bool aot_set_slot_is_full(const XrAotSetView *src, int64_t slot) {
+    return src && src->ctrl && slot >= 0 && slot < src->cap && (src->ctrl[slot] & 0x80u) == 0;
+}
+
+static XrValue aot_bridge_set_to_runtime(XrRuntimeCore *core, XrCoroutine *owner,
+                                         const XrAotSetView *src, uint8_t depth) {
+    if (!src || !owner)
+        return XR_NULL_VAL;
+    uint32_t cap = src->elem_type == XR_ELEM_ANY ? src->count : (uint32_t) src->len;
+    XrSet *dst = xr_set_new_with_capacity(owner, cap);
+    if (!dst)
+        return XR_NULL_VAL;
+    dst->elem_tid = src->elem_tid;
+    if ((src->flags & (XR_SET_FLAG_DUMMY | XR_SET_FLAG_WEAK)))
+        return xr_value_from_set(dst);
+
+    if (src->elem_type == XR_ELEM_ANY) {
+        for (uint32_t i = 0; i < src->nentries; i++) {
+            XrSetEntry *entry = &src->entries[i];
+            if (entry->val_tt == XR_SET_ENTRY_NIL)
+                continue;
+            XrValue value =
+                aot_bridge_result_value_to_runtime(core, owner, entry->value, depth + 1);
+            xr_set_add(dst, value);
+        }
+        return xr_value_from_set(dst);
+    }
+
+    for (int64_t oi = 0; oi < src->order_len; oi++) {
+        int64_t slot = src->order[oi];
+        if (!aot_set_slot_is_full(src, slot))
+            continue;
+        XrValue value = xr_typed_get(src->items, (int32_t) slot, src->elem_type);
+        value = aot_bridge_result_value_to_runtime(core, owner, value, depth + 1);
+        xr_set_add(dst, value);
+    }
+    return xr_value_from_set(dst);
+}
+
+static XrValue aot_bridge_result_value_to_runtime(XrRuntimeCore *core, XrCoroutine *owner,
+                                                  XrValue value, uint8_t depth) {
+    if (depth > XR_AOT_BRIDGE_MAX_DEPTH)
+        return XR_NULL_VAL;
+    if (aot_value_is_aot_string(value))
+        return aot_bridge_string_to_runtime(core, value);
+    if (!aot_value_is_aot_native_object(value))
+        return value;
+    if (XR_IS_ARRAY(value))
+        return aot_bridge_array_to_runtime(core, owner, (const XrAotArrayView *) value.ptr, depth);
+    if (XR_IS_MAP(value))
+        return aot_bridge_map_to_runtime(core, owner, (const XrAotMapView *) value.ptr, depth);
+    if (XR_IS_SET(value))
+        return aot_bridge_set_to_runtime(core, owner, (const XrAotSetView *) value.ptr, depth);
+    return value;
+}
+
+static XrValue aot_bridge_result_to_runtime(XrCoroutine *coro, XrAotRuntime *runtime,
+                                            XrValue value) {
+    XrRuntimeCore *core = coro && coro->core ? coro->core : xr_aot_runtime_core(runtime);
+    return aot_bridge_result_value_to_runtime(core, coro, value, 0);
+}
+
 static bool aot_coro_cancelled(const XrCoroutine *coro) {
     return coro && xr_coro_flags_has((XrCoroutine *) coro,
                                      XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_CANCELLED);
 }
 
 static XrCoroRunResult aot_map_result(XrCoroutine *coro, XrAotResult result) {
+    XrAotCoroState *state = aot_state_from_coro(coro);
+    XrAotRuntime *runtime = state ? state->runtime : NULL;
     switch (result.kind) {
         case XR_AOT_RUN_DONE:
+            result.value = aot_bridge_result_to_runtime(coro, runtime, result.value);
             coro->result = result.value;
             return xr_coro_run_done(result.value);
         case XR_AOT_RUN_BLOCKED:
@@ -174,6 +378,7 @@ static XrCoroRunResult aot_map_result(XrCoroutine *coro, XrAotResult result) {
         case XR_AOT_RUN_YIELD:
             return xr_coro_run_result(XR_CORO_RUN_YIELD);
         case XR_AOT_RUN_GEN_YIELD:
+            result.value = aot_bridge_result_to_runtime(coro, runtime, result.value);
             coro->result = result.value;
             return xr_coro_run_result(XR_CORO_RUN_YIELD);
         case XR_AOT_RUN_SPAWN_CHILD:
@@ -181,6 +386,9 @@ static XrCoroRunResult aot_map_result(XrCoroutine *coro, XrAotResult result) {
         case XR_AOT_RUN_CANCELLED:
             return xr_coro_run_result(XR_CORO_RUN_CANCELLED);
         case XR_AOT_RUN_ERROR:
+            if (result.error_is_value)
+                result.error = aot_bridge_result_to_runtime(coro, runtime, result.error);
+            return xr_coro_run_error(result.error, result.error_is_value);
         default:
             return xr_coro_run_error(result.error, result.error_is_value);
     }

@@ -1,4 +1,4 @@
-let bytes = Bytes(8, 1)
+var bytes = Bytes(8, 1)
 bytes[0] = 1
 bytes[1] = 2
 bytes[2] = 3
@@ -8,17 +8,17 @@ bytes[5] = 6
 bytes[6] = 7
 bytes[7] = 8
 print(bytes.length)
-let view: ByteSpan = bytes[:]
-let u16: uint16 = view.load<uint16>(0, Endian.LE)
-let u32: uint32 = view.load<uint32>(0, Endian.LE)
-let u64: uint64 = view.load<uint64>(0, Endian.LE)
+var view: ByteSpan = bytes[:]
+var u16: uint16 = view.load<uint16>(0, Endian.LE)
+var u32: uint32 = view.load<uint32>(0, Endian.LE)
+var u64: uint64 = view.load<uint64>(0, Endian.LE)
 view.store<uint16>(6, 0x0a09, Endian.LE)
 print(int(u16))
 print(int(u32))
 print(int(u64))
 print(bytes[6])
 
-let dst = Bytes.withCapacity(6)
+var dst = Bytes.withCapacity(6)
 print(dst.length)
 print(dst.capacity)
 dst.appendFrom(view[1:4])
@@ -26,8 +26,8 @@ print(dst.length)
 print(dst[0])
 print(dst[2])
 
-let repeated = Bytes.withCapacity(9)
-let seed = Bytes(3)
+var repeated = Bytes.withCapacity(9)
+var seed = Bytes(3)
 seed[0] = 65
 seed[1] = 66
 seed[2] = 67
@@ -36,13 +36,13 @@ repeated.repeatFrom(3, 6)
 print(repeated[3])
 print(repeated[8])
 
-let filled = Bytes(5, 0)
+var filled = Bytes(5, 0)
 filled.fill(7, 1, 4)
 print(filled[0])
 print(filled[1])
 print(filled[3])
 print(filled[4])
 
-let filledView: ByteSpan = filled[1:4]
+var filledView: ByteSpan = filled[1:4]
 print(filledView.length)
 print(filledView[0])

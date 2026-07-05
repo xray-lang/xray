@@ -39,7 +39,7 @@ fn getColorCode(c: Color) -> string {
 fn test_enum() {
 
     // Test: enum identity comparison
-    let c = Color.Red
+    var c = Color.Red
     assert_eq(c == Color.Red, true)
     assert_eq(c == Color.Green, false)
     assert_eq(Color.Red == Color.Red, true)
@@ -89,9 +89,9 @@ fn test_enum() {
     assert_eq(HttpStatus.memberCount, 3)
     assert_eq(Direction.memberCount, 4)
 
-    let m0 = Color.getMember(0)
-    let m1 = Color.getMember(1)
-    let m2 = Color.getMember(2)
+    var m0 = Color.getMember(0)
+    var m1 = Color.getMember(1)
+    var m2 = Color.getMember(2)
     assert_eq(m0 == Color.Red, true)
     assert_eq(m1 == Color.Green, true)
     assert_eq(m2 == Color.Blue, true)
@@ -99,22 +99,22 @@ fn test_enum() {
     assert_eq(m1.value, 1)
 
     // getMember loop
-    for (let i = 0; i < Color.memberCount; i++) {
-        let member = Color.getMember(i)
+    for (var i = 0; i < Color.memberCount; i++) {
+        var member = Color.getMember(i)
         assert_eq(member.ordinal, i)
     }
 
     // ===== Enum for-in iteration =====
 
 
-    let count = 0
+    var count = 0
     for (day in Day) {
         count++
     }
     assert_eq(count, 7)
 
     // for-in with properties
-    let names: Array<string> = []
+    var names: Array<string> = []
     for (d in Color) {
         names.push(d.name)
     }
@@ -124,7 +124,7 @@ fn test_enum() {
     assert_eq(names[2], "Blue")
 
     // for-in string enum
-    let vals: Array<string> = []
+    var vals: Array<string> = []
     for (dir in Direction) {
         vals.push(dir.value)
     }
@@ -133,7 +133,7 @@ fn test_enum() {
     assert_eq(vals[3], "W")
 
     // for-in blank identifier
-    let total = 0
+    var total = 0
     for (_ in Day) {
         total++
     }
@@ -141,16 +141,16 @@ fn test_enum() {
 
     // ===== Enum in match =====
 
-    let color = Color.Green
-    let name = match (color) {
+    var color = Color.Green
+    var name = match (color) {
         Color.Red -> "red",
         Color.Green -> "green",
         Color.Blue -> "blue"
     }
     assert_eq(name, "green")
 
-    let status = HttpStatus.NotFound
-    let message = match (status) {
+    var status = HttpStatus.NotFound
+    var message = match (status) {
         HttpStatus.OK -> "Success",
         HttpStatus.NotFound -> "Not Found",
         HttpStatus.ServerError -> "Server Error"
@@ -166,7 +166,7 @@ fn test_enum() {
 
     // ===== Enum in array =====
 
-    let colors = [Color.Red, Color.Green, Color.Blue]
+    var colors = [Color.Red, Color.Green, Color.Blue]
     assert_eq(colors.length, 3)
     assert_eq(colors[0] == Color.Red, true)
     assert_eq(colors[2] == Color.Blue, true)

@@ -2,7 +2,7 @@ fn worker(xs: Array<int>) -> int {
     return xs.length
 }
 
-let xs = [1, 2, 3]
-let tmp = copy(xs)
-let task = go worker(tmp)
+var xs = [1, 2, 3]
+var tmp = copy(xs)
+var task = go worker(tmp)
 print(await task)

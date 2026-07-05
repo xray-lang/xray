@@ -25,8 +25,8 @@ fn test_ws_url_format() {
 
 @test
 fn test_ws_message_types() {
-    let text = "Hello WebSocket"
-    let binary = Bytes(10)
+    var text = "Hello WebSocket"
+    var binary = Bytes(10)
     assert_eq(typeof(text), "string")
     assert_eq(typeof(binary), "Array")
 }

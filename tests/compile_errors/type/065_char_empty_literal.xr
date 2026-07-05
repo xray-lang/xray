@@ -1,1 +1,1 @@
-let c: char = ''
+var c: char = ''
