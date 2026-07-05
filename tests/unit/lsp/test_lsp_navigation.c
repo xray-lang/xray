@@ -59,14 +59,14 @@ TEST(hover_on_keyword) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code = "let x = 42\n";
+    const char *code = "var x = 42\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
-    // Hover on "let" (line 0, col 0)
+    // Hover on "var" (line 0, col 0)
     XrLspPosition pos = {0, 0};
     XrJsonValue *result = xlsp_analyze_hover(server, doc, pos);
-    // "let" is a keyword, hover should return something (keyword doc)
+    // "var" is a keyword, hover should return something (keyword doc)
     // May return NULL if no keyword doc available â€?either is acceptable
     if (result) {
         xjson_free(result);
@@ -79,7 +79,7 @@ TEST(hover_on_variable) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code = "let greeting = \"hello\"\nprint(greeting)\n";
+    const char *code = "var greeting = \"hello\"\nprint(greeting)\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -99,7 +99,7 @@ TEST(hover_on_empty_space) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code = "let x = 42\n\n";
+    const char *code = "var x = 42\n\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -135,7 +135,7 @@ TEST(definition_local_variable) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code = "let count = 0\n"
+    const char *code = "var count = 0\n"
                        "print(count)\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
@@ -192,8 +192,8 @@ TEST(references_local_variable) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code = "let x = 1\n"
-                       "let y = x + 1\n"
+    const char *code = "var x = 1\n"
+                       "var y = x + 1\n"
                        "print(x)\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
@@ -218,7 +218,7 @@ TEST(references_function_name) {
     const char *code = "fn add(a: int, b: int) -> int {\n"
                        "    return a + b\n"
                        "}\n"
-                       "let result = add(1, 2)\n"
+                       "var result = add(1, 2)\n"
                        "print(add(3, 4))\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
@@ -258,7 +258,7 @@ TEST(highlight_variable_occurrences) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code = "let counter = 0\n"
+    const char *code = "var counter = 0\n"
                        "counter = counter + 1\n"
                        "print(counter)\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
@@ -299,7 +299,7 @@ TEST(prepare_rename_valid_symbol) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code = "let counter = 0\n";
+    const char *code = "var counter = 0\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -317,11 +317,11 @@ TEST(prepare_rename_keyword_rejected) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code = "let x = 42\n";
+    const char *code = "var x = 42\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
-    // Prepare rename on "let" (line 0, col 0) â€?should be rejected
+    // Prepare rename on "var" (line 0, col 0) â€?should be rejected
     XrLspPosition pos = {0, 0};
     XrJsonValue *result = xlsp_analyze_prepare_rename(doc, pos);
     ASSERT(result == NULL);

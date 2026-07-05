@@ -7,7 +7,7 @@ fn patchHeader(out: Bytes) {
     }
 }
 
-let out = Bytes.withCapacity(4)
+var out = Bytes.withCapacity(4)
 unsafe {
     out.pushUnchecked(0)
     out.pushUnchecked(0)

@@ -9,7 +9,7 @@ enum TestErr {
 
 @test
 fn test_enum_basic_construct() {
-    let e = TestErr.Msg("hi")
+    var e = TestErr.Msg("hi")
     match (e) {
         TestErr.Msg(s) -> { assert_eq(s, "hi") }
         _ -> { assert(false) }
@@ -18,7 +18,7 @@ fn test_enum_basic_construct() {
 
 @test
 fn test_enum_multi_field() {
-    let e = TestErr.Wrapped("outer", "inner")
+    var e = TestErr.Wrapped("outer", "inner")
     match (e) {
         TestErr.Wrapped(msg, cause) -> {
             assert_eq(msg, "outer")
@@ -30,8 +30,8 @@ fn test_enum_multi_field() {
 
 @test
 fn test_enum_cause_chain() {
-    let inner = TestErr.Msg("inner")
-    let outer = TestErr.Wrapped("outer", "inner")
+    var inner = TestErr.Msg("inner")
+    var outer = TestErr.Wrapped("outer", "inner")
     match (outer) {
         TestErr.Wrapped(msg, cause) -> {
             assert_eq(msg, "outer")
@@ -46,14 +46,14 @@ fn test_enum_cause_chain() {
 
 @test
 fn test_enum_to_string() {
-    let e = TestErr.Msg("boom")
-    let s = string(e)
+    var e = TestErr.Msg("boom")
+    var s = string(e)
     assert(s.length > 0)
 }
 
 @test
 fn test_enum_throw_and_catch() {
-    let caught_msg = ""
+    var caught_msg = ""
     try {
         throw TestErr.Msg("oops")
     } catch (e) {
@@ -64,8 +64,8 @@ fn test_enum_throw_and_catch() {
 
 @test
 fn test_enum_throw_with_wrapped() {
-    let primary_msg = ""
-    let cause_msg = ""
+    var primary_msg = ""
+    var cause_msg = ""
     try {
         throw TestErr.Wrapped("wrapped", "primary")
     } catch (e) {
@@ -82,7 +82,7 @@ fn test_enum_throw_with_wrapped() {
 
 @test
 fn test_enum_typed_catch() {
-    let caught = false
+    var caught = false
     try {
         throw TestErr.Msg("annotated")
     } catch (e: TestErr) {
@@ -97,7 +97,7 @@ fn make_failure(msg: string) -> TestErr {
 
 @test
 fn test_enum_function_return() {
-    let e = make_failure("via fn")
+    var e = make_failure("via fn")
     match (e) {
         TestErr.Msg(s) -> { assert_eq(s, "via fn") }
         _ -> { assert(false) }

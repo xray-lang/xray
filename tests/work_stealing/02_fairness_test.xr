@@ -14,21 +14,21 @@ print("========== 测试2：工作窃取公平性 ==========")
 const CORO_COUNT = 8
 const TEST_DURATION_MS = 200
 /* 每个协程的执行计数 */
-let counts = []
-for (let i = 0; i < CORO_COUNT; i++) {
+var counts = []
+for (var i = 0; i < CORO_COUNT; i++) {
     counts.push(0)
 }
-let done = false
+var done = false
 /* 启动计算密集型协程 */
 print("启动 " + string(CORO_COUNT) + " 个计算密集型协程...")
-let tasks = []
-for (let i = 0; i < CORO_COUNT; i++) {
-    let idx = i
-    let task = go fn() {
+var tasks = []
+for (var i = 0; i < CORO_COUNT; i++) {
+    var idx = i
+    var task = go fn() {
         while (!done) {
             /* 模拟计算工作 */
-            let sum = 0
-            for (let j = 0; j < 100; j++) {
+            var sum = 0
+            for (var j = 0; j < 100; j++) {
                 sum = sum + j
             }
             counts[idx] = counts[idx] + 1
@@ -47,10 +47,10 @@ time.sleep(20)
 /* 分析结果 */
 print("
 各协程执行次数:")
-let total = 0
-let min_count = counts[0]
-let max_count = counts[0]
-for (let i = 0; i < CORO_COUNT; i++) {
+var total = 0
+var min_count = counts[0]
+var max_count = counts[0]
+for (var i = 0; i < CORO_COUNT; i++) {
     print("  协程 " + string(i) + ": " + string(counts[i]) + " 次")
     total = total + counts[i]
     if (counts[i] < min_count) {
@@ -60,7 +60,7 @@ for (let i = 0; i < CORO_COUNT; i++) {
         max_count = counts[i]
     }
 }
-let avg = total / CORO_COUNT
+var avg = total / CORO_COUNT
 print("
 统计:")
 print("  总执行次数: " + string(total))
@@ -68,7 +68,7 @@ print("  平均: " + string(avg))
 print("  最小: " + string(min_count))
 print("  最大: " + string(max_count))
 /* 计算公平性指标 */
-let ratio = 1
+var ratio = 1
 if (min_count > 0) {
     ratio = float(max_count) / float(min_count)
 }
@@ -82,8 +82,8 @@ if (ratio <= 10) {
 ⚠ 公平性警告：执行次数差异较大")
 }
 /* 验证所有协程都执行了 */
-let all_executed = true
-for (let i = 0; i < CORO_COUNT; i++) {
+var all_executed = true
+for (var i = 0; i < CORO_COUNT; i++) {
     if (counts[i] == 0) {
         all_executed = false
         print("✗ 协程 " + string(i) + " 未执行")

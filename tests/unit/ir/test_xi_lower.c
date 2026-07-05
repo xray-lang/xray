@@ -188,7 +188,7 @@ static int func_tree_has_builtin_name(XiFunc *f, const char *name) {
 /* ========== Tests ========== */
 
 TEST(simple_arithmetic) {
-    XiFunc *f = lower_source("let x = 1 + 2\nlet y = x * 3\nprint(y)");
+    XiFunc *f = lower_source("var x = 1 + 2\nvar y = x * 3\nprint(y)");
     assert(f != NULL);
     assert(f->nblocks >= 1);
     /* Entry block should have: const 1, const 2, add, const 3, mul, print */
@@ -197,14 +197,14 @@ TEST(simple_arithmetic) {
 }
 
 TEST(variable_assignment) {
-    XiFunc *f = lower_source("let x = 10\nx = x + 5\nprint(x)");
+    XiFunc *f = lower_source("var x = 10\nx = x + 5\nprint(x)");
     assert(f != NULL);
     assert(f->nblocks >= 1);
     xi_func_free(f);
 }
 
 TEST(if_else) {
-    XiFunc *f = lower_source("let x = 10\n"
+    XiFunc *f = lower_source("var x = 10\n"
                              "if (x > 5) {\n"
                              "    print(1)\n"
                              "} else {\n"
@@ -217,7 +217,7 @@ TEST(if_else) {
 }
 
 TEST(while_loop) {
-    XiFunc *f = lower_source("let i = 0\n"
+    XiFunc *f = lower_source("var i = 0\n"
                              "while (i < 10) {\n"
                              "    i = i + 1\n"
                              "}\n"
@@ -229,8 +229,8 @@ TEST(while_loop) {
 }
 
 TEST(for_loop) {
-    XiFunc *f = lower_source("let sum = 0\n"
-                             "for (let i = 0; i < 5; i = i + 1) {\n"
+    XiFunc *f = lower_source("var sum = 0\n"
+                             "for (var i = 0; i < 5; i = i + 1) {\n"
                              "    sum = sum + i\n"
                              "}\n"
                              "print(sum)\n");
@@ -240,7 +240,7 @@ TEST(for_loop) {
 }
 
 TEST(nested_if) {
-    XiFunc *f = lower_source("let x = 10\n"
+    XiFunc *f = lower_source("var x = 10\n"
                              "if (x > 5) {\n"
                              "    if (x > 8) {\n"
                              "        print(2)\n"
@@ -256,35 +256,35 @@ TEST(nested_if) {
 }
 
 TEST(bool_literals) {
-    XiFunc *f = lower_source("let a = true\n"
-                             "let b = false\n"
-                             "let c = !a\n"
+    XiFunc *f = lower_source("var a = true\n"
+                             "var b = false\n"
+                             "var c = !a\n"
                              "print(c)\n");
     assert(f != NULL);
     xi_func_free(f);
 }
 
 TEST(float_arithmetic) {
-    XiFunc *f = lower_source("let x = 3.14\n"
-                             "let y = x * 2.0\n"
+    XiFunc *f = lower_source("var x = 3.14\n"
+                             "var y = x * 2.0\n"
                              "print(y)\n");
     assert(f != NULL);
     xi_func_free(f);
 }
 
 TEST(string_const) {
-    XiFunc *f = lower_source("let msg = \"hello\"\n"
+    XiFunc *f = lower_source("var msg = \"hello\"\n"
                              "print(msg)\n");
     assert(f != NULL);
     xi_func_free(f);
 }
 
 TEST(comparison_ops) {
-    XiFunc *f = lower_source("let a = 1\n"
-                             "let b = 2\n"
-                             "let eq = a == b\n"
-                             "let ne = a != b\n"
-                             "let lt = a < b\n"
+    XiFunc *f = lower_source("var a = 1\n"
+                             "var b = 2\n"
+                             "var eq = a == b\n"
+                             "var ne = a != b\n"
+                             "var lt = a < b\n"
                              "print(eq)\n"
                              "print(ne)\n"
                              "print(lt)\n");
@@ -293,7 +293,7 @@ TEST(comparison_ops) {
 }
 
 TEST(compound_assignment) {
-    XiFunc *f = lower_source("let x = 10\n"
+    XiFunc *f = lower_source("var x = 10\n"
                              "x += 5\n"
                              "x -= 2\n"
                              "print(x)\n");
@@ -305,7 +305,7 @@ TEST(compound_assignment) {
 }
 
 TEST(inc_dec) {
-    XiFunc *f = lower_source("let x = 0\n"
+    XiFunc *f = lower_source("var x = 0\n"
                              "x++\n"
                              "x++\n"
                              "x--\n"
@@ -317,8 +317,8 @@ TEST(inc_dec) {
 }
 
 TEST(ternary_expr) {
-    XiFunc *f = lower_source("let x = 10\n"
-                             "let y = (x > 5) ? 1 : 0\n"
+    XiFunc *f = lower_source("var x = 10\n"
+                             "var y = (x > 5) ? 1 : 0\n"
                              "print(y)\n");
     assert(f != NULL);
     /* ternary produces: entry, then, else, merge blocks */
@@ -327,7 +327,7 @@ TEST(ternary_expr) {
 }
 
 TEST(break_continue) {
-    XiFunc *f = lower_source("let i = 0\n"
+    XiFunc *f = lower_source("var i = 0\n"
                              "while (i < 100) {\n"
                              "    i = i + 1\n"
                              "    if (i == 5) {\n"
@@ -344,10 +344,10 @@ TEST(break_continue) {
 }
 
 TEST(nested_while) {
-    XiFunc *f = lower_source("let sum = 0\n"
-                             "let i = 0\n"
+    XiFunc *f = lower_source("var sum = 0\n"
+                             "var i = 0\n"
                              "while (i < 3) {\n"
-                             "    let j = 0\n"
+                             "    var j = 0\n"
                              "    while (j < 3) {\n"
                              "        sum = sum + 1\n"
                              "        j = j + 1\n"
@@ -362,11 +362,11 @@ TEST(nested_while) {
 }
 
 TEST(type_propagation) {
-    XiFunc *f = lower_source("let a = 1\n"
-                             "let b = 2.0\n"
-                             "let c = a + a\n"
-                             "let d = b + b\n"
-                             "let e = a > 0\n"
+    XiFunc *f = lower_source("var a = 1\n"
+                             "var b = 2.0\n"
+                             "var c = a + a\n"
+                             "var d = b + b\n"
+                             "var e = a > 0\n"
                              "print(c)\n"
                              "print(d)\n"
                              "print(e)\n");
@@ -392,7 +392,7 @@ TEST(type_propagation) {
 }
 
 TEST(array_literal) {
-    XiFunc *f = lower_source("let arr = [1, 2, 3]\n"
+    XiFunc *f = lower_source("var arr = [1, 2, 3]\n"
                              "print(arr)\n");
     assert(f != NULL);
     /* Should have: CONST*3 elements, ARRAY_NEW, INDEX_SET*3, PRINT */
@@ -406,8 +406,8 @@ TEST(array_literal) {
 }
 
 TEST(index_access) {
-    XiFunc *f = lower_source("let arr = [10, 20, 30]\n"
-                             "let x = arr[1]\n"
+    XiFunc *f = lower_source("var arr = [10, 20, 30]\n"
+                             "var x = arr[1]\n"
                              "print(x)\n");
     assert(f != NULL);
     int found_index_get = 0;
@@ -420,8 +420,8 @@ TEST(index_access) {
 }
 
 TEST(member_access) {
-    XiFunc *f = lower_source("let arr = [1, 2, 3]\n"
-                             "let n = arr.length\n"
+    XiFunc *f = lower_source("var arr = [1, 2, 3]\n"
+                             "var n = arr.length\n"
                              "print(n)\n");
     assert(f != NULL);
     int found_load_field = 0;
@@ -438,7 +438,7 @@ TEST(member_access_field_symbols_are_distinct) {
                              "    Coro.yield()\n"
                              "    return 1\n"
                              "}\n"
-                             "let task = go worker()\n"
+                             "var task = go worker()\n"
                              "print(task.done)\n"
                              "print(task.cancelled)\n");
     assert(f != NULL);
@@ -466,12 +466,12 @@ TEST(member_access_field_symbols_are_distinct) {
 }
 
 TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
-    XiFunc *f = lower_source("let src = Bytes(8)\n"
-                             "let view: ByteSpan = src\n"
-                             "let dst = Bytes.withCapacity(8)\n"
-                             "let h = view.load<uint16>(0, Endian.LE)\n"
-                             "let a = view.load<uint32>(0, Endian.LE)\n"
-                             "let b = view.load<uint64>(0, Endian.LE)\n"
+    XiFunc *f = lower_source("var src = Bytes(8)\n"
+                             "var view: ByteSpan = src\n"
+                             "var dst = Bytes.withCapacity(8)\n"
+                             "var h = view.load<uint16>(0, Endian.LE)\n"
+                             "var a = view.load<uint32>(0, Endian.LE)\n"
+                             "var b = view.load<uint64>(0, Endian.LE)\n"
                              "view.store<uint16>(6, h, Endian.LE)\n"
                              "dst.appendFrom(view[0:2])\n"
                              "dst.repeatFrom(2, 4)\n"
@@ -495,7 +495,7 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
 
 TEST(throw_stmt) {
     XiFunc *f = lower_source("enum LowerErr { Error }\n"
-                             "let x = 1\n"
+                             "var x = 1\n"
                              "if (x == 0) {\n"
                              "    throw LowerErr.Error\n"
                              "}\n"
@@ -520,7 +520,7 @@ TEST(throw_stmt) {
 }
 
 TEST(for_in_loop) {
-    XiFunc *f = lower_source("let arr = [10, 20, 30]\n"
+    XiFunc *f = lower_source("var arr = [10, 20, 30]\n"
                              "for (x in arr) {\n"
                              "    print(x)\n"
                              "}\n");
@@ -549,8 +549,8 @@ TEST(for_in_loop) {
 }
 
 TEST(nullish_coalesce) {
-    XiFunc *f = lower_source("let x: int? = null\n"
-                             "let y = x ?? 42\n"
+    XiFunc *f = lower_source("var x: int? = null\n"
+                             "var y = x ?? 42\n"
                              "print(y)\n");
     assert(f != NULL);
     /* Canonicalized to: x == null ? 42 : x → ternary with EQ null check.
@@ -570,7 +570,7 @@ TEST(nullish_coalesce) {
 }
 
 TEST(map_literal) {
-    XiFunc *f = lower_source("let m = #{\"a\": 1, \"b\": 2}\n"
+    XiFunc *f = lower_source("var m = #{\"a\": 1, \"b\": 2}\n"
                              "print(m)\n");
     assert(f != NULL);
     int found_map_new = 0;
@@ -583,8 +583,8 @@ TEST(map_literal) {
 }
 
 TEST(match_expr) {
-    XiFunc *f = lower_source("let x = 2\n"
-                             "let y = match (x) {\n"
+    XiFunc *f = lower_source("var x = 2\n"
+                             "var y = match (x) {\n"
                              "    1 -> 10,\n"
                              "    2 -> 20,\n"
                              "    _ -> 0\n"
@@ -607,7 +607,7 @@ TEST(match_expr) {
 }
 
 TEST(try_catch) {
-    XiFunc *f = lower_source("let result = 0\n"
+    XiFunc *f = lower_source("var result = 0\n"
                              "try {\n"
                              "    result = 42\n"
                              "} catch (e) {\n"
@@ -633,7 +633,7 @@ TEST(try_catch) {
 }
 
 TEST(try_catch_defer) {
-    XiFunc *f = lower_source("let x = 0\n"
+    XiFunc *f = lower_source("var x = 0\n"
                              "defer { x = 9 }\n"
                              "try {\n"
                              "    x = 1\n"
@@ -647,7 +647,7 @@ TEST(try_catch_defer) {
 }
 
 TEST(object_literal) {
-    XiFunc *f = lower_source("let obj = {a: 1, b: 2}\n"
+    XiFunc *f = lower_source("var obj = {a: 1, b: 2}\n"
                              "print(obj)\n");
     assert(f != NULL);
     int found_alloc = 0;
@@ -663,7 +663,7 @@ TEST(nested_function) {
     XiFunc *f = lower_source("fn add(a: int, b: int) -> int {\n"
                              "    return a + b\n"
                              "}\n"
-                             "let r = add(1, 2)\n"
+                             "var r = add(1, 2)\n"
                              "print(r)\n");
     assert(f != NULL);
     /* Parent should have a child function */
@@ -688,8 +688,8 @@ TEST(nested_function) {
 }
 
 TEST(function_expr) {
-    XiFunc *f = lower_source("let double = fn(x: int) -> int { return x * 2 }\n"
-                             "let r = double(5)\n"
+    XiFunc *f = lower_source("var double = fn(x: int) -> int { return x * 2 }\n"
+                             "var r = double(5)\n"
                              "print(r)\n");
     assert(f != NULL);
     assert(f->nchildren == 1);
@@ -709,8 +709,8 @@ TEST(multiple_functions) {
 }
 
 TEST(template_string) {
-    XiFunc *f = lower_source("let name = \"world\"\n"
-                             "let msg = \"hello ${name}!\"\n"
+    XiFunc *f = lower_source("var name = \"world\"\n"
+                             "var msg = \"hello ${name}!\"\n"
                              "print(msg)\n");
     assert(f != NULL);
     int found_concat = 0;
@@ -724,8 +724,8 @@ TEST(template_string) {
 
 TEST(go_await) {
     XiFunc *f = lower_source("fn work() -> int { return 42 }\n"
-                             "let t = go work()\n"
-                             "let r = await t\n"
+                             "var t = go work()\n"
+                             "var r = await t\n"
                              "print(r)\n");
     assert(f != NULL);
     int found_go = 0, found_await = 0;
@@ -745,7 +745,7 @@ TEST(go_await) {
 
 TEST(direct_await_go_one_shot) {
     XiFunc *f = lower_source("fn work() -> int { return 42 }\n"
-                             "let r = await go work()\n"
+                             "var r = await go work()\n"
                              "print(r)\n");
     assert(f != NULL);
     int found_await = 0;
@@ -762,8 +762,8 @@ TEST(direct_await_go_one_shot) {
 
 TEST(go_arg_transfer_modes) {
     XiFunc *copy_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
-                                   "let xs = [1, 2]\n"
-                                   "let task = go worker(copy(xs))\n"
+                                   "var xs = [1, 2]\n"
+                                   "var task = go worker(copy(xs))\n"
                                    "print(await task)\n");
     assert(copy_ir != NULL);
     XiValue *copy_go = func_tree_find_op(copy_ir, XI_GO);
@@ -776,8 +776,8 @@ TEST(go_arg_transfer_modes) {
     xi_func_free(copy_ir);
 
     XiFunc *move_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
-                                   "shared let xs: Array<int> = [1, 2]\n"
-                                   "let task = go worker(move xs)\n"
+                                   "shared xs: Array<int> = [1, 2]\n"
+                                   "var task = go worker(move xs)\n"
                                    "print(await task)\n");
     assert(move_ir != NULL);
     XiValue *move_go = func_tree_find_op(move_ir, XI_GO);
@@ -789,20 +789,20 @@ TEST(go_arg_transfer_modes) {
     xi_func_free(move_ir);
 
     XiFunc *share_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
-                                    "shared const xs: Array<int> = [1, 2]\n"
-                                    "let task = go worker(xs)\n"
+                                    "shared xs: Array<int> = [1, 2]\n"
+                                    "var task = go worker(xs)\n"
                                     "print(await task)\n");
     assert(share_ir != NULL);
     XiValue *share_go = func_tree_find_op(share_ir, XI_GO);
-    assert(share_go != NULL && "shared const case should lower a GO op");
+    assert(share_go != NULL && "shared case should lower a GO op");
     assert(xi_go_arg_transfer_mode(share_go, 0) == XR_TRANSFER_SHARE &&
-           "shared const go arguments should be encoded as zero-copy SHARE transfer");
+           "shared go arguments should be encoded as zero-copy SHARE transfer");
     xi_func_free(share_ir);
 }
 
 TEST(channel_send_transfer_modes) {
-    XiFunc *copy_ir = lower_source("let ch: Channel<Array<int>> = Channel(1)\n"
-                                   "let xs = [1, 2]\n"
+    XiFunc *copy_ir = lower_source("var ch: Channel<Array<int>> = Channel(1)\n"
+                                   "var xs = [1, 2]\n"
                                    "ch.send(copy(xs))\n");
     assert(copy_ir != NULL);
     XiValue *copy_send = func_tree_find_op(copy_ir, XI_CHAN_SEND);
@@ -813,8 +813,8 @@ TEST(channel_send_transfer_modes) {
            "channel boundary copy(...) must not lower to a separate copy op before send");
     xi_func_free(copy_ir);
 
-    XiFunc *move_ir = lower_source("let ch: Channel<Array<int>> = Channel(1)\n"
-                                   "let xs = [1, 2]\n"
+    XiFunc *move_ir = lower_source("var ch: Channel<Array<int>> = Channel(1)\n"
+                                   "var xs = [1, 2]\n"
                                    "ch.send(move xs)\n");
     assert(move_ir != NULL);
     XiValue *move_send = func_tree_find_op(move_ir, XI_CHAN_SEND);
@@ -825,8 +825,8 @@ TEST(channel_send_transfer_modes) {
            "move transfer should still consume source ownership");
     xi_func_free(move_ir);
 
-    XiFunc *try_ir = lower_source("let ch: Channel<Array<int>> = Channel(1)\n"
-                                  "let xs = [1, 2]\n"
+    XiFunc *try_ir = lower_source("var ch: Channel<Array<int>> = Channel(1)\n"
+                                  "var xs = [1, 2]\n"
                                   "print(ch.trySend(copy(xs)))\n");
     assert(try_ir != NULL);
     XiValue *try_send = func_tree_find_method(try_ir, "trySend");
@@ -835,8 +835,8 @@ TEST(channel_send_transfer_modes) {
            "copy(...) at trySend boundary must be encoded as COPY transfer");
     xi_func_free(try_ir);
 
-    XiFunc *timeout_ir = lower_source("let ch: Channel<Array<int>> = Channel(1)\n"
-                                      "let xs = [1, 2]\n"
+    XiFunc *timeout_ir = lower_source("var ch: Channel<Array<int>> = Channel(1)\n"
+                                      "var xs = [1, 2]\n"
                                       "print(ch.sendTimeout(copy(xs), 0))\n");
     assert(timeout_ir != NULL);
     XiValue *timeout_send = func_tree_find_method(timeout_ir, "sendTimeout");
@@ -891,7 +891,7 @@ TEST(defer_args_lower_before_defer) {
 }
 
 TEST(set_literal) {
-    XiFunc *f = lower_source("let s = #[1, 2, 3]\n"
+    XiFunc *f = lower_source("var s = #[1, 2, 3]\n"
                              "print(s)\n");
     assert(f != NULL);
     int found_set_new = 0;
@@ -904,8 +904,8 @@ TEST(set_literal) {
 }
 
 TEST(is_expr) {
-    XiFunc *f = lower_source("let x = 42\n"
-                             "let ok = x is int\n"
+    XiFunc *f = lower_source("var x = 42\n"
+                             "var ok = x is int\n"
                              "print(ok)\n");
     assert(f != NULL);
     int found_is = 0;
@@ -918,8 +918,8 @@ TEST(is_expr) {
 }
 
 TEST(slice_expr) {
-    XiFunc *f = lower_source("let arr = [1, 2, 3, 4]\n"
-                             "let sub = arr[1:3]\n"
+    XiFunc *f = lower_source("var arr = [1, 2, 3, 4]\n"
+                             "var sub = arr[1:3]\n"
                              "print(sub)\n");
     assert(f != NULL);
     int found_slice = 0;
@@ -932,7 +932,7 @@ TEST(slice_expr) {
 }
 
 TEST(range_expr) {
-    XiFunc *f = lower_source("let r = 1..10\n"
+    XiFunc *f = lower_source("var r = 1..10\n"
                              "print(r)\n");
     assert(f != NULL);
     XiValue *range = func_tree_find_op(f, XI_RANGE);
@@ -942,7 +942,7 @@ TEST(range_expr) {
 }
 
 TEST(range_inclusive_expr) {
-    XiFunc *f = lower_source("let r = 1..=10\n"
+    XiFunc *f = lower_source("var r = 1..=10\n"
                              "print(r)\n");
     assert(f != NULL);
     XiValue *range = func_tree_find_op(f, XI_RANGE);
@@ -952,8 +952,8 @@ TEST(range_inclusive_expr) {
 }
 
 TEST(optional_chain) {
-    XiFunc *f = lower_source("let obj = {name: \"alice\"}\n"
-                             "let n = obj?.name\n"
+    XiFunc *f = lower_source("var obj = {name: \"alice\"}\n"
+                             "var n = obj?.name\n"
                              "print(n)\n");
     assert(f != NULL);
     /* Optional chain generates ISNULL + branch + merge */
@@ -973,8 +973,8 @@ TEST(optional_chain) {
 TEST(optional_call) {
     XiFunc *f = lower_source("type IntFn = (int) -> int\n"
                              "fn bump(x: int) -> int { return x + 1 }\n"
-                             "let fnv: IntFn? = bump\n"
-                             "let n = fnv?.(41)\n"
+                             "var fnv: IntFn? = bump\n"
+                             "var n = fnv?.(41)\n"
                              "print(n)\n");
     assert(f != NULL);
     assert(func_tree_has_op(f, XI_ISNULL) && "optional call should null-check callee");
@@ -987,7 +987,7 @@ TEST(struct_literal) {
                              "    x: float\n"
                              "    y: float\n"
                              "}\n"
-                             "let p = Point{x: 1.0, y: 2.0}\n"
+                             "var p = Point{x: 1.0, y: 2.0}\n"
                              "print(p)\n");
     assert(f != NULL);
     int found_new = 0, found_set = 0;
@@ -1011,7 +1011,7 @@ TEST(struct_literal_inside_function) {
                              "    b: int\n"
                              "}\n"
                              "fn run() -> int {\n"
-                             "    let p = Pair{a: 1, b: 2}\n"
+                             "    var p = Pair{a: 1, b: 2}\n"
                              "    return p.a + p.b\n"
                              "}\n"
                              "print(run())\n");
@@ -1030,7 +1030,7 @@ TEST(struct_field_store_narrows_native_width) {
                              "    byte: uint8\n"
                              "}\n"
                              "fn run() -> int {\n"
-                             "    let p = Sample{byte: 300}\n"
+                             "    var p = Sample{byte: 300}\n"
                              "    p.byte = p.byte + 1\n"
                              "    return p.byte\n"
                              "}\n"
@@ -1048,7 +1048,7 @@ TEST(struct_field_store_narrows_native_width) {
 
 TEST(as_to_native_width_int_lowers_to_narrow) {
     XiFunc *f = lower_source("fn run(i: int) -> int {\n"
-                             "    let v = i as uint16\n"
+                             "    var v = i as uint16\n"
                              "    return int(v)\n"
                              "}\n"
                              "print(run(65537))\n");
@@ -1064,8 +1064,8 @@ TEST(as_to_native_width_int_lowers_to_narrow) {
 }
 
 TEST(force_unwrap) {
-    XiFunc *f = lower_source("let x: int? = 42\n"
-                             "let y = x!\n"
+    XiFunc *f = lower_source("var x: int? = 42\n"
+                             "var y = x!\n"
                              "print(y)\n");
     assert(f != NULL);
     /* Force unwrap generates ISNULL + branch */
@@ -1083,8 +1083,8 @@ TEST(force_unwrap) {
 }
 
 TEST(destructure_decl) {
-    XiFunc *f = lower_source("let arr = [1, 2, 3]\n"
-                             "let [a, b, c] = arr\n"
+    XiFunc *f = lower_source("var arr = [1, 2, 3]\n"
+                             "var [a, b, c] = arr\n"
                              "print(a + b + c)\n");
     assert(f != NULL);
     /* Destructure should create INDEX_GET ops */
@@ -1098,8 +1098,8 @@ TEST(destructure_decl) {
 }
 
 TEST(multi_assign) {
-    XiFunc *f = lower_source("let a = 1\n"
-                             "let b = 2\n"
+    XiFunc *f = lower_source("var a = 1\n"
+                             "var b = 2\n"
                              "(a, b) = (b, a)\n"
                              "print(a)\n"
                              "print(b)\n");
@@ -1113,7 +1113,7 @@ TEST(enum_access) {
                              "    Green,\n"
                              "    Blue\n"
                              "}\n"
-                             "let c = Color.Red\n"
+                             "var c = Color.Red\n"
                              "print(c)\n");
     assert(f != NULL);
     int found_load = 0;
@@ -1127,7 +1127,7 @@ TEST(enum_access) {
 
 TEST(import_export_skip) {
     XiFunc *f = lower_source("import \"math\" as math\n"
-                             "let x = 42\n"
+                             "var x = 42\n"
                              "print(x)\n");
     assert(f != NULL);
     /* Import is compile-time, should not generate any special ops */
@@ -1175,7 +1175,7 @@ TEST(parallel_for_lowers_to_dedicated_ir) {
     } while (0)
 
     XiFunc *f = lower_source("fn run(n: int) {\n"
-                             "    let base = 3\n"
+                             "    var base = 3\n"
                              "    parallel for i in 0..n workers 2 worker wid {\n"
                              "        print(i + wid + base)\n"
                              "    }\n"
@@ -1257,7 +1257,7 @@ TEST(parallel_range_lowers_to_range_body_ir) {
     } while (0)
 
     XiFunc *f = lower_source("fn run(n: int) {\n"
-                             "    let base = 3\n"
+                             "    var base = 3\n"
                              "    parallel range begin, end in 0..n workers 2 worker wid {\n"
                              "        print(begin + end + wid + base)\n"
                              "    }\n"
@@ -1301,7 +1301,7 @@ TEST(parallel_reduce_lowers_to_dedicated_ir) {
     } while (0)
 
     XiFunc *f = lower_source("fn run(n: int) -> int {\n"
-                             "    let base = 3\n"
+                             "    var base = 3\n"
                              "    return parallel reduce i in 0..n workers 2 worker wid init 10 "
                              "combine (a: int, b: int) -> a + b {\n"
                              "        i + wid - wid + base\n"
@@ -1383,7 +1383,7 @@ TEST(parallel_range_reduce_lowers_to_range_body_ir) {
 
     XiFunc *f =
         lower_source("fn run(n: int) -> int {\n"
-                     "    let base = 3\n"
+                     "    var base = 3\n"
                      "    return parallel range reduce begin, end in 0..n workers 2 worker wid "
                      "init 0 combine (a: int, b: int) -> a + b {\n"
                      "        end - begin + wid - wid + base - base\n"
@@ -1438,7 +1438,7 @@ TEST(parallel_reduce_local_init_lowers_to_range_body_ir) {
     } while (0)
 
     XiFunc *f = lower_source("fn run(n: int) -> int {\n"
-                             "    let base = 3\n"
+                             "    var base = 3\n"
                              "    return parallel reduce i in 0..n workers 2 worker wid\n"
                              "        local acc = base + wid\n"
                              "        init 0\n"
@@ -1500,8 +1500,8 @@ TEST(parallel_collect_lowers_to_dedicated_ir) {
 
     XiFunc *f =
         lower_source("fn run(n: int) -> int {\n"
-                     "    let base = 3\n"
-                     "    let values = parallel for i in 0..n workers 2 worker wid collect {\n"
+                     "    var base = 3\n"
+                     "    var values = parallel for i in 0..n workers 2 worker wid collect {\n"
                      "        i + wid + base\n"
                      "    }\n"
                      "    return values[0] + values[3]\n"
@@ -1560,8 +1560,8 @@ TEST(parallel_collect_into_lowers_to_dedicated_ir) {
     } while (0)
 
     XiFunc *f = lower_source("fn run(n: int) {\n"
-                             "    let out: Array<int> = []\n"
-                             "    let base = 7\n"
+                             "    var out: Array<int> = []\n"
+                             "    var base = 7\n"
                              "    parallel for i in 0..n workers 2 worker wid collect into out {\n"
                              "        i + wid + base\n"
                              "    }\n"
@@ -1611,7 +1611,7 @@ TEST(parallel_collect_final_lowers_to_range_body_ir) {
     } while (0)
 
     XiFunc *f = lower_source("fn run(n: int) {\n"
-                             "    let values = parallel for i in 0..n workers 2 worker wid\n"
+                             "    var values = parallel for i in 0..n workers 2 worker wid\n"
                              "        final { print(wid) }\n"
                              "        collect {\n"
                              "        i + wid\n"
@@ -1651,8 +1651,8 @@ TEST(parallel_collect_into_reference_lane_uses_direct_ir) {
     } while (0)
 
     XiFunc *f = lower_source("fn run(n: int) {\n"
-                             "    let out: Array<string> = []\n"
-                             "    let label = \"chunk\"\n"
+                             "    var out: Array<string> = []\n"
+                             "    var label = \"chunk\"\n"
                              "    parallel for i in 0..n workers 2 collect into out {\n"
                              "        label\n"
                              "    }\n"
@@ -1700,7 +1700,7 @@ TEST(parallel_reduce_struct_accumulator_keeps_typed_ir) {
                              "    checksum: int\n"
                              "}\n"
                              "fn run(n: int) -> int {\n"
-                             "    let totals = parallel reduce i in 0..n workers 2 worker wid "
+                             "    var totals = parallel reduce i in 0..n workers 2 worker wid "
                              "init Totals{bytes: 0, checksum: 0} "
                              "combine (a: Totals, b: Totals) -> Totals{"
                              "bytes: a.bytes + b.bytes, "

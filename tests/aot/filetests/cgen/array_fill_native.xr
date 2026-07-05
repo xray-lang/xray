@@ -5,5 +5,5 @@ fn fillZero(a: Array<uint32>) -> int {
     }
 }
 
-let a = Array<uint32>(8, 7)
+var a = Array<uint32>(8, 7)
 print(fillZero(a))

@@ -4,8 +4,8 @@
 // Run: xray demos/02-collections/arrays.xr
 
 // === Creation ===
-let nums = [1, 2, 3, 4, 5]
-let empty: Array<int> = []
+var nums = [1, 2, 3, 4, 5]
+var empty: Array<int> = []
 print("nums: ${nums}")
 print("empty: ${empty}")
 
@@ -14,15 +14,15 @@ print("first: ${nums[0]}, last: ${nums[nums.length - 1]}")
 
 // === Mutation ===
 nums.push(6)
-let popped = nums.pop()
+var popped = nums.pop()
 print("after push(6) + pop(): ${nums}, popped: ${popped}")
 
 nums.unshift(0)
-let shifted = nums.shift()
+var shifted = nums.shift()
 print("after unshift(0) + shift(): ${nums}, shifted: ${shifted}")
 
 // === Slicing (creates a copy) ===
-let slice = nums[1:4]
+var slice = nums[1:4]
 print("nums[1:4] = ${slice}")
 print("nums[:3]  = ${nums[:3]}")
 print("nums[3:]  = ${nums[3:]}")
@@ -32,45 +32,45 @@ print("indexOf(3) = ${nums.indexOf(3)}")
 print("includes(5) = ${nums.includes(5)}")
 
 // === Join ===
-let words = ["hello", "world"]
+var words = ["hello", "world"]
 print(words.join(", "))
 
 // === Sort and reverse ===
-let unsorted = [5, 2, 8, 1, 9, 3]
+var unsorted = [5, 2, 8, 1, 9, 3]
 unsorted.sort()
 print("sorted: ${unsorted}")
 unsorted.reverse()
 print("reversed: ${unsorted}")
 
 // === Functional methods ===
-let data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+var data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-let evens = data.filter(fn(x: int) -> bool { return x % 2 == 0 })
+var evens = data.filter(fn(x: int) -> bool { return x % 2 == 0 })
 print("evens: ${evens}")
 
-let doubled = data.map(fn(x: int) -> int { return x * 2 })
+var doubled = data.map(fn(x: int) -> int { return x * 2 })
 print("doubled: ${doubled}")
 
-let total = data.reduce(fn(acc: int, x: int) -> int { return acc + x }, 0)
+var total = data.reduce(fn(acc: int, x: int) -> int { return acc + x }, 0)
 print("sum: ${total}")
 
 // Chaining
-let result = data
+var result = data
     .filter(fn(x: int) -> bool { return x % 2 == 0 })
     .map(fn(x: int) -> int { return x * x })
 print("even squares: ${result}")
 
 // === find / every / some ===
-let found = data.find(fn(x: int) -> bool { return x > 5 })
+var found = data.find(fn(x: int) -> bool { return x > 5 })
 print("first > 5: ${found}")
 
-let allPositive = data.every(fn(x: int) -> bool { return x > 0 })
+var allPositive = data.every(fn(x: int) -> bool { return x > 0 })
 print("all positive: ${allPositive}")
 
-let hasLarge = data.some(fn(x: int) -> bool { return x > 8 })
+var hasLarge = data.some(fn(x: int) -> bool { return x > 8 })
 print("has > 8: ${hasLarge}")
 
 // === fill ===
-let zeros = [0, 0, 0, 0, 0]
+var zeros = [0, 0, 0, 0, 0]
 zeros.fill(7)
 print("filled: ${zeros}")

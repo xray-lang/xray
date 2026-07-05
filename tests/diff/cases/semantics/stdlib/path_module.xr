@@ -22,7 +22,7 @@ print(path.relative("/a/b/c", "/a/x/y"))
 print(path.resolve("/foo", "/bar", "baz"))
 print(path.resolve("/tmp", "../var"))
 
-let p = path.parse("/home/user/file.txt")
+var p = path.parse("/home/user/file.txt")
 print(p.root)
 print(p.dir)
 print(p.base)

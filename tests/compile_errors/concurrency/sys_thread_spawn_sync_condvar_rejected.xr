@@ -1,8 +1,8 @@
 import sys
 import sync
 
-let t = sys.Thread.spawn(fn() -> int {
-    let cv = sync.Condvar()
+var t = sys.Thread.spawn(fn() -> int {
+    var cv = sync.Condvar()
     cv.lock()
     cv.unlock()
     return 0

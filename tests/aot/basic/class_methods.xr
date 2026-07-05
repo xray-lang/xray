@@ -25,13 +25,13 @@ class Vec2 {
     }
 }
 
-let a = Vec2(3.0, 4.0)
-let b = Vec2(1.0, 2.0)
+var a = Vec2(3.0, 4.0)
+var b = Vec2(1.0, 2.0)
 print(a.length_sq())     // 25.0
 print(a.dot(b))          // 11.0
-let c = a.scale(2.0)
+var c = a.scale(2.0)
 print(c.x)               // 6.0
 print(c.y)               // 8.0
-let d = a.add(b)
+var d = a.add(b)
 print(d.x)               // 4.0
 print(d.y)               // 6.0

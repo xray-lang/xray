@@ -75,7 +75,7 @@ static const char *const k_repl_dot_commands[] = {
  * avoid cross-app coupling with src/app/lsp.  Order is not significant
  * — readline displays matches alphabetically. */
 static const char *const k_repl_keywords[] = {
-    "let",          "const",     "fn",         "class",   "interface", "enum",     "type",
+    "var",          "const",     "fn",         "class",   "interface", "enum",     "type",
     "if",           "else",      "while",      "for",     "in",        "is",       "break",
     "continue",     "return",    "match",      "true",    "false",     "null",     "import",
     "export",       "from",      "as",         "go",      "await",     "select",   "defer",
@@ -256,14 +256,14 @@ static void print_help_brief(ReplState *state) {
 static void print_help_syntax(ReplState *state) {
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Basic Syntax:\n");
-    printf("  let x = 1              // mutable variable\n");
+    printf("  var x = 1              // mutable variable\n");
     printf("  const PI = 3.14        // constant\n");
     printf("  fn add(a: int, b: int) -> int { return a + b }\n");
     printf("  (x: int) -> x * 2      // arrow function\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Control Flow:\n");
     printf("  if (x > 0) { } else { }\n");
-    printf("  for (let i = 0; i < 10; i++) { }\n");
+    printf("  for (var i = 0; i < 10; i++) { }\n");
     printf("  for (item in array) { }\n");
     printf("  while (cond) { }\n");
     printf("  match (x) { 1 -> \"one\", _ -> \"other\" }\n");
@@ -291,8 +291,8 @@ static void print_help_types(ReplState *state) {
     printf("  Bytes       Bytes(1024)\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Type Annotations:\n");
-    printf("  let x: int = 1\n");
-    printf("  let arr: Array<int> = [1, 2]\n");
+    printf("  var x: int = 1\n");
+    printf("  var arr: Array<int> = [1, 2]\n");
     printf("  fn add(a: int, b: int) -> int { return a + b }\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Type Conversion:\n");
@@ -307,13 +307,13 @@ static void print_help_types(ReplState *state) {
 static void print_help_coro(ReplState *state) {
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Coroutine Basics:\n");
-    printf("  let t = go func()      // spawn coroutine\n");
+    printf("  var t = go func()      // spawn coroutine\n");
     printf("  await t                // wait for completion\n");
     printf("  yield                  // yield execution\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Channel:\n");
-    printf("  shared const ch = new Channel<int>()\n");
-    printf("  shared const ch = new Channel<int>(10)\n");
+    printf("  shared ch = new Channel<int>()\n");
+    printf("  shared ch = new Channel<int>(10)\n");
     printf("  ch.send(value)         // blocking send\n");
     printf("  match (ch.recv()) { Recv.Value(v) -> print(v); _ -> {} }\n");
     printf("  ch.close()             // close channel\n");
@@ -327,8 +327,8 @@ static void print_help_coro(ReplState *state) {
     printf("  }\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Shared Variables:\n");
-    printf("  shared const CFG = {...}  // read-only sharing\n");
-    printf("  shared let data = [...]   // move semantics\n");
+    printf("  shared CFG = {...}  // read-only sharing\n");
+    printf("  shared data = [...]   // shared identity\n");
     printf("\n");
 }
 

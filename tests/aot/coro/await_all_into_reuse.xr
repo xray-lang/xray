@@ -9,19 +9,19 @@ fn evenWorker(n: int) -> bool {
 }
 
 fn run() {
-    let tasks: Array<Task<int>> = []
-    let results: Array<int> = []
+    var tasks: Array<Task<int>> = []
+    var results: Array<int> = []
     tasks.reserve(4)
     results.reserve(4)
 
-    let i = 0
+    var i = 0
     while (i < 4) {
         tasks.push(go worker(i))
         i = i + 1
     }
 
     await all tasks into results
-    let sum = 0
+    var sum = 0
     i = 0
     while (i < results.length) {
         sum = sum + results[i]
@@ -47,8 +47,8 @@ fn run() {
     print(results.length)
     print(sum)
 
-    let boolTasks: Array<Task<bool>> = []
-    let boolResults: Array<bool> = []
+    var boolTasks: Array<Task<bool>> = []
+    var boolResults: Array<bool> = []
     boolTasks.reserve(4)
     boolResults.reserve(4)
 
@@ -59,7 +59,7 @@ fn run() {
     }
 
     await all boolTasks into boolResults
-    let trueCount = 0
+    var trueCount = 0
     i = 0
     while (i < boolResults.length) {
         if (boolResults[i]) {

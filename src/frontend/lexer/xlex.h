@@ -89,8 +89,9 @@ typedef enum {
 
     // Keywords (TK_FIRST_KEYWORD must be first, TK_LAST_KEYWORD must be last)
     TK_FIRST_KEYWORD,
-    TK_LET = TK_FIRST_KEYWORD,  // let
+    TK_VAR = TK_FIRST_KEYWORD,  // var
     TK_CONST,                   // const
+    TK_COMPTIME,                // comptime - force compile-time expression evaluation
     TK_SHARED,    // shared - stored in global heap, pass by reference (zero-copy across coroutines)
     TK_IF,        // if
     TK_ELSE,      // else

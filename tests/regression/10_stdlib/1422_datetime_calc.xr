@@ -9,29 +9,29 @@ import datetime
 
 @test
 fn test_add_days() {
-    let dt = datetime.create(2024, 6, 15, 12, 0, 0)
-    let result = dt.add(10, "days")
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var result = dt.add(10, "days")
     assert_eq(result.day, 25)
 }
 
 @test
 fn test_add_hours() {
-    let dt = datetime.create(2024, 6, 15, 12, 0, 0)
-    let result = dt.add(5, "hours")
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var result = dt.add(5, "hours")
     assert_eq(result.hour, 17)
 }
 
 @test
 fn test_add_minutes() {
-    let dt = datetime.create(2024, 6, 15, 12, 0, 0)
-    let result = dt.add(30, "minutes")
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var result = dt.add(30, "minutes")
     assert_eq(result.minute, 30)
 }
 
 @test
 fn test_add_seconds() {
-    let dt = datetime.create(2024, 6, 15, 12, 0, 0)
-    let result = dt.add(45, "seconds")
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var result = dt.add(45, "seconds")
     assert_eq(result.second, 45)
 }
 
@@ -41,15 +41,15 @@ fn test_add_seconds() {
 
 @test
 fn test_subtract_days() {
-    let dt = datetime.create(2024, 6, 15, 12, 0, 0)
-    let result = dt.add(-5, "days")
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var result = dt.add(-5, "days")
     assert_eq(result.day, 10)
 }
 
 @test
 fn test_subtract_hours() {
-    let dt = datetime.create(2024, 6, 15, 12, 0, 0)
-    let result = dt.add(-2, "hours")
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var result = dt.add(-2, "hours")
     assert_eq(result.hour, 10)
 }
 
@@ -59,33 +59,33 @@ fn test_subtract_hours() {
 
 @test
 fn test_diff_one_day_seconds() {
-    let dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
-    let dt2 = datetime.create(2024, 6, 16, 12, 0, 0)
-    let diff = dt1.diff(dt2, "seconds")
+    var dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
+    var dt2 = datetime.create(2024, 6, 16, 12, 0, 0)
+    var diff = dt1.diff(dt2, "seconds")
     assert_eq(diff, -86400)
 }
 
 @test
 fn test_diff_one_day_minutes() {
-    let dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
-    let dt2 = datetime.create(2024, 6, 16, 12, 0, 0)
-    let diff = dt1.diff(dt2, "minutes")
+    var dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
+    var dt2 = datetime.create(2024, 6, 16, 12, 0, 0)
+    var diff = dt1.diff(dt2, "minutes")
     assert_eq(diff, -1440)
 }
 
 @test
 fn test_diff_one_day_hours() {
-    let dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
-    let dt2 = datetime.create(2024, 6, 16, 12, 0, 0)
-    let diff = dt1.diff(dt2, "hours")
+    var dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
+    var dt2 = datetime.create(2024, 6, 16, 12, 0, 0)
+    var diff = dt1.diff(dt2, "hours")
     assert_eq(diff, -24)
 }
 
 @test
 fn test_diff_reverse() {
-    let dt1 = datetime.create(2024, 6, 16, 12, 0, 0)
-    let dt2 = datetime.create(2024, 6, 15, 12, 0, 0)
-    let diff = dt1.diff(dt2, "hours")
+    var dt1 = datetime.create(2024, 6, 16, 12, 0, 0)
+    var dt2 = datetime.create(2024, 6, 15, 12, 0, 0)
+    var diff = dt1.diff(dt2, "hours")
     assert_eq(diff, 24)
 }
 
@@ -95,15 +95,15 @@ fn test_diff_reverse() {
 
 @test
 fn test_weekday_range() {
-    let dt = datetime.create(2024, 6, 15)
-    let wd = dt.weekday
+    var dt = datetime.create(2024, 6, 15)
+    var wd = dt.weekday
     assert_true(wd >= 0 && wd <= 6)
 }
 
 @test
 fn test_weekday_now() {
-    let dt = datetime.now()
-    let wd = dt.weekday
+    var dt = datetime.now()
+    var wd = dt.weekday
     assert_true(wd >= 0 && wd <= 6)
 }
 
@@ -113,21 +113,21 @@ fn test_weekday_now() {
 
 @test
 fn test_offset_reasonable() {
-    let offset = datetime.offset()
+    var offset = datetime.offset()
     assert_true(offset >= -720 && offset <= 840)
 }
 
 @test
 fn test_to_utc() {
-    let local = datetime.now()
-    let utc = local.toUTC()
+    var local = datetime.now()
+    var utc = local.toUTC()
     assert_true(utc.year >= 2024)
 }
 
 @test
 fn test_to_local() {
-    let utc = datetime.utc()
-    let local = utc.toLocal()
+    var utc = datetime.utc()
+    var local = utc.toLocal()
     assert_true(local.year >= 2024)
 }
 
@@ -137,24 +137,24 @@ fn test_to_local() {
 
 @test
 fn test_is_before() {
-    let dt1 = datetime.create(2024, 1, 1)
-    let dt2 = datetime.create(2024, 12, 31)
+    var dt1 = datetime.create(2024, 1, 1)
+    var dt2 = datetime.create(2024, 12, 31)
     assert_true(dt1.isBefore(dt2))
     assert_true(!dt2.isBefore(dt1))
 }
 
 @test
 fn test_is_after() {
-    let dt1 = datetime.create(2024, 12, 31)
-    let dt2 = datetime.create(2024, 1, 1)
+    var dt1 = datetime.create(2024, 12, 31)
+    var dt2 = datetime.create(2024, 1, 1)
     assert_true(dt1.isAfter(dt2))
     assert_true(!dt2.isAfter(dt1))
 }
 
 @test
 fn test_equals() {
-    let dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
-    let dt2 = datetime.create(2024, 6, 15, 12, 0, 0)
+    var dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
+    var dt2 = datetime.create(2024, 6, 15, 12, 0, 0)
     assert_true(dt1.equals(dt2))
 }
 
@@ -164,19 +164,19 @@ fn test_equals() {
 
 @test
 fn test_is_leap_year() {
-    let dt2024 = datetime.create(2024, 1, 1)
+    var dt2024 = datetime.create(2024, 1, 1)
     assert_true(dt2024.isLeapYear())
-    let dt2023 = datetime.create(2023, 1, 1)
+    var dt2023 = datetime.create(2023, 1, 1)
     assert_true(!dt2023.isLeapYear())
 }
 
 @test
 fn test_days_in_month() {
-    let feb_leap = datetime.create(2024, 2, 1)
+    var feb_leap = datetime.create(2024, 2, 1)
     assert_eq(feb_leap.daysInMonth(), 29)
-    let feb_normal = datetime.create(2023, 2, 1)
+    var feb_normal = datetime.create(2023, 2, 1)
     assert_eq(feb_normal.daysInMonth(), 28)
-    let jan = datetime.create(2024, 1, 1)
+    var jan = datetime.create(2024, 1, 1)
     assert_eq(jan.daysInMonth(), 31)
 }
 
@@ -187,8 +187,8 @@ fn test_days_in_month() {
 @test
 fn test_add_months_clamp() {
     // Jan 31 + 1 month should be Feb 28/29, not March
-    let dt = datetime.create(2024, 1, 31)
-    let result = dt.add(1, "months")
+    var dt = datetime.create(2024, 1, 31)
+    var result = dt.add(1, "months")
     assert_eq(result.month, 2)
     assert_eq(result.day, 29)  // 2024 is leap year
 }

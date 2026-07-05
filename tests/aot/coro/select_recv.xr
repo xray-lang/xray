@@ -1,5 +1,5 @@
 fn wait_recv(ch: Channel<int>) -> int {
-    let result = 0
+    var result = 0
     select {
         value from ch -> {
             result = value + 1
@@ -8,10 +8,10 @@ fn wait_recv(ch: Channel<int>) -> int {
     return result
 }
 
-let ch = Channel<int>(1)
+shared ch = Channel<int>(1)
 ch.send(41)
-let task = go wait_recv(ch)
+var task = go wait_recv(ch)
 
-let result = await task
+var result = await task
 print(result)
 ch.close()

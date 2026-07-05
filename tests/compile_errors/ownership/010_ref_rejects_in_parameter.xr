@@ -6,5 +6,5 @@ fn view(data: in Array<int>) {
     mutate(data)
 }
 
-let values: Array<int> = []
+var values: Array<int> = []
 view(values)

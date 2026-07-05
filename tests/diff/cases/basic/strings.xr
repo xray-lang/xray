@@ -1,5 +1,5 @@
 // anchor: basic-strings
-let s = "Hello, World"
+var s = "Hello, World"
 print(s.length)
 print(s.toUpperCase())
 print(s.toLowerCase())
@@ -50,17 +50,17 @@ print("aaaa".replace("aa", "X"))
 print("aaaa".replaceAll("aa", "X"))
 print("abc".replaceAll("b", ""))
 
-let parts = "a,b,c,d".split(",")
+var parts = "a,b,c,d".split(",")
 print(parts.length)
 for (i in 0..parts.length) {
     print(parts[i])
 }
-let edgeParts = "a,,b,".split(",")
+var edgeParts = "a,,b,".split(",")
 print(edgeParts.length)
 for (i in 0..edgeParts.length) {
     print(edgeParts[i])
 }
-let charParts = "ab".split("")
+var charParts = "ab".split("")
 print(charParts.length)
 for (i in 0..charParts.length) {
     print(charParts[i])

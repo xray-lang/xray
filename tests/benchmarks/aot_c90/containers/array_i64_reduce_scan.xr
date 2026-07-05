@@ -1,6 +1,6 @@
 fn run(n: int) -> int {
-    let values: Array<int> = []
-    let i = 0
+    var values: Array<int> = []
+    var i = 0
     while (i < n) {
         values.push((i * 17) % 251)
         i = i + 1

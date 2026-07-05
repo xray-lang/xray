@@ -20,17 +20,17 @@ print(greet("Bob", "Hi"))
 fn divmod(a: int, b: int) -> (int, int) {
     return (a / b, a % b)
 }
-let (q, r) = divmod(17, 5)
+var (q, r) = divmod(17, 5)
 print("17 / 5 = ${q} remainder ${r}")
 
 // === Arrow functions (must have type annotations) ===
-let double = fn(x: int) -> int { return x * 2 }
-let square = fn(x: int) -> int { return x * x }
+var double = fn(x: int) -> int { return x * 2 }
+var square = fn(x: int) -> int { return x * x }
 print("double(5) = ${double(5)}")
 print("square(6) = ${square(6)}")
 
 // Arrow function with body
-let clamp = fn(x: int, lo: int, hi: int) -> int {
+var clamp = fn(x: int, lo: int, hi: int) -> int {
     if (x < lo) { return lo }
     if (x > hi) { return hi }
     return x
@@ -45,8 +45,8 @@ print("apply(square, 7) = ${apply(square, 7)}")
 
 // === Rest parameters (no type annotation on rest param) ===
 fn sum(...nums) -> int {
-    let total = 0
-    for (let i = 0; i < nums.length; i++) {
+    var total = 0
+    for (var i = 0; i < nums.length; i++) {
         total = total + nums[i]
     }
     return total

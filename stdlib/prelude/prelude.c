@@ -292,7 +292,7 @@ XrModule *xr_load_module_prelude(XrVMRuntime *isolate) {
     isolate->prelude_symbols = (void *) &g_prelude_symbols;
 
     /* Eagerly register every native XrClass that prelude entries refer
-     * to. This makes user-side annotations like `let dt: DateTime = ...`
+     * to. This makes user-side annotations like `var dt: DateTime = ...`
      * usable without a separate `import datetime`, at the cost of always
      * linking those four stdlib modules into the binary. */
     xr_prelude_register_all_native_types(isolate);

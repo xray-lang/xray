@@ -1,10 +1,10 @@
 // anchor: slice-array-negative-start
-let arr = [1, 2, 3, 4]
+var arr = [1, 2, 3, 4]
 
-let tail: Span<int> = arr[-2:]
+var tail: Span<int> = arr[-2:]
 print(tail)
 print(copy(arr[-2:]))
-let hugeTail: Span<int> = arr[-999:]
+var hugeTail: Span<int> = arr[-999:]
 print(hugeTail)
-let pastEnd: Span<int> = arr[999:]
+var pastEnd: Span<int> = arr[999:]
 print(pastEnd)

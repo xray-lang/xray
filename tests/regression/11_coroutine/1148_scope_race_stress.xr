@@ -39,8 +39,8 @@ const SUCCEEDING_PER_SCOPE = 50
 // children overlap in flight on different workers — this widens the
 // race window for the wake_waiter scope-side bookkeeping.
 fn make_failing(id: int) -> int {
-    let x = 0
-    for (let k = 0; k < 50; k++) {
+    var x = 0
+    for (var k = 0; k < 50; k++) {
         x = x + k
     }
     throw RaceErr.Msg("err_" + string(id))
@@ -48,16 +48,16 @@ fn make_failing(id: int) -> int {
 }
 
 fn make_ok(id: int) -> int {
-    let x = 0
-    for (let k = 0; k < 50; k++) {
+    var x = 0
+    for (var k = 0; k < 50; k++) {
         x = x + k
     }
     return x + id
 }
 
 fn count_success(outcomes: Array<TaskOutcome>) -> int {
-    let count = 0
-    for (let i = 0; i < outcomes.length; i++) {
+    var count = 0
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Success(_) -> { count = count + 1 }
             _ -> {}
@@ -67,8 +67,8 @@ fn count_success(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn count_failed(outcomes: Array<TaskOutcome>) -> int {
-    let count = 0
-    for (let i = 0; i < outcomes.length; i++) {
+    var count = 0
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(_) -> { count = count + 1 }
             _ -> {}
@@ -78,7 +78,7 @@ fn count_failed(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn failed_payloads_valid(outcomes: Array<TaskOutcome>) -> bool {
-    for (let i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(err) -> {
                 match (err) {
@@ -100,12 +100,12 @@ fn failed_payloads_valid(outcomes: Array<TaskOutcome>) -> bool {
 // success/failure counts are deterministic across all iterations.
 @test
 fn test_supervisor_no_lost_updates() {
-    for (let iter = 0; iter < ITERATIONS; iter++) {
-        let outcomes = supervisor scope {
-            for (let i = 0; i < FAILING_PER_SCOPE; i++) {
+    for (var iter = 0; iter < ITERATIONS; iter++) {
+        var outcomes = supervisor scope {
+            for (var i = 0; i < FAILING_PER_SCOPE; i++) {
                 go make_failing(i)
             }
-            for (let i = 0; i < SUCCEEDING_PER_SCOPE; i++) {
+            for (var i = 0; i < SUCCEEDING_PER_SCOPE; i++) {
                 go make_ok(i)
             }
         }
@@ -120,9 +120,9 @@ fn test_supervisor_no_lost_updates() {
 // concurrent xr_array_push.
 @test
 fn test_supervisor_no_torn_pushes() {
-    for (let iter = 0; iter < ITERATIONS; iter++) {
-        let outcomes = supervisor scope {
-            for (let i = 0; i < FAILING_PER_SCOPE; i++) {
+    for (var iter = 0; iter < ITERATIONS; iter++) {
+        var outcomes = supervisor scope {
+            for (var i = 0; i < FAILING_PER_SCOPE; i++) {
                 go make_failing(i)
             }
         }
@@ -137,12 +137,12 @@ fn test_supervisor_no_torn_pushes() {
 // form must be a valid err_<n> from one of the children.
 @test
 fn test_linked_first_error_deterministic() {
-    for (let iter = 0; iter < ITERATIONS; iter++) {
-        let caught = false
-        let msg = ""
+    for (var iter = 0; iter < ITERATIONS; iter++) {
+        var caught = false
+        var msg = ""
         try {
             linked scope {
-                for (let i = 0; i < FAILING_PER_SCOPE; i++) {
+                for (var i = 0; i < FAILING_PER_SCOPE; i++) {
                     go make_failing(i)
                 }
             }
@@ -159,9 +159,9 @@ fn test_linked_first_error_deterministic() {
 // Test 4 — supervisor: all-success outcomes must stay deterministic under load.
 @test
 fn test_supervisor_all_success() {
-    for (let iter = 0; iter < 5; iter++) {
-        let outcomes = supervisor scope {
-            for (let i = 0; i < FAILING_PER_SCOPE; i++) {
+    for (var iter = 0; iter < 5; iter++) {
+        var outcomes = supervisor scope {
+            for (var i = 0; i < FAILING_PER_SCOPE; i++) {
                 go make_ok(i)
             }
         }

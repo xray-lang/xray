@@ -10,22 +10,22 @@ import runtime
 // Exercises: global string pool ACCESSED flag + markobject path
 @test
 fn test_string_pool_survival() {
-    let strings: Array<string> = []
-    for (let i = 0; i < 500; i++) {
+    var strings: Array<string> = []
+    for (var i = 0; i < 500; i++) {
         strings.push("interned_str_" + string(i))
     }
 
     // Multiple cycle-collection rounds to trigger string pool sweep
-    for (let cycle = 0; cycle < 5; cycle++) {
+    for (var cycle = 0; cycle < 5; cycle++) {
         runtime.collectCycles()
         // Create garbage between cycles
-        for (let j = 0; j < 100; j++) {
-            let tmp = "temp_garbage_" + string(j) + "_" + string(cycle)
+        for (var j = 0; j < 100; j++) {
+            var tmp = "temp_garbage_" + string(j) + "_" + string(cycle)
         }
     }
 
     // All original strings must survive
-    for (let i = 0; i < 500; i++) {
+    for (var i = 0; i < 500; i++) {
         assert_eq(strings[i], "interned_str_" + string(i))
     }
 }
@@ -35,22 +35,22 @@ fn test_string_pool_survival() {
 // Exercises: traverse_map marking string keys + ACCESSED flag
 @test
 fn test_nested_string_key_survival() {
-    let data: Array<Json> = []
-    for (let i = 0; i < 200; i++) {
-        let m: Json = {"val": i * 3, "name": "field_" + string(i)}
+    var data: Array<Json> = []
+    for (var i = 0; i < 200; i++) {
+        var m: Json = {"val": i * 3, "name": "field_" + string(i)}
         data.push(m)
     }
 
     runtime.collectCycles()
 
     // Create churn to stress hole scanning
-    for (let j = 0; j < 500; j++) {
-        let tmp = [j, j + 1, j + 2]
+    for (var j = 0; j < 500; j++) {
+        var tmp = [j, j + 1, j + 2]
     }
 
     runtime.collectCycles()
 
-    for (let i = 0; i < 200; i++) {
+    for (var i = 0; i < 200; i++) {
         assert_eq(data[i]["val"], i * 3)
         assert_eq(data[i]["name"], "field_" + string(i))
     }
@@ -60,10 +60,10 @@ fn test_nested_string_key_survival() {
 // Exercises: traverse_closure + upvalue marking
 @test
 fn test_closure_upvalue_gc() {
-    let closures: Array<() -> string> = []
-    for (let i = 0; i < 100; i++) {
-        let captured = "captured_" + string(i)
-        let arr = [i, i * 2]
+    var closures: Array<() -> string> = []
+    for (var i = 0; i < 100; i++) {
+        var captured = "captured_" + string(i)
+        var arr = [i, i * 2]
         closures.push(fn() {
             return captured + "_" + string(arr[1])
         })
@@ -72,13 +72,13 @@ fn test_closure_upvalue_gc() {
     runtime.collectCycles()
 
     // Create garbage to push GC
-    for (let j = 0; j < 300; j++) {
-        let tmp: Json = {"garbage": j}
+    for (var j = 0; j < 300; j++) {
+        var tmp: Json = {"garbage": j}
     }
 
     runtime.collectCycles()
 
-    for (let i = 0; i < 100; i++) {
+    for (var i = 0; i < 100; i++) {
         assert_eq(closures[i](), "captured_" + string(i) + "_" + string(i * 2))
     }
 }
@@ -88,10 +88,10 @@ fn test_closure_upvalue_gc() {
 // Exercises: alloc_marks stability during mark phase
 @test
 fn test_rapid_alloc_collect() {
-    let survivors: Array<Array<Json>> = []
-    for (let cycle = 0; cycle < 20; cycle++) {
-        let batch: Array<Json> = []
-        for (let i = 0; i < 50; i++) {
+    var survivors: Array<Array<Json>> = []
+    for (var cycle = 0; cycle < 20; cycle++) {
+        var batch: Array<Json> = []
+        for (var i = 0; i < 50; i++) {
             batch.push({"c": cycle, "i": i, "s": "v" + string(cycle) + "_" + string(i)})
         }
         runtime.collectCycles()
@@ -102,10 +102,10 @@ fn test_rapid_alloc_collect() {
     }
 
     // Verify surviving batches
-    for (let si = 0; si < survivors.length; si++) {
-        let batch = survivors[si]
-        let expected_cycle = 15 + si
-        for (let i = 0; i < 50; i++) {
+    for (var si = 0; si < survivors.length; si++) {
+        var batch = survivors[si]
+        var expected_cycle = 15 + si
+        for (var i = 0; i < 50; i++) {
             assert_eq(batch[i]["c"], expected_cycle)
             assert_eq(batch[i]["i"], i)
         }
@@ -116,28 +116,28 @@ fn test_rapid_alloc_collect() {
 // Exercises: traverse completeness for Array, Map, Set, Json-like objects
 @test
 fn test_mixed_container_gc() {
-    let arr: Array<Array<int | string>> = []
-    let map: Json = {}
-    let data: Array<Json> = []
+    var arr: Array<Array<int | string>> = []
+    var map: Json = {}
+    var data: Array<Json> = []
 
-    for (let i = 0; i < 100; i++) {
+    for (var i = 0; i < 100; i++) {
         arr.push([i, "a" + string(i)])
         map["k" + string(i)] = {"nested": i}
-        let item_arr: Json = [arr[i][0], arr[i][1]]
+        var item_arr: Json = [arr[i][0], arr[i][1]]
         data.push({"arr": item_arr, "map_key": "k" + string(i)})
     }
 
     runtime.collectCycles()
 
     // Create garbage
-    for (let j = 0; j < 500; j++) {
-        let tmp = [j, j]
+    for (var j = 0; j < 500; j++) {
+        var tmp = [j, j]
     }
 
     runtime.collectCycles()
 
     // Verify all containers intact
-    for (let i = 0; i < 100; i++) {
+    for (var i = 0; i < 100; i++) {
         assert_eq(arr[i][0], i)
         assert_eq(arr[i][1], "a" + string(i))
         assert_eq(map["k" + string(i)]["nested"], i)
@@ -151,29 +151,29 @@ fn test_mixed_container_gc() {
 @test
 fn test_generational_cross_reference() {
     // Create long-lived container
-    let long_lived: Array<Json> = []
-    for (let i = 0; i < 50; i++) {
+    var long_lived: Array<Json> = []
+    for (var i = 0; i < 50; i++) {
         long_lived.push({"id": i, "children": []})
     }
 
     runtime.collectCycles()
 
     // Now add young objects as children of old objects
-    for (let round = 0; round < 10; round++) {
-        for (let i = 0; i < 50; i++) {
+    for (var round = 0; round < 10; round++) {
+        for (var i = 0; i < 50; i++) {
             long_lived[i]["children"].push("round_" + string(round))
         }
 
         // Create garbage between rounds
-        for (let j = 0; j < 100; j++) {
-            let tmp: Json = {"temp": j}
+        for (var j = 0; j < 100; j++) {
+            var tmp: Json = {"temp": j}
         }
 
         runtime.collectCycles()
     }
 
     // Verify all children survived
-    for (let i = 0; i < 50; i++) {
+    for (var i = 0; i < 50; i++) {
         assert_eq(long_lived[i]["children"].length, 10)
         assert_eq(long_lived[i]["children"][0], "round_0")
         assert_eq(long_lived[i]["children"][9], "round_9")
@@ -184,10 +184,10 @@ fn test_generational_cross_reference() {
 // Heavy string allocation: tests interned string pool under extreme pressure
 @test
 fn test_string_concat_churn() {
-    let results: Array<string> = []
-    for (let i = 0; i < 100; i++) {
-        let s = ""
-        for (let j = 0; j < 10; j++) {
+    var results: Array<string> = []
+    for (var i = 0; i < 100; i++) {
+        var s = ""
+        for (var j = 0; j < 10; j++) {
             s = s + string(j)
         }
         results.push(s)
@@ -197,8 +197,8 @@ fn test_string_concat_churn() {
         }
     }
 
-    let expected = "0123456789"
-    for (let i = 0; i < 100; i++) {
+    var expected = "0123456789"
+    for (var i = 0; i < 100; i++) {
         assert_eq(results[i], expected)
     }
 }
@@ -219,9 +219,9 @@ fn test_instance_field_gc() {
         }
     }
 
-    let nodes: Array<Node> = []
-    for (let i = 0; i < 100; i++) {
-        let n = Node(i, "node_" + string(i))
+    var nodes: Array<Node> = []
+    for (var i = 0; i < 100; i++) {
+        var n = Node(i, "node_" + string(i))
         if (i > 0) {
             nodes[i - 1].children.push(n)
         }
@@ -231,14 +231,14 @@ fn test_instance_field_gc() {
     runtime.collectCycles()
 
     // Garbage storm
-    for (let j = 0; j < 500; j++) {
-        let tmp = Node(j + 1000, "garbage")
+    for (var j = 0; j < 500; j++) {
+        var tmp = Node(j + 1000, "garbage")
     }
 
     runtime.collectCycles()
 
     // Verify
-    for (let i = 0; i < 100; i++) {
+    for (var i = 0; i < 100; i++) {
         assert_eq(nodes[i].value, i)
         assert_eq(nodes[i].label, "node_" + string(i))
     }

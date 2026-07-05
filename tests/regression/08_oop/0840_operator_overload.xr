@@ -32,35 +32,35 @@ class Vector2 {
 
 @test
 fn test_operator_add() {
-    let a = Vector2(1, 2)
-    let b = Vector2(3, 4)
-    let c = a + b
+    var a = Vector2(1, 2)
+    var b = Vector2(3, 4)
+    var c = a + b
     assert_eq(c.x, 4)
     assert_eq(c.y, 6)
 }
 
 @test
 fn test_operator_sub() {
-    let a = Vector2(5, 7)
-    let b = Vector2(2, 3)
-    let c = a - b
+    var a = Vector2(5, 7)
+    var b = Vector2(2, 3)
+    var c = a - b
     assert_eq(c.x, 3)
     assert_eq(c.y, 4)
 }
 
 @test
 fn test_operator_mul() {
-    let v = Vector2(2, 3)
-    let scaled = v * 2
+    var v = Vector2(2, 3)
+    var scaled = v * 2
     assert_eq(scaled.x, 4)
     assert_eq(scaled.y, 6)
 }
 
 @test
 fn test_operator_eq() {
-    let a = Vector2(1, 2)
-    let b = Vector2(1, 2)
-    let c = Vector2(3, 4)
+    var a = Vector2(1, 2)
+    var b = Vector2(1, 2)
+    var c = Vector2(3, 4)
     assert_eq(a == b, true)
     assert_eq(a == c, false)
 }
@@ -85,7 +85,7 @@ class Matrix {
 
 @test
 fn test_subscript_get() {
-    let m = Matrix()
+    var m = Matrix()
     m.data[0] = 10
     m.data[1] = 20
     assert_eq(m[0], 10)
@@ -94,7 +94,7 @@ fn test_subscript_get() {
 
 @test
 fn test_subscript_set() {
-    let m = Matrix()
+    var m = Matrix()
     m[0] = 100
     m[1] = 200
     assert_eq(m.data[0], 100)
@@ -129,8 +129,8 @@ class Money {
 
 @test
 fn test_comparison_operators() {
-    let a = Money(100)
-    let b = Money(200)
+    var a = Money(100)
+    var b = Money(200)
     
     assert_eq(a < b, true)
     assert_eq(a <= b, true)
@@ -142,11 +142,11 @@ fn test_comparison_operators() {
 
 @test
 fn test_chained_operations() {
-    let a = Vector2(1, 1)
-    let b = Vector2(2, 2)
-    let c = Vector2(3, 3)
+    var a = Vector2(1, 1)
+    var b = Vector2(2, 2)
+    var c = Vector2(3, 3)
     
-    let result = a + b + c
+    var result = a + b + c
     assert_eq(result.x, 6)
     assert_eq(result.y, 6)
 }

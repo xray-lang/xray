@@ -1,5 +1,5 @@
-let min: int = -9223372036854775807 - 1
-let sb = StringBuilder()
+var min: int = -9223372036854775807 - 1
+var sb = StringBuilder()
 sb.append("min=")
 sb.append(min)
 sb.append("; abs=")

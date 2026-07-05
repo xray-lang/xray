@@ -4,6 +4,6 @@ fn make(data: in Array<int>) -> () -> int {
     }
 }
 
-let values: Array<int> = [1, 2, 3]
-let f = make(values)
+var values: Array<int> = [1, 2, 3]
+var f = make(values)
 print(f())

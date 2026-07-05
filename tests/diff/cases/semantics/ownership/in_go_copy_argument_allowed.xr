@@ -1,5 +1,5 @@
 fn launch(data: in Array<int>) {
-    let task = go fn(owned: Array<int>) -> int {
+    var task = go fn(owned: Array<int>) -> int {
         owned.push(5)
         return owned.length
     }(copy(data))
@@ -7,5 +7,5 @@ fn launch(data: in Array<int>) {
     print(data.length)
 }
 
-let values: Array<int> = [1, 2, 3, 4]
+var values: Array<int> = [1, 2, 3, 4]
 launch(values)

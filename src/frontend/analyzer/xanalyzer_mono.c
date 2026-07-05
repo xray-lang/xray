@@ -357,6 +357,10 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         case AST_GROUPING:
             n->as.grouping = xr_ast_clone_ctx(node->as.grouping, map, mc, clone_ctx);
             break;
+        case AST_COMPTIME_EXPR:
+            n->as.comptime_expr.expr =
+                xr_ast_clone_ctx(node->as.comptime_expr.expr, map, mc, clone_ctx);
+            break;
         case AST_EXPR_STMT:
             n->as.expr_stmt = xr_ast_clone_ctx(node->as.expr_stmt, map, mc, clone_ctx);
             break;
@@ -380,6 +384,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         // === Variable ===
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             n->as.var_decl.name = clone_str(node->as.var_decl.name);
             n->as.var_decl.initializer =
                 xr_ast_clone_ctx(node->as.var_decl.initializer, map, mc, clone_ctx);
@@ -1358,6 +1363,7 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             collect_instantiation_sites(node->as.var_decl.initializer, registry, collector);
             break;
         case AST_ASSIGNMENT:
@@ -1487,6 +1493,9 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             break;
         case AST_AS_EXPR:
             collect_instantiation_sites(node->as.as_expr.expr, registry, collector);
+            break;
+        case AST_COMPTIME_EXPR:
+            collect_instantiation_sites(node->as.comptime_expr.expr, registry, collector);
             break;
         case AST_GO_EXPR:
             collect_instantiation_sites(node->as.go_expr.expr, registry, collector);
@@ -1634,6 +1643,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             rewrite_call_sites(node->as.var_decl.initializer, registry, collector);
             break;
         case AST_ASSIGNMENT:
@@ -1722,6 +1732,9 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         case AST_UNSAFE_EXPR:
             rewrite_call_sites(node->as.unsafe_expr.operand, registry, collector);
+            break;
+        case AST_COMPTIME_EXPR:
+            rewrite_call_sites(node->as.comptime_expr.expr, registry, collector);
             break;
         case AST_SCOPE_BLOCK:
             rewrite_call_sites(node->as.scope_block.body, registry, collector);

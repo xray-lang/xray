@@ -1,5 +1,5 @@
-let m = #{"k": "value"}
-let name = "Ada"
+var m = #{"k": "value"}
+var name = "Ada"
 
 print("${"x"}")
 print("value=${"a}b"}")

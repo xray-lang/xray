@@ -5,5 +5,5 @@ fn sleeper(ms: int) -> int {
     return ms + 1
 }
 
-let task = go sleeper(1)
+var task = go sleeper(1)
 print(await task)

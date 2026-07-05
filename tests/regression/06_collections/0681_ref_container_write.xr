@@ -5,7 +5,7 @@
 
 @test
 fn test_array_push_json_objects() {
-    let arr: Array<Json> = []
+    var arr: Array<Json> = []
     for (i in 0..100) {
         arr.push({ id: i, name: "item" + string(i) })
     }
@@ -16,7 +16,7 @@ fn test_array_push_json_objects() {
 
 @test
 fn test_array_push_strings() {
-    let arr: Array<string> = []
+    var arr: Array<string> = []
     for (i in 0..200) {
         arr.push("string_" + string(i))
     }
@@ -27,7 +27,7 @@ fn test_array_push_strings() {
 
 @test
 fn test_array_push_mixed_types() {
-    let arr: Array<Json> = []
+    var arr: Array<Json> = []
     for (i in 0..50) {
         arr.push(i)
         arr.push("s" + string(i))
@@ -43,7 +43,7 @@ fn test_array_push_mixed_types() {
 
 @test
 fn test_array_set_overwrites() {
-    let arr: Array<Json> = [{}, {}, {}, {}, {}]
+    var arr: Array<Json> = [{}, {}, {}, {}, {}]
     for (i in 0..5) {
         arr[i] = { index: i, data: "value_" + string(i) }
     }
@@ -54,9 +54,9 @@ fn test_array_set_overwrites() {
 
 @test
 fn test_nested_array_push() {
-    let outer: Array<Array<int>> = []
+    var outer: Array<Array<int>> = []
     for (i in 0..20) {
-        let inner: Array<int> = []
+        var inner: Array<int> = []
         for (j in 0..10) {
             inner.push(i * 10 + j)
         }
@@ -74,15 +74,15 @@ fn first_json(xs: Array<Json>) -> Json {
 
 @test
 fn test_array_self_assignment_keeps_element_alive() {
-    let arr: Array<Json> = [{ id: 1 }]
+    var arr: Array<Json> = [{ id: 1 }]
     arr[0] = arr[0]
     assert_eq(arr[0]["id"], 1)
 }
 
 @test
 fn test_returned_array_element_survives_replacement() {
-    let arr: Array<Json> = [{ id: 7 }]
-    let saved = first_json(arr)
+    var arr: Array<Json> = [{ id: 7 }]
+    var saved = first_json(arr)
     arr[0] = { id: 9 }
     assert_eq(saved["id"], 7)
     assert_eq(arr[0]["id"], 9)

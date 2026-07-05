@@ -1,19 +1,19 @@
 // anchor: bytes-int-arg-shared-core
-let dyn: Json = {
+var dyn: Json = {
     "badOffset": true,
     "badDst": false,
     "badSrc": "src",
     "badCount": null
 }
 
-let bytes = Bytes(8, 1)
-let src = Bytes(8, 2)
+var bytes = Bytes(8, 1)
+var src = Bytes(8, 2)
 
 fn show_load_u32() {
-    let loadBytes = Bytes(8, 1)
-    let view: ByteSpan = loadBytes[:]
+    var loadBytes = Bytes(8, 1)
+    var view: ByteSpan = loadBytes[:]
     try {
-        let value: uint32 = view.load<uint32>(dyn.badOffset, Endian.LE)
+        var value: uint32 = view.load<uint32>(dyn.badOffset, Endian.LE)
         print(int(value))
     } catch panic (p) {
         print(p.message)
@@ -22,10 +22,10 @@ fn show_load_u32() {
 }
 
 fn show_load_u64() {
-    let loadBytes = Bytes(8, 1)
-    let view: ByteSpan = loadBytes[:]
+    var loadBytes = Bytes(8, 1)
+    var view: ByteSpan = loadBytes[:]
     try {
-        let value: uint64 = view.load<uint64>(dyn.badOffset, Endian.LE)
+        var value: uint64 = view.load<uint64>(dyn.badOffset, Endian.LE)
         print(int(value))
     } catch panic (p) {
         print(p.message)

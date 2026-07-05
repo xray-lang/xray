@@ -23,7 +23,7 @@ print("")
 print("=== Testing different WebSocket servers ===")
 
 // Test servers
-let servers = [
+var servers = [
     "wss://ws.postman-echo.com/raw",
     "wss://echo.websocket.org",
     "wss://socketsbay.com/wss/v2/1/demo/"
@@ -32,7 +32,7 @@ let servers = [
 for (server in servers) {
     print("")
     print("Trying: " + server)
-    let conn = ws.connect(server, null)
+    var conn = ws.connect(server, null)
     
     if (conn == null) {
         print("  conn is null")

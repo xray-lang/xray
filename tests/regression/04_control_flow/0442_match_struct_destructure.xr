@@ -5,8 +5,8 @@
 // ===== 对象字段解构（簡寫） =====
 @test
 fn test_match_object_shorthand() {
-    let p = {x: 3, y: 4}
-    let r = match (p) {
+    var p = {x: 3, y: 4}
+    var r = match (p) {
         { x, y } -> x + y
         _ -> 0
     }
@@ -16,8 +16,8 @@ fn test_match_object_shorthand() {
 // ===== 对象字段重命名 + 簡寫混用 =====
 @test
 fn test_match_object_rename() {
-    let user = {name: "Bob", age: 5}
-    let r = match (user) {
+    var user = {name: "Bob", age: 5}
+    var r = match (user) {
         { name: n, age } -> n + ":" + string(age)
         _ -> "none"
     }
@@ -27,8 +27,8 @@ fn test_match_object_rename() {
 // ===== 对象可反驳字段子模式 =====
 @test
 fn test_match_object_refutable_field() {
-    let cfg = {mode: 2, label: "go"}
-    let r = match (cfg) {
+    var cfg = {mode: 2, label: "go"}
+    var r = match (cfg) {
         { mode: 1 } -> "one"
         { mode: 2, label } -> "two:" + label
         _ -> "other"
@@ -39,7 +39,7 @@ fn test_match_object_refutable_field() {
 // ===== 数组解构 + ..rest =====
 @test
 fn test_match_array_rest() {
-    let a = [10, 20, 30]
+    var a = [10, 20, 30]
     match (a) {
         [first, ..rest] -> {
             assert_eq(first, 10)
@@ -54,8 +54,8 @@ fn test_match_array_rest() {
 // ===== 数组按长度选择分支 =====
 @test
 fn test_match_array_length_select() {
-    let pair = [1, 2]
-    let r = match (pair) {
+    var pair = [1, 2]
+    var r = match (pair) {
         [x] -> x
         [x, y] -> x * 10 + y
         _ -> 0
@@ -66,7 +66,7 @@ fn test_match_array_length_select() {
 // ===== 空 rest =====
 @test
 fn test_match_array_empty_rest() {
-    let single = [99]
+    var single = [99]
     match (single) {
         [head, ..tail] -> {
             assert_eq(head, 99)
@@ -79,8 +79,8 @@ fn test_match_array_empty_rest() {
 // ===== 元素位通配 =====
 @test
 fn test_match_array_wildcards() {
-    let triple = [7, 8, 9]
-    let r = match (triple) {
+    var triple = [7, 8, 9]
+    var r = match (triple) {
         [_, mid, _] -> mid
         _ -> 0
     }
@@ -90,8 +90,8 @@ fn test_match_array_wildcards() {
 // ===== 数组元素 guard（按值判断走守卫） =====
 @test
 fn test_match_array_guard() {
-    let a = [5, 6]
-    let r = match (a) {
+    var a = [5, 6]
+    var r = match (a) {
         [x, y] if (x > 10) -> "big"
         [x, y] -> "small:" + string(x + y)
         _ -> "none"

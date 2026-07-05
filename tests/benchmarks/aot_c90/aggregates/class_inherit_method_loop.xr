@@ -21,8 +21,8 @@ class Rect extends Shape {
     }
 
     score(n: int) -> int {
-        let i = 0
-        let sum = 0
+        var i = 0
+        var sum = 0
         while (i < n) {
             this.w = this.w + (sum % 3)
             sum = sum + this.area() + this.kind
@@ -33,7 +33,7 @@ class Rect extends Shape {
 }
 
 fn run(n: int) -> int {
-    let r = Rect(3, 4)
+    var r = Rect(3, 4)
     return r.score(n)
 }
 

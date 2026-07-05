@@ -105,7 +105,7 @@ static XaInterfaceMethod iterator_methods[] = {
  *
  *       compareTo(other: Point): int {
  *           // Compare by x first, then by y
- *           let dx = this.x - other.x
+ *           var dx = this.x - other.x
  *           if (dx != 0) return dx
  *           return this.y - other.y
  *       }
@@ -132,8 +132,8 @@ static XaInterfaceMethod comparable_methods[] = {
  *
  * Usage:
  *   // Hashable is required for Map keys and Set elements
- *   let map: Map<K: Hashable, V> = {}
- *   let set: Set<T: Hashable> = #[]
+ *   var map: Map<K: Hashable, V> = {}
+ *   var set: Set<T: Hashable> = #[]
  *
  * User implementation example:
  *   class Point implements Hashable {
@@ -212,15 +212,15 @@ static XaInterfaceMethod stringable_methods[] = {
  *   - Array<uint8>: index by int, returns int      (get/set)
  *
  * Usage:
- *   let arr = [1, 2, 3]
- *   let x = arr[0]     // calls get(0)
+ *   var arr = [1, 2, 3]
+ *   var x = arr[0]     // calls get(0)
  *   arr[1] = 10        // calls set(1, 10)
  *
- *   let str = "hello"
- *   let c = str[0]     // "h"
+ *   var str = "hello"
+ *   var c = str[0]     // "h"
  *
- *   let map = {"a" => 1}
- *   let v = map["a"]   // calls get("a")
+ *   var map = {"a" => 1}
+ *   var v = map["a"]   // calls get("a")
  *
  * User implementation example:
  *   class Matrix implements Indexable {
@@ -364,7 +364,7 @@ static XaInterfaceMethod callable_methods[] = {
  *       action(resource)
  *   }
  *
- *   let file = fs.open("data.txt")
+ *   var file = fs.open("data.txt")
  *   defer file.close()  // automatic cleanup
  */
 static XaInterfaceMethod closeable_methods[] = {

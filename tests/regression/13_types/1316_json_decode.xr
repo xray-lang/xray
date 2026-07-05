@@ -10,8 +10,8 @@ fn test_sanity() {
 
 @test
 fn test_decode_basic() {
-    let json = Json.parse("{\"name\": \"Alice\", \"age\": 30}")
-    let user = Json.decode<User>(json)
+    var json = Json.parse("{\"name\": \"Alice\", \"age\": 30}")
+    var user = Json.decode<User>(json)
     assert(user != null)
     assert_eq(user!.name, "Alice")
     assert_eq(user!.age, 30)
@@ -19,8 +19,8 @@ fn test_decode_basic() {
 
 @test
 fn test_decode_missing_field() {
-    let partial = Json.parse("{\"name\": \"Bob\"}")
-    let bad = Json.decode<User>(partial)
+    var partial = Json.parse("{\"name\": \"Bob\"}")
+    var bad = Json.decode<User>(partial)
     assert_eq(bad, null)
 }
 
@@ -28,16 +28,16 @@ fn test_decode_missing_field() {
 fn test_decode_wrong_type() {
     // Decode currently validates field presence, not field types.
     // All required fields exist → decode succeeds with the raw values.
-    let wrong = Json.parse("{\"name\": 123, \"age\": 30}")
-    let result = Json.decode<User>(wrong)
+    var wrong = Json.parse("{\"name\": 123, \"age\": 30}")
+    var result = Json.decode<User>(wrong)
     assert(result != null)
     assert_eq(result!.name, 123)
 }
 
 @test
 fn test_decode_extra_fields() {
-    let extra = Json.parse("{\"name\": \"Carol\", \"age\": 25, \"email\": \"c@test.com\"}")
-    let user = Json.decode<User>(extra)
+    var extra = Json.parse("{\"name\": \"Carol\", \"age\": 25, \"email\": \"c@test.com\"}")
+    var user = Json.decode<User>(extra)
     assert(user != null)
     assert_eq(user!.name, "Carol")
     assert_eq(user!.age, 25)
@@ -45,8 +45,8 @@ fn test_decode_extra_fields() {
 
 @test
 fn test_decode_non_object() {
-    let arr = Json.parse("[1, 2, 3]")
-    let bad = Json.decode<User>(arr)
+    var arr = Json.parse("[1, 2, 3]")
+    var bad = Json.decode<User>(arr)
     assert_eq(bad, null)
 }
 
@@ -55,8 +55,8 @@ type Config = { host: string, port: int, debug: bool }
 
 @test
 fn test_decode_bool_field() {
-    let json = Json.parse("{\"host\": \"localhost\", \"port\": 8080, \"debug\": true}")
-    let cfg = Json.decode<Config>(json)
+    var json = Json.parse("{\"host\": \"localhost\", \"port\": 8080, \"debug\": true}")
+    var cfg = Json.decode<Config>(json)
     assert(cfg != null)
     assert_eq(cfg!.host, "localhost")
     assert_eq(cfg!.port, 8080)
@@ -67,8 +67,8 @@ type Point = { x: float, y: float }
 
 @test
 fn test_decode_float_fields() {
-    let json = Json.parse("{\"x\": 1.5, \"y\": 2.7}")
-    let pt = Json.decode<Point>(json)
+    var json = Json.parse("{\"x\": 1.5, \"y\": 2.7}")
+    var pt = Json.decode<Point>(json)
     assert(pt != null)
     assert_eq(pt!.x, 1.5)
     assert_eq(pt!.y, 2.7)
@@ -76,7 +76,7 @@ fn test_decode_float_fields() {
 
 @test
 fn test_decode_null_input() {
-    let n = Json.parse("null")
-    let bad = Json.decode<User>(n)
+    var n = Json.parse("null")
+    var bad = Json.decode<User>(n)
     assert_eq(bad, null)
 }

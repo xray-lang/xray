@@ -1,6 +1,6 @@
 fn launch() -> int {
     const data = [1, 2, 3]
-    let task = go {
+    var task = go {
         return data.length
     }
     return await task

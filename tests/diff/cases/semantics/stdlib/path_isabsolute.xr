@@ -6,14 +6,14 @@ print(path.isAbsolute("relative/dir"))
 print(path.isAbsolute("/"))
 print(path.isAbsolute(""))
 
-let p = "/etc/hosts"
+var p = "/etc/hosts"
 if (path.isAbsolute(p)) {
     print("abs")
 } else {
     print("rel")
 }
 
-let q = "./local"
+var q = "./local"
 if (path.isAbsolute(q)) {
     print("abs")
 } else {

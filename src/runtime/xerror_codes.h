@@ -148,7 +148,6 @@
 
 /* ---- Removed-syntax errors (E08xx) ---- */
 #define XR_ERR_SYN_RETURN_MULTI_REMOVED 801
-#define XR_ERR_SYN_LET_MULTI_REMOVED 802
 #define XR_ERR_SYN_FOR_FLAT_REMOVED 803
 #define XR_ERR_SYN_VOID_REMOVED 804
 

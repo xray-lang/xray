@@ -1,7 +1,7 @@
 fn run(n: int) -> int {
-    let values: Array<int> = []
-    let seed = 123456789
-    let i = 0
+    var values: Array<int> = []
+    var seed = 123456789
+    var i = 0
     while (i < n) {
         seed = (seed * 1103515245 + 12345) % 2147483648
         values.push(seed)
@@ -10,7 +10,7 @@ fn run(n: int) -> int {
 
     values.sort()
 
-    let checksum = values[0] + values[n / 2] + values[n - 1]
+    var checksum = values[0] + values[n / 2] + values[n - 1]
     i = 0
     while (i < n) {
         checksum = checksum + values[i] % 7

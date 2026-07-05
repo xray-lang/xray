@@ -1,9 +1,9 @@
 fn worker() -> string {
-    let s = "hello" + "_aot"
+    var s = "hello" + "_aot"
     Coro.yield()
     return s
 }
 
-let task = go worker()
-let result = await task
+var task = go worker()
+var result = await task
 print(result)

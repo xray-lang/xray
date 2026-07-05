@@ -287,7 +287,52 @@ static bool derive_array_storage_plan(const XaotBundle *bundle, const XiValue *a
     const XiValue *value = unwrap_identity_value(array_value);
     XaotContainerElemPlan self_elem;
 
-    if (!bundle || !value || depth > 8 || !array_elem_plan_for_value(bundle, value, &self_elem))
+    if (!bundle || !value || depth > 8)
+        return false;
+
+    if ((required_flag & XAOT_ARRAY_STORAGE_READ) != 0 && value->op == XI_SLICE) {
+        return value->nargs >= 1 &&
+               derive_array_storage_plan(bundle, value->args[0], XAOT_ARRAY_STORAGE_READ, out_elem,
+                                         out_origin, (uint8_t) (depth + 1));
+    }
+
+    if (value->op == XI_PHI) {
+        bool has_base = false;
+        const XiValue *origin = NULL;
+        XaotContainerElemPlan first_elem;
+        memset(&first_elem, 0, sizeof(first_elem));
+        if (value->nargs == 0)
+            return false;
+        for (uint16_t i = 0; i < value->nargs; i++) {
+            XaotContainerElemPlan arg_elem;
+            const XiValue *arg_origin = NULL;
+            const XiValue *arg = unwrap_identity_value(value->args[i]);
+            if (arg == value)
+                continue;
+            if (!derive_array_storage_plan(bundle, arg, required_flag, &arg_elem, &arg_origin,
+                                           (uint8_t) (depth + 1)))
+                return false;
+            if (!has_base) {
+                first_elem = arg_elem;
+                origin = arg_origin;
+                has_base = true;
+            } else if (!first_elem.elem_name || !arg_elem.elem_name ||
+                       strcmp(first_elem.elem_name, arg_elem.elem_name) != 0) {
+                return false;
+            } else if (origin != arg_origin) {
+                origin = value;
+            }
+        }
+        if (!has_base)
+            return false;
+        if (out_elem)
+            *out_elem = first_elem;
+        if (out_origin)
+            *out_origin = origin ? origin : value;
+        return true;
+    }
+
+    if (!array_elem_plan_for_value(bundle, value, &self_elem))
         return false;
 
     /* Typed array class fields serve reads and writes alike: the element
@@ -350,53 +395,11 @@ static bool derive_array_storage_plan(const XaotBundle *bundle, const XiValue *a
                                          out_origin, (uint8_t) (depth + 1));
     }
 
-    if ((required_flag & XAOT_ARRAY_STORAGE_READ) != 0 && value->op == XI_SLICE) {
-        return value->nargs >= 1 &&
-               derive_array_storage_plan(bundle, value->args[0], XAOT_ARRAY_STORAGE_READ, out_elem,
-                                         out_origin, (uint8_t) (depth + 1));
-    }
-
     if (array_method_is_hof_result(value)) {
         if (out_elem)
             *out_elem = self_elem;
         if (out_origin)
             *out_origin = value;
-        return true;
-    }
-
-    if (value->op == XI_PHI) {
-        bool has_base = false;
-        const XiValue *origin = NULL;
-        XaotContainerElemPlan first_elem;
-        memset(&first_elem, 0, sizeof(first_elem));
-        if (value->nargs == 0)
-            return false;
-        for (uint16_t i = 0; i < value->nargs; i++) {
-            XaotContainerElemPlan arg_elem;
-            const XiValue *arg_origin = NULL;
-            const XiValue *arg = unwrap_identity_value(value->args[i]);
-            if (arg == value)
-                continue;
-            if (!derive_array_storage_plan(bundle, arg, required_flag, &arg_elem, &arg_origin,
-                                           (uint8_t) (depth + 1)))
-                return false;
-            if (!has_base) {
-                first_elem = arg_elem;
-                origin = arg_origin;
-                has_base = true;
-            } else if (!first_elem.elem_name || !arg_elem.elem_name ||
-                       strcmp(first_elem.elem_name, arg_elem.elem_name) != 0) {
-                return false;
-            } else if (origin != arg_origin) {
-                origin = value;
-            }
-        }
-        if (!has_base)
-            return false;
-        if (out_elem)
-            *out_elem = first_elem;
-        if (out_origin)
-            *out_origin = origin ? origin : value;
         return true;
     }
 

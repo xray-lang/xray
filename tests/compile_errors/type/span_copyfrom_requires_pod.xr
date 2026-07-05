@@ -1,5 +1,5 @@
-let dst = ["a", "b"]
-let src = ["c"]
-let dstSpan: Span<string> = dst[:]
-let srcSpan: Span<string> = src[:]
+var dst = ["a", "b"]
+var src = ["c"]
+var dstSpan: Span<string> = dst[:]
+var srcSpan: Span<string> = src[:]
 dstSpan.copyFrom(srcSpan)

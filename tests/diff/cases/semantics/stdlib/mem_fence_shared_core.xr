@@ -6,16 +6,16 @@
 // zero-runtime-symbol direct helper xrt_mem_fence; VM via mem_fence.
 import mem
 
-let a = 7
+var a = 7
 mem.fence(0)
 print(a)
 
-let b = a * 6
+var b = a * 6
 mem.fence(1)
 print(b)
 
 mem.fence(2)
-let c = b - 1
+var c = b - 1
 mem.fence(3)
 print(c)
 

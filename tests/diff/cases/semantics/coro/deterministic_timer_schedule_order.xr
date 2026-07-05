@@ -17,15 +17,15 @@ fn send_after(ch: Channel<int>, id: int, delay_ms: int) {
     ch.send(id)
 }
 
-shared const ch: Channel<int> = Channel(3)
+shared ch: Channel<int> = Channel(3)
 
 go send_after(ch, 1, 50)
 go send_after(ch, 2, 10)
 go send_after(ch, 3, 30)
 
-let first = recv_int(ch)
-let second = recv_int(ch)
-let third = recv_int(ch)
+var first = recv_int(ch)
+var second = recv_int(ch)
+var third = recv_int(ch)
 
 assert_eq(first, 2)
 assert_eq(second, 3)

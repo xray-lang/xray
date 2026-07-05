@@ -6,8 +6,8 @@ fn return_int(x: Json) -> int {
     return x
 }
 
-let dyn: Json = { "goodBool": true, "badBool": 1, "goodInt": 7, "badInt": 3.5 }
-let m: Map<bool, int> = #{}
+var dyn: Json = { "goodBool": true, "badBool": 1, "goodInt": 7, "badInt": 3.5 }
+var m: Map<bool, int> = #{}
 m.set(dyn.goodBool, dyn.goodInt)
 print("map=" + m.get(true)!.toString())
 
@@ -33,7 +33,7 @@ try {
 }
 
 try {
-    let x: int = dyn.badInt
+    var x: int = dyn.badInt
     print("bad-var=" + x.toString())
 } catch panic(e) {
     print("caught-var")

@@ -4,8 +4,8 @@
 // 测试负载均衡 + 队列竞争 + 实际服务器模式
 import time
 
-let WORKERS = 8        // worker 数量
-let TASKS = 100000     // 任务总数
+var WORKERS = 8        // worker 数量
+var TASKS = 100000     // 任务总数
 if (process.args.length > 0) {
     WORKERS = int(process.args[0]) ?? WORKERS
 }
@@ -17,8 +17,8 @@ print("=== Work Pool 测试 ===")
 print("Worker数:", WORKERS)
 print("任务总数:", TASKS)
 
-shared const task_ch = Channel(1000)
-shared const result_ch = Channel(1000)
+shared task_ch = Channel(1000)
+shared result_ch = Channel(1000)
 
 fn recv_int(ch: Channel<int>, fallback: int) -> int {
     return match (ch.recv()) {
@@ -30,10 +30,10 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 // 模拟 CPU 工作：计算斐波那契（小规模）
 fn fib(n: int) -> int {
     if (n <= 1) { return n }
-    let a = 0
-    let b = 1
-    for (let i = 2; i <= n; i++) {
-        let t = a + b
+    var a = 0
+    var b = 1
+    for (var i = 2; i <= n; i++) {
+        var t = a + b
         a = b
         b = t
     }
@@ -41,8 +41,8 @@ fn fib(n: int) -> int {
 }
 
 fn expected_checksum(count: int) -> int {
-    let total = 0
-    for (let i = 0; i < count; i++) {
+    var total = 0
+    for (var i = 0; i < count; i++) {
         total = total + fib(i % 20)
     }
     return total
@@ -50,12 +50,12 @@ fn expected_checksum(count: int) -> int {
 
 // Worker: 从任务队列取任务，执行后发送结果
 fn worker(id: int) -> int {
-    let processed = 0
+    var processed = 0
     while (true) {
-        let task = recv_int(task_ch, -1)
+        var task = recv_int(task_ch, -1)
         if (task < 0) { break }
         // task 是一个整数，计算 fib(task % 20)
-        let result = fib(task % 20)
+        var result = fib(task % 20)
         result_ch.send(result)
         processed++
     }
@@ -64,40 +64,40 @@ fn worker(id: int) -> int {
 
 // 任务提交者
 fn submit_tasks(count: int) {
-    for (let i = 0; i < count; i++) {
+    for (var i = 0; i < count; i++) {
         task_ch.send(i)
     }
     task_ch.close()
 }
 
-let start = time.monotonic()
+var start = time.monotonic()
 
 // 启动 workers
-let workers: Array<Task> = []
-for (let i = 0; i < WORKERS; i++) {
+var workers: Array<Task> = []
+for (var i = 0; i < WORKERS; i++) {
     workers.push(go worker(i))
 }
 
 // 单独协程提交任务（避免与结果收集死锁）
-let submitter = go submit_tasks(TASKS)
+var submitter = go submit_tasks(TASKS)
 
 // 收集结果
-let total = 0
-for (let i = 0; i < TASKS; i++) {
+var total = 0
+for (var i = 0; i < TASKS; i++) {
     total = total + recv_int(result_ch, 0)
 }
 await submitter
 
 // 等待 workers 完成，统计负载均衡
-let worker_loads: Array<int> = []
+var worker_loads: Array<int> = []
 for (w in workers) {
-    let processed = await w
+    var processed = await w
     worker_loads.push(processed)
 }
 
-let elapsed = time.monotonic() - start
+var elapsed = time.monotonic() - start
 result_ch.close()
-let expected = expected_checksum(TASKS)
+var expected = expected_checksum(TASKS)
 
 print("结果校验和:", total)
 print("预期:", expected)
@@ -110,8 +110,8 @@ if (elapsed > 0) {
 }
 
 // 打印负载分布
-let min_load = TASKS
-let max_load = 0
+var min_load = TASKS
+var max_load = 0
 for (load in worker_loads) {
     if (load < min_load) { min_load = load }
     if (load > max_load) { max_load = load }

@@ -2,14 +2,14 @@
 // Tests basic defer, multiple defers (LIFO), and defer with upvalue capture
 
 fn test_basic() -> int {
-    let result = 0
+    var result = 0
     defer { result = 99 }
     result = 42
     return result
 }
 
 fn test_multi_defer() -> int {
-    let order = 0
+    var order = 0
     defer { order = order + 1 }
     defer { order = order + 10 }
     defer { order = order + 100 }
@@ -17,7 +17,7 @@ fn test_multi_defer() -> int {
 }
 
 fn test_defer_capture() -> int {
-    let x = 0
+    var x = 0
     defer { x = 1 }
     return x
 }

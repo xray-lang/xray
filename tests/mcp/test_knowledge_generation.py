@@ -279,13 +279,13 @@ def check_prompt_smoke_examples(root: Path, xray: Path) -> list[str]:
     examples = {
         "code-review": "fn add(a: int, b: int) -> int {\n    return a + b\n}\nprint(add(1, 2))\n",
         "explain-error": (
-            "shared const ch = new Channel<int>(1)\n"
+            "shared ch = Channel<int>(1)\n"
             "ch.send(42)\n"
-            "let value = ch.recv()\n"
+            "var value = ch.recv()\n"
         ),
         "convert-to-xray": (
-            "let status = 200\n"
-            "let label = match (status) {\n"
+            "var status = 200\n"
+            "var label = match (status) {\n"
             "    200 -> \"ok\",\n"
             "    _ -> \"other\"\n"
             "}\n"
@@ -294,8 +294,8 @@ def check_prompt_smoke_examples(root: Path, xray: Path) -> list[str]:
             "fn worker(input: int) -> int {\n"
             "    return input * 2\n"
             "}\n"
-            "let task = go worker(21)\n"
-            "let result = await task\n"
+            "var task = go worker(21)\n"
+            "var result = await task\n"
         ),
         "write-test": (
             "@test\n"

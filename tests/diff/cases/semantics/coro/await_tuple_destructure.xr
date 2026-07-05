@@ -10,16 +10,16 @@ fn produce() -> (int, int) {
     return (10, 20)
 }
 
-let task = go produce()
-let (a, b) = await task
+var task = go produce()
+var (a, b) = await task
 print(a)
 print(b)
 
 // Tuple constructed and destructured within a coroutine body.
 fn sum_pair() -> int {
     Coro.yield()
-    let pair = (3, 4)
-    let (x, y) = pair
+    var pair = (3, 4)
+    var (x, y) = pair
     return x + y
 }
 

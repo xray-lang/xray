@@ -155,6 +155,16 @@ XR_FUNC const char *xa_threadsafe_shared_ref_label(const XrType *type) {
         return "Semaphore";
     if (xr_type_is_named_class(type, "EventCount"))
         return "EventCount";
+    if (xr_type_is_named_class(type, "OsMutex"))
+        return "OsMutex";
+    if (xr_type_is_named_class(type, "OsRwLock"))
+        return "OsRwLock";
+    if (xr_type_is_named_class(type, "OsCondvar"))
+        return "OsCondvar";
+    if (xr_type_is_named_class(type, "OsBarrier"))
+        return "OsBarrier";
+    if (xr_type_is_named_class(type, "OsOnce"))
+        return "OsOnce";
     return NULL;
 }
 
@@ -237,20 +247,17 @@ XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, X
                  "parallel for body cannot assign to captured variable '%s'; use Atomic<T>, "
                  "worker-local context, or parallel reduce",
                  name);
+    } else if (sym->is_shared) {
+        return;
     } else if (xa_type_is_threadsafe_shared_ref(sym_type)) {
         return;
     } else if (sym->kind == XA_SYM_PARAMETER) {
         snprintf(msg, sizeof(msg),
                  "parallel for body cannot capture parameter '%s'; pass immutable data through "
-                 "shared const or future TaskGroup context",
+                 "shared or future TaskGroup context",
                  name);
     } else if (sym->is_const) {
         return;
-    } else if (sym->is_shared) {
-        snprintf(msg, sizeof(msg),
-                 "parallel for body cannot capture mutable 'shared let' variable '%s'; use "
-                 "Atomic<T> or shared const",
-                 name);
     } else {
         snprintf(msg, sizeof(msg),
                  "parallel for body cannot capture mutable variable '%s'; copy it to a const, "
@@ -1854,7 +1861,8 @@ static void xa_visit_precollect_const_decl(XaInferContext *ctx, AstNode *node) {
     XaSymbol *sym = xa_symbol_new(var->name, XA_SYM_VARIABLE);
     sym->location.line = node->line;
     sym->is_const = true;
-    sym->is_shared = (var->storage_mode == XR_STORAGE_SHARED);
+    sym->is_readonly_binding = true;
+    sym->is_rebindable = false;
     xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
     var->symbol_id = sym->id;
 
@@ -1938,7 +1946,7 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
             }
         } else if (stmt->type != AST_CLASS_DECL && stmt->type != AST_STRUCT_DECL &&
                    stmt->type != AST_ENUM_DECL) {
-            /* Bare block statements need a scope so inner let/const
+            /* Bare block statements need a scope so inner var/const
              * declarations get distinct symbol_ids from outer variables
              * with the same name (variable shadowing).  Matches Pass 2's
              * xa_visit_block_stmt which enters BLOCK_SCOPE. */
@@ -2216,6 +2224,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             xa_visit_collect_var_decl(ctx, node);
             break;
         case AST_IMPORT_STMT:
@@ -2833,6 +2842,7 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
         case AST_FUNCTION_EXPR:
         case AST_PARALLEL_REDUCE_EXPR:
         case AST_PARALLEL_COLLECT_EXPR:
+        case AST_COMPTIME_EXPR:
             return xa_visit_infer_expr(ctx, node);
 
         // Statements
@@ -2840,6 +2850,37 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
             xa_visit_infer_stmt(ctx, node);
             return xr_type_new_unit(NULL);
     }
+}
+
+static XrType *xa_visit_comptime_expr(XaInferContext *ctx, AstNode *node) {
+    AstNode *inner = node ? node->as.comptime_expr.expr : NULL;
+    if (!ctx || !ctx->analyzer || !node || !inner)
+        return xr_type_new_unknown(NULL);
+
+    if (inner->type == AST_BLOCK) {
+        xa_visit_infer_stmt(ctx, inner);
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+            "comptime block requires the frontend consteval block engine, which is not implemented "
+            "in this phase",
+            &loc);
+        return xr_type_new_unit(NULL);
+    }
+
+    XrType *inner_type = xa_visit_infer_expr(ctx, inner);
+    int64_t ignored = 0;
+    const char *err = NULL;
+    if (!xa_eval_const_int_expr(ctx->analyzer, inner, &ignored, &err)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "comptime expression must be an integer expression evaluable at compile time%s%s",
+                 err ? ": " : "", err ? err : "");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+    }
+    return inner_type ? inner_type : xr_type_new_unknown(NULL);
 }
 
 XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
@@ -2961,6 +3002,9 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_GROUPING:
             result = xa_visit_infer_expr(ctx, node->as.grouping);
+            break;
+        case AST_COMPTIME_EXPR:
+            result = xa_visit_comptime_expr(ctx, node);
             break;
         case AST_GO_EXPR:
             result = xa_visit_go_expr(ctx, node);
@@ -3290,6 +3334,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             xa_visit_var_decl_stmt(ctx, node);
             break;
         case AST_ASSIGNMENT:
@@ -3302,11 +3347,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             if (id_sym)
                 id->symbol_id = id_sym->id;
             xa_parallel_capture_check(ctx, node, id_sym, true);
-            if (id_sym && id_sym->is_const) {
+            if (id_sym && (id_sym->is_const || id_sym->is_shared || !id_sym->is_rebindable)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[128];
-                snprintf(msg, sizeof(msg), "Cannot modify const '%s'", id->name);
+                snprintf(msg, sizeof(msg),
+                         id_sym->is_shared ? "Cannot modify shared binding '%s'"
+                                           : "Cannot modify const '%s'",
+                         id->name);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
             }
@@ -3359,11 +3407,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 (xa_type_contains_float(ca_target_type) || xa_type_contains_float(ca_value_type))) {
                 xa_report_float_modulo_error(ctx, node, ca_target_type, ca_value_type);
             }
-            if (ca_sym && ca_sym->is_const) {
+            if (ca_sym && (ca_sym->is_const || ca_sym->is_shared || !ca_sym->is_rebindable)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[128];
-                snprintf(msg, sizeof(msg), "Cannot assign to const '%s'", ca->name);
+                snprintf(msg, sizeof(msg),
+                         ca_sym->is_shared ? "Cannot assign to shared binding '%s'"
+                                           : "Cannot assign to const '%s'",
+                         ca->name);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
             }
@@ -3569,7 +3620,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
 
             // Isolate flow graph: each function gets a fresh start node
             // so that flow facts from sibling/parent functions (e.g.
-            // `let name = p?.name`) do not leak into this function body.
+            // `var name = p?.name`) do not leak into this function body.
             XaFlowNode *saved_flow = NULL;
             XrFlowLabel *saved_break = NULL;
             XrFlowLabel *saved_continue = NULL;
@@ -4054,7 +4105,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     char msg[256];
                     snprintf(msg, sizeof(msg),
                              "tuple type '%s' is not iterable; use '.0', '.1' or destructure "
-                             "with 'let (a, b, ...) = t' instead",
+                             "with 'var (a, b, ...) = t' instead",
                              xr_type_to_string(coll_type));
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
@@ -4483,7 +4534,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_expr(ctx, sc->value);
                 /* Send arms cross a coroutine boundary just like ch.send / go,
                  * so a bare owned-heap payload must use explicit copy/move/
-                 * shared const. */
+                 * shared. */
                 if (sc->is_send) {
                     XrType *send_type = xa_analyzer_get_node_type(ctx->analyzer, sc->value);
                     if (!send_type)

@@ -6,6 +6,6 @@ fn stash(data: in Array<int>, out: ref Array<Array<int>>) {
     sink(data, out)
 }
 
-let values: Array<int> = [1, 2]
-let out: Array<Array<int>> = []
+var values: Array<int> = [1, 2]
+var out: Array<Array<int>> = []
 stash(values, out)

@@ -1,6 +1,6 @@
 // anchor: labeled-break-continue
 
-let break_trace = ""
+var break_trace = ""
 outer_break: for (i in 0..4) {
     for (j in 0..4) {
         if (i == 2 && j == 1) {
@@ -11,7 +11,7 @@ outer_break: for (i in 0..4) {
 }
 print(break_trace)
 
-let continue_trace = ""
+var continue_trace = ""
 outer_continue: for (i in 0..3) {
     for (j in 0..4) {
         if (j == 1) {
@@ -23,10 +23,10 @@ outer_continue: for (i in 0..3) {
 }
 print(continue_trace)
 
-let while_count = 0
-let i = 0
+var while_count = 0
+var i = 0
 outer_while: while (i < 5) {
-    let j = 0
+    var j = 0
     i += 1
     while (j < 5) {
         j += 1

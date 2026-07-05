@@ -2,5 +2,5 @@
 // 错误测试：使用 const 关键字声明的只读字段
 // 期望错误：无法修改只读字段
 type Config = { const version: string, debug: bool }
-let cfg: Config = { "version": "1.0.0", "debug": false }
+var cfg: Config = { "version": "1.0.0", "debug": false }
 cfg.version = "2.0.0"

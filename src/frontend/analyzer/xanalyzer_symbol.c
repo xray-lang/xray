@@ -49,6 +49,7 @@ XaSymbol *xa_symbol_new(const char *name, XaSymbolKind kind) {
     sym->name = name ? xr_strdup(name) : NULL;
     sym->kind = kind;
     sym->id = next_symbol_id();
+    sym->is_rebindable = kind == XA_SYM_VARIABLE || kind == XA_SYM_PARAMETER;
 
     return sym;
 }

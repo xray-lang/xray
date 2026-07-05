@@ -1,1 +1,1 @@
-let s = r'abc'
+var s = r'abc'

@@ -4,8 +4,8 @@ fn worker(xs: Array<int>) -> int {
     return xs.length
 }
 
-let xs = [1, 2]
-let task = go worker(copy(xs))
-let child_len = await task
+var xs = [1, 2]
+var task = go worker(copy(xs))
+var child_len = await task
 print(child_len)
 print(xs.length)

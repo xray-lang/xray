@@ -1,5 +1,5 @@
 // copy(x) preserves the static type of x: the deep copy can be passed to a
-// typed parameter and bound to a typed `shared const`. Guards the analyzer
+// typed parameter and bound to a typed `shared`. Guards the analyzer
 // inference for the deep-copy builtin (116 copy / shared-promotion demos).
 class Box {
     value: int
@@ -13,20 +13,20 @@ fn readValue(b: Box) -> int {
     return b.value
 }
 
-let original = Box(42)
-let duplicate = copy(original)
+var original = Box(42)
+var duplicate = copy(original)
 print(readValue(duplicate))
 
-shared const frozen = copy(original)
+shared frozen = copy(original)
 print(readValue(frozen))
 
 fn total(a: Array<int>) -> int {
-    let s = 0
+    var s = 0
     for (x in a) {
         s = s + x
     }
     return s
 }
 
-let xs: Array<int> = [1, 2, 3]
+var xs: Array<int> = [1, 2, 3]
 print(total(copy(xs)))

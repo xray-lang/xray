@@ -1067,8 +1067,9 @@ static const char *token_names[] = {
     [TK_NOT] = "!",
 
     // Keywords
-    [TK_LET] = "let",
+    [TK_VAR] = "var",
     [TK_CONST] = "const",
+    [TK_COMPTIME] = "comptime",
     [TK_SHARED] = "shared",
     [TK_IF] = "if",
     [TK_ELSE] = "else",

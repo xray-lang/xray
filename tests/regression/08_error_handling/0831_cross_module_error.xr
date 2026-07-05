@@ -4,7 +4,7 @@
 import "./modules/error_source" as src
 
 @test fn catch_error_from_imported_module() {
-    let result = 0
+    var result = 0
     try {
         result = src.safe_div(10, 0)
     } catch (e) {
@@ -14,7 +14,7 @@ import "./modules/error_source" as src
 }
 
 @test fn success_from_imported_module() {
-    let result = 0
+    var result = 0
     try {
         result = src.safe_div(10, 2)
     } catch (e) {
@@ -24,7 +24,7 @@ import "./modules/error_source" as src
 }
 
 @test fn catch_cross_module_with_match() {
-    let msg = ""
+    var msg = ""
     try {
         msg = src.validate("")
     } catch (e) {
@@ -35,10 +35,10 @@ import "./modules/error_source" as src
 
 @test fn auto_propagation_cross_module() {
     fn wrapper() -> int {
-        let x = src.safe_div(100, 0)
+        var x = src.safe_div(100, 0)
         return x + 1
     }
-    let result = 0
+    var result = 0
     try {
         result = wrapper()
     } catch (e) {
@@ -48,10 +48,10 @@ import "./modules/error_source" as src
 }
 
 @test fn multiple_cross_module_calls() {
-    let sum = 0
+    var sum = 0
     try {
-        let a = src.safe_div(10, 2)
-        let b = src.safe_div(20, 4)
+        var a = src.safe_div(10, 2)
+        var b = src.safe_div(20, 4)
         sum = a + b
     } catch (e) {
         sum = -1

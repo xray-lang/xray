@@ -1,6 +1,6 @@
 import mem
 
 fn raw() -> RawMut<uint8> {
-    let b = mem.alloc(8)
+    var b = mem.alloc(8)
     return b.ptrUnchecked()
 }

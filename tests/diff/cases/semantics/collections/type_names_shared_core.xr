@@ -4,17 +4,17 @@ print(typeof(true))
 print(typeof(null))
 print(typeof("x"))
 
-let xs = [1, 2, 3]
+var xs = [1, 2, 3]
 print(typeof(xs))
 
-let m: Map<string, int> = #{"a": 1}
+var m: Map<string, int> = #{"a": 1}
 print(typeof(m))
 
-let s = #[1, 2, 3]
+var s = #[1, 2, 3]
 print(typeof(s))
 
-let r = 2..6
+var r = 2..6
 print(typeof(r))
 
-let sb = StringBuilder()
+var sb = StringBuilder()
 print(typeof(sb))

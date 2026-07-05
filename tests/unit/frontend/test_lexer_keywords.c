@@ -86,7 +86,9 @@ static const KwExpect kKnownKeywords[] = {
     {"bool", TK_BOOL},
     {"break", TK_BREAK},
     {"catch", TK_CATCH},
+    {"char", TK_CHAR},
     {"class", TK_CLASS},
+    {"comptime", TK_COMPTIME},
     {"const", TK_CONST},
     {"constructor", TK_CONSTRUCTOR},
     {"continue", TK_CONTINUE},
@@ -114,7 +116,6 @@ static const KwExpect kKnownKeywords[] = {
     {"int64", TK_INT64},
     {"interface", TK_INTERFACE},
     {"is", TK_IS},
-    {"let", TK_LET},
     {"match", TK_MATCH},
     {"new", TK_NEW},
     {"null", TK_NULL},
@@ -138,6 +139,7 @@ static const KwExpect kKnownKeywords[] = {
     {"uint16", TK_UINT16},
     {"uint32", TK_UINT32},
     {"uint64", TK_UINT64},
+    {"var", TK_VAR},
     {"while", TK_WHILE},
     {"yield", TK_YIELD},
 };
@@ -194,6 +196,8 @@ static const char *kPrefixIdentifiers[] = {
     "ascend",
     "letter",
     "lettuce",
+    "comptimeValue",
+    "comptime_expr",
     "constants",
     "constellation",
     "continueLater",
@@ -305,7 +309,7 @@ TEST(keyword_with_underscore_suffix_is_identifier) {
 
 TEST(keyword_then_punctuation) {
     // The keyword scanner must stop at non-identifier characters.
-    // Verifies tokenisation of common forms like `if(`, `let;`,
+    // Verifies tokenisation of common forms like `if(`, `var;`,
     // `return)`, `match{`.
     Token a, b;
 
@@ -313,8 +317,13 @@ TEST(keyword_then_punctuation) {
     ASSERT_EQ_INT(a.type, TK_IF);
     ASSERT_EQ_INT(b.type, TK_LPAREN);
 
+    scan_two("var;", &a, &b);
+    ASSERT_EQ_INT(a.type, TK_VAR);
+    ASSERT_EQ_INT(b.type, TK_SEMICOLON);
+
     scan_two("let;", &a, &b);
-    ASSERT_EQ_INT(a.type, TK_LET);
+    ASSERT_EQ_INT(a.type, TK_NAME);
+    ASSERT_TRUE(token_text_eq(a, "let"));
     ASSERT_EQ_INT(b.type, TK_SEMICOLON);
 
     scan_two("return)", &a, &b);

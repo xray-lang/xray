@@ -22,17 +22,17 @@ fn task_poll(task: Task<int>) -> TaskResult<int> {
     return task.poll()
 }
 
-const ch = Channel<int>(0)
-let blocked = go wait_for_value(ch)
+shared ch = Channel<int>(0)
+var blocked = go wait_for_value(ch)
 blocked.cancel()
-let cancelled_result = blocked.awaitResult()
+var cancelled_result = blocked.awaitResult()
 print(blocked.done)
 print(blocked.status)
 print(cancelled_result)
 ch.close()
 
-let quick = go quick_value(21)
-let quick_result = await quick
+var quick = go quick_value(21)
+var quick_result = await quick
 quick.cancel()
 print(quick.done)
 print(quick.status)

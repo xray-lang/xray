@@ -9,7 +9,7 @@ fn getFirst<T>(arr: Array<T>) -> T? {
     return null
 }
 fn swap<T>(arr: Array<T>, i: int, j: int) {
-    let temp = arr[i]
+    var temp = arr[i]
     arr[i] = arr[j]
     arr[j] = temp
 }
@@ -26,17 +26,17 @@ fn contains<T>(arr: Array<T>, target: T) -> bool {
 fn test_generic_container() {
 
     // Test with arrays (no explicit type annotation)
-    let intArr = [10, 20, 30]
-    let firstInt = getFirst(intArr)
+    var intArr = [10, 20, 30]
+    var firstInt = getFirst(intArr)
     print(firstInt)            // 10
 
-    let strArr = ["x", "y", "z"]  
-    let firstStr = getFirst(strArr)
+    var strArr = ["x", "y", "z"]
+    var firstStr = getFirst(strArr)
     print(firstStr)            // "x"
 
     // Generic swap function
 
-    let nums = [1, 2, 3]
+    var nums = [1, 2, 3]
     swap(nums, 0, 2)
     print(nums)                // [3, 2, 1]
 
@@ -47,4 +47,3 @@ fn test_generic_container() {
 
     print("Generic container test completed")
 }
-

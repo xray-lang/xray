@@ -9,8 +9,8 @@ fn sum3(a: int, b: int, c: int) -> int {
     return a + b + c
 }
 
-let r = sum3(tap("A", 1), tap("B", 2), tap("C", 3))
+var r = sum3(tap("A", 1), tap("B", 2), tap("C", 3))
 print(r)
 
-let arr = [tap("X", 10), tap("Y", 20)]
+var arr = [tap("X", 10), tap("Y", 20)]
 print(arr[0] + arr[1])

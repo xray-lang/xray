@@ -6,16 +6,16 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 // named-import case in sync_module_import.xr; regression for task 147 §0.13.
 import sync
 
-shared const counter = sync.Mutex<int>(0)
+shared counter = sync.Mutex<int>(0)
 print(counter.lock((v) -> v + 100))
 print(counter.lock((v) -> v))
 
-let gate = sync.RwLock<int>(7)
+var gate = sync.RwLock<int>(7)
 print(gate.read((v) -> v))
 print(gate.write((v) -> v + 1))
 
 // Cross-coroutine mutation through a namespace-imported Mutex.
-shared const latch = CountdownLatch(1)
+shared latch = CountdownLatch(1)
 go {
     counter.replace((v) -> v + 42)
     latch.done()

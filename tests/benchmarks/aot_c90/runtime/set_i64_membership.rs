@@ -3,16 +3,16 @@
 use std::collections::HashSet;
 
 fn run(n: i64, rounds: i64) -> i64 {
-    let mut s: HashSet<i64> = HashSet::new();
+    var mut s: HashSet<i64> = HashSet::new();
 
-    let mut i: i64 = 0;
+    var mut i: i64 = 0;
     while i < n {
         s.insert(i * 2);
         i += 1;
     }
 
-    let mut hits: i64 = 0;
-    let mut r: i64 = 0;
+    var mut hits: i64 = 0;
+    var mut r: i64 = 0;
     while r < rounds {
         i = 0;
         while i < n * 2 {

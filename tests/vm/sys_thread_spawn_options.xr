@@ -1,6 +1,6 @@
 import sys
 
-let t = sys.Thread.spawn(ThreadOptions{ name: "xray-test-worker", stackSize: 65536, affinity: [0] }, fn() -> int {
+var t = sys.Thread.spawn(ThreadOptions{ name: "xray-test-worker", stackSize: 65536, affinity: [0] }, fn() -> int {
     return 6 * 7
 })
 print(t.join())

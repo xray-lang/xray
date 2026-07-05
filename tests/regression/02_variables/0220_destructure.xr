@@ -5,7 +5,7 @@
 
 @test
 fn test_array_basic() {
-    let [a, b, c] = [1, 2, 3]
+    var [a, b, c] = [1, 2, 3]
     assert_eq(a, 1)
     assert_eq(b, 2)
     assert_eq(c, 3)
@@ -13,14 +13,14 @@ fn test_array_basic() {
 
 @test
 fn test_array_partial() {
-    let [first, second] = [1, 2, 3, 4, 5]
+    var [first, second] = [1, 2, 3, 4, 5]
     assert_eq(first, 1)
     assert_eq(second, 2)
 }
 
 @test
 fn test_array_single() {
-    let [x] = [42]
+    var [x] = [42]
     assert_eq(x, 42)
 }
 
@@ -28,14 +28,14 @@ fn test_array_single() {
 
 @test
 fn test_skip_elements() {
-    let [first, , third] = [10, 20, 30]
+    var [first, , third] = [10, 20, 30]
     assert_eq(first, 10)
     assert_eq(third, 30)
 }
 
 @test
 fn test_skip_multiple() {
-    let [a, , , d] = [1, 2, 3, 4]
+    var [a, , , d] = [1, 2, 3, 4]
     assert_eq(a, 1)
     assert_eq(d, 4)
 }
@@ -44,7 +44,7 @@ fn test_skip_multiple() {
 
 @test
 fn test_flat_nested_value() {
-    let [a, b, c] = [10, [11, 12], 13]
+    var [a, b, c] = [10, [11, 12], 13]
     assert_eq(a, 10)
     assert_eq(b[0], 11)
     assert_eq(b[1], 12)
@@ -55,14 +55,14 @@ fn test_flat_nested_value() {
 
 @test
 fn test_object_basic() {
-    let { name, age } = { name: "Alice", age: 30 }
+    var { name, age } = { name: "Alice", age: 30 }
     assert_eq(name, "Alice")
     assert_eq(age, 30)
 }
 
 @test
 fn test_object_flat_nested_value() {
-    let { d, e, f } = { d: 100, e: 200, f: { f1: 300, f2: 400 } }
+    var { d, e, f } = { d: 100, e: 200, f: { f1: 300, f2: 400 } }
     assert_eq(d, 100)
     assert_eq(e, 200)
     assert_eq(f.f1, 300)
@@ -71,12 +71,12 @@ fn test_object_flat_nested_value() {
 
 @test
 fn test_object_rename() {
-    let user = { name: "Alice", age: 30 }
-    let { name: localName, age } = user
+    var user = { name: "Alice", age: 30 }
+    var { name: localName, age } = user
     assert_eq(localName, "Alice")
     assert_eq(age, 30)
 
-    let otherName = ""
+    var otherName = ""
     { name: otherName } = user
     assert_eq(otherName, "Alice")
 }

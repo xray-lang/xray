@@ -128,8 +128,8 @@ PURE_CLASS_FIELD_PATTERN = re.compile(
     r'^\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^=\n]+)$',
     re.M,
 )
-PURE_LET_PATTERN = re.compile(
-    r'^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([^=\n]+))?\s*=\s*([^\n]+)',
+PURE_CONST_PATTERN = re.compile(
+    r'^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([^=\n]+))?\s*=\s*([^\n]+)',
     re.M,
 )
 
@@ -296,7 +296,7 @@ def scan_pure_xray_module(filepath, module_name):
         }
 
     constants = {}
-    for match in PURE_LET_PATTERN.finditer(content):
+    for match in PURE_CONST_PATTERN.finditer(content):
         name = match.group(1)
         if name not in exported:
             continue

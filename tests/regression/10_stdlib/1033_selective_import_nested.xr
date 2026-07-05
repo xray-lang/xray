@@ -12,13 +12,13 @@ import { Box, makeBox, BOX_VERSION } from "./modules/sel_lib"
 @test
 fn test_selective_class_top_level() {
     // baseline：顶层使用，旧实现也工作
-    let b = Box(4, 5)
+    var b = Box(4, 5)
     assert_eq(b.area(), 20)
 }
 
 @test
 fn test_selective_fn_top_level() {
-    let b = makeBox(2, 3)
+    var b = makeBox(2, 3)
     assert_eq(b.area(), 6)
 }
 
@@ -33,7 +33,7 @@ fn test_selective_class_nested() {
     // 嵌套函数返回基础类型 int 以绕过 analyzer 跨模块类型 unknown 问题，
     // 让运行时实际命中 lower_import_stmt 的写读不对称路径。
     fn make() -> int {
-        let b = Box(7, 6)
+        var b = Box(7, 6)
         return b.area()
     }
     assert_eq(make(), 42)
@@ -42,7 +42,7 @@ fn test_selective_class_nested() {
 @test
 fn test_selective_fn_nested() {
     fn build() -> int {
-        let b = makeBox(8, 9)
+        var b = makeBox(8, 9)
         return b.area()
     }
     assert_eq(build(), 72)
@@ -62,7 +62,7 @@ fn test_selective_typeof_nested() {
     fn check() -> string {
         return typeof(Box)
     }
-    let t = check()
+    var t = check()
     // 修复前：t == "null" — slot 永远为 null
     // 修复后：t 是 class 的 typeof（"function" / "class" 等），不是 "null"
     assert_eq(t != "null", true)

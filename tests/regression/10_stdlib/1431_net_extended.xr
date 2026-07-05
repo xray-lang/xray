@@ -32,7 +32,7 @@ fn test_net_core_apis() {
 @test
 fn test_net_tls_apis() {
     assert(typeof(net.hasTLS) == "function")
-    let tls = net.hasTLS()
+    var tls = net.hasTLS()
     assert(typeof(tls) == "bool")
 }
 
@@ -47,15 +47,15 @@ fn test_net_udp_apis() {
 // @test DNS lookup - multiple calls consistent
 @test
 fn test_lookup_consistent() {
-    let a1 = net.lookup("localhost")
-    let a2 = net.lookup("localhost")
+    var a1 = net.lookup("localhost")
+    var a2 = net.lookup("localhost")
     assert_eq(a1, a2)
 }
 
 // @test DNS lookup - returns string or null
 @test
 fn test_lookup_type() {
-    let addr = net.lookup("localhost")
+    var addr = net.lookup("localhost")
     if (addr != null) {
         assert_eq(typeof(addr), "string")
         assert(addr.length > 0)

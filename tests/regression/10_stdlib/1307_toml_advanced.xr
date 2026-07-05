@@ -6,8 +6,8 @@ import toml
 
 @test
 fn test_multiline_basic_string() {
-    let data = "desc = \"\"\"\nHello\nWorld\"\"\""
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "desc = \"\"\"\nHello\nWorld\"\"\""
+    var obj: Json = toml.parse(data) ?? {}
     assert_eq(obj["desc"], "Hello\nWorld")
 }
 
@@ -15,8 +15,8 @@ fn test_multiline_basic_string() {
 
 @test
 fn test_literal_string() {
-    let data = "path = 'C:\\Users\\Alice'"
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "path = 'C:\\Users\\Alice'"
+    var obj: Json = toml.parse(data) ?? {}
     assert_eq(obj["path"], "C:\\Users\\Alice")
 }
 
@@ -24,8 +24,8 @@ fn test_literal_string() {
 
 @test
 fn test_multiline_literal_string() {
-    let data = "text = '''\nno escapes \\n here\n'''"
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "text = '''\nno escapes \\n here\n'''"
+    var obj: Json = toml.parse(data) ?? {}
     assert(obj["text"].length > 0)
 }
 
@@ -33,8 +33,8 @@ fn test_multiline_literal_string() {
 
 @test
 fn test_array_of_tables() {
-    let data = "[[products]]\nname = \"Hammer\"\nsku = 738594937\n\n[[products]]\nname = \"Nail\"\nsku = 284758393"
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "[[products]]\nname = \"Hammer\"\nsku = 738594937\n\n[[products]]\nname = \"Nail\"\nsku = 284758393"
+    var obj: Json = toml.parse(data) ?? {}
     assert_eq(obj["products"][0]["name"], "Hammer")
     assert_eq(obj["products"][1]["name"], "Nail")
     assert_eq(obj["products"][0]["sku"], 738594937)
@@ -44,8 +44,8 @@ fn test_array_of_tables() {
 
 @test
 fn test_escape_sequences() {
-    let data = "s = \"tab\\there\\nnewline\""
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "s = \"tab\\there\\nnewline\""
+    var obj: Json = toml.parse(data) ?? {}
     assert(obj["s"].length > 0)
 }
 
@@ -53,8 +53,8 @@ fn test_escape_sequences() {
 
 @test
 fn test_unicode_escape() {
-    let data = "heart = \"\\u2764\""
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "heart = \"\\u2764\""
+    var obj: Json = toml.parse(data) ?? {}
     assert(obj["heart"].length > 0)
 }
 
@@ -62,8 +62,8 @@ fn test_unicode_escape() {
 
 @test
 fn test_dotted_keys() {
-    let data = "fruit.name = \"apple\"\nfruit.color = \"red\""
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "fruit.name = \"apple\"\nfruit.color = \"red\""
+    var obj: Json = toml.parse(data) ?? {}
     assert_eq(obj["fruit"]["name"], "apple")
     assert_eq(obj["fruit"]["color"], "red")
 }
@@ -72,8 +72,8 @@ fn test_dotted_keys() {
 
 @test
 fn test_inline_table_dotted_keys() {
-    let data = "point = { position.x = 1, position.y = 2 }"
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "point = { position.x = 1, position.y = 2 }"
+    var obj: Json = toml.parse(data) ?? {}
     assert_eq(obj["point"]["position"]["x"], 1)
     assert_eq(obj["point"]["position"]["y"], 2)
 }
@@ -82,8 +82,8 @@ fn test_inline_table_dotted_keys() {
 
 @test
 fn test_special_floats() {
-    let data = "pos_inf = inf\nneg_inf = -inf\nnot_a_num = nan"
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "pos_inf = inf\nneg_inf = -inf\nnot_a_num = nan"
+    var obj: Json = toml.parse(data) ?? {}
     assert(obj["pos_inf"] > 0)
     assert(obj["neg_inf"] < 0)
 }
@@ -92,8 +92,8 @@ fn test_special_floats() {
 
 @test
 fn test_negative_numbers() {
-    let data = "temp = -17\noffset = -0.5"
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "temp = -17\noffset = -0.5"
+    var obj: Json = toml.parse(data) ?? {}
     assert_eq(obj["temp"], -17)
     assert_eq(obj["offset"], -0.5)
 }
@@ -102,11 +102,11 @@ fn test_negative_numbers() {
 
 @test
 fn test_float_decimal_point() {
-    let config: Json = {"value": 1.0}
-    let result = toml.stringify(config)
+    var config: Json = {"value": 1.0}
+    var result = toml.stringify(config)
     // Float must have decimal point in TOML
     assert(result.length > 0)
-    let reparsed: Json = toml.parse(result) ?? {}
+    var reparsed: Json = toml.parse(result) ?? {}
     assert_eq(typeof(reparsed["value"]), "float")
 }
 
@@ -114,9 +114,9 @@ fn test_float_decimal_point() {
 
 @test
 fn test_stringify_roundtrip() {
-    let original: Json = {"name": "xray", "version": 2, "enabled": true}
-    let toml_str = toml.stringify(original)
-    let parsed: Json = toml.parse(toml_str) ?? {}
+    var original: Json = {"name": "xray", "version": 2, "enabled": true}
+    var toml_str = toml.stringify(original)
+    var parsed: Json = toml.parse(toml_str) ?? {}
     assert_eq(parsed["name"], "xray")
     assert_eq(parsed["version"], 2)
     assert_eq(parsed["enabled"], true)
@@ -126,10 +126,10 @@ fn test_stringify_roundtrip() {
 
 @test
 fn test_stringify_nested_roundtrip() {
-    let data = "[server]\nhost = \"localhost\"\nport = 8080"
-    let obj: Json = toml.parse(data) ?? {}
-    let toml_str = toml.stringify(obj)
-    let reparsed: Json = toml.parse(toml_str) ?? {}
+    var data = "[server]\nhost = \"localhost\"\nport = 8080"
+    var obj: Json = toml.parse(data) ?? {}
+    var toml_str = toml.stringify(obj)
+    var reparsed: Json = toml.parse(toml_str) ?? {}
     assert_eq(reparsed["server"]["host"], "localhost")
     assert_eq(reparsed["server"]["port"], 8080)
 }
@@ -138,8 +138,8 @@ fn test_stringify_nested_roundtrip() {
 
 @test
 fn test_parse_strict() {
-    let data = "name = \"Alice\"\nage = 30"
-    let result: Json = toml.parseStrict(data) ?? {}
+    var data = "name = \"Alice\"\nage = 30"
+    var result: Json = toml.parseStrict(data) ?? {}
     assert_eq(result["data"]["name"], "Alice")
     assert(result["errors"].length == 0)
     assert(result["meta"]["lines"] > 0)
@@ -150,8 +150,8 @@ fn test_parse_strict() {
 
 @test
 fn test_duplicate_key_strict() {
-    let data = "name = \"Alice\"\nname = \"Bob\""
-    let result: Json = toml.parseStrict(data) ?? {}
+    var data = "name = \"Alice\"\nname = \"Bob\""
+    var result: Json = toml.parseStrict(data) ?? {}
     // Should detect duplicate key error
     assert(result["errors"].length > 0)
 }
@@ -160,7 +160,7 @@ fn test_duplicate_key_strict() {
 
 @test
 fn test_empty_input() {
-    let obj: Json = toml.parse("") ?? {}
+    var obj: Json = toml.parse("") ?? {}
     assert(obj != null)
 }
 
@@ -168,8 +168,8 @@ fn test_empty_input() {
 
 @test
 fn test_comments() {
-    let data = "# This is a comment\nkey = \"value\" # inline comment"
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "# This is a comment\nkey = \"value\" # inline comment"
+    var obj: Json = toml.parse(data) ?? {}
     assert_eq(obj["key"], "value")
 }
 
@@ -177,12 +177,12 @@ fn test_comments() {
 
 @test
 fn test_bool_at_end() {
-    let data = "flag = true"
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "flag = true"
+    var obj: Json = toml.parse(data) ?? {}
     assert_eq(obj["flag"], true)
 
-    let data2 = "flag = false"
-    let obj2 = toml.parse(data2)
+    var data2 = "flag = false"
+    var obj2 = toml.parse(data2)
     assert_eq(obj2["flag"], false)
 }
 
@@ -190,8 +190,8 @@ fn test_bool_at_end() {
 
 @test
 fn test_datetime() {
-    let data = "created = 2024-01-15T10:30:00Z"
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "created = 2024-01-15T10:30:00Z"
+    var obj: Json = toml.parse(data) ?? {}
     assert_eq(obj["created"].toString(), "2024-01-15 10:30:00")
 }
 
@@ -199,8 +199,8 @@ fn test_datetime() {
 
 @test
 fn test_datetime_space() {
-    let data = "created = 1979-05-27 07:32:00"
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "created = 1979-05-27 07:32:00"
+    var obj: Json = toml.parse(data) ?? {}
     assert_eq(obj["created"].toString(), "1979-05-27 07:32:00")
 }
 
@@ -208,8 +208,8 @@ fn test_datetime_space() {
 
 @test
 fn test_underscore_numbers() {
-    let data = "big = 1_000_000\nhex = 0xFF_FF"
-    let obj: Json = toml.parse(data) ?? {}
+    var data = "big = 1_000_000\nhex = 0xFF_FF"
+    var obj: Json = toml.parse(data) ?? {}
     assert_eq(obj["big"], 1000000)
     assert_eq(obj["hex"], 65535)
 }

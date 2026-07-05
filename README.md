@@ -7,16 +7,16 @@
 
 ```xray
 fn count(xs: Array<int>) -> int {
-    let total = 0
+    var total = 0
     for (x in xs) { total += x }
     return total
 }
 
-let left = go count([1, 2, 3])
-let right = go count([4, 5, 6])
+var left = go count([1, 2, 3])
+var right = go count([4, 5, 6])
 
-let a = await left
-let b = await right
+var a = await left
+var b = await right
 print(a + b)
 ```
 
@@ -68,14 +68,14 @@ fn greet(user: User?) -> string {
     }
 }
 
-let scores = #{"alice": 10, "bob": 8}
-let names = #["alice", "bob"]
+var scores = #{"alice": 10, "bob": 8}
+var names = #["alice", "bob"]
 ```
 
-Concurrency is explicit. Ordinary local variables cannot be accidentally shared across `go` coroutines; use parameters, `shared const`, or `Channel<T>`.
+Concurrency is explicit. Ordinary local variables cannot be accidentally shared across `go` coroutines; use parameters, `shared`, or `Channel<T>`.
 
 ```xray
-shared const ch = new Channel<int>(2)
+shared ch = new Channel<int>(2)
 
 go fn() { ch.send(42) }()
 

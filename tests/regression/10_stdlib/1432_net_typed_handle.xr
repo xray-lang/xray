@@ -51,10 +51,10 @@ fn test_module_and_method_interop() {
 
 @test
 fn test_method_dispatch_via_inference() {
-    let listener = net.listen(0, 1)
+    var listener = net.listen(0, 1)
     if (listener == null) { return }
 
-    let l = listener!
+    var l = listener!
     assert_true(l.fd() >= 0)
     assert_true(l.port() > 0)
 
@@ -68,17 +68,17 @@ fn test_method_dispatch_via_inference() {
 // NetConn / NetListener are registered as prelude entries with the
 // XrClasses pre-installed by xr_prelude_register_all_native_types,
 // and the cfunc signatures advertise NetConn? / NetListener?, so a
-// user-side `let conn: NetConn? = net.dial(...)` annotation now
+// user-side `var conn: NetConn? = net.dial(...)` annotation now
 // type-checks and dispatches methods through the same path that
 // inference uses.
 // ============================================================
 
 @test
 fn test_explicit_typed_listener() {
-    let listener: NetListener? = net.listen(0, 1)
+    var listener: NetListener? = net.listen(0, 1)
     if (listener == null) { return }
 
-    let l: NetListener = listener!
+    var l: NetListener = listener!
     assert_true(l.fd() >= 0)
     assert_true(l.port() > 0)
     assert_true(!l.isClosed())

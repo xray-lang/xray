@@ -1,5 +1,5 @@
 fn run() {
-    let msg = "cleanup"
+    var msg = "cleanup"
     defer {
         print(msg)
     }

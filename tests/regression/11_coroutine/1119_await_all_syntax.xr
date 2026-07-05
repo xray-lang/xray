@@ -21,11 +21,11 @@ fn test_await_all_syntax() {
 
     // 测试1：await all 基本用法
     print("test1: await all basic")
-    let t1 = go task1()
-    let t2 = go task2()
-    let t3 = go task3()
+    var t1 = go task1()
+    var t2 = go task2()
+    var t3 = go task3()
 
-    let results = await all [t1, t2, t3]
+    var results = await all [t1, t2, t3]
     print("  r0:", results[0])
     print("  r1:", results[1])
     print("  r2:", results[2])
@@ -33,10 +33,10 @@ fn test_await_all_syntax() {
 
     // 测试2：await all with two tasks
     print("test2: await all two tasks")
-    let t4 = go task1()
-    let t5 = go task2()
+    var t4 = go task1()
+    var t5 = go task2()
 
-    let results2 = await all [t4, t5]
+    var results2 = await all [t4, t5]
     print("  r0:", results2[0])
     print("  r1:", results2[1])
 }

@@ -16,8 +16,8 @@ fn ok_worker() -> int {
     return 42
 }
 fn test_linked_scope_error() {
-    let caught = false
-    let code = -1
+    var caught = false
+    var code = -1
     try {
         linked scope {
             go ok_worker()
@@ -34,7 +34,7 @@ fn test_linked_scope_error() {
     assert_eq(code, 1)
 }
 fn test_normal_scope_no_error() {
-    let caught = false
+    var caught = false
     try {
         scope {
             go ok_worker()
@@ -46,7 +46,7 @@ fn test_normal_scope_no_error() {
     assert(!caught, "normal scope should not throw child error")
 }
 fn test_linked_scope_success() {
-    let caught = false
+    var caught = false
     try {
         linked scope {
             go ok_worker()
@@ -58,7 +58,7 @@ fn test_linked_scope_success() {
     assert(!caught, "linked scope with all success should not throw")
 }
 fn test_supervisor_scope_no_throw() {
-    let caught = false
+    var caught = false
     try {
         supervisor scope {
             go ok_worker()

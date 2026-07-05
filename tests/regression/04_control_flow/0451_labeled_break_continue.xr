@@ -3,7 +3,7 @@
 
 @test
 fn test_labeled_break_exits_named_for_in() {
-    let trace = ""
+    var trace = ""
     outer: for (i in 0..4) {
         for (j in 0..4) {
             if (i == 2 && j == 1) {
@@ -17,7 +17,7 @@ fn test_labeled_break_exits_named_for_in() {
 
 @test
 fn test_labeled_continue_targets_named_for_in() {
-    let trace = ""
+    var trace = ""
     outer: for (i in 0..3) {
         for (j in 0..4) {
             if (j == 1) {
@@ -32,9 +32,9 @@ fn test_labeled_continue_targets_named_for_in() {
 
 @test
 fn test_labeled_continue_targets_traditional_for_increment() {
-    let total = 0
-    outer: for (let i = 0; i < 4; i++) {
-        for (let j = 0; j < 4; j++) {
+    var total = 0
+    outer: for (var i = 0; i < 4; i++) {
+        for (var j = 0; j < 4; j++) {
             if (j == 2) {
                 continue outer
             }
@@ -47,10 +47,10 @@ fn test_labeled_continue_targets_traditional_for_increment() {
 
 @test
 fn test_labeled_while_break_and_continue() {
-    let i = 0
-    let count = 0
+    var i = 0
+    var count = 0
     outer: while (i < 5) {
-        let j = 0
+        var j = 0
         i += 1
         while (j < 5) {
             j += 1

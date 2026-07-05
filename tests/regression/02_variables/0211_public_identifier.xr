@@ -3,6 +3,6 @@
 
 @test
 fn test_public_identifier_name() {
-    let public = 11
+    var public = 11
     assert_eq(public, 11)
 }

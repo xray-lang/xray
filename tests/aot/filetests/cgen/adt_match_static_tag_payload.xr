@@ -11,7 +11,7 @@ fn pick(ok: bool) -> FastResult<int> {
 }
 
 fn score(ok: bool) -> int {
-    let result = pick(ok)
+    var result = pick(ok)
     match (result) {
         FastResult.Ok(value) -> {
             return value + 1

@@ -10,8 +10,8 @@ fn run(n: int) {
     // Phase 1: Swiss cheese pattern
     // Allocate array of objects, then nil-out every other one
     // This creates maximum fragmentation for line-based allocators
-    let objects = []
-    let i = 0
+    var objects = []
+    var i = 0
     while (i < 2000) {
         // Varying sizes: small and medium objects interleaved
         if (i % 3 == 0) {
@@ -26,8 +26,8 @@ fn run(n: int) {
     print("Phase 1: allocated 2000 objects")
 
     // Punch holes: remove every other object
-    let checksum = 0
-    let round = 0
+    var checksum = 0
+    var round = 0
     while (round < n) {
         i = 0
         while (i < 2000) {
@@ -53,22 +53,22 @@ fn run(n: int) {
     // Phase 2: Generational fragmentation
     // Keep some objects alive across many GC cycles (old gen)
     // while rapidly churning others (young gen)
-    let permanent = []
+    var permanent = []
     i = 0
     while (i < 200) {
         permanent.push({ "id": i, "children": [] })
         i = i + 1
     }
 
-    let total = 0
+    var total = 0
     round = 0
     while (round < n) {
         // Add temporary children to permanent objects (old→young refs)
         i = 0
         while (i < 200) {
             // Replace children each round
-            let kids = []
-            let j = 0
+            var kids = []
+            var j = 0
             while (j < 5) {
                 kids.push({ "parent": i, "gen": round, "val": round * 5 + j })
                 j = j + 1
@@ -85,7 +85,7 @@ fn run(n: int) {
     // Phase 3: Reallocate with different sizes
     // After fragmentation, allocate objects of different sizes
     // Tests whether the allocator can reuse fragmented space
-    let mixed = []
+    var mixed = []
     round = 0
     while (round < n) {
         mixed = []
@@ -105,11 +105,11 @@ fn run(n: int) {
         }
         round = round + 1
     }
-    let lastLen = mixed.length
+    var lastLen = mixed.length
     print("Phase 3 (size mixing x" + n + "): final array length=" + lastLen)
 }
 
-let n = process.args.length > 0 ? int(process.args[0]) ?? 500 : 500
+var n = process.args.length > 0 ? int(process.args[0]) ?? 500 : 500
 run(n)
-let a = []
-let b:Array;
+var a = []
+var b:Array;

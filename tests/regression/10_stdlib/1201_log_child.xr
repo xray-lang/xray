@@ -5,7 +5,7 @@ import log
 @test
 fn test_child_logger_creation() {
     log.setLevel(log.DEBUG)
-    let httpLog = log.child("module", "http", "version", "1.0")
+    var httpLog = log.child("module", "http", "version", "1.0")
     assert_eq(typeof(httpLog), "Logger")
 }
 
@@ -13,7 +13,7 @@ fn test_child_logger_creation() {
 fn test_child_logger_methods() {
     log.setLevel(log.DEBUG)
     log.setFormat("json")
-    let httpLog = log.child("module", "http")
+    var httpLog = log.child("module", "http")
     httpLog.debug("debug from child")
     httpLog.info("request received", "path", "/api")
     httpLog.warn("slow response")
@@ -25,8 +25,8 @@ fn test_child_logger_methods() {
 @test
 fn test_nested_child_logger() {
     log.setLevel(log.DEBUG)
-    let httpLog = log.child("module", "http")
-    let dbLog = httpLog.child("component", "database")
+    var httpLog = log.child("module", "http")
+    var dbLog = httpLog.child("component", "database")
     assert_eq(typeof(dbLog), "Logger")
     dbLog.info("query executed", "table", "users")
 }

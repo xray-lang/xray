@@ -1,7 +1,7 @@
 const OFFSET: uint32 = 17
 
 fn mix(seed: uint32) -> uint32 {
-    let t: uint32 = seed + 1
+    var t: uint32 = seed + 1
     return t + OFFSET
 }
 

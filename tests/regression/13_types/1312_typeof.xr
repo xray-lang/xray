@@ -14,11 +14,11 @@ assert_eq(typeof(true), "bool")
 assert_eq(typeof(false), "bool")
 assert_eq(typeof(null), "null")
 // 测试容器类型
-let arr = [1, 2, 3]
+var arr = [1, 2, 3]
 assert_eq(typeof(arr), "Array")
-let map = #{"a": 1}
+var map = #{"a": 1}
 assert_eq(typeof(map), "Map")
-let s = #[1, 2, 3]
+var s = #[1, 2, 3]
 assert_eq(typeof(s), "Set")
 
 // 测试函数类型
@@ -29,14 +29,14 @@ fn test_fn() -> int {
 
 assert_eq(typeof(test_fn), "function")
 // 测试闭包
-let closure = fn() {
+var closure = fn() {
     return 1
 }
 assert_eq(typeof(closure), "function")
 // 测试变量类型
-let x = 10
+var x = 10
 assert_eq(typeof(x), "int")
-let y = 3.14
+var y = 3.14
 assert_eq(typeof(y), "float")
 // 测试表达式结果类型
 assert_eq(typeof(1 + 2), "int")

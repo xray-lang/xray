@@ -10,8 +10,8 @@ type Box<T> = { value: T }
 
 @test
 fn test_object_alias() {
-    let ints: Pair<int> = { first: 2, second: 5 }
-    let names: Pair<string> = { first: "x", second: "ray" }
+    var ints: Pair<int> = { first: 2, second: 5 }
+    var names: Pair<string> = { first: "x", second: "ray" }
     assert_eq(ints.first + ints.second, 7)
     assert_eq(names.first + names.second, "xray")
 }
@@ -26,9 +26,9 @@ fn test_function_alias() {
 
 @test
 fn test_container_and_optional_alias() {
-    let xs: Vec<int> = [1, 2, 3]
-    let hit: Maybe<string> = "ok"
-    let miss: Maybe<string> = null
+    var xs: Vec<int> = [1, 2, 3]
+    var hit: Maybe<string> = "ok"
+    var miss: Maybe<string> = null
     assert_eq(xs.length, 3)
     assert_eq(hit ?? "no", "ok")
     assert_eq(miss ?? "no", "no")
@@ -36,6 +36,6 @@ fn test_container_and_optional_alias() {
 
 @test
 fn test_forward_generic_alias() {
-    let box: Forward<int> = { value: 42 }
+    var box: Forward<int> = { value: 42 }
     assert_eq(box.value, 42)
 }

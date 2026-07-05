@@ -108,7 +108,8 @@ TEST(lexer_inc_dec) {
 /* ========== Keyword Tests ========== */
 
 TEST(lexer_keywords) {
-    assert_token(scan_single("let"), TK_LET, "let");
+    assert_token(scan_single("var"), TK_VAR, "var");
+    assert_token(scan_single("let"), TK_NAME, "let");
     assert_token(scan_single("const"), TK_CONST, "const");
     assert_token(scan_single("fn"), TK_FN, "fn");
     assert_token(scan_single("return"), TK_RETURN, "return");
@@ -315,10 +316,10 @@ TEST(lexer_token_sequence) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "let x = 42");
+    xr_scanner_init(&scanner, "var x = 42");
 
     t = xr_scanner_scan(&scanner);
-    assert_token(t, TK_LET, "let");
+    assert_token(t, TK_VAR, "var");
 
     t = xr_scanner_scan(&scanner);
     assert_token(t, TK_NAME, "x");
@@ -518,7 +519,6 @@ TEST(lexer_keyword_table_completeness) {
         {"int64", TK_INT64},
         {"interface", TK_INTERFACE},
         {"is", TK_IS},
-        {"let", TK_LET},
         {"match", TK_MATCH},
         {"new", TK_NEW},
         {"null", TK_NULL},
@@ -542,6 +542,7 @@ TEST(lexer_keyword_table_completeness) {
         {"uint16", TK_UINT16},
         {"uint32", TK_UINT32},
         {"uint64", TK_UINT64},
+        {"var", TK_VAR},
         {"while", TK_WHILE},
         {"yield", TK_YIELD},
         // None of the uppercase native type names are lexer keywords:

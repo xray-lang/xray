@@ -4,21 +4,21 @@
 
 fn counter(n: int) -> Iterator<int> {
     print("start " + string(n))
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         print("yield " + string(i))
         yield i
     }
     print("done " + string(n))
 }
 
-let sum = 0
+var sum = 0
 for (x in counter(3)) {
     print("take " + string(x))
     sum = sum + x
 }
 print("sum " + string(sum))
 
-let partial = 0
+var partial = 0
 for (x in counter(5)) {
     print("partial " + string(x))
     partial = partial + x

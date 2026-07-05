@@ -1,11 +1,11 @@
 fn build_array() -> Array<int> {
-    let xs = [1, 2]
+    var xs = [1, 2]
     Coro.yield()
     return xs
 }
 
-let task = go build_array()
-let xs = await task
+var task = go build_array()
+var xs = await task
 print(xs.length)
 xs.push(3)
 print(xs.length)

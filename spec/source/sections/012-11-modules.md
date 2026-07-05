@@ -132,7 +132,7 @@ export * from "./product"
 
 **限制**：
 - 未标 `export` 的声明仅模块内可见（**私有**）。
-- `export let` 不被支持。可变绑定不能跨模块共享，使用 `export const` 代替。
+- `export var` 不被支持。可变绑定不能跨模块共享，使用 `export const` 代替。
 - 模块的内部状态在不同模块中互不冲突，即使同名。
 - 重导出与通配重导出常用于 `index.xr` 聚合子模块的公开 API。
 
@@ -171,7 +171,7 @@ xray 端用法相同：
 
 ```xray @id=modules-use
 import time
-let t = time.now()
+var t = time.now()
 time.sleep(100)
 ```
 <!-- /xr-spec:cn -->
@@ -305,7 +305,7 @@ export * from "./product"
 
 **Restrictions**:
 - Declarations not marked `export` are **private** to the module.
-- `export let` is not supported. Mutable bindings cannot be shared across modules; use `export const` instead.
+- `export var` is not supported. Mutable bindings cannot be shared across modules; use `export const` instead.
 - Internal state does not collide across modules even with the same name.
 - Re-exports and wildcard re-exports are commonly used in `index.xr` to aggregate public APIs of submodules.
 
@@ -346,7 +346,7 @@ Usage from Xray code is identical:
 
 ```xray @id=modules-use
 import time
-let t = time.now()
+var t = time.now()
 time.sleep(100)
 ```
 <!-- /xr-spec:en -->

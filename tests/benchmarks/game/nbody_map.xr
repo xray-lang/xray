@@ -13,7 +13,7 @@ fn createBody(x, y, z, vx, vy, vz, mass) {
 }
 
 fn createBodies() {
-    let bodies = []
+    var bodies = []
     bodies.push(createBody(0, 0, 0, 0, 0, 0, SOLAR_MASS))
     bodies.push(createBody(4.84143, -1.16032, -0.103622, 0.00166008 * DAYS_PER_YEAR, 0.00769901 * DAYS_PER_YEAR, -6.9046e-05 * DAYS_PER_YEAR, 0.000954792 * SOLAR_MASS))
     bodies.push(createBody(8.34337, 4.1248, -0.403523, -0.00276743 * DAYS_PER_YEAR, 0.00499853 * DAYS_PER_YEAR, 2.30417e-05 * DAYS_PER_YEAR, 0.000285886 * SOLAR_MASS))
@@ -23,12 +23,12 @@ fn createBodies() {
 }
 
 fn offsetMomentum(bodies) {
-    let px = 0.0
-    let py = 0.0
-    let pz = 0.0
-    let i = 0
+    var px = 0.0
+    var py = 0.0
+    var pz = 0.0
+    var i = 0
     while (i < bodies.length) {
-        let b = bodies[i]
+        var b = bodies[i]
         px = px + b["vx"] * b["mass"]
         py = py + b["vy"] * b["mass"]
         pz = pz + b["vz"] * b["mass"]
@@ -40,19 +40,19 @@ fn offsetMomentum(bodies) {
 }
 
 fn energy(bodies): float {
-    let e = 0.0
-    let nbodies = bodies.length
-    let i = 0
+    var e = 0.0
+    var nbodies = bodies.length
+    var i = 0
     while (i < nbodies) {
-        let bi = bodies[i]
+        var bi = bodies[i]
         e = e + 0.5 * bi["mass"] * (bi["vx"] * bi["vx"] + bi["vy"] * bi["vy"] + bi["vz"] * bi["vz"])
-        let j = i + 1
+        var j = i + 1
         while (j < nbodies) {
-            let bj = bodies[j]
-            let dx = bi["x"] - bj["x"]
-            let dy = bi["y"] - bj["y"]
-            let dz = bi["z"] - bj["z"]
-            let distance = (dx * dx + dy * dy + dz * dz).sqrt()
+            var bj = bodies[j]
+            var dx = bi["x"] - bj["x"]
+            var dy = bi["y"] - bj["y"]
+            var dz = bi["z"] - bj["z"]
+            var distance = (dx * dx + dy * dy + dz * dz).sqrt()
             e = e - (bi["mass"] * bj["mass"]) / distance
             j = j + 1
         }
@@ -62,19 +62,19 @@ fn energy(bodies): float {
 }
 
 fn advance(bodies, dt: float) {
-    let nbodies = bodies.length
-    let i = 0
+    var nbodies = bodies.length
+    var i = 0
     while (i < nbodies) {
-        let bi = bodies[i]
-        let j = i + 1
+        var bi = bodies[i]
+        var j = i + 1
         while (j < nbodies) {
-            let bj = bodies[j]
-            let dx = bi["x"] - bj["x"]
-            let dy = bi["y"] - bj["y"]
-            let dz = bi["z"] - bj["z"]
-            let distanceSquared = dx * dx + dy * dy + dz * dz
-            let distance = distanceSquared.sqrt()
-            let mag = dt / (distanceSquared * distance)
+            var bj = bodies[j]
+            var dx = bi["x"] - bj["x"]
+            var dy = bi["y"] - bj["y"]
+            var dz = bi["z"] - bj["z"]
+            var distanceSquared = dx * dx + dy * dy + dz * dz
+            var distance = distanceSquared.sqrt()
+            var mag = dt / (distanceSquared * distance)
             bi["vx"] = bi["vx"] - dx * bj["mass"] * mag
             bi["vy"] = bi["vy"] - dy * bj["mass"] * mag
             bi["vz"] = bi["vz"] - dz * bj["mass"] * mag
@@ -87,7 +87,7 @@ fn advance(bodies, dt: float) {
     }
     i = 0
     while (i < nbodies) {
-        let b = bodies[i]
+        var b = bodies[i]
         b["x"] = b["x"] + dt * b["vx"]
         b["y"] = b["y"] + dt * b["vy"]
         b["z"] = b["z"] + dt * b["vz"]
@@ -96,11 +96,11 @@ fn advance(bodies, dt: float) {
 }
 
 fn main() {
-    let n = process.args.length > 0 ? int(process.args[0]) ?? 500000 : 500000
-    let bodies = createBodies()
+    var n = process.args.length > 0 ? int(process.args[0]) ?? 500000 : 500000
+    var bodies = createBodies()
     offsetMomentum(bodies)
     print(energy(bodies))
-    let i = 0
+    var i = 0
     while (i < n) {
         advance(bodies, 0.01)
         i = i + 1

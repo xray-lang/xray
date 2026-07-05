@@ -5,9 +5,9 @@ struct Pair {
 }
 
 fn run(n: int) -> int {
-    let p = Pair{a: 1, b: 2, scale: 3}
-    let i = 0
-    let sum = 0
+    var p = Pair{a: 1, b: 2, scale: 3}
+    var i = 0
+    var sum = 0
     while (i < n) {
         p.a = p.a + i
         p.b = p.b + p.scale

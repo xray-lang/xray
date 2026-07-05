@@ -2,7 +2,7 @@ import mem
 
 @c_export("xray_mem_addr_roundtrip")
 fn xray_mem_addr_roundtrip(addr: int) -> int {
-    let p = mem.fromAddress(addr)
+    var p = mem.fromAddress(addr)
     return mem.addressOf(p)
 }
 
@@ -18,8 +18,8 @@ fn xray_mem_bits(x: int, n: int) -> int {
 
 @c_export("xray_mem_bulk")
 fn xray_mem_bulk(dst: int, src: int, n: int) -> int {
-    let d = mem.fromAddress(dst)
-    let s = mem.fromAddress(src)
+    var d = mem.fromAddress(dst)
+    var s = mem.fromAddress(src)
     mem.copy(d, s, n)
     mem.move(d, s, n)
     mem.set(d, 0, n)
@@ -28,7 +28,7 @@ fn xray_mem_bulk(dst: int, src: int, n: int) -> int {
 
 @c_export("xray_mem_mmio_shape")
 fn xray_mem_mmio_shape(addr: int) -> int {
-    let p = mem.fromAddress(addr)
+    var p = mem.fromAddress(addr)
     mem.prefetch(p, 1)
     mem.cacheFlush(p, 64)
     mem.cacheInvalidate(p, 64)

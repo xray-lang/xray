@@ -19,15 +19,15 @@ fn skynet(result_ch: Channel<int>, num: int, size: int, div: int) {
         return
     }
     const child_size = int(size / div)
-    shared const ch = Channel(10)
-    let sum = 0
+    shared ch = Channel(10)
+    var sum = 0
     scope {
-        for (let i = 0; i < div; i++) {
+        for (var i = 0; i < div; i++) {
             const cn = num + i * child_size
             const cs = child_size
             go skynet_child(ch, cn, cs, div)
         }
-        for (let i = 0; i < div; i++) {
+        for (var i = 0; i < div; i++) {
             sum = sum + recv_int(ch, 0)
         }
     }
@@ -41,9 +41,9 @@ fn skynet_child(result_ch: Channel<int>, num: int, size: int, div: int) {
 
 // 计算总协程数
 fn calc_total(depth: int) -> int {
-    let total = 0
-    let n = 1
-    for (let i = 0; i <= depth; i++) {
+    var total = 0
+    var n = 1
+    for (var i = 0; i <= depth; i++) {
         total = total + n
         n = n * 10
     }
@@ -55,14 +55,14 @@ const depth = process.args.length > 0 ? (int(process.args[0]) ?? 6) : 6
 print("=== Skynet 测试 ===")
 print("深度:", depth)
 print("预计协程数:", calc_total(depth))
-let size = 1
-for (let i = 0; i < depth; i++) {
+var size = 1
+for (var i = 0; i < depth; i++) {
     size = size * 10
 }
 const start = time.monotonic()
 const final_size = size
-shared const result_ch = Channel(1)
-let task = go skynet_child(result_ch, 0, final_size, 10)
+shared result_ch = Channel(1)
+var task = go skynet_child(result_ch, 0, final_size, 10)
 const result = recv_int(result_ch, 0)
 await task
 const elapsed = time.monotonic() - start

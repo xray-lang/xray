@@ -11,11 +11,11 @@ fn worker(ch: Channel<int>, value: int) -> int {
 }
 
 fn run() -> int {
-    shared const ch: Channel<int> = Channel(1)
-    let tasks: Array<Task<int>> = []
+    shared ch: Channel<int> = Channel(1)
+    var tasks: Array<Task<int>> = []
     tasks.push(go worker(ch, 41))
-    let received = recvInt(ch)
-    let results = await all tasks
+    var received = recvInt(ch)
+    var results = await all tasks
     ch.close()
     return received + results[0]
 }

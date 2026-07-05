@@ -13,7 +13,7 @@ import time
 
 print("=== WebSocket Server/Client Integration Test ===")
 
-let testPassed = false
+var testPassed = false
 
 // Server coroutine
 go fn() {
@@ -23,7 +23,7 @@ go fn() {
         print("[Server] Client connected")
         
         while (ws.isOpen(conn)) {
-            let msg = ws.recv(conn, null)
+            var msg = ws.recv(conn, null)
             if (msg == null || msg.error) {
                 break
             }
@@ -44,7 +44,7 @@ time.sleep(100)
 go fn() {
     print("[Client] Connecting to ws://localhost:8766...")
     
-    let conn = ws.connect("ws://localhost:8766", null)
+    var conn = ws.connect("ws://localhost:8766", null)
     if (conn!.error) {
         print("[Client] Connection error: " + conn!.error)
         ws.stopServer()
@@ -58,7 +58,7 @@ go fn() {
     ws.send(conn, "Hello Server!", null)
     
     // Receive echo
-    let msg = ws.recv(conn, null)
+    var msg = ws.recv(conn, null)
     if (msg != null && msg!.data) {
         print("[Client] Received: " + msg!.data)
         if (msg!.data == "Echo: Hello Server!") {

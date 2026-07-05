@@ -8,8 +8,8 @@
 fn run(n: int) {
     // Phase 1: Build a long-lived map, then repeatedly overwrite values
     // This forces write barriers: old container ← young value
-    let bigMap = #{}
-    let i = 0
+    var bigMap = #{}
+    var i = 0
     while (i < 1000) {
         bigMap["key_" + i] = i
         i = i + 1
@@ -17,7 +17,7 @@ fn run(n: int) {
     print("Phase 1: built map with 1000 keys")
 
     // Repeatedly overwrite with new objects (write barrier stress)
-    let round = 0
+    var round = 0
     while (round < n) {
         i = 0
         while (i < 1000) {
@@ -27,15 +27,15 @@ fn run(n: int) {
         round = round + 1
     }
     // Verify
-    let check = bigMap["key_500"].v
+    var check = bigMap["key_500"].v
     print("Phase 1 done: " + n + " rounds, check=" + check)
 
     // Phase 2: Create and discard many small maps (allocation churn)
-    let total = 0
+    var total = 0
     i = 0
     while (i < n * 10) {
-        let m = {}
-        let j = 0
+        var m = {}
+        var j = 0
         while (j < 20) {
             m["k" + j] = j * j
             j = j + 1
@@ -46,11 +46,11 @@ fn run(n: int) {
     print("Phase 2 (small map churn x" + (n * 10) + "): total=" + total)
 
     // Phase 3: Nested maps (deep reference chains, mark traversal stress)
-    let root = {}
+    var root = {}
     i = 0
     while (i < n) {
-        let inner = {}
-        let j = 0
+        var inner = {}
+        var j = 0
         while (j < 10) {
             inner["field_" + j] = { "data": i * 10 + j }
             j = j + 1
@@ -58,9 +58,9 @@ fn run(n: int) {
         root["node_" + (i % 100)] = inner
         i = i + 1
     }
-    let deepCheck = root["node_0"]["field_5"].data
+    var deepCheck = root["node_0"]["field_5"].data
     print("Phase 3 (nested maps): check=" + deepCheck)
 }
 
-let n = process.args.length > 0 ? int(process.args[0]) ?? 500 : 500
+var n = process.args.length > 0 ? int(process.args[0]) ?? 500 : 500
 run(n)

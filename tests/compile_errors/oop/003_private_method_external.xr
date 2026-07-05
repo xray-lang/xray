@@ -2,5 +2,5 @@ class Account {
     private secret() -> int { return 42 }
     constructor() {}
 }
-let a = Account()
+var a = Account()
 print(a.secret())

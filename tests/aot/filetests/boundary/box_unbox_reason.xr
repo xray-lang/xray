@@ -1,6 +1,6 @@
-let arr = [1, 2, 3]
-let total = 0
-let i = 0
+var arr = [1, 2, 3]
+var total = 0
+var i = 0
 
 while (i < arr.length) {
     total = total + arr[i]

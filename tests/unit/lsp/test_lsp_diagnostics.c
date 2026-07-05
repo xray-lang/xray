@@ -74,7 +74,7 @@ TEST(diagnostics_valid_code) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code = "let x = 42\nlet y = x + 1\n";
+    const char *code = "var x = 42\nvar y = x + 1\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -93,7 +93,7 @@ TEST(diagnostics_syntax_error) {
     ASSERT(server != NULL);
 
     // Missing closing paren
-    const char *code = "let x = (42\n";
+    const char *code = "var x = (42\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -132,7 +132,7 @@ TEST(diagnostics_disabled_config) {
     // Disable diagnostics in config
     server->config.diagnostics_enabled = false;
 
-    const char *code = "let x = (42\n";
+    const char *code = "var x = (42\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -154,7 +154,7 @@ TEST(diagnostics_enabled_config) {
     // Enable diagnostics (default)
     server->config.diagnostics_enabled = true;
 
-    const char *code = "let x = 42\n";
+    const char *code = "var x = 42\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -175,7 +175,7 @@ TEST(diagnostics_debounce_dedup) {
     ASSERT(server != NULL);
     server->config.diagnostics_enabled = true;
 
-    const char *code = "let x = 42\n";
+    const char *code = "var x = 42\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -196,8 +196,8 @@ TEST(diagnostics_multiple_documents) {
     ASSERT(server != NULL);
     server->config.diagnostics_enabled = true;
 
-    XrLspDocument *doc1 = open_and_parse(server, "file:///a.xr", "let a = 1\n");
-    XrLspDocument *doc2 = open_and_parse(server, "file:///b.xr", "let b = 2\n");
+    XrLspDocument *doc1 = open_and_parse(server, "file:///a.xr", "var a = 1\n");
+    XrLspDocument *doc2 = open_and_parse(server, "file:///b.xr", "var b = 2\n");
     ASSERT(doc1 != NULL);
     ASSERT(doc2 != NULL);
 

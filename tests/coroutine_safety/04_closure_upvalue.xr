@@ -12,7 +12,7 @@ fn recvValue(ch) {
 }
 
 fn test_closure_capture() {
-    let counter = 0
+    var counter = 0
     fn increment() {
         counter = counter + 1
         return counter
@@ -27,37 +27,37 @@ fn test_closure_capture() {
 }
 
 fn test_closure_in_go() {
-    let result_ch = Channel(1)
+    shared result_ch = Channel(1)
     fn make_adder(base) {
         // 返回闭包，捕获 base
         return fn(x) {
             return base + x
         }
     }
-    let add10 = make_adder(10)
+    var add10 = make_adder(10)
     fn worker() {
-        let r = add10(5)
+        var r = add10(5)
         // 应该返回 15
         result_ch.send(r)
     }
-    let task = go worker()
+    var task = go worker()
     await task
-    let result = recvValue(result_ch)
+    var result = recvValue(result_ch)
     print("闭包协程结果:", result)
     assert_eq(result, 15)
     print("✓ 协程中闭包测试通过")
 }
 
 fn test_multiple_closures() {
-    let results = Channel(3)
+    shared results = Channel(3)
     fn make_multiplier(factor) {
         return fn(x) {
             return x * factor
         }
     }
-    let double = make_multiplier(2)
-    let triple = make_multiplier(3)
-    let quadruple = make_multiplier(4)
+    var double = make_multiplier(2)
+    var triple = make_multiplier(3)
+    var quadruple = make_multiplier(4)
     fn worker1() {
         results.send(double(10))
     }
@@ -67,23 +67,23 @@ fn test_multiple_closures() {
     fn worker3() {
         results.send(quadruple(10))
     }
-    let t1 = go worker1()
-    let t2 = go worker2()
-    let t3 = go worker3()
+    var t1 = go worker1()
+    var t2 = go worker2()
+    var t3 = go worker3()
     await [t1, t2, t3]
-    let r1 = recvValue(results)
-    let r2 = recvValue(results)
-    let r3 = recvValue(results)
+    var r1 = recvValue(results)
+    var r2 = recvValue(results)
+    var r3 = recvValue(results)
     print("结果:", r1, r2, r3)
     // 结果顺序可能不同，检查总和
-    let sum = r1 + r2 + r3
+    var sum = r1 + r2 + r3
     assert_eq(sum, 20 + 30 + 40)
     // 90
     print("✓ 多闭包测试通过")
 }
 
 fn test_nested_closure() {
-    let ch = Channel(1)
+    shared ch = Channel(1)
     fn outer(a) {
         fn middle(b) {
             fn inner(c) {
@@ -93,14 +93,14 @@ fn test_nested_closure() {
         }
         return middle
     }
-    let f = outer(1)(2)
+    var f = outer(1)(2)
     // 返回 inner，捕获 a=1, b=2
     fn worker() {
         ch.send(f(3))
     }
-    let task = go worker()
+    var task = go worker()
     await task
-    let result = recvValue(ch)
+    var result = recvValue(ch)
     print("嵌套闭包结果:", result)
     assert_eq(result, 6)
     print("✓ 嵌套闭包测试通过")

@@ -3,5 +3,5 @@
 // Numeric / string / nested-call expressions in the pattern are
 // rejected at parse time.
 fn main() {
-    let (a, 42, c) = (1, 2, 3)
+    var (a, 42, c) = (1, 2, 3)
 }

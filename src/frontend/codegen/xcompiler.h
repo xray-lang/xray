@@ -40,7 +40,7 @@ typedef struct XrGlobalVar {
     bool is_const;
 } XrGlobalVar;
 
-/* Ownership state for shared let variables (Move semantics) */
+/* Ownership state for explicit local move semantics. */
 typedef enum {
     SHARED_STATE_OWNED, /* Can be used */
     SHARED_STATE_MOVED, /* Cannot be used after Channel.send() */
@@ -53,7 +53,7 @@ typedef struct XrSharedVar {
     int scope_depth;    /* Scope depth at declaration */
     int function_depth; /* Function nesting depth */
     bool is_const;
-    XrSharedState state;         /* Ownership (shared let only) */
+    XrSharedState state;         /* Ownership (shared only) */
     int moved_line;              /* Line where variable was moved */
     int moved_column;            /* Column where variable was moved */
     struct XrType *compile_type; /* Inferred type */

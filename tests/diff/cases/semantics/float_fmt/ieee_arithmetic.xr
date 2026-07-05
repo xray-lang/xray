@@ -11,13 +11,13 @@ fn runtime_div_f32(a: float32, b: float32) -> float32 {
     return a / b
 }
 
-let zp = 0.0
-let pos = runtime_div(1.0, zp)
-let neg = runtime_div(-1.0, zp)
-let nan_rt = runtime_div(zp, zp)
-let nan_folded = 0.0 / 0.0
-let pos_folded = 1.0 / 0.0
-let f32_inf = runtime_div_f32(1.0, 0.0)
+var zp = 0.0
+var pos = runtime_div(1.0, zp)
+var neg = runtime_div(-1.0, zp)
+var nan_rt = runtime_div(zp, zp)
+var nan_folded = 0.0 / 0.0
+var pos_folded = 1.0 / 0.0
+var f32_inf = runtime_div_f32(1.0, 0.0)
 
 print(math.isFinite(pos))
 print(pos > 1.0)

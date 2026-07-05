@@ -11,7 +11,7 @@ fn mayFail(n: int) -> int {
 
 @c_export("xray_enum_reject")
 fn xray_enum_reject(n: int) -> int {
-    let out = 0
+    var out = 0
     try { out = mayFail(n) } catch (e) { out = -1 }
     return out
 }

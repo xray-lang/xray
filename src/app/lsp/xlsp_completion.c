@@ -273,7 +273,7 @@ static XlspBuiltinType infer_type_from_source(const char *content, const char *v
         while (*line_start == ' ' || *line_start == '\t')
             line_start++;
 
-        if (strncmp(line_start, "let ", 4) == 0 || strncmp(line_start, "const ", 6) == 0) {
+        if (strncmp(line_start, "var ", 4) == 0 || strncmp(line_start, "const ", 6) == 0) {
             const char *after = p + var_len;
             while (*after == ' ' || *after == '\t')
                 after++;
@@ -415,8 +415,8 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             } else {
                 kind = 6;
                 const char *type_str = type ? xr_type_to_string(type) : "unknown";
-                snprintf(detail_buf, sizeof(detail_buf), "%s: %s", sym->is_const ? "const" : "let",
-                         type_str);
+                const char *kw = sym->is_shared ? "shared" : (sym->is_const ? "const" : "var");
+                snprintf(detail_buf, sizeof(detail_buf), "%s: %s", kw, type_str);
                 detail = detail_buf;
             }
 
@@ -575,7 +575,7 @@ static XrJsonValue *complete_enum_decl(XrLspDocument *doc, const char *prefix) {
     return NULL;
 }
 
-// Shared helper: advance `p` to the next occurrence of `let <prefix>`
+// Shared helper: advance `p` to the next occurrence of `var <prefix>`
 // or `const <prefix>` such that the match is surrounded by non-identifier
 // bytes (whole-word). `*out_after` points at the first byte AFTER the
 // identifier on success, ready for `: Type` or `= expr` parsing.
@@ -583,11 +583,11 @@ static XrJsonValue *complete_enum_decl(XrLspDocument *doc, const char *prefix) {
 static bool scan_next_binding(const char **p_io, const char *content_begin, const char *prefix,
                               size_t prefix_len, const char **out_after) {
     const char *p = *p_io;
-    char let_pat[128], const_pat[128];
-    snprintf(let_pat, sizeof(let_pat), "let %s", prefix);
+    char var_pat[128], const_pat[128];
+    snprintf(var_pat, sizeof(var_pat), "var %s", prefix);
     snprintf(const_pat, sizeof(const_pat), "const %s", prefix);
     while (p && *p) {
-        const char *lm = strstr(p, let_pat);
+        const char *lm = strstr(p, var_pat);
         const char *cm = strstr(p, const_pat);
         const char *match = NULL;
         int skip = 0;
@@ -602,7 +602,7 @@ static bool scan_next_binding(const char **p_io, const char *content_begin, cons
             *p_io = p;
             return false;
         }
-        // Boundary: char before the `let`/`const` must not be identifier.
+        // Boundary: char before the `var`/`const` must not be identifier.
         if (match > content_begin) {
             char prev = match[-1];
             if ((prev >= 'a' && prev <= 'z') || (prev >= 'A' && prev <= 'Z') ||
@@ -628,12 +628,12 @@ static bool scan_next_binding(const char **p_io, const char *content_begin, cons
     return false;
 }
 
-// Step 1 of instance-member completion: scan for `let x = <rhs>` forms
+// Step 1 of instance-member completion: scan for `var x = <rhs>` forms
 // to either (a) emit a literal/constructor completion directly, or
-// (b) extract the class name for `new ClassName(...)`.
+// (b) extract the class name for `ClassName(...)`.
 // Output: *early_items = non-null for direct completions (caller returns it).
-//         *class_name_out = non-null char* when we found a `new Foo` RHS.
-static void scan_let_const_assignment(XrLspDocument *doc, const char *prefix,
+//         *class_name_out = non-null char* when we found a `Foo(...)` RHS.
+static void scan_var_const_assignment(XrLspDocument *doc, const char *prefix,
                                       XrJsonValue **early_items, const char **class_name_out) {
     *early_items = NULL;
     *class_name_out = NULL;
@@ -693,16 +693,29 @@ static void scan_let_const_assignment(XrLspDocument *doc, const char *prefix,
             return;
         }
 
-        // new ClassName(...) → capture class name for later member lookup.
-        if (strncmp(after, "new ", 4) == 0) {
-            after += 4;
-            while (*after == ' ' || *after == '\t')
-                after++;
+        // ClassName(...) / ClassName<T>(...) -> capture class name for later member lookup.
+        if (*after >= 'A' && *after <= 'Z') {
             const char *name_start = after;
             while ((*after >= 'a' && *after <= 'z') || (*after >= 'A' && *after <= 'Z') ||
                    (*after >= '0' && *after <= '9') || *after == '_')
                 after++;
-            if (after > name_start) {
+            const char *call_start = after;
+            while (*call_start == ' ' || *call_start == '\t')
+                call_start++;
+            if (*call_start == '<') {
+                int depth = 1;
+                call_start++;
+                while (*call_start && depth > 0) {
+                    if (*call_start == '<')
+                        depth++;
+                    else if (*call_start == '>')
+                        depth--;
+                    call_start++;
+                }
+                while (*call_start == ' ' || *call_start == '\t')
+                    call_start++;
+            }
+            if (after > name_start && *call_start == '(') {
                 static char found_class[64];
                 size_t len = (size_t) (after - name_start);
                 if (len < sizeof(found_class)) {
@@ -820,7 +833,7 @@ static void append_instance_method(XrJsonValue *items, XaAnalyzer *analyzer, XaS
     xjson_array_push(items, item);
 }
 
-// Instance-member completion via scanned class name (from `new ClassName(...)`).
+// Instance-member completion via scanned class name (from `ClassName(...)`).
 static XrJsonValue *complete_instance_members_by_name(XaAnalyzer *analyzer,
                                                       const char *class_name) {
     XrClassInfo *cls_info = xa_analyzer_get_class(analyzer, class_name);
@@ -969,7 +982,7 @@ static XrJsonValue *complete_enum_instance(XrLspDocument *doc, XrLspPosition pos
     return make_enum_value_completions(enum_name);
 }
 
-// Variable assigned from an enum member: `let c = Color.Green; c.` → name/...
+// Variable assigned from an enum member: `var c = Color.Green; c.` → name/...
 static XrJsonValue *complete_variable_from_enum_assignment(XrLspDocument *doc, const char *prefix) {
     if (!doc->content || !doc->ast)
         return NULL;
@@ -1039,13 +1052,13 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
     if ((r = complete_enum_decl(doc, prefix)))
         return r;
 
-    // Class-instance path via text scan for `let x = <rhs>` / `const x = <rhs>`.
-    // scan_let_const_assignment() handles literal RHS directly and extracts
-    // `new ClassName(...)` into class_name for a subsequent member lookup.
+    // Class-instance path via text scan for `var x = <rhs>` / `const x = <rhs>`.
+    // scan_var_const_assignment() handles literal RHS directly and extracts
+    // `ClassName(...)` into class_name for a subsequent member lookup.
     if (doc->content && analyzer) {
         XrJsonValue *early = NULL;
         const char *class_name = NULL;
-        scan_let_const_assignment(doc, prefix, &early, &class_name);
+        scan_var_const_assignment(doc, prefix, &early, &class_name);
         if (early)
             return early;
 

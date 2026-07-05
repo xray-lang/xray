@@ -6,16 +6,16 @@
 
 @test
 fn test_int_to_string() {
-    let x = 42
-    let s = string(x)
+    var x = 42
+    var s = string(x)
     assert_eq(s, "42")
     assert_eq(typeof(s), "string")
 }
 
 @test
 fn test_float_to_string() {
-    let x = 3.14
-    let s = string(x)
+    var x = 3.14
+    var s = string(x)
     assert_eq(s.startsWith("3.14"), true)
 }
 
@@ -50,14 +50,14 @@ fn test_bool_to_int() {
 
 @test
 fn test_string_to_float() {
-    let f = float("3.14")
+    var f = float("3.14")
     assert_eq(f > 3.13, true)
     assert_eq(f < 3.15, true)
 }
 
 @test
 fn test_int_to_float() {
-    let f = float(42)
+    var f = float(42)
     assert_eq(f, 42.0)
 }
 
@@ -85,8 +85,8 @@ fn test_null_to_bool() {
 
 @test
 fn test_array_unique() {
-    let arr = [1, 2, 2, 3, 3, 3]
-    let s = #[1, 2, 3]  // 手动去重
+    var arr = [1, 2, 2, 3, 3, 3]
+    var s = #[1, 2, 3]  // 手动去重
     assert_eq(s.length, 3)
     assert_eq(s.has(1), true)
     assert_eq(s.has(2), true)

@@ -10,21 +10,21 @@ import "./modules/mod_b" as b
 
 @test
 fn test_mod_a_works() {
-    let result = a.publicFn()
+    var result = a.publicFn()
     assert_eq(result, "A-helper-1.0")
 }
 
 @test
 fn test_mod_b_works() {
-    let result = b.publicFn()
+    var result = b.publicFn()
     assert_eq(result, "B-helper-2.0")
 }
 
 @test
 fn test_modules_independent() {
     // 两个模块的内部状态互不干扰
-    let resultA = a.publicFn()
-    let resultB = b.publicFn()
+    var resultA = a.publicFn()
+    var resultB = b.publicFn()
     assert_eq(resultA != resultB, true)
 }
 

@@ -6,9 +6,9 @@ import time
 
 @test
 fn test_monotonic_ordering() {
-    let t1 = time.monotonic()
-    let t2 = time.monotonic()
-    let t3 = time.monotonic()
+    var t1 = time.monotonic()
+    var t2 = time.monotonic()
+    var t3 = time.monotonic()
     assert(t3 >= t2)
     assert(t2 >= t1)
 }
@@ -17,16 +17,16 @@ fn test_monotonic_ordering() {
 
 @test
 fn test_now_returns_milliseconds() {
-    let t = time.now()
+    var t = time.now()
     // Should be in milliseconds (13+ digits since 2001)
     assert(t > 1000000000000)
 }
 
 @test
 fn test_now_advances() {
-    let t1 = time.now()
+    var t1 = time.now()
     time.sleep(10)
-    let t2 = time.now()
+    var t2 = time.now()
     assert(t2 > t1)
 }
 
@@ -34,7 +34,7 @@ fn test_now_advances() {
 
 @test
 fn test_clock_non_negative() {
-    let c = time.clock()
+    var c = time.clock()
     assert(c >= 0)
 }
 
@@ -42,16 +42,16 @@ fn test_clock_non_negative() {
 
 @test
 fn test_sleep_zero() {
-    let start = time.monotonic()
+    var start = time.monotonic()
     time.sleep(0)
-    let end = time.monotonic()
+    var end = time.monotonic()
     assert(end >= start)
 }
 
 @test
 fn test_sleep_small() {
-    let start = time.monotonic()
+    var start = time.monotonic()
     time.sleep(1)
-    let end = time.monotonic()
+    var end = time.monotonic()
     assert(end >= start)
 }

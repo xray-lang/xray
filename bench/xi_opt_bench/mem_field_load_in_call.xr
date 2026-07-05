@@ -7,16 +7,16 @@ class Cell {
 }
 
 fn opaque_mix(x: int) -> int {
-    let acc = x
-    for (let i = 0; i < 4; i++) {
+    var acc = x
+    for (var i = 0; i < 4; i++) {
         acc = (acc * 13 + i * 11) % 97
     }
     return acc
 }
 
 fn run(cell: Cell, rounds: int) -> int {
-    let total = 0
-    for (let i = 0; i < rounds; i++) {
+    var total = 0
+    for (var i = 0; i < rounds; i++) {
         total = total + cell.value
         total = total + opaque_mix(i)
         total = total + cell.value
@@ -25,8 +25,8 @@ fn run(cell: Cell, rounds: int) -> int {
 }
 
 fn main() {
-    let cell = Cell(37)
-    let result = run(cell, 160000)
+    var cell = Cell(37)
+    var result = run(cell, 160000)
     print("mem_field_load_in_call=${result}")
 }
 

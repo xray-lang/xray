@@ -96,18 +96,18 @@ static bool contains(const char *haystack, const char *needle) {
 TEST(leading_line_comment_preserved) {
     setup();
     const char *src = "// pre-amble\n"
-                      "let x = 5;\n";
+                      "var x = 5;\n";
     char *out = parse_and_format(src);
     ASSERT_NOT_NULL(out);
-    // The pre-amble comment must precede the let on its own line.
-    ASSERT_TRUE(contains(out, "// pre-amble\nlet x"));
+    // The pre-amble comment must precede the var on its own line.
+    ASSERT_TRUE(contains(out, "// pre-amble\nvar x"));
     free(out);
     teardown();
 }
 
 TEST(trailing_line_comment_preserved) {
     setup();
-    const char *src = "let x = 5; // tail\n";
+    const char *src = "var x = 5; // tail\n";
     char *out = parse_and_format(src);
     ASSERT_NOT_NULL(out);
     // The trailing comment must live on the SAME line as the
@@ -115,7 +115,7 @@ TEST(trailing_line_comment_preserved) {
     // space gap, line comment) before the terminating newline.
     ASSERT_TRUE(contains(out, "  // tail\n"));
     // No second copy on a separate line.
-    ASSERT_FALSE(contains(out, "// tail\nlet"));
+    ASSERT_FALSE(contains(out, "// tail\nvar"));
     free(out);
     teardown();
 }
@@ -124,16 +124,16 @@ TEST(trailing_comment_does_not_steal_next_line_leading) {
     setup();
     // A comment that lives on a line BY ITSELF must remain leading
     // for the NEXT statement, not trailing of the previous one.
-    const char *src = "let x = 5;\n"
+    const char *src = "var x = 5;\n"
                       "// belongs to y\n"
-                      "let y = 6;\n";
+                      "var y = 6;\n";
     char *out = parse_and_format(src);
     ASSERT_NOT_NULL(out);
 
     // The comment must NOT be glued to `5;` as a trailing.
     ASSERT_FALSE(contains(out, "x = 5  // belongs"));
     // It must precede `y` on its own line.
-    ASSERT_TRUE(contains(out, "// belongs to y\nlet y"));
+    ASSERT_TRUE(contains(out, "// belongs to y\nvar y"));
     free(out);
     teardown();
 }
@@ -142,17 +142,17 @@ TEST(multiline_block_comment_stays_leading) {
     setup();
     // Multi-line `/* ... */` after a statement is NOT a trailing
     // candidate; it becomes the next statement's leading.
-    const char *src = "let x = 5;\n"
+    const char *src = "var x = 5;\n"
                       "/* multi\n"
                       "   line */\n"
-                      "let y = 6;\n";
+                      "var y = 6;\n";
     char *out = parse_and_format(src);
     ASSERT_NOT_NULL(out);
 
     // Block comment must NOT be inlined as trailing.
     ASSERT_FALSE(contains(out, "x = 5  /*"));
     // It must appear before `y`.
-    ASSERT_TRUE(contains(out, "*/\nlet y"));
+    ASSERT_TRUE(contains(out, "*/\nvar y"));
     free(out);
     teardown();
 }
@@ -160,10 +160,10 @@ TEST(multiline_block_comment_stays_leading) {
 TEST(format_is_idempotent_with_comments) {
     setup();
     const char *src = "// header\n"
-                      "let x = 5; // tail-x\n"
-                      "let y = 6;\n"
+                      "var x = 5; // tail-x\n"
+                      "var y = 6;\n"
                       "// before-z\n"
-                      "let z = 7;\n";
+                      "var z = 7;\n";
 
     char *first = parse_and_format(src);
     ASSERT_NOT_NULL(first);
@@ -185,7 +185,7 @@ TEST(trailing_comment_on_block_decl) {
     // Trailing comments on closing braces of block-bodied declarations
     // must travel with the outer declaration, not the inner block.
     const char *src = "fn foo() {\n"
-                      "    let x = 1;\n"
+                      "    var x = 1;\n"
                       "} // end-foo\n";
     char *out = parse_and_format(src);
     ASSERT_NOT_NULL(out);

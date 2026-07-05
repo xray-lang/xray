@@ -3,7 +3,7 @@
 // parent function uses it.
 
 fn run() -> int {
-    let log: Array<int> = []
+    var log: Array<int> = []
     fn a() { log.push(1) }
     fn b() { log.push(2) }
     a()

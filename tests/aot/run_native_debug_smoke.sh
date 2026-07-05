@@ -83,15 +83,15 @@ AGG_LLDB_LOG="$WORK/agg_lldb.log"
 cat > "$SRC" <<'XR'
 fn compute(seed: int) -> int {
     if (seed <= 0) { return 0 }
-    let answer = seed + 1
-    let doubled = answer * 2
-    let ratio = doubled / 2.0
-    let ok = ratio == 21.0
+    var answer = seed + 1
+    var doubled = answer * 2
+    var ratio = doubled / 2.0
+    var ok = ratio == 21.0
     if (!ok) { return 0 }
     print(doubled)
     return compute(seed - seed) + doubled
 }
-let runtimeSeed = process.args.length > 1000 ? 1 : 20
+var runtimeSeed = process.args.length > 1000 ? 1 : 20
 compute(runtimeSeed)
 XR
 
@@ -169,9 +169,9 @@ struct Point {
 }
 fn make(seed: int32) -> Point {
     if (seed < 0) { return Point{x: 0, y: 0} }
-    let p = Point{x: seed + 1, y: seed + 2}
-    let q = p
-    let total = q.x + q.y
+    var p = Point{x: seed + 1, y: seed + 2}
+    var q = p
+    var total = q.x + q.y
     print(total)
     return q
 }
@@ -247,16 +247,16 @@ fn produce(seed: int) -> int {
     return seed + 1
 }
 fn worker(seed: int) -> int {
-    let task = go produce(seed)
-    let answer = await task
+    var task = go produce(seed)
+    var answer = await task
     yield
-    let doubled = answer * 2
-    let ratio = doubled / 2.0
-    let ok = ratio == 21.0
+    var doubled = answer * 2
+    var ratio = doubled / 2.0
+    var ok = ratio == 21.0
     if (!ok) { return 0 }
     return doubled
 }
-let task = go worker(20)
+var task = go worker(20)
 print(await task)
 XR
 

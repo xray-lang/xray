@@ -5,10 +5,10 @@
 import { square_plus } from "./_corolib"
 
 fn run() {
-    let t1 = go square_plus(6)
-    let t2 = go square_plus(9)
-    let a = await t1
-    let b = await t2
+    var t1 = go square_plus(6)
+    var t2 = go square_plus(9)
+    var a = await t1
+    var b = await t2
     print(a + b)
 }
 

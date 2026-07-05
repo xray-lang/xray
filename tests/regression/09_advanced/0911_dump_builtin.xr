@@ -9,21 +9,21 @@
 
 @test
 fn test_dump_int() {
-    let x = 42
+    var x = 42
     dump(x)
     assert_eq(x, 42)
 }
 
 @test
 fn test_dump_float() {
-    let f = 3.14
+    var f = 3.14
     dump(f)
     assert(f > 3.13 && f < 3.15)
 }
 
 @test
 fn test_dump_string() {
-    let s = "hello"
+    var s = "hello"
     dump(s)
     assert_eq(s, "hello")
     assert_eq(s.length, 5)
@@ -31,21 +31,21 @@ fn test_dump_string() {
 
 @test
 fn test_dump_bool() {
-    let b = true
+    var b = true
     dump(b)
     assert_eq(b, true)
 }
 
 @test
 fn test_dump_null() {
-    let n: int? = null
+    var n: int? = null
     dump(n)
     assert_eq(n == null, true)
 }
 
 @test
 fn test_dump_array() {
-    let a = [1, 2, 3]
+    var a = [1, 2, 3]
     dump(a)
     assert_eq(a.length, 3)
     assert_eq(a[0], 1)
@@ -59,7 +59,7 @@ fn test_dump_map() {
     // of the map. Even though stdout cannot be asserted, the codegen bug
     // also corrupted the register holding the map. This case verifies the
     // map is intact after dump().
-    let scores = #{"alice": 95, "bob": 87, "charlie": 92}
+    var scores = #{"alice": 95, "bob": 87, "charlie": 92}
     dump(scores)
     assert_eq(scores["alice"], 95)
     assert_eq(scores["bob"], 87)
@@ -68,7 +68,7 @@ fn test_dump_map() {
 
 @test
 fn test_dump_set() {
-    let s = #[1, 2, 3]
+    var s = #[1, 2, 3]
     dump(s)
     assert_eq(s.length, 3)
     assert_eq(s.has(2), true)
@@ -76,7 +76,7 @@ fn test_dump_set() {
 
 @test
 fn test_dump_with_indent() {
-    let data = #{"name": "alice", "score": 95}
+    var data = #{"name": "alice", "score": 95}
     dump(data, 2)
     dump(data, 4)
     dump(data, 0)
@@ -91,7 +91,7 @@ fn test_dump_inside_function() {
     // Regression for: dump() inside a function body must not interfere
     // with the function's return register or local variables.
     fn helper(v: int) -> int {
-        let doubled = v * 2
+        var doubled = v * 2
         dump(doubled)
         return doubled + 1
     }
@@ -101,8 +101,8 @@ fn test_dump_inside_function() {
 
 @test
 fn test_dump_nested_expr() {
-    let arr = [10, 20, 30]
-    let idx = 1
+    var arr = [10, 20, 30]
+    var idx = 1
     dump(arr[idx])
     assert_eq(arr[idx], 20)
     assert_eq(idx, 1)
@@ -111,7 +111,7 @@ fn test_dump_nested_expr() {
 
 @test
 fn test_dump_in_loop() {
-    let total = 0
+    var total = 0
     for (i in 0..5) {
         dump(i)
         total = total + i
@@ -122,6 +122,6 @@ fn test_dump_in_loop() {
 @test
 fn test_dump_return_is_null() {
     // dump() is statically unit-valued; the runtime sentinel remains null.
-    let r = dump(42)
+    var r = dump(42)
     assert_eq(typeof(r), "null")
 }

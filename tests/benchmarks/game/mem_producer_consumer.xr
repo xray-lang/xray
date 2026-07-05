@@ -8,8 +8,8 @@
 
 // Ring buffer queue using array
 fn createQueue(capacity: int) {
-    let data = []
-    let i = 0
+    var data = []
+    var i = 0
     while (i < capacity) {
         data.push(null)
         i = i + 1
@@ -24,7 +24,7 @@ fn enqueue(q, item) {
 }
 
 fn dequeue(q) {
-    let item = q.data[q.head]
+    var item = q.data[q.head]
     q.data[q.head] = null
     q.head = (q.head + 1) % q.capacity
     q.size = q.size - 1
@@ -32,14 +32,14 @@ fn dequeue(q) {
 }
 
 fn run(n: int) {
-    let queueSize = 1000
+    var queueSize = 1000
 
     // Phase 1: Steady-state producer-consumer
     // Queue is old, items are young → write barrier on every enqueue
-    let q = createQueue(queueSize)
+    var q = createQueue(queueSize)
 
     // Fill queue initially
-    let i = 0
+    var i = 0
     while (i < queueSize) {
         enqueue(q, { "id": i, "payload": "data_" + i })
         i = i + 1
@@ -47,10 +47,10 @@ fn run(n: int) {
     print("Queue initialized: size=" + q.size)
 
     // Steady-state: produce and consume at same rate
-    let checksum = 0
+    var checksum = 0
     i = 0
     while (i < n * 1000) {
-        let old = dequeue(q)
+        var old = dequeue(q)
         checksum = checksum + old.id
         enqueue(q, { "id": i, "payload": "new_" + (i % 100) })
         i = i + 1
@@ -59,9 +59,9 @@ fn run(n: int) {
 
     // Phase 2: Burst producer (queue grows then shrinks)
     // Creates temporary spikes of young objects referenced by old queue
-    let burstQ = createQueue(5000)
-    let total = 0
-    let round = 0
+    var burstQ = createQueue(5000)
+    var total = 0
+    var round = 0
     while (round < n) {
         // Burst: produce 100 items
         i = 0
@@ -71,7 +71,7 @@ fn run(n: int) {
         }
         // Consume all
         while (burstQ.size > 0) {
-            let item = dequeue(burstQ)
+            var item = dequeue(burstQ)
             total = total + item.v
         }
         round = round + 1
@@ -80,12 +80,12 @@ fn run(n: int) {
 
     // Phase 3: Multiple queues with cross-references
     // Items in one queue point to items from another → complex reference graph
-    let q1 = createQueue(500)
-    let q2 = createQueue(500)
+    var q1 = createQueue(500)
+    var q2 = createQueue(500)
     i = 0
     while (i < 500) {
-        let item1 = { "id": i, "partner": null }
-        let item2 = { "id": i + 10000, "partner": item1 }
+        var item1 = { "id": i, "partner": null }
+        var item2 = { "id": i + 10000, "partner": item1 }
         item1.partner = item2
         enqueue(q1, item1)
         enqueue(q2, item2)
@@ -95,11 +95,11 @@ fn run(n: int) {
     checksum = 0
     i = 0
     while (i < n * 100) {
-        let old1 = dequeue(q1)
-        let old2 = dequeue(q2)
+        var old1 = dequeue(q1)
+        var old2 = dequeue(q2)
         checksum = checksum + old1.id + old2.partner.id
-        let new1 = { "id": i, "partner": null }
-        let new2 = { "id": i + 10000, "partner": new1 }
+        var new1 = { "id": i, "partner": null }
+        var new2 = { "id": i + 10000, "partner": new1 }
         new1.partner = new2
         enqueue(q1, new1)
         enqueue(q2, new2)
@@ -108,5 +108,5 @@ fn run(n: int) {
     print("Phase 3 (cross-ref x" + (n * 100) + "): checksum=" + checksum)
 }
 
-let n = process.args.length > 0 ? int(process.args[0]) ?? 500 : 500
+var n = process.args.length > 0 ? int(process.args[0]) ?? 500 : 500
 run(n)

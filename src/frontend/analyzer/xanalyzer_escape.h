@@ -13,13 +13,13 @@
  *   disallowed patterns and does not mutate the AST.
  *
  * RULES ENFORCED:
- *   - Plain `let x` captured by a go closure           -> ERROR
- *     (must be passed via argument or declared `shared const`)
- *   - Mutable `shared let x` captured by a go closure  -> ERROR
- *     (only `shared const` may be captured; `shared let` is move-only)
+ *   - Plain local `var x` captured by a go closure     -> ERROR
+ *     (must be passed via argument, copied/moved, or declared `shared`)
+ *   - `shared x` captured by a go closure              -> allowed
+ *     (`shared` is a stable shared identity)
  *   - `move x` for a mutable local                     -> allowed
  *     (source invalidation is handled by the type checker)
- *   - `move x` where `x` is `const` / shared primitive -> handled by
+ *   - `move x` where `x` is `const` / `shared`         -> handled by
  *     xa_visit_move_expr in the type checker
  *
  * Function-local analysis only (no cross-function inference).

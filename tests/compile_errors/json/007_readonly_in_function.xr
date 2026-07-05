@@ -7,5 +7,5 @@ fn updateUser(u: User) {
     u.id = 999
 }
 
-let user: User = { "id": 1, "name": "test" }
+var user: User = { "id": 1, "name": "test" }
 updateUser(user)

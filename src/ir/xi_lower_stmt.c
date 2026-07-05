@@ -2076,9 +2076,9 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
  * an object with hasNext(): bool and next(): T.
  *
  * Desugars to:
- *   let __iter = obj.iterator()
+ *   var __iter = obj.iterator()
  *   while (__iter.hasNext()) {
- *       let item = __iter.next()
+ *       var item = __iter.next()
  *       <body>
  *   }
  */
@@ -2135,7 +2135,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     XiLoopTarget loop_target;
     xi_lower_loop_push(l, &loop_target, s->label, exit_blk, cond_blk);
 
-    /* Body: let item = __iter.next(); <body> */
+    /* Body: var item = __iter.next(); <body> */
     l->cur_block = body_blk;
     XiValue *iter_body = xi_lower_braun_read(l, iter_var, l->cur_block);
     XiValue *next_val = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, l->type_any, 1);
@@ -2848,7 +2848,7 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
     }
 }
 
-/* Destructure declaration: let [a, b] = expr or let {x, y} = expr */
+/* Destructure declaration: var [a, b] = expr or var {x, y} = expr */
 static void lower_destructure_decl(XiLower *l, AstNode *node) {
     DestructureDeclNode *dd = &node->as.destructure_decl;
     XiValue *init = xi_lower_expr(l, dd->initializer);
@@ -3089,7 +3089,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
     stmt_set_missing_line(init_val, node->line);
 
     /* Propagate reified generic elem_tid when there is an explicit type
-     * annotation on a container literal (e.g. let a: Array<int> = [1,2]).
+     * annotation on a container literal (e.g. var a: Array<int> = [1,2]).
      * Only the annotation distinguishes typed from untyped containers. */
     if (node->as.var_decl.type_annotation && type) {
         if (init_val->op == XI_ARRAY_NEW &&
@@ -4090,6 +4090,7 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
     switch (node->type) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             lower_var_decl(l, node);
             break;
 
@@ -4190,6 +4191,7 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
         case AST_CALL_EXPR:
         case AST_MEMBER_SET:
         case AST_INDEX_SET:
+        case AST_COMPTIME_EXPR:
         case AST_GO_EXPR:
         case AST_AWAIT_EXPR:
         case AST_NEW_EXPR:
@@ -4214,8 +4216,8 @@ static void prescan_block_decls(XiLower *l, AstNode **stmts, int count) {
      * Functions: get a null placeholder value (needed for register allocation
      * and cell-based upvalue capture) marked with SIDE_EFFECT to survive DCE.
      *
-     * Variables (let/const): only create the variable slot without writing a
-     * null placeholder — the actual let/const initializer assigns the register.
+     * Bindings (var/const/shared): only create the variable slot without writing a
+     * null placeholder — the actual initializer assigns the register.
      * This avoids cell-wrapping conflicts where the null occupies the register
      * before the real initialization overwrites it. */
     for (int i = 0; i < count; i++) {
@@ -4235,6 +4237,7 @@ static void prescan_block_decls(XiLower *l, AstNode **stmts, int count) {
                 break;
             case AST_VAR_DECL:
             case AST_CONST_DECL:
+            case AST_SHARED_DECL:
                 name = s->as.var_decl.name;
                 sid = s->as.var_decl.symbol_id;
                 type = xi_lower_node_type(l, s);

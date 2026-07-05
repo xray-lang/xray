@@ -13,7 +13,7 @@
   "sections": [
     {
       "heading": "Sharing model",
-      "markdown": "- `shared const` is immutable and can be shared across coroutines without copying\n- `shared let` represents exclusive mutable ownership and must be transferred with `move`\n- ordinary local variables cannot be captured by `go` closures; pass data explicitly\n- `go { ... }` is a zero-argument block form; pass local data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`"
+      "markdown": "- `shared` creates a stable, non-rebindable identity on the global heap\n- `shared` values may be captured by `go` closures and passed across coroutine boundaries directly\n- `move` is for explicit ownership transfer of rebindable local `var` values, not for `shared` bindings\n- ordinary local variables cannot be captured by `go` closures; pass data explicitly with parameters, `copy(...)`, `move`, or `shared`\n- `go { ... }` is a zero-argument block form; pass local data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`"
     },
     {
       "heading": "await all",
@@ -39,7 +39,7 @@
     },
     {
       "heading": "Atomic",
-      "markdown": "`Atomic<T>` wraps `int`/`float`/`bool` with lock-free atomic operations. Must be `shared const`; `move` prohibited. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`)."
+      "markdown": "`Atomic<T>` wraps `int`/`float`/`bool` with lock-free atomic operations. Must be `shared`; `move` prohibited. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`)."
     }
   ]
 }

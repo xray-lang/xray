@@ -25,7 +25,7 @@ fn test_hex_encode_special() {
 
 @test
 fn test_hex_decode_bytes() {
-    let bytes = encoding.hexDecode("48656c6c6f")!
+    var bytes = encoding.hexDecode("48656c6c6f")!
     assert_eq(bytes.length, 5)
     assert_eq(bytes[0], 0x48)  // 'H'
     assert_eq(bytes[4], 0x6f)  // 'o'
@@ -44,7 +44,7 @@ fn test_hex_decode_invalid() {
 
 @test
 fn test_hex_decode_empty() {
-    let bytes = encoding.hexDecode("")!
+    var bytes = encoding.hexDecode("")!
     assert_eq(bytes.length, 0)
 }
 
@@ -91,39 +91,39 @@ fn test_utf8_byte_length() {
 
 @test
 fn test_utf16_encode_decode_le() {
-    let u16 = encoding.utf16Encode("AB")
+    var u16 = encoding.utf16Encode("AB")
     assert_eq(u16.length, 4)
     // LE: 'A' = 0x0041 -> [0x41, 0x00]
     assert_eq(u16[0], 0x41)
     assert_eq(u16[1], 0x00)
-    let decoded = encoding.utf16Decode(u16)
+    var decoded = encoding.utf16Decode(u16)
     assert_eq(decoded, "AB")
 }
 
 @test
 fn test_utf16_encode_decode_be() {
-    let u16 = encoding.utf16Encode("AB", encoding.BE)
+    var u16 = encoding.utf16Encode("AB", encoding.BE)
     assert_eq(u16.length, 4)
     // BE: 'A' = 0x0041 -> [0x00, 0x41]
     assert_eq(u16[0], 0x00)
     assert_eq(u16[1], 0x41)
-    let decoded = encoding.utf16Decode(u16, encoding.BE)
+    var decoded = encoding.utf16Decode(u16, encoding.BE)
     assert_eq(decoded, "AB")
 }
 
 @test
 fn test_utf16_cjk() {
-    let u16 = encoding.utf16Encode("你好")
+    var u16 = encoding.utf16Encode("你好")
     assert_eq(u16.length, 4)  // 2 BMP chars x 2 bytes
-    let decoded = encoding.utf16Decode(u16)
+    var decoded = encoding.utf16Decode(u16)
     assert_eq(decoded, "你好")
 }
 
 @test
 fn test_utf16_empty() {
-    let u16 = encoding.utf16Encode("")
+    var u16 = encoding.utf16Encode("")
     assert_eq(u16.length, 0)
-    let decoded = encoding.utf16Decode(u16)
+    var decoded = encoding.utf16Decode(u16)
     assert_eq(decoded, "")
 }
 

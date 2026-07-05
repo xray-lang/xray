@@ -113,8 +113,9 @@ static ParseRule rules[] = {
     [TK_RSHIFT_ASSIGN] = {NULL, xr_parse_compound_assignment, PREC_ASSIGNMENT},
 
     // Keywords
-    [TK_LET] = {NULL, NULL, PREC_NONE},
+    [TK_VAR] = {NULL, NULL, PREC_NONE},
     [TK_CONST] = {NULL, NULL, PREC_NONE},
+    [TK_COMPTIME] = {xr_parse_comptime_expr, NULL, PREC_NONE},
     [TK_IF] = {NULL, NULL, PREC_NONE},
     [TK_ELSE] = {NULL, NULL, PREC_NONE},
     [TK_WHILE] = {NULL, NULL, PREC_NONE},
@@ -512,8 +513,9 @@ void xr_parser_synchronize(Parser *parser) {
                 case TK_INTERFACE:
                 case TK_ENUM:
                 case TK_FN:
-                case TK_LET:
+                case TK_VAR:
                 case TK_CONST:
+                case TK_COMPTIME:
                 case TK_TYPE_ALIAS:
                 case TK_IMPORT:
                 case TK_EXPORT:
@@ -593,9 +595,9 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
         // literal LHS, a destructure assignment, or an array literal),
         // not a call/index continuation of the previous expression.
         // xray has no `;` terminator, so without this the sequence
-        //     let p = (b, a)
+        //     var p = (b, a)
         //     (a, b) = p
-        // parses as `let p = (b, a)(a, b) = p` and the LHS of `=`
+        // parses as `var p = (b, a)(a, b) = p` and the LHS of `=`
         // ends up an AST_CALL_EXPR. Same rule as Go.
         if ((parser->current.type == TK_LPAREN || parser->current.type == TK_LBRACKET) &&
             parser->current.line > parser->previous.line) {
@@ -1759,7 +1761,7 @@ AstNode *xr_parse_inc_dec(Parser *parser) {
 // Parse postfix increment/decrement: x++, x--
 // Only postfix form is supported, and only through the statement-only parser
 // entrypoints. Expression parsing reaches this function only for illegal
-// embedded uses such as `let y = x++`, `f(x++)`, or `a[i++]`.
+// embedded uses such as `var y = x++`, `f(x++)`, or `a[i++]`.
 AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
     int line = left->line;
     (void) line;
@@ -1774,7 +1776,7 @@ AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
     return NULL;
 }
 
-// Parse single variable declaration: let x = 10 or const PI = 3.14
+// Parse single variable declaration: var x = 10 or const PI = 3.14
 AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
     xr_parser_consume(parser, TK_NAME, "expected variable name");
     char *name = (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
@@ -1798,7 +1800,7 @@ AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
         xr_parser_error(parser, "constants must be initialized");
         return NULL;
     }
-    // let variables can be uninitialized
+    // var variables can be uninitialized
     AstNode *node = xr_ast_var_decl(parser->compiler_session, name, initializer, is_const, line);
     node->column = column;
     // End span extends to the initializer when present; otherwise just the name.

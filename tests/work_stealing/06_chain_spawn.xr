@@ -18,23 +18,23 @@ const BRANCHES_PER_LEVEL = 3
 fn spawn_chain(level, id) {
     if (level >= CHAIN_DEPTH) {
         /* 叶子节点：做一些计算 */
-        let sum = 0
-        for (let i = 0; i < 100; i++) {
+        var sum = 0
+        for (var i = 0; i < 100; i++) {
             sum = sum + i
         }
         return { "level": level, "id": id, "children": 0, "sum": sum }
     }
     /* 非叶子节点：创建子协程 */
-    let children = []
-    for (let i = 0; i < BRANCHES_PER_LEVEL; i++) {
-        let child_id = id * BRANCHES_PER_LEVEL + i
-        let task = go spawn_chain(level + 1, child_id)
+    var children = []
+    for (var i = 0; i < BRANCHES_PER_LEVEL; i++) {
+        var child_id = id * BRANCHES_PER_LEVEL + i
+        var task = go spawn_chain(level + 1, child_id)
         children.push(task)
     }
     /* 等待所有子协程 */
-    let child_sum = 0
-    for (let i = 0; i < children.length; i++) {
-        let child_result = await children[i]
+    var child_sum = 0
+    for (var i = 0; i < children.length; i++) {
+        var child_result = await children[i]
         child_sum = child_sum + child_result.sum
     }
     return { "level": level, "id": id, "children": children.length, "sum": child_sum }
@@ -42,10 +42,10 @@ fn spawn_chain(level, id) {
 
 /* 启动根协程 */
 print("启动链式创建（深度=" + string(CHAIN_DEPTH) + ", 分支=" + string(BRANCHES_PER_LEVEL) + "）...")
-let start_time = time.monotonic()
-let root_task = go spawn_chain(0, 0)
-let result = await root_task
-let total_time = time.monotonic() - start_time
+var start_time = time.monotonic()
+var root_task = go spawn_chain(0, 0)
+var result = await root_task
+var total_time = time.monotonic() - start_time
 print("
 结果:")
 print("  根节点 level: " + string(result.level))
@@ -54,15 +54,15 @@ print("  耗时: " + string(total_time) + " ms")
 
 /* 计算预期的协程总数 */
 fn power(base, exp) {
-    let result = 1
-    for (let i = 0; i < exp; i++) {
+    var result = 1
+    for (var i = 0; i < exp; i++) {
         result = result * base
     }
     return result
 }
 
-let expected_coros = 0
-for (let i = 0; i <= CHAIN_DEPTH; i++) {
+var expected_coros = 0
+for (var i = 0; i <= CHAIN_DEPTH; i++) {
     expected_coros = expected_coros + power(BRANCHES_PER_LEVEL, i)
 }
 print("  预期协程总数: " + string(expected_coros))

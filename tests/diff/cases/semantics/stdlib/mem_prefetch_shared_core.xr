@@ -7,7 +7,7 @@ import mem
 @extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
 @extern("C") fn free(p: RawMut<uint8>)
 
-let buf = unsafe { malloc(64) }
+var buf = unsafe { malloc(64) }
 unsafe { buf[0] = 3 }
 unsafe { buf[1] = 4 }
 
@@ -20,7 +20,7 @@ mem.prefetch(buf, 1)
 unsafe { print(buf[1]) }
 
 // prefetch further into the buffer via offset()
-let mid = unsafe { buf.offset(32) }
+var mid = unsafe { buf.offset(32) }
 unsafe { mid[0] = 9 }
 mem.prefetch(mid, 0)
 unsafe { print(mid[0]) }

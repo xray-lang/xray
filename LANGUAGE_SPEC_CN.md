@@ -159,21 +159,22 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 - 在 `match` 模式中表示**通配符**（见 §6.7）。
 - 在 `for-in` 中可用于忽略键或值：`for (_, v in m) { ... }`。
-- 在解构绑定中可用于忽略位置：`let (a, _) = (1, 2)`。
-- **不能**作为 `let _ = expr`、函数参数名或被引用的变量名；编译器会报"expected variable name"。
+- 在解构绑定中可用于忽略位置：`var (a, _) = (1, 2)`。
+- **不能**作为 `var _ = expr`、函数参数名或被引用的变量名；编译器会报"expected variable name"。
 - 多下划线名（如 `__tmp`）是普通标识符。
 
 ### 1.5 关键字
 
-xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
+xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
 
 #### 1.5.1 声明与流程控制
 
 | 关键字 | 用途 |
 |--|--|
-| `let` | 可变变量声明 |
+| `var` | 可变变量声明 |
 | `const` | 不可变变量声明 |
-| `shared` | 跨协程共享修饰符（与 `const`/`let` 组合） |
+| `shared` | 共享身份绑定（全局堆存储，词法作用域照常） |
+| `comptime` | 强制编译期求值的表达式前缀 |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
 | `yield` | 生成器产值语句 |
@@ -211,7 +212,7 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 
 #### 1.5.5 协程与并发
 
-`go` `await` `select` `defer` `scope` `unsafe`
+`go` `await` `select` `defer` `scope` `unsafe` `parallel`
 
 #### 1.5.6 类型名（保留）
 
@@ -260,7 +261,7 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 - 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
 - 字面量默认类型为 `int`（= `int64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
 - 范围：`int64` 表示范围 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
-- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `let x: int8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
+- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `var x: int8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
 
 ```xray
 42
@@ -376,9 +377,9 @@ CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 - char 字面量不支持 `${...}` 插值。
 
 ```xray
-let a: char = 'a'
-let zh: char = '中'
-let smile: char = '\u{1F600}'
+var a: char = 'a'
+var zh: char = '中'
+var smile: char = '\u{1F600}'
 ```
 
 ##### 反引号字符串（非法）
@@ -479,8 +480,8 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 例：
 
 ```xray
-let empty_map = #{}
-let primes = #[2, 3, 5, 7]
+var empty_map = #{}
+var primes = #[2, 3, 5, 7]
 ```
 
 #### 1.7.10 模式
@@ -543,11 +544,11 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
 | `uint8`..`uint64` | 无符号对应 | — |
 
-- 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量），但直接字面量必须落在目标范围内（`let x: int8 = 200` 编译拒绝）。
+- 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量），但直接字面量必须落在目标范围内（`var x: int8 = 200` 编译拒绝）。
 - 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同宽窄整数运算保留该宽度并按该宽度环绕（`uint8 + uint8 -> uint8`）；异宽窄整数运算塌回 `int`；移位运算结果取左操作数宽度。
 - 静态类型为 `uint8`..`uint64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `uint64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
 - `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
-- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `let x: uint8 = 255 + 1` 得到 `0`。
+- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `var x: uint8 = 255 + 1` 得到 `0`。
 - 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `int64` 正范围的 `uint64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
 
 #### 2.3.2 浮点类型
@@ -561,7 +562,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 #### 2.3.3 `bool`
 
-`true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `let x: int = true`，也不能 `let b: bool = 1`）。
+`true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `var x: int = true`，也不能 `var b: bool = 1`）。
 
 **条件表达式规则**（`if` / `while` / `for` 条件 / 三元 `?:` / `match` 守卫）：
 
@@ -575,20 +576,20 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 `&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
 
 ```xray
-let ok = true
+var ok = true
 if (ok) { }
 
-let user: User? = findUser()
+var user: User? = findUser()
 if (user) {              // 存在性：仅检查 null
     print(user.name)     // 此分支 user 窄化为 User
 }
 
-let flag: bool? = maybeFlag()
+var flag: bool? = maybeFlag()
 if (flag == true) { }    // OK
 if (flag != null) { }    // OK
 // if (flag) { }         // 编译错误：裸 bool? 不能作条件
 
-let s = ""
+var s = ""
 if (!s.isEmpty()) { }    // OK
 // if (s) { }            // 编译错误
 ```
@@ -604,15 +605,15 @@ if (!s.isEmpty()) { }    // OK
 `char` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `uint32` 的别名。
 
 ```xray
-let a: char = 'a'
-let zh = '中'
-let smile = '\u{1F600}'
+var a: char = 'a'
+var zh = '中'
+var smile = '\u{1F600}'
 print(typeof(a))          // "char"
 print(int(smile))         // 128512
 ```
 
 - char 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
-- `char` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`let n: uint32 = 'a'` 都会在分析期拒绝。
+- `char` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: uint32 = 'a'` 都会在分析期拒绝。
 - 显式转换：`int(c)` 得到 scalar code point；`char(n)` 从整数构造 char 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
 - 常用方法见 §14.4.1。
 
@@ -623,7 +624,7 @@ xray 用 **0-元组 `()`** 表示"无返回值"（Unit 类型）：
 ```xray
 fn log(msg: string) -> () { print(msg) }   // 显式 Unit 返回
 fn ping() { print("pong") }                  // 省略返回类型 = ()
-let r: () = log("hi")                        // 允许；r 是 Unit 值
+var r: () = log("hi")                        // 允许；r 是 Unit 值
 ```
 
 - 一个函数省略返回类型等同于 `-> ()`。
@@ -647,7 +648,7 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 @extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
 @extern("C") fn free(p: RawMut<uint8>)
 
-let p = unsafe { malloc(4) }
+var p = unsafe { malloc(4) }
 unsafe {
     p[0] = 42
     print(p.deref())
@@ -666,9 +667,9 @@ unsafe {
 有序可变数组。详见 §14.1。
 
 ```xray
-let a: Array<int> = [1, 2, 3]
-let b = [1, 2, 3]                // 推断为 Array<int>
-let c: Array<string> = []         // 显式空数组
+var a: Array<int> = [1, 2, 3]
+var b = [1, 2, 3]                // 推断为 Array<int>
+var c: Array<string> = []         // 显式空数组
 ```
 
 `Array<T>` 的 `T` 必须能在编译期确定。空 `[]` 在无类型标注时是编译错误：`Empty array '[]' requires a type annotation`。
@@ -682,10 +683,10 @@ let c: Array<string> = []         // 显式空数组
 当前实现支持 struct inline 字段和局部栈上定长数组。标量元素（`int`、`float`、`bool`、精确整数/浮点等）使用紧凑 native lane；`string`、struct、嵌套定长数组和引用容器等非标量元素使用 tagged `XrValue` lane，因此可以递归组合：
 
 ```xray
-let bytes: [uint8; 4] = [1, 2, 3, 4]
-let zero: [uint8; 64] = [0; 64]
-let names: [string; 2] = ["a", "b"]
-let blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
+var bytes: [uint8; 4] = [1, 2, 3, 4]
+var zero: [uint8; 64] = [0; 64]
+var names: [string; 2] = ["a", "b"]
+var blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
 ```
 
 有目标类型的数组字面量初始化 `[T; N]` 时必须 exact-length；重复初始化 `[value; N]` 的 `N` 同样是正的编译期整数表达式，并且必须和目标类型长度一致。无上下文的普通数组字面量仍推断为动态 `Array<T>`；无上下文的 `[value; N]` 推断为 `[T; N]`。
@@ -693,8 +694,8 @@ let blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
 定长数组支持 `length`/`size`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Span<T>` 时通过切片产生借用视图：
 
 ```xray
-let data: [uint8; 4] = [5, 6, 7, 8]
-let view: Span<uint8> = data[1:4]
+var data: [uint8; 4] = [5, 6, 7, 8]
+var view: Span<uint8> = data[1:4]
 view[1] = 99
 ```
 
@@ -704,7 +705,7 @@ struct Packet {
     payload: [uint8; 128]
 }
 
-let key: [uint8; 4] = [1, 2, 3, 4]
+var key: [uint8; 4] = [1, 2, 3, 4]
 key[1] = 9
 
 fn first(packet: Packet) -> uint8 {
@@ -727,12 +728,12 @@ fn first(packet: Packet) -> uint8 {
 **Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`（与 Record / Json 对象一致，靠 `#` 前缀消歧）：
 
 ```xray
-let m: Map<string, int> = #{"a": 1, "b": 2}
-let m2 = #{"a": 1, "b": 2}
-let empty = #{}                                     // 空 Map
+var m: Map<string, int> = #{"a": 1, "b": 2}
+var m2 = #{"a": 1, "b": 2}
+var empty = #{}                                     // 空 Map
 
 m["c"] = 3                                          // 添加/修改
-let v = m["a"]                                      // 取值；不存在返回 null
+var v = m["a"]                                      // 取值；不存在返回 null
 ```
 
 | 字面量形式 | 类型 | 用途 |
@@ -750,15 +751,15 @@ let v = m["a"]                                      // 取值；不存在返回 
 去重集合。详见 §14.4。
 
 ```xray
-let s: Set<int> = #[1, 2, 3]
+var s: Set<int> = #[1, 2, 3]
 ```
 
 #### 2.4.4 `Channel<T>`
 
-协程间通信通道。**必须**用 `const` 声明（见 §10.5）。
+协程间通信通道。命名通道句柄**必须**用 `shared` 创建（见 §10.5）。
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+shared ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Bytes`
@@ -766,8 +767,8 @@ const ch: Channel<int> = Channel<int>(10)
 类型化字节缓冲。语义等价 `Array<uint8>`，但底层是连续内存。
 
 ```xray
-let buf = Bytes(1024)
-let init = Bytes([72, 101, 108, 108, 111])
+var buf = Bytes(1024)
+var init = Bytes([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.6 `Record` / `Json` 与对象字面量
@@ -778,19 +779,19 @@ let init = Bytes([72, 101, 108, 108, 111])
 
 ```xray
 // Record/Json 对象字面量：标识符或字符串 key + 冒号 ':'
-let data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-let user = { name: "Bob", age: 25 }       // 默认类型为 sealed Record
+var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
+var user = { name: "Bob", age: 25 }       // 默认类型为 sealed Record
 typeof(user)                              // "Record"
 data.name              // 类型: Json（字段访问返回 Json）
 data["name"]           // 等价
 
 // 字段简写：当字段名与变量名相同
-let name = "Alice"
-let age = 30
-let user = { name, age }                  // 等价 { name: name, age: age }
+var name = "Alice"
+var age = 30
+var user = { name, age }                  // 等价 { name: name, age: age }
 
 // Map 字面量：`#{}` 前缀 + `:`
-let m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
+var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 ```
 
 **对照表**：
@@ -798,7 +799,7 @@ let m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 | 写法 | 类型 | 备注 |
 |---|---|---|
 | `{ name: "x", age: 1 }` | sealed anonymous `Record` | 标识符或字符串 key 后跟 `:` |
-| `let j: Json = { name: "x" }` | `Json` object | 只有显式 `Json` 期望类型时按动态 Json 解释 |
+| `var j: Json = { name: "x" }` | `Json` object | 只有显式 `Json` 期望类型时按动态 Json 解释 |
 | `{ x: y }`（`x` 是字段名，`y` 是变量名） | sealed anonymous `Record` | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
 | `#{"a": 1}` | `Map<K, V>` | `#` 前缀消歧，分隔符用 `:` |
 | `Point{x: 1.0, y: 2.0}` | `Point`（struct） | 类型名 + `{...}` 字面量 |
@@ -808,14 +809,14 @@ let m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 ```xray
 type User = { name: string, age: int }
 
-let u: User = { name: "Alice", age: 30 }
+var u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
 // u.extra = "x"      // 编译错误：sealed type User has no field 'extra'
 
-let u2 = { name: "Alice", age: 30 }      // sealed Record
+var u2 = { name: "Alice", age: 30 }      // sealed Record
 // u2.extra = "x"     // 编译错误
 
-let j: Json = { name: "Alice", age: 30 } // 动态 Json object
+var j: Json = { name: "Alice", age: 30 } // 动态 Json object
 j.extra = "x"        // OK（Json 是动态的）
 ```
 
@@ -840,9 +841,9 @@ j.extra = "x"        // OK（Json 是动态的）
 `T?` 是 `T | null` 的语法糖。
 
 ```xray
-let x: int? = null      // OK
-let y: int? = 42        // OK
-let z: int = null       // 编译错误：null 不是 int
+var x: int? = null      // OK
+var y: int? = 42        // OK
+var z: int = null       // 编译错误：null 不是 int
 ```
 
 `Json` 本身包含 `null`，因此 `Json?` 与 `Json | null` 是语义重复并在解析阶段报错；需要表达解析失败或缺失值时应使用 `Result<T, E>`、ADT、或含显式状态字段的 Record。
@@ -855,13 +856,13 @@ let z: int = null       // 编译错误：null 不是 int
 
 ```xray
 // 1. 空合并
-let v = x ?? 0
+var v = x ?? 0
 
 // 2. 可选链
-let len = name?.length    // 若 name 为 null，结果为 null
+var len = name?.length    // 若 name 为 null，结果为 null
 
 // 3. 强制解包
-let v: int = x!           // 若 x 为 null，运行时抛 NullError
+var v: int = x!           // 若 x 为 null，运行时抛 NullError
 
 // 4. is 检查
 if (x is int) {
@@ -873,7 +874,7 @@ if (x is int) {
 ### 2.6 Union 类型
 
 ```xray
-let v: int | string = 42
+var v: int | string = 42
 v = "hello"             // OK
 ```
 
@@ -883,7 +884,7 @@ v = "hello"             // OK
 - 处理 union 值需用 `match` 或 `is` 窄化：
 
 ```xray
-let v: int | string = ...
+var v: int | string = ...
 match v {
     is int    -> print("int: ${v}"),
     is string -> print("str: ${v}"),
@@ -900,27 +901,27 @@ xray 的元组**是头等公民**——可以作为任意值出现、作为字�
 
 ```xray
 // 字面量
-let t = (1, 2, 3)                 // 类型推断为 (int, int, int)
-let h = (10, "hi", true)          // 异构元组
-let single = (99,)                // 单元素元组：注意尾逗号
+var t = (1, 2, 3)                 // 类型推断为 (int, int, int)
+var h = (10, "hi", true)          // 异构元组
+var single = (99,)                // 单元素元组：注意尾逗号
 
 // 类型注解
-let p: (int, string) = (7, "ok")
+var p: (int, string) = (7, "ok")
 
 // 字段访问：.N（N 是编译期常量整数下标）
-let first = t.0                   // 1
-let mid   = t.1                   // 2
-let nest  = ((1, 2), (3, 4))
-let a     = nest.0.0              // 1
-let b     = nest.1.1              // 4
+var first = t.0                   // 1
+var mid   = t.1                   // 2
+var nest  = ((1, 2), (3, 4))
+var a     = nest.0.0              // 1
+var b     = nest.1.1              // 4
 
 // 函数返回与解构
 fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }
-let (q, r) = divmod(17, 5)        // tuple destructure
+var (q, r) = divmod(17, 5)        // tuple destructure
 
 // 泛型
 fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
-let p2 = pair(1, "x")             // (int, string)
+var p2 = pair(1, "x")             // (int, string)
 ```
 
 **注意事项**：
@@ -942,8 +943,8 @@ type Mapper2<T, U> = (T) -> U
 别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
 
 ```xray
-let p: Pair<int> = { first: 1, second: 2 }  // 等价于 { first: int, second: int }
-let f: Mapper2<int, string> = (n) -> string(n)
+var p: Pair<int> = { first: 1, second: 2 }  // 等价于 { first: int, second: int }
+var f: Mapper2<int, string> = (n) -> string(n)
 ```
 
 泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
@@ -953,13 +954,13 @@ let f: Mapper2<int, string> = (n) -> string(n)
 详见 §7.4。简述：
 
 ```xray
-let x = 1               // x: int
-let y = 1.5             // y: float
-let z = "hello"         // z: string
-let a = [1, 2, 3]       // a: Array<int>
-let m = #{"a": 1}    // m: Map<string, int>
-let p = { name: "A" }   // p: { name: string } —— 结构化对象类型
-let f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
+var x = 1               // x: int
+var y = 1.5             // y: float
+var z = "hello"         // z: string
+var a = [1, 2, 3]       // a: Array<int>
+var m = #{"a": 1}    // m: Map<string, int>
+var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
+var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 ```
 
 ### 2.10 类型兼容性与转换
@@ -979,15 +980,15 @@ let f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 > **结构化兼容方向**（duck typing）：字段更多的类型可赋给字段更少的类型。
 > ```xray
 > type User = { name: string }
-> let full = { name: "A", age: 18 }
-> let u: User = full       // OK：full 是 User 的超集
+> var full = { name: "A", age: 18 }
+> var u: User = full       // OK：full 是 User 的超集
 > ```
 
 #### 2.10.2 显式 `as`
 
 ```xray
-let n = x as int        // 失败抛 TypeError
-let n = x as int?       // 失败返回 null（安全转换）
+var n = x as int        // 失败抛 TypeError
+var n = x as int?       // 失败返回 null（安全转换）
 ```
 
 适用于：
@@ -1047,7 +1048,7 @@ Reflect.getAllTypes()       // 所有已注册类型
 | 级 | 运算符 | 结合性 | 说明 |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | 左 | 后缀：分组、索引、成员、可选链、调用、强制解包 |
-| 16 | 前缀 `-` `+` `!` `~` `move` `await` `go` `unsafe` | 右 | 一元前缀 + 协程/FFI 边界操作 |
+| 16 | 前缀 `-` `+` `!` `~` `move` `await` `go` `unsafe` `comptime` | 右 | 一元前缀 + 协程/FFI/编译期边界操作 |
 | 15 | `as` `is` | 左 | 类型转换 / 检查（`as T?` 安全形式靠目标类型可空，非独立 `as?` 运算符） |
 | 14 | `*` `/` `%` | 左 | 乘除取模 |
 | 13 | `+` `-` | 左 | 加减 |
@@ -1075,6 +1076,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
             | 'unsafe' Block
+            | 'comptime' Expression
             | PostfixExpr
 ```
 
@@ -1084,7 +1086,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 | `+x` | 数值 | 同 | 标识，几乎无用 |
 | `!x` | `bool` | `bool` | 逻辑非；**不接受非 bool**（不像 JS） |
 | `~x` | 整数 | 同 | 按位取反 |
-`++` / `--` **不是表达式**：`let y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译报错。语句级自增/自减见 §4.1。
+`++` / `--` **不是表达式**：`var y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译报错。语句级自增/自减见 §4.1。
 
 #### `unsafe { }`
 
@@ -1094,7 +1096,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 @extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
 @extern("C") fn free(p: RawMut<uint8>)
 
-let p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果
+var p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果
 unsafe {
     p[0] = 7                      // RawMut 写入必须在 unsafe 内
     print(p.deref())              // 解引用必须在 unsafe 内
@@ -1103,6 +1105,17 @@ unsafe {
 ```
 
 `unsafe` 不改变表达式的结果类型；多语句块的最后一个表达式语句产生块值，否则结果为 `()`。`unsafe` 也不关闭普通类型检查：`RawPtr<T>` 仍不可写，`RawMut<T>` 才能写入；空指针、越界、生命周期和对齐由调用方负责。
+
+#### `comptime expr`
+
+`comptime` 是表达式前缀，用来要求操作数在分析/编译阶段求值；求值失败时直接报编译错误，而不是退回运行期。当前已实现的保证范围是**整数常量表达式**：整数字面量、`const` 整数标识符、括号、整数一元/二元算术与位运算，可用于固定数组长度、repeat 初始化长度等静态整数位置。
+
+```xray
+const SCALE = comptime 8 * 4
+var buf: [uint8; comptime SCALE + 2] = [0; SCALE + 2]
+```
+
+`comptime { ... }` 块语法已被 parser 预留，但当前分析期会拒绝；完整 consteval 块、泛型 `ct_value` 和可求值函数体属于后续阶段。
 
 ### 3.3 二元表达式
 
@@ -1166,7 +1179,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 #### 3.3.5 空值合并 `??`
 
 ```xray
-let v = nullable_expr ?? default_value
+var v = nullable_expr ?? default_value
 ```
 
 - 当 `nullable_expr` 为 `null` 时返回 `default_value`，否则返回 `nullable_expr` 本身。
@@ -1187,7 +1200,7 @@ AssignOp ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
 - 赋值是**表达式**，结果是赋值后的值（可链式：`a = b = 0`）。
 - `x op= y` 等价于 `x = x op y`，但 `x` 只求值一次（重要：`obj.f += 1` 不会调用 `f` 的 getter 两次）。
 - 不能赋值给 `const`（编译错误 `E0303`）。
-- 不能赋值给 `shared const`（同上）。
+- 不能赋值给 `shared`（同上）。
 
 **特殊**：
 - 函数参数中的 `in T` 修饰符使参数变只读，对其赋值是编译错误。
@@ -1200,7 +1213,7 @@ TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
 ```
 
 ```xray
-let max = a > b ? a : b
+var max = a > b ? a : b
 ```
 
 - **右结合**：`a ? b : c ? d : e` = `a ? b : (c ? d : e)`。
@@ -1218,9 +1231,9 @@ OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr '
 ```
 
 ```xray
-let len = name?.length          // null 时返回 null
-let item = arr?[0]              // 可选索引
-let value = callback?.(input)   // 可选函数调用
+var len = name?.length          // null 时返回 null
+var item = arr?[0]              // 可选索引
+var value = callback?.(input)   // 可选函数调用
 ```
 
 **语义**：
@@ -1238,7 +1251,7 @@ let value = callback?.(input)   // 可选函数调用
 #### 强制解包 `expr!`
 
 ```xray
-let v: int = nullable_int!      // null 时运行时抛 NullThrowError (E0410)
+var v: int = nullable_int!      // null 时运行时抛 NullThrowError (E0410)
 ```
 
 仅当编译期可确定 `expr` 是可空类型 (`T?`) 时合法；对非空类型 `T` 使用 `!` 是编译错误。
@@ -1270,8 +1283,8 @@ AsExpr ::= UnaryExpr 'as' Type
 ```
 
 ```xray
-let n = v as int           // 失败抛 TypeError
-let n = v as int?          // 失败返回 null（"as nullable" 安全形式）
+var n = v as int           // 失败抛 TypeError
+var n = v as int?          // 失败返回 null（"as nullable" 安全形式）
 ```
 
 | 形式 | 失败行为 | 用途 |
@@ -1296,8 +1309,8 @@ RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
 ```xray
 0..10                  // 0..10，左闭右开（包含 0，不包含 10）
 0..=10                 // 0..=10，闭区间（包含 0 和 10）
-let r = 1..100
-let n = 10
+var r = 1..100
+var n = 10
 for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
 ```
@@ -1318,12 +1331,12 @@ for (i in 0..=n) { print(i) }
 - **对象/record 字面量展开**：`{...base, x: 1}`，展开源必须是对象；字段合并成新对象，同名字段后者覆盖前者，结果字段集为各展开源字段与字面量字段的并集。
 
 ```xray
-let a = [1, 2]
-let b = [3, 4]
-let nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
+var a = [1, 2]
+var b = [3, 4]
+var nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
 
-let base = { x: 1, y: 2 }
-let point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+var base = { x: 1, y: 2 }
+var point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
 ```
 
 ### 3.10 字面量构造
@@ -1336,9 +1349,9 @@ ArrayElem ::= '...' Expr | Expr
 ```
 
 ```xray
-let a = [1, 2, 3]
-let empty: Array<int> = []
-let mixed = [1, "hello"]    // 类型 Array<int | string>
+var a = [1, 2, 3]
+var empty: Array<int> = []
+var mixed = [1, "hello"]    // 类型 Array<int | string>
 ```
 
 #### Map `#{k: v, ...}` 与 `#{}`
@@ -1350,8 +1363,8 @@ EmptyMap ::= '#{' '}'    // 注意：'#{' 是单个 token
 ```
 
 ```xray
-let m = #{"a": 1, "b": 2}
-let empty = #{}                           // 空 Map
+var m = #{"a": 1, "b": 2}
+var empty = #{}                           // 空 Map
 ```
 
 **关键区别**：`{}` 始终是**Json / Object**；`#{}` 始终是 **Map**。两者都用 `:` 作键值分隔，靠 `#` 前缀区分。
@@ -1363,8 +1376,8 @@ SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
 ```
 
 ```xray
-let s = #[1, 2, 3]
-let empty = #[]
+var s = #[1, 2, 3]
+var empty = #[]
 ```
 
 #### Object（结构化对象）`{ field: value, ... }`
@@ -1377,14 +1390,14 @@ ObjectField ::= Identifier ':' Expr
 ```
 
 ```xray
-let p = { name: "Alice", age: 30 }
-let users = "Bob"
-let obj = { users }              // shorthand
+var p = { name: "Alice", age: 30 }
+var users = "Bob"
+var obj = { users }              // shorthand
 ```
 
 - 默认推断为 sealed structural `Record`（见 §2.4.6），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
 - 只有显式 `Json` 期望类型时才按动态 Json object literal 解释；typed value 进入 JSON 边界使用 `Json.encode(value)`。
-- 用 `type` 别名命名 Record：`let u: User = {...}`（编译期检查字段集，密封）。
+- 用 `type` 别名命名 Record：`var u: User = {...}`（编译期检查字段集，密封）。
 
 #### Bytes `Bytes(...)`
 
@@ -1393,7 +1406,7 @@ let obj = { users }              // shorthand
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+shared ch: Channel<int> = Channel<int>(10)
 ```
 
 详见 §10.5。
@@ -1484,16 +1497,16 @@ arr.map(x -> x * 2)
 arr.filter(x -> x % 2 == 0)
 
 // ── 箭头 lambda：任意位置，支持多参数和参数类型注解 ──
-let sum = arr.reduce((acc, x) -> acc + x, 0)    // 无类型
-let double = (x: int) -> x * 2                   // 有类型
-let add = (a: int, b: int) -> a + b              // 多参数
+var sum = arr.reduce((acc, x) -> acc + x, 0)    // 无类型
+var double = (x: int) -> x * 2                   // 有类型
+var add = (a: int, b: int) -> a + b              // 多参数
 
 // ── fn 表达式：多语句体、返回类型注解、泛型参数 ──
-let inc = fn(x: int) -> int {
-    let y = x + 1
+var inc = fn(x: int) -> int {
+    var y = x + 1
     return y
 }
-let identity = fn<T>(x: T) -> T { return x }     // 泛型
+var identity = fn<T>(x: T) -> T { return x }     // 泛型
 ```
 
 **三种形式的选择指南**：
@@ -1506,11 +1519,11 @@ let identity = fn<T>(x: T) -> T { return x }     // 泛型
 
 **关键规则**：
 - **裸 lambda**（`x -> expr`）：仅限**调用参数位置**，单参数无括号。参数类型由被调函数签名或容器元素类型推断。
-- **箭头 lambda**（`(x) -> expr`、`(x, y) -> expr`）：任意位置可用。参数类型可省略，由上下文推断；推断失败时报 E0365。箭头 lambda **不支持返回类型注解**；需要显式返回类型时，用 `fn(x: T) -> R { ... }`，或给绑定写函数类型：`let f: (T) -> R = (x) -> ...`。
+- **箭头 lambda**（`(x) -> expr`、`(x, y) -> expr`）：任意位置可用。参数类型可省略，由上下文推断；推断失败时报 E0365。箭头 lambda **不支持返回类型注解**；需要显式返回类型时，用 `fn(x: T) -> R { ... }`，或给绑定写函数类型：`var f: (T) -> R = (x) -> ...`。
 - **fn 表达式**（`fn(x: T) { ... }`）：任意位置可用。支持泛型参数 `fn<T>(...)`、返回类型注解 `-> T`、多语句体。
 - 单表达式形式 `-> expr` 自动 `return`。
 - 块形式 `-> { ... }` 或 `{ ... }` 用显式 `return`。
-- 捕获规则：见 §7.4 闭包捕获。**`go` 协程闭包对 `let` 变量的捕获是编译错误**——必须显式 `shared const`、`move`、或参数传递。
+- 捕获规则：见 §7.4 闭包捕获。**`go` 协程闭包对普通 `var` / `const` 局部引用值的捕获是编译错误**——必须显式 `shared`、`copy(...)`、`move`、或参数传递。
 
 ### 3.13 `match` 表达式
 
@@ -1520,7 +1533,7 @@ MatchArm ::= Pattern ('if' Expr)? '->' Expression
 ```
 
 ```xray
-let result = match (x) {
+var result = match (x) {
     1 -> "one",
     2, 3, 4 -> "few",                 // 多值
     10..20 -> "teen",                 // 范围
@@ -1546,10 +1559,10 @@ ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 构造与普通函数调用同形：`TypeName(args)`。没有 `new` 关键字——写出 `new`（如 `new Point(...)`）是编译错误，提示删除 `new`。
 
 ```xray
-let p = Point(1.0, 2.0)
-let arr = Array<int>()
-let ch = Channel<int>(10)
-let m = Map<string, int>()
+var p = Point(1.0, 2.0)
+var arr = Array<int>()
+shared ch = Channel<int>(10)
+var m = Map<string, int>()
 ```
 
 **用于**：
@@ -1559,9 +1572,9 @@ let m = Map<string, int>()
 
 **与字面量的关系**：
 ```xray
-let a = [1, 2, 3]              // 等价 Array<int>() + push
-let m = #{}                    // 等价 Map<...>()
-let p = Point{x: 1, y: 2}      // struct literal
+var a = [1, 2, 3]              // 等价 Array<int>() + push
+var m = #{}                    // 等价 Map<...>()
+var p = Point{x: 1, y: 2}      // struct literal
 ```
 
 ### 3.15 字符串插值
@@ -1607,12 +1620,12 @@ foo()                  // 表达式语句
 x = 1                  // 赋值表达式作为语句
 x++                    // 自增语句；不产生表达式值
 {                      // 块
-    let y = 2
+    var y = 2
     y + 1              // 表达式但结果被丢弃
 }
 ```
 
-`++` / `--` 是纯语句或 `for` 步进项，只能写作 `name++` / `name--`。它们等价于 `name = name + 1` / `name = name - 1`，没有返回值；`let y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译失败。
+`++` / `--` 是纯语句或 `for` 步进项，只能写作 `name++` / `name--`。它们等价于 `name = name + 1` / `name = name - 1`，没有返回值；`var y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译失败。
 
 **注**：块**不是表达式**——它没有值。如果需要从块求值，用 `match` 或包装成立即调用函数。
 
@@ -1648,7 +1661,7 @@ WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
 ```
 
 ```xray
-let i = 0
+var i = 0
 while (i < 10) {
     print(i)
     i++
@@ -1668,10 +1681,10 @@ ForStep ::= Expression | Identifier ('++' | '--')
 ```
 
 ```xray
-for (let i = 0; i < 10; i++) {
+for (var i = 0; i < 10; i++) {
     print(i)
 }
-for (let j = 100; j > 90; j--) {
+for (var j = 100; j > 90; j--) {
     print(j)
 }
 ```
@@ -1857,7 +1870,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 ```xray
 fn read_file(path: string) -> string {
-    let f = open(path)
+    var f = open(path)
     defer f.close()                  // 函数返回前必执行
     return f.readAll()
 }
@@ -1902,10 +1915,12 @@ dump(some_obj)                 // 调试输出，含类型信息与结构布局
 
 > 真值源：`src/frontend/parser/xparse_decl.c`、`src/frontend/parser/xast_nodes_decl.h`、`src/frontend/analyzer/xanalyzer_visitor.c`。
 
-### 5.1 `let` / `const` / `shared`
+### 5.1 `var` / `const` / `shared`
 
 ```ebnf
-VarDecl ::= ('let' | 'const' | 'shared' ('const' | 'let')) Binding (',' Binding)*
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -1914,14 +1929,14 @@ Pattern ::= Identifier
 ObjectBinding ::= Identifier (':' Identifier)?
 ```
 
-#### 5.1.1 `let` — 可变绑定
+#### 5.1.1 `var` — 可变绑定
 
 ```xray
-let x = 1                         // 类型推断为 int
-let name: string = "Alice"        // 显式类型
-let count: int                    // 仅声明无初值：使用零值
-let maybeName: string?            // OK：默认 null
-let empty: string = ""            // string 必须显式初始化
+var x = 1                         // 类型推断为 int
+var name: string = "Alice"        // 显式类型
+var count: int                    // 仅声明无初值：使用零值
+var maybeName: string?            // OK：默认 null
+var empty: string = ""            // string 必须显式初始化
 ```
 
 - 可重新赋值。
@@ -1939,43 +1954,36 @@ const MAX_LEN: int = 1024
 - **必须**有初值。
 - 不能重新赋值（编译错误 `E0303`）。
 - 类型可推断或显式标注。
+- `const` 和 `var` 一样是单绑定声明；逗号并列声明已移除。需要多个名字时写多条声明，或使用解构：`const (a, b) = pair`。
 
-#### 5.1.3 `shared const` — 跨协程不可变共享
+#### 5.1.3 `shared` — 共享身份绑定
 
 ```xray
-shared const CONFIG = { host: "localhost", port: 8080 }
-shared const PRIMES = [2, 3, 5, 7, 11]
+shared CONFIG = { host: "localhost", port: 8080 }
+shared PRIMES = [2, 3, 5, 7, 11]
+shared counter = Atomic(0)
 ```
 
 - 存储在**全局堆**，refcount 管理。
-- 跨协程**零拷贝**只读访问。
-- 是 `go` 闭包**唯一**能合法捕获的可变作用域之外的变量种类（其他必须走参数传递或 `move`）。
-
-#### 5.1.4 `shared let` — 跨协程可变独占
-
-```xray
-shared let buffer = Bytes(1024)
-```
-
-- **Move 语义**：必须用 `move` 显式转移所有权。
-- 不能被 `go` 闭包捕获（必须 `move`）。
-- `move` 之后访问 → 编译错误。
+- 绑定名不可重新赋值，也不能作为 `move` 源。
+- 可被 `go` 闭包捕获，也可作为实参跨协程传递；对象本身是否可安全并发修改由类型语义决定。
+- `Atomic`、`Channel`、`Semaphore`、`WorkQueue` 等同步/并发句柄必须通过 `shared` 创建命名。
 
 详见 [§10.11](#1011-并发安全模型)。
 
-#### 5.1.5 解构绑定
+#### 5.1.4 解构绑定
 
 ```xray
 // 数组解构
-let [a, b, c] = [1, 2, 3]
-let [first, , third] = [10, 20, 30]         // 跳过元素
+var [a, b, c] = [1, 2, 3]
+var [first, , third] = [10, 20, 30]         // 跳过元素
 
 // 元组解构（多返回值）
-let (q, r) = divmod(17, 5)
+var (q, r) = divmod(17, 5)
 
 // 对象解构（按字段名提取，可重命名本地绑定）
-let { name, age } = { name: "Alice", age: 30 }
-let { name: localName, age } = { name: "Alice", age: 30 }
+var { name, age } = { name: "Alice", age: 30 }
+var { name: localName, age } = { name: "Alice", age: 30 }
 ```
 
 约束：
@@ -2043,8 +2051,8 @@ fn divmod(a: int, b: int) -> (int, int) {
     return (a / b, a % b)
 }
 
-let (q, r) = divmod(17, 5)
-let result = divmod(10, 3)        // result 类型 (int, int)
+var (q, r) = divmod(17, 5)
+var result = divmod(10, 3)        // result 类型 (int, int)
 ```
 
 **约束**：
@@ -2079,7 +2087,7 @@ fn translate(v: ref Vec2, dx: float, dy: float) -> () {
 
 ```xray
 fn sum(...nums: int) -> int {
-    let total = 0
+    var total = 0
     for (n in nums) { total += n }
     return total
 }
@@ -2100,7 +2108,7 @@ fn main() { ... }
 ```
 
 - 顶层 `fn` 声明被提升到当前作用域顶部。
-- `let f = (x: int) -> x`（赋值给变量的箭头函数）**不**提升。
+- `var f = (x: int) -> x`（赋值给变量的箭头函数）**不**提升。
 
 #### 5.2.7 尾递归优化
 
@@ -2137,7 +2145,7 @@ greet()                   // 必须显式调用
 @extern("C") fn free(p: RawMut<uint8>)
 @extern("C") @dylib("m") fn cos(x: float64) -> float64
 
-let p = unsafe { malloc(4) }
+var p = unsafe { malloc(4) }
 unsafe {
     p[0] = 42
     print(cos(0.0))
@@ -2236,7 +2244,7 @@ class Animal {
     }
 }
 
-let a = Animal("Rex")
+var a = Animal("Rex")
 print(a.speak())
 print(Animal.create("Bob").name)
 ```
@@ -2383,15 +2391,15 @@ struct Point {
 }
 
 // 两种创建方式
-let p = Point()                  // 默认构造（字段为零值）后逐个赋值
+var p = Point()                  // 默认构造（字段为零值）后逐个赋值
 p.x = 3.0
 p.y = 4.0
 
-let q = Point{x: 3.0, y: 4.0}        // struct 字面量：类型名 + { field: value }
-let pt = Point{x: 1.0, y: 2.0}
+var q = Point{x: 3.0, y: 4.0}        // struct 字面量：类型名 + { field: value }
+var pt = Point{x: 1.0, y: 2.0}
 
 // 值语义：赋值与传参都是拷贝
-let b = q                            // b 是 q 的独立拷贝
+var b = q                            // b 是 q 的独立拷贝
 b.x = 99.0
 // q.x 仍为 3.0
 ```
@@ -2401,7 +2409,7 @@ b.x = 99.0
 | 维度 | `class` | `struct` |
 |--|--|--|
 | 内存语义 | 引用类型（堆） | 值类型（栈或内联） |
-| 赋值/传参 | 共享引用 | **拷贝**（`let b = a` 生产独立副本） |
+| 赋值/传参 | 共享引用 | **拷贝**（`var b = a` 生产独立副本） |
 | 继承 | 支持 `extends` | **不支持**继承 |
 | `implements` | ✅ | ✅ |
 | 泛型 | ✅ | ✅ |
@@ -2583,11 +2591,11 @@ enum Expr {
 构造：
 
 ```xray
-let c = Color.Red                                   // 简单
-let r1 = Option.Some(42)                            // 位置 payload
-let e1 = NetEvent.DataReceived(bytes: b)            // 具名 payload，可写字段名
-let e2 = NetEvent.Error(404, "not found")           // 也可省略字段名按位置传
-let e3 = NetEvent.Connected                         // 无 payload 变体不写括号
+var c = Color.Red                                   // 简单
+var r1 = Option.Some(42)                            // 位置 payload
+var e1 = NetEvent.DataReceived(bytes: b)            // 具名 payload，可写字段名
+var e2 = NetEvent.Error(404, "not found")           // 也可省略字段名按位置传
+var e3 = NetEvent.Connected                         // 无 payload 变体不写括号
 ```
 
 解构（match）：
@@ -2654,7 +2662,7 @@ enum Shape {
             Shape.Circle(r)     -> 3.14159 * r * r,
             Shape.Rect(w, h)    -> w * h,
             Shape.Triangle(a, b, c) -> {
-                let s = (a + b + c) / 2.0
+                var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
         }
@@ -2668,7 +2676,7 @@ enum Shape {
     }
 }
 
-let s = Shape.Circle(radius: 1.0)
+var s = Shape.Circle(radius: 1.0)
 print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
@@ -2775,7 +2783,7 @@ export * from "./other"
 
 > 真值源：`src/frontend/parser/xparse_match.c`、`src/runtime/value/x_value_match.c`。
 
-模式出现在 `match` 表达式/语句与 `let` 解构中。
+模式出现在 `match` 表达式/语句与 `var` / `const` 解构中。
 
 ### 6.1 字面量模式
 
@@ -2920,7 +2928,7 @@ match (x) {
 
 - 匹配任意值，不绑定变量。
 - 通常作为最后的 default 分支。
-- 解构中可用于跳过位置：`let [_, b, _] = arr`。
+- 解构中可用于跳过位置：`var [_, b, _] = arr`。
 
 ### 6.8 变量绑定模式
 
@@ -2937,9 +2945,9 @@ match (http_status) {
 ### 6.9 解构模式
 
 ```xray
-let [a, b, c] = some_array
-let (q, r) = divmod(17, 5)
-let { name, age } = user
+var [a, b, c] = some_array
+var (q, r) = divmod(17, 5)
+var { name, age } = user
 ```
 
 详见 §5.1.5。`match` 支持 tuple、ADT variant、对象与数组结构解构：
@@ -2977,26 +2985,26 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 
 | 作用域 | 触发 | 示例 |
 |--|--|--|
-| 模块 | 每个 `.xr` 文件 | 顶层 `let` `fn` `class` |
+| 模块 | 每个 `.xr` 文件 | 顶层 `var` `const` `shared` `fn` `class` |
 | 函数 / 闭包 | `fn` / 箭头函数进入 | 参数 + 函数体 |
 | 块 | `{...}` | `if` `while` `for` `match` 分支体 |
 | `scope` 块 | `scope { ... }` 关键字 | 显式词法作用域 + 结构化并发（见 §10.7） |
-| `for` 头 | `for (let i=0; ...)` | `i` 仅循环体可见 |
+| `for` 头 | `for (var i=0; ...)` | `i` 仅循环体可见 |
 | `catch` 参数 | `catch (e)` | `e` 仅 catch 体可见 |
 | 类体 | `class` 定义 | 字段、方法 |
 
 **提升规则**：
 
 - 顶层 `fn` `class` `struct` `interface` `enum` `type` **提升**至当前作用域顶部——可在定义前引用。
-- `let` / `const` **不提升**——必须在定义后使用。
+- `var` / `const` / `shared` **不提升**——必须在定义后使用。
 - 同名重复声明：同作用域内 2 个同名变量 → 编译错误（嵌套作用域可 shadow）。
 
 ```xray
 main()                    // OK：使用提升后的 fn
 fn main() { ... }
 
-let y = x                 // 错误：x 未声明
-let x = 10
+var y = x                 // 错误：x 未声明
+var x = 10
 ```
 
 #### Shadow 规则
@@ -3004,9 +3012,9 @@ let x = 10
 嵌套块可 shadow 外层同名变量：
 
 ```xray
-let x = 1
+var x = 1
 {
-    let x = "hello"           // shadow：OK
+    var x = "hello"           // shadow：OK
     print(x)                 // "hello"
 }
 print(x)                     // 1
@@ -3022,14 +3030,14 @@ print(x)                     // 1
 
 ```xray
 fn make_counter() -> (() -> int) {
-    let count = 0
+    var count = 0
     return fn() -> int {
         count += 1                  // 修改外层 count
         return count
     }
 }
 
-let c = make_counter()
+var c = make_counter()
 print(c())      // 1
 print(c())      // 2
 ```
@@ -3049,13 +3057,13 @@ print(c())      // 2
 Xray **不**是全面 ownership/borrow checker 语言（不像 Rust）。但在**跨协程数据传递**中使用 move 语义：
 
 ```xray
-shared let big_buffer = Bytes(1024 * 1024)
+var big_buffer = Bytes(1024 * 1024)
 
-let t = go fn(b: Bytes) -> int {
+var t = go fn(b: Bytes) -> int {
     return process(b)
-}(big_buffer)             // 编译错误：shared let 不能直接传递，必须 move
+}(big_buffer)             // 编译错误：owned heap 值不能裸跨协程传递
 
-let t2 = go fn(b: Bytes) -> int {
+var t2 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big_buffer)        // OK：所有权转移
 
@@ -3072,20 +3080,19 @@ print(big_buffer.length)  // 编译错误：move 后访问
 
 "保证编译期消除数据竞争"是 xray 并发模型的核心设计原则。
 
-`go` 启动的协程**不能直接捕获**外层作用域的可变变量；数据必须通过**参数传递**进入协程。普通变量自动深拷贝；shared 变量按下表区分：
+`go` 启动的协程**不能直接捕获**外层作用域的可变变量；数据必须通过**参数传递**进入协程。普通局部引用值必须显式 `copy(...)` 或 `move`；`shared` 绑定是稳定共享身份，可直接跨协程使用：
 
 | 变量种类 | 跨协程传递规则 |
 |---|---|
-| 普通 `let` / `const`（局部） | 作为实参传递时**自动深拷贝**；不能被闭包捕获修改 |
+| 普通 `var` / `const`（局部） | 引用型 owned heap 值作为实参时必须显式 `copy(...)` 或 `move`；不能被闭包捕获修改 |
 | 函数参数 | ✅ 完全自由（已经是拷贝 / move 进来的） |
-| `shared const` | ✅ 跨协程零拷贝只读共享（可被闭包捕获） |
-| `shared let` | ⚠️ 必须用 `move` 实参前缀转移所有权；move 后原变量在编译期不可访问 |
+| `shared` | ✅ 可直接跨协程传递/捕获；绑定不可重新赋值，也不能 `move` |
 | `Channel<T>` | ✅ 可被闭包捕获（生命周期由 channel 自身管理） |
 | `this` / 闭包 upvalue（可变） | ❌ 不能跨协程；必须通过参数显式传递 |
 | 全局 `import` 的函数/类 | ✅ 不可变定义，可自由引用 |
 
 ```xray
-let local = 0
+var local = 0
 go { local += 1 }                        // ❌ 编译错误：不能捕获可变局部变量
 ```
 
@@ -3093,29 +3100,29 @@ go { local += 1 }                        // ❌ 编译错误：不能捕获可�
 
 ```xray
 // 方法 1：作为参数传值（普通变量自动深拷贝）
-let arr = [1, 2, 3]
-let t = go fn(data: Array<int>) -> int {
+var arr = [1, 2, 3]
+var t = go fn(data: Array<int>) -> int {
     data.push(4)            // 拷贝上修改，不影响原值
     return data.length
 }(arr)
 print(arr)                  // [1, 2, 3] 未变
 
-// 方法 2：shared const 零拷贝只读（可被捕获）
-shared const config = { rate: 100 }
-let t2 = go fn(c: Json) -> int {
+// 方法 2：shared 零拷贝只读（可被捕获）
+shared config = { rate: 100 }
+var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
 
 // 方法 3：move 转移所有权
-shared let big = Bytes(1024)
-let t3 = go fn(b: Bytes) -> int {
+shared big = Bytes(1024)
+var t3 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big)
 // big 在此处不可访问
 
 // 方法 4：Channel 通信（可被捕获）
-shared const ch = Channel<int>(10)
-let t4 = go fn(c: Channel<int>) -> int {
+shared ch = Channel<int>(10)
+var t4 = go fn(c: Channel<int>) -> int {
     return match (c.recv()) {
         Recv.Value(v) -> v
         _ -> 0
@@ -3130,7 +3137,7 @@ Xray 采用多层内存管理：
 
 | 存储 | 机制 | 释放时机 |
 |--|--|--|
-| 全局堆（`shared const`） | refcount | refcount 变 0 |
+| 全局堆（`shared`） | refcount | refcount 变 0 |
 | 局部堆（一般对象） | 引用计数 + 循环引用回收 | 最后引用释放；强引用环由 cycle collector 回收 |
 | 栈（`struct` 值、本地） | RAII | 作用域退出 |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
@@ -3273,7 +3280,7 @@ fn fetchUser(id: int) -> User {
 }
 
 try {
-    let user = fetchUser(-1)
+    var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
         HttpErr.NotFound(msg) -> log("404:", msg),
@@ -3298,7 +3305,7 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 
 ```xray
 enum WorkerErr { Failed(string) }
-const err_ch = Channel<string>(1)
+shared err_ch = Channel<string>(1)
 
 go {
     try {
@@ -3309,7 +3316,7 @@ go {
     }
 }
 
-let result = match (err_ch.recv()) {
+var result = match (err_ch.recv()) {
     Recv.Value(v) -> v
     _ -> "error"
 }
@@ -3338,14 +3345,14 @@ panic 通过有限的栈展开传播，生成 `PanicInfo` 对象携带堆栈信�
 
 ```xray
 try {
-    let arr: Array<int> = [1, 2, 3]
-    let v = arr[10]                          // 越界 → panic
+    var arr: Array<int> = [1, 2, 3]
+    var v = arr[10]                          // 越界 → panic
 } catch panic {
     log("runtime fault caught")
 }
 
 try {
-    let n = 10 / 0                           // 除零 → panic
+    var n = 10 / 0                           // 除零 → panic
 } catch panic {
     log("division by zero caught")
 }
@@ -3391,10 +3398,10 @@ class PanicInfo {
 
 ```xray
 fn fetch(url: string) -> string {
-    let conn = open(url)
+    var conn = open(url)
     defer conn.close()                       // 无论后续如何，conn 一定关闭
 
-    let data = conn.read()
+    var data = conn.read()
     if (data.isEmpty()) {
         throw FetchErr.Empty                 // defer 仍执行
     }
@@ -3463,7 +3470,7 @@ fn fetch(url: string) -> string {
 enum ConnErr { Refused, Timeout, Reset }
 
 fn fetchData(host: string) -> string {
-    let conn = connect(host)
+    var conn = connect(host)
     defer conn.close()
 
     if (!conn.isAlive()) { throw ConnErr.Timeout }
@@ -3472,7 +3479,7 @@ fn fetchData(host: string) -> string {
 
 fn main() {
     try {
-        let data = fetchData("api.example.com")
+        var data = fetchData("api.example.com")
         print(data)
     } catch (e: ConnErr) {
         match (e) {
@@ -3492,15 +3499,15 @@ main()
 enum ConfigErr { BadJson(string), BadField(string) }
 
 fn parseConfig(text: string) -> Config {
-    let json = parseJson(text)
-    let port = json["port"].toInt()
+    var json = parseJson(text)
+    var port = json["port"].toInt()
     if (port == null) { throw ConfigErr.BadField("port") }
     return Config(port: port!)
 }
 
 fn main() {
     try {
-        let cfg = parseConfig(configText)
+        var cfg = parseConfig(configText)
         startServer(cfg)
     } catch (e: ConfigErr) {
         match (e) {
@@ -3516,8 +3523,8 @@ main()
 #### 模式 3：`??` 提供默认值
 
 ```xray
-let port = config?.port ?? 8080
-let user = db.findUser(id) ?? guestUser
+var port = config?.port ?? 8080
+var user = db.findUser(id) ?? guestUser
 ```
 
 #### 模式 4：catch panic 兜底运行时故障
@@ -3554,8 +3561,8 @@ fn identity<T>(x: T) -> T {
     return x
 }
 
-let a = identity<int>(42)
-let b = identity("hello")               // 推断 T=string
+var a = identity<int>(42)
+var b = identity("hello")               // 推断 T=string
 
 // 泛型类
 class Box<T> {
@@ -3564,8 +3571,8 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-let b1 = Box<int>(42)
-let b2 = Box<string>("hi")
+var b1 = Box<int>(42)
+var b2 = Box<string>("hi")
 
 // 多参数泛型
 class Pair<K, V> {
@@ -3644,9 +3651,9 @@ Pair("key", 100)            // K=string, V=int
 在推断失败或需要明确时：
 
 ```xray
-let empty = Array<int>()              // 无元素可推
-let m = Map<string, int>()
-let result = identity<float>(0)            // 0 默认 int，强制 float
+var empty = Array<int>()              // 无元素可推
+var m = Map<string, int>()
+var result = identity<float>(0)            // 0 默认 int，强制 float
 ```
 
 ### 9.4 特化与 monomorphization
@@ -3719,7 +3726,7 @@ describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字�
 class Container<T> {
     items: Array<T>
 }
-let c = Container<int>()
+var c = Container<int>()
 print(Reflect.typeOf(c))       // "Container<int>"
 ```
 
@@ -3757,36 +3764,36 @@ GoOption ::= 'name' ':' StringLiteral
 
 ```xray
 // 形式 1：调用一个已声明的函数
-let t1 = go worker(0, channel)
+var t1 = go worker(0, channel)
 
 // 形式 2：调用一个 lambda 字面量（用于内联逻辑 + 显式传参）
-let t2 = go fn(d: Json) -> int {
+var t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
 
 // 形式 3：块形式（隐式包装为零参 lambda）
-let t3 = go {
+var t3 = go {
     return compute()
 }
 
 // 可选调试名称
-let named = go(name: "worker-1") worker(1, channel)
+var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**move 在参数位置**：跨协程转移所有权通过参数前缀 `move` 实现，**不是** `go` 的选项：
+**move 在参数位置**：跨协程转移普通局部所有权通过参数前缀 `move` 实现，**不是** `go` 的选项；`shared` 绑定是稳定共享身份，不能 `move`：
 
 ```xray
-shared let data = { value: 10 }
-let task = go fn(d: Json) -> int {
+var data = { value: 10 }
+var task = go fn(d: Json) -> int {
     return d.value + 1
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
-**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过并发捕获规则。块内不能捕获普通可变局部；可直接使用的外部状态必须是 `shared const`、全局不可变状态，或显式并发安全对象（如 Channel / Atomic）。需要把局部数据传入协程时，使用带参数的 lambda / 函数调用形式：
+**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过并发捕获规则。块内不能捕获普通可变局部；可直接使用的外部状态必须是 `shared`、全局不可变状态，或显式并发安全对象（如 Channel / Atomic）。需要把局部数据传入协程时，使用带参数的 lambda / 函数调用形式：
 
 ```xray
-let n = 10
-let task = go fn(x: int) -> int {
+var n = 10
+var task = go fn(x: int) -> int {
     return x + 1
 }(n)
 ```
@@ -3796,7 +3803,7 @@ let task = go fn(x: int) -> int {
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
-- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared const`，**裸传是编译错误**；标量、`string`、`shared const`、Channel / Task / Atomic 等可直接传。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，正常路径不再有隐式边界深拷贝。
+- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared`，**裸传是编译错误**；标量、`string`、`shared`、Channel / Task / Atomic 等可直接传。`move` 只适用于可重新绑定的局部 `var` 值，`shared` 绑定不能被 move。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，正常路径不再有隐式边界深拷贝。
 - `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
 
 ### 10.3 `await` — 等待结果
@@ -3809,23 +3816,23 @@ AwaitExpr ::= 'await' Expression
 
 ```xray
 // 单 task
-let task = go fetch("https://example.com")
-let result = await task                    // 让出当前协程直到 task 完成
+var task = go fetch("https://example.com")
+var result = await task                    // 让出当前协程直到 task 完成
 
 // await all：等待全部完成，返回结果数组（与输入顺序一致）
-let t1 = go compute(2)
-let t2 = go compute(3)
-let t3 = go compute(4)
-let results: Array<int> = await all [t1, t2, t3]
+var t1 = go compute(2)
+var t2 = go compute(3)
+var t3 = go compute(4)
+var results: Array<int> = await all [t1, t2, t3]
 // 也可直接对变量使用，无需中括号
-let tasks = [t1, t2, t3]
-let results2: Array<int> = await all tasks
+var tasks = [t1, t2, t3]
+var results2: Array<int> = await all tasks
 
 // await any：等待任一完成，返回该任务结果；其他任务继续运行
-let first = await any [t1, t2, t3]
+var first = await any [t1, t2, t3]
 
 // await anySuccess：跳过失败任务，等待第一个成功的任务
-let firstOk = await anySuccess [t1, t2, t3]
+var firstOk = await anySuccess [t1, t2, t3]
 ```
 
 **语义**：
@@ -3855,9 +3862,9 @@ let firstOk = await anySuccess [t1, t2, t3]
 | `t.awaitTimeout(ms)` | `(int) -> TaskResult<T>` | 阻塞到完成或超时，超时返回 `TaskResult.Timeout` |
 
 ```xray
-let t = go fetch(url)
+var t = go fetch(url)
 if (!t.done) { /* 还在跑 */ }
-let r = await t
+var r = await t
 
 match t.poll() {
     TaskResult.Pending -> print("running")
@@ -3881,12 +3888,12 @@ ChannelType ::= 'Channel' '<' Type '>'
 ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
-Channel 通常以 `shared const` 声明（生命周期跨协程，引用语义）：
+Channel 通常以 `shared` 声明（生命周期跨协程，引用语义）：
 
 ```xray
-shared const ch  = Channel<int>(10)    // 有缓冲，capacity = 10
-shared const ch0 = Channel<int>(0)     // 无缓冲（同步握手）
-shared const cha = Channel(3)          // 元素类型从首次 send 推断
+shared ch  = Channel<int>(10)    // 有缓冲，capacity = 10
+shared ch0 = Channel<int>(0)     // 无缓冲（同步握手）
+shared cha = Channel(3)          // 元素类型从首次 send 推断
 ```
 
 **API**（注意全部为 **camelCase**）：
@@ -3904,15 +3911,15 @@ shared const cha = Channel(3)          // 元素类型从首次 send 推断
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
 ```xray
-shared const ch = Channel<int>(10)
+shared ch = Channel<int>(10)
 ch.send(42)                             // 阻塞发送
-let v = match ch.recv() {
+var v = match ch.recv() {
     Recv.Value(value) -> value
     Recv.Closed -> -1
     _ -> -1
 }
 
-let sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
+var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
 match ch.tryRecv() {
     Recv.Value(next) -> print(next)
     Recv.Empty -> print("empty")
@@ -3926,7 +3933,7 @@ for (msg in ch) {
     print(msg)
 }
 
-let value = ch.recvOr(-1)
+var value = ch.recvOr(-1)
 ```
 
 **send/recv 与 `move`**：发送大对象时用 `ch.send(move payload)` 转移所有权，避免拷贝；接收方独占。
@@ -3960,8 +3967,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray
-shared const ch1 = Channel<int>(2)
-shared const ch2 = Channel<int>(2)
+shared ch1 = Channel<int>(2)
+shared ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
@@ -3973,7 +3980,7 @@ select {
 
 **语义**：
 - 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value(name)` 的 payload 绑定到 `name`。
-- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一显式 transfer 规则——裸 owned heap 值必须写成 `copy(v)` / `move v` 或 `shared const`。
+- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一显式 transfer 规则——裸 owned heap 值必须写成 `copy(v)` / `move v` 或 `shared`。
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
 
@@ -3981,7 +3988,7 @@ select {
 
 `scope` 是**语句关键字**，建立一个新的词法作用域块。它服务两个目的：
 
-1. **纯词法作用域**：与 C/Rust `{ ... }` 局部块一致，块内 `let` 不影响外层同名变量。
+1. **纯词法作用域**：与 C/Rust `{ ... }` 局部块一致，块内 `var` 不影响外层同名变量。
 2. **结构化并发**（语义增强）：在 `scope` 块内 `go` 启动的协程，块退出前**自动等待**全部完成或取消。
 
 ```ebnf
@@ -3992,9 +3999,9 @@ SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // 收集每个子协程�
 
 ```xray
 // 词法作用域用途
-let x = 1
+var x = 1
 scope {
-    let x = 10            // shadow 外层 x，块内有效
+    var x = 10            // shadow 外层 x，块内有效
     print(x)              // 10
 }
 print(x)                  // 1
@@ -4039,7 +4046,7 @@ try {
 }
 
 // supervisor scope：收集每个子协程的 outcome
-let outcomes = supervisor scope {
+var outcomes = supervisor scope {
     go failing("error1")
     go failing("error2")
     go ok()
@@ -4057,37 +4064,37 @@ print(outcomes.length)               // 3（每个子协程一个 outcome）
 MoveExpr ::= 'move' Identifier        // 仅出现在调用参数位置
 ```
 
-`move` 是**实参修饰前缀**（不是 `go` 的选项）。它把 `shared let` 变量的所有权从当前作用域转移到被调函数（包括 `go` 启动的协程、`ch.send()` 等）。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误。
+`move` 是**实参修饰前缀**（不是 `go` 的选项）。它把可重新绑定的局部 `var` 值所有权从当前作用域转移到被调函数（包括 `go` 启动的协程、`ch.send()` 等）。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误。`const` 和 `shared` 绑定都不能作为 `move` 源。
 
 ```xray
-shared let buf = Bytes(1024 * 1024)
+var buf = Bytes(1024 * 1024)
 
 // 移交给协程
-let t = go fn(b: Bytes) -> int {
+var t = go fn(b: Bytes) -> int {
     return process(b)
 }(move buf)
 // 编译错误：buf has been moved
 // print(buf.length)
 
 // 移交给 channel
-shared const ch = Channel<Bytes>(1)
-shared let payload = Bytes(4096)
+shared ch = Channel<Bytes>(1)
+var payload = Bytes(4096)
 ch.send(move payload)
 // 编译错误：payload has been moved
 ```
 
-详见 §7.3、§7.4 关于 shared 变量的捕获规则。
+详见 §7.3、§7.4 关于 `var` / `shared` 的协程传递规则。
 
 ### 10.9 同步原语
 
-xray 的默认并发模型偏向**消息传递 + 不可变共享**——通过 `shared const`、`Channel`、`move`、`scope` 已能在编译期消除大部分数据竞争，因此**不**鼓励使用裸 Mutex/锁。
+xray 的默认并发模型偏向**消息传递 + 显式共享身份 + 显式所有权转移**——通过 `shared`、`Channel`、`move`、`scope` 把跨协程数据边界写在源码里，因此**不**鼓励使用裸 Mutex/锁。
 
 如确需互斥锁/原子操作，运行时层面提供：
 
 | 原语 | 形态 | 说明 |
 |---|---|---|
 | Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
-| `shared let` + `move` | 编译期独占 | 跨协程独占，无运行时开销 |
+| `shared` | 稳定共享身份 | 存储在全局堆，作用域仍按词法规则；并发可变安全由值的类型语义决定 |
 | `Atomic<T>` | 无锁原子包装 | 对 `int`/`float`/`bool` 提供 C11 原子操作 |
 
 > **设计说明**：xray 不暴露 `Mutex`/`RwLock` 等通用锁原语。对于简单共享计数器、标志位等场景，`Atomic<T>` 是推荐选择；对于复杂互斥场景，使用 `Channel(1)` 模拟 lock/unlock。
@@ -4096,12 +4103,12 @@ xray 的默认并发模型偏向**消息传递 + 不可变共享**——通过 `
 
 `Atomic<T>` 包装 `int`、`float` 或 `bool`，在系统堆上分配，底层使用 C11 原子指令，无需锁即可跨协程安全读写。
 
-**声明约束**：`Atomic<T>` 变量必须声明为 `shared const`，禁止 `move`。
+**声明约束**：`Atomic<T>` 变量必须声明为 `shared`，禁止 `move`。
 
 ```xray
-shared const counter = Atomic(0)         // Atomic<int>
-shared const flag = Atomic(false)        // Atomic<bool>
-shared const rate = Atomic(3.14)         // Atomic<float>
+shared counter = Atomic(0)         // Atomic<int>
+shared flag = Atomic(false)        // Atomic<bool>
+shared rate = Atomic(3.14)         // Atomic<float>
 ```
 
 **方法一览**（完整签名见 §14.19）：
@@ -4134,9 +4141,9 @@ enum Ordering {
 `Ordering` 枚举由编译器自动注入（prelude），无需 import。
 
 ```xray
-shared const counter = Atomic(0)
+shared counter = Atomic(0)
 counter.store(42, Ordering.Release)
-let val = counter.load(Ordering.Acquire)
+var val = counter.load(Ordering.Acquire)
 ```
 
 
@@ -4161,14 +4168,14 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 
 | 规则 | 强制 |
 |--|--|
-| `go` 闭包不能捕获普通 `let` 局部变量 | ✅ |
-| `shared const` 跨协程零拷贝只读 | ✅ |
-| `shared let` 必须 `move` 才能跨协程 | ✅ |
+| `go` 闭包不能捕获普通 `var` / `const` 局部引用值 | ✅ |
+| `shared` 绑定可直接跨协程传递/捕获，且不能重新赋值或 `move` | ✅ |
+| `move` 只适用于普通局部 `var` 的显式所有权转移 | ✅ |
 | Channel 跨协程传值 | ✅ |
-| `Atomic<T>` 必须声明为 `shared const`，禁止 `move` | ✅ |
+| `Atomic<T>` 必须声明为 `shared`，禁止 `move` | ✅ |
 
 **仍可能存在数据竞争**（运行时检测，非编译期）：
-- 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared const` / `Bytes` / 不可变对象 / `move` 移交。
+- 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared` / `Bytes` / 不可变对象 / `move` 移交。
 
 ---
 
@@ -4298,7 +4305,7 @@ export * from "./product"
 
 **限制**：
 - 未标 `export` 的声明仅模块内可见（**私有**）。
-- `export let` 不被支持。可变绑定不能跨模块共享，使用 `export const` 代替。
+- `export var` 不被支持。可变绑定不能跨模块共享，使用 `export const` 代替。
 - 模块的内部状态在不同模块中互不冲突，即使同名。
 - 重导出与通配重导出常用于 `index.xr` 聚合子模块的公开 API。
 
@@ -4337,7 +4344,7 @@ xray 端用法相同：
 
 ```xray
 import time
-let t = time.now()
+var t = time.now()
 time.sleep(100)
 ```
 
@@ -4363,7 +4370,7 @@ fn test_addition() {
 
 @test
 fn test_with_assertions() {
-    let result = compute()
+    var result = compute()
     assert_eq(result, 42)
     assert(result > 0)
 }
@@ -4410,8 +4417,8 @@ xray 把断言函数作为**全局内置**（不需 `import test`）。完整签
 ```xray
 @test
 fn test_async_fetch() {
-    let task = go fetch_data("http://...")
-    let result = await task
+    var task = go fetch_data("http://...")
+    var result = await task
     assert_eq(result.status, 200)
 }
 ```
@@ -4491,7 +4498,7 @@ fn oldAPI() { return }
 | `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
 
 ```xray
-let x = 42
+var x = 42
 print(typeof(x))                // "int"
 print(x is int)                 // true
 print(typeof(x) == "int")       // true
@@ -4712,7 +4719,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `Json.encode(value)` | 显式 typed value → Json 边界转换 |
 | `Json.stringify(value, indent?)` | 序列化 |
 
-**字面量**：`{ name: "alice", age: 30 }` 默认是 sealed `Record`。显式写 `let j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。
+**字面量**：`{ name: "alice", age: 30 }` 默认是 sealed `Record`。显式写 `var j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。
 
 ### 14.12 `Range`
 
@@ -4766,7 +4773,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 
 ### 14.19 `Atomic<T>` 方法
 
-`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。必须声明为 `shared const`，禁止 `move`。
+`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。必须声明为 `shared`，禁止 `move`。
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
@@ -4943,7 +4950,7 @@ Typed array 元素布局是容器元数据的一部分。`Array<char>` 使用 `X
 | 区域 | 用途 |
 |--|--|
 | **系统堆** | C `malloc/free`，用于 native 数据结构 |
-| **全局堆** | `shared const` / `shared let`，引用计数 |
+| **全局堆** | `shared` / `shared`，引用计数 |
 | **协程堆** | 每协程独立的 RC 对象堆，强引用环由 cycle collector 回收 |
 | **栈** | `struct` 值、局部 immediate、函数帧 |
 | **Arena** | parser 临时分配、frame allocation |
@@ -5265,7 +5272,6 @@ Bytecode  →  AOT (machine code)
 | 码 | 名称 | 禁止写法 | 正确写法 |
 |--|--|--|--|
 | `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` | `return (a, b)` |
-| `E0802` | `XR_ERR_SYN_LET_MULTI_REMOVED` | `let x, y = ...` | `let (x, y) = ...` |
 | `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | `for k, v in m`（裸 KV） | `for (k, v in m)` |
 | `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` | `-> ()` 或省略返回类型 |
 
@@ -5419,6 +5425,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
          |  ArrowFunction
+         |  ComptimeExpr
          |  MatchExpr
          |  '(' Expression ')'
          |  '(' Expression (',' Expression)+ ')'  // tuple
@@ -5435,7 +5442,9 @@ ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)*
 ArrowParam  ::= Identifier ':' Type
 // Note: arrow closures cannot declare an explicit return type;
-// use `fn(p: T) -> R { ... }` or annotate the binding (`let f: (T) -> R = ...`) instead.
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: (T) -> R = ...`) instead.
+
+ComptimeExpr ::= 'comptime' (Expression | Block)
 
 MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
@@ -5539,7 +5548,9 @@ YieldStmt ::= 'yield' Expression
 ### A.6 声明
 
 ```ebnf
-VarDecl ::= ('let' | 'const' | 'shared' ('const' | 'let')) Binding (',' Binding)*
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
@@ -5615,7 +5626,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-完整 63 个关键字按字母排序见 [§1.5](#15-关键字)。
+完整 65 个关键字按字母排序见 [§1.5](#15-关键字)。
 
 | 关键字 | 节 |
 |--|--|
@@ -5627,6 +5638,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `catch` | §8 |
 | `char` | §2.3.5 |
 | `class` | §5.3 |
+| `comptime` | §3.2 |
 | `const` | §5.1 |
 | `constructor` | §5.3 |
 | `continue` | §4.6 |
@@ -5648,12 +5660,12 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `int` `int8`..`int64` | §2.3.1 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
-| `let` | §5.1 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
 | `override` | §5.3 |
+| `parallel` | §10 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
 | `return` | §4.7 |
@@ -5671,6 +5683,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
 | `unsafe` | §3.2 |
+| `var` | §5.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
 

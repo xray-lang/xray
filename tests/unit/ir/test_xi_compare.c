@@ -91,9 +91,6 @@ static XrProto *compile_legacy(const char *source) {
         return NULL;
     }
 
-    /* Use the context's built-in analyzer */
-    xa_analyzer_analyze(ctx->analyzer, "compare.xr", program);
-
     /* Re-enter the parse arena: legacy codegen desugars some AST nodes
      * (e.g. for-in, match) which calls ast_alloc and needs the arena. */
     XrCompilerSessionScope ast_scope;
@@ -491,7 +488,7 @@ static void run_fusion(FusionSpec spec) {
 
 TEST(cmp_int_const) {
     run_compare((CompareSpec) {
-        .source = "let x = 42\nprint(x)",
+        .source = "var x = 42\nprint(x)",
         .label = "int constant",
         .expect_xi_success = true,
         .min_similarity = 0.3,
@@ -501,7 +498,7 @@ TEST(cmp_int_const) {
 
 TEST(cmp_float_const) {
     run_compare((CompareSpec) {
-        .source = "let x = 3.14\nprint(x)",
+        .source = "var x = 3.14\nprint(x)",
         .label = "float constant",
         .expect_xi_success = true,
         .min_similarity = 0.3,
@@ -511,7 +508,7 @@ TEST(cmp_float_const) {
 
 TEST(cmp_bool_const) {
     run_compare((CompareSpec) {
-        .source = "let a = true\nlet b = false\nprint(a)\nprint(b)",
+        .source = "var a = true\nvar b = false\nprint(a)\nprint(b)",
         .label = "bool constants",
         .expect_xi_success = true,
         .min_similarity = 0.3,
@@ -521,7 +518,7 @@ TEST(cmp_bool_const) {
 
 TEST(cmp_string_const) {
     run_compare((CompareSpec) {
-        .source = "let s = \"hello\"\nprint(s)",
+        .source = "var s = \"hello\"\nprint(s)",
         .label = "string constant",
         .expect_xi_success = true,
         .min_similarity = 0.3,
@@ -531,7 +528,7 @@ TEST(cmp_string_const) {
 
 TEST(cmp_null_const) {
     run_compare((CompareSpec) {
-        .source = "let x = null\nprint(x)",
+        .source = "var x = null\nprint(x)",
         .label = "null constant",
         .expect_xi_success = true,
         .min_similarity = 0.3,
@@ -543,7 +540,7 @@ TEST(cmp_null_const) {
 
 TEST(cmp_add) {
     run_compare((CompareSpec) {
-        .source = "let a = 10\nlet b = 20\nlet c = a + b\nprint(c)",
+        .source = "var a = 10\nvar b = 20\nvar c = a + b\nprint(c)",
         .label = "addition",
         .expect_xi_success = true,
         .min_similarity = 0.3,
@@ -553,7 +550,7 @@ TEST(cmp_add) {
 
 TEST(cmp_arith_chain) {
     run_compare((CompareSpec) {
-        .source = "let x = 1 + 2 * 3 - 4\nprint(x)",
+        .source = "var x = 1 + 2 * 3 - 4\nprint(x)",
         .label = "arithmetic chain (const folded)",
         .expect_xi_success = true,
         .min_similarity = 0.3,
@@ -563,7 +560,7 @@ TEST(cmp_arith_chain) {
 
 TEST(cmp_unary_neg) {
     run_compare((CompareSpec) {
-        .source = "let x = 10\nlet y = -x\nprint(y)",
+        .source = "var x = 10\nvar y = -x\nprint(y)",
         .label = "unary negation",
         .expect_xi_success = true,
         .min_similarity = 0.3,
@@ -575,7 +572,7 @@ TEST(cmp_unary_neg) {
 
 TEST(cmp_if_else) {
     run_compare((CompareSpec) {
-        .source = "let x = 5\nif (x > 3) { print(1) } else { print(0) }",
+        .source = "var x = 5\nif (x > 3) { print(1) } else { print(0) }",
         .label = "if-else",
         .expect_xi_success = true,
         .min_similarity = 0.2,
@@ -595,7 +592,7 @@ TEST(cmp_if_const_true) {
 
 TEST(cmp_while_loop) {
     run_compare((CompareSpec) {
-        .source = "let i = 0\nwhile (i < 5) { i = i + 1 }\nprint(i)",
+        .source = "var i = 0\nwhile (i < 5) { i = i + 1 }\nprint(i)",
         .label = "while loop",
         .expect_xi_success = true,
         .min_similarity = 0.2,
@@ -617,8 +614,8 @@ TEST(cmp_multi_print) {
 
 TEST(cmp_multi_vars) {
     run_compare((CompareSpec) {
-        .source = "let a = 1\nlet b = 2\nlet c = 3\n"
-                  "let d = a + b + c\nprint(d)",
+        .source = "var a = 1\nvar b = 2\nvar c = 3\n"
+                  "var d = a + b + c\nprint(d)",
         .label = "multiple variables + sum",
         .expect_xi_success = true,
         .min_similarity = 0.3,
@@ -630,7 +627,7 @@ TEST(cmp_multi_vars) {
 
 TEST(cmp_var_reassign) {
     run_compare((CompareSpec) {
-        .source = "let x = 10\nx = x + 5\nx = x * 2\nprint(x)",
+        .source = "var x = 10\nx = x + 5\nx = x * 2\nprint(x)",
         .label = "variable reassignment chain",
         .expect_xi_success = true,
         .min_similarity = 0.3,
@@ -642,7 +639,7 @@ TEST(cmp_var_reassign) {
 
 TEST(cmp_comparisons) {
     run_compare((CompareSpec) {
-        .source = "let a = 5\nlet b = 10\n"
+        .source = "var a = 5\nvar b = 10\n"
                   "print(a < b)\nprint(a > b)\n"
                   "print(a == b)\nprint(a != b)",
         .label = "comparison operators",
@@ -656,7 +653,7 @@ TEST(cmp_comparisons) {
 
 TEST(cmp_logical_and) {
     run_compare((CompareSpec) {
-        .source = "let a = true\nlet b = false\n"
+        .source = "var a = true\nvar b = false\n"
                   "print(a && b)\nprint(a && true)",
         .label = "logical AND (short-circuit)",
         .expect_xi_success = true,
@@ -667,7 +664,7 @@ TEST(cmp_logical_and) {
 
 TEST(cmp_logical_or) {
     run_compare((CompareSpec) {
-        .source = "let a = false\nlet b = true\n"
+        .source = "var a = false\nvar b = true\n"
                   "print(a || b)\nprint(false || false)",
         .label = "logical OR (short-circuit)",
         .expect_xi_success = true,
@@ -678,7 +675,7 @@ TEST(cmp_logical_or) {
 
 TEST(cmp_logical_not) {
     run_compare((CompareSpec) {
-        .source = "let a = true\nprint(!a)\nprint(!false)",
+        .source = "var a = true\nprint(!a)\nprint(!false)",
         .label = "logical NOT",
         .expect_xi_success = true,
         .min_similarity = 0.3,
@@ -690,8 +687,8 @@ TEST(cmp_logical_not) {
 
 TEST(cmp_for_loop) {
     run_compare((CompareSpec) {
-        .source = "let sum = 0\n"
-                  "for (let i = 1; i <= 5; i = i + 1) { sum = sum + i }\n"
+        .source = "var sum = 0\n"
+                  "for (var i = 1; i <= 5; i = i + 1) { sum = sum + i }\n"
                   "print(sum)",
         .label = "for loop with accumulator",
         .expect_xi_success = true,
@@ -704,7 +701,7 @@ TEST(cmp_for_loop) {
 
 TEST(cmp_nested_if) {
     run_compare((CompareSpec) {
-        .source = "let x = 15\n"
+        .source = "var x = 15\n"
                   "if (x > 20) { print(1) }\n"
                   "else if (x > 10) { print(2) }\n"
                   "else { print(3) }",
@@ -719,7 +716,7 @@ TEST(cmp_nested_if) {
 
 TEST(cmp_compound_assign) {
     run_compare((CompareSpec) {
-        .source = "let x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)",
+        .source = "var x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)",
         .label = "compound assignment operators",
         .expect_xi_success = true,
         .min_similarity = 0.2,
@@ -731,8 +728,8 @@ TEST(cmp_compound_assign) {
 
 TEST(cmp_ternary) {
     run_compare((CompareSpec) {
-        .source = "let x = 5\n"
-                  "let y = x > 3 ? 100 : 200\n"
+        .source = "var x = 5\n"
+                  "var y = x > 3 ? 100 : 200\n"
                   "print(y)",
         .label = "ternary expression",
         .expect_xi_success = true,
@@ -745,7 +742,7 @@ TEST(cmp_ternary) {
 
 TEST(cmp_while_break) {
     run_compare((CompareSpec) {
-        .source = "let i = 0\n"
+        .source = "var i = 0\n"
                   "while (true) {\n"
                   "  if (i >= 3) { break }\n"
                   "  i = i + 1\n"
@@ -759,7 +756,7 @@ TEST(cmp_while_break) {
 
 TEST(cmp_while_continue) {
     run_compare((CompareSpec) {
-        .source = "let sum = 0\nlet i = 0\n"
+        .source = "var sum = 0\nvar i = 0\n"
                   "while (i < 6) {\n"
                   "  i = i + 1\n"
                   "  if (i == 3) { continue }\n"
@@ -777,7 +774,7 @@ TEST(cmp_while_continue) {
 TEST(cmp_func_call) {
     run_compare((CompareSpec) {
         .source = "fn add(a: int, b: int) -> int { return a + b }\n"
-                  "let r = add(3, 4)\nprint(r)",
+                  "var r = add(3, 4)\nprint(r)",
         .label = "function declaration and call",
         .expect_xi_success = true,
         .min_similarity = 0.2,
@@ -802,9 +799,9 @@ TEST(cmp_func_recursive) {
 
 TEST(cmp_nested_loop) {
     run_compare((CompareSpec) {
-        .source = "let sum = 0\n"
-                  "let i = 0\nwhile (i < 3) {\n"
-                  "  let j = 0\n  while (j < 3) {\n"
+        .source = "var sum = 0\n"
+                  "var i = 0\nwhile (i < 3) {\n"
+                  "  var j = 0\n  while (j < 3) {\n"
                   "    sum = sum + 1\n    j = j + 1\n"
                   "  }\n  i = i + 1\n}\nprint(sum)",
         .label = "nested while loops (3x3)",
@@ -818,8 +815,8 @@ TEST(cmp_nested_loop) {
 
 TEST(cmp_string_concat) {
     run_compare((CompareSpec) {
-        .source = "let a = \"hello\"\nlet b = \" world\"\n"
-                  "let c = a + b\nprint(c)",
+        .source = "var a = \"hello\"\nvar b = \" world\"\n"
+                  "var c = a + b\nprint(c)",
         .label = "string concatenation",
         .expect_xi_success = true,
         .min_similarity = 0.2,
@@ -830,11 +827,11 @@ TEST(cmp_string_concat) {
 TEST(cmp_string_concat_chain) {
     /* Multi-operand chain: "a" + "b" + "c" + "d" flattened to single STRBUF */
     run_compare((CompareSpec) {
-        .source = "let a = \"hello\"\n"
-                  "let b = \" \"\n"
-                  "let c = \"world\"\n"
-                  "let d = \"!\"\n"
-                  "let result = a + b + c + d\n"
+        .source = "var a = \"hello\"\n"
+                  "var b = \" \"\n"
+                  "var c = \"world\"\n"
+                  "var d = \"!\"\n"
+                  "var result = a + b + c + d\n"
                   "print(result)",
         .label = "string concat chain: 4-way STRBUF flatten",
         .expect_xi_success = true,
@@ -847,7 +844,7 @@ TEST(cmp_string_concat_chain) {
 
 TEST(cmp_mixed_arith) {
     run_compare((CompareSpec) {
-        .source = "let a = 10\nlet b = 3\n"
+        .source = "var a = 10\nvar b = 3\n"
                   "print(a / b)\nprint(a % b)",
         .label = "integer division and modulo",
         .expect_xi_success = true,
@@ -899,7 +896,7 @@ TEST(cmp_factorial) {
 
 TEST(cmp_float_arith) {
     run_compare((CompareSpec) {
-        .source = "let x = 3.14\nlet y = 2.0\n"
+        .source = "var x = 3.14\nvar y = 2.0\n"
                   "print(x + y)\nprint(x * y)",
         .label = "float arithmetic",
         .expect_xi_success = true,
@@ -912,9 +909,9 @@ TEST(cmp_float_arith) {
 
 TEST(cmp_block_scope) {
     run_compare((CompareSpec) {
-        .source = "let x = 10\n"
+        .source = "var x = 10\n"
                   "if (true) {\n"
-                  "  let y = x + 5\n"
+                  "  var y = x + 5\n"
                   "  print(y)\n"
                   "}\nprint(x)",
         .label = "block scoping with inner variable",
@@ -928,8 +925,8 @@ TEST(cmp_block_scope) {
 
 TEST(cmp_complex_expr) {
     run_compare((CompareSpec) {
-        .source = "let a = 2\nlet b = 3\nlet c = 4\n"
-                  "let r = (a + b) * c - a\nprint(r)",
+        .source = "var a = 2\nvar b = 3\nvar c = 4\n"
+                  "var r = (a + b) * c - a\nprint(r)",
         .label = "complex arithmetic expression",
         .expect_xi_success = true,
         .min_similarity = 0.2,
@@ -939,8 +936,8 @@ TEST(cmp_complex_expr) {
 
 TEST(cmp_for_accumulate) {
     run_compare((CompareSpec) {
-        .source = "let sum = 0\n"
-                  "for (let i = 1; i <= 10; i = i + 1) {\n"
+        .source = "var sum = 0\n"
+                  "for (var i = 1; i <= 10; i = i + 1) {\n"
                   "  sum = sum + i\n"
                   "}\nprint(sum)",
         .label = "for-loop sum 1..10",
@@ -952,7 +949,7 @@ TEST(cmp_for_accumulate) {
 
 TEST(cmp_chained_comparison) {
     run_compare((CompareSpec) {
-        .source = "let a = 5\nlet b = 10\nlet c = 3\n"
+        .source = "var a = 5\nvar b = 10\nvar c = 3\n"
                   "if (a > c && b > a) { print(1) } else { print(0) }",
         .label = "chained comparison with logical and",
         .expect_xi_success = true,
@@ -963,7 +960,7 @@ TEST(cmp_chained_comparison) {
 
 TEST(cmp_while_countdown) {
     run_compare((CompareSpec) {
-        .source = "let n = 5\nlet result = 1\n"
+        .source = "var n = 5\nvar result = 1\n"
                   "while (n > 0) {\n"
                   "  result = result * n\n"
                   "  n = n - 1\n"
@@ -977,7 +974,7 @@ TEST(cmp_while_countdown) {
 
 TEST(cmp_bool_logic) {
     run_compare((CompareSpec) {
-        .source = "let t = true\nlet f = false\n"
+        .source = "var t = true\nvar f = false\n"
                   "print(t && t)\nprint(t && f)\n"
                   "print(f || t)\nprint(f || f)",
         .label = "boolean logic combinations",
@@ -1005,7 +1002,7 @@ TEST(cmp_multi_func) {
 
 TEST(cmp_bitwise_and_or) {
     run_compare((CompareSpec) {
-        .source = "let a = 12\nlet b = 10\n"
+        .source = "var a = 12\nvar b = 10\n"
                   "print(a & b)\nprint(a | b)",
         .label = "bitwise AND and OR",
         .expect_xi_success = true,
@@ -1016,7 +1013,7 @@ TEST(cmp_bitwise_and_or) {
 
 TEST(cmp_bitwise_xor_shift) {
     run_compare((CompareSpec) {
-        .source = "let a = 5\n"
+        .source = "var a = 5\n"
                   "print(a ^ 3)\nprint(a << 2)\nprint(a >> 1)",
         .label = "bitwise XOR and shifts",
         .expect_xi_success = true,
@@ -1027,8 +1024,8 @@ TEST(cmp_bitwise_xor_shift) {
 
 TEST(cmp_bitwise_not) {
     run_compare((CompareSpec) {
-        .source = "let a = 0\nprint(~a)\n"
-                  "let b = 255\nprint(~b)",
+        .source = "var a = 0\nprint(~a)\n"
+                  "var b = 255\nprint(~b)",
         .label = "bitwise NOT",
         .expect_xi_success = true,
         .min_similarity = 0.2,
@@ -1040,7 +1037,7 @@ TEST(cmp_bitwise_not) {
 
 TEST(cmp_increment) {
     run_compare((CompareSpec) {
-        .source = "let x = 5\nx++\nprint(x)\n"
+        .source = "var x = 5\nx++\nprint(x)\n"
                   "x--\nx--\nprint(x)",
         .label = "increment and decrement operators",
         .expect_xi_success = true,
@@ -1053,7 +1050,7 @@ TEST(cmp_increment) {
 
 TEST(cmp_array_literal) {
     run_compare((CompareSpec) {
-        .source = "let arr = [10, 20, 30]\n"
+        .source = "var arr = [10, 20, 30]\n"
                   "print(arr[0])\nprint(arr[1])\nprint(arr[2])",
         .label = "array literal and index access",
         .expect_xi_success = true,
@@ -1064,7 +1061,7 @@ TEST(cmp_array_literal) {
 
 TEST(cmp_array_assign) {
     run_compare((CompareSpec) {
-        .source = "let arr = [1, 2, 3]\n"
+        .source = "var arr = [1, 2, 3]\n"
                   "arr[1] = 99\nprint(arr[1])",
         .label = "array index assignment",
         .expect_xi_success = true,
@@ -1077,8 +1074,8 @@ TEST(cmp_array_assign) {
 
 TEST(cmp_nested_ternary) {
     run_compare((CompareSpec) {
-        .source = "let x = 5\n"
-                  "let r = x > 10 ? 1 : (x > 3 ? 2 : 3)\n"
+        .source = "var x = 5\n"
+                  "var r = x > 10 ? 1 : (x > 3 ? 2 : 3)\n"
                   "print(r)",
         .label = "nested ternary expression",
         .expect_xi_success = true,
@@ -1091,7 +1088,7 @@ TEST(cmp_nested_ternary) {
 
 TEST(cmp_if_else_chain) {
     run_compare((CompareSpec) {
-        .source = "let x = 15\n"
+        .source = "var x = 15\n"
                   "if (x > 20) { print(1) }\n"
                   "else if (x > 10) { print(2) }\n"
                   "else if (x > 5) { print(3) }\n"
@@ -1107,8 +1104,8 @@ TEST(cmp_if_else_chain) {
 
 TEST(cmp_deep_arith) {
     run_compare((CompareSpec) {
-        .source = "let a = 2\nlet b = 3\nlet c = 4\nlet d = 5\n"
-                  "let r = ((a + b) * (c - d) + a * b) * c\n"
+        .source = "var a = 2\nvar b = 3\nvar c = 4\nvar d = 5\n"
+                  "var r = ((a + b) * (c - d) + a * b) * c\n"
                   "print(r)",
         .label = "deeply nested arithmetic expression",
         .expect_xi_success = true,
@@ -1121,7 +1118,7 @@ TEST(cmp_deep_arith) {
 
 TEST(cmp_while_multi_cond) {
     run_compare((CompareSpec) {
-        .source = "let i = 0\nlet sum = 0\n"
+        .source = "var i = 0\nvar sum = 0\n"
                   "while (i < 10 && sum < 20) {\n"
                   "  sum = sum + i\n"
                   "  i = i + 1\n"
@@ -1137,7 +1134,7 @@ TEST(cmp_while_multi_cond) {
 
 TEST(cmp_map_literal) {
     run_compare((CompareSpec) {
-        .source = "let m = {\"a\": 1, \"b\": 2}\n"
+        .source = "var m = {\"a\": 1, \"b\": 2}\n"
                   "print(m[\"a\"])\nprint(m[\"b\"])",
         .label = "map literal and key access",
         .expect_xi_success = true,
@@ -1150,8 +1147,8 @@ TEST(cmp_map_literal) {
 
 TEST(cmp_template_string) {
     run_compare((CompareSpec) {
-        .source = "let name = \"world\"\n"
-                  "let msg = \"hello ${name}\"\n"
+        .source = "var name = \"world\"\n"
+                  "var msg = \"hello ${name}\"\n"
                   "print(msg)",
         .label = "template string interpolation",
         .expect_xi_success = true,
@@ -1164,8 +1161,8 @@ TEST(cmp_template_string) {
 
 TEST(cmp_for_in_array) {
     run_compare((CompareSpec) {
-        .source = "let arr = [10, 20, 30]\n"
-                  "let sum = 0\n"
+        .source = "var arr = [10, 20, 30]\n"
+                  "var sum = 0\n"
                   "for (item in arr) { sum = sum + item }\n"
                   "print(sum)",
         .label = "for-in loop over array",
@@ -1177,7 +1174,7 @@ TEST(cmp_for_in_array) {
 
 TEST(cmp_for_in_range) {
     run_compare((CompareSpec) {
-        .source = "let sum = 0\n"
+        .source = "var sum = 0\n"
                   "for (i in 0..5) { sum = sum + i }\n"
                   "print(sum)",
         .label = "for-in loop over range",
@@ -1195,7 +1192,7 @@ TEST(cmp_closure_capture) {
                   "  fn adder(y: int) -> int { return x + y }\n"
                   "  return adder\n"
                   "}\n"
-                  "let add5 = make_adder(5)\n"
+                  "var add5 = make_adder(5)\n"
                   "print(add5(3))",
         .label = "closure capturing outer variable",
         .expect_xi_success = true,
@@ -1209,8 +1206,8 @@ TEST(cmp_closure_capture) {
 TEST(cmp_type_convert) {
     /* as cast: type matches -> value passes through */
     run_compare((CompareSpec) {
-        .source = "let x: Json = 42\n"
-                  "let y = x as int\n"
+        .source = "var x: Json = 42\n"
+                  "var y = x as int\n"
                   "print(y)",
         .label = "as cast: Json(int) as int succeeds",
         .expect_xi_success = true,
@@ -1222,8 +1219,8 @@ TEST(cmp_type_convert) {
 TEST(cmp_as_safe_match) {
     /* as? (safe cast) -> type matches -> value passes through */
     run_compare((CompareSpec) {
-        .source = "let x: Json = \"hello\"\n"
-                  "let y = x as string?\n"
+        .source = "var x: Json = \"hello\"\n"
+                  "var y = x as string?\n"
                   "print(y)",
         .label = "as? safe cast: Json(string) as string? succeeds",
         .expect_xi_success = true,
@@ -1235,8 +1232,8 @@ TEST(cmp_as_safe_match) {
 TEST(cmp_as_safe_mismatch) {
     /* as? (safe cast) -> type mismatch -> null */
     run_compare((CompareSpec) {
-        .source = "let x: Json = \"hello\"\n"
-                  "let y = x as int?\n"
+        .source = "var x: Json = \"hello\"\n"
+                  "var y = x as int?\n"
                   "print(y)",
         .label = "as? safe cast: Json(string) as int? -> null",
         .expect_xi_success = true,
@@ -1248,8 +1245,8 @@ TEST(cmp_as_safe_mismatch) {
 TEST(cmp_as_unsafe_mismatch) {
     /* as (unsafe cast) -> type mismatch -> throw (both legacy and Xi throw) */
     run_compare((CompareSpec) {
-        .source = "let x: Json = \"hello\"\n"
-                  "let y = x as int\n"
+        .source = "var x: Json = \"hello\"\n"
+                  "var y = x as int\n"
                   "print(y)",
         .label = "as unsafe cast: Json(string) as int -> throw",
         .expect_xi_success = true,
@@ -1262,11 +1259,11 @@ TEST(cmp_as_unsafe_mismatch) {
 
 TEST(cmp_nullish_coalesce) {
     run_compare((CompareSpec) {
-        .source = "let a: int? = null\n"
-                  "let b = a ?? 42\n"
+        .source = "var a: int? = null\n"
+                  "var b = a ?? 42\n"
                   "print(b)\n"
-                  "let c: int? = 10\n"
-                  "let d = c ?? 99\n"
+                  "var c: int? = 10\n"
+                  "var d = c ?? 99\n"
                   "print(d)",
         .label = "nullish coalesce operator",
         .expect_xi_success = true,
@@ -1279,8 +1276,8 @@ TEST(cmp_nullish_coalesce) {
 
 TEST(cmp_match_expr) {
     run_compare((CompareSpec) {
-        .source = "let x = 3\n"
-                  "let r = match (x) {\n"
+        .source = "var x = 3\n"
+                  "var r = match (x) {\n"
                   "  1 -> 10\n"
                   "  2 -> 20\n"
                   "  3 -> 30\n"
@@ -1297,7 +1294,7 @@ TEST(cmp_match_expr) {
 
 TEST(cmp_try_catch) {
     run_compare((CompareSpec) {
-        .source = "let result = 0\n"
+        .source = "var result = 0\n"
                   "try {\n"
                   "  result = 42\n"
                   "} catch (e) {\n"
@@ -1314,8 +1311,8 @@ TEST(cmp_try_catch) {
 
 TEST(cmp_slice) {
     run_compare((CompareSpec) {
-        .source = "let arr = [1, 2, 3, 4, 5]\n"
-                  "let s = arr[1:3]\n"
+        .source = "var arr = [1, 2, 3, 4, 5]\n"
+                  "var s: Span<int> = arr[1:3]\n"
                   "print(s)",
         .label = "array slice expression",
         .expect_xi_success = true,
@@ -1329,7 +1326,7 @@ TEST(cmp_slice) {
 TEST(cmp_nested_func_scope) {
     run_compare((CompareSpec) {
         .source = "fn outer() -> int {\n"
-                  "  let x = 10\n"
+                  "  var x = 10\n"
                   "  fn inner() -> int { return x * 2 }\n"
                   "  return inner()\n"
                   "}\nprint(outer())",
@@ -1359,8 +1356,8 @@ TEST(cmp_func_no_return) {
 
 TEST(cmp_optional_chain) {
     run_compare((CompareSpec) {
-        .source = "let x: int? = null\n"
-                  "let v = x ?? -1\n"
+        .source = "var x: int? = null\n"
+                  "var v = x ?? -1\n"
                   "print(v)",
         .label = "nullable with nullish coalesce fallback",
         .expect_xi_success = true,
@@ -1373,7 +1370,7 @@ TEST(cmp_optional_chain) {
 
 TEST(cmp_array_push) {
     run_compare((CompareSpec) {
-        .source = "let arr = [10, 20]\n"
+        .source = "var arr = [10, 20]\n"
                   "arr.push(30)\n"
                   "print(arr.length)\nprint(arr[2])",
         .label = "array push and length",
@@ -1385,7 +1382,7 @@ TEST(cmp_array_push) {
 
 TEST(cmp_string_method) {
     run_compare((CompareSpec) {
-        .source = "let s = \"hello\"\n"
+        .source = "var s = \"hello\"\n"
                   "print(s.length)\n"
                   "print(s.toUpperCase())",
         .label = "string length and toUpperCase",
@@ -1402,7 +1399,7 @@ TEST(cmp_higher_order) {
         .source = "fn makeAdder(x: int) ->(int) -> int {\n"
                   "    return fn(y: int) -> int { return x + y }\n"
                   "}\n"
-                  "let add5 = makeAdder(5)\n"
+                  "var add5 = makeAdder(5)\n"
                   "print(add5(3))\n"
                   "print(add5(10))",
         .label = "higher-order function (closure factory)",
@@ -1416,8 +1413,8 @@ TEST(cmp_higher_order) {
 
 TEST(cmp_nested_for_in) {
     run_compare((CompareSpec) {
-        .source = "let total = 0\n"
-                  "let matrix = [[1, 2], [3, 4]]\n"
+        .source = "var total = 0\n"
+                  "var matrix = [[1, 2], [3, 4]]\n"
                   "for (row in matrix) {\n"
                   "    for (val in row) {\n"
                   "        total += val\n"
@@ -1435,7 +1432,7 @@ TEST(cmp_nested_for_in) {
 
 TEST(cmp_for_in_string) {
     run_compare((CompareSpec) {
-        .source = "let count = 0\n"
+        .source = "var count = 0\n"
                   "for (c in \"hello\") {\n"
                   "    count += 1\n"
                   "}\n"
@@ -1452,7 +1449,7 @@ TEST(cmp_for_in_string) {
 TEST(cmp_array_sum_func) {
     run_compare((CompareSpec) {
         .source = "fn sum(arr: Array<int>) -> int {\n"
-                  "    let total = 0\n"
+                  "    var total = 0\n"
                   "    for (x in arr) {\n"
                   "        total += x\n"
                   "    }\n"
@@ -1470,9 +1467,9 @@ TEST(cmp_array_sum_func) {
 
 TEST(cmp_multi_closure) {
     run_compare((CompareSpec) {
-        .source = "let x = 10\n"
-                  "let add = fn(a: int) -> int { return a + x }\n"
-                  "let mul = fn(a: int) -> int { return a * x }\n"
+        .source = "var x = 10\n"
+                  "var add = fn(a: int) -> int { return a + x }\n"
+                  "var mul = fn(a: int) -> int { return a * x }\n"
                   "print(add(5))\n"
                   "print(mul(3))",
         .label = "multiple closures capturing same variable",
@@ -1503,7 +1500,7 @@ TEST(cmp_fibonacci) {
 TEST(cmp_transitive_capture) {
     run_compare((CompareSpec) {
         .source = "fn outer() -> int {\n"
-                  "    let x = 10\n"
+                  "    var x = 10\n"
                   "    fn middle() -> int {\n"
                   "        fn inner() -> int { return x + 1 }\n"
                   "        return inner()\n"
@@ -1523,10 +1520,10 @@ TEST(cmp_transitive_capture) {
 TEST(cmp_closure_counter) {
     run_compare((CompareSpec) {
         .source = "fn counter() ->() -> int {\n"
-                  "    let n = 0\n"
+                  "    var n = 0\n"
                   "    return fn() -> int { n += 1; return n }\n"
                   "}\n"
-                  "let c = counter()\n"
+                  "var c = counter()\n"
                   "print(c())\n"
                   "print(c())\n"
                   "print(c())",
@@ -1546,7 +1543,7 @@ TEST(cmp_compose) {
                   "}\n"
                   "fn add1(x: int) -> int { return x + 1 }\n"
                   "fn mul2(x: int) -> int { return x * 2 }\n"
-                  "let h = compose(add1, mul2)\n"
+                  "var h = compose(add1, mul2)\n"
                   "print(h(5))",
         .label = "function composition capturing two params",
         .expect_xi_success = true,
@@ -1577,8 +1574,8 @@ TEST(cmp_apply_fn) {
 
 TEST(cmp_find_max) {
     run_compare((CompareSpec) {
-        .source = "let nums = [5, 3, 8, 1, 9, 2]\n"
-                  "let max = nums[0]\n"
+        .source = "var nums = [5, 3, 8, 1, 9, 2]\n"
+                  "var max = nums[0]\n"
                   "for (n in nums) {\n"
                   "    if (n > max) { max = n }\n"
                   "}\n"
@@ -1657,7 +1654,7 @@ TEST(cmp_class_basic) {
                   "        this.y = y\n"
                   "    }\n"
                   "}\n"
-                  "let p = Point(3, 4)\n"
+                  "var p = Point(3, 4)\n"
                   "print(p.x)\n"
                   "print(p.y)",
         .label = "class basic: constructor + field access",
@@ -1677,7 +1674,7 @@ TEST(cmp_class_method) {
                   "        this.value = v\n"
                   "    }\n"
                   "}\n"
-                  "let b = Box(42)\n"
+                  "var b = Box(42)\n"
                   "print(b.value)\n"
                   "b.value = 99\n"
                   "print(b.value)",
@@ -1692,7 +1689,7 @@ TEST(cmp_class_method) {
 
 TEST(cmp_struct_literal) {
     run_compare((CompareSpec) {
-        .source = "let obj = { name: \"Alice\", age: 30 }\n"
+        .source = "var obj = { name: \"Alice\", age: 30 }\n"
                   "print(obj[\"name\"])\n"
                   "print(obj[\"age\"])",
         .label = "object literal with fields",
@@ -1719,7 +1716,7 @@ TEST(cmp_class_inherit) {
                   "        this.breed = breed\n"
                   "    }\n"
                   "}\n"
-                  "let d = Dog(\"Rex\", \"Labrador\")\n"
+                  "var d = Dog(\"Rex\", \"Labrador\")\n"
                   "print(d.name)\n"
                   "print(d.breed)",
         .label = "class inheritance + method override",
@@ -1738,7 +1735,7 @@ TEST(cmp_enum_basic) {
                   "    Green,\n"
                   "    Blue\n"
                   "}\n"
-                  "let c = Color.Red\n"
+                  "var c = Color.Red\n"
                   "print(c.name)\n"
                   "print(c.value)",
         .label = "enum basic: access name and value",
@@ -1752,8 +1749,8 @@ TEST(cmp_enum_basic) {
 
 TEST(cmp_for_in_map) {
     run_compare((CompareSpec) {
-        .source = "let m = #{ \"a\": 1, \"b\": 2, \"c\": 3 }\n"
-                  "let sum = 0\n"
+        .source = "var m = #{ \"a\": 1, \"b\": 2, \"c\": 3 }\n"
+                  "var sum = 0\n"
                   "for (k, v in m) {\n"
                   "    sum += v\n"
                   "}\n"
@@ -1772,8 +1769,8 @@ TEST(cmp_closure_adder) {
         .source = "fn make_adder(n: int) ->(int) -> int {\n"
                   "    return fn(x: int) -> int { return x + n }\n"
                   "}\n"
-                  "let add5 = make_adder(5)\n"
-                  "let add10 = make_adder(10)\n"
+                  "var add5 = make_adder(5)\n"
+                  "var add10 = make_adder(10)\n"
                   "print(add5(3))\n"
                   "print(add10(3))",
         .label = "closure factory: make_adder",
@@ -1786,10 +1783,10 @@ TEST(cmp_closure_adder) {
 TEST(cmp_closure_accumulator) {
     run_compare((CompareSpec) {
         .source = "fn make_acc() ->(int) -> int {\n"
-                  "    let total = 0\n"
+                  "    var total = 0\n"
                   "    return fn(n: int) -> int { total += n; return total }\n"
                   "}\n"
-                  "let acc = make_acc()\n"
+                  "var acc = make_acc()\n"
                   "print(acc(5))\n"
                   "print(acc(3))\n"
                   "print(acc(2))",
@@ -1805,7 +1802,7 @@ TEST(cmp_closure_accumulator) {
 TEST(cmp_nested_closure) {
     run_compare((CompareSpec) {
         .source = "fn outer() ->() ->() -> int {\n"
-                  "    let val = 42\n"
+                  "    var val = 42\n"
                   "    return fn() ->() -> int {\n"
                   "        return fn() -> int { return val }\n"
                   "    }\n"
@@ -1820,7 +1817,7 @@ TEST(cmp_nested_closure) {
 
 TEST(cmp_string_for_in) {
     run_compare((CompareSpec) {
-        .source = "let count = 0\n"
+        .source = "var count = 0\n"
                   "for (ch in \"hello\") {\n"
                   "    count += 1\n"
                   "}\n"
@@ -1836,8 +1833,8 @@ TEST(cmp_string_for_in) {
 
 TEST(cmp_destructure_array) {
     run_compare((CompareSpec) {
-        .source = "let arr = [10, 20, 30]\n"
-                  "let [a, b, c] = arr\n"
+        .source = "var arr = [10, 20, 30]\n"
+                  "var [a, b, c] = arr\n"
                   "print(a)\n"
                   "print(b)\n"
                   "print(c)",
@@ -1850,7 +1847,7 @@ TEST(cmp_destructure_array) {
 
 TEST(cmp_destructure_object) {
     run_compare((CompareSpec) {
-        .source = "let { name, age } = { name: \"alice\", age: 30 }\n"
+        .source = "var { name, age } = { name: \"alice\", age: 30 }\n"
                   "print(name)\n"
                   "print(age)",
         .label = "destructure object declaration",
@@ -1863,7 +1860,7 @@ TEST(cmp_destructure_object) {
 TEST(cmp_multi_var_decl) {
     run_compare((CompareSpec) {
         .source = "fn pair() -> (int, int) { return (10, 20) }\n"
-                  "let (x, y) = pair()\n"
+                  "var (x, y) = pair()\n"
                   "print(x)\n"
                   "print(y)",
         .label = "tuple-return var declaration",
@@ -1875,8 +1872,8 @@ TEST(cmp_multi_var_decl) {
 
 TEST(cmp_multi_assign) {
     run_compare((CompareSpec) {
-        .source = "let x = 1\n"
-                  "let y = 2\n"
+        .source = "var x = 1\n"
+                  "var y = 2\n"
                   "(x, y) = (y, x)\n"
                   "print(x)\n"
                   "print(y)",
@@ -1889,7 +1886,7 @@ TEST(cmp_multi_assign) {
 
 TEST(cmp_set_literal) {
     run_compare((CompareSpec) {
-        .source = "let s = #[1, 2, 3, 2, 1]\n"
+        .source = "var s = #[1, 2, 3, 2, 1]\n"
                   "print(s.size())",
         .label = "set literal with duplicates",
         .expect_xi_success = true,
@@ -1900,7 +1897,7 @@ TEST(cmp_set_literal) {
 
 TEST(cmp_object_literal) {
     run_compare((CompareSpec) {
-        .source = "let obj = { name: \"alice\", age: 30 }\n"
+        .source = "var obj = { name: \"alice\", age: 30 }\n"
                   "print(obj[\"name\"])\n"
                   "print(obj[\"age\"])",
         .label = "object literal bracket access",
@@ -1960,7 +1957,7 @@ TEST(cmp_yield_basic) {
 TEST(cmp_chan_new_unbuf) {
     /* Channel() creates an unbuffered channel; just type-check */
     run_compare((CompareSpec) {
-        .source = "const ch = Channel()\nprint(typeof(ch))",
+        .source = "shared ch = Channel()\nprint(typeof(ch))",
         .label = "Channel() -> unbuffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1970,7 +1967,7 @@ TEST(cmp_chan_new_unbuf) {
 
 TEST(cmp_chan_new_buffered) {
     run_compare((CompareSpec) {
-        .source = "const ch: Channel<int> = Channel(4)\nprint(typeof(ch))",
+        .source = "shared ch: Channel<int> = Channel(4)\nprint(typeof(ch))",
         .label = "Channel(N) -> buffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1981,7 +1978,7 @@ TEST(cmp_chan_new_buffered) {
 TEST(cmp_chan_send_recv_buffered) {
     /* Buffered channel: send then recv on same coro works without scheduling */
     run_compare((CompareSpec) {
-        .source = "const ch: Channel<int> = Channel(2)\n"
+        .source = "shared ch: Channel<int> = Channel(2)\n"
                   "ch.send(10)\n"
                   "ch.send(20)\n"
                   "print(ch.recv())\n"
@@ -1994,14 +1991,14 @@ TEST(cmp_chan_send_recv_buffered) {
 }
 
 TEST(cmp_chan_recv_match_uses_raw_opcode) {
-    const char *src = "const ch: Channel<int?> = Channel(2)\n"
+    const char *src = "shared ch: Channel<int?> = Channel(2)\n"
                       "ch.send(0)\n"
                       "ch.send(null)\n"
-                      "let zero = match (ch.recv()) {\n"
+                      "var zero = match (ch.recv()) {\n"
                       "  Recv.Value(v) -> v\n"
                       "  _ -> -1\n"
                       "}\n"
-                      "let nil = match (ch.recv()) {\n"
+                      "var nil = match (ch.recv()) {\n"
                       "  Recv.Value(v) -> v\n"
                       "  _ -> 7\n"
                       "}\n"
@@ -2025,7 +2022,7 @@ TEST(cmp_go_simple) {
      * Output ordering may differ; only verify compiles and runs. */
     run_compare((CompareSpec) {
         .source = "fn worker() { print(\"worker\") }\n"
-                  "let task = go worker()\n"
+                  "var task = go worker()\n"
                   "await task\n"
                   "print(\"done\")",
         .label = "go fn() -> basic spawn + await",
@@ -2039,8 +2036,8 @@ TEST(cmp_go_with_chan) {
     /* go + channel: producer/consumer pattern */
     run_compare((CompareSpec) {
         .source = "fn producer(ch: Channel<int>) { ch.send(42) }\n"
-                  "const ch: Channel<int> = Channel(1)\n"
-                  "let task = go producer(ch)\n"
+                  "shared ch: Channel<int> = Channel(1)\n"
+                  "var task = go producer(ch)\n"
                   "print(ch.recv())\n"
                   "await task",
         .label = "go + channel: producer/consumer",
@@ -2081,7 +2078,7 @@ TEST(cmp_select_recv) {
         .source = "fn producer(ch: Channel<int>) {\n"
                   "  ch.send(42)\n"
                   "}\n"
-                  "const ch: Channel<int> = Channel(1)\n"
+                  "shared ch: Channel<int> = Channel(1)\n"
                   "go producer(ch)\n"
                   "select {\n"
                   "  msg from ch -> {\n"
@@ -2101,9 +2098,9 @@ TEST(cmp_await_all) {
         .source = "fn double(x: int) -> int {\n"
                   "  return x * 2\n"
                   "}\n"
-                  "let t1 = go double(10)\n"
-                  "let t2 = go double(20)\n"
-                  "let r = await [t1, t2]\n"
+                  "var t1 = go double(10)\n"
+                  "var t2 = go double(20)\n"
+                  "var r = await [t1, t2]\n"
                   "print(r)",
         .label = "await all: wait for multiple tasks",
         .expect_xi_success = true,
@@ -2118,9 +2115,9 @@ TEST(cmp_await_any) {
         .source = "fn double(x: int) -> int {\n"
                   "  return x * 2\n"
                   "}\n"
-                  "let t1 = go double(10)\n"
-                  "let t2 = go double(20)\n"
-                  "let r = await any [t1, t2]\n"
+                  "var t1 = go double(10)\n"
+                  "var t2 = go double(20)\n"
+                  "var r = await any [t1, t2]\n"
                   "print(r)",
         .label = "await any: wait for first task",
         .expect_xi_success = true,

@@ -9,14 +9,14 @@ fn compare(a: int, b: int) -> bool {
     return a < b
 }
 fn getFirstComparison() -> bool {
-    let x = 5
-    let y = 10
+    var x = 5
+    var y = 10
     // With space, this is a comparison, not generic syntax
     return x < y
 }
 fn getSecondComparison() -> bool {
-    let z = 3
-    let x = 5
+    var z = 3
+    var x = 5
     return z < x
 }
 fn bothTrue(a: bool, b: bool) -> bool {
@@ -46,22 +46,22 @@ fn test_generic_space_sensitivity() {
     // =============================================================================
     // Test 1: Generic call without space (should work)
     // =============================================================================
-    let n1 = identity<int>(42)
+    var n1 = identity<int>(42)
     assert_eq(n1, 42)
-    let s1 = identity<string>("hello")
+    var s1 = identity<string>("hello")
     assert_eq(s1, "hello")
     // =============================================================================
     // Test 2: Comparison with space (should NOT be parsed as generic)
     // =============================================================================
-    let a = 10
-    let b = 20
-    let c = 5
+    var a = 10
+    var b = 20
+    var c = 5
     // These should all be comparisons, not generic calls
-    let cmp1 = a < b
+    var cmp1 = a < b
     // true
-    let cmp2 = b > a
+    var cmp2 = b > a
     // true
-    let cmp3 = a < b && c < a
+    var cmp3 = a < b && c < a
     // true && true = true
     assert_eq(cmp1, true)
     assert_eq(cmp2, true)
@@ -72,8 +72,8 @@ fn test_generic_space_sensitivity() {
     // =============================================================================
 
 
-    let r1 = getFirstComparison()
-    let r2 = getSecondComparison()
+    var r1 = getFirstComparison()
+    var r2 = getSecondComparison()
     assert_eq(r1, true)
     assert_eq(r2, true)
 
@@ -81,7 +81,7 @@ fn test_generic_space_sensitivity() {
     // Test 4: Function call with multiple comparison arguments
     // =============================================================================
 
-    let result = bothTrue(3 < 5, 10 > 7)
+    var result = bothTrue(3 < 5, 10 > 7)
     // bothTrue(true, true)
     assert_eq(result, true)
 
@@ -90,32 +90,32 @@ fn test_generic_space_sensitivity() {
     // =============================================================================
 
     // Nested generic - tests >> split handling
-    let nested = Box<Array<int>>([1, 2, 3])
+    var nested = Box<Array<int>>([1, 2, 3])
     assert_eq(nested.get()[0], 1)
     // Double nested
-    let deep = Box<Box<int>>(Box<int>(42))
+    var deep = Box<Box<int>>(Box<int>(42))
     assert_eq(deep.get().get(), 42)
 
     // =============================================================================
     // Test 6: Generic method call
     // =============================================================================
 
-    let u = Utils()
-    let arr = u.wrap<int>(100)
+    var u = Utils()
+    var arr = u.wrap<int>(100)
     assert_eq(arr[0], 100)
     // =============================================================================
     // Test 7: Type inference (no explicit type args needed)
     // =============================================================================
-    let inferred = identity(999)
+    var inferred = identity(999)
     // Should infer int
     assert_eq(inferred, 999)
-    let box = Box(123)
+    var box = Box(123)
     // Should infer Box<int>
     assert_eq(box.get(), 123)
     // =============================================================================
     // Test 8: Array literals with comparisons
     // =============================================================================
-    let comparisons = [1 < 2, 3 > 2, 5 < 10]
+    var comparisons = [1 < 2, 3 > 2, 5 < 10]
     // [true, true, true]
     assert_eq(comparisons[0], true)
     assert_eq(comparisons[1], true)

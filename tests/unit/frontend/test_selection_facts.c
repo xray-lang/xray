@@ -73,6 +73,7 @@ static AstNode *find_member_access(AstNode *node) {
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             return find_member_access(node->as.var_decl.initializer);
         case AST_EXPR_STMT:
             return find_member_access(node->as.expr_stmt);
@@ -130,6 +131,7 @@ static AstNode *find_enum_access(AstNode *node) {
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             return find_enum_access(node->as.var_decl.initializer);
         case AST_EXPR_STMT:
             return find_enum_access(node->as.expr_stmt);
@@ -200,7 +202,7 @@ TEST(class_field_access_has_selection) {
                                "        this.y = y\n"
                                "    }\n"
                                "}\n"
-                               "let p = Point(1, 2)\n"
+                               "var p = Point(1, 2)\n"
                                "print(p.x)\n");
     if (!r.program)
         return false;
@@ -234,7 +236,7 @@ TEST(method_call_has_selection) {
                                "        return \"hello\"\n"
                                "    }\n"
                                "}\n"
-                               "let g = Greeter(\"world\")\n"
+                               "var g = Greeter(\"world\")\n"
                                "print(g.greet())\n");
     if (!r.program)
         return false;
@@ -263,7 +265,7 @@ TEST(enum_member_has_selection) {
                                "    Red = \"red\",\n"
                                "    Blue = \"blue\"\n"
                                "}\n"
-                               "let c = Color.Red\n"
+                               "var c = Color.Red\n"
                                "print(c)\n");
     if (!r.program)
         return false;
@@ -313,9 +315,9 @@ TEST(selection_table_has_entries_after_analysis) {
                                "        return this.value\n"
                                "    }\n"
                                "}\n"
-                               "let b = Box(42)\n"
-                               "let v = b.get()\n"
-                               "let w = b.value\n"
+                               "var b = Box(42)\n"
+                               "var v = b.get()\n"
+                               "var w = b.value\n"
                                "print(v, w)\n");
     if (!r.program)
         return false;
@@ -333,8 +335,8 @@ TEST(selection_table_has_entries_after_analysis) {
 }
 
 TEST(builtin_method_has_selection) {
-    AnalysisResult r = analyze("let arr = [1, 2, 3]\n"
-                               "let n = arr.length\n"
+    AnalysisResult r = analyze("var arr = [1, 2, 3]\n"
+                               "var n = arr.length\n"
                                "print(n)\n");
     if (!r.program)
         return false;

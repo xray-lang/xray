@@ -6,19 +6,19 @@
 // were unaffected, so this exercises the in-function bind-to-local path.
 // Must agree across VM/JIT/AOT.
 fn take_owned() -> Array<int> {
-    let buf = [10, 20, 30]
-    let taken = move buf
+    var buf = [10, 20, 30]
+    var taken = move buf
     taken.push(40)
     return taken
 }
 
 fn observe() {
-    let local = [1, 2, 3]
-    let moved = move local
+    var local = [1, 2, 3]
+    var moved = move local
     print(moved.length)
 }
 
 observe()
-let r = take_owned()
+var r = take_owned()
 print(r.length)
 print(r[0] + r[3])

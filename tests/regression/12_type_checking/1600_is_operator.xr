@@ -3,13 +3,13 @@
 
 @test
 fn test_is_operator() {
-    let a = 42
-    let b = 3.14
-    let c = "hello"
-    let d = true
-    let e = null
-    let arr = [1, 2, 3]
-    let map = #{"a": 1}
+    var a = 42
+    var b = 3.14
+    var c = "hello"
+    var d = true
+    var e = null
+    var arr = [1, 2, 3]
+    var map = #{"a": 1}
     // Test basic types
     print(a is int)
     // true

@@ -16,7 +16,7 @@ impl IntMapBag {
     }
 
     fn fill(&mut self, n: i64) -> i64 {
-        let mut i: i64 = 0;
+        var mut i: i64 = 0;
         while i < n {
             self.values.insert(i, i * 3 + 1);
             i += 1;
@@ -25,10 +25,10 @@ impl IntMapBag {
     }
 
     fn scan(&self, n: i64, rounds: i64) -> i64 {
-        let mut r: i64 = 0;
-        let mut sum: i64 = 0;
+        var mut r: i64 = 0;
+        var mut sum: i64 = 0;
         while r < rounds {
-            let mut i: i64 = 0;
+            var mut i: i64 = 0;
             while i < n {
                 if self.values.contains_key(&i) {
                     sum += self.values[&i];
@@ -42,8 +42,8 @@ impl IntMapBag {
 }
 
 fn run(n: i64, rounds: i64) -> i64 {
-    let mut bag = IntMapBag::new();
-    let count = bag.fill(n);
+    var mut bag = IntMapBag::new();
+    var count = bag.fill(n);
     bag.scan(n, rounds) + count
 }
 

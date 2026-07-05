@@ -1,5 +1,5 @@
-let headers = #{"Accept": "application/json"}
-let payload: Json = {
+var headers = #{"Accept": "application/json"}
+var payload: Json = {
     headers: headers
 }
 

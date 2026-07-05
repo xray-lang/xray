@@ -1,9 +1,9 @@
 fn run(rounds: int, parts: int) -> int {
-    let total = 0
-    let r = 0
+    var total = 0
+    var r = 0
     while (r < rounds) {
-        let s = ""
-        let i = 0
+        var s = ""
+        var i = 0
         while (i < parts) {
             s = s + "part-" + (i % 10).toString() + ";"
             i = i + 1

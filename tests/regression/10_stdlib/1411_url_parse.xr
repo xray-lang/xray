@@ -10,7 +10,7 @@ import url
 
 @test
 fn test_parse_full_url() {
-    let r = url.parse("https://example.com:8080/path/to/page?foo=bar#section")
+    var r = url.parse("https://example.com:8080/path/to/page?foo=bar#section")
     assert_eq(r.protocol, "https:")
     assert_eq(r.hostname, "example.com")
     assert_eq(r.port, "8080")
@@ -23,7 +23,7 @@ fn test_parse_full_url() {
 
 @test
 fn test_parse_http_url() {
-    let r = url.parse("http://www.example.org/index.html")
+    var r = url.parse("http://www.example.org/index.html")
     assert_eq(r.protocol, "http:")
     assert_eq(r.hostname, "www.example.org")
     assert_eq(r.pathname, "/index.html")
@@ -32,21 +32,21 @@ fn test_parse_http_url() {
 
 @test
 fn test_parse_with_query() {
-    let r = url.parse("https://api.example.com/search?q=hello&limit=10")
+    var r = url.parse("https://api.example.com/search?q=hello&limit=10")
     assert_eq(r.hostname, "api.example.com")
     assert_eq(r.search, "?q=hello&limit=10")
 }
 
 @test
 fn test_parse_localhost() {
-    let r = url.parse("https://localhost")
+    var r = url.parse("https://localhost")
     assert_eq(r.hostname, "localhost")
     assert_eq(r.pathname, "/")
 }
 
 @test
 fn test_parse_ip_with_port() {
-    let r = url.parse("http://127.0.0.1:3000/api/v1/users")
+    var r = url.parse("http://127.0.0.1:3000/api/v1/users")
     assert_eq(r.hostname, "127.0.0.1")
     assert_eq(r.port, "3000")
     assert_eq(r.pathname, "/api/v1/users")
@@ -54,20 +54,20 @@ fn test_parse_ip_with_port() {
 
 @test
 fn test_parse_no_path() {
-    let r = url.parse("https://example.com")
+    var r = url.parse("https://example.com")
     assert_eq(r.hostname, "example.com")
     assert_eq(r.pathname, "/")
 }
 
 @test
 fn test_parse_hash_only() {
-    let r = url.parse("https://example.com#top")
+    var r = url.parse("https://example.com#top")
     assert_eq(r.hash, "#top")
 }
 
 @test
 fn test_parse_query_only() {
-    let r = url.parse("https://example.com?key=value")
+    var r = url.parse("https://example.com?key=value")
     assert_eq(r.search, "?key=value")
 }
 
@@ -77,7 +77,7 @@ fn test_parse_query_only() {
 
 @test
 fn test_parse_userinfo() {
-    let r = url.parse("http://user:pass@example.com:8080/path")
+    var r = url.parse("http://user:pass@example.com:8080/path")
     assert_eq(r.username, "user")
     assert_eq(r.password, "pass")
     assert_eq(r.hostname, "example.com")
@@ -87,7 +87,7 @@ fn test_parse_userinfo() {
 
 @test
 fn test_parse_username_only() {
-    let r = url.parse("http://admin@example.com/")
+    var r = url.parse("http://admin@example.com/")
     assert_eq(r.username, "admin")
     assert_eq(r.password, "")
     assert_eq(r.hostname, "example.com")
@@ -99,7 +99,7 @@ fn test_parse_username_only() {
 
 @test
 fn test_parse_ipv6() {
-    let r = url.parse("http://[::1]:8080/path")
+    var r = url.parse("http://[::1]:8080/path")
     assert_eq(r.hostname, "[::1]")
     assert_eq(r.port, "8080")
     assert_eq(r.pathname, "/path")
@@ -107,7 +107,7 @@ fn test_parse_ipv6() {
 
 @test
 fn test_parse_ipv6_no_port() {
-    let r = url.parse("http://[2001:db8::1]/")
+    var r = url.parse("http://[2001:db8::1]/")
     assert_eq(r.hostname, "[2001:db8::1]")
     assert_eq(r.port, "")
 }
@@ -118,17 +118,17 @@ fn test_parse_ipv6_no_port() {
 
 @test
 fn test_format_roundtrip() {
-    let orig = "https://example.com:8080/path?q=1#top"
-    let r = url.parse(orig)
-    let rebuilt = url.format(r)
+    var orig = "https://example.com:8080/path?q=1#top"
+    var r = url.parse(orig)
+    var rebuilt = url.format(r)
     assert_eq(rebuilt, orig)
 }
 
 @test
 fn test_format_with_userinfo() {
-    let orig = "http://user:pass@example.com/path"
-    let r = url.parse(orig)
-    let rebuilt = url.format(r)
+    var orig = "http://user:pass@example.com/path"
+    var r = url.parse(orig)
+    var rebuilt = url.format(r)
     assert_eq(rebuilt, orig)
 }
 
@@ -138,28 +138,28 @@ fn test_format_with_userinfo() {
 
 @test
 fn test_parse_query() {
-    let q = url.parseQuery("foo=bar&baz=qux")
+    var q = url.parseQuery("foo=bar&baz=qux")
     assert_eq(q.foo, "bar")
     assert_eq(q.baz, "qux")
 }
 
 @test
 fn test_parse_query_with_leading_question() {
-    let q = url.parseQuery("?name=hello&count=10")
+    var q = url.parseQuery("?name=hello&count=10")
     assert_eq(q.name, "hello")
     assert_eq(q.count, "10")
 }
 
 @test
 fn test_parse_query_encoded() {
-    let q = url.parseQuery("msg=hello+world&key=a%26b")
+    var q = url.parseQuery("msg=hello+world&key=a%26b")
     assert_eq(q.msg, "hello world")
     assert_eq(q.key, "a&b")
 }
 
 @test
 fn test_parse_query_empty_flag_and_empty_pairs() {
-    let q = url.parseQuery("?empty=&flag&msg=hello+world&&=skip")
+    var q = url.parseQuery("?empty=&flag&msg=hello+world&&=skip")
     assert_eq(q.empty, "")
     assert_eq(q.flag, "")
     assert_eq(q.msg, "hello world")
@@ -167,8 +167,8 @@ fn test_parse_query_empty_flag_and_empty_pairs() {
 
 @test
 fn test_build_query() {
-    let q = url.parseQuery("a=1&b=2")
-    let qs = url.buildQuery(q)
+    var q = url.parseQuery("a=1&b=2")
+    var qs = url.buildQuery(q)
     // Order may vary in hash map, just check both pairs exist
     assert_true(qs.includes("a=1"))
     assert_true(qs.includes("b=2"))
@@ -176,8 +176,8 @@ fn test_build_query() {
 
 @test
 fn test_build_query_encodes_form_values() {
-    let q = url.parseQuery("msg=hello+world&key=a%26b&flag")
-    let qs = url.buildQuery(q)
+    var q = url.parseQuery("msg=hello+world&key=a%26b&flag")
+    var qs = url.buildQuery(q)
     assert_true(qs.includes("msg=hello+world"))
     assert_true(qs.includes("key=a%26b"))
     assert_true(qs.includes("flag="))
@@ -211,43 +211,43 @@ fn test_encode_decode_consistency() {
 
 @test
 fn test_resolve_absolute_path() {
-    let result = url.resolve("https://example.com/a/b/c", "/new/path")
+    var result = url.resolve("https://example.com/a/b/c", "/new/path")
     assert_eq(result, "https://example.com/new/path")
 }
 
 @test
 fn test_resolve_relative_path() {
-    let result = url.resolve("https://example.com/a/b/c", "d.html")
+    var result = url.resolve("https://example.com/a/b/c", "d.html")
     assert_eq(result, "https://example.com/a/b/d.html")
 }
 
 @test
 fn test_resolve_absolute_url() {
-    let result = url.resolve("https://example.com/a", "http://other.com/b")
+    var result = url.resolve("https://example.com/a", "http://other.com/b")
     assert_eq(result, "http://other.com/b")
 }
 
 @test
 fn test_resolve_query_only_replaces_base_query() {
-    let result = url.resolve("https://example.com/a/b/c?old=1#top", "?new=2")
+    var result = url.resolve("https://example.com/a/b/c?old=1#top", "?new=2")
     assert_eq(result, "https://example.com/a/b/c?new=2")
 }
 
 @test
 fn test_resolve_fragment_only_preserves_base_query() {
-    let result = url.resolve("https://example.com/a/b/c?old=1", "#frag")
+    var result = url.resolve("https://example.com/a/b/c?old=1", "#frag")
     assert_eq(result, "https://example.com/a/b/c?old=1#frag")
 }
 
 @test
 fn test_resolve_network_path_keeps_base_scheme() {
-    let result = url.resolve("https://example.com/a/b/c", "//cdn.example.com/lib.js")
+    var result = url.resolve("https://example.com/a/b/c", "//cdn.example.com/lib.js")
     assert_eq(result, "https://cdn.example.com/lib.js")
 }
 
 @test
 fn test_resolve_dot_segments() {
-    let result = url.resolve("https://example.com/a/b/c", "../d/./e")
+    var result = url.resolve("https://example.com/a/b/c", "../d/./e")
     assert_eq(result, "https://example.com/a/d/e")
 }
 
@@ -257,24 +257,24 @@ fn test_resolve_dot_segments() {
 
 @test
 fn test_join_paths() {
-    let result = url.join("/api", "v1", "users")
+    var result = url.join("/api", "v1", "users")
     assert_eq(result, "/api/v1/users")
 }
 
 @test
 fn test_join_trailing_slash() {
-    let result = url.join("/api/", "/v1/", "/users")
+    var result = url.join("/api/", "/v1/", "/users")
     assert_eq(result, "/api/v1/users")
 }
 
 @test
 fn test_join_skips_empty_segments() {
-    let result = url.join("", "/api/", "", "v1", "/users")
+    var result = url.join("", "/api/", "", "v1", "/users")
     assert_eq(result, "/api/v1/users")
 }
 
 @test
 fn test_join_single() {
-    let result = url.join("/path")
+    var result = url.join("/path")
     assert_eq(result, "/path")
 }

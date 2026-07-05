@@ -1,52 +1,52 @@
 // 0518_json_type_coercion.xr
 // Test: Json→concrete type coercion rules
-// - let x = json["k"] → x is Json (no check)
-// - let x: int = json["k"] → allowed, runtime CHECKTYPE
+// - var x = json["k"] -> x is Json (no check)
+// - var x: int = json["k"] -> allowed, runtime CHECKTYPE
 // - Runtime CHECKTYPE throws TypeError on mismatch
 
 // ===== Rule 1: json["key"] returns Json, no error =====
 @test
 fn test_json_subscript_returns_json() {
-    let data: Json = { "name": "xray", "version": 1 }
-    let val = data["name"]
+    var data: Json = { "name": "xray", "version": 1 }
+    var val = data["name"]
     // val is Json, can be used directly
     assert_eq(val, "xray")
 }
 
-// ===== Rule 2: let x: int = json["key"] — allowed with runtime check =====
+// ===== Rule 2: var x: int = json["key"] - allowed with runtime check =====
 @test
 fn test_json_to_int_coercion() {
-    let data: Json = { "port": 8080 }
-    let port: int = data["port"]
+    var data: Json = { "port": 8080 }
+    var port: int = data["port"]
     assert_eq(port, 8080)
 }
 
 @test
 fn test_json_to_string_coercion() {
-    let data: Json = { "host": "localhost" }
-    let host: string = data["host"]
+    var data: Json = { "host": "localhost" }
+    var host: string = data["host"]
     assert_eq(host, "localhost")
 }
 
 @test
 fn test_json_to_float_coercion() {
-    let data: Json = { "pi": 3.14 }
-    let pi: float = data["pi"]
+    var data: Json = { "pi": 3.14 }
+    var pi: float = data["pi"]
     assert_eq(pi, 3.14)
 }
 
 @test
 fn test_json_to_bool_coercion() {
-    let data: Json = { "debug": true }
-    let debug: bool = data["debug"]
+    var data: Json = { "debug": true }
+    var debug: bool = data["debug"]
     assert_eq(debug, true)
 }
 
 // ===== Rule 2b: assignment coercion =====
 @test
 fn test_json_assignment_coercion() {
-    let data: Json = { "count": 42 }
-    let count: int = 0
+    var data: Json = { "count": 42 }
+    var count: int = 0
     count = data["count"]
     assert_eq(count, 42)
 }
@@ -54,10 +54,10 @@ fn test_json_assignment_coercion() {
 // ===== Rule 3: Runtime CHECKTYPE throws on mismatch =====
 @test
 fn test_json_type_mismatch_throws() {
-    let data: Json = { "name": "xray" }
-    let caught = false
+    var data: Json = { "name": "xray" }
+    var caught = false
     try {
-        let port: int = data["name"]
+        var port: int = data["name"]
         // Should not reach here — "xray" is string, not int
         assert(false)
     } catch panic (e) {
@@ -68,10 +68,10 @@ fn test_json_type_mismatch_throws() {
 
 @test
 fn test_json_type_mismatch_float_to_int() {
-    let data: Json = { "val": 3.14 }
-    let caught = false
+    var data: Json = { "val": 3.14 }
+    var caught = false
     try {
-        let x: int = data["val"]
+        var x: int = data["val"]
         assert(false)
     } catch panic (e) {
         caught = true
@@ -79,11 +79,11 @@ fn test_json_type_mismatch_float_to_int() {
     assert(caught)
 }
 
-// ===== Rule 4: Untyped let — no CHECKTYPE, just Json =====
+// ===== Rule 4: Untyped var - no CHECKTYPE, just Json =====
 @test
 fn test_json_untyped_let() {
-    let data: Json = { "mixed": [1, "two", true] }
-    let val = data["mixed"]
+    var data: Json = { "mixed": [1, "two", true] }
+    var val = data["mixed"]
     // val is Json, no runtime check needed
     assert_eq(val[0], 1)
     assert_eq(val[1], "two")
@@ -93,7 +93,7 @@ fn test_json_untyped_let() {
 // ===== Rule 5: Dot access also works =====
 @test
 fn test_json_dot_access_coercion() {
-    let data: Json = { "port": 9090 }
+    var data: Json = { "port": 9090 }
     // Dot access returns the actual value
     assert_eq(data.port, 9090)
 }
@@ -101,16 +101,16 @@ fn test_json_dot_access_coercion() {
 // ===== Rule 6: Array is a valid Json field type =====
 @test
 fn test_json_array_value_access() {
-    let data: Json = { "items": [1, 2, 3] }
-    let items = data["items"]
+    var data: Json = { "items": [1, 2, 3] }
+    var items = data["items"]
     assert_eq(items[0], 1)
     assert_eq(items[2], 3)
 }
 
 @test
 fn test_json_non_array_value_stays_json() {
-    let data: Json = { "name": "xray" }
-    let value = data["name"]
+    var data: Json = { "name": "xray" }
+    var value = data["name"]
     assert_eq(value, "xray")
 }
 

@@ -21,17 +21,9 @@
 // directly by GoExprNode / ScopeBlockNode below.
 #include "../../coro/xtask.h"
 
-/* ========== Variable Declarations (statement form) ========== */
+/* ========== Binding Declarations (statement form) ========== */
 
-// Variable declaration node
-//
-// Storage mode (storage_mode):
-//   0 = normal variable (must use explicit copy/move at coroutine boundaries)
-//   1 = shared variable (stored in global heap, passed by reference when const)
-//
-// shared variable features:
-//   - shared const: can be directly read concurrently by coroutine closures
-//   - shared let:   can only be accessed serially through Channel
+// Binding declaration payload, shared by var/const/shared AST nodes.
 typedef struct VarDeclNode {
     char *name;
     AstNode *initializer;

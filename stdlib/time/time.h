@@ -14,8 +14,8 @@
  *
  * USAGE:
  *   import time
- *   let now = time.now()       // epoch milliseconds (wall clock)
- *   let t   = time.nanos()     // monotonic nanoseconds
+ *   var now = time.now()       // epoch milliseconds (wall clock)
+ *   var t   = time.nanos()     // monotonic nanoseconds
  *   time.sleep(1500)           // yield for 1500 ms
  */
 

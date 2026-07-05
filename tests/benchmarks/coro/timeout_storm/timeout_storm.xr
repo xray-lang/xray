@@ -1,7 +1,7 @@
 import time
 
-let COUNT = 1000
-let TIMEOUT_MS = 10
+var COUNT = 1000
+var TIMEOUT_MS = 10
 
 if (process.args.length > 0) {
     COUNT = int(process.args[0]) ?? COUNT
@@ -26,13 +26,13 @@ fn send_timeout_worker(ch: Channel<int>, timeout_ms: int, value: int) -> bool {
 }
 
 fn run_recv_storm(count: int, timeout_ms: int) -> int {
-    shared const ch = Channel(1)
-    let tasks: Array<Task> = []
-    for (let i = 0; i < count; i++) {
+    shared ch = Channel(1)
+    var tasks: Array<Task> = []
+    for (var i = 0; i < count; i++) {
         tasks.push(go recv_timeout_worker(ch, timeout_ms))
     }
 
-    let timeouts = 0
+    var timeouts = 0
     for (task in tasks) {
         if (await task) {
             timeouts++
@@ -43,21 +43,21 @@ fn run_recv_storm(count: int, timeout_ms: int) -> int {
 }
 
 fn run_send_storm(count: int, timeout_ms: int) -> int {
-    shared const ch = Channel(1)
+    shared ch = Channel(1)
     ch.send(1)
 
-    let tasks: Array<Task> = []
-    for (let i = 0; i < count; i++) {
+    var tasks: Array<Task> = []
+    for (var i = 0; i < count; i++) {
         tasks.push(go send_timeout_worker(ch, timeout_ms, i + 2))
     }
 
-    let timeouts = 0
+    var timeouts = 0
     for (task in tasks) {
         if (await task) {
             timeouts++
         }
     }
-    let _drain = match (ch.recv()) {
+    var _drain = match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
     }
@@ -69,20 +69,20 @@ print("=== Timeout Storm Benchmark ===")
 print("coroutines:", COUNT)
 print("timeout:", TIMEOUT_MS, "ms")
 
-let start_total = time.monotonic()
+var start_total = time.monotonic()
 
-let start_recv = time.monotonic()
-let recv_timeouts = run_recv_storm(COUNT, TIMEOUT_MS)
-let recv_elapsed = time.monotonic() - start_recv
+var start_recv = time.monotonic()
+var recv_timeouts = run_recv_storm(COUNT, TIMEOUT_MS)
+var recv_elapsed = time.monotonic() - start_recv
 
-let start_send = time.monotonic()
-let send_timeouts = run_send_storm(COUNT, TIMEOUT_MS)
-let send_elapsed = time.monotonic() - start_send
+var start_send = time.monotonic()
+var send_timeouts = run_send_storm(COUNT, TIMEOUT_MS)
+var send_elapsed = time.monotonic() - start_send
 
-let total_elapsed = time.monotonic() - start_total
-let completed = COUNT * 2
-let expected = COUNT * 2
-let timed_out = recv_timeouts + send_timeouts
+var total_elapsed = time.monotonic() - start_total
+var completed = COUNT * 2
+var expected = COUNT * 2
+var timed_out = recv_timeouts + send_timeouts
 
 print("recv completed:", COUNT)
 print("recv timeouts:", recv_timeouts)

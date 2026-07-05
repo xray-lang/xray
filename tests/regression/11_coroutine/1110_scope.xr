@@ -2,14 +2,14 @@
 
 @test
 fn test_scope() {
-    let x = 1
+    var x = 1
 
     // scope 创建新的词法作用域
     scope {
-        let x = 10  // 遮蔽外部的 x
+        var x = 10  // 遮蔽外部的 x
         print(x)    // 10
 
-        let y = 20
+        var y = 20
         print(y)    // 20
     }
 

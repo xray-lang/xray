@@ -6,8 +6,8 @@
 
 @test
 fn test_for_count_up() {
-    let sum = 0
-    for (let i = 0; i < 5; i++) {
+    var sum = 0
+    for (var i = 0; i < 5; i++) {
         sum += i
     }
     assert_eq(sum, 10)  // 0+1+2+3+4
@@ -15,8 +15,8 @@ fn test_for_count_up() {
 
 @test
 fn test_for_count_down() {
-    let sum = 0
-    for (let i = 5; i > 0; i--) {
+    var sum = 0
+    for (var i = 5; i > 0; i--) {
         sum += i
     }
     assert_eq(sum, 15)  // 5+4+3+2+1
@@ -24,8 +24,8 @@ fn test_for_count_down() {
 
 @test
 fn test_for_start_from_one() {
-    let sum = 0
-    for (let i = 1; i <= 5; i++) {
+    var sum = 0
+    for (var i = 1; i <= 5; i++) {
         sum += i
     }
     assert_eq(sum, 15)  // 1+2+3+4+5
@@ -35,8 +35,8 @@ fn test_for_start_from_one() {
 
 @test
 fn test_for_step_two() {
-    let sum = 0
-    for (let i = 0; i < 10; i += 2) {
+    var sum = 0
+    for (var i = 0; i < 10; i += 2) {
         sum += i
     }
     assert_eq(sum, 20)  // 0+2+4+6+8
@@ -44,8 +44,8 @@ fn test_for_step_two() {
 
 @test
 fn test_for_step_three() {
-    let result: Array<int> = []
-    for (let i = 0; i < 10; i += 3) {
+    var result: Array<int> = []
+    for (var i = 0; i < 10; i += 3) {
         result.push(i)
     }
     assert_eq(result.length, 4)  // [0,3,6,9]
@@ -55,8 +55,8 @@ fn test_for_step_three() {
 
 @test
 fn test_for_never_run() {
-    let count = 0
-    for (let i = 10; i < 0; i++) {
+    var count = 0
+    for (var i = 10; i < 0; i++) {
         count++
     }
     assert_eq(count, 0)
@@ -64,8 +64,8 @@ fn test_for_never_run() {
 
 @test
 fn test_for_once() {
-    let count = 0
-    for (let i = 0; i < 1; i++) {
+    var count = 0
+    for (var i = 0; i < 1; i++) {
         count++
     }
     assert_eq(count, 1)
@@ -75,8 +75,8 @@ fn test_for_once() {
 
 @test
 fn test_for_break() {
-    let last = 0
-    for (let i = 0; i < 10; i++) {
+    var last = 0
+    for (var i = 0; i < 10; i++) {
         if (i == 5) {
             break
         }
@@ -87,8 +87,8 @@ fn test_for_break() {
 
 @test
 fn test_for_break_early() {
-    let sum = 0
-    for (let i = 0; i < 100; i++) {
+    var sum = 0
+    for (var i = 0; i < 100; i++) {
         sum += i
         if (sum > 10) {
             break
@@ -101,8 +101,8 @@ fn test_for_break_early() {
 
 @test
 fn test_for_continue() {
-    let sum = 0
-    for (let i = 0; i < 10; i++) {
+    var sum = 0
+    for (var i = 0; i < 10; i++) {
         if (i % 2 == 0) {
             continue
         }
@@ -113,8 +113,8 @@ fn test_for_continue() {
 
 @test
 fn test_for_continue_first() {
-    let result: Array<int> = []
-    for (let i = 0; i < 5; i++) {
+    var result: Array<int> = []
+    for (var i = 0; i < 5; i++) {
         if (i == 0) {
             continue
         }
@@ -127,9 +127,9 @@ fn test_for_continue_first() {
 
 @test
 fn test_for_nested() {
-    let total = 0
-    for (let i = 0; i < 3; i++) {
-        for (let j = 0; j < 3; j++) {
+    var total = 0
+    for (var i = 0; i < 3; i++) {
+        for (var j = 0; j < 3; j++) {
             total++
         }
     }
@@ -138,9 +138,9 @@ fn test_for_nested() {
 
 @test
 fn test_for_multiplication_table() {
-    let sum = 0
-    for (let i = 1; i <= 3; i++) {
-        for (let j = 1; j <= 3; j++) {
+    var sum = 0
+    for (var i = 1; i <= 3; i++) {
+        for (var j = 1; j <= 3; j++) {
             sum += i * j
         }
     }
@@ -150,9 +150,9 @@ fn test_for_multiplication_table() {
 
 @test
 fn test_for_nested_break() {
-    let count = 0
-    for (let i = 0; i < 5; i++) {
-        for (let j = 0; j < 5; j++) {
+    var count = 0
+    for (var i = 0; i < 5; i++) {
+        for (var j = 0; j < 5; j++) {
             count++
             if (j == 2) {
                 break  // 只跳出内层
@@ -166,8 +166,8 @@ fn test_for_nested_break() {
 
 @test
 fn test_for_outer_variable() {
-    let x = 100
-    for (let i = 0; i < 3; i++) {
+    var x = 100
+    for (var i = 0; i < 3; i++) {
         x += i
     }
     assert_eq(x, 103)  // 100+0+1+2
@@ -175,8 +175,8 @@ fn test_for_outer_variable() {
 
 @test
 fn test_for_collect() {
-    let result: Array<int> = []
-    for (let i = 0; i < 5; i++) {
+    var result: Array<int> = []
+    for (var i = 0; i < 5; i++) {
         result.push(i * i)
     }
     assert_eq(result.length, 5)
@@ -188,9 +188,9 @@ fn test_for_collect() {
 
 @test
 fn test_for_expression_init() {
-    let start = 5
-    let sum = 0
-    for (let i = start; i < start + 3; i++) {
+    var start = 5
+    var sum = 0
+    for (var i = start; i < start + 3; i++) {
         sum += i
     }
     assert_eq(sum, 18)  // 5+6+7

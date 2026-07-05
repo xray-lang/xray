@@ -3,7 +3,7 @@
 
 @test
 fn test_cancelled() {
-    let is_cancelled = cancelled()
+    var is_cancelled = cancelled()
     print(is_cancelled)  // 应输出 false
 }
 

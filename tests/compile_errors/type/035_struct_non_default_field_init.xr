@@ -7,5 +7,5 @@ struct Item {
     name: string
 }
 
-let item: Item
+var item: Item
 

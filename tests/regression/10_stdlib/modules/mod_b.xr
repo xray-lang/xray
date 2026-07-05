@@ -9,7 +9,7 @@
 */
 
 /* 私有变量（与 mod_a 同名）*/
-let _internal = "B"
+var _internal = "B"
 const _VERSION = "2.0"
 
 /* 私有函数（与 mod_a 同名）*/

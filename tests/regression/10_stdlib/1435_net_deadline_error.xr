@@ -5,7 +5,7 @@ import net
 import time
 
 fn acceptSlowWrite(lst: NetListener) {
-    let conn = net.accept(lst)
+    var conn = net.accept(lst)
     if (conn != null) {
         time.sleep(100)
         net.write(conn!, "late")
@@ -14,7 +14,7 @@ fn acceptSlowWrite(lst: NetListener) {
 }
 
 fn acceptAndClose(lst: NetListener) {
-    let conn = net.accept(lst)
+    var conn = net.accept(lst)
     if (conn != null) {
         net.close(conn!)
     }
@@ -22,13 +22,13 @@ fn acceptAndClose(lst: NetListener) {
 
 @test
 fn test_accept_deadline_timeout() {
-    let maybeLst = net.listen(0, 8)
+    var maybeLst = net.listen(0, 8)
     if (maybeLst == null) { return }
-    let lst = maybeLst!
-    let deadline = time.monotonic() + 20
+    var lst = maybeLst!
+    var deadline = time.monotonic() + 20
     assert_true(net.setAcceptDeadline(lst, deadline))
 
-    let conn = net.accept(lst)
+    var conn = net.accept(lst)
     assert_true(conn == null)
     assert_eq(net.lastError(lst), "timeout")
     assert_eq(net.lastErrno(lst), 0)
@@ -38,16 +38,16 @@ fn test_accept_deadline_timeout() {
 
 @test
 fn test_read_deadline_timeout() {
-    let maybeLst = net.listen(0, 8)
+    var maybeLst = net.listen(0, 8)
     if (maybeLst == null) { return }
-    let lst = maybeLst!
-    let port = lst.port()
+    var lst = maybeLst!
+    var port = lst.port()
     go acceptSlowWrite(lst)
 
-    let c = net.dial("127.0.0.1", port)!
+    var c = net.dial("127.0.0.1", port)!
     assert_true(net.setReadDeadline(c, time.monotonic() + 20))
 
-    let data = net.read(c)
+    var data = net.read(c)
     assert_true(data == null)
     assert_eq(net.lastError(c), "timeout")
     assert_eq(net.lastErrno(c), 0)
@@ -58,13 +58,13 @@ fn test_read_deadline_timeout() {
 
 @test
 fn test_closed_handle_error() {
-    let maybeLst = net.listen(0, 8)
+    var maybeLst = net.listen(0, 8)
     if (maybeLst == null) { return }
-    let lst = maybeLst!
-    let port = lst.port()
+    var lst = maybeLst!
+    var port = lst.port()
     go acceptAndClose(lst)
 
-    let c = net.dial("127.0.0.1", port)!
+    var c = net.dial("127.0.0.1", port)!
     net.close(c)
 
     assert_eq(net.write(c, "x"), -1)

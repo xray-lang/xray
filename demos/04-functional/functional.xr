@@ -5,21 +5,21 @@
 
 // === Closures ===
 fn makeCounter(start: int) ->() -> int {
-    let count = start
+    var count = start
     return fn() -> int {
         count = count + 1
         return count
     }
 }
 
-let counter = makeCounter(0)
+var counter = makeCounter(0)
 print("counter: ${counter()}, ${counter()}, ${counter()}")
 
 // === Higher-order functions ===
 fn twice(f: (int) -> int, x: int) -> int {
     return f(f(x))
 }
-let addOne = fn(x: int) -> int { return x + 1 }
+var addOne = fn(x: int) -> int { return x + 1 }
 print("twice(addOne, 5) = ${twice(addOne, 5)}")
 
 // === Function composition ===
@@ -27,25 +27,25 @@ fn compose(f: (int) -> int, g: (int) -> int) -> (int) -> int {
     return fn(x: int) -> int { return f(g(x)) }
 }
 
-let doubleIt = fn(x: int) -> int { return x * 2 }
-let addTen = fn(x: int) -> int { return x + 10 }
-let doubleThenAdd = compose(addTen, doubleIt)
+var doubleIt = fn(x: int) -> int { return x * 2 }
+var addTen = fn(x: int) -> int { return x + 10 }
+var doubleThenAdd = compose(addTen, doubleIt)
 print("doubleThenAdd(5) = ${doubleThenAdd(5)}")
 
 // === Currying ===
 fn multiply(a: int) ->(int) -> int {
     return fn(b: int) -> int { return a * b }
 }
-let triple = multiply(3)
-let quadruple = multiply(4)
+var triple = multiply(3)
+var quadruple = multiply(4)
 print("triple(7) = ${triple(7)}")
 print("quadruple(7) = ${quadruple(7)}")
 
 // === Pipeline with arrays ===
-let data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+var data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 // Filter evens, square them, sum the result
-let result = data
+var result = data
     .filter(fn(x: int) -> bool { return x % 2 == 0 })
     .map(fn(x: int) -> int { return x * x })
     .reduce(fn(acc: int, x: int) -> int { return acc + x }, 0)
@@ -53,19 +53,19 @@ print("sum of even squares: ${result}")
 
 // === Memoization pattern ===
 fn makeFibMemo() ->(int) -> int {
-    let cache = #{"0": 0, "1": 1}
-    let fib_inner = fn(n: int) -> int {
-        let key = string(n)
-        let cached = cache.get(key)
+    var cache = #{"0": 0, "1": 1}
+    var fib_inner = fn(n: int) -> int {
+        var key = string(n)
+        var cached = cache.get(key)
         if (cached != null) { return cached }
-        let val = fib_inner(n - 1) + fib_inner(n - 2)
+        var val = fib_inner(n - 1) + fib_inner(n - 2)
         cache.set(key, val)
         return val
     }
     return fib_inner
 }
 
-let fib = makeFibMemo()
+var fib = makeFibMemo()
 for (i in 0..10) {
     print("fib(${i}) = ${fib(i)}")
 }

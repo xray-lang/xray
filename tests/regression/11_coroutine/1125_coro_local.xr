@@ -20,30 +20,30 @@ fn test_coro_local() {
 
     // 测试 2：协程内本地存储
     print("test2: coroutine local storage")
-    let task1 = go(name: "worker-1") fn() -> int {
+    var task1 = go(name: "worker-1") fn() -> int {
         Coro.setLocal("id", 1)
         Coro.setLocal("name", "worker-one")
         return Coro.getLocal("id")
     }()
 
-    let result1 = await task1
+    var result1 = await task1
     print("  worker-1 id:", result1)  // expect: 1
 
     // 测试 3：协程之间数据隔离
     print("test3: isolation between coroutines")
 
-    let task2 = go(name: "worker-A") fn() -> string {
+    var task2 = go(name: "worker-A") fn() -> string {
         Coro.setLocal("value", "A")
         return Coro.getLocal("value")
     }()
 
-    let task3 = go(name: "worker-B") fn() -> string {
+    var task3 = go(name: "worker-B") fn() -> string {
         Coro.setLocal("value", "B")
         return Coro.getLocal("value")
     }()
 
-    let resultA = await task2
-    let resultB = await task3
+    var resultA = await task2
+    var resultB = await task3
     print("  worker-A value:", resultA)  // expect: A
     print("  worker-B value:", resultB)  // expect: B
 
@@ -54,7 +54,7 @@ fn test_coro_local() {
 
     // 测试 5：获取不存在的 key
     print("test5: get non-existent key")
-    let missing = Coro.getLocal("non_existent")
+    var missing = Coro.getLocal("non_existent")
     if (missing == null) {
         print("  missing key returns null")  // expect: null
     }

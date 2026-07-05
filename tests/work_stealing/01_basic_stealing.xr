@@ -13,13 +13,13 @@ print("========== 测试1：基础工作窃取 ==========")
 /* 测试参数 */
 const CORO_COUNT = 100
 const WORK_PER_CORO = 1000
-let completed = 0
-let all_correct = true
+var completed = 0
+var all_correct = true
 
 /* 计算密集型工作函数 */
 fn compute_work(id: int, iterations: int) -> int {
-    let sum = 0
-    for (let i = 0; i < iterations; i++) {
+    var sum = 0
+    for (var i = 0; i < iterations; i++) {
         sum = sum + i * id
     }
     return sum
@@ -27,25 +27,25 @@ fn compute_work(id: int, iterations: int) -> int {
 
 /* 启动多个协程 */
 print("启动 " + string(CORO_COUNT) + " 个协程...")
-let start_time = time.monotonic()
-let tasks: Array<Task> = []
-for (let i = 0; i < CORO_COUNT; i++) {
-    let task = go compute_work(i, WORK_PER_CORO)
+var start_time = time.monotonic()
+var tasks: Array<Task> = []
+for (var i = 0; i < CORO_COUNT; i++) {
+    var task = go compute_work(i, WORK_PER_CORO)
     tasks.push(task)
 }
 /* 等待所有协程完成 */
 print("等待所有协程完成...")
-for (let i = 0; i < tasks.length; i++) {
-    let result: int = await tasks[i]
-    let expected = compute_work(i, WORK_PER_CORO)
+for (var i = 0; i < tasks.length; i++) {
+    var result: int = await tasks[i]
+    var expected = compute_work(i, WORK_PER_CORO)
     if (result != expected) {
         print("✗ 协程 " + string(i) + " 结果错误")
         all_correct = false
     }
     completed = completed + 1
 }
-let end_time = time.monotonic()
-let elapsed = end_time - start_time
+var end_time = time.monotonic()
+var elapsed = end_time - start_time
 /* 验证结果 */
 print("完成协程数: " + string(completed))
 print("耗时: " + string(elapsed) + " ms")

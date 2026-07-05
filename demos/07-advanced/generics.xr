@@ -22,13 +22,13 @@ class Box<T> {
     }
 }
 
-let intBox = Box(42)
-let strBox = Box("hello")
+var intBox = Box(42)
+var strBox = Box("hello")
 print("intBox: ${intBox.toString()}, get: ${intBox.get()}")
 print("strBox: ${strBox.toString()}, get: ${strBox.get()}")
 
 // map transforms the value inside the box
-let doubled = intBox.map(fn(x: int) -> int { return x * 2 })
+var doubled = intBox.map(fn(x: int) -> int { return x * 2 })
 print("doubled: ${doubled.toString()}")
 
 // === Generic pair ===
@@ -46,7 +46,7 @@ class Pair<A, B> {
     }
 }
 
-let p = Pair("age", 25)
+var p = Pair("age", 25)
 print("pair: ${p.toString()}")
 print("first: ${p.first}, second: ${p.second}")
 
@@ -72,7 +72,7 @@ class Stack<T> {
     isEmpty() -> bool { return this.items.length == 0 }
 }
 
-let stack = Stack<int>()
+var stack = Stack<int>()
 stack.push(10)
 stack.push(20)
 stack.push(30)
@@ -87,12 +87,12 @@ fn safeDivide(a: float, b: float) -> float? {
     return a / b
 }
 
-let ok = safeDivide(10.0, 3.0)
-let bad = safeDivide(10.0, 0.0)
+var ok = safeDivide(10.0, 3.0)
+var bad = safeDivide(10.0, 0.0)
 print("10/3 = ${ok ?? 0.0}")
 print("10/0 = ${bad ?? 0.0} (fallback)")
 
 // Optional chaining
-let obj: Json = { inner: { value: 42 } }
+var obj: Json = { inner: { value: 42 } }
 print("optional chain: ${obj?.inner?.value}")
 print("missing chain: ${obj?.missing?.value}")

@@ -14,8 +14,8 @@ fn max_of(a: int, b: int) -> int {
 }
 
 fn sum_to(n: int) -> int {
-    let total = 0
-    let i = 1
+    var total = 0
+    var i = 1
     while (i <= n) {
         total = total + i
         i = i + 1

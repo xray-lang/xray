@@ -1,4 +1,4 @@
-let ch = Channel<int>(2)
+shared ch = Channel<int>(2)
 
 select {
     100 to ch -> { print("sent 100") }
@@ -15,8 +15,8 @@ select {
     _ -> { print("buffer full") }
 }
 
-let r1 = ch.tryRecv()
-let r2 = ch.tryRecv()
+var r1 = ch.tryRecv()
+var r2 = ch.tryRecv()
 print(match (r1) {
     Recv.Value(v) -> v
     _ -> -1

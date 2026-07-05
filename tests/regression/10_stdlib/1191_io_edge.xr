@@ -6,7 +6,7 @@ import io
 
 @test
 fn test_read_nonexistent() {
-    let content = io.readFile("/tmp/xray_nonexistent_file_12345.txt")
+    var content = io.readFile("/tmp/xray_nonexistent_file_12345.txt")
     assert_eq(content, null)
 }
 
@@ -29,10 +29,10 @@ fn test_is_dir_nonexistent() {
 
 @test
 fn test_write_empty() {
-    let tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "")
     assert_eq(io.fileSize(tmp), 0)
-    let content = io.readFile(tmp) ?? ""
+    var content = io.readFile(tmp) ?? ""
     assert_eq(content, "")
     io.remove(tmp)
 }
@@ -41,7 +41,7 @@ fn test_write_empty() {
 
 @test
 fn test_overwrite_file() {
-    let tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "first content")
     io.writeFile(tmp, "second")
     assert_eq(io.readFile(tmp) ?? "", "second")
@@ -53,13 +53,13 @@ fn test_overwrite_file() {
 
 @test
 fn test_large_write_read() {
-    let tmp = io.tempFile() ?? ""
-    let data = ""
-    for (let i = 0; i < 100; i++) {
+    var tmp = io.tempFile() ?? ""
+    var data = ""
+    for (var i = 0; i < 100; i++) {
         data = data + "line " + string(i) + "\n"
     }
     io.writeFile(tmp, data)
-    let content = io.readFile(tmp) ?? ""
+    var content = io.readFile(tmp) ?? ""
     assert_eq(content, data)
     io.remove(tmp)
 }
@@ -68,12 +68,12 @@ fn test_large_write_read() {
 
 @test
 fn test_read_dir_recursive() {
-    let tmpDir = io.tempDir() ?? ""
+    var tmpDir = io.tempDir() ?? ""
     io.mkdirp(tmpDir + "/a/b")
     io.writeFile(tmpDir + "/file1.txt", "1")
     io.writeFile(tmpDir + "/a/file2.txt", "2")
     io.writeFile(tmpDir + "/a/b/file3.txt", "3")
-    let all = io.readDirRecursive(tmpDir)
+    var all = io.readDirRecursive(tmpDir)
     assert(all.length >= 3)
     io.removeAll(tmpDir)
 }
@@ -82,8 +82,8 @@ fn test_read_dir_recursive() {
 
 @test
 fn test_mkdirp_existing_and_trailing_slashes() {
-    let tmpDir = io.tempDir() ?? ""
-    let nested = tmpDir + "/a/b"
+    var tmpDir = io.tempDir() ?? ""
+    var nested = tmpDir + "/a/b"
     assert_eq(io.mkdirp(nested), true)
     assert_eq(io.mkdirp(nested), true)
     assert_eq(io.mkdirp(nested + "///"), true)
@@ -103,9 +103,9 @@ fn test_remove_nonexistent() {
 
 @test
 fn test_read_lines_empty() {
-    let tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "")
-    let lines = io.readLines(tmp)
+    var lines = io.readLines(tmp)
     assert_eq(lines.length, 0)
     io.remove(tmp)
 }
@@ -114,9 +114,9 @@ fn test_read_lines_empty() {
 
 @test
 fn test_read_lines_single() {
-    let tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "single line")
-    let lines = io.readLines(tmp)
+    var lines = io.readLines(tmp)
     assert_eq(lines.length, 1)
     assert_eq(lines[0], "single line")
     io.remove(tmp)
@@ -126,9 +126,9 @@ fn test_read_lines_single() {
 
 @test
 fn test_read_lines_trailing_newline() {
-    let tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "alpha\n")
-    let lines = io.readLines(tmp)
+    var lines = io.readLines(tmp)
     assert_eq(lines.length, 1)
     assert_eq(lines[0], "alpha")
     io.remove(tmp)
@@ -138,9 +138,9 @@ fn test_read_lines_trailing_newline() {
 
 @test
 fn test_read_lines_middle_empty_and_crlf() {
-    let tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "a\r\n\r\nb\r\n")
-    let lines = io.readLines(tmp)
+    var lines = io.readLines(tmp)
     assert_eq(lines.length, 3)
     assert_eq(lines[0], "a")
     assert_eq(lines[1], "")

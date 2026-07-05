@@ -111,7 +111,7 @@ TEST(unresolved_variable_in_print) {
 
 TEST(unresolved_variable_in_expression) {
     /* Undeclared variable used in arithmetic. */
-    XiFunc *f = try_lower("let x = unknown_y + 1");
+    XiFunc *f = try_lower("var x = unknown_y + 1");
     assert(f == NULL && "lowerer must reject unresolved variable in expr");
 }
 
@@ -125,14 +125,14 @@ TEST(unresolved_variable_in_function) {
 
 TEST(resolved_variable_accepted) {
     /* Declared variable should lower successfully. */
-    XiFunc *f = try_lower("let x = 42\nprint(x)");
+    XiFunc *f = try_lower("var x = 42\nprint(x)");
     assert(f != NULL && "lowerer must accept resolved variables");
     xi_func_free(f);
 }
 
 TEST(declared_and_assigned_accepted) {
     /* Assignment to a declared variable should lower successfully. */
-    XiFunc *f = try_lower("let x = 1\nx = x + 2\nprint(x)");
+    XiFunc *f = try_lower("var x = 1\nx = x + 2\nprint(x)");
     assert(f != NULL && "lowerer must accept declared+assigned variables");
     xi_func_free(f);
 }

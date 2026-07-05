@@ -1,14 +1,14 @@
 // Demo: Concurrency Safety Rules
-// shared const, Channel, parameter passing — the three ways to share data
+// shared, Channel, parameter passing — the three ways to share data
 //
 // Run: xray demos/05-concurrency/shared_data.xr
 //
 // GOLDEN RULE: If it compiles, it's concurrency-safe.
 // No locks needed. The compiler enforces safety.
 
-// === Rule 1: shared const (immutable cross-coroutine sharing) ===
+// === Rule 1: shared (immutable cross-coroutine sharing) ===
 // Zero-copy reads from any coroutine
-shared const CONFIG = {
+shared CONFIG = {
     host: "localhost",
     port: 8080,
     maxRetries: 3
@@ -26,15 +26,15 @@ scope {
 }
 
 // === Rule 2: Channel (inter-coroutine communication) ===
-// Channels are declared `shared const` and deep-copy pointer values on send.
-shared const ch = Channel<int>(1)
+// Channels are declared `shared` and deep-copy pointer values on send.
+shared ch = Channel<int>(1)
 
 fn sender(ch: Channel<int>) {
     ch.send(42)
 }
 
 go sender(ch)
-let val = match (ch.recv()) {
+var val = match (ch.recv()) {
     Recv.Value(v) -> v
     _ -> -1
 }
@@ -49,8 +49,8 @@ fn processData(data: Array<int>) {
     print("child sees: ${data}")
 }
 
-let myData = [1, 2, 3]
-let t = go processData(myData)
+var myData = [1, 2, 3]
+var t = go processData(myData)
 await t
 print("parent still has: ${myData}")
 
@@ -60,9 +60,9 @@ print("parent still has: ${myData}")
 // let x = [1, 2, 3]
 // go fn() { print(x) }()              // ERROR: cannot capture 'x' in go closure
 //
-// let ch2 = Channel<int>(1)            // ERROR: Channel must be `shared const`
+// let ch2 = Channel<int>(1)            // ERROR: Channel must be `shared`
 //
-// shared let data = [1,2,3]
-// go fn() { data.push(4) }()           // ERROR: cannot capture `shared let`
+// shared data = [1,2,3]
+// go fn() { data.push(4) }()           // ERROR: cannot capture `shared`
 
 print("\nAll concurrency rules demonstrated safely!")

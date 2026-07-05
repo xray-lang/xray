@@ -14,5 +14,5 @@ fn view(holder: in Holder) {
     mutate(holder.items)
 }
 
-let holder = Holder()
+var holder = Holder()
 view(holder)

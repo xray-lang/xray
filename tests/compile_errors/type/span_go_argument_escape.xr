@@ -3,9 +3,9 @@ fn worker(view: ByteSpan) -> int {
 }
 
 fn bad() {
-    let bytes = Bytes(4)
-    let view: ByteSpan = bytes[0:2]
-    let task = go worker(move view)
+    var bytes = Bytes(4)
+    var view: ByteSpan = bytes[0:2]
+    var task = go worker(move view)
     print(await task)
 }
 

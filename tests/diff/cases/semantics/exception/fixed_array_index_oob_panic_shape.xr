@@ -4,7 +4,7 @@ struct Buf {
 }
 
 fn show_direct_read(i: int) {
-    let buf = Buf{data: [1, 2, 3, 4]}
+    var buf = Buf{data: [1, 2, 3, 4]}
     try {
         print(buf.data[i])
     } catch panic (p) {
@@ -14,7 +14,7 @@ fn show_direct_read(i: int) {
 }
 
 fn show_direct_write(i: int) {
-    let buf = Buf{data: [1, 2, 3, 4]}
+    var buf = Buf{data: [1, 2, 3, 4]}
     try {
         buf.data[i] = 9
         print(buf.data[0])
@@ -29,7 +29,7 @@ fn write_view(view: [int; 4], i: int) {
 }
 
 fn show_view_write(i: int) {
-    let buf = Buf{data: [1, 2, 3, 4]}
+    var buf = Buf{data: [1, 2, 3, 4]}
     try {
         write_view(buf.data, i)
         print(buf.data[0])

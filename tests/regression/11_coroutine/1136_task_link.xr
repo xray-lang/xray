@@ -16,27 +16,27 @@ fn ok() -> int {
     return 42
 }
 fn test_cancel_result() {
-    let t = go slow_work()
+    var t = go slow_work()
     t.cancel()
-    let r = t.awaitResult()
+    var r = t.awaitResult()
     match (r) {
         TaskResult.Cancelled -> assert(true, "cancelled task should return TaskResult.Cancelled")
         _ -> assert(false, "cancelled task should not return a value")
     }
 }
 fn test_failed_result() {
-    let t = go failing()
-    let r = t.awaitResult()
+    var t = go failing()
+    var r = t.awaitResult()
     match (r) {
         TaskResult.Failed(_) -> assert(true, "failed task should return TaskResult.Failed")
         _ -> assert(false, "failed task should not return success")
     }
 }
 fn test_both_ok() {
-    let t1 = go ok()
-    let t2 = go ok()
-    let r1 = await t1
-    let r2 = await t2
+    var t1 = go ok()
+    var t2 = go ok()
+    var r1 = await t1
+    var r2 = await t2
     assert(r1 == 42)
     assert(r2 == 42)
 }

@@ -5,9 +5,9 @@ fn sleeper() -> int {
     return 7
 }
 
-let task = go sleeper()
+var task = go sleeper()
 task.cancel()
-let value = task.awaitResult()
+var value = task.awaitResult()
 print(match (value) {
     TaskResult.Cancelled -> true
     _ -> false

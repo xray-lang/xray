@@ -10,7 +10,7 @@ order: 007
 
 > 真值源：`src/frontend/parser/xparse_match.c`、`src/runtime/value/x_value_match.c`。
 
-模式出现在 `match` 表达式/语句与 `let` 解构中。
+模式出现在 `match` 表达式/语句与 `var` / `const` 解构中。
 
 ### 6.1 字面量模式
 
@@ -155,7 +155,7 @@ match (x) {
 
 - 匹配任意值，不绑定变量。
 - 通常作为最后的 default 分支。
-- 解构中可用于跳过位置：`let [_, b, _] = arr`。
+- 解构中可用于跳过位置：`var [_, b, _] = arr`。
 
 ### 6.8 变量绑定模式
 
@@ -172,9 +172,9 @@ match (http_status) {
 ### 6.9 解构模式
 
 ```xray
-let [a, b, c] = some_array
-let (q, r) = divmod(17, 5)
-let { name, age } = user
+var [a, b, c] = some_array
+var (q, r) = divmod(17, 5)
+var { name, age } = user
 ```
 
 详见 §5.1.5。`match` 支持 tuple、ADT variant、对象与数组结构解构：
@@ -206,7 +206,7 @@ match (p) {
 
 > Source of truth: `src/frontend/parser/xparse_match.c`, `src/runtime/value/x_value_match.c`.
 
-Patterns appear in `match` expressions/statements and in `let` destructuring.
+Patterns appear in `match` expressions/statements and in `var` / `const` destructuring.
 
 ### 6.1 Literal Patterns
 
@@ -351,7 +351,7 @@ match (x) {
 
 - Matches any value without binding.
 - Typically used as the trailing default arm.
-- Usable in destructuring to skip positions: `let [_, b, _] = arr`.
+- Usable in destructuring to skip positions: `var [_, b, _] = arr`.
 
 ### 6.8 Variable-binding Patterns
 
@@ -368,9 +368,9 @@ match (http_status) {
 ### 6.9 Destructuring Patterns
 
 ```xray
-let [a, b, c] = some_array
-let (q, r) = divmod(17, 5)
-let { name, age } = user
+var [a, b, c] = some_array
+var (q, r) = divmod(17, 5)
+var { name, age } = user
 ```
 
 See §5.1.5 for details. Within `match`, tuple, ADT-variant, object, and array destructuring are supported:

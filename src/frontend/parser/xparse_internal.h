@@ -142,6 +142,7 @@ XR_FUNC AstNode *xr_parse_template_string(Parser *parser);
 XR_FUNC AstNode *xr_parse_lt_or_generic(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_force_unwrap(Parser *parser, AstNode *operand);
 XR_FUNC AstNode *xr_parse_as_cast(Parser *parser, AstNode *left);
+XR_FUNC AstNode *xr_parse_comptime_expr(Parser *parser);
 XR_FUNC AstNode *xr_parse_range(Parser *parser, AstNode *start);
 XR_FUNC AstNode *xr_parse_ternary(Parser *parser, AstNode *condition);
 XR_FUNC AstNode *xr_parse_nullish_coalesce(Parser *parser, AstNode *left);

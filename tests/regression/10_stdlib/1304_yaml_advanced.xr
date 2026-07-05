@@ -11,16 +11,16 @@ import yaml
 @test
 fn test_anchor_alias() {
     // Basic anchor/alias: scalar value
-    let data = "anchor: &val hello\nalias: *val"
-    let obj = yaml.parse(data)
+    var data = "anchor: &val hello\nalias: *val"
+    var obj = yaml.parse(data)
     assert_eq(obj["anchor"], "hello")
     assert_eq(obj["alias"], "hello")
 }
 
 @test
 fn test_anchor_alias_number() {
-    let data = "port: &p 8080\nbackup_port: *p"
-    let obj = yaml.parse(data)
+    var data = "port: &p 8080\nbackup_port: *p"
+    var obj = yaml.parse(data)
     assert_eq(obj["port"], 8080)
     assert_eq(obj["backup_port"], 8080)
 }
@@ -29,9 +29,9 @@ fn test_anchor_alias_number() {
 
 @test
 fn test_literal_block() {
-    let data = "text: |\n  line one\n  line two\n  line three"
-    let obj = yaml.parse(data)
-    let text = obj["text"]
+    var data = "text: |\n  line one\n  line two\n  line three"
+    var obj = yaml.parse(data)
+    var text = obj["text"]
     assert(text.length > 0)
     assert(text.indexOf("line one") >= 0)
     assert(text.indexOf("line two") >= 0)
@@ -39,9 +39,9 @@ fn test_literal_block() {
 
 @test
 fn test_literal_block_strip() {
-    let data = "text: |-\n  hello\n  world"
-    let obj = yaml.parse(data)
-    let text = string(obj["text"])
+    var data = "text: |-\n  hello\n  world"
+    var obj = yaml.parse(data)
+    var text = string(obj["text"])
     assert(text.length > 0)
     // Strip mode: no trailing newline
     assert(text[text.length - 1] != "\n")
@@ -49,9 +49,9 @@ fn test_literal_block_strip() {
 
 @test
 fn test_literal_block_keep() {
-    let data = "text: |+\n  hello\n  world\n\n\n"
-    let obj = yaml.parse(data)
-    let text = string(obj["text"])
+    var data = "text: |+\n  hello\n  world\n\n\n"
+    var obj = yaml.parse(data)
+    var text = string(obj["text"])
     assert(text.length > 0)
     // Keep mode: trailing newlines preserved
 }
@@ -60,9 +60,9 @@ fn test_literal_block_keep() {
 
 @test
 fn test_folded_block() {
-    let data = "text: >\n  line one\n  line two\n  line three"
-    let obj = yaml.parse(data)
-    let text = string(obj["text"])
+    var data = "text: >\n  line one\n  line two\n  line three"
+    var obj = yaml.parse(data)
+    var text = string(obj["text"])
     assert(text.length > 0)
     // Folded: newlines become spaces
     assert(text.indexOf(" ") >= 0)
@@ -70,9 +70,9 @@ fn test_folded_block() {
 
 @test
 fn test_folded_block_strip() {
-    let data = "text: >-\n  hello\n  world"
-    let obj = yaml.parse(data)
-    let text = string(obj["text"])
+    var data = "text: >-\n  hello\n  world"
+    var obj = yaml.parse(data)
+    var text = string(obj["text"])
     assert(text.length > 0)
     assert(text[text.length - 1] != "\n")
 }
@@ -82,8 +82,8 @@ fn test_folded_block_strip() {
 @test
 fn test_parse_all() {
     // parseAll splits on document end marker '...'
-    let data = "first: 1\n...\nsecond: 2\n...\nthird: 3"
-    let docs = yaml.parseAll(data)
+    var data = "first: 1\n...\nsecond: 2\n...\nthird: 3"
+    var docs = yaml.parseAll(data)
     assert(docs.length >= 1)
     assert_eq(docs[0]["first"], 1)
 }
@@ -91,8 +91,8 @@ fn test_parse_all() {
 @test
 fn test_parse_all_single() {
     // Single document with --- header
-    let data = "---\na: 1\nb: 2"
-    let docs = yaml.parseAll(data)
+    var data = "---\na: 1\nb: 2"
+    var docs = yaml.parseAll(data)
     assert(docs.length >= 1)
     assert_eq(docs[0]["a"], 1)
     assert_eq(docs[0]["b"], 2)
@@ -102,22 +102,22 @@ fn test_parse_all_single() {
 
 @test
 fn test_hex_numbers() {
-    let data = "hex: 0xFF"
-    let obj = yaml.parse(data)
+    var data = "hex: 0xFF"
+    var obj = yaml.parse(data)
     assert_eq(obj["hex"], 255)
 }
 
 @test
 fn test_hex_number_upper() {
-    let data = "val: 0x1A"
-    let obj = yaml.parse(data)
+    var data = "val: 0x1A"
+    var obj = yaml.parse(data)
     assert_eq(obj["val"], 26)
 }
 
 @test
 fn test_octal_numbers() {
-    let data = "oct: 0o77"
-    let obj = yaml.parse(data)
+    var data = "oct: 0o77"
+    var obj = yaml.parse(data)
     assert_eq(obj["oct"], 63)
 }
 
@@ -125,16 +125,16 @@ fn test_octal_numbers() {
 
 @test
 fn test_string_not_hex() {
-    let data = "word: cafe"
-    let obj = yaml.parse(data)
+    var data = "word: cafe"
+    var obj = yaml.parse(data)
     // "cafe" should be a string, not parsed as hex number
     assert_eq(obj["word"], "cafe")
 }
 
 @test
 fn test_string_abcdef() {
-    let data = "word: abcdef"
-    let obj = yaml.parse(data)
+    var data = "word: abcdef"
+    var obj = yaml.parse(data)
     assert_eq(obj["word"], "abcdef")
 }
 
@@ -142,16 +142,16 @@ fn test_string_abcdef() {
 
 @test
 fn test_infinity() {
-    let data = "pos: .inf\nneg: -.inf"
-    let obj = yaml.parse(data)
+    var data = "pos: .inf\nneg: -.inf"
+    var obj = yaml.parse(data)
     assert(obj["pos"] > 999999999)
     assert(obj["neg"] < -999999999)
 }
 
 @test
 fn test_nan() {
-    let data = "val: .nan"
-    let obj = yaml.parse(data)
+    var data = "val: .nan"
+    var obj = yaml.parse(data)
     // NaN != NaN
     assert(obj["val"] != obj["val"])
 }
@@ -160,8 +160,8 @@ fn test_nan() {
 
 @test
 fn test_tilde_null() {
-    let data = "val: ~"
-    let obj = yaml.parse(data)
+    var data = "val: ~"
+    var obj = yaml.parse(data)
     assert_eq(obj["val"], null)
 }
 
@@ -169,8 +169,8 @@ fn test_tilde_null() {
 
 @test
 fn test_empty_value() {
-    let data = "key:"
-    let obj = yaml.parse(data)
+    var data = "key:"
+    var obj = yaml.parse(data)
     assert_eq(obj["key"], null)
 }
 
@@ -178,15 +178,15 @@ fn test_empty_value() {
 
 @test
 fn test_unicode_escape() {
-    let data = "char: \"\\u0041\""
-    let obj = yaml.parse(data)
+    var data = "char: \"\\u0041\""
+    var obj = yaml.parse(data)
     assert_eq(obj["char"], "A")
 }
 
 @test
 fn test_unicode_escape_multibyte() {
-    let data = "char: \"\\u00E9\""
-    let obj = yaml.parse(data)
+    var data = "char: \"\\u00E9\""
+    var obj = yaml.parse(data)
     // U+00E9 = é (2-byte UTF-8)
     assert(obj["char"].length > 0)
 }
@@ -195,8 +195,8 @@ fn test_unicode_escape_multibyte() {
 
 @test
 fn test_escape_sequences() {
-    let data = "tab: \"hello\\tworld\"\nnl: \"line1\\nline2\""
-    let obj = yaml.parse(data)
+    var data = "tab: \"hello\\tworld\"\nnl: \"line1\\nline2\""
+    var obj = yaml.parse(data)
     assert(obj["tab"].indexOf("\t") >= 0)
     assert(obj["nl"].indexOf("\n") >= 0)
 }
@@ -205,11 +205,11 @@ fn test_escape_sequences() {
 
 @test
 fn test_stringify_json() {
-    let config: Json = {name: "xray", version: 1, debug: false}
-    let result = yaml.stringify(config)
+    var config: Json = {name: "xray", version: 1, debug: false}
+    var result = yaml.stringify(config)
     assert(result.length > 0)
     // Roundtrip: parse the stringified result
-    let parsed = yaml.parse(result)
+    var parsed = yaml.parse(result)
     assert_eq(parsed["name"], "xray")
     assert_eq(parsed["version"], 1)
     assert_eq(parsed["debug"], false)
@@ -217,22 +217,22 @@ fn test_stringify_json() {
 
 @test
 fn test_stringify_nested_json() {
-    let data: Json = {
+    var data: Json = {
         server: {
             host: "localhost",
             port: 8080
         },
         features: ["auth", "logging"]
     }
-    let result = yaml.stringify(data)
+    var result = yaml.stringify(data)
     assert(result.length > 0)
 }
 
 @test
 fn test_stringify_json_roundtrip() {
-    let original: Json = {a: 1, b: "hello", c: true, d: null}
-    let yaml_str = yaml.stringify(original)
-    let parsed = yaml.parse(yaml_str)
+    var original: Json = {a: 1, b: "hello", c: true, d: null}
+    var yaml_str = yaml.stringify(original)
+    var parsed = yaml.parse(yaml_str)
     assert_eq(parsed["a"], 1)
     assert_eq(parsed["b"], "hello")
     assert_eq(parsed["c"], true)
@@ -243,8 +243,8 @@ fn test_stringify_json_roundtrip() {
 
 @test
 fn test_stringify_map() {
-    let m: Json = {"key1": "val1", "key2": 42}
-    let result = yaml.stringify(m)
+    var m: Json = {"key1": "val1", "key2": 42}
+    var result = yaml.stringify(m)
     assert(result.length > 0)
 }
 
@@ -252,20 +252,20 @@ fn test_stringify_map() {
 
 @test
 fn test_empty_input() {
-    let result = yaml.parse("")
+    var result = yaml.parse("")
     assert_eq(result, null)
 }
 
 @test
 fn test_whitespace_only() {
-    let result = yaml.parse("   \n\n  ")
+    var result = yaml.parse("   \n\n  ")
     assert_eq(result, null)
 }
 
 @test
 fn test_comment_only() {
     // Comments followed by empty lines are skipped
-    let result = yaml.parse("# this is a comment\n")
+    var result = yaml.parse("# this is a comment\n")
     // Parser may return non-null for partial comment lines
     // Just verify no crash
     assert(true)
@@ -275,8 +275,8 @@ fn test_comment_only() {
 
 @test
 fn test_inline_comments() {
-    let data = "name: Alice # user name\nage: 30 # years"
-    let obj = yaml.parse(data)
+    var data = "name: Alice # user name\nage: 30 # years"
+    var obj = yaml.parse(data)
     assert_eq(obj["name"], "Alice")
     assert_eq(obj["age"], 30)
 }
@@ -285,8 +285,8 @@ fn test_inline_comments() {
 
 @test
 fn test_negative_numbers() {
-    let data = "neg_int: -42\nneg_float: -3.14"
-    let obj = yaml.parse(data)
+    var data = "neg_int: -42\nneg_float: -3.14"
+    var obj = yaml.parse(data)
     assert_eq(obj["neg_int"], -42)
     assert_eq(obj["neg_float"], -3.14)
 }
@@ -296,9 +296,9 @@ fn test_negative_numbers() {
 @test
 fn test_flow_quoted_keys() {
     // Quoted keys work in flow mappings
-    let data = "data: {\"key one\": 1, 'key two': 2}"
-    let obj = yaml.parse(data)
-    let d = obj["data"]
+    var data = "data: {\"key one\": 1, 'key two': 2}"
+    var obj = yaml.parse(data)
+    var d = obj["data"]
     assert_eq(d["key one"], 1)
     assert_eq(d["key two"], 2)
 }

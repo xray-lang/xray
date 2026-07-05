@@ -4,7 +4,7 @@
 fn test_bytes_slice() {
 
     // ========== Basic slice ==========
-    let bytes = Bytes(5)
+    var bytes = Bytes(5)
     bytes[0] = 10
     bytes[1] = 20
     bytes[2] = 30
@@ -12,14 +12,14 @@ fn test_bytes_slice() {
     bytes[4] = 50
     print(bytes.length)  // 5
 
-    let s1: ByteSpan = bytes[1:4]
+    var s1: ByteSpan = bytes[1:4]
     print(s1.length)  // 3
     print(s1[0])      // 20
     print(s1[1])      // 30
     print(s1[2])      // 40
 
     // ========== Slice boundaries ==========
-    let b = Bytes(5)
+    var b = Bytes(5)
     b[0] = 1
     b[1] = 2
     b[2] = 3
@@ -27,23 +27,23 @@ fn test_bytes_slice() {
     b[4] = 5
 
     // Omit start
-    let s3: ByteSpan = b[:3]
+    var s3: ByteSpan = b[:3]
     print(s3.length)  // 3
 
     // Omit end
-    let s4: ByteSpan = b[2:]
+    var s4: ByteSpan = b[2:]
     print(s4.length)  // 3
 
     // Full slice
-    let s5: ByteSpan = b[:]
+    var s5: ByteSpan = b[:]
     print(s5.length)  // 5
 
     // Empty slice
-    let s6: ByteSpan = b[2:2]
+    var s6: ByteSpan = b[2:2]
     print(s6.length)  // 0
 
     // Negative bounds
-    let s7: ByteSpan = b[-4:-1]
+    var s7: ByteSpan = b[-4:-1]
     print(s7.length)  // 3
     print(s7[0])      // 2
     print(s7[2])      // 4

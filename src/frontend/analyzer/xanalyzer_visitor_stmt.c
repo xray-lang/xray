@@ -520,7 +520,8 @@ static bool xa_block_uses_symbol_name_from(AstNode *node, const char *name, int 
         AstNode *stmt = statements[i];
         if (!stmt)
             continue;
-        if ((stmt->type == AST_VAR_DECL || stmt->type == AST_CONST_DECL) &&
+        if ((stmt->type == AST_VAR_DECL || stmt->type == AST_CONST_DECL ||
+             stmt->type == AST_SHARED_DECL) &&
             stmt->as.var_decl.name && strcmp(stmt->as.var_decl.name, name) == 0) {
             return xa_node_uses_symbol_name(stmt->as.var_decl.initializer, name);
         }
@@ -579,6 +580,7 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
 
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             return xa_node_uses_symbol_name(node->as.var_decl.initializer, name);
         case AST_ASSIGNMENT:
             return xa_node_uses_symbol_name(node->as.assignment.value, name);
@@ -813,6 +815,8 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
             return xa_node_uses_symbol_name(node->as.scope_block.body, name);
         case AST_MOVE_EXPR:
             return xa_node_uses_symbol_name(node->as.move_expr.expr, name);
+        case AST_COMPTIME_EXPR:
+            return xa_node_uses_symbol_name(node->as.comptime_expr.expr, name);
         case AST_UNSAFE_EXPR:
             return xa_node_uses_symbol_name(node->as.unsafe_expr.operand, name);
         case AST_PROGRAM:
@@ -1090,7 +1094,7 @@ XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, 
     snprintf(msg, sizeof(msg),
              "cannot %s; Span is a borrowed view, keep it local or copy the owner data into an "
              "Array",
-             escape_context ? escape_context : "let Span view escape");
+             escape_context ? escape_context : "var Span view escape");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
 }
@@ -1190,7 +1194,7 @@ static void xa_check_shared_initializer_boundary(XaInferContext *ctx, AstNode *d
     if (!ctx || !decl_node)
         return;
     VarDeclNode *var = &decl_node->as.var_decl;
-    if (var->storage_mode != XR_STORAGE_SHARED || !var->initializer)
+    if (decl_node->type != AST_SHARED_DECL || !var->initializer)
         return;
 
     bool is_move = false;
@@ -1207,15 +1211,12 @@ static void xa_check_shared_initializer_boundary(XaInferContext *ctx, AstNode *d
     const char *src_name = source->as.variable.name ? source->as.variable.name : "?";
 
     if (src_sym->is_shared) {
-        if (!is_move && src_sym->is_const && var->is_const)
-            return;
-        if (is_move)
+        if (!is_move)
             return;
         char msg[256];
         snprintf(msg, sizeof(msg),
-                 "shared binding from 'shared let' variable '%s' must use 'move %s' or "
-                 "'copy(%s)'",
-                 src_name, src_name, src_name);
+                 "shared binding '%s' is already a shared identity and must not be moved",
+                 src_name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                                    msg, &loc);
         return;
@@ -1266,12 +1267,11 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         var->symbol_id = sym->id;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    if (links && sym->is_const)
-        links->const_initializer = var->initializer;
-    if (xa_freestanding_profile_enabled(ctx->analyzer) && var->storage_mode == XR_STORAGE_SHARED) {
+    if (links)
+        links->const_initializer = sym->is_const ? var->initializer : NULL;
+    if (xa_freestanding_profile_enabled(ctx->analyzer) && node->type == AST_SHARED_DECL) {
         xa_freestanding_report_unavailable(
-            ctx, node,
-            node->type == AST_CONST_DECL ? "shared const declaration" : "shared let declaration",
+            ctx, node, "shared declaration",
             "shared storage still requires module initialization; static data sections are a "
             "future freestanding M3 step");
     } else if (xa_freestanding_profile_enabled(ctx->analyzer) &&
@@ -1279,7 +1279,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         xa_freestanding_report_unavailable(
             ctx, node,
             node->type == AST_CONST_DECL ? "top-level const declaration"
-                                         : "top-level let declaration",
+                                         : "top-level var declaration",
             "module storage still requires constructor initialization; move constants inside "
             "functions until static data sections land in freestanding M3");
     }
@@ -1327,7 +1327,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
             }
             if (!null_err && type_mismatch) {
                 // Json→concrete type: allowed at compile time, runtime check inserted by
-                // codegen. e.g. let x: int = data["key"] is legal but requires runtime validation.
+                // codegen. e.g. var x: int = data["key"] is legal but requires runtime validation.
                 if (XR_TYPE_IS_FUNCTION(links->declared_type) ||
                     !xr_is_json_coercion(links->declared_type, init_type)) {
                     char msg[256];
@@ -1349,14 +1349,14 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                    "Empty array '[]' requires a type annotation, e.g. let x: Array<int> = []",
+                    "Empty array '[]' requires a type annotation, e.g. var x: Array<int> = []",
                     &loc);
             }
         }
     } else if (links->declared_type) {
         var_type = links->declared_type;
         /* Reject non-default-initializable types without explicit initializer.
-         * e.g. `let u: User` is a compile error, but `let x: int` is allowed. */
+         * e.g. `var u: User` is a compile error, but `var x: int` is allowed. */
         if (!XR_TYPE_IS_UNKNOWN(links->declared_type) &&
             !xa_type_is_default_initializable(ctx, links->declared_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -1377,14 +1377,15 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     xa_update_borrowed_alias_root(ctx, sym, var->initializer, var_type);
     xa_register_active_span_borrow(ctx, sym, var->initializer, var_type);
 
-    /* Shared mutable runtime primitives require an immutable binding. */
-    if (var_type && var_type->kind != XR_KIND_CHANNEL &&
-        xa_type_is_threadsafe_shared_ref(var_type)) {
-        if (!sym->is_shared || !sym->is_const) {
+    if (var_type && xa_type_is_threadsafe_shared_ref(var_type)) {
+        if (!sym->is_shared) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                "shared runtime primitive must be declared as 'shared const'", &loc);
+            const char *label = xa_threadsafe_shared_ref_label(var_type);
+            char msg[160];
+            snprintf(msg, sizeof(msg), "%s handle must be declared with 'shared'",
+                     label ? label : "synchronization");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
         }
     }
 
@@ -1455,11 +1456,14 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
         xa_symbol_add_ref(links, node->line, node->column, end_col, true);  // is_write=true
     }
 
-    // Check const assignment
-    if (sym->is_const) {
+    // Check immutable binding assignment
+    if (sym->is_const || sym->is_shared || !sym->is_rebindable) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
-        snprintf(msg, sizeof(msg), "Cannot assign to const '%s'", assign->name);
+        snprintf(msg, sizeof(msg),
+                 sym->is_shared ? "Cannot assign to shared binding '%s'"
+                                : "Cannot assign to const '%s'",
+                 assign->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
                                    msg, &loc);
         return;

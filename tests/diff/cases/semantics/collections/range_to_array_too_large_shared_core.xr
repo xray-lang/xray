@@ -1,5 +1,5 @@
 // anchor: range-to-array-too-large-shared-core
-let huge = 0..10000001
+var huge = 0..10000001
 
 try {
     print(huge.toArray().length)

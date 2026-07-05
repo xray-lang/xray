@@ -3,6 +3,6 @@ fn store_bytes(out: Bytes) {
     out[1] = 9
 }
 
-let out = Bytes(2)
+var out = Bytes(2)
 store_bytes(out)
 print(out[0] + out[1])

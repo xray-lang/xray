@@ -11,13 +11,13 @@ import time
 print("=== xray Server + Client Self-Test ===")
 print("")
 
-let testResults = ""
+var testResults = ""
 
 // Start echo server in background coroutine
 go fn() {
     ws.serve(9102, fn(conn) {
         while (ws.isOpen(conn)) {
-            let msg = ws.recv(conn, null)
+            var msg = ws.recv(conn, null)
             if (msg == null || msg.error) {
                 break
             }
@@ -33,18 +33,18 @@ time.sleep(300)
 
 // Run all tests in a single client coroutine
 go fn() {
-    let passed = 0
-    let failed = 0
-    let URL = "ws://127.0.0.1:9102"
+    var passed = 0
+    var failed = 0
+    var URL = "ws://127.0.0.1:9102"
     
     // I1: Basic local echo
-    let conn1 = ws.connect(URL, null)
+    var conn1 = ws.connect(URL, null)
     if (conn1 == null) {
         print("  FAIL  I1 local echo -- connect failed")
         failed = failed + 1
     } else {
         ws.send(conn1, "hello self", false)
-        let resp = ws.recv(conn1, 5000)
+        var resp = ws.recv(conn1, 5000)
         if (resp != null && resp.data == "hello self") {
             print("  PASS  I1 local echo")
             passed = passed + 1
@@ -56,17 +56,17 @@ go fn() {
     }
     
     // I2: Multiple messages round-trip (20 messages)
-    let conn2 = ws.connect(URL, null)
+    var conn2 = ws.connect(URL, null)
     if (conn2 == null) {
         print("  FAIL  I2 multi messages -- connect failed")
         failed = failed + 1
     } else {
-        let count = 20
-        let success = 0
-        for (let i = 0; i < count; i = i + 1) {
-            let msg = "self-msg-" + i.toString()
+        var count = 20
+        var success = 0
+        for (var i = 0; i < count; i = i + 1) {
+            var msg = "self-msg-" + i.toString()
             ws.send(conn2, msg, false)
-            let resp = ws.recv(conn2, 5000)
+            var resp = ws.recv(conn2, 5000)
             if (resp != null && resp.data == msg) {
                 success = success + 1
             }
@@ -82,17 +82,17 @@ go fn() {
     }
     
     // I3: Sequential multi-client (3 connections one after another)
-    let allOk = true
-    for (let c = 0; c < 3; c = c + 1) {
-        let conn = ws.connect(URL, null)
+    var allOk = true
+    for (var c = 0; c < 3; c = c + 1) {
+        var conn = ws.connect(URL, null)
         if (conn == null) {
             allOk = false
             break
         }
-        for (let i = 0; i < 5; i = i + 1) {
-            let msg = "client" + c.toString() + "-" + i.toString()
+        for (var i = 0; i < 5; i = i + 1) {
+            var msg = "client" + c.toString() + "-" + i.toString()
             ws.send(conn, msg, false)
-            let resp = ws.recv(conn, 5000)
+            var resp = ws.recv(conn, 5000)
             if (resp == null || resp.data != msg) {
                 allOk = false
                 break

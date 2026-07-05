@@ -13,14 +13,14 @@ fn dump_int(m: Map<bool, int>) {
 }
 
 print("-- insert false then true --")
-let a: Map<bool, int> = #{}
+var a: Map<bool, int> = #{}
 a.set(false, 34)
 a.set(true, 21)
 dump_int(a)
 print("get true=" + a.get(true)!.toString() + " get false=" + a.get(false)!.toString())
 
 print("-- insert true then false --")
-let b: Map<bool, int> = #{}
+var b: Map<bool, int> = #{}
 b.set(true, 7)
 b.set(false, 9)
 dump_int(b)
@@ -40,7 +40,7 @@ b.delete(false)
 print("size=" + b.size.toString() + " has true=" + b.has(true).toString())
 
 print("-- float32 narrowing --")
-let c: Map<bool, float32> = #{}
+var c: Map<bool, float32> = #{}
 c.set(true, 1.5)
 c.set(false, 2.25)
 print("csize=" + c.size.toString())
@@ -50,7 +50,7 @@ for (k, v in c) { print("cf " + k.toString() + "=" + v.toString()) }
 class BoolIntMapBag {
     values: Map<bool, int>
     constructor() {
-        let values: Map<bool, int> = #{}
+        var values: Map<bool, int> = #{}
         this.values = values
     }
     fill() -> int {
@@ -59,7 +59,7 @@ class BoolIntMapBag {
         return this.values.size
     }
     probe() -> int {
-        let sum = 0
+        var sum = 0
         if (this.values.has(true)) { sum = sum + this.values.get(true) }
         if (this.values.has(false)) { sum = sum + this.values.get(false) }
         return sum
@@ -67,6 +67,6 @@ class BoolIntMapBag {
 }
 
 print("-- class field --")
-let bag = BoolIntMapBag()
+var bag = BoolIntMapBag()
 print("fill=" + bag.fill().toString())
 print("probe=" + bag.probe().toString())

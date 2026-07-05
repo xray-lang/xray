@@ -1,8 +1,8 @@
 fn bad() {
-    let owner = Array<int>(4, 0)
-    let first: Span<int> = owner[0:1]
-    let second: Span<int> = owner[1:2]
-    let views = Array<Span<int>>(1, first)
+    var owner = Array<int>(4, 0)
+    var first: Span<int> = owner[0:1]
+    var second: Span<int> = owner[1:2]
+    var views = Array<Span<int>>(1, first)
     views[0] = second
 }
 

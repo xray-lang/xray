@@ -13,7 +13,7 @@ class Box {
 fn cleanup(msg: string) { print("fn " + msg) }
 
 fn mix() {
-    let box = Box("B")
+    var box = Box("B")
     defer print("builtin")
     defer cleanup("free")
     defer box.drop()

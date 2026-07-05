@@ -5,5 +5,5 @@ fn commitLength(out: Bytes, n: int) -> int {
     return out.length
 }
 
-let out = Bytes.withCapacity(8)
+var out = Bytes.withCapacity(8)
 print(commitLength(out, 3))

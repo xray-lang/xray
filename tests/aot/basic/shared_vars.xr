@@ -1,5 +1,5 @@
 // AOT basic test: shared variables (GETSHARED/SETSHARED)
-let counter = 0
+var counter = 0
 
 fn increment() -> int {
     counter = counter + 1

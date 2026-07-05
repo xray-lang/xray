@@ -278,7 +278,7 @@ def test_resources_and_prompts_protocol_paths(xray: Path) -> None:
                 4,
                 {
                     "name": "code-review",
-                    "arguments": {"code": "let x = 1\nprint(x)\n"},
+                    "arguments": {"code": "var x = 1\nprint(x)\n"},
                 },
             )
         )
@@ -399,7 +399,7 @@ def test_tools_call_invalid_params_and_structured_content(xray: Path) -> None:
                 3,
                 {
                     "name": "xray_format",
-                    "arguments": {"code": "let x=1\nprint(x)\n", "indentSize": 2},
+                    "arguments": {"code": "var x=1\nprint(x)\n", "indentSize": 2},
                 },
             )
         )

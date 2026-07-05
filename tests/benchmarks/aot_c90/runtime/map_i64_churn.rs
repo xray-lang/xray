@@ -3,15 +3,15 @@
 use std::collections::HashMap;
 
 fn run(n: i64) -> i64 {
-    let mut m: HashMap<i64, i64> = HashMap::new();
+    var mut m: HashMap<i64, i64> = HashMap::new();
 
-    let mut i: i64 = 0;
+    var mut i: i64 = 0;
     while i < n {
         m.insert((i * 17) % n, i * 3 + 1);
         i += 1;
     }
 
-    let mut sum: i64 = 0;
+    var mut sum: i64 = 0;
     i = 0;
     while i < n * 2 {
         if let Some(v) = m.get(&i) {

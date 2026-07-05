@@ -6,8 +6,8 @@
 
 @test
 fn test_while_count_up() {
-    let i = 0
-    let sum = 0
+    var i = 0
+    var sum = 0
     while (i < 5) {
         sum += i
         i++
@@ -18,8 +18,8 @@ fn test_while_count_up() {
 
 @test
 fn test_while_count_down() {
-    let i = 5
-    let sum = 0
+    var i = 5
+    var sum = 0
     while (i > 0) {
         sum += i
         i--
@@ -32,7 +32,7 @@ fn test_while_count_down() {
 
 @test
 fn test_while_never_run() {
-    let count = 0
+    var count = 0
     while (false) {
         count++
     }
@@ -41,8 +41,8 @@ fn test_while_never_run() {
 
 @test
 fn test_while_once() {
-    let i = 0
-    let count = 0
+    var i = 0
+    var count = 0
     while (i < 1) {
         count++
         i++
@@ -52,7 +52,7 @@ fn test_while_once() {
 
 @test
 fn test_while_condition_becomes_false() {
-    let i = 10
+    var i = 10
     while (i < 0) {
         i++  // 永远不会执行
     }
@@ -63,7 +63,7 @@ fn test_while_condition_becomes_false() {
 
 @test
 fn test_while_break() {
-    let i = 0
+    var i = 0
     while (i < 100) {
         if (i == 5) {
             break
@@ -75,8 +75,8 @@ fn test_while_break() {
 
 @test
 fn test_while_break_early() {
-    let sum = 0
-    let i = 0
+    var sum = 0
+    var i = 0
     while (true) {
         sum += i
         i++
@@ -91,8 +91,8 @@ fn test_while_break_early() {
 
 @test
 fn test_while_continue() {
-    let sum = 0
-    let i = 0
+    var sum = 0
+    var i = 0
     while (i < 10) {
         i++
         if (i % 2 == 0) {
@@ -105,8 +105,8 @@ fn test_while_continue() {
 
 @test
 fn test_while_continue_and_break() {
-    let result: Array<int> = []
-    let i = 0
+    var result: Array<int> = []
+    var i = 0
     while (i < 10) {
         i++
         if (i % 2 == 0) {
@@ -124,10 +124,10 @@ fn test_while_continue_and_break() {
 
 @test
 fn test_while_nested() {
-    let total = 0
-    let i = 0
+    var total = 0
+    var i = 0
     while (i < 3) {
-        let j = 0
+        var j = 0
         while (j < 3) {
             total++
             j++
@@ -139,10 +139,10 @@ fn test_while_nested() {
 
 @test
 fn test_while_nested_break() {
-    let i = 0
-    let count = 0
+    var i = 0
+    var count = 0
     while (i < 3) {
-        let j = 0
+        var j = 0
         while (j < 5) {
             count++
             if (j == 2) {
@@ -159,9 +159,9 @@ fn test_while_nested_break() {
 
 @test
 fn test_while_and_condition() {
-    let i = 0
-    let j = 10
-    let count = 0
+    var i = 0
+    var j = 10
+    var count = 0
     while (i < 5 && j > 5) {
         i++
         j--
@@ -172,8 +172,8 @@ fn test_while_and_condition() {
 
 @test
 fn test_while_or_condition() {
-    let i = 0
-    let count = 0
+    var i = 0
+    var count = 0
     while (i < 3 || count < 5) {
         i++
         count++
@@ -185,10 +185,10 @@ fn test_while_or_condition() {
 
 @test
 fn test_while_find() {
-    let arr = [1, 3, 5, 7, 9, 11]
-    let target = 7
-    let found = false
-    let i = 0
+    var arr = [1, 3, 5, 7, 9, 11]
+    var target = 7
+    var found = false
+    var i = 0
     while (i < arr.length) {
         if (arr[i] == target) {
             found = true
@@ -202,9 +202,9 @@ fn test_while_find() {
 
 @test
 fn test_while_accumulate() {
-    let arr = [1, 2, 3, 4, 5]
-    let sum = 0
-    let i = 0
+    var arr = [1, 2, 3, 4, 5]
+    var sum = 0
+    var i = 0
     while (i < arr.length) {
         sum += arr[i]
         i++

@@ -4,7 +4,7 @@
 // Test 1: Variable with optional type
 
 fn findIndex(arr: Array<int>, val: int) -> int? {
-    for (let i = 0; i < arr.length; i++) {
+    for (var i = 0; i < arr.length; i++) {
         if (arr[i] == val) {
             return i
         }
@@ -20,27 +20,27 @@ fn greet(name: string?) -> string {
 
 @test
 fn test_optional_type() {
-    let x: int? = null
+    var x: int? = null
     print(x)
     // expect: null
-    let y: int? = 42
+    var y: int? = 42
     print(y)
 
     // expect: 42
     // Test 2: Function return type
 
-    let idx1 = findIndex([10, 20, 30], 20)
+    var idx1 = findIndex([10, 20, 30], 20)
     print(idx1)
     // expect: 1
-    let idx2 = findIndex([10, 20, 30], 99)
+    var idx2 = findIndex([10, 20, 30], 99)
     print(idx2)
     // expect: null
     // Test 3: Null coalescing with optional
-    let result = findIndex([1, 2, 3], 5) ?? -1
+    var result = findIndex([1, 2, 3], 5) ?? -1
     print(result)
     // expect: -1
     // Test 4: String optional type
-    let name: string? = null
+    var name: string? = null
     print(name)
     // expect: null
     name = "Alice"
@@ -54,7 +54,7 @@ fn test_optional_type() {
     print(greet("Bob"))
     // expect: Hello, Bob!
     // Test 6: Array optional type
-    let arr: Array<int>? = null
+    var arr: Array<int>? = null
     print(arr)
     // expect: null
     arr = [1, 2, 3]

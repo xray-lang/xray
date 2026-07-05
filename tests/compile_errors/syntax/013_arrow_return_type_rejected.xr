@@ -1,1 +1,1 @@
-let f = (): int -> 1
+var f = (): int -> 1

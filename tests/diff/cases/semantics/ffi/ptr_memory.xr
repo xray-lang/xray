@@ -6,8 +6,8 @@
 @extern("C") fn free(p: RawMut<uint8>)
 @extern("C") fn memcpy(dst: RawMut<uint8>, src: RawPtr<uint8>, n: uintsize) -> RawMut<uint8>
 
-let src = unsafe { malloc(4) }
-let dst = unsafe { malloc(4) }
+var src = unsafe { malloc(4) }
+var dst = unsafe { malloc(4) }
 
 unsafe {
     src[0] = 10
@@ -19,7 +19,7 @@ unsafe {
     print(dst[1])
     print(dst[2])
     print(dst[3])
-    let mid = dst.offset(2)
+    var mid = dst.offset(2)
     print(mid.deref())
 }
 

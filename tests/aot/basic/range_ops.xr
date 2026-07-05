@@ -1,5 +1,5 @@
 // AOT basic test: Range expression value model
-let r = 2..6
+var r = 2..6
 print(r)
 print(typeof(r))
 

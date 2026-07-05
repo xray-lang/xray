@@ -147,7 +147,7 @@ void xfmt_emit_generic_args(XrFmtContext *ctx, XrTypeRef **args, int count) {
 }
 
 // ----------------------------------------------------------------------------
-// Destructure patterns (used by let / multi-assign)
+// Destructure patterns (used by var/const declarations and multi-assign)
 // ----------------------------------------------------------------------------
 
 void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {

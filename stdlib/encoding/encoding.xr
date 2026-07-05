@@ -4,10 +4,10 @@
 // code points and surrogate pairs with explicit endianness and BOM handling.
 // All algorithms are byte-indexed with bit ops, matching the RFC/Unicode rules.
 
-let LE = 0
-let BE = 1
+const LE = 0
+const BE = 1
 
-let HEX = "0123456789abcdef"
+const HEX = "0123456789abcdef"
 
 // ---- hex ----
 
@@ -20,10 +20,10 @@ fn hexVal(c: int) -> int {
 }
 
 fn hexEncode(data: string) -> string {
-    let src = data.toBytes()
-    let out = ""
-    for (let i = 0; i < src.length; i++) {
-        let b = src[i]
+    var src = data.toBytes()
+    var out = ""
+    for (var i = 0; i < src.length; i++) {
+        var b = src[i]
         out = out + HEX.charAt(b >> 4)
         out = out + HEX.charAt(b & 15)
     }
@@ -31,15 +31,15 @@ fn hexEncode(data: string) -> string {
 }
 
 fn hexDecode(hex: string) -> Bytes? {
-    let src = hex.toBytes()
-    let n = src.length
+    var src = hex.toBytes()
+    var n = src.length
     if (n % 2 != 0) { return null }
-    let out = Bytes(n / 2)
-    let oi = 0
-    let i = 0
+    var out = Bytes(n / 2)
+    var oi = 0
+    var i = 0
     while (i < n) {
-        let hi = hexVal(src[i])
-        let lo = hexVal(src[i + 1])
+        var hi = hexVal(src[i])
+        var lo = hexVal(src[i + 1])
         if (hi < 0 || lo < 0) { return null }
         out[oi] = (hi << 4) | lo
         oi = oi + 1
@@ -49,16 +49,16 @@ fn hexDecode(hex: string) -> Bytes? {
 }
 
 fn hexDecodeString(hex: string) -> string? {
-    let b = hexDecode(hex)
+    var b = hexDecode(hex)
     if (b == null) { return null }
     return b.toString()
 }
 
 fn hexValid(hex: string) -> bool {
-    let src = hex.toBytes()
-    let n = src.length
+    var src = hex.toBytes()
+    var n = src.length
     if (n % 2 != 0) { return false }
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         if (hexVal(src[i]) < 0) { return false }
     }
     return true
@@ -77,20 +77,20 @@ fn utf8Count(data: string) -> int {
 // Validate that the string's bytes form well-formed UTF-8. A Xray string is
 // already valid UTF-8, but scanning keeps the semantics honest and total.
 fn utf8Valid(data: string) -> bool {
-    let src = data.toBytes()
-    let n = src.length
-    let i = 0
+    var src = data.toBytes()
+    var n = src.length
+    var i = 0
     while (i < n) {
-        let b = src[i]
-        let extra = 0
+        var b = src[i]
+        var extra = 0
         if (b < 0x80) { extra = 0 }
         else if (b >= 0xC0 && b < 0xE0) { extra = 1 }
         else if (b >= 0xE0 && b < 0xF0) { extra = 2 }
         else if (b >= 0xF0 && b < 0xF8) { extra = 3 }
         else { return false }
         if (i + extra >= n) { return false }
-        for (let j = 1; j <= extra; j++) {
-            let c = src[i + j]
+        for (var j = 1; j <= extra; j++) {
+            var c = src[i + j]
             if (c < 0x80 || c >= 0xC0) { return false }
         }
         i = i + extra + 1
@@ -115,8 +115,8 @@ fn putU16(out: Bytes, oi: int, unit: int, endian: int) {
 // promoted to int before shifting: a Bytes element is uint8, so `<< 8` in the
 // uint8 domain would truncate the high byte to zero.
 fn getU16(src: Bytes, i: int, endian: int) -> int {
-    let lo: int = src[i]
-    let hi: int = src[i + 1]
+    var lo: int = src[i]
+    var hi: int = src[i + 1]
     if (endian == BE) {
         return (lo << 8) | hi
     }
@@ -124,19 +124,19 @@ fn getU16(src: Bytes, i: int, endian: int) -> int {
 }
 
 fn utf16Encode(data: string, endian: int = 0) -> Bytes {
-    let cpCount = data.length
+    var cpCount = data.length
     // First pass: count 16-bit units (BMP = 1, supplementary = 2).
-    let units = 0
-    for (let i = 0; i < cpCount; i++) {
-        let cp = data.codePointAt(i)
+    var units = 0
+    for (var i = 0; i < cpCount; i++) {
+        var cp = data.codePointAt(i)
         if (cp >= 0x10000) { units = units + 2 } else { units = units + 1 }
     }
-    let out = Bytes(units * 2)
-    let oi = 0
-    for (let i = 0; i < cpCount; i++) {
-        let cp = data.codePointAt(i)
+    var out = Bytes(units * 2)
+    var oi = 0
+    for (var i = 0; i < cpCount; i++) {
+        var cp = data.codePointAt(i)
         if (cp >= 0x10000) {
-            let v = cp - 0x10000
+            var v = cp - 0x10000
             putU16(out, oi, 0xD800 + (v >> 10), endian)
             putU16(out, oi + 2, 0xDC00 + (v & 0x3FF), endian)
             oi = oi + 4
@@ -181,14 +181,14 @@ fn putUtf8(out: Bytes, oi: int, cp: int) -> int {
 // Decode UTF-16 bytes to a string. Auto-detects a leading BOM (FE FF = BE,
 // FF FE = LE); without a BOM the `endian` argument selects byte order.
 fn utf16Decode(data: Bytes, endian: int = 0, stripBom: bool = true) -> string? {
-    let n = data.length
+    var n = data.length
     if (n == 0) { return "" }
 
-    let e = endian
-    let start = 0
+    var e = endian
+    var start = 0
     if (n >= 2) {
-        let b0 = data[0]
-        let b1 = data[1]
+        var b0 = data[0]
+        var b1 = data[1]
         if (b0 == 0xFE && b1 == 0xFF) {
             e = BE
             if (stripBom) { start = 2 }
@@ -199,13 +199,13 @@ fn utf16Decode(data: Bytes, endian: int = 0, stripBom: bool = true) -> string? {
     }
 
     // Pass 1: decode code units (with surrogate pairs) into code points.
-    let cps: Array<int> = []
-    let i = start
+    var cps: Array<int> = []
+    var i = start
     while (i + 1 < n) {
-        let u = getU16(data, i, e)
+        var u = getU16(data, i, e)
         i = i + 2
         if (u >= 0xD800 && u <= 0xDBFF && i + 1 < n) {
-            let u2 = getU16(data, i, e)
+            var u2 = getU16(data, i, e)
             if (u2 >= 0xDC00 && u2 <= 0xDFFF) {
                 cps.push(0x10000 + ((u - 0xD800) << 10) + (u2 - 0xDC00))
                 i = i + 2
@@ -216,11 +216,11 @@ fn utf16Decode(data: Bytes, endian: int = 0, stripBom: bool = true) -> string? {
     }
 
     // Pass 2: encode code points as UTF-8 and materialize the string.
-    let outLen = 0
-    for (let k = 0; k < cps.length; k++) { outLen = outLen + utf8Len(cps[k]) }
-    let out = Bytes(outLen)
-    let oi = 0
-    for (let k = 0; k < cps.length; k++) { oi = putUtf8(out, oi, cps[k]) }
+    var outLen = 0
+    for (var k = 0; k < cps.length; k++) { outLen = outLen + utf8Len(cps[k]) }
+    var out = Bytes(outLen)
+    var oi = 0
+    for (var k = 0; k < cps.length; k++) { oi = putUtf8(out, oi, cps[k]) }
     return out.toString()
 }
 

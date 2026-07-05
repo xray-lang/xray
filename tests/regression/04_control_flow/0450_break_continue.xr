@@ -6,8 +6,8 @@
 
 @test
 fn test_while_break() {
-    let i = 0
-    let sum = 0
+    var i = 0
+    var sum = 0
     while (i < 100) {
         if (i >= 5) {
             break
@@ -23,8 +23,8 @@ fn test_while_break() {
 
 @test
 fn test_while_continue() {
-    let i = 0
-    let sum = 0
+    var i = 0
+    var sum = 0
     while (i < 10) {
         i = i + 1
         if (i % 2 == 0) {
@@ -39,7 +39,7 @@ fn test_while_continue() {
 
 @test
 fn test_for_break() {
-    let sum = 0
+    var sum = 0
     for (i in 0..100) {
         if (i >= 5) {
             break
@@ -53,7 +53,7 @@ fn test_for_break() {
 
 @test
 fn test_for_continue() {
-    let sum = 0
+    var sum = 0
     for (i in 0..10) {
         if (i % 2 == 0) {
             continue
@@ -67,7 +67,7 @@ fn test_for_continue() {
 
 @test
 fn test_nested_break() {
-    let count = 0
+    var count = 0
     for (i in 0..5) {
         for (j in 0..5) {
             if (j >= 2) {
@@ -83,8 +83,8 @@ fn test_nested_break() {
 
 @test
 fn test_conditional_break() {
-    let arr = [1, 2, 3, -1, 4, 5]
-    let sum = 0
+    var arr = [1, 2, 3, -1, 4, 5]
+    var sum = 0
     for (x in arr) {
         if (x < 0) {
             break
@@ -98,8 +98,8 @@ fn test_conditional_break() {
 
 @test
 fn test_conditional_continue() {
-    let arr = [1, -2, 3, -4, 5]
-    let sum = 0
+    var arr = [1, -2, 3, -4, 5]
+    var sum = 0
     for (x in arr) {
         if (x < 0) {
             continue
@@ -113,7 +113,7 @@ fn test_conditional_continue() {
 
 @test
 fn test_code_after_break() {
-    let executed = false
+    var executed = false
     for (i in 0..10) {
         break
         executed = true
@@ -125,7 +125,7 @@ fn test_code_after_break() {
 
 @test
 fn test_immediate_break() {
-    let count = 0
+    var count = 0
     while (true) {
         count = count + 1
         break

@@ -10,7 +10,7 @@ fn divide(a: int, b: int) -> int {
 
 fn run(b: int) -> string {
     try {
-        let r = divide(10, b)
+        var r = divide(10, b)
         return "ok:" + string(r)
     } catch panic (p) {
         return "caught"
@@ -24,7 +24,7 @@ print(run(0))
 // outer panic handler.
 fn nested() -> string {
     try {
-        let q = divide(5, 0)
+        var q = divide(5, 0)
         return "no-panic:" + string(q)
     } catch panic (p) {
         return "outer-caught"

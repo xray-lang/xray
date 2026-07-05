@@ -7,8 +7,8 @@
 
 // ---------- 1. Arithmetic + control loop (arith + compare + jump) ----------
 fn bench_arith(iters: int): int {
-    let acc = 0
-    for (let i = 0; i < iters; i++) {
+    var acc = 0
+    for (var i = 0; i < iters; i++) {
         acc = acc + i * 3 - 1
         if (acc % 7 == 0) {
             acc = acc + 1
@@ -19,8 +19,8 @@ fn bench_arith(iters: int): int {
 
 // ---------- 2. Bitwise (bitwise) ----------
 fn bench_bitwise(iters: int): int {
-    let acc = 0
-    for (let i = 0; i < iters; i++) {
+    var acc = 0
+    for (var i = 0; i < iters; i++) {
         acc = (acc ^ i) | ((i & 0xFF) << 3)
         acc = acc >> 1
     }
@@ -29,12 +29,12 @@ fn bench_bitwise(iters: int): int {
 
 // ---------- 3. Array push + index + length (collection + invoke-IC) ----------
 fn bench_array(iters: int): int {
-    let arr: Array<int> = []
-    for (let i = 0; i < iters; i++) {
+    var arr: Array<int> = []
+    for (var i = 0; i < iters; i++) {
         arr.push(i)
     }
-    let total = 0
-    for (let i = 0; i < arr.length; i++) {
+    var total = 0
+    for (var i = 0; i < arr.length; i++) {
         total = total + arr[i]
     }
     return total
@@ -42,12 +42,12 @@ fn bench_array(iters: int): int {
 
 // ---------- 4. Map insert + lookup (collection + INVOKE_BUILTIN) ----------
 fn bench_map(iters: int): int {
-    let m: Map<int, int> = #{}
-    for (let i = 0; i < iters; i++) {
+    var m: Map<int, int> = #{}
+    for (var i = 0; i < iters; i++) {
         m.set(i, i * 2)
     }
-    let total = 0
-    for (let i = 0; i < iters; i++) {
+    var total = 0
+    for (var i = 0; i < iters; i++) {
         total = total + m.get(i)
     }
     return total
@@ -55,9 +55,9 @@ fn bench_map(iters: int): int {
 
 // ---------- 5. String methods (invoke-IC monomorphic site) ----------
 fn bench_string(iters: int): int {
-    let s = "abcdefghijklmnop"
-    let total = 0
-    for (let i = 0; i < iters; i++) {
+    var s = "abcdefghijklmnop"
+    var total = 0
+    for (var i = 0; i < iters; i++) {
         total = total + s.length
         if (s.startsWith("abc")) {
             total = total + 1
@@ -72,8 +72,8 @@ fn add(a: int, b: int): int {
 }
 
 fn bench_calls(iters: int): int {
-    let acc = 0
-    for (let i = 0; i < iters; i++) {
+    var acc = 0
+    for (var i = 0; i < iters; i++) {
         acc = add(acc, i)
     }
     return acc
@@ -86,8 +86,8 @@ class Point {
 }
 
 fn bench_field_ic(iters: int): int {
-    let p = Point()
-    for (let i = 0; i < iters; i++) {
+    var p = Point()
+    for (var i = 0; i < iters; i++) {
         p.x = p.x + i
         p.y = p.y - 1
     }
@@ -105,9 +105,9 @@ class Counter {
 }
 
 fn bench_method(iters: int): int {
-    let c = Counter()
-    let last = 0
-    for (let i = 0; i < iters; i++) {
+    var c = Counter()
+    var last = 0
+    for (var i = 0; i < iters; i++) {
         last = c.bump()
     }
     return last
@@ -117,23 +117,23 @@ fn bench_method(iters: int): int {
 fn main() {
     // Per-section iteration count tuned to make each block contribute
     // ~10x process-startup so wall-clock dominates the dispatch path.
-    let nHot = 20000000  // tight loops: arith / bitwise / calls / method
-    let nMid = 4000000   // string + field IC (some allocation)
-    let nLow = 2000000   // array / map (heap-heavy)
+    var nHot = 20000000  // tight loops: arith / bitwise / calls / method
+    var nMid = 4000000   // string + field IC (some allocation)
+    var nLow = 2000000   // array / map (heap-heavy)
 
     // Warm up the IC tables / proto pools
     bench_arith(1000)
     bench_array(1000)
     bench_method(1000)
 
-    let r1 = bench_arith(nHot)
-    let r2 = bench_bitwise(nHot)
-    let r3 = bench_array(nLow)
-    let r4 = bench_map(nLow)
-    let r5 = bench_string(nMid)
-    let r6 = bench_calls(nHot)
-    let r7 = bench_field_ic(nMid)
-    let r8 = bench_method(nHot)
+    var r1 = bench_arith(nHot)
+    var r2 = bench_bitwise(nHot)
+    var r3 = bench_array(nLow)
+    var r4 = bench_map(nLow)
+    var r5 = bench_string(nMid)
+    var r6 = bench_calls(nHot)
+    var r7 = bench_field_ic(nMid)
+    var r8 = bench_method(nHot)
 
     // Print every result so the optimizer can't dead-code anything,
     // but route through a single println so wall-clock measurement

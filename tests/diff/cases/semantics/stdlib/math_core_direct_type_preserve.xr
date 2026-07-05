@@ -4,25 +4,25 @@
 import math
 import { min as mmin, max as mmax, clamp as cclamp } from "math"
 
-let a = math.abs(-42)
+var a = math.abs(-42)
 print(typeof(a))
 print(a)
 
-let amin = math.abs(math.MIN_INT)
+var amin = math.abs(math.MIN_INT)
 print(typeof(amin))
 
 print(typeof(math.min()))
 print(math.min())
 
-let mn = math.min(3, 7, 5)
+var mn = math.min(3, 7, 5)
 print(typeof(mn))
 print(mn)
 
-let mx = math.max(3, 7, 5)
+var mx = math.max(3, 7, 5)
 print(typeof(mx))
 print(mx)
 
-let cl = math.clamp(5, 10, 0)
+var cl = math.clamp(5, 10, 0)
 print(typeof(cl))
 print(cl)
 

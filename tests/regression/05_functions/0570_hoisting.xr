@@ -6,7 +6,7 @@
 
 @test
 fn test_call_before_definition() {
-    let result = add(10, 20)
+    var result = add(10, 20)
     assert_eq(result, 30)
 }
 
@@ -49,7 +49,7 @@ class Dog {
 
 @test
 fn test_fn_before_class() {
-    let d = createDog("Rex")
+    var d = createDog("Rex")
     assert_eq(d.name, "Rex")
 }
 
@@ -67,7 +67,7 @@ fn addBrackets(s: string) -> string {
 
 @test
 fn test_class_method_uses_later_fn() {
-    let f = Formatter()
+    var f = Formatter()
     assert_eq(f.format("hello"), "[hello]")
 }
 
@@ -84,7 +84,7 @@ fn test_definition_before_call() {
 
 // ===== Function uses variable defined before it (upvalue) =====
 
-let factor = 10
+var factor = 10
 
 fn scaled(x: int) -> int {
     return x * factor
@@ -99,7 +99,7 @@ fn test_fn_captures_variable() {
 
 @test
 fn test_block_call_before_definition() {
-    let r = greetBlock("world")
+    var r = greetBlock("world")
     assert_eq(r, "hello world")
     
     fn greetBlock(name: string) -> string {
@@ -109,8 +109,8 @@ fn test_block_call_before_definition() {
 
 @test
 fn test_block_closure_capture_with_hoisting() {
-    let x = 10
-    let result = getDoubled()
+    var x = 10
+    var result = getDoubled()
     assert_eq(result, 20)
     
     fn getDoubled() -> int {

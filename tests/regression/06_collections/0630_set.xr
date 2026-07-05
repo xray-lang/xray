@@ -4,32 +4,32 @@
 // ===== 创建 =====
 @test
 fn test_set_literal() {
-    let s = #[1, 2, 3]
+    var s = #[1, 2, 3]
     assert_eq(s.length, 3)
 }
 
 @test
 fn test_empty_set() {
-    let s = #[]
+    var s = #[]
     assert_eq(s.length, 0)
 }
 
 @test
 fn test_single_element() {
-    let s = #[42]
+    var s = #[42]
     assert_eq(s.length, 1)
 }
 
 @test
 fn test_set_dedup() {
-    let s = #[1, 2, 2, 3, 3, 3]
+    var s = #[1, 2, 2, 3, 3, 3]
     assert_eq(s.length, 3)
 }
 
 // ===== 添加 =====
 @test
 fn test_add_new() {
-    let s = #[]
+    var s = #[]
     s.add(1)
     s.add(2)
     s.add(3)
@@ -38,7 +38,7 @@ fn test_add_new() {
 
 @test
 fn test_add_duplicate() {
-    let s = #[1, 2]
+    var s = #[1, 2]
     s.add(2)
     // 重复
     assert_eq(s.length, 2)
@@ -47,21 +47,21 @@ fn test_add_duplicate() {
 // ===== 检查 =====
 @test
 fn test_has() {
-    let s = #[1, 2, 3]
+    var s = #[1, 2, 3]
     assert_eq(s.has(2), true)
     assert_eq(s.has(5), false)
 }
 
 @test
 fn test_has_empty() {
-    let s = #[]
+    var s = #[]
     assert_eq(s.has(1), false)
 }
 
 // ===== 删除 =====
 @test
 fn test_delete() {
-    let s = #[1, 2, 3]
+    var s = #[1, 2, 3]
     s.delete(2)
     assert_eq(s.length, 2)
     assert_eq(s.has(2), false)
@@ -71,7 +71,7 @@ fn test_delete() {
 
 @test
 fn test_delete_missing() {
-    let s = #[1, 2]
+    var s = #[1, 2]
     s.delete(5)
     // 不存在
     assert_eq(s.length, 2)
@@ -80,8 +80,8 @@ fn test_delete_missing() {
 // ===== 遍历 =====
 @test
 fn test_iterate() {
-    let s = #[1, 2, 3]
-    let sum = 0
+    var s = #[1, 2, 3]
+    var sum = 0
     for (x in s) {
         sum += x
     }
@@ -90,8 +90,8 @@ fn test_iterate() {
 
 @test
 fn test_iterate_empty() {
-    let s = #[]
-    let count = 0
+    var s = #[]
+    var count = 0
     for (x in s) {
         count++
     }
@@ -101,7 +101,7 @@ fn test_iterate_empty() {
 // ===== 清空 =====
 @test
 fn test_clear() {
-    let s = #[1, 2, 3]
+    var s = #[1, 2, 3]
     s.clear()
     assert_eq(s.length, 0)
 }
@@ -109,7 +109,7 @@ fn test_clear() {
 // ===== 字符串元素 =====
 @test
 fn test_string_elements() {
-    let s = #["apple", "banana", "cherry"]
+    var s = #["apple", "banana", "cherry"]
     assert_eq(s.length, 3)
     assert_eq(s.has("apple"), true)
     assert_eq(s.has("grape"), false)
@@ -118,16 +118,16 @@ fn test_string_elements() {
 // ===== 转换为数组 =====
 @test
 fn test_to_array() {
-    let s = #[1, 2, 3]
-    let arr = s.toArray()
+    var s = #[1, 2, 3]
+    var arr = s.toArray()
     assert_eq(arr.length, 3)
 }
 
 // ===== 边界条件 =====
 @test
 fn test_many_elements() {
-    let s = #[]
-    for (let i = 0; i < 100; i++) {
+    var s = #[]
+    for (var i = 0; i < 100; i++) {
         s.add(i)
     }
     assert_eq(s.length, 100)
@@ -136,7 +136,7 @@ fn test_many_elements() {
 
 @test
 fn test_add_and_delete() {
-    let s = #[]
+    var s = #[]
     s.add(1)
     s.add(2)
     s.delete(1)

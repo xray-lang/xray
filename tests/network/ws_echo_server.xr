@@ -23,16 +23,16 @@ print("")
 print("Press Ctrl+C to stop")
 print("")
 
-let connectionCount = 0
-let messageCount = 0
+var connectionCount = 0
+var messageCount = 0
 
 ws.serve(8765, fn(conn) {
     connectionCount = connectionCount + 1
-    let connId = connectionCount
+    var connId = connectionCount
     
     // Echo loop - minimal overhead for max performance
     while (ws.isOpen(conn)) {
-        let msg = ws.recv(conn, null)
+        var msg = ws.recv(conn, null)
         if (msg == null || msg.error) {
             break
         }

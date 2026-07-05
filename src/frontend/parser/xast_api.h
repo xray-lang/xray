@@ -49,7 +49,7 @@ XR_FUNC void xr_ast_block_add(XrCompilerSession *session, AstNode *block, AstNod
 XR_FUNC AstNode *xr_ast_var_decl(XrCompilerSession *session, const char *name, AstNode *initializer,
                                  bool is_const, int line);
 
-// Create variable declaration with storage mode (shared)
+// Create binding declaration with storage mode (shared)
 XR_FUNC AstNode *xr_ast_var_decl_with_mode(XrCompilerSession *session, const char *name,
                                            AstNode *initializer, bool is_const,
                                            uint8_t storage_mode, int line);
@@ -172,6 +172,8 @@ XR_FUNC AstNode *xr_ast_is_expr(XrCompilerSession *session, AstNode *expr, XrTyp
 // Create as expression node (explicit type cast)
 XR_FUNC AstNode *xr_ast_as_expr(XrCompilerSession *session, AstNode *expr, XrTypeRef *type,
                                 bool is_safe, int line);
+XR_FUNC AstNode *xr_ast_comptime_expr(XrCompilerSession *session, AstNode *expr, int line,
+                                      int column);
 
 // Create array literal node
 XR_FUNC AstNode *xr_ast_array_literal(XrCompilerSession *session, AstNode **elements, int count,

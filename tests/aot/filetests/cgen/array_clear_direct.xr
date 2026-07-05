@@ -1,5 +1,5 @@
 fn clearLocal() -> int {
-    let a: Array<int> = []
+    var a: Array<int> = []
     a.push(1)
     a.push(2)
     a.clear()

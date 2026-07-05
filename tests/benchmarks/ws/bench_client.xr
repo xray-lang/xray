@@ -12,13 +12,13 @@
 import ws
 import time
 
-let url = "ws://127.0.0.1:9001"
+var url = "ws://127.0.0.1:9001"
 if (process.args.length > 0) {
     url = process.args[0]
 }
 
 fn make_text(size) {
-    let s = "X"
+    var s = "X"
     while (s.length < size) {
         s = s + s
     }
@@ -26,38 +26,38 @@ fn make_text(size) {
 }
 
 fn bench_echo(label, payload, is_binary, count) {
-    let conn = ws.connect(url)
+    var conn = ws.connect(url)
     if (conn == null) {
         print("  " + label + "  ERROR: connect failed")
         return
     }
 
     // warmup
-    let warmup = 20
+    var warmup = 20
     if (warmup > count) { warmup = count }
-    for (let i = 0; i < warmup; i++) {
+    for (var i = 0; i < warmup; i++) {
         ws.send(conn, payload, is_binary)
         ws.recv(conn, null)
     }
 
-    let t0 = time.monotonic()
-    for (let i = 0; i < count; i++) {
+    var t0 = time.monotonic()
+    for (var i = 0; i < count; i++) {
         ws.send(conn, payload, is_binary)
-        let r = ws.recv(conn, null)
+        var r = ws.recv(conn, null)
         if (r == null || r.error) {
             print("  " + label + "  ERROR at msg " + string(i))
             ws.close(conn)
             return
         }
     }
-    let elapsed_ms = time.monotonic() - t0
+    var elapsed_ms = time.monotonic() - t0
     ws.close(conn)
 
-    let size = payload.length
-    let elapsed_sec = elapsed_ms / 1000.0
-    let msg_per_sec = float(count) / elapsed_sec
-    let mb_per_sec = (float(size) * float(count) * 2.0 / elapsed_sec) / (1024.0 * 1024.0)
-    let avg_rtt = elapsed_ms / float(count)
+    var size = payload.length
+    var elapsed_sec = elapsed_ms / 1000.0
+    var msg_per_sec = float(count) / elapsed_sec
+    var mb_per_sec = (float(size) * float(count) * 2.0 / elapsed_sec) / (1024.0 * 1024.0)
+    var avg_rtt = elapsed_ms / float(count)
 
     print("  " + label + "  " + string(int(msg_per_sec)) + " msg/s  "
         + string(int(mb_per_sec * 100.0) / 100.0) + " MB/s  rtt="
@@ -71,12 +71,12 @@ print("╚═══════════════════════�
 print("")
 
 // text payloads
-let sizes = [64, 256, 1024, 4096]
-let counts = [3000, 3000, 2000, 1000]
+var sizes = [64, 256, 1024, 4096]
+var counts = [3000, 3000, 2000, 1000]
 
 print("━━━ Text Echo ━━━")
-for (let i = 0; i < sizes.length; i++) {
-    let payload = make_text(sizes[i])
+for (var i = 0; i < sizes.length; i++) {
+    var payload = make_text(sizes[i])
     bench_echo(string(sizes[i]) + "B text", payload, false, counts[i])
     time.sleep(200)
 }
@@ -84,12 +84,12 @@ print("")
 
 // binary payloads
 print("━━━ Binary Echo ━━━")
-let bin_sizes = [65536, 262144, 1048576]
-let bin_counts = [300, 100, 30]
+var bin_sizes = [65536, 262144, 1048576]
+var bin_counts = [300, 100, 30]
 
-for (let i = 0; i < bin_sizes.length; i++) {
-    let payload = Bytes(bin_sizes[i], 0xAB)
-    let label = string(bin_sizes[i] / 1024) + "KB bin"
+for (var i = 0; i < bin_sizes.length; i++) {
+    var payload = Bytes(bin_sizes[i], 0xAB)
+    var label = string(bin_sizes[i] / 1024) + "KB bin"
     bench_echo(label, payload, true, bin_counts[i])
     time.sleep(200)
 }

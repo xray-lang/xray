@@ -2,14 +2,14 @@
 // Atomic<T> concurrent correctness: multiple coroutines incrementing
 // a shared atomic counter must converge to the exact expected total.
 //
-// NOTE: shared const Atomic declared at top-level because of a pre-existing
-// bug where function-local shared const becomes null inside go closures
+// NOTE: shared Atomic declared at top-level because of a pre-existing
+// bug where function-local shared becomes null inside go closures
 // spawned from for loops (scope nesting issue).
 
 print("========== Test 12: Atomic Counter ==========")
 
 // --- Test 1: Concurrent counter ---
-shared const counter = Atomic(0)
+shared counter = Atomic(0)
 
 scope {
     for (i in 0..10) {
@@ -19,32 +19,32 @@ scope {
     }
 }
 
-let total = counter.load()
+var total = counter.load()
 print("Counter:", total, "expected: 10")
 assert_eq(total, 10)
 print("✓ Concurrent counter test passed")
 
 // --- Test 2: CAS claim (exactly one winner) ---
-shared const slot = Atomic(0)
+shared slot = Atomic(0)
 
 scope {
-    let t1 = go fn() -> bool {
-        let (_, ok) = slot.compareExchange(0, 1)
+    var t1 = go fn() -> bool {
+        var (_, ok) = slot.compareExchange(0, 1)
         return ok
     }()
-    let t2 = go fn() -> bool {
-        let (_, ok) = slot.compareExchange(0, 2)
+    var t2 = go fn() -> bool {
+        var (_, ok) = slot.compareExchange(0, 2)
         return ok
     }()
-    let r1 = await t1
-    let r2 = await t2
+    var r1 = await t1
+    var r2 = await t2
     assert(r1 != r2)
     print("✓ CAS claim test passed (r1=" + r1.toString() + " r2=" + r2.toString() + ")")
 }
 
 // --- Test 3: Shutdown flag ---
-shared const shutdown = Atomic(false)
-shared const work_count = Atomic(0)
+shared shutdown = Atomic(false)
+shared work_count = Atomic(0)
 
 scope {
     for (i in 0..3) {
@@ -64,7 +64,7 @@ scope {
     shutdown.store(true)
 }
 
-let work_total = work_count.load()
+var work_total = work_count.load()
 print("Workers completed", work_total, "units of work")
 assert(work_total > 0)
 print("✓ Shutdown flag test passed")

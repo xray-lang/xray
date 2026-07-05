@@ -54,11 +54,11 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
 | `uint8`..`uint64` | 无符号对应 | — |
 
-- 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量），但直接字面量必须落在目标范围内（`let x: int8 = 200` 编译拒绝）。
+- 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量），但直接字面量必须落在目标范围内（`var x: int8 = 200` 编译拒绝）。
 - 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同宽窄整数运算保留该宽度并按该宽度环绕（`uint8 + uint8 -> uint8`）；异宽窄整数运算塌回 `int`；移位运算结果取左操作数宽度。
 - 静态类型为 `uint8`..`uint64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `uint64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
 - `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
-- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `let x: uint8 = 255 + 1` 得到 `0`。
+- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `var x: uint8 = 255 + 1` 得到 `0`。
 - 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `int64` 正范围的 `uint64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
 
 #### 2.3.2 浮点类型
@@ -72,7 +72,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 #### 2.3.3 `bool`
 
-`true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `let x: int = true`，也不能 `let b: bool = 1`）。
+`true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `var x: int = true`，也不能 `var b: bool = 1`）。
 
 **条件表达式规则**（`if` / `while` / `for` 条件 / 三元 `?:` / `match` 守卫）：
 
@@ -86,20 +86,20 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 `&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
 
 ```xray @id=types-explicit-conditions
-let ok = true
+var ok = true
 if (ok) { }
 
-let user: User? = findUser()
+var user: User? = findUser()
 if (user) {              // 存在性：仅检查 null
     print(user.name)     // 此分支 user 窄化为 User
 }
 
-let flag: bool? = maybeFlag()
+var flag: bool? = maybeFlag()
 if (flag == true) { }    // OK
 if (flag != null) { }    // OK
 // if (flag) { }         // 编译错误：裸 bool? 不能作条件
 
-let s = ""
+var s = ""
 if (!s.isEmpty()) { }    // OK
 // if (s) { }            // 编译错误
 ```
@@ -115,15 +115,15 @@ if (!s.isEmpty()) { }    // OK
 `char` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `uint32` 的别名。
 
 ```xray
-let a: char = 'a'
-let zh = '中'
-let smile = '\u{1F600}'
+var a: char = 'a'
+var zh = '中'
+var smile = '\u{1F600}'
 print(typeof(a))          // "char"
 print(int(smile))         // 128512
 ```
 
 - char 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
-- `char` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`let n: uint32 = 'a'` 都会在分析期拒绝。
+- `char` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: uint32 = 'a'` 都会在分析期拒绝。
 - 显式转换：`int(c)` 得到 scalar code point；`char(n)` 从整数构造 char 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
 - 常用方法见 §14.4.1。
 
@@ -134,7 +134,7 @@ xray 用 **0-元组 `()`** 表示"无返回值"（Unit 类型）：
 ```xray
 fn log(msg: string) -> () { print(msg) }   // 显式 Unit 返回
 fn ping() { print("pong") }                  // 省略返回类型 = ()
-let r: () = log("hi")                        // 允许；r 是 Unit 值
+var r: () = log("hi")                        // 允许；r 是 Unit 值
 ```
 
 - 一个函数省略返回类型等同于 `-> ()`。
@@ -158,7 +158,7 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 @extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
 @extern("C") fn free(p: RawMut<uint8>)
 
-let p = unsafe { malloc(4) }
+var p = unsafe { malloc(4) }
 unsafe {
     p[0] = 42
     print(p.deref())
@@ -177,9 +177,9 @@ unsafe {
 有序可变数组。详见 §14.1。
 
 ```xray @id=types-array
-let a: Array<int> = [1, 2, 3]
-let b = [1, 2, 3]                // 推断为 Array<int>
-let c: Array<string> = []         // 显式空数组
+var a: Array<int> = [1, 2, 3]
+var b = [1, 2, 3]                // 推断为 Array<int>
+var c: Array<string> = []         // 显式空数组
 ```
 
 `Array<T>` 的 `T` 必须能在编译期确定。空 `[]` 在无类型标注时是编译错误：`Empty array '[]' requires a type annotation`。
@@ -193,10 +193,10 @@ let c: Array<string> = []         // 显式空数组
 当前实现支持 struct inline 字段和局部栈上定长数组。标量元素（`int`、`float`、`bool`、精确整数/浮点等）使用紧凑 native lane；`string`、struct、嵌套定长数组和引用容器等非标量元素使用 tagged `XrValue` lane，因此可以递归组合：
 
 ```xray
-let bytes: [uint8; 4] = [1, 2, 3, 4]
-let zero: [uint8; 64] = [0; 64]
-let names: [string; 2] = ["a", "b"]
-let blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
+var bytes: [uint8; 4] = [1, 2, 3, 4]
+var zero: [uint8; 64] = [0; 64]
+var names: [string; 2] = ["a", "b"]
+var blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
 ```
 
 有目标类型的数组字面量初始化 `[T; N]` 时必须 exact-length；重复初始化 `[value; N]` 的 `N` 同样是正的编译期整数表达式，并且必须和目标类型长度一致。无上下文的普通数组字面量仍推断为动态 `Array<T>`；无上下文的 `[value; N]` 推断为 `[T; N]`。
@@ -204,8 +204,8 @@ let blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
 定长数组支持 `length`/`size`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Span<T>` 时通过切片产生借用视图：
 
 ```xray
-let data: [uint8; 4] = [5, 6, 7, 8]
-let view: Span<uint8> = data[1:4]
+var data: [uint8; 4] = [5, 6, 7, 8]
+var view: Span<uint8> = data[1:4]
 view[1] = 99
 ```
 
@@ -215,7 +215,7 @@ struct Packet {
     payload: [uint8; 128]
 }
 
-let key: [uint8; 4] = [1, 2, 3, 4]
+var key: [uint8; 4] = [1, 2, 3, 4]
 key[1] = 9
 
 fn first(packet: Packet) -> uint8 {
@@ -238,12 +238,12 @@ fn first(packet: Packet) -> uint8 {
 **Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`（与 Record / Json 对象一致，靠 `#` 前缀消歧）：
 
 ```xray @id=types-map
-let m: Map<string, int> = #{"a": 1, "b": 2}
-let m2 = #{"a": 1, "b": 2}
-let empty = #{}                                     // 空 Map
+var m: Map<string, int> = #{"a": 1, "b": 2}
+var m2 = #{"a": 1, "b": 2}
+var empty = #{}                                     // 空 Map
 
 m["c"] = 3                                          // 添加/修改
-let v = m["a"]                                      // 取值；不存在返回 null
+var v = m["a"]                                      // 取值；不存在返回 null
 ```
 
 | 字面量形式 | 类型 | 用途 |
@@ -261,15 +261,15 @@ let v = m["a"]                                      // 取值；不存在返回 
 去重集合。详见 §14.4。
 
 ```xray @id=types-set
-let s: Set<int> = #[1, 2, 3]
+var s: Set<int> = #[1, 2, 3]
 ```
 
 #### 2.4.4 `Channel<T>`
 
-协程间通信通道。**必须**用 `const` 声明（见 §10.5）。
+协程间通信通道。命名通道句柄**必须**用 `shared` 创建（见 §10.5）。
 
 ```xray @id=types-channel
-const ch: Channel<int> = Channel<int>(10)
+shared ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Bytes`
@@ -277,8 +277,8 @@ const ch: Channel<int> = Channel<int>(10)
 类型化字节缓冲。语义等价 `Array<uint8>`，但底层是连续内存。
 
 ```xray
-let buf = Bytes(1024)
-let init = Bytes([72, 101, 108, 108, 111])
+var buf = Bytes(1024)
+var init = Bytes([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.6 `Record` / `Json` 与对象字面量
@@ -289,19 +289,19 @@ let init = Bytes([72, 101, 108, 108, 111])
 
 ```xray @id=types-json-object
 // Record/Json 对象字面量：标识符或字符串 key + 冒号 ':'
-let data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-let user = { name: "Bob", age: 25 }       // 默认类型为 sealed Record
+var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
+var user = { name: "Bob", age: 25 }       // 默认类型为 sealed Record
 typeof(user)                              // "Record"
 data.name              // 类型: Json（字段访问返回 Json）
 data["name"]           // 等价
 
 // 字段简写：当字段名与变量名相同
-let name = "Alice"
-let age = 30
-let user = { name, age }                  // 等价 { name: name, age: age }
+var name = "Alice"
+var age = 30
+var user = { name, age }                  // 等价 { name: name, age: age }
 
 // Map 字面量：`#{}` 前缀 + `:`
-let m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
+var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 ```
 
 **对照表**：
@@ -309,7 +309,7 @@ let m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 | 写法 | 类型 | 备注 |
 |---|---|---|
 | `{ name: "x", age: 1 }` | sealed anonymous `Record` | 标识符或字符串 key 后跟 `:` |
-| `let j: Json = { name: "x" }` | `Json` object | 只有显式 `Json` 期望类型时按动态 Json 解释 |
+| `var j: Json = { name: "x" }` | `Json` object | 只有显式 `Json` 期望类型时按动态 Json 解释 |
 | `{ x: y }`（`x` 是字段名，`y` 是变量名） | sealed anonymous `Record` | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
 | `#{"a": 1}` | `Map<K, V>` | `#` 前缀消歧，分隔符用 `:` |
 | `Point{x: 1.0, y: 2.0}` | `Point`（struct） | 类型名 + `{...}` 字面量 |
@@ -319,14 +319,14 @@ let m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 ```xray
 type User = { name: string, age: int }
 
-let u: User = { name: "Alice", age: 30 }
+var u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
 // u.extra = "x"      // 编译错误：sealed type User has no field 'extra'
 
-let u2 = { name: "Alice", age: 30 }      // sealed Record
+var u2 = { name: "Alice", age: 30 }      // sealed Record
 // u2.extra = "x"     // 编译错误
 
-let j: Json = { name: "Alice", age: 30 } // 动态 Json object
+var j: Json = { name: "Alice", age: 30 } // 动态 Json object
 j.extra = "x"        // OK（Json 是动态的）
 ```
 
@@ -351,9 +351,9 @@ j.extra = "x"        // OK（Json 是动态的）
 `T?` 是 `T | null` 的语法糖。
 
 ```xray @id=types-nullable
-let x: int? = null      // OK
-let y: int? = 42        // OK
-let z: int = null       // 编译错误：null 不是 int
+var x: int? = null      // OK
+var y: int? = 42        // OK
+var z: int = null       // 编译错误：null 不是 int
 ```
 
 `Json` 本身包含 `null`，因此 `Json?` 与 `Json | null` 是语义重复并在解析阶段报错；需要表达解析失败或缺失值时应使用 `Result<T, E>`、ADT、或含显式状态字段的 Record。
@@ -366,13 +366,13 @@ let z: int = null       // 编译错误：null 不是 int
 
 ```xray
 // 1. 空合并
-let v = x ?? 0
+var v = x ?? 0
 
 // 2. 可选链
-let len = name?.length    // 若 name 为 null，结果为 null
+var len = name?.length    // 若 name 为 null，结果为 null
 
 // 3. 强制解包
-let v: int = x!           // 若 x 为 null，运行时抛 NullError
+var v: int = x!           // 若 x 为 null，运行时抛 NullError
 
 // 4. is 检查
 if (x is int) {
@@ -384,7 +384,7 @@ if (x is int) {
 ### 2.6 Union 类型
 
 ```xray @id=types-union-basic
-let v: int | string = 42
+var v: int | string = 42
 v = "hello"             // OK
 ```
 
@@ -394,7 +394,7 @@ v = "hello"             // OK
 - 处理 union 值需用 `match` 或 `is` 窄化：
 
 ```xray
-let v: int | string = ...
+var v: int | string = ...
 match v {
     is int    -> print("int: ${v}"),
     is string -> print("str: ${v}"),
@@ -411,27 +411,27 @@ xray 的元组**是头等公民**——可以作为任意值出现、作为字�
 
 ```xray @id=types-tuple
 // 字面量
-let t = (1, 2, 3)                 // 类型推断为 (int, int, int)
-let h = (10, "hi", true)          // 异构元组
-let single = (99,)                // 单元素元组：注意尾逗号
+var t = (1, 2, 3)                 // 类型推断为 (int, int, int)
+var h = (10, "hi", true)          // 异构元组
+var single = (99,)                // 单元素元组：注意尾逗号
 
 // 类型注解
-let p: (int, string) = (7, "ok")
+var p: (int, string) = (7, "ok")
 
 // 字段访问：.N（N 是编译期常量整数下标）
-let first = t.0                   // 1
-let mid   = t.1                   // 2
-let nest  = ((1, 2), (3, 4))
-let a     = nest.0.0              // 1
-let b     = nest.1.1              // 4
+var first = t.0                   // 1
+var mid   = t.1                   // 2
+var nest  = ((1, 2), (3, 4))
+var a     = nest.0.0              // 1
+var b     = nest.1.1              // 4
 
 // 函数返回与解构
 fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }
-let (q, r) = divmod(17, 5)        // tuple destructure
+var (q, r) = divmod(17, 5)        // tuple destructure
 
 // 泛型
 fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
-let p2 = pair(1, "x")             // (int, string)
+var p2 = pair(1, "x")             // (int, string)
 ```
 
 **注意事项**：
@@ -453,8 +453,8 @@ type Mapper2<T, U> = (T) -> U
 别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
 
 ```xray
-let p: Pair<int> = { first: 1, second: 2 }  // 等价于 { first: int, second: int }
-let f: Mapper2<int, string> = (n) -> string(n)
+var p: Pair<int> = { first: 1, second: 2 }  // 等价于 { first: int, second: int }
+var f: Mapper2<int, string> = (n) -> string(n)
 ```
 
 泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
@@ -464,13 +464,13 @@ let f: Mapper2<int, string> = (n) -> string(n)
 详见 §7.4。简述：
 
 ```xray @id=types-inference
-let x = 1               // x: int
-let y = 1.5             // y: float
-let z = "hello"         // z: string
-let a = [1, 2, 3]       // a: Array<int>
-let m = #{"a": 1}    // m: Map<string, int>
-let p = { name: "A" }   // p: { name: string } —— 结构化对象类型
-let f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
+var x = 1               // x: int
+var y = 1.5             // y: float
+var z = "hello"         // z: string
+var a = [1, 2, 3]       // a: Array<int>
+var m = #{"a": 1}    // m: Map<string, int>
+var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
+var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 ```
 
 ### 2.10 类型兼容性与转换
@@ -490,15 +490,15 @@ let f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 > **结构化兼容方向**（duck typing）：字段更多的类型可赋给字段更少的类型。
 > ```xray
 > type User = { name: string }
-> let full = { name: "A", age: 18 }
-> let u: User = full       // OK：full 是 User 的超集
+> var full = { name: "A", age: 18 }
+> var u: User = full       // OK：full 是 User 的超集
 > ```
 
 #### 2.10.2 显式 `as`
 
 ```xray @id=types-cast
-let n = x as int        // 失败抛 TypeError
-let n = x as int?       // 失败返回 null（安全转换）
+var n = x as int        // 失败抛 TypeError
+var n = x as int?       // 失败返回 null（安全转换）
 ```
 
 适用于：
@@ -597,11 +597,11 @@ Xray is statically typed; every expression has a determined type at compile time
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
 | `uint8`..`uint64` | unsigned counterparts | — |
 
-- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable), but a direct literal must fit the target range (`let x: int8 = 200` is rejected at compile time).
+- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable), but a direct literal must fit the target range (`var x: int8 = 200` is rejected at compile time).
 - Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`uint8 + uint8 -> uint8`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
 - Values with static type `uint8`..`uint64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `uint64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
 - `int.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `int` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
-- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `let x: uint8 = 255 + 1` evaluates to `0`.
+- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `var x: uint8 = 255 + 1` evaluates to `0`.
 - After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `any` / Json / dynamic-container boundaries, `uint64` values above the positive `int64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
@@ -615,7 +615,7 @@ Literals default to `float`.
 
 #### 2.3.3 `bool`
 
-`true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `let x: int = true` or `let b: bool = 1`).
+`true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `var x: int = true` or `var b: bool = 1`).
 
 **Condition expression rules** (`if` / `while` / `for` conditions / ternary `?:` / `match` guards):
 
@@ -629,20 +629,20 @@ Literals default to `float`.
 Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
 
 ```xray @id=types-explicit-conditions
-let ok = true
+var ok = true
 if (ok) { }
 
-let user: User? = findUser()
+var user: User? = findUser()
 if (user) {              // presence: null check only
     print(user.name)     // user is narrowed to User here
 }
 
-let flag: bool? = maybeFlag()
+var flag: bool? = maybeFlag()
 if (flag == true) { }    // OK
 if (flag != null) { }    // OK
 // if (flag) { }         // compile error: bare bool? cannot be a condition
 
-let s = ""
+var s = ""
 if (!s.isEmpty()) { }    // OK
 // if (s) { }            // compile error
 ```
@@ -658,15 +658,15 @@ Internally uses ARC; runtime short strings are coroutine-local by default (lock-
 `char` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `uint32`.
 
 ```xray
-let a: char = 'a'
-let zh = '中'
-let smile = '\u{1F600}'
+var a: char = 'a'
+var zh = '中'
+var smile = '\u{1F600}'
 print(typeof(a))          // "char"
 print(int(smile))         // 128512
 ```
 
 - A char literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
-- `char` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `let n: uint32 = 'a'` are rejected by the analyzer.
+- `char` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: uint32 = 'a'` are rejected by the analyzer.
 - Explicit conversions: `int(c)` returns the scalar code point; `char(n)` constructs a char from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
 - Common methods are listed in §14.4.1.
 
@@ -677,7 +677,7 @@ Xray uses the **0-tuple `()`** to represent "no return value" (the Unit type):
 ```xray
 fn log(msg: string) -> () { print(msg) }   // explicit Unit return
 fn ping() { print("pong") }                  // omitted return type = ()
-let r: () = log("hi")                        // allowed; r is a Unit value
+var r: () = log("hi")                        // allowed; r is a Unit value
 ```
 
 - A function omitting its return type is equivalent to `-> ()`.
@@ -701,7 +701,7 @@ Raw pointer values may be stored, passed, compared, and offset with `offset(i)` 
 @extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
 @extern("C") fn free(p: RawMut<uint8>)
 
-let p = unsafe { malloc(4) }
+var p = unsafe { malloc(4) }
 unsafe {
     p[0] = 42
     print(p.deref())
@@ -720,9 +720,9 @@ unsafe {
 Ordered mutable array. See §14.1.
 
 ```xray @id=types-array
-let a: Array<int> = [1, 2, 3]
-let b = [1, 2, 3]                // inferred as Array<int>
-let c: Array<string> = []         // explicit empty array
+var a: Array<int> = [1, 2, 3]
+var b = [1, 2, 3]                // inferred as Array<int>
+var c: Array<string> = []         // explicit empty array
 ```
 
 The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
@@ -736,10 +736,10 @@ The `T` in `Array<T>` must be determinable at compile time. An empty `[]` withou
 The current implementation supports inline struct fields and stack-local fixed arrays. Scalar elements (`int`, `float`, `bool`, sized integers/floats, and similar primitives) use compact native lanes; `string`, struct, nested fixed arrays, and reference-container elements use tagged `XrValue` lanes, so fixed arrays compose recursively:
 
 ```xray
-let bytes: [uint8; 4] = [1, 2, 3, 4]
-let zero: [uint8; 64] = [0; 64]
-let names: [string; 2] = ["a", "b"]
-let blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
+var bytes: [uint8; 4] = [1, 2, 3, 4]
+var zero: [uint8; 64] = [0; 64]
+var names: [string; 2] = ["a", "b"]
+var blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
 ```
 
 A target-typed array literal that initializes `[T; N]` must have the exact length; repeat initialization `[value; N]` uses the same positive compile-time integer expression rule and must also match the target length. A normal array literal without context still infers dynamic `Array<T>`; `[value; N]` without context infers `[T; N]`.
@@ -747,8 +747,8 @@ A target-typed array literal that initializes `[T; N]` must have the exact lengt
 Fixed arrays support `length`/`size`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Span<T>`:
 
 ```xray
-let data: [uint8; 4] = [5, 6, 7, 8]
-let view: Span<uint8> = data[1:4]
+var data: [uint8; 4] = [5, 6, 7, 8]
+var view: Span<uint8> = data[1:4]
 view[1] = 99
 ```
 
@@ -758,7 +758,7 @@ struct Packet {
     payload: [uint8; 128]
 }
 
-let key: [uint8; 4] = [1, 2, 3, 4]
+var key: [uint8; 4] = [1, 2, 3, 4]
 key[1] = 9
 
 fn first(packet: Packet) -> uint8 {
@@ -781,12 +781,12 @@ Hash table that **preserves insertion order**. See §14.7.
 **Map literals** must use the `#{ ... }` prefix with `:` separators (consistent with Json; disambiguated by the `#` prefix):
 
 ```xray @id=types-map
-let m: Map<string, int> = #{"a": 1, "b": 2}
-let m2 = #{"a": 1, "b": 2}
-let empty = #{}                                     // empty Map
+var m: Map<string, int> = #{"a": 1, "b": 2}
+var m2 = #{"a": 1, "b": 2}
+var empty = #{}                                     // empty Map
 
 m["c"] = 3                                          // insert / update
-let v = m["a"]                                      // lookup; returns null if absent
+var v = m["a"]                                      // lookup; returns null if absent
 ```
 
 | Literal form | Type | Purpose |
@@ -804,15 +804,15 @@ let v = m["a"]                                      // lookup; returns null if a
 Deduplicated collection. See §14.4.
 
 ```xray @id=types-set
-let s: Set<int> = #[1, 2, 3]
+var s: Set<int> = #[1, 2, 3]
 ```
 
 #### 2.4.4 `Channel<T>`
 
-Inter-coroutine communication channel. **Must** be declared `const` (see §10.5).
+Inter-coroutine communication channel. Named channel handles **must** be created with `shared` (see §10.5).
 
 ```xray @id=types-channel
-const ch: Channel<int> = Channel<int>(10)
+shared ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Bytes`
@@ -820,8 +820,8 @@ const ch: Channel<int> = Channel<int>(10)
 Typed byte buffer. Semantically equivalent to `Array<uint8>`, but stored as contiguous memory.
 
 ```xray
-let buf = Bytes(1024)
-let init = Bytes([72, 101, 108, 108, 111])
+var buf = Bytes(1024)
+var init = Bytes([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.6 `Record` / `Json` and Object Literals
@@ -832,19 +832,19 @@ The key difference between an **object literal** `{ field: value, ... }` and a M
 
 ```xray @id=types-json-object
 // Record/Json object literal: identifier or string key + colon ':'
-let data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-let user = { name: "Bob", age: 25 }       // default type is sealed Record
+var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
+var user = { name: "Bob", age: 25 }       // default type is sealed Record
 typeof(user)                              // "Record"
 data.name              // type: Json (field access returns Json)
 data["name"]           // equivalent
 
 // Field shorthand: when a field name matches a variable name
-let name = "Alice"
-let age = 30
-let user = { name, age }                  // equivalent to { name: name, age: age }
+var name = "Alice"
+var age = 30
+var user = { name, age }                  // equivalent to { name: name, age: age }
 
 // Map literal: `#{}` prefix + `:`
-let m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
+var m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 ```
 
 **Comparison**:
@@ -852,7 +852,7 @@ let m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 | Form | Type | Notes |
 |---|---|---|
 | `{ name: "x", age: 1 }` | sealed anonymous `Record` | identifier or string key followed by `:` |
-| `let j: Json = { name: "x" }` | `Json` object | interpreted as dynamic Json only with an explicit `Json` expected type |
+| `var j: Json = { name: "x" }` | `Json` object | interpreted as dynamic Json only with an explicit `Json` expected type |
 | `{ x: y }` (`x` is field name, `y` is variable) | sealed anonymous `Record` | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
 | `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
 | `Point{x: 1.0, y: 2.0}` | `Point` (struct) | type name + `{...}` literal |
@@ -862,14 +862,14 @@ let m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 ```xray
 type User = { name: string, age: int }
 
-let u: User = { name: "Alice", age: 30 }
+var u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
 // u.extra = "x"      // compile error: sealed type User has no field 'extra'
 
-let u2 = { name: "Alice", age: 30 }      // sealed Record
+var u2 = { name: "Alice", age: 30 }      // sealed Record
 // u2.extra = "x"     // compile error
 
-let j: Json = { name: "Alice", age: 30 } // dynamic Json object
+var j: Json = { name: "Alice", age: 30 } // dynamic Json object
 j.extra = "x"        // OK (Json is dynamic)
 ```
 
@@ -894,9 +894,9 @@ Keys of `WeakMap` and elements of `WeakSet` must be heap objects; weak reference
 `T?` is sugar for `T | null`.
 
 ```xray @id=types-nullable
-let x: int? = null      // OK
-let y: int? = 42        // OK
-let z: int = null       // compile error: null is not int
+var x: int? = null      // OK
+var y: int? = 42        // OK
+var z: int = null       // compile error: null is not int
 ```
 
 `Json` intrinsically includes `null`, so `Json?` and `Json | null` are redundant and rejected during parsing. Use `Result<T, E>`, an ADT, or a Record with an explicit status field for parse failure or absence.
@@ -909,13 +909,13 @@ let z: int = null       // compile error: null is not int
 
 ```xray
 // 1. Null coalescing
-let v = x ?? 0
+var v = x ?? 0
 
 // 2. Optional chaining
-let len = name?.length    // null if name is null
+var len = name?.length    // null if name is null
 
 // 3. Force unwrap
-let v: int = x!           // throws NullError at runtime if x is null
+var v: int = x!           // throws NullError at runtime if x is null
 
 // 4. `is` check
 if (x is int) {
@@ -927,7 +927,7 @@ if (x is int) {
 ### 2.6 Union Types
 
 ```xray @id=types-union-basic
-let v: int | string = 42
+var v: int | string = 42
 v = "hello"             // OK
 ```
 
@@ -937,7 +937,7 @@ Constraints:
 - Working with a union value requires `match` or `is`-based narrowing:
 
 ```xray
-let v: int | string = ...
+var v: int | string = ...
 match v {
     is int    -> print("int: ${v}"),
     is string -> print("str: ${v}"),
@@ -954,27 +954,27 @@ Xray's tuples are **first-class** — they may appear as any value, be stored as
 
 ```xray @id=types-tuple
 // Literals
-let t = (1, 2, 3)                 // type inferred as (int, int, int)
-let h = (10, "hi", true)          // heterogeneous tuple
-let single = (99,)                // single-element tuple: note trailing comma
+var t = (1, 2, 3)                 // type inferred as (int, int, int)
+var h = (10, "hi", true)          // heterogeneous tuple
+var single = (99,)                // single-element tuple: note trailing comma
 
 // Type annotation
-let p: (int, string) = (7, "ok")
+var p: (int, string) = (7, "ok")
 
 // Field access: .N (N is a compile-time constant integer index)
-let first = t.0                   // 1
-let mid   = t.1                   // 2
-let nest  = ((1, 2), (3, 4))
-let a     = nest.0.0              // 1
-let b     = nest.1.1              // 4
+var first = t.0                   // 1
+var mid   = t.1                   // 2
+var nest  = ((1, 2), (3, 4))
+var a     = nest.0.0              // 1
+var b     = nest.1.1              // 4
 
 // Function return and destructuring
 fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }
-let (q, r) = divmod(17, 5)        // tuple destructure
+var (q, r) = divmod(17, 5)        // tuple destructure
 
 // Generic
 fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
-let p2 = pair(1, "x")             // (int, string)
+var p2 = pair(1, "x")             // (int, string)
 ```
 
 **Notes**:
@@ -998,8 +998,8 @@ runtime metadata, or AOT branches. A generic alias is substituted at its use
 site:
 
 ```xray
-let p: Pair<int> = { first: 1, second: 2 }  // equivalent to { first: int, second: int }
-let f: Mapper2<int, string> = (n) -> string(n)
+var p: Pair<int> = { first: 1, second: 2 }  // equivalent to { first: int, second: int }
+var f: Mapper2<int, string> = (n) -> string(n)
 ```
 
 Generic alias parameters are a name list only (`<T, U>`); constraints are not
@@ -1013,13 +1013,13 @@ errors.
 See §7.4 for details. In summary:
 
 ```xray @id=types-inference
-let x = 1               // x: int
-let y = 1.5             // y: float
-let z = "hello"         // z: string
-let a = [1, 2, 3]       // a: Array<int>
-let m = #{"a": 1}    // m: Map<string, int>
-let p = { name: "A" }   // p: { name: string } — structured object type
-let f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotation
+var x = 1               // x: int
+var y = 1.5             // y: float
+var z = "hello"         // z: string
+var a = [1, 2, 3]       // a: Array<int>
+var m = #{"a": 1}    // m: Map<string, int>
+var p = { name: "A" }   // p: { name: string } — structured object type
+var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotation
 ```
 
 ### 2.10 Type Compatibility and Conversion
@@ -1039,15 +1039,15 @@ let f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotati
 > **Structural compatibility direction** (duck typing): a type with more fields is assignable to a type with fewer fields.
 > ```xray
 > type User = { name: string }
-> let full = { name: "A", age: 18 }
-> let u: User = full       // OK: full is a superset of User
+> var full = { name: "A", age: 18 }
+> var u: User = full       // OK: full is a superset of User
 > ```
 
 #### 2.10.2 Explicit `as`
 
 ```xray @id=types-cast
-let n = x as int        // throws TypeError on failure
-let n = x as int?       // returns null on failure (safe cast)
+var n = x as int        // throws TypeError on failure
+var n = x as int?       // returns null on failure (safe cast)
 ```
 
 Applies to:

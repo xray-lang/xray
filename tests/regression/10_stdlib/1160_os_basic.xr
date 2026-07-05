@@ -6,25 +6,25 @@ import os
 
 @test
 fn test_platform() {
-    let p = os.platform
+    var p = os.platform
     assert(p == "darwin" || p == "linux" || p == "windows")
 }
 
 @test
 fn test_arch() {
-    let a = os.arch
+    var a = os.arch
     assert(a == "arm64" || a == "x64" || a == "x86")
 }
 
 @test
 fn test_sep() {
-    let s = os.sep
+    var s = os.sep
     assert(s == "/" || s == "\\")
 }
 
 @test
 fn test_eol() {
-    let e = os.eol
+    var e = os.eol
     assert(e == "\n" || e == "\r\n")
 }
 
@@ -32,26 +32,26 @@ fn test_eol() {
 
 @test
 fn test_getenv_path() {
-    let path = os.getenv("PATH")
+    var path = os.getenv("PATH")
     assert(path != null)
     assert(path!.length > 0)
 }
 
 @test
 fn test_getenv_nonexistent() {
-    let val = os.getenv("XRAY_TEST_NONEXISTENT_VAR_12345")
+    var val = os.getenv("XRAY_TEST_NONEXISTENT_VAR_12345")
     assert_eq(val, null)
 }
 
 @test
 fn test_setenv_getenv() {
     os.setenv("XRAY_TEST_VAR", "hello_xray")
-    let val = os.getenv("XRAY_TEST_VAR")
+    var val = os.getenv("XRAY_TEST_VAR")
     assert_eq(val, "hello_xray")
 
     // cleanup
     os.unsetenv("XRAY_TEST_VAR")
-    let val2 = os.getenv("XRAY_TEST_VAR")
+    var val2 = os.getenv("XRAY_TEST_VAR")
     assert_eq(val2, null)
 }
 
@@ -69,9 +69,9 @@ fn test_setenv_overwrite() {
 @test
 fn test_environ() {
     os.setenv("XRAY_TEST_ENV_EMPTY", "")
-    let env = os.environ()
+    var env = os.environ()
     // PATH should exist; Windows may store it as "Path"
-    let path = env.get("PATH")
+    var path = env.get("PATH")
     if (path == null) {
         path = env.get("Path")
     }
@@ -84,33 +84,33 @@ fn test_environ() {
 
 @test
 fn test_getpid() {
-    let pid = os.getpid()
+    var pid = os.getpid()
     assert(pid > 0)
 }
 
 @test
 fn test_getcwd() {
-    let cwd = os.getcwd()
+    var cwd = os.getcwd()
     assert(cwd.length > 0)
 }
 
 @test
 fn test_hostname() {
-    let h = os.hostname()
+    var h = os.hostname()
     assert(h.length > 0)
 }
 
 @test
 fn test_tmpdir() {
-    let tmp = os.tmpdir()
+    var tmp = os.tmpdir()
     assert(tmp.length > 0)
 }
 
 @test
 fn test_tmpdir_skips_empty_env_candidate() {
-    let oldTmpdir = os.getenv("TMPDIR")
-    let oldTmp = os.getenv("TMP")
-    let oldTemp = os.getenv("TEMP")
+    var oldTmpdir = os.getenv("TMPDIR")
+    var oldTmp = os.getenv("TMP")
+    var oldTemp = os.getenv("TEMP")
 
     os.setenv("TMPDIR", "")
     os.setenv("TMP", "/tmp/xray_tmpdir_fallback")
@@ -139,11 +139,11 @@ fn test_tmpdir_skips_empty_env_candidate() {
 
 @test
 fn test_chdir() {
-    let original = os.getcwd()
-    let tmp = os.tmpdir()
+    var original = os.getcwd()
+    var tmp = os.tmpdir()
 
     os.chdir(tmp)
-    let newCwd = os.getcwd()
+    var newCwd = os.getcwd()
     // Should have changed (may differ due to symlink resolution)
     assert(newCwd.length > 0)
 

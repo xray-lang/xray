@@ -1,4 +1,4 @@
-let x: int = 1
+var x: int = 1
 
 if (x == null) {
     print("bad")

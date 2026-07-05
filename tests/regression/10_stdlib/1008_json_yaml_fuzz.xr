@@ -11,15 +11,15 @@ import yaml
 @test
 fn test_json_fuzz_nested_arrays() {
     // Build increasingly nested arrays: [1], [[1]], [[[1]]], ...
-    for (let depth = 1; depth <= 8; depth++) {
-        let s = ""
-        for (let i = 0; i < depth; i++) { s = s + "[" }
+    for (var depth = 1; depth <= 8; depth++) {
+        var s = ""
+        for (var i = 0; i < depth; i++) { s = s + "[" }
         s = s + "1"
-        for (let i = 0; i < depth; i++) { s = s + "]" }
-        let result = Json.parse(s)
+        for (var i = 0; i < depth; i++) { s = s + "]" }
+        var result = Json.parse(s)
         // Navigate to innermost value
-        let val = result
-        for (let i = 1; i < depth; i++) { val = val[0] }
+        var val = result
+        for (var i = 1; i < depth; i++) { val = val[0] }
         assert_eq(val[0], 1)
     }
 }
@@ -27,16 +27,16 @@ fn test_json_fuzz_nested_arrays() {
 @test
 fn test_json_fuzz_nested_objects() {
     // Build nested objects: {"k0":{"k1":{"k2":42}}}
-    for (let depth = 1; depth <= 6; depth++) {
-        let s = ""
-        for (let i = 0; i < depth; i++) {
+    for (var depth = 1; depth <= 6; depth++) {
+        var s = ""
+        for (var i = 0; i < depth; i++) {
             s = s + "{\"k" + i.toString() + "\":"
         }
         s = s + "42"
-        for (let i = 0; i < depth; i++) { s = s + "}" }
-        let result = Json.parse(s)
-        let val = result
-        for (let i = 0; i < depth; i++) {
+        for (var i = 0; i < depth; i++) { s = s + "}" }
+        var result = Json.parse(s)
+        var val = result
+        for (var i = 0; i < depth; i++) {
             val = val["k" + i.toString()]
         }
         assert_eq(val, 42)
@@ -46,13 +46,13 @@ fn test_json_fuzz_nested_objects() {
 @test
 fn test_json_fuzz_wide_arrays() {
     // Arrays with increasing width: [1], [1,2], [1,2,3], ..., [1..50]
-    for (let width = 1; width <= 50; width += 10) {
-        let parts: Array<string> = []
-        for (let i = 0; i < width; i++) {
+    for (var width = 1; width <= 50; width += 10) {
+        var parts: Array<string> = []
+        for (var i = 0; i < width; i++) {
             parts.push(i.toString())
         }
-        let s = "[" + parts.join(",") + "]"
-        let arr = Json.parse(s)
+        var s = "[" + parts.join(",") + "]"
+        var arr = Json.parse(s)
         assert_eq(arr.length, width)
         assert_eq(arr[0], 0)
         assert_eq(arr[width - 1], width - 1)
@@ -62,13 +62,13 @@ fn test_json_fuzz_wide_arrays() {
 @test
 fn test_json_fuzz_wide_objects() {
     // Objects with increasing key count
-    for (let width = 1; width <= 50; width += 10) {
-        let parts: Array<string> = []
-        for (let i = 0; i < width; i++) {
+    for (var width = 1; width <= 50; width += 10) {
+        var parts: Array<string> = []
+        for (var i = 0; i < width; i++) {
             parts.push("\"f" + i.toString() + "\":" + i.toString())
         }
-        let s = "{" + parts.join(",") + "}"
-        let obj = Json.parse(s)
+        var s = "{" + parts.join(",") + "}"
+        var obj = Json.parse(s)
         assert_eq(obj["f0"], 0)
         assert_eq(obj["f" + (width - 1).toString()], width - 1)
     }
@@ -79,11 +79,11 @@ fn test_json_fuzz_wide_objects() {
 @test
 fn test_json_roundtrip_stress() {
     // Build a complex object, stringify, parse, verify
-    let data: Json = {
+    var data: Json = {
         users: [],
         meta: { count: 0 }
     }
-    for (let i = 0; i < 20; i++) {
+    for (var i = 0; i < 20; i++) {
         data.users.push({
             id: i,
             name: "user" + i.toString(),
@@ -93,8 +93,8 @@ fn test_json_roundtrip_stress() {
     }
     data.meta.count = 20
 
-    let s = Json.stringify(data)
-    let parsed = Json.parse(s)
+    var s = Json.stringify(data)
+    var parsed = Json.parse(s)
 
     assert_eq(parsed.users.length, 20)
     assert_eq(parsed.meta.count, 20)
@@ -113,17 +113,17 @@ fn test_json_roundtrip_stress() {
 @test
 fn test_json_fuzz_mixed_types() {
     // Alternate types in array
-    let parts: Array<string> = []
-    for (let i = 0; i < 30; i++) {
-        let mod = i % 5
+    var parts: Array<string> = []
+    for (var i = 0; i < 30; i++) {
+        var mod = i % 5
         if (mod == 0) { parts.push(i.toString()) }
         else if (mod == 1) { parts.push("\"s" + i.toString() + "\"") }
         else if (mod == 2) { parts.push("true") }
         else if (mod == 3) { parts.push("null") }
         else { parts.push("[" + i.toString() + "]") }
     }
-    let s = "[" + parts.join(",") + "]"
-    let arr = Json.parse(s)
+    var s = "[" + parts.join(",") + "]"
+    var arr = Json.parse(s)
     assert_eq(arr.length, 30)
     assert_eq(arr[0], 0)
     assert_eq(arr[1], "s1")
@@ -137,14 +137,14 @@ fn test_json_fuzz_mixed_types() {
 @test
 fn test_yaml_fuzz_flow_mappings() {
     // Generate flow mappings with increasing keys
-    for (let n = 1; n <= 10; n += 3) {
-        let parts: Array<string> = []
-        for (let i = 0; i < n; i++) {
+    for (var n = 1; n <= 10; n += 3) {
+        var parts: Array<string> = []
+        for (var i = 0; i < n; i++) {
             parts.push("k" + i.toString() + ": " + i.toString())
         }
-        let s = "data: {" + parts.join(", ") + "}"
-        let obj = yaml.parse(s)
-        let data = obj["data"]
+        var s = "data: {" + parts.join(", ") + "}"
+        var obj = yaml.parse(s)
+        var data = obj["data"]
         assert_eq(data["k0"], 0)
         assert_eq(data["k" + (n - 1).toString()], n - 1)
     }
@@ -153,14 +153,14 @@ fn test_yaml_fuzz_flow_mappings() {
 @test
 fn test_yaml_fuzz_flow_sequences() {
     // Generate flow sequences with increasing elements
-    for (let n = 1; n <= 20; n += 5) {
-        let parts: Array<string> = []
-        for (let i = 0; i < n; i++) {
+    for (var n = 1; n <= 20; n += 5) {
+        var parts: Array<string> = []
+        for (var i = 0; i < n; i++) {
             parts.push(i.toString())
         }
-        let s = "list: [" + parts.join(", ") + "]"
-        let obj = yaml.parse(s)
-        let list = obj["list"]
+        var s = "list: [" + parts.join(", ") + "]"
+        var obj = yaml.parse(s)
+        var list = obj["list"]
         assert_eq(list[0], 0)
         assert_eq(list[n - 1], n - 1)
     }
@@ -169,16 +169,16 @@ fn test_yaml_fuzz_flow_sequences() {
 @test
 fn test_yaml_fuzz_nested_flow() {
     // Nested flow mappings at various depths
-    let s1 = "d: {a: {b: 1}}"
-    let o1 = yaml.parse(s1)
+    var s1 = "d: {a: {b: 1}}"
+    var o1 = yaml.parse(s1)
     assert_eq(o1["d"]["a"]["b"], 1)
 
-    let s2 = "d: {a: {b: {c: 2}}}"
-    let o2 = yaml.parse(s2)
+    var s2 = "d: {a: {b: {c: 2}}}"
+    var o2 = yaml.parse(s2)
     assert_eq(o2["d"]["a"]["b"]["c"], 2)
 
-    let s3 = "d: {a: {b: {c: {d: 3}}}}"
-    let o3 = yaml.parse(s3)
+    var s3 = "d: {a: {b: {c: {d: 3}}}}"
+    var o3 = yaml.parse(s3)
     assert_eq(o3["d"]["a"]["b"]["c"]["d"], 3)
 }
 
@@ -186,9 +186,9 @@ fn test_yaml_fuzz_nested_flow() {
 
 @test
 fn test_yaml_roundtrip_basic() {
-    let original: Json = {"name": "test", "version": 1, "debug": false}
-    let s = yaml.stringify(original)
-    let parsed = yaml.parse(s)
+    var original: Json = {"name": "test", "version": 1, "debug": false}
+    var s = yaml.stringify(original)
+    var parsed = yaml.parse(s)
     assert_eq(parsed["name"], "test")
     assert_eq(parsed["version"], 1)
     assert_eq(parsed["debug"], false)
@@ -199,12 +199,12 @@ fn test_yaml_roundtrip_basic() {
 @test
 fn test_yaml_fuzz_block_with_flow_values() {
     // Multiple block keys with flow values
-    let lines: Array<string> = []
-    for (let i = 0; i < 5; i++) {
+    var lines: Array<string> = []
+    for (var i = 0; i < 5; i++) {
         lines.push("group" + i.toString() + ": {val: " + (i * 10).toString() + "}")
     }
-    let s = lines.join("\n")
-    let obj = yaml.parse(s)
+    var s = lines.join("\n")
+    var obj = yaml.parse(s)
     assert_eq(obj["group0"]["val"], 0)
     assert_eq(obj["group2"]["val"], 20)
     assert_eq(obj["group4"]["val"], 40)
@@ -212,15 +212,15 @@ fn test_yaml_fuzz_block_with_flow_values() {
 
 @test
 fn test_yaml_fuzz_block_keys_with_flow_arrays() {
-    let lines: Array<string> = []
-    for (let i = 0; i < 4; i++) {
-        let a = i * 3
-        let b = i * 3 + 1
-        let c = i * 3 + 2
+    var lines: Array<string> = []
+    for (var i = 0; i < 4; i++) {
+        var a = i * 3
+        var b = i * 3 + 1
+        var c = i * 3 + 2
         lines.push("row" + i.toString() + ": [" + a.toString() + ", " + b.toString() + ", " + c.toString() + "]")
     }
-    let s = lines.join("\n")
-    let obj = yaml.parse(s)
+    var s = lines.join("\n")
+    var obj = yaml.parse(s)
     assert_eq(obj["row0"][0], 0)
     assert_eq(obj["row0"][2], 2)
     assert_eq(obj["row3"][0], 9)
@@ -232,15 +232,15 @@ fn test_yaml_fuzz_block_keys_with_flow_arrays() {
 @test
 fn test_yaml_fuzz_block_sequence_nested() {
     // Programmatically generate block sequence items with nested mappings
-    let lines: Array<string> = []
+    var lines: Array<string> = []
     lines.push("items:")
-    for (let i = 0; i < 5; i++) {
+    for (var i = 0; i < 5; i++) {
         lines.push("  - id: " + i.toString())
         lines.push("    value: " + (i * 100).toString())
     }
-    let s = lines.join("\n")
-    let obj = yaml.parse(s)
-    let items = obj["items"]
+    var s = lines.join("\n")
+    var obj = yaml.parse(s)
+    var items = obj["items"]
     assert_eq(items.length, 5)
     assert_eq(items[0]["id"], 0)
     assert_eq(items[0]["value"], 0)
@@ -252,18 +252,18 @@ fn test_yaml_fuzz_block_sequence_nested() {
 
 @test
 fn test_yaml_fuzz_mixed_block_flow_items() {
-    let lines: Array<string> = []
+    var lines: Array<string> = []
     lines.push("data:")
-    for (let i = 0; i < 4; i++) {
+    for (var i = 0; i < 4; i++) {
         if (i % 2 == 0) {
             lines.push("  - {k: " + i.toString() + "}")
         } else {
             lines.push("  - " + i.toString())
         }
     }
-    let s = lines.join("\n")
-    let obj = yaml.parse(s)
-    let data = obj["data"]
+    var s = lines.join("\n")
+    var obj = yaml.parse(s)
+    var data = obj["data"]
     assert_eq(data[0]["k"], 0)
     assert_eq(data[1], 1)
     assert_eq(data[2]["k"], 2)
@@ -275,13 +275,13 @@ fn test_yaml_fuzz_mixed_block_flow_items() {
 @test
 fn test_json_fuzz_deep_mixed() {
     // Build: {"a": [{"b": [{"c": 42}]}]}
-    let s = "{\"a\":[{\"b\":[{\"c\":42}]}]}"
-    let obj = Json.parse(s)
+    var s = "{\"a\":[{\"b\":[{\"c\":42}]}]}"
+    var obj = Json.parse(s)
     assert_eq(obj.a[0].b[0].c, 42)
 
     // Build: [{"k": [1, [2, [3]]]}]
-    let s2 = "[{\"k\":[1,[2,[3]]]}]"
-    let obj2 = Json.parse(s2)
+    var s2 = "[{\"k\":[1,[2,[3]]]}]"
+    var obj2 = Json.parse(s2)
     assert_eq(obj2[0].k[0], 1)
     assert_eq(obj2[0].k[1][0], 2)
     assert_eq(obj2[0].k[1][1][0], 3)
@@ -291,7 +291,7 @@ fn test_json_fuzz_deep_mixed() {
 
 @test
 fn test_json_fuzz_complex_roundtrip() {
-    let data: Json = {
+    var data: Json = {
         matrix: [[1, 2], [3, 4]],
         config: {
             nested: {
@@ -305,8 +305,8 @@ fn test_json_fuzz_complex_roundtrip() {
         flag: false,
         nothing: null
     }
-    let s = Json.stringify(data)
-    let p = Json.parse(s)
+    var s = Json.stringify(data)
+    var p = Json.parse(s)
     assert_eq(p.matrix[0][0], 1)
     assert_eq(p.matrix[1][1], 4)
     assert_eq(p.config.nested.deep, true)
@@ -326,7 +326,7 @@ fn test_json_fuzz_stringify_special() {
     assert_eq(Json.stringify(42), "42")
     assert_eq(Json.stringify("hello"), "\"hello\"")
     assert_eq(Json.stringify([]), "[]")
-    let emptyObj: Json = {}
+    var emptyObj: Json = {}
     assert_eq(Json.stringify(emptyObj), "{}")
 }
 
@@ -335,14 +335,14 @@ fn test_json_fuzz_stringify_special() {
 @test
 fn test_json_fuzz_many_nested_arrays() {
     // Build array of arrays: [[0,1],[2,3],[4,5],...,[98,99]]
-    let parts: Array<string> = []
-    for (let i = 0; i < 50; i++) {
-        let a = i * 2
-        let b = i * 2 + 1
+    var parts: Array<string> = []
+    for (var i = 0; i < 50; i++) {
+        var a = i * 2
+        var b = i * 2 + 1
         parts.push("[" + a.toString() + "," + b.toString() + "]")
     }
-    let s = "[" + parts.join(",") + "]"
-    let arr = Json.parse(s)
+    var s = "[" + parts.join(",") + "]"
+    var arr = Json.parse(s)
     assert_eq(arr.length, 50)
     assert_eq(arr[0][0], 0)
     assert_eq(arr[0][1], 1)
@@ -354,15 +354,15 @@ fn test_json_fuzz_many_nested_arrays() {
 
 @test
 fn test_yaml_fuzz_deep_block() {
-    let lines: Array<string> = []
+    var lines: Array<string> = []
     // Build 5-level deep block mapping
     lines.push("l0:")
     lines.push("  l1:")
     lines.push("    l2:")
     lines.push("      l3:")
     lines.push("        l4: deep_value")
-    let s = lines.join("\n")
-    let obj = yaml.parse(s)
+    var s = lines.join("\n")
+    var obj = yaml.parse(s)
     assert_eq(obj["l0"]["l1"]["l2"]["l3"]["l4"], "deep_value")
 }
 
@@ -370,8 +370,8 @@ fn test_yaml_fuzz_deep_block() {
 
 @test
 fn test_yaml_fuzz_sibling_sequences() {
-    let s = "a: [1, 2, 3]\nb: [4, 5, 6]\nc: [7, 8, 9]"
-    let obj = yaml.parse(s)
+    var s = "a: [1, 2, 3]\nb: [4, 5, 6]\nc: [7, 8, 9]"
+    var obj = yaml.parse(s)
     assert_eq(obj["a"][0], 1)
     assert_eq(obj["b"][1], 5)
     assert_eq(obj["c"][2], 9)
