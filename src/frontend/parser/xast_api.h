@@ -172,6 +172,8 @@ XR_FUNC AstNode *xr_ast_is_expr(XrCompilerSession *session, AstNode *expr, XrTyp
 // Create as expression node (explicit type cast)
 XR_FUNC AstNode *xr_ast_as_expr(XrCompilerSession *session, AstNode *expr, XrTypeRef *type,
                                 bool is_safe, int line);
+XR_FUNC AstNode *xr_ast_comptime_expr(XrCompilerSession *session, AstNode *expr, int line,
+                                      int column);
 
 // Create array literal node
 XR_FUNC AstNode *xr_ast_array_literal(XrCompilerSession *session, AstNode **elements, int count,

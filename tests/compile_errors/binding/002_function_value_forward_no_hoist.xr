@@ -1,0 +1,5 @@
+print(later())
+
+const later = fn() -> int {
+    return 1
+}

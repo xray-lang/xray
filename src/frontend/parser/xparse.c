@@ -115,6 +115,7 @@ static ParseRule rules[] = {
     // Keywords
     [TK_VAR] = {NULL, NULL, PREC_NONE},
     [TK_CONST] = {NULL, NULL, PREC_NONE},
+    [TK_COMPTIME] = {xr_parse_comptime_expr, NULL, PREC_NONE},
     [TK_IF] = {NULL, NULL, PREC_NONE},
     [TK_ELSE] = {NULL, NULL, PREC_NONE},
     [TK_WHILE] = {NULL, NULL, PREC_NONE},
@@ -514,6 +515,7 @@ void xr_parser_synchronize(Parser *parser) {
                 case TK_FN:
                 case TK_VAR:
                 case TK_CONST:
+                case TK_COMPTIME:
                 case TK_TYPE_ALIAS:
                 case TK_IMPORT:
                 case TK_EXPORT:

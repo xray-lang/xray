@@ -49,6 +49,10 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             visit_node(node->as.function_expr.body, v);
             break;
 
+        case AST_COMPTIME_EXPR:
+            visit_node(node->as.comptime_expr.expr, v);
+            break;
+
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:

@@ -2832,6 +2832,7 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
         case AST_FUNCTION_EXPR:
         case AST_PARALLEL_REDUCE_EXPR:
         case AST_PARALLEL_COLLECT_EXPR:
+        case AST_COMPTIME_EXPR:
             return xa_visit_infer_expr(ctx, node);
 
         // Statements
@@ -2839,6 +2840,37 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
             xa_visit_infer_stmt(ctx, node);
             return xr_type_new_unit(NULL);
     }
+}
+
+static XrType *xa_visit_comptime_expr(XaInferContext *ctx, AstNode *node) {
+    AstNode *inner = node ? node->as.comptime_expr.expr : NULL;
+    if (!ctx || !ctx->analyzer || !node || !inner)
+        return xr_type_new_unknown(NULL);
+
+    if (inner->type == AST_BLOCK) {
+        xa_visit_infer_stmt(ctx, inner);
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+            "comptime block requires the frontend consteval block engine, which is not implemented "
+            "in this phase",
+            &loc);
+        return xr_type_new_unit(NULL);
+    }
+
+    XrType *inner_type = xa_visit_infer_expr(ctx, inner);
+    int64_t ignored = 0;
+    const char *err = NULL;
+    if (!xa_eval_const_int_expr(ctx->analyzer, inner, &ignored, &err)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "comptime expression must be an integer expression evaluable at compile time%s%s",
+                 err ? ": " : "", err ? err : "");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+    }
+    return inner_type ? inner_type : xr_type_new_unknown(NULL);
 }
 
 XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
@@ -2960,6 +2992,9 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_GROUPING:
             result = xa_visit_infer_expr(ctx, node->as.grouping);
+            break;
+        case AST_COMPTIME_EXPR:
+            result = xa_visit_comptime_expr(ctx, node);
             break;
         case AST_GO_EXPR:
             result = xa_visit_go_expr(ctx, node);

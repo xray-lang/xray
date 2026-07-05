@@ -791,6 +791,10 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             canon_node(ctx, node->as.grouping);
             break;
 
+        case AST_COMPTIME_EXPR:
+            canon_node(ctx, node->as.comptime_expr.expr);
+            break;
+
         case AST_FORCE_UNWRAP:
             canon_node(ctx, node->as.unary.operand);
             break;

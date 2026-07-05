@@ -357,6 +357,10 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         case AST_GROUPING:
             n->as.grouping = xr_ast_clone_ctx(node->as.grouping, map, mc, clone_ctx);
             break;
+        case AST_COMPTIME_EXPR:
+            n->as.comptime_expr.expr =
+                xr_ast_clone_ctx(node->as.comptime_expr.expr, map, mc, clone_ctx);
+            break;
         case AST_EXPR_STMT:
             n->as.expr_stmt = xr_ast_clone_ctx(node->as.expr_stmt, map, mc, clone_ctx);
             break;
@@ -1490,6 +1494,9 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         case AST_AS_EXPR:
             collect_instantiation_sites(node->as.as_expr.expr, registry, collector);
             break;
+        case AST_COMPTIME_EXPR:
+            collect_instantiation_sites(node->as.comptime_expr.expr, registry, collector);
+            break;
         case AST_GO_EXPR:
             collect_instantiation_sites(node->as.go_expr.expr, registry, collector);
             break;
@@ -1725,6 +1732,9 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         case AST_UNSAFE_EXPR:
             rewrite_call_sites(node->as.unsafe_expr.operand, registry, collector);
+            break;
+        case AST_COMPTIME_EXPR:
+            rewrite_call_sites(node->as.comptime_expr.expr, registry, collector);
             break;
         case AST_SCOPE_BLOCK:
             rewrite_call_sites(node->as.scope_block.body, registry, collector);

@@ -3363,6 +3363,9 @@ void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
         case AST_MEMBER_ACCESS:
             check_closure_capture(ctx, node->as.member_access.object, line);
             break;
+        case AST_COMPTIME_EXPR:
+            check_closure_capture(ctx, node->as.comptime_expr.expr, line);
+            break;
         case AST_FUNCTION_EXPR:
             // Nested closure - check its body for captured variables
             if (node->as.function_expr.body) {

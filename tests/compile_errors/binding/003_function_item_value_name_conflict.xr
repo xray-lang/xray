@@ -1,0 +1,7 @@
+fn b() -> int {
+    return 1
+}
+
+const b = fn() -> int {
+    return 2
+}

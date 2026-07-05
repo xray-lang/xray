@@ -1,0 +1,39 @@
+@test
+fn test_function_item_hoists_before_definition() {
+    assert_eq(item_later(41), 42)
+}
+
+fn item_later(x: int) -> int {
+    return x + 1
+}
+
+@test
+fn test_const_function_value_call_after_binding() {
+    const f = fn(x: int) -> int {
+        return x + 3
+    }
+    assert_eq(f(39), 42)
+}
+
+@test
+fn test_var_function_value_can_rebind() {
+    var op = fn(x: int) -> int {
+        return x + 1
+    }
+    assert_eq(op(10), 11)
+
+    op = fn(x: int) -> int {
+        return x * 2
+    }
+    assert_eq(op(21), 42)
+}
+
+fn fact_item(n: int) -> int {
+    if (n <= 1) { return 1 }
+    return n * fact_item(n - 1)
+}
+
+@test
+fn test_function_item_recursion() {
+    assert_eq(fact_item(5), 120)
+}

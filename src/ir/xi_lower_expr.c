@@ -6697,6 +6697,8 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         /* Grouping: just unwrap */
         case AST_GROUPING:
             return xi_lower_expr(l, node->as.grouping);
+        case AST_COMPTIME_EXPR:
+            return xi_lower_expr(l, node->as.comptime_expr.expr);
 
         /* Variables and assignment */
         case AST_VARIABLE:

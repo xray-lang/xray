@@ -99,6 +99,7 @@ static bool is_expression_node(AstNodeType t) {
         case AST_OPTIONAL_CHAIN:
         case AST_FORCE_UNWRAP:
         case AST_AS_EXPR:
+        case AST_COMPTIME_EXPR:
         case AST_IS_EXPR:
         case AST_RANGE:
         /* Unary */
@@ -257,6 +258,10 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
             check_node(ctx, node->as.call_expr.callee);
             for (int i = 0; i < node->as.call_expr.arg_count; i++)
                 check_node(ctx, node->as.call_expr.arguments[i]);
+            break;
+
+        case AST_COMPTIME_EXPR:
+            check_node(ctx, node->as.comptime_expr.expr);
             break;
 
         case AST_MEMBER_ACCESS:

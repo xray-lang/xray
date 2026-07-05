@@ -85,6 +85,7 @@ typedef enum {
     AST_OPTIONAL_CHAIN,    // obj?.prop / obj?[i] / func?.()
     AST_FORCE_UNWRAP,      // expr! (force unwrap nullable)
     AST_AS_EXPR,           // expr as Type (explicit type cast)
+    AST_COMPTIME_EXPR,     // comptime expr / comptime { ... }
     AST_RANGE,             // 1..10
 
     // Type check

@@ -725,6 +725,10 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             ea_walk(ctx, node->as.move_expr.expr);
             break;
 
+        case AST_COMPTIME_EXPR:
+            ea_walk(ctx, node->as.comptime_expr.expr);
+            break;
+
         case AST_UNSAFE_EXPR:
             ea_walk(ctx, node->as.unsafe_expr.operand);
             break;

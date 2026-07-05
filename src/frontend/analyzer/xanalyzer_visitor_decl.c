@@ -1232,6 +1232,8 @@ static bool xa_method_body_mutates_receiver(AstNode *node, XrClassInfo *receiver
                    xa_method_body_mutates_receiver(node->as.ternary.false_expr, receiver_info);
         case AST_MOVE_EXPR:
             return xa_method_body_mutates_receiver(node->as.move_expr.expr, receiver_info);
+        case AST_COMPTIME_EXPR:
+            return xa_method_body_mutates_receiver(node->as.comptime_expr.expr, receiver_info);
         case AST_UNSAFE_EXPR:
             return xa_method_body_mutates_receiver(node->as.unsafe_expr.operand, receiver_info);
         case AST_AWAIT_EXPR:
