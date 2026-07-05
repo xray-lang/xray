@@ -1024,14 +1024,23 @@ static bool xa_type_is_bytes_like_view_or_owner(XrType *type) {
 }
 
 static XrType *xa_copy_owned_return_type(XaInferContext *ctx, XrType *arg_type) {
-    if (!ctx || !ctx->analyzer || !arg_type ||
-        (!XR_TYPE_IS_SPAN(arg_type) && !XR_TYPE_IS_VIEW(arg_type)))
+    if (!ctx || !ctx->analyzer || !arg_type)
         return NULL;
-    if (xa_type_is_bytes_like_view_or_owner(arg_type))
-        return xr_type_new_bytes(ctx->analyzer->isolate);
-    XrType *elem = arg_type->container.element_type ? arg_type->container.element_type
-                                                    : xr_type_new_unknown(NULL);
-    return xr_type_new_array(ctx->analyzer->isolate, elem);
+    XrType *result = NULL;
+    if (XR_TYPE_IS_SPAN(arg_type) || XR_TYPE_IS_VIEW(arg_type)) {
+        if (xa_type_is_bytes_like_view_or_owner(arg_type)) {
+            result = xr_type_new_bytes(ctx->analyzer->isolate);
+        } else {
+            XrType *elem = arg_type->container.element_type ? arg_type->container.element_type
+                                                            : xr_type_new_unknown(NULL);
+            result = xr_type_new_array(ctx->analyzer->isolate, elem);
+        }
+    } else {
+        result = xr_type_copy(ctx->analyzer->isolate, arg_type);
+    }
+    if (result)
+        result->is_const = false;
+    return result;
 }
 
 static void xa_check_ref_argument_not_readonly(XaInferContext *ctx, AstNode *call_node,
@@ -1288,6 +1297,29 @@ static XaSymbolLinks *xa_method_symbol_links_for_call(XaInferContext *ctx, XrTyp
                                ? xa_class_info_lookup_member(class_links->class_info, method_name)
                                : NULL;
     return method_sym ? xa_analyzer_get_links(ctx->analyzer, method_sym) : NULL;
+}
+
+static bool xa_call_mutates_receiver(XaInferContext *ctx, XrType *receiver_type,
+                                     const char *method_name) {
+    if (!ctx || !receiver_type || !method_name)
+        return false;
+
+    if (XR_TYPE_IS_STRING(receiver_type))
+        return false;
+
+    const char *class_name = xr_type_get_class_name(receiver_type);
+    if (class_name) {
+        XaSymbol *class_sym = xa_lookup_visible_class_symbol(ctx, class_name);
+        XaSymbolLinks *class_links =
+            class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+        if (class_links && class_links->class_info) {
+            XaSymbol *method_sym =
+                xa_class_info_lookup_instance_member(class_links->class_info, method_name);
+            return method_sym && method_sym->kind == XA_SYM_METHOD && method_sym->mutates_receiver;
+        }
+    }
+
+    return xa_method_name_mutates_receiver(method_name);
 }
 
 static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *call_node,
@@ -1610,28 +1642,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
         XaSymbol *in_param = xa_in_param_symbol_for_expr(ctx, ma->object);
         if (in_param && method_name) {
-            // Decide whether the call mutates the `in` receiver. For user class
-            // instances use the precise body-derived flag (mutates_receiver); the
-            // method-name heuristic only applies to builtin containers/strings,
-            // which have no analyzable body. Applying the name list to instances
-            // would wrongly reject immutable value-style APIs (e.g. a read-only
-            // `Vec.add` that returns a new value without touching `this`).
-            bool call_mutates_receiver;
-            const char *recv_class_name =
-                callee_obj_type ? xr_type_get_class_name(callee_obj_type) : NULL;
-            if (recv_class_name) {
-                XaSymbol *class_sym = xa_lookup_visible_class_symbol(ctx, recv_class_name);
-                XaSymbolLinks *class_links =
-                    class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
-                XaSymbol *method_sym =
-                    (class_links && class_links->class_info)
-                        ? xa_class_info_lookup_instance_member(class_links->class_info, method_name)
-                        : NULL;
-                call_mutates_receiver =
-                    method_sym && method_sym->kind == XA_SYM_METHOD && method_sym->mutates_receiver;
-            } else {
-                call_mutates_receiver = xa_method_name_mutates_receiver(method_name);
-            }
+            bool call_mutates_receiver =
+                xa_call_mutates_receiver(ctx, callee_obj_type, method_name);
             if (call_mutates_receiver) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
@@ -1640,6 +1652,23 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                          "Cannot call mutating method '%s' on 'in' parameter '%s' (readonly "
                          "reference)",
                          method_name, in_param->name ? in_param->name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+            }
+        }
+        if (method_name && callee_obj_type &&
+            !(XR_TYPE_IS_SPAN(callee_obj_type) || XR_TYPE_IS_VIEW(callee_obj_type)) &&
+            xa_call_mutates_receiver(ctx, callee_obj_type, method_name)) {
+            XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
+            bool readonly_receiver = xr_type_is_const(callee_obj_type);
+            if ((root && root->is_readonly_binding) || readonly_receiver) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[192];
+                const char *label =
+                    root && root->is_readonly_binding ? "const binding" : "readonly value";
+                snprintf(msg, sizeof(msg), "Cannot call mutating method '%s' on %s '%s'",
+                         method_name, label, root && root->name ? root->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
             }

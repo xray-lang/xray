@@ -1,0 +1,2 @@
+const xs = Array<int>()
+xs.push(1)
