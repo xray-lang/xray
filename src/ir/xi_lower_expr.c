@@ -2920,6 +2920,37 @@ static XiValue *lower_bytes_endian_arg(XiLower *l, AstNode *arg) {
     return xi_lower_expr(l, arg);
 }
 
+static uint16_t lower_bytes_typed_op_for_target(XrType *target, bool is_load) {
+    if (!target || !XR_TYPE_IS_INT(target))
+        return 0;
+    switch (target->native_width) {
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+            return is_load ? XI_BYTES_LOAD_U16 : XI_BYTES_STORE_U16;
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+            return is_load ? XI_BYTES_LOAD_U32 : XI_BYTES_STORE_U32;
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
+            return is_load ? XI_BYTES_LOAD_U64 : XI_BYTES_STORE_U64;
+        default:
+            return 0;
+    }
+}
+
+static XiValue *lower_bytes_typed_signed_load_narrow(XiLower *l, AstNode *node, XiValue *value,
+                                                     XrType *target) {
+    if (!target || !value || !XR_TYPE_IS_INT(target))
+        return value;
+    switch (target->native_width) {
+        case XR_NATIVE_I16:
+        case XR_NATIVE_I32:
+            return xi_lower_narrow_for_static_type(l, node, value, target);
+        default:
+            return value;
+    }
+}
+
 static XiValue *lower_bytes_typed_call(XiLower *l, AstNode *node, CallExprNode *call,
                                        MemberAccessNode *ma, XiValue *recv,
                                        struct XrType *result_type) {
@@ -2938,16 +2969,9 @@ static XiValue *lower_bytes_typed_call(XiLower *l, AstNode *node, CallExprNode *
     }
 
     XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
-    uint16_t bytes_op = 0;
-    if (target && XR_TYPE_IS_INT(target) && target->native_width == XR_NATIVE_U16) {
-        bytes_op = bytes_typed_load ? XI_BYTES_LOAD_U16 : XI_BYTES_STORE_U16;
-    } else if (target && XR_TYPE_IS_INT(target) && target->native_width == XR_NATIVE_U32) {
-        bytes_op = bytes_typed_load ? XI_BYTES_LOAD_U32 : XI_BYTES_STORE_U32;
-    } else if (target && XR_TYPE_IS_INT(target) && target->native_width == XR_NATIVE_U64) {
-        bytes_op = bytes_typed_load ? XI_BYTES_LOAD_U64 : XI_BYTES_STORE_U64;
-    } else {
+    uint16_t bytes_op = lower_bytes_typed_op_for_target(target, bytes_typed_load);
+    if (!bytes_op)
         return NULL;
-    }
 
     XiValue *offset = xi_lower_expr(l, call->arguments[0]);
     if (!offset)
@@ -2990,7 +3014,7 @@ static XiValue *lower_bytes_typed_call(XiLower *l, AstNode *node, CallExprNode *
         v->args[2] = endian;
     }
     v->line = (uint32_t) node->line;
-    return v;
+    return bytes_typed_load ? lower_bytes_typed_signed_load_narrow(l, node, v, target) : v;
 }
 
 static bool lower_is_channel_send_boundary_method(const char *method) {
@@ -3475,38 +3499,21 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (xi_type_is_bytes(recv->type) && ma->name) {
             uint16_t bytes_op = 0;
             uint16_t expected_args = 0;
+            XrType *target = NULL;
             bool bytes_typed_load = strcmp(ma->name, "load") == 0;
             bool bytes_typed_store = strcmp(ma->name, "store") == 0;
             if (bytes_typed_load && (n == 1 || n == 2) && call->type_arg_count == 1 &&
                 call->type_args && call->type_args[0]) {
-                XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
-                if (target && XR_TYPE_IS_INT(target) && target->native_width == XR_NATIVE_U16) {
-                    bytes_op = XI_BYTES_LOAD_U16;
+                target = xr_tref_resolve(l->isolate, call->type_args[0]);
+                bytes_op = lower_bytes_typed_op_for_target(target, true);
+                if (bytes_op)
                     expected_args = 3;
-                } else if (target && XR_TYPE_IS_INT(target) &&
-                           target->native_width == XR_NATIVE_U32) {
-                    bytes_op = XI_BYTES_LOAD_U32;
-                    expected_args = 3;
-                } else if (target && XR_TYPE_IS_INT(target) &&
-                           target->native_width == XR_NATIVE_U64) {
-                    bytes_op = XI_BYTES_LOAD_U64;
-                    expected_args = 3;
-                }
             } else if (bytes_typed_store && (n == 2 || n == 3) && call->type_arg_count == 1 &&
                        call->type_args && call->type_args[0]) {
-                XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
-                if (target && XR_TYPE_IS_INT(target) && target->native_width == XR_NATIVE_U16) {
-                    bytes_op = XI_BYTES_STORE_U16;
+                target = xr_tref_resolve(l->isolate, call->type_args[0]);
+                bytes_op = lower_bytes_typed_op_for_target(target, false);
+                if (bytes_op)
                     expected_args = 4;
-                } else if (target && XR_TYPE_IS_INT(target) &&
-                           target->native_width == XR_NATIVE_U32) {
-                    bytes_op = XI_BYTES_STORE_U32;
-                    expected_args = 4;
-                } else if (target && XR_TYPE_IS_INT(target) &&
-                           target->native_width == XR_NATIVE_U64) {
-                    bytes_op = XI_BYTES_STORE_U64;
-                    expected_args = 4;
-                }
             }
             if (bytes_op) {
                 /* Strict dynamic→int boundary on Bytes intrinsic offsets/counts:
@@ -3533,7 +3540,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 if (default_endian)
                     v->args[expected_args - 1] = default_endian;
                 v->line = (uint32_t) node->line;
-                return v;
+                return bytes_typed_load ? lower_bytes_typed_signed_load_narrow(l, node, v, target)
+                                        : v;
             }
 
             if (XR_TYPE_IS_SPAN(recv->type)) {

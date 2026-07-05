@@ -13,6 +13,16 @@ fn read64(src: ByteSpan, pos: int) -> int {
     return int(value)
 }
 
+fn readI16(src: ByteSpan, pos: int) -> int {
+    var value: int16 = src.load<int16>(pos, Endian.LE)
+    return int(value)
+}
+
+fn readI32(src: ByteSpan, pos: int) -> int {
+    var value: int32 = src.load<int32>(pos, Endian.LE)
+    return int(value)
+}
+
 fn read32BE(src: ByteSpan, pos: int) -> int {
     var value: uint32 = src.load<uint32>(pos, Endian.BE)
     return int(value)
@@ -20,4 +30,8 @@ fn read32BE(src: ByteSpan, pos: int) -> int {
 
 fn write16(src: ByteSpan, pos: int, value: uint16) {
     src.store<uint16>(pos, value, Endian.LE)
+}
+
+fn writeI16(src: ByteSpan, pos: int, value: int16) {
+    src.store<int16>(pos, value, Endian.LE)
 }
