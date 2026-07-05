@@ -47,6 +47,7 @@ ALLOWED_RUNTIME_CASES = {
     # script modules as whole units, so importing sync intentionally pulls those
     # runtime-backed definitions into the manifest.
     "tests/diff/cases/semantics/stdlib/sync_fence_alias.xr",
+    "tests/diff/cases/semantics/stdlib/sync_cache_padded.xr",
     "tests/diff/cases/semantics/stdlib/sync_module_import.xr",
     "tests/diff/cases/semantics/stdlib/sync_namespace_import.xr",
     "tests/diff/cases/semantics/modules/xmod_coro.xr",
