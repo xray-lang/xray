@@ -3702,12 +3702,11 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Check: cannot move thread-safe shared runtime primitives.
-    const char *shared_ref_label = xa_threadsafe_shared_ref_label(var_type);
-    if (shared_ref_label) {
+    // Check: cannot move synchronization/concurrency handles.
+    const char *handle_label = xa_concurrency_handle_label(var_type);
+    if (handle_label) {
         char msg[128];
-        snprintf(msg, sizeof(msg), "cannot move %s (thread-safe, shared by reference)",
-                 shared_ref_label);
+        snprintf(msg, sizeof(msg), "cannot move %s (shared concurrency handle)", handle_label);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
     }

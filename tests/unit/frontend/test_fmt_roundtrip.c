@@ -448,8 +448,8 @@ TEST(branch_arrows_aligned_idempotent) {
 TEST(select_branch_arrows_default_aligned) {
     setup();
     const char *src = "fn main() {\n"
-                      "    var ch1 = Channel<int>(1)\n"
-                      "    var ch2 = Channel<int>(1)\n"
+                      "    shared ch1 = Channel<int>(1)\n"
+                      "    shared ch2 = Channel<int>(1)\n"
                       "    select {\n"
                       "        v from ch1 -> { print(v) }\n"
                       "        100 to ch2 -> { print(\"sent\") }\n"

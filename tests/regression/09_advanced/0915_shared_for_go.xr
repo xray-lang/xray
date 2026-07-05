@@ -1,10 +1,10 @@
-// 0915_shared_const_for_go.xr
+// 0915_shared_for_go.xr
 // Regression: shared captured by go closures inside for loops
 // must resolve to the actual value, not an uninitialized register left
 // behind by an eliminated PHI node.
 
 @test
-fn test_shared_const_atomic_for_go() {
+fn test_shared_atomic_for_go() {
     shared counter = Atomic(0)
     scope {
         for (i in 0..3) {
@@ -17,7 +17,7 @@ fn test_shared_const_atomic_for_go() {
 }
 
 @test
-fn test_shared_const_typeof_for_go() {
+fn test_shared_typeof_for_go() {
     shared counter = Atomic(0)
     shared ok_count = Atomic(0)
     scope {
@@ -33,7 +33,7 @@ fn test_shared_const_typeof_for_go() {
 }
 
 @test
-fn test_shared_const_channel_for_go() {
+fn test_shared_channel_for_go() {
     shared ch = Channel<int>(3)
     scope {
         for (i in 0..3) {
@@ -53,7 +53,7 @@ fn test_shared_const_channel_for_go() {
 }
 
 @test
-fn test_shared_const_no_for_baseline() {
+fn test_shared_no_for_baseline() {
     shared counter = Atomic(0)
     scope {
         go fn() { counter.add(1) }()

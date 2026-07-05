@@ -157,7 +157,7 @@ static bool xi_same_int_value(const XiFunc *f, const XiValue *a, const XiValue *
         a->aux_int >= 0 && a->aux_int < f->ncaptures) {
         const XiCapture *cap = &f->captures[a->aux_int];
         return cap && !cap->needs_cell && cap->capture_kind != XI_CAPTURE_BY_MUT_CELL &&
-               cap->capture_kind != XI_CAPTURE_CORO_SHARED;
+               cap->capture_kind != XI_CAPTURE_SHARED;
     }
     return false;
 }

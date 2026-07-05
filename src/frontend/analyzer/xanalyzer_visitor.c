@@ -138,7 +138,7 @@ static bool xa_view_target_matches_source(XrType *target, XrType *src) {
     return xr_type_assignable(target_elem, src_elem) && xr_type_assignable(src_elem, target_elem);
 }
 
-XR_FUNC const char *xa_threadsafe_shared_ref_label(const XrType *type) {
+XR_FUNC const char *xa_concurrency_handle_label(const XrType *type) {
     if (!type)
         return NULL;
     if (type->kind == XR_KIND_CHANNEL)
@@ -168,8 +168,8 @@ XR_FUNC const char *xa_threadsafe_shared_ref_label(const XrType *type) {
     return NULL;
 }
 
-XR_FUNC bool xa_type_is_threadsafe_shared_ref(const XrType *type) {
-    return xa_threadsafe_shared_ref_label(type) != NULL;
+XR_FUNC bool xa_type_is_concurrency_handle(const XrType *type) {
+    return xa_concurrency_handle_label(type) != NULL;
 }
 
 XR_FUNC bool xa_freestanding_profile_enabled(XaAnalyzer *analyzer) {
@@ -249,7 +249,7 @@ XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, X
                  name);
     } else if (sym->is_shared) {
         return;
-    } else if (xa_type_is_threadsafe_shared_ref(sym_type)) {
+    } else if (xa_type_is_concurrency_handle(sym_type)) {
         return;
     } else if (sym->kind == XA_SYM_PARAMETER) {
         snprintf(msg, sizeof(msg),

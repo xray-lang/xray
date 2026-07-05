@@ -8,19 +8,12 @@
  * xshared.h - Reference counting for shared objects
  *
  * KEY CONCEPT:
- *   Shared objects live in global heap with atomic refcount.
- *   Support concurrent access from multiple coroutines.
- *
- * SHARED VARIABLE TYPES:
- *   shared x = value
- *     - Atomic refcount, all coroutines can read concurrently
- *     - Immutable after creation, zero-copy sharing
- *     - Example: shared config = { port: 8080 }
- *
- *   shared x = value
- *     - Only accessible via Channel for serialized read/write
- *     - Must send through channel, cannot be read directly
- *     - Example: shared counter = 0; ch.send(counter)
+ *   Shared objects live in the global/system heap with atomic refcount.
+ *   A `shared name = expr` binding creates a stable identity that may be
+ *   captured by coroutines, sys.Thread bodies, and parallel workers in the
+ *   same address space. The binding itself is not rebindable; controlled
+ *   mutation is provided by explicit concurrency handles such as Channel,
+ *   Atomic, Semaphore, and OS-domain synchronization objects.
  *
  * SCOPING RULES:
  *   - Stored in global heap, but visibility is lexical scope only
@@ -41,7 +34,7 @@ struct XrRuntimeCore;
 
 /* ========== Shared Reference Count Operations ==========
  *
- * Shared (cross-coroutine) objects use the same sign-tagged refcount field
+ * Shared (cross-execution-unit) objects use the same sign-tagged refcount field
  * as the per-coroutine RC, in the atomic (negative) band: a live count of N
  * is stored as -N, so the compiler's hot-path sign test routes every shared
  * object to its cold/atomic path automatically (see xobj_header.h). These
