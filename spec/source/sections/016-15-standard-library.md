@@ -12,9 +12,9 @@ order: 016
 > MCP knowledge 通过 `xray builtin-dump` 获取 API 签名并在生成时注入模块知识卡片。
 > 详见 [附录 D stdlib 模块索引](#d-stdlib-模块索引)。
 
-> **真实 native 模块清单**（22 个，源码：`stdlib/<module>/*.c`）：
+> **真实 native 模块清单**（25 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
 >
-> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
+> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`runtime`、`sync`、`sys`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
 > 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Bytes` `BigInt` `StringBuilder` `PanicInfo` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
 
@@ -109,7 +109,10 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | 模块 | 关键 API |
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`、source 位置开关、异步写入模式 |
-| `mem` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
+| `runtime` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
+| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
+| `sync` | 协程域同步：`Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync` |
+| `sys` | OS / 线程域：`Thread.spawn()`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、`cpuCount()`、`sleepMs()` 等，需显式 `import sys` |
 
 ### 15.10 分布式
 
@@ -125,7 +128,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 文档中可能引用过、但当前 stdlib 中**确实没有**的模块（避免误导）：
 
-`fs` · `process` · `dns` · `random` · `strconv` · `sync` · `runtime` · `json`
+`fs` · `process` · `dns` · `random` · `strconv` · `json`
 
 这些功能或者归入其他模块（见上面各小节注），或者尚未实现。
 
@@ -141,9 +144,9 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 > MCP knowledge fetches API signatures via `xray builtin-dump` and injects per-module knowledge cards at generation time.
 > See [Appendix D — stdlib module index](#d-stdlib-module-index).
 
-> **Authoritative native module list** (22 modules; source: `stdlib/<module>/*.c`):
+> **Authoritative native module list** (25 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
 >
-> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
+> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `runtime`, `sync`, `sys`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
 > Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Bytes`, `BigInt`, `StringBuilder`, `PanicInfo`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
 
@@ -238,7 +241,10 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 | Module | Key APIs |
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`, source-position toggles, async write mode |
-| `mem` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
+| `runtime` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
+| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` return managed `Buffer`; `pageAlloc()` / `pageFree()`; `copy()` / `move()` / `set()` / `compare()`; `volatileLoad()` / `volatileStore()`; `fence()` |
+| `sync` | coroutine-domain synchronization: `Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()`, with explicit `import sync` |
+| `sys` | OS / thread domain: `Thread.spawn()`, `OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`, `cpuCount()`, `sleepMs()`, with explicit `import sys` |
 
 ### 15.10 Distributed
 
@@ -254,7 +260,7 @@ The `@test` attribute together with the global `assert*` family is enough; **no*
 
 Modules that may have been referenced historically but are **not** part of the current stdlib (to avoid confusion):
 
-`fs` · `process` · `dns` · `random` · `strconv` · `sync` · `runtime` · `json`
+`fs` · `process` · `dns` · `random` · `strconv` · `json`
 
 Their functionality has either moved into other modules (see the per-section notes above) or has not yet been implemented.
 

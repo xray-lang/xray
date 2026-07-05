@@ -4107,8 +4107,10 @@ When mutual exclusion or atomic operations are unavoidable, the runtime provides
 | Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
 | `shared` | Stable shared identity | Stored on the global heap while retaining lexical scope; concurrent mutation safety comes from the value's own type semantics |
 | `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `int`/`float`/`bool` |
+| `sync.Mutex<T>` / `sync.RwLock<T>` | Coroutine-domain locks | Require explicit `import sync`; wait by suspending a coroutine, not by blocking a worker; not allowed in `sys.Thread` bodies |
+| `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar`, etc. | OS-thread-domain locks | Require explicit `import sys`; block the current OS thread, suitable for `sys.Thread`, runtime components, and short critical sections |
 
-> **Design note**: xray does not expose generic lock primitives such as `Mutex`/`RwLock`. For simple shared counters and flags, `Atomic<T>` is the recommended choice; for complex mutual exclusion, use `Channel(1)` to simulate lock/unlock.
+> **Design note**: xray does not expose bare `Mutex`/`RwLock` in the prelude. Prefer `Channel`, `shared`, `move`, and `Atomic<T>` by default. When a lock is required, choose the execution domain explicitly through `sync` or `sys` so coroutine-suspending locks are not confused with OS-thread-blocking locks.
 
 #### `Atomic<T>` — lock-free atomic type
 
@@ -4811,9 +4813,9 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 > MCP knowledge fetches API signatures via `xray builtin-dump` and injects per-module knowledge cards at generation time.
 > See [Appendix D — stdlib module index](#d-stdlib-module-index).
 
-> **Authoritative native module list** (22 modules; source: `stdlib/<module>/*.c`):
+> **Authoritative native module list** (25 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
 >
-> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
+> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `runtime`, `sync`, `sys`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
 > Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Bytes`, `BigInt`, `StringBuilder`, `PanicInfo`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
 
@@ -4908,7 +4910,10 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 | Module | Key APIs |
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`, source-position toggles, async write mode |
-| `mem` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
+| `runtime` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
+| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` return managed `Buffer`; `pageAlloc()` / `pageFree()`; `copy()` / `move()` / `set()` / `compare()`; `volatileLoad()` / `volatileStore()`; `fence()` |
+| `sync` | coroutine-domain synchronization: `Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()`, with explicit `import sync` |
+| `sys` | OS / thread domain: `Thread.spawn()`, `OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`, `cpuCount()`, `sleepMs()`, with explicit `import sys` |
 
 ### 15.10 Distributed
 
@@ -4924,7 +4929,7 @@ The `@test` attribute together with the global `assert*` family is enough; **no*
 
 Modules that may have been referenced historically but are **not** part of the current stdlib (to avoid confusion):
 
-`fs` · `process` · `dns` · `random` · `strconv` · `sync` · `runtime` · `json`
+`fs` · `process` · `dns` · `random` · `strconv` · `json`
 
 Their functionality has either moved into other modules (see the per-section notes above) or has not yet been implemented.
 

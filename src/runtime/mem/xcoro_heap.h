@@ -312,7 +312,7 @@ static inline void xr_rc_release_value(XrCoroHeap *heap, XrValue value) {
 /*
  * Track non-GC malloc'd memory (e.g., array/map/set data buffers) in the
  * coroutine's byte counter. Under reference counting this no longer drives
- * collection (RC owns reclamation); it keeps mem.liveBytes()/mem.info() byte stats
+ * collection (RC owns reclamation); it keeps runtime.liveBytes()/runtime.info() byte stats
  * accurate so abandoned large buffers are reflected in reported usage.
  */
 static inline void xr_coro_heap_add_external(XrCoroHeap *heap, int64_t bytes) {
