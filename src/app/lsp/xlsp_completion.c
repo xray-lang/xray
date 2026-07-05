@@ -575,34 +575,41 @@ static XrJsonValue *complete_enum_decl(XrLspDocument *doc, const char *prefix) {
     return NULL;
 }
 
-// Shared helper: advance `p` to the next occurrence of `var <prefix>`
-// or `const <prefix>` such that the match is surrounded by non-identifier
-// bytes (whole-word). `*out_after` points at the first byte AFTER the
+// Shared helper: advance `p` to the next occurrence of a binding declaration
+// (`var`/`const`/`shared`) for `<prefix>` such that the match is surrounded by
+// non-identifier bytes. `*out_after` points at the first byte AFTER the
 // identifier on success, ready for `: Type` or `= expr` parsing.
 // Returns true on success (match found), false when no more matches.
 static bool scan_next_binding(const char **p_io, const char *content_begin, const char *prefix,
                               size_t prefix_len, const char **out_after) {
     const char *p = *p_io;
-    char var_pat[128], const_pat[128];
+    char var_pat[128], const_pat[128], shared_pat[128];
     snprintf(var_pat, sizeof(var_pat), "var %s", prefix);
     snprintf(const_pat, sizeof(const_pat), "const %s", prefix);
+    snprintf(shared_pat, sizeof(shared_pat), "shared %s", prefix);
     while (p && *p) {
         const char *lm = strstr(p, var_pat);
         const char *cm = strstr(p, const_pat);
+        const char *sm = strstr(p, shared_pat);
         const char *match = NULL;
         int skip = 0;
-        if (lm && (!cm || lm < cm)) {
+        if (lm) {
             match = lm;
             skip = 4 + (int) prefix_len;
-        } else if (cm) {
+        }
+        if (cm && (!match || cm < match)) {
             match = cm;
             skip = 6 + (int) prefix_len;
+        }
+        if (sm && (!match || sm < match)) {
+            match = sm;
+            skip = 7 + (int) prefix_len;
         }
         if (!match) {
             *p_io = p;
             return false;
         }
-        // Boundary: char before the `var`/`const` must not be identifier.
+        // Boundary: char before the binding keyword must not be identifier.
         if (match > content_begin) {
             char prev = match[-1];
             if ((prev >= 'a' && prev <= 'z') || (prev >= 'A' && prev <= 'Z') ||
@@ -628,13 +635,13 @@ static bool scan_next_binding(const char **p_io, const char *content_begin, cons
     return false;
 }
 
-// Step 1 of instance-member completion: scan for `var x = <rhs>` forms
-// to either (a) emit a literal/constructor completion directly, or
+// Step 1 of instance-member completion: scan for `var`/`const`/`shared`
+// binding assignment forms to either (a) emit a literal/constructor completion directly, or
 // (b) extract the class name for `ClassName(...)`.
 // Output: *early_items = non-null for direct completions (caller returns it).
 //         *class_name_out = non-null char* when we found a `Foo(...)` RHS.
-static void scan_var_const_assignment(XrLspDocument *doc, const char *prefix,
-                                      XrJsonValue **early_items, const char **class_name_out) {
+static void scan_binding_assignment(XrLspDocument *doc, const char *prefix,
+                                    XrJsonValue **early_items, const char **class_name_out) {
     *early_items = NULL;
     *class_name_out = NULL;
 
@@ -1052,13 +1059,13 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
     if ((r = complete_enum_decl(doc, prefix)))
         return r;
 
-    // Class-instance path via text scan for `var x = <rhs>` / `const x = <rhs>`.
-    // scan_var_const_assignment() handles literal RHS directly and extracts
+    // Class-instance path via text scan for `var`/`const`/`shared` bindings.
+    // scan_binding_assignment() handles literal RHS directly and extracts
     // `ClassName(...)` into class_name for a subsequent member lookup.
     if (doc->content && analyzer) {
         XrJsonValue *early = NULL;
         const char *class_name = NULL;
-        scan_var_const_assignment(doc, prefix, &early, &class_name);
+        scan_binding_assignment(doc, prefix, &early, &class_name);
         if (early)
             return early;
 

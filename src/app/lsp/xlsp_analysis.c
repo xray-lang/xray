@@ -887,8 +887,9 @@ static void extract_symbols_lexer(XrLspDocument *doc, SymbolTable *table) {
                              (int) strlen(name));
             xr_free(name);
         }
-        // var <name> or const <name>
-        else if ((prev.type == TK_VAR || prev.type == TK_CONST) && token.type == TK_NAME) {
+        // var <name>, const <name>, or shared <name>
+        else if ((prev.type == TK_VAR || prev.type == TK_CONST || prev.type == TK_SHARED) &&
+                 token.type == TK_NAME) {
             char *name = strndup(token.start, token.length);
             int kind = (prev.type == TK_CONST) ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
             symbol_table_add(table, name, kind, token.line - 1, 0, token.line - 1,
