@@ -1,0 +1,11 @@
+class Box {
+    value: int
+
+    constructor(v: int) {
+        this.value = v
+    }
+}
+
+const b = Box(1)
+var c = b
+c.value = 2

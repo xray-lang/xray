@@ -1,0 +1,3 @@
+const xs = Array<int>()
+var ys = xs
+ys.push(1)

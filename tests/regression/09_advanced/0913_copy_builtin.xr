@@ -98,3 +98,38 @@ fn test_copy_range_native_body() {
     assert_eq(c.includes(4), true)
     assert_eq(c.includes(6), false)
 }
+
+class CopyBox {
+    value: int
+
+    constructor(v: int) {
+        this.value = v
+    }
+}
+
+@test
+fn test_copy_const_array_returns_mutable_owned_copy() {
+    const a = [1, 2]
+    var b = copy(a)
+    b.push(3)
+    assert_eq(a.length, 2)
+    assert_eq(b.length, 3)
+}
+
+@test
+fn test_copy_const_map_returns_mutable_owned_copy() {
+    const m = #{"a": 1}
+    var n = copy(m)
+    n["b"] = 2
+    assert_eq(m.length, 1)
+    assert_eq(n.length, 2)
+}
+
+@test
+fn test_copy_const_object_returns_mutable_owned_copy() {
+    const b = CopyBox(1)
+    var c = copy(b)
+    c.value = 2
+    assert_eq(b.value, 1)
+    assert_eq(c.value, 2)
+}

@@ -1373,6 +1373,9 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         var_type = xr_type_new_unknown(NULL);
     }
 
+    if (sym->is_readonly_binding && var_type)
+        var_type = xr_type_make_const(ctx->analyzer->isolate, var_type);
+
     links->type = var_type;
     xa_update_borrowed_alias_root(ctx, sym, var->initializer, var_type);
     xa_register_active_span_borrow(ctx, sym, var->initializer, var_type);
