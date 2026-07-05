@@ -122,7 +122,7 @@ static XlspSemanticTokenType get_var_token_type(SemanticTokenContext *ctx, const
     }
 
     // Set modifiers
-    if (sym->is_const)
+    if (sym->is_const || sym->is_readonly_binding || sym->is_shared)
         *out_mods |= XLSP_MOD_READONLY;
     if (sym->is_static)
         *out_mods |= XLSP_MOD_STATIC;
@@ -138,7 +138,7 @@ static XlspSemanticTokenType get_var_token_type(SemanticTokenContext *ctx, const
         case XA_SYM_PARAMETER:
             return XLSP_TOKEN_PARAMETER;
         case XA_SYM_VARIABLE:
-            if (sym->is_const)
+            if (sym->is_const || sym->is_readonly_binding || sym->is_shared)
                 *out_mods |= XLSP_MOD_READONLY;
             return XLSP_TOKEN_VARIABLE;
         case XA_SYM_FIELD:

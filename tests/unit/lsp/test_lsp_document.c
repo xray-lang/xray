@@ -12,7 +12,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../../../src/app/lsp/xlsp_server.h"
+#include "../../../src/app/lsp/xlsp_analysis.h"
 #include "../../../src/app/lsp/xlsp_code_action.h"
+#include "../../../src/app/lsp/xlsp_completion.h"
 #include "../../../src/base/xjson.h"
 #include "../test_win_compat.h"
 
@@ -39,6 +41,19 @@ static int tests_failed = 0;
 
 #define ASSERT_EQ(a, b) ASSERT((a) == (b))
 #define ASSERT_STR_EQ(a, b) ASSERT(strcmp((a), (b)) == 0)
+
+static bool json_array_contains_label(XrJsonValue *items, const char *label) {
+    if (!items || !label)
+        return false;
+    int n = xjson_array_len(items);
+    for (int i = 0; i < n; i++) {
+        XrJsonValue *item = xjson_array_get(items, i);
+        const char *candidate = xjson_get_string(item, "label");
+        if (candidate && strcmp(candidate, label) == 0)
+            return true;
+    }
+    return false;
+}
 
 // ============================================================================
 // Server and Document Lifecycle Tests
@@ -246,6 +261,30 @@ TEST(document_version) {
 }
 
 // ============================================================================
+// Completion Tests
+// ============================================================================
+
+TEST(completion_shared_channel_member) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "shared ch = Channel<int>(1)\n"
+                          "ch.\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///completion.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 3};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "send"));
+    ASSERT(json_array_contains_label(items, "recv"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+// ============================================================================
 // Code Action Quick-Fix Tests (concurrency diagnostics)
 // ============================================================================
 
@@ -292,7 +331,7 @@ static bool actions_contain_title_with(XrJsonValue *actions, const char *s1, con
     return false;
 }
 
-TEST(code_action_go_capture_to_shared_const) {
+TEST(code_action_go_capture_to_shared) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
@@ -378,8 +417,11 @@ int main(int argc, char **argv) {
     printf("\nDocument version tests:\n");
     RUN_TEST(document_version);
 
+    printf("\nCompletion tests:\n");
+    RUN_TEST(completion_shared_channel_member);
+
     printf("\nCode action concurrency quick-fix tests:\n");
-    RUN_TEST(code_action_go_capture_to_shared_const);
+    RUN_TEST(code_action_go_capture_to_shared);
     RUN_TEST(code_action_quickfix_skips_when_decl_missing);
 
     printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);
