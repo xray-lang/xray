@@ -16,16 +16,211 @@
 #include "xanalyzer.h"
 #include "xanalyzer_builtin_interfaces.h"
 #include "xanalyzer_symbol.h"
+#include "../parser/xast_nodes.h"
 #include "../parser/xtype_ref.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../base/xchecks.h"
 #include "../../../stdlib/prelude/prelude.h"
+#include <limits.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 /* Resolve child type refs recursively. */
 static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t);
+
+#define XA_CONST_EVAL_MAX_DEPTH 64
+
+static bool xa_const_stack_contains(const uint32_t *stack, int depth, uint32_t id) {
+    if (!stack || id == 0)
+        return false;
+    for (int i = 0; i < depth; i++) {
+        if (stack[i] == id)
+            return true;
+    }
+    return false;
+}
+
+static bool xa_eval_const_int_expr_impl(XaAnalyzer *analyzer, const AstNode *expr, int64_t *out,
+                                        const char **err, uint32_t *stack, int depth) {
+    if (!expr || !out) {
+        if (err)
+            *err = "missing expression";
+        return false;
+    }
+    if (depth > XA_CONST_EVAL_MAX_DEPTH) {
+        if (err)
+            *err = "constant expression is too deeply nested";
+        return false;
+    }
+
+    switch (expr->type) {
+        case AST_LITERAL_INT:
+            *out = expr->as.literal.raw_value.int_val;
+            return true;
+
+        case AST_GROUPING:
+            return xa_eval_const_int_expr_impl(analyzer, expr->as.grouping, out, err, stack,
+                                               depth + 1);
+
+        case AST_UNARY_NEG: {
+            int64_t v = 0;
+            if (!xa_eval_const_int_expr_impl(analyzer, expr->as.unary.operand, &v, err, stack,
+                                             depth + 1))
+                return false;
+            if (v == INT64_MIN) {
+                if (err)
+                    *err = "integer constant overflow";
+                return false;
+            }
+            *out = -v;
+            return true;
+        }
+
+        case AST_UNARY_BNOT: {
+            int64_t v = 0;
+            if (!xa_eval_const_int_expr_impl(analyzer, expr->as.unary.operand, &v, err, stack,
+                                             depth + 1))
+                return false;
+            *out = ~v;
+            return true;
+        }
+
+        case AST_VARIABLE: {
+            if (!analyzer || !expr->as.variable.name) {
+                if (err)
+                    *err = "identifier is not a compile-time constant";
+                return false;
+            }
+            XaSymbol *sym = NULL;
+            if (expr->as.variable.symbol_id != 0)
+                sym = xa_scope_lookup_by_id(analyzer->global_scope, expr->as.variable.symbol_id);
+            if (!sym && analyzer->current_scope)
+                sym = xa_scope_lookup(analyzer->current_scope, expr->as.variable.name);
+            if (!sym && analyzer->global_scope)
+                sym = xa_scope_lookup(analyzer->global_scope, expr->as.variable.name);
+            XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
+            if (!sym || !sym->is_const || !links || !links->const_initializer) {
+                if (err)
+                    *err = "identifier is not a const integer";
+                return false;
+            }
+            if (xa_const_stack_contains(stack, depth, sym->id)) {
+                if (err)
+                    *err = "cyclic const integer expression";
+                return false;
+            }
+            if (depth < XA_CONST_EVAL_MAX_DEPTH)
+                stack[depth] = sym->id;
+            return xa_eval_const_int_expr_impl(analyzer, links->const_initializer, out, err, stack,
+                                               depth + 1);
+        }
+
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT: {
+            int64_t left = 0;
+            int64_t right = 0;
+            if (!xa_eval_const_int_expr_impl(analyzer, expr->as.binary.left, &left, err, stack,
+                                             depth + 1) ||
+                !xa_eval_const_int_expr_impl(analyzer, expr->as.binary.right, &right, err, stack,
+                                             depth + 1)) {
+                return false;
+            }
+            switch (expr->type) {
+                case AST_BINARY_ADD:
+                    *out = left + right;
+                    return true;
+                case AST_BINARY_SUB:
+                    *out = left - right;
+                    return true;
+                case AST_BINARY_MUL:
+                    *out = left * right;
+                    return true;
+                case AST_BINARY_DIV:
+                    if (right == 0) {
+                        if (err)
+                            *err = "division by zero in constant expression";
+                        return false;
+                    }
+                    *out = left / right;
+                    return true;
+                case AST_BINARY_MOD:
+                    if (right == 0) {
+                        if (err)
+                            *err = "modulo by zero in constant expression";
+                        return false;
+                    }
+                    *out = left % right;
+                    return true;
+                case AST_BINARY_BAND:
+                    *out = left & right;
+                    return true;
+                case AST_BINARY_BOR:
+                    *out = left | right;
+                    return true;
+                case AST_BINARY_BXOR:
+                    *out = left ^ right;
+                    return true;
+                case AST_BINARY_LSHIFT:
+                    if (left < 0 || right < 0 || right >= 63) {
+                        if (err)
+                            *err = "bit shift is out of range";
+                        return false;
+                    }
+                    *out = left << right;
+                    return true;
+                case AST_BINARY_RSHIFT:
+                    if (right < 0 || right >= 63) {
+                        if (err)
+                            *err = "bit shift is out of range";
+                        return false;
+                    }
+                    *out = left >> right;
+                    return true;
+                default:
+                    break;
+            }
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    if (err)
+        *err = "expression is not an integer constant";
+    return false;
+}
+
+XR_FUNC bool xa_eval_const_int_expr(XaAnalyzer *analyzer, const AstNode *expr, int64_t *out_value,
+                                    const char **out_error) {
+    uint32_t stack[XA_CONST_EVAL_MAX_DEPTH + 1];
+    memset(stack, 0, sizeof(stack));
+    if (out_error)
+        *out_error = NULL;
+    return xa_eval_const_int_expr_impl(analyzer, expr, out_value, out_error, stack, 0);
+}
+
+static void xa_report_fixed_array_length_diag(XaAnalyzer *analyzer, const AstNode *expr,
+                                              const char *message) {
+    if (!analyzer || !message)
+        return;
+    XrLocation loc = {.file = analyzer->current_file,
+                      .line = expr ? expr->line : 0,
+                      .column = expr ? expr->column : 0};
+    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, message,
+                               &loc);
+}
 
 /* Map a named type to its runtime XrType*.
  * Order: built-in interfaces → prelude → well-known singletons → class fallback. */
@@ -253,6 +448,8 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
         case XR_TREF_FIXED_ARRAY: {
             XrType *elem =
                 t->nchildren > 0 ? resolve_impl(X, t->children[0]) : xr_type_new_unknown(NULL);
+            if (t->fixed_length <= 0 || t->fixed_length > (int) UINT16_MAX)
+                return xr_type_new_unknown(X);
             return xr_type_new_fixed_array(X, elem, (int) t->fixed_length);
         }
 
@@ -403,6 +600,36 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                 return result;
             }
         }
+    }
+
+    if (tref->kind == XR_TREF_FIXED_ARRAY) {
+        XrType *elem = tref->nchildren > 0
+                           ? xr_tref_resolve_in_analyzer(analyzer, tref->children[0])
+                           : xr_type_new_unknown(NULL);
+        int64_t length = tref->fixed_length;
+        const AstNode *length_expr = tref->fixed_length_expr;
+        if (length_expr) {
+            const char *err = NULL;
+            if (!xa_eval_const_int_expr(analyzer, length_expr, &length, &err)) {
+                char msg[192];
+                snprintf(msg, sizeof(msg),
+                         "fixed array length must be a compile-time integer expression%s%s",
+                         err ? ": " : "", err ? err : "");
+                xa_report_fixed_array_length_diag(analyzer, length_expr, msg);
+                return xr_type_new_unknown(NULL);
+            }
+        }
+        if (length <= 0) {
+            xa_report_fixed_array_length_diag(analyzer, length_expr,
+                                              "fixed array length must be greater than zero");
+            return xr_type_new_unknown(NULL);
+        }
+        if (length > UINT16_MAX) {
+            xa_report_fixed_array_length_diag(
+                analyzer, length_expr, "fixed array length exceeds maximum of 65535 elements");
+            return xr_type_new_unknown(NULL);
+        }
+        return xr_type_new_fixed_array(analyzer->isolate, elem, (int) length);
     }
 
     return resolve_impl(analyzer->isolate, tref);

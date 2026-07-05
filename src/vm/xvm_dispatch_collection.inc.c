@@ -437,6 +437,9 @@ vmcase(OP_ARRAY_GET) {
                 case XR_NATIVE_BOOL:
                     R(a) = *(uint8_t *) ep ? XR_TRUE_VAL : XR_FALSE_VAL;
                     break;
+                case XR_NATIVE_VALUE:
+                    R(a) = *(XrValue *) ep;
+                    break;
                 case XR_NATIVE_I32:
                     R(a) = XR_FROM_INT((int64_t) *(int32_t *) ep);
                     break;
@@ -528,6 +531,9 @@ vmcase(OP_ARRAY_GETC) {
                     break;
                 case XR_NATIVE_BOOL:
                     R(a) = *(uint8_t *) ep ? XR_TRUE_VAL : XR_FALSE_VAL;
+                    break;
+                case XR_NATIVE_VALUE:
+                    R(a) = *(XrValue *) ep;
                     break;
                 case XR_NATIVE_I32:
                     R(a) = XR_FROM_INT((int64_t) *(int32_t *) ep);
@@ -647,6 +653,9 @@ vmcase(OP_ARRAY_SET) {
                 case XR_NATIVE_BOOL:
                     *(uint8_t *) ep = (uint8_t) _av.i;
                     break;
+                case XR_NATIVE_VALUE:
+                    *(XrValue *) ep = _av;
+                    break;
                 case XR_NATIVE_I32:
                     *(int32_t *) ep = (int32_t) XR_TO_INT(_av);
                     break;
@@ -749,6 +758,9 @@ vmcase(OP_ARRAY_SETC) {
                     break;
                 case XR_NATIVE_BOOL:
                     *(uint8_t *) ep = (uint8_t) _acv.i;
+                    break;
+                case XR_NATIVE_VALUE:
+                    *(XrValue *) ep = _acv;
                     break;
                 case XR_NATIVE_I32:
                     *(int32_t *) ep = (int32_t) XR_TO_INT(_acv);
@@ -1812,7 +1824,7 @@ vmcase(OP_INDEX_GET) {
     XrValue obj_val = R(b);
     XrValue key_val = R(c);
 
-    // Fast path: struct inline fixed array ([N]T)
+    // Fast path: struct inline fixed array ([T; N])
     if (XR_IS_ARRAY_REF(obj_val) && XR_IS_INT(key_val)) {
         uint8_t etype = XR_ARRAY_REF_ELEM_TYPE(obj_val);
         uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
@@ -1830,6 +1842,9 @@ vmcase(OP_INDEX_GET) {
                     break;
                 case XR_NATIVE_BOOL:
                     R(a) = *(uint8_t *) ep ? XR_TRUE_VAL : XR_FALSE_VAL;
+                    break;
+                case XR_NATIVE_VALUE:
+                    R(a) = *(XrValue *) ep;
                     break;
                 case XR_NATIVE_I32:
                     R(a) = XR_FROM_INT((int64_t) *(int32_t *) ep);
@@ -1986,7 +2001,7 @@ vmcase(OP_INDEX_SET) {
     XrValue key_val = R(b);
     XrValue val = R(c);
 
-    // Fast path: struct inline fixed array ([N]T)
+    // Fast path: struct inline fixed array ([T; N])
     if (XR_IS_ARRAY_REF(obj_val) && XR_IS_INT(key_val)) {
         uint8_t etype = XR_ARRAY_REF_ELEM_TYPE(obj_val);
         uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
@@ -2004,6 +2019,9 @@ vmcase(OP_INDEX_SET) {
                     break;
                 case XR_NATIVE_BOOL:
                     *(uint8_t *) ep = (uint8_t) val.i;
+                    break;
+                case XR_NATIVE_VALUE:
+                    *(XrValue *) ep = val;
                     break;
                 case XR_NATIVE_I32:
                     *(int32_t *) ep = (int32_t) XR_TO_INT(val);
@@ -2155,6 +2173,31 @@ vmcase(OP_SLICE) {
         span->contains_refs = arr->contains_refs;
         span->reserved = 0;
         span->guard = arr;
+        R(a) = xr_span_ref(span);
+        vmbreak;
+    }
+
+    // Frame-local fixed array slice: only target-typed Span<T> is supported.
+    if (XR_IS_ARRAY_REF(source)) {
+        if (!XR_IS_INT(R(c + 2))) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                             "fixed array slices can only produce Span views");
+        }
+        uint8_t native_type = XR_ARRAY_REF_ELEM_TYPE(source);
+        uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(source);
+        xr_array_normalize_slice(elem_count, &start, &end);
+        uint8_t elem_size = xr_native_type_size(native_type);
+        XrSpanView *span = VM_SPAN_SLOT(R(c + 2));
+        span->data = (source.ptr && end > start)
+                         ? (uint8_t *) source.ptr + (size_t) start * (size_t) elem_size
+                         : (uint8_t *) source.ptr;
+        span->length = end - start;
+        span->elem_type = xr_native_type_to_elem_type(native_type);
+        span->elem_size = elem_size ? elem_size : (uint8_t) sizeof(XrValue);
+        span->elem_tid = 0;
+        span->contains_refs = span->elem_type == XR_ELEM_ANY;
+        span->reserved = 0;
+        span->guard = NULL;
         R(a) = xr_span_ref(span);
         vmbreak;
     }

@@ -60,6 +60,7 @@
 #define KOP_ABC_BIN_LIT XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_LIT
 #define KOP_ABC_INOUT_IN_LIT XR_OPF_REG_INOUT, XR_OPF_REG_IN, XR_OPF_LIT
 #define KOP_ABC_STORE_LIT XR_OPF_REG_IN, XR_OPF_REG_IN, XR_OPF_LIT
+#define KOP_ABC_OUT_LIT_K XR_OPF_REG_OUT, XR_OPF_LIT, XR_OPF_K_IDX
 #define KOP_ABC_INPLACE_K XR_OPF_REG_INOUT, XR_OPF_K_IDX, XR_OPF_REG_IN
 #define KOP_ABC_INPLACE_LIT XR_OPF_REG_INOUT, XR_OPF_LIT, XR_OPF_REG_IN
 #define KOP_AB_TEST XR_OPF_REG_IN, XR_OPF_REG_IN, XR_OPF_LIT_FLAG
@@ -349,6 +350,8 @@
     _(STRUCT_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = struct(R[B]).field[C]")                        \
     _(STRUCT_SET, FMT_ABC, KOP_ABC_INPLACE_LIT, "struct(R[A]).field[B] = R[C]")                    \
     _(STRUCT_COPY, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = memcpy struct R[B] into struct_area slot C")  \
+    _(FIXED_ARRAY_NEW, FMT_ABC, KOP_ABC_OUT_LIT_K,                                                 \
+      "R[A] = fixed array ref in struct_area slot B, metadata K[C]")                               \
     _(PTR_LOAD, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = *(T*)R[B], C = XrFFIType width of T")            \
     _(PTR_STORE, FMT_ABC, KOP_ABC_STORE_LIT, "*(T*)R[A] = R[B], C = XrFFIType width of T")         \
     _(PTR_COPY_NONOVERLAP, FMT_ABC, KOP_ABC_INPLACE, "memcpy(R[A], R[B], R[C] * elem_size)")       \

@@ -1,0 +1,17 @@
+struct Holder {
+    names: [string; 2]
+    blocks: [[uint8; 2]; 2]
+}
+
+let zero: [uint8; 4] = [0; 4]
+print(zero.length)
+print(zero[3])
+
+let names: [string; 2] = ["a", "b"]
+print(names[1])
+
+let holder = Holder{names: ["x", "y"], blocks: [[11, 12], [13, 14]]}
+print(holder.names[1])
+print(holder.blocks[0][1])
+print(holder.blocks[1][0])
+print(holder.blocks[1][1])

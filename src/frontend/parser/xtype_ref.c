@@ -202,9 +202,17 @@ XR_FUNC XrTypeRef *xr_tref_fixed_array(struct XrCompilerSession *session, XrType
                                        int length) {
     XR_DCHECK(elem != NULL, "xr_tref_fixed_array: NULL element type");
     XR_DCHECK(length > 0, "xr_tref_fixed_array: non-positive length");
+    return xr_tref_fixed_array_expr(session, elem, NULL, length);
+}
+
+XR_FUNC XrTypeRef *xr_tref_fixed_array_expr(struct XrCompilerSession *session, XrTypeRef *elem,
+                                            struct AstNode *length_expr, int literal_length) {
+    XR_DCHECK(elem != NULL, "xr_tref_fixed_array_expr: NULL element type");
+    XR_DCHECK(literal_length >= 0, "xr_tref_fixed_array_expr: negative literal length");
     XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_FIXED_ARRAY;
-    t->fixed_length = (int16_t) length;
+    t->fixed_length = literal_length;
+    t->fixed_length_expr = length_expr;
     t->nchildren = 1;
     t->children = (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), 1);
     t->children[0] = elem;
@@ -358,10 +366,16 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
 
         case XR_TREF_FIXED_ARRAY: {
             char lenbuf[16];
-            snprintf(lenbuf, sizeof(lenbuf), "[%d]", (int) t->fixed_length);
-            tref_append(buf, pos, cap, lenbuf);
+            tref_append(buf, pos, cap, "[");
             if (t->nchildren > 0)
                 tref_to_str_impl(t->children[0], buf, pos, cap);
+            else
+                tref_append(buf, pos, cap, "unknown");
+            if (t->fixed_length > 0)
+                snprintf(lenbuf, sizeof(lenbuf), "; %d]", (int) t->fixed_length);
+            else
+                snprintf(lenbuf, sizeof(lenbuf), "; ?]");
+            tref_append(buf, pos, cap, lenbuf);
             break;
         }
 

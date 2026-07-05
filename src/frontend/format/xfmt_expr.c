@@ -532,6 +532,14 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_ARRAY_LITERAL: {
             xfmt_write_indent(ctx);
             ArrayLiteralNode *arr = &node->as.array_literal;
+            if (arr->is_repeat) {
+                xfmt_write_char(ctx, '[');
+                xfmt_emit_expression(ctx, arr->repeat_value);
+                xfmt_write_str(ctx, "; ");
+                xfmt_emit_expression(ctx, arr->repeat_count);
+                xfmt_write_char(ctx, ']');
+                break;
+            }
             bool arr_wrap = ctx->config && ctx->config->wrap_long_lines && arr->count > 0;
             XfmtSnapshot arr_snap;
             if (arr_wrap)

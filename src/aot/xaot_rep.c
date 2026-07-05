@@ -10,6 +10,7 @@
 
 #include "xaot_rep.h"
 #include "xaot_abi_gen.h"
+#include "xaot_layout_gen.h"
 #include "../ir/xi.h"
 #include "../ir/xi_ops_gen.h"
 #include "../runtime/value/xstruct_layout.h"
@@ -133,6 +134,34 @@ static bool rep_from_xr_storage(const XrType *type, XrRep storage, XaotRep *out)
     }
 }
 
+static bool struct_layout_has_heap_field_views_depth(const XrStructLayout *sl, int depth) {
+    if (!sl || sl->field_count == 0 || sl->field_count > XR_MAX_STRUCT_FIELDS || depth > 8)
+        return false;
+    for (uint16_t i = 0; i < sl->field_count; i++) {
+        uint8_t native_type = sl->fields[i].native_type;
+        if (xaot_layout_native_field_direct_heap_supported(native_type))
+            continue;
+        if (xaot_layout_native_field_uses_elem_layout(native_type)) {
+            if (sl->fields[i].elem_count == 0 ||
+                xaot_layout_storage_rep_for_native_type(sl->fields[i].elem_native_type) ==
+                    XR_REP_TAGGED)
+                return false;
+            continue;
+        }
+        if (xaot_layout_native_field_uses_nested_layout(native_type)) {
+            if (!struct_layout_has_heap_field_views_depth(sl->fields[i].sub_layout, depth + 1))
+                return false;
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+static bool struct_layout_has_heap_field_views(const XrStructLayout *sl) {
+    return struct_layout_has_heap_field_views_depth(sl, 0);
+}
+
 static const XiValue *trace_fixed_array_field_ref(const XiValue *v) {
     while (v && (xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && v->nargs >= 1)
         v = v->args[0];
@@ -142,7 +171,8 @@ static const XiValue *trace_fixed_array_field_ref(const XiValue *v) {
     if (!sl || v->aux_int < 0 || v->aux_int >= sl->field_count)
         return NULL;
     const XrStructFieldLayout *field = &sl->fields[v->aux_int];
-    return field->native_type == XR_NATIVE_ARRAY ? v : NULL;
+    return field->native_type == XR_NATIVE_ARRAY && struct_layout_has_heap_field_views(sl) ? v
+                                                                                           : NULL;
 }
 
 static bool fixed_array_elem_rep_for_value(const XiValue *value, XaotRep *out) {
@@ -184,6 +214,8 @@ XR_FUNC XaotValueRep xaot_value_rep_for_value(const XiValue *value) {
         return fixed_array_view_rep(value);
     if (fixed_array_elem_rep_for_value(value, &rep))
         return value_rep_make(value->type, rep);
+    if (value->type && value->type->kind == XR_KIND_FIXED_ARRAY)
+        return value_rep_make(value->type, XAOT_REP_TAGGED);
     if (rep_from_native_name(xi_generated_op_result_native_type(value->op), &rep))
         return value_rep_make(value->type, rep);
     if (value->op == XI_WIDEN_F32)

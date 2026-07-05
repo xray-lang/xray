@@ -21,6 +21,8 @@
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
 #include "../../../stdlib/prelude/prelude.h"
+#include <limits.h>
+#include <stdint.h>
 
 /* Record a selection fact for a member/index access node. */
 static void record_selection(XaInferContext *ctx, AstNode *node, XaSelectionKind kind,
@@ -55,6 +57,16 @@ static int object_shape_field_index(XrType *type, const char *name) {
             return i;
     }
     return -1;
+}
+
+static XrType *class_info_field_type(XaInferContext *ctx, XrClassInfo *info, const char *name) {
+    if (!ctx || !info || !name)
+        return NULL;
+    XaSymbol *field = xa_class_info_lookup_member(info, name);
+    XaSymbolLinks *links = field ? xa_analyzer_get_links(ctx->analyzer, field) : NULL;
+    if (!links)
+        return NULL;
+    return links->type ? links->type : links->declared_type;
 }
 
 static bool xa_type_is_bytes(XrType *type) {
@@ -93,8 +105,36 @@ static bool xa_type_is_raw_u8_ptr(XrType *type) {
 }
 
 static bool xa_type_has_collection_size_alias(XrType *type) {
-    return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type) ||
-                    XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET);
+    return type &&
+           (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type) ||
+            XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET || type->kind == XR_KIND_FIXED_ARRAY);
+}
+
+static bool xa_array_repeat_count_const_expr(XaInferContext *ctx, AstNode *node, int *out,
+                                             const char **out_error) {
+    if (out_error)
+        *out_error = NULL;
+    if (!ctx || !ctx->analyzer || !node || !out)
+        return false;
+    int64_t value = 0;
+    const char *err = NULL;
+    if (!xa_eval_const_int_expr(ctx->analyzer, node, &value, &err)) {
+        if (out_error)
+            *out_error = err;
+        return false;
+    }
+    if (value <= 0) {
+        if (out_error)
+            *out_error = "repeat count must be greater than zero";
+        return false;
+    }
+    if (value > UINT16_MAX) {
+        if (out_error)
+            *out_error = "repeat count exceeds maximum of 65535 elements";
+        return false;
+    }
+    *out = (int) value;
+    return true;
 }
 
 static bool xa_symbol_is_collection_length(SymbolId sym, XrType *type) {
@@ -102,7 +142,8 @@ static bool xa_symbol_is_collection_length(SymbolId sym, XrType *type) {
         return false;
     if (sym == SYMBOL_LENGTH) {
         return XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type) ||
-               XR_TYPE_IS_STRING(type) || XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET;
+               XR_TYPE_IS_STRING(type) || XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET ||
+               type->kind == XR_KIND_FIXED_ARRAY;
     }
     if (sym == SYMBOL_SIZE)
         return xa_type_has_collection_size_alias(type);
@@ -444,7 +485,7 @@ static XrType *xa_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *objec
     } else {
         return NULL;
     }
-    XrType *pointee = xr_tref_resolve(ctx->analyzer->isolate, ne->type_args[0]);
+    XrType *pointee = xr_tref_resolve_in_analyzer(ctx->analyzer, ne->type_args[0]);
     if (!pointee)
         pointee = xr_type_new_unknown(ctx->analyzer->isolate);
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
@@ -1397,6 +1438,16 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
     }
 
+    if (obj_type->kind == XR_KIND_FIXED_ARRAY) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[160];
+        snprintf(msg, sizeof(msg),
+                 "Fixed array has no member '%s'; use length/size or indexed access", ma->name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_unknown(NULL);
+    }
+
     // Handle built-in methods (return function type for method access)
     if (xa_builtin_is_method(obj_type, ma->name)) {
         const char *sig = xa_builtin_get_member_signature(obj_type, ma->name);
@@ -1619,6 +1670,12 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
             add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
         return container->container.element_type;
     }
+    if (container && container->kind == XR_KIND_FIXED_ARRAY &&
+        container->fixed_array.element_type) {
+        if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
+            add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+        return container->fixed_array.element_type;
+    }
     if (XR_TYPE_IS_MAP(container) && container->map.value_type) {
         if (index_type && container->map.key_type && !XR_TYPE_IS_UNKNOWN(index_type) &&
             !xa_typecheck_assignable(container->map.key_type, index_type))
@@ -1803,12 +1860,121 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
 
+    ArrayLiteralNode *arr = &node->as.array_literal;
+    if (arr->is_repeat) {
+        int repeat_count = 0;
+        const char *repeat_err = NULL;
+        if (!xa_array_repeat_count_const_expr(ctx, arr->repeat_count, &repeat_count, &repeat_err)) {
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = arr->repeat_count ? arr->repeat_count->line : node->line,
+                              .column =
+                                  arr->repeat_count ? arr->repeat_count->column : node->column};
+            char msg[192];
+            snprintf(msg, sizeof(msg),
+                     "fixed array repeat count must be a positive compile-time integer "
+                     "expression%s%s",
+                     repeat_err ? ": " : "", repeat_err ? repeat_err : "");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+        }
+
+        XrType *elem_expected = NULL;
+        if (ctx->expected_type && ctx->expected_type->kind == XR_KIND_FIXED_ARRAY &&
+            ctx->expected_type->fixed_array.element_type) {
+            elem_expected = ctx->expected_type->fixed_array.element_type;
+            if (repeat_count > 0 && repeat_count != ctx->expected_type->fixed_array.length) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[192];
+                snprintf(msg, sizeof(msg),
+                         "fixed array repeat count mismatch: expected %d element(s), got %d",
+                         ctx->expected_type->fixed_array.length, repeat_count);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+            }
+        }
+
+        XrType *saved_expected = ctx->expected_type;
+        ctx->expected_type = elem_expected;
+        XrType *elem_type = xa_visit_infer_expr(ctx, arr->repeat_value);
+        ctx->expected_type = saved_expected;
+        XrType *count_type = xa_visit_infer_expr(ctx, arr->repeat_count);
+        if (count_type && !XR_TYPE_IS_UNKNOWN(count_type) && !XR_TYPE_IS_INT(count_type)) {
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = arr->repeat_count->line,
+                              .column = arr->repeat_count->column};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                       "fixed array repeat count must have type int", &loc);
+        }
+
+        if (elem_expected && elem_type && !XR_TYPE_IS_UNKNOWN(elem_type) &&
+            !xa_typecheck_assignable(elem_expected, elem_type)) {
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = arr->repeat_value ? arr->repeat_value->line : node->line,
+                              .column =
+                                  arr->repeat_value ? arr->repeat_value->column : node->column};
+            char msg[192];
+            snprintf(msg, sizeof(msg), "fixed array element has type '%s', expected '%s'",
+                     xr_type_to_string(elem_type), xr_type_to_string(elem_expected));
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+        }
+        if (ctx->expected_type && ctx->expected_type->kind == XR_KIND_FIXED_ARRAY)
+            return ctx->expected_type;
+        if (!elem_type || XR_TYPE_IS_UNKNOWN(elem_type) || repeat_count <= 0)
+            return xr_type_new_unknown(ctx->analyzer->isolate);
+        return xr_type_new_fixed_array(ctx->analyzer->isolate, elem_type, repeat_count);
+    }
+
+    if (ctx->expected_type && ctx->expected_type->kind == XR_KIND_FIXED_ARRAY &&
+        ctx->expected_type->fixed_array.element_type) {
+        XrType *fixed = ctx->expected_type;
+        XrType *elem_expected = fixed->fixed_array.element_type;
+        if (arr->count != fixed->fixed_array.length) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            char msg[192];
+            snprintf(msg, sizeof(msg),
+                     "fixed array literal length mismatch: expected %d element(s), got %d",
+                     fixed->fixed_array.length, arr->count);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+        }
+        XrType *saved_expected = ctx->expected_type;
+        for (int i = 0; i < arr->count; i++) {
+            AstNode *child = arr->elements[i];
+            if (!child)
+                continue;
+            if (child->type == AST_SPREAD_EXPR) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = child->line, .column = child->column};
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                           "fixed array literal cannot use spread '...'", &loc);
+                continue;
+            }
+            ctx->expected_type = elem_expected;
+            XrType *elem_type = xa_visit_infer_expr(ctx, child);
+            if (elem_type && !XR_TYPE_IS_UNKNOWN(elem_type) &&
+                !xa_typecheck_assignable(elem_expected, elem_type)) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = child->line, .column = child->column};
+                char msg[192];
+                snprintf(msg, sizeof(msg), "fixed array element has type '%s', expected '%s'",
+                         xr_type_to_string(elem_type), xr_type_to_string(elem_expected));
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+            }
+        }
+        ctx->expected_type = saved_expected;
+        return fixed;
+    }
+
     xa_freestanding_report_unavailable(
         ctx, node, "Array literal",
-        "dynamic arrays require hosted allocation; fixed-size array literals are tracked for a "
-        "future no-heap data slice");
+        "dynamic arrays require hosted allocation; use a target-typed fixed array literal when a "
+        "no-heap layout is required");
 
-    ArrayLiteralNode *arr = &node->as.array_literal;
     if (ctx->expected_type && XR_TYPE_IS_JSON(ctx->expected_type)) {
         XrType *saved_expected = ctx->expected_type;
         XrType *json_type = xr_type_new_json(ctx->analyzer->isolate);
@@ -2183,8 +2349,8 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         XrType *ta[8] = {0};
         int tac = ne->type_arg_count > 8 ? 8 : ne->type_arg_count;
         for (int i = 0; i < tac; i++)
-            ta[i] =
-                ne->type_args[i] ? xr_tref_resolve(X, ne->type_args[i]) : xr_type_new_unknown(NULL);
+            ta[i] = ne->type_args[i] ? xr_tref_resolve_in_analyzer(ctx->analyzer, ne->type_args[i])
+                                     : xr_type_new_unknown(NULL);
 
         if (strcmp(cn, "Map") == 0 || strcmp(cn, "WeakMap") == 0) {
             XrType *kt = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
@@ -2310,7 +2476,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                                       : xr_malloc(sizeof(XrType *) * (size_t) ne->type_arg_count);
         for (int i = 0; i < ne->type_arg_count; i++)
             resolved_targs[i] = ne->type_args[i]
-                                    ? xr_tref_resolve(ctx->analyzer->isolate, ne->type_args[i])
+                                    ? xr_tref_resolve_in_analyzer(ctx->analyzer, ne->type_args[i])
                                     : xr_type_new_unknown(NULL);
 
         // Check constructor argument types against substituted parameter types
@@ -2464,19 +2630,30 @@ XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
     StructLiteralNode *sl = &node->as.struct_literal;
     const char *struct_name = sl->struct_name;
 
-    // Infer field value types (for side effects / type checking)
-    for (int i = 0; i < sl->field_count; i++) {
-        xa_visit_infer_expr(ctx, sl->field_values[i]);
-    }
-
     // Look up struct symbol
     XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->current_scope, struct_name);
     if (!class_sym) {
         class_sym = xa_scope_lookup(ctx->analyzer->global_scope, struct_name);
     }
 
+    XaSymbolLinks *links = NULL;
+    XrClassInfo *class_info = NULL;
     if (class_sym && class_sym->kind == XA_SYM_CLASS) {
-        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, class_sym);
+        links = xa_analyzer_get_links(ctx->analyzer, class_sym);
+        class_info = links ? links->class_info : NULL;
+    }
+
+    // Infer field value types (for side effects / type checking), propagating
+    // struct field types so nested literals lower to the declared layout.
+    for (int i = 0; i < sl->field_count; i++) {
+        XrType *saved_expected = ctx->expected_type;
+        ctx->expected_type =
+            class_info ? class_info_field_type(ctx, class_info, sl->field_names[i]) : NULL;
+        xa_visit_infer_expr(ctx, sl->field_values[i]);
+        ctx->expected_type = saved_expected;
+    }
+
+    if (class_sym && class_sym->kind == XA_SYM_CLASS) {
         if (links && links->class_info) {
             XrType *inst_type = xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
             if (links->type && links->type->is_value_type) {
@@ -2676,7 +2853,7 @@ XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
     // Visit operand to ensure it's analyzed (side effects, narrowing)
     xa_visit_infer_expr(ctx, node->as.as_expr.expr);
     XrType *target = node->as.as_expr.type
-                         ? xr_tref_resolve(ctx->analyzer->isolate, node->as.as_expr.type)
+                         ? xr_tref_resolve_in_analyzer(ctx->analyzer, node->as.as_expr.type)
                          : NULL;
     if (!target)
         return xr_type_new_unknown(NULL);
@@ -2744,7 +2921,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             XrParamNode *p = fn->params[i];
             // Check for explicit type annotation first
             if (p && p->type) {
-                param_types[i] = xr_tref_resolve(ctx->analyzer->isolate, p->type);
+                param_types[i] = xr_tref_resolve_in_analyzer(ctx->analyzer, p->type);
                 if (type_param_names) {
                     param_types[i] =
                         resolve_class_to_type_param(ctx->analyzer->isolate, param_types[i],
@@ -2789,8 +2966,9 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     }
 
     // Use expected return type if not explicitly declared
-    XrType *return_type = fn->return_type ? xr_tref_resolve(ctx->analyzer->isolate, fn->return_type)
-                                          : xr_type_new_unknown(NULL);
+    XrType *return_type = fn->return_type
+                              ? xr_tref_resolve_in_analyzer(ctx->analyzer, fn->return_type)
+                              : xr_type_new_unknown(NULL);
     if (fn->return_type && type_param_names) {
         return_type = resolve_class_to_type_param(ctx->analyzer->isolate, return_type,
                                                   type_param_names, fn->type_param_count);

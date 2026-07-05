@@ -315,6 +315,7 @@ XR_FUNC void xi_emit_store_field(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_fixed_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_index_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_index_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);

@@ -72,7 +72,7 @@ typedef enum XrTypeKind {
     XR_KIND_TYPE_PARAM,
     XR_KIND_TUPLE,
     XR_KIND_UNION,        // Union type: int | string (compile-time only)
-    XR_KIND_FIXED_ARRAY,  // Fixed-length array: [N]T (compile-time length, runtime Array<T>)
+    XR_KIND_FIXED_ARRAY,  // Fixed-length array: [T; N] (compile-time length)
     XR_KIND_POINTER,      // FFI raw pointer: RawPtr<T> (const) / RawMut<T> (mut). Address-
                           // width integer at the value level, invisible to the GC.
     XR_KIND_CHAR,         // Unicode scalar value. Immediate value (tag XR_TAG_CHAR), not
@@ -208,7 +208,7 @@ struct XrType {
             uint8_t member_count;  // Number of members (≤ XR_UNION_MAX_MEMBERS)
         } union_type;
 
-        // For fixed-length array ([N]T)
+        // For fixed-length array ([T; N])
         struct {
             XrType *element_type;  // Element type
             int length;            // Fixed length N
@@ -705,7 +705,7 @@ static inline bool xr_type_is_json_field_compatible(XrType *type) {
     }
 }
 
-// API: Fixed-length array ([N]T - compile-time length, runtime Array<T>)
+// API: Fixed-length array ([T; N] - compile-time length)
 XR_FUNC XrType *xr_type_new_fixed_array(XrVMRuntime *X, XrType *element_type, int length);
 
 // API: Type operations

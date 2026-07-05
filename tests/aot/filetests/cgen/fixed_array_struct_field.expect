@@ -9,6 +9,3 @@ c_contains=xrt_fixed_array_copy
 c_regex=static int64_t fixed_array_struct_field_run_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
 c_regex=uint8_t v[0-9]+ = .*->data\[v[0-9]+\];
 c_not_regex=XrValue v[0-9]+ = .*->data\[
-c_not_contains=xrt_index_get(
-c_not_contains=xrt_index_set(
-c_not_contains=xr_array_ref(

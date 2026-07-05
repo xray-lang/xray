@@ -130,7 +130,7 @@ typedef enum {
     AST_RETURN_STMT,            // return expr
 
     // Array nodes
-    AST_ARRAY_LITERAL,  // [1, 2, 3]
+    AST_ARRAY_LITERAL,  // [1, 2, 3] or [value; count]
     AST_INDEX_GET,      // arr[0]
     AST_INDEX_SET,      // arr[0] = 10
     AST_SLICE_EXPR,     // arr[start:end]

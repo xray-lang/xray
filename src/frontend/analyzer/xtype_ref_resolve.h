@@ -16,11 +16,14 @@
 #define XTYPE_REF_RESOLVE_H
 
 #include "../../base/xdefs.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 struct XrVMRuntime;
 struct XrTypeRef;
 struct XrType;
 struct XaAnalyzer;
+struct AstNode;
 
 /* Resolve a single XrTypeRef to its runtime XrType*.
  * Returns xr_type_new_unknown() on NULL input or unresolvable refs. */
@@ -41,5 +44,11 @@ XR_FUNC struct XrType *xr_tref_resolve(struct XrVMRuntime *X, const struct XrTyp
  * information because it always allocates a brand-new class XrType. */
 XR_FUNC struct XrType *xr_tref_resolve_in_analyzer(struct XaAnalyzer *analyzer,
                                                    const struct XrTypeRef *tref);
+
+/* Evaluate the integer subset allowed in compile-time constant contexts:
+ * integer literals, const integer identifiers, grouping, unary +/-/~, and
+ * arithmetic/bitwise binary operators. */
+XR_FUNC bool xa_eval_const_int_expr(struct XaAnalyzer *analyzer, const struct AstNode *expr,
+                                    int64_t *out_value, const char **out_error);
 
 #endif  // XTYPE_REF_RESOLVE_H

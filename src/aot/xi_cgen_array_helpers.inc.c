@@ -23,6 +23,11 @@ static bool cg_value_type_is_span(const XiValue *value) {
     return v && v->type && v->type->kind == XR_KIND_SPAN;
 }
 
+static bool cg_value_type_is_fixed_array(const XiValue *value) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    return v && v->type && v->type->kind == XR_KIND_FIXED_ARRAY;
+}
+
 static bool cg_span_elem_info_from_value(XiCgenCtx *ctx, const XiValue *value,
                                          CgArrayElemInfo *out) {
     const XiValue *v = cg_unwrap_identity_value(value);
@@ -100,6 +105,8 @@ static bool cg_array_value_storage_info(XiCgenCtx *ctx, const XiFunc *f, const X
     uint32_t required_flag =
         use == CG_ARRAY_STORAGE_READ ? XAOT_ARRAY_STORAGE_READ : XAOT_ARRAY_STORAGE_MUTABLE;
     (void) f;
+    if (v && v->type && v->type->kind == XR_KIND_FIXED_ARRAY)
+        return false;
     plan = xaot_bundle_find_array_storage_plan(cg_ctx_aot_bundle(ctx), v);
     if (plan)
         return (plan->flags & required_flag) != 0 &&

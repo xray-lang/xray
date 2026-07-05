@@ -99,6 +99,7 @@
     X(STRUCT_NEW, "xi.struct.new", xicgen_struct_new) \
     X(STRUCT_GET, "xi.struct.get", xicgen_struct_get) \
     X(STRUCT_SET, "xi.struct.set", xicgen_struct_set) \
+    X(FIXED_ARRAY_NEW, "xi.fixed.array.new", xicgen_fixed_array_new) \
     X(TUPLE_NEW, "xi.tuple.new", xicgen_tuple_new) \
     X(TUPLE_GET, "xi.tuple.get", xicgen_tuple_get) \
     X(BYTES_LOAD_U16, "xi.bytes.load.u16", xicgen_bytes_load_u16) \

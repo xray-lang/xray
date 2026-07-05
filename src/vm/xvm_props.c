@@ -220,6 +220,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
                 case XR_NATIVE_ARRAY_REF:
                 case XR_NATIVE_MAP_REF:
                 case XR_NATIVE_SET_REF:
+                case XR_NATIVE_VALUE:
                     *(XrValue *) fp = value;
                     break;
                 default:

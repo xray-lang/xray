@@ -1,0 +1,3 @@
+const N = 0
+let key: [uint8; N] = []
+print(key.length)

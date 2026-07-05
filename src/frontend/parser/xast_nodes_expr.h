@@ -113,6 +113,9 @@ typedef struct AsExprNode {
 typedef struct ArrayLiteralNode {
     AstNode **elements;
     int count;
+    AstNode *repeat_value;
+    AstNode *repeat_count;
+    bool is_repeat;
 } ArrayLiteralNode;
 
 // Tuple literal node — `()`, `(x,)`, `(a, b, ...)`.

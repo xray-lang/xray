@@ -164,7 +164,7 @@ const char *xr_type_to_string(XrType *type) {
         const char *elem = type->fixed_array.element_type
                                ? xr_type_to_string(type->fixed_array.element_type)
                                : "unknown";
-        snprintf(buf, TYPE_STR_BUF_SIZE, "[%d]%s", type->fixed_array.length, elem);
+        snprintf(buf, TYPE_STR_BUF_SIZE, "[%s; %d]", elem, type->fixed_array.length);
         return xr_pool_strdup(pool, buf);
     }
 

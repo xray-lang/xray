@@ -3537,7 +3537,7 @@ TEST(cgen_nested_struct_field_uses_embedded_heap_native_storage) {
 
 TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
     const char *src = "struct Buf {\n"
-                      "    data: [4]uint8\n"
+                      "    data: [uint8; 4]\n"
                       "    bias: int\n"
                       "}\n"
                       "let buf = Buf{data: [1, 2, 3, 4], bias: 5}\n"
@@ -3584,6 +3584,40 @@ TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
            !contains(code, "xrt_map_set(") && "fixed array struct must not use map storage");
 
     printf("  Generated fixed-array struct heap-native path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_fixed_array_local_uses_stack_array_ref_storage) {
+    const char *src = "fn first(key: [uint8; 4]) -> int {\n"
+                      "    return key[0]\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    let key: [uint8; 4] = [1, 2, 3, 4]\n"
+                      "    key[1] = 9\n"
+                      "    return key.length + first(key) + key[1]\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "local fixed-array path should generate");
+
+    assert(contains(code, "uint8_t _fa") && "local fixed array must allocate native stack storage");
+    assert(contains(code, "xr_array_ref(_fa") &&
+           "local fixed array must expose storage as an array ref");
+    assert(contains(code, "XR_ARRAY_REF_ELEM_COUNT") &&
+           "local fixed array length must read array-ref metadata");
+    assert(contains(code, "xrt_index_get(") && contains(code, "xrt_index_set(") &&
+           "local fixed array index operations should use array-ref runtime helpers");
+    assert(!contains(code, "((xrt_array_t*)") &&
+           "local fixed array array-ref storage must not be cast to dynamic array header");
+
+    printf("  Generated local fixed-array stack path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -8216,6 +8250,7 @@ int main(void) {
     run_cgen_repr_c_struct_omits_native_header();
     run_cgen_nested_struct_field_uses_embedded_heap_native_storage();
     run_cgen_fixed_array_struct_field_uses_embedded_heap_native_storage();
+    run_cgen_fixed_array_local_uses_stack_array_ref_storage();
     run_cgen_shared_struct_alias_elides_tagged_hot_locals();
     run_cgen_class_method_caches_receiver_scalar_fields();
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();

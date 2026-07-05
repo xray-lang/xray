@@ -517,6 +517,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Sized integers | `int8`, `int16`, `int32`, `int64`, `uint8`..`uint64` |
 | Sized floats | `float32`, `float64` |
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Bytes` (equivalent to `Array<uint8>`) |
+| Fixed layout | `[T; N]` |
 | Special | `Json`, `BigInt`, `Range`, `DateTime`, `Regex`, `StringBuilder`, `Logger`, `NetConn`, `NetListener` |
 | Error-handling prelude | `PanicInfo` (see §8) |
 | Weak containers | `WeakMap`, `WeakSet` |
@@ -672,6 +673,51 @@ let c: Array<string> = []         // explicit empty array
 The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
 
 `Array<char>` preserves the `char` element identity: reads return `char`, and writes accept only `char`. The implementation uses compact Unicode-scalar storage (`XR_ELEM_CHAR` / `uint32_t[]`) and does not degrade to `Array<uint32>`.
+
+#### 2.4.1.1 Fixed Arrays `[T; N]`
+
+`[T; N]` is a fixed-layout array type for `N` elements of type `T`. `N` is part of the type and must evaluate during analysis to a positive compile-time integer expression. The current expression subset includes integer literals, `const` integer identifiers, grouping, unary `-`/`~`, and integer arithmetic/bitwise operators. The current backend encoding limit is 65535 elements.
+
+The current implementation supports inline struct fields and stack-local fixed arrays. Scalar elements (`int`, `float`, `bool`, sized integers/floats, and similar primitives) use compact native lanes; `string`, struct, nested fixed arrays, and reference-container elements use tagged `XrValue` lanes, so fixed arrays compose recursively:
+
+```xray
+let bytes: [uint8; 4] = [1, 2, 3, 4]
+let zero: [uint8; 64] = [0; 64]
+let names: [string; 2] = ["a", "b"]
+let blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
+```
+
+A target-typed array literal that initializes `[T; N]` must have the exact length; repeat initialization `[value; N]` uses the same positive compile-time integer expression rule and must also match the target length. A normal array literal without context still infers dynamic `Array<T>`; `[value; N]` without context infers `[T; N]`.
+
+Fixed arrays support `length`/`size`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Span<T>`:
+
+```xray
+let data: [uint8; 4] = [5, 6, 7, 8]
+let view: Span<uint8> = data[1:4]
+view[1] = 99
+```
+
+```xray
+struct Packet {
+    magic: [uint8; 4]
+    payload: [uint8; 128]
+}
+
+let key: [uint8; 4] = [1, 2, 3, 4]
+key[1] = 9
+
+fn first(packet: Packet) -> uint8 {
+    return packet.magic[0]
+}
+```
+
+`[T; N]` has different semantics from `Array<T>`:
+
+- `[T; N]`: fixed length, value semantics, fixed layout; suited for inline struct fields, local small buffers, and FFI/freestanding data.
+- `Array<T>`: dynamic length, growable, heap-backed container.
+- `Span<T>`: borrowed view over contiguous storage; it does not own data.
+
+The old `[N]T` syntax is not part of the Xray language.
 
 #### 2.4.2 `Map<K, V>`
 

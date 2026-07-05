@@ -1,5 +1,5 @@
 struct Buf {
-    data: [4]uint8
+    data: [uint8; 4]
     bias: int
 }
 

@@ -45,6 +45,7 @@
 #include <stdio.h>
 #include <float.h>
 #include <math.h>
+#include <limits.h>
 
 /* ========== Forward Declarations ========== */
 
@@ -1707,14 +1708,149 @@ static XiValue *lower_array_literal_spread(XiLower *l, AstNode *node, struct XrT
     return arr_val;
 }
 
+static int xi_fixed_array_elem_native_type(struct XrType *type) {
+    if (!type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
+        type->fixed_array.length <= 0)
+        return -1;
+    XrType *elem = type->fixed_array.element_type;
+    if (elem->is_nullable)
+        return XR_NATIVE_VALUE;
+    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    if (native == XR_NATIVE_I64 || native == XR_NATIVE_F64 || native == XR_NATIVE_BOOL ||
+        native == XR_NATIVE_I8 || native == XR_NATIVE_I16 || native == XR_NATIVE_I32 ||
+        native == XR_NATIVE_U8 || native == XR_NATIVE_U16 || native == XR_NATIVE_U32 ||
+        native == XR_NATIVE_U64 || native == XR_NATIVE_F32)
+        return native;
+    if (native == XR_NATIVE_STRING || native < 0)
+        return XR_NATIVE_VALUE;
+    return native;
+}
+
+static XiValue *lower_fixed_array_store_elem(XiLower *l, AstNode *node, XiValue *arr_val, int idx,
+                                             XiValue *elem, struct XrType *elem_type, int native) {
+    if (!l || !arr_val || !elem)
+        return NULL;
+    XiValue *idx_val = xi_const_int(l->func, l->cur_block, idx, l->type_int);
+    if (!idx_val)
+        return NULL;
+    if (native != XR_NATIVE_VALUE) {
+        uint16_t narrow_op = xi_narrow_op_for_elem(elem_type);
+        if (narrow_op) {
+            XiValue *narrow = xi_value_new(l->func, l->cur_block, narrow_op, elem->type, 1);
+            if (narrow) {
+                narrow->args[0] = elem;
+                narrow->line = (uint32_t) node->line;
+                elem = narrow;
+            }
+        }
+    }
+    XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
+    if (!set)
+        return NULL;
+    set->args[0] = arr_val;
+    set->args[1] = idx_val;
+    set->args[2] = elem;
+    set->flags |= XI_FLAG_SIDE_EFFECT;
+    set->line = (uint32_t) node->line;
+    return set;
+}
+
+static bool xi_fixed_array_repeat_value_is_zero(AstNode *node, int native) {
+    if (!node || native == XR_NATIVE_VALUE)
+        return false;
+    if (node->type == AST_LITERAL_INT)
+        return node->as.literal.raw_value.int_val == 0;
+    if (node->type == AST_LITERAL_FALSE)
+        return true;
+    if (node->type == AST_LITERAL_FLOAT)
+        return node->as.literal.raw_value.float_val == 0.0;
+    return false;
+}
+
+static XiValue *lower_fixed_array_literal(XiLower *l, AstNode *node, ArrayLiteralNode *arr,
+                                          struct XrType *result_type) {
+    if (!result_type || result_type->kind != XR_KIND_FIXED_ARRAY)
+        return NULL;
+    int native = xi_fixed_array_elem_native_type(result_type);
+    if (native < 0) {
+        fprintf(stderr, "[LOWER] fixed array element type '%s' has no native layout at line %d\n",
+                result_type->fixed_array.element_type
+                    ? xr_type_to_string(result_type->fixed_array.element_type)
+                    : "?",
+                (int) node->line);
+        l->had_error = true;
+        return NULL;
+    }
+    int expected_count = result_type->fixed_array.length;
+    if (arr->is_repeat) {
+        XiValue *repeat_value = xi_lower_expr(l, arr->repeat_value);
+        if (!repeat_value)
+            return NULL;
+        XiValue *arr_val = xi_value_new(l->func, l->cur_block, XI_FIXED_ARRAY_NEW, result_type, 0);
+        if (!arr_val)
+            return NULL;
+        arr_val->aux_int = native;
+        arr_val->flags |= XI_FLAG_SIDE_EFFECT;
+        arr_val->line = (uint32_t) node->line;
+
+        if (xi_fixed_array_repeat_value_is_zero(arr->repeat_value, native))
+            return arr_val;
+
+        for (int i = 0; i < expected_count; i++) {
+            if (!lower_fixed_array_store_elem(l, node, arr_val, i, repeat_value,
+                                              result_type->fixed_array.element_type, native))
+                return NULL;
+        }
+        return arr_val;
+    }
+
+    if (arr->count != expected_count) {
+        fprintf(stderr,
+                "[LOWER] fixed array literal length mismatch at line %d: got %d, expected %d\n",
+                (int) node->line, arr->count, expected_count);
+        l->had_error = true;
+        return NULL;
+    }
+
+    int n = arr->count;
+    int alloc_n = n > 0 ? n : 1;
+    XiValue **elem_vals =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
+    if (!elem_vals)
+        return NULL;
+    for (int i = 0; i < n; i++) {
+        elem_vals[i] = xi_lower_expr(l, arr->elements[i]);
+        if (!elem_vals[i])
+            return NULL;
+    }
+
+    XiValue *arr_val = xi_value_new(l->func, l->cur_block, XI_FIXED_ARRAY_NEW, result_type, 0);
+    if (!arr_val)
+        return NULL;
+    arr_val->aux_int = native;
+    arr_val->flags |= XI_FLAG_SIDE_EFFECT;
+    arr_val->line = (uint32_t) node->line;
+
+    for (int i = 0; i < n; i++) {
+        if (!lower_fixed_array_store_elem(l, node, arr_val, i, elem_vals[i],
+                                          result_type->fixed_array.element_type, native))
+            return NULL;
+    }
+    return arr_val;
+}
+
 static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
     ArrayLiteralNode *arr = &node->as.array_literal;
     int count = arr->count;
+    struct XrType *result_type = xi_lower_node_type(l, node);
+
+    if (result_type && result_type->kind == XR_KIND_FIXED_ARRAY)
+        return lower_fixed_array_literal(l, node, arr, result_type);
 
     /* Spread elements force the dynamic build path. */
     for (int i = 0; i < count; i++) {
         if (arr->elements[i] && arr->elements[i]->type == AST_SPREAD_EXPR)
-            return lower_array_literal_spread(l, node, xi_lower_node_type(l, node));
+            return lower_array_literal_spread(l, node, result_type);
     }
 
     /* Evaluate all elements first */
@@ -1731,7 +1867,6 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
     }
 
     /* Create array: XI_ARRAY_NEW with element count as aux */
-    struct XrType *result_type = xi_lower_node_type(l, node);
     XiValue *cap = xi_const_int(l->func, l->cur_block, count, l->type_int);
     XiValue *arr_val = xi_value_new(l->func, l->cur_block, XI_ARRAY_NEW, result_type, 1);
     if (!arr_val)

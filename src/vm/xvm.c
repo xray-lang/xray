@@ -280,6 +280,7 @@ static bool vm_struct_write_field_bytes(XrVMRuntime *isolate, uint8_t *fp,
         case XR_NATIVE_ARRAY_REF:
         case XR_NATIVE_MAP_REF:
         case XR_NATIVE_SET_REF:
+        case XR_NATIVE_VALUE:
             *(XrValue *) fp = src;
             return true;
         default:

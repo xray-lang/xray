@@ -317,10 +317,11 @@ typedef enum {
     /* Struct native storage: typed field access with compile-time layout.
      * args[0]=class_val for NEW; args[0]=struct for GET/SET.
      * aux=XrStructLayout*; aux_int=field_index for GET/SET. */
-    XI_STRUCT_NEW, /* allocate struct: args[0]=class, aux=XrStructLayout* */
-    XI_STRUCT_GET, /* read field: args[0]=struct, aux_int=field_idx, aux=XrStructLayout* */
-    XI_STRUCT_SET, /* write field: args[0]=struct, args[1]=val, aux_int=field_idx,
-                      aux=XrStructLayout* */
+    XI_STRUCT_NEW,      /* allocate struct: args[0]=class, aux=XrStructLayout* */
+    XI_STRUCT_GET,      /* read field: args[0]=struct, aux_int=field_idx, aux=XrStructLayout* */
+    XI_STRUCT_SET,      /* write field: args[0]=struct, args[1]=val, aux_int=field_idx,
+                           aux=XrStructLayout* */
+    XI_FIXED_ARRAY_NEW, /* allocate fixed array in frame storage: type=[T; N], aux_int=native */
 
     /* Json / Allocation */
     XI_JSON_NEW,     /* Create Json object: aux=field_count, aux_ptr=field_names[] */

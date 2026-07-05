@@ -563,8 +563,20 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         // === Array / Index / Slice ===
         case AST_ARRAY_LITERAL:
             n->as.array_literal.count = node->as.array_literal.count;
-            n->as.array_literal.elements = clone_node_array(
-                node->as.array_literal.elements, node->as.array_literal.count, map, mc, clone_ctx);
+            n->as.array_literal.is_repeat = node->as.array_literal.is_repeat;
+            if (node->as.array_literal.is_repeat) {
+                n->as.array_literal.elements = NULL;
+                n->as.array_literal.repeat_value =
+                    xr_ast_clone_ctx(node->as.array_literal.repeat_value, map, mc, clone_ctx);
+                n->as.array_literal.repeat_count =
+                    xr_ast_clone_ctx(node->as.array_literal.repeat_count, map, mc, clone_ctx);
+            } else {
+                n->as.array_literal.repeat_value = NULL;
+                n->as.array_literal.repeat_count = NULL;
+                n->as.array_literal.elements =
+                    clone_node_array(node->as.array_literal.elements, node->as.array_literal.count,
+                                     map, mc, clone_ctx);
+            }
             break;
         case AST_INDEX_GET:
             n->as.index_get.array = xr_ast_clone_ctx(node->as.index_get.array, map, mc, clone_ctx);
@@ -1411,9 +1423,16 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
                 collect_instantiation_sites(node->as.print_stmt.exprs[i], registry, collector);
             break;
         case AST_ARRAY_LITERAL:
-            for (int i = 0; i < node->as.array_literal.count; i++)
-                collect_instantiation_sites(node->as.array_literal.elements[i], registry,
+            if (node->as.array_literal.is_repeat) {
+                collect_instantiation_sites(node->as.array_literal.repeat_value, registry,
                                             collector);
+                collect_instantiation_sites(node->as.array_literal.repeat_count, registry,
+                                            collector);
+            } else {
+                for (int i = 0; i < node->as.array_literal.count; i++)
+                    collect_instantiation_sites(node->as.array_literal.elements[i], registry,
+                                                collector);
+            }
             break;
         case AST_INDEX_GET:
             collect_instantiation_sites(node->as.index_get.array, registry, collector);

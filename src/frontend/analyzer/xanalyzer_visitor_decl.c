@@ -48,6 +48,18 @@
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xstruct_layout.h"
 
+static int xa_fixed_array_elem_native_lane(XrType *elem) {
+    if (!elem || elem->is_nullable)
+        return XR_NATIVE_VALUE;
+    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    if (native == XR_NATIVE_I64 || native == XR_NATIVE_F64 || native == XR_NATIVE_BOOL ||
+        native == XR_NATIVE_I8 || native == XR_NATIVE_I16 || native == XR_NATIVE_I32 ||
+        native == XR_NATIVE_U8 || native == XR_NATIVE_U16 || native == XR_NATIVE_U32 ||
+        native == XR_NATIVE_U64 || native == XR_NATIVE_F32)
+        return native;
+    return XR_NATIVE_VALUE;
+}
+
 static bool xa_class_attr_has(const ClassDeclNode *cls, AttributeKind kind) {
     if (!cls || !cls->attributes)
         return false;
@@ -511,8 +523,13 @@ static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr) {
             xa_summary_mark_expr(summary, expr->as.ternary.false_expr);
             break;
         case AST_ARRAY_LITERAL:
-            for (int i = 0; i < expr->as.array_literal.count; i++)
-                xa_summary_mark_expr(summary, expr->as.array_literal.elements[i]);
+            if (expr->as.array_literal.is_repeat) {
+                xa_summary_mark_expr(summary, expr->as.array_literal.repeat_value);
+                xa_summary_mark_expr(summary, expr->as.array_literal.repeat_count);
+            } else {
+                for (int i = 0; i < expr->as.array_literal.count; i++)
+                    xa_summary_mark_expr(summary, expr->as.array_literal.elements[i]);
+            }
             break;
         case AST_OBJECT_LITERAL:
             for (int i = 0; i < expr->as.object_literal.count; i++)
@@ -605,8 +622,13 @@ static void xa_summary_mark_capture_refs(XaParamEscapeSummary *summary, AstNode 
             xa_summary_mark_capture_refs(summary, node->as.index_set.value);
             break;
         case AST_ARRAY_LITERAL:
-            for (int i = 0; i < node->as.array_literal.count; i++)
-                xa_summary_mark_capture_refs(summary, node->as.array_literal.elements[i]);
+            if (node->as.array_literal.is_repeat) {
+                xa_summary_mark_capture_refs(summary, node->as.array_literal.repeat_value);
+                xa_summary_mark_capture_refs(summary, node->as.array_literal.repeat_count);
+            } else {
+                for (int i = 0; i < node->as.array_literal.count; i++)
+                    xa_summary_mark_capture_refs(summary, node->as.array_literal.elements[i]);
+            }
             break;
         case AST_OBJECT_LITERAL:
             for (int i = 0; i < node->as.object_literal.count; i++)
@@ -858,8 +880,13 @@ static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
             xa_summary_walk(summary, node->as.parallel_collect_expr.body);
             break;
         case AST_ARRAY_LITERAL:
-            for (int i = 0; i < node->as.array_literal.count; i++)
-                xa_summary_walk(summary, node->as.array_literal.elements[i]);
+            if (node->as.array_literal.is_repeat) {
+                xa_summary_walk(summary, node->as.array_literal.repeat_value);
+                xa_summary_walk(summary, node->as.array_literal.repeat_count);
+            } else {
+                for (int i = 0; i < node->as.array_literal.count; i++)
+                    xa_summary_walk(summary, node->as.array_literal.elements[i]);
+            }
             break;
         case AST_OBJECT_LITERAL:
             for (int i = 0; i < node->as.object_literal.count; i++)
@@ -1124,10 +1151,18 @@ static bool xa_method_body_mutates_receiver(AstNode *node, XrClassInfo *receiver
             return xa_method_body_mutates_receiver(node->as.destructure_assign.value,
                                                    receiver_info);
         case AST_ARRAY_LITERAL:
-            for (int i = 0; i < node->as.array_literal.count; i++) {
-                if (xa_method_body_mutates_receiver(node->as.array_literal.elements[i],
+            if (node->as.array_literal.is_repeat) {
+                if (xa_method_body_mutates_receiver(node->as.array_literal.repeat_value,
+                                                    receiver_info) ||
+                    xa_method_body_mutates_receiver(node->as.array_literal.repeat_count,
                                                     receiver_info))
                     return true;
+            } else {
+                for (int i = 0; i < node->as.array_literal.count; i++) {
+                    if (xa_method_body_mutates_receiver(node->as.array_literal.elements[i],
+                                                        receiver_info))
+                        return true;
+                }
             }
             return false;
         case AST_TUPLE_LITERAL:
@@ -2609,7 +2644,7 @@ skip_interfaces:
                 char msg[256];
                 snprintf(msg, sizeof(msg),
                          "Struct '%s' field '%s' cannot use a dynamic container type; "
-                         "use a class field or a fixed array [N]T",
+                         "use a class field or a fixed array [T; N]",
                          cls->name ? cls->name : "?", fs->name ? fs->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
@@ -2699,42 +2734,41 @@ skip_interfaces:
 
             int native = xr_type_kind_to_native(ft->kind, ft->native_width);
             if (native < 0) {
-                // Fixed-size array field: [N]T
+                // Fixed-size array field: [T; N]
                 if (ft->kind == XR_KIND_FIXED_ARRAY && ft->fixed_array.element_type) {
                     XrType *elem = ft->fixed_array.element_type;
-                    int elem_native = xr_type_kind_to_native(elem->kind, elem->native_width);
-                    if (elem_native >= 0 && ft->fixed_array.length > 0) {
-                        uint32_t field_bytes = (uint32_t) ft->fixed_array.length *
-                                               xr_native_type_size((uint8_t) elem_native);
-                        if (field_bytes > UINT16_MAX) {
-                            XrLocation loc = {.file = ctx->file_path, .line = node->line};
-                            char msg[256];
-                            snprintf(msg, sizeof(msg),
-                                     "Fixed array field '%s' in struct '%s' exceeds maximum size "
-                                     "(%u bytes > 65535). For larger collections, use a class with "
-                                     "Array<T>.",
-                                     fs->name ? fs->name : "?", cls->name ? cls->name : "?",
-                                     (unsigned) field_bytes);
-                            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-                            layout_valid = false;
-                            break;
-                        }
-                        layout->fields[i].native_type = XR_NATIVE_ARRAY;
-                        layout->fields[i].elem_native_type = (uint8_t) elem_native;
-                        layout->fields[i].elem_count = (uint16_t) ft->fixed_array.length;
-                    } else {
+                    int elem_native = xa_fixed_array_elem_native_lane(elem);
+                    if (ft->fixed_array.length <= 0) {
                         XrLocation loc = {.file = ctx->file_path, .line = node->line};
                         char msg[256];
-                        snprintf(
-                            msg, sizeof(msg),
-                            "Struct '%s' field '%s': fixed array element must be a primitive type",
-                            cls->name ? cls->name : "?", fs->name ? fs->name : "?");
+                        snprintf(msg, sizeof(msg),
+                                 "Struct '%s' field '%s': fixed array length must be positive",
+                                 cls->name ? cls->name : "?", fs->name ? fs->name : "?");
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                         layout_valid = false;
                         break;
                     }
+                    uint32_t elem_size = xr_native_type_size((uint8_t) elem_native);
+                    uint64_t field_bytes = (uint64_t) ft->fixed_array.length * (uint64_t) elem_size;
+                    if (elem_size == 0 || field_bytes > UINT16_MAX ||
+                        (uint32_t) ft->fixed_array.length > UINT16_MAX) {
+                        XrLocation loc = {.file = ctx->file_path, .line = node->line};
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                                 "Fixed array field '%s' in struct '%s' exceeds maximum size "
+                                 "(%u bytes > 65535). For larger collections, use a class with "
+                                 "Array<T>.",
+                                 fs->name ? fs->name : "?", cls->name ? cls->name : "?",
+                                 (unsigned) (field_bytes > UINT32_MAX ? UINT32_MAX : field_bytes));
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                        layout_valid = false;
+                        break;
+                    }
+                    layout->fields[i].native_type = XR_NATIVE_ARRAY;
+                    layout->fields[i].elem_native_type = (uint8_t) elem_native;
+                    layout->fields[i].elem_count = (uint16_t) ft->fixed_array.length;
                     continue;
                 }
                 // Check if field type is a nested struct with known layout
@@ -3089,20 +3123,29 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
 
     VarDeclNode *var = &node->as.var_decl;
 
-    XaSymbol *sym = xa_symbol_new(var->name, XA_SYM_VARIABLE);
-    sym->location.line = node->line;
-    sym->is_const = (node->type == AST_CONST_DECL);
-    sym->is_shared = (var->storage_mode == 1);  // XR_STORAGE_SHARED
+    XaSymbol *sym =
+        var->symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, var->symbol_id) : NULL;
+    if (!sym) {
+        sym = xa_symbol_new(var->name, XA_SYM_VARIABLE);
+        sym->location.line = node->line;
+        sym->is_const = (node->type == AST_CONST_DECL);
+        sym->is_shared = (var->storage_mode == 1);  // XR_STORAGE_SHARED
 
-    xa_visit_add_symbol_checked(ctx, sym, 0);
+        xa_visit_add_symbol_checked(ctx, sym, 0);
 
-    /* Write back unique symbol ID so Xi lowering can use it as Braun SSA key
-     * instead of name-based lookup (eliminates scope ambiguity). */
-    var->symbol_id = sym->id;
+        /* Write back unique symbol ID so Xi lowering can use it as Braun SSA key
+         * instead of name-based lookup (eliminates scope ambiguity). */
+        var->symbol_id = sym->id;
+    } else {
+        sym->is_const = (node->type == AST_CONST_DECL);
+        sym->is_shared = (var->storage_mode == 1);
+    }
 
     // Type will be inferred in pass 2
     // Keep NULL when no annotation (distinguishes "no annotation" from "annotated as any")
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (links && sym->is_const)
+        links->const_initializer = var->initializer;
     links->declared_type = var->type_annotation
                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, var->type_annotation)
                                : NULL;

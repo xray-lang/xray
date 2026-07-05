@@ -19,6 +19,7 @@
 #include "../../runtime/xerror_codes.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -218,7 +219,8 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             XrTypeRef *elem = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
                                                                         subst_alias, type_args)
                                                  : xr_tref_unknown(parser->compiler_session);
-            return xr_tref_fixed_array(parser->compiler_session, elem, src->fixed_length);
+            return xr_tref_fixed_array_expr(parser->compiler_session, elem, src->fixed_length_expr,
+                                            src->fixed_length);
         }
     }
     return xr_tref_unknown(parser->compiler_session);
@@ -318,21 +320,29 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
 static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_type_annotation_base: NULL parser");
 
-    /* Fixed-length array type: [N]T */
+    /* Fixed-length array type: [T; N] */
     if (xr_parser_check(parser, TK_LBRACKET)) {
-        Scanner saved = parser->scanner;
-        Token saved_current = parser->current;
         xr_parser_advance(parser);
         if (parser->current.type == TK_LITERAL_INT) {
-            int length = (int) strtol(parser->current.start, NULL, 10);
-            xr_parser_advance(parser);
-            if (xr_parser_match(parser, TK_RBRACKET)) {
-                XrTypeRef *elem = parse_type_annotation_base(parser);
-                return xr_tref_fixed_array(parser->compiler_session, elem, length);
-            }
+            xr_parser_error(parser, "fixed array type uses [T; N], e.g. [uint8; 64]");
+            return xr_tref_unknown(parser->compiler_session);
         }
-        parser->scanner = saved;
-        parser->current = saved_current;
+        XrTypeRef *elem = xr_parse_type_annotation(parser);
+        xr_parser_consume(parser, TK_SEMICOLON, "expected ';' before fixed array length in [T; N]");
+        AstNode *length_expr = xr_parse_expression(parser);
+        if (!length_expr) {
+            xr_parser_error(parser, "fixed array length must be a compile-time integer expression");
+            return xr_tref_unknown(parser->compiler_session);
+        }
+        int literal_length = 0;
+        if (length_expr->type == AST_LITERAL_INT) {
+            int64_t raw = length_expr->as.literal.raw_value.int_val;
+            if (raw > 0 && raw <= INT_MAX)
+                literal_length = (int) raw;
+        }
+        xr_parser_consume(parser, TK_RBRACKET, "expected ']' after fixed array length");
+        return xr_tref_fixed_array_expr(parser->compiler_session, elem, length_expr,
+                                        literal_length);
     }
 
     /* Primitive type keywords */

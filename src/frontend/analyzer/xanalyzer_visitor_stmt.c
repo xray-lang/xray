@@ -15,6 +15,7 @@
 #include "xanalyzer_visitor_internal.h"
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
+#include <stdint.h>
 
 static bool xa_is_module_level_scope(const XaAnalyzer *analyzer) {
     return analyzer && analyzer->current_scope && analyzer->current_scope->kind == XA_SCOPE_GLOBAL;
@@ -648,6 +649,9 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
                                                   node->as.return_stmt.value_count, name);
 
         case AST_ARRAY_LITERAL:
+            if (node->as.array_literal.is_repeat)
+                return xa_node_uses_symbol_name(node->as.array_literal.repeat_value, name) ||
+                       xa_node_uses_symbol_name(node->as.array_literal.repeat_count, name);
             return xa_node_array_uses_symbol_name(node->as.array_literal.elements,
                                                   node->as.array_literal.count, name);
         case AST_TUPLE_LITERAL:
@@ -1262,6 +1266,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         var->symbol_id = sym->id;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (links && sym->is_const)
+        links->const_initializer = var->initializer;
     if (xa_freestanding_profile_enabled(ctx->analyzer) && var->storage_mode == XR_STORAGE_SHARED) {
         xa_freestanding_report_unavailable(
             ctx, node,
@@ -1386,7 +1392,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     // Variables with type annotations are initialized to the type zero value.
     links->is_definitely_assigned = (var->initializer != NULL) || (links->declared_type != NULL);
 
-    // A const with a literal initializer can be constant-folded downstream.
+    // A const with a literal initializer, or an integer constant expression,
+    // can be constant-folded downstream.
     if (sym->is_const && var->initializer) {
         AstNodeType init_t = var->initializer->type;
         if (init_t == AST_LITERAL_INT || init_t == AST_LITERAL_FLOAT ||
@@ -1394,6 +1401,10 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
             init_t == AST_LITERAL_TRUE || init_t == AST_LITERAL_FALSE ||
             init_t == AST_LITERAL_NULL) {
             links->is_const_foldable = true;
+        } else {
+            int64_t ignored = 0;
+            if (xa_eval_const_int_expr(ctx->analyzer, var->initializer, &ignored, NULL))
+                links->is_const_foldable = true;
         }
     }
     links->assign_count = var->initializer ? 1 : 0;
