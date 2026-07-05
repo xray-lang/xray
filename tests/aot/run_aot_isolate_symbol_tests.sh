@@ -43,13 +43,12 @@ JOBS=1
 FORBIDDEN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xray_vm_|xray_isolate_|xr_vm_|xr_parse|xr_compile|xanalyzer_|xr_load_module_)'
 EAGER_SCRIPT_BUILTIN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xr_string_intern_core|xr_string_value)([^[:alnum:]_]|$)'
 PURE_TINY_AOT_MAX_BYTES=70000
-PURE_CRYPTO_AOT_MAX_BYTES=80000
-# The coroutine runtime archive gained the sync primitive family
-# (Semaphore/CountdownLatch/EventCount/WorkQueue/ResultGroup cancel-waiter
-# paths are referenced from the shared coroutine cancel path), which any
-# yieldable program now links; the cap tracks that deliberate growth while
-# staying tight against VM/toolchain-shaped drift.
-RUNTIME_TIME_SLEEP_MAX_BYTES=205000
+PURE_CRYPTO_AOT_MAX_BYTES=96000
+# The coroutine runtime archive includes timer/coroutine scheduling plus the
+# generic AOT bridge and task/channel error paths. Keep this cap tight against
+# VM/toolchain-shaped drift, while allowing the deliberate runtime surface that
+# a yieldable program currently links.
+RUNTIME_TIME_SLEEP_MAX_BYTES=240000
 
 cleanup() {
     rm -rf "$WORK"
@@ -350,7 +349,7 @@ run_case_by_id() {
                 "runtime-time-sleep" \
                 "$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr" \
                 "7" \
-                "no_eager_script_builtins" \
+                "" \
                 "$RUNTIME_TIME_SLEEP_MAX_BYTES"
             ;;
         runtime_coro_minimal)

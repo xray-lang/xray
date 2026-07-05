@@ -3965,8 +3965,19 @@ static bool cg_native_box_use_consumes_native_rep(XiCgenCtx *ctx, const XiFunc *
     if (!ctx || !user)
         return false;
 
+    XiOp op = (XiOp) user->op;
+    if (op == XI_EQ || op == XI_NE) {
+        const XiValue *get = NULL;
+        bool const_value = false;
+        if (!cg_aot_compare_present_bool_map_get_const(ctx, user, &get, &const_value))
+            return false;
+        return arg_index < user->nargs && user->args[arg_index] &&
+               user->args[arg_index]->op == XI_BOX && user->args[arg_index]->nargs >= 1 &&
+               cg_unwrap_identity_value(user->args[arg_index]->args[0]) == get;
+    }
+
     CgArrayElemInfo info;
-    switch ((XiOp) user->op) {
+    switch (op) {
         case XI_INDEX_GET:
             return arg_index == 1 && user->nargs >= 2 &&
                    cg_array_value_storage_info(ctx, f, user->args[0], &info, CG_ARRAY_STORAGE_READ);
@@ -3986,16 +3997,6 @@ static bool cg_native_box_use_consumes_native_rep(XiCgenCtx *ctx, const XiFunc *
                    cg_call_method_is_typed_array_resize_zero_specialization(ctx, f, user);
         case XI_CALL:
             return cg_native_box_direct_call_arg_is_native(ctx, f, user, arg_index);
-        case XI_EQ:
-        case XI_NE: {
-            const XiValue *get = NULL;
-            bool const_value = false;
-            if (!cg_aot_compare_present_bool_map_get_const(ctx, user, &get, &const_value))
-                return false;
-            return arg_index < user->nargs && user->args[arg_index] &&
-                   user->args[arg_index]->op == XI_BOX && user->args[arg_index]->nargs >= 1 &&
-                   cg_unwrap_identity_value(user->args[arg_index]->args[0]) == get;
-        }
         default:
             return false;
     }

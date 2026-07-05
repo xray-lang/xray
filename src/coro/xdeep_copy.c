@@ -29,6 +29,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../runtime/closure/xcell.h"
 #include "../base/xmalloc.h"
+#include "../shared/xr_native_type_core.h"
 #include <stdlib.h>
 #include <string.h>
 #include "../base/xhash.h"
@@ -732,8 +733,40 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
 // through xr_deep_copy_instance_with_ctx via the unified transfer table
 // dispatch.
 
+static XrValue xr_deep_copy_array_ref_with_ctx(XrCopyContext *ctx, XrValue value) {
+    if (!ctx || !XR_IS_ARRAY_REF(value) || !value.ptr)
+        return value;
+
+    uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(value);
+    uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(value);
+    uint8_t elem_size = xr_native_type_size(elem_type);
+    if (elem_size == 0 || elem_count == 0)
+        return value;
+    size_t byte_count = (size_t) elem_size * (size_t) elem_count;
+    if (elem_count != 0 && byte_count / elem_count != elem_size)
+        return XR_NULL_VAL;
+
+    XrObjHeader *blob =
+        (XrObjHeader *) copy_ctx_alloc(ctx, sizeof(XrObjHeader) + byte_count, XR_TBLOB);
+    if (!blob)
+        return XR_NULL_VAL;
+    void *dst = (void *) (blob + 1);
+
+    if (elem_type == XR_NATIVE_VALUE) {
+        const XrValue *src_values = (const XrValue *) value.ptr;
+        XrValue *dst_values = (XrValue *) dst;
+        for (uint16_t i = 0; i < elem_count; i++)
+            dst_values[i] = xr_deep_copy_with_ctx(ctx, src_values[i]);
+    } else {
+        memcpy(dst, value.ptr, byte_count);
+    }
+    return xr_array_ref(dst, elem_type, elem_count);
+}
+
 XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     XR_DCHECK(ctx != NULL, "deep_copy_with_ctx: NULL context");
+    if (XR_IS_ARRAY_REF(value))
+        return xr_deep_copy_array_ref_with_ctx(ctx, value);
     if (!XR_IS_PTR(value))
         return value;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
