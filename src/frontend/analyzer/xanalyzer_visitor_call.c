@@ -806,19 +806,23 @@ static bool xa_type_is_supported_raw_load_le_result(XrType *type) {
 }
 
 static bool xa_type_is_supported_bytes_typed_scalar(XrType *type) {
-    if (!type || !XR_TYPE_IS_INT(type))
+    if (!type)
         return false;
-    switch (type->native_width) {
-        case XR_NATIVE_I16:
-        case XR_NATIVE_U16:
-        case XR_NATIVE_I32:
-        case XR_NATIVE_U32:
-        case XR_NATIVE_I64:
-        case XR_NATIVE_U64:
-            return true;
-        default:
-            return false;
+    if (XR_TYPE_IS_INT(type)) {
+        switch (type->native_width) {
+            case XR_NATIVE_I16:
+            case XR_NATIVE_U16:
+            case XR_NATIVE_I32:
+            case XR_NATIVE_U32:
+            case XR_NATIVE_I64:
+            case XR_NATIVE_U64:
+                return true;
+            default:
+                return false;
+        }
     }
+    return XR_TYPE_IS_FLOAT(type) &&
+           (type->native_width == XR_NATIVE_F32 || type->native_width == XR_NATIVE_F64);
 }
 
 static bool xa_type_is_pod_span_elem(XrType *type) {
@@ -854,7 +858,7 @@ static XrType *xa_bytes_typed_type_arg(XaInferContext *ctx, AstNode *node, CallE
     if (!supported) {
         char msg[192];
         snprintf(msg, sizeof(msg), "%s currently supports T = %s", label,
-                 allow_signed ? "int16, uint16, int32, uint32, int64 or uint64"
+                 allow_signed ? "int16, uint16, int32, uint32, int64, uint64, float32 or float64"
                               : "uint16, uint32 or uint64");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);

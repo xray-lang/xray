@@ -1,0 +1,3 @@
+fn bad(src: ByteSpan) -> bool {
+    return src.load<bool>(0)
+}

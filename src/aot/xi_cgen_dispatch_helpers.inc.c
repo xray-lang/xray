@@ -1299,9 +1299,13 @@ static bool xicgen_op_arg_keeps_span_noescape(XiCgenCtx *ctx, const XiFunc *curr
         case XI_BYTES_LOAD_U16:
         case XI_BYTES_LOAD_U32:
         case XI_BYTES_LOAD_U64:
+        case XI_BYTES_LOAD_F32:
+        case XI_BYTES_LOAD_F64:
         case XI_BYTES_STORE_U16:
         case XI_BYTES_STORE_U32:
         case XI_BYTES_STORE_U64:
+        case XI_BYTES_STORE_F32:
+        case XI_BYTES_STORE_F64:
         case XI_BYTES_SPAN_FILL:
         case XI_BYTES_SPAN_REPEAT:
         case XI_SPAN_AS_BYTES:
@@ -5570,6 +5574,30 @@ static bool xicgen_emit_span_bytes_load(XiCgenCtx *ctx, FILE *out, const XiValue
     return true;
 }
 
+static bool xicgen_emit_span_bytes_float_load(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                              const char *core_helper, const char *ctype,
+                                              const char *bounds_message) {
+    CgArrayElemInfo info;
+    if (!v || v->nargs != 3 || !cg_span_value_u8_info(ctx, v->args[0], &info))
+        return false;
+    (void) info;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_F64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "({ xr_span_t _s = ");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, "; int64_t _off = ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+    fprintf(out, "; bool _ok = false; %s _v = %s(_s.data, _s.length, XR_ELEM_U8, _off, ", ctype,
+            core_helper);
+    xicgen_emit_endian_arg_i64(ctx, out, v->args[2]);
+    fprintf(out,
+            ", &_ok); if (!_ok) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, \"%s\"); "
+            "(double)_v; })",
+            bounds_message);
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
 static bool xicgen_emit_span_bytes_store(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                          const char *checked_helper) {
     CgArrayElemInfo info;
@@ -5582,6 +5610,24 @@ static bool xicgen_emit_span_bytes_store(XiCgenCtx *ctx, FILE *out, const XiValu
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+    fprintf(out, ", ");
+    xicgen_emit_endian_arg_i64(ctx, out, v->args[3]);
+    fprintf(out, ")");
+    return true;
+}
+
+static bool xicgen_emit_span_bytes_float_store(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                               const char *checked_helper) {
+    CgArrayElemInfo info;
+    if (!v || v->nargs != 4 || !cg_span_value_u8_info(ctx, v->args[0], &info))
+        return false;
+    (void) info;
+    fprintf(out, "%s(", checked_helper);
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_F64);
     fprintf(out, ", ");
     xicgen_emit_endian_arg_i64(ctx, out, v->args[3]);
     fprintf(out, ")");
@@ -5648,6 +5694,44 @@ static void xicgen_bytes_load_u64(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     emit_conversion_suffix(out, conv_suffix);
 }
 
+static void xicgen_bytes_load_f32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                  const char *prefix) {
+    (void) f;
+    (void) prefix;
+    if (xicgen_emit_span_bytes_float_load(ctx, out, v, "xr_array_core_bytes_load_f32", "float",
+                                          "ByteSpan.load<float32>() offset out of bounds"))
+        return;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_F64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "XR_TO_FLOAT(xrt_span_bytes_load_f32_value(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+    fprintf(out, "))");
+    emit_conversion_suffix(out, conv_suffix);
+}
+
+static void xicgen_bytes_load_f64(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                  const char *prefix) {
+    (void) f;
+    (void) prefix;
+    if (xicgen_emit_span_bytes_float_load(ctx, out, v, "xr_array_core_bytes_load_f64", "double",
+                                          "ByteSpan.load<float64>() offset out of bounds"))
+        return;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_F64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "XR_TO_FLOAT(xrt_span_bytes_load_f64_value(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+    fprintf(out, "))");
+    emit_conversion_suffix(out, conv_suffix);
+}
+
 static void xicgen_bytes_store_u16(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                    const char *prefix) {
     (void) f;
@@ -5689,6 +5773,40 @@ static void xicgen_bytes_store_u64(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     if (xicgen_emit_span_bytes_store(ctx, out, v, "xrt_span_bytes_store_u64_checked_raw"))
         return;
     fprintf(out, "xrt_span_bytes_store_u64_value(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
+    fprintf(out, ")");
+}
+
+static void xicgen_bytes_store_f32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                   const char *prefix) {
+    (void) f;
+    (void) prefix;
+    if (xicgen_emit_span_bytes_float_store(ctx, out, v, "xrt_span_bytes_store_f32_checked_raw"))
+        return;
+    fprintf(out, "xrt_span_bytes_store_f32_value(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
+    fprintf(out, ")");
+}
+
+static void xicgen_bytes_store_f64(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                   const char *prefix) {
+    (void) f;
+    (void) prefix;
+    if (xicgen_emit_span_bytes_float_store(ctx, out, v, "xrt_span_bytes_store_f64_checked_raw"))
+        return;
+    fprintf(out, "xrt_span_bytes_store_f64_value(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);

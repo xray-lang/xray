@@ -755,6 +755,18 @@
   :vm-bytecode (driver xi_emit_bytes_load_u64)
   :aot-c (driver xicgen_bytes_load_u64))
 
+(lower xi.bytes.load.f32
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_bytes_load_f32)
+  :aot-c (driver xicgen_bytes_load_f32))
+
+(lower xi.bytes.load.f64
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_bytes_load_f64)
+  :aot-c (driver xicgen_bytes_load_f64))
+
 (lower xi.bytes.store.u16
   :match ()
   :required-targets (vm-bytecode aot-c)
@@ -772,6 +784,18 @@
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_bytes_store_u64)
   :aot-c (driver xicgen_bytes_store_u64))
+
+(lower xi.bytes.store.f32
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_bytes_store_f32)
+  :aot-c (driver xicgen_bytes_store_f32))
+
+(lower xi.bytes.store.f64
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_bytes_store_f64)
+  :aot-c (driver xicgen_bytes_store_f64))
 
 (lower xi.bytes.span.fill
   :match ()

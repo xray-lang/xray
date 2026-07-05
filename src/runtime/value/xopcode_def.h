@@ -180,12 +180,18 @@
     _(BYTES_LOAD_U16, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<uint16>(R[A+1], R[A+2], R[A+3])")    \
     _(BYTES_LOAD_U32, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<uint32>(R[A+1], R[A+2], R[A+3])")    \
     _(BYTES_LOAD_U64, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<uint64>(R[A+1], R[A+2], R[A+3])")    \
+    _(BYTES_LOAD_F32, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<float32>(R[A+1], R[A+2], R[A+3])")   \
+    _(BYTES_LOAD_F64, FMT_A, KOP_A_USE, "R[A] = ByteSpan.load<float64>(R[A+1], R[A+2], R[A+3])")   \
     _(BYTES_STORE_U16, FMT_A, KOP_A_INOUT,                                                         \
       "ByteSpan.store<uint16>(R[A+1], R[A+2], R[A+3], R[A+4])")                                    \
     _(BYTES_STORE_U32, FMT_A, KOP_A_INOUT,                                                         \
       "ByteSpan.store<uint32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                    \
     _(BYTES_STORE_U64, FMT_A, KOP_A_INOUT,                                                         \
       "ByteSpan.store<uint64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                    \
+    _(BYTES_STORE_F32, FMT_A, KOP_A_INOUT,                                                         \
+      "ByteSpan.store<float32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                   \
+    _(BYTES_STORE_F64, FMT_A, KOP_A_INOUT,                                                         \
+      "ByteSpan.store<float64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                   \
     _(BYTES_SPAN_FILL, FMT_A, KOP_A_INOUT, "R[A].fill(R[A+1])")                                    \
     _(BYTES_SPAN_COPY, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1])")                                \
     _(BYTES_SPAN_COMPARE, FMT_A, KOP_A_USE, "R[A] = R[A].compare(R[A+1])")                         \

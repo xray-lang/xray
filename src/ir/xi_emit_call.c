@@ -392,6 +392,14 @@ XR_FUNC void xi_emit_bytes_load_u64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U64);
 }
 
+XR_FUNC void xi_emit_bytes_load_f32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_F32);
+}
+
+XR_FUNC void xi_emit_bytes_load_f64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_F64);
+}
+
 XR_FUNC void xi_emit_bytes_store_u16(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTES_STORE_U16);
 }
@@ -402,6 +410,14 @@ XR_FUNC void xi_emit_bytes_store_u32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
 XR_FUNC void xi_emit_bytes_store_u64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTES_STORE_U64);
+}
+
+XR_FUNC void xi_emit_bytes_store_f32(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTES_STORE_F32);
+}
+
+XR_FUNC void xi_emit_bytes_store_f64(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_bytes_store_op(ctx, v, dst, OP_BYTES_STORE_F64);
 }
 
 XR_FUNC void xi_emit_bytes_span_fill(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {

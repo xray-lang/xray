@@ -2921,21 +2921,34 @@ static XiValue *lower_bytes_endian_arg(XiLower *l, AstNode *arg) {
 }
 
 static uint16_t lower_bytes_typed_op_for_target(XrType *target, bool is_load) {
-    if (!target || !XR_TYPE_IS_INT(target))
+    if (!target)
         return 0;
-    switch (target->native_width) {
-        case XR_NATIVE_I16:
-        case XR_NATIVE_U16:
-            return is_load ? XI_BYTES_LOAD_U16 : XI_BYTES_STORE_U16;
-        case XR_NATIVE_I32:
-        case XR_NATIVE_U32:
-            return is_load ? XI_BYTES_LOAD_U32 : XI_BYTES_STORE_U32;
-        case XR_NATIVE_I64:
-        case XR_NATIVE_U64:
-            return is_load ? XI_BYTES_LOAD_U64 : XI_BYTES_STORE_U64;
-        default:
-            return 0;
+    if (XR_TYPE_IS_INT(target)) {
+        switch (target->native_width) {
+            case XR_NATIVE_I16:
+            case XR_NATIVE_U16:
+                return is_load ? XI_BYTES_LOAD_U16 : XI_BYTES_STORE_U16;
+            case XR_NATIVE_I32:
+            case XR_NATIVE_U32:
+                return is_load ? XI_BYTES_LOAD_U32 : XI_BYTES_STORE_U32;
+            case XR_NATIVE_I64:
+            case XR_NATIVE_U64:
+                return is_load ? XI_BYTES_LOAD_U64 : XI_BYTES_STORE_U64;
+            default:
+                return 0;
+        }
     }
+    if (XR_TYPE_IS_FLOAT(target)) {
+        switch (target->native_width) {
+            case XR_NATIVE_F32:
+                return is_load ? XI_BYTES_LOAD_F32 : XI_BYTES_STORE_F32;
+            case XR_NATIVE_F64:
+                return is_load ? XI_BYTES_LOAD_F64 : XI_BYTES_STORE_F64;
+            default:
+                return 0;
+        }
+    }
+    return 0;
 }
 
 static XiValue *lower_bytes_typed_signed_load_narrow(XiLower *l, AstNode *node, XiValue *value,
@@ -2985,9 +2998,11 @@ static XiValue *lower_bytes_typed_call(XiLower *l, AstNode *node, CallExprNode *
         value = xi_lower_expr(l, call->arguments[1]);
         if (!value)
             return NULL;
-        value = lower_bytes_int_arg(l, node, value);
-        if (!value)
-            return NULL;
+        if (target && XR_TYPE_IS_INT(target)) {
+            value = lower_bytes_int_arg(l, node, value);
+            if (!value)
+                return NULL;
+        }
     }
 
     int endian_arg_index = bytes_typed_load ? 1 : 2;
@@ -3521,7 +3536,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                  * so VM and AOT raise the same TypeError instead of silently
                  * coercing. */
                 for (int i = 0; i < n; i++) {
-                    if (arg_vals[i] && arg_vals[i]->type &&
+                    bool needs_int_boundary = bytes_typed_load || i != 1 || XR_TYPE_IS_INT(target);
+                    if (arg_vals[i] && arg_vals[i]->type && needs_int_boundary &&
                         xr_is_json_coercion(l->type_int, arg_vals[i]->type))
                         arg_vals[i] =
                             xi_lower_checktype_for_type(l, node, arg_vals[i], l->type_int);

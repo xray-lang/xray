@@ -139,9 +139,13 @@
     X(BYTES_LOAD_U16, xi_emit_bytes_load_u16) \
     X(BYTES_LOAD_U32, xi_emit_bytes_load_u32) \
     X(BYTES_LOAD_U64, xi_emit_bytes_load_u64) \
+    X(BYTES_LOAD_F32, xi_emit_bytes_load_f32) \
+    X(BYTES_LOAD_F64, xi_emit_bytes_load_f64) \
     X(BYTES_STORE_U16, xi_emit_bytes_store_u16) \
     X(BYTES_STORE_U32, xi_emit_bytes_store_u32) \
     X(BYTES_STORE_U64, xi_emit_bytes_store_u64) \
+    X(BYTES_STORE_F32, xi_emit_bytes_store_f32) \
+    X(BYTES_STORE_F64, xi_emit_bytes_store_f64) \
     X(BYTES_SPAN_FILL, xi_emit_bytes_span_fill) \
     X(BYTES_SPAN_COPY, xi_emit_bytes_span_copy) \
     X(BYTES_SPAN_COMPARE, xi_emit_bytes_span_compare) \

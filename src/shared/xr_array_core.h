@@ -832,6 +832,44 @@ static inline uint64_t xr_array_core_bytes_load_u64(const void *data, int64_t le
     return xr_array_core_endian_matches_host(endian) ? value : xr_array_core_bswap64(value);
 }
 
+static inline float xr_array_core_f32_from_bits(uint32_t bits) {
+    float value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+static inline double xr_array_core_f64_from_bits(uint64_t bits) {
+    double value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+static inline uint32_t xr_array_core_f32_to_bits(float value) {
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+static inline uint64_t xr_array_core_f64_to_bits(double value) {
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+static inline float xr_array_core_bytes_load_f32(const void *data, int64_t length,
+                                                 uint8_t elem_type, int64_t offset, int64_t endian,
+                                                 bool *ok) {
+    uint32_t bits = xr_array_core_bytes_load_u32(data, length, elem_type, offset, endian, ok);
+    return xr_array_core_f32_from_bits(bits);
+}
+
+static inline double xr_array_core_bytes_load_f64(const void *data, int64_t length,
+                                                  uint8_t elem_type, int64_t offset, int64_t endian,
+                                                  bool *ok) {
+    uint64_t bits = xr_array_core_bytes_load_u64(data, length, elem_type, offset, endian, ok);
+    return xr_array_core_f64_from_bits(bits);
+}
+
 static inline bool xr_array_core_bytes_store_u16(void *data, int64_t length, uint8_t elem_type,
                                                  int64_t offset, uint16_t value, int64_t endian) {
     if (!data || !xr_array_core_bytes_range_ok(length, elem_type, offset, 2))
@@ -863,6 +901,18 @@ static inline bool xr_array_core_bytes_store_u64(void *data, int64_t length, uin
         value = xr_array_core_bswap64(value);
     memcpy(p, &value, sizeof(value));
     return true;
+}
+
+static inline bool xr_array_core_bytes_store_f32(void *data, int64_t length, uint8_t elem_type,
+                                                 int64_t offset, float value, int64_t endian) {
+    return xr_array_core_bytes_store_u32(data, length, elem_type, offset,
+                                         xr_array_core_f32_to_bits(value), endian);
+}
+
+static inline bool xr_array_core_bytes_store_f64(void *data, int64_t length, uint8_t elem_type,
+                                                 int64_t offset, double value, int64_t endian) {
+    return xr_array_core_bytes_store_u64(data, length, elem_type, offset,
+                                         xr_array_core_f64_to_bits(value), endian);
 }
 
 static inline uint16_t xr_array_core_bytes_load_u16_le(const void *data, int64_t length,

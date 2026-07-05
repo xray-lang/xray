@@ -1,1 +1,0 @@
-ByteSpan.load<T>() currently supports T = int16, uint16, int32, uint32, int64 or uint64
