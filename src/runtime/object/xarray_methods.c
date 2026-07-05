@@ -321,127 +321,6 @@ static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
     return self;
 }
 
-static XrValue m_write_from_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    XrArray *dst = array_self(self);
-    const void *src_data = NULL;
-    int64_t src_length = 0;
-    if (argc != 4 || !XR_IS_INT(args[0]) || !bytespan_arg(args[1], &src_data, &src_length, NULL) ||
-        !XR_IS_INT(args[2]) || !XR_IS_INT(args[3])) {
-        XrValue exc = xr_panic_info_newf(
-            iso, XR_ERR_TYPE_MISMATCH,
-            "Bytes.writeFromUnchecked expects dstOffset, ByteSpan, srcOffset and count");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-    if (!dst || dst->elem_type != XR_ELEM_U8) {
-        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH,
-                                         "Bytes.writeFromUnchecked receiver must be Bytes");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-    if (!xr_array_core_bytes_copy_from(dst->data, dst->length, dst->elem_type, src_data, src_length,
-                                       XR_ELEM_U8, XR_TO_INT(args[2]), XR_TO_INT(args[0]),
-                                       XR_TO_INT(args[3]), false)) {
-        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
-                                         "Bytes.writeFromUnchecked range out of bounds");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-    return self;
-}
-
-static XrValue m_copy_within_nonoverlapping_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args,
-                                                      int argc) {
-    XrArray *arr = array_self(self);
-    if (argc != 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2])) {
-        XrValue exc = xr_panic_info_newf(
-            iso, XR_ERR_TYPE_MISMATCH,
-            "Bytes.copyWithinNonOverlappingUnchecked expects dstOffset, srcOffset and count");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-    if (!arr || arr->elem_type != XR_ELEM_U8) {
-        XrValue exc =
-            xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH,
-                               "Bytes.copyWithinNonOverlappingUnchecked receiver must be Bytes");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-
-    int64_t dst_offset = XR_TO_INT(args[0]);
-    int64_t src_offset = XR_TO_INT(args[1]);
-    int64_t count = XR_TO_INT(args[2]);
-    bool ok = xr_array_core_bytes_range_ok(arr->length, arr->elem_type, dst_offset, count) &&
-              xr_array_core_bytes_range_ok(arr->length, arr->elem_type, src_offset, count);
-    if (ok && count > 0) {
-        if (!arr->data ||
-            xr_array_core_memory_ranges_overlap((uint8_t *) arr->data + dst_offset, count,
-                                                (uint8_t *) arr->data + src_offset, count))
-            ok = false;
-    }
-    if (!ok) {
-        XrValue exc = xr_panic_info_newf(
-            iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
-            "Bytes.copyWithinNonOverlappingUnchecked range out of bounds or overlaps");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-
-    xr_array_core_copy_nonoverlap_bytes((uint8_t *) arr->data + dst_offset,
-                                        (uint8_t *) arr->data + src_offset, count);
-    return self;
-}
-
-static XrValue m_repeat_at_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    XrArray *arr = array_self(self);
-    if (argc != 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2])) {
-        XrValue exc =
-            xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH,
-                               "Bytes.repeatAtUnchecked expects dstOffset, distance and count");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-    if (!arr || arr->elem_type != XR_ELEM_U8) {
-        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH,
-                                         "Bytes.repeatAtUnchecked receiver must be Bytes");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-    if (!xr_array_bytes_repeat_from(arr, (int32_t) XR_TO_INT(args[0]), (int32_t) XR_TO_INT(args[1]),
-                                    (int32_t) XR_TO_INT(args[2]))) {
-        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
-                                         "Bytes.repeatAtUnchecked range out of bounds");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-    return self;
-}
-
-static XrValue m_set_length_unchecked(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    XrArray *arr = array_self(self);
-    if (argc != 1 || !XR_IS_INT(args[0])) {
-        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH,
-                                         "Bytes.setLengthUnchecked expects length");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-    if (!arr || arr->elem_type != XR_ELEM_U8) {
-        XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH,
-                                         "Bytes.setLengthUnchecked receiver must be Bytes");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-    int64_t length = XR_TO_INT(args[0]);
-    if (length < 0 || length > arr->capacity) {
-        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
-                                         "Bytes.setLengthUnchecked length out of bounds");
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
-    arr->length = length;
-    return self;
-}
-
 /* === Construction (returns new array) === */
 
 static XrValue m_concat(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -654,10 +533,6 @@ void xr_array_register_native_type(XrVMRuntime *isolate) {
         {"indexOf", m_index_of, 1},
         {"appendFrom", m_append_from, 1},
         {"repeatFrom", m_repeat_from, 2},
-        {"writeFromUnchecked", m_write_from_unchecked, 4},
-        {"copyWithinNonOverlappingUnchecked", m_copy_within_nonoverlapping_unchecked, 3},
-        {"repeatAtUnchecked", m_repeat_at_unchecked, 3},
-        {"setLengthUnchecked", m_set_length_unchecked, 1},
         /* Construction */
         {"concat", m_concat, 0},
         {"join", m_join, 0},

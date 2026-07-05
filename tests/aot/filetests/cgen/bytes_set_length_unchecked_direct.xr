@@ -1,9 +1,0 @@
-fn commitLength(out: Bytes, n: int) -> int {
-    unsafe {
-        out.setLengthUnchecked(n)
-    }
-    return out.length
-}
-
-var out = Bytes.withCapacity(8)
-print(commitLength(out, 3))
