@@ -176,7 +176,7 @@ static uint16_t xi_widen_op_for_elem(struct XrType *elem_type) {
     }
 }
 
-/* Get element type from a contiguous container type (Array<T>, View<T>, Span<T>, or [N]T). */
+/* Get element type from a contiguous container type (Array<T>, View<T>, Span<T>, or [T; N]). */
 static struct XrType *xi_get_container_elem_type(struct XrType *container_type) {
     if (!container_type)
         return NULL;

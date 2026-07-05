@@ -26,6 +26,7 @@
 #include "../../base/xdefs.h"
 
 struct XrCompilerSession;
+struct AstNode;
 
 /* ========== Kind Enum ========== */
 
@@ -56,7 +57,7 @@ typedef enum {
     XR_TREF_TUPLE,       /* (T1, T2, ...) — children[0..n-1] */
     XR_TREF_OBJECT,      /* { f1: T1, ... } — field_names +
                             children as field types            */
-    XR_TREF_FIXED_ARRAY, /* [N]T — fixed_length + children[0] */
+    XR_TREF_FIXED_ARRAY, /* [T; N] — fixed_length_expr + children[0] */
     XR_TREF_TYPE_PARAM,  /* generic type parameter (T, U, ...)  */
 } XrTypeRefKind;
 
@@ -80,15 +81,16 @@ typedef enum {
 /* ========== The Type Reference ========== */
 
 typedef struct XrTypeRef {
-    uint8_t kind;             /* XrTypeRefKind                    */
-    uint8_t nchildren;        /* number of child type refs        */
-    uint8_t native_width;     /* XR_TREF_NW_* for INT_WIDTH /
-                                 FLOAT_WIDTH; 0 otherwise         */
-    bool extensible;          /* OBJECT: has ... marker           */
-    int16_t fixed_length;     /* FIXED_ARRAY: compile-time length */
-    const char *name;         /* NAMED / GENERIC: type name
-                                 (arena-allocated, NUL-terminated) */
-    const char **field_names; /* OBJECT: per-field names         */
+    uint8_t kind;                      /* XrTypeRefKind                    */
+    uint8_t nchildren;                 /* number of child type refs        */
+    uint8_t native_width;              /* XR_TREF_NW_* for INT_WIDTH /
+                                          FLOAT_WIDTH; 0 otherwise         */
+    bool extensible;                   /* OBJECT: has ... marker           */
+    int fixed_length;                  /* FIXED_ARRAY: literal length if known, 0 otherwise */
+    struct AstNode *fixed_length_expr; /* FIXED_ARRAY: source expression for N */
+    const char *name;                  /* NAMED / GENERIC: type name
+                                          (arena-allocated, NUL-terminated) */
+    const char **field_names;          /* OBJECT: per-field names         */
     bool *field_readonly;
     struct XrTypeRef **children; /* child type refs (arena array) */
 } XrTypeRef;
@@ -140,9 +142,11 @@ XR_FUNC XrTypeRef *xr_tref_object(struct XrCompilerSession *session, const char 
                                   XrTypeRef **field_types, const bool *field_readonly, int count,
                                   bool extensible);
 
-/* Fixed-length array: [N]T */
+/* Fixed-length array: [T; N] */
 XR_FUNC XrTypeRef *xr_tref_fixed_array(struct XrCompilerSession *session, XrTypeRef *elem,
                                        int length);
+XR_FUNC XrTypeRef *xr_tref_fixed_array_expr(struct XrCompilerSession *session, XrTypeRef *elem,
+                                            struct AstNode *length_expr, int literal_length);
 
 /* Generic type parameter: T, U, V, ... */
 XR_FUNC XrTypeRef *xr_tref_type_param(struct XrCompilerSession *session, const char *name);

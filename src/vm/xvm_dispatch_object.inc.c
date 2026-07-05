@@ -509,6 +509,7 @@ vmcase(OP_GETPROP) {
                 case XR_NATIVE_ARRAY_REF:
                 case XR_NATIVE_MAP_REF:
                 case XR_NATIVE_SET_REF:
+                case XR_NATIVE_VALUE:
                     R(a) = *(XrValue *) fp;
                     break;
                 default:

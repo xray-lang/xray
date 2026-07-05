@@ -90,4 +90,35 @@ static inline uint8_t xr_tid_to_elem_size(uint8_t tid) {
     return XR_ELEM_SIZES[xr_tid_to_elem_type(tid)];
 }
 
+/* Map native fixed-array lane tags to Span/Array element storage tags.
+ * Non-scalar lanes use XR_ELEM_ANY because their storage is full XrValue slots. */
+static inline XrArrayElemType xr_native_type_to_elem_type(uint8_t native_type) {
+    switch (native_type) {
+        case 3: /* XR_NATIVE_I8 */
+            return XR_ELEM_I8;
+        case 6: /* XR_NATIVE_U8 */
+            return XR_ELEM_U8;
+        case 4: /* XR_NATIVE_I16 */
+            return XR_ELEM_I16;
+        case 7: /* XR_NATIVE_U16 */
+            return XR_ELEM_U16;
+        case 5: /* XR_NATIVE_I32 */
+            return XR_ELEM_I32;
+        case 8: /* XR_NATIVE_U32 */
+            return XR_ELEM_U32;
+        case 0: /* XR_NATIVE_I64 */
+            return XR_ELEM_I64;
+        case 9: /* XR_NATIVE_U64 */
+            return XR_ELEM_U64;
+        case 10: /* XR_NATIVE_F32 */
+            return XR_ELEM_F32;
+        case 1: /* XR_NATIVE_F64 */
+            return XR_ELEM_F64;
+        case 2: /* XR_NATIVE_BOOL */
+            return XR_ELEM_BOOL;
+        default:
+            return XR_ELEM_ANY;
+    }
+}
+
 #endif  // XR_ELEM_TYPE_H

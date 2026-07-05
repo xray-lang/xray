@@ -18,6 +18,7 @@ TEST(native_type_tag_values_are_stable) {
     ASSERT_EQ_INT(XR_NATIVE_ARRAY_REF, 14);
     ASSERT_EQ_INT(XR_NATIVE_MAP_REF, 15);
     ASSERT_EQ_INT(XR_NATIVE_SET_REF, 16);
+    ASSERT_EQ_INT(XR_NATIVE_VALUE, 17);
 }
 
 TEST(native_type_scalar_sizes_are_stable) {
@@ -41,6 +42,7 @@ TEST(native_type_aggregate_sizes_are_stable) {
     ASSERT_EQ_INT(xr_native_type_size(XR_NATIVE_ARRAY_REF), 16);
     ASSERT_EQ_INT(xr_native_type_size(XR_NATIVE_MAP_REF), 16);
     ASSERT_EQ_INT(xr_native_type_size(XR_NATIVE_SET_REF), 16);
+    ASSERT_EQ_INT(xr_native_type_size(XR_NATIVE_VALUE), 16);
 }
 
 TEST(native_type_alignment_rules_are_stable) {
@@ -52,6 +54,7 @@ TEST(native_type_alignment_rules_are_stable) {
     ASSERT_EQ_INT(xr_native_type_align(XR_NATIVE_ARRAY_REF), 8);
     ASSERT_EQ_INT(xr_native_type_align(XR_NATIVE_MAP_REF), 8);
     ASSERT_EQ_INT(xr_native_type_align(XR_NATIVE_SET_REF), 8);
+    ASSERT_EQ_INT(xr_native_type_align(XR_NATIVE_VALUE), 8);
 }
 
 TEST_MAIN_BEGIN()

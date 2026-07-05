@@ -4639,6 +4639,37 @@ static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
 }
 
+static bool xicgen_fixed_array_new_info(const XiValue *v, uint8_t *native_out,
+                                        uint16_t *count_out) {
+    if (!v || !v->type || v->type->kind != XR_KIND_FIXED_ARRAY ||
+        !v->type->fixed_array.element_type || v->type->fixed_array.length <= 0 ||
+        v->type->fixed_array.length > UINT16_MAX)
+        return false;
+    XrType *elem = v->type->fixed_array.element_type;
+    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    if (elem->is_nullable || native == XR_NATIVE_STRING || native < 0)
+        native = XR_NATIVE_VALUE;
+    if (native_out)
+        *native_out = (uint8_t) native;
+    if (count_out)
+        *count_out = (uint16_t) v->type->fixed_array.length;
+    return true;
+}
+
+static void xicgen_fixed_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                   const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    uint8_t native = 0;
+    uint16_t count = 0;
+    if (!xicgen_fixed_array_new_info(v, &native, &count)) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, "xr_array_ref(_fa%u, %u, %u)", v->id, (unsigned) native, (unsigned) count);
+}
+
 static void xicgen_template_shift(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
     (void) prefix;
@@ -4872,6 +4903,23 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
             break;
         }
     }
+}
+
+static bool emit_fixed_array_ref_length_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (!v || v->op != XI_LOAD_FIELD || v->nargs < 1 || !v->aux)
+        return false;
+    const char *field = (const char *) v->aux;
+    if (strcmp(field, "length") != 0 && strcmp(field, "size") != 0)
+        return false;
+    if (!cg_value_type_is_fixed_array(v->args[0]))
+        return false;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "((int64_t)XR_ARRAY_REF_ELEM_COUNT(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, "))");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
 }
 
 static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -5124,6 +5172,9 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
         emit_span_length_expr(ctx, out, v))
+        return;
+    if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
+        emit_fixed_array_ref_length_expr(ctx, out, v))
         return;
     if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
         emit_typed_array_length_expr(ctx, out, f, prefix, v))

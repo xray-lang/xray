@@ -935,7 +935,7 @@ static XrType *xr_type_union_filter(XrType *type, XrTypeKind kind) {
     return xr_type_new_never(NULL);
 }
 
-// Fixed-length array ([N]T - compile-time length, runtime Array<T>)
+// Fixed-length array ([T; N] - compile-time length)
 XrType *xr_type_new_fixed_array(XrVMRuntime *X, XrType *element_type, int length) {
     XrType *type = type_alloc(X, XR_KIND_FIXED_ARRAY);
     if (!type)
@@ -1414,17 +1414,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         return key_ok && val_ok;
     }
 
-    // Fixed-length array compatibility: [N]T <-> Array<T>
-    if (target->kind == XR_KIND_FIXED_ARRAY && XR_TYPE_IS_ARRAY(source)) {
-        if (!target->fixed_array.element_type || !source->container.element_type)
-            return true;
-        return xr_type_assignable(target->fixed_array.element_type, source->container.element_type);
-    }
-    if (XR_TYPE_IS_ARRAY(target) && source->kind == XR_KIND_FIXED_ARRAY) {
-        if (!target->container.element_type || !source->fixed_array.element_type)
-            return true;
-        return xr_type_assignable(target->container.element_type, source->fixed_array.element_type);
-    }
+    // Fixed-length arrays are value-shaped and distinct from dynamic Array<T>.
     if (target->kind == XR_KIND_FIXED_ARRAY && source->kind == XR_KIND_FIXED_ARRAY) {
         if (target->fixed_array.length != source->fixed_array.length)
             return false;

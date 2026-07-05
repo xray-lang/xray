@@ -141,6 +141,7 @@ typedef struct XrValue {
 #define XR_NATIVE_ARRAY_REF 14
 #define XR_NATIVE_MAP_REF 15
 #define XR_NATIVE_SET_REF 16
+#define XR_NATIVE_VALUE 17
 
 #define XR_FROM_INT(x) ((XrValue) {.tag = XR_TAG_I64, .i = (int64_t) (x)})
 #define XR_FROM_FLOAT(x) ((XrValue) {.tag = XR_TAG_F64, .f = (double) (x)})

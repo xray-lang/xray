@@ -2912,6 +2912,10 @@ static bool stmt_shared_init_direct_alloc_safe(AstNode *node) {
             return true;
         case AST_ARRAY_LITERAL: {
             ArrayLiteralNode *arr = &node->as.array_literal;
+            if (arr->is_repeat) {
+                return stmt_shared_init_direct_alloc_safe(arr->repeat_value) &&
+                       stmt_shared_init_direct_alloc_safe(arr->repeat_count);
+            }
             for (int i = 0; i < arr->count; i++) {
                 AstNode *elem = arr->elements[i];
                 if (!elem || elem->type == AST_SPREAD_EXPR ||

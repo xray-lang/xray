@@ -176,6 +176,8 @@ XR_FUNC AstNode *xr_ast_as_expr(XrCompilerSession *session, AstNode *expr, XrTyp
 // Create array literal node
 XR_FUNC AstNode *xr_ast_array_literal(XrCompilerSession *session, AstNode **elements, int count,
                                       int line);
+XR_FUNC AstNode *xr_ast_array_repeat_literal(XrCompilerSession *session, AstNode *value,
+                                             AstNode *count, int line);
 
 // Create tuple literal node.
 // count == 0 produces a unit literal `()`; count == 1 is a unary tuple

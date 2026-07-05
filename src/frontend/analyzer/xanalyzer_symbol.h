@@ -131,9 +131,10 @@ struct XaSymbolLinks {
     // File ownership (for multi-file support)
     const char *file_path;  // File where this symbol is defined
 
-    int assign_count;        // Number of assignments
-    bool is_const_foldable;  // const with literal init, can inline
-    bool is_loop_variable;   // Defined/mutated inside a loop
+    int assign_count;                   // Number of assignments
+    bool is_const_foldable;             // const with literal init, can inline
+    struct AstNode *const_initializer;  // const initializer expression for compile-time eval
+    bool is_loop_variable;              // Defined/mutated inside a loop
 
     // Reference tracking (for LSP Find References)
     XaRefLocation *references;  // List of usage locations

@@ -1,0 +1,3 @@
+let n = 4
+let key: [uint8; n] = [0; 4]
+print(key.length)

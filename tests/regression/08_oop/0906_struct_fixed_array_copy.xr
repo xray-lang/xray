@@ -1,5 +1,5 @@
 struct Buf {
-    data: [4]int
+    data: [int; 4]
 }
 
 @test

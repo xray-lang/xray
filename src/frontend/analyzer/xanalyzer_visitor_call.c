@@ -43,7 +43,7 @@ static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *
     } else {
         return NULL;
     }
-    XrType *pointee = xr_tref_resolve(ctx->analyzer->isolate, ne->type_args[0]);
+    XrType *pointee = xr_tref_resolve_in_analyzer(ctx->analyzer, ne->type_args[0]);
     if (!pointee)
         pointee = xr_type_new_unknown(ctx->analyzer->isolate);
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
@@ -1158,7 +1158,7 @@ static XrType *xa_sync_runtime_construct_type(XaInferContext *ctx, const char *n
     if (strcmp(name, "WorkQueue") == 0) {
         XrType *elem = NULL;
         if (call && call->type_arg_count > 0 && call->type_args[0])
-            elem = xr_tref_resolve(ctx->analyzer->isolate, call->type_args[0]);
+            elem = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
         if (!elem)
             elem = xr_type_new_unknown(NULL);
         XrType **arg_copy = (XrType **) xr_malloc(sizeof(XrType *));
@@ -1492,9 +1492,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         MemberAccessNode *ma = &call->callee->as.member_access;
         if (ma->name && strcmp(ma->name, "decode") == 0 && ma->object &&
             ma->object->type == AST_VARIABLE && strcmp(ma->object->as.variable.name, "Json") == 0) {
-            XrType *target_type = call->type_args[0]
-                                      ? xr_tref_resolve(ctx->analyzer->isolate, call->type_args[0])
-                                      : NULL;
+            XrType *target_type =
+                call->type_args[0] ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0])
+                                   : NULL;
 
             // Resolve type alias to its underlying object type
             if (target_type && target_type->kind == XR_KIND_CLASS &&

@@ -770,6 +770,13 @@ AstNode *xr_parse_array_literal(Parser *parser) {
 
     // Parse first expression, then check ':' for Map or ',' for array
     AstNode *first_expr = xr_parse_expression(parser);
+    if (xr_parser_match(parser, TK_SEMICOLON)) {
+        AstNode *repeat_count = xr_parse_expression(parser);
+        xr_parser_consume(parser, TK_RBRACKET, "expected ']' after array repeat count");
+        return xr_ast_array_repeat_literal(parser->compiler_session, first_expr, repeat_count,
+                                           line);
+    }
+
     if (xr_parser_match(parser, TK_COLON)) {
         // Map: ["key": value, ...]
         AstNode **keys = NULL;
@@ -1897,6 +1904,8 @@ XrDestructurePattern *convert_array_literal_to_pattern(XrCompilerSession *X,
     if (array_literal->type != AST_ARRAY_LITERAL) {
         return NULL;
     }
+    if (array_literal->as.array_literal.is_repeat)
+        return NULL;
 
     int count = array_literal->as.array_literal.count;
     XrDestructurePattern **elements = (XrDestructurePattern **) ast_alloc_array(

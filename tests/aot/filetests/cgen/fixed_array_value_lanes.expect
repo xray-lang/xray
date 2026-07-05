@@ -1,0 +1,5 @@
+contains=xaot-plan v0
+c_regex=XrValue _fa[0-9]+\[2\];
+c_regex=xr_array_ref\(_fa[0-9]+, 17, 2\)
+c_contains=xrt_map_set
+c_contains=xrt_index_get(

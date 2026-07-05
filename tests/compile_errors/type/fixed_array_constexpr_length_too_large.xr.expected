@@ -1,0 +1,2 @@
+fixed array length exceeds maximum of 65535 elements
+fixed array repeat count must be a positive compile-time integer expression

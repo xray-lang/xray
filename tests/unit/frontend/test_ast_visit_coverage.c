@@ -343,8 +343,13 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
             break;
 
         case AST_ARRAY_LITERAL:
-            for (int i = 0; i < node->as.array_literal.count; i++)
-                check_node(ctx, node->as.array_literal.elements[i]);
+            if (node->as.array_literal.is_repeat) {
+                check_node(ctx, node->as.array_literal.repeat_value);
+                check_node(ctx, node->as.array_literal.repeat_count);
+            } else {
+                for (int i = 0; i < node->as.array_literal.count; i++)
+                    check_node(ctx, node->as.array_literal.elements[i]);
+            }
             break;
 
         case AST_MAP_LITERAL:

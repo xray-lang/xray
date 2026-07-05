@@ -314,6 +314,59 @@ XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 }
 
+static bool xi_emit_fixed_array_type_info(EmitCtx *ctx, const XrType *type, uint8_t *native_out,
+                                          uint16_t *count_out, uint32_t *bytes_out) {
+    if (!ctx || !type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
+        type->fixed_array.length <= 0) {
+        if (ctx)
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return false;
+    }
+    if (type->fixed_array.length > UINT16_MAX) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return false;
+    }
+
+    XrType *elem = type->fixed_array.element_type;
+    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    if (elem->is_nullable || native == XR_NATIVE_STRING || native < 0)
+        native = XR_NATIVE_VALUE;
+
+    uint32_t elem_size = xr_native_type_size((uint8_t) native);
+    uint32_t count = (uint32_t) type->fixed_array.length;
+    if (elem_size == 0 || count > UINT32_MAX / elem_size) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return false;
+    }
+    uint32_t bytes = count * elem_size;
+    if (native_out)
+        *native_out = (uint8_t) native;
+    if (count_out)
+        *count_out = (uint16_t) count;
+    if (bytes_out)
+        *bytes_out = bytes;
+    return true;
+}
+
+XR_FUNC void xi_emit_fixed_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    uint8_t native = 0;
+    uint16_t count = 0;
+    uint32_t bytes = 0;
+    if (!xi_emit_fixed_array_type_info(ctx, v ? v->type : NULL, &native, &count, &bytes))
+        return;
+
+    uint16_t slot = 0;
+    if (!xi_emit_alloc_struct_area_bytes(ctx, bytes, &slot))
+        return;
+
+    int kidx = add_const_int(ctx, ((int64_t) count << 8) | native);
+    uint16_t karg = 0;
+    if (!xi_emit_const_index_to_c(ctx, kidx, &karg))
+        return;
+
+    emit_inst(ctx, CREATE_ABC(OP_FIXED_ARRAY_NEW, dst, slot, karg));
+}
+
 /* Index get */
 XR_FUNC void xi_emit_index_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 2) {

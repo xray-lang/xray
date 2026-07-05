@@ -704,6 +704,12 @@
   :vm-bytecode (driver xi_emit_struct_set)
   :aot-c (driver xicgen_struct_set))
 
+(lower xi.fixed.array.new
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_fixed_array_new)
+  :aot-c (driver xicgen_fixed_array_new))
+
 (lower xi.scope.enter
   :match ()
   :required-targets (vm-bytecode)

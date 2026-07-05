@@ -212,8 +212,13 @@ static int count_unresolved_vars(AstNode *node) {
                 count += count_unresolved_vars(node->as.optional_chain.index);
             break;
         case AST_ARRAY_LITERAL:
-            for (int i = 0; i < node->as.array_literal.count; i++)
-                count += count_unresolved_vars(node->as.array_literal.elements[i]);
+            if (node->as.array_literal.is_repeat) {
+                count += count_unresolved_vars(node->as.array_literal.repeat_value);
+                count += count_unresolved_vars(node->as.array_literal.repeat_count);
+            } else {
+                for (int i = 0; i < node->as.array_literal.count; i++)
+                    count += count_unresolved_vars(node->as.array_literal.elements[i]);
+            }
             break;
         case AST_MAP_LITERAL:
             for (int i = 0; i < node->as.map_literal.count; i++) {

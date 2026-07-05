@@ -153,8 +153,13 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
             break;
 
         case AST_ARRAY_LITERAL:
-            for (int i = 0; i < node->as.array_literal.count; i++)
-                es_walk_expr(ctx, node->as.array_literal.elements[i]);
+            if (node->as.array_literal.is_repeat) {
+                es_walk_expr(ctx, node->as.array_literal.repeat_value);
+                es_walk_expr(ctx, node->as.array_literal.repeat_count);
+            } else {
+                for (int i = 0; i < node->as.array_literal.count; i++)
+                    es_walk_expr(ctx, node->as.array_literal.elements[i]);
+            }
             break;
 
         case AST_TEMPLATE_STRING:

@@ -130,6 +130,7 @@
     X(STRUCT_NEW, xi_emit_struct_new) \
     X(STRUCT_GET, xi_emit_struct_get) \
     X(STRUCT_SET, xi_emit_struct_set) \
+    X(FIXED_ARRAY_NEW, xi_emit_fixed_array_new) \
     X(SCOPE_ENTER, xi_emit_scope_enter) \
     X(SCOPE_EXIT, xi_emit_scope_exit) \
     X(REGEX_COMPILE, xi_emit_regex_compile) \

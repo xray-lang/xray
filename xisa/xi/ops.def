@@ -745,6 +745,14 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.fixed.array.new
+  :class allocation
+  :arity 0
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.json.new
   :class allocation
   :arity 0

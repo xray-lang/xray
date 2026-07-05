@@ -173,7 +173,7 @@ typedef enum {
 #define XI_GEN_ALGEBRAIC_ASSOCIATIVE (1u << 0)
 #define XI_GEN_ALGEBRAIC_COMMUTATIVE (1u << 1)
 
-enum { XI_GEN_OP_COUNT = 165 };
+enum { XI_GEN_OP_COUNT = 166 };
 typedef char xi_generated_op_count_must_match_XiOp[
     ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];
 
@@ -275,6 +275,7 @@ typedef struct {
     X(STRUCT_NEW, "xi.struct.new", XI_GEN_CLASS_ALLOCATION, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(STRUCT_GET, "xi.struct.get", XI_GEN_CLASS_MEMORY_READ, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_MEMORY_READ, XI_GEN_TBAA_STRUCT, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_READS_MEM, 0, XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(STRUCT_SET, "xi.struct.set", XI_GEN_CLASS_MEMORY_WRITE, 2, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_STRUCT, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_HEAP, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_STORED_VALUE, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(FIXED_ARRAY_NEW, "xi.fixed.array.new", XI_GEN_CLASS_ALLOCATION, 0, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(JSON_NEW, "xi.json.new", XI_GEN_CLASS_ALLOCATION, 0, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_HEAP, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(JSON_INIT_F, "xi.json.init.f", XI_GEN_CLASS_MEMORY_WRITE, 2, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_JSON, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_HEAP, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_STORED_VALUE, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(JSON_GET_F, "xi.json.get.f", XI_GEN_CLASS_MEMORY_READ, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_MEMORY_READ, XI_GEN_TBAA_JSON, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_READS_MEM, 0, XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
@@ -444,6 +445,7 @@ static inline const char *xi_generated_op_name(uint16_t op) {
         case XI_STRUCT_NEW: return "STRUCT_NEW";
         case XI_STRUCT_GET: return "STRUCT_GET";
         case XI_STRUCT_SET: return "STRUCT_SET";
+        case XI_FIXED_ARRAY_NEW: return "FIXED_ARRAY_NEW";
         case XI_JSON_NEW: return "JSON_NEW";
         case XI_JSON_INIT_F: return "JSON_INIT_F";
         case XI_JSON_GET_F: return "JSON_GET_F";
@@ -616,6 +618,7 @@ static inline uint8_t xi_generated_op_arity(uint16_t op) {
         case XI_STRUCT_NEW: return 1;
         case XI_STRUCT_GET: return 1;
         case XI_STRUCT_SET: return 2;
+        case XI_FIXED_ARRAY_NEW: return 0;
         case XI_JSON_NEW: return 0;
         case XI_JSON_INIT_F: return 2;
         case XI_JSON_GET_F: return 1;
@@ -788,6 +791,7 @@ static inline uint8_t xi_generated_op_class(uint16_t op) {
         case XI_STRUCT_NEW: return XI_GEN_CLASS_ALLOCATION;
         case XI_STRUCT_GET: return XI_GEN_CLASS_MEMORY_READ;
         case XI_STRUCT_SET: return XI_GEN_CLASS_MEMORY_WRITE;
+        case XI_FIXED_ARRAY_NEW: return XI_GEN_CLASS_ALLOCATION;
         case XI_JSON_NEW: return XI_GEN_CLASS_ALLOCATION;
         case XI_JSON_INIT_F: return XI_GEN_CLASS_MEMORY_WRITE;
         case XI_JSON_GET_F: return XI_GEN_CLASS_MEMORY_READ;
@@ -960,6 +964,7 @@ static inline uint8_t xi_generated_op_result_kind(uint16_t op) {
         case XI_STRUCT_NEW: return XI_GEN_RESULT_VALUE;
         case XI_STRUCT_GET: return XI_GEN_RESULT_VALUE;
         case XI_STRUCT_SET: return XI_GEN_RESULT_VOID;
+        case XI_FIXED_ARRAY_NEW: return XI_GEN_RESULT_VALUE;
         case XI_JSON_NEW: return XI_GEN_RESULT_VALUE;
         case XI_JSON_INIT_F: return XI_GEN_RESULT_VOID;
         case XI_JSON_GET_F: return XI_GEN_RESULT_VALUE;
@@ -1132,6 +1137,7 @@ static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {
         case XI_STRUCT_NEW: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_STRUCT_GET: return XI_GEN_RESULT_OWNERSHIP_BORROWED;
         case XI_STRUCT_SET: return XI_GEN_RESULT_OWNERSHIP_NONE;
+        case XI_FIXED_ARRAY_NEW: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_JSON_NEW: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_JSON_INIT_F: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_JSON_GET_F: return XI_GEN_RESULT_OWNERSHIP_BORROWED;
@@ -1304,6 +1310,7 @@ static inline const char *xi_generated_op_result_native_type(uint16_t op) {
         case XI_STRUCT_NEW: return NULL;
         case XI_STRUCT_GET: return NULL;
         case XI_STRUCT_SET: return NULL;
+        case XI_FIXED_ARRAY_NEW: return NULL;
         case XI_JSON_NEW: return NULL;
         case XI_JSON_INIT_F: return NULL;
         case XI_JSON_GET_F: return NULL;
@@ -1476,6 +1483,7 @@ static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {
         case XI_STRUCT_NEW: return XI_GEN_LOWERING_GENERATED;
         case XI_STRUCT_GET: return XI_GEN_LOWERING_GENERATED;
         case XI_STRUCT_SET: return XI_GEN_LOWERING_GENERATED;
+        case XI_FIXED_ARRAY_NEW: return XI_GEN_LOWERING_GENERATED;
         case XI_JSON_NEW: return XI_GEN_LOWERING_GENERATED;
         case XI_JSON_INIT_F: return XI_GEN_LOWERING_GENERATED;
         case XI_JSON_GET_F: return XI_GEN_LOWERING_GENERATED;
@@ -1648,6 +1656,7 @@ static inline uint8_t xi_generated_op_speculation(uint16_t op) {
         case XI_STRUCT_NEW: return XI_GEN_SPECULATION_NEVER;
         case XI_STRUCT_GET: return XI_GEN_SPECULATION_NEVER;
         case XI_STRUCT_SET: return XI_GEN_SPECULATION_NEVER;
+        case XI_FIXED_ARRAY_NEW: return XI_GEN_SPECULATION_NEVER;
         case XI_JSON_NEW: return XI_GEN_SPECULATION_NEVER;
         case XI_JSON_INIT_F: return XI_GEN_SPECULATION_NEVER;
         case XI_JSON_GET_F: return XI_GEN_SPECULATION_NEVER;
@@ -1820,6 +1829,7 @@ static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {
         case XI_STRUCT_NEW: return XI_GEN_VN_NONE;
         case XI_STRUCT_GET: return XI_GEN_VN_MEMORY_READ;
         case XI_STRUCT_SET: return XI_GEN_VN_NONE;
+        case XI_FIXED_ARRAY_NEW: return XI_GEN_VN_NONE;
         case XI_JSON_NEW: return XI_GEN_VN_NONE;
         case XI_JSON_INIT_F: return XI_GEN_VN_NONE;
         case XI_JSON_GET_F: return XI_GEN_VN_MEMORY_READ;
@@ -1992,6 +2002,7 @@ static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {
         case XI_STRUCT_NEW: return XI_GEN_TBAA_NONE;
         case XI_STRUCT_GET: return XI_GEN_TBAA_STRUCT;
         case XI_STRUCT_SET: return XI_GEN_TBAA_STRUCT;
+        case XI_FIXED_ARRAY_NEW: return XI_GEN_TBAA_NONE;
         case XI_JSON_NEW: return XI_GEN_TBAA_NONE;
         case XI_JSON_INIT_F: return XI_GEN_TBAA_JSON;
         case XI_JSON_GET_F: return XI_GEN_TBAA_JSON;
@@ -2164,6 +2175,7 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_STRUCT_NEW: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_STRUCT_GET: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_STRUCT_SET: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_FIXED_ARRAY_NEW: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_JSON_NEW: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_JSON_INIT_F: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_JSON_GET_F: return XI_GEN_BACKEND_REWRITE_NONE;
@@ -2336,6 +2348,7 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_STRUCT_NEW: return NULL;
         case XI_STRUCT_GET: return NULL;
         case XI_STRUCT_SET: return NULL;
+        case XI_FIXED_ARRAY_NEW: return NULL;
         case XI_JSON_NEW: return NULL;
         case XI_JSON_INIT_F: return NULL;
         case XI_JSON_GET_F: return NULL;
@@ -2513,6 +2526,7 @@ static inline uint8_t xi_generated_op_escape_use(uint16_t op) {
         case XI_STRUCT_NEW: return XI_GEN_ESCAPE_USE_NONE;
         case XI_STRUCT_GET: return XI_GEN_ESCAPE_USE_NONE;
         case XI_STRUCT_SET: return XI_GEN_ESCAPE_USE_HEAP;
+        case XI_FIXED_ARRAY_NEW: return XI_GEN_ESCAPE_USE_NONE;
         case XI_JSON_NEW: return XI_GEN_ESCAPE_USE_NONE;
         case XI_JSON_INIT_F: return XI_GEN_ESCAPE_USE_HEAP;
         case XI_JSON_GET_F: return XI_GEN_ESCAPE_USE_NONE;
@@ -2685,6 +2699,7 @@ static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {
         case XI_STRUCT_NEW: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_STRUCT_GET: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_STRUCT_SET: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_FIXED_ARRAY_NEW: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_JSON_NEW: return XI_GEN_ESCAPE_ALLOC_HEAP;
         case XI_JSON_INIT_F: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_JSON_GET_F: return XI_GEN_ESCAPE_ALLOC_NONE;
@@ -2857,6 +2872,7 @@ static inline uint8_t xi_generated_op_own_use(uint16_t op) {
         case XI_STRUCT_NEW: return XI_GEN_OWN_USE_CONSUME;
         case XI_STRUCT_GET: return XI_GEN_OWN_USE_BORROW;
         case XI_STRUCT_SET: return XI_GEN_OWN_USE_STORED_VALUE;
+        case XI_FIXED_ARRAY_NEW: return XI_GEN_OWN_USE_CONSUME;
         case XI_JSON_NEW: return XI_GEN_OWN_USE_CONSUME;
         case XI_JSON_INIT_F: return XI_GEN_OWN_USE_STORED_VALUE;
         case XI_JSON_GET_F: return XI_GEN_OWN_USE_BORROW;
@@ -3029,6 +3045,7 @@ static inline uint8_t xi_generated_op_ic_site(uint16_t op) {
         case XI_STRUCT_NEW: return XI_GEN_IC_SITE_NONE;
         case XI_STRUCT_GET: return XI_GEN_IC_SITE_NONE;
         case XI_STRUCT_SET: return XI_GEN_IC_SITE_NONE;
+        case XI_FIXED_ARRAY_NEW: return XI_GEN_IC_SITE_NONE;
         case XI_JSON_NEW: return XI_GEN_IC_SITE_NONE;
         case XI_JSON_INIT_F: return XI_GEN_IC_SITE_NONE;
         case XI_JSON_GET_F: return XI_GEN_IC_SITE_NONE;
@@ -3201,6 +3218,7 @@ static inline XiOp xi_generated_op_negates_to(uint16_t op) {
         case XI_STRUCT_NEW: return XI_OP_COUNT;
         case XI_STRUCT_GET: return XI_OP_COUNT;
         case XI_STRUCT_SET: return XI_OP_COUNT;
+        case XI_FIXED_ARRAY_NEW: return XI_OP_COUNT;
         case XI_JSON_NEW: return XI_OP_COUNT;
         case XI_JSON_INIT_F: return XI_OP_COUNT;
         case XI_JSON_GET_F: return XI_OP_COUNT;
@@ -3373,6 +3391,7 @@ static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {
         case XI_STRUCT_NEW: return 0;
         case XI_STRUCT_GET: return 0;
         case XI_STRUCT_SET: return 0;
+        case XI_FIXED_ARRAY_NEW: return 0;
         case XI_JSON_NEW: return 0;
         case XI_JSON_INIT_F: return 0;
         case XI_JSON_GET_F: return 0;
@@ -3545,6 +3564,7 @@ static inline uint8_t xi_generated_op_default_flags(uint16_t op) {
         case XI_STRUCT_NEW: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_STRUCT_GET: return XI_FLAG_READS_MEM;
         case XI_STRUCT_SET: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+        case XI_FIXED_ARRAY_NEW: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_JSON_NEW: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_JSON_INIT_F: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_JSON_GET_F: return XI_FLAG_READS_MEM;
@@ -3717,6 +3737,7 @@ static inline uint32_t xi_generated_op_effects(uint16_t op) {
         case XI_STRUCT_NEW: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES;
         case XI_STRUCT_GET: return XI_EFFECT_MEMORY_READ;
         case XI_STRUCT_SET: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE;
+        case XI_FIXED_ARRAY_NEW: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES;
         case XI_JSON_NEW: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES;
         case XI_JSON_INIT_F: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE;
         case XI_JSON_GET_F: return XI_EFFECT_MEMORY_READ;

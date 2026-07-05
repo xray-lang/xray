@@ -141,7 +141,7 @@
   :integer no
   :boxed yes
   :dynamic-kind tagged
-  :native-type none
+  :native-type XR_NATIVE_VALUE
   :storage-rep XR_REP_TAGGED)
 
 (define-aot-rep ptr

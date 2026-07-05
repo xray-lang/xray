@@ -732,8 +732,13 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             break;
 
         case AST_ARRAY_LITERAL:
-            for (int i = 0; i < node->as.array_literal.count; i++) {
-                ea_walk(ctx, node->as.array_literal.elements[i]);
+            if (node->as.array_literal.is_repeat) {
+                ea_walk(ctx, node->as.array_literal.repeat_value);
+                ea_walk(ctx, node->as.array_literal.repeat_count);
+            } else {
+                for (int i = 0; i < node->as.array_literal.count; i++) {
+                    ea_walk(ctx, node->as.array_literal.elements[i]);
+                }
             }
             break;
 

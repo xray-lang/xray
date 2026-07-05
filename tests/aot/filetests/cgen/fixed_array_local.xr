@@ -1,0 +1,11 @@
+fn first(key: [uint8; 4]) -> int {
+    return key[0]
+}
+
+fn run() -> int {
+    let key: [uint8; 4] = [1, 2, 3, 4]
+    key[1] = 9
+    return key.length + first(key) + key[1]
+}
+
+print(run())

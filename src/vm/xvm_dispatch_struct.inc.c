@@ -178,6 +178,7 @@ vmcase(OP_NEW_STRUCT) {
                 case XR_NATIVE_ARRAY_REF:
                 case XR_NATIVE_MAP_REF:
                 case XR_NATIVE_SET_REF:
+                case XR_NATIVE_VALUE:
                     *(XrValue *) fp = dv;
                     break;
                 default:
@@ -259,6 +260,7 @@ vmcase(OP_STRUCT_GET) {
         case XR_NATIVE_ARRAY_REF:
         case XR_NATIVE_MAP_REF:
         case XR_NATIVE_SET_REF:
+        case XR_NATIVE_VALUE:
             R(a) = *(XrValue *) fp;
             break;
         default:
@@ -367,6 +369,9 @@ vmcase(OP_STRUCT_SET) {
                         case XR_NATIVE_F32:
                             *(float *) ep = (float) XR_TO_FLOAT(elem);
                             break;
+                        case XR_NATIVE_VALUE:
+                            *(XrValue *) ep = elem;
+                            break;
                         default:
                             break;
                     }
@@ -384,6 +389,7 @@ vmcase(OP_STRUCT_SET) {
         case XR_NATIVE_ARRAY_REF:
         case XR_NATIVE_MAP_REF:
         case XR_NATIVE_SET_REF:
+        case XR_NATIVE_VALUE:
             *(XrValue *) fp = src;
             break;
         default:
@@ -414,5 +420,32 @@ vmcase(OP_STRUCT_COPY) {
 
     memcpy(dst_ptr, src_ptr, xr_struct_layout_storage_size(layout));
     R(a) = xr_struct_ref(dst_ptr, layout_id);
+    vmbreak;
+}
+
+vmcase(OP_FIXED_ARRAY_NEW) {
+    /* A = dest reg, B = struct_area slot offset, C = const metadata
+     * metadata packs (elem_count << 8) | elem_native_type. */
+    TRACE_EXECUTION();
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+
+    if (XR_UNLIKELY(c < 0 || c >= PROTO_CONST_COUNT(cl->proto) || !XR_IS_INT(K(c)))) {
+        VM_RUNTIME_ERROR(XR_ERR_RUNTIME, "invalid fixed array metadata");
+    }
+    uint32_t meta = (uint32_t) XR_TO_INT(K(c));
+    uint8_t elem_native_type = (uint8_t) (meta & 0xFFu);
+    uint16_t elem_count = (uint16_t) (meta >> 8);
+    if (XR_UNLIKELY(elem_count == 0)) {
+        VM_RUNTIME_ERROR(XR_ERR_RUNTIME, "invalid fixed array length");
+    }
+    XR_DCHECK(vm_ctx->struct_areas && vm_ctx->struct_areas[VM_FRAME_COUNT - 1],
+              "OP_FIXED_ARRAY_NEW requires allocated struct_area");
+
+    uint8_t *array_ptr = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + (uint16_t) b * 16u;
+    uint32_t bytes = (uint32_t) elem_count * (uint32_t) xr_native_type_size(elem_native_type);
+    memset(array_ptr, 0, bytes);
+    R(a) = xr_array_ref(array_ptr, elem_native_type, elem_count);
     vmbreak;
 }

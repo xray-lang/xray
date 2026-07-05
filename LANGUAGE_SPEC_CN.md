@@ -518,6 +518,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 精确整数 | `int8`、`int16`、`int32`、`int64`、`uint8`..`uint64` |
 | 精确浮点 | `float32`、`float64` |
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`、`Bytes`（即 `Array<uint8>`） |
+| 定长布局 | `[T; N]` |
 | 特殊 | `Json`、`BigInt`、`Range`、`DateTime`、`Regex`、`StringBuilder`、`Logger`、`NetConn`、`NetListener` |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
 | 弱引用容器 | `WeakMap`、`WeakSet` |
@@ -673,6 +674,51 @@ let c: Array<string> = []         // 显式空数组
 `Array<T>` 的 `T` 必须能在编译期确定。空 `[]` 在无类型标注时是编译错误：`Empty array '[]' requires a type annotation`。
 
 `Array<char>` 保留 `char` 元素身份，读出时得到 `char`，写入时只接受 `char`。实现使用紧凑的 Unicode scalar 存储（`XR_ELEM_CHAR` / `uint32_t[]`），不会退化成 `Array<uint32>`。
+
+#### 2.4.1.1 定长数组 `[T; N]`
+
+`[T; N]` 是定长布局数组类型，表示 `N` 个 `T` 元素。`N` 是类型的一部分，必须能在分析期求值为正的编译期整数表达式；当前支持整数字面量、`const` 整数标识符、括号、一元 `-`/`~`，以及整数算术/位运算。当前后端编码上限为 65535 个元素。
+
+当前实现支持 struct inline 字段和局部栈上定长数组。标量元素（`int`、`float`、`bool`、精确整数/浮点等）使用紧凑 native lane；`string`、struct、嵌套定长数组和引用容器等非标量元素使用 tagged `XrValue` lane，因此可以递归组合：
+
+```xray
+let bytes: [uint8; 4] = [1, 2, 3, 4]
+let zero: [uint8; 64] = [0; 64]
+let names: [string; 2] = ["a", "b"]
+let blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
+```
+
+有目标类型的数组字面量初始化 `[T; N]` 时必须 exact-length；重复初始化 `[value; N]` 的 `N` 同样是正的编译期整数表达式，并且必须和目标类型长度一致。无上下文的普通数组字面量仍推断为动态 `Array<T>`；无上下文的 `[value; N]` 推断为 `[T; N]`。
+
+定长数组支持 `length`/`size`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Span<T>` 时通过切片产生借用视图：
+
+```xray
+let data: [uint8; 4] = [5, 6, 7, 8]
+let view: Span<uint8> = data[1:4]
+view[1] = 99
+```
+
+```xray
+struct Packet {
+    magic: [uint8; 4]
+    payload: [uint8; 128]
+}
+
+let key: [uint8; 4] = [1, 2, 3, 4]
+key[1] = 9
+
+fn first(packet: Packet) -> uint8 {
+    return packet.magic[0]
+}
+```
+
+`[T; N]` 与 `Array<T>` 语义不同：
+
+- `[T; N]`：定长、值语义、固定布局，适合 struct inline 字段、局部小缓冲、FFI/freestanding 数据。
+- `Array<T>`：动态长度、可增长、堆上容器。
+- `Span<T>`：借用连续存储的视图，不拥有数据。
+
+旧的 `[N]T` 语法不属于 Xray 语言。
 
 #### 2.4.2 `Map<K, V>`
 

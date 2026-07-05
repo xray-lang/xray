@@ -40,10 +40,26 @@ static bool xa_type_is_known_unassignable(XrType *target, XrType *source) {
     return !xr_type_assignable(target, source);
 }
 
+static XrType *xa_view_source_element_type(XrType *type) {
+    if (!type)
+        return NULL;
+    if ((XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type)) &&
+        type->container.element_type)
+        return type->container.element_type;
+    if (type->kind == XR_KIND_FIXED_ARRAY && type->fixed_array.element_type)
+        return type->fixed_array.element_type;
+    return NULL;
+}
+
+static bool xa_type_is_span_slice_source(XrType *type) {
+    return type &&
+           (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SPAN(type) || type->kind == XR_KIND_FIXED_ARRAY);
+}
+
 static bool xa_type_is_byte_array_or_span(XrType *type) {
-    if (!type || (!XR_TYPE_IS_ARRAY(type) && !XR_TYPE_IS_SPAN(type)))
+    if (!xa_type_is_span_slice_source(type))
         return false;
-    XrType *elem = type->container.element_type;
+    XrType *elem = xa_view_source_element_type(type);
     return elem && XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
 }
 
@@ -57,10 +73,11 @@ static bool xa_type_is_byte_array_or_view(XrType *type) {
 static XrType *xa_span_type_from_view_source(XaInferContext *ctx, XrType *src) {
     if (!ctx || !ctx->analyzer || !src)
         return xr_type_new_unknown(NULL);
-    if (!XR_TYPE_IS_ARRAY(src) && !XR_TYPE_IS_SPAN(src))
+    if (!xa_type_is_span_slice_source(src))
         return xr_type_new_unknown(NULL);
-    XrType *elem =
-        src->container.element_type ? src->container.element_type : xr_type_new_unknown(NULL);
+    XrType *elem = xa_view_source_element_type(src);
+    if (!elem)
+        elem = xr_type_new_unknown(NULL);
     if (xa_type_is_byte_array_or_span(src))
         return xr_type_new_bytespan(ctx->analyzer->isolate);
     return xr_type_new_span(ctx->analyzer->isolate, elem);
@@ -96,10 +113,10 @@ XR_FUNC void xa_report_view_expr_requires_target(XaInferContext *ctx, AstNode *n
 static bool xa_span_target_matches_source(XrType *target, XrType *src) {
     if (!target || !src || !XR_TYPE_IS_SPAN(target))
         return false;
-    if (!XR_TYPE_IS_ARRAY(src) && !XR_TYPE_IS_SPAN(src))
+    if (!xa_type_is_span_slice_source(src))
         return false;
     XrType *target_elem = target->container.element_type;
-    XrType *src_elem = src->container.element_type;
+    XrType *src_elem = xa_view_source_element_type(src);
     if (!target_elem || !src_elem)
         return true;
     if (XR_TYPE_IS_UNKNOWN(target_elem) || XR_TYPE_IS_UNKNOWN(src_elem))
@@ -1675,7 +1692,7 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
         }
         for (int i = 0; i < call->type_arg_count; i++)
             actual_types[i] = call->type_args[i]
-                                  ? xr_tref_resolve(ctx->analyzer->isolate, call->type_args[i])
+                                  ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[i])
                                   : xr_type_new_unknown(NULL);
         actual_count = call->type_arg_count;
         inferred = true; /* mark for free */
@@ -1825,6 +1842,29 @@ XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, 
  * Uses two-phase approach for functions/classes to support mutual recursion.
  * ========================================================================== */
 
+static void xa_visit_precollect_const_decl(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node || node->type != AST_CONST_DECL)
+        return;
+    VarDeclNode *var = &node->as.var_decl;
+    if (!var->name || var->symbol_id != 0)
+        return;
+    if (xa_scope_lookup_local(ctx->analyzer->current_scope, var->name))
+        return;
+
+    XaSymbol *sym = xa_symbol_new(var->name, XA_SYM_VARIABLE);
+    sym->location.line = node->line;
+    sym->is_const = true;
+    sym->is_shared = (var->storage_mode == XR_STORAGE_SHARED);
+    xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+    var->symbol_id = sym->id;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (links) {
+        links->const_initializer = var->initializer;
+        links->file_path = ctx->file_path;
+    }
+}
+
 // xa_visit_collect_function_decl_only / xa_visit_collect_function_body
 // Cross-TU: also called from xa_visit_collect_function_body() in
 // xanalyzer_visitor_decl.c for nested function bodies.
@@ -1841,6 +1881,20 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
         } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
                    stmt->as.export_stmt.declaration->type == AST_INTERFACE_DECL) {
             xa_visit_collect_interface(ctx, stmt->as.export_stmt.declaration);
+        }
+    }
+
+    // Phase 0.5: pre-register const initializers so signatures and field types
+    // can use [T; N] where N is a source-level const.
+    for (int i = 0; i < count; i++) {
+        AstNode *stmt = stmts[i];
+        if (!stmt)
+            continue;
+        if (stmt->type == AST_CONST_DECL) {
+            xa_visit_precollect_const_decl(ctx, stmt);
+        } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
+                   stmt->as.export_stmt.declaration->type == AST_CONST_DECL) {
+            xa_visit_precollect_const_decl(ctx, stmt->as.export_stmt.declaration);
         }
     }
 
@@ -2230,7 +2284,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                                 for (int p = 0; p < pc; p++) {
                                     XrTypeRef *tref = mem->as.enum_member.payload_types[p];
                                     XrType *ptype =
-                                        tref ? xr_tref_resolve(ctx->analyzer->isolate, tref)
+                                        tref ? xr_tref_resolve_in_analyzer(ctx->analyzer, tref)
                                              : xr_type_new_unknown(NULL);
                                     if (ptype && edecl->type_param_count > 0 &&
                                         edecl->type_params && links->type_param_names) {
@@ -2325,9 +2379,10 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 // TypeAliasNode::resolved_type. Mirror it into the side
                 // table so downstream readers (codegen, LSP) get the
                 // same answer through the canonical lookup path.
-                XrType *resolved = ta->resolved_type
-                                       ? xr_tref_resolve(ctx->analyzer->isolate, ta->resolved_type)
-                                       : NULL;
+                XrType *resolved =
+                    ta->resolved_type
+                        ? xr_tref_resolve_in_analyzer(ctx->analyzer, ta->resolved_type)
+                        : NULL;
                 if (resolved) {
                     xa_analyzer_set_node_type(ctx->analyzer, node, resolved);
                 }
@@ -3059,7 +3114,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_expr(ctx, sl->end);
             /* Array/Span slices are target-typed view-producing expressions.
              * They no longer choose Span/View/owned semantics by themselves. */
-            if (src && (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_SPAN(src) || XR_TYPE_IS_VIEW(src))) {
+            if (src && (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_SPAN(src) || XR_TYPE_IS_VIEW(src) ||
+                        src->kind == XR_KIND_FIXED_ARRAY)) {
                 XrType *target = ctx->expected_type;
                 if (target && XR_TYPE_IS_SPAN(target)) {
                     xa_check_span_borrow_source_stable(ctx, node, sl->source, "slice expression");
@@ -3077,7 +3133,7 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                     }
-                } else if (target && XR_TYPE_IS_VIEW(target)) {
+                } else if (target && XR_TYPE_IS_VIEW(target) && src->kind != XR_KIND_FIXED_ARRAY) {
                     result = XR_TYPE_IS_UNKNOWN(target->container.element_type)
                                  ? xa_storage_view_type_from_source(ctx, src)
                                  : target;
@@ -3092,6 +3148,13 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                     }
+                } else if (target && XR_TYPE_IS_VIEW(target)) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    xa_analyzer_add_diagnostic(
+                        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                        "fixed array slices can only produce scoped Span<T>, not View<T>", &loc);
+                    result = xr_type_new_unknown(NULL);
                 } else if (ctx->allow_view_expr_for_copy) {
                     xa_check_span_borrow_source_stable(ctx, node, sl->source, "slice expression");
                     result = xa_span_type_from_view_source(ctx, src);
@@ -3562,7 +3625,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType *saved_expected_ret = ctx->expected_return_type;
             if (fn_decl->return_type) {
                 ctx->expected_return_type =
-                    xr_tref_resolve(ctx->analyzer->isolate, fn_decl->return_type);
+                    xr_tref_resolve_in_analyzer(ctx->analyzer, fn_decl->return_type);
             } else {
                 ctx->expected_return_type = xr_type_new_unit(NULL);
             }
@@ -3686,7 +3749,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     ctx->current_method_is_constructor = md->is_constructor;
                     if (md->return_type) {
                         ctx->expected_return_type =
-                            xr_tref_resolve(ctx->analyzer->isolate, md->return_type);
+                            xr_tref_resolve_in_analyzer(ctx->analyzer, md->return_type);
                     } else {
                         ctx->expected_return_type = NULL;
                     }
@@ -4211,6 +4274,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                      XR_TYPE_IS_SPAN(array_type)) &&
                     array_type->container.element_type) {
                     value_expected = array_type->container.element_type;
+                } else if (array_type->kind == XR_KIND_FIXED_ARRAY &&
+                           array_type->fixed_array.element_type) {
+                    value_expected = array_type->fixed_array.element_type;
                 } else if (XR_TYPE_IS_MAP(array_type) && array_type->map.value_type) {
                     value_expected = array_type->map.value_type;
                 } else if (XR_TYPE_HAS_OBJECT_SHAPE(array_type)) {
@@ -4350,8 +4416,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                            "sealed Record index assignment requires a string "
                                            "literal key",
                                            &loc);
-            } else if (array_type && (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_VIEW(array_type) ||
-                                      XR_TYPE_IS_SPAN(array_type))) {
+            } else if (array_type &&
+                       (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_VIEW(array_type) ||
+                        XR_TYPE_IS_SPAN(array_type) || array_type->kind == XR_KIND_FIXED_ARRAY)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type)) {
@@ -4362,10 +4429,16 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
-                if (array_type->container.element_type && value_type &&
-                    !XR_TYPE_IS_UNKNOWN(value_type)) {
-                    xa_analyzer_check_assignment(ctx->analyzer, array_type->container.element_type,
-                                                 value_type, &loc);
+                XrType *elem_type = NULL;
+                if ((XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_VIEW(array_type) ||
+                     XR_TYPE_IS_SPAN(array_type)) &&
+                    array_type->container.element_type) {
+                    elem_type = array_type->container.element_type;
+                } else if (array_type->kind == XR_KIND_FIXED_ARRAY) {
+                    elem_type = array_type->fixed_array.element_type;
+                }
+                if (elem_type && value_type && !XR_TYPE_IS_UNKNOWN(value_type)) {
+                    xa_analyzer_check_assignment(ctx->analyzer, elem_type, value_type, &loc);
                 }
             } else if (array_type && XR_TYPE_IS_STRING(array_type) && index_type &&
                        !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type)) {
@@ -4495,7 +4568,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, method);
                 XrType *saved_ret = ctx->expected_return_type;
                 ctx->expected_return_type =
-                    md->return_type ? xr_tref_resolve(ctx->analyzer->isolate, md->return_type)
+                    md->return_type ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->return_type)
                                     : NULL;
                 xa_visit_function_body_unified(ctx, md->body);
                 ctx->expected_return_type = saved_ret;

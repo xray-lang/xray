@@ -4009,6 +4009,36 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
 
+    if (v->op == XI_FIXED_ARRAY_NEW) {
+        uint8_t native = 0;
+        uint16_t count = 0;
+        if (!xicgen_fixed_array_new_info(v, &native, &count)) {
+            ctx->error = true;
+            fprintf(out, "    XrValue ");
+            emit_vref(out, v);
+            fprintf(out, " = XR_NULL_VAL;\n");
+            return;
+        }
+        if (!ctx->pre_decl_all) {
+            fprintf(out, "    %s _fa%u[%u];\n", cg_struct_native_c_type(native), v->id,
+                    (unsigned) count);
+        }
+        fprintf(out, "    memset(_fa%u, 0, sizeof(_fa%u));\n", v->id, v->id);
+        if (ctx->pre_decl_all) {
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = ");
+        } else {
+            fprintf(out, "    XrValue ");
+            emit_vref(out, v);
+            fprintf(out, " = ");
+        }
+        emit_value_rhs(ctx, out, f, v, prefix);
+        fprintf(out, ";\n");
+        emit_value_generated_line_reset(ctx, out, v);
+        return;
+    }
+
     if (cg_value_is_elided_nested_struct_ref(f, v) || cg_value_is_elided_fixed_array_ref(f, v))
         return;
     if ((v->op == XI_COPY || v->op == XI_MOVE) && (cg_value_traces_to_inlined_struct(f, v) ||
@@ -4811,6 +4841,14 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                 const XiValue *v = blk->values[vi];
                 if (cg_value_skips_predecl(ctx, f, v))
                     continue;
+                if (v->op == XI_FIXED_ARRAY_NEW) {
+                    uint8_t native = 0;
+                    uint16_t count = 0;
+                    if (xicgen_fixed_array_new_info(v, &native, &count)) {
+                        fprintf(out, "    %s _fa%u[%u];\n", cg_struct_native_c_type(native), v->id,
+                                (unsigned) count);
+                    }
+                }
                 XrRep rep = cg_value_plan_storage_rep(ctx, v);
                 fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
                 emit_vref(out, v);

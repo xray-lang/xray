@@ -116,6 +116,8 @@ typedef struct XrValue {
     };
 } XrValue;
 
+#define XRT_VALUE_FLAG_ARRAY_REF_OWNED 0x01u
+
 /* =========================================================================
  * Tag constants — base tags (0-7) identical to VM's XrValueTag.
  * Extended tags (>= 8) are AOT-specific: encode object type without object header.
@@ -217,6 +219,7 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
 #define XR_NATIVE_ARRAY_REF 14
 #define XR_NATIVE_MAP_REF 15
 #define XR_NATIVE_SET_REF 16
+#define XR_NATIVE_VALUE 17
 
 /* String type check (both literal and bump-allocated) */
 #define XR_IS_STR(v) ((v).tag == XR_TAG_STR || (v).tag == XR_TAG_STR_ARC)
@@ -381,6 +384,12 @@ static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint16_t
     return r;
 }
 
+static inline XrValue xr_array_ref_owned(void *ptr, uint8_t elem_native_type, uint16_t elem_count) {
+    XrValue r = xr_array_ref(ptr, elem_native_type, elem_count);
+    r.flags = XRT_VALUE_FLAG_ARRAY_REF_OWNED;
+    return r;
+}
+
 #define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_STRUCT_REF && (v).ext != 0)
 #define XR_ARRAY_REF_ELEM_TYPE(v) ((uint8_t) ((v).ext & 0xFF))
 #define XR_ARRAY_REF_ELEM_COUNT(v) ((uint16_t) ((v).ext >> 8))
@@ -443,6 +452,8 @@ static inline size_t xrt_value_native_type_size(uint8_t native_type) {
         case XR_NATIVE_U32:
         case XR_NATIVE_F32:
             return 4;
+        case XR_NATIVE_VALUE:
+            return sizeof(XrValue);
         default:
             return 8;
     }

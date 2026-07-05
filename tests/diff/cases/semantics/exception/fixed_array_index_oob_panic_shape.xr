@@ -1,6 +1,6 @@
 // anchor: fixed-array-index-oob-panic-shape
 struct Buf {
-    data: [4]int
+    data: [int; 4]
 }
 
 fn show_direct_read(i: int) {
@@ -24,7 +24,7 @@ fn show_direct_write(i: int) {
     }
 }
 
-fn write_view(view: [4]int, i: int) {
+fn write_view(view: [int; 4], i: int) {
     view[i] = 9
 }
 

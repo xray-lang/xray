@@ -969,7 +969,8 @@ static bool emit_struct_heap_nested_object_ptr_expr(XiCgenCtx *ctx, FILE *out, c
 
 static bool emit_struct_heap_field_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                             const XrStructLayout *sl, int64_t idx,
-                                            const XiValue *object, const char *prefix) {
+                                            const XiValue *object, XrRep result_rep,
+                                            const char *prefix) {
     if (!cg_struct_native_heap_supported(sl) || idx < 0 || idx >= sl->field_count)
         return false;
     const XrStructFieldLayout *field = cg_struct_field(sl, idx);
@@ -982,6 +983,12 @@ static bool emit_struct_heap_field_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         return true;
     }
     if (field && field->native_type == XR_NATIVE_ARRAY) {
+        if (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR) {
+            fprintf(out, "&");
+            emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+            fprintf(out, "[0]");
+            return true;
+        }
         fprintf(out, "xr_array_ref(&");
         emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, "[0], %u, %u)", (unsigned) field->elem_native_type,
@@ -1008,7 +1015,7 @@ static void emit_struct_fallback_field_get(XiCgenCtx *ctx, FILE *out, const XiFu
                                            const XrStructLayout *sl, int64_t idx,
                                            const XiValue *object, const XrType *result_type,
                                            XrRep result_rep, const char *prefix) {
-    if (emit_struct_heap_field_get_expr(ctx, out, f, sl, idx, object, prefix))
+    if (emit_struct_heap_field_get_expr(ctx, out, f, sl, idx, object, result_rep, prefix))
         return;
     emit_struct_runtime_field_get(ctx, out, sl, idx, object, result_type, result_rep);
 }

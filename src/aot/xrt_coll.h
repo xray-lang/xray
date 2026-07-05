@@ -577,6 +577,27 @@ static inline xr_span_t xrt_span_empty(void) {
 }
 
 static inline xr_span_t xrt_span_from_array_slice(XrValue arr, int64_t start, int64_t end) {
+    if (XR_IS_ARRAY_REF(arr)) {
+        uint8_t native_type = XR_ARRAY_REF_ELEM_TYPE(arr);
+        int64_t len = XR_ARRAY_REF_ELEM_COUNT(arr);
+        xrt_array_normalize_slice(len, &start, &end);
+        int64_t count = end - start;
+        if (count < 0)
+            count = 0;
+        uint8_t elem_size = (uint8_t) xrt_value_native_type_size(native_type);
+        xr_span_t out = {0};
+        out.data = (count > 0 && arr.ptr)
+                       ? (void *) ((uint8_t *) arr.ptr + (size_t) start * (size_t) elem_size)
+                       : arr.ptr;
+        out.length = count;
+        out.guard = NULL;
+        out.elem_type = xr_native_type_to_elem_type(native_type);
+        out.elem_size = elem_size ? elem_size : (uint8_t) sizeof(XrValue);
+        out.elem_tid = 0;
+        out.contains_refs = out.elem_type == XR_ELEM_ANY;
+        out.flags = 0;
+        return out;
+    }
     if (!XR_IS_ARRAY(arr) || !arr.ptr)
         return xrt_span_empty();
     xrt_array_t *src = (xrt_array_t *) arr.ptr;
@@ -1410,6 +1431,16 @@ static inline uint64_t xrt_hash_value(XrValue v) {
             return xr_hash_core_mix_u64(xrt_str_hash(v));
         case XR_TAG_NULL:
             return xr_hash_core_mix_u64(0x9e3779b97f4a7c15ull);
+        case XR_TAG_STRUCT_REF:
+            if (XR_IS_ARRAY_REF(v)) {
+                if (!v.ptr)
+                    return xr_hash_core_mix_u64((uint64_t) v.ext);
+                size_t size = xrt_value_native_type_size(XR_ARRAY_REF_ELEM_TYPE(v)) *
+                              (size_t) XR_ARRAY_REF_ELEM_COUNT(v);
+                return xr_hash_core_mix_u64(xr_hash_core_bytes((const char *) v.ptr, size) ^
+                                            ((uint64_t) v.ext << 32));
+            }
+            return xr_hash_core_mix_u64((uint64_t) (uintptr_t) v.ptr);
         default:
             return xr_hash_core_mix_u64((uint64_t) (uintptr_t) v.ptr);
     }
@@ -1821,6 +1852,8 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
     int32_t eidx = xrt_map_find_entry(m, key, hash, key_tt);
     if (eidx >= 0) {
         if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+            if (XR_IS_ARRAY_REF(val))
+                val = xrt_value_to_owned(val);
             xrt_release(key);
             xrt_release(m->entries[eidx].value);
         }
@@ -1829,6 +1862,12 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
     }
     if (m->nentries >= m->entries_cap)
         xrt_map_resize_tagged(m, m->count + 1);
+    if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+        if (XR_IS_ARRAY_REF(key))
+            key = xrt_value_to_owned(key);
+        if (XR_IS_ARRAY_REF(val))
+            val = xrt_value_to_owned(val);
+    }
     eidx = (int32_t) m->nentries++;
     XrMapEntry *entry = &m->entries[eidx];
     entry->key = key;
@@ -2189,6 +2228,8 @@ static inline int xrt_set_add(xrt_set_t *s, XrValue value) {
         }
         if (s->nentries >= s->entries_cap)
             xrt_set_resize_tagged(s, s->count + 1);
+        if (!(s->flags & XR_SET_FLAG_WEAK) && XR_IS_ARRAY_REF(value))
+            value = xrt_value_to_owned(value);
         int32_t eidx = (int32_t) s->nentries++;
         XrSetEntry *entry = &s->entries[eidx];
         entry->value = value;
@@ -3324,18 +3365,8 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
         case XR_TAG_STRUCT_REF: {
             if (!val.ptr)
                 return val;
-            if (XR_IS_ARRAY_REF(val)) {
-                uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(val);
-                uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(val);
-                size_t size = xrt_native_type_size(elem_type) * (size_t) elem_count;
-                void *dst = xrt_arc_alloc(size);
-                if (XR_UNLIKELY(!dst)) {
-                    fprintf(stderr, "xrt_value_clone_for_coro: out of memory\n");
-                    abort();
-                }
-                memcpy(dst, val.ptr, size);
-                return xr_array_ref(dst, elem_type, elem_count);
-            }
+            if (XR_IS_ARRAY_REF(val))
+                return xrt_array_ref_to_owned(val);
             uint16_t storage_size = val.heap_type;
             uint32_t size = storage_size ? storage_size : *(uint32_t *) val.ptr;
             if (size == 0 || size > (16u * 1024u * 1024u))

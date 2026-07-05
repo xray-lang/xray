@@ -167,8 +167,13 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             break;
 
         case AST_ARRAY_LITERAL:
-            for (int i = 0; i < node->as.array_literal.count; i++) {
-                visit_node(node->as.array_literal.elements[i], v);
+            if (node->as.array_literal.is_repeat) {
+                visit_node(node->as.array_literal.repeat_value, v);
+                visit_node(node->as.array_literal.repeat_count, v);
+            } else {
+                for (int i = 0; i < node->as.array_literal.count; i++) {
+                    visit_node(node->as.array_literal.elements[i], v);
+                }
             }
             break;
 

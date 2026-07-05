@@ -279,6 +279,8 @@ static inline void xrt_bump_header_init(XrObjHeader *h, uint16_t type) {
 static inline int xrt_arc_value_has_header(XrValue v) {
     if (!v.ptr)
         return 0;
+    if (XR_IS_ARRAY_REF(v))
+        return (v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0;
     if (v.tag == XR_TAG_PTR)
         return v.heap_type == XR_TINSTANCE;
     return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_CLOSURE || v.tag == XR_TAG_CELL ||
@@ -329,6 +331,8 @@ static inline int xrt_rc_claim_release_last(XrObjHeader *hdr) {
     }
 }
 
+static inline void xrt_array_ref_release_owned(XrValue v);
+
 /* ARC release: release one owning reference, free on the LAST one.
  * 0-based RC (matching the VM/AOT unified header): rc == 0 means a single
  * owner, so a release at rc == 0 frees; otherwise it just decrements. The
@@ -353,6 +357,10 @@ static inline void xrt_finalize_one(XrObjHeader *hdr) {
 static inline void xrt_release(XrValue v) {
     if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v)) {
         xrt_coll_release(v);
+        return;
+    }
+    if (XR_IS_ARRAY_REF(v)) {
+        xrt_array_ref_release_owned(v);
         return;
     }
     if (!xrt_arc_value_has_header(v))
@@ -384,7 +392,49 @@ static inline void xrt_release(XrValue v) {
     }
 }
 
+static inline XrValue xrt_value_to_owned(XrValue v);
+
+static inline XrValue xrt_array_ref_to_owned(XrValue v) {
+    if (!XR_IS_ARRAY_REF(v) || !v.ptr)
+        return v;
+    if ((v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0) {
+        xrt_retain(v);
+        return v;
+    }
+    uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(v);
+    uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(v);
+    size_t elem_size = xrt_value_native_type_size(elem_type);
+    size_t size = elem_size * (size_t) elem_count;
+    void *dst = xrt_arc_alloc(size);
+    if (elem_type == XR_NATIVE_VALUE) {
+        XrValue *dst_values = (XrValue *) dst;
+        const XrValue *src_values = (const XrValue *) v.ptr;
+        for (uint16_t i = 0; i < elem_count; i++)
+            dst_values[i] = xrt_value_to_owned(src_values[i]);
+    } else {
+        memcpy(dst, v.ptr, size);
+    }
+    return xr_array_ref_owned(dst, elem_type, elem_count);
+}
+
+static inline void xrt_array_ref_release_owned(XrValue v) {
+    if (!XR_IS_ARRAY_REF(v) || (v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) == 0 || !v.ptr)
+        return;
+    XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
+    if (!xrt_rc_claim_release_last(hdr))
+        return;
+    if (!(hdr->extra & XR_OBJ_STORAGE_BUMP) && XR_ARRAY_REF_ELEM_TYPE(v) == XR_NATIVE_VALUE) {
+        XrValue *values = (XrValue *) v.ptr;
+        uint16_t count = XR_ARRAY_REF_ELEM_COUNT(v);
+        for (uint16_t i = 0; i < count; i++)
+            xrt_release(values[i]);
+    }
+    xrt_finalize_one(hdr);
+}
+
 static inline XrValue xrt_value_to_owned(XrValue v) {
+    if (XR_IS_ARRAY_REF(v))
+        return xrt_array_ref_to_owned(v);
     xrt_retain(v);
     return v;
 }

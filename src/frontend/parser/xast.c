@@ -750,6 +750,9 @@ AstNode *xr_ast_as_expr(XrCompilerSession *session, AstNode *expr, XrTypeRef *ty
 AstNode *xr_ast_array_literal(XrCompilerSession *session, AstNode **elements, int count, int line) {
     AstNode *node = alloc_node(session, AST_ARRAY_LITERAL, line);
     node->as.array_literal.count = count;
+    node->as.array_literal.is_repeat = false;
+    node->as.array_literal.repeat_value = NULL;
+    node->as.array_literal.repeat_count = NULL;
 
     // Copy element array
     if (count > 0) {
@@ -764,6 +767,17 @@ AstNode *xr_ast_array_literal(XrCompilerSession *session, AstNode **elements, in
 
     // compile_type set by type inference, not here (avoid analyzer pool dependency)
 
+    return node;
+}
+
+AstNode *xr_ast_array_repeat_literal(XrCompilerSession *session, AstNode *value, AstNode *count,
+                                     int line) {
+    AstNode *node = alloc_node(session, AST_ARRAY_LITERAL, line);
+    node->as.array_literal.elements = NULL;
+    node->as.array_literal.count = 1;
+    node->as.array_literal.repeat_value = value;
+    node->as.array_literal.repeat_count = count;
+    node->as.array_literal.is_repeat = true;
     return node;
 }
 
@@ -1934,6 +1948,16 @@ void xr_ast_print(AstNode *node, int indent) {
 
         // Array related nodes
         case AST_ARRAY_LITERAL:
+            if (node->as.array_literal.is_repeat) {
+                printf(" [repeat]\n");
+                printf("%*s", (indent + 1) * 2, "");
+                printf("Value:");
+                xr_ast_print(node->as.array_literal.repeat_value, indent + 2);
+                printf("%*s", (indent + 1) * 2, "");
+                printf("Count:");
+                xr_ast_print(node->as.array_literal.repeat_count, indent + 2);
+                break;
+            }
             printf(" [%d elements]\n", node->as.array_literal.count);
             for (int i = 0; i < node->as.array_literal.count; i++) {
                 printf("%*s", (indent + 1) * 2, "");
