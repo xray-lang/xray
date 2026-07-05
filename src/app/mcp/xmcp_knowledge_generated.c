@@ -2033,7 +2033,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "\n"
             "### Features\n"
-            "- `constructor()` is called through `new ClassName(...)`\n"
+            "- `constructor()` is called through `ClassName(...)`\n"
             "- `extends` enables single inheritance\n"
             "- `override` is optional but checked when present: it must match a parent-chain method signature\n"
             "- `static` declares class-level methods or fields\n"
@@ -3131,7 +3131,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var s: Set<int> = #[1, 2, 3]\n"
             "```\n"
             "```xray\n"
-            "const ch: Channel<int> = Channel<int>(10)\n"
+            "shared ch: Channel<int> = Channel<int>(10)\n"
             "```\n"
             "\n"
             "### Union types\n"
@@ -3196,7 +3196,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```xray\n"
             "var p = Point(1.0, 2.0)\n"
             "var arr = Array<int>()\n"
-            "var ch = Channel<int>(10)\n"
+            "shared ch = Channel<int>(10)\n"
             "var m = Map<string, int>()\n"
             "```\n"
             "```xray\n"
@@ -3209,7 +3209,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "variables",
         .title = "Variables",
-        .aliases_csv = "var,const,var,shared,declaration",
+        .aliases_csv = "var,const,binding,shared,declaration",
         .body =
             "[Language reference](#51-var-const-shared)\n"
             "\n"
@@ -4398,7 +4398,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "## Important notes\n"
     "- `print()` outputs with newline; there is no `println`\n"
     "- arrow function parameter types may be inferred only when the context is known\n"
-    "- `new Channel<T>(n)` constructs a channel; `Channel<T>` is used in type position\n"
+    "- `shared ch = Channel<T>(n)` creates a named channel handle; `Channel<T>` is used in type position\n"
     "- field increment such as `this.x++` is not supported; assign explicitly\n"
     "- same-quote strings are allowed inside `${...}` interpolation\n"
     "";

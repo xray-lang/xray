@@ -158,21 +158,22 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 - In `match` patterns it represents a **wildcard** (see §6.7).
 - In `for-in`, it can ignore the key or the value: `for (_, v in m) { ... }`.
-- In destructuring binding it can ignore positions: `let (a, _) = (1, 2)`.
-- It **cannot** appear as `let _ = expr`, as a function-parameter name, or as a referenced variable; the compiler reports "expected variable name".
+- In destructuring binding it can ignore positions: `var (a, _) = (1, 2)`.
+- It **cannot** appear as `var _ = expr`, as a function-parameter name, or as a referenced variable; the compiler reports "expected variable name".
 - Multi-underscore names (such as `__tmp`) are ordinary identifiers.
 
 ### 1.5 Keywords
 
-Xray has **63 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
+Xray has **65 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
 
 #### 1.5.1 Declarations and Control Flow
 
 | Keyword | Purpose |
 |--|--|
-| `let` | mutable variable declaration |
+| `var` | mutable variable declaration |
 | `const` | immutable variable declaration |
-| `shared` | cross-coroutine shared modifier (combined with `const`/`let`) |
+| `shared` | shared identity binding (global-heap storage, ordinary lexical scope) |
+| `comptime` | expression prefix that forces compile-time evaluation |
 | `fn` | function declaration |
 | `return` | function return |
 | `yield` | generator value-yield statement |
@@ -210,7 +211,7 @@ Xray has **63 reserved keywords** in total; the authoritative source-of-truth ta
 
 #### 1.5.5 Coroutines and Concurrency
 
-`go` `await` `select` `defer` `scope` `unsafe`
+`go` `await` `select` `defer` `scope` `unsafe` `parallel`
 
 #### 1.5.6 Type Names (reserved)
 
@@ -259,7 +260,7 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 - Digit separators `_` exist purely for readability and may appear anywhere between digits.
 - Default literal type is `int` (= `int64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
 - Range: `int64` covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
-- When an integer literal appears directly in a narrow-integer context (variable initialization, assignment, argument, return value, collection element, and similar sites), its value must fit the target type; for example, `let x: int8 = 200` is a compile-time error. Non-literal expressions written into narrow integer targets are still narrowed with target-width wrap-around; see §2.3.1.
+- When an integer literal appears directly in a narrow-integer context (variable initialization, assignment, argument, return value, collection element, and similar sites), its value must fit the target type; for example, `var x: int8 = 200` is a compile-time error. Non-literal expressions written into narrow integer targets are still narrowed with target-width wrap-around; see §2.3.1.
 
 ```xray
 42
@@ -542,11 +543,11 @@ Xray is statically typed; every expression has a determined type at compile time
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
 | `uint8`..`uint64` | unsigned counterparts | — |
 
-- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable), but a direct literal must fit the target range (`let x: int8 = 200` is rejected at compile time).
+- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable), but a direct literal must fit the target range (`var x: int8 = 200` is rejected at compile time).
 - Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`uint8 + uint8 -> uint8`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
 - Values with static type `uint8`..`uint64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `uint64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
 - `int.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `int` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
-- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `let x: uint8 = 255 + 1` evaluates to `0`.
+- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `var x: uint8 = 255 + 1` evaluates to `0`.
 - After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `any` / Json / dynamic-container boundaries, `uint64` values above the positive `int64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
@@ -560,7 +561,7 @@ Literals default to `float`.
 
 #### 2.3.3 `bool`
 
-`true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `let x: int = true` or `let b: bool = 1`).
+`true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `var x: int = true` or `var b: bool = 1`).
 
 **Condition expression rules** (`if` / `while` / `for` conditions / ternary `?:` / `match` guards):
 
@@ -611,7 +612,7 @@ print(int(smile))         // 128512
 ```
 
 - A char literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
-- `char` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `let n: uint32 = 'a'` are rejected by the analyzer.
+- `char` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: uint32 = 'a'` are rejected by the analyzer.
 - Explicit conversions: `int(c)` returns the scalar code point; `char(n)` constructs a char from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
 - Common methods are listed in §14.4.1.
 
@@ -754,10 +755,10 @@ var s: Set<int> = #[1, 2, 3]
 
 #### 2.4.4 `Channel<T>`
 
-Inter-coroutine communication channel. **Must** be declared `const` (see §10.5).
+Inter-coroutine communication channel. Named channel handles **must** be created with `shared` (see §10.5).
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+shared ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Bytes`
@@ -797,7 +798,7 @@ var m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 | Form | Type | Notes |
 |---|---|---|
 | `{ name: "x", age: 1 }` | sealed anonymous `Record` | identifier or string key followed by `:` |
-| `let j: Json = { name: "x" }` | `Json` object | interpreted as dynamic Json only with an explicit `Json` expected type |
+| `var j: Json = { name: "x" }` | `Json` object | interpreted as dynamic Json only with an explicit `Json` expected type |
 | `{ x: y }` (`x` is field name, `y` is variable) | sealed anonymous `Record` | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
 | `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
 | `Point{x: 1.0, y: 2.0}` | `Point` (struct) | type name + `{...}` literal |
@@ -984,8 +985,8 @@ var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotati
 > **Structural compatibility direction** (duck typing): a type with more fields is assignable to a type with fewer fields.
 > ```xray
 > type User = { name: string }
-> let full = { name: "A", age: 18 }
-> let u: User = full       // OK: full is a superset of User
+> var full = { name: "A", age: 18 }
+> var u: User = full       // OK: full is a superset of User
 > ```
 
 #### 2.10.2 Explicit `as`
@@ -1052,7 +1053,7 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | Level | Operators | Assoc. | Description |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | left | postfix: grouping, index, member, optional chain, call, force unwrap |
-| 16 | prefix `-` `+` `!` `~` `move` `await` `go` `unsafe` | right | unary prefix + coroutine/FFI boundary operators |
+| 16 | prefix `-` `+` `!` `~` `move` `await` `go` `unsafe` `comptime` | right | unary prefix + coroutine/FFI/compile-time boundary operators |
 | 15 | `as` `is` | left | type cast / check (`as T?` is the safe form via a nullable target type, not a separate `as?` operator) |
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
@@ -1080,6 +1081,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
             | 'unsafe' Block
+            | 'comptime' Expression
             | PostfixExpr
 ```
 
@@ -1108,6 +1110,17 @@ unsafe {
 ```
 
 `unsafe` does not change the expression's result type; in a multi-statement block, the trailing expression statement yields the block value, otherwise the result is `()`. `unsafe` also does not disable ordinary type checking: `RawPtr<T>` is still read-only, and writes require `RawMut<T>`; null pointers, bounds, lifetimes, and alignment remain the caller's responsibility.
+
+#### `comptime expr`
+
+`comptime` is an expression prefix that requires its operand to be evaluated during analysis/compilation. If evaluation fails, compilation fails instead of falling back to runtime. The implemented guarantee is currently limited to **integer constant expressions**: integer literals, `const` integer identifiers, grouping, integer unary/binary arithmetic, and bitwise operators. These values may feed static integer positions such as fixed-array lengths and repeat-initializer lengths.
+
+```xray
+const SCALE = comptime 8 * 4
+var buf: [uint8; comptime SCALE + 2] = [0; SCALE + 2]
+```
+
+The parser reserves `comptime { ... }` block syntax, but analysis rejects it for now; full consteval blocks, generic `ct_value`, and evaluable function bodies are future phases.
 
 ### 3.3 Binary Expressions
 
@@ -1398,7 +1411,7 @@ See §2.4.5 and §14.5.
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+shared ch: Channel<int> = Channel<int>(10)
 ```
 
 See §10.5.
@@ -1553,7 +1566,7 @@ Construction looks just like a function call: `TypeName(args)`. There is no `new
 ```xray
 var p = Point(1.0, 2.0)
 var arr = Array<int>()
-var ch = Channel<int>(10)
+shared ch = Channel<int>(10)
 var m = Map<string, int>()
 ```
 
@@ -1617,7 +1630,7 @@ x++                    // increment statement; produces no expression value
 }
 ```
 
-`++` / `--` are pure statements or `for` step items, and can only be written as `name++` / `name--`. They are equivalent to `name = name + 1` / `name = name - 1` and produce no value; expression-position uses such as `let y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors.
+`++` / `--` are pure statements or `for` step items, and can only be written as `name++` / `name--`. They are equivalent to `name = name + 1` / `name = name - 1` and produce no value; expression-position uses such as `var y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors.
 
 **Note**: a block is **not an expression** — it has no value. To get a value out of a block, use `match` or wrap it in an immediately-invoked function.
 
@@ -1912,7 +1925,9 @@ dump(some_obj)                 // debug output, with type info and structure
 ### 5.1 `var` / `const` / `shared`
 
 ```ebnf
-VarDecl ::= ('var' | 'const' | 'shared') Binding (',' Binding)*
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -1946,6 +1961,7 @@ const MAX_LEN: int = 1024
 - Initializer is **required**.
 - Cannot be reassigned (compile error `E0303`).
 - The type may be inferred or annotated explicitly.
+- Like `var`, `const` is a single-binding declaration. Comma-separated declarations are removed; use separate declarations or destructure with `const (a, b) = pair`.
 
 #### 5.1.3 `shared` — shared identity binding
 
@@ -2774,7 +2790,7 @@ For full rules, path resolution, and visibility details see [§11 Modules](#11-m
 
 > Source of truth: `src/frontend/parser/xparse_match.c`, `src/runtime/value/x_value_match.c`.
 
-Patterns appear in `match` expressions/statements and in `let` destructuring.
+Patterns appear in `match` expressions/statements and in `var` / `const` destructuring.
 
 ### 6.1 Literal Patterns
 
@@ -2919,7 +2935,7 @@ match (x) {
 
 - Matches any value without binding.
 - Typically used as the trailing default arm.
-- Usable in destructuring to skip positions: `let [_, b, _] = arr`.
+- Usable in destructuring to skip positions: `var [_, b, _] = arr`.
 
 ### 6.8 Variable-binding Patterns
 
@@ -2976,7 +2992,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 
 | Scope | Triggered by | Example |
 |--|--|--|
-| Module | Each `.xr` file | top-level `let` `fn` `class` |
+| Module | Each `.xr` file | top-level `var` `const` `shared` `fn` `class` |
 | Function / closure | Entering `fn` / arrow function | parameters + function body |
 | Block | `{...}` | `if` `while` `for` `match` arm body |
 | `scope` block | `scope { ... }` keyword | explicit lexical scope + structured concurrency (see §10.7) |
@@ -2987,7 +3003,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 **Hoisting rules**:
 
 - Top-level `fn` `class` `struct` `interface` `enum` `type` are **hoisted** to the top of the current scope — they may be referenced before their textual definition.
-- `let` / `const` are **not hoisted** — they must appear before any use.
+- `var` / `const` / `shared` are **not hoisted** — they must appear before any use.
 - Duplicate names: declaring two same-named variables in the same scope is a compile error (nested scopes may shadow).
 
 ```xray
@@ -3281,7 +3297,7 @@ try {
 }
 ```
 
-ADT enums let `match` check exhaustiveness at compile time.
+ADT enums allow `match` to check exhaustiveness at compile time.
 
 #### 8.1.5 Errors and coroutine boundaries
 
@@ -3296,7 +3312,7 @@ Ways to pass child coroutine errors:
 
 ```xray
 enum WorkerErr { Failed(string) }
-const err_ch = Channel<string>(1)
+shared err_ch = Channel<string>(1)
 
 go {
     try {
@@ -3983,7 +3999,7 @@ select {
 
 `scope` is a **statement keyword** that introduces a new lexical block. It serves two purposes:
 
-1. **Pure lexical scope**: identical to a C/Rust `{ ... }` local block; `let` inside the block does not affect outer same-named variables.
+1. **Pure lexical scope**: identical to a C/Rust `{ ... }` local block; `var` inside the block does not affect outer same-named variables.
 2. **Structured concurrency** (semantic enhancement): coroutines started via `go` inside the block are **awaited automatically** before the block exits.
 
 ```ebnf
@@ -4300,7 +4316,7 @@ export * from "./product"
 
 **Restrictions**:
 - Declarations not marked `export` are **private** to the module.
-- `export let` is not supported. Mutable bindings cannot be shared across modules; use `export const` instead.
+- `export var` is not supported. Mutable bindings cannot be shared across modules; use `export const` instead.
 - Internal state does not collide across modules even with the same name.
 - Re-exports and wildcard re-exports are commonly used in `index.xr` to aggregate public APIs of submodules.
 
@@ -4716,7 +4732,7 @@ The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScr
 | `Json.encode(value)` | explicit typed value → Json boundary conversion |
 | `Json.stringify(value, indent?)` | serialization |
 
-**Literal**: `{ name: "alice", age: 30 }` defaults to sealed `Record`. It becomes a dynamic Json object only with an explicit `Json` annotation such as `let j: Json = {...}`; use `Json.encode(value)` when a typed value crosses a JSON boundary.
+**Literal**: `{ name: "alice", age: 30 }` defaults to sealed `Record`. It becomes a dynamic Json object only with an explicit `Json` annotation such as `var j: Json = {...}`; use `Json.encode(value)` when a typed value crosses a JSON boundary.
 
 ### 14.12 `Range`
 
@@ -5269,7 +5285,6 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 | Code | Name | Rejected form | Correct form |
 |--|--|--|--|
 | `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` | `return (a, b)` |
-| `E0802` | `XR_ERR_SYN_LET_MULTI_REMOVED` | `let x, y = ...` | `let (x, y) = ...` |
 | `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | `for k, v in m` (bare KV) | `for (k, v in m)` |
 | `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` | `-> ()` or omit the return type |
 
@@ -5423,6 +5438,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
          |  ArrowFunction
+         |  ComptimeExpr
          |  MatchExpr
          |  '(' Expression ')'
          |  '(' Expression (',' Expression)+ ')'  // tuple
@@ -5439,7 +5455,9 @@ ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)*
 ArrowParam  ::= Identifier ':' Type
 // Note: arrow closures cannot declare an explicit return type;
-// use `fn(p: T) -> R { ... }` or annotate the binding (`let f: (T) -> R = ...`) instead.
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: (T) -> R = ...`) instead.
+
+ComptimeExpr ::= 'comptime' (Expression | Block)
 
 MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
@@ -5543,7 +5561,9 @@ YieldStmt ::= 'yield' Expression
 ### A.6 Declarations
 
 ```ebnf
-VarDecl ::= ('let' | 'const' | 'shared' ('const' | 'let')) Binding (',' Binding)*
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
@@ -5619,7 +5639,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## Appendix B. Keyword Index
 
-The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
+The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
 
 | Keyword | Section |
 |--|--|
@@ -5631,6 +5651,7 @@ The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `catch` | §8 |
 | `char` | §2.3.5 |
 | `class` | §5.3 |
+| `comptime` | §3.2 |
 | `const` | §5.1 |
 | `constructor` | §5.3 |
 | `continue` | §4.6 |
@@ -5652,12 +5673,12 @@ The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `int` `int8`..`int64` | §2.3.1 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
-| `let` | §5.1 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
 | `override` | §5.3 |
+| `parallel` | §10 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
 | `return` | §4.7 |
@@ -5675,6 +5696,7 @@ The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
 | `unsafe` | §3.2 |
+| `var` | §5.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
 

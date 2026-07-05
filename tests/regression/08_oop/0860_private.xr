@@ -98,7 +98,7 @@ class SavingsAccount extends BankAccount {
         this.interestRate = rate
     }
 
-    applyInterest() {        let interest = (this.getBalance() * this.interestRate).floor()
+    applyInterest() {        var interest = (this.getBalance() * this.interestRate).floor()
         this.addAmount(interest)
     }
 }
@@ -110,4 +110,3 @@ fn test_private_with_inheritance() {
     savings.applyInterest()
     assert_eq(savings.getBalance(), 1100)
 }
-

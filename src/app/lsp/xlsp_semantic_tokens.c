@@ -619,7 +619,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             break;
 
         case AST_NEW_EXPR: {
-            // Constructor call: new ClassName(...)
+            // Constructor call: ClassName(...)
             const char *name = node->as.new_expr.class_name;
             if (name) {
                 int col = node->column > 0 ? node->column - 1 : 0;

@@ -379,7 +379,7 @@ AstNode *xr_parse_comptime_expr(Parser *parser) {
     if (xr_parser_match(parser, TK_LBRACE)) {
         expr = xr_parse_block(parser);
     } else {
-        expr = xr_parse_precedence(parser, PREC_UNARY);
+        expr = xr_parse_precedence(parser, PREC_TERNARY);
     }
     if (!expr) {
         xr_parser_error_at_previous(parser, "expected expression after 'comptime'");

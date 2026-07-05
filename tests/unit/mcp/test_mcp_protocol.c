@@ -117,7 +117,7 @@ static void test_server_load_knowledge(XmcpServer *server) {
 }
 
 /* Test wrappers for handlers that now return JSON-RPC errors via XmcpRpcError.
- * Tests that don't focus on the RPC error path use these wrappers and let any
+ * Tests that don't focus on the RPC error path use these wrappers and allow any
  * error pass through to assertions on `g_test_rpc_err`. */
 static XmcpRpcError g_test_rpc_err;
 

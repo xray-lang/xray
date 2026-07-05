@@ -12,7 +12,7 @@ fn recvValue(ch) {
 }
 
 fn test_single_producer_consumer() {
-    var ch = Channel(5)
+    shared ch = Channel(5)
     fn producer() {
         for (var i = 0; i < 20; i++) {
             ch.send(i)
@@ -37,8 +37,8 @@ fn test_single_producer_consumer() {
 }
 
 fn test_multi_producer() {
-    var ch = Channel(10)
-    var results = Channel(1)
+    shared ch = Channel(10)
+    shared results = Channel(1)
     fn producer(id, count) {
         for (var i = 0; i < count; i++) {
             ch.send(id * 100 + i)
@@ -68,8 +68,8 @@ fn test_multi_producer() {
 }
 
 fn test_multi_consumer() {
-    var ch = Channel(20)
-    var results = Channel(3)
+    shared ch = Channel(20)
+    shared results = Channel(3)
     fn producer(count) {
         for (var i = 0; i < count; i++) {
             ch.send(i)

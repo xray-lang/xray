@@ -99,7 +99,7 @@ XR_FUNC const XrPreludeTypeEntry *xr_prelude_lookup_type(const XrPreludeSymbols 
  * Eagerly register every native XrClass that prelude entries refer to:
  * Logger (log), DateTime (datetime), Regex (regex), NetConn / NetListener
  * (net). Called from inside xr_load_module_prelude during isolate init,
- * so that user code can write `let dt: DateTime = ...` and have method
+ * so that user code can write `var dt: DateTime = ...` and have method
  * dispatch work even when the user has not separately `import datetime`.
  *
  * The cost of this design is that the four stdlib modules above are

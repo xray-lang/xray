@@ -121,14 +121,14 @@ fn test_int64_comparison_eq_expr() {
 fn test_int64_div_by_zero() {
     var a: int = 42
     var zero: int = 0
-    assert_throws(fn() { let r = a / zero })
+    assert_throws(fn() { var r = a / zero })
 }
 
 @test
 fn test_int64_mod_by_zero() {
     var a: int = 42
     var zero: int = 0
-    assert_throws(fn() { let r = a % zero })
+    assert_throws(fn() { var r = a % zero })
 }
 
 // ===== Bitwise operations =====

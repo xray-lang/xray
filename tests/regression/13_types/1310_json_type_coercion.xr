@@ -1,7 +1,7 @@
 // 0518_json_type_coercion.xr
 // Test: Json→concrete type coercion rules
-// - let x = json["k"] → x is Json (no check)
-// - let x: int = json["k"] → allowed, runtime CHECKTYPE
+// - var x = json["k"] -> x is Json (no check)
+// - var x: int = json["k"] -> allowed, runtime CHECKTYPE
 // - Runtime CHECKTYPE throws TypeError on mismatch
 
 // ===== Rule 1: json["key"] returns Json, no error =====
@@ -13,7 +13,7 @@ fn test_json_subscript_returns_json() {
     assert_eq(val, "xray")
 }
 
-// ===== Rule 2: let x: int = json["key"] — allowed with runtime check =====
+// ===== Rule 2: var x: int = json["key"] - allowed with runtime check =====
 @test
 fn test_json_to_int_coercion() {
     var data: Json = { "port": 8080 }
@@ -79,7 +79,7 @@ fn test_json_type_mismatch_float_to_int() {
     assert(caught)
 }
 
-// ===== Rule 4: Untyped let — no CHECKTYPE, just Json =====
+// ===== Rule 4: Untyped var - no CHECKTYPE, just Json =====
 @test
 fn test_json_untyped_let() {
     var data: Json = { "mixed": [1, "two", true] }

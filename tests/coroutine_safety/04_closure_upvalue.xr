@@ -27,7 +27,7 @@ fn test_closure_capture() {
 }
 
 fn test_closure_in_go() {
-    var result_ch = Channel(1)
+    shared result_ch = Channel(1)
     fn make_adder(base) {
         // 返回闭包，捕获 base
         return fn(x) {
@@ -49,7 +49,7 @@ fn test_closure_in_go() {
 }
 
 fn test_multiple_closures() {
-    var results = Channel(3)
+    shared results = Channel(3)
     fn make_multiplier(factor) {
         return fn(x) {
             return x * factor
@@ -83,7 +83,7 @@ fn test_multiple_closures() {
 }
 
 fn test_nested_closure() {
-    var ch = Channel(1)
+    shared ch = Channel(1)
     fn outer(a) {
         fn middle(b) {
             fn inner(c) {
