@@ -5,10 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xi_opt_comptime.c - Compile-time constant evaluation
+ * xi_opt_comptime.c - IR constant optimization fixpoint
  *
  * Iterates lightweight constant-propagation passes (const-fold, copy-prop,
- * SCCP, DCE) until fixpoint or round limit.
+ * SCCP, DCE) until fixpoint or round limit. This pass is not the language
+ * frontend `comptime` evaluator.
  */
 
 #include "xi_opt_comptime.h"
