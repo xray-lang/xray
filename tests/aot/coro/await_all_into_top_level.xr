@@ -3,12 +3,12 @@ fn worker(n: int) -> int {
     return n * n
 }
 
-let tasks: Array<Task<int>> = []
-let results: Array<int> = []
+var tasks: Array<Task<int>> = []
+var results: Array<int> = []
 tasks.reserve(4)
 results.reserve(4)
 
-let i = 0
+var i = 0
 while (i < 4) {
     tasks.push(go worker(i))
     i = i + 1
@@ -16,7 +16,7 @@ while (i < 4) {
 
 await all tasks into results
 
-let sum = 0
+var sum = 0
 i = 0
 while (i < results.length) {
     sum = sum + results[i]

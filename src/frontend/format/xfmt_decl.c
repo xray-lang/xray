@@ -94,10 +94,11 @@ void xfmt_emit_var_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     VarDeclNode *decl = &node->as.var_decl;
 
-    if (decl->storage_mode == XR_STORAGE_SHARED) {
+    if (node->type == AST_SHARED_DECL) {
         xfmt_write_str(ctx, "shared ");
+    } else {
+        xfmt_write_str(ctx, decl->is_const ? "const " : "var ");
     }
-    xfmt_write_str(ctx, decl->is_const ? "const " : "var ");
     xfmt_write_str(ctx, decl->name);
 
     if (decl->type_annotation) {

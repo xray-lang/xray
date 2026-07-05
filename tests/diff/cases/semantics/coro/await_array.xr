@@ -9,20 +9,20 @@ fn compute(n: int) -> int {
 }
 
 // await all over an array bound to a variable
-let a = go compute(1)
-let b = go compute(2)
-let c = go compute(3)
-let group = [a, b, c]
+var a = go compute(1)
+var b = go compute(2)
+var c = go compute(3)
+var group = [a, b, c]
 print(await all group)
 
 // await all over an array literal
-let d = go compute(4)
-let e = go compute(5)
+var d = go compute(4)
+var e = go compute(5)
 print(await all [d, e])
 
 // await any over an array literal; both already resolved -> array-order first
-let f = go compute(6)
-let g = go compute(7)
+var f = go compute(6)
+var g = go compute(7)
 await f
 await g
 print(await any [f, g])

@@ -1,10 +1,10 @@
 // anchor: array-capacity-panic-shared-core
-let dyn: Json = {
+var dyn: Json = {
     "bad": true
 }
 
 try {
-    let xs = Array<int>(dyn.bad, 1)
+    var xs = Array<int>(dyn.bad, 1)
     print(xs.length)
 } catch panic (p) {
     print(p.message)
@@ -12,7 +12,7 @@ try {
 }
 
 try {
-    let ys = Array.withCapacity(dyn.bad)
+    var ys = Array.withCapacity(dyn.bad)
     print(ys.length)
 } catch panic (p) {
     print(p.message)

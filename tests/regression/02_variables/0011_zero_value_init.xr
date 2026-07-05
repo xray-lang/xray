@@ -2,32 +2,32 @@
 
 @test
 fn test_int_zero_value() {
-    let a: int
+    var a: int
     assert_eq(a, 0)
 }
 
 @test
 fn test_float_zero_value() {
-    let b: float
+    var b: float
     assert_eq(b, 0.0)
 }
 
 @test
 fn test_bool_zero_value() {
-    let c: bool
+    var c: bool
     assert_eq(c, false)
 }
 
 @test
 fn test_nullable_defaults_to_null() {
-    let e: int?
+    var e: int?
     assert_eq(e, null)
 }
 
 @test
 fn test_string_requires_initializer() {
     // string is not default-initializable; must use explicit initializer
-    let d: string = ""
+    var d: string = ""
     assert_eq(d, "")
 }
 
@@ -43,14 +43,14 @@ struct DefaultBox {
 
 @test
 fn test_struct_zero_value_init() {
-    let p: DefaultPoint
+    var p: DefaultPoint
     assert_eq(p.x, 0)
     assert_eq(p.y, 0)
 
     p.x = 7
     assert_eq(p.x, 7)
 
-    let box: DefaultBox
+    var box: DefaultBox
     assert_eq(box.p.x, 0)
     assert_eq(box.p.y, 0)
     assert_eq(box.ok, false)
@@ -70,8 +70,8 @@ class BranchInitializedName {
 
 @test
 fn test_class_field_initialized_in_both_branches() {
-    let yes = BranchInitializedName(true)
-    let no = BranchInitializedName(false)
+    var yes = BranchInitializedName(true)
+    var no = BranchInitializedName(false)
     assert_eq(yes.name, "yes")
     assert_eq(no.name, "no")
 }

@@ -3,8 +3,8 @@ fn worker(src: Bytes) -> int {
 }
 
 fn child(src: Bytes) {
-    shared const alias = src
-    let task = go worker(alias)
+    shared alias = src
+    var task = go worker(alias)
     print(await task)
 }
 
@@ -16,7 +16,7 @@ fn runMode(mode: string, src: Bytes) {
     }
 }
 
-let data = Bytes(0)
+var data = Bytes(0)
 data.push(42)
-let mode = process.args.length > 0 ? process.args[0] : "parallel"
+var mode = process.args.length > 0 ? process.args[0] : "parallel"
 runMode(mode, data)

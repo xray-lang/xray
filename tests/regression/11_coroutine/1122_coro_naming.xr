@@ -16,30 +16,30 @@ fn worker(id: int) -> int {
 fn test_coro_naming() {
 
     // 测试命名协程
-    let task1 = go(name: "worker-1") worker(1)
-    let result1 = await task1
+    var task1 = go(name: "worker-1") worker(1)
+    var result1 = await task1
     print(result1)  // expect: 10
 
     // 测试命名协程（匿名块形式）
-    let task2 = go(name: "counter") {
-        let sum = 0
+    var task2 = go(name: "counter") fn() -> int {
+        var sum = 0
         for (i in 1..5) {
             sum = sum + i
         }
         return sum
-    }
-    let result2 = await task2
+    }()
+    var result2 = await task2
     print(result2)  // expect: 10
 
     // 测试无名称协程
-    let task3 = go worker(2)
-    let result3 = await task3
+    var task3 = go worker(2)
+    var result3 = await task3
     print(result3)  // expect: 20
 
     // 测试混合使用
-    let task4 = go(name: "alpha") worker(3)
-    let task5 = go(name: "beta") worker(4)
-    let task6 = go worker(5)
+    var task4 = go(name: "alpha") worker(3)
+    var task5 = go(name: "beta") worker(4)
+    var task6 = go worker(5)
 
     print(await task4)  // expect: 30
     print(await task5)  // expect: 40
@@ -47,4 +47,3 @@ fn test_coro_naming() {
 
     print("done")  // expect: done
 }
-

@@ -22,8 +22,8 @@ fn stash(data: in Array<int>, holder: ref Holder) {
     holder.outer(copy(data))
 }
 
-let values: Array<int> = [1, 2, 3]
-let holder = Holder()
+var values: Array<int> = [1, 2, 3]
+var holder = Holder()
 stash(values, holder)
 values.push(4)
 print(holder.items[0].length)

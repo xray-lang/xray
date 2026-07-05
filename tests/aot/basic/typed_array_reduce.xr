@@ -1,9 +1,9 @@
-let values: Array<int> = []
+var values: Array<int> = []
 values.push(1)
 values.push(2)
 values.push(3)
 
-let sum = values.reduce(fn(acc: int, x: int) -> int {
+var sum = values.reduce(fn(acc: int, x: int) -> int {
     return acc + x
 }, 0)
 

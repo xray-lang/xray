@@ -1,5 +1,5 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-shared const results: ResultGroup = ResultGroup(1)
+shared results: ResultGroup = ResultGroup(1)
 
 fn worker() {
     results.add(42)
@@ -7,5 +7,5 @@ fn worker() {
 }
 
 go worker()
-let value = results.recv()
+var value = results.recv()
 print(value ?? -1)

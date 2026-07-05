@@ -7,10 +7,10 @@
 
 @test
 fn test_reduce_nested_findIndex() {
-    let data = [[10, 20, 30], [40, 50, 60], [70, 80, 90]]
+    var data = [[10, 20, 30], [40, 50, 60], [70, 80, 90]]
     // For each row, find index of element > 25, then sum those indices
-    let indexSum = data.reduce(fn(acc, row) {
-        let idx = row.findIndex(fn(x) { return x > 25 })
+    var indexSum = data.reduce(fn(acc, row) {
+        var idx = row.findIndex(fn(x) { return x > 25 })
         return acc + idx
     }, 0)
     // row0: idx=2 (30>25), row1: idx=0 (40>25), row2: idx=0 (70>25) => 2+0+0=2
@@ -19,9 +19,9 @@ fn test_reduce_nested_findIndex() {
 
 @test
 fn test_findIndex_with_nested_reduce() {
-    let matrix = [[1, 2, 3], [10, 20, 30], [4, 5, 6]]
+    var matrix = [[1, 2, 3], [10, 20, 30], [4, 5, 6]]
     // Find first row where sum > 20
-    let idx = matrix.findIndex(fn(row) {
+    var idx = matrix.findIndex(fn(row) {
         return row.reduce(fn(a, b) { return a + b }, 0) > 20
     })
     assert_eq(idx, 1)
@@ -29,15 +29,15 @@ fn test_findIndex_with_nested_reduce() {
 
 @test
 fn test_findIndex_with_nested_every() {
-    let groups = [[2, 4, 6], [1, 3, 5], [8, 10, 12]]
+    var groups = [[2, 4, 6], [1, 3, 5], [8, 10, 12]]
     // Find first group where all elements are even
-    let idx = groups.findIndex(fn(g) {
+    var idx = groups.findIndex(fn(g) {
         return g.every(fn(x) { return x % 2 == 0 })
     })
     assert_eq(idx, 0)
 
     // Find first group where all elements > 5
-    let idx2 = groups.findIndex(fn(g) {
+    var idx2 = groups.findIndex(fn(g) {
         return g.every(fn(x) { return x > 5 })
     })
     assert_eq(idx2, 2)
@@ -47,21 +47,21 @@ fn test_findIndex_with_nested_every() {
 
 @test
 fn test_map_then_reduce_nested() {
-    let students = [
+    var students = [
         { name: "Alice", scores: [85, 90, 95] },
         { name: "Bob", scores: [70, 75, 80] },
         { name: "Carol", scores: [90, 92, 94] }
     ]
     // Calculate average score per student, then find max average
-    let averages = students.map(fn(s) {
-        let total = s.scores.reduce(fn(a, b) { return a + b }, 0)
+    var averages = students.map(fn(s) {
+        var total = s.scores.reduce(fn(a, b) { return a + b }, 0)
         return total / s.scores.length
     })
     assert_eq(averages[0], 90)
     assert_eq(averages[1], 75)
     assert_eq(averages[2], 92)
 
-    let maxAvg = averages.reduce(fn(a, b) {
+    var maxAvg = averages.reduce(fn(a, b) {
         if (a > b) { return a }
         return b
     }, 0)
@@ -72,14 +72,14 @@ fn test_map_then_reduce_nested() {
 
 @test
 fn test_filter_map_reduce_pipeline() {
-    let data = [
+    var data = [
         { category: "A", values: [1, 2, 3] },
         { category: "B", values: [10, 20] },
         { category: "A", values: [4, 5] },
         { category: "B", values: [30] }
     ]
     // Sum all values from category "A"
-    let totalA = data.filter(fn(d) {
+    var totalA = data.filter(fn(d) {
         return d.category == "A"
     }).map(fn(d) -> int {
         return d.values.reduce(fn(a, b) -> int { return a + b }, 0)
@@ -91,8 +91,8 @@ fn test_filter_map_reduce_pipeline() {
 
 @test
 fn test_nested_map_with_filter() {
-    let matrix = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]]
-    let result = matrix.map(fn(row) {
+    var matrix = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]]
+    var result = matrix.map(fn(row) {
         return row.filter(fn(x) { return x % 2 == 0 }).map(fn(x) { return x * x })
     })
     // row0: [4, 16], row1: [36, 64], row2: [100, 144]
@@ -106,8 +106,8 @@ fn test_nested_map_with_filter() {
 
 @test
 fn test_nested_forEach_with_accumulation() {
-    let data = [[1, 2], [3, 4], [5, 6]]
-    let products: Array<int> = []
+    var data = [[1, 2], [3, 4], [5, 6]]
+    var products: Array<int> = []
     data.forEach(fn(row) {
         row.forEach(fn(x) {
             products.push(x * x)
@@ -123,9 +123,9 @@ fn test_nested_forEach_with_accumulation() {
 
 @test
 fn test_some_with_nested_some() {
-    let matrix = [[1, 3, 5], [2, 4, 6], [7, 9, 11]]
+    var matrix = [[1, 3, 5], [2, 4, 6], [7, 9, 11]]
     // Is there any row that has at least one element divisible by 4?
-    let result = matrix.some(fn(row) {
+    var result = matrix.some(fn(row) {
         return row.some(fn(x) { return x % 4 == 0 })
     })
     assert_eq(result, true)
@@ -133,9 +133,9 @@ fn test_some_with_nested_some() {
 
 @test
 fn test_every_with_nested_filter() {
-    let groups = [[2, 4, 6], [8, 10, 12], [14, 16, 18]]
+    var groups = [[2, 4, 6], [8, 10, 12], [14, 16, 18]]
     // Check: every group, after filtering >5, has at least 2 elements
-    let result = groups.every(fn(g) {
+    var result = groups.every(fn(g) {
         return g.filter(fn(x) { return x > 5 }).length >= 2
     })
     // group0 filter: [6] => length=1 => false
@@ -146,15 +146,15 @@ fn test_every_with_nested_filter() {
 
 @test
 fn test_reduce_build_nested_map() {
-    let entries = [
+    var entries = [
         { group: "fruit", item: "apple" },
         { group: "veg", item: "carrot" },
         { group: "fruit", item: "banana" },
         { group: "veg", item: "pea" }
     ]
     // Group by category
-    let seed: Json = {}
-    let grouped = entries.reduce(fn(acc, e) {
+    var seed: Json = {}
+    var grouped = entries.reduce(fn(acc, e) {
         if (acc[e.group] == null) {
             acc[e.group] = []
         }
@@ -171,10 +171,10 @@ fn test_reduce_build_nested_map() {
 
 @test
 fn test_higher_order_with_for_loop() {
-    let results: Array<int> = []
-    for (let i = 0; i < 3; i++) {
-        let arr = [1, 2, 3]
-        let sum = arr.map(fn(x) { return x + i }).reduce(fn(a, b) { return a + b }, 0)
+    var results: Array<int> = []
+    for (var i = 0; i < 3; i++) {
+        var arr = [1, 2, 3]
+        var sum = arr.map(fn(x) { return x + i }).reduce(fn(a, b) { return a + b }, 0)
         results.push(sum)
     }
     // i=0: 1+2+3=6, i=1: 2+3+4=9, i=2: 3+4+5=12
@@ -187,10 +187,10 @@ fn test_higher_order_with_for_loop() {
 
 @test
 fn test_map_findIndex_reduce_combo() {
-    let data = [[5, 1, 3], [2, 8, 4], [7, 6, 9]]
+    var data = [[5, 1, 3], [2, 8, 4], [7, 6, 9]]
 
     // Map each row to its max value via reduce
-    let maxValues = data.map(fn(row) {
+    var maxValues = data.map(fn(row) {
         return row.reduce(fn(a, b) {
             if (a > b) { return a }
             return b
@@ -201,7 +201,7 @@ fn test_map_findIndex_reduce_combo() {
     assert_eq(maxValues[2], 9)
 
     // findIndex on reduce results — tests any-type value comparison
-    let idx = maxValues.findIndex(fn(v) { return v > 8 })
+    var idx = maxValues.findIndex(fn(v) { return v > 8 })
     assert_eq(idx, 2)
 }
 
@@ -209,10 +209,10 @@ fn test_map_findIndex_reduce_combo() {
 
 @test
 fn test_findIndex_inline_reduce() {
-    let data = [[5, 1, 3], [2, 8, 4], [7, 6, 9]]
+    var data = [[5, 1, 3], [2, 8, 4], [7, 6, 9]]
     // Find first row where reduce(max) > 8
-    let idx = data.findIndex(fn(row) {
-        let mx = row.reduce(fn(a, b) {
+    var idx = data.findIndex(fn(row) {
+        var mx = row.reduce(fn(a, b) {
             if (a > b) { return a }
             return b
         }, 0)
@@ -225,8 +225,8 @@ fn test_findIndex_inline_reduce() {
 
 @test
 fn test_four_level_nesting() {
-    let data = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
-    let flat_sum = data.reduce(fn(total, plane) {
+    var data = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+    var flat_sum = data.reduce(fn(total, plane) {
         return total + plane.reduce(fn(subtotal, row) {
             return subtotal + row.reduce(fn(a, b) {
                 return a + b
@@ -240,15 +240,15 @@ fn test_four_level_nesting() {
 
 @test
 fn test_map_reduce_findIndex_chain() {
-    let rows = [[3, 7, 2], [1, 1, 1], [10, 20, 30]]
-    let sums = rows.map(fn(r) {
+    var rows = [[3, 7, 2], [1, 1, 1], [10, 20, 30]]
+    var sums = rows.map(fn(r) {
         return r.reduce(fn(a, b) { return a + b }, 0)
     })
     // sums = [12, 3, 60]
     assert_eq(sums[0], 12)
     assert_eq(sums[1], 3)
     assert_eq(sums[2], 60)
-    let idx = sums.findIndex(fn(s) { return s > 50 })
+    var idx = sums.findIndex(fn(s) { return s > 50 })
     assert_eq(idx, 2)
 }
 
@@ -256,11 +256,11 @@ fn test_map_reduce_findIndex_chain() {
 
 @test
 fn test_multi_method_chain() {
-    let data = [[1, 2, 3, 4, 5], [10, 20, 30], [7, 8]]
+    var data = [[1, 2, 3, 4, 5], [10, 20, 30], [7, 8]]
     // For each row: filter evens, then check if all evens > 5
-    let results = data.map(fn(row) {
-        let evens = row.filter(fn(x) { return x % 2 == 0 })
-        let allBig = evens.every(fn(x) { return x > 5 })
+    var results = data.map(fn(row) {
+        var evens = row.filter(fn(x) { return x % 2 == 0 })
+        var allBig = evens.every(fn(x) { return x > 5 })
         return allBig
     })
     // row0 evens: [2,4] -> every>5 = false
@@ -275,10 +275,10 @@ fn test_multi_method_chain() {
 
 @test
 fn test_nested_some_with_map() {
-    let matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    var matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
     // Does any row, when doubled, contain a value > 15?
-    let found = matrix.some(fn(row) {
-        let doubled = row.map(fn(x) { return x * 2 })
+    var found = matrix.some(fn(row) {
+        var doubled = row.map(fn(x) { return x * 2 })
         return doubled.some(fn(x) { return x > 15 })
     })
     // row2 doubled: [14,16,18] -> 16>15 = true
@@ -289,11 +289,11 @@ fn test_nested_some_with_map() {
 
 @test
 fn test_reduce_builds_grouped_arrays() {
-    let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    var nums = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     // Group into chunks of 3
-    let seed: Array<int> = []
-    let chunks = nums.reduce(fn(acc, val) {
-        let last = acc[acc.length - 1]
+    var seed: Array<int> = []
+    var chunks = nums.reduce(fn(acc, val) {
+        var last = acc[acc.length - 1]
         if (last.length < 3) {
             last.push(val)
         } else {
@@ -312,18 +312,18 @@ fn test_reduce_builds_grouped_arrays() {
 
 @test
 fn test_interleaved_in_loop() {
-    let datasets = [
+    var datasets = [
         [5, 12, 3, 8, 1],
         [20, 15, 10, 5, 25],
         [1, 1, 1, 1, 100]
     ]
-    let summaries: Array<string> = []
-    for (let i = 0; i < datasets.length; i++) {
-        let d = datasets[i]
-        let big = d.filter(fn(x) { return x >= 10 })
-        let doubled = big.map(fn(x) { return x * 2 })
-        let total = doubled.reduce(fn(a, b) { return a + b }, 0)
-        let firstBig = d.findIndex(fn(x) { return x >= 10 })
+    var summaries: Array<string> = []
+    for (var i = 0; i < datasets.length; i++) {
+        var d = datasets[i]
+        var big = d.filter(fn(x) { return x >= 10 })
+        var doubled = big.map(fn(x) { return x * 2 })
+        var total = doubled.reduce(fn(a, b) { return a + b }, 0)
+        var firstBig = d.findIndex(fn(x) { return x >= 10 })
         summaries.push("total=${total},first=${firstBig}")
     }
     // d0: big=[12],doubled=[24],total=24,first=1
@@ -338,11 +338,11 @@ fn test_interleaved_in_loop() {
 
 @test
 fn test_five_level_deep() {
-    let data = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]]
+    var data = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]]
     // For each plane: for each row: filter odd, sum, collect
-    let result = data.map(fn(plane) {
+    var result = data.map(fn(plane) {
         return plane.map(fn(row) {
-            let odds = row.filter(fn(x) { return x % 2 != 0 })
+            var odds = row.filter(fn(x) { return x % 2 != 0 })
             return odds.reduce(fn(a, b) { return a + b }, 0)
         })
     })
@@ -357,9 +357,9 @@ fn test_five_level_deep() {
 
 @test
 fn test_stress_large_chain() {
-    let arr: Array<int> = []
-    for (let i = 0; i < 500; i++) { arr.push(i) }
-    let result = arr
+    var arr: Array<int> = []
+    for (var i = 0; i < 500; i++) { arr.push(i) }
+    var result = arr
         .filter(fn(x) { return x % 3 == 0 })
         .map(fn(x) { return x * x })
         .filter(fn(x) { return x > 100 })
@@ -374,11 +374,11 @@ fn test_stress_large_chain() {
 
 @test
 fn test_forEach_with_index_accumulator() {
-    let matrix = [[10, 20, 30], [40, 50, 60]]
-    let indexed: Array<string> = []
-    let rowIdx = 0
+    var matrix = [[10, 20, 30], [40, 50, 60]]
+    var indexed: Array<string> = []
+    var rowIdx = 0
     matrix.forEach(fn(row) {
-        let colIdx = 0
+        var colIdx = 0
         row.forEach(fn(val) {
             indexed.push("[${rowIdx},${colIdx}]=${val}")
             colIdx = colIdx + 1

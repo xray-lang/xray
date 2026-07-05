@@ -1,4 +1,4 @@
-let scores: Map<int, int> = #{}
+var scores: Map<int, int> = #{}
 scores.set(1, 10)
 scores.set(2, 20)
 scores.set(1, 30)
@@ -9,7 +9,7 @@ print(scores.delete(2))
 print(scores.has(2))
 print(scores.get(2) == null)
 
-let flags: Map<bool, int> = #{}
+var flags: Map<bool, int> = #{}
 flags.set(true, 7)
 flags.set(false, 11)
 flags.set(true, 13)
@@ -20,7 +20,7 @@ print(flags.has(false))
 print(flags.delete(false))
 print(flags.has(false))
 
-let weights: Map<float, int> = #{}
+var weights: Map<float, int> = #{}
 weights.set(1.25, 4)
 weights.set(2.5, 8)
 weights.set(1.25, 16)
@@ -29,7 +29,7 @@ print(weights.get(1.25))
 print(weights.delete(2.5))
 print(weights.has(2.5))
 
-let ints: Set<int> = #[]
+var ints: Set<int> = #[]
 ints.add(3)
 ints.add(5)
 ints.add(3)
@@ -38,7 +38,7 @@ print(ints.has(5))
 print(ints.delete(5))
 print(ints.has(5))
 
-let bytes: Set<uint8> = #[]
+var bytes: Set<uint8> = #[]
 bytes.add(255)
 bytes.add(0)
 print(bytes.length)
@@ -46,7 +46,7 @@ print(bytes.has(0))
 print(bytes.delete(255))
 print(bytes.has(255))
 
-let floats: Set<float> = #[]
+var floats: Set<float> = #[]
 floats.add(1.5)
 floats.add(2.5)
 floats.add(1.5)

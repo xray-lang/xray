@@ -775,17 +775,12 @@ static void symbol_extract_visitor(AstNode *node, void *ctx) {
             break;
 
         case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             if (node->as.var_decl.name) {
-                int kind = node->as.var_decl.is_const ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
+                int kind = node->type == AST_CONST_DECL ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
                 symbol_table_add(table, node->as.var_decl.name, kind, node->line - 1, 0,
                                  node->line - 1, (int) strlen(node->as.var_decl.name));
-            }
-            break;
-
-        case AST_CONST_DECL:
-            if (node->as.var_decl.name) {
-                symbol_table_add(table, node->as.var_decl.name, LSP_SYMBOL_CONSTANT, node->line - 1,
-                                 0, node->line - 1, (int) strlen(node->as.var_decl.name));
             }
             break;
 
@@ -1012,16 +1007,11 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
             break;
         }
 
-        case AST_VAR_DECL: {
-            int kind = node->as.var_decl.is_const ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL: {
+            int kind = node->type == AST_CONST_DECL ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
             XrJsonValue *sym = emit_decl_symbol(node, node->as.var_decl.name, kind);
-            if (sym)
-                xjson_array_push(symbols, sym);
-            break;
-        }
-
-        case AST_CONST_DECL: {
-            XrJsonValue *sym = emit_decl_symbol(node, node->as.var_decl.name, LSP_SYMBOL_CONSTANT);
             if (sym)
                 xjson_array_push(symbols, sym);
             break;

@@ -2,7 +2,7 @@
 // refills a buffered channel after the select coroutine has gone to sleep.
 
 fn produce(ch: Channel<int>, count: int) {
-    for (let i = 0; i < count; i++) {
+    for (var i = 0; i < count; i++) {
         ch.send(i)
     }
     ch.close()
@@ -10,11 +10,11 @@ fn produce(ch: Channel<int>, count: int) {
 
 @test
 fn test_select_wakes_after_buffer_refill() {
-    shared const ch = Channel(10)
-    let task = go produce(ch, 50)
+    shared ch = Channel(10)
+    var task = go produce(ch, 50)
 
-    let received = 0
-    let sum = 0
+    var received = 0
+    var sum = 0
     while (received < 50) {
         select {
             msg from ch -> {

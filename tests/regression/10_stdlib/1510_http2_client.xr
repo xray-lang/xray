@@ -11,7 +11,7 @@ fn test_h2_apis_exist() {
 
 @test
 fn test_h2_options_object() {
-    let opts = {
+    var opts = {
         url: "https://example.com/api",
         method: "POST",
         headers: #{"Content-Type": "application/json"},

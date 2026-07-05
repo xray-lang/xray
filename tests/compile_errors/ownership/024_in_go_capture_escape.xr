@@ -1,9 +1,9 @@
 fn launch(data: in Array<int>) {
-    let task = go {
+    var task = go {
         return data.length
     }
     print(await task)
 }
 
-let values: Array<int> = [1, 2, 3]
+var values: Array<int> = [1, 2, 3]
 launch(values)

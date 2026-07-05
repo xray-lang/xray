@@ -1,11 +1,11 @@
 import time
 
 fn monotonic_ok() -> bool {
-    let before = time.monotonic()
+    var before = time.monotonic()
     Coro.yield()
-    let after = time.monotonic()
+    var after = time.monotonic()
     return after >= before
 }
 
-let task = go monotonic_ok()
+var task = go monotonic_ok()
 print(await task)

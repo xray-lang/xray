@@ -2,5 +2,5 @@
 // through a function-typed value carries no default expressions, so omitting
 // an argument must be a compile error rather than silently using a stale value.
 fn connect(timeout: int? = 30) -> int? { return timeout }
-let f = connect
-let x = f()
+var f = connect
+var x = f()

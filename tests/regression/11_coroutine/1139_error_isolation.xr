@@ -7,7 +7,7 @@
 // 会抛出错误的任务
 
 fn error_task() -> int {
-    let x: int = 1 / 0  // 除零错误
+    var x: int = 1 / 0  // 除零错误
     return x
 }
 fn normal_task() -> int {
@@ -21,8 +21,8 @@ fn test_error_isolation() {
 
     // 测试1：错误隔离
     print("test1: error isolation")
-    let task1 = go error_task()
-    let result1 = task1.awaitResult()
+    var task1 = go error_task()
+    var result1 = task1.awaitResult()
     print("  done:", task1.done)
     print("  failed:", match (result1) {
         TaskResult.Failed(_) -> true
@@ -31,7 +31,7 @@ fn test_error_isolation() {
 
     // 测试2：错误不影响其他协程
     print("test2: error does not affect other coroutines")
-    let task2 = go normal_task()
-    let result2 = await task2
+    var task2 = go normal_task()
+    var result2 = await task2
     print("  result:", result2)
 }

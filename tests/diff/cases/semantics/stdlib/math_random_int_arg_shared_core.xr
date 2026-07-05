@@ -1,6 +1,6 @@
 import math
 
-let dyn: Json = {
+var dyn: Json = {
     "intMin": 7,
     "intMax": 7,
     "floatMin": 5.8,

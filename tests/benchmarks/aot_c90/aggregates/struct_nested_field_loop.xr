@@ -9,11 +9,11 @@ struct Box {
     bias: int
 }
 
-let box = Box{point: Point{x: 1, y: 2, step: 3}, bias: 5}
+var box = Box{point: Point{x: 1, y: 2, step: 3}, bias: 5}
 
 fn run(n: int) -> int {
-    let i = 0
-    let sum = 0
+    var i = 0
+    var sum = 0
     while (i < n) {
         box.point.x = box.point.x + i
         box.point.y = box.point.y + box.point.step

@@ -1,14 +1,14 @@
 import io
 import os
 
-let root = io.tempDir() ?? ""
+var root = io.tempDir() ?? ""
 print(root.length > 0)
 
-let file = root + "/mode.txt"
+var file = root + "/mode.txt"
 print(io.writeFile(file, "mode"))
 
 print(io.chmod(file, 420))
-let st = io.stat(file)
+var st = io.stat(file)
 if (os.platform == "windows") {
     print(st != null)
 } else {
@@ -16,7 +16,7 @@ if (os.platform == "windows") {
 }
 
 print(io.chmod(file, 0))
-let st2 = io.stat(file)
+var st2 = io.stat(file)
 if (os.platform == "windows") {
     print(st2 != null)
 } else {

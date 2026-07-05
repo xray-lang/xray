@@ -168,7 +168,7 @@ TEST(repl_compile_let_registers_symbol) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let x = 42\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var x = 42\n");
     ASSERT_NOT_NULL(proto);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
@@ -183,7 +183,7 @@ TEST(repl_compile_let_registers_symbol) {
 
 TEST(repl_compile_const_marks_is_const) {
     /* `const PI = ...` must round-trip the const bit through
-     * XiFunc.slot_owned_consts so .vars can distinguish let from
+     * XiFunc.slot_owned_consts so .vars can distinguish var from
      * const without re-parsing. */
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
@@ -228,7 +228,7 @@ TEST(repl_compile_let_and_const_round_trip) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                     "let x = 1\nconst Y = 2\n");
+                                     "var x = 1\nconst Y = 2\n");
     ASSERT_NOT_NULL(proto);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
@@ -255,12 +255,12 @@ TEST(repl_cross_input_symbol_resolves) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let x = 42\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var x = 42\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
     XrProto *p2 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let y = x + 1\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var y = x + 1\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -290,7 +290,7 @@ TEST(repl_cross_input_function_call) {
     xr_execute(iso, p1);
 
     XrProto *p2 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let r = inc(10)\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var r = inc(10)\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -313,13 +313,13 @@ TEST(repl_cross_input_function_reads_shared) {
      * later REPL input.  The bug was that xi_emit baked shared_offset
      * into the nested proto at emit time, but REPL forces absolute
      * indices on the top-level proto only; nested protos kept the
-     * stale offset and read the wrong slot.  Symptom: `let r =
+     * stale offset and read the wrong slot.  Symptom: `var r =
      * getx()` bound `r` to the closure itself instead of x's value. */
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let x = 10\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var x = 10\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
@@ -329,7 +329,7 @@ TEST(repl_cross_input_function_reads_shared) {
     xr_execute(iso, p2);
 
     XrProto *p3 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let r = getx()\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var r = getx()\n");
     ASSERT_NOT_NULL(p3);
     xr_execute(iso, p3);
 
@@ -354,7 +354,7 @@ TEST(repl_cross_input_function_mutates_shared) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let counter = 0\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var counter = 0\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
@@ -364,12 +364,12 @@ TEST(repl_cross_input_function_mutates_shared) {
     xr_execute(iso, p2);
 
     XrProto *p3 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let r1 = bump()\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var r1 = bump()\n");
     ASSERT_NOT_NULL(p3);
     xr_execute(iso, p3);
 
     XrProto *p4 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let r2 = bump()\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var r2 = bump()\n");
     ASSERT_NOT_NULL(p4);
     xr_execute(iso, p4);
 
@@ -389,7 +389,7 @@ TEST(repl_cross_input_function_mutates_shared) {
 }
 
 TEST(repl_redefinition_reuses_slot) {
-    /* `let x = 1` followed by `let x = 2` should keep one entry in
+    /* `var x = 1` followed by `var x = 2` should keep one entry in
      * the symbol table, not duplicate it (repl_symbols_add_or_update
      * promises this contract).  Also asserts the second value
      * actually replaces the first — without value verification the
@@ -397,10 +397,10 @@ TEST(repl_redefinition_reuses_slot) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let x = 1\n");
+    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var x = 1\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
-    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let x = 2\n");
+    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var x = 2\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -441,7 +441,7 @@ TEST(repl_function_calls_function_cross_input) {
     xr_execute(iso, p2);
 
     XrProto *p3 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let r = a()\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var r = a()\n");
     ASSERT_NOT_NULL(p3);
     xr_execute(iso, p3);
 
@@ -472,7 +472,7 @@ TEST(repl_function_recursive_self_reference) {
     xr_execute(iso, p1);
 
     XrProto *p2 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let r = fact(5)\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var r = fact(5)\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -495,7 +495,7 @@ TEST(repl_function_mutates_array_cross_input) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                  "let arr: Array<int> = []\n");
+                                  "var arr: Array<int> = []\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
@@ -510,7 +510,7 @@ TEST(repl_function_mutates_array_cross_input) {
     xr_execute(iso, p3);
 
     XrProto *p4 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let n = arr.length\n");
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var n = arr.length\n");
     ASSERT_NOT_NULL(p4);
     xr_execute(iso, p4);
 
@@ -542,14 +542,14 @@ TEST(repl_class_instantiation_cross_input) {
 
     const char *cls =
         "class Point {\n"
-        "  let x: int; let y: int\n"
+        "  var x: int; var y: int\n"
         "  constructor(x: int, y: int) { this.x = x; this.y = y }\n"
         "}\n";
     XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, cls);
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let px = Point(7, 8).x\n");
+    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var px = Point(7, 8).x\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -654,7 +654,7 @@ TEST(repl_print_vars_after_compile_no_crash) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *p = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                 "let x = 1\nconst Y = 2\n");
+                                 "var x = 1\nconst Y = 2\n");
     ASSERT_NOT_NULL(p);
     xr_execute(iso, p);
 

@@ -36,36 +36,36 @@ GoOption ::= 'name' ':' StringLiteral
 
 ```xray @id=coro-go-forms
 // 形式 1：调用一个已声明的函数
-let t1 = go worker(0, channel)
+var t1 = go worker(0, channel)
 
 // 形式 2：调用一个 lambda 字面量（用于内联逻辑 + 显式传参）
-let t2 = go fn(d: Json) -> int {
+var t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
 
 // 形式 3：块形式（隐式包装为零参 lambda）
-let t3 = go {
+var t3 = go {
     return compute()
 }
 
 // 可选调试名称
-let named = go(name: "worker-1") worker(1, channel)
+var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**move 在参数位置**：跨协程转移所有权通过参数前缀 `move` 实现，**不是** `go` 的选项：
+**move 在参数位置**：跨协程转移普通局部所有权通过参数前缀 `move` 实现，**不是** `go` 的选项；`shared` 绑定是稳定共享身份，不能 `move`：
 
 ```xray @id=coro-move-argument
-shared let data = { value: 10 }
-let task = go fn(d: Json) -> int {
+var data = { value: 10 }
+var task = go fn(d: Json) -> int {
     return d.value + 1
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
-**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过并发捕获规则。块内不能捕获普通可变局部；可直接使用的外部状态必须是 `shared const`、全局不可变状态，或显式并发安全对象（如 Channel / Atomic）。需要把局部数据传入协程时，使用带参数的 lambda / 函数调用形式：
+**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过并发捕获规则。块内不能捕获普通可变局部；可直接使用的外部状态必须是 `shared`、全局不可变状态，或显式并发安全对象（如 Channel / Atomic）。需要把局部数据传入协程时，使用带参数的 lambda / 函数调用形式：
 
 ```xray
-let n = 10
-let task = go fn(x: int) -> int {
+var n = 10
+var task = go fn(x: int) -> int {
     return x + 1
 }(n)
 ```
@@ -75,7 +75,7 @@ let task = go fn(x: int) -> int {
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
-- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared const`，**裸传是编译错误**；标量、`string`、`shared const`、Channel / Task / Atomic 等可直接传。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，正常路径不再有隐式边界深拷贝。
+- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared`，**裸传是编译错误**；标量、`string`、`shared`、Channel / Task / Atomic 等可直接传。`move` 只适用于可重新绑定的局部 `var` 值，`shared` 绑定不能被 move。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，正常路径不再有隐式边界深拷贝。
 - `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
 
 ### 10.3 `await` — 等待结果
@@ -88,23 +88,23 @@ AwaitExpr ::= 'await' Expression
 
 ```xray @id=coro-await-forms
 // 单 task
-let task = go fetch("https://example.com")
-let result = await task                    // 让出当前协程直到 task 完成
+var task = go fetch("https://example.com")
+var result = await task                    // 让出当前协程直到 task 完成
 
 // await all：等待全部完成，返回结果数组（与输入顺序一致）
-let t1 = go compute(2)
-let t2 = go compute(3)
-let t3 = go compute(4)
-let results: Array<int> = await all [t1, t2, t3]
+var t1 = go compute(2)
+var t2 = go compute(3)
+var t3 = go compute(4)
+var results: Array<int> = await all [t1, t2, t3]
 // 也可直接对变量使用，无需中括号
-let tasks = [t1, t2, t3]
-let results2: Array<int> = await all tasks
+var tasks = [t1, t2, t3]
+var results2: Array<int> = await all tasks
 
 // await any：等待任一完成，返回该任务结果；其他任务继续运行
-let first = await any [t1, t2, t3]
+var first = await any [t1, t2, t3]
 
 // await anySuccess：跳过失败任务，等待第一个成功的任务
-let firstOk = await anySuccess [t1, t2, t3]
+var firstOk = await anySuccess [t1, t2, t3]
 ```
 
 **语义**：
@@ -134,9 +134,9 @@ let firstOk = await anySuccess [t1, t2, t3]
 | `t.awaitTimeout(ms)` | `(int) -> TaskResult<T>` | 阻塞到完成或超时，超时返回 `TaskResult.Timeout` |
 
 ```xray @id=coro-task-handle
-let t = go fetch(url)
+var t = go fetch(url)
 if (!t.done) { /* 还在跑 */ }
-let r = await t
+var r = await t
 
 match t.poll() {
     TaskResult.Pending -> print("running")
@@ -160,12 +160,12 @@ ChannelType ::= 'Channel' '<' Type '>'
 ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
-Channel 通常以 `shared const` 声明（生命周期跨协程，引用语义）：
+Channel 通常以 `shared` 声明（生命周期跨协程，引用语义）：
 
 ```xray @id=channel-decl-variants
-shared const ch  = Channel<int>(10)    // 有缓冲，capacity = 10
-shared const ch0 = Channel<int>(0)     // 无缓冲（同步握手）
-shared const cha = Channel(3)          // 元素类型从首次 send 推断
+shared ch  = Channel<int>(10)    // 有缓冲，capacity = 10
+shared ch0 = Channel<int>(0)     // 无缓冲（同步握手）
+shared cha = Channel(3)          // 元素类型从首次 send 推断
 ```
 
 **API**（注意全部为 **camelCase**）：
@@ -183,15 +183,15 @@ shared const cha = Channel(3)          // 元素类型从首次 send 推断
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
 ```xray @id=channel-basic-ops
-shared const ch = Channel<int>(10)
+shared ch = Channel<int>(10)
 ch.send(42)                             // 阻塞发送
-let v = match ch.recv() {
+var v = match ch.recv() {
     Recv.Value(value) -> value
     Recv.Closed -> -1
     _ -> -1
 }
 
-let sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
+var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
 match ch.tryRecv() {
     Recv.Value(next) -> print(next)
     Recv.Empty -> print("empty")
@@ -205,7 +205,7 @@ for (msg in ch) {
     print(msg)
 }
 
-let value = ch.recvOr(-1)
+var value = ch.recvOr(-1)
 ```
 
 **send/recv 与 `move`**：发送大对象时用 `ch.send(move payload)` 转移所有权，避免拷贝；接收方独占。
@@ -239,8 +239,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray @id=coro-select
-shared const ch1 = Channel<int>(2)
-shared const ch2 = Channel<int>(2)
+shared ch1 = Channel<int>(2)
+shared ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
@@ -252,7 +252,7 @@ select {
 
 **语义**：
 - 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value(name)` 的 payload 绑定到 `name`。
-- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一显式 transfer 规则——裸 owned heap 值必须写成 `copy(v)` / `move v` 或 `shared const`。
+- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一显式 transfer 规则——裸 owned heap 值必须写成 `copy(v)` / `move v` 或 `shared`。
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
 
@@ -271,9 +271,9 @@ SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // 收集每个子协程�
 
 ```xray @id=coro-scope
 // 词法作用域用途
-let x = 1
+var x = 1
 scope {
-    let x = 10            // shadow 外层 x，块内有效
+    var x = 10            // shadow 外层 x，块内有效
     print(x)              // 10
 }
 print(x)                  // 1
@@ -318,7 +318,7 @@ try {
 }
 
 // supervisor scope：收集每个子协程的 outcome
-let outcomes = supervisor scope {
+var outcomes = supervisor scope {
     go failing("error1")
     go failing("error2")
     go ok()
@@ -336,37 +336,37 @@ print(outcomes.length)               // 3（每个子协程一个 outcome）
 MoveExpr ::= 'move' Identifier        // 仅出现在调用参数位置
 ```
 
-`move` 是**实参修饰前缀**（不是 `go` 的选项）。它把 `shared let` 变量的所有权从当前作用域转移到被调函数（包括 `go` 启动的协程、`ch.send()` 等）。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误。
+`move` 是**实参修饰前缀**（不是 `go` 的选项）。它把可重新绑定的局部 `var` 值所有权从当前作用域转移到被调函数（包括 `go` 启动的协程、`ch.send()` 等）。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误。`const` 和 `shared` 绑定都不能作为 `move` 源。
 
 ```xray @id=coro-move-transfer
-shared let buf = Bytes(1024 * 1024)
+var buf = Bytes(1024 * 1024)
 
 // 移交给协程
-let t = go fn(b: Bytes) -> int {
+var t = go fn(b: Bytes) -> int {
     return process(b)
 }(move buf)
 // 编译错误：buf has been moved
 // print(buf.length)
 
 // 移交给 channel
-shared const ch = Channel<Bytes>(1)
-shared let payload = Bytes(4096)
+shared ch = Channel<Bytes>(1)
+var payload = Bytes(4096)
 ch.send(move payload)
 // 编译错误：payload has been moved
 ```
 
-详见 §7.3、§7.4 关于 shared 变量的捕获规则。
+详见 §7.3、§7.4 关于 `var` / `shared` 的协程传递规则。
 
 ### 10.9 同步原语
 
-xray 的默认并发模型偏向**消息传递 + 不可变共享**——通过 `shared const`、`Channel`、`move`、`scope` 已能在编译期消除大部分数据竞争，因此**不**鼓励使用裸 Mutex/锁。
+xray 的默认并发模型偏向**消息传递 + 显式共享身份 + 显式所有权转移**——通过 `shared`、`Channel`、`move`、`scope` 把跨协程数据边界写在源码里，因此**不**鼓励使用裸 Mutex/锁。
 
 如确需互斥锁/原子操作，运行时层面提供：
 
 | 原语 | 形态 | 说明 |
 |---|---|---|
 | Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
-| `shared let` + `move` | 编译期独占 | 跨协程独占，无运行时开销 |
+| `shared` | 稳定共享身份 | 存储在全局堆，作用域仍按词法规则；并发可变安全由值的类型语义决定 |
 | `Atomic<T>` | 无锁原子包装 | 对 `int`/`float`/`bool` 提供 C11 原子操作 |
 
 > **设计说明**：xray 不暴露 `Mutex`/`RwLock` 等通用锁原语。对于简单共享计数器、标志位等场景，`Atomic<T>` 是推荐选择；对于复杂互斥场景，使用 `Channel(1)` 模拟 lock/unlock。
@@ -375,12 +375,12 @@ xray 的默认并发模型偏向**消息传递 + 不可变共享**——通过 `
 
 `Atomic<T>` 包装 `int`、`float` 或 `bool`，在系统堆上分配，底层使用 C11 原子指令，无需锁即可跨协程安全读写。
 
-**声明约束**：`Atomic<T>` 变量必须声明为 `shared const`，禁止 `move`。
+**声明约束**：`Atomic<T>` 变量必须声明为 `shared`，禁止 `move`。
 
 ```xray
-shared const counter = Atomic(0)         // Atomic<int>
-shared const flag = Atomic(false)        // Atomic<bool>
-shared const rate = Atomic(3.14)         // Atomic<float>
+shared counter = Atomic(0)         // Atomic<int>
+shared flag = Atomic(false)        // Atomic<bool>
+shared rate = Atomic(3.14)         // Atomic<float>
 ```
 
 **方法一览**（完整签名见 §14.19）：
@@ -413,9 +413,9 @@ enum Ordering {
 `Ordering` 枚举由编译器自动注入（prelude），无需 import。
 
 ```xray
-shared const counter = Atomic(0)
+shared counter = Atomic(0)
 counter.store(42, Ordering.Release)
-let val = counter.load(Ordering.Acquire)
+var val = counter.load(Ordering.Acquire)
 ```
 
 
@@ -440,14 +440,14 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 
 | 规则 | 强制 |
 |--|--|
-| `go` 闭包不能捕获普通 `let` 局部变量 | ✅ |
-| `shared const` 跨协程零拷贝只读 | ✅ |
-| `shared let` 必须 `move` 才能跨协程 | ✅ |
+| `go` 闭包不能捕获普通 `var` / `const` 局部引用值 | ✅ |
+| `shared` 绑定可直接跨协程传递/捕获，且不能重新赋值或 `move` | ✅ |
+| `move` 只适用于普通局部 `var` 的显式所有权转移 | ✅ |
 | Channel 跨协程传值 | ✅ |
-| `Atomic<T>` 必须声明为 `shared const`，禁止 `move` | ✅ |
+| `Atomic<T>` 必须声明为 `shared`，禁止 `move` | ✅ |
 
 **仍可能存在数据竞争**（运行时检测，非编译期）：
-- 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared const` / `Bytes` / 不可变对象 / `move` 移交。
+- 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared` / `Bytes` / 不可变对象 / `move` 移交。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -483,36 +483,36 @@ GoOption ::= 'name' ':' StringLiteral
 
 ```xray @id=coro-go-forms
 // Form 1: call an existing function
-let t1 = go worker(0, channel)
+var t1 = go worker(0, channel)
 
 // Form 2: call a lambda literal (inline logic + explicit arguments)
-let t2 = go fn(d: Json) -> int {
+var t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
 
 // Form 3: block form (implicitly wrapped as a zero-argument lambda)
-let t3 = go {
+var t3 = go {
     return compute()
 }
 
 // Optional debugging name
-let named = go(name: "worker-1") worker(1, channel)
+var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**`move` lives in argument position**: cross-coroutine ownership transfer goes through the argument prefix `move`, **not** through a `go` option:
+**`move` lives in argument position**: ownership transfer of ordinary locals goes through the argument prefix `move`, **not** through a `go` option; `shared` bindings are stable shared identities and cannot be moved:
 
 ```xray @id=coro-move-argument
-shared let data = { value: 10 }
-let task = go fn(d: Json) -> int {
+var data = { value: 10 }
+var task = go fn(d: Json) -> int {
     return d.value + 1
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
 
-**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass concurrency capture rules. The block may not capture ordinary mutable locals; external state used directly inside the block must be `shared const`, immutable global state, or an explicitly concurrency-safe object such as a Channel or Atomic. To pass local data into a coroutine, use the lambda-call or function-call form:
+**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass concurrency capture rules. The block may not capture ordinary mutable locals; external state used directly inside the block must be `shared`, immutable global state, or an explicitly concurrency-safe object such as a Channel or Atomic. To pass local data into a coroutine, use the lambda-call or function-call form:
 
 ```xray
-let n = 10
-let task = go fn(x: int) -> int {
+var n = 10
+var task = go fn(x: int) -> int {
     return x + 1
 }(n)
 ```
@@ -522,7 +522,7 @@ let task = go fn(x: int) -> int {
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
-- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared const`; **passing them bare is a compile error**. Scalars, `string`, `shared const`, and Channel / Task / Atomic pass directly. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, and the normal path no longer performs an implicit boundary deep copy.
+- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared`; **passing them bare is a compile error**. Scalars, `string`, `shared`, and Channel / Task / Atomic pass directly. `move` only applies to rebindable local `var` values; `shared` bindings cannot be moved. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, and the normal path no longer performs an implicit boundary deep copy.
 - The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
 
 ### 10.3 `await` — wait for a result
@@ -535,23 +535,23 @@ AwaitExpr ::= 'await' Expression
 
 ```xray @id=coro-await-forms
 // single task
-let task = go fetch("https://example.com")
-let result = await task                    // yields the current coroutine until task completes
+var task = go fetch("https://example.com")
+var result = await task                    // yields the current coroutine until task completes
 
 // await all: wait for all, returns the result array (in input order)
-let t1 = go compute(2)
-let t2 = go compute(3)
-let t3 = go compute(4)
-let results: Array<int> = await all [t1, t2, t3]
+var t1 = go compute(2)
+var t2 = go compute(3)
+var t3 = go compute(4)
+var results: Array<int> = await all [t1, t2, t3]
 // also works on a variable directly, no brackets needed
-let tasks = [t1, t2, t3]
-let results2: Array<int> = await all tasks
+var tasks = [t1, t2, t3]
+var results2: Array<int> = await all tasks
 
 // await any: wait for the first to complete, return its result; the others keep running
-let first = await any [t1, t2, t3]
+var first = await any [t1, t2, t3]
 
 // await anySuccess: skip failing tasks; wait for the first successful one
-let firstOk = await anySuccess [t1, t2, t3]
+var firstOk = await anySuccess [t1, t2, t3]
 ```
 
 **Semantics**:
@@ -581,9 +581,9 @@ let firstOk = await anySuccess [t1, t2, t3]
 | `t.awaitTimeout(ms)` | `(int) -> TaskResult<T>` | Waits until completion or timeout; timeout returns `TaskResult.Timeout` |
 
 ```xray @id=coro-task-handle
-let t = go fetch(url)
+var t = go fetch(url)
 if (!t.done) { /* still running */ }
-let r = await t
+var r = await t
 
 match t.poll() {
     TaskResult.Pending -> print("running")
@@ -607,12 +607,12 @@ ChannelType ::= 'Channel' '<' Type '>'
 ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
-Channels are usually declared as `shared const` (cross-coroutine lifetime, reference semantics):
+Channels are usually declared as `shared` (cross-coroutine lifetime, reference semantics):
 
 ```xray @id=channel-decl-variants
-shared const ch  = Channel<int>(10)    // buffered, capacity = 10
-shared const ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
-shared const cha = Channel(3)          // element type inferred from the first send
+shared ch  = Channel<int>(10)    // buffered, capacity = 10
+shared ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
+shared cha = Channel(3)          // element type inferred from the first send
 ```
 
 **API** (note that all method names are **camelCase**):
@@ -630,15 +630,15 @@ shared const cha = Channel(3)          // element type inferred from the first s
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
 ```xray @id=channel-basic-ops
-shared const ch = Channel<int>(10)
+shared ch = Channel<int>(10)
 ch.send(42)                             // blocking send
-let v = match ch.recv() {
+var v = match ch.recv() {
     Recv.Value(value) -> value
     Recv.Closed -> -1
     _ -> -1
 }
 
-let sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
+var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
 match ch.tryRecv() {
     Recv.Value(next) -> print(next)
     Recv.Empty -> print("empty")
@@ -652,7 +652,7 @@ for (msg in ch) {
     print(msg)
 }
 
-let value = ch.recvOr(-1)
+var value = ch.recvOr(-1)
 ```
 
 **send/recv with `move`**: when sending a large object, use `ch.send(move payload)` to transfer ownership and avoid copying; the receiver becomes the sole owner.
@@ -686,8 +686,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray @id=coro-select
-shared const ch1 = Channel<int>(2)
-shared const ch2 = Channel<int>(2)
+shared ch1 = Channel<int>(2)
+shared ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
@@ -699,7 +699,7 @@ select {
 
 **Semantics**:
 - Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value(name)` payload to `name`.
-- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same explicit-transfer rule as `ch.send` — a bare owned heap value must be written as `copy(v)`, `move v`, or `shared const`.
+- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same explicit-transfer rule as `ch.send` — a bare owned heap value must be written as `copy(v)`, `move v`, or `shared`.
 - Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
 - When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
 
@@ -718,9 +718,9 @@ SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // collect every child re
 
 ```xray @id=coro-scope
 // lexical scope use
-let x = 1
+var x = 1
 scope {
-    let x = 10            // shadow the outer x; in effect inside the block
+    var x = 10            // shadow the outer x; in effect inside the block
     print(x)              // 10
 }
 print(x)                  // 1
@@ -765,7 +765,7 @@ try {
 }
 
 // supervisor scope: collect every child outcome
-let outcomes = supervisor scope {
+var outcomes = supervisor scope {
     go failing("error1")
     go failing("error2")
     go ok()
@@ -783,37 +783,37 @@ print(outcomes.length)               // 3 (one outcome per child)
 MoveExpr ::= 'move' Identifier        // only at call-argument position
 ```
 
-`move` is an **argument-prefix modifier** (not a `go` option). It transfers ownership of a `shared let` variable from the current scope to the callee (including coroutines started by `go`, `ch.send()`, etc.). After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error.
+`move` is an **argument-prefix modifier** (not a `go` option). It transfers ownership of a rebindable local `var` value from the current scope to the callee (including coroutines started by `go`, `ch.send()`, etc.). After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error. `const` and `shared` bindings cannot be used as `move` sources.
 
 ```xray @id=coro-move-transfer
-shared let buf = Bytes(1024 * 1024)
+var buf = Bytes(1024 * 1024)
 
 // hand off to a coroutine
-let t = go fn(b: Bytes) -> int {
+var t = go fn(b: Bytes) -> int {
     return process(b)
 }(move buf)
 // compile error: buf has been moved
 // print(buf.length)
 
 // hand off to a channel
-shared const ch = Channel<Bytes>(1)
-shared let payload = Bytes(4096)
+shared ch = Channel<Bytes>(1)
+var payload = Bytes(4096)
 ch.send(move payload)
 // compile error: payload has been moved
 ```
 
-See §7.3 and §7.4 for the capture rules of shared variables.
+See §7.3 and §7.4 for the coroutine transfer rules of `var` and `shared`.
 
 ### 10.9 Synchronisation primitives
 
-xray's default concurrency model favours **message passing + immutable sharing**—`shared const`, `Channel`, `move`, and `scope` already eliminate most data races at compile time, so raw mutexes/locks are **discouraged**.
+xray's default concurrency model favours **message passing + explicit shared identity + explicit ownership transfer**: `shared`, `Channel`, `move`, and `scope` make cross-coroutine data boundaries visible in source, so raw mutexes/locks are **discouraged**.
 
 When mutual exclusion or atomic operations are unavoidable, the runtime provides:
 
 | Primitive | Form | Description |
 |---|---|---|
 | Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
-| `shared let` + `move` | Compile-time exclusivity | Cross-coroutine exclusivity with no runtime overhead |
+| `shared` | Stable shared identity | Stored on the global heap while retaining lexical scope; concurrent mutation safety comes from the value's own type semantics |
 | `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `int`/`float`/`bool` |
 
 > **Design note**: xray does not expose generic lock primitives such as `Mutex`/`RwLock`. For simple shared counters and flags, `Atomic<T>` is the recommended choice; for complex mutual exclusion, use `Channel(1)` to simulate lock/unlock.
@@ -822,12 +822,12 @@ When mutual exclusion or atomic operations are unavoidable, the runtime provides
 
 `Atomic<T>` wraps `int`, `float`, or `bool`, allocated on the system heap, using C11 atomic instructions for lock-free cross-coroutine reads and writes.
 
-**Declaration constraint**: `Atomic<T>` variables must be declared as `shared const`; `move` is prohibited.
+**Declaration constraint**: `Atomic<T>` variables must be declared as `shared`; `move` is prohibited.
 
 ```xray
-shared const counter = Atomic(0)         // Atomic<int>
-shared const flag = Atomic(false)        // Atomic<bool>
-shared const rate = Atomic(3.14)         // Atomic<float>
+shared counter = Atomic(0)         // Atomic<int>
+shared flag = Atomic(false)        // Atomic<bool>
+shared rate = Atomic(3.14)         // Atomic<float>
 ```
 
 **Method overview** (full signatures in §14.19):
@@ -860,9 +860,9 @@ enum Ordering {
 The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed.
 
 ```xray
-shared const counter = Atomic(0)
+shared counter = Atomic(0)
 counter.store(42, Ordering.Release)
-let val = counter.load(Ordering.Acquire)
+var val = counter.load(Ordering.Acquire)
 ```
 
 
@@ -887,12 +887,12 @@ xray uses the type system to **eliminate most data races at compile time**:
 
 | Rule | Enforced |
 |--|--|
-| `go` closures cannot capture ordinary `let` locals | ✅ |
-| `shared const` is read-only and zero-copy across coroutines | ✅ |
-| `shared let` must be `move`d to cross a coroutine boundary | ✅ |
+| `go` closures cannot capture ordinary local `var` / `const` reference values | ✅ |
+| `shared` bindings may cross coroutine boundaries directly and cannot be reassigned or moved | ✅ |
+| `move` only applies to explicit ownership transfer of ordinary local `var` values | ✅ |
 | Channels for cross-coroutine values | ✅ |
-| `Atomic<T>` must be declared as `shared const`; `move` prohibited | ✅ |
+| `Atomic<T>` must be declared as `shared`; `move` prohibited | ✅ |
 
 **Residual data-race risk** (detected at runtime, not compile time):
-- Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared const` / `Bytes` / immutable objects, or transfer ownership via `move`.
+- Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared` / `Bytes` / immutable objects, or transfer ownership via `move`.
 <!-- /xr-spec:en -->

@@ -14,7 +14,7 @@
 #include <stdint.h>
 
 typedef enum XrTransferMode {
-    XR_TRANSFER_SHARE = 0, /* already safe to share: scalar, immutable, shared const, handle */
+    XR_TRANSFER_SHARE = 0, /* already safe to share: scalar, immutable, shared, handle */
     XR_TRANSFER_COPY = 1,  /* explicit copy(expr): clone once at the boundary */
     XR_TRANSFER_MOVE = 2,  /* explicit move expr: transfer ownership, no clone */
 } XrTransferMode;

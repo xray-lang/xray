@@ -1,10 +1,10 @@
 fn make_bytes() -> Bytes {
-    let b = Bytes(0)
+    var b = Bytes(0)
     b.push(1)
     b.push(2)
     b.push(3)
     return b
 }
 
-let view: ByteSpan = make_bytes()[0:2]
+var view: ByteSpan = make_bytes()[0:2]
 print(view.length)

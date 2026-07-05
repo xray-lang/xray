@@ -23,14 +23,14 @@ class Wrapper<T> {
 @test
 fn test_generic_instanceof() {
     // T1: instanceof with generic — generic_origin check
-    let b = Box<int>(42)
+    var b = Box<int>(42)
     assert(b is Box)
 
-    let bs = Box<string>("hello")
+    var bs = Box<string>("hello")
     assert(bs is Box)
 
     // Non-Box should fail
-    let w = Wrapper<int>(1)
+    var w = Wrapper<int>(1)
     assert(!(w is Box))
     assert(w is Wrapper)
 }
@@ -38,34 +38,34 @@ fn test_generic_instanceof() {
 @test
 fn test_generic_typeof() {
     // T2: Reflect.typeOf for generic class
-    let b = Box<int>(42)
+    var b = Box<int>(42)
     assert_eq(Reflect.typeOf(b), "Box<int>")
 
-    let bs = Box<string>("hello")
+    var bs = Box<string>("hello")
     assert_eq(Reflect.typeOf(bs), "Box<string>")
 
     // T7: Multiple type parameters
-    let p = Pair<int, string>{first: 1, second: "x"}
+    var p = Pair<int, string>{first: 1, second: "x"}
     assert_eq(Reflect.typeOf(p), "Pair<int, string>")
 
     // T8: Non-generic instance
-    let plain = Box(99)
+    var plain = Box(99)
     assert_eq(Reflect.typeOf(plain), "Box")
 }
 
 @test
 fn test_struct_generic_is_typeof() {
     // T9: Struct generic `is` + Reflect.typeOf
-    let p1 = Pair<int, string>{first: 1, second: "x"}
+    var p1 = Pair<int, string>{first: 1, second: "x"}
     assert(p1 is Pair)
     assert_eq(Reflect.typeOf(p1), "Pair<int, string>")
 
-    let p2 = Pair<float, bool>{first: 3.14, second: true}
+    var p2 = Pair<float, bool>{first: 3.14, second: true}
     assert(p2 is Pair)
     assert_eq(Reflect.typeOf(p2), "Pair<float, bool>")
 
     // Non-struct should not match
-    let b = Box<int>(1)
+    var b = Box<int>(1)
     assert(!(b is Pair))
 }
 
@@ -74,8 +74,8 @@ fn test_rep_sharing_correctness() {
     // T10: Rep-sharing must not merge distinct reference-type instantiations
     // Wrapper<string> and Wrapper<Array> have the same slot layout (both PTR)
     // but must remain distinct classes with correct type info
-    let ws = Wrapper<string>("hello")
-    let wi = Wrapper<int>(42)
+    var ws = Wrapper<string>("hello")
+    var wi = Wrapper<int>(42)
 
     assert_eq(Reflect.typeOf(ws), "Wrapper<string>")
     assert_eq(Reflect.typeOf(wi), "Wrapper<int>")
@@ -85,7 +85,7 @@ fn test_rep_sharing_correctness() {
     assert(wi is Wrapper)
 
     // Different instantiations must not be confused
-    let b = Box<int>(1)
+    var b = Box<int>(1)
     assert(!(b is Wrapper))
     assert(!(ws is Box))
 }

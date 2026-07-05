@@ -1,6 +1,6 @@
 export fn sumWindow(view: ByteSpan) -> int {
-    let total = 0
-    let i = 0
+    var total = 0
+    var i = 0
     while (i < view.length) {
         total = total + int(view[i])
         i = i + 1

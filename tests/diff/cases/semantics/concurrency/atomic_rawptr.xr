@@ -6,12 +6,12 @@
 @extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
 @extern("C") fn free(p: RawMut<uint8>)
 
-let p1 = unsafe { malloc(4) }
-let p2 = unsafe { malloc(4) }
+var p1 = unsafe { malloc(4) }
+var p2 = unsafe { malloc(4) }
 unsafe { p1[0] = 11 }
 unsafe { p2[0] = 22 }
 
-shared const a = Atomic<RawMut<uint8>>(p1)
+shared a = Atomic<RawMut<uint8>>(p1)
 
 // load: read data behind the stored pointer
 unsafe { print(a.load()[0]) }        // 11
@@ -22,17 +22,17 @@ a.store(p2)
 unsafe { print(a.load()[0]) }        // 22
 
 // swap: returns previous (p2), installs p1
-let old = a.swap(p1)
+var old = a.swap(p1)
 unsafe { print(old[0]) }             // 22 (was p2)
 unsafe { print(a.load()[0]) }        // 11 (now p1)
 
 // compareExchange success: expected == current (p1) -> installs p2
-let (prev, ok) = a.compareExchange(a.load(), p2)
+var (prev, ok) = a.compareExchange(a.load(), p2)
 print(ok)                            // true
 unsafe { print(a.load()[0]) }        // 22 (now p2)
 
 // compareExchange failure: expected p1 but current is p2 -> no change
-let (prev2, ok2) = a.compareExchange(p1, p1)
+var (prev2, ok2) = a.compareExchange(p1, p1)
 print(ok2)                           // false
 unsafe { print(a.load()[0]) }        // 22 (unchanged)
 

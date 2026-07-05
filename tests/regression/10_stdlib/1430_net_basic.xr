@@ -15,7 +15,7 @@ import net
 @test
 fn test_lookup_localhost() {
     // 解析 localhost
-    let addr = net.lookup("localhost")
+    var addr = net.lookup("localhost")
     assert_true(addr != null)
     // localhost 通常解析为 127.0.0.1 或 ::1
     assert_true(addr == "127.0.0.1" || addr!.startsWith("::"))
@@ -25,7 +25,7 @@ fn test_lookup_localhost() {
 fn test_lookup_invalid_host() {
     // 解析无效主机名应返回 null 或被 DNS 劫持返回 IP
     // 某些 ISP/DNS 会对不存在的域名返回有效 IP（DNS hijacking）
-    let addr = net.lookup("this-host-does-not-exist-12345.invalid")
+    var addr = net.lookup("this-host-does-not-exist-12345.invalid")
     // 只验证不会崩溃，结果是 null 或字符串都可接受
     assert_true(addr == null || typeof(addr) == "string")
 }
@@ -60,14 +60,14 @@ fn test_net_lookup_exists() {
 fn test_lookup_ipv6_localhost() {
     // localhost 支持 IPv6 解析
     // 注意：结果可能是 IPv4 或 IPv6，取决于系统配置
-    let addr = net.lookup("localhost")
+    var addr = net.lookup("localhost")
     assert_true(addr != null)
 }
 
 @test
 fn test_lookup_returns_valid_address() {
     // 验证返回的地址格式正确
-    let addr = net.lookup("localhost")
+    var addr = net.lookup("localhost")
     if (addr != null) {
         // 地址应该是非空字符串
         assert_true(addr.length > 0)

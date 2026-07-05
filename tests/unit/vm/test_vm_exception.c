@@ -74,7 +74,7 @@ TEST(runtime_error_records_trace) {
      * fault), not a value-return error: it uses the unwind channel
      * and is reported via current_exception, never pending_error. */
     const char *src = "fn divider(a: int, b: int) -> int { return a / b }\n"
-                      "let r = divider(10, 0)\n";
+                      "var r = divider(10, 0)\n";
 
     int rc = xray_vm_dostring(iso, src);
     /* Uncaught panic fail-fasts — dostring returns non-zero. */
@@ -99,14 +99,14 @@ TEST(catch_clears_pending_error_state) {
      * Verify that after a caught error, the program continues
      * normally without stale error state. */
     const char *src = "enum VmErr { Test }\n"
-                      "let caught = false\n"
+                      "var caught = false\n"
                       "try {\n"
                       "    throw VmErr.Test\n"
                       "} catch (e) {\n"
                       "    caught = true\n"
                       "}\n"
                       "assert(caught)\n"
-                      "let x = 42\n"
+                      "var x = 42\n"
                       "assert_eq(x, 42)\n";
 
     int rc = xray_vm_dostring(iso, src);

@@ -28,7 +28,7 @@ fn createBody(x, y, z, vx, vy, vz, mass): Body {
 
 // 初始化太阳系天体
 fn createBodies(): Array<Body> {
-    let bodies: Array<Body> = []
+    var bodies: Array<Body> = []
     // 太阳
     bodies.push(createBody(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, SOLAR_MASS))
     // 木星
@@ -75,11 +75,11 @@ fn createBodies(): Array<Body> {
 ** 通过调整太阳的速度来实现
 */
 fn offsetMomentum(bodies: Array<Body>) {
-    let px = 0.0
-    let py = 0.0
-    let pz = 0.0
-    for (let i = 0; i < bodies.length; i++) {
-        let b = bodies[i]
+    var px = 0.0
+    var py = 0.0
+    var pz = 0.0
+    for (var i = 0; i < bodies.length; i++) {
+        var b = bodies[i]
         px = px + b.vx * b.mass
         py = py + b.vy * b.mass
         pz = pz + b.vz * b.mass
@@ -97,19 +97,19 @@ fn offsetMomentum(bodies: Array<Body>) {
 ** 势能 = -G * m1 * m2 / r（G=1）
 */
 fn energy(bodies: Array<Body>): float {
-    let e = 0.0
-    let nbodies = bodies.length
-    for (let i = 0; i < nbodies; i++) {
-        let bi = bodies[i]
+    var e = 0.0
+    var nbodies = bodies.length
+    for (var i = 0; i < nbodies; i++) {
+        var bi = bodies[i]
         // 动能
         e = e + 0.5 * bi.mass * (bi.vx * bi.vx + bi.vy * bi.vy + bi.vz * bi.vz)
         // 势能（与所有后续天体的相互作用）
-        for (let j = i + 1; j < nbodies; j++) {
-            let bj = bodies[j]
-            let dx = bi.x - bj.x
-            let dy = bi.y - bj.y
-            let dz = bi.z - bj.z
-            let distance = (dx * dx + dy * dy + dz * dz).sqrt()
+        for (var j = i + 1; j < nbodies; j++) {
+            var bj = bodies[j]
+            var dx = bi.x - bj.x
+            var dy = bi.y - bj.y
+            var dz = bi.z - bj.z
+            var distance = (dx * dx + dy * dy + dz * dz).sqrt()
             e = e - (bi.mass * bj.mass) / distance
         }
     }
@@ -126,18 +126,18 @@ fn energy(bodies: Array<Body>): float {
 ** 3. 更新位置
 */
 fn advance(bodies: Array<Body>, dt: float) {
-    let nbodies = bodies.length
+    var nbodies = bodies.length
     // 计算引力并更新速度
-    for (let i = 0; i < nbodies; i++) {
-        let bi = bodies[i]
-        for (let j = i + 1; j < nbodies; j++) {
-            let bj = bodies[j]
-            let dx = bi.x - bj.x
-            let dy = bi.y - bj.y
-            let dz = bi.z - bj.z
-            let distanceSquared = dx * dx + dy * dy + dz * dz
-            let distance = distanceSquared.sqrt()
-            let mag = dt / (distanceSquared * distance)
+    for (var i = 0; i < nbodies; i++) {
+        var bi = bodies[i]
+        for (var j = i + 1; j < nbodies; j++) {
+            var bj = bodies[j]
+            var dx = bi.x - bj.x
+            var dy = bi.y - bj.y
+            var dz = bi.z - bj.z
+            var distanceSquared = dx * dx + dy * dy + dz * dz
+            var distance = distanceSquared.sqrt()
+            var mag = dt / (distanceSquared * distance)
             // 更新速度（牛顿第三定律：作用力与反作用力）
             bi.vx = bi.vx - dx * bj.mass * mag
             bi.vy = bi.vy - dy * bj.mass * mag
@@ -148,8 +148,8 @@ fn advance(bodies: Array<Body>, dt: float) {
         }
     }
     // 更新位置
-    for (let i = 0; i < nbodies; i++) {
-        let b = bodies[i]
+    for (var i = 0; i < nbodies; i++) {
+        var b = bodies[i]
         b.x = b.x + dt * b.vx
         b.y = b.y + dt * b.vy
         b.z = b.z + dt * b.vz
@@ -159,15 +159,15 @@ fn advance(bodies: Array<Body>, dt: float) {
 // 主程序
 fn main() {
     // 迭代次数（从命令行读取，默认 500000）
-    let n = process.args.length > 0 ? int(process.args[0]) ?? 500000 : 500000
+    var n = process.args.length > 0 ? int(process.args[0]) ?? 500000 : 500000
     // 创建天体系统
-    let bodies = createBodies()
+    var bodies = createBodies()
     // 初始化：调整动量使系统质心静止
     offsetMomentum(bodies)
     // 输出初始能量
     print(energy(bodies).toFixed(9))
     // 执行 n 次模拟步骤
-    for (let i = 0; i < n; i++) {
+    for (var i = 0; i < n; i++) {
         advance(bodies, 0.01)
     }
     // 输出最终能量

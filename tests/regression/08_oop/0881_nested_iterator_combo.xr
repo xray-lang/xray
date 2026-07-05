@@ -14,7 +14,7 @@ class CustomRangeIter {
     }
     hasNext() -> bool { return this.val < this.max }
     next() -> int {
-        let v = this.val
+        var v = this.val
         this.val = this.val + 1
         return v
     }
@@ -31,8 +31,8 @@ class CustomRange {
 
 @test
 fn test_triple_nested_for_in() {
-    let count = 0
-    let sum = 0
+    var count = 0
+    var sum = 0
     for (i in CustomRange(1, 4)) {
         for (j in CustomRange(1, 4)) {
             for (k in CustomRange(1, 4)) {
@@ -56,7 +56,7 @@ class Accumulator {
 
 @test
 fn test_nested_for_in_with_method_calls() {
-    let acc = Accumulator()
+    var acc = Accumulator()
     for (i in CustomRange(1, 5)) {
         for (j in CustomRange(1, 5)) {
             acc.add(i * j)
@@ -70,7 +70,7 @@ fn test_nested_for_in_with_method_calls() {
 
 @test
 fn test_nested_for_in_inner_break() {
-    let pairs: Array<string> = []
+    var pairs: Array<string> = []
     for (i in CustomRange(1, 6)) {
         for (j in CustomRange(1, 6)) {
             if (j > i) { break }
@@ -88,10 +88,10 @@ fn test_nested_for_in_inner_break() {
 
 @test
 fn test_nested_for_in_outer_continue() {
-    let results: Array<int> = []
+    var results: Array<int> = []
     for (i in CustomRange(1, 6)) {
         if (i % 2 == 0) { continue }
-        let sum = 0
+        var sum = 0
         for (j in CustomRange(1, 4)) {
             sum = sum + j
         }
@@ -116,7 +116,7 @@ class StepIter {
         return this.val > this.max
     }
     next() -> int {
-        let v = this.val
+        var v = this.val
         this.val = this.val + this.step
         return v
     }
@@ -132,7 +132,7 @@ class StepRange {
 
 @test
 fn test_mixed_iterator_types_nested() {
-    let results: Array<string> = []
+    var results: Array<string> = []
     for (i in CustomRange(0, 3)) {
         for (j in StepRange(10, 40, 10)) {
             results.push("${i}:${j}")
@@ -148,10 +148,10 @@ fn test_mixed_iterator_types_nested() {
 
 @test
 fn test_for_in_with_array_map() {
-    let results: Array<int> = []
+    var results: Array<int> = []
     for (i in CustomRange(1, 4)) {
-        let arr = [1, 2, 3]
-        let mapped = arr.map(fn(x) { return x * i })
+        var arr = [1, 2, 3]
+        var mapped = arr.map(fn(x) { return x * i })
         results.push(mapped.reduce(fn(a, b) { return a + b }, 0))
     }
     // i=1: sum([1,2,3])=6, i=2: sum([2,4,6])=12, i=3: sum([3,6,9])=18
@@ -165,9 +165,9 @@ fn test_for_in_with_array_map() {
 
 @test
 fn test_nested_for_in_matrix_build() {
-    let matrix: Array<Array<int>> = []
+    var matrix: Array<Array<int>> = []
     for (i in CustomRange(0, 3)) {
-        let row: Array<int> = []
+        var row: Array<int> = []
         for (j in CustomRange(0, 4)) {
             row.push(i * 4 + j)
         }
@@ -184,10 +184,10 @@ fn test_nested_for_in_matrix_build() {
 
 @test
 fn test_iterable_reuse() {
-    let r = CustomRange(1, 4)
-    let sum1 = 0
+    var r = CustomRange(1, 4)
+    var sum1 = 0
     for (i in r) { sum1 = sum1 + i }
-    let sum2 = 0
+    var sum2 = 0
     for (i in r) { sum2 = sum2 + i }
     // Each for-in creates a fresh iterator via iterator()
     assert_eq(sum1, 6)
@@ -217,7 +217,7 @@ fn test_nested_for_in_early_return() {
 
 @test
 fn test_nested_stress_100x100() {
-    let count = 0
+    var count = 0
     for (i in CustomRange(0, 100)) {
         for (j in CustomRange(0, 100)) {
             count = count + 1
@@ -248,7 +248,7 @@ class FlattenIter {
         return false
     }
     next() -> int {
-        let val = this.outer[this.outerIdx][this.innerIdx]
+        var val = this.outer[this.outerIdx][this.innerIdx]
         this.innerIdx = this.innerIdx + 1
         return val
     }
@@ -262,8 +262,8 @@ class FlattenIterable {
 
 @test
 fn test_flatten_iterator() {
-    let data = [[1, 2], [3], [4, 5, 6]]
-    let result: Array<int> = []
+    var data = [[1, 2], [3], [4, 5, 6]]
+    var result: Array<int> = []
     for (v in FlattenIterable(data)) {
         result.push(v)
     }
@@ -275,9 +275,9 @@ fn test_flatten_iterator() {
 
 @test
 fn test_nested_flatten_iterators() {
-    let data1 = [[1, 2], [3, 4]]
-    let data2 = [[10, 20], [30]]
-    let products: Array<int> = []
+    var data1 = [[1, 2], [3, 4]]
+    var data2 = [[10, 20], [30]]
+    var products: Array<int> = []
     for (a in FlattenIterable(data1)) {
         for (b in FlattenIterable(data2)) {
             products.push(a * b)
@@ -307,7 +307,7 @@ class FilteredRangeIter {
     }
     hasNext() -> bool { return this.val < this.max }
     next() -> int {
-        let v = this.val
+        var v = this.val
         this.val = this.val + 1
         while (this.val < this.max && this.val % this.divisor != 0) {
             this.val = this.val + 1
@@ -327,7 +327,7 @@ class FilteredRange {
 @test
 fn test_nested_filtered_ranges() {
     // Multiples of 3 in [1,20) crossed with multiples of 5 in [1,30)
-    let pairs: Array<string> = []
+    var pairs: Array<string> = []
     for (a in FilteredRange(1, 20, 3)) {
         for (b in FilteredRange(1, 30, 5)) {
             pairs.push("${a}x${b}")
@@ -344,12 +344,12 @@ fn test_nested_filtered_ranges() {
 
 @test
 fn test_for_in_with_chained_operations() {
-    let results: Array<string> = []
+    var results: Array<string> = []
     for (i in CustomRange(1, 5)) {
-        let arr = [10, 20, 30]
-        let mapped = arr.map(fn(x) { return x * i })
-        let filtered = mapped.filter(fn(x) { return x > 25 })
-        let total = filtered.reduce(fn(a, b) { return a + b }, 0)
+        var arr = [10, 20, 30]
+        var mapped = arr.map(fn(x) { return x * i })
+        var filtered = mapped.filter(fn(x) { return x > 25 })
+        var total = filtered.reduce(fn(a, b) { return a + b }, 0)
         results.push("i=${i}:sum=${total}")
     }
     // i=1: [10,20,30]->filter>25->[30]->sum=30
@@ -366,11 +366,11 @@ fn test_for_in_with_chained_operations() {
 
 @test
 fn test_iterator_then_findIndex() {
-    let sums: Array<int> = []
+    var sums: Array<int> = []
     for (i in CustomRange(1, 4)) {
-        let arr = [1, 2, 3, 4, 5]
-        let mapped = arr.map(fn(x) { return x * i })
-        let idx = mapped.findIndex(fn(x) { return x > 6 })
+        var arr = [1, 2, 3, 4, 5]
+        var mapped = arr.map(fn(x) { return x * i })
+        var idx = mapped.findIndex(fn(x) { return x > 6 })
         sums.push(idx)
     }
     // i=1: [1,2,3,4,5]->findIndex(>6)=-1
@@ -384,14 +384,14 @@ fn test_iterator_then_findIndex() {
 // ===== Recursive function with iterator =====
 
 fn collect_custom_range_recursive(depth: int, max_depth: int) -> Array<string> {
-    let results: Array<string> = []
+    var results: Array<string> = []
     if (depth >= max_depth) {
         results.push("leaf:${depth}")
         return results
     }
     for (i in CustomRange(0, 3)) {
-        let sub = collect_custom_range_recursive(depth + 1, max_depth)
-        for (let j = 0; j < sub.length; j++) {
+        var sub = collect_custom_range_recursive(depth + 1, max_depth)
+        for (var j = 0; j < sub.length; j++) {
             results.push("d${depth}i${i}:${sub[j]}")
         }
     }
@@ -400,7 +400,7 @@ fn collect_custom_range_recursive(depth: int, max_depth: int) -> Array<string> {
 
 @test
 fn test_recursive_with_iterator() {
-    let result = collect_custom_range_recursive(0, 2)
+    var result = collect_custom_range_recursive(0, 2)
     // depth 0: 3 branches, each depth 1: 3 branches, each depth 2: leaf
     // Total: 3 * 3 = 9
     assert_eq(result.length, 9)
@@ -412,7 +412,7 @@ fn test_recursive_with_iterator() {
 
 @test
 fn test_4deep_nested_break_continue() {
-    let count = 0
+    var count = 0
     for (a in CustomRange(0, 5)) {
         if (a == 3) { continue }
         for (b in CustomRange(0, 5)) {

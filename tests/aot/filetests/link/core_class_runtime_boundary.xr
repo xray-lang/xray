@@ -24,7 +24,7 @@ fn touch(c: Counter) -> int {
     return c.get()
 }
 
-let c = make(2)
+var c = make(2)
 print(c.bump(5))
 print(c.value)
 print(touch(c))

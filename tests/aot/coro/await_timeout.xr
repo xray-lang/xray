@@ -10,17 +10,17 @@ fn quick_value(n: int) -> int {
     return n * 2
 }
 
-let ch = Channel<int>(0)
-let blocked = go wait_for_value(ch)
-let timed_out = blocked.awaitTimeout(1)
+shared ch = Channel<int>(0)
+var blocked = go wait_for_value(ch)
+var timed_out = blocked.awaitTimeout(1)
 print(match (timed_out) {
     TaskResult.Timeout -> true
     _ -> false
 })
 ch.close()
 
-let quick = go quick_value(21)
-let value = quick.awaitTimeout(1000)
+var quick = go quick_value(21)
+var value = quick.awaitTimeout(1000)
 print(match (value) {
     TaskResult.Success(v) -> v
     _ -> -1

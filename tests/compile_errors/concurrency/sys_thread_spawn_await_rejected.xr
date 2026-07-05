@@ -5,8 +5,8 @@ fn worker() -> int {
 }
 
 fn main() {
-    let t = sys.Thread.spawn(fn() -> int {
-        let y = await go worker()
+    var t = sys.Thread.spawn(fn() -> int {
+        var y = await go worker()
         return y
     })
     print(t)

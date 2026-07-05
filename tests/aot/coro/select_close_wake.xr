@@ -8,9 +8,9 @@ fn wait_select_close(ch: Channel<int>, ready: Channel<int>, done: Channel<int>) 
     return 1
 }
 
-let ch = Channel<int>(0)
-let ready = Channel<int>(0)
-let done = Channel<int>(1)
+shared ch = Channel<int>(0)
+shared ready = Channel<int>(0)
+shared done = Channel<int>(1)
 
 go wait_select_close(ch, ready, done)
 print(match (ready.recv()) {
@@ -18,12 +18,12 @@ print(match (ready.recv()) {
     _ -> -1
 })
 
-for (let i = 0; i < 16; i++) {
+for (var i = 0; i < 16; i++) {
     Coro.yield()
 }
 
 ch.close()
-let result = done.recvTimeout(2000)
+var result = done.recvTimeout(2000)
 print(match (result) {
     Recv.Value(value) -> value
     _ -> -1

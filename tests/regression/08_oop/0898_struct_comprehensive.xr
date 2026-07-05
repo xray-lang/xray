@@ -32,38 +32,38 @@ fn test_struct_comprehensive() {
 
     // === Struct as return value ===
 
-    let p1 = make_point(100.0, 200.0)
+    var p1 = make_point(100.0, 200.0)
     assert(p1.x == 100.0)
     assert(p1.y == 200.0)
 
     // === Struct in array ===
-    let points = [Point{x: 1.0, y: 2.0}, Point{x: 3.0, y: 4.0}]
+    var points = [Point{x: 1.0, y: 2.0}, Point{x: 3.0, y: 4.0}]
     assert(points[0].x == 1.0)
     assert(points[1].y == 4.0)
 
     // === Value copy from function return ===
 
-    let o1 = origin()
-    let o2 = origin()
+    var o1 = origin()
+    var o2 = origin()
     o1.x = 99.0
     assert(o2.x == 0.0)
 
     // === Struct with method ===
 
-    let r = Rect{x: 0.0, y: 0.0, w: 100.0, h: 50.0}
+    var r = Rect{x: 0.0, y: 0.0, w: 100.0, h: 50.0}
     assert(r.area() == 5000.0)
 
     // === Copy preserves methods ===
-    let r2 = r
+    var r2 = r
     r2.w = 200.0
     assert(r.area() == 5000.0)
     assert(r2.area() == 10000.0)
 
     // === Struct with int fields ===
 
-    let red = Color{r: 255, g: 0, b: 0}
-    let blue = Color{r: 0, g: 0, b: 255}
-    let mix = red
+    var red = Color{r: 255, g: 0, b: 0}
+    var blue = Color{r: 0, g: 0, b: 255}
+    var mix = red
     mix.b = blue.b
     assert(mix.r == 255)
     assert(mix.g == 0)
@@ -71,10 +71,10 @@ fn test_struct_comprehensive() {
     assert(red.b == 0)
 
     // === Chain of copies ===
-    let base = Point{x: 0.0, y: 0.0}
-    let a = base
-    let b = a
-    let c = b
+    var base = Point{x: 0.0, y: 0.0}
+    var a = base
+    var b = a
+    var c = b
     c.x = 42.0
     assert(base.x == 0.0)
     assert(a.x == 0.0)
@@ -82,7 +82,7 @@ fn test_struct_comprehensive() {
     assert(c.x == 42.0)
 
     // === Struct literal reassignment ===
-    let p = Point{x: 1.0, y: 2.0}
+    var p = Point{x: 1.0, y: 2.0}
     p = Point{x: 10.0, y: 20.0}
     assert(p.x == 10.0)
     assert(p.y == 20.0)

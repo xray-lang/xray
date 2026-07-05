@@ -75,8 +75,8 @@ TEST(single_line_token_position) {
 
 TEST(token_on_second_line) {
     Scanner s;
-    xr_scanner_init(&s, "let\nx");
-    (void) xr_scanner_scan(&s);  // consume `let`
+    xr_scanner_init(&s, "var\nx");
+    (void) xr_scanner_scan(&s);  // consume `var`
     Token b = xr_scanner_scan(&s);
 
     ASSERT_EQ_INT(b.type, TK_NAME);
@@ -164,7 +164,7 @@ TEST(tab_indented_token_column_is_byte_offset) {
 TEST(carriage_return_does_not_double_count_lines) {
     // CRLF line endings must produce the same line numbers as LF.
     Scanner s;
-    xr_scanner_init(&s, "let\r\nx");
+    xr_scanner_init(&s, "var\r\nx");
     Token a = xr_scanner_scan(&s);
     Token b = xr_scanner_scan(&s);
 

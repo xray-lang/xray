@@ -1,18 +1,18 @@
 // anchor: basic-closures-recursion
 fn makeCounter() -> () -> int {
-    let n = 0
+    var n = 0
     return () -> {
         n = n + 1
         return n
     }
 }
 
-let c = makeCounter()
+var c = makeCounter()
 print(c())
 print(c())
 print(c())
 
-let base = 10
+var base = 10
 print(((x: int) -> x + base)(5))
 
 fn fib(n: int) -> int {

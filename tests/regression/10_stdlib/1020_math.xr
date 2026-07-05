@@ -82,14 +82,14 @@ fn test_sqrt() {
 
 @test
 fn test_pi() {
-    let pi = math.PI
+    var pi = math.PI
     assert_eq(pi > 3.14, true)
     assert_eq(pi < 3.15, true)
 }
 
 @test
 fn test_e() {
-    let e = math.E
+    var e = math.E
     assert_eq(e > 2.71, true)
     assert_eq(e < 2.72, true)
 }
@@ -98,14 +98,14 @@ fn test_e() {
 
 @test
 fn test_sin_zero() {
-    let s = math.sin(0)
+    var s = math.sin(0)
     assert_eq(s > -0.01, true)
     assert_eq(s < 0.01, true)
 }
 
 @test
 fn test_cos_zero() {
-    let c = math.cos(0)
+    var c = math.cos(0)
     assert_eq(c > 0.99, true)
     assert_eq(c < 1.01, true)
 }
@@ -114,7 +114,7 @@ fn test_cos_zero() {
 
 @test
 fn test_random_range() {
-    let r = math.random()
+    var r = math.random()
     assert_eq(r >= 0, true)
     assert_eq(r < 1, true)
 }

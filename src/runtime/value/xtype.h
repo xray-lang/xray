@@ -247,7 +247,7 @@ static inline bool xr_type_is_named_class(const XrType *t, const char *name) {
  *
  * Only Task and Coroutine qualify: the scheduler owns them. Channel, Atomic,
  * WorkQueue, and ResultGroup are pure cross-coroutine shared DATA with no
- * executor owner, so they use the atomic shared-RC exactly like `shared const`
+ * executor owner, so they use the atomic shared-RC exactly like `shared`
  * — the compiler DOES track them (dup = atomic incref, last drop frees). Timer
  * channels keep a per-instance XR_OBJ_MANAGED backstop (the timer wheel owns
  * the embedded node asynchronously), so the runtime dup/drop primitives no-op
@@ -729,7 +729,7 @@ XR_FUNC bool xr_type_is_inherently_immutable(XrType *type);
 
 // API: Default-initializable check
 // A type is default-initializable if a variable of that type can be
-// declared without an explicit initializer (e.g. `let x: int`).
+// declared without an explicit initializer (e.g. `var x: int`).
 // Default-initializable types: numeric primitives, bool, unit, nullable T?,
 // and structs where every field is itself default-initializable.
 // Non-default-initializable: class instance, string, containers, channel,

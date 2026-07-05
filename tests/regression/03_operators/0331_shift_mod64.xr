@@ -14,32 +14,32 @@
 
 @test
 fn test_shl_count_64_is_identity() {
-    let x: int = 12345
-    let n: int = 64
+    var x: int = 12345
+    var n: int = 64
     assert_eq(x << n, 12345)   // 64 & 63 == 0
     assert_eq(x << 64, 12345)  // constant-folded path must agree
 }
 
 @test
 fn test_shl_count_65_is_shift_1() {
-    let x: int = 7
-    let n: int = 65
+    var x: int = 7
+    var n: int = 65
     assert_eq(x << n, 14)
     assert_eq(x << 65, 14)
 }
 
 @test
 fn test_shr_count_64_is_identity() {
-    let x: int = -12345
-    let n: int = 64
+    var x: int = -12345
+    var n: int = 64
     assert_eq(x >> n, -12345)
     assert_eq(x >> 64, -12345)
 }
 
 @test
 fn test_shr_count_70_is_shift_6() {
-    let x: int = 640
-    let n: int = 70
+    var x: int = 640
+    var n: int = 70
     assert_eq(x >> n, 10)
     assert_eq(x >> 70, 10)
 }
@@ -48,8 +48,8 @@ fn test_shr_count_70_is_shift_6() {
 
 @test
 fn test_shl_negative_count() {
-    let one: int = 1
-    let n: int = -1
+    var one: int = 1
+    var n: int = -1
     // 1 << 63 == INT64_MIN
     assert_eq(one << n, -9223372036854775807 - 1)
     assert_eq(one << -1, -9223372036854775807 - 1)
@@ -57,8 +57,8 @@ fn test_shl_negative_count() {
 
 @test
 fn test_shr_negative_count() {
-    let x: int = -1
-    let n: int = -1
+    var x: int = -1
+    var n: int = -1
     // -1 >> 63 == -1 (arithmetic shift keeps the sign)
     assert_eq(x >> n, -1)
 }
@@ -67,8 +67,8 @@ fn test_shr_negative_count() {
 
 @test
 fn test_shr_negative_value_sign_extends() {
-    let x: int = -8
-    let n: int = 1
+    var x: int = -8
+    var n: int = 1
     assert_eq(x >> n, -4)
     assert_eq(-8 >> 1, -4)      // constant fold must be arithmetic too
     assert_eq(-1 >> 63, -1)
@@ -79,18 +79,18 @@ fn test_shr_negative_value_sign_extends() {
 
 @test
 fn test_shl_into_sign_bit_wraps() {
-    let one: int = 1
-    let s: int = 63
+    var one: int = 1
+    var s: int = 63
     assert_eq(one << s, -9223372036854775807 - 1)
-    let three: int = 3
+    var three: int = 3
     // 3 << 63 wraps: only bit 63 survives
     assert_eq(three << 63, -9223372036854775807 - 1)
 }
 
 @test
 fn test_shl_negative_value_defined() {
-    let x: int = -1
-    let n: int = 1
+    var x: int = -1
+    var n: int = 1
     assert_eq(x << n, -2)
     assert_eq(-1 << 1, -2)
 }
@@ -99,9 +99,9 @@ fn test_shl_negative_value_defined() {
 
 @test
 fn test_shift_mod64_in_hot_loop() {
-    let acc: int = 0
+    var acc: int = 0
     for (i in 0..300) {
-        let x: int = 12345
+        var x: int = 12345
         acc += (x << 64) - x        // identity → contributes 0
         acc += (x >> 64) - x        // identity → contributes 0
         acc += ((-8) >> 1) + 4      // arithmetic → contributes 0
@@ -113,12 +113,12 @@ fn test_shift_mod64_in_hot_loop() {
 
 @test
 fn test_compound_shift_mod64() {
-    let x: int = 5
+    var x: int = 5
     x <<= 64
     assert_eq(x, 5)
     x >>= 64
     assert_eq(x, 5)
-    let y: int = -32
+    var y: int = -32
     y >>= 2
     assert_eq(y, -8)
 }
@@ -127,19 +127,19 @@ fn test_compound_shift_mod64() {
 
 @test
 fn test_bigint_shift_positive_count_unmasked() {
-    let a = 1n
+    var a = 1n
     // 1n << 64 is a true 64-bit shift (arbitrary precision, no mod-64)
     assert_eq((a << 64).toString(), "18446744073709551616")
 }
 
 @test
 fn test_bigint_negative_shift_count_panics() {
-    let a = 1n
-    let caught = false
+    var a = 1n
+    var caught = false
     // An out-of-range bigint shift count is a runtime fault on the panic
     // channel; a plain `catch` only sees user-thrown enum errors.
     try {
-        let r = a << -1
+        var r = a << -1
         print(r)  // unreachable
     } catch panic (e) {
         caught = true

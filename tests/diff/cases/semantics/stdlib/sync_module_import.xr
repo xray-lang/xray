@@ -5,7 +5,7 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 // generic classes composing the builtin coroutine-aware primitives. This
 // exercises the whole packaging path end to end: bare-name stdlib resolution
 // of a pure-Xray module, cross-module (named) generic class + generic method
-// monomorphisation, closure/defer, and `shared const` cross-coroutine sharing
+// monomorphisation, closure/defer, and `shared` cross-coroutine sharing
 // of an imported class — all must be VM/AOT identical.
 //
 // Named imports (`import { Mutex } from sync`) are used deliberately: the
@@ -15,30 +15,30 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 import { Mutex, RwLock, Once, Barrier, Condvar } from sync
 
 // --- Single-coroutine surface of every primitive -----------------------------
-let m = Mutex<int>(10)
+var m = Mutex<int>(10)
 print(m.lock((v) -> v * 2))       // 20
 print(m.replace((v) -> v + 5))    // 15
 
-let rw = RwLock<string>("a")
+var rw = RwLock<string>("a")
 print(rw.read((s) -> s + "!"))    // a!
 print(rw.replace((s) -> s + "b")) // ab
 print(rw.write((s) -> s + "c"))   // abc
 
-shared const onceCount = Atomic<int>(0)
-let once = Once()
+shared onceCount = Atomic<int>(0)
+var once = Once()
 once.call(() -> { onceCount.fetchAdd(1) })
 once.call(() -> { onceCount.fetchAdd(1) })
 print(onceCount.load())           // 1
 
-let barrier = Barrier(1)
+var barrier = Barrier(1)
 print(barrier.wait())             // true
 
 // --- Cross-coroutine mutual exclusion via the imported Mutex -----------------
-// A `shared const` instance of the imported generic class must be shared by
+// A `shared` instance of the imported generic class must be shared by
 // reference across coroutines; the mutation under the lock in the spawned
 // coroutine must be visible after synchronisation.
-shared const shared_m = Mutex<int>(0)
-shared const done = CountdownLatch(1)
+shared shared_m = Mutex<int>(0)
+shared done = CountdownLatch(1)
 
 go {
     shared_m.replace((v) -> v + 100)
@@ -49,14 +49,14 @@ done.wait()
 print(shared_m.lock((v) -> v))    // 100
 
 // --- Condvar producer/consumer through the imported class --------------------
-shared const cv = Condvar()
-shared const box = Atomic<int>(-1)
-shared const consumed = CountdownLatch(1)
+shared cv = Condvar()
+shared box = Atomic<int>(-1)
+shared consumed = CountdownLatch(1)
 
 go {
     cv.lock()
     while (box.load() < 0) { cv.wait() }
-    let v = box.load()
+    var v = box.load()
     cv.unlock()
     print(v)                      // 42
     consumed.done()

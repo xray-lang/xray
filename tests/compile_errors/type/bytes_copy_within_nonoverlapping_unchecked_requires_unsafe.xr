@@ -1,2 +1,2 @@
-let out = Bytes(4)
+var out = Bytes(4)
 out.copyWithinNonOverlappingUnchecked(1, 0, 1)

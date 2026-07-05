@@ -10,8 +10,8 @@ fn fail() -> int {
 }
 
 fn count_success(outcomes: Array<TaskOutcome>) -> int {
-    let count = 0
-    for (let i = 0; i < outcomes.length; i++) {
+    var count = 0
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Success(_) -> { count = count + 1 }
             _ -> {}
@@ -21,8 +21,8 @@ fn count_success(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn count_failed(outcomes: Array<TaskOutcome>) -> int {
-    let count = 0
-    for (let i = 0; i < outcomes.length; i++) {
+    var count = 0
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(_) -> { count = count + 1 }
             _ -> {}
@@ -32,7 +32,7 @@ fn count_failed(outcomes: Array<TaskOutcome>) -> int {
 }
 
 fn has_error(outcomes: Array<TaskOutcome>) -> bool {
-    for (let i = 0; i < outcomes.length; i++) {
+    for (var i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(err) -> {
                 match (err) {
@@ -50,7 +50,7 @@ fn has_error(outcomes: Array<TaskOutcome>) -> bool {
     return false
 }
 
-let outcomes = supervisor scope {
+var outcomes = supervisor scope {
     go ok()
     go fail()
 }

@@ -11,7 +11,7 @@ class Probe {
     }
 }
 
-let p = Probe()
+var p = Probe()
 
 if (false && p.hit()) {
     print(100)

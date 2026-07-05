@@ -3,7 +3,7 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 
 import time
 
-shared const q: WorkQueue<int> = WorkQueue<int>(2, 2)
+shared q: WorkQueue<int> = WorkQueue<int>(2, 2)
 
 fn delayed_push(value: int) -> int {
     assert_true(q.push(value, 0))
@@ -12,12 +12,12 @@ fn delayed_push(value: int) -> int {
 
 @test
 fn test_work_queue_blocking_pop() {
-    let consumer = go {
-        let value = q.pop(0)
+    var consumer = go fn() -> int {
+        var value = q.pop(0)
         return value ?? -1
-    }
+    }()
     time.sleep(1)
-    let producer = go delayed_push(42)
+    var producer = go delayed_push(42)
     assert_eq(await producer, 42)
     assert_eq(await consumer, 42)
 

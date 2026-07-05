@@ -4,20 +4,20 @@
 // ===== 字段名边界情况 =====
 @test
 fn test_long_field_name() {
-    let obj = { "veryLongFieldNameThatExceedsNormalLength": "value" }
+    var obj = { "veryLongFieldNameThatExceedsNormalLength": "value" }
     assert_eq(obj.veryLongFieldNameThatExceedsNormalLength, "value")
 }
 
 @test
 fn test_unicode_values() {
-    let obj = { "greeting": "你好", "emoji": "🎉" }
+    var obj = { "greeting": "你好", "emoji": "🎉" }
     assert_eq(obj.greeting, "你好")
     assert_eq(obj.emoji, "🎉")
 }
 
 @test
 fn test_special_string_values() {
-    let obj = { "empty": "", "spaces": "  ", "newline": "line1
+    var obj = { "empty": "", "spaces": "  ", "newline": "line1
 line2",     "tab": "col1	col2" }
     assert_eq(obj.empty, "")
     assert_eq(obj.spaces, "  ")
@@ -26,7 +26,7 @@ line2",     "tab": "col1	col2" }
 // ===== 大量字段 =====
 @test
 fn test_many_fields() {
-    let obj = { "f1": 1, "f2": 2, "f3": 3, "f4": 4, "f5": 5, "f6": 6, "f7": 7, "f8": 8, "f9": 9, "f10": 10 }
+    var obj = { "f1": 1, "f2": 2, "f3": 3, "f4": 4, "f5": 5, "f6": 6, "f7": 7, "f8": 8, "f9": 9, "f10": 10 }
     assert_eq(obj.f1, 1)
     assert_eq(obj.f5, 5)
     assert_eq(obj.f10, 10)
@@ -34,7 +34,7 @@ fn test_many_fields() {
 
 @test
 fn test_dynamic_add_many() {
-    let obj: Json = {}
+    var obj: Json = {}
     for (i in 0..20) {
         obj["field_" + string(i)] = i
     }
@@ -46,7 +46,7 @@ fn test_dynamic_add_many() {
 // ===== 字段覆盖 =====
 @test
 fn test_field_overwrite() {
-    let obj: Json = { "value": 1 }
+    var obj: Json = { "value": 1 }
     assert_eq(obj.value, 1)
     obj.value = 2
     assert_eq(obj.value, 2)
@@ -56,8 +56,8 @@ fn test_field_overwrite() {
 
 @test
 fn test_dynamic_overwrite() {
-    let obj: Json = { "x": 1 }
-    let key = "x"
+    var obj: Json = { "x": 1 }
+    var key = "x"
     obj[key] = 100
     assert_eq(obj.x, 100)
 }
@@ -65,20 +65,20 @@ fn test_dynamic_overwrite() {
 // ===== null 和 undefined 行为 =====
 @test
 fn test_null_field_value() {
-    let obj = { "data": null }
+    var obj = { "data": null }
     assert_eq(obj.data, null)
 }
 
 @test
 fn test_missing_field_returns_null() {
-    let obj: Json = { "existing": 1 }
+    var obj: Json = { "existing": 1 }
     assert_eq(obj["nonexistent"], null)
 }
 
 // ===== 类型转换 =====
 @test
 fn test_field_type_change() {
-    let obj: Json = { "value": 1 }
+    var obj: Json = { "value": 1 }
     assert_eq(obj.value, 1)
     obj.value = "string now"
     assert_eq(obj.value, "string now")
@@ -92,7 +92,7 @@ fn test_object_as_parameter() {
     fn getField(obj: Json, key: string) -> string | int {
         return obj[key]
     }
-    let data: Json = { "name": "test", "value": 42 }
+    var data: Json = { "name": "test", "value": 42 }
     assert_eq(getField(data, "name"), "test")
     assert_eq(getField(data, "value"), 42)
 }
@@ -102,7 +102,7 @@ fn test_object_modification_in_function() {
     fn addField(obj: Json, key: string, val: int) {
         obj[key] = val
     }
-    let obj: Json = {}
+    var obj: Json = {}
     addField(obj, "added", 123)
     assert_eq(obj.added, 123)
 }
@@ -110,8 +110,8 @@ fn test_object_modification_in_function() {
 // ===== 对象比较 =====
 @test
 fn test_object_identity() {
-    let obj1: Json = { "x": 1 }
-    let obj2 = obj1
+    var obj1: Json = { "x": 1 }
+    var obj2 = obj1
     // 引用同一对象
     obj2.x = 2
     assert_eq(obj1.x, 2)
@@ -119,8 +119,8 @@ fn test_object_identity() {
 
 @test
 fn test_nested_modification() {
-    let parent: Json = { "child": { "value": 1 } }
-    let child_ref = parent.child
+    var parent: Json = { "child": { "value": 1 } }
+    var child_ref = parent.child
     child_ref.value = 100
     assert_eq(parent.child.value, 100)
 }

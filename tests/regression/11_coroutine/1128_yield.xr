@@ -16,8 +16,8 @@ fn worker(id: int) -> int {
 }
 
 fn loop_yield(n: int) -> int {
-    let sum = 0
-    for (let i = 0; i < n; i++) {
+    var sum = 0
+    for (var i = 0; i < n; i++) {
         sum = sum + i
         if (i % 2 == 0) {
             Coro.yield()
@@ -27,8 +27,8 @@ fn loop_yield(n: int) -> int {
 }
 
 fn intensive_yield(count: int) -> int {
-    let sum = 0
-    for (let i = 0; i < count; i++) {
+    var sum = 0
+    for (var i = 0; i < count; i++) {
         sum = sum + i
         Coro.yield()
     }
@@ -43,27 +43,27 @@ fn test_yield() {
     print("test1: after yield")
 
     // Test 2: yield in single coroutine
-    let t1 = go task_with_yield()
-    let r1 = await t1
+    var t1 = go task_with_yield()
+    var r1 = await t1
     print("test2: result =", r1)
 
     // Test 3: multiple workers with yield (verify return values only)
-    let w1 = go worker(1)
-    let w2 = go worker(2)
-    let w3 = go worker(3)
-    let worker_results = await all [w1, w2, w3]
+    var w1 = go worker(1)
+    var w2 = go worker(2)
+    var w3 = go worker(3)
+    var worker_results = await all [w1, w2, w3]
     print("test3:", worker_results[0], worker_results[1], worker_results[2])
 
     // Test 4: yield inside loop
-    let t4 = go loop_yield(5)
-    let r4 = await t4
+    var t4 = go loop_yield(5)
+    var r4 = await t4
     print("test4: sum =", r4)
 
     // Test 5: multiple coroutines with intensive yield
-    let t5a = go intensive_yield(10)
-    let t5b = go intensive_yield(10)
-    let t5c = go intensive_yield(10)
-    let sums = await all [t5a, t5b, t5c]
+    var t5a = go intensive_yield(10)
+    var t5b = go intensive_yield(10)
+    var t5c = go intensive_yield(10)
+    var sums = await all [t5a, t5b, t5c]
     print("test5: sums =", sums[0], sums[1], sums[2])
 }
 

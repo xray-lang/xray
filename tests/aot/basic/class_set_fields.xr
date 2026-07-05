@@ -2,7 +2,7 @@ class SeenSet {
     values: Set<int>
 
     constructor() {
-        let values: Set<int> = #[]
+        var values: Set<int> = #[]
         this.values = values
     }
 
@@ -24,7 +24,7 @@ class SeenSet {
     }
 }
 
-let seen = SeenSet()
+var seen = SeenSet()
 print(seen.add(3))
 print(seen.add(5))
 print(seen.add(3))

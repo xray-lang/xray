@@ -2,18 +2,18 @@ fn show(label: string, value: bool) {
     print(label + "=" + value.toString())
 }
 
-let emptyArray: Array<int> = []
-let fullArray: Array<int> = [1]
+var emptyArray: Array<int> = []
+var fullArray: Array<int> = [1]
 show("empty-array-if", bool(emptyArray))
 show("full-array-if", bool(fullArray))
 
-let emptyMap: Map<string, int> = #{}
-let fullMap: Map<string, int> = #{"x": 1}
+var emptyMap: Map<string, int> = #{}
+var fullMap: Map<string, int> = #{"x": 1}
 show("empty-map-if", bool(emptyMap))
 show("full-map-if", bool(fullMap))
 
-let emptySet: Set<string> = #[]
-let fullSet: Set<string> = #["x"]
+var emptySet: Set<string> = #[]
+var fullSet: Set<string> = #["x"]
 show("empty-set-if", bool(emptySet))
 show("full-set-if", bool(fullSet))
 

@@ -11,4 +11,4 @@ class User {
     }
 }
 
-let u: User
+var u: User

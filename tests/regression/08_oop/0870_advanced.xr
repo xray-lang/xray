@@ -38,7 +38,7 @@ class Rectangle extends Shape {
 
 @test
 fn test_super_method_with_extension() {
-    let rect = Rectangle(5, 3)
+    var rect = Rectangle(5, 3)
     assert_eq(rect.describe(), "Shape: Rectangle (5x3)")
     assert_eq(rect.area(), 15)
 }
@@ -91,7 +91,7 @@ class C extends B {
 
 @test
 fn test_three_level_inheritance() {
-    let c = C(1, 2, 3)
+    var c = C(1, 2, 3)
     assert_eq(c.value, 1)
     assert_eq(c.extra, 2)
     assert_eq(c.more, 3)
@@ -128,7 +128,7 @@ class FileLogger extends Logger {
 
 @test
 fn test_super_in_chain() {
-    let fl = FileLogger("app.log")
+    var fl = FileLogger("app.log")
     assert_eq(fl.log("test"), "FILE: test -> app.log")
     assert_eq(fl.warn("error"), "[WARN] FILE: error -> app.log")
 }
@@ -147,11 +147,11 @@ class Processor {
 
 @test
 fn test_method_reference() {
-    let p = Processor(3)
+    var p = Processor(3)
     assert_eq(p.process(5), 15)
 
     // 方法绑定到实例
-    let fn_ref = p.process
+    var fn_ref = p.process
     // 注意：这需要语言支持绑定方法
     // assert_eq(fn_ref(5), 15)
 }
@@ -174,7 +174,7 @@ class Calculator {
 
 @test
 fn test_internal_method_calls() {
-    let calc = Calculator(10)
+    var calc = Calculator(10)
     assert_eq(calc.add(5), 15)
     assert_eq(calc.addTwice(3), 26)  // (10+3) + (10+3)
     assert_eq(calc.addChain(1, 2, 3), 16)  // (10+1) + (10+2) + (10+3) - 20
@@ -196,7 +196,7 @@ class Initializer {
 
 @test
 fn test_constructor_calls_method() {
-    let init = Initializer("hello")
+    var init = Initializer("hello")
     assert_eq(init.data, "hello")
     assert_eq(init.processed, "[hello]")
 }
@@ -217,7 +217,7 @@ class Ordered {
 
 @test
 fn test_field_init_order() {
-    let o = Ordered()
+    var o = Ordered()
     assert_eq(o.a, 1)
     assert_eq(o.b, 2)
     assert_eq(o.c, 3)
@@ -243,9 +243,9 @@ class Box {
 
 @test
 fn test_object_as_param() {
-    let b1 = Box(10)
-    let b2 = Box(20)
-    let b3 = b1.add(b2)
+    var b1 = Box(10)
+    var b2 = Box(20)
+    var b3 = b1.add(b2)
 
     assert_eq(b3.value, 30)
     assert_eq(b1.equals(b2), false)
@@ -266,7 +266,7 @@ class Item {
 
 @test
 fn test_object_array() {
-    let items = [
+    var items = [
         Item("apple", 100),
         Item("banana", 50),
         Item("orange", 75)
@@ -277,7 +277,7 @@ fn test_object_array() {
     assert_eq(items[1].price, 50)
 
     // 计算总价
-    let total = 0
+    var total = 0
     for (item in items) {
         total = total + item.price
     }
@@ -298,7 +298,7 @@ class MapUser {
 
 @test
 fn test_object_in_map() {
-    let users = #{}  // 使用 #{} 创建 Map，不是 {}
+    var users = #{}  // 使用 #{} 创建 Map，不是 {}
     users["alice"] = MapUser("Alice", 10)
     users["bob"] = MapUser("Bob", 5)
 

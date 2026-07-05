@@ -1,2 +1,2 @@
-let bytes = Bytes(0)
-let view: ByteView = bytes
+var bytes = Bytes(0)
+var view: ByteView = bytes

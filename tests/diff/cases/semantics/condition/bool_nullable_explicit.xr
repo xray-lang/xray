@@ -1,5 +1,5 @@
 // anchor: bool-nullable-explicit-condition
-let flag: bool? = true
+var flag: bool? = true
 if (flag == true) {
     print("yes")
 } else {

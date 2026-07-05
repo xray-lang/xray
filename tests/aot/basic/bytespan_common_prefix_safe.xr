@@ -1,10 +1,10 @@
 fn common(src: ByteSpan, left: int, right: int, maxCount: int) -> int {
-    let a: ByteSpan = src[left:left + maxCount]
-    let b: ByteSpan = src[right:right + maxCount]
+    var a: ByteSpan = src[left:left + maxCount]
+    var b: ByteSpan = src[right:right + maxCount]
     return a.commonPrefix(b)
 }
 
-let bytes = Bytes(16)
+var bytes = Bytes(16)
 bytes[0] = 65
 bytes[1] = 66
 bytes[2] = 67
@@ -22,7 +22,7 @@ bytes[13] = 70
 bytes[14] = 71
 bytes[15] = 72
 
-let view: ByteSpan = bytes[:]
+var view: ByteSpan = bytes[:]
 print(common(view, 0, 4, 4))
 print(common(view, 0, 8, 8))
 print(common(view, 2, 6, 2))

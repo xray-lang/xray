@@ -1,10 +1,10 @@
-let lengths: Array<int> = []
-let checksums: Array<int> = []
+var lengths: Array<int> = []
+var checksums: Array<int> = []
 lengths.reserve(8)
 checksums.reserve(8)
 
 parallel for i in 0..6 workers 3 worker wid collect into (lengths, checksums) {
-    let v = i + wid
+    var v = i + wid
     (v, v * 10)
 }
 

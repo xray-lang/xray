@@ -21,26 +21,26 @@ struct Vec2 {
 @test
 fn test_struct_operators() {
 
-    let a = Vec2{x: 1.0, y: 2.0}
-    let b = Vec2{x: 3.0, y: 4.0}
+    var a = Vec2{x: 1.0, y: 2.0}
+    var b = Vec2{x: 3.0, y: 4.0}
 
     // === operator + ===
-    let c = a + b
+    var c = a + b
     assert(c.x == 4.0)
     assert(c.y == 6.0)
 
     // === operator - ===
-    let d = b - a
+    var d = b - a
     assert(d.x == 2.0)
     assert(d.y == 2.0)
 
     // === operator == ===
-    let e = Vec2{x: 1.0, y: 2.0}
+    var e = Vec2{x: 1.0, y: 2.0}
     assert(a == e)
     assert(!(a == b))
 
     // === Chained operators ===
-    let f = a + b + a
+    var f = a + b + a
     assert(f.x == 5.0)
     assert(f.y == 8.0)
 
@@ -50,8 +50,8 @@ fn test_struct_operators() {
     assert(d.x == 2.0)
 
     // === Operator on copies ===
-    let g = a
-    let h = g + Vec2{x: 1.0, y: 0.0}
+    var g = a
+    var h = g + Vec2{x: 1.0, y: 0.0}
     assert(h.x == 100.0)
     assert(g.x == 99.0)
 }

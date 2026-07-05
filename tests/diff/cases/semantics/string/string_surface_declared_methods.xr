@@ -5,7 +5,7 @@
 // codePointAt / byteAt / ord / reverse / toInt / toFloat / isEmpty /
 // toString, plus the Bytes(Array<uint8>).toString() UTF-8 decode.
 
-let s = "héllo"
+var s = "héllo"
 
 // length counts UTF-8 scalars; byteLength counts raw bytes
 print(s.length)
@@ -43,11 +43,11 @@ print("a".isEmpty())
 print("self".toString())
 
 // Bytes <-> text bridge: Bytes.toString() decodes UTF-8 bytes
-let bin = Bytes([104, 105])
+var bin = Bytes([104, 105])
 print(bin.toString())
-let accented = Bytes([104, 195, 169])
+var accented = Bytes([104, 195, 169])
 print(accented.toString())
 
 // non-U8 arrays keep the formatter rendering
-let nums = [1, 2, 3]
+var nums = [1, 2, 3]
 print(nums.toString())

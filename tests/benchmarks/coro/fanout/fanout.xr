@@ -2,9 +2,9 @@
 // 扇出扇入测试（Fan-out/Fan-in）
 // 一个分发器将任务分发给 N 个工作协程，然后收集结果
 import time
-let N = 1000
+var N = 1000
 // 工作协程数量
-let TASKS = 100000
+var TASKS = 100000
 // 任务数量
 if (process.args.length > 0) {
     N = int(process.args[0]) ?? N
@@ -15,9 +15,9 @@ if (process.args.length > 1) {
 print("=== Fanout 测试 ===")
 print("工作协程:", N)
 print("任务数量:", TASKS)
-shared const task_ch = Channel(100)
+shared task_ch = Channel(100)
 // 任务队列
-shared const result_ch = Channel(100)
+shared result_ch = Channel(100)
 
 fn recv_int(ch: Channel<int>, fallback: int) -> int {
     return match (ch.recv()) {
@@ -33,7 +33,7 @@ fn worker(id: int) {
         match (task_ch.recv()) {
             Recv.Value(task) -> {
                 // 模拟计算
-                let result = task * 2
+                var result = task * 2
                 result_ch.send(result)
             }
             Recv.Closed -> { break }
@@ -44,23 +44,23 @@ fn worker(id: int) {
 
 // 收集器：收集所有结果
 fn collector(expected_count: int) -> int {
-    let sum = 0
-    for (let i = 0; i < expected_count; i++) {
+    var sum = 0
+    for (var i = 0; i < expected_count; i++) {
         sum = sum + recv_int(result_ch, 0)
     }
     return sum
 }
 
-let start = time.monotonic()
+var start = time.monotonic()
 // 启动工作协程
-let workers: Array<Task> = []
-for (let i = 0; i < N; i++) {
+var workers: Array<Task> = []
+for (var i = 0; i < N; i++) {
     workers.push(go worker(i))
 }
 // 启动收集器
-let collector_task = go collector(TASKS)
+var collector_task = go collector(TASKS)
 // 分发任务
-for (let i = 0; i < TASKS; i++) {
+for (var i = 0; i < TASKS; i++) {
     task_ch.send(i)
 }
 // 关闭任务队列，通知工作协程退出
@@ -70,11 +70,11 @@ for (w in workers) {
     await w
 }
 // 等待收集器完成
-let result = await collector_task
-let elapsed = time.monotonic() - start
+var result = await collector_task
+var elapsed = time.monotonic() - start
 result_ch.close()
 // 预期结果: (0 + 1 + 2 + ... + (TASKS-1)) * 2 = TASKS * (TASKS - 1)
-let expected = TASKS * (TASKS - 1)
+var expected = TASKS * (TASKS - 1)
 print("结果:", result)
 print("预期:", expected)
 print("正确:", result == expected)

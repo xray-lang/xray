@@ -4,22 +4,22 @@
 import http
 
 fn test_empty_url() {
-    let resp = http.get("")
+    var resp = http.get("")
     assert_eq(resp == null || resp.error != null, true)
 }
 
 fn test_invalid_domain() {
-    let resp = http.get("http://invalid.nonexistent.domain.xray/")
+    var resp = http.get("http://invalid.nonexistent.domain.xray/")
     assert_eq(resp == null || resp.error != null, true)
 }
 
 fn test_status_500() {
-    let resp = http.get("http://httpbin.org/status/500")
+    var resp = http.get("http://httpbin.org/status/500")
     assert_eq(resp.status, 500)
     assert_eq(resp.ok, false)
 }
 
 fn test_missing_url_in_request() {
-    let resp = http.request({})
+    var resp = http.request({})
     assert_eq(resp == null || resp.error != null, true)
 }

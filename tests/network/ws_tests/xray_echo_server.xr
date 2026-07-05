@@ -7,7 +7,7 @@
 
 import ws
 
-let port = 9100
+var port = 9100
 if (process.args.length > 0) {
     port = int(process.args[0])
 }
@@ -19,7 +19,7 @@ print("")
 
 ws.serve(port, fn(conn) {
     while (ws.isOpen(conn)) {
-        let msg = ws.recv(conn, null)
+        var msg = ws.recv(conn, null)
         if (msg == null || msg.error) {
             break
         }

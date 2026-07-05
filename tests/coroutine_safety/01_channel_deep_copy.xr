@@ -12,15 +12,15 @@ fn recvValue(ch) {
 }
 
 fn test_array_isolation() {
-    let ch = Channel(1)
+    var ch = Channel(1)
     // 发送可变数组
-    let original = [1, 2, 3]
+    var original = [1, 2, 3]
     ch.send(copy(original))
     // 修改原数组
     original.push(4)
     original.push(5)
     // 接收
-    let received = recvValue(ch)
+    var received = recvValue(ch)
     // 验证隔离：接收到的应该是 [1,2,3]，不是 [1,2,3,4,5]
     print("原数组长度:", original.length)
     // 应该是 5
@@ -32,15 +32,15 @@ fn test_array_isolation() {
 }
 
 fn test_map_isolation() {
-    let ch = Channel(1)
+    var ch = Channel(1)
     // 发送可变 Map
-    let original = { "a" => 1, "b" => 2 }
+    var original = { "a" => 1, "b" => 2 }
     ch.send(copy(original))
     // 修改原 Map
     original.set("c", 3)
     original.set("d", 4)
     // 接收
-    let received = recvValue(ch)
+    var received = recvValue(ch)
     // 验证隔离
     print("原 Map 大小:", original.size)
     // 应该是 4
@@ -52,17 +52,17 @@ fn test_map_isolation() {
 }
 
 fn test_nested_isolation() {
-    let ch = Channel(1)
+    var ch = Channel(1)
     // 发送嵌套结构
-    let original = { "items" => [1, 2, 3], "count" => 3 }
+    var original = { "items" => [1, 2, 3], "count" => 3 }
     ch.send(copy(original))
     // 修改嵌套数组
     original.get("items").push(4)
     // 接收
-    let received = recvValue(ch)
+    var received = recvValue(ch)
     // 验证深层隔离
-    let orig_items = original.get("items")
-    let recv_items = received.get("items")
+    var orig_items = original.get("items")
+    var recv_items = received.get("items")
     print("原嵌套数组长度:", orig_items.length)
     // 应该是 4
     print("接收嵌套数组长度:", recv_items.length)

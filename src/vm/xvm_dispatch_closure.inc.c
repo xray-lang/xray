@@ -106,7 +106,7 @@ vmcase(OP_SETGLOBAL) {
 
 vmcase(OP_CLOSURE) {
     /* OP_CLOSURE: create closure, populate upvals[] from proto descriptors.
-    ** All captures are BY_VALUE: const → raw value, let → cell ref.
+    ** All captures are BY_VALUE: const → raw value, var → cell ref.
     ** Sources: SRC_REG (from register) or SRC_UPVAL (from enclosing upvals[]). */
     int a = GETARG_A(i);
     int bx = GETARG_Bx(i);
@@ -144,7 +144,7 @@ vmcase(OP_UPVAL_GET) {
 vmcase(OP_CELL_NEW) {
     /* OP_CELL_NEW: R[A] = new_cell(R[A])
     ** Wraps current register value in a heap-allocated XrCell (32B).
-    ** Used for captured mutable let vars. */
+    ** Used for captured mutable var bindings. */
     int a = GETARG_A(i);
     XrCell *cell = xr_cell_new(isolate, (XrCoroutine *) vm_ctx->current_coro);
     cell->value = R(a);

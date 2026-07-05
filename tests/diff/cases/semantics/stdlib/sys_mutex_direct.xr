@@ -4,7 +4,7 @@
 
 import sys
 
-let m = sys.OsMutex()
+var m = sys.OsMutex()
 print(m.tryLock())
 m.unlock()
 

@@ -3,13 +3,13 @@
 // exercised through the VM/AOT differential runner for parity.
 
 // ---- Object patterns ----
-let p = {x: 3, y: 4}
+var p = {x: 3, y: 4}
 match (p) {
     { x, y } -> { print(x + y) }       // 7
     _ -> { print(0) }
 }
 
-let user = {name: "Bob", age: 5}
+var user = {name: "Bob", age: 5}
 match (user) {
     { name: n, age } -> {
         print(n)                        // Bob
@@ -19,7 +19,7 @@ match (user) {
 }
 
 // Object pattern with a refutable field sub-pattern (field reads are null-safe).
-let cfg = {mode: 2, label: "go"}
+var cfg = {mode: 2, label: "go"}
 match (cfg) {
     { mode: 1 } -> { print("one") }
     { mode: 2, label } -> { print("two:" + label) }   // two:go
@@ -27,7 +27,7 @@ match (cfg) {
 }
 
 // ---- Array patterns ----
-let a = [10, 20, 30]
+var a = [10, 20, 30]
 match (a) {
     [first, ..rest] -> {
         print(first)                    // 10
@@ -38,7 +38,7 @@ match (a) {
 }
 
 // Length-based arm selection: exact-length arm.
-let pair = [1, 2]
+var pair = [1, 2]
 match (pair) {
     [x] -> { print("one") }
     [x, y] -> { print(x * 10 + y) }     // 12
@@ -46,7 +46,7 @@ match (pair) {
 }
 
 // Empty rest.
-let single = [99]
+var single = [99]
 match (single) {
     [head, ..tail] -> {
         print(head)                     // 99
@@ -56,7 +56,7 @@ match (single) {
 }
 
 // Wildcards in element positions.
-let triple = [7, 8, 9]
+var triple = [7, 8, 9]
 match (triple) {
     [_, mid, _] -> { print(mid) }       // 8
     _ -> { print(0) }

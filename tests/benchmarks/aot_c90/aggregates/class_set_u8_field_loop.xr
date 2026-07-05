@@ -2,12 +2,12 @@ class ByteSetBag {
     values: Set<uint8>
 
     constructor() {
-        let values: Set<uint8> = #[]
+        var values: Set<uint8> = #[]
         this.values = values
     }
 
     fill(n: int) -> int {
-        let i = 0
+        var i = 0
         while (i < n) {
             this.values.add(i)
             i = i + 1
@@ -16,10 +16,10 @@ class ByteSetBag {
     }
 
     scan(n: int, rounds: int) -> int {
-        let r = 0
-        let hits = 0
+        var r = 0
+        var hits = 0
         while (r < rounds) {
-            let i = 0
+            var i = 0
             while (i < n) {
                 if (this.values.has(i)) {
                     hits = hits + i
@@ -32,8 +32,8 @@ class ByteSetBag {
     }
 
     prune(n: int) -> int {
-        let i = 0
-        let removed = 0
+        var i = 0
+        var removed = 0
         while (i < n) {
             if (this.values.delete(i)) {
                 removed = removed + 1
@@ -45,9 +45,9 @@ class ByteSetBag {
 }
 
 fn class_set_u8_field_loop_run(n: int, rounds: int) -> int {
-    let bag = ByteSetBag()
-    let count = bag.fill(n)
-    let sum = bag.scan(n, rounds)
+    var bag = ByteSetBag()
+    var count = bag.fill(n)
+    var sum = bag.scan(n, rounds)
     return sum + count + bag.prune(n)
 }
 

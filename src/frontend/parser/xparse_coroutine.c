@@ -286,8 +286,8 @@ static AstNode *defer_wrap_in_closure(Parser *parser, AstNode *call_expr, int li
  * deferred closure:
  *
  *   {
- *       let __xr_dtmp_0 = a0     // arguments evaluated NOW (eager, Go-style)
- *       let __xr_dtmp_1 = a1
+ *       var __xr_dtmp_0 = a0     // arguments evaluated NOW (eager, Go-style)
+ *       var __xr_dtmp_1 = a1
  *       defer { callee(__xr_dtmp_0, __xr_dtmp_1) }
  *   }
  *
@@ -609,7 +609,7 @@ AstNode *xr_parse_move_expr(Parser *parser) {
  * The braces delimit a statement block whose trailing expression (if any)
  * becomes the value of the unsafe expression. The wrapper is semantically
  * transparent — it only marks a region where the analyzer permits extern calls
- * and raw-pointer dereference. Used both as a value (let r = unsafe { sqrt(2.0) }
+ * and raw-pointer dereference. Used both as a value (var r = unsafe { sqrt(2.0) }
  * — a single trailing expression) and as a statement block executed for effect
  * (unsafe { p[0] = 1; p[1] = 2; free(p) }).
  */

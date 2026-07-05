@@ -9,7 +9,7 @@ fn test_config_management() {
     // 可扩展配置类型
     type AppConfig = { name: string, version: string, ... }
     
-    let config: AppConfig = {
+    var config: AppConfig = {
         name: "MyApp",
         version: "1.0.0"
     }
@@ -32,18 +32,18 @@ fn test_config_management() {
 @test
 fn test_data_transformation() {
     // 原始数据
-    let rawData: Json = {
+    var rawData: Json = {
         user_name: "alice",
         user_age: 25,
         user_email: "alice@test.com"
     }
     
     // 转换为新格式
-    let fields = ["name", "age", "email"]
-    let result: Json = {}
+    var fields = ["name", "age", "email"]
+    var result: Json = {}
     
     for (field in fields) {
-        let srcKey = "user_" + field
+        var srcKey = "user_" + field
         result[field] = rawData[srcKey]
     }
     
@@ -57,17 +57,17 @@ fn test_data_transformation() {
 @test
 fn test_dynamic_form() {
     fn createFormData<T>(fields: Array<string>, values: Array<T>) -> Json {
-        let form: Json = {}
+        var form: Json = {}
         for (i in 0..fields.length) {
             form[fields[i]] = values[i]
         }
         return form
     }
     
-    let fieldNames = ["username", "password", "remember"]
-    let fieldValues = ["admin", "secret", true]
+    var fieldNames = ["username", "password", "remember"]
+    var fieldValues = ["admin", "secret", true]
     
-    let formData = createFormData(fieldNames, fieldValues)
+    var formData = createFormData(fieldNames, fieldValues)
     
     assert_eq(formData.username, "admin")
     assert_eq(formData.password, "secret")
@@ -79,7 +79,7 @@ fn test_dynamic_form() {
 @test
 fn test_api_response() {
     // 模拟 API 响应
-    let response: Json = {
+    var response: Json = {
         status: 200,
         data: {
             users: [
@@ -108,7 +108,7 @@ fn test_api_response() {
 @test
 fn test_object_factory() {
     fn createEntity(type_name: string, id: int) -> Json {
-        let prefix = type_name + "_"
+        var prefix = type_name + "_"
         return {
             [prefix + "id"]: id,
             [prefix + "type"]: type_name,
@@ -116,8 +116,8 @@ fn test_object_factory() {
         }
     }
     
-    let user = createEntity("user", 1)
-    let order = createEntity("order", 100)
+    var user = createEntity("user", 1)
+    var order = createEntity("order", 100)
     
     assert_eq(user["user_id"], 1)
     assert_eq(user["user_type"], "user")
@@ -131,8 +131,8 @@ fn test_object_factory() {
 
 @test
 fn test_word_count() {
-    let words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
-    let counts: Json = {}
+    var words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
+    var counts: Json = {}
     
     for (word in words) {
         if (counts[word] == null) {
@@ -151,7 +151,7 @@ fn test_word_count() {
 
 @test
 fn test_deep_nesting() {
-    let data: Json = {
+    var data: Json = {
         level1: {
             level2: {
                 level3: {
@@ -165,9 +165,9 @@ fn test_deep_nesting() {
     assert_eq(data.level1.level2.level3.value, "deep")
     
     // 动态访问
-    let k1 = "level1"
-    let k2 = "level2"
-    let k3 = "level3"
+    var k1 = "level1"
+    var k2 = "level2"
+    var k3 = "level3"
     assert_eq(data[k1][k2][k3].value, "deep")
 }
 
@@ -177,11 +177,11 @@ fn test_deep_nesting() {
 fn test_strict_vs_extensible() {
     // 严格类型：只能有定义的字段
     type StrictPoint = { x: int, y: int }
-    let sp: StrictPoint = { x: 1, y: 2 }
+    var sp: StrictPoint = { x: 1, y: 2 }
     
     // 可扩展类型：可以添加额外字段
     type ExtensiblePoint = { x: int, y: int, ... }
-    let ep: ExtensiblePoint = { x: 1, y: 2 }
+    var ep: ExtensiblePoint = { x: 1, y: 2 }
     ep.z = 3
     ep.label = "origin"
     

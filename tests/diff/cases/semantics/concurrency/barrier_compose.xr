@@ -18,5 +18,5 @@ class Barrier {
     }
 }
 
-let b = Barrier(1)
+var b = Barrier(1)
 print(b.wait())   // true — sole party arrives, latch reaches zero

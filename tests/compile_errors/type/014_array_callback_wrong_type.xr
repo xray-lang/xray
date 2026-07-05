@@ -5,15 +5,15 @@
 // to unknown, which caused arr.reduce(0, fn) to compile (and segfault at
 // runtime when args[0] was a non-zero int) instead of being rejected.
 
-let xs = [1, 2, 3]
+var xs = [1, 2, 3]
 
-let bad1 = xs.map(0)
-let bad2 = xs.filter(0)
-let bad3 = xs.reduce(0,(acc: int, v: int) -> int { return acc + v })
-let bad4 = xs.find(0)
-let bad5 = xs.every(0)
-let bad6 = xs.some(0)
+var bad1 = xs.map(0)
+var bad2 = xs.filter(0)
+var bad3 = xs.reduce(0,(acc: int, v: int) -> int { return acc + v })
+var bad4 = xs.find(0)
+var bad5 = xs.every(0)
+var bad6 = xs.some(0)
 xs.forEach(0)
 
-let m: Map<string, int> = Map()
+var m: Map<string, int> = Map()
 m.forEach(0)

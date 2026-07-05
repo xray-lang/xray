@@ -23,8 +23,8 @@ struct Vec2 {
 fn test_struct_value_semantics() {
 
     // === let b = a creates independent copy ===
-    let a = Point{x: 1.0, y: 2.0}
-    let b = a
+    var a = Point{x: 1.0, y: 2.0}
+    var b = a
     b.x = 99.0
     assert(a.x == 1.0)
     assert(a.y == 2.0)
@@ -32,23 +32,23 @@ fn test_struct_value_semantics() {
     assert(b.y == 2.0)
 
     // === Reassignment also copies ===
-    let c = Point{x: 10.0, y: 20.0}
-    let d = Point{x: 0.0, y: 0.0}
+    var c = Point{x: 10.0, y: 20.0}
+    var d = Point{x: 0.0, y: 0.0}
     d = c
     d.x = 999.0
     assert(c.x == 10.0)
     assert(d.x == 999.0)
 
     // === Struct literal assignment (fresh object, no extra copy) ===
-    let e = Point{x: 5.0, y: 6.0}
+    var e = Point{x: 5.0, y: 6.0}
     assert(e.x == 5.0)
     assert(e.y == 6.0)
 
     // === Multiple copies are independent ===
-    let src = Point{x: 42.0, y: 0.0}
-    let c1 = src
-    let c2 = src
-    let c3 = src
+    var src = Point{x: 42.0, y: 0.0}
+    var c1 = src
+    var c2 = src
+    var c3 = src
     c1.x = 1.0
     c2.x = 2.0
     c3.x = 3.0
@@ -59,8 +59,8 @@ fn test_struct_value_semantics() {
 
     // === Copy preserves all fields ===
 
-    let red = Color{r: 255, g: 0, b: 0}
-    let copy = red
+    var red = Color{r: 255, g: 0, b: 0}
+    var copy = red
     copy.g = 128
     assert(red.r == 255)
     assert(red.g == 0)
@@ -71,8 +71,8 @@ fn test_struct_value_semantics() {
 
     // === Struct with method - copy preserves methods ===
 
-    let v1 = Vec2{x: 3.0, y: 4.0}
-    let v2 = v1
+    var v1 = Vec2{x: 3.0, y: 4.0}
+    var v2 = v1
     v2.x = 0.0
     assert(v1.mag_sq() == 25.0)
     assert(v2.mag_sq() == 16.0)

@@ -6,12 +6,12 @@ fn recv_once(ch: Channel<int>) -> int {
 }
 
 fn caller(ch: Channel<int>) -> int {
-    let value = recv_once(ch)
+    var value = recv_once(ch)
     return value + 1
 }
 
-const ch = Channel(1)
+shared ch = Channel(1)
 ch.send(41)
-let task = go caller(ch)
+var task = go caller(ch)
 print(await task)
 ch.close()

@@ -4,15 +4,15 @@ enum Color {
     Blue,
 }
 
-let t = (1, "two", true)
+var t = (1, "two", true)
 print(t)
 print(typeof(t))
-let (a, b, c) = t
+var (a, b, c) = t
 print(a)
 print(b)
 print(c)
 
-let color = Color.Green
+var color = Color.Green
 print(color.name)
 print(color.ordinal)
 print(color.toString())

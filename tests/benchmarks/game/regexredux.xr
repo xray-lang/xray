@@ -15,16 +15,16 @@ fn countMatches(re, text: string): int {
 
 // 生成测试 FASTA 数据
 fn generateFasta(n: int): string {
-    let alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
-    let sb = StringBuilder()
+    var alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
+    var sb = StringBuilder()
     // 生成 ONE 序列
     sb.append(">ONE Homo sapiens alu
 ")
-    let aluLen = alu.length
-    let i = 0
+    var aluLen = alu.length
+    var i = 0
     while (i < n * 2) {
-        let start = i % aluLen
-        let end = start + 60
+        var start = i % aluLen
+        var end = start + 60
         if (end > aluLen) {
             end = aluLen
         }
@@ -36,12 +36,12 @@ fn generateFasta(n: int): string {
     // 生成 TWO 序列
     sb.append(">TWO IUB ambiguity codes
 ")
-    let iub = "acBDGHKMNRSVWY"
-    let iubLen = iub.length
+    var iub = "acBDGHKMNRSVWY"
+    var iubLen = iub.length
     i = 0
     while (i < n * 3) {
-        let j = 0
-        let line = StringBuilder()
+        var j = 0
+        var line = StringBuilder()
         while (j < 60 && i + j < n * 3) {
             line.append(iub.charAt((i + j) % iubLen))
             j++
@@ -54,11 +54,11 @@ fn generateFasta(n: int): string {
     // 生成 THREE 序列
     sb.append(">THREE Homo sapiens frequency
 ")
-    let bases = "acgt"
+    var bases = "acgt"
     i = 0
     while (i < n * 5) {
-        let j = 0
-        let line = StringBuilder()
+        var j = 0
+        var line = StringBuilder()
         while (j < 60 && i + j < n * 5) {
             line.append(bases.charAt((i + j) % 4))
             j++
@@ -76,35 +76,35 @@ fn main() {
     // 生成测试数据（从命令行读取，默认 100000）
     // n = 100000 生成约 1MB 数据，用于基准测试
     // n = 1000 生成约 10KB 数据，用于快速验证
-    let n = process.args.length > 0 ? int(process.args[0]) ?? 100000 : 100000
-    let data = generateFasta(n)
-    let initialLen = data.byteLength
+    var n = process.args.length > 0 ? int(process.args[0]) ?? 100000 : 100000
+    var data = generateFasta(n)
+    var initialLen = data.byteLength
     // 步骤 1：移除 FASTA 描述行和换行符
-    let cleanPattern = regex.compile("^>.*
+    var cleanPattern = regex.compile("^>.*
 |
 ",     "m")
-    let cleaned = regex.replaceAll(cleanPattern, data, "")
-    let cleanedLen = cleaned.byteLength
+    var cleaned = regex.replaceAll(cleanPattern, data, "")
+    var cleanedLen = cleaned.byteLength
     // 步骤 2：计数 9 个 DNA 模式
-    let patterns = ["agggtaaa|tttaccct", "[cgt]gggtaaa|tttaccc[acg]", "a[act]ggtaaa|tttacc[agt]t", "ag[act]gtaaa|tttac[agt]ct", "agg[act]taaa|ttta[agt]cct", "aggg[acg]aaa|ttt[cgt]ccct", "agggt[cgt]aa|tt[acg]accct", "agggta[cgt]a|t[acg]taccct", "agggtaa[cgt]|[acg]ttaccct"]
-    let i = 0
+    var patterns = ["agggtaaa|tttaccct", "[cgt]gggtaaa|tttaccc[acg]", "a[act]ggtaaa|tttacc[agt]t", "ag[act]gtaaa|tttac[agt]ct", "agg[act]taaa|ttta[agt]cct", "aggg[acg]aaa|ttt[cgt]ccct", "agggt[cgt]aa|tt[acg]accct", "agggta[cgt]a|t[acg]taccct", "agggtaa[cgt]|[acg]ttaccct"]
+    var i = 0
     while (i < patterns.length) {
-        let re = regex.compile(patterns[i], "i")
-        let count = countMatches(re, cleaned)
+        var re = regex.compile(patterns[i], "i")
+        var count = countMatches(re, cleaned)
         print(patterns[i], count)
         i++
     }
     // 步骤 3：执行魔术替换
-    let magicPatterns = ["tHa[Nt]", "aND|caN|Ha[DS]|WaS", "a[NSt]|BY", "<[^>]*>", "\|[^|][^|]*\|"]
-    let magicReplacements = ["<4>", "<3>", "<2>", "|", "-"]
-    let current = cleaned
+    var magicPatterns = ["tHa[Nt]", "aND|caN|Ha[DS]|WaS", "a[NSt]|BY", "<[^>]*>", "\|[^|][^|]*\|"]
+    var magicReplacements = ["<4>", "<3>", "<2>", "|", "-"]
+    var current = cleaned
     i = 0
     while (i < magicPatterns.length) {
-        let re = regex.compile(magicPatterns[i], "")
+        var re = regex.compile(magicPatterns[i], "")
         current = regex.replaceAll(re, current, magicReplacements[i])
         i++
     }
-    let endLen = current.byteLength
+    var endLen = current.byteLength
     // 输出三个长度
     print("")
     print(initialLen)

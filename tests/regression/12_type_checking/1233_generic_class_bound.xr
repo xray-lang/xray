@@ -50,7 +50,7 @@ class Puppy extends Dog {
 fn test_direct_subclass() {
     fn nameOf<T: Animal>(a: T) -> string { return a.name }
 
-    let dog = Dog("Rex", "Labrador")
+    var dog = Dog("Rex", "Labrador")
     assert_eq(nameOf<Dog>(dog), "Rex")
 }
 
@@ -58,7 +58,7 @@ fn test_direct_subclass() {
 fn test_sibling_subclass() {
     fn nameOf<T: Animal>(a: T) -> string { return a.name }
 
-    let cat = Cat("Whiskers")
+    var cat = Cat("Whiskers")
     assert_eq(nameOf<Cat>(cat), "Whiskers")
 }
 
@@ -67,7 +67,7 @@ fn test_sibling_subclass() {
 fn test_grandchild_subclass() {
     fn nameOf<T: Animal>(a: T) -> string { return a.name }
 
-    let puppy = Puppy("Buddy")
+    var puppy = Puppy("Buddy")
     assert_eq(nameOf<Puppy>(puppy), "Buddy")
 }
 
@@ -76,7 +76,7 @@ fn test_grandchild_subclass() {
 fn test_base_class_self() {
     fn nameOf<T: Animal>(a: T) -> string { return a.name }
 
-    let animal = Animal("Generic")
+    var animal = Animal("Generic")
     assert_eq(nameOf<Animal>(animal), "Generic")
 }
 
@@ -85,7 +85,7 @@ fn test_base_class_self() {
 fn test_inferred_type_arg() {
     fn nameOf<T: Animal>(a: T) -> string { return a.name }
 
-    let dog = Dog("Spot", "Beagle")
+    var dog = Dog("Spot", "Beagle")
     assert_eq(nameOf(dog), "Spot")
 }
 
@@ -94,7 +94,7 @@ fn test_inferred_type_arg() {
 fn test_class_bound_with_second_param() {
     fn pair<T: Animal, U>(a: T, tag: U) -> U { return tag }
 
-    let cat = Cat("Mittens")
+    var cat = Cat("Mittens")
     assert_eq(pair<Cat, int>(cat, 7), 7)
     assert_eq(pair<Cat, string>(cat, "ok"), "ok")
 }

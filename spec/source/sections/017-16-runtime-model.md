@@ -37,7 +37,7 @@ Typed array 元素布局是容器元数据的一部分。`Array<char>` 使用 `X
 | 区域 | 用途 |
 |--|--|
 | **系统堆** | C `malloc/free`，用于 native 数据结构 |
-| **全局堆** | `shared const` / `shared let`，引用计数 |
+| **全局堆** | `shared` / `shared`，引用计数 |
 | **协程堆** | 每协程独立的 RC 对象堆，强引用环由 cycle collector 回收 |
 | **栈** | `struct` 值、局部 immediate、函数帧 |
 | **Arena** | parser 临时分配、frame allocation |
@@ -164,7 +164,7 @@ Typed-array element layout is part of the container metadata. `Array<char>` uses
 | Region | Use |
 |--|--|
 | **System heap** | C `malloc/free`, used for native data structures |
-| **Global heap** | `shared const` / `shared let`, reference counting |
+| **Global heap** | `shared` / `shared`, reference counting |
 | **Coroutine heap** | per-coroutine RC object heap; strong cycles are reclaimed by the cycle collector |
 | **Stack** | `struct` values, local immediates, function frames |
 | **Arena** | parser temporary allocation, frame allocation |

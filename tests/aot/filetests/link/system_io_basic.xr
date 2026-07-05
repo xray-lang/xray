@@ -1,13 +1,13 @@
 import io
 
-let root = io.tempDir() ?? ""
+var root = io.tempDir() ?? ""
 print(root.length > 0)
 
-let dir = root + "/a/b"
+var dir = root + "/a/b"
 print(io.mkdirp(dir))
 print(io.isDir(dir))
 
-let file = dir + "/sample.txt"
+var file = dir + "/sample.txt"
 print(io.writeFile(file, "hello"))
 print(io.exists(file))
 print(io.isFile(file))
@@ -16,18 +16,18 @@ print(io.fileSize(file))
 print(io.readFile(file) == "hello")
 print(io.appendFile(file, "\nworld"))
 
-let lines = io.readLines(file)
+var lines = io.readLines(file)
 print(lines.length)
 print(lines[0])
 print(lines[1])
 
-let bytesFile = dir + "/bytes.bin"
-let bytes = Bytes(3)
+var bytesFile = dir + "/bytes.bin"
+var bytes = Bytes(3)
 bytes[0] = 65
 bytes[1] = 0
 bytes[2] = 255
 print(io.writeFileBytes(bytesFile, bytes))
-let readBytes = io.readFileBytes(bytesFile)
+var readBytes = io.readFileBytes(bytesFile)
 if (readBytes != null) {
     print(readBytes.length)
     print(readBytes[0])
@@ -40,15 +40,15 @@ if (readBytes != null) {
     print(0)
 }
 
-let copied = root + "/copy.txt"
+var copied = root + "/copy.txt"
 print(io.copyFile(file, copied))
 print(io.readFile(copied) == "hello\nworld")
-let moved = root + "/moved.txt"
+var moved = root + "/moved.txt"
 print(io.rename(copied, moved))
 print(!io.exists(copied))
 print(io.exists(moved))
 
-let stat = io.stat(file)
+var stat = io.stat(file)
 print(stat != null)
 print(stat!.size == 11)
 print(stat!.mode >= 0)
@@ -61,25 +61,25 @@ print(stat!.isFile)
 print(!stat!.isDir)
 print(!stat!.isSymlink)
 
-let touched = root + "/touched.txt"
+var touched = root + "/touched.txt"
 print(io.touch(touched))
 print(io.chmod(file, 420))
 
-let entries = io.readDir(dir)
+var entries = io.readDir(dir)
 print(entries.length >= 2)
-let recursive = io.readDirRecursive(root)
+var recursive = io.readDirRecursive(root)
 print(recursive.length >= 4)
 
-let resolvedDir = io.realpath(dir) ?? ""
-let oldCwd = io.cwd()
+var resolvedDir = io.realpath(dir) ?? ""
+var oldCwd = io.cwd()
 print(oldCwd.length > 0)
 print(resolvedDir.length > 0)
 print(io.chdir(dir))
 print(io.cwd() == resolvedDir)
 print(io.chdir(oldCwd))
 
-let link = root + "/sample-link.txt"
-let linkOk = io.symlink(file, link)
+var link = root + "/sample-link.txt"
+var linkOk = io.symlink(file, link)
 if (linkOk) {
     print(io.isSymlink(link))
     print(io.readlink(link) != null)
@@ -88,7 +88,7 @@ if (linkOk) {
     print(true)
 }
 
-let tmpFile = io.tempFile() ?? ""
+var tmpFile = io.tempFile() ?? ""
 print(tmpFile.length > 0)
 print(io.exists(tmpFile))
 print(io.remove(tmpFile))

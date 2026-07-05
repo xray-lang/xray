@@ -3,8 +3,8 @@ fn captured_sync_go(x: int) -> int {
         return x * 7
     }
 
-    let task = go inner()
-    let result = await task
+    var task = go inner()
+    var result = await task
     return result ?? -1
 }
 
@@ -14,8 +14,8 @@ fn captured_suspend_go(x: int) -> int {
         return x + 1
     }
 
-    let task = go inner()
-    let result = await task
+    var task = go inner()
+    var result = await task
     return result ?? -1
 }
 
@@ -26,21 +26,21 @@ fn nested_captured_suspend_go(x: int) -> int {
             return x + 2
         }
 
-        let task = go inner()
-        let result = await task
+        var task = go inner()
+        var result = await task
         return result ?? -1
     }
 
-    let task = go mid()
-    let result = await task
+    var task = go mid()
+    var result = await task
     return result ?? -1
 }
 
-let sync_task = go captured_sync_go(6)
+var sync_task = go captured_sync_go(6)
 print(await sync_task)
 
-let suspend_task = go captured_suspend_go(41)
+var suspend_task = go captured_suspend_go(41)
 print(await suspend_task)
 
-let nested_task = go nested_captured_suspend_go(40)
+var nested_task = go nested_captured_suspend_go(40)
 print(await nested_task)

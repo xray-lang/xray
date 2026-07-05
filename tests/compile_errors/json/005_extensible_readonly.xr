@@ -2,7 +2,7 @@
 // 错误测试：可扩展类型中的只读字段仍然不能修改
 // 期望错误：无法修改只读字段
 type Entity = { const id: int, name: string, ... }
-let e: Entity = { "id": 1, "name": "test" }
+var e: Entity = { "id": 1, "name": "test" }
 e.extra = "ok"
 // 这行没问题，可以添加扩展字段
 e.id = 2

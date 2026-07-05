@@ -29,7 +29,7 @@
 
 // Symbol kinds
 typedef enum XaSymbolKind {
-    XA_SYM_VARIABLE,    // let/const variable (is_const=true for const)
+    XA_SYM_VARIABLE,    // var/const/shared variable (is_const=true for const)
     XA_SYM_FUNCTION,    // Function definition
     XA_SYM_CLASS,       // Class definition
     XA_SYM_FIELD,       // Class field
@@ -42,7 +42,7 @@ typedef enum XaSymbolKind {
     XA_SYM_TYPE_ALIAS,  // Type alias (type Point = {x: int, y: int})
 } XaSymbolKind;
 
-// Move state for shared let variables (Move semantics)
+// Move state for explicit ownership transfer of local variables.
 typedef enum XaMoveState {
     XA_MOVE_NOT_MOVED,    // Variable is owned, can be used
     XA_MOVE_MOVED,        // Variable has been moved, cannot be used
@@ -74,7 +74,7 @@ struct XaSymbolLinks {
     // Definite assignment tracking
     bool is_definitely_assigned;  // true if variable has been assigned a value
 
-    // Move state for shared let variables (Move semantics)
+    // Move state for explicit ownership transfer of local variables.
     XaMoveState move_state;  // Current ownership state
     uint32_t moved_line;     // Line where variable was moved (for error message)
     uint32_t moved_column;   // Column where variable was moved
@@ -149,17 +149,19 @@ struct XaSymbol {
     XrLocation location;  // Definition location
 
     // Modifiers
-    bool is_const;          // const declaration / immutable field
-    bool is_exported;       // export modifier
-    bool is_static;         // static member
-    bool is_private;        // private member (class-only visibility)
-    bool is_protected;      // protected member (class + subclass visibility)
-    bool is_override;       // explicit override modifier on a method
-    bool is_shared;         // shared variable
-    bool is_imported;       // selective import binding; kind remains the exported semantic kind
-    bool is_builtin;        // built-in type member (Array.push, etc.)
-    bool mutates_receiver;  // method body writes through `this`
-    uint8_t passing_mode;   // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF (for parameters)
+    bool is_const;             // const declaration / immutable field
+    bool is_rebindable;        // binding name may be assigned again
+    bool is_readonly_binding;  // binding exposes deep-readonly semantics
+    bool is_exported;          // export modifier
+    bool is_static;            // static member
+    bool is_private;           // private member (class-only visibility)
+    bool is_protected;         // protected member (class + subclass visibility)
+    bool is_override;          // explicit override modifier on a method
+    bool is_shared;            // shared variable
+    bool is_imported;          // selective import binding; kind remains the exported semantic kind
+    bool is_builtin;           // built-in type member (Array.push, etc.)
+    bool mutates_receiver;     // method body writes through `this`
+    uint8_t passing_mode;      // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF (for parameters)
     uint32_t borrowed_root_symbol_id;  // local alias root for in/ref parameter borrowing
 
     // Parent references

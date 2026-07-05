@@ -4,8 +4,8 @@
 // ===== keys() =====
 @test
 fn test_keys() {
-    let obj: Json = { name: "Alice", age: 30 }
-    let k = obj.keys()
+    var obj: Json = { name: "Alice", age: 30 }
+    var k = obj.keys()
     assert_eq(k.length, 2)
     assert_true(k[0] == "name" || k[1] == "name")
     assert_true(k[0] == "age" || k[1] == "age")
@@ -13,15 +13,15 @@ fn test_keys() {
 
 @test
 fn test_keys_empty() {
-    let obj: Json = {}
+    var obj: Json = {}
     assert_eq(obj.keys().length, 0)
 }
 
 // ===== values() =====
 @test
 fn test_values() {
-    let obj: Json = { x: 10, y: 20 }
-    let v = obj.values()
+    var obj: Json = { x: 10, y: 20 }
+    var v = obj.values()
     assert_eq(v.length, 2)
     assert_true(v[0] == 10 || v[1] == 10)
     assert_true(v[0] == 20 || v[1] == 20)
@@ -30,7 +30,7 @@ fn test_values() {
 // ===== has() =====
 @test
 fn test_has() {
-    let obj: Json = { name: "Alice", age: 30 }
+    var obj: Json = { name: "Alice", age: 30 }
     assert_true(obj.has("name"))
     assert_true(obj.has("age"))
     assert_eq(obj.has("email"), false)
@@ -39,7 +39,7 @@ fn test_has() {
 // ===== Combined =====
 @test
 fn test_combined() {
-    let data: Json = { a: 1, b: "two", c: true }
+    var data: Json = { a: 1, b: "two", c: true }
     assert_eq(data.keys().length, 3)
     assert_eq(data.values().length, 3)
     assert_true(data.has("a"))
@@ -49,7 +49,7 @@ fn test_combined() {
 // ===== Parsed Json =====
 @test
 fn test_parsed_json() {
-    let data = Json.parse("{\"x\": 1, \"y\": 2}")
+    var data = Json.parse("{\"x\": 1, \"y\": 2}")
     assert_true(data.has("x"))
     assert_eq(data.keys().length, 2)
     assert_eq(data.values().length, 2)

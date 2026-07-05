@@ -2,4 +2,4 @@ type A<T> = B<T>
 type B<T> = C<T>
 type C<T> = A<T>
 
-let x: A<int>? = null
+var x: A<int>? = null

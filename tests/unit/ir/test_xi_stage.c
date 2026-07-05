@@ -101,7 +101,7 @@ static void test_stage_after_lowering(void) {
     printf("--- test_stage_after_lowering ---\n");
 
     /* Use the pipeline to lower a simple program */
-    const char *source = "let x = 42\nprint(x)\n";
+    const char *source = "var x = 42\nprint(x)\n";
 
     /* Parse + analyze + lower via pipeline in CHECK mode (no opt, no emit) */
     XiPipelineConfig cfg = xi_pipeline_default_config();

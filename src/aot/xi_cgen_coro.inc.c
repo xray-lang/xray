@@ -682,6 +682,40 @@ static bool cg_coro_value_needs_frame_arc_release(XiCgenCtx *ctx, const XiFunc *
            !cg_coro_value_is_borrowed_identity_alias(ctx, f, v);
 }
 
+static bool cg_coro_return_value_needs_retain(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    if (!v)
+        return false;
+    if (v->op == XI_PARAM)
+        return xi_coro_value_needs_arc_release(v);
+    if (cg_coro_value_needs_frame(ctx, f, v) && cg_coro_value_may_hold_frame_root(ctx, f, v) &&
+        cg_coro_value_needs_frame_arc_release(ctx, f, v))
+        return true;
+
+    const XiValue *origin = cg_unwrap_identity_value(v);
+    if (!origin || origin == v)
+        return false;
+    if (origin->op == XI_PARAM)
+        return xi_coro_value_needs_arc_release(origin);
+    return cg_coro_value_needs_frame(ctx, f, origin) &&
+           cg_coro_value_may_hold_frame_root(ctx, f, origin) &&
+           cg_coro_value_needs_frame_arc_release(ctx, f, origin);
+}
+
+static void emit_coro_aot_done_value(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                     const XiValue *value) {
+    if (!value) {
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
+    if (cg_coro_return_value_needs_retain(ctx, f, value)) {
+        fprintf(out, "({ XrValue _xrt_ret = ");
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
+        fprintf(out, "; xrt_retain(_xrt_ret); _xrt_ret; })");
+        return;
+    }
+    emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
+}
+
 static bool cg_coro_param_is_native_receiver(XiCgenCtx *ctx, const XiFunc *f, uint16_t index) {
     return index == 0 && cg_class_func_uses_native_receiver(ctx, f);
 }
@@ -4356,16 +4390,13 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
                  * LIFO, then complete. Defers run before the awaiting caller
                  * observes the result, matching the VM. */
                 fprintf(out, "    { XrValue _xrt_dret = ");
-                if (blk->control)
-                    emit_value_as_rep_ctx(ctx, out, blk->control, XR_REP_TAGGED);
-                else
-                    fprintf(out, "XR_NULL_VAL");
+                emit_coro_aot_done_value(ctx, out, f, blk->control);
                 fprintf(out, ";\n");
                 fprintf(out, "      xrt_defer_run(&f->_xrt_ds);\n");
                 fprintf(out, "      return xr_aot_done(_xrt_dret); }\n");
             } else if (blk->control) {
                 fprintf(out, "    return xr_aot_done(");
-                emit_value_as_rep_ctx(ctx, out, blk->control, XR_REP_TAGGED);
+                emit_coro_aot_done_value(ctx, out, f, blk->control);
                 fprintf(out, ");\n");
             } else {
                 fprintf(out, "    return xr_aot_done(XR_NULL_VAL);\n");

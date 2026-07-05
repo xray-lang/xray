@@ -380,6 +380,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         // === Variable ===
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             n->as.var_decl.name = clone_str(node->as.var_decl.name);
             n->as.var_decl.initializer =
                 xr_ast_clone_ctx(node->as.var_decl.initializer, map, mc, clone_ctx);
@@ -1358,6 +1359,7 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             collect_instantiation_sites(node->as.var_decl.initializer, registry, collector);
             break;
         case AST_ASSIGNMENT:
@@ -1634,6 +1636,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             rewrite_call_sites(node->as.var_decl.initializer, registry, collector);
             break;
         case AST_ASSIGNMENT:

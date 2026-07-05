@@ -186,20 +186,20 @@ fn test_valid_with_whitespace() {
 
 @test
 fn test_tryparse_success() {
-    let result = Json.tryParse("[1, 2, 3]")
+    var result = Json.tryParse("[1, 2, 3]")
     assert_eq(result.error, null)
     assert_eq(result.value.length, 3)
 }
 
 @test
 fn test_tryparse_error_incomplete() {
-    let result = Json.tryParse("{incomplete")
+    var result = Json.tryParse("{incomplete")
     assert_eq(result.error != null, true)
 }
 
 @test
 fn test_tryparse_error_invalid() {
-    let result = Json.tryParse("not valid json")
+    var result = Json.tryParse("not valid json")
     assert_eq(result.error != null, true)
 }
 
@@ -219,7 +219,7 @@ fn test_typeof_valid() {
 @test
 fn test_typeof_invalid() {
     // Invalid JSON parse returns null
-    let t = Json.parse("invalid")
+    var t = Json.parse("invalid")
     assert_eq(t, null)
 }
 
@@ -228,18 +228,18 @@ fn test_typeof_invalid() {
 @test
 fn test_deep_nesting_valid() {
     // 合理深度的嵌套应该工作
-    let s = "[[[[[[1]]]]]]"
+    var s = "[[[[[[1]]]]]]"
     assert_eq(Json.isValid(s), true)
-    let arr = Json.parse(s)
+    var arr = Json.parse(s)
     assert_eq(arr[0][0][0][0][0][0], 1)
 }
 
 @test
 fn test_long_array() {
     // 长数组
-    let s = "[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]"
+    var s = "[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]"
     assert_eq(Json.isValid(s), true)
-    let arr = Json.parse(s)
+    var arr = Json.parse(s)
     assert_eq(arr.length, 20)
     assert_eq(arr[19], 19)
 }
@@ -247,9 +247,9 @@ fn test_long_array() {
 @test
 fn test_long_string() {
     // 长字符串
-    let s = "\"" + "x".repeat(1000) + "\""
+    var s = "\"" + "x".repeat(1000) + "\""
     assert_eq(Json.isValid(s), true)
-    let parsed = Json.parse(s)
+    var parsed = Json.parse(s)
     assert_eq(parsed.length, 1000)
 }
 

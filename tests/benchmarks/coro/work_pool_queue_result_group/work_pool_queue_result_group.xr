@@ -3,9 +3,9 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 
 import time
 
-let WORKERS = 8
-let TASKS = 100000
-let BATCH = 64
+var WORKERS = 8
+var TASKS = 100000
+var BATCH = 64
 if (process.args.length > 0) {
     WORKERS = int(process.args[0]) ?? WORKERS
 }
@@ -25,8 +25,8 @@ if (BATCH < 1) {
     BATCH = 1
 }
 
-shared const work_queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
-shared const result_group: ResultGroup = ResultGroup(BATCH)
+shared work_queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
+shared result_group: ResultGroup = ResultGroup(BATCH)
 
 print("=== Work Queue Pool ResultGroup 测试 ===")
 print("Worker数:", WORKERS)
@@ -35,10 +35,10 @@ print("Result batch:", BATCH)
 
 fn fib(n: int) -> int {
     if (n <= 1) { return n }
-    let a = 0
-    let b = 1
-    for (let i = 2; i <= n; i++) {
-        let t = a + b
+    var a = 0
+    var b = 1
+    for (var i = 2; i <= n; i++) {
+        var t = a + b
         a = b
         b = t
     }
@@ -46,21 +46,21 @@ fn fib(n: int) -> int {
 }
 
 fn expected_total(count: int) -> int {
-    let total = 0
-    for (let i = 0; i < count; i++) {
+    var total = 0
+    for (var i = 0; i < count; i++) {
         total = total + fib(i % 20)
     }
     return total
 }
 
 fn worker(id: int) -> int {
-    let processed = 0
+    var processed = 0
     while (true) {
-        let task = work_queue.pop(id)
+        var task = work_queue.pop(id)
         if (task == null) {
             break
         }
-        let task_id = task ?? 0
+        var task_id = task ?? 0
         result_group.add(fib(task_id % 20))
         processed++
     }
@@ -68,16 +68,16 @@ fn worker(id: int) -> int {
 }
 
 fn submit_tasks(count: int) {
-    for (let i = 0; i < count; i++) {
+    for (var i = 0; i < count; i++) {
         assert_true(work_queue.push(i, i))
     }
     work_queue.close()
 }
 
 fn reduce_results() -> int {
-    let total = 0
+    var total = 0
     while (true) {
-        let value = result_group.recv()
+        var value = result_group.recv()
         if (value == null) {
             break
         }
@@ -86,28 +86,28 @@ fn reduce_results() -> int {
     return total
 }
 
-let start = time.monotonic()
+var start = time.monotonic()
 
-let reducer = go reduce_results()
-let workers: Array<Task> = []
-for (let i = 0; i < WORKERS; i++) {
+var reducer = go reduce_results()
+var workers: Array<Task> = []
+for (var i = 0; i < WORKERS; i++) {
     workers.push(go worker(i))
 }
 
-let submitter = go submit_tasks(TASKS)
+var submitter = go submit_tasks(TASKS)
 await submitter
 
-let worker_loads: Array<int> = []
+var worker_loads: Array<int> = []
 for (w in workers) {
-    let processed = await w
+    var processed = await w
     worker_loads.push(processed)
 }
 result_group.close()
-let total = await reducer
+var total = await reducer
 
-let elapsed = time.monotonic() - start
-let expected = expected_total(TASKS)
-let result_events = int((TASKS + BATCH - 1) / BATCH)
+var elapsed = time.monotonic() - start
+var expected = expected_total(TASKS)
+var result_events = int((TASKS + BATCH - 1) / BATCH)
 
 print("结果校验和:", total)
 print("预期:", expected)
@@ -120,8 +120,8 @@ if (elapsed > 0) {
     print("吞吐量: 太快无法测量")
 }
 
-let min_load = TASKS
-let max_load = 0
+var min_load = TASKS
+var max_load = 0
 for (load in worker_loads) {
     if (load < min_load) { min_load = load }
     if (load > max_load) { max_load = load }

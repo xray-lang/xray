@@ -15,12 +15,12 @@ class Box {
 }
 
 fn idBox(box: Box) -> Box {
-    let alias = box
+    var alias = box
     return alias
 }
 
-let box = Box(7)
-let alias = idBox(box)
+var box = Box(7)
+var alias = idBox(box)
 alias.set(9)
 
 print(box.get())

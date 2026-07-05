@@ -18,7 +18,7 @@ fn producer(ch: Channel<int>) -> string {
 
 // 消费者：从 Channel 接收数据（使用 Recv<T>）
 fn consumer(ch: Channel<int>) -> int {
-    let sum = 0
+    var sum = 0
     sum = sum + recv_value(ch.tryRecv())
     sum = sum + recv_value(ch.tryRecv())
     sum = sum + recv_value(ch.tryRecv())
@@ -32,18 +32,18 @@ fn test_combined() {
     print("=== 协程综合测试 ===")
 
     // 1. 创建缓冲 Channel
-    shared const ch = Channel(5)
+    shared ch = Channel(5)
 
     // 2. defer 清理
     defer cleanup()
 
     // 3. go/await + Channel 参数传递
-    let prod_task = go producer(ch)
-    let prod_result = await prod_task
+    var prod_task = go producer(ch)
+    var prod_result = await prod_task
     print(prod_result)  // "producer done"
 
-    let cons_task = go consumer(ch)
-    let sum = await cons_task
+    var cons_task = go consumer(ch)
+    var sum = await cons_task
     print(sum)  // 6
 
     // 4. cancelled 检查

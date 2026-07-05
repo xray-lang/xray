@@ -33,15 +33,15 @@ fn test_struct_param_passing() {
     // Function that modifies its struct parameter
 
     // === Caller's struct is not modified ===
-    let p1 = Point{x: 1.0, y: 2.0}
-    let p2 = move_point(p1, 10.0, 20.0)
+    var p1 = Point{x: 1.0, y: 2.0}
+    var p2 = move_point(p1, 10.0, 20.0)
     assert(p1.x == 1.0)
     assert(p1.y == 2.0)
     assert(p2.x == 11.0)
     assert(p2.y == 22.0)
 
     // === Multiple calls, original unchanged ===
-    let p3 = move_point(p1, 100.0, 200.0)
+    var p3 = move_point(p1, 100.0, 200.0)
     assert(p1.x == 1.0)
     assert(p1.y == 2.0)
     assert(p3.x == 101.0)
@@ -50,8 +50,8 @@ fn test_struct_param_passing() {
     // === Struct parameter with method ===
 
 
-    let v1 = Vec2{x: 3.0, y: 4.0}
-    let v2 = double_and_offset(v1)
+    var v1 = Vec2{x: 3.0, y: 4.0}
+    var v2 = double_and_offset(v1)
     assert(v1.x == 3.0)
     assert(v1.y == 4.0)
     assert(v2.x == 6.0)
@@ -59,8 +59,8 @@ fn test_struct_param_passing() {
 
     // === Struct return from function (fresh object) ===
 
-    let p4 = make_point(42.0, 99.0)
-    let p5 = make_point(42.0, 99.0)
+    var p4 = make_point(42.0, 99.0)
+    var p5 = make_point(42.0, 99.0)
     p4.x = 0.0
     assert(p5.x == 42.0)
 }

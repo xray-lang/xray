@@ -4,7 +4,7 @@
 
 @test
 fn test_slice_basic() {
-    let s = "Hello World"
+    var s = "Hello World"
     assert_eq(s.slice(0, 5), "Hello")
     assert_eq(s.slice(6, 11), "World")
     assert_eq(s.slice(0, 11), "Hello World")
@@ -14,7 +14,7 @@ fn test_slice_basic() {
 
 @test
 fn test_slice_negative() {
-    let s = "Hello World"
+    var s = "Hello World"
     assert_eq(s.slice(-5), "World")
     assert_eq(s.slice(-5, -1), "Worl")
     assert_eq(s.slice(0, -1), "Hello Worl")
@@ -26,7 +26,7 @@ fn test_slice_negative() {
 
 @test
 fn test_slice_single_arg() {
-    let s = "Hello World"
+    var s = "Hello World"
     assert_eq(s.slice(6), "World")
     assert_eq(s.slice(0), "Hello World")
 }
@@ -35,7 +35,7 @@ fn test_slice_single_arg() {
 
 @test
 fn test_slice_boundary() {
-    let s = "Hello World"
+    var s = "Hello World"
     assert_eq(s.slice(0, 100), "Hello World")
     assert_eq(s.slice(-100), "Hello World")
     assert_eq(s.slice(5, 2), "")
@@ -53,7 +53,7 @@ fn test_slice_empty() {
 
 @test
 fn test_slice_extension() {
-    let path = "/home/user/file.txt"
+    var path = "/home/user/file.txt"
     assert_eq(path.slice(-4), ".txt")
     assert_eq(path.slice(0, -4), "/home/user/file")
 }

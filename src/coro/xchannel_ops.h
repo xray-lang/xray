@@ -59,7 +59,7 @@ static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue val
      * sources we uniquely own. Shared-by-pointer values must keep the original
      * copy-then-drop order: deep_copy increfs them and hands them out by
      * pointer, and the drop rebalances — dropping first then rc_destroy would
-     * free a shared const value the receiver still aliases. drop_is_last is
+     * free a shared value the receiver still aliases. drop_is_last is
      * mutating, so it is evaluated exactly once on each path. */
     bool coro_local = obj && !XR_OBJ_IS_SHARED(obj);
     if (coro_local && xr_obj_drop_is_last((XrObjHeader *) obj)) {

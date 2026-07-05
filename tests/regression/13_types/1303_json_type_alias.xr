@@ -7,7 +7,7 @@
 @test
 fn test_strict_type_alias() {
     type Point = { x: int, y: int }
-    let p: Point = { x: 10, y: 20 }
+    var p: Point = { x: 10, y: 20 }
     assert_eq(p.x, 10)
     assert_eq(p.y, 20)
 }
@@ -15,7 +15,7 @@ fn test_strict_type_alias() {
 @test
 fn test_strict_type_modify_existing() {
     type Point2 = { x: int, y: int }
-    let p: Point2 = { x: 1, y: 2 }
+    var p: Point2 = { x: 1, y: 2 }
     p.x = 100      // 修改已有字段，允许
     p.y = 200
     assert_eq(p.x, 100)
@@ -27,7 +27,7 @@ fn test_strict_type_modify_existing() {
 @test
 fn test_extensible_type_alias() {
     type Config = { port: int, host: string, ... }
-    let cfg: Config = { port: 8080, host: "localhost" }
+    var cfg: Config = { port: 8080, host: "localhost" }
     cfg.timeout = 30       // 允许添加
     cfg.debug = true       // 允许添加
     assert_eq(cfg.port, 8080)
@@ -39,7 +39,7 @@ fn test_extensible_type_alias() {
 @test
 fn test_extensible_type_with_any_extra() {
     type Server = { id: int, ... }
-    let s: Server = { id: 1 }
+    var s: Server = { id: 1 }
     s.name = "main"
     s.status = "running"
     s.metrics = { cpu: 0.5, mem: 0.8 }
@@ -54,7 +54,7 @@ fn test_extensible_type_with_any_extra() {
 @test
 fn test_readonly_field() {
     type User1 = { const id: int, name: string }
-    let u: User1 = { id: 1, name: "Alice" }
+    var u: User1 = { id: 1, name: "Alice" }
     u.name = "Bob"       // 可修改普通字段
     assert_eq(u.id, 1)
     assert_eq(u.name, "Bob")
@@ -63,7 +63,7 @@ fn test_readonly_field() {
 @test
 fn test_readonly_with_extensible() {
     type Entity1 = { const id: int, name: string, ... }
-    let e: Entity1 = { id: 100, name: "test" }
+    var e: Entity1 = { id: 100, name: "test" }
     e.extra = "data"     // 可以添加扩展字段
     assert_eq(e.id, 100)
     assert_eq(e.extra, "data")
@@ -74,10 +74,10 @@ fn test_readonly_with_extensible() {
 @test
 fn test_optional_field() {
     type Profile1 = { name: string, email?: string }
-    let p1: Profile1 = { name: "Alice" }
+    var p1: Profile1 = { name: "Alice" }
     assert_eq(p1.name, "Alice")
     
-    let p2: Profile1 = { name: "Bob", email: "bob@test.com" }
+    var p2: Profile1 = { name: "Bob", email: "bob@test.com" }
     assert_eq(p2.email, "bob@test.com")
 }
 
@@ -88,7 +88,7 @@ fn test_nested_type_alias() {
     type Address = { city: string, zip: string }
     type Person = { name: string, addr: Address }
     
-    let p: Person = {
+    var p: Person = {
         name: "Charlie",
         addr: { city: "Beijing", zip: "100000" }
     }

@@ -1,6 +1,6 @@
 fn choose(requested: int, size: int) -> int {
-    let proposed = 64
-    let maxSize = 65536
+    var proposed = 64
+    var maxSize = 65536
     while (requested > proposed) {
         if (size <= maxSize) {
             return proposed

@@ -3,5 +3,5 @@ struct Holder {
     blocks: [[uint8; 2]; 2]
 }
 
-let holder = Holder{names: ["x", "y"], blocks: [[11, 12], [13, 14]]}
+var holder = Holder{names: ["x", "y"], blocks: [[11, 12], [13, 14]]}
 print(holder.blocks[1][1])

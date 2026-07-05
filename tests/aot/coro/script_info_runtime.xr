@@ -18,5 +18,5 @@ fn check() -> int {
     return 0
 }
 
-let task = go check()
+var task = go check()
 print(await task)

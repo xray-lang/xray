@@ -102,11 +102,13 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
             break;
         }
 
-        case AST_VAR_DECL: {
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL: {
             const char *name = node->as.var_decl.name;
             if (name) {
                 XrLspSymbolKind kind =
-                    node->as.var_decl.is_const ? XR_SYMBOL_CONSTANT : XR_SYMBOL_VARIABLE;
+                    node->type == AST_CONST_DECL ? XR_SYMBOL_CONSTANT : XR_SYMBOL_VARIABLE;
                 XrLspIndexSymbol *sym = create_symbol(name, kind, node->line - 1, 0, in_export);
                 add_symbol_to_result(result, sym);
             }

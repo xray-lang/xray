@@ -30,12 +30,12 @@ fn parseConfigOK() -> Json {
 @test
 fn test_catch_with_default_basic() {
     print("1. success returns value")
-    let a = maybeFailInt(false)
+    var a = maybeFailInt(false)
     assert_eq(a, 42)
     print("   PASS")
 
     print("2. failure caught with default")
-    let b = 0
+    var b = 0
     try {
         b = maybeFailInt(true)
     } catch (e) {
@@ -45,7 +45,7 @@ fn test_catch_with_default_basic() {
     print("   PASS")
 
     print("3. catch with default value")
-    let c = -1
+    var c = -1
     try {
         c = maybeFailInt(true)
     } catch (e) {
@@ -55,7 +55,7 @@ fn test_catch_with_default_basic() {
     print("   PASS")
 
     print("4. success keeps original value")
-    let d = -1
+    var d = -1
     try {
         d = maybeFailInt(false)
     } catch (e) {
@@ -68,9 +68,9 @@ fn test_catch_with_default_basic() {
 @test
 fn test_catch_chain() {
     print("5. chain on failure with default")
-    let host = "localhost"
+    var host = "localhost"
     try {
-        let cfg = parseConfig()
+        var cfg = parseConfig()
         host = cfg["database"]["host"] ?? "localhost"
     } catch (e) {
         host = "localhost"
@@ -79,9 +79,9 @@ fn test_catch_chain() {
     print("   PASS")
 
     print("6. chain on success keeps original")
-    let host2 = "localhost"
+    var host2 = "localhost"
     try {
-        let cfg2 = parseConfigOK()
+        var cfg2 = parseConfigOK()
         host2 = cfg2["database"]["host"] ?? "localhost"
     } catch (e) {
         host2 = "localhost"
@@ -93,7 +93,7 @@ fn test_catch_chain() {
 @test
 fn test_catch_object_default() {
     print("7. catch with object literal as fallback")
-    let cfg: Json = { port: 8080, host: "localhost" }
+    var cfg: Json = { port: 8080, host: "localhost" }
     try {
         cfg = parseConfig()
     } catch (e) {
@@ -115,12 +115,12 @@ fn findUser(id: int) -> Json {
 @test
 fn test_catch_function_return() {
     print("8. function with Json return type using try-catch in body")
-    let u = findUser(1)
+    var u = findUser(1)
     assert_ne(u, null)
     assert_eq(u.name, "Alice")
     print("   PASS")
 
-    let v = findUser(-1)
+    var v = findUser(-1)
     assert_eq(v, null)
     print("   PASS")
 }
@@ -132,13 +132,13 @@ fn test_catch_batch() {
     fn fetchAge() -> int { return 27 }
     fn fetchEmail() -> string { throw OptErr.Msg("no email") }
 
-    let name = "unknown"
+    var name = "unknown"
     try { name = fetchName() } catch (e) { name = "unknown" }
 
-    let age = 0
+    var age = 0
     try { age = fetchAge() } catch (e) { age = 0 }
 
-    let email = ""
+    var email = ""
     try { email = fetchEmail() } catch (e) { email = "" }
 
     assert_eq(name, "unknown")

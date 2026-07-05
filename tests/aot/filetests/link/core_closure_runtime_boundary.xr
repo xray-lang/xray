@@ -1,7 +1,7 @@
 fn direct_score(delta: int) -> int {
     fn add(x: int) -> int {
-        let acc = x
-        let i = 0
+        var acc = x
+        var i = 0
         while (i < 4) {
             acc = acc + delta + i
             i = i + 1
@@ -13,15 +13,15 @@ fn direct_score(delta: int) -> int {
 }
 
 fn cell_score() -> int {
-    let n = 0
+    var n = 0
 
     fn inc(step: int) -> int {
         n = n + step
         return n
     }
 
-    let a = inc(2)
-    let b = inc(3)
+    var a = inc(2)
+    var b = inc(3)
     return a * 10 + b
 }
 

@@ -1,3 +1,3 @@
-let bytes = Bytes(4)
-let view: ByteSpan = bytes[:]
-let words: Span<string> = view.reinterpret<string>()
+var bytes = Bytes(4)
+var view: ByteSpan = bytes[:]
+var words: Span<string> = view.reinterpret<string>()

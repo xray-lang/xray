@@ -6,7 +6,7 @@ fn test_identity_int() {
     fn identity<T>(x: T) -> T {
         return x
     }
-    let n = identity(42)
+    var n = identity(42)
     assert_eq(n, 42)
     assert_eq(n + 1, 43)
 }
@@ -16,7 +16,7 @@ fn test_identity_string() {
     fn identity<T>(x: T) -> T {
         return x
     }
-    let s = identity("hello")
+    var s = identity("hello")
     assert_eq(s, "hello")
     assert_eq(s.length, 5)
 }
@@ -26,7 +26,7 @@ fn test_identity_float() {
     fn identity<T>(x: T) -> T {
         return x
     }
-    let f = identity(3.14)
+    var f = identity(3.14)
     assert(f > 3 && f < 4)
 }
 
@@ -44,7 +44,7 @@ fn test_identity_array() {
     fn identity<T>(x: T) -> T {
         return x
     }
-    let arr = identity([1, 2, 3])
+    var arr = identity([1, 2, 3])
     assert_eq(arr.length, 3)
     assert_eq(arr[0], 1)
 }
@@ -55,7 +55,7 @@ fn test_pair_creation() {
     fn makePair<T, U>(a: T, b: U) -> (T, U) {
         return (a, b)
     }
-    let (x, y) = makePair(1, "one")
+    var (x, y) = makePair(1, "one")
     assert_eq(x, 1)
     assert_eq(y, "one")
 }
@@ -65,7 +65,7 @@ fn test_swap_types() {
     fn swap<T, U>(a: T, b: U) -> (U, T) {
         return (b, a)
     }
-    let (x, y) = swap("hello", 42)
+    var (x, y) = swap("hello", 42)
     assert_eq(x, 42)
     assert_eq(y, "hello")
 }
@@ -75,7 +75,7 @@ fn test_triple_params() {
     fn triple<A, B, C>(a: A, b: B, c: C) -> (A, B, C) {
         return (a, b, c)
     }
-    let (x, y, z) = triple(1, "two", true)
+    var (x, y, z) = triple(1, "two", true)
     assert_eq(x, 1)
     assert_eq(y, "two")
     assert_eq(z, true)
@@ -111,15 +111,15 @@ fn test_array_last() {
 @test
 fn test_array_swap_elements() {
     fn swapElements<T>(arr: Array<T>, i: int, j: int) {
-        let temp = arr[i]
+        var temp = arr[i]
         arr[i] = arr[j]
         arr[j] = temp
     }
-    let nums = [1, 2, 3]
+    var nums = [1, 2, 3]
     swapElements(nums, 0, 2)
     assert_eq(nums[0], 3)
     assert_eq(nums[2], 1)
-    let strs = ["a", "b", "c"]
+    var strs = ["a", "b", "c"]
     swapElements(strs, 0, 1)
     assert_eq(strs[0], "b")
     assert_eq(strs[1], "a")
@@ -144,7 +144,7 @@ fn test_array_contains() {
 @test
 fn test_array_find_index() {
     fn findIndex<T>(arr: Array<T>, target: T) -> int {
-        for (let i = 0; i < arr.length; i++) {
+        for (var i = 0; i < arr.length; i++) {
             if (arr[i] == target) {
                 return i
             }
@@ -162,10 +162,10 @@ fn test_wrap_in_array() {
     fn wrap<T>(x: T) -> Array<T> {
         return [x]
     }
-    let intArr = wrap(42)
+    var intArr = wrap(42)
     assert_eq(intArr.length, 1)
     assert_eq(intArr[0], 42)
-    let strArr = wrap("hello")
+    var strArr = wrap("hello")
     assert_eq(strArr.length, 1)
     assert_eq(strArr[0], "hello")
 }
@@ -173,17 +173,17 @@ fn test_wrap_in_array() {
 @test
 fn test_repeat_value() {
     fn repeat<T>(x: T, n: int) -> Array<T> {
-        let result: Array<T> = []
-        for (let i = 0; i < n; i++) {
+        var result: Array<T> = []
+        for (var i = 0; i < n; i++) {
             result.push(x)
         }
         return result
     }
-    let nums = repeat(1, 3)
+    var nums = repeat(1, 3)
     assert_eq(nums.length, 3)
     assert_eq(nums[0], 1)
     assert_eq(nums[2], 1)
-    let strs = repeat("x", 2)
+    var strs = repeat("x", 2)
     assert_eq(strs.length, 2)
     assert_eq(strs[0], "x")
 }
@@ -194,11 +194,11 @@ fn test_generic_apply() {
     fn apply<T, R>(x: T, f: (T) -> R) -> R {
         return f(x)
     }
-    let doubled = apply(5, fn(n) {
+    var doubled = apply(5, fn(n) {
         return n * 2
     })
     assert_eq(doubled, 10)
-    let length = apply("hello", fn(s) {
+    var length = apply("hello", fn(s) {
         return s.length
     })
     assert_eq(length, 5)
@@ -207,13 +207,13 @@ fn test_generic_apply() {
 @test
 fn test_generic_transform() {
     fn transform<T>(arr: Array<T>, f: (T) -> T) -> Array<T> {
-        let result: Array<T> = []
+        var result: Array<T> = []
         for (item in arr) {
             result.push(f(item))
         }
         return result
     }
-    let doubled = transform([1, 2, 3], fn(x) {
+    var doubled = transform([1, 2, 3], fn(x) {
         return x * 2
     })
     assert_eq(doubled[0], 2)
@@ -245,11 +245,11 @@ fn test_find_element() {
         }
         return null
     }
-    let result: int? = find([1, 2, 3, 4, 5], fn(x) {
+    var result: int? = find([1, 2, 3, 4, 5], fn(x) {
         return x > 3
     })
     assert_eq(result, 4)
-    let notFound: int? = find([1, 2, 3], fn(x) {
+    var notFound: int? = find([1, 2, 3], fn(x) {
         return x > 10
     })
     assert_eq(notFound, null)
@@ -265,7 +265,7 @@ fn test_nested_generic_calls() {
         return [x]
     }
     // Nested calls: wrap(identity(value))
-    let arr = wrap(identity(42))
+    var arr = wrap(identity(42))
     assert_eq(arr.length, 1)
     assert_eq(arr[0], 42)
 }
@@ -282,7 +282,7 @@ fn test_chained_generic_operations() {
         return [x]
     }
     // Chain: first(wrap(value))
-    let result = first(wrap("test"))
+    var result = first(wrap("test"))
     assert_eq(result, "test")
 }
 
@@ -295,7 +295,7 @@ fn test_generic_with_map() {
         }
         return defaultVal
     }
-    let m = #{"a": 1, "b": 2}
+    var m = #{"a": 1, "b": 2}
     assert_eq(getOrDefault(m, "a", 0), 1)
     assert_eq(getOrDefault(m, "z", -1), -1)
 }
@@ -303,7 +303,7 @@ fn test_generic_with_map() {
 @test
 fn test_generic_merge_arrays() {
     fn merge<T>(a: Array<T>, b: Array<T>) -> Array<T> {
-        let result: Array<T> = []
+        var result: Array<T> = []
         for (item in a) {
             result.push(item)
         }
@@ -312,7 +312,7 @@ fn test_generic_merge_arrays() {
         }
         return result
     }
-    let merged = merge([1, 2], [3, 4])
+    var merged = merge([1, 2], [3, 4])
     assert_eq(merged.length, 4)
     assert_eq(merged[0], 1)
     assert_eq(merged[3], 4)
@@ -325,10 +325,10 @@ fn test_infer_from_return_usage() {
         return x
     }
     // Type inferred from arithmetic operation
-    let n = identity(10) + 5
+    var n = identity(10) + 5
     assert_eq(n, 15)
     // Type inferred from string operation
-    let s = identity("hello") + " world"
+    var s = identity("hello") + " world"
     assert_eq(s, "hello world")
 }
 

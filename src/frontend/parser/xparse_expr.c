@@ -588,7 +588,7 @@ AstNode *xr_parse_grouping(Parser *parser) {
 
     // Case 1: `() -> expr` no-param arrow function, or `()` unit literal.
     // Arrow closures cannot declare an explicit return type — use
-    // `fn() -> T { ... }` or annotate the binding (`let f: () -> T = ...`).
+    // `fn() -> T { ... }` or annotate the binding (`var f: () -> T = ...`).
     if (xr_parser_check(parser, TK_RPAREN)) {
         xr_parser_advance(parser);
         if (xr_parser_check(parser, TK_COLON)) {

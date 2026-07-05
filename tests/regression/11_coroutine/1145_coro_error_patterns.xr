@@ -29,19 +29,19 @@ import time
 enum CoroErr { Msg(string) }
 
 fn test_basic_error() {
-    let t1 = go {
-        let x = 1 / 0
+    var t1 = go fn() -> int {
+        var x = 1 / 0
         return x
-    }
-    let r1 = t1.awaitResult()
+    }()
+    var r1 = t1.awaitResult()
     print("t1.done:", t1.done)
     print("t1.failed:", match (r1) {
         TaskResult.Failed(_) -> true
         _ -> false
     })
 
-    let t2 = go { return 42 }
-    let r = t2.awaitResult()
+    var t2 = go fn() -> int { return 42 }()
+    var r = t2.awaitResult()
     print("t2.done:", t2.done)
     print("t2.result:", match (r) {
         TaskResult.Success(v) -> v
@@ -49,20 +49,20 @@ fn test_basic_error() {
     })
 }
 fn test_failed_await_result() {
-    let t = go {
+    var t = go {
         throw CoroErr.Msg("something went wrong")
     }
-    let r = t.awaitResult()
+    var r = t.awaitResult()
     match (r) {
         TaskResult.Failed(e) -> print("observed await error:", e)
         _ -> print("UNEXPECTED await status")
     }
 }
 fn test_success_status_in_coro() {
-    let t = go {
+    var t = go fn() -> string {
         return "success"
-    }
-    let r = await t
+    }()
+    var r = await t
     print("result:", r)
     print("status:", t.status)
 }
@@ -74,8 +74,8 @@ fn test_manual_error_check() {
         return 100 / n
     }
 
-    let t = go risky_task(0)
-    let r = t.awaitResult()
+    var t = go risky_task(0)
+    var r = t.awaitResult()
     match (r) {
         TaskResult.Failed(e) -> print("Task failed:", e)
         TaskResult.Success(v) -> print("Task succeeded:", v)
@@ -83,14 +83,14 @@ fn test_manual_error_check() {
     }
 }
 fn test_await_all_with_errors() {
-    let tasks = [
-        go { return "ok-1" },
+    var tasks = [
+        go fn() -> string { return "ok-1" }(),
         go { throw CoroErr.Msg("fail-2") },
-        go { return "ok-3" }
+        go fn() -> string { return "ok-3" }()
     ]
 
-    for (let i = 0; i < tasks.length; i++) {
-        let r = tasks[i].awaitResult()
+    for (var i = 0; i < tasks.length; i++) {
+        var r = tasks[i].awaitResult()
         match (r) {
             TaskResult.Success(v) -> print("  task[" + string(i) + "] OK:", v)
             TaskResult.Failed(e) -> print("  task[" + string(i) + "] FAILED:", e)
@@ -99,21 +99,21 @@ fn test_await_all_with_errors() {
     }
 }
 fn test_await_any() {
-    let tasks = [
-        go { time.sleep(100); return "slow" },
-        go { return "fast" }
+    var tasks = [
+        go fn() -> string { time.sleep(100); return "slow" }(),
+        go fn() -> string { return "fast" }()
     ]
-    let r = await any(tasks)
+    var r = await any(tasks)
     print("First result:", r)
 }
 fn test_monitor_error() {
-    let t = go(name: "err-worker") {
+    var t = go(name: "err-worker") {
         time.sleep(10)
         throw CoroErr.Msg("worker crashed")
     }
 
-    let ch = Coro.monitor("err-worker")
-    let reason = match (ch.recv()) {
+    var ch = Coro.monitor("err-worker")
+    var reason = match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> ""
     }

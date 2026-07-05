@@ -1,8 +1,8 @@
 import sys
 
 fn main() {
-    let x = 1
-    let t = sys.Thread.spawn(fn() -> int {
+    var x = 1
+    var t = sys.Thread.spawn(fn() -> int {
         return x
     })
     print(t)

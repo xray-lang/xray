@@ -28,9 +28,9 @@
  *
  * FIELD INHERITANCE:
  *
- *   class Animal { let name }           // field_count=1, fields=[name]
- *   class Dog extends Animal { let age } // field_count=2, fields=[name, age]
- *   class Husky extends Dog { let color } // field_count=3, fields=[name, age, color]
+ *   class Animal { name: string }           // field_count=1, fields=[name]
+ *   class Dog extends Animal { age: int } // field_count=2, fields=[name, age]
+ *   class Husky extends Dog { color: string } // field_count=3, fields=[name, age, color]
  *
  *   Husky instance memory:
  *   +------------------+

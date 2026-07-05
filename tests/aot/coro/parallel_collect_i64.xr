@@ -1,4 +1,4 @@
-let xs = parallel for i in 0..8 workers 4 worker wid collect {
+var xs = parallel for i in 0..8 workers 4 worker wid collect {
     i * 10 + wid
 }
 
@@ -8,7 +8,7 @@ print(xs[3])
 print(xs[4])
 print(xs[7])
 
-let empty = parallel for i in 5..5 workers 4 collect {
+var empty = parallel for i in 5..5 workers 4 collect {
     i
 }
 

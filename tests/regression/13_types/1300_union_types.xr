@@ -40,7 +40,7 @@ class Cat {
 
 @test
 fn test_union_types() {
-    let x: int | string = 42
+    var x: int | string = 42
     assert_eq(typeof(x), "int")
     x = "hello"
     assert_eq(typeof(x), "string")
@@ -50,17 +50,17 @@ fn test_union_types() {
     assert_eq(to_string_value("hello"), "str")
 
     // Test 3: union return type
-    let a = parse_value("42")
+    var a = parse_value("42")
     assert_eq(typeof(a), "int")
-    let b = parse_value("hello")
+    var b = parse_value("hello")
     assert_eq(typeof(b), "string")
 
     // Test 4: union with null normalizes to nullable (int | null -> int?)
-    let n: int | null = 42
+    var n: int | null = 42
     assert_eq(typeof(n), "int")
 
     // Test 5: numeric promotion preserved (int | float -> float)
-    let f: int | float = 3.14
+    var f: int | float = 3.14
     assert_eq(typeof(f), "float")
 
     // Test 6: three-member union
@@ -69,14 +69,14 @@ fn test_union_types() {
     assert_eq(classify(true), "flag")
 
     // Test 7: union assignability - int is assignable to int | string
-    let u: int | string = 100
+    var u: int | string = 100
     assert_eq(typeof(u), "int")
     u = "world"
     assert_eq(typeof(u), "string")
 
     // Test 8: type alias with union
     type Result = int | string
-    let r: Result = 42
+    var r: Result = 42
     assert_eq(typeof(r), "int")
     r = "ok"
     assert_eq(typeof(r), "string")
@@ -84,11 +84,11 @@ fn test_union_types() {
     // Test 9: JSON type alias as union member (non-union alias allowed)
     type User = {id: int, name: string}
     type Response = User | bool
-    let resp: Response = true
+    var resp: Response = true
     assert_eq(typeof(resp), "bool")
 
     // Test 10: nullable union member (int? | string)
-    let m: int? | string = null
+    var m: int? | string = null
     assert_eq(typeof(m), "null")
     m = 42
     assert_eq(typeof(m), "int")
@@ -97,18 +97,18 @@ fn test_union_types() {
 
     // Test 11: class instance union
 
-    let pet: Dog | Cat = Dog("Buddy")
+    var pet: Dog | Cat = Dog("Buddy")
     assert_eq(pet.speak(), "woof")
     pet = Cat("Whiskers")
     assert_eq(pet.speak(), "meow")
 
     // Test 12: class instance with is check
-    let pet2: Dog | Cat = Dog("Rex")
+    var pet2: Dog | Cat = Dog("Rex")
     assert_eq(pet2 is Dog, true)
     assert_eq(pet2 is Cat, false)
 
     // Test 13: container with union element type
-    let arr: Array<int | string> = [1, "hello", 2, "world"]
+    var arr: Array<int | string> = [1, "hello", 2, "world"]
     assert_eq(arr.length, 4)
     assert_eq(typeof(arr[0]), "int")
     assert_eq(typeof(arr[1]), "string")

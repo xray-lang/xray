@@ -2,10 +2,10 @@
 
 @test
 fn test_null_unwrap_throws_413() {
-    let x: int? = null
-    let caught = false
+    var x: int? = null
+    var caught = false
     try {
-        let v = x!
+        var v = x!
         assert(false)
     } catch(e) {
         caught = true
@@ -17,6 +17,6 @@ fn test_null_unwrap_throws_413() {
 
 @test
 fn test_non_null_unwrap_succeeds() {
-    let y: int? = 42
+    var y: int? = 42
     assert_eq(y!, 42)
 }

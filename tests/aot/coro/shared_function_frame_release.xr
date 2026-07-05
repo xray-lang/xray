@@ -3,9 +3,9 @@ fn worker(n: int) -> int {
 }
 
 fn run_many(iter: int) -> int {
-    let sum = 0
-    for (let i = 0; i < iter; i++) {
-        let task = go worker(i)
+    var sum = 0
+    for (var i = 0; i < iter; i++) {
+        var task = go worker(i)
         sum = sum + await task
     }
     return sum

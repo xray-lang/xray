@@ -1,5 +1,5 @@
 fn taggedArrayOps() -> string {
-    let names: Array<string> = []
+    var names: Array<string> = []
     names.push("alpha")
     names.push("beta")
     return names[0]

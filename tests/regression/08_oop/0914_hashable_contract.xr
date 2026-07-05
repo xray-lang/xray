@@ -34,22 +34,22 @@ fn passHashable<T: Hashable>(value: T) -> T {
 
 @test
 fn test_class_hashable_map_set_key() {
-    let token = Token(7)
-    let values: Map<Token, int> = #{}
+    var token = Token(7)
+    var values: Map<Token, int> = #{}
     values.set(token, 99)
     assert(values.has(token))
     assert_eq(values.get(token), 99)
 
-    let seen: Set<Token> = #[]
+    var seen: Set<Token> = #[]
     seen.add(token)
     assert(seen.has(token))
 }
 
 @test
 fn test_user_hashable_generic_constraint() {
-    let token = Token(3)
+    var token = Token(3)
     assert_eq(passHashable(token).value, 3)
 
-    let cell = Cell{value: 5}
+    var cell = Cell{value: 5}
     assert_eq(passHashable(cell).value, 5)
 }

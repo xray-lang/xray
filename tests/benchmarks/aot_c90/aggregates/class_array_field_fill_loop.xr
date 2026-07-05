@@ -2,24 +2,24 @@ class FillBag {
     values: Array<int>
 
     constructor() {
-        let values: Array<int> = []
+        var values: Array<int> = []
         this.values = values
     }
 
     fill(n: int, rounds: int) -> int {
-        let values: Array<int> = []
+        var values: Array<int> = []
         this.values = values
 
-        let i = 0
+        var i = 0
         while (i < n) {
             this.values.push(i * 3 + 1)
             i = i + 1
         }
 
-        let r = 0
-        let sum = 0
+        var r = 0
+        var sum = 0
         while (r < rounds) {
-            let j = 0
+            var j = 0
             while (j < this.values.length) {
                 sum = sum + this.values[j]
                 j = j + 1
@@ -31,7 +31,7 @@ class FillBag {
 }
 
 fn class_array_field_fill_loop_run(rounds: int) -> int {
-    let bag = FillBag()
+    var bag = FillBag()
     return bag.fill(256, rounds)
 }
 

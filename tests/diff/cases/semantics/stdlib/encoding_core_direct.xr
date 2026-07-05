@@ -3,7 +3,7 @@ import encoding
 
 print(encoding.hexEncode("Hello"))
 print(encoding.hexEncode("\t"))
-let bytes = encoding.hexDecode("48656c6c6f")
+var bytes = encoding.hexDecode("48656c6c6f")
 if (bytes != null) {
     print(bytes.length)
     print(bytes[0])
@@ -15,7 +15,7 @@ if (bytes != null) {
 print(encoding.hexDecodeString("48656C6C6F"))
 print(encoding.hexDecode("gg") == null)
 print(encoding.hexDecode("abc") == null)
-let emptyBytes = encoding.hexDecode("")
+var emptyBytes = encoding.hexDecode("")
 if (emptyBytes != null) {
     print(emptyBytes.length)
 }
@@ -37,7 +37,7 @@ print(encoding.utf8ByteLength("你好"))
 print(encoding.LE)
 print(encoding.BE)
 
-let u16le = encoding.utf16Encode("AB")
+var u16le = encoding.utf16Encode("AB")
 print(u16le.length)
 print(u16le[0])
 print(u16le[1])
@@ -45,7 +45,7 @@ print(u16le[2])
 print(u16le[3])
 print(encoding.utf16Decode(u16le))
 
-let u16be = encoding.utf16Encode("AB", encoding.BE)
+var u16be = encoding.utf16Encode("AB", encoding.BE)
 print(u16be.length)
 print(u16be[0])
 print(u16be[1])
@@ -54,7 +54,7 @@ print(u16be[3])
 print(encoding.utf16Decode(u16be, encoding.BE))
 print(encoding.utf16Decode(u16be, encoding.BE, false))
 
-let bom = Bytes(4)
+var bom = Bytes(4)
 bom[0] = 254
 bom[1] = 255
 bom[2] = 0

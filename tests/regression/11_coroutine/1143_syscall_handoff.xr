@@ -22,8 +22,8 @@ fn slow_worker(ch: Channel<string>) {
     ch.send("slow done")
 }
 fn fast_worker(id: int, ch: Channel<string>) {
-    let sum = 0
-    for (let i = 0; i < 100; i++) {
+    var sum = 0
+    for (var i = 0; i < 100; i++) {
         sum = sum + i
     }
     ch.send("fast " + string(id) + " done")
@@ -32,8 +32,8 @@ fn fast_worker(id: int, ch: Channel<string>) {
 @test
 fn test_syscall_handoff() {
 
-    shared const FAST_COUNT = 8
-    shared const resultCh = Channel(9)
+    shared FAST_COUNT = 8
+    shared resultCh = Channel(9)
 
 
 
@@ -41,15 +41,15 @@ fn test_syscall_handoff() {
     go slow_worker(resultCh)
 
     // Spawn fast coroutines
-    for (let i = 0; i < FAST_COUNT; i++) {
+    for (var i = 0; i < FAST_COUNT; i++) {
         go fast_worker(i, resultCh)
     }
 
     // Collect all results
-    let fast_done = 0
-    let slow_done = false
-    for (let i = 0; i < FAST_COUNT + 1; i++) {
-        let msg = recv_string(resultCh)
+    var fast_done = 0
+    var slow_done = false
+    for (var i = 0; i < FAST_COUNT + 1; i++) {
+        var msg = recv_string(resultCh)
         if (msg == "slow done") {
             slow_done = true
         } else {

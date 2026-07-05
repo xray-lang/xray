@@ -21,18 +21,18 @@ fn recv_ok(r: Recv<int>) -> bool {
 
 @test
 fn test_dynamic_channel_capacity() {
-    let n = 3
-    const ch = Channel<int>(n)
+    var n = 3
+    shared ch = Channel<int>(n)
     assert_eq(ch.capacity, 3)
     assert_eq(sent(ch.trySend(1)), true)
     assert_eq(sent(ch.trySend(2)), true)
     assert_eq(sent(ch.trySend(3)), true)
-    let r1 = ch.tryRecv()
-    let r2 = ch.tryRecv()
-    let r3 = ch.tryRecv()
-    let v1 = recv_value(r1)
-    let v2 = recv_value(r2)
-    let v3 = recv_value(r3)
+    var r1 = ch.tryRecv()
+    var r2 = ch.tryRecv()
+    var r3 = ch.tryRecv()
+    var v1 = recv_value(r1)
+    var v2 = recv_value(r2)
+    var v3 = recv_value(r3)
     assert_eq(recv_ok(r1), true)
     assert_eq(recv_ok(r2), true)
     assert_eq(recv_ok(r3), true)
@@ -42,15 +42,15 @@ fn test_dynamic_channel_capacity() {
 
 @test
 fn test_bare_dynamic_channel_capacity() {
-    let n = 2
-    const ch: Channel<int> = Channel(n)
+    var n = 2
+    shared ch: Channel<int> = Channel(n)
     assert_eq(ch.capacity, 2)
     assert_eq(sent(ch.trySend(4)), true)
     assert_eq(sent(ch.trySend(5)), true)
-    let r1 = ch.tryRecv()
-    let r2 = ch.tryRecv()
-    let v1 = recv_value(r1)
-    let v2 = recv_value(r2)
+    var r1 = ch.tryRecv()
+    var r2 = ch.tryRecv()
+    var v1 = recv_value(r1)
+    var v2 = recv_value(r2)
     assert_eq(recv_ok(r1), true)
     assert_eq(recv_ok(r2), true)
     assert_eq(v1 + v2, 9)

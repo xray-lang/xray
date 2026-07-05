@@ -10,10 +10,10 @@ order: 006
 
 > 真值源：`src/frontend/parser/xparse_decl.c`、`src/frontend/parser/xast_nodes_decl.h`、`src/frontend/analyzer/xanalyzer_visitor.c`。
 
-### 5.1 `let` / `const` / `shared`
+### 5.1 `var` / `const` / `shared`
 
 ```ebnf
-VarDecl ::= ('let' | 'const' | 'shared' ('const' | 'let')) Binding (',' Binding)*
+VarDecl ::= ('var' | 'const' | 'shared') Binding (',' Binding)*
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -22,14 +22,14 @@ Pattern ::= Identifier
 ObjectBinding ::= Identifier (':' Identifier)?
 ```
 
-#### 5.1.1 `let` — 可变绑定
+#### 5.1.1 `var` — 可变绑定
 
-```xray @id=decl-let
-let x = 1                         // 类型推断为 int
-let name: string = "Alice"        // 显式类型
-let count: int                    // 仅声明无初值：使用零值
-let maybeName: string?            // OK：默认 null
-let empty: string = ""            // string 必须显式初始化
+```xray @id=decl-var
+var x = 1                         // 类型推断为 int
+var name: string = "Alice"        // 显式类型
+var count: int                    // 仅声明无初值：使用零值
+var maybeName: string?            // OK：默认 null
+var empty: string = ""            // string 必须显式初始化
 ```
 
 - 可重新赋值。
@@ -48,42 +48,34 @@ const MAX_LEN: int = 1024
 - 不能重新赋值（编译错误 `E0303`）。
 - 类型可推断或显式标注。
 
-#### 5.1.3 `shared const` — 跨协程不可变共享
+#### 5.1.3 `shared` — 共享身份绑定
 
-```xray @id=decl-shared-const
-shared const CONFIG = { host: "localhost", port: 8080 }
-shared const PRIMES = [2, 3, 5, 7, 11]
+```xray @id=decl-shared
+shared CONFIG = { host: "localhost", port: 8080 }
+shared PRIMES = [2, 3, 5, 7, 11]
+shared counter = Atomic(0)
 ```
 
 - 存储在**全局堆**，refcount 管理。
-- 跨协程**零拷贝**只读访问。
-- 是 `go` 闭包**唯一**能合法捕获的可变作用域之外的变量种类（其他必须走参数传递或 `move`）。
-
-#### 5.1.4 `shared let` — 跨协程可变独占
-
-```xray @id=decl-shared-let
-shared let buffer = Bytes(1024)
-```
-
-- **Move 语义**：必须用 `move` 显式转移所有权。
-- 不能被 `go` 闭包捕获（必须 `move`）。
-- `move` 之后访问 → 编译错误。
+- 绑定名不可重新赋值，也不能作为 `move` 源。
+- 可被 `go` 闭包捕获，也可作为实参跨协程传递；对象本身是否可安全并发修改由类型语义决定。
+- `Atomic`、`Channel`、`Semaphore`、`WorkQueue` 等同步/并发句柄必须通过 `shared` 创建命名。
 
 详见 [§10.11](#1011-并发安全模型)。
 
-#### 5.1.5 解构绑定
+#### 5.1.4 解构绑定
 
 ```xray @id=decl-destructuring
 // 数组解构
-let [a, b, c] = [1, 2, 3]
-let [first, , third] = [10, 20, 30]         // 跳过元素
+var [a, b, c] = [1, 2, 3]
+var [first, , third] = [10, 20, 30]         // 跳过元素
 
 // 元组解构（多返回值）
-let (q, r) = divmod(17, 5)
+var (q, r) = divmod(17, 5)
 
 // 对象解构（按字段名提取，可重命名本地绑定）
-let { name, age } = { name: "Alice", age: 30 }
-let { name: localName, age } = { name: "Alice", age: 30 }
+var { name, age } = { name: "Alice", age: 30 }
+var { name: localName, age } = { name: "Alice", age: 30 }
 ```
 
 约束：
@@ -151,8 +143,8 @@ fn divmod(a: int, b: int) -> (int, int) {
     return (a / b, a % b)
 }
 
-let (q, r) = divmod(17, 5)
-let result = divmod(10, 3)        // result 类型 (int, int)
+var (q, r) = divmod(17, 5)
+var result = divmod(10, 3)        // result 类型 (int, int)
 ```
 
 **约束**：
@@ -187,7 +179,7 @@ fn translate(v: ref Vec2, dx: float, dy: float) -> () {
 
 ```xray @id=decl-fn-rest
 fn sum(...nums: int) -> int {
-    let total = 0
+    var total = 0
     for (n in nums) { total += n }
     return total
 }
@@ -208,7 +200,7 @@ fn main() { ... }
 ```
 
 - 顶层 `fn` 声明被提升到当前作用域顶部。
-- `let f = (x: int) -> x`（赋值给变量的箭头函数）**不**提升。
+- `var f = (x: int) -> x`（赋值给变量的箭头函数）**不**提升。
 
 #### 5.2.7 尾递归优化
 
@@ -245,7 +237,7 @@ greet()                   // 必须显式调用
 @extern("C") fn free(p: RawMut<uint8>)
 @extern("C") @dylib("m") fn cos(x: float64) -> float64
 
-let p = unsafe { malloc(4) }
+var p = unsafe { malloc(4) }
 unsafe {
     p[0] = 42
     print(cos(0.0))
@@ -344,7 +336,7 @@ class Animal {
     }
 }
 
-let a = Animal("Rex")
+var a = Animal("Rex")
 print(a.speak())
 print(Animal.create("Bob").name)
 ```
@@ -491,15 +483,15 @@ struct Point {
 }
 
 // 两种创建方式
-let p = Point()                  // 默认构造（字段为零值）后逐个赋值
+var p = Point()                  // 默认构造（字段为零值）后逐个赋值
 p.x = 3.0
 p.y = 4.0
 
-let q = Point{x: 3.0, y: 4.0}        // struct 字面量：类型名 + { field: value }
-let pt = Point{x: 1.0, y: 2.0}
+var q = Point{x: 3.0, y: 4.0}        // struct 字面量：类型名 + { field: value }
+var pt = Point{x: 1.0, y: 2.0}
 
 // 值语义：赋值与传参都是拷贝
-let b = q                            // b 是 q 的独立拷贝
+var b = q                            // b 是 q 的独立拷贝
 b.x = 99.0
 // q.x 仍为 3.0
 ```
@@ -509,7 +501,7 @@ b.x = 99.0
 | 维度 | `class` | `struct` |
 |--|--|--|
 | 内存语义 | 引用类型（堆） | 值类型（栈或内联） |
-| 赋值/传参 | 共享引用 | **拷贝**（`let b = a` 生产独立副本） |
+| 赋值/传参 | 共享引用 | **拷贝**（`var b = a` 生产独立副本） |
 | 继承 | 支持 `extends` | **不支持**继承 |
 | `implements` | ✅ | ✅ |
 | 泛型 | ✅ | ✅ |
@@ -691,11 +683,11 @@ enum Expr {
 构造：
 
 ```xray
-let c = Color.Red                                   // 简单
-let r1 = Option.Some(42)                            // 位置 payload
-let e1 = NetEvent.DataReceived(bytes: b)            // 具名 payload，可写字段名
-let e2 = NetEvent.Error(404, "not found")           // 也可省略字段名按位置传
-let e3 = NetEvent.Connected                         // 无 payload 变体不写括号
+var c = Color.Red                                   // 简单
+var r1 = Option.Some(42)                            // 位置 payload
+var e1 = NetEvent.DataReceived(bytes: b)            // 具名 payload，可写字段名
+var e2 = NetEvent.Error(404, "not found")           // 也可省略字段名按位置传
+var e3 = NetEvent.Connected                         // 无 payload 变体不写括号
 ```
 
 解构（match）：
@@ -762,7 +754,7 @@ enum Shape {
             Shape.Circle(r)     -> 3.14159 * r * r,
             Shape.Rect(w, h)    -> w * h,
             Shape.Triangle(a, b, c) -> {
-                let s = (a + b + c) / 2.0
+                var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
         }
@@ -776,7 +768,7 @@ enum Shape {
     }
 }
 
-let s = Shape.Circle(radius: 1.0)
+var s = Shape.Circle(radius: 1.0)
 print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
@@ -885,10 +877,10 @@ export * from "./other"
 
 > Source of truth: `src/frontend/parser/xparse_decl.c`, `src/frontend/parser/xast_nodes_decl.h`, `src/frontend/analyzer/xanalyzer_visitor.c`.
 
-### 5.1 `let` / `const` / `shared`
+### 5.1 `var` / `const` / `shared`
 
 ```ebnf
-VarDecl ::= ('let' | 'const' | 'shared' ('const' | 'let')) Binding (',' Binding)*
+VarDecl ::= ('var' | 'const' | 'shared') Binding (',' Binding)*
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -897,14 +889,14 @@ Pattern ::= Identifier
 ObjectBinding ::= Identifier (':' Identifier)?
 ```
 
-#### 5.1.1 `let` — mutable binding
+#### 5.1.1 `var` — mutable binding
 
-```xray @id=decl-let
-let x = 1                         // type inferred as int
-let name: string = "Alice"        // explicit type
-let count: int                    // no initializer: zero value used
-let maybeName: string?            // OK: defaults to null
-let empty: string = ""            // string requires an explicit initializer
+```xray @id=decl-var
+var x = 1                         // type inferred as int
+var name: string = "Alice"        // explicit type
+var count: int                    // no initializer: zero value used
+var maybeName: string?            // OK: defaults to null
+var empty: string = ""            // string requires an explicit initializer
 ```
 
 - Reassignable.
@@ -923,42 +915,34 @@ const MAX_LEN: int = 1024
 - Cannot be reassigned (compile error `E0303`).
 - The type may be inferred or annotated explicitly.
 
-#### 5.1.3 `shared const` — cross-coroutine immutable shared
+#### 5.1.3 `shared` — shared identity binding
 
-```xray @id=decl-shared-const
-shared const CONFIG = { host: "localhost", port: 8080 }
-shared const PRIMES = [2, 3, 5, 7, 11]
+```xray @id=decl-shared
+shared CONFIG = { host: "localhost", port: 8080 }
+shared PRIMES = [2, 3, 5, 7, 11]
+shared counter = Atomic(0)
 ```
 
 - Stored on the **global heap**, refcount-managed.
-- Read-only **zero-copy** access across coroutines.
-- The **only** kind of variable outside the local mutable scope that a `go` closure may legally capture (everything else must be passed explicitly or `move`d).
-
-#### 5.1.4 `shared let` — cross-coroutine mutable, exclusive
-
-```xray @id=decl-shared-let
-shared let buffer = Bytes(1024)
-```
-
-- **Move semantics**: ownership must be transferred explicitly with `move`.
-- Cannot be captured by a `go` closure (must be `move`d).
-- Use after `move` is a compile error.
+- The binding name cannot be reassigned and cannot be used as a `move` source.
+- It may be captured by `go` closures and passed across coroutine boundaries directly; concurrent mutation safety comes from the value's own type semantics.
+- Synchronization/concurrency handles such as `Atomic`, `Channel`, `Semaphore`, and `WorkQueue` must be created with `shared`.
 
 See [§10.11](#1011-concurrency-safety-model).
 
-#### 5.1.5 Destructuring bindings
+#### 5.1.4 Destructuring bindings
 
 ```xray @id=decl-destructuring
 // array destructuring
-let [a, b, c] = [1, 2, 3]
-let [first, , third] = [10, 20, 30]         // skip elements
+var [a, b, c] = [1, 2, 3]
+var [first, , third] = [10, 20, 30]         // skip elements
 
 // tuple destructuring (multi-return)
-let (q, r) = divmod(17, 5)
+var (q, r) = divmod(17, 5)
 
 // object destructuring (extract by field name; local binding may be renamed)
-let { name, age } = { name: "Alice", age: 30 }
-let { name: localName, age } = { name: "Alice", age: 30 }
+var { name, age } = { name: "Alice", age: 30 }
+var { name: localName, age } = { name: "Alice", age: 30 }
 ```
 
 Constraints:
@@ -1026,8 +1010,8 @@ fn divmod(a: int, b: int) -> (int, int) {
     return (a / b, a % b)
 }
 
-let (q, r) = divmod(17, 5)
-let result = divmod(10, 3)        // result has type (int, int)
+var (q, r) = divmod(17, 5)
+var result = divmod(10, 3)        // result has type (int, int)
 ```
 
 **Constraints**:
@@ -1062,7 +1046,7 @@ fn translate(v: ref Vec2, dx: float, dy: float) -> () {
 
 ```xray @id=decl-fn-rest
 fn sum(...nums: int) -> int {
-    let total = 0
+    var total = 0
     for (n in nums) { total += n }
     return total
 }
@@ -1083,7 +1067,7 @@ fn main() { ... }
 ```
 
 - Top-level `fn` declarations are hoisted to the top of the current scope.
-- `let f = (x: int) -> x` (an arrow function bound to a variable) is **not** hoisted.
+- `var f = (x: int) -> x` (an arrow function bound to a variable) is **not** hoisted.
 
 #### 5.2.7 Tail-call optimization
 
@@ -1120,7 +1104,7 @@ greet()                   // must be called explicitly
 @extern("C") fn free(p: RawMut<uint8>)
 @extern("C") @dylib("m") fn cos(x: float64) -> float64
 
-let p = unsafe { malloc(4) }
+var p = unsafe { malloc(4) }
 unsafe {
     p[0] = 42
     print(cos(0.0))
@@ -1219,7 +1203,7 @@ class Animal {
     }
 }
 
-let a = Animal("Rex")
+var a = Animal("Rex")
 print(a.speak())
 print(Animal.create("Bob").name)
 ```
@@ -1366,15 +1350,15 @@ struct Point {
 }
 
 // Two creation styles
-let p = Point()                  // default-construct (zero-valued fields), then assign
+var p = Point()                  // default-construct (zero-valued fields), then assign
 p.x = 3.0
 p.y = 4.0
 
-let q = Point{x: 3.0, y: 4.0}        // struct literal: TypeName + { field: value }
-let pt = Point{x: 1.0, y: 2.0}
+var q = Point{x: 3.0, y: 4.0}        // struct literal: TypeName + { field: value }
+var pt = Point{x: 1.0, y: 2.0}
 
 // Value semantics: assignment and parameter passing copy
-let b = q                            // b is an independent copy of q
+var b = q                            // b is an independent copy of q
 b.x = 99.0
 // q.x is still 3.0
 ```
@@ -1384,7 +1368,7 @@ b.x = 99.0
 | Dimension | `class` | `struct` |
 |--|--|--|
 | Memory model | Reference type (heap) | Value type (stack or inlined) |
-| Assign / pass | Shared reference | **Copy** (`let b = a` produces an independent copy) |
+| Assign / pass | Shared reference | **Copy** (`var b = a` produces an independent copy) |
 | Inheritance | Supports `extends` | **No** inheritance |
 | `implements` | ✅ | ✅ |
 | Generics | ✅ | ✅ |
@@ -1566,11 +1550,11 @@ Mixing: a single enum may contain both payload-free and payload-bearing variants
 Construction:
 
 ```xray
-let c = Color.Red                                   // simple
-let r1 = Option.Some(42)                            // positional payload
-let e1 = NetEvent.DataReceived(bytes: b)            // named payload, field name allowed
-let e2 = NetEvent.Error(404, "not found")           // field name omitted, positional
-let e3 = NetEvent.Connected                         // payload-free variant: no parentheses
+var c = Color.Red                                   // simple
+var r1 = Option.Some(42)                            // positional payload
+var e1 = NetEvent.DataReceived(bytes: b)            // named payload, field name allowed
+var e2 = NetEvent.Error(404, "not found")           // field name omitted, positional
+var e3 = NetEvent.Connected                         // payload-free variant: no parentheses
 ```
 
 Destructuring (match):
@@ -1637,7 +1621,7 @@ enum Shape {
             Shape.Circle(r)     -> 3.14159 * r * r,
             Shape.Rect(w, h)    -> w * h,
             Shape.Triangle(a, b, c) -> {
-                let s = (a + b + c) / 2.0
+                var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
         }
@@ -1651,7 +1635,7 @@ enum Shape {
     }
 }
 
-let s = Shape.Circle(radius: 1.0)
+var s = Shape.Circle(radius: 1.0)
 print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```

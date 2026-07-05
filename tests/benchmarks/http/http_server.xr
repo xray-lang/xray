@@ -14,7 +14,7 @@
 
 import http
 
-let port = 8080
+var port = 8080
 if (process.args.length > 0) {
     port = int(process.args[0]) ?? 8080
 }

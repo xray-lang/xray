@@ -7,7 +7,7 @@ fn deep() {
     throw AppErr.Msg("boom")
 }
 
-let order: Array<string> = []
+var order: Array<string> = []
 try {
     order.push("try")
     deep()

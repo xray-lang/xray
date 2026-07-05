@@ -9,7 +9,7 @@ print("=== WebSocket Echo Test ===")
 const TEST_URL = "wss://ws.postman-echo.com/raw"
 
 print("Connecting to: " + TEST_URL)
-let conn = ws.connect(TEST_URL, null)
+var conn = ws.connect(TEST_URL, null)
 
 if (conn!.error) {
     print("Connection error: " + conn!.error)
@@ -19,7 +19,7 @@ if (conn!.error) {
     
     // Send message
     print("Sending message...")
-    let sent = ws.send(conn, "Hello WebSocket!", null)
+    var sent = ws.send(conn, "Hello WebSocket!", null)
     if (sent) {
         print("Message sent!")
     } else {
@@ -28,7 +28,7 @@ if (conn!.error) {
     
     // Receive echo
     print("Waiting for echo...")
-    let msg = ws.recv(conn, null)
+    var msg = ws.recv(conn, null)
     if (msg == null) {
         print("recv returned null")
     } else if (msg.error) {

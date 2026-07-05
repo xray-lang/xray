@@ -12,7 +12,7 @@ fn test_simple_floats() {
 @test
 fn test_zero_float() {
     assert_eq(0, 0)
-    let x = 0
+    var x = 0
     assert_eq(x, 0)
 }
 
@@ -63,7 +63,7 @@ fn test_leading_zero() {
 @test
 fn test_float_comparison() {
     // IEEE 754 精度问题：0.1 + 0.2 != 0.3
-    let sum = 0.1 + 0.2
+    var sum = 0.1 + 0.2
     assert_eq(sum > 0.29, true)
     assert_eq(sum < 0.31, true)
 }

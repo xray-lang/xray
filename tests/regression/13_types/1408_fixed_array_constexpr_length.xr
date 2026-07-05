@@ -10,23 +10,23 @@ fn last_scaled(xs: [uint8; DOUBLE]) -> int {
 fn test_fixed_array_constexpr_lengths() {
     const LOCAL = BASE + 1
 
-    let a: [uint8; BASE] = [7; BASE]
+    var a: [uint8; BASE] = [7; BASE]
     assert(a.length == 4)
     assert(a[3] == 7)
 
-    let b: [uint8; DOUBLE] = [1; DOUBLE]
+    var b: [uint8; DOUBLE] = [1; DOUBLE]
     assert(b.length == 8)
     assert(last_scaled(b) == 1)
 
-    let c: [uint8; SHIFTED] = [0; SHIFTED]
+    var c: [uint8; SHIFTED] = [0; SHIFTED]
     assert(c.length == 8)
     assert(c[6] == 0)
 
-    let d: [uint8; LOCAL] = [2; LOCAL]
+    var d: [uint8; LOCAL] = [2; LOCAL]
     assert(d.length == 5)
     assert(d[4] == 2)
 
-    let inferred = [3; BASE + 2]
+    var inferred = [3; BASE + 2]
     assert(inferred.length == 6)
     assert(inferred[5] == 3)
 }

@@ -117,20 +117,20 @@ static int count_opcode(const XrProto *proto, OpCode op) {
 /* ========== Constant & Arithmetic Tests ========== */
 
 TEST(e2e_simple_const) {
-    /* let x = 42
+    /* var x = 42
      * print(x)
      * Expect: LOADI + PRINT + RETURN */
-    XrProto *p = compile_source("let x = 42\nprint(x)", NULL);
+    XrProto *p = compile_source("var x = 42\nprint(x)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_PRINT));
     xr_vm_proto_free(p);
 }
 
 TEST(e2e_arithmetic) {
-    /* let x = 1 + 2
-     * let y = x * 3
+    /* var x = 1 + 2
+     * var y = x * 3
      * After const folding: x=3, y=9 (both constants). */
-    XrProto *p = compile_source("let x = 1 + 2\nlet y = x * 3\nprint(y)", NULL);
+    XrProto *p = compile_source("var x = 1 + 2\nvar y = x * 3\nprint(y)", NULL);
     assert(p != NULL);
     /* After optimization, ADD and MUL should be folded away */
     assert(!has_opcode(p, OP_ADD) && "1+2 should be folded");
@@ -139,10 +139,10 @@ TEST(e2e_arithmetic) {
 }
 
 TEST(e2e_variable_assignment) {
-    /* let x = 10
+    /* var x = 10
      * x = x + 5
      * print(x) */
-    XrProto *p = compile_source("let x = 10\nx = x + 5\nprint(x)", NULL);
+    XrProto *p = compile_source("var x = 10\nx = x + 5\nprint(x)", NULL);
     assert(p != NULL);
     /* After const folding: x=15, so no ADD */
     assert(!has_opcode(p, OP_ADD) && "10+5 should be folded");
@@ -161,10 +161,10 @@ TEST(e2e_if_else) {
 }
 
 TEST(e2e_while_loop) {
-    /* let i = 0
+    /* var i = 0
      * while i < 3 { i = i + 1 }
      * print(i) */
-    XrProto *p = compile_source("let i = 0\nwhile (i < 3) { i = i + 1 }\nprint(i)", NULL);
+    XrProto *p = compile_source("var i = 0\nwhile (i < 3) { i = i + 1 }\nprint(i)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_JMP) && "while loop needs JMP");
     xr_vm_proto_free(p);
@@ -176,7 +176,7 @@ TEST(e2e_no_optimize) {
     /* Verify that unoptimized path works */
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.run_optimize = false;
-    XrProto *p = compile_source("let x = 1 + 2\nprint(x)", &cfg);
+    XrProto *p = compile_source("var x = 1 + 2\nprint(x)", &cfg);
     assert(p != NULL);
     /* Without optimization, constant folding doesn't run, so arithmetic remains.
      * Instruction fusion may emit ADDI instead of ADD for small constant args. */
@@ -189,7 +189,7 @@ TEST(e2e_with_verify) {
     /* Verify passes by default */
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.run_verify = true;
-    XrProto *p = compile_source("let x = 42\nprint(x)", &cfg);
+    XrProto *p = compile_source("var x = 42\nprint(x)", &cfg);
     assert(p != NULL);
     xr_vm_proto_free(p);
 }
@@ -197,19 +197,19 @@ TEST(e2e_with_verify) {
 /* ========== Boolean & Comparison ========== */
 
 TEST(e2e_bool_ops) {
-    /* let a = true
-     * let b = false
+    /* var a = true
+     * var b = false
      * print(a) */
-    XrProto *p = compile_source("let a = true\nlet b = false\nprint(a)", NULL);
+    XrProto *p = compile_source("var a = true\nvar b = false\nprint(a)", NULL);
     assert(p != NULL);
     xr_vm_proto_free(p);
 }
 
 TEST(e2e_comparison) {
-    /* let x = 5 > 3
+    /* var x = 5 > 3
      * print(x)
      * After const folding: x=true */
-    XrProto *p = compile_source("let x = 5 > 3\nprint(x)", NULL);
+    XrProto *p = compile_source("var x = 5 > 3\nprint(x)", NULL);
     assert(p != NULL);
     xr_vm_proto_free(p);
 }
@@ -229,7 +229,7 @@ TEST(e2e_multi_print) {
 /* ========== String Literals ========== */
 
 TEST(e2e_string_literal) {
-    XrProto *p = compile_source("let s = \"hello\"\nprint(s)", NULL);
+    XrProto *p = compile_source("var s = \"hello\"\nprint(s)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_PRINT));
     xr_vm_proto_free(p);
@@ -238,9 +238,9 @@ TEST(e2e_string_literal) {
 /* ========== Unary Ops ========== */
 
 TEST(e2e_unary_neg) {
-    /* let x = -42
+    /* var x = -42
      * After const folding: x = -42 */
-    XrProto *p = compile_source("let x = -42\nprint(x)", NULL);
+    XrProto *p = compile_source("var x = -42\nprint(x)", NULL);
     assert(p != NULL);
     xr_vm_proto_free(p);
 }
@@ -248,8 +248,8 @@ TEST(e2e_unary_neg) {
 /* ========== For Loop ========== */
 
 TEST(e2e_for_loop) {
-    XrProto *p = compile_source("let sum = 0\n"
-                                "for (let i = 0; i < 5; i = i + 1) { sum = sum + i }\n"
+    XrProto *p = compile_source("var sum = 0\n"
+                                "for (var i = 0; i < 5; i = i + 1) { sum = sum + i }\n"
                                 "print(sum)",
                                 NULL);
     assert(p != NULL);
@@ -326,9 +326,9 @@ TEST(e2e_nested_call) {
 /* ========== Constant Propagation Chain ========== */
 
 TEST(e2e_const_prop_chain) {
-    /* let a = 2; let b = a + 3; let c = b * 4; print(c)
+    /* var a = 2; var b = a + 3; var c = b * 4; print(c)
      * After folding: a=2, b=5, c=20. No arithmetic ops. */
-    XrProto *p = compile_source("let a = 2\nlet b = a + 3\nlet c = b * 4\nprint(c)", NULL);
+    XrProto *p = compile_source("var a = 2\nvar b = a + 3\nvar c = b * 4\nprint(c)", NULL);
     assert(p != NULL);
     assert(!has_opcode(p, OP_ADD) && "chain should fold ADD away");
     assert(!has_opcode(p, OP_MUL) && "chain should fold MUL away");
@@ -340,10 +340,10 @@ TEST(e2e_const_prop_chain) {
 TEST(e2e_dce_unused_var) {
     /* Top-level vars are stored via SETSHARED (side effect) so DCE keeps
      * them.  Test inside a function where locals are register-only.
-     *   fn f() -> int { let x = 42; let y = 99; return x }
+     *   fn f() -> int { var x = 42; var y = 99; return x }
      * y is unused → LOADI 99 should be eliminated from the child proto. */
     XrProto *p =
-        compile_source("fn f() -> int { let x = 42\nlet y = 99\nreturn x }\nprint(f())", NULL);
+        compile_source("fn f() -> int { var x = 42\nvar y = 99\nreturn x }\nprint(f())", NULL);
     assert(p != NULL);
     /* Child proto (f) should have only one LOADI (for x=42); y=99 is dead */
     int nch = DYNARRAY_COUNT(&p->protos);
@@ -357,7 +357,7 @@ TEST(e2e_dce_unused_var) {
 /* ========== Array Operations ========== */
 
 TEST(e2e_array_literal) {
-    XrProto *p = compile_source("let arr = [10, 20, 30]\nprint(arr[1])", NULL);
+    XrProto *p = compile_source("var arr = [10, 20, 30]\nprint(arr[1])", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_NEWARRAY) && "array literal needs NEWARRAY");
     assert(has_opcode(p, OP_INDEX_GET) && "arr[1] needs INDEX_GET");
@@ -365,7 +365,7 @@ TEST(e2e_array_literal) {
 }
 
 TEST(e2e_array_set) {
-    XrProto *p = compile_source("let arr = [1, 2, 3]\narr[0] = 99\nprint(arr[0])", NULL);
+    XrProto *p = compile_source("var arr = [1, 2, 3]\narr[0] = 99\nprint(arr[0])", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_INDEX_SET) && "arr[0]=99 needs INDEX_SET");
     xr_vm_proto_free(p);
@@ -375,7 +375,7 @@ TEST(e2e_array_set) {
 
 TEST(e2e_bitwise_ops) {
     /* Variable-based bitwise ops should emit real instructions */
-    XrProto *p = compile_source("let a = 12\nlet b = 10\n"
+    XrProto *p = compile_source("var a = 12\nvar b = 10\n"
                                 "print(a & b)\nprint(a | b)\nprint(a ^ b)",
                                 NULL);
     assert(p != NULL);
@@ -383,7 +383,7 @@ TEST(e2e_bitwise_ops) {
 }
 
 TEST(e2e_bitwise_shift) {
-    XrProto *p = compile_source("let x = 1\nprint(x << 4)\nprint(x >> 0)", NULL);
+    XrProto *p = compile_source("var x = 1\nprint(x << 4)\nprint(x >> 0)", NULL);
     assert(p != NULL);
     xr_vm_proto_free(p);
 }
@@ -391,7 +391,7 @@ TEST(e2e_bitwise_shift) {
 /* ========== Compound Assignment ========== */
 
 TEST(e2e_compound_assign) {
-    XrProto *p = compile_source("let x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)", NULL);
+    XrProto *p = compile_source("var x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_PRINT));
     xr_vm_proto_free(p);
@@ -400,7 +400,7 @@ TEST(e2e_compound_assign) {
 /* ========== Increment / Decrement ========== */
 
 TEST(e2e_inc_dec) {
-    XrProto *p = compile_source("let x = 0\nx++\nx++\nx++\nx--\nprint(x)", NULL);
+    XrProto *p = compile_source("var x = 0\nx++\nx++\nx++\nx--\nprint(x)", NULL);
     assert(p != NULL);
     xr_vm_proto_free(p);
 }
@@ -408,7 +408,7 @@ TEST(e2e_inc_dec) {
 /* ========== Break / Continue ========== */
 
 TEST(e2e_break) {
-    XrProto *p = compile_source("let i = 0\n"
+    XrProto *p = compile_source("var i = 0\n"
                                 "while (i < 100) {\n"
                                 "  if (i == 5) { break }\n"
                                 "  i = i + 1\n"
@@ -420,7 +420,7 @@ TEST(e2e_break) {
 }
 
 TEST(e2e_continue) {
-    XrProto *p = compile_source("let sum = 0\nlet i = 0\n"
+    XrProto *p = compile_source("var sum = 0\nvar i = 0\n"
                                 "while (i < 10) {\n"
                                 "  i = i + 1\n"
                                 "  if (i % 2 == 0) { continue }\n"
@@ -434,7 +434,7 @@ TEST(e2e_continue) {
 /* ========== Multi-branch If-Else ========== */
 
 TEST(e2e_if_else_chain) {
-    XrProto *p = compile_source("let x = 7\n"
+    XrProto *p = compile_source("var x = 7\n"
                                 "if (x > 10) { print(1) }\n"
                                 "else if (x > 5) { print(2) }\n"
                                 "else { print(3) }",
@@ -447,8 +447,8 @@ TEST(e2e_if_else_chain) {
 /* ========== Float Constants ========== */
 
 TEST(e2e_float_arith) {
-    /* let x = 1.5 + 2.5 → folded to 4.0 */
-    XrProto *p = compile_source("let x = 1.5 + 2.5\nprint(x)", NULL);
+    /* var x = 1.5 + 2.5 → folded to 4.0 */
+    XrProto *p = compile_source("var x = 1.5 + 2.5\nprint(x)", NULL);
     assert(p != NULL);
     assert(!has_opcode(p, OP_ADD) && "1.5+2.5 should be folded");
     xr_vm_proto_free(p);
@@ -457,7 +457,7 @@ TEST(e2e_float_arith) {
 /* ========== Ternary ========== */
 
 TEST(e2e_ternary) {
-    XrProto *p = compile_source("let x = 5\nlet r = x > 3 ? 1 : 0\nprint(r)", NULL);
+    XrProto *p = compile_source("var x = 5\nvar r = x > 3 ? 1 : 0\nprint(r)", NULL);
     assert(p != NULL);
     xr_vm_proto_free(p);
 }
@@ -466,7 +466,7 @@ TEST(e2e_ternary) {
 
 TEST(e2e_short_circuit) {
     /* Short-circuit AND/OR produce conditional jumps, not BAND/BOR */
-    XrProto *p = compile_source("let a = true\nlet b = false\n"
+    XrProto *p = compile_source("var a = true\nvar b = false\n"
                                 "if (a && b) { print(1) }\n"
                                 "if (a || b) { print(2) }",
                                 NULL);
@@ -493,8 +493,8 @@ TEST(e2e_multi_func) {
 /* ========== String Concatenation ========== */
 
 TEST(e2e_string_concat) {
-    XrProto *p = compile_source("let a = \"hello\"\nlet b = \" world\"\n"
-                                "let c = a + b\nprint(c)",
+    XrProto *p = compile_source("var a = \"hello\"\nvar b = \" world\"\n"
+                                "var c = a + b\nprint(c)",
                                 NULL);
     assert(p != NULL);
     /* Xi pipeline uses STRBUF optimization for typed string concat,
@@ -507,7 +507,7 @@ TEST(e2e_string_concat) {
 /* ========== Map Literal ========== */
 
 TEST(e2e_map_literal) {
-    XrProto *p = compile_source("let m = {\"a\": 1, \"b\": 2}\nprint(m)", NULL);
+    XrProto *p = compile_source("var m = {\"a\": 1, \"b\": 2}\nprint(m)", NULL);
     assert(p != NULL);
     /* Map creation should emit NEWMAP or NEWJSON + field stores */
     int total = PROTO_CODE_COUNT(p);
@@ -518,7 +518,7 @@ TEST(e2e_map_literal) {
 /* ========== Template String ========== */
 
 TEST(e2e_template_string) {
-    XrProto *p = compile_source("let x = \"world\"\nlet s = \"hello ${x}\"\nprint(s)", NULL);
+    XrProto *p = compile_source("var x = \"world\"\nvar s = \"hello ${x}\"\nprint(s)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_STRBUF_NEW) && "template uses STRBUF pipeline");
     assert(has_opcode(p, OP_STRBUF_APPEND));
@@ -529,7 +529,7 @@ TEST(e2e_template_string) {
 /* ========== Nullish Coalesce ========== */
 
 TEST(e2e_nullish_coalesce) {
-    XrProto *p = compile_source("let a: int? = null\nlet b = a ?? 42\nprint(b)", NULL);
+    XrProto *p = compile_source("var a: int? = null\nvar b = a ?? 42\nprint(b)", NULL);
     assert(p != NULL);
     /* ?? lowers to ISNULL + conditional branch; verify enough instructions */
     int total = PROTO_CODE_COUNT(p);
@@ -540,8 +540,8 @@ TEST(e2e_nullish_coalesce) {
 /* ========== Match Expression ========== */
 
 TEST(e2e_match_expr) {
-    XrProto *p = compile_source("let x = 2\n"
-                                "let r = match (x) {\n"
+    XrProto *p = compile_source("var x = 2\n"
+                                "var r = match (x) {\n"
                                 "  1 -> 10,\n"
                                 "  2 -> 20,\n"
                                 "  _ -> 0\n"
@@ -568,7 +568,7 @@ TEST(e2e_try_catch) {
 /* ========== Slice ========== */
 
 TEST(e2e_slice) {
-    XrProto *p = compile_source("let arr = [1, 2, 3, 4, 5]\nlet s = arr[1:3]\nprint(s)", NULL);
+    XrProto *p = compile_source("var arr = [1, 2, 3, 4, 5]\nvar s = arr[1:3]\nprint(s)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_SLICE) && "slice expression needs OP_SLICE");
     xr_vm_proto_free(p);
@@ -580,7 +580,7 @@ TEST(e2e_closure) {
     XrProto *p = compile_source("fn make() ->() -> int {\n"
                                 "  fn inner() -> int { return 42 }\n"
                                 "  return inner\n"
-                                "}\nlet f = make()\nprint(f())",
+                                "}\nvar f = make()\nprint(f())",
                                 NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_CLOSURE) && "nested func needs OP_CLOSURE");
@@ -591,7 +591,7 @@ TEST(e2e_closure) {
 /* ========== Type Conversion ========== */
 
 TEST(e2e_type_convert) {
-    XrProto *p = compile_source("let x = 42\nlet s = x as string\nprint(s)", NULL);
+    XrProto *p = compile_source("var x = 42\nvar s = x as string\nprint(s)", NULL);
     assert(p != NULL);
     /* XI_AS lowers to MOVE; just verify pipeline succeeds */
     int total = PROTO_CODE_COUNT(p);
@@ -602,12 +602,12 @@ TEST(e2e_type_convert) {
 /* ========== Range ========== */
 
 TEST(e2e_range) {
-    XrProto *p = compile_source("let r = 0..10\nprint(r)", NULL);
+    XrProto *p = compile_source("var r = 0..10\nprint(r)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_NEWRANGE) && "range expression needs OP_NEWRANGE");
     xr_vm_proto_free(p);
 
-    p = compile_source("let r = 0..=10\nprint(r)", NULL);
+    p = compile_source("var r = 0..=10\nprint(r)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_NEWRANGE_INCLUSIVE) &&
            "inclusive range expression needs OP_NEWRANGE_INCLUSIVE");
@@ -623,7 +623,7 @@ static char *gen_large_sequential(int nstmts) {
         return NULL;
     size_t pos = 0;
     for (int i = 0; i < nstmts; i++)
-        pos += (size_t) snprintf(buf + pos, cap - pos, "let v%d = %d + %d\n", i, i, i * 2);
+        pos += (size_t) snprintf(buf + pos, cap - pos, "var v%d = %d + %d\n", i, i, i * 2);
     pos += (size_t) snprintf(buf + pos, cap - pos, "print(v%d)\n", nstmts - 1);
     return buf;
 }
@@ -634,10 +634,10 @@ static char *gen_nested_loops(int depth, int body_stmts) {
     if (!buf)
         return NULL;
     size_t pos = 0;
-    pos += (size_t) snprintf(buf + pos, cap - pos, "let result = 0\n");
+    pos += (size_t) snprintf(buf + pos, cap - pos, "var result = 0\n");
     for (int d = 0; d < depth; d++)
         pos += (size_t) snprintf(buf + pos, cap - pos,
-                                 "for (let i%d = 0; i%d < 3; i%d = i%d + 1) {\n", d, d, d, d);
+                                 "for (var i%d = 0; i%d < 3; i%d = i%d + 1) {\n", d, d, d, d);
     for (int s = 0; s < body_stmts; s++)
         pos += (size_t) snprintf(buf + pos, cap - pos, "result = result + %d\n", s + 1);
     for (int d = 0; d < depth; d++)
@@ -654,12 +654,12 @@ static char *gen_many_functions(int nfuncs, int body_size) {
     size_t pos = 0;
     for (int f = 0; f < nfuncs; f++) {
         pos += (size_t) snprintf(buf + pos, cap - pos,
-                                 "fn func%d(x: int) -> int {\n  let acc = x\n", f);
+                                 "fn func%d(x: int) -> int {\n  var acc = x\n", f);
         for (int s = 0; s < body_size; s++)
             pos += (size_t) snprintf(buf + pos, cap - pos, "  acc = acc + %d\n", s + 1);
         pos += (size_t) snprintf(buf + pos, cap - pos, "  return acc\n}\n");
     }
-    pos += (size_t) snprintf(buf + pos, cap - pos, "let r = func0(1)\n");
+    pos += (size_t) snprintf(buf + pos, cap - pos, "var r = func0(1)\n");
     for (int f = 1; f < nfuncs; f++)
         pos += (size_t) snprintf(buf + pos, cap - pos, "r = func%d(r)\n", f);
     pos += (size_t) snprintf(buf + pos, cap - pos, "print(r)\n");
@@ -761,7 +761,7 @@ static char *gen_large_reuse(int nstmts) {
     if (!buf)
         return NULL;
     size_t pos = 0;
-    pos += (size_t) snprintf(buf + pos, cap - pos, "let acc = 0\n");
+    pos += (size_t) snprintf(buf + pos, cap - pos, "var acc = 0\n");
     for (int i = 0; i < nstmts; i++)
         pos += (size_t) snprintf(buf + pos, cap - pos, "acc = acc + %d\n", i + 1);
     pos += (size_t) snprintf(buf + pos, cap - pos, "print(acc)\n");

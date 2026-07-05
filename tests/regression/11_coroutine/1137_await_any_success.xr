@@ -17,30 +17,30 @@ fn failing() -> int {
 fn test_await_any_success() {
     // Test 1: single success
     print("test1: single success")
-    let t1 = go success()
-    let r1 = await anySuccess [t1]
+    var t1 = go success()
+    var r1 = await anySuccess [t1]
     print("  result:", r1)
 
     // Test 2: pre-completed tasks, array-order scan (deterministic)
     print("test2: pre-completed tasks")
-    let t2 = go success()
-    let t3 = go success()
+    var t2 = go success()
+    var t3 = go success()
     await t2
     await t3
-    let r2 = await anySuccess [t2, t3]
+    var r2 = await anySuccess [t2, t3]
     print("  result:", r2)
 
     // Test 3: one failing + one success — anySuccess skips failure
     print("test3: skip failure")
-    let t4 = go failing()
-    let t5 = go success()
-    let failed = t4.awaitResult()
+    var t4 = go failing()
+    var t5 = go success()
+    var failed = t4.awaitResult()
     assert(match (failed) {
         TaskResult.Failed(_) -> true
         _ -> false
     })
     await t5
-    let r3 = await anySuccess [t4, t5]
+    var r3 = await anySuccess [t4, t5]
     print("  result:", r3)
 
     print("done")

@@ -9,7 +9,7 @@
 
 import ws
 
-let port = 9001
+var port = 9001
 if (process.args.length > 0) {
     port = int(process.args[0]) ?? 9001
 }

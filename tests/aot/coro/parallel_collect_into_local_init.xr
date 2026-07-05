@@ -1,6 +1,6 @@
 fn main() {
-    let values: Array<int> = []
-    let marks: Array<int> = []
+    var values: Array<int> = []
+    var marks: Array<int> = []
     values.reserve(8)
     marks.reserve(8)
 
@@ -14,7 +14,7 @@ fn main() {
             table.setUnchecked(0, table.getUnchecked(0) + 1)
         }
         acc = acc + 1
-        let tag = 0
+        var tag = 0
         unsafe {
             tag = buf.length + table.getUnchecked(0)
         }

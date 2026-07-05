@@ -9,7 +9,7 @@ fn delayed_value() -> int {
 
 fn await_any_report(id: int, task: Task, ready: Channel<int>, out: Channel<int>) {
     ready.send(id)
-    let value = await any [task]
+    var value = await any [task]
     out.send(id * 100 + value)
 }
 
@@ -22,18 +22,18 @@ fn recv_int(ch: Channel<int>) -> int {
 
 @test
 fn test_overlapping_await_any_waiters() {
-    const ready = Channel<int>(2)
-    const out = Channel<int>(2)
+    shared ready = Channel<int>(2)
+    shared out = Channel<int>(2)
 
-    let task = go delayed_value()
-    let a = go await_any_report(1, task, ready, out)
-    let b = go await_any_report(2, task, ready, out)
+    var task = go delayed_value()
+    var a = go await_any_report(1, task, ready, out)
+    var b = go await_any_report(2, task, ready, out)
 
     recv_int(ready)
     recv_int(ready)
 
-    let first = recv_int(out)
-    let second = recv_int(out)
+    var first = recv_int(out)
+    var second = recv_int(out)
     print(first + second)
 
     await a

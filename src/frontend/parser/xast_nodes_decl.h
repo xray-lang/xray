@@ -271,11 +271,11 @@ typedef struct ReexportMember {
 } ReexportMember;
 
 // Export statement node — three forms:
-//   1. export let/const/fn/class ...
+//   1. export var/const/fn/class ...
 //   2. export a, b, c
 //   3. export { a, b as c } from "./file"
 typedef struct ExportStmtNode {
-    AstNode *declaration;  // Declaration export (export let x = 1)
+    AstNode *declaration;  // Declaration export (export var x = 1)
     char *export_name;     // Single export name (declaration style)
     char **export_names;   // Export name list (list style: export a, b)
     int export_count;

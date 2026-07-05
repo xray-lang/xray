@@ -7,7 +7,7 @@
 //            导致 4000 条消息就超时。详见 issue 报告。
 import time
 
-let MSGS = 1000        // 每个生产者发送的消息数
+var MSGS = 1000        // 每个生产者发送的消息数
 if (process.args.length > 0) {
     MSGS = int(process.args[0]) ?? MSGS
 }
@@ -22,25 +22,25 @@ print("总消息数:", TOTAL)
 
 // 生产者：向 channel 发送消息
 fn producer(ch: Channel<int>, id: int, count: int) {
-    for (let i = 0; i < count; i++) {
+    for (var i = 0; i < count; i++) {
         ch.send(id * 1000000 + i)
     }
 }
 
-let start = time.monotonic()
+var start = time.monotonic()
 
-shared const ch0 = Channel(10)
-shared const ch1 = Channel(10)
-shared const ch2 = Channel(10)
-shared const ch3 = Channel(10)
+shared ch0 = Channel(10)
+shared ch1 = Channel(10)
+shared ch2 = Channel(10)
+shared ch3 = Channel(10)
 
-let t0 = go producer(ch0, 0, MSGS)
-let t1 = go producer(ch1, 1, MSGS)
-let t2 = go producer(ch2, 2, MSGS)
-let t3 = go producer(ch3, 3, MSGS)
+var t0 = go producer(ch0, 0, MSGS)
+var t1 = go producer(ch1, 1, MSGS)
+var t2 = go producer(ch2, 2, MSGS)
+var t3 = go producer(ch3, 3, MSGS)
 
 // 消费者：用 select 轮询 4 个 channel 直到收齐所有消息
-let received = 0
+var received = 0
 
 while (received < TOTAL) {
     select {
@@ -60,7 +60,7 @@ ch1.close()
 ch2.close()
 ch3.close()
 
-let elapsed = time.monotonic() - start
+var elapsed = time.monotonic() - start
 print("接收总数:", received)
 print("预期:", TOTAL)
 print("正确:", received == TOTAL)

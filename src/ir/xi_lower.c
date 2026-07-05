@@ -899,6 +899,7 @@ static AstNode *prescan_extract_decl(XiLower *l, AstNode *s, const char **out_na
             *out_is_const = true;
             /* fall through */
         case AST_VAR_DECL:
+        case AST_SHARED_DECL:
             *out_name = s->as.var_decl.name;
             *out_sid = s->as.var_decl.symbol_id;
             *out_type = xi_lower_node_type(l, s);

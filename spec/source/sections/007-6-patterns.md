@@ -172,9 +172,9 @@ match (http_status) {
 ### 6.9 解构模式
 
 ```xray
-let [a, b, c] = some_array
-let (q, r) = divmod(17, 5)
-let { name, age } = user
+var [a, b, c] = some_array
+var (q, r) = divmod(17, 5)
+var { name, age } = user
 ```
 
 详见 §5.1.5。`match` 支持 tuple、ADT variant、对象与数组结构解构：
@@ -368,9 +368,9 @@ match (http_status) {
 ### 6.9 Destructuring Patterns
 
 ```xray
-let [a, b, c] = some_array
-let (q, r) = divmod(17, 5)
-let { name, age } = user
+var [a, b, c] = some_array
+var (q, r) = divmod(17, 5)
+var { name, age } = user
 ```
 
 See §5.1.5 for details. Within `match`, tuple, ADT-variant, object, and array destructuring are supported:

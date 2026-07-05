@@ -6,8 +6,8 @@ class Bag {
     }
 
     sum() -> int {
-        let i = 0
-        let total = 0
+        var i = 0
+        var total = 0
         while (i < this.values.length) {
             total = total + this.values[i]
             i = i + 1
@@ -30,9 +30,9 @@ fn swap(b: Bag, next: Array<int>) -> int {
     return b.sum()
 }
 
-let first = [1, 2, 3]
-let second = [10, 20]
-let bag = make(first)
+var first = [1, 2, 3]
+var second = [10, 20]
+var bag = make(first)
 
 print(bag.sum())
 print(bag.replace(second))

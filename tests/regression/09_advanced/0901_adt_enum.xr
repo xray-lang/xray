@@ -53,8 +53,8 @@ fn test_adt_enum() {
     assert_eq(radius_or(Shape.Unknown), -2)
 
     // Bare non-payload variant bound to a local, then matched.
-    let p = Shape.Point
-    let is_point = match (p) {
+    var p = Shape.Point
+    var is_point = match (p) {
         Shape.Point -> true
         _ -> false
     }
@@ -62,30 +62,30 @@ fn test_adt_enum() {
 
     // Non-payload variant must NOT match a payload arm of the same ordinal
     // family — Circle(0) is ordinal 0, Point is ordinal 2.
-    let c0 = Shape.Circle(0)
-    let matched_circle = match (c0) {
+    var c0 = Shape.Circle(0)
+    var matched_circle = match (c0) {
         Shape.Circle(_) -> true
         _ -> false
     }
     assert_eq(matched_circle, true)
 
     // ADT variants inside an array keep their instance representation.
-    let shapes = [Shape.Circle(1), Shape.Point, Shape.Square(5), Shape.Unknown]
+    var shapes = [Shape.Circle(1), Shape.Point, Shape.Square(5), Shape.Unknown]
     assert_eq(describe(shapes[0]), "circle:1")
     assert_eq(describe(shapes[1]), "point")
     assert_eq(describe(shapes[2]), "square:5")
     assert_eq(describe(shapes[3]), "unknown")
 
     // A second ADT enum with a leading non-payload arm.
-    let t = Tree.Empty
-    let td = match (t) {
+    var t = Tree.Empty
+    var td = match (t) {
         Tree.Empty -> 0
         Tree.Leaf(v) -> v
         Tree.Branch(v) -> v * 10
     }
     assert_eq(td, 0)
-    let leaf = Tree.Leaf(7)
-    let ld = match (leaf) {
+    var leaf = Tree.Leaf(7)
+    var ld = match (leaf) {
         Tree.Empty -> 0
         Tree.Leaf(v) -> v
         Tree.Branch(v) -> v * 10

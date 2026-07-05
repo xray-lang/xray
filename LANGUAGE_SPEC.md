@@ -375,9 +375,9 @@ CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 - Char literals do not support `${...}` interpolation.
 
 ```xray
-let a: char = 'a'
-let zh: char = '中'
-let smile: char = '\u{1F600}'
+var a: char = 'a'
+var zh: char = '中'
+var smile: char = '\u{1F600}'
 ```
 
 ##### Backtick strings (illegal)
@@ -478,8 +478,8 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 Examples:
 
 ```xray
-let empty_map = #{}
-let primes = #[2, 3, 5, 7]
+var empty_map = #{}
+var primes = #[2, 3, 5, 7]
 ```
 
 #### 1.7.10 Patterns
@@ -574,20 +574,20 @@ Literals default to `float`.
 Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
 
 ```xray
-let ok = true
+var ok = true
 if (ok) { }
 
-let user: User? = findUser()
+var user: User? = findUser()
 if (user) {              // presence: null check only
     print(user.name)     // user is narrowed to User here
 }
 
-let flag: bool? = maybeFlag()
+var flag: bool? = maybeFlag()
 if (flag == true) { }    // OK
 if (flag != null) { }    // OK
 // if (flag) { }         // compile error: bare bool? cannot be a condition
 
-let s = ""
+var s = ""
 if (!s.isEmpty()) { }    // OK
 // if (s) { }            // compile error
 ```
@@ -603,9 +603,9 @@ Internally uses ARC; runtime short strings are coroutine-local by default (lock-
 `char` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `uint32`.
 
 ```xray
-let a: char = 'a'
-let zh = '中'
-let smile = '\u{1F600}'
+var a: char = 'a'
+var zh = '中'
+var smile = '\u{1F600}'
 print(typeof(a))          // "char"
 print(int(smile))         // 128512
 ```
@@ -622,7 +622,7 @@ Xray uses the **0-tuple `()`** to represent "no return value" (the Unit type):
 ```xray
 fn log(msg: string) -> () { print(msg) }   // explicit Unit return
 fn ping() { print("pong") }                  // omitted return type = ()
-let r: () = log("hi")                        // allowed; r is a Unit value
+var r: () = log("hi")                        // allowed; r is a Unit value
 ```
 
 - A function omitting its return type is equivalent to `-> ()`.
@@ -646,7 +646,7 @@ Raw pointer values may be stored, passed, compared, and offset with `offset(i)` 
 @extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
 @extern("C") fn free(p: RawMut<uint8>)
 
-let p = unsafe { malloc(4) }
+var p = unsafe { malloc(4) }
 unsafe {
     p[0] = 42
     print(p.deref())
@@ -665,9 +665,9 @@ unsafe {
 Ordered mutable array. See §14.1.
 
 ```xray
-let a: Array<int> = [1, 2, 3]
-let b = [1, 2, 3]                // inferred as Array<int>
-let c: Array<string> = []         // explicit empty array
+var a: Array<int> = [1, 2, 3]
+var b = [1, 2, 3]                // inferred as Array<int>
+var c: Array<string> = []         // explicit empty array
 ```
 
 The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
@@ -681,10 +681,10 @@ The `T` in `Array<T>` must be determinable at compile time. An empty `[]` withou
 The current implementation supports inline struct fields and stack-local fixed arrays. Scalar elements (`int`, `float`, `bool`, sized integers/floats, and similar primitives) use compact native lanes; `string`, struct, nested fixed arrays, and reference-container elements use tagged `XrValue` lanes, so fixed arrays compose recursively:
 
 ```xray
-let bytes: [uint8; 4] = [1, 2, 3, 4]
-let zero: [uint8; 64] = [0; 64]
-let names: [string; 2] = ["a", "b"]
-let blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
+var bytes: [uint8; 4] = [1, 2, 3, 4]
+var zero: [uint8; 64] = [0; 64]
+var names: [string; 2] = ["a", "b"]
+var blocks: [[uint8; 2]; 2] = [[1, 2], [3, 4]]
 ```
 
 A target-typed array literal that initializes `[T; N]` must have the exact length; repeat initialization `[value; N]` uses the same positive compile-time integer expression rule and must also match the target length. A normal array literal without context still infers dynamic `Array<T>`; `[value; N]` without context infers `[T; N]`.
@@ -692,8 +692,8 @@ A target-typed array literal that initializes `[T; N]` must have the exact lengt
 Fixed arrays support `length`/`size`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Span<T>`:
 
 ```xray
-let data: [uint8; 4] = [5, 6, 7, 8]
-let view: Span<uint8> = data[1:4]
+var data: [uint8; 4] = [5, 6, 7, 8]
+var view: Span<uint8> = data[1:4]
 view[1] = 99
 ```
 
@@ -703,7 +703,7 @@ struct Packet {
     payload: [uint8; 128]
 }
 
-let key: [uint8; 4] = [1, 2, 3, 4]
+var key: [uint8; 4] = [1, 2, 3, 4]
 key[1] = 9
 
 fn first(packet: Packet) -> uint8 {
@@ -726,12 +726,12 @@ Hash table that **preserves insertion order**. See §14.7.
 **Map literals** must use the `#{ ... }` prefix with `:` separators (consistent with Json; disambiguated by the `#` prefix):
 
 ```xray
-let m: Map<string, int> = #{"a": 1, "b": 2}
-let m2 = #{"a": 1, "b": 2}
-let empty = #{}                                     // empty Map
+var m: Map<string, int> = #{"a": 1, "b": 2}
+var m2 = #{"a": 1, "b": 2}
+var empty = #{}                                     // empty Map
 
 m["c"] = 3                                          // insert / update
-let v = m["a"]                                      // lookup; returns null if absent
+var v = m["a"]                                      // lookup; returns null if absent
 ```
 
 | Literal form | Type | Purpose |
@@ -749,7 +749,7 @@ let v = m["a"]                                      // lookup; returns null if a
 Deduplicated collection. See §14.4.
 
 ```xray
-let s: Set<int> = #[1, 2, 3]
+var s: Set<int> = #[1, 2, 3]
 ```
 
 #### 2.4.4 `Channel<T>`
@@ -765,8 +765,8 @@ const ch: Channel<int> = Channel<int>(10)
 Typed byte buffer. Semantically equivalent to `Array<uint8>`, but stored as contiguous memory.
 
 ```xray
-let buf = Bytes(1024)
-let init = Bytes([72, 101, 108, 108, 111])
+var buf = Bytes(1024)
+var init = Bytes([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.6 `Record` / `Json` and Object Literals
@@ -777,19 +777,19 @@ The key difference between an **object literal** `{ field: value, ... }` and a M
 
 ```xray
 // Record/Json object literal: identifier or string key + colon ':'
-let data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-let user = { name: "Bob", age: 25 }       // default type is sealed Record
+var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
+var user = { name: "Bob", age: 25 }       // default type is sealed Record
 typeof(user)                              // "Record"
 data.name              // type: Json (field access returns Json)
 data["name"]           // equivalent
 
 // Field shorthand: when a field name matches a variable name
-let name = "Alice"
-let age = 30
-let user = { name, age }                  // equivalent to { name: name, age: age }
+var name = "Alice"
+var age = 30
+var user = { name, age }                  // equivalent to { name: name, age: age }
 
 // Map literal: `#{}` prefix + `:`
-let m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
+var m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 ```
 
 **Comparison**:
@@ -807,14 +807,14 @@ let m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 ```xray
 type User = { name: string, age: int }
 
-let u: User = { name: "Alice", age: 30 }
+var u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
 // u.extra = "x"      // compile error: sealed type User has no field 'extra'
 
-let u2 = { name: "Alice", age: 30 }      // sealed Record
+var u2 = { name: "Alice", age: 30 }      // sealed Record
 // u2.extra = "x"     // compile error
 
-let j: Json = { name: "Alice", age: 30 } // dynamic Json object
+var j: Json = { name: "Alice", age: 30 } // dynamic Json object
 j.extra = "x"        // OK (Json is dynamic)
 ```
 
@@ -839,9 +839,9 @@ Keys of `WeakMap` and elements of `WeakSet` must be heap objects; weak reference
 `T?` is sugar for `T | null`.
 
 ```xray
-let x: int? = null      // OK
-let y: int? = 42        // OK
-let z: int = null       // compile error: null is not int
+var x: int? = null      // OK
+var y: int? = 42        // OK
+var z: int = null       // compile error: null is not int
 ```
 
 `Json` intrinsically includes `null`, so `Json?` and `Json | null` are redundant and rejected during parsing. Use `Result<T, E>`, an ADT, or a Record with an explicit status field for parse failure or absence.
@@ -854,13 +854,13 @@ let z: int = null       // compile error: null is not int
 
 ```xray
 // 1. Null coalescing
-let v = x ?? 0
+var v = x ?? 0
 
 // 2. Optional chaining
-let len = name?.length    // null if name is null
+var len = name?.length    // null if name is null
 
 // 3. Force unwrap
-let v: int = x!           // throws NullError at runtime if x is null
+var v: int = x!           // throws NullError at runtime if x is null
 
 // 4. `is` check
 if (x is int) {
@@ -872,7 +872,7 @@ if (x is int) {
 ### 2.6 Union Types
 
 ```xray
-let v: int | string = 42
+var v: int | string = 42
 v = "hello"             // OK
 ```
 
@@ -882,7 +882,7 @@ Constraints:
 - Working with a union value requires `match` or `is`-based narrowing:
 
 ```xray
-let v: int | string = ...
+var v: int | string = ...
 match v {
     is int    -> print("int: ${v}"),
     is string -> print("str: ${v}"),
@@ -899,27 +899,27 @@ Xray's tuples are **first-class** — they may appear as any value, be stored as
 
 ```xray
 // Literals
-let t = (1, 2, 3)                 // type inferred as (int, int, int)
-let h = (10, "hi", true)          // heterogeneous tuple
-let single = (99,)                // single-element tuple: note trailing comma
+var t = (1, 2, 3)                 // type inferred as (int, int, int)
+var h = (10, "hi", true)          // heterogeneous tuple
+var single = (99,)                // single-element tuple: note trailing comma
 
 // Type annotation
-let p: (int, string) = (7, "ok")
+var p: (int, string) = (7, "ok")
 
 // Field access: .N (N is a compile-time constant integer index)
-let first = t.0                   // 1
-let mid   = t.1                   // 2
-let nest  = ((1, 2), (3, 4))
-let a     = nest.0.0              // 1
-let b     = nest.1.1              // 4
+var first = t.0                   // 1
+var mid   = t.1                   // 2
+var nest  = ((1, 2), (3, 4))
+var a     = nest.0.0              // 1
+var b     = nest.1.1              // 4
 
 // Function return and destructuring
 fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }
-let (q, r) = divmod(17, 5)        // tuple destructure
+var (q, r) = divmod(17, 5)        // tuple destructure
 
 // Generic
 fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
-let p2 = pair(1, "x")             // (int, string)
+var p2 = pair(1, "x")             // (int, string)
 ```
 
 **Notes**:
@@ -943,8 +943,8 @@ runtime metadata, or AOT branches. A generic alias is substituted at its use
 site:
 
 ```xray
-let p: Pair<int> = { first: 1, second: 2 }  // equivalent to { first: int, second: int }
-let f: Mapper2<int, string> = (n) -> string(n)
+var p: Pair<int> = { first: 1, second: 2 }  // equivalent to { first: int, second: int }
+var f: Mapper2<int, string> = (n) -> string(n)
 ```
 
 Generic alias parameters are a name list only (`<T, U>`); constraints are not
@@ -958,13 +958,13 @@ errors.
 See §7.4 for details. In summary:
 
 ```xray
-let x = 1               // x: int
-let y = 1.5             // y: float
-let z = "hello"         // z: string
-let a = [1, 2, 3]       // a: Array<int>
-let m = #{"a": 1}    // m: Map<string, int>
-let p = { name: "A" }   // p: { name: string } — structured object type
-let f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotation
+var x = 1               // x: int
+var y = 1.5             // y: float
+var z = "hello"         // z: string
+var a = [1, 2, 3]       // a: Array<int>
+var m = #{"a": 1}    // m: Map<string, int>
+var p = { name: "A" }   // p: { name: string } — structured object type
+var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotation
 ```
 
 ### 2.10 Type Compatibility and Conversion
@@ -991,8 +991,8 @@ let f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotati
 #### 2.10.2 Explicit `as`
 
 ```xray
-let n = x as int        // throws TypeError on failure
-let n = x as int?       // returns null on failure (safe cast)
+var n = x as int        // throws TypeError on failure
+var n = x as int?       // returns null on failure (safe cast)
 ```
 
 Applies to:
@@ -1089,7 +1089,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 | `+x` | numeric | same | identity, almost never useful |
 | `!x` | `bool` | `bool` | logical not; **rejects non-bool** (unlike JS) |
 | `~x` | integer | same | bitwise complement |
-`++` / `--` are **not expressions**: expression-position uses such as `let y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors. Statement-level increment/decrement is specified in §4.1.
+`++` / `--` are **not expressions**: expression-position uses such as `var y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors. Statement-level increment/decrement is specified in §4.1.
 
 #### `unsafe { }`
 
@@ -1099,7 +1099,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 @extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
 @extern("C") fn free(p: RawMut<uint8>)
 
-let p = unsafe { malloc(1) }      // the final expression is the block result
+var p = unsafe { malloc(1) }      // the final expression is the block result
 unsafe {
     p[0] = 7                      // RawMut writes must be inside unsafe
     print(p.deref())              // dereference must be inside unsafe
@@ -1171,7 +1171,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 #### 3.3.5 Null Coalescing `??`
 
 ```xray
-let v = nullable_expr ?? default_value
+var v = nullable_expr ?? default_value
 ```
 
 - Returns `default_value` when `nullable_expr` is `null`; otherwise returns `nullable_expr` itself.
@@ -1192,7 +1192,7 @@ AssignOp ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
 - Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`).
 - `x op= y` is equivalent to `x = x op y`, but `x` is evaluated only once (important: `obj.f += 1` does not call `f`'s getter twice).
 - Cannot assign to a `const` (compile error `E0303`).
-- Cannot assign to `shared const` (same as above).
+- Cannot assign to `shared` (same as above).
 
 **Special cases**:
 - A function parameter with the `in T` modifier is read-only; assignment is a compile error.
@@ -1205,7 +1205,7 @@ TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
 ```
 
 ```xray
-let max = a > b ? a : b
+var max = a > b ? a : b
 ```
 
 - **Right-associative**: `a ? b : c ? d : e` = `a ? b : (c ? d : e)`.
@@ -1223,9 +1223,9 @@ OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr '
 ```
 
 ```xray
-let len = name?.length          // returns null when name is null
-let item = arr?[0]              // optional index
-let value = callback?.(input)   // optional function call
+var len = name?.length          // returns null when name is null
+var item = arr?[0]              // optional index
+var value = callback?.(input)   // optional function call
 ```
 
 **Semantics**:
@@ -1243,7 +1243,7 @@ let value = callback?.(input)   // optional function call
 #### Force unwrap `expr!`
 
 ```xray
-let v: int = nullable_int!      // throws NullThrowError (E0410) at runtime when null
+var v: int = nullable_int!      // throws NullThrowError (E0410) at runtime when null
 ```
 
 Legal only when `expr` is known to be a nullable type (`T?`) at compile time; using `!` on a non-null `T` is a compile error.
@@ -1275,8 +1275,8 @@ AsExpr ::= UnaryExpr 'as' Type
 ```
 
 ```xray
-let n = v as int           // throws TypeError on failure
-let n = v as int?          // returns null on failure (the "as nullable" safe form)
+var n = v as int           // throws TypeError on failure
+var n = v as int?          // returns null on failure (the "as nullable" safe form)
 ```
 
 | Form | Failure behavior | Use case |
@@ -1301,8 +1301,8 @@ RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
 ```xray
 0..10                  // 0..10, left-closed right-open (includes 0, excludes 10)
 0..=10                 // 0..=10, closed interval (includes both 0 and 10)
-let r = 1..100
-let n = 10
+var r = 1..100
+var n = 10
 for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
 ```
@@ -1323,12 +1323,12 @@ Allowed in the following positions only:
 - **Object/record literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
 
 ```xray
-let a = [1, 2]
-let b = [3, 4]
-let nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
+var a = [1, 2]
+var b = [3, 4]
+var nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
 
-let base = { x: 1, y: 2 }
-let point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+var base = { x: 1, y: 2 }
+var point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
 ```
 
 ### 3.10 Literal Construction
@@ -1341,9 +1341,9 @@ ArrayElem ::= '...' Expr | Expr
 ```
 
 ```xray
-let a = [1, 2, 3]
-let empty: Array<int> = []
-let mixed = [1, "hello"]    // type Array<int | string>
+var a = [1, 2, 3]
+var empty: Array<int> = []
+var mixed = [1, "hello"]    // type Array<int | string>
 ```
 
 #### Map `#{k: v, ...}` and `#{}`
@@ -1355,8 +1355,8 @@ EmptyMap ::= '#{' '}'    // note: '#{' is a single token
 ```
 
 ```xray
-let m = #{"a": 1, "b": 2}
-let empty = #{}                           // empty Map
+var m = #{"a": 1, "b": 2}
+var empty = #{}                           // empty Map
 ```
 
 **Key distinction**: `{}` is always a **Json / Object**; `#{}` is always a **Map**. Both use `:` between key and value; the `#` prefix is the disambiguator.
@@ -1368,8 +1368,8 @@ SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
 ```
 
 ```xray
-let s = #[1, 2, 3]
-let empty = #[]
+var s = #[1, 2, 3]
+var empty = #[]
 ```
 
 #### Object (structured object) `{ field: value, ... }`
@@ -1382,14 +1382,14 @@ ObjectField ::= Identifier ':' Expr
 ```
 
 ```xray
-let p = { name: "Alice", age: 30 }
-let users = "Bob"
-let obj = { users }              // shorthand
+var p = { name: "Alice", age: 30 }
+var users = "Bob"
+var obj = { users }              // shorthand
 ```
 
 - Defaults to sealed structural `Record` (see §2.4.6); the field set and offsets are fixed at compile time for AOT fast paths.
 - It is interpreted as a dynamic Json object literal only under an explicit `Json` expected type; use `Json.encode(value)` when a typed value crosses a JSON boundary.
-- Name the Record with a `type` alias: `let u: User = {...}` (compile-time field check, sealed).
+- Name the Record with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
 
 #### Bytes `Bytes(...)`
 
@@ -1489,16 +1489,16 @@ arr.map(x -> x * 2)
 arr.filter(x -> x % 2 == 0)
 
 // ── Arrow lambda: any position, supports multi-param and parameter type annotation ──
-let sum = arr.reduce((acc, x) -> acc + x, 0)    // no type
-let double = (x: int) -> x * 2                   // typed
-let add = (a: int, b: int) -> a + b              // multi-param
+var sum = arr.reduce((acc, x) -> acc + x, 0)    // no type
+var double = (x: int) -> x * 2                   // typed
+var add = (a: int, b: int) -> a + b              // multi-param
 
 // ── fn expression: multi-statement body, return-type annotation, generics ──
-let inc = fn(x: int) -> int {
-    let y = x + 1
+var inc = fn(x: int) -> int {
+    var y = x + 1
     return y
 }
-let identity = fn<T>(x: T) -> T { return x }     // generic
+var identity = fn<T>(x: T) -> T { return x }     // generic
 ```
 
 **Choosing among the three**:
@@ -1511,11 +1511,11 @@ let identity = fn<T>(x: T) -> T { return x }     // generic
 
 **Key rules**:
 - **Bare lambda** (`x -> expr`): restricted to **call-argument position**; the single parameter is unparenthesized. The parameter type is inferred from the callee signature or the container element type.
-- **Arrow lambda** (`(x) -> expr`, `(x, y) -> expr`): usable in any position. Parameter types may be omitted and inferred from context; inference failure raises `E0365`. Arrow lambdas **do not support return-type annotations**; use `fn(x: T) -> R { ... }`, or annotate the binding as a function type: `let f: (T) -> R = (x) -> ...`.
+- **Arrow lambda** (`(x) -> expr`, `(x, y) -> expr`): usable in any position. Parameter types may be omitted and inferred from context; inference failure raises `E0365`. Arrow lambdas **do not support return-type annotations**; use `fn(x: T) -> R { ... }`, or annotate the binding as a function type: `var f: (T) -> R = (x) -> ...`.
 - **fn expression** (`fn(x: T) { ... }`): usable in any position. Supports generic parameters `fn<T>(...)`, return-type annotation `-> T`, and a multi-statement body.
 - Single-expression form `-> expr` implicitly `return`s.
 - Block form `-> { ... }` or `{ ... }` uses an explicit `return`.
-- Capture rules: see §7.4 closure capture. **A `go` coroutine closure cannot capture `let` variables** — pass them explicitly via `shared const`, `move`, or parameters.
+- Capture rules: see §7.4 closure capture. **A `go` coroutine closure cannot capture ordinary local `var` / `const` reference values** — pass them explicitly via `shared`, `copy(...)`, `move`, or parameters.
 
 ### 3.13 `match` Expression
 
@@ -1525,7 +1525,7 @@ MatchArm ::= Pattern ('if' Expr)? '->' Expression
 ```
 
 ```xray
-let result = match (x) {
+var result = match (x) {
     1 -> "one",
     2, 3, 4 -> "few",                 // multi-value
     10..20 -> "teen",                 // range
@@ -1551,10 +1551,10 @@ ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 Construction looks just like a function call: `TypeName(args)`. There is no `new` keyword—writing `new` (e.g. `new Point(...)`) is a compile error that tells you to delete it.
 
 ```xray
-let p = Point(1.0, 2.0)
-let arr = Array<int>()
-let ch = Channel<int>(10)
-let m = Map<string, int>()
+var p = Point(1.0, 2.0)
+var arr = Array<int>()
+var ch = Channel<int>(10)
+var m = Map<string, int>()
 ```
 
 **Used for**:
@@ -1564,9 +1564,9 @@ let m = Map<string, int>()
 
 **Relation to literals**:
 ```xray
-let a = [1, 2, 3]              // equivalent to Array<int>() + push
-let m = #{}                    // equivalent to Map<...>()
-let p = Point{x: 1, y: 2}      // struct literal
+var a = [1, 2, 3]              // equivalent to Array<int>() + push
+var m = #{}                    // equivalent to Map<...>()
+var p = Point{x: 1, y: 2}      // struct literal
 ```
 
 ### 3.15 String Interpolation
@@ -1612,7 +1612,7 @@ foo()                  // expression statement
 x = 1                  // assignment expression as a statement
 x++                    // increment statement; produces no expression value
 {                      // block
-    let y = 2
+    var y = 2
     y + 1              // expression with discarded result
 }
 ```
@@ -1653,7 +1653,7 @@ WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
 ```
 
 ```xray
-let i = 0
+var i = 0
 while (i < 10) {
     print(i)
     i++
@@ -1673,10 +1673,10 @@ ForStep ::= Expression | Identifier ('++' | '--')
 ```
 
 ```xray
-for (let i = 0; i < 10; i++) {
+for (var i = 0; i < 10; i++) {
     print(i)
 }
-for (let j = 100; j > 90; j--) {
+for (var j = 100; j > 90; j--) {
     print(j)
 }
 ```
@@ -1864,7 +1864,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 ```xray
 fn read_file(path: string) -> string {
-    let f = open(path)
+    var f = open(path)
     defer f.close()                  // always runs before the function returns
     return f.readAll()
 }
@@ -1909,10 +1909,10 @@ dump(some_obj)                 // debug output, with type info and structure
 
 > Source of truth: `src/frontend/parser/xparse_decl.c`, `src/frontend/parser/xast_nodes_decl.h`, `src/frontend/analyzer/xanalyzer_visitor.c`.
 
-### 5.1 `let` / `const` / `shared`
+### 5.1 `var` / `const` / `shared`
 
 ```ebnf
-VarDecl ::= ('let' | 'const' | 'shared' ('const' | 'let')) Binding (',' Binding)*
+VarDecl ::= ('var' | 'const' | 'shared') Binding (',' Binding)*
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -1921,14 +1921,14 @@ Pattern ::= Identifier
 ObjectBinding ::= Identifier (':' Identifier)?
 ```
 
-#### 5.1.1 `let` — mutable binding
+#### 5.1.1 `var` — mutable binding
 
 ```xray
-let x = 1                         // type inferred as int
-let name: string = "Alice"        // explicit type
-let count: int                    // no initializer: zero value used
-let maybeName: string?            // OK: defaults to null
-let empty: string = ""            // string requires an explicit initializer
+var x = 1                         // type inferred as int
+var name: string = "Alice"        // explicit type
+var count: int                    // no initializer: zero value used
+var maybeName: string?            // OK: defaults to null
+var empty: string = ""            // string requires an explicit initializer
 ```
 
 - Reassignable.
@@ -1947,42 +1947,34 @@ const MAX_LEN: int = 1024
 - Cannot be reassigned (compile error `E0303`).
 - The type may be inferred or annotated explicitly.
 
-#### 5.1.3 `shared const` — cross-coroutine immutable shared
+#### 5.1.3 `shared` — shared identity binding
 
 ```xray
-shared const CONFIG = { host: "localhost", port: 8080 }
-shared const PRIMES = [2, 3, 5, 7, 11]
+shared CONFIG = { host: "localhost", port: 8080 }
+shared PRIMES = [2, 3, 5, 7, 11]
+shared counter = Atomic(0)
 ```
 
 - Stored on the **global heap**, refcount-managed.
-- Read-only **zero-copy** access across coroutines.
-- The **only** kind of variable outside the local mutable scope that a `go` closure may legally capture (everything else must be passed explicitly or `move`d).
-
-#### 5.1.4 `shared let` — cross-coroutine mutable, exclusive
-
-```xray
-shared let buffer = Bytes(1024)
-```
-
-- **Move semantics**: ownership must be transferred explicitly with `move`.
-- Cannot be captured by a `go` closure (must be `move`d).
-- Use after `move` is a compile error.
+- The binding name cannot be reassigned and cannot be used as a `move` source.
+- It may be captured by `go` closures and passed across coroutine boundaries directly; concurrent mutation safety comes from the value's own type semantics.
+- Synchronization/concurrency handles such as `Atomic`, `Channel`, `Semaphore`, and `WorkQueue` must be created with `shared`.
 
 See [§10.11](#1011-concurrency-safety-model).
 
-#### 5.1.5 Destructuring bindings
+#### 5.1.4 Destructuring bindings
 
 ```xray
 // array destructuring
-let [a, b, c] = [1, 2, 3]
-let [first, , third] = [10, 20, 30]         // skip elements
+var [a, b, c] = [1, 2, 3]
+var [first, , third] = [10, 20, 30]         // skip elements
 
 // tuple destructuring (multi-return)
-let (q, r) = divmod(17, 5)
+var (q, r) = divmod(17, 5)
 
 // object destructuring (extract by field name; local binding may be renamed)
-let { name, age } = { name: "Alice", age: 30 }
-let { name: localName, age } = { name: "Alice", age: 30 }
+var { name, age } = { name: "Alice", age: 30 }
+var { name: localName, age } = { name: "Alice", age: 30 }
 ```
 
 Constraints:
@@ -2050,8 +2042,8 @@ fn divmod(a: int, b: int) -> (int, int) {
     return (a / b, a % b)
 }
 
-let (q, r) = divmod(17, 5)
-let result = divmod(10, 3)        // result has type (int, int)
+var (q, r) = divmod(17, 5)
+var result = divmod(10, 3)        // result has type (int, int)
 ```
 
 **Constraints**:
@@ -2086,7 +2078,7 @@ fn translate(v: ref Vec2, dx: float, dy: float) -> () {
 
 ```xray
 fn sum(...nums: int) -> int {
-    let total = 0
+    var total = 0
     for (n in nums) { total += n }
     return total
 }
@@ -2107,7 +2099,7 @@ fn main() { ... }
 ```
 
 - Top-level `fn` declarations are hoisted to the top of the current scope.
-- `let f = (x: int) -> x` (an arrow function bound to a variable) is **not** hoisted.
+- `var f = (x: int) -> x` (an arrow function bound to a variable) is **not** hoisted.
 
 #### 5.2.7 Tail-call optimization
 
@@ -2144,7 +2136,7 @@ greet()                   // must be called explicitly
 @extern("C") fn free(p: RawMut<uint8>)
 @extern("C") @dylib("m") fn cos(x: float64) -> float64
 
-let p = unsafe { malloc(4) }
+var p = unsafe { malloc(4) }
 unsafe {
     p[0] = 42
     print(cos(0.0))
@@ -2243,7 +2235,7 @@ class Animal {
     }
 }
 
-let a = Animal("Rex")
+var a = Animal("Rex")
 print(a.speak())
 print(Animal.create("Bob").name)
 ```
@@ -2390,15 +2382,15 @@ struct Point {
 }
 
 // Two creation styles
-let p = Point()                  // default-construct (zero-valued fields), then assign
+var p = Point()                  // default-construct (zero-valued fields), then assign
 p.x = 3.0
 p.y = 4.0
 
-let q = Point{x: 3.0, y: 4.0}        // struct literal: TypeName + { field: value }
-let pt = Point{x: 1.0, y: 2.0}
+var q = Point{x: 3.0, y: 4.0}        // struct literal: TypeName + { field: value }
+var pt = Point{x: 1.0, y: 2.0}
 
 // Value semantics: assignment and parameter passing copy
-let b = q                            // b is an independent copy of q
+var b = q                            // b is an independent copy of q
 b.x = 99.0
 // q.x is still 3.0
 ```
@@ -2408,7 +2400,7 @@ b.x = 99.0
 | Dimension | `class` | `struct` |
 |--|--|--|
 | Memory model | Reference type (heap) | Value type (stack or inlined) |
-| Assign / pass | Shared reference | **Copy** (`let b = a` produces an independent copy) |
+| Assign / pass | Shared reference | **Copy** (`var b = a` produces an independent copy) |
 | Inheritance | Supports `extends` | **No** inheritance |
 | `implements` | ✅ | ✅ |
 | Generics | ✅ | ✅ |
@@ -2590,11 +2582,11 @@ Mixing: a single enum may contain both payload-free and payload-bearing variants
 Construction:
 
 ```xray
-let c = Color.Red                                   // simple
-let r1 = Option.Some(42)                            // positional payload
-let e1 = NetEvent.DataReceived(bytes: b)            // named payload, field name allowed
-let e2 = NetEvent.Error(404, "not found")           // field name omitted, positional
-let e3 = NetEvent.Connected                         // payload-free variant: no parentheses
+var c = Color.Red                                   // simple
+var r1 = Option.Some(42)                            // positional payload
+var e1 = NetEvent.DataReceived(bytes: b)            // named payload, field name allowed
+var e2 = NetEvent.Error(404, "not found")           // field name omitted, positional
+var e3 = NetEvent.Connected                         // payload-free variant: no parentheses
 ```
 
 Destructuring (match):
@@ -2661,7 +2653,7 @@ enum Shape {
             Shape.Circle(r)     -> 3.14159 * r * r,
             Shape.Rect(w, h)    -> w * h,
             Shape.Triangle(a, b, c) -> {
-                let s = (a + b + c) / 2.0
+                var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
         }
@@ -2675,7 +2667,7 @@ enum Shape {
     }
 }
 
-let s = Shape.Circle(radius: 1.0)
+var s = Shape.Circle(radius: 1.0)
 print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
@@ -2944,9 +2936,9 @@ match (http_status) {
 ### 6.9 Destructuring Patterns
 
 ```xray
-let [a, b, c] = some_array
-let (q, r) = divmod(17, 5)
-let { name, age } = user
+var [a, b, c] = some_array
+var (q, r) = divmod(17, 5)
+var { name, age } = user
 ```
 
 See §5.1.5 for details. Within `match`, tuple, ADT-variant, object, and array destructuring are supported:
@@ -2988,7 +2980,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 | Function / closure | Entering `fn` / arrow function | parameters + function body |
 | Block | `{...}` | `if` `while` `for` `match` arm body |
 | `scope` block | `scope { ... }` keyword | explicit lexical scope + structured concurrency (see §10.7) |
-| `for` header | `for (let i=0; ...)` | `i` is visible only within the loop body |
+| `for` header | `for (var i=0; ...)` | `i` is visible only within the loop body |
 | `catch` parameter | `catch (e)` | `e` is visible only within the catch body |
 | Class body | `class` definition | fields, methods |
 
@@ -3002,8 +2994,8 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 main()                    // OK: uses the hoisted fn
 fn main() { ... }
 
-let y = x                 // error: x is not declared
-let x = 10
+var y = x                 // error: x is not declared
+var x = 10
 ```
 
 #### Shadow rules
@@ -3011,9 +3003,9 @@ let x = 10
 A nested block may shadow a same-named variable in an outer scope:
 
 ```xray
-let x = 1
+var x = 1
 {
-    let x = "hello"           // shadow: OK
+    var x = "hello"           // shadow: OK
     print(x)                 // "hello"
 }
 print(x)                     // 1
@@ -3029,14 +3021,14 @@ The default capture mode is **by reference**:
 
 ```xray
 fn make_counter() -> (() -> int) {
-    let count = 0
+    var count = 0
     return fn() -> int {
         count += 1                  // mutates the outer count
         return count
     }
 }
 
-let c = make_counter()
+var c = make_counter()
 print(c())      // 1
 print(c())      // 2
 ```
@@ -3056,13 +3048,13 @@ The compiler analyzes upvalues:
 Xray is **not** a full ownership/borrow-checked language (unlike Rust). However, **cross-coroutine data transfer** uses move semantics:
 
 ```xray
-shared let big_buffer = Bytes(1024 * 1024)
+var big_buffer = Bytes(1024 * 1024)
 
-let t = go fn(b: Bytes) -> int {
+var t = go fn(b: Bytes) -> int {
     return process(b)
-}(big_buffer)             // compile error: shared let cannot be passed directly, must move
+}(big_buffer)             // compile error: owned heap value cannot cross bare
 
-let t2 = go fn(b: Bytes) -> int {
+var t2 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big_buffer)        // OK: ownership transferred
 
@@ -3079,20 +3071,19 @@ print(big_buffer.length)  // compile error: accessed after move
 
 "Statically eliminating data races at compile time" is a core design principle of xray's concurrency model.
 
-A coroutine launched by `go` **cannot directly capture** mutable variables from the outer scope; data must enter the coroutine through **parameter passing**. Plain variables are deep-copied automatically; `shared` variables follow the rules below:
+A coroutine launched by `go` **cannot directly capture** mutable variables from the outer scope; data must enter the coroutine through **parameter passing**. Plain local reference values must use explicit `copy(...)` or `move`; `shared` bindings are stable shared identities and may cross coroutine boundaries directly:
 
 | Variable kind | Cross-coroutine transfer rule |
 |---|---|
-| Plain `let` / `const` (local) | **Deep-copied** automatically when passed as an argument; cannot be captured and mutated by closures |
+| Plain `var` / `const` (local) | Owned heap values must use explicit `copy(...)` or `move` when passed as arguments; cannot be captured and mutated by closures |
 | Function parameters | ✅ Fully free (already copied / moved in) |
-| `shared const` | ✅ Zero-copy read-only sharing across coroutines (capturable by closures) |
-| `shared let` | ⚠️ Must transfer ownership with a `move` argument prefix; the original variable becomes inaccessible after the move |
+| `shared` | ✅ May be passed/captured across coroutines directly; the binding cannot be reassigned or moved |
 | `Channel<T>` | ✅ May be captured by closures (lifetime managed by the channel itself) |
 | `this` / mutable closure upvalues | ❌ Cannot cross coroutines; must be passed explicitly through parameters |
 | Globally imported functions/classes | ✅ Immutable definitions, freely referenceable |
 
 ```xray
-let local = 0
+var local = 0
 go { local += 1 }                        // ❌ compile error: cannot capture mutable local
 ```
 
@@ -3100,29 +3091,29 @@ go { local += 1 }                        // ❌ compile error: cannot capture mu
 
 ```xray
 // Pattern 1: pass by value (plain variables are deep-copied)
-let arr = [1, 2, 3]
-let t = go fn(data: Array<int>) -> int {
+var arr = [1, 2, 3]
+var t = go fn(data: Array<int>) -> int {
     data.push(4)            // mutates the copy, original is unaffected
     return data.length
 }(arr)
 print(arr)                  // [1, 2, 3] unchanged
 
-// Pattern 2: shared const, zero-copy read-only (capturable)
-shared const config = { rate: 100 }
-let t2 = go fn(c: Json) -> int {
+// Pattern 2: shared, zero-copy read-only (capturable)
+shared config = { rate: 100 }
+var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
 
 // Pattern 3: move ownership
-shared let big = Bytes(1024)
-let t3 = go fn(b: Bytes) -> int {
+shared big = Bytes(1024)
+var t3 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big)
 // big is inaccessible from this point
 
 // Pattern 4: Channel communication (capturable)
-shared const ch = Channel<int>(10)
-let t4 = go fn(c: Channel<int>) -> int {
+shared ch = Channel<int>(10)
+var t4 = go fn(c: Channel<int>) -> int {
     return match (c.recv()) {
         Recv.Value(v) -> v
         _ -> 0
@@ -3137,7 +3128,7 @@ Xray uses a layered memory management strategy:
 
 | Storage | Mechanism | Reclamation |
 |--|--|--|
-| Global heap (`shared const`) | refcount | when refcount reaches 0 |
+| Global heap (`shared`) | refcount | when refcount reaches 0 |
 | Local heap (general objects) | reference counting + cycle collection | when the last reference is released; strong cycles are reclaimed by the cycle collector |
 | Stack (`struct` values, locals) | RAII | when scope exits |
 | Arena (low-level temporary allocations) | bulk free | at arena end |
@@ -3280,7 +3271,7 @@ fn fetchUser(id: int) -> User {
 }
 
 try {
-    let user = fetchUser(-1)
+    var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
         HttpErr.NotFound(msg) -> log("404:", msg),
@@ -3316,7 +3307,7 @@ go {
     }
 }
 
-let result = match (err_ch.recv()) {
+var result = match (err_ch.recv()) {
     Recv.Value(v) -> v
     _ -> "error"
 }
@@ -3345,14 +3336,14 @@ Panics propagate via limited stack unwinding and generate `PanicInfo` objects wi
 
 ```xray
 try {
-    let arr: Array<int> = [1, 2, 3]
-    let v = arr[10]                          // OOB → panic
+    var arr: Array<int> = [1, 2, 3]
+    var v = arr[10]                          // OOB → panic
 } catch panic {
     log("runtime fault caught")
 }
 
 try {
-    let n = 10 / 0                           // division by zero → panic
+    var n = 10 / 0                           // division by zero → panic
 } catch panic {
     log("division by zero caught")
 }
@@ -3398,10 +3389,10 @@ User code generally does not construct `PanicInfo` directly — use `throw <enum
 
 ```xray
 fn fetch(url: string) -> string {
-    let conn = open(url)
+    var conn = open(url)
     defer conn.close()                       // conn is guaranteed to close
 
-    let data = conn.read()
+    var data = conn.read()
     if (data.isEmpty()) {
         throw FetchErr.Empty                 // defer still runs
     }
@@ -3470,7 +3461,7 @@ Reference table:
 enum ConnErr { Refused, Timeout, Reset }
 
 fn fetchData(host: string) -> string {
-    let conn = connect(host)
+    var conn = connect(host)
     defer conn.close()
 
     if (!conn.isAlive()) { throw ConnErr.Timeout }
@@ -3479,7 +3470,7 @@ fn fetchData(host: string) -> string {
 
 fn main() {
     try {
-        let data = fetchData("api.example.com")
+        var data = fetchData("api.example.com")
         print(data)
     } catch (e: ConnErr) {
         match (e) {
@@ -3499,15 +3490,15 @@ main()
 enum ConfigErr { BadJson(string), BadField(string) }
 
 fn parseConfig(text: string) -> Config {
-    let json = parseJson(text)
-    let port = json["port"].toInt()
+    var json = parseJson(text)
+    var port = json["port"].toInt()
     if (port == null) { throw ConfigErr.BadField("port") }
     return Config(port: port!)
 }
 
 fn main() {
     try {
-        let cfg = parseConfig(configText)
+        var cfg = parseConfig(configText)
         startServer(cfg)
     } catch (e: ConfigErr) {
         match (e) {
@@ -3523,8 +3514,8 @@ main()
 #### Pattern 3: `??` for default values
 
 ```xray
-let port = config?.port ?? 8080
-let user = db.findUser(id) ?? guestUser
+var port = config?.port ?? 8080
+var user = db.findUser(id) ?? guestUser
 ```
 
 #### Pattern 4: catch panic for runtime fault fallback
@@ -3561,8 +3552,8 @@ fn identity<T>(x: T) -> T {
     return x
 }
 
-let a = identity<int>(42)
-let b = identity("hello")               // T inferred as string
+var a = identity<int>(42)
+var b = identity("hello")               // T inferred as string
 
 // Generic class
 class Box<T> {
@@ -3571,8 +3562,8 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-let b1 = Box<int>(42)
-let b2 = Box<string>("hi")
+var b1 = Box<int>(42)
+var b2 = Box<string>("hi")
 
 // Multi-parameter generic
 class Pair<K, V> {
@@ -3655,9 +3646,9 @@ The inference algorithm is **bidirectional**:
 When inference fails or precision is needed:
 
 ```xray
-let empty = Array<int>()              // no element to infer from
-let m = Map<string, int>()
-let result = identity<float>(0)            // 0 defaults to int; force float
+var empty = Array<int>()              // no element to infer from
+var m = Map<string, int>()
+var result = identity<float>(0)            // 0 defaults to int; force float
 ```
 
 ### 9.4 Specialization and Monomorphization
@@ -3730,7 +3721,7 @@ Because of monomorphization, every concrete instantiation has its own class/func
 class Container<T> {
     items: Array<T>
 }
-let c = Container<int>()
+var c = Container<int>()
 print(Reflect.typeOf(c))       // "Container<int>"
 ```
 
@@ -3768,36 +3759,36 @@ GoOption ::= 'name' ':' StringLiteral
 
 ```xray
 // Form 1: call an existing function
-let t1 = go worker(0, channel)
+var t1 = go worker(0, channel)
 
 // Form 2: call a lambda literal (inline logic + explicit arguments)
-let t2 = go fn(d: Json) -> int {
+var t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
 
 // Form 3: block form (implicitly wrapped as a zero-argument lambda)
-let t3 = go {
+var t3 = go {
     return compute()
 }
 
 // Optional debugging name
-let named = go(name: "worker-1") worker(1, channel)
+var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**`move` lives in argument position**: cross-coroutine ownership transfer goes through the argument prefix `move`, **not** through a `go` option:
+**`move` lives in argument position**: ownership transfer of ordinary locals goes through the argument prefix `move`, **not** through a `go` option; `shared` bindings are stable shared identities and cannot be moved:
 
 ```xray
-shared let data = { value: 10 }
-let task = go fn(d: Json) -> int {
+var data = { value: 10 }
+var task = go fn(d: Json) -> int {
     return d.value + 1
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
 
-**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass concurrency capture rules. The block may not capture ordinary mutable locals; external state used directly inside the block must be `shared const`, immutable global state, or an explicitly concurrency-safe object such as a Channel or Atomic. To pass local data into a coroutine, use the lambda-call or function-call form:
+**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass concurrency capture rules. The block may not capture ordinary mutable locals; external state used directly inside the block must be `shared`, immutable global state, or an explicitly concurrency-safe object such as a Channel or Atomic. To pass local data into a coroutine, use the lambda-call or function-call form:
 
 ```xray
-let n = 10
-let task = go fn(x: int) -> int {
+var n = 10
+var task = go fn(x: int) -> int {
     return x + 1
 }(n)
 ```
@@ -3807,7 +3798,7 @@ let task = go fn(x: int) -> int {
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
-- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared const`; **passing them bare is a compile error**. Scalars, `string`, `shared const`, and Channel / Task / Atomic pass directly. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, and the normal path no longer performs an implicit boundary deep copy.
+- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Bytes` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared`; **passing them bare is a compile error**. Scalars, `string`, `shared`, and Channel / Task / Atomic pass directly. `move` only applies to rebindable local `var` values; `shared` bindings cannot be moved. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, and the normal path no longer performs an implicit boundary deep copy.
 - The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
 
 ### 10.3 `await` — wait for a result
@@ -3820,23 +3811,23 @@ AwaitExpr ::= 'await' Expression
 
 ```xray
 // single task
-let task = go fetch("https://example.com")
-let result = await task                    // yields the current coroutine until task completes
+var task = go fetch("https://example.com")
+var result = await task                    // yields the current coroutine until task completes
 
 // await all: wait for all, returns the result array (in input order)
-let t1 = go compute(2)
-let t2 = go compute(3)
-let t3 = go compute(4)
-let results: Array<int> = await all [t1, t2, t3]
+var t1 = go compute(2)
+var t2 = go compute(3)
+var t3 = go compute(4)
+var results: Array<int> = await all [t1, t2, t3]
 // also works on a variable directly, no brackets needed
-let tasks = [t1, t2, t3]
-let results2: Array<int> = await all tasks
+var tasks = [t1, t2, t3]
+var results2: Array<int> = await all tasks
 
 // await any: wait for the first to complete, return its result; the others keep running
-let first = await any [t1, t2, t3]
+var first = await any [t1, t2, t3]
 
 // await anySuccess: skip failing tasks; wait for the first successful one
-let firstOk = await anySuccess [t1, t2, t3]
+var firstOk = await anySuccess [t1, t2, t3]
 ```
 
 **Semantics**:
@@ -3866,9 +3857,9 @@ let firstOk = await anySuccess [t1, t2, t3]
 | `t.awaitTimeout(ms)` | `(int) -> TaskResult<T>` | Waits until completion or timeout; timeout returns `TaskResult.Timeout` |
 
 ```xray
-let t = go fetch(url)
+var t = go fetch(url)
 if (!t.done) { /* still running */ }
-let r = await t
+var r = await t
 
 match t.poll() {
     TaskResult.Pending -> print("running")
@@ -3892,12 +3883,12 @@ ChannelType ::= 'Channel' '<' Type '>'
 ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
-Channels are usually declared as `shared const` (cross-coroutine lifetime, reference semantics):
+Channels are usually declared as `shared` (cross-coroutine lifetime, reference semantics):
 
 ```xray
-shared const ch  = Channel<int>(10)    // buffered, capacity = 10
-shared const ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
-shared const cha = Channel(3)          // element type inferred from the first send
+shared ch  = Channel<int>(10)    // buffered, capacity = 10
+shared ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
+shared cha = Channel(3)          // element type inferred from the first send
 ```
 
 **API** (note that all method names are **camelCase**):
@@ -3915,15 +3906,15 @@ shared const cha = Channel(3)          // element type inferred from the first s
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
 ```xray
-shared const ch = Channel<int>(10)
+shared ch = Channel<int>(10)
 ch.send(42)                             // blocking send
-let v = match ch.recv() {
+var v = match ch.recv() {
     Recv.Value(value) -> value
     Recv.Closed -> -1
     _ -> -1
 }
 
-let sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
+var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
 match ch.tryRecv() {
     Recv.Value(next) -> print(next)
     Recv.Empty -> print("empty")
@@ -3937,7 +3928,7 @@ for (msg in ch) {
     print(msg)
 }
 
-let value = ch.recvOr(-1)
+var value = ch.recvOr(-1)
 ```
 
 **send/recv with `move`**: when sending a large object, use `ch.send(move payload)` to transfer ownership and avoid copying; the receiver becomes the sole owner.
@@ -3971,8 +3962,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray
-shared const ch1 = Channel<int>(2)
-shared const ch2 = Channel<int>(2)
+shared ch1 = Channel<int>(2)
+shared ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
@@ -3984,7 +3975,7 @@ select {
 
 **Semantics**:
 - Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value(name)` payload to `name`.
-- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same explicit-transfer rule as `ch.send` — a bare owned heap value must be written as `copy(v)`, `move v`, or `shared const`.
+- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same explicit-transfer rule as `ch.send` — a bare owned heap value must be written as `copy(v)`, `move v`, or `shared`.
 - Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
 - When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
 
@@ -4003,9 +3994,9 @@ SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // collect every child re
 
 ```xray
 // lexical scope use
-let x = 1
+var x = 1
 scope {
-    let x = 10            // shadow the outer x; in effect inside the block
+    var x = 10            // shadow the outer x; in effect inside the block
     print(x)              // 10
 }
 print(x)                  // 1
@@ -4050,7 +4041,7 @@ try {
 }
 
 // supervisor scope: collect every child outcome
-let outcomes = supervisor scope {
+var outcomes = supervisor scope {
     go failing("error1")
     go failing("error2")
     go ok()
@@ -4068,37 +4059,37 @@ print(outcomes.length)               // 3 (one outcome per child)
 MoveExpr ::= 'move' Identifier        // only at call-argument position
 ```
 
-`move` is an **argument-prefix modifier** (not a `go` option). It transfers ownership of a `shared let` variable from the current scope to the callee (including coroutines started by `go`, `ch.send()`, etc.). After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error.
+`move` is an **argument-prefix modifier** (not a `go` option). It transfers ownership of a rebindable local `var` value from the current scope to the callee (including coroutines started by `go`, `ch.send()`, etc.). After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error. `const` and `shared` bindings cannot be used as `move` sources.
 
 ```xray
-shared let buf = Bytes(1024 * 1024)
+var buf = Bytes(1024 * 1024)
 
 // hand off to a coroutine
-let t = go fn(b: Bytes) -> int {
+var t = go fn(b: Bytes) -> int {
     return process(b)
 }(move buf)
 // compile error: buf has been moved
 // print(buf.length)
 
 // hand off to a channel
-shared const ch = Channel<Bytes>(1)
-shared let payload = Bytes(4096)
+shared ch = Channel<Bytes>(1)
+var payload = Bytes(4096)
 ch.send(move payload)
 // compile error: payload has been moved
 ```
 
-See §7.3 and §7.4 for the capture rules of shared variables.
+See §7.3 and §7.4 for the coroutine transfer rules of `var` and `shared`.
 
 ### 10.9 Synchronisation primitives
 
-xray's default concurrency model favours **message passing + immutable sharing**—`shared const`, `Channel`, `move`, and `scope` already eliminate most data races at compile time, so raw mutexes/locks are **discouraged**.
+xray's default concurrency model favours **message passing + explicit shared identity + explicit ownership transfer**: `shared`, `Channel`, `move`, and `scope` make cross-coroutine data boundaries visible in source, so raw mutexes/locks are **discouraged**.
 
 When mutual exclusion or atomic operations are unavoidable, the runtime provides:
 
 | Primitive | Form | Description |
 |---|---|---|
 | Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
-| `shared let` + `move` | Compile-time exclusivity | Cross-coroutine exclusivity with no runtime overhead |
+| `shared` | Stable shared identity | Stored on the global heap while retaining lexical scope; concurrent mutation safety comes from the value's own type semantics |
 | `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `int`/`float`/`bool` |
 
 > **Design note**: xray does not expose generic lock primitives such as `Mutex`/`RwLock`. For simple shared counters and flags, `Atomic<T>` is the recommended choice; for complex mutual exclusion, use `Channel(1)` to simulate lock/unlock.
@@ -4107,12 +4098,12 @@ When mutual exclusion or atomic operations are unavoidable, the runtime provides
 
 `Atomic<T>` wraps `int`, `float`, or `bool`, allocated on the system heap, using C11 atomic instructions for lock-free cross-coroutine reads and writes.
 
-**Declaration constraint**: `Atomic<T>` variables must be declared as `shared const`; `move` is prohibited.
+**Declaration constraint**: `Atomic<T>` variables must be declared as `shared`; `move` is prohibited.
 
 ```xray
-shared const counter = Atomic(0)         // Atomic<int>
-shared const flag = Atomic(false)        // Atomic<bool>
-shared const rate = Atomic(3.14)         // Atomic<float>
+shared counter = Atomic(0)         // Atomic<int>
+shared flag = Atomic(false)        // Atomic<bool>
+shared rate = Atomic(3.14)         // Atomic<float>
 ```
 
 **Method overview** (full signatures in §14.19):
@@ -4145,9 +4136,9 @@ enum Ordering {
 The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed.
 
 ```xray
-shared const counter = Atomic(0)
+shared counter = Atomic(0)
 counter.store(42, Ordering.Release)
-let val = counter.load(Ordering.Acquire)
+var val = counter.load(Ordering.Acquire)
 ```
 
 
@@ -4172,14 +4163,14 @@ xray uses the type system to **eliminate most data races at compile time**:
 
 | Rule | Enforced |
 |--|--|
-| `go` closures cannot capture ordinary `let` locals | ✅ |
-| `shared const` is read-only and zero-copy across coroutines | ✅ |
-| `shared let` must be `move`d to cross a coroutine boundary | ✅ |
+| `go` closures cannot capture ordinary local `var` / `const` reference values | ✅ |
+| `shared` bindings may cross coroutine boundaries directly and cannot be reassigned or moved | ✅ |
+| `move` only applies to explicit ownership transfer of ordinary local `var` values | ✅ |
 | Channels for cross-coroutine values | ✅ |
-| `Atomic<T>` must be declared as `shared const`; `move` prohibited | ✅ |
+| `Atomic<T>` must be declared as `shared`; `move` prohibited | ✅ |
 
 **Residual data-race risk** (detected at runtime, not compile time):
-- Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared const` / `Bytes` / immutable objects, or transfer ownership via `move`.
+- Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared` / `Bytes` / immutable objects, or transfer ownership via `move`.
 
 ---
 
@@ -4350,7 +4341,7 @@ Usage from Xray code is identical:
 
 ```xray
 import time
-let t = time.now()
+var t = time.now()
 time.sleep(100)
 ```
 
@@ -4376,7 +4367,7 @@ fn test_addition() {
 
 @test
 fn test_with_assertions() {
-    let result = compute()
+    var result = compute()
     assert_eq(result, 42)
     assert(result > 0)
 }
@@ -4423,8 +4414,8 @@ A `@test` function body may use `go` / `await` / `await all` / `await any`:
 ```xray
 @test
 fn test_async_fetch() {
-    let task = go fetch_data("http://...")
-    let result = await task
+    var task = go fetch_data("http://...")
+    var result = await task
     assert_eq(result.status, 200)
 }
 ```
@@ -4504,7 +4495,7 @@ These global functions and built-in constructor/static functions are usable with
 | `x is T` | expression | runtime type check; the analyzer may narrow types |
 
 ```xray
-let x = 42
+var x = 42
 print(typeof(x))                // "int"
 print(x is int)                 // true
 print(typeof(x) == "int")       // true
@@ -4779,7 +4770,7 @@ These types are registered by the prelude; instances are constructed by factory 
 
 ### 14.19 `Atomic<T>` Methods
 
-`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Must be declared as `shared const`; `move` is prohibited.
+`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Must be declared as `shared`; `move` is prohibited.
 
 | Method | Signature | Description |
 |--|--|--|
@@ -4956,7 +4947,7 @@ Typed-array element layout is part of the container metadata. `Array<char>` uses
 | Region | Use |
 |--|--|
 | **System heap** | C `malloc/free`, used for native data structures |
-| **Global heap** | `shared const` / `shared let`, reference counting |
+| **Global heap** | `shared` / `shared`, reference counting |
 | **Coroutine heap** | per-coroutine RC object heap; strong cycles are reclaimed by the cycle collector |
 | **Stack** | `struct` values, local immediates, function frames |
 | **Arena** | parser temporary allocation, frame allocation |

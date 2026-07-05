@@ -45,11 +45,11 @@ fn test_generic_functions() {
     // Multiple type parameters
 
     // Test 3: Multiple type params - implicit
-    let (p1a, p1b) = makePair(1, "one")
+    var (p1a, p1b) = makePair(1, "one")
     assert_eq(p1a, 1)
     assert_eq(p1b, "one")
     // Test 4: Multiple type params - explicit  
-    let (p2a, p2b) = makePair<string, int>("age", 30)
+    var (p2a, p2b) = makePair<string, int>("age", 30)
     assert_eq(p2a, "age")
     assert_eq(p2b, 30)
 
@@ -66,11 +66,11 @@ fn test_generic_functions() {
     // Higher-order generic functions
 
     // Test 6: Higher-order
-    let doubled = apply(5, fn(n) {
+    var doubled = apply(5, fn(n) {
         return n * 2
     })
     assert_eq(doubled, 10)
-    let length = apply("hello", fn(s) {
+    var length = apply("hello", fn(s) {
         return s.length
     })
     assert_eq(length, 5)
@@ -78,16 +78,16 @@ fn test_generic_functions() {
     // Generic with array result
 
     // Test 7: Wrap
-    let intArr = wrap(42)
+    var intArr = wrap(42)
     assert_eq(intArr[0], 42)
     assert_eq(intArr.length, 1)
-    let strArr = wrap("test")
+    var strArr = wrap("test")
     assert_eq(strArr[0], "test")
 
     // Nested generic calls
 
     // Test 8: Nested calls
-    let result = wrap(identity(99))
+    var result = wrap(identity(99))
     assert_eq(result[0], 99)
 }
 

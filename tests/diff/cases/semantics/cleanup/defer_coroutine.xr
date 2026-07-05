@@ -8,8 +8,8 @@ fn task(id: int) -> int {
     return id * 10
 }
 
-let t1 = go task(1)
+var t1 = go task(1)
 print(await t1)
-let t2 = go task(2)
+var t2 = go task(2)
 print(await t2)
 print("done")

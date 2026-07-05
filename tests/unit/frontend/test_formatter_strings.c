@@ -124,20 +124,20 @@ static char *assert_round_trip(const char *src, const char *label) {
     return first;  // caller frees
 }
 
-// Build `let s = "<payload>";` with `payload` injected verbatim.
+// Build `var s = "<payload>";` with `payload` injected verbatim.
 // Used to drive parser through the regular-string production.
 static char *build_regular_let(const char *payload) {
     size_t len = strlen(payload);
     char *buf = (char *) malloc(len + 32);
-    snprintf(buf, len + 32, "let s = \"%s\";\n", payload);
+    snprintf(buf, len + 32, "var s = \"%s\";\n", payload);
     return buf;
 }
 
-// Build `let s = r"<payload>";` for the raw-string production.
+// Build `var s = r"<payload>";` for the raw-string production.
 static char *build_raw_let(const char *payload) {
     size_t len = strlen(payload);
     char *buf = (char *) malloc(len + 32);
-    snprintf(buf, len + 32, "let s = r\"%s\";\n", payload);
+    snprintf(buf, len + 32, "var s = r\"%s\";\n", payload);
     return buf;
 }
 
@@ -151,19 +151,19 @@ TEST(regular_string_round_trip_basic) {
     // contain a `"`-quoted form (never reverts to raw-string form
     // since raw lexeme is dropped at parse time).
     static const char *kSources[] = {
-        "let s = \"hello\";\n",
-        "let s = \"with space\";\n",
-        "let s = \"escaped quote: \\\"\";\n",
-        "let s = \"backslash: \\\\\";\n",
-        "let s = \"newline: \\n end\";\n",
-        "let s = \"tab\\there\";\n",
-        "let s = \"all: \\\" \\\\ \\n \\r \\t \\b \\f\";\n",
-        "let s = \"dollar: $not a placeholder\";\n",
-        "let s = \"chinese: \xe4\xbd\xa0\xe5\xa5\xbd\";\n",
+        "var s = \"hello\";\n",
+        "var s = \"with space\";\n",
+        "var s = \"escaped quote: \\\"\";\n",
+        "var s = \"backslash: \\\\\";\n",
+        "var s = \"newline: \\n end\";\n",
+        "var s = \"tab\\there\";\n",
+        "var s = \"all: \\\" \\\\ \\n \\r \\t \\b \\f\";\n",
+        "var s = \"dollar: $not a placeholder\";\n",
+        "var s = \"chinese: \xe4\xbd\xa0\xe5\xa5\xbd\";\n",
         // Empty string:
-        "let s = \"\";\n",
+        "var s = \"\";\n",
         // Only escapes:
-        "let s = \"\\n\\t\";\n",
+        "var s = \"\\n\\t\";\n",
     };
     int n = (int) (sizeof(kSources) / sizeof(kSources[0]));
     for (int i = 0; i < n; i++) {
@@ -209,13 +209,13 @@ TEST(template_string_round_trip) {
     // are gone), with `$` in literal parts escaped so that no
     // implicit `${` can re-form.
     static const char *kSources[] = {
-        "let n = \"x\";\nlet s = \"hello, ${n}!\";\n",
-        "let a = 1; let b = 2;\nlet s = \"sum=${a + b}\";\n",
-        "let p = 0;\nlet s = \"$${p}\";\n",  // user wants literal `$`
-        "let n = \"x\";\nlet s = \"${n}-${n}-${n}\";\n",
-        "let x = 1;\nlet s = \"start ${x} mid ${x + 1} end\";\n",
-        "let s = \"${\"quoted\"}\";\n",
-        "let m = #{\"k\": \"value\"};\nlet s = \"${m[\"k\"]}\";\n",
+        "var n = \"x\";\nvar s = \"hello, ${n}!\";\n",
+        "var a = 1; var b = 2;\nvar s = \"sum=${a + b}\";\n",
+        "var p = 0;\nvar s = \"$${p}\";\n",  // user wants literal `$`
+        "var n = \"x\";\nvar s = \"${n}-${n}-${n}\";\n",
+        "var x = 1;\nvar s = \"start ${x} mid ${x + 1} end\";\n",
+        "var s = \"${\"quoted\"}\";\n",
+        "var m = #{\"k\": \"value\"};\nvar s = \"${m[\"k\"]}\";\n",
     };
     int n = (int) (sizeof(kSources) / sizeof(kSources[0]));
     for (int i = 0; i < n; i++) {
@@ -230,11 +230,11 @@ TEST(idempotence_after_two_passes) {
     // The most direct fixed-point witness: a single source going
     // through two format passes must yield identical bytes. This
     // is the canonical formulation of the round-trip contract.
-    const char *src = "let a = \"plain\";\n"
-                      "let b = \"with \\\"quote\\\" and \\\\ backslash\";\n"
-                      "let c = r\"raw \\n stays literal\";\n"
-                      "let n = \"x\";\n"
-                      "let d = \"template ${n} done\";\n";
+    const char *src = "var a = \"plain\";\n"
+                      "var b = \"with \\\"quote\\\" and \\\\ backslash\";\n"
+                      "var c = r\"raw \\n stays literal\";\n"
+                      "var n = \"x\";\n"
+                      "var d = \"template ${n} done\";\n";
 
     char *first = parse_and_format(src);
     ASSERT_NOT_NULL(first);

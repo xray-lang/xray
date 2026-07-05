@@ -6,14 +6,14 @@
 // frame's defers run at its normal exit afterward.
 fn boom(x: int) -> int {
     defer print("boom-defer")
-    let z = 0
+    var z = 0
     return x / z
 }
 
 fn mid() -> int {
     defer print("mid-defer-1")
     defer print("mid-defer-2")
-    let r = boom(10)
+    var r = boom(10)
     print("unreachable-mid")
     return r
 }

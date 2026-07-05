@@ -10,8 +10,8 @@ class Box {
 @test
 fn test_crash_min() {
 
-    for (let i = 0; i < 200; i++) {
-        let b = Box(i)
+    for (var i = 0; i < 200; i++) {
+        var b = Box(i)
     }
 }
 

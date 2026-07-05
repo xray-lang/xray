@@ -1,7 +1,7 @@
 fn main() {
-    let chunks: Array<Bytes> = [Bytes(0)]
+    var chunks: Array<Bytes> = [Bytes(0)]
     chunks[0].push(1)
-    let view: ByteSpan = chunks[0][:]
+    var view: ByteSpan = chunks[0][:]
     chunks[0].push(2)
     print(view.length)
 }

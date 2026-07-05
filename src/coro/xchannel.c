@@ -722,7 +722,7 @@ XrChannel *xr_channel_new(XrRuntimeCore *core, XrRuntime *scheduler, uint32_t bu
 
     // Atomic shared-RC, one owning reference for the creating handle. A channel
     // is pure cross-coroutine shared data (no executor owner), so the compiler
-    // tracks it like `shared const`: dup = atomic incref, the last drop frees.
+    // tracks it like `shared`: dup = atomic incref, the last drop frees.
     // NOT XR_OBJ_MANAGED — that backstop is only for the timer-channel variant,
     // whose embedded node the timer wheel owns asynchronously.
     xr_shared_set_refc(&ch->gc_header, 1);

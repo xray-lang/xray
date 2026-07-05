@@ -17,7 +17,7 @@ fn set_at(xs: Array<int>, i: int, v: int) -> int {
 @test
 fn test_index_set_strict() {
     // In-bounds assignment overwrites.
-    let a = [1, 2, 3]
+    var a = [1, 2, 3]
     a[0] = 10
     a[2] = 30
     assert_eq(a[0], 10)

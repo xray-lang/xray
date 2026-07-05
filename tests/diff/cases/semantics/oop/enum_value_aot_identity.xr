@@ -16,7 +16,7 @@ enum HttpStatus {
     NotFound = 404,
 }
 
-let colors = [Color.Red, Color.Green, Color.Blue]
+var colors = [Color.Red, Color.Green, Color.Blue]
 print(colors.join("|"))
 
 print(Color.Red.name)
@@ -25,7 +25,7 @@ print(Color.Blue.ordinal)
 print(Color.Red.toString())
 print(Color.memberCount)
 
-let middle = Color.getMember(1)
+var middle = Color.getMember(1)
 print(middle == Color.Green)
 print(middle.name + ":" + string(middle.value) + ":" + string(middle.ordinal))
 
@@ -33,7 +33,7 @@ print(Direction.North.value)
 print(Direction.North.toString())
 print(HttpStatus.NotFound.value)
 
-let names: Array<string> = []
+var names: Array<string> = []
 for (c in Color) {
     names.push(c.name)
 }

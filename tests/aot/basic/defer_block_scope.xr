@@ -9,7 +9,7 @@ fn fail() {
 }
 
 fn loop_sum() -> int {
-    let sum = 0
+    var sum = 0
     for (i in 0..4) {
         defer { sum = sum + 10 + i }
         sum = sum + 1
@@ -18,7 +18,7 @@ fn loop_sum() -> int {
 }
 
 fn value_try() -> int {
-    let sum = 0
+    var sum = 0
     try {
         defer { sum = sum + 10 }
         fail()
@@ -30,7 +30,7 @@ fn value_try() -> int {
 }
 
 fn return_from_block() -> int {
-    let sum = 0
+    var sum = 0
     defer { sum = sum + 100 }
     {
         defer { sum = sum + 10 }

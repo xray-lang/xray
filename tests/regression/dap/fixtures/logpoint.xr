@@ -1,5 +1,5 @@
 // DAP test fixture: logpoint test
-let a = 10
-let b = 20
-let c = a + b
+var a = 10
+var b = 20
+var c = a + b
 print(c)

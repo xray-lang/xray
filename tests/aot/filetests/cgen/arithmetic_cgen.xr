@@ -1,6 +1,6 @@
 fn hot(n: int) -> int {
-    let acc = 0
-    let i = 0
+    var acc = 0
+    var i = 0
     while (i < n) {
         acc = acc + i * 2
         i = i + 1

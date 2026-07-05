@@ -13,7 +13,7 @@ fn safe_div(a: int, b: int) -> int {
 }
 
 @test fn basic_throw_catch() {
-    let result = 0
+    var result = 0
     try {
         result = safe_div(10, 2)
     } catch (e) {
@@ -23,7 +23,7 @@ fn safe_div(a: int, b: int) -> int {
 }
 
 @test fn catch_on_error() {
-    let result = 0
+    var result = 0
     try {
         result = safe_div(10, 0)
     } catch (e) {
@@ -33,7 +33,7 @@ fn safe_div(a: int, b: int) -> int {
 }
 
 @test fn typed_catch() {
-    let msg = "ok"
+    var msg = "ok"
     try {
         safe_div(1, 0)
     } catch (e: MathErr) {
@@ -44,10 +44,10 @@ fn safe_div(a: int, b: int) -> int {
 
 @test fn auto_propagation() {
     fn wrapper() -> int {
-        let x = safe_div(10, 0)
+        var x = safe_div(10, 0)
         return x + 1
     }
-    let result = 0
+    var result = 0
     try {
         result = wrapper()
     } catch (e) {
@@ -57,13 +57,13 @@ fn safe_div(a: int, b: int) -> int {
 }
 
 @test fn nested_try_catch() {
-    let inner_val = 0
+    var inner_val = 0
     try {
         inner_val = safe_div(1, 0)
     } catch (e) {
         inner_val = 42
     }
-    let outer = 0
+    var outer = 0
     try {
         outer = inner_val + safe_div(10, 5)
     } catch (e) {
@@ -79,7 +79,7 @@ fn safe_div(a: int, b: int) -> int {
         }
         return "value_${key}"
     }
-    let msg = ""
+    var msg = ""
     try {
         msg = lookup("")
     } catch (e: AppErr) {
@@ -92,8 +92,8 @@ fn safe_div(a: int, b: int) -> int {
 }
 
 @test fn defer_runs_on_throw() {
-    let cleaned = false
-    let caught = false
+    var cleaned = false
+    var caught = false
     fn work() -> int {
         defer { cleaned = true }
         throw MathErr.Overflow
@@ -115,7 +115,7 @@ fn safe_div(a: int, b: int) -> int {
         return input.length
     }
 
-    let r1 = 0
+    var r1 = 0
     try {
         r1 = process("closed")
     } catch (e: IoErr) {
@@ -125,7 +125,7 @@ fn safe_div(a: int, b: int) -> int {
     }
     assert_eq(r1, -1)
 
-    let r2 = 0
+    var r2 = 0
     try {
         r2 = process("bad")
     } catch (e: IoErr) {
@@ -135,7 +135,7 @@ fn safe_div(a: int, b: int) -> int {
     }
     assert_eq(r2, -2)
 
-    let r3 = 0
+    var r3 = 0
     try {
         r3 = process("hello")
     } catch (e: IoErr) {

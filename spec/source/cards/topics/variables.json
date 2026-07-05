@@ -1,9 +1,9 @@
 {
   "id": "variables",
   "title": "Variables",
-  "spec_anchor": "#51-let-const-shared",
+  "spec_anchor": "#51-var-const-shared",
   "aliases": [
-    "let",
+    "var",
     "const",
     "var",
     "shared",
@@ -11,9 +11,9 @@
   ],
   "sections": [
     {
-      "heading": "let",
+      "heading": "var",
       "fences": [
-        "decl-let"
+        "decl-var"
       ]
     },
     {
@@ -23,15 +23,9 @@
       ]
     },
     {
-      "heading": "shared const",
+      "heading": "shared",
       "fences": [
-        "decl-shared-const"
-      ]
-    },
-    {
-      "heading": "shared let",
-      "fences": [
-        "decl-shared-let"
+        "decl-shared"
       ]
     },
     {

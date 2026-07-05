@@ -8,7 +8,7 @@
     {
       "heading": "Declaration (MUST be const)",
       "fences": ["channel-decl-variants"],
-      "after_text": "`let ch = new Channel<int>(10)` is a **compile error** for coroutine sharing."
+      "after_text": "`var ch = Channel<int>(10)` is a **compile error** for coroutine sharing; channel handles must be declared with `shared`."
     },
     {
       "heading": "Operations",

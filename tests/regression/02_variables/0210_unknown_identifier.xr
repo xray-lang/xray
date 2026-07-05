@@ -3,6 +3,6 @@
 
 @test
 fn test_unknown_identifier_name() {
-    let unknown = 7
+    var unknown = 7
     assert_eq(unknown, 7)
 }

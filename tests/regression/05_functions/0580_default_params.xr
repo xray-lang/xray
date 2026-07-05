@@ -40,9 +40,9 @@ fn test_default_params() {
 
     // Default with all optional params
 
-    let p1 = createPoint()
-    let p2 = createPoint(5)
-    let p3 = createPoint(5, 10)
+    var p1 = createPoint()
+    var p2 = createPoint(5)
+    var p3 = createPoint(5, 10)
     print(p1.x, p1.y)       // 0 0
     print(p2.x, p2.y)       // 5 0
     print(p3.x, p3.y)       // 5 10

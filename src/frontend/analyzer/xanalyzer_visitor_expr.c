@@ -3068,7 +3068,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         // Unified body visitor: idempotent collect + direct traversal.
         // A variable is hidden from its own initializer, but nested closure
         // bodies are analyzed after the binding exists and may capture it
-        // (e.g. `let f = fn() { return f() }`).
+        // (e.g. `var f = fn() { return f() }`).
         uint32_t saved_initializing_symbol_id = ctx->initializing_symbol_id;
         ctx->initializing_symbol_id = 0;
         xa_visit_function_body_unified(ctx, fn->body);
@@ -3175,7 +3175,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
  * Heap-shaped values that currently need a coroutine-boundary clone must be
  * transferred with explicit syntax. This keeps the source model aligned with
  * AOT cost: copy(...) means the user accepts O(n), move means ownership leaves
- * the current coroutine, and shared const is the zero-copy read-only path.
+ * the current coroutine, and shared is the zero-copy read-only path.
  * -------------------------------------------------------------------------- */
 bool xa_boundary_transfer_type_needs_explicit(const XrType *type) {
     if (!type || XR_TYPE_IS_UNKNOWN(type) || XR_TYPE_IS_NEVER(type) || XR_TYPE_IS_NULL(type))
@@ -3214,12 +3214,12 @@ bool xa_boundary_arg_is_explicit_copy(AstNode *arg_node) {
     return name && strcmp(name, "copy") == 0;
 }
 
-bool xa_boundary_arg_is_shared_const(XaInferContext *ctx, AstNode *arg_node) {
+bool xa_boundary_arg_is_shared(XaInferContext *ctx, AstNode *arg_node) {
     if (!ctx || !ctx->analyzer || !arg_node || arg_node->type != AST_VARIABLE)
         return false;
     const char *name = arg_node->as.variable.name;
     XaSymbol *sym = name ? xa_scope_lookup(ctx->analyzer->current_scope, name) : NULL;
-    return sym && sym->is_shared && sym->is_const;
+    return sym && sym->is_shared;
 }
 
 void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node, AstNode *arg_node,
@@ -3236,7 +3236,7 @@ void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
     if (!xa_boundary_transfer_type_needs_explicit(arg_type))
         return;
     if (arg_node->type == AST_MOVE_EXPR || xa_boundary_arg_is_explicit_copy(arg_node) ||
-        xa_boundary_arg_is_shared_const(ctx, arg_node))
+        xa_boundary_arg_is_shared(ctx, arg_node))
         return;
 
     XrLocation loc = {.file = ctx->file_path,
@@ -3246,8 +3246,8 @@ void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
                                                  : (boundary_node ? boundary_node->column : 0)};
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "%s transfer of type '%s' requires explicit copy(...) or move; use shared const for "
-             "read-only sharing",
+             "%s transfer of type '%s' requires explicit copy(...) or move; use shared for "
+             "shared identity",
              boundary_label ? boundary_label : "cross-coroutine value",
              xr_type_to_string(arg_type));
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
@@ -3298,7 +3298,7 @@ void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
                 sym->kind == XA_SYM_IMPORT)
                 break;
 
-            if (sym->is_shared && sym->is_const)
+            if (sym->is_shared)
                 break;
 
             XrLocation loc = {.file = ctx->file_path, .line = line, .column = node->column};
@@ -3316,24 +3316,18 @@ void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
                              "hint: pass copy(%s) or move %s through an explicit go argument",
                              name, name, name);
                 }
-            } else if (sym->is_shared) {
-                snprintf(msg, sizeof(msg),
-                         "go closure cannot capture mutable 'shared let' variable '%s'\n"
-                         "hint: pass it through an argument with 'move': go worker(move %s)",
-                         name, name);
             } else if (sym->is_const) {
-                snprintf(
-                    msg, sizeof(msg),
-                    "go closure cannot capture const variable '%s'\n"
-                    "hint: pass copy(%s) through an explicit go argument, or declare shared const "
-                    "for read-only sharing",
-                    name, name);
+                snprintf(msg, sizeof(msg),
+                         "go closure cannot capture const variable '%s'\n"
+                         "hint: pass copy(%s) through an explicit go argument, or declare shared "
+                         "for shared identity",
+                         name, name);
             } else {
                 snprintf(
                     msg, sizeof(msg),
                     "go closure cannot capture mutable variable '%s'\n"
                     "hint: pass copy(%s) or move %s through an explicit go argument, or declare "
-                    "shared const for read-only sharing",
+                    "shared for shared identity",
                     name, name, name);
             }
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
@@ -3382,6 +3376,7 @@ void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             // Check initializer
             if (node->as.var_decl.initializer) {
                 check_closure_capture(ctx, node->as.var_decl.initializer, line);
@@ -3506,8 +3501,8 @@ XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
         }
 
         // Check coroutine closure capture rules. Coroutine closures can only
-        // capture shared const; heap-shaped values must cross as explicit
-        // copy(...), move, or shared const arguments.
+        // capture shared; heap-shaped values must cross as explicit
+        // copy(...), move, or shared arguments.
         check_coro_capture(ctx, go->expr, node->line);
     }
 
@@ -3703,11 +3698,14 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
 
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
 
-    // Check: variable must exist and be a let variable (not const)
-    if (move_sym && move_sym->is_const) {
+    // Check: variable must exist and be a movable var binding.
+    if (move_sym && (move_sym->is_const || move_sym->is_shared)) {
         const char *name = inner->as.variable.name;
         char msg[128];
-        snprintf(msg, sizeof(msg), "cannot move const value '%s'", name);
+        snprintf(msg, sizeof(msg),
+                 move_sym->is_shared ? "cannot move shared binding '%s'"
+                                     : "cannot move const value '%s'",
+                 name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
     }

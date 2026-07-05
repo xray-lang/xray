@@ -20,23 +20,23 @@ fn blocked(ch: Channel<int>) -> int {
 fn test_main() {
     // === 1. 基本 go/await ===
     print("=== go/await ===")
-    let task1 = go { return 42 }
+    var task1 = go fn() -> int { return 42 }()
     print("task1 result:", await task1)
 
     // === 2. 状态检查（await 后确定性） ===
     print("=== status ===")
-    let task2 = go { return 100 }
-    let task2_result = await task2
+    var task2 = go fn() -> int { return 100 }()
+    var task2_result = await task2
     print("done:", task2.done)
     print("status:", task2.status)
     print("result:", task2_result)
 
     // === 3. 取消协程（channel-blocked 保证未完成） ===
     print("=== cancel ===")
-    const cancel_ch = Channel<int>(0)
-    let task3 = go blocked(cancel_ch)
+    shared cancel_ch = Channel<int>(0)
+    var task3 = go blocked(cancel_ch)
     task3.cancel()
-    let result3 = task3.awaitResult()
+    var result3 = task3.awaitResult()
     print("cancelled:", match (result3) {
         TaskResult.Cancelled -> true
         _ -> false
@@ -46,7 +46,7 @@ fn test_main() {
 
     // === 4. Channel 通信 ===
     print("=== channel ===")
-    shared const ch = Channel(3)
+    shared ch = Channel(3)
     ch.trySend(1)
     ch.trySend(2)
     ch.trySend(3)
@@ -64,16 +64,16 @@ fn test_main() {
 
     // === 6. await all ===
     print("=== await all ===")
-    let t1 = go { return 1 }
-    let t2 = go { return 2 }
-    let t3 = go { return 3 }
-    let results = await all [t1, t2, t3]
+    var t1 = go fn() -> int { return 1 }()
+    var t2 = go fn() -> int { return 2 }()
+    var t3 = go fn() -> int { return 3 }()
+    var results = await all [t1, t2, t3]
     print("all results:", results)
 
     // === 7. await any (single task = deterministic) ===
     print("=== await any ===")
-    let t4 = go { return "winner" }
-    let first = await any [t4]
+    var t4 = go fn() -> string { return "winner" }()
+    var first = await any [t4]
     print("first result:", first)
 
     print("=== done ===")

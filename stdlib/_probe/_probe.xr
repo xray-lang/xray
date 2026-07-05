@@ -10,7 +10,7 @@
 //   * static methods and generic class methods with closure-taking bodies
 // Keep it tiny: it ships in every binary as the permanent compiler gate.
 
-let probeSeed = 148
+var probeSeed = 148
 
 // --- module-level functions (gap B: slot_funcs direct call) ---
 
@@ -24,8 +24,8 @@ fn probeConcat(a: string, b: string) -> string {
 
 // --- variadic function (gap A: rest-parameter ABI) ---
 fn probeSum(...nums: int) -> int {
-    let total = 0
-    for (let i = 0; i < nums.length; i++) {
+    var total = 0
+    for (var i = 0; i < nums.length; i++) {
         total = total + nums[i]
     }
     return total
@@ -34,7 +34,7 @@ fn probeSum(...nums: int) -> int {
 // --- closure + defer in exported module functions (T3.4 permanent guard) ---
 
 fn probeDeferValue(base: int) -> int {
-    let total = base
+    var total = base
     {
         defer { total = total + 7 }
         total = total + 1
@@ -102,8 +102,8 @@ class ProbeBag {
     }
 
     labels() -> string {
-        let out: Array<string> = []
-        for (let i = 0; i < this.boxes.length; i++) {
+        var out: Array<string> = []
+        for (var i = 0; i < this.boxes.length; i++) {
             out.push(this.boxes[i].describe())
         }
         return out.join("|")

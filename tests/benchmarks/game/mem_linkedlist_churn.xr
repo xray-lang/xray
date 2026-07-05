@@ -6,8 +6,8 @@
 // Usage: xray gc_linkedlist_churn.xr -- [iterations]
 
 fn makeList(length: int) {
-    let node = null
-    let i = 0
+    var node = null
+    var i = 0
     while (i < length) {
         node = { "value": i, "next": node }
         i = i + 1
@@ -16,7 +16,7 @@ fn makeList(length: int) {
 }
 
 fn sumList(node): int {
-    let sum = 0
+    var sum = 0
     while (node != null) {
         sum = sum + node.value
         node = node.next
@@ -25,12 +25,12 @@ fn sumList(node): int {
 }
 
 fn run(n: int) {
-    let total = 0
+    var total = 0
 
     // Phase 1: Many short lists (high churn, young gen pressure)
-    let i = 0
+    var i = 0
     while (i < n * 100) {
-        let list = makeList(10)
+        var list = makeList(10)
         total = total + sumList(list)
         i = i + 1
     }
@@ -40,7 +40,7 @@ fn run(n: int) {
     total = 0
     i = 0
     while (i < n * 10) {
-        let list = makeList(100)
+        var list = makeList(100)
         total = total + sumList(list)
         i = i + 1
     }
@@ -50,12 +50,12 @@ fn run(n: int) {
     total = 0
     i = 0
     while (i < n) {
-        let list = makeList(1000)
+        var list = makeList(1000)
         total = total + sumList(list)
         i = i + 1
     }
     print("Phase 3 (long lists x" + n + "): sum=" + total)
 }
 
-let n = process.args.length > 0 ? int(process.args[0]) ?? 1000 : 1000
+var n = process.args.length > 0 ? int(process.args[0]) ?? 1000 : 1000
 run(n)

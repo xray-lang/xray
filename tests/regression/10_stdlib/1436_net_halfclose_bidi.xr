@@ -4,9 +4,9 @@
 import net
 
 fn serveReadUntilEof(c: NetConn) {
-    let total = 0
+    var total = 0
     while (true) {
-        let data = net.read(c)
+        var data = net.read(c)
         if (data == null) {
             break
         }
@@ -21,20 +21,20 @@ fn serveReadUntilEof(c: NetConn) {
 }
 
 fn acceptReadUntilEof(lst: NetListener) {
-    let c = net.accept(lst)!
+    var c = net.accept(lst)!
     go serveReadUntilEof(c)
 }
 
 fn serveUpstreamEcho(lst: NetListener) {
-    let c = net.accept(lst)!
+    var c = net.accept(lst)!
     net.copy(c, c)
     net.close(c)
 }
 
 fn serveProxyOnce(lst: NetListener, upstreamPort: int) {
-    let client = net.accept(lst)!
-    let upstream = net.dial("127.0.0.1", upstreamPort)!
-    let stats = net.copyBidirectional(client, upstream)
+    var client = net.accept(lst)!
+    var upstream = net.dial("127.0.0.1", upstreamPort)!
+    var stats = net.copyBidirectional(client, upstream)
     assert_true(stats != null)
     assert_true(stats.ab >= 4)
     assert_true(stats.ba >= 4)
@@ -45,17 +45,17 @@ fn serveProxyOnce(lst: NetListener, upstreamPort: int) {
 
 @test
 fn test_shutdown_write_allows_response() {
-    let maybeLst = net.listen(0, 8)
+    var maybeLst = net.listen(0, 8)
     if (maybeLst == null) { return }
-    let lst = maybeLst!
-    let port = lst.port()
+    var lst = maybeLst!
+    var port = lst.port()
     go acceptReadUntilEof(lst)
 
-    let c = net.dial("127.0.0.1", port)!
+    var c = net.dial("127.0.0.1", port)!
     assert_eq(net.write(c, "body"), 4)
     assert_true(net.shutdownWrite(c))
 
-    let resp = net.read(c)!
+    var resp = net.read(c)!
     assert_eq(resp, "done")
 
     net.close(c)
@@ -64,27 +64,27 @@ fn test_shutdown_write_allows_response() {
 
 @test
 fn test_copy_bidirectional_proxy_echo() {
-    let maybeUpstreamLst = net.listen(0, 8)
+    var maybeUpstreamLst = net.listen(0, 8)
     if (maybeUpstreamLst == null) { return }
-    let upstreamLst = maybeUpstreamLst!
-    let upstreamPort = upstreamLst.port()
+    var upstreamLst = maybeUpstreamLst!
+    var upstreamPort = upstreamLst.port()
     go serveUpstreamEcho(upstreamLst)
 
-    let maybeProxyLst = net.listen(0, 8)
+    var maybeProxyLst = net.listen(0, 8)
     if (maybeProxyLst == null) {
         net.close(upstreamLst)
         return
     }
-    let proxyLst = maybeProxyLst!
-    let proxyPort = proxyLst.port()
+    var proxyLst = maybeProxyLst!
+    var proxyPort = proxyLst.port()
     go serveProxyOnce(proxyLst, upstreamPort)
 
-    let c = net.dial("127.0.0.1", proxyPort)!
+    var c = net.dial("127.0.0.1", proxyPort)!
     assert_eq(net.write(c, "ping"), 4)
-    let resp = net.read(c)!
+    var resp = net.read(c)!
     assert_eq(resp, "ping")
     assert_true(net.shutdownWrite(c))
-    let eof = net.read(c)
+    var eof = net.read(c)
     assert_true(eof == null)
 
     net.close(c)

@@ -6,10 +6,10 @@
 // value-discarding `void` body). VM and AOT must agree byte-for-byte.
 import "./_genbox" as bx
 
-let b = bx.Box<int>(10)
+var b = bx.Box<int>(10)
 print(b.get())                 // 10
 print(b.map((v) -> v * 2))     // 20
 
-let s = bx.Box<string>("hi")
+var s = bx.Box<string>("hi")
 print(s.get())                 // hi
 print(s.map((v) -> v + "!"))   // hi!

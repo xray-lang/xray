@@ -32,6 +32,7 @@
 /* ========== Infrastructure ========== */
 
 static XrVMRuntime *g_iso = NULL;
+static XrCompilerSession *g_session = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
 
@@ -40,10 +41,17 @@ static void setup(void) {
         XrVMConfig p;
         xray_vm_config_init(&p);
         g_iso = xray_vm_new(&p);
+        XrCompilerSessionConfig cfg = {.vm_host = g_iso};
+        g_session = xr_compiler_session_new(&cfg);
+        xr_compiler_session_attach_isolate(g_iso, g_session);
     }
 }
 
 static void teardown(void) {
+    if (g_session) {
+        xr_compiler_session_delete(g_session);
+        g_session = NULL;
+    }
     if (g_iso) {
         xray_vm_delete(g_iso);
         g_iso = NULL;
@@ -79,6 +87,7 @@ static int count_unresolved_vars(AstNode *node) {
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
+        case AST_SHARED_DECL:
             count += count_unresolved_vars(node->as.var_decl.initializer);
             break;
         case AST_ASSIGNMENT:
@@ -364,7 +373,7 @@ static int count_unresolved_vars(AstNode *node) {
 /* Parse + analyze + lower; check binding invariant.
  * Returns true if all bindings resolved and lowering succeeded. */
 static bool check_bindings(const char *source, const char *label) {
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    XrCompilerSession *session = g_session;
     AstNode *program = xr_parse(session, source);
     if (!program) {
         fprintf(stderr, "  [%s] PARSE FAILED\n", label);
@@ -428,7 +437,7 @@ static bool check_bindings(const char *source, const char *label) {
 /* ========== Binding Pattern Tests ========== */
 
 TEST(simple_var_decl) {
-    assert(check_bindings("let x = 42\nprint(x)", "simple_var_decl"));
+    assert(check_bindings("var x = 42\nprint(x)", "simple_var_decl"));
 }
 
 TEST(const_decl) {
@@ -436,17 +445,17 @@ TEST(const_decl) {
 }
 
 TEST(variable_reassignment) {
-    assert(check_bindings("let x = 1\nx = x + 2\nprint(x)", "var_reassign"));
+    assert(check_bindings("var x = 1\nx = x + 2\nprint(x)", "var_reassign"));
 }
 
 TEST(compound_assignment) {
-    assert(check_bindings("let x = 10\nx += 5\nprint(x)", "compound_assign"));
+    assert(check_bindings("var x = 10\nx += 5\nprint(x)", "compound_assign"));
 }
 
 TEST(shadowing) {
-    assert(check_bindings("let x = 1\n"
+    assert(check_bindings("var x = 1\n"
                           "{\n"
-                          "    let x = 2\n"
+                          "    var x = 2\n"
                           "    print(x)\n"
                           "}\n"
                           "print(x)\n",
@@ -454,11 +463,11 @@ TEST(shadowing) {
 }
 
 TEST(nested_scope) {
-    assert(check_bindings("let a = 1\n"
+    assert(check_bindings("var a = 1\n"
                           "{\n"
-                          "    let b = a + 1\n"
+                          "    var b = a + 1\n"
                           "    {\n"
-                          "        let c = b + 1\n"
+                          "        var c = b + 1\n"
                           "        print(c)\n"
                           "    }\n"
                           "}\n",
@@ -474,7 +483,7 @@ TEST(function_params) {
 }
 
 TEST(closure_capture) {
-    assert(check_bindings("let x = 10\n"
+    assert(check_bindings("var x = 10\n"
                           "fn foo() -> int {\n"
                           "    return x + 1\n"
                           "}\n"
@@ -483,9 +492,9 @@ TEST(closure_capture) {
 }
 
 TEST(nested_closure) {
-    assert(check_bindings("let outer = 1\n"
+    assert(check_bindings("var outer = 1\n"
                           "fn foo() -> int {\n"
-                          "    let mid = 2\n"
+                          "    var mid = 2\n"
                           "    fn bar() -> int {\n"
                           "        return outer + mid\n"
                           "    }\n"
@@ -512,19 +521,19 @@ TEST(for_in_kv_binding) {
 }
 
 TEST(if_else_scoping) {
-    assert(check_bindings("let x = 10\n"
+    assert(check_bindings("var x = 10\n"
                           "if (x > 5) {\n"
-                          "    let y = x + 1\n"
+                          "    var y = x + 1\n"
                           "    print(y)\n"
                           "} else {\n"
-                          "    let z = x - 1\n"
+                          "    var z = x - 1\n"
                           "    print(z)\n"
                           "}\n",
                           "if_else_scoping"));
 }
 
 TEST(while_loop_scoping) {
-    assert(check_bindings("let i = 0\n"
+    assert(check_bindings("var i = 0\n"
                           "while (i < 10) {\n"
                           "    print(i)\n"
                           "    i += 1\n"
@@ -533,15 +542,15 @@ TEST(while_loop_scoping) {
 }
 
 TEST(ternary_binding) {
-    assert(check_bindings("let x = 5\n"
-                          "let y = x > 3 ? x + 1 : x - 1\n"
+    assert(check_bindings("var x = 5\n"
+                          "var y = x > 3 ? x + 1 : x - 1\n"
                           "print(y)\n",
                           "ternary_binding"));
 }
 
 TEST(template_string_binding) {
-    assert(check_bindings("let name = \"world\"\n"
-                          "let msg = \"hello ${name}\"\n"
+    assert(check_bindings("var name = \"world\"\n"
+                          "var msg = \"hello ${name}\"\n"
                           "print(msg)\n",
                           "template_string_binding"));
 }
@@ -568,7 +577,7 @@ TEST(class_method_this) {
 
 TEST(try_catch_binding) {
     assert(check_bindings("try {\n"
-                          "    let x = 42\n"
+                          "    var x = 42\n"
                           "    print(x)\n"
                           "} catch (e) {\n"
                           "    print(e)\n"
@@ -577,8 +586,8 @@ TEST(try_catch_binding) {
 }
 
 TEST(array_and_map_literal) {
-    assert(check_bindings("let a = [1, 2, 3]\n"
-                          "let m = {\"key\": a}\n"
+    assert(check_bindings("var a = [1, 2, 3]\n"
+                          "var m = {\"key\": a}\n"
                           "print(a)\n"
                           "print(m)\n",
                           "array_and_map_literal"));

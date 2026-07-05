@@ -4,7 +4,7 @@
 // ===== 创建 =====
 @test
 fn test_array_literal() {
-    let arr = [1, 2, 3]
+    var arr = [1, 2, 3]
     assert_eq(arr.length, 3)
     assert_eq(arr[0], 1)
     assert_eq(arr[1], 2)
@@ -13,21 +13,21 @@ fn test_array_literal() {
 
 @test
 fn test_empty_array() {
-    let arr: Array<int> = []
+    var arr: Array<int> = []
     assert_eq(arr.length, 0)
     assert_eq(arr.isEmpty, true)
 }
 
 @test
 fn test_single_element() {
-    let arr = [42]
+    var arr = [42]
     assert_eq(arr.length, 1)
     assert_eq(arr[0], 42)
 }
 
 @test
 fn test_mixed_types() {
-    let arr = [1, "hello", 3.14, true, null]
+    var arr = [1, "hello", 3.14, true, null]
     assert_eq(arr.length, 5)
     assert_eq(arr[0], 1)
     assert_eq(arr[1], "hello")
@@ -38,7 +38,7 @@ fn test_mixed_types() {
 
 @test
 fn test_nested_array() {
-    let matrix = [[1, 2], [3, 4], [5, 6]]
+    var matrix = [[1, 2], [3, 4], [5, 6]]
     assert_eq(matrix.length, 3)
     assert_eq(matrix[0][0], 1)
     assert_eq(matrix[1][1], 4)
@@ -48,7 +48,7 @@ fn test_nested_array() {
 // ===== 访问 =====
 @test
 fn test_index_access() {
-    let arr = [10, 20, 30, 40, 50]
+    var arr = [10, 20, 30, 40, 50]
     assert_eq(arr[0], 10)
     assert_eq(arr[2], 30)
     assert_eq(arr[4], 50)
@@ -56,19 +56,19 @@ fn test_index_access() {
 
 @test
 fn test_out_of_bounds() {
-    let arr = [1, 2, 3]
-    let caught_high = false
+    var arr = [1, 2, 3]
+    var caught_high = false
     try {
-        let high_value = arr[100]
+        var high_value = arr[100]
         print(high_value)
     } catch panic (p) {
         caught_high = true
     }
     assert_eq(caught_high, true)
 
-    let caught_negative = false
+    var caught_negative = false
     try {
-        let negative_value = arr[-1]
+        var negative_value = arr[-1]
         print(negative_value)
     } catch panic (p) {
         caught_negative = true
@@ -78,8 +78,8 @@ fn test_out_of_bounds() {
 
 @test
 fn test_dynamic_index() {
-    let arr = [10, 20, 30]
-    let i = 1
+    var arr = [10, 20, 30]
+    var i = 1
     assert_eq(arr[i], 20)
     assert_eq(arr[i + 1], 30)
 }
@@ -87,7 +87,7 @@ fn test_dynamic_index() {
 // ===== 修改 =====
 @test
 fn test_index_assignment() {
-    let arr = [1, 2, 3]
+    var arr = [1, 2, 3]
     arr[0] = 10
     arr[2] = 30
     assert_eq(arr[0], 10)
@@ -98,7 +98,7 @@ fn test_index_assignment() {
 // ===== push/pop =====
 @test
 fn test_push() {
-    let arr: Array<int> = []
+    var arr: Array<int> = []
     arr.push(1)
     arr.push(2)
     arr.push(3)
@@ -109,8 +109,8 @@ fn test_push() {
 
 @test
 fn test_pop() {
-    let arr = [1, 2, 3]
-    let last = arr.pop()
+    var arr = [1, 2, 3]
+    var last = arr.pop()
     assert_eq(last, 3)
     assert_eq(arr.length, 2)
     last = arr.pop()
@@ -120,8 +120,8 @@ fn test_pop() {
 
 @test
 fn test_pop_empty() {
-    let arr: Array<int> = []
-    let result = arr.pop()
+    var arr: Array<int> = []
+    var result = arr.pop()
     assert_eq(result, null)
     assert_eq(arr.length, 0)
 }
@@ -129,8 +129,8 @@ fn test_pop_empty() {
 // ===== shift/unshift =====
 @test
 fn test_shift() {
-    let arr = [1, 2, 3]
-    let first = arr.shift()
+    var arr = [1, 2, 3]
+    var first = arr.shift()
     assert_eq(first, 1)
     assert_eq(arr.length, 2)
     assert_eq(arr[0], 2)
@@ -138,7 +138,7 @@ fn test_shift() {
 
 @test
 fn test_unshift() {
-    let arr = [2, 3]
+    var arr = [2, 3]
     arr.unshift(1)
     assert_eq(arr[0], 1)
     assert_eq(arr.length, 3)
@@ -146,15 +146,15 @@ fn test_unshift() {
 
 @test
 fn test_shift_empty() {
-    let arr: Array<int> = []
-    let result = arr.shift()
+    var arr: Array<int> = []
+    var result = arr.shift()
     assert_eq(result, null)
 }
 
 // ===== 查找 =====
 @test
 fn test_indexOf() {
-    let arr = ["a", "b", "c", "b"]
+    var arr = ["a", "b", "c", "b"]
     assert_eq(arr.indexOf("a"), 0)
     assert_eq(arr.indexOf("b"), 1)
     assert_eq(arr.indexOf("c"), 2)
@@ -163,7 +163,7 @@ fn test_indexOf() {
 
 @test
 fn test_includes() {
-    let arr = [1, 2, 3]
+    var arr = [1, 2, 3]
     assert_eq(arr.includes(2), true)
     assert_eq(arr.includes(5), false)
 }
@@ -171,7 +171,7 @@ fn test_includes() {
 // ===== 转换 =====
 @test
 fn test_join() {
-    let arr = ["a", "b", "c"]
+    var arr = ["a", "b", "c"]
     assert_eq(arr.join(","), "a,b,c")
     assert_eq(arr.join("-"), "a-b-c")
     assert_eq(arr.join(""), "abc")
@@ -179,7 +179,7 @@ fn test_join() {
 
 @test
 fn test_reverse() {
-    let arr = [1, 2, 3, 4, 5]
+    var arr = [1, 2, 3, 4, 5]
     arr.reverse()
     assert_eq(arr[0], 5)
     assert_eq(arr[4], 1)
@@ -187,7 +187,7 @@ fn test_reverse() {
 
 @test
 fn test_clear() {
-    let arr = [1, 2, 3]
+    var arr = [1, 2, 3]
     arr.clear()
     assert_eq(arr.length, 0)
     assert_eq(arr.isEmpty, true)
@@ -196,8 +196,8 @@ fn test_clear() {
 // ===== 边界条件 =====
 @test
 fn test_large_array() {
-    let arr: Array<int> = []
-    for (let i = 0; i < 100; i++) {
+    var arr: Array<int> = []
+    for (var i = 0; i < 100; i++) {
         arr.push(i)
     }
     assert_eq(arr.length, 100)
@@ -207,7 +207,7 @@ fn test_large_array() {
 
 @test
 fn test_array_of_arrays() {
-    let arr: Array<Array<int>> = []
+    var arr: Array<Array<int>> = []
     arr.push([1, 2])
     arr.push([3, 4])
     assert_eq(arr.length, 2)

@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Single source of truth for top-level user bindings.  Every
- *   `let / const / fn / class` at the top level reads and writes
+ *   `var / const / shared / fn / class` at the top level reads and writes
  *   through this dict; the bytecode encodes the binding's name as
  *   an interned string in the constant pool, never an integer slot.
  *
