@@ -1167,8 +1167,6 @@ static bool xicgen_method_arg_keeps_span_noescape(const XiValue *user, uint16_t 
         return true;
     if (arg_index == 1 && strcmp(method, "appendFrom") == 0)
         return true;
-    if (arg_index == 2 && strcmp(method, "writeFromUnchecked") == 0)
-        return true;
     return false;
 }
 
@@ -3022,18 +3020,6 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
         return true;
     if (nargs == 2 && method && strcmp(method, "repeatFrom") == 0 &&
         emit_bytes_repeat_from_expr(ctx, out, f, prefix, v))
-        return true;
-    if (nargs == 4 && method && strcmp(method, "writeFromUnchecked") == 0 &&
-        emit_bytes_write_from_unchecked_expr(ctx, out, f, prefix, v))
-        return true;
-    if (nargs == 3 && method && strcmp(method, "copyWithinNonOverlappingUnchecked") == 0 &&
-        emit_bytes_copy_within_nonoverlap_unchecked_expr(ctx, out, f, prefix, v))
-        return true;
-    if (nargs == 3 && method && strcmp(method, "repeatAtUnchecked") == 0 &&
-        emit_bytes_repeat_at_unchecked_expr(ctx, out, f, prefix, v))
-        return true;
-    if (nargs == 1 && method && strcmp(method, "setLengthUnchecked") == 0 &&
-        emit_bytes_set_length_unchecked_expr(ctx, out, f, prefix, v))
         return true;
     if (method && strcmp(method, "fill") == 0 && nargs >= 1 && nargs <= 3 &&
         emit_typed_array_fill_expr(ctx, out, f, prefix, v))

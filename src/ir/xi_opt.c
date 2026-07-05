@@ -1938,9 +1938,7 @@ static bool sr_is_typed_array_native_receiver_method(const XiValue *v) {
     return strcmp(method, "push") == 0 || strcmp(method, "pushUnchecked") == 0 ||
            strcmp(method, "reserve") == 0 || strcmp(method, "resize") == 0 ||
            strcmp(method, "appendFrom") == 0 || strcmp(method, "repeatFrom") == 0 ||
-           strcmp(method, "writeFromUnchecked") == 0 ||
-           strcmp(method, "copyWithinNonOverlappingUnchecked") == 0 ||
-           strcmp(method, "repeatAtUnchecked") == 0 || strcmp(method, "fill") == 0;
+           strcmp(method, "fill") == 0;
 }
 
 static bool sr_type_is_named_instance(const XrType *type, const char *name) {

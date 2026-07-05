@@ -149,10 +149,6 @@ static bool low_level_byte_method_arg_is_borrowed(const XiValue *user, uint16_t 
     if (strcmp(method, "appendFrom") == 0)
         return arg_idx == 1 && user->nargs > 1 &&
                type_is_u8_contiguous_view(user->args[1] ? user->args[1]->type : NULL);
-    if (strcmp(method, "writeFromUnchecked") == 0)
-        return arg_idx == 2 && user->nargs > 2 &&
-               type_is_u8_contiguous_view(user->args[2] ? user->args[2]->type : NULL);
-
     return false;
 }
 

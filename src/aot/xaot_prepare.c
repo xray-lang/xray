@@ -1244,15 +1244,9 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
                 return false;
             if (arg_index == 0 &&
                 (strcmp(method, "push") == 0 || strcmp(method, "reserve") == 0 ||
-                 strcmp(method, "appendFrom") == 0 || strcmp(method, "repeatFrom") == 0 ||
-                 strcmp(method, "writeFromUnchecked") == 0 ||
-                 strcmp(method, "copyWithinNonOverlappingUnchecked") == 0 ||
-                 strcmp(method, "repeatAtUnchecked") == 0 ||
-                 strcmp(method, "setLengthUnchecked") == 0))
+                 strcmp(method, "appendFrom") == 0 || strcmp(method, "repeatFrom") == 0))
                 return true;
             if (arg_index == 1 && strcmp(method, "appendFrom") == 0)
-                return true;
-            if (arg_index == 2 && strcmp(method, "writeFromUnchecked") == 0)
                 return true;
             return false;
         }
