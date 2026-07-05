@@ -815,6 +815,8 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
             return xa_node_uses_symbol_name(node->as.scope_block.body, name);
         case AST_MOVE_EXPR:
             return xa_node_uses_symbol_name(node->as.move_expr.expr, name);
+        case AST_COMPTIME_EXPR:
+            return xa_node_uses_symbol_name(node->as.comptime_expr.expr, name);
         case AST_UNSAFE_EXPR:
             return xa_node_uses_symbol_name(node->as.unsafe_expr.operand, name);
         case AST_PROGRAM:

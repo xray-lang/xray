@@ -89,6 +89,7 @@ struct AstNode {
         ReturnStmtNode return_stmt;
         IsExprNode is_expr;
         AsExprNode as_expr;
+        ComptimeExprNode comptime_expr;
         ArrayLiteralNode array_literal;
         TupleLiteralNode tuple_literal;
         SpreadExprNode spread_expr;

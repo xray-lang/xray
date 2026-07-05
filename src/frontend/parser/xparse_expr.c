@@ -370,6 +370,24 @@ AstNode *xr_parse_type_cast(Parser *parser) {
     return xr_ast_call_expr(parser->compiler_session, callee, arguments, 1, line);
 }
 
+AstNode *xr_parse_comptime_expr(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_comptime_expr: NULL parser");
+    int line = parser->previous.line;
+    int column = parser->previous.column;
+
+    AstNode *expr = NULL;
+    if (xr_parser_match(parser, TK_LBRACE)) {
+        expr = xr_parse_block(parser);
+    } else {
+        expr = xr_parse_precedence(parser, PREC_UNARY);
+    }
+    if (!expr) {
+        xr_parser_error_at_previous(parser, "expected expression after 'comptime'");
+        return NULL;
+    }
+    return xr_ast_comptime_expr(parser->compiler_session, expr, line, column);
+}
+
 // Helper: create string literal node from a template string part.
 // For normal template strings, applies escape processing.
 // For raw template strings, copies verbatim.

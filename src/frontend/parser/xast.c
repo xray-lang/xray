@@ -745,6 +745,17 @@ AstNode *xr_ast_as_expr(XrCompilerSession *session, AstNode *expr, XrTypeRef *ty
     return node;
 }
 
+AstNode *xr_ast_comptime_expr(XrCompilerSession *session, AstNode *expr, int line, int column) {
+    AstNode *node = alloc_node(session, AST_COMPTIME_EXPR, line);
+    node->column = column;
+    node->as.comptime_expr.expr = expr;
+    if (expr && expr->end_line > 0) {
+        node->end_line = expr->end_line;
+        node->end_column = expr->end_column;
+    }
+    return node;
+}
+
 /* ========== Array Node Creation ========== */
 
 // Create array literal node
@@ -1543,6 +1554,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "FunctionExpr";
         case AST_CALL_EXPR:
             return "CallExpr";
+        case AST_COMPTIME_EXPR:
+            return "ComptimeExpr";
         case AST_RETURN_STMT:
             return "ReturnStmt";
         case AST_ARRAY_LITERAL:
@@ -1943,6 +1956,11 @@ void xr_ast_print(AstNode *node, int indent) {
             for (int i = 0; i < node->as.call_expr.arg_count; i++) {
                 xr_ast_print(node->as.call_expr.arguments[i], indent + 1);
             }
+            break;
+
+        case AST_COMPTIME_EXPR:
+            printf("\n");
+            xr_ast_print(node->as.comptime_expr.expr, indent + 1);
             break;
 
         case AST_RETURN_STMT:

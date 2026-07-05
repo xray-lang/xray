@@ -70,6 +70,7 @@
 #define AST_AS_EXPORT(n) (XR_AST_ASSERT(n, AST_EXPORT_STMT), &(n)->as.export_stmt)
 #define AST_AS_IS_EXPR(n) (XR_AST_ASSERT(n, AST_IS_EXPR), &(n)->as.is_expr)
 #define AST_AS_AS_EXPR(n) (XR_AST_ASSERT(n, AST_AS_EXPR), &(n)->as.as_expr)
+#define AST_AS_COMPTIME_EXPR(n) (XR_AST_ASSERT(n, AST_COMPTIME_EXPR), &(n)->as.comptime_expr)
 #define AST_AS_GO(n) (XR_AST_ASSERT(n, AST_GO_EXPR), &(n)->as.go_expr)
 #define AST_AS_AWAIT(n) (XR_AST_ASSERT(n, AST_AWAIT_EXPR), &(n)->as.await_expr)
 #define AST_AS_PROGRAM(n) (XR_AST_ASSERT(n, AST_PROGRAM), &(n)->as.program)

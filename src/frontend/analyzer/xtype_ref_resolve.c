@@ -57,6 +57,10 @@ static bool xa_eval_const_int_expr_impl(XaAnalyzer *analyzer, const AstNode *exp
     }
 
     switch (expr->type) {
+        case AST_COMPTIME_EXPR:
+            return xa_eval_const_int_expr_impl(analyzer, expr->as.comptime_expr.expr, out, err,
+                                               stack, depth + 1);
+
         case AST_LITERAL_INT:
             *out = expr->as.literal.raw_value.int_val;
             return true;
