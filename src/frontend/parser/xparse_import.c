@@ -468,7 +468,7 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
         if (declaration && declaration->type == AST_STRUCT_DECL) {
             export_name = declaration->as.struct_decl.name;
         }
-    } else if (xr_parser_check(parser, TK_LET)) {
+    } else if (xr_parser_check(parser, TK_VAR)) {
         xr_parser_error(parser, "mutable export is not supported; use 'export const' instead");
         return NULL;
     } else if (xr_parser_match(parser, TK_CONST)) {

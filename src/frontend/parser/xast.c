@@ -2177,7 +2177,7 @@ AstNode *xr_ast_export_reexport(XrCompilerSession *session, const char *from_pat
 /* ========== Destructuring Implementation ========== */
 
 // Create array destructuring pattern
-// let [a, b, c] = arr
+// var [a, b, c] = arr
 XrDestructurePattern *xr_pattern_array(XrCompilerSession *session, XrDestructurePattern **elements,
                                        int count) {
     (void) session;
@@ -2190,7 +2190,7 @@ XrDestructurePattern *xr_pattern_array(XrCompilerSession *session, XrDestructure
 }
 
 // Create tuple destructuring pattern
-// let (a, b, c) = tuple — element_count == 0 represents the unit
+// var (a, b, c) = tuple — element_count == 0 represents the unit
 // pattern `()`, count == 1 the unary form `(x,)`. Storage shape
 // matches array pattern so visitors that walk children can reuse
 // the array.elements traversal; the PATTERN_TUPLE tag tells the
@@ -2207,7 +2207,7 @@ XrDestructurePattern *xr_pattern_tuple(XrCompilerSession *session, XrDestructure
 }
 
 // Create object destructuring pattern (curly braces)
-// let {name, age} = person or let {name: userName} = person
+// var {name, age} = person or var {name: userName} = person
 XrDestructurePattern *xr_pattern_object(XrCompilerSession *session, char **fields,
                                         XrDestructurePattern **patterns, int count,
                                         bool use_shorthand) {
@@ -2245,7 +2245,7 @@ XrDestructurePattern *xr_pattern_skip(XrCompilerSession *session) {
 }
 
 // Create destructuring declaration node
-// let [a, b] = arr or const {x, y} = obj
+// var [a, b] = arr or const {x, y} = obj
 AstNode *xr_ast_destructure_decl(XrCompilerSession *session, XrDestructurePattern *pattern,
                                  AstNode *initializer, bool is_const, int line) {
     AstNode *node = alloc_node(session, AST_DESTRUCTURE_DECL, line);

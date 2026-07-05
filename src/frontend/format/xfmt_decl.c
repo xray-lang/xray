@@ -97,7 +97,7 @@ void xfmt_emit_var_decl(XrFmtContext *ctx, AstNode *node) {
     if (decl->storage_mode == XR_STORAGE_SHARED) {
         xfmt_write_str(ctx, "shared ");
     }
-    xfmt_write_str(ctx, decl->is_const ? "const " : "let ");
+    xfmt_write_str(ctx, decl->is_const ? "const " : "var ");
     xfmt_write_str(ctx, decl->name);
 
     if (decl->type_annotation) {
@@ -115,7 +115,7 @@ void xfmt_emit_destructure_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     DestructureDeclNode *decl = &node->as.destructure_decl;
 
-    xfmt_write_str(ctx, decl->is_const ? "const " : "let ");
+    xfmt_write_str(ctx, decl->is_const ? "const " : "var ");
     xfmt_emit_pattern(ctx, decl->pattern);
     xfmt_write_str(ctx, " = ");
     xfmt_emit_expression(ctx, decl->initializer);

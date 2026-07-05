@@ -113,7 +113,7 @@ static ParseRule rules[] = {
     [TK_RSHIFT_ASSIGN] = {NULL, xr_parse_compound_assignment, PREC_ASSIGNMENT},
 
     // Keywords
-    [TK_LET] = {NULL, NULL, PREC_NONE},
+    [TK_VAR] = {NULL, NULL, PREC_NONE},
     [TK_CONST] = {NULL, NULL, PREC_NONE},
     [TK_IF] = {NULL, NULL, PREC_NONE},
     [TK_ELSE] = {NULL, NULL, PREC_NONE},
@@ -512,7 +512,7 @@ void xr_parser_synchronize(Parser *parser) {
                 case TK_INTERFACE:
                 case TK_ENUM:
                 case TK_FN:
-                case TK_LET:
+                case TK_VAR:
                 case TK_CONST:
                 case TK_TYPE_ALIAS:
                 case TK_IMPORT:

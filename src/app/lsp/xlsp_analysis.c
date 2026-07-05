@@ -54,14 +54,14 @@ typedef struct {
 } XlspDocEntry;
 
 static const XlspDocEntry keyword_docs[] = {
-    {"let", "```xray\nlet <name> = <value>\n```\n\nDeclares a mutable variable."},
+    {"var", "```xray\nvar <name> = <value>\n```\n\nDeclares a mutable variable."},
     {"const", "```xray\nconst <name> = <value>\n```\n\nDeclares an immutable constant."},
     {"fn", "```xray\nfn <name>(<params>) { <body> }\n```\n\nDeclares a function."},
     {"class", "```xray\nclass <name> { <members> }\n```\n\nDeclares a class."},
     {"go", "```xray\ngo <expr>\n```\n\nSpawns a new coroutine."},
     {"await", "```xray\nawait <task>\n```\n\nWaits for a coroutine to complete."},
     {"Channel", "```xray\nChannel(size?)\n```\n\nCreates a channel for coroutine communication."},
-    {"shared", "```xray\nshared const|let <name> = <value>\n```\n\nDeclares a variable shared "
+    {"shared", "```xray\nshared <name> = <value>\n```\n\nDeclares a variable shared "
                "across coroutines."},
     {"if", "```xray\nif (<cond>) { ... } else { ... }\n```\n\nConditional statement."},
     {"else", "```xray\nif (<cond>) { ... } else { ... }\n```\n\nAlternate branch of if statement."},
@@ -619,7 +619,7 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
                          sym->name);
             } else {
                 snprintf(hover_buf, sizeof(hover_buf), "```xray\n%s %s: %s\n```\n\n%s",
-                         sym->is_const ? "const" : "let", sym->name, type_str,
+                         sym->is_const ? "const" : "var", sym->name, type_str,
                          sym->kind == XA_SYM_PARAMETER ? "(parameter)" : "(local variable)");
             }
             description = hover_buf;
@@ -891,8 +891,8 @@ static void extract_symbols_lexer(XrLspDocument *doc, SymbolTable *table) {
                              (int) strlen(name));
             xr_free(name);
         }
-        // let <name> or const <name>
-        else if ((prev.type == TK_LET || prev.type == TK_CONST) && token.type == TK_NAME) {
+        // var <name> or const <name>
+        else if ((prev.type == TK_VAR || prev.type == TK_CONST) && token.type == TK_NAME) {
             char *name = strndup(token.start, token.length);
             int kind = (prev.type == TK_CONST) ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
             symbol_table_add(table, name, kind, token.line - 1, 0, token.line - 1,
