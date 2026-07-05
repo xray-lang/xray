@@ -1,0 +1,5 @@
+{
+  "module": "runtime",
+  "summary": "Runtime and heap introspection",
+  "lead": "Runtime diagnostics and current coroutine heap introspection. Use `runtime.collectCycles()` to request cycle collection, and `runtime.liveBytes()`, `runtime.liveObjects()`, or `runtime.info()` to inspect live memory."
+}

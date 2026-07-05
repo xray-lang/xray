@@ -4800,9 +4800,9 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 > MCP knowledge 通过 `xray builtin-dump` 获取 API 签名并在生成时注入模块知识卡片。
 > 详见 [附录 D stdlib 模块索引](#d-stdlib-模块索引)。
 
-> **真实 native 模块清单**（22 个，源码：`stdlib/<module>/*.c`）：
+> **真实 native 模块清单**（25 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
 >
-> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
+> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`runtime`、`sync`、`sys`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
 > 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Bytes` `BigInt` `StringBuilder` `PanicInfo` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
 
@@ -4898,9 +4898,9 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`、source 位置开关、异步写入模式 |
 | `runtime` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
-| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()`、`pageAlloc()`、`copy()` / `move()` / `set()` / `compare()`、`volatileLoad()` / `volatileStore()`、`fence()` 等裸内存能力 |
-| `sync` | `Mutex<T>` / `RwLock<T>` / `Once` / `Barrier` / `Condvar` / `CachePadded<T>` / `fence()` |
-| `sys` | `Thread.spawn()`、`OsMutex` / `OsRwLock` / `OsCondvar` / `OsBarrier` / `OsOnce`、`cpuCount()` / `sleepMs()` 等 OS 线程域能力 |
+| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
+| `sync` | 协程域同步：`Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync` |
+| `sys` | OS / 线程域：`Thread.spawn()`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、`cpuCount()`、`sleepMs()` 等，需显式 `import sys` |
 
 ### 15.10 分布式
 

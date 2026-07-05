@@ -6,7 +6,7 @@
   "lead": "Channels are the primary inter-coroutine communication mechanism.",
   "sections": [
     {
-      "heading": "Declaration (MUST be const)",
+      "heading": "Declaration (MUST be shared)",
       "fences": ["channel-decl-variants"],
       "after_text": "`var ch = Channel<int>(10)` is a **compile error** for coroutine sharing; channel handles must be declared with `shared`."
     },

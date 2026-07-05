@@ -1,5 +1,5 @@
 {
   "module": "mem",
-  "summary": "Memory and cycle-collection introspection",
-  "lead": "Memory and cycle-collection introspection for the current coroutine heap."
+  "summary": "Raw memory, Buffer allocation, page allocation, volatile access, and memory primitives",
+  "lead": "Raw-memory capabilities for explicit low-level work. `mem.alloc*` returns managed `Buffer`; GC and heap introspection lives in the `runtime` module."
 }

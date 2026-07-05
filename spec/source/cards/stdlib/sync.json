@@ -1,0 +1,5 @@
+{
+  "module": "sync",
+  "summary": "Coroutine-domain synchronization primitives",
+  "lead": "Coroutine-domain synchronization primitives: `Mutex<T>`, `RwLock<T>`, `Once`, `Barrier`, `Condvar`, `CachePadded<T>`, and `fence(order)`. These primitives may suspend the current coroutine instead of blocking an OS thread, and must be imported explicitly."
+}

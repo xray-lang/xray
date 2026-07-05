@@ -1,0 +1,5 @@
+{
+  "module": "sys",
+  "summary": "OS-thread-domain system primitives",
+  "lead": "OS-thread-domain system primitives, including `Thread.spawn`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, CPU/thread helpers, and blocking sleep/yield operations. Use `sys.Os*` primitives for `sys.Thread` code and other blocking OS-thread contexts."
+}

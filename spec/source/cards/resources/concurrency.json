@@ -50,6 +50,11 @@
       "heading_level": 2,
       "heading": "Atomic — lock-free shared state",
       "markdown": "`Atomic<T>` wraps `int`, `float`, or `bool` with C11 atomic operations. Must be declared `shared`; `move` prohibited.\n\nMethods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`, `toString`.\n\nAll methods accept optional `Ordering` enum (default `SeqCst`): `Relaxed`, `Acquire`, `Release`, `AcquireRelease`, `SeqCst`.\n\n```xray\nshared counter = Atomic(0)\ncounter.add(1)\nvar (old, ok) = counter.compareExchange(1, 42)\nprint(counter.load())  // 42\n```"
+    },
+    {
+      "heading_level": 2,
+      "heading": "Locks — explicit execution domain",
+      "markdown": "`sync.*` locks are coroutine-domain primitives: they may suspend and require `import sync`. `sys.Os*` locks are OS-thread-domain primitives: they block the current OS thread and require `import sys`. Synchronization handles must be created with `shared` when named.\n\n```xray\nimport sync\nimport sys\n\nshared m = sync.Mutex<int>(0)\nshared os_m = sys.OsMutex()\n```"
     }
   ]
 }
