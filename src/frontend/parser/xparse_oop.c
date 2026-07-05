@@ -204,13 +204,10 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
             continue;
         }
 
-        // Friendly hint: check common errors
-        if (xr_parser_check(parser, TK_LET)) {
+        if (xr_parser_check(parser, TK_VAR)) {
             xr_parser_error_at_current(parser,
-                                       "'let' keyword not needed for field declarations in class "
-                                       "body, write field name directly, e.g.: name: string\n"
-                                       "'fn' keyword not needed for method definitions either, "
-                                       "write method name directly, e.g.: greet() { ... }");
+                                       "'var' is not used for field declarations in class body; "
+                                       "write the field name directly, e.g.: name: string");
             xr_parser_advance(parser);
             continue;
         }
@@ -427,13 +424,15 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
             continue;
         }
 
-        // Reject 'let' and 'fn' hints
-        if (xr_parser_check(parser, TK_LET)) {
-            xr_parser_error_at_current(
-                parser, "'let' keyword not needed for field declarations in struct body");
+        if (xr_parser_check(parser, TK_VAR)) {
+            xr_parser_error_at_current(parser,
+                                       "'var' is not used for field declarations in struct body; "
+                                       "write the field name directly, e.g.: name: int");
             xr_parser_advance(parser);
             continue;
         }
+
+        // Reject method keyword hints.
         if (xr_parser_check(parser, TK_FN)) {
             xr_parser_error_at_current(
                 parser, "'fn' keyword not needed for method definitions in struct body");

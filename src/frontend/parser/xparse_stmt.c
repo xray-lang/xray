@@ -155,7 +155,7 @@ AstNode *xr_parse_for_statement(Parser *parser) {
     AstNode *initializer = NULL;
     if (xr_parser_match(parser, TK_SEMICOLON)) {
         initializer = NULL;
-    } else if (xr_parser_match(parser, TK_LET)) {
+    } else if (xr_parser_match(parser, TK_VAR)) {
         initializer = xr_parse_single_var_declaration(parser, 0);
         xr_parser_consume(parser, TK_SEMICOLON, "expected ';' after for initializer");
     } else {

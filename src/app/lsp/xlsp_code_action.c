@@ -19,10 +19,10 @@ static const char *STDLIB_MODULES[] = {"time",    "json",   "http",  "log",    "
                                        "strings", "bytes",  "fmt",   NULL};
 
 /*
- * Find the declaration of `name` as a `let NAME = ...` or `const NAME = ...`
+ * Find the declaration of `name` as a `var NAME = ...` or `const NAME = ...`
  * (not `shared` prefixed) inside `content`. On success returns true and
  * fills the 0-indexed line plus the column range covering just the
- * `let`/`const` keyword so the caller can rewrite it.
+ * `var`/`const` keyword so the caller can rewrite it.
  */
 static bool find_plain_decl_keyword(const char *content, const char *name, int *out_line,
                                     int *out_start_col, int *out_end_col) {
@@ -39,7 +39,7 @@ static bool find_plain_decl_keyword(const char *content, const char *name, int *
         int col = (int) (t - line_start);
         const char *kw_end = NULL;
         int kw_len = 0;
-        if (strncmp(t, "let ", 4) == 0) {
+        if (strncmp(t, "var ", 4) == 0) {
             kw_len = 3;
             kw_end = t + 3;
         } else if (strncmp(t, "const ", 6) == 0) {
@@ -98,7 +98,7 @@ static bool extract_quoted_name_after(const char *msg, const char *after, char *
 }
 
 /*
- * Emit a quick-fix action that replaces the `let`/`const` keyword of a
+ * Emit a quick-fix action that replaces the `var`/`const` keyword of a
  * variable declaration with `new_prefix`. No-op if the declaration
  * cannot be located in the document text.
  */
@@ -226,27 +226,24 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                 }
             }
 
-            // QuickFix: E0363 go closure captures mutable variable -> shared const
+            // QuickFix: E0363 go closure captures mutable variable -> shared
             // Matches: "go closure cannot capture mutable variable 'NAME'"
-            // (skips the 'shared let' sub-variant on purpose; that one needs
-            // call-site `move` which is not a simple decl rewrite.)
             if (msg && strstr(msg, "go closure cannot capture mutable variable '")) {
                 char var_name[128];
                 if (extract_quoted_name_after(msg, "go closure cannot capture mutable variable '",
                                               var_name, sizeof(var_name))) {
                     char title[192];
                     snprintf(title, sizeof(title),
-                             "Declare '%s' as 'shared const' (allow concurrent reads)", var_name);
-                    push_decl_rewrite_action(actions, uri, doc->content, var_name, "shared const",
-                                             title);
+                             "Declare '%s' as 'shared' (allow concurrent access)", var_name);
+                    push_decl_rewrite_action(actions, uri, doc->content, var_name, "shared", title);
                 }
             }
         }
     }
 
-    // Refactor: Convert let → const (when variable is never reassigned)
+    // Refactor: Convert var → const (when variable is never reassigned)
     if (doc->content && doc->ast) {
-        // Find if cursor is on a "let" declaration line
+        // Find if cursor is on a "var" declaration line
         const char *cur_line_start = doc->content;
         int cl = 0;
         while (cl < sel_start_line && *cur_line_start) {
@@ -258,7 +255,7 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
         while (*trimmed == ' ' || *trimmed == '\t')
             trimmed++;
 
-        if (strncmp(trimmed, "let ", 4) == 0) {
+        if (strncmp(trimmed, "var ", 4) == 0) {
             // Extract variable name
             const char *name_start = trimmed + 4;
             while (*name_start == ' ' || *name_start == '\t')
@@ -292,11 +289,11 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                     }
                     // occurrences > 1 means reassignment (1 = declaration itself)
                     if (occurrences <= 1) {
-                        int let_col = (int) (trimmed - cur_line_start);
+                        int var_col = (int) (trimmed - cur_line_start);
 
                         XrJsonValue *action = xjson_new_object();
                         xjson_object_set(action, "title",
-                                         xjson_new_string("Convert 'let' to 'const'"));
+                                         xjson_new_string("Convert 'var' to 'const'"));
                         xjson_object_set(action, "kind", xjson_new_string("refactor.rewrite"));
 
                         XrJsonValue *edit = xjson_new_object();
@@ -307,7 +304,7 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                         xjson_object_set(text_edit, "newText", xjson_new_string("const"));
                         xjson_object_set(
                             text_edit, "range",
-                            xjson_make_range(sel_start_line, let_col, sel_start_line, let_col + 3));
+                            xjson_make_range(sel_start_line, var_col, sel_start_line, var_col + 3));
 
                         xjson_array_push(edits_arr, text_edit);
                         xjson_object_set(changes, uri, edits_arr);
@@ -353,7 +350,7 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
 
                     XrJsonValue *decl_edit = xjson_new_object();
                     char decl_text[256];
-                    snprintf(decl_text, sizeof(decl_text), "let extracted = %s\n", selected);
+                    snprintf(decl_text, sizeof(decl_text), "var extracted = %s\n", selected);
                     xjson_object_set(decl_edit, "newText", xjson_new_string(decl_text));
                     xjson_object_set(decl_edit, "range",
                                      xjson_make_range(sel_start_line, 0, sel_start_line, 0));

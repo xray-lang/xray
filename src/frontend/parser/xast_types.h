@@ -172,7 +172,7 @@ typedef enum {
     AST_EXPORT_STMT,  // export
 
     // Destructuring
-    AST_DESTRUCTURE_DECL,    // let [a, b] = arr
+    AST_DESTRUCTURE_DECL,    // var [a, b] = arr
     AST_DESTRUCTURE_ASSIGN,  // [a, b] = [b, a]
 
     // Match expression

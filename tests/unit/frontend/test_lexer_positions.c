@@ -59,17 +59,17 @@ static Token scan_nth(const char *source, int n) {
 TEST(single_line_token_position) {
     // Token positions are 1-indexed.
     Scanner s;
-    xr_scanner_init(&s, "let x");
+    xr_scanner_init(&s, "var x");
     Token a = xr_scanner_scan(&s);
     Token b = xr_scanner_scan(&s);
 
-    ASSERT_EQ_INT(a.type, TK_LET);
+    ASSERT_EQ_INT(a.type, TK_VAR);
     ASSERT_EQ_INT(a.line, 1);
     ASSERT_EQ_INT(a.column, 1);
 
     ASSERT_EQ_INT(b.type, TK_NAME);
     ASSERT_EQ_INT(b.line, 1);
-    // "let " is 4 chars, x starts at column 5.
+    // "var " is 4 chars, x starts at column 5.
     ASSERT_EQ_INT(b.column, 5);
 }
 
@@ -153,12 +153,12 @@ TEST(tab_indented_token_column_is_byte_offset) {
     // assumes elsewhere; test it explicitly so a "smart" tab
     // expansion regression would surface.
     Scanner s;
-    xr_scanner_init(&s, "\t\tlet");
+    xr_scanner_init(&s, "\t\tvar");
     Token t = xr_scanner_scan(&s);
 
-    ASSERT_EQ_INT(t.type, TK_LET);
+    ASSERT_EQ_INT(t.type, TK_VAR);
     ASSERT_EQ_INT(t.line, 1);
-    ASSERT_EQ_INT(t.column, 3);  // 2 tabs (cols 1, 2), `l` at col 3
+    ASSERT_EQ_INT(t.column, 3);  // 2 tabs (cols 1, 2), `v` at col 3
 }
 
 TEST(carriage_return_does_not_double_count_lines) {
