@@ -799,10 +799,26 @@ static bool xa_call_is_rawptr_load_le_unchecked(CallExprNode *call, XrType *rece
     return ma->name && strcmp(ma->name, "loadLEUnchecked") == 0;
 }
 
-static bool xa_type_is_supported_load_le_result(XrType *type) {
+static bool xa_type_is_supported_raw_load_le_result(XrType *type) {
     return type && XR_TYPE_IS_INT(type) &&
            (type->native_width == XR_NATIVE_U16 || type->native_width == XR_NATIVE_U32 ||
             type->native_width == XR_NATIVE_U64);
+}
+
+static bool xa_type_is_supported_bytes_typed_scalar(XrType *type) {
+    if (!type || !XR_TYPE_IS_INT(type))
+        return false;
+    switch (type->native_width) {
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
+            return true;
+        default:
+            return false;
+    }
 }
 
 static bool xa_type_is_pod_span_elem(XrType *type) {
@@ -820,7 +836,7 @@ static bool xa_type_is_pod_span_elem(XrType *type) {
 }
 
 static XrType *xa_bytes_typed_type_arg(XaInferContext *ctx, AstNode *node, CallExprNode *call,
-                                       const char *label) {
+                                       const char *label, bool allow_signed) {
     if (!ctx || !call)
         return xr_type_new_unknown(NULL);
     XrLocation loc = {
@@ -833,9 +849,13 @@ static XrType *xa_bytes_typed_type_arg(XaInferContext *ctx, AstNode *node, CallE
         return xr_type_new_unknown(NULL);
     }
     XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
-    if (!xa_type_is_supported_load_le_result(target)) {
+    bool supported = allow_signed ? xa_type_is_supported_bytes_typed_scalar(target)
+                                  : xa_type_is_supported_raw_load_le_result(target);
+    if (!supported) {
         char msg[192];
-        snprintf(msg, sizeof(msg), "%s currently supports T = uint16, uint32 or uint64", label);
+        snprintf(msg, sizeof(msg), "%s currently supports T = %s", label,
+                 allow_signed ? "int16, uint16, int32, uint32, int64 or uint64"
+                              : "uint16, uint32 or uint64");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
         return xr_type_new_unknown(NULL);
@@ -844,8 +864,8 @@ static XrType *xa_bytes_typed_type_arg(XaInferContext *ctx, AstNode *node, CallE
 }
 
 static XrType *xa_load_le_return_type(XaInferContext *ctx, AstNode *node, CallExprNode *call,
-                                      const char *label) {
-    return xa_bytes_typed_type_arg(ctx, node, call, label);
+                                      const char *label, bool allow_signed) {
+    return xa_bytes_typed_type_arg(ctx, node, call, label, allow_signed);
 }
 
 static XrType *xa_bytespan_reinterpret_return_type(XaInferContext *ctx, AstNode *node,
@@ -2264,10 +2284,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
 
     if (xa_call_is_bytespan_typed_load(call, callee_obj_type))
-        return_type = xa_load_le_return_type(ctx, node, call, "ByteSpan.load<T>()");
+        return_type = xa_load_le_return_type(ctx, node, call, "ByteSpan.load<T>()", true);
 
     if (xa_call_is_bytespan_typed_store(call, callee_obj_type)) {
-        (void) xa_bytes_typed_type_arg(ctx, node, call, "ByteSpan.store<T>()");
+        (void) xa_bytes_typed_type_arg(ctx, node, call, "ByteSpan.store<T>()", true);
         return_type = xr_type_new_unit(ctx->analyzer->isolate);
     }
 
@@ -2275,7 +2295,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return_type = xa_bytespan_reinterpret_return_type(ctx, node, call);
 
     if (xa_call_is_rawptr_load_le_unchecked(call, callee_obj_type))
-        return_type = xa_load_le_return_type(ctx, node, call, "RawPtr.loadLEUnchecked<T>()");
+        return_type = xa_load_le_return_type(ctx, node, call, "RawPtr.loadLEUnchecked<T>()", false);
 
     // Apply type substitution for generic method calls: obj.method<T>()
     if (callee_obj_type && call->callee->type == AST_MEMBER_ACCESS) {

@@ -1,18 +1,26 @@
 contains=function 1 name=read16 module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
 contains=function 2 name=read32 module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
 contains=function 3 name=read64 module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
-contains=function 4 name=read32BE module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
-contains=function 5 name=write16 module=0 depth=1 abi=native boundary=none params=3 ret=void/void/void
+contains=function 4 name=readI16 module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
+contains=function 5 name=readI32 module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
+contains=function 6 name=read32BE module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
+contains=function 7 name=write16 module=0 depth=1 abi=native boundary=none params=3 ret=void/void/void
+contains=function 8 name=writeI16 module=0 depth=1 abi=native boundary=none params=3 ret=void/void/void
 regex=array-storage [0-9]+ func=read16 value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
 regex=array-storage [0-9]+ func=read32 value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
 regex=array-storage [0-9]+ func=read64 value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
+regex=array-storage [0-9]+ func=readI16 value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
+regex=array-storage [0-9]+ func=readI32 value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
 regex=array-storage [0-9]+ func=read32BE value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
 regex=array-storage [0-9]+ func=write16 value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
+regex=array-storage [0-9]+ func=writeI16 value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
 c_contains=xrt_span_bytes_load_u16_le_unchecked_raw(
 c_contains=xrt_span_bytes_load_u32_le_unchecked_raw(
 c_contains=xrt_span_bytes_load_u64_le_unchecked_raw(
 c_contains=xr_array_core_bytes_load_u32(
 c_contains=xrt_span_bytes_store_u16_checked_raw(
+regex=  value v[0-9]+ op=NARROW_I16 kind=scalar rep=i16 c_type=int16_t
+regex=  value v[0-9]+ op=NARROW_I32 kind=scalar rep=i32 c_type=int32_t
 c_not_contains=xrt_span_bytes_load_u16_checked_raw(
 c_not_contains=xrt_span_bytes_load_u32_checked_raw(
 c_not_contains=xrt_span_bytes_load_u64_checked_raw(

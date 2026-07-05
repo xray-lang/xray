@@ -1,3 +1,0 @@
-fn bad(src: ByteSpan) -> int {
-    return int(src.load<int>(0))
-}
