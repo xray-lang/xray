@@ -79,7 +79,7 @@ static const char SYSTEM_PREAMBLE[] =
     "Key features:\n"
     "- Types: int, float, string, bool, Array<T>, Map<K,V>, Set<T>, "
     "Channel<T>, Json\n"
-    "- Concurrency: go/await, Channel (must be const), scope, select, "
+    "- Concurrency: go/await, shared Channel, scope, select, "
     "shared\n"
     "- Safety: if it compiles, it's concurrency-safe\n"
     "- OOP: class (extends), struct (value type), interface (implements), "
@@ -123,9 +123,10 @@ static const char CONCURRENCY_SYSTEM[] =
     "2. Channel: producer-consumer, pipeline\n"
     "3. scope: structured concurrency (wait for all)\n"
     "4. select: multiplex channels with timeout\n"
-    "5. shared: read-only shared config\n"
+    "5. shared: stable shared identity\n"
     "6. await all / await any: fan-out patterns\n"
-    "Rules: Channel must be const. go arguments that transfer heap values must use "
+    "Rules: Channel handles must be declared with shared. go arguments that transfer heap values "
+    "must use "
     "copy(...), move, or shared. Cannot capture ordinary local var reference values in go "
     "closures.\n";
 

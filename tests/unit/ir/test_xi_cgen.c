@@ -6712,7 +6712,7 @@ TEST(cgen_coro_unit_match_send_omits_void_phi) {
                       "    }\n"
                       "}\n"
                       "shared ch = Channel<int>(0)\n"
-                      "var done = Channel<int>(1)\n"
+                      "shared done = Channel<int>(1)\n"
                       "go recv_timeout_until_close(ch, done)\n"
                       "ch.close()\n";
 

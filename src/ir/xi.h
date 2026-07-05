@@ -659,7 +659,7 @@ typedef enum XiCaptureKind {
     XI_CAPTURE_BY_IMM_REF,  /* immutable reference (large struct, no copy) */
     XI_CAPTURE_BY_MUT_CELL, /* mutable cell indirection (needs_cell) */
     XI_CAPTURE_MODULE_LIVE, /* module-level live binding via shared array */
-    XI_CAPTURE_CORO_SHARED, /* coroutine-shared cell (escape analyzer) */
+    XI_CAPTURE_SHARED,      /* stable shared identity capture */
 } XiCaptureKind;
 
 typedef struct XiCapture {

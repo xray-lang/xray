@@ -1377,10 +1377,10 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     xa_update_borrowed_alias_root(ctx, sym, var->initializer, var_type);
     xa_register_active_span_borrow(ctx, sym, var->initializer, var_type);
 
-    if (var_type && xa_type_is_threadsafe_shared_ref(var_type)) {
+    if (var_type && xa_type_is_concurrency_handle(var_type)) {
         if (!sym->is_shared) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            const char *label = xa_threadsafe_shared_ref_label(var_type);
+            const char *label = xa_concurrency_handle_label(var_type);
             char msg[160];
             snprintf(msg, sizeof(msg), "%s handle must be declared with 'shared'",
                      label ? label : "synchronization");

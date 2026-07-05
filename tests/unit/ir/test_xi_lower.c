@@ -801,7 +801,7 @@ TEST(go_arg_transfer_modes) {
 }
 
 TEST(channel_send_transfer_modes) {
-    XiFunc *copy_ir = lower_source("var ch: Channel<Array<int>> = Channel(1)\n"
+    XiFunc *copy_ir = lower_source("shared ch: Channel<Array<int>> = Channel(1)\n"
                                    "var xs = [1, 2]\n"
                                    "ch.send(copy(xs))\n");
     assert(copy_ir != NULL);
@@ -813,7 +813,7 @@ TEST(channel_send_transfer_modes) {
            "channel boundary copy(...) must not lower to a separate copy op before send");
     xi_func_free(copy_ir);
 
-    XiFunc *move_ir = lower_source("var ch: Channel<Array<int>> = Channel(1)\n"
+    XiFunc *move_ir = lower_source("shared ch: Channel<Array<int>> = Channel(1)\n"
                                    "var xs = [1, 2]\n"
                                    "ch.send(move xs)\n");
     assert(move_ir != NULL);
@@ -825,7 +825,7 @@ TEST(channel_send_transfer_modes) {
            "move transfer should still consume source ownership");
     xi_func_free(move_ir);
 
-    XiFunc *try_ir = lower_source("var ch: Channel<Array<int>> = Channel(1)\n"
+    XiFunc *try_ir = lower_source("shared ch: Channel<Array<int>> = Channel(1)\n"
                                   "var xs = [1, 2]\n"
                                   "print(ch.trySend(copy(xs)))\n");
     assert(try_ir != NULL);
@@ -835,7 +835,7 @@ TEST(channel_send_transfer_modes) {
            "copy(...) at trySend boundary must be encoded as COPY transfer");
     xi_func_free(try_ir);
 
-    XiFunc *timeout_ir = lower_source("var ch: Channel<Array<int>> = Channel(1)\n"
+    XiFunc *timeout_ir = lower_source("shared ch: Channel<Array<int>> = Channel(1)\n"
                                       "var xs = [1, 2]\n"
                                       "print(ch.sendTimeout(copy(xs), 0))\n");
     assert(timeout_ir != NULL);

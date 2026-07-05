@@ -784,7 +784,7 @@ TEST(throw_stmt) {
 }
 
 TEST(channel_and_go) {
-    return assert_all_typed("var ch = Channel(1)\n"
+    return assert_all_typed("shared ch = Channel(1)\n"
                             "go fn() {\n"
                             "    ch.send(42)\n"
                             "}\n"
