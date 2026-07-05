@@ -505,6 +505,24 @@
   :observable (u64-wrap)
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.bytes.load.f32
+  :class memory-read
+  :arity 3
+  :own-use borrow
+  :effects (may-throw memory-read)
+  :requires (bytes bounds endian)
+  :observable (f32-bitcast)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bytes.load.f64
+  :class memory-read
+  :arity 3
+  :own-use borrow
+  :effects (may-throw memory-read)
+  :requires (bytes bounds endian)
+  :observable (f64-bitcast)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.bytes.store.u16
   :class memory-write
   :arity 4
@@ -536,6 +554,28 @@
   :effects (side-effect may-throw memory-write)
   :requires (bytes bounds endian)
   :observable (u64-wrap)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bytes.store.f32
+  :class memory-write
+  :arity 4
+  :result-kind void
+  :result-ownership none
+  :own-use stored-value
+  :effects (side-effect may-throw memory-write)
+  :requires (bytes bounds endian)
+  :observable (f32-bitcast)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bytes.store.f64
+  :class memory-write
+  :arity 4
+  :result-kind void
+  :result-ownership none
+  :own-use stored-value
+  :effects (side-effect may-throw memory-write)
+  :requires (bytes bounds endian)
+  :observable (f64-bitcast)
   :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.bytes.span.fill

@@ -1376,13 +1376,115 @@ vmcase(OP_ARRAY_RESIZE) {
         vmbreak;                                                                                   \
     }
 
+#define VM_BYTES_LOAD_FLOAT_CASE(opcode, load_fn, width_name)                                      \
+    vmcase(opcode) {                                                                               \
+        int a = GETARG_A(i);                                                                       \
+        XrValue _recv = R(a + 1);                                                                  \
+        XrValue _offset = R(a + 2);                                                                \
+        if (!XR_IS_INT(_offset)) {                                                                 \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan.load<T>() expects integer offset");   \
+        }                                                                                          \
+        int64_t _endian = XR_ENDIAN_NATIVE;                                                        \
+        VM_PARSE_ENDIAN_ARG(R(a + 3), _endian);                                                    \
+        void *_data = NULL;                                                                        \
+        int64_t _length = 0;                                                                       \
+        uint8_t _elem_type = XR_ELEM_ANY;                                                          \
+        if (XR_IS_SPAN_REF(_recv)) {                                                               \
+            XrSpanView *_span = XR_TO_SPAN_REF(_recv);                                             \
+            if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
+                                 "ByteSpan.load<" width_name ">() expects ByteSpan");              \
+            }                                                                                      \
+            _data = _span->data;                                                                   \
+            _length = _span->length;                                                               \
+            _elem_type = _span->elem_type;                                                         \
+        } else if (XR_IS_ARRAY(_recv)) {                                                           \
+            XrArray *_arr = XR_TO_ARRAY(_recv);                                                    \
+            if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
+                                 "ByteSpan.load<" width_name ">() expects ByteSpan");              \
+            }                                                                                      \
+            _data = _arr->data;                                                                    \
+            _length = _arr->length;                                                                \
+            _elem_type = _arr->elem_type;                                                          \
+        } else {                                                                                   \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
+                             "ByteSpan.load<" width_name ">() expects ByteSpan");                  \
+        }                                                                                          \
+        bool _ok = false;                                                                          \
+        double _value =                                                                            \
+            (double) load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok);       \
+        if (!_ok) {                                                                                \
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,                                           \
+                             "ByteSpan.load<" width_name ">() offset out of bounds");              \
+        }                                                                                          \
+        R(a) = xr_float(_value);                                                                   \
+        vmbreak;                                                                                   \
+    }
+
+#define VM_BYTES_STORE_FLOAT_CASE(opcode, store_fn, value_type, width_name)                        \
+    vmcase(opcode) {                                                                               \
+        int a = GETARG_A(i);                                                                       \
+        XrValue _recv = R(a + 1);                                                                  \
+        XrValue _offset = R(a + 2);                                                                \
+        XrValue _value = R(a + 3);                                                                 \
+        if (!XR_IS_INT(_offset) || !XR_IS_FLOAT(_value)) {                                         \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
+                             "ByteSpan.store<T>() expects integer offset and float value");        \
+        }                                                                                          \
+        int64_t _endian = XR_ENDIAN_NATIVE;                                                        \
+        VM_PARSE_ENDIAN_ARG(R(a + 4), _endian);                                                    \
+        void *_data = NULL;                                                                        \
+        int64_t _length = 0;                                                                       \
+        uint8_t _elem_type = XR_ELEM_ANY;                                                          \
+        if (XR_IS_SPAN_REF(_recv)) {                                                               \
+            XrSpanView *_span = XR_TO_SPAN_REF(_recv);                                             \
+            if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
+                                 "ByteSpan.store<" width_name ">() expects ByteSpan");             \
+            }                                                                                      \
+            if ((_span->reserved & XR_SPAN_VIEW_READONLY) != 0) {                                  \
+                VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");   \
+            }                                                                                      \
+            _data = _span->data;                                                                   \
+            _length = _span->length;                                                               \
+            _elem_type = _span->elem_type;                                                         \
+        } else if (XR_IS_ARRAY(_recv)) {                                                           \
+            XrArray *_arr = XR_TO_ARRAY(_recv);                                                    \
+            if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                             \
+                                 "ByteSpan.store<" width_name ">() expects ByteSpan");             \
+            }                                                                                      \
+            _data = _arr->data;                                                                    \
+            _length = _arr->length;                                                                \
+            _elem_type = _arr->elem_type;                                                          \
+        } else {                                                                                   \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
+                             "ByteSpan.store<" width_name ">() expects ByteSpan");                 \
+        }                                                                                          \
+        bool _ok = store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                        \
+                            (value_type) XR_TO_FLOAT(_value), _endian);                            \
+        if (!_ok) {                                                                                \
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,                                           \
+                             "ByteSpan.store<" width_name ">() offset out of bounds");             \
+        }                                                                                          \
+        R(a) = xr_null();                                                                          \
+        vmbreak;                                                                                   \
+    }
+
 VM_BYTES_LOAD_CASE(OP_BYTES_LOAD_U16, xr_array_core_bytes_load_u16, "uint16")
 VM_BYTES_LOAD_CASE(OP_BYTES_LOAD_U32, xr_array_core_bytes_load_u32, "uint32")
 VM_BYTES_LOAD_CASE(OP_BYTES_LOAD_U64, xr_array_core_bytes_load_u64, "uint64")
+VM_BYTES_LOAD_FLOAT_CASE(OP_BYTES_LOAD_F32, xr_array_core_bytes_load_f32, "float32")
+VM_BYTES_LOAD_FLOAT_CASE(OP_BYTES_LOAD_F64, xr_array_core_bytes_load_f64, "float64")
 VM_BYTES_STORE_CASE(OP_BYTES_STORE_U16, xr_array_core_bytes_store_u16, uint16_t, "uint16")
 VM_BYTES_STORE_CASE(OP_BYTES_STORE_U32, xr_array_core_bytes_store_u32, uint32_t, "uint32")
 VM_BYTES_STORE_CASE(OP_BYTES_STORE_U64, xr_array_core_bytes_store_u64, uint64_t, "uint64")
+VM_BYTES_STORE_FLOAT_CASE(OP_BYTES_STORE_F32, xr_array_core_bytes_store_f32, float, "float32")
+VM_BYTES_STORE_FLOAT_CASE(OP_BYTES_STORE_F64, xr_array_core_bytes_store_f64, double, "float64")
 
+#undef VM_BYTES_STORE_FLOAT_CASE
+#undef VM_BYTES_LOAD_FLOAT_CASE
 #undef VM_BYTES_STORE_CASE
 #undef VM_BYTES_LOAD_CASE
 #undef VM_PARSE_ENDIAN_ARG

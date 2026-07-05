@@ -105,9 +105,13 @@
     X(BYTES_LOAD_U16, "xi.bytes.load.u16", xicgen_bytes_load_u16) \
     X(BYTES_LOAD_U32, "xi.bytes.load.u32", xicgen_bytes_load_u32) \
     X(BYTES_LOAD_U64, "xi.bytes.load.u64", xicgen_bytes_load_u64) \
+    X(BYTES_LOAD_F32, "xi.bytes.load.f32", xicgen_bytes_load_f32) \
+    X(BYTES_LOAD_F64, "xi.bytes.load.f64", xicgen_bytes_load_f64) \
     X(BYTES_STORE_U16, "xi.bytes.store.u16", xicgen_bytes_store_u16) \
     X(BYTES_STORE_U32, "xi.bytes.store.u32", xicgen_bytes_store_u32) \
     X(BYTES_STORE_U64, "xi.bytes.store.u64", xicgen_bytes_store_u64) \
+    X(BYTES_STORE_F32, "xi.bytes.store.f32", xicgen_bytes_store_f32) \
+    X(BYTES_STORE_F64, "xi.bytes.store.f64", xicgen_bytes_store_f64) \
     X(BYTES_SPAN_FILL, "xi.bytes.span.fill", xicgen_bytes_span_fill) \
     X(BYTES_SPAN_COPY, "xi.bytes.span.copy", xicgen_bytes_span_copy) \
     X(BYTES_SPAN_COMPARE, "xi.bytes.span.compare", xicgen_bytes_span_compare) \

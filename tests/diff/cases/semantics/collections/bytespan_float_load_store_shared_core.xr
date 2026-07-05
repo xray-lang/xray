@@ -1,0 +1,21 @@
+// anchor: bytespan-float-load-store-shared-core
+var bytes = Bytes(16)
+var view: ByteSpan = bytes[:]
+
+view.store<float32>(0, 1.5, Endian.LE)
+view.store<float32>(4, -2.5, Endian.BE)
+view.store<float64>(8, -2.25, Endian.LE)
+
+print(bytes[0])
+print(bytes[1])
+print(bytes[2])
+print(bytes[3])
+print(bytes[4])
+print(bytes[5])
+print(bytes[6])
+print(bytes[7])
+print(bytes[14])
+print(bytes[15])
+print(view.load<float32>(0, Endian.LE))
+print(view.load<float32>(4, Endian.BE))
+print(view.load<float64>(8, Endian.LE))

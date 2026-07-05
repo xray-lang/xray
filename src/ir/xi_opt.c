@@ -2168,6 +2168,11 @@ static bool sr_def_rep_memory_op(const XiValue *v, XrRep *out) {
         case XI_BYTES_LOAD_U16:
         case XI_BYTES_LOAD_U32:
         case XI_BYTES_LOAD_U64:
+        case XI_BYTES_LOAD_F32:
+        case XI_BYTES_LOAD_F64:
+            *out = (v->op == XI_BYTES_LOAD_F32 || v->op == XI_BYTES_LOAD_F64) ? XR_REP_F64
+                                                                              : XR_REP_I64;
+            return true;
         case XI_SPAN_COMPARE:
         case XI_BYTES_SPAN_COMPARE:
         case XI_BYTES_SPAN_COMMON_PREFIX:
@@ -2473,6 +2478,8 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
         case XI_BYTES_LOAD_U16:
         case XI_BYTES_LOAD_U32:
         case XI_BYTES_LOAD_U64:
+        case XI_BYTES_LOAD_F32:
+        case XI_BYTES_LOAD_F64:
             if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
                 sr_value_has_static_typed_array_storage(user->args[0])) {
                 *out = sr_type_native_boundary_rep(user->args[0]->type);
@@ -2483,12 +2490,22 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
         case XI_BYTES_STORE_U16:
         case XI_BYTES_STORE_U32:
         case XI_BYTES_STORE_U64:
+        case XI_BYTES_STORE_F32:
+        case XI_BYTES_STORE_F64:
             if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
                 sr_value_has_static_typed_array_storage(user->args[0])) {
                 *out = sr_type_native_boundary_rep(user->args[0]->type);
                 return true;
             }
-            *out = (arg_idx == 1 || arg_idx == 2) ? XR_REP_I64 : XR_REP_TAGGED;
+            if (arg_idx == 1) {
+                *out = XR_REP_I64;
+            } else if (arg_idx == 2) {
+                *out = (user->op == XI_BYTES_STORE_F32 || user->op == XI_BYTES_STORE_F64)
+                           ? XR_REP_F64
+                           : XR_REP_I64;
+            } else {
+                *out = XR_REP_TAGGED;
+            }
             return true;
         case XI_BYTES_SPAN_FILL:
         case XI_BYTES_SPAN_REPEAT:

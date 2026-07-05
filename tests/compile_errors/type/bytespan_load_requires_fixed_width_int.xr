@@ -1,3 +1,0 @@
-fn bad(src: ByteSpan) -> float32 {
-    return src.load<float32>(0)
-}
