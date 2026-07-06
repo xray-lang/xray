@@ -1,0 +1,28 @@
+// anchor: buffer-direct-index-rejected
+// Buffer is an opaque managed allocation; byte access goes through asSpan()
+// or unsafe ptrUnchecked(), not direct [] indexing.
+import mem
+
+fn show_get() {
+    var buf = mem.alloc(4)
+    try {
+        print(buf[0])
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+fn show_set() {
+    var buf = mem.alloc(4)
+    try {
+        buf[0] = 7
+        print("stored")
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+show_get()
+show_set()

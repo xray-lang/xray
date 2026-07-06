@@ -9,6 +9,7 @@
  * path, so the static-inline callers are elided). */
 XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length);
 XRT_COLD _Noreturn void xrt_fixed_index_oob(int64_t idx, int64_t length);
+XRT_COLD _Noreturn void xrt_type_no_index(const char *message);
 
 static inline XrValue xrt_fixed_array_get(void *base, uint8_t native_type, int64_t idx) {
     uint8_t *p = (uint8_t *) base + (size_t) idx * xrt_value_native_type_size(native_type);
@@ -215,11 +216,12 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         // Positional access into the set's insertion order (used by for-in).
         xrt_set_t *s = (xrt_set_t *) obj.ptr;
         return xrt_set_value_at_owned(s, key.i);
-    } else if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0 && XR_IS_STR(key)) {
-        // Json object indexed by a string key.
-        return xrt_json_get_name_owned(obj, xr_str_data(key));
+    } else if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0) {
+        if (XR_IS_STR(key))
+            return xrt_json_get_name_owned(obj, xr_str_data(key));
+        xrt_type_no_index("Json object only supports string keys");
     }
-    return XR_NULL_VAL;
+    xrt_type_no_index("only Array, Map, Json, String, Bytes, typed array support indexing");
 }
 
 static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
@@ -246,9 +248,13 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
         }
     } else if (XR_IS_MAP(obj)) {
         xrt_map_set((xrt_map_t *) obj.ptr, key, val);
-    } else if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0 && XR_IS_STR(key)) {
+    } else if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0) {
+        if (!XR_IS_STR(key))
+            xrt_type_no_index("Json object only supports string keys");
         /* Json object indexed by a string key (e.g. computed object-literal
          * keys `{ [k]: v }` and object spread). */
         xrt_json_set_name(obj, xr_str_data(key), val);
+    } else {
+        xrt_type_no_index("only Array, Map, Json, Bytes, typed array support index assignment");
     }
 }
