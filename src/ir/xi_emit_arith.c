@@ -495,8 +495,7 @@ XR_FUNC void xi_emit_checktype(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_CHECKTYPE, dst, mask_arg, 0));
 }
 
-/* typeof(x) / typename(x) */
-XR_FUNC void xi_emit_typeof(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+static void xi_emit_type_query(EmitCtx *ctx, XiValue *v, XiEmitReg dst, uint8_t op) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -504,6 +503,13 @@ XR_FUNC void xi_emit_typeof(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    uint8_t tyop = v->aux_int == 1 ? OP_TYPENAME : OP_TYPEOF;
-    emit_inst(ctx, CREATE_ABC(tyop, dst, src, 0));
+    emit_inst(ctx, CREATE_ABC(op, dst, src, 0));
+}
+
+XR_FUNC void xi_emit_typeid(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    xi_emit_type_query(ctx, v, dst, OP_TYPEOF);
+}
+
+XR_FUNC void xi_emit_typename(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    xi_emit_type_query(ctx, v, dst, OP_TYPENAME);
 }

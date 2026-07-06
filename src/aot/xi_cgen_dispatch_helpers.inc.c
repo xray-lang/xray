@@ -844,21 +844,26 @@ static void xicgen_assert_ne(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
             loc);
 }
 
-static void xicgen_typeof(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+static void xicgen_typeid(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                           const char *prefix) {
     (void) ctx;
     (void) f;
     (void) prefix;
-    XR_DCHECK(v->nargs >= 1, "xicgen_typeof: need arg");
-    if (v->aux_int == 1) {
-        fprintf(out, "xrt_typeof_str(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
-    } else {
-        fprintf(out, "XR_FROM_INT(xrt_typeof_id(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, "))");
-    }
+    XR_DCHECK(v->nargs >= 1, "xicgen_typeid: need arg");
+    fprintf(out, "XR_FROM_INT(xrt_typeof_id(");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, "))");
+}
+
+static void xicgen_typename(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                            const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 1, "xicgen_typename: need arg");
+    fprintf(out, "xrt_typeof_str(");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ")");
 }
 
 static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -2990,7 +2995,9 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     } else if (strcmp(bn, "range") == 0) {
         xicgen_range(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "typeof") == 0) {
-        xicgen_typeof(ctx, out, f, v, prefix);
+        xicgen_typeid(ctx, out, f, v, prefix);
+    } else if (strcmp(bn, "typename") == 0) {
+        xicgen_typename(ctx, out, f, v, prefix);
     } else if (xicgen_emit_math_builtin_expr(ctx, out, f, v, bn)) {
         /* Expression emitted by the math helper. */
     } else if (strcmp(bn, "regex_compile") == 0) {

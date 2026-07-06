@@ -173,7 +173,7 @@ typedef enum {
 #define XI_GEN_ALGEBRAIC_ASSOCIATIVE (1u << 0)
 #define XI_GEN_ALGEBRAIC_COMMUTATIVE (1u << 1)
 
-enum { XI_GEN_OP_COUNT = 170 };
+enum { XI_GEN_OP_COUNT = 171 };
 typedef char xi_generated_op_count_must_match_XiOp[
     ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];
 
@@ -362,7 +362,8 @@ typedef struct {
     X(ASSERT_EQ, "xi.assert.eq", XI_GEN_CLASS_SIDE_EFFECT, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_THROW, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(ASSERT_NE, "xi.assert.ne", XI_GEN_CLASS_SIDE_EFFECT, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_THROW, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(ASSERT_THROWS, "xi.assert.throws", XI_GEN_CLASS_SIDE_EFFECT, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_THROW, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
-    X(TYPEOF, "xi.typeof", XI_GEN_CLASS_TYPE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(TYPEID, "xi.typeid", XI_GEN_CLASS_TYPE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(TYPENAME, "xi.typename", XI_GEN_CLASS_TYPE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(GET_BUILTIN, "xi.get.builtin", XI_GEN_CLASS_MEMORY_READ, 0, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_CONST, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_READS_MEM, 0, XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(IMPORT_REF, "xi.import.ref", XI_GEN_CLASS_MEMORY_READ, 0, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_READS_MEM, 0, XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(REGEX_COMPILE, "xi.regex.compile", XI_GEN_CLASS_ALLOCATION, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_BUILTIN, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_HEAP, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, "regex_compile", NULL) \
@@ -536,7 +537,8 @@ static inline const char *xi_generated_op_name(uint16_t op) {
         case XI_ASSERT_EQ: return "ASSERT_EQ";
         case XI_ASSERT_NE: return "ASSERT_NE";
         case XI_ASSERT_THROWS: return "ASSERT_THROWS";
-        case XI_TYPEOF: return "TYPEOF";
+        case XI_TYPEID: return "TYPEID";
+        case XI_TYPENAME: return "TYPENAME";
         case XI_GET_BUILTIN: return "GET_BUILTIN";
         case XI_IMPORT_REF: return "IMPORT_REF";
         case XI_REGEX_COMPILE: return "REGEX_COMPILE";
@@ -713,7 +715,8 @@ static inline uint8_t xi_generated_op_arity(uint16_t op) {
         case XI_ASSERT_EQ: return 2;
         case XI_ASSERT_NE: return 2;
         case XI_ASSERT_THROWS: return 1;
-        case XI_TYPEOF: return 1;
+        case XI_TYPEID: return 1;
+        case XI_TYPENAME: return 1;
         case XI_GET_BUILTIN: return 0;
         case XI_IMPORT_REF: return 0;
         case XI_REGEX_COMPILE: return 2;
@@ -890,7 +893,8 @@ static inline uint8_t xi_generated_op_class(uint16_t op) {
         case XI_ASSERT_EQ: return XI_GEN_CLASS_SIDE_EFFECT;
         case XI_ASSERT_NE: return XI_GEN_CLASS_SIDE_EFFECT;
         case XI_ASSERT_THROWS: return XI_GEN_CLASS_SIDE_EFFECT;
-        case XI_TYPEOF: return XI_GEN_CLASS_TYPE;
+        case XI_TYPEID: return XI_GEN_CLASS_TYPE;
+        case XI_TYPENAME: return XI_GEN_CLASS_TYPE;
         case XI_GET_BUILTIN: return XI_GEN_CLASS_MEMORY_READ;
         case XI_IMPORT_REF: return XI_GEN_CLASS_MEMORY_READ;
         case XI_REGEX_COMPILE: return XI_GEN_CLASS_ALLOCATION;
@@ -1067,7 +1071,8 @@ static inline uint8_t xi_generated_op_result_kind(uint16_t op) {
         case XI_ASSERT_EQ: return XI_GEN_RESULT_VALUE;
         case XI_ASSERT_NE: return XI_GEN_RESULT_VALUE;
         case XI_ASSERT_THROWS: return XI_GEN_RESULT_VALUE;
-        case XI_TYPEOF: return XI_GEN_RESULT_VALUE;
+        case XI_TYPEID: return XI_GEN_RESULT_VALUE;
+        case XI_TYPENAME: return XI_GEN_RESULT_VALUE;
         case XI_GET_BUILTIN: return XI_GEN_RESULT_VALUE;
         case XI_IMPORT_REF: return XI_GEN_RESULT_VALUE;
         case XI_REGEX_COMPILE: return XI_GEN_RESULT_VALUE;
@@ -1244,7 +1249,8 @@ static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {
         case XI_ASSERT_EQ: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_ASSERT_NE: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_ASSERT_THROWS: return XI_GEN_RESULT_OWNERSHIP_NONE;
-        case XI_TYPEOF: return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        case XI_TYPEID: return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        case XI_TYPENAME: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_GET_BUILTIN: return XI_GEN_RESULT_OWNERSHIP_BORROWED;
         case XI_IMPORT_REF: return XI_GEN_RESULT_OWNERSHIP_BORROWED;
         case XI_REGEX_COMPILE: return XI_GEN_RESULT_OWNERSHIP_OWNED;
@@ -1421,7 +1427,8 @@ static inline const char *xi_generated_op_result_native_type(uint16_t op) {
         case XI_ASSERT_EQ: return NULL;
         case XI_ASSERT_NE: return NULL;
         case XI_ASSERT_THROWS: return NULL;
-        case XI_TYPEOF: return NULL;
+        case XI_TYPEID: return NULL;
+        case XI_TYPENAME: return NULL;
         case XI_GET_BUILTIN: return NULL;
         case XI_IMPORT_REF: return NULL;
         case XI_REGEX_COMPILE: return NULL;
@@ -1598,7 +1605,8 @@ static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {
         case XI_ASSERT_EQ: return XI_GEN_LOWERING_GENERATED;
         case XI_ASSERT_NE: return XI_GEN_LOWERING_GENERATED;
         case XI_ASSERT_THROWS: return XI_GEN_LOWERING_GENERATED;
-        case XI_TYPEOF: return XI_GEN_LOWERING_GENERATED;
+        case XI_TYPEID: return XI_GEN_LOWERING_GENERATED;
+        case XI_TYPENAME: return XI_GEN_LOWERING_GENERATED;
         case XI_GET_BUILTIN: return XI_GEN_LOWERING_GENERATED;
         case XI_IMPORT_REF: return XI_GEN_LOWERING_GENERATED;
         case XI_REGEX_COMPILE: return XI_GEN_LOWERING_GENERATED;
@@ -1775,7 +1783,8 @@ static inline uint8_t xi_generated_op_speculation(uint16_t op) {
         case XI_ASSERT_EQ: return XI_GEN_SPECULATION_NEVER;
         case XI_ASSERT_NE: return XI_GEN_SPECULATION_NEVER;
         case XI_ASSERT_THROWS: return XI_GEN_SPECULATION_NEVER;
-        case XI_TYPEOF: return XI_GEN_SPECULATION_NEVER;
+        case XI_TYPEID: return XI_GEN_SPECULATION_NEVER;
+        case XI_TYPENAME: return XI_GEN_SPECULATION_NEVER;
         case XI_GET_BUILTIN: return XI_GEN_SPECULATION_NEVER;
         case XI_IMPORT_REF: return XI_GEN_SPECULATION_NEVER;
         case XI_REGEX_COMPILE: return XI_GEN_SPECULATION_NEVER;
@@ -1952,7 +1961,8 @@ static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {
         case XI_ASSERT_EQ: return XI_GEN_VN_NONE;
         case XI_ASSERT_NE: return XI_GEN_VN_NONE;
         case XI_ASSERT_THROWS: return XI_GEN_VN_NONE;
-        case XI_TYPEOF: return XI_GEN_VN_NONE;
+        case XI_TYPEID: return XI_GEN_VN_NONE;
+        case XI_TYPENAME: return XI_GEN_VN_NONE;
         case XI_GET_BUILTIN: return XI_GEN_VN_NONE;
         case XI_IMPORT_REF: return XI_GEN_VN_NONE;
         case XI_REGEX_COMPILE: return XI_GEN_VN_NONE;
@@ -2129,7 +2139,8 @@ static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {
         case XI_ASSERT_EQ: return XI_GEN_TBAA_NONE;
         case XI_ASSERT_NE: return XI_GEN_TBAA_NONE;
         case XI_ASSERT_THROWS: return XI_GEN_TBAA_NONE;
-        case XI_TYPEOF: return XI_GEN_TBAA_NONE;
+        case XI_TYPEID: return XI_GEN_TBAA_NONE;
+        case XI_TYPENAME: return XI_GEN_TBAA_NONE;
         case XI_GET_BUILTIN: return XI_GEN_TBAA_CONST;
         case XI_IMPORT_REF: return XI_GEN_TBAA_NONE;
         case XI_REGEX_COMPILE: return XI_GEN_TBAA_NONE;
@@ -2306,7 +2317,8 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_ASSERT_EQ: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_ASSERT_NE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_ASSERT_THROWS: return XI_GEN_BACKEND_REWRITE_NONE;
-        case XI_TYPEOF: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_TYPEID: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_TYPENAME: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_GET_BUILTIN: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_IMPORT_REF: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_REGEX_COMPILE: return XI_GEN_BACKEND_REWRITE_BUILTIN;
@@ -2483,7 +2495,8 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_ASSERT_EQ: return NULL;
         case XI_ASSERT_NE: return NULL;
         case XI_ASSERT_THROWS: return NULL;
-        case XI_TYPEOF: return NULL;
+        case XI_TYPEID: return NULL;
+        case XI_TYPENAME: return NULL;
         case XI_GET_BUILTIN: return NULL;
         case XI_IMPORT_REF: return NULL;
         case XI_REGEX_COMPILE: return "regex_compile";
@@ -2665,7 +2678,8 @@ static inline uint8_t xi_generated_op_escape_use(uint16_t op) {
         case XI_ASSERT_EQ: return XI_GEN_ESCAPE_USE_NONE;
         case XI_ASSERT_NE: return XI_GEN_ESCAPE_USE_NONE;
         case XI_ASSERT_THROWS: return XI_GEN_ESCAPE_USE_NONE;
-        case XI_TYPEOF: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_TYPEID: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_TYPENAME: return XI_GEN_ESCAPE_USE_NONE;
         case XI_GET_BUILTIN: return XI_GEN_ESCAPE_USE_NONE;
         case XI_IMPORT_REF: return XI_GEN_ESCAPE_USE_NONE;
         case XI_REGEX_COMPILE: return XI_GEN_ESCAPE_USE_NONE;
@@ -2842,7 +2856,8 @@ static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {
         case XI_ASSERT_EQ: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_ASSERT_NE: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_ASSERT_THROWS: return XI_GEN_ESCAPE_ALLOC_NONE;
-        case XI_TYPEOF: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_TYPEID: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_TYPENAME: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_GET_BUILTIN: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_IMPORT_REF: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_REGEX_COMPILE: return XI_GEN_ESCAPE_ALLOC_HEAP;
@@ -3019,7 +3034,8 @@ static inline uint8_t xi_generated_op_own_use(uint16_t op) {
         case XI_ASSERT_EQ: return XI_GEN_OWN_USE_BORROW;
         case XI_ASSERT_NE: return XI_GEN_OWN_USE_BORROW;
         case XI_ASSERT_THROWS: return XI_GEN_OWN_USE_CONSUME;
-        case XI_TYPEOF: return XI_GEN_OWN_USE_BORROW;
+        case XI_TYPEID: return XI_GEN_OWN_USE_BORROW;
+        case XI_TYPENAME: return XI_GEN_OWN_USE_BORROW;
         case XI_GET_BUILTIN: return XI_GEN_OWN_USE_CONSUME;
         case XI_IMPORT_REF: return XI_GEN_OWN_USE_CONSUME;
         case XI_REGEX_COMPILE: return XI_GEN_OWN_USE_CONSUME;
@@ -3196,7 +3212,8 @@ static inline uint8_t xi_generated_op_ic_site(uint16_t op) {
         case XI_ASSERT_EQ: return XI_GEN_IC_SITE_NONE;
         case XI_ASSERT_NE: return XI_GEN_IC_SITE_NONE;
         case XI_ASSERT_THROWS: return XI_GEN_IC_SITE_NONE;
-        case XI_TYPEOF: return XI_GEN_IC_SITE_NONE;
+        case XI_TYPEID: return XI_GEN_IC_SITE_NONE;
+        case XI_TYPENAME: return XI_GEN_IC_SITE_NONE;
         case XI_GET_BUILTIN: return XI_GEN_IC_SITE_NONE;
         case XI_IMPORT_REF: return XI_GEN_IC_SITE_NONE;
         case XI_REGEX_COMPILE: return XI_GEN_IC_SITE_NONE;
@@ -3373,7 +3390,8 @@ static inline XiOp xi_generated_op_negates_to(uint16_t op) {
         case XI_ASSERT_EQ: return XI_OP_COUNT;
         case XI_ASSERT_NE: return XI_OP_COUNT;
         case XI_ASSERT_THROWS: return XI_OP_COUNT;
-        case XI_TYPEOF: return XI_OP_COUNT;
+        case XI_TYPEID: return XI_OP_COUNT;
+        case XI_TYPENAME: return XI_OP_COUNT;
         case XI_GET_BUILTIN: return XI_OP_COUNT;
         case XI_IMPORT_REF: return XI_OP_COUNT;
         case XI_REGEX_COMPILE: return XI_OP_COUNT;
@@ -3550,7 +3568,8 @@ static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {
         case XI_ASSERT_EQ: return 0;
         case XI_ASSERT_NE: return 0;
         case XI_ASSERT_THROWS: return 0;
-        case XI_TYPEOF: return 0;
+        case XI_TYPEID: return 0;
+        case XI_TYPENAME: return 0;
         case XI_GET_BUILTIN: return 0;
         case XI_IMPORT_REF: return 0;
         case XI_REGEX_COMPILE: return 0;
@@ -3727,7 +3746,8 @@ static inline uint8_t xi_generated_op_default_flags(uint16_t op) {
         case XI_ASSERT_EQ: return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         case XI_ASSERT_NE: return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         case XI_ASSERT_THROWS: return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-        case XI_TYPEOF: return 0;
+        case XI_TYPEID: return 0;
+        case XI_TYPENAME: return 0;
         case XI_GET_BUILTIN: return XI_FLAG_READS_MEM;
         case XI_IMPORT_REF: return XI_FLAG_READS_MEM;
         case XI_REGEX_COMPILE: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
@@ -3904,7 +3924,8 @@ static inline uint32_t xi_generated_op_effects(uint16_t op) {
         case XI_ASSERT_EQ: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_THROW;
         case XI_ASSERT_NE: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_THROW;
         case XI_ASSERT_THROWS: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_THROW;
-        case XI_TYPEOF: return 0;
+        case XI_TYPEID: return 0;
+        case XI_TYPENAME: return 0;
         case XI_GET_BUILTIN: return XI_EFFECT_MEMORY_READ;
         case XI_IMPORT_REF: return XI_EFFECT_MEMORY_READ;
         case XI_REGEX_COMPILE: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES;

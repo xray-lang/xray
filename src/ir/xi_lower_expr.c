@@ -2258,22 +2258,20 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
     /* typeof(x) → TypeId int. */
     if (strcmp(fname, "typeof") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_TYPEOF, l->type_int, 1);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_TYPEID, l->type_int, 1);
         if (!v)
             return xi_const_null(l->func, l->cur_block, l->type_null);
         v->args[0] = arg;
-        v->aux_int = 0; /* emit OP_TYPEOF: returns TypeId int */
         v->line = (uint32_t) line;
         return v;
     }
     /* typename(x) → cold/debug type display name string. */
     if (strcmp(fname, "typename") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_TYPEOF, l->type_string, 1);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_TYPENAME, l->type_string, 1);
         if (!v)
             return xi_const_null(l->func, l->cur_block, l->type_null);
         v->args[0] = arg;
-        v->aux_int = 1; /* emit OP_TYPENAME: returns string */
         v->line = (uint32_t) line;
         return v;
     }

@@ -1680,7 +1680,16 @@
   :observable ()
   :targets (vm-bytecode aot-verify))
 
-(define-xi-op xi.typeof
+(define-xi-op xi.typeid
+  :class type
+  :arity 1
+  :own-use borrow
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.typename
   :class type
   :arity 1
   :own-use borrow
