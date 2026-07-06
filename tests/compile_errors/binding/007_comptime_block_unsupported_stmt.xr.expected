@@ -1,0 +1,1 @@
+comptime block currently supports only compile_assert(...) and compile_error(...)

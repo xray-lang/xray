@@ -11,7 +11,7 @@ import net
 @test
 fn test_listener_methods() {
     // listen on an ephemeral port (0 → kernel picks)
-    const listener = net.listen(0, 16)
+    var listener = net.listen(0, 16)
     if (listener == null) { return }
 
     // method-style accessors
@@ -34,7 +34,7 @@ fn test_listener_methods() {
 fn test_module_and_method_interop() {
     // The module-level cfunc (net.fd) and the typed method must agree
     // both before and after close.
-    const listener = net.listen(0, 1)
+    var listener = net.listen(0, 1)
     if (listener == null) { return }
 
     assert_true(net.fd(listener!) == listener!.fd())

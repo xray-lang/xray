@@ -2925,13 +2925,10 @@ static XrType *xa_visit_comptime_expr(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
 
     if (inner->type == AST_BLOCK) {
-        xa_visit_infer_stmt(ctx, inner);
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-            "comptime block requires the frontend consteval block engine, which is not implemented "
-            "in this phase",
-            &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   "comptime block can only be used as a statement in this phase",
+                                   &loc);
         return xr_type_new_unit(NULL);
     }
 
@@ -2947,6 +2944,135 @@ static XrType *xa_visit_comptime_expr(XaInferContext *ctx, AstNode *node) {
                                    msg, &loc);
     }
     return inner_type ? inner_type : xr_type_new_unknown(NULL);
+}
+
+static bool xa_is_comptime_block_expr(const AstNode *node) {
+    return node && node->type == AST_COMPTIME_EXPR && node->as.comptime_expr.expr &&
+           node->as.comptime_expr.expr->type == AST_BLOCK;
+}
+
+static void xa_report_comptime_block_error(XaInferContext *ctx, AstNode *loc_node,
+                                           const char *message) {
+    if (!ctx || !ctx->analyzer || !message)
+        return;
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = loc_node ? loc_node->line : 0,
+                      .column = loc_node ? loc_node->column : 0};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                               message, &loc);
+}
+
+static bool xa_eval_comptime_block_arg(XaInferContext *ctx, AstNode *arg, XrCtValue *out,
+                                       const char *subject) {
+    if (!ctx || !arg || !out)
+        return false;
+    xa_visit_infer_expr(ctx, arg);
+    const char *err = NULL;
+    if (xa_consteval_expr(ctx->analyzer, arg, out, &err))
+        return true;
+
+    char msg[256];
+    snprintf(msg, sizeof(msg), "%s must be evaluable at compile time%s%s", subject, err ? ": " : "",
+             err ? err : "");
+    xa_report_comptime_block_error(ctx, arg, msg);
+    return false;
+}
+
+static void xa_visit_comptime_compile_assert(XaInferContext *ctx, AstNode *stmt,
+                                             CallExprNode *call) {
+    if (!ctx || !stmt || !call)
+        return;
+    if (call->arg_count < 1 || call->arg_count > 2) {
+        xa_report_comptime_block_error(ctx, stmt, "compile_assert expects 1 or 2 arguments");
+        return;
+    }
+
+    XrCtValue condition = {0};
+    if (!xa_eval_comptime_block_arg(ctx, call->arguments[0], &condition,
+                                    "compile_assert condition"))
+        return;
+    if (condition.kind != XR_CT_BOOL) {
+        xa_report_comptime_block_error(ctx, call->arguments[0],
+                                       "compile_assert condition must be a compile-time bool");
+        return;
+    }
+
+    const char *message = NULL;
+    if (call->arg_count == 2) {
+        XrCtValue msg_value = {0};
+        if (!xa_eval_comptime_block_arg(ctx, call->arguments[1], &msg_value,
+                                        "compile_assert message"))
+            return;
+        if (msg_value.kind != XR_CT_STRING) {
+            xa_report_comptime_block_error(ctx, call->arguments[1],
+                                           "compile_assert message must be a compile-time string");
+            return;
+        }
+        message = msg_value.as.string_val;
+    }
+
+    if (!condition.as.bool_val) {
+        char msg[512];
+        if (message && message[0])
+            snprintf(msg, sizeof(msg), "compile_assert failed: %s", message);
+        else
+            snprintf(msg, sizeof(msg), "compile_assert failed");
+        xa_report_comptime_block_error(ctx, stmt, msg);
+    }
+}
+
+static void xa_visit_comptime_compile_error(XaInferContext *ctx, AstNode *stmt,
+                                            CallExprNode *call) {
+    if (!ctx || !stmt || !call)
+        return;
+    if (call->arg_count != 1) {
+        xa_report_comptime_block_error(ctx, stmt, "compile_error expects 1 argument");
+        return;
+    }
+
+    XrCtValue message = {0};
+    if (!xa_eval_comptime_block_arg(ctx, call->arguments[0], &message, "compile_error message"))
+        return;
+    if (message.kind != XR_CT_STRING) {
+        xa_report_comptime_block_error(ctx, call->arguments[0],
+                                       "compile_error message must be a compile-time string");
+        return;
+    }
+
+    char msg[512];
+    snprintf(msg, sizeof(msg), "compile_error: %s",
+             message.as.string_val ? message.as.string_val : "");
+    xa_report_comptime_block_error(ctx, stmt, msg);
+}
+
+static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !node || !xa_is_comptime_block_expr(node))
+        return;
+
+    BlockNode *block = &node->as.comptime_expr.expr->as.block;
+    for (int i = 0; i < block->count; i++) {
+        AstNode *stmt = block->statements[i];
+        AstNode *expr = stmt && stmt->type == AST_EXPR_STMT ? stmt->as.expr_stmt : NULL;
+        if (!expr || expr->type != AST_CALL_EXPR || !expr->as.call_expr.callee ||
+            expr->as.call_expr.callee->type != AST_VARIABLE) {
+            xa_report_comptime_block_error(ctx, stmt ? stmt : node,
+                                           "comptime block currently supports only "
+                                           "compile_assert(...) and compile_error(...)");
+            continue;
+        }
+
+        CallExprNode *call = &expr->as.call_expr;
+        const char *name = call->callee->as.variable.name;
+        if (name && strcmp(name, "compile_assert") == 0) {
+            xa_visit_comptime_compile_assert(ctx, expr, call);
+        } else if (name && strcmp(name, "compile_error") == 0) {
+            xa_visit_comptime_compile_error(ctx, expr, call);
+        } else {
+            xa_report_comptime_block_error(ctx, expr,
+                                           "comptime block currently supports only "
+                                           "compile_assert(...) and compile_error(...)");
+        }
+    }
 }
 
 XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
@@ -3647,6 +3773,10 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_EXPR_STMT: {
             AstNode *inner = node->as.expr_stmt;
+            if (xa_is_comptime_block_expr(inner)) {
+                xa_visit_comptime_block_stmt(ctx, inner);
+                break;
+            }
             // Check in-parameter immutability before normal inference
             if (inner && inner->type == AST_ASSIGNMENT) {
                 AssignmentNode *a = &inner->as.assignment;
