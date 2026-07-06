@@ -518,7 +518,33 @@ static bool emit_const_value_as_rep_expr(XiCgenCtx *ctx, FILE *out, const XiValu
     return true;
 }
 
+static void emit_unit_materialized_as_rep(FILE *out, XrRep target_rep) {
+    switch (target_rep) {
+        case XR_REP_F64:
+            fprintf(out, "0.0");
+            return;
+        case XR_REP_PTR:
+        case XR_REP_RAWPTR:
+            fprintf(out, "(void*)0");
+            return;
+        case XR_REP_VOID:
+            fprintf(out, "((void)0)");
+            return;
+        case XR_REP_I64:
+            fprintf(out, "INT64_C(0)");
+            return;
+        case XR_REP_TAGGED:
+        default:
+            fprintf(out, "XR_NULL_VAL");
+            return;
+    }
+}
+
 static void emit_value_as_rep(FILE *out, const XiValue *v, XrRep target_rep) {
+    if (cg_is_void_like(v)) {
+        emit_unit_materialized_as_rep(out, target_rep);
+        return;
+    }
     const char *conv_suffix =
         emit_conversion_prefix(out, v ? v->type : NULL, cg_rep(v), target_rep);
     emit_vref(out, v);
@@ -527,6 +553,10 @@ static void emit_value_as_rep(FILE *out, const XiValue *v, XrRep target_rep) {
 
 static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, XrRep target_rep) {
     XrRep inner_rep;
+    if (cg_is_void_like(v)) {
+        emit_unit_materialized_as_rep(out, target_rep);
+        return;
+    }
     if (target_rep != XR_REP_TAGGED && cg_value_box_inner_native_rep(ctx, v, &inner_rep)) {
         const XiValue *inner = v->args[0];
         if (emit_const_value_as_rep_expr(ctx, out, inner, inner_rep, target_rep))

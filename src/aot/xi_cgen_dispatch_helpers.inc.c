@@ -2137,7 +2137,7 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) 
                 emit_span_array_view_ptr_expr(out, v->args[0]);
                 fprintf(out, ", XR_TAG_ARRAY)");
             } else {
-                emit_vref(out, v->args[0]);
+                emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             }
             fprintf(out, ")");
         }
@@ -2167,7 +2167,7 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) 
             emit_span_array_view_ptr_expr(out, v->args[0]);
             fprintf(out, ", XR_TAG_ARRAY)");
         } else {
-            emit_vref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         }
         fprintf(out, ")");
     }

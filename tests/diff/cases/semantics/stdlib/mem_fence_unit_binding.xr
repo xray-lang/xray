@@ -1,0 +1,10 @@
+// anchor: mem-fence-unit-binding
+// AOT stdlib direct calls that semantically return unit must still be valid in
+// value-binding positions. The binding itself has no observable payload, but it
+// must not make CGen produce an invalid storage slot.
+
+import mem
+
+var u = mem.fence(4)
+print(u)
+print("unit-bound")
