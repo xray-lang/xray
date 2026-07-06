@@ -1,0 +1,6 @@
+comptime {
+    const pair = comptime (1, 2)
+    for (item in pair) {
+        compile_assert(item == 1)
+    }
+}

@@ -3055,8 +3055,8 @@ static bool xa_eval_comptime_block_arg(XaInferContext *ctx, AstNode *arg, XrCtVa
 static const char *xa_comptime_block_supported_message(void) {
     return "comptime block currently supports const/var declarations, local var assignments, "
            "local var compound assignments, compile-time if/while statements, "
-           "C-style for loops, break/continue inside comptime loops, compile_assert(...) "
-           "and compile_error(...)";
+           "C-style for loops, fixed-array for-in loops, break/continue inside comptime loops, "
+           "compile_assert(...) and compile_error(...)";
 }
 
 typedef enum XaComptimeBlockFlowKind {
@@ -3538,6 +3538,182 @@ done:
     return result;
 }
 
+static XrType *xa_type_from_ct_value(XaInferContext *ctx, const XrCtValue *value) {
+    XrVMRuntime *X = (ctx && ctx->analyzer) ? ctx->analyzer->isolate : NULL;
+    if (!value)
+        return xr_type_new_unknown(X);
+    switch (value->kind) {
+        case XR_CT_INT:
+            return xr_type_new_int(X);
+        case XR_CT_FLOAT:
+            return xr_type_new_float(X);
+        case XR_CT_BOOL:
+            return xr_type_new_bool(X);
+        case XR_CT_STRING:
+            return xr_type_new_string(X);
+        case XR_CT_CHAR:
+            return xr_type_new_char(X);
+        case XR_CT_NULL:
+            return xr_type_new_null(X);
+        default:
+            return xr_type_new_unknown(X);
+    }
+}
+
+static XaSymbol *xa_ensure_comptime_for_in_symbol(XaInferContext *ctx, AstNode *stmt,
+                                                  const char *name, uint32_t *symbol_id,
+                                                  XrType *type) {
+    if (!ctx || !ctx->analyzer || !name)
+        return NULL;
+
+    XaSymbol *sym = NULL;
+    if (symbol_id && *symbol_id != 0)
+        sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, *symbol_id);
+    if (!sym)
+        sym = xa_scope_lookup_local(ctx->analyzer->current_scope, name);
+    if (!sym) {
+        sym = xa_symbol_new(name, XA_SYM_VARIABLE);
+        sym->location.line = stmt ? stmt->line : 0;
+        sym->is_const = true;
+        sym->is_readonly_binding = true;
+        sym->is_rebindable = false;
+        xa_visit_add_symbol_checked(ctx, sym, 0);
+    }
+    if (symbol_id && *symbol_id == 0)
+        *symbol_id = sym->id;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (links) {
+        links->type = type ? type : xr_type_new_unknown(ctx->analyzer->isolate);
+        links->declared_type = links->type;
+        links->is_definitely_assigned = true;
+        links->is_comptime_local = true;
+        links->is_const_foldable = true;
+    }
+    return sym;
+}
+
+static void xa_set_comptime_for_in_symbol_value(XaInferContext *ctx, XaSymbol *sym,
+                                                const XrCtValue *value, XrType *type) {
+    if (!ctx || !ctx->analyzer || !sym || !value)
+        return;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links)
+        return;
+    links->type = type ? type : xa_type_from_ct_value(ctx, value);
+    links->declared_type = links->type;
+    links->has_ct_value = true;
+    links->ct_value = *value;
+    links->is_const_foldable = true;
+    links->is_definitely_assigned = true;
+}
+
+static XaComptimeBlockFlow xa_visit_comptime_block_for_in_stmt(XaInferContext *ctx, AstNode *stmt,
+                                                               ForInStmtNode *fi,
+                                                               XaComptimeBlockReturn *ret) {
+    if (!ctx || !ctx->analyzer || !stmt || !fi)
+        return xa_comptime_block_flow_normal();
+
+    XrType *collection_type = NULL;
+    if (fi->collection) {
+        xa_clear_ct_value_cache_expr(ctx->analyzer, fi->collection);
+        collection_type = xa_visit_infer_expr(ctx, fi->collection);
+    }
+
+    XrCtValue collection = {0};
+    const char *err = NULL;
+    if (!fi->collection || !xa_consteval_expr(ctx->analyzer, fi->collection, &collection, &err)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "comptime for-in collection must be evaluable at compile time%s%s",
+                 err ? ": " : "", err ? err : "");
+        xa_report_comptime_block_error(ctx, fi->collection ? fi->collection : stmt, msg);
+        return xa_comptime_block_flow_normal();
+    }
+
+    if (collection.kind == XR_CT_TUPLE) {
+        xa_report_comptime_block_error(ctx, fi->collection,
+                                       "tuple values are not iterable in comptime for-in; use "
+                                       "'.0', '.1' or destructuring instead");
+        return xa_comptime_block_flow_normal();
+    }
+    if (collection.kind != XR_CT_FIXED_ARRAY) {
+        xa_report_comptime_block_error(
+            ctx, fi->collection,
+            "comptime for-in currently supports fixed-array compile-time values");
+        return xa_comptime_block_flow_normal();
+    }
+
+    XrType *element_type = NULL;
+    if (collection_type) {
+        if (collection_type->kind == XR_KIND_FIXED_ARRAY && collection_type->fixed_array.element_type)
+            element_type = collection_type->fixed_array.element_type;
+        else if ((XR_TYPE_IS_ARRAY(collection_type) || XR_TYPE_IS_VIEW(collection_type) ||
+                  XR_TYPE_IS_SPAN(collection_type)) &&
+                 collection_type->container.element_type)
+            element_type = collection_type->container.element_type;
+    }
+    if (!element_type && collection.as.fixed_array_val.count > 0)
+        element_type = xa_type_from_ct_value(ctx, &collection.as.fixed_array_val.elements[0]);
+    if (!element_type)
+        element_type = xr_type_new_unknown(ctx->analyzer->isolate);
+
+    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, stmt);
+    XaComptimeBlockFlow result = xa_comptime_block_flow_normal();
+    XaLoopScope loop_scope;
+    xa_loop_scope_push(ctx, &loop_scope, fi->label, stmt);
+
+    XrType *item_type = fi->is_keyvalue ? xr_type_new_int(ctx->analyzer->isolate) : element_type;
+    XrType *value_type = element_type;
+    XaSymbol *item_sym =
+        xa_ensure_comptime_for_in_symbol(ctx, stmt, fi->item_name, &fi->item_symbol_id, item_type);
+    XaSymbol *value_sym =
+        fi->is_keyvalue && fi->value_name
+            ? xa_ensure_comptime_for_in_symbol(ctx, stmt, fi->value_name, &fi->value_symbol_id,
+                                               value_type)
+            : NULL;
+
+    int count = collection.as.fixed_array_val.count;
+    for (int i = 0; i < count; i++) {
+        XrCtValue index_value = {.kind = XR_CT_INT, .as.int_val = i};
+        XrCtValue *element = &collection.as.fixed_array_val.elements[i];
+        if (fi->is_keyvalue) {
+            xa_set_comptime_for_in_symbol_value(ctx, item_sym, &index_value, item_type);
+            xa_set_comptime_for_in_symbol_value(ctx, value_sym, element, value_type);
+        } else {
+            xa_set_comptime_for_in_symbol_value(ctx, item_sym, element, item_type);
+        }
+
+        int body_diag_count = ctx->analyzer->diagnostic_count;
+        XaComptimeBlockFlow flow = xa_comptime_block_flow_normal();
+        if (fi->body)
+            flow = xa_visit_comptime_block_nested_block(ctx, fi->body, ret);
+        if (ctx->analyzer->diagnostic_count > body_diag_count)
+            goto done;
+        if (flow.kind == XA_COMPTIME_FLOW_BREAK) {
+            if (xa_comptime_block_flow_targets_loop(&flow, fi->label))
+                goto done;
+            result = flow;
+            goto done;
+        }
+        if (flow.kind == XA_COMPTIME_FLOW_CONTINUE) {
+            if (xa_comptime_block_flow_targets_loop(&flow, fi->label))
+                continue;
+            result = flow;
+            goto done;
+        }
+        if (flow.kind == XA_COMPTIME_FLOW_RETURN) {
+            result = flow;
+            goto done;
+        }
+    }
+
+done:
+    xa_loop_scope_pop(ctx, &loop_scope);
+    xa_analyzer_exit_scope(ctx->analyzer);
+    return result;
+}
+
 static bool xa_ct_value_is_comptime_block_runtime_value(const XrCtValue *value) {
     if (!value)
         return false;
@@ -3627,6 +3803,9 @@ static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx
     }
     if (stmt->type == AST_FOR_STMT) {
         return xa_visit_comptime_block_for_stmt(ctx, stmt, &stmt->as.for_stmt, ret);
+    }
+    if (stmt->type == AST_FOR_IN_STMT) {
+        return xa_visit_comptime_block_for_in_stmt(ctx, stmt, &stmt->as.for_in_stmt, ret);
     }
     if (stmt->type == AST_RETURN_STMT) {
         return xa_visit_comptime_block_return_stmt(ctx, stmt, &stmt->as.return_stmt, ret);

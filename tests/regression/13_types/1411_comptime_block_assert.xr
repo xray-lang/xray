@@ -140,6 +140,39 @@ comptime {
     compile_assert(continueForLanded == 5, "comptime labeled continue runs for increment")
 }
 
+comptime {
+    const table: [int; 5] = comptime [2, 4, 6, 8, 10]
+
+    var sum = comptime 0
+    for (value in table) {
+        sum += value
+    }
+    compile_assert(sum == 30, "comptime for-in value sum")
+
+    var weighted = comptime 0
+    for (index, value in table) {
+        if (index == 1) {
+            continue
+        }
+        if (index == 4) {
+            break
+        }
+        weighted += index * value
+    }
+    compile_assert(weighted == 36, "comptime for-in index/value control")
+
+    var labeledForIn = comptime 0
+    stop_values: for (value in table) {
+        labeledForIn += value
+        for (var guard = 0; guard < 2; guard += 1) {
+            if (value == 6) {
+                break stop_values
+            }
+        }
+    }
+    compile_assert(labeledForIn == 12, "comptime for-in labeled break")
+}
+
 @test
 fn test_comptime_block_erased() {
     var x = 3
