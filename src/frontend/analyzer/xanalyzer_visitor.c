@@ -3059,12 +3059,68 @@ static const char *xa_comptime_block_supported_message(void) {
            "and compile_error(...)";
 }
 
-typedef enum XaComptimeBlockFlow {
+typedef enum XaComptimeBlockFlowKind {
     XA_COMPTIME_FLOW_NORMAL = 0,
     XA_COMPTIME_FLOW_BREAK,
     XA_COMPTIME_FLOW_CONTINUE,
     XA_COMPTIME_FLOW_RETURN,
+} XaComptimeBlockFlowKind;
+
+typedef struct XaComptimeBlockFlow {
+    XaComptimeBlockFlowKind kind;
+    const char *label;
+    AstNode *node;
 } XaComptimeBlockFlow;
+
+static XaComptimeBlockFlow xa_comptime_block_flow(XaComptimeBlockFlowKind kind,
+                                                  const char *label, AstNode *node) {
+    XaComptimeBlockFlow flow = {.kind = kind, .label = label, .node = node};
+    return flow;
+}
+
+static XaComptimeBlockFlow xa_comptime_block_flow_normal(void) {
+    return xa_comptime_block_flow(XA_COMPTIME_FLOW_NORMAL, NULL, NULL);
+}
+
+static bool xa_comptime_block_flow_targets_loop(const XaComptimeBlockFlow *flow,
+                                                const char *loop_label) {
+    if (!flow)
+        return false;
+    if (flow->kind != XA_COMPTIME_FLOW_BREAK && flow->kind != XA_COMPTIME_FLOW_CONTINUE)
+        return false;
+    if (!flow->label)
+        return true;
+    return loop_label && strcmp(flow->label, loop_label) == 0;
+}
+
+static void xa_report_unhandled_comptime_loop_control(XaInferContext *ctx,
+                                                      const XaComptimeBlockFlow *flow,
+                                                      AstNode *fallback) {
+    if (!ctx || !flow)
+        return;
+    AstNode *node = flow->node ? flow->node : fallback;
+    if (flow->kind == XA_COMPTIME_FLOW_BREAK) {
+        if (flow->label) {
+            char msg[160];
+            snprintf(msg, sizeof(msg), "unknown loop label '%s' for 'break'", flow->label);
+            xa_report_comptime_block_error(ctx, node, msg);
+        } else {
+            xa_report_comptime_block_error(
+                ctx, node, "comptime break can only be used inside comptime loop");
+        }
+        return;
+    }
+    if (flow->kind == XA_COMPTIME_FLOW_CONTINUE) {
+        if (flow->label) {
+            char msg[160];
+            snprintf(msg, sizeof(msg), "unknown loop label '%s' for 'continue'", flow->label);
+            xa_report_comptime_block_error(ctx, node, msg);
+        } else {
+            xa_report_comptime_block_error(
+                ctx, node, "comptime continue can only be used inside comptime loop");
+        }
+    }
+}
 
 typedef struct XaComptimeBlockReturn {
     bool allow_return;
@@ -3302,17 +3358,17 @@ static XaComptimeBlockFlow xa_visit_comptime_block_nested_block(XaInferContext *
                                                                 AstNode *block_node,
                                                                 XaComptimeBlockReturn *ret) {
     if (!ctx || !block_node)
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
     if (block_node->type != AST_BLOCK) {
         return xa_visit_comptime_block_statement(ctx, block_node, ret);
     }
 
     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, block_node);
     BlockNode *block = &block_node->as.block;
-    XaComptimeBlockFlow flow = XA_COMPTIME_FLOW_NORMAL;
+    XaComptimeBlockFlow flow = xa_comptime_block_flow_normal();
     for (int i = 0; i < block->count; i++) {
         flow = xa_visit_comptime_block_statement(ctx, block->statements[i], ret);
-        if (flow != XA_COMPTIME_FLOW_NORMAL)
+        if (flow.kind != XA_COMPTIME_FLOW_NORMAL)
             break;
     }
     xa_analyzer_exit_scope(ctx->analyzer);
@@ -3323,21 +3379,21 @@ static XaComptimeBlockFlow xa_visit_comptime_block_if_stmt(XaInferContext *ctx, 
                                                            IfStmtNode *if_stmt,
                                                            XaComptimeBlockReturn *ret) {
     if (!ctx || !stmt || !if_stmt)
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
 
     XrCtValue condition = {0};
     if (!xa_eval_comptime_block_arg(ctx, if_stmt->condition, &condition, "comptime if condition"))
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
     if (condition.kind != XR_CT_BOOL) {
         xa_report_comptime_block_error(ctx, if_stmt->condition,
                                        "comptime if condition must be a compile-time bool");
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
     }
 
     AstNode *selected = condition.as.bool_val ? if_stmt->then_branch : if_stmt->else_branch;
     if (selected)
         return xa_visit_comptime_block_nested_block(ctx, selected, ret);
-    return XA_COMPTIME_FLOW_NORMAL;
+    return xa_comptime_block_flow_normal();
 }
 
 #define XA_COMPTIME_WHILE_MAX_ITERATIONS 100000
@@ -3346,61 +3402,80 @@ static XaComptimeBlockFlow xa_visit_comptime_block_while_stmt(XaInferContext *ct
                                                               WhileStmtNode *while_stmt,
                                                               XaComptimeBlockReturn *ret) {
     if (!ctx || !stmt || !while_stmt)
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
 
+    XaLoopScope loop_scope;
+    xa_loop_scope_push(ctx, &loop_scope, while_stmt->label, stmt);
+    XaComptimeBlockFlow result = xa_comptime_block_flow_normal();
     for (int iteration = 0; iteration < XA_COMPTIME_WHILE_MAX_ITERATIONS; iteration++) {
         XrCtValue condition = {0};
         if (!xa_eval_comptime_block_arg(ctx, while_stmt->condition, &condition,
                                         "comptime while condition"))
-            return XA_COMPTIME_FLOW_NORMAL;
+            goto done;
         if (condition.kind != XR_CT_BOOL) {
             xa_report_comptime_block_error(ctx, while_stmt->condition,
                                            "comptime while condition must be a compile-time bool");
-            return XA_COMPTIME_FLOW_NORMAL;
+            goto done;
         }
         if (!condition.as.bool_val)
-            return XA_COMPTIME_FLOW_NORMAL;
+            goto done;
 
         int body_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
-        XaComptimeBlockFlow flow = XA_COMPTIME_FLOW_NORMAL;
+        XaComptimeBlockFlow flow = xa_comptime_block_flow_normal();
         if (while_stmt->body)
             flow = xa_visit_comptime_block_nested_block(ctx, while_stmt->body, ret);
         if (ctx->analyzer && ctx->analyzer->diagnostic_count > body_diag_count)
-            return XA_COMPTIME_FLOW_NORMAL;
-        if (flow == XA_COMPTIME_FLOW_BREAK)
-            return XA_COMPTIME_FLOW_NORMAL;
-        if (flow == XA_COMPTIME_FLOW_CONTINUE)
-            continue;
-        if (flow == XA_COMPTIME_FLOW_RETURN)
-            return XA_COMPTIME_FLOW_RETURN;
+            goto done;
+        if (flow.kind == XA_COMPTIME_FLOW_BREAK) {
+            if (xa_comptime_block_flow_targets_loop(&flow, while_stmt->label))
+                goto done;
+            result = flow;
+            goto done;
+        }
+        if (flow.kind == XA_COMPTIME_FLOW_CONTINUE) {
+            if (xa_comptime_block_flow_targets_loop(&flow, while_stmt->label))
+                continue;
+            result = flow;
+            goto done;
+        }
+        if (flow.kind == XA_COMPTIME_FLOW_RETURN) {
+            result = flow;
+            goto done;
+        }
     }
 
     xa_report_comptime_block_error(ctx, stmt, "comptime while loop exceeded iteration limit");
-    return XA_COMPTIME_FLOW_NORMAL;
+done:
+    xa_loop_scope_pop(ctx, &loop_scope);
+    return result;
 }
 
 static XaComptimeBlockFlow xa_visit_comptime_block_for_stmt(XaInferContext *ctx, AstNode *stmt,
                                                             ForStmtNode *for_stmt,
                                                             XaComptimeBlockReturn *ret) {
     if (!ctx || !stmt || !for_stmt)
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
 
     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, stmt);
-    XaComptimeBlockFlow result = XA_COMPTIME_FLOW_NORMAL;
+    XaComptimeBlockFlow result = xa_comptime_block_flow_normal();
+    XaLoopScope loop_scope;
+    bool loop_scope_pushed = false;
 
     if (for_stmt->initializer) {
         int init_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
         result = xa_visit_comptime_block_statement(ctx, for_stmt->initializer, ret);
         if (ctx->analyzer && ctx->analyzer->diagnostic_count > init_diag_count)
             goto done;
-        if (result != XA_COMPTIME_FLOW_NORMAL) {
+        if (result.kind != XA_COMPTIME_FLOW_NORMAL) {
             xa_report_comptime_block_error(ctx, for_stmt->initializer,
                                            "comptime for initializer cannot use loop control");
-            result = XA_COMPTIME_FLOW_NORMAL;
+            result = xa_comptime_block_flow_normal();
             goto done;
         }
     }
 
+    xa_loop_scope_push(ctx, &loop_scope, for_stmt->label, stmt);
+    loop_scope_pushed = true;
     for (int iteration = 0; iteration < XA_COMPTIME_WHILE_MAX_ITERATIONS; iteration++) {
         if (for_stmt->condition) {
             XrCtValue condition = {0};
@@ -3417,15 +3492,24 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_stmt(XaInferContext *ctx,
         }
 
         int body_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
-        XaComptimeBlockFlow flow = XA_COMPTIME_FLOW_NORMAL;
+        XaComptimeBlockFlow flow = xa_comptime_block_flow_normal();
         if (for_stmt->body)
             flow = xa_visit_comptime_block_nested_block(ctx, for_stmt->body, ret);
         if (ctx->analyzer && ctx->analyzer->diagnostic_count > body_diag_count)
             goto done;
-        if (flow == XA_COMPTIME_FLOW_BREAK)
+        if (flow.kind == XA_COMPTIME_FLOW_BREAK) {
+            if (xa_comptime_block_flow_targets_loop(&flow, for_stmt->label))
+                goto done;
+            result = flow;
             goto done;
-        if (flow == XA_COMPTIME_FLOW_RETURN) {
-            result = XA_COMPTIME_FLOW_RETURN;
+        }
+        if (flow.kind == XA_COMPTIME_FLOW_RETURN) {
+            result = flow;
+            goto done;
+        }
+        if (flow.kind == XA_COMPTIME_FLOW_CONTINUE &&
+            !xa_comptime_block_flow_targets_loop(&flow, for_stmt->label)) {
+            result = flow;
             goto done;
         }
 
@@ -3435,21 +3519,23 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_stmt(XaInferContext *ctx,
                 xa_visit_comptime_block_statement(ctx, for_stmt->increment, ret);
             if (ctx->analyzer && ctx->analyzer->diagnostic_count > inc_diag_count)
                 goto done;
-            if (inc_flow != XA_COMPTIME_FLOW_NORMAL) {
+            if (inc_flow.kind != XA_COMPTIME_FLOW_NORMAL) {
                 xa_report_comptime_block_error(ctx, for_stmt->increment,
                                                "comptime for increment cannot use loop control");
                 goto done;
             }
         }
-        if (flow == XA_COMPTIME_FLOW_CONTINUE)
+        if (flow.kind == XA_COMPTIME_FLOW_CONTINUE)
             continue;
     }
 
     xa_report_comptime_block_error(ctx, stmt, "comptime for loop exceeded iteration limit");
 
 done:
+    if (loop_scope_pushed)
+        xa_loop_scope_pop(ctx, &loop_scope);
     xa_analyzer_exit_scope(ctx->analyzer);
-    return XA_COMPTIME_FLOW_NORMAL;
+    return result;
 }
 
 static bool xa_ct_value_is_comptime_block_runtime_value(const XrCtValue *value) {
@@ -3474,17 +3560,17 @@ static XaComptimeBlockFlow xa_visit_comptime_block_return_stmt(XaInferContext *c
                                                                ReturnStmtNode *return_stmt,
                                                                XaComptimeBlockReturn *ret) {
     if (!ctx || !stmt || !return_stmt)
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
     if (!ret || !ret->allow_return) {
         xa_report_comptime_block_error(ctx, stmt,
                                        "comptime return can only be used in a comptime block "
                                        "expression");
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
     }
     if (return_stmt->value_count != 1 || !return_stmt->values || !return_stmt->values[0]) {
         xa_report_comptime_block_error(
             ctx, stmt, "comptime block expression return expects exactly one value");
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
     }
 
     AstNode *value_expr = return_stmt->values[0];
@@ -3499,26 +3585,26 @@ static XaComptimeBlockFlow xa_visit_comptime_block_return_stmt(XaInferContext *c
                  "comptime block return value must be evaluable at compile time%s%s",
                  err ? ": " : "", err ? err : "");
         xa_report_comptime_block_error(ctx, value_expr, msg);
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
     }
     if (!xa_ct_value_is_comptime_block_runtime_value(&value)) {
         xa_report_comptime_block_error(
             ctx, value_expr,
             "comptime block expression return value must be a scalar, fixed-array, or tuple "
             "compile-time value in this phase");
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
     }
 
     ret->has_value = true;
     ret->value = value;
     ret->type = value_type ? value_type : xr_type_new_unknown(NULL);
-    return XA_COMPTIME_FLOW_RETURN;
+    return xa_comptime_block_flow(XA_COMPTIME_FLOW_RETURN, NULL, stmt);
 }
 
 static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt,
                                                              XaComptimeBlockReturn *ret) {
     if (!ctx || !stmt)
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
 
     if (stmt->type == AST_CONST_DECL || stmt->type == AST_VAR_DECL) {
         VarDeclNode *var = &stmt->as.var_decl;
@@ -3528,7 +3614,7 @@ static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx
             xa_visit_collect_var_decl(ctx, stmt);
         }
         xa_visit_infer_stmt(ctx, stmt);
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
     }
     if (stmt->type == AST_BLOCK) {
         return xa_visit_comptime_block_nested_block(ctx, stmt, ret);
@@ -3546,36 +3632,27 @@ static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx
         return xa_visit_comptime_block_return_stmt(ctx, stmt, &stmt->as.return_stmt, ret);
     }
     if (stmt->type == AST_BREAK_STMT) {
-        if (stmt->as.break_stmt.label) {
-            xa_report_comptime_block_error(ctx, stmt,
-                                           "labeled comptime break is not supported in this phase");
-            return XA_COMPTIME_FLOW_NORMAL;
-        }
-        return XA_COMPTIME_FLOW_BREAK;
+        return xa_comptime_block_flow(XA_COMPTIME_FLOW_BREAK, stmt->as.break_stmt.label, stmt);
     }
     if (stmt->type == AST_CONTINUE_STMT) {
-        if (stmt->as.continue_stmt.label) {
-            xa_report_comptime_block_error(
-                ctx, stmt, "labeled comptime continue is not supported in this phase");
-            return XA_COMPTIME_FLOW_NORMAL;
-        }
-        return XA_COMPTIME_FLOW_CONTINUE;
+        return xa_comptime_block_flow(XA_COMPTIME_FLOW_CONTINUE, stmt->as.continue_stmt.label,
+                                      stmt);
     }
 
     AstNode *expr = stmt->type == AST_EXPR_STMT ? stmt->as.expr_stmt : stmt;
     if (expr && expr->type == AST_ASSIGNMENT) {
         xa_visit_comptime_block_assignment(ctx, expr, &expr->as.assignment);
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
     }
     if (expr && expr->type == AST_COMPOUND_ASSIGNMENT) {
         xa_visit_comptime_block_compound_assignment(ctx, expr, &expr->as.compound_assignment);
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
     }
 
     if (!expr || expr->type != AST_CALL_EXPR || !expr->as.call_expr.callee ||
         expr->as.call_expr.callee->type != AST_VARIABLE) {
         xa_report_comptime_block_error(ctx, stmt, xa_comptime_block_supported_message());
-        return XA_COMPTIME_FLOW_NORMAL;
+        return xa_comptime_block_flow_normal();
     }
 
     CallExprNode *call = &expr->as.call_expr;
@@ -3587,7 +3664,7 @@ static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx
     } else {
         xa_report_comptime_block_error(ctx, expr, xa_comptime_block_supported_message());
     }
-    return XA_COMPTIME_FLOW_NORMAL;
+    return xa_comptime_block_flow_normal();
 }
 
 XrType *xa_visit_comptime_block_expr(XaInferContext *ctx, AstNode *node) {
@@ -3596,7 +3673,11 @@ XrType *xa_visit_comptime_block_expr(XaInferContext *ctx, AstNode *node) {
 
     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
     int saved_comptime_depth = ctx->comptime_block_depth;
+    XaLoopScope *saved_loop_scope = ctx->loop_scope;
+    int saved_loop_depth = ctx->loop_depth;
     ctx->comptime_block_depth++;
+    ctx->loop_scope = NULL;
+    ctx->loop_depth = 0;
     int start_diag_count = ctx->analyzer->diagnostic_count;
 
     XaComptimeBlockReturn ret = {.allow_return = true};
@@ -3604,21 +3685,17 @@ XrType *xa_visit_comptime_block_expr(XaInferContext *ctx, AstNode *node) {
     for (int i = 0; i < block->count; i++) {
         AstNode *stmt = block->statements[i];
         XaComptimeBlockFlow flow = xa_visit_comptime_block_statement(ctx, stmt ? stmt : node, &ret);
-        if (flow == XA_COMPTIME_FLOW_BREAK) {
-            xa_report_comptime_block_error(ctx, stmt ? stmt : node,
-                                           "comptime break can only be used inside comptime loop");
+        if (flow.kind == XA_COMPTIME_FLOW_BREAK || flow.kind == XA_COMPTIME_FLOW_CONTINUE) {
+            xa_report_unhandled_comptime_loop_control(ctx, &flow, stmt ? stmt : node);
             break;
         }
-        if (flow == XA_COMPTIME_FLOW_CONTINUE) {
-            xa_report_comptime_block_error(
-                ctx, stmt ? stmt : node, "comptime continue can only be used inside comptime loop");
-            break;
-        }
-        if (flow == XA_COMPTIME_FLOW_RETURN)
+        if (flow.kind == XA_COMPTIME_FLOW_RETURN)
             break;
     }
 
     ctx->comptime_block_depth = saved_comptime_depth;
+    ctx->loop_scope = saved_loop_scope;
+    ctx->loop_depth = saved_loop_depth;
     xa_analyzer_exit_scope(ctx->analyzer);
 
     if (ret.has_value) {
@@ -3639,24 +3716,22 @@ static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
 
     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
     int saved_comptime_depth = ctx->comptime_block_depth;
+    XaLoopScope *saved_loop_scope = ctx->loop_scope;
+    int saved_loop_depth = ctx->loop_depth;
     ctx->comptime_block_depth++;
+    ctx->loop_scope = NULL;
+    ctx->loop_depth = 0;
 
     BlockNode *block = &node->as.comptime_expr.expr->as.block;
     for (int i = 0; i < block->count; i++) {
         AstNode *stmt = block->statements[i];
         XaComptimeBlockFlow flow = xa_visit_comptime_block_statement(ctx, stmt ? stmt : node, NULL);
-        if (flow == XA_COMPTIME_FLOW_BREAK) {
-            xa_report_comptime_block_error(ctx, stmt ? stmt : node,
-                                           "comptime break can only be used inside comptime loop");
+        if (flow.kind == XA_COMPTIME_FLOW_BREAK || flow.kind == XA_COMPTIME_FLOW_CONTINUE) {
+            xa_report_unhandled_comptime_loop_control(ctx, &flow, stmt ? stmt : node);
             break;
         }
-        if (flow == XA_COMPTIME_FLOW_CONTINUE) {
-            xa_report_comptime_block_error(
-                ctx, stmt ? stmt : node, "comptime continue can only be used inside comptime loop");
-            break;
-        }
-        if (flow == XA_COMPTIME_FLOW_RETURN) {
-            xa_report_comptime_block_error(ctx, stmt ? stmt : node,
+        if (flow.kind == XA_COMPTIME_FLOW_RETURN) {
+            xa_report_comptime_block_error(ctx, flow.node ? flow.node : (stmt ? stmt : node),
                                            "comptime return can only be used in a comptime block "
                                            "expression");
             break;
@@ -3664,6 +3739,8 @@ static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
     }
 
     ctx->comptime_block_depth = saved_comptime_depth;
+    ctx->loop_scope = saved_loop_scope;
+    ctx->loop_depth = saved_loop_depth;
     xa_analyzer_exit_scope(ctx->analyzer);
 }
 
