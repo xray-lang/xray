@@ -69,6 +69,12 @@ static void emit_fixed_array_lane_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiVa
         fprintf(out, "_fa%u", info->stack_origin->id);
         return;
     }
+    if (cg_value_plan_storage_rep(ctx, value) == XR_REP_PTR) {
+        fprintf(out, "((%s*)", info->ctype);
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_PTR);
+        fprintf(out, ")");
+        return;
+    }
     fprintf(out, "((%s*)(", info->ctype);
     emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
     fprintf(out, ").ptr)");

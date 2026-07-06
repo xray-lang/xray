@@ -74,6 +74,23 @@ static bool cg_type_is_byte_span(const XrType *type) {
     return elem->kind == XR_KIND_INT && elem->native_width == XR_NATIVE_U8;
 }
 
+static bool cg_fixed_array_type_info(const XrType *type, uint8_t *native_out, uint16_t *count_out) {
+    if (!type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
+        type->fixed_array.length <= 0 || type->fixed_array.length > UINT16_MAX)
+        return false;
+    XrType *elem = type->fixed_array.element_type;
+    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    if (elem->is_nullable || native == XR_NATIVE_STRING || native < 0)
+        native = XR_NATIVE_VALUE;
+    if (!xaot_layout_c_type_for_native_type((uint8_t) native))
+        return false;
+    if (native_out)
+        *native_out = (uint8_t) native;
+    if (count_out)
+        *count_out = (uint16_t) type->fixed_array.length;
+    return true;
+}
+
 static const XrType *cg_func_param_type(const XiFunc *f, uint16_t arg_index) {
     if (!f || arg_index >= f->nparams || !f->params || !f->params[arg_index])
         return NULL;
@@ -600,6 +617,17 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
     }
     XrRep from_rep = plan ? xaot_value_storage_rep(plan->rep)
                           : (ctx ? cg_value_plan_storage_rep(ctx, v) : cg_rep(v));
+    if (target_rep == XR_REP_TAGGED && from_rep == XR_REP_PTR && v && v->type &&
+        v->type->kind == XR_KIND_FIXED_ARRAY) {
+        uint8_t native = XR_NATIVE_VALUE;
+        uint16_t count = 0;
+        if (cg_fixed_array_type_info(v->type, &native, &count)) {
+            fprintf(out, "xr_array_ref(");
+            emit_vref(out, v);
+            fprintf(out, ", %u, %u)", (unsigned) native, (unsigned) count);
+            return;
+        }
+    }
     const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, from_rep, target_rep);
     emit_vref(out, v);
     emit_conversion_suffix(out, conv_suffix);

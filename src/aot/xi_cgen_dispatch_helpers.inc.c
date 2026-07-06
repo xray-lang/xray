@@ -5057,9 +5057,8 @@ static bool emit_fixed_array_ref_length_expr(XiCgenCtx *ctx, FILE *out, const Xi
         return false;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "((int64_t)XR_ARRAY_REF_ELEM_COUNT(");
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, "))");
+    int length = v->args[0]->type ? v->args[0]->type->fixed_array.length : 0;
+    fprintf(out, "INT64_C(%d)", length);
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }

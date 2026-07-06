@@ -1,7 +1,7 @@
 contains=xaot-plan v0
 c_contains=uint8_t _fa
 c_contains=xr_array_ref(_fa
-c_contains=XR_ARRAY_REF_ELEM_COUNT
+c_contains=INT64_C(4)
 c_contains=[INT64_C(1)] = (uint8_t)
 c_contains=((uint8_t*)
 c_contains=xrt_fixed_index_oob(_idx, 4)
