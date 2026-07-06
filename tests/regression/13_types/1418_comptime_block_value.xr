@@ -25,6 +25,17 @@ const BLOCK_LOCAL = comptime {
     return n
 }
 
+const BLOCK_TUPLE = comptime {
+    var base = comptime 10
+    return (base, base + 1, "block")
+}
+
+const BLOCK_TABLE: [int; 3] = comptime {
+    var base = comptime 5
+    const values: [int; 3] = comptime [base, base + 1, base + 2]
+    return values
+}
+
 @test
 fn test_comptime_block_returns_scalar_value() {
     assert_eq(BLOCK_SUM, 10)
@@ -38,4 +49,34 @@ fn test_comptime_block_returns_scalar_value() {
     assert_eq(local, 12)
 
     assert_eq(BLOCK_LOCAL, 4)
+}
+
+@test
+fn test_comptime_block_returns_tuple_value() {
+    var runtime = comptime {
+        var base = comptime 20
+        return (base, base + 2, "runtime")
+    }
+    assert_eq(runtime.0, 20)
+    assert_eq(runtime.1, 22)
+    assert_eq(runtime.2, "runtime")
+
+    var picked = comptime (BLOCK_TUPLE.0 + BLOCK_TUPLE.1)
+    assert_eq(picked, 21)
+    assert_eq(BLOCK_TUPLE.2, "block")
+}
+
+@test
+fn test_comptime_block_returns_fixed_array_value() {
+    var runtime: [int; 3] = comptime {
+        var base = comptime 30
+        const values: [int; 3] = comptime [base, base + 1, base + 2]
+        return values
+    }
+    assert_eq(runtime[0], 30)
+    assert_eq(runtime[1], 31)
+    assert_eq(runtime[2], 32)
+
+    var picked = comptime (BLOCK_TABLE[0] + BLOCK_TABLE[2])
+    assert_eq(picked, 12)
 }

@@ -406,6 +406,8 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
         return false;
     if (!bc_put_u32(w, proto->num_globals))
         return false;
+    if (!bc_put_u32(w, proto->struct_area_size))
+        return false;
     if (!bc_put_u8(w, proto->is_vararg ? 1 : 0))
         return false;
     if (!bc_put_u8(w, proto->is_coro_safe ? 1 : 0))
@@ -557,6 +559,12 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     proto->numparams = bc_get_u32(r);
     proto->maxstacksize = bc_get_u32(r);
     proto->num_globals = bc_get_u32(r);
+    uint32_t struct_area_size = bc_get_u32(r);
+    if (struct_area_size > UINT16_MAX) {
+        r->error = XR_BC_ERR_CORRUPT;
+        goto fail;
+    }
+    proto->struct_area_size = (uint16_t) struct_area_size;
     proto->is_vararg = bc_get_u8(r) != 0;
     proto->is_coro_safe = bc_get_u8(r) != 0;
     if (r->error != XR_BC_OK)

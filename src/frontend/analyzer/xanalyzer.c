@@ -24,6 +24,7 @@
 #include "../../base/xintmap.h"
 #include "../../base/xhashmap.h"
 #include "../../base/xmalloc.h"
+#include "../../base/xarena.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -308,9 +309,18 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     analyzer->compiler_session = session;
     analyzer->isolate = X;
 
+    analyzer->consteval_arena = (XrArena *) xr_malloc(sizeof(XrArena));
+    if (!analyzer->consteval_arena) {
+        xr_free(analyzer);
+        return NULL;
+    }
+    xr_arena_init(analyzer->consteval_arena, 4096);
+
     // Initialize type pool (per-analyzer, no global state)
     analyzer->type_pool = xr_type_pool_new();
     if (!analyzer->type_pool) {
+        xr_arena_destroy(analyzer->consteval_arena);
+        xr_free(analyzer->consteval_arena);
         xr_free(analyzer);
         return NULL;
     }
@@ -422,6 +432,11 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
         // Note: diag->code is an int (error code), not a pointer - no free needed
         xr_free(diag);
         diag = next;
+    }
+
+    if (analyzer->consteval_arena) {
+        xr_arena_destroy(analyzer->consteval_arena);
+        xr_free(analyzer->consteval_arena);
     }
 
     xr_free(analyzer);

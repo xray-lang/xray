@@ -1,0 +1,7 @@
+struct BlockPoint {
+    x: int
+}
+
+const BAD = comptime {
+    return BlockPoint{x: 1}
+}

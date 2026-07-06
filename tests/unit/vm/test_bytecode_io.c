@@ -40,7 +40,7 @@ static XrProto *make_minimal_proto(void) {
     return proto;
 }
 
-TEST(bytecode_write_emits_v6_header_and_roundtrips_u64_instruction) {
+TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction) {
     XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
@@ -60,6 +60,30 @@ TEST(bytecode_write_emits_v6_header_and_roundtrips_u64_instruction) {
     ASSERT_EQ_INT(PROTO_CODE_COUNT(roundtrip), 1);
     ASSERT_EQ_INT(GET_OPCODE(PROTO_CODE(roundtrip, 0)), OP_RETURN);
     ASSERT_EQ_INT(roundtrip->maxstacksize, 1);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(iso);
+}
+
+TEST(bytecode_roundtrips_struct_area_size) {
+    XrVMRuntime *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    proto->struct_area_size = 48;
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(iso, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_UINT(roundtrip->struct_area_size, 48);
 
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);
@@ -314,7 +338,8 @@ TEST(bytecode_roundtrips_extern_cfn_callback_signature) {
 
 static void run_all_tests(void) {
     RUN_TEST_SUITE("Bytecode I/O");
-    RUN_TEST(bytecode_write_emits_v6_header_and_roundtrips_u64_instruction);
+    RUN_TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction);
+    RUN_TEST(bytecode_roundtrips_struct_area_size);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_u16_upvalue_index);
     RUN_TEST(bytecode_roundtrips_declared_shared_count);

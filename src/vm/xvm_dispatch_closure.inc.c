@@ -66,7 +66,11 @@ vmcase(OP_SETSHARED) {
         }
     }
 
-    xr_shared_array_set(&isolate->vm.shared, shared_index, R(a));
+    XrValue new_val = R(a);
+    if (XR_IS_ARRAY_REF(new_val) && !vm_rescue_array_ref_to_ret_arena(vm_ctx, &new_val)) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to rescue fixed array shared value");
+    }
+    xr_shared_array_set(&isolate->vm.shared, shared_index, new_val);
     vmbreak;
 }
 

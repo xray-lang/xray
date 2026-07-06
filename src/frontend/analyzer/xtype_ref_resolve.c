@@ -26,7 +26,6 @@
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include "../../../stdlib/prelude/prelude.h"
-#include "../../toolchain/xcompiler_session.h"
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -72,15 +71,14 @@ static double ct_as_double(const XrCtValue *v) {
 static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
                          const char **err, uint32_t *stack, int depth);
 
+static XrArena *ct_value_arena(XaAnalyzer *analyzer) {
+    return analyzer ? analyzer->consteval_arena : NULL;
+}
+
 static XrCtValue *ct_alloc_values(XaAnalyzer *analyzer, int count, const char **err) {
     if (count <= 0)
         return NULL;
-    if (!analyzer || !analyzer->compiler_session) {
-        if (err)
-            *err = "consteval storage is unavailable";
-        return NULL;
-    }
-    XrArena *arena = xr_compiler_session_current_arena(analyzer->compiler_session);
+    XrArena *arena = ct_value_arena(analyzer);
     if (!arena) {
         if (err)
             *err = "consteval storage is unavailable";
@@ -99,12 +97,7 @@ static XrCtValue *ct_alloc_values(XaAnalyzer *analyzer, int count, const char **
 static const char **ct_alloc_field_names(XaAnalyzer *analyzer, int count, const char **err) {
     if (count <= 0)
         return NULL;
-    if (!analyzer || !analyzer->compiler_session) {
-        if (err)
-            *err = "consteval storage is unavailable";
-        return NULL;
-    }
-    XrArena *arena = xr_compiler_session_current_arena(analyzer->compiler_session);
+    XrArena *arena = ct_value_arena(analyzer);
     if (!arena) {
         if (err)
             *err = "consteval storage is unavailable";

@@ -2009,6 +2009,130 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
     return arr_val;
 }
 
+static XiValue *lower_ct_value(XiLower *l, AstNode *node, const XrCtValue *value,
+                               struct XrType *target_type);
+
+static XiValue *lower_ct_tuple_value(XiLower *l, AstNode *node, const XrCtValue *value,
+                                     struct XrType *target_type) {
+    if (!l || !node || !value || value->kind != XR_CT_TUPLE)
+        return NULL;
+    int count = value->as.tuple_val.count;
+    if (count < 0 || count > XI_LOWER_MAX_VARIADIC_VALUES) {
+        fprintf(stderr, "[LOWER] comptime tuple value arity exceeds %d at line %d\n",
+                XI_LOWER_MAX_VARIADIC_VALUES, (int) node->line);
+        l->had_error = true;
+        return NULL;
+    }
+    if (target_type && target_type->kind == XR_KIND_TUPLE &&
+        xr_type_tuple_count(target_type) != count) {
+        fprintf(stderr, "[LOWER] comptime tuple value arity mismatch at line %d\n",
+                (int) node->line);
+        l->had_error = true;
+        return NULL;
+    }
+
+    int alloc_n = count > 0 ? count : 1;
+    XiValue **elem_vals =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
+    if (!elem_vals)
+        return NULL;
+    for (int i = 0; i < count; i++) {
+        struct XrType *elem_type =
+            (target_type && target_type->kind == XR_KIND_TUPLE) ? xr_type_tuple_get(target_type, i)
+                                                                : NULL;
+        elem_vals[i] =
+            lower_ct_value(l, node, &value->as.tuple_val.elements[i], elem_type ? elem_type : NULL);
+        if (!elem_vals[i])
+            return NULL;
+    }
+
+    XiValue *tup_val = xi_value_new(l->func, l->cur_block, XI_TUPLE_NEW,
+                                    target_type ? target_type : l->type_any, (uint16_t) count);
+    if (!tup_val)
+        return NULL;
+    for (uint16_t i = 0; i < (uint16_t) count; i++)
+        tup_val->args[i] = elem_vals[i];
+    tup_val->aux_int = count;
+    tup_val->line = (uint32_t) node->line;
+    return tup_val;
+}
+
+static XiValue *lower_ct_fixed_array_value(XiLower *l, AstNode *node, const XrCtValue *value,
+                                           struct XrType *target_type) {
+    if (!l || !node || !value || value->kind != XR_CT_FIXED_ARRAY)
+        return NULL;
+    if (!target_type || target_type->kind != XR_KIND_FIXED_ARRAY) {
+        fprintf(stderr, "[LOWER] comptime fixed-array value needs fixed-array target type at line "
+                        "%d\n",
+                (int) node->line);
+        l->had_error = true;
+        return NULL;
+    }
+    int count = value->as.fixed_array_val.count;
+    if (count != target_type->fixed_array.length) {
+        fprintf(stderr,
+                "[LOWER] comptime fixed-array value length mismatch at line %d: got %d, expected "
+                "%d\n",
+                (int) node->line, count, target_type->fixed_array.length);
+        l->had_error = true;
+        return NULL;
+    }
+    int native = xi_fixed_array_elem_native_type(target_type);
+    if (native < 0) {
+        fprintf(stderr, "[LOWER] comptime fixed-array element type '%s' has no native layout at "
+                        "line %d\n",
+                target_type->fixed_array.element_type
+                    ? xr_type_to_string(target_type->fixed_array.element_type)
+                    : "?",
+                (int) node->line);
+        l->had_error = true;
+        return NULL;
+    }
+
+    int alloc_n = count > 0 ? count : 1;
+    XiValue **elem_vals =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
+    if (!elem_vals)
+        return NULL;
+    for (int i = 0; i < count; i++) {
+        elem_vals[i] = lower_ct_value(l, node, &value->as.fixed_array_val.elements[i],
+                                      target_type->fixed_array.element_type);
+        if (!elem_vals[i])
+            return NULL;
+    }
+
+    XiValue *arr_val = xi_value_new(l->func, l->cur_block, XI_FIXED_ARRAY_NEW, target_type, 0);
+    if (!arr_val)
+        return NULL;
+    arr_val->aux_int = native;
+    arr_val->flags |= XI_FLAG_SIDE_EFFECT;
+    arr_val->line = (uint32_t) node->line;
+
+    for (int i = 0; i < count; i++) {
+        if (!lower_fixed_array_store_elem(l, node, arr_val, i, elem_vals[i],
+                                          target_type->fixed_array.element_type, native))
+            return NULL;
+    }
+    return arr_val;
+}
+
+static XiValue *lower_ct_value(XiLower *l, AstNode *node, const XrCtValue *value,
+                               struct XrType *target_type) {
+    XiValue *scalar = lower_ct_scalar_value(l, value);
+    if (scalar)
+        return scalar;
+    if (!l || !node || !value)
+        return NULL;
+    switch (value->kind) {
+        case XR_CT_FIXED_ARRAY:
+            return lower_ct_fixed_array_value(l, node, value, target_type);
+        case XR_CT_TUPLE:
+            return lower_ct_tuple_value(l, node, value, target_type);
+        default:
+            return NULL;
+    }
+}
+
 /* Generate a location string constant for assert diagnostics.
  * Format: "line <N>" using the AST node's line number. */
 static const char *make_assert_loc(XiLower *l, int line) {
@@ -6873,7 +6997,7 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
             if (node->as.comptime_expr.expr && node->as.comptime_expr.expr->type == AST_BLOCK) {
                 XrCtValue value = {0};
                 if (xa_analyzer_get_node_ct_value(l->analyzer, node, &value)) {
-                    XiValue *lowered = lower_ct_scalar_value(l, &value);
+                    XiValue *lowered = lower_ct_value(l, node, &value, xi_lower_node_type(l, node));
                     if (lowered)
                         return lowered;
                 }
