@@ -2912,7 +2912,9 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
 XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
-    // Visit operand to ensure it's analyzed (side effects, narrowing)
+    // Visit operand to ensure it's analyzed (side effects, narrowing). `as`
+    // is an explicit conversion, so do not use the target as assignment
+    // context; casts such as `2147483648 as int32` intentionally truncate.
     xa_visit_infer_expr(ctx, node->as.as_expr.expr);
     XrType *target = node->as.as_expr.type
                          ? xr_tref_resolve_in_analyzer(ctx->analyzer, node->as.as_expr.type)

@@ -21,6 +21,8 @@
 #include "../../module/xmodule_graph.h"
 #include "../../runtime/value/xstruct_layout.h"
 #include "../../runtime/value/xtype_internal.h"
+#include <stdio.h>
+#include <string.h>
 
 // Forward declarations now in xanalyzer_visitor_internal.h
 void xa_visit_collect(XaInferContext *ctx, AstNode *node);
@@ -857,13 +859,26 @@ static XrType *xa_visit_parallel_collect_expr(XaInferContext *ctx, AstNode *node
     return xr_type_new_array(ctx->analyzer->isolate, elem_type);
 }
 
-static bool extract_contextual_int_literal(AstNode *node, int64_t *out_value) {
+typedef struct XaContextualIntLiteral {
+    bool negative;
+    bool signed_valid;
+    int64_t signed_value;
+    uint64_t unsigned_value;
+} XaContextualIntLiteral;
+
+static bool extract_contextual_int_literal(AstNode *node, XaContextualIntLiteral *out_value) {
     node = unwrap_grouping(node);
     if (!node || !out_value)
         return false;
 
+    memset(out_value, 0, sizeof(*out_value));
     if (node->type == AST_LITERAL_INT) {
-        *out_value = node->as.literal.raw_value.int_val;
+        out_value->negative = false;
+        out_value->unsigned_value = node->as.literal.int_bits;
+        if (!node->as.literal.int_overflows_i64) {
+            out_value->signed_valid = true;
+            out_value->signed_value = node->as.literal.raw_value.int_val;
+        }
         return true;
     }
 
@@ -874,10 +889,21 @@ static bool extract_contextual_int_literal(AstNode *node, int64_t *out_value) {
     if (!operand || operand->type != AST_LITERAL_INT)
         return false;
 
+    uint64_t magnitude = operand->as.literal.int_bits;
+    out_value->negative = true;
+    if (operand->as.literal.int_overflows_i64) {
+        if (magnitude == ((uint64_t) INT64_MAX + 1u)) {
+            out_value->signed_valid = true;
+            out_value->signed_value = INT64_MIN;
+        }
+        return true;
+    }
+
     int64_t raw = operand->as.literal.raw_value.int_val;
     if (raw == INT64_MIN)
-        return false;
-    *out_value = -raw;
+        return true;
+    out_value->signed_valid = true;
+    out_value->signed_value = -raw;
     return true;
 }
 
@@ -895,6 +921,8 @@ static const char *int_range_label(uint8_t native_width) {
             return "-2147483648..2147483647";
         case XR_NATIVE_U32:
             return "0..4294967295";
+        case XR_NATIVE_I64:
+            return "-9223372036854775808..9223372036854775807";
         case XR_NATIVE_U64:
             return "0..18446744073709551615";
         default:
@@ -916,6 +944,8 @@ static const char *int_native_width_label(uint8_t native_width) {
             return "int32";
         case XR_NATIVE_U32:
             return "uint32";
+        case XR_NATIVE_I64:
+            return "int64";
         case XR_NATIVE_U64:
             return "uint64";
         default:
@@ -923,25 +953,51 @@ static const char *int_native_width_label(uint8_t native_width) {
     }
 }
 
-static bool int_literal_fits_native_width(int64_t value, uint8_t native_width) {
+static bool int_literal_fits_native_width(const XaContextualIntLiteral *value,
+                                          uint8_t native_width) {
+    if (!value)
+        return true;
     switch (native_width) {
         case XR_NATIVE_I8:
-            return value >= INT8_MIN && value <= INT8_MAX;
+            return value->signed_valid && value->signed_value >= INT8_MIN &&
+                   value->signed_value <= INT8_MAX;
         case XR_NATIVE_U8:
-            return value >= 0 && (uint64_t) value <= UINT8_MAX;
+            return !value->negative && value->unsigned_value <= UINT8_MAX;
         case XR_NATIVE_I16:
-            return value >= INT16_MIN && value <= INT16_MAX;
+            return value->signed_valid && value->signed_value >= INT16_MIN &&
+                   value->signed_value <= INT16_MAX;
         case XR_NATIVE_U16:
-            return value >= 0 && (uint64_t) value <= UINT16_MAX;
+            return !value->negative && value->unsigned_value <= UINT16_MAX;
         case XR_NATIVE_I32:
-            return value >= INT32_MIN && value <= INT32_MAX;
+            return value->signed_valid && value->signed_value >= INT32_MIN &&
+                   value->signed_value <= INT32_MAX;
         case XR_NATIVE_U32:
-            return value >= 0 && (uint64_t) value <= UINT32_MAX;
+            return !value->negative && value->unsigned_value <= UINT32_MAX;
+        case XR_NATIVE_I64:
+            return value->signed_valid;
         case XR_NATIVE_U64:
-            return value >= 0;
+            return !value->negative;
         default:
             return true;
     }
+}
+
+static void format_contextual_int_literal(const XaContextualIntLiteral *value, char *buf,
+                                          size_t buf_size) {
+    if (!buf || buf_size == 0)
+        return;
+    if (!value) {
+        snprintf(buf, buf_size, "<integer>");
+        return;
+    }
+    if (value->signed_valid) {
+        snprintf(buf, buf_size, "%lld", (long long) value->signed_value);
+        return;
+    }
+    if (value->negative)
+        snprintf(buf, buf_size, "-%llu", (unsigned long long) value->unsigned_value);
+    else
+        snprintf(buf, buf_size, "%llu", (unsigned long long) value->unsigned_value);
 }
 
 static bool xa_type_name_matches(XrType *type, const char *name) {
@@ -1289,16 +1345,18 @@ static void check_contextual_int_literal_range(XaInferContext *ctx, AstNode *nod
     if (!range)
         return;
 
-    int64_t value = 0;
+    XaContextualIntLiteral value;
     if (!extract_contextual_int_literal(node, &value))
         return;
-    if (int_literal_fits_native_width(value, native_width))
+    if (int_literal_fits_native_width(&value, native_width))
         return;
 
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char value_buf[64];
+    format_contextual_int_literal(&value, value_buf, sizeof(value_buf));
     char msg[256];
-    snprintf(msg, sizeof(msg), "Integer literal %lld is out of range for type '%s' (expected %s)",
-             (long long) value, int_native_width_label(native_width), range);
+    snprintf(msg, sizeof(msg), "Integer literal %s is out of range for type '%s' (expected %s)",
+             value_buf, int_native_width_label(native_width), range);
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
 }

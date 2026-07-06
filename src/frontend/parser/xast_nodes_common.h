@@ -46,6 +46,12 @@ typedef struct UnaryNode {
 // Literal node
 typedef struct LiteralNode {
     LiteralKind kind;
+    /* Integer literals keep their original 64-bit bit pattern so uint64
+     * contexts can distinguish 0xffff_ffff_ffff_ffff from a parse-time
+     * signed overflow. raw_value.int_val remains the signed view used by
+     * older call sites. */
+    uint64_t int_bits;
+    bool int_overflows_i64;
     union {
         int64_t int_val;
         double float_val;

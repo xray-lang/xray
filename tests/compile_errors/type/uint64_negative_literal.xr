@@ -1,0 +1,2 @@
+var x: uint64 = -1
+print(x)

@@ -29,7 +29,10 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
 
     switch (node->type) {
         case AST_LITERAL_INT:
-            xfmt_write_fmt(ctx, "%lld", (long long) node->as.literal.raw_value.int_val);
+            if (node->as.literal.int_overflows_i64)
+                xfmt_write_fmt(ctx, "%llu", (unsigned long long) node->as.literal.int_bits);
+            else
+                xfmt_write_fmt(ctx, "%lld", (long long) node->as.literal.raw_value.int_val);
             break;
         case AST_LITERAL_FLOAT:
             xfmt_write_fmt(ctx, "%g", node->as.literal.raw_value.float_val);

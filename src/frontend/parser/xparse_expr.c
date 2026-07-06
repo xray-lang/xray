@@ -21,6 +21,8 @@
 #include "../../runtime/xisolate_api.h"
 #include "../xdiag_fmt.h"
 
+#include <stdint.h>
+
 /* ========== Helpers ========== */
 
 // Strip underscore separators from numeric literal into dst buffer.
@@ -37,25 +39,60 @@ static int strip_underscores(const char *src, int src_len, char *dst, int dst_si
 
 /* ========== Prefix Parsing ========== */
 
+typedef struct ParsedIntLiteral {
+    uint64_t bits;
+    bool overflows_i64;
+    bool overflows_u64;
+} ParsedIntLiteral;
+
+static int numeric_digit_value(char c) {
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+    return -1;
+}
+
 // Parse integer literal (supports multiple bases and underscore separators)
 // Formats: decimal (123), hex (0xFF), binary (0b1010), octal (0o755)
-static xr_Integer parse_integer_literal(const char *start, int length) {
-    char buf[64];
-    int buf_len = strip_underscores(start, length, buf, sizeof(buf));
+static ParsedIntLiteral parse_integer_literal(const char *start, int length) {
+    ParsedIntLiteral out = {0};
+    int base = 10;
+    int pos = 0;
 
-    // Detect base
-    if (buf_len >= 2 && buf[0] == '0') {
-        char prefix = buf[1];
+    if (length >= 2 && start[0] == '0') {
+        char prefix = start[1];
         if (prefix == 'x' || prefix == 'X') {
-            return strtoll(buf + 2, NULL, 16);  // Hex
+            base = 16;
+            pos = 2;
         } else if (prefix == 'b' || prefix == 'B') {
-            return strtoll(buf + 2, NULL, 2);  // Binary
+            base = 2;
+            pos = 2;
         } else if (prefix == 'o' || prefix == 'O') {
-            return strtoll(buf + 2, NULL, 8);  // Octal
+            base = 8;
+            pos = 2;
         }
     }
 
-    return strtoll(buf, NULL, 10);  // Decimal
+    for (int i = pos; i < length; i++) {
+        if (start[i] == '_')
+            continue;
+        int digit = numeric_digit_value(start[i]);
+        if (digit < 0 || digit >= base)
+            continue;
+        if (out.bits > (UINT64_MAX - (uint64_t) digit) / (uint64_t) base) {
+            out.bits = UINT64_MAX;
+            out.overflows_i64 = true;
+            out.overflows_u64 = true;
+            continue;
+        }
+        out.bits = out.bits * (uint64_t) base + (uint64_t) digit;
+    }
+
+    out.overflows_i64 = out.overflows_u64 || out.bits > (uint64_t) INT64_MAX;
+    return out;
 }
 
 static int char_hex_value(char c) {
@@ -160,12 +197,14 @@ AstNode *xr_parse_literal(Parser *parser) {
     int column = parser->previous.column;
     switch (parser->previous.type) {
         case TK_LITERAL_INT: {
-            xr_Integer value =
+            ParsedIntLiteral value =
                 parse_integer_literal(parser->previous.start, parser->previous.length);
+            if (value.overflows_u64)
+                xr_parser_error_at_previous(parser, "integer literal exceeds uint64 range");
             // Full int64 range allowed at parse time; range checks against
             // the target type happen later in the analyzer/compiler.
-            AstNode *node =
-                xr_ast_literal_int(parser->compiler_session, value, parser->previous.line);
+            AstNode *node = xr_ast_literal_int_bits(parser->compiler_session, value.bits,
+                                                    value.overflows_i64, parser->previous.line);
             node->column = column;
             return node;
         }
