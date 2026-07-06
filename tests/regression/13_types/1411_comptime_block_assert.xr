@@ -20,6 +20,20 @@ comptime {
     pair = comptime Point{x: pair.y, y: pair.x + counter}
     compile_assert(pair.x == 2)
     compile_assert(pair.y == 21)
+
+    if (counter == 20) {
+        counter = counter + 2
+    } else {
+        compile_error("unselected comptime branch")
+    }
+    compile_assert(counter == 22, "comptime if selected branch")
+
+    if (false) {
+        compile_error("false comptime branch")
+    } else {
+        const branched = counter + 1
+        compile_assert(branched == 23)
+    }
 }
 
 @test
