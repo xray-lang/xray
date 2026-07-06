@@ -1200,7 +1200,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         snprintf(feature, sizeof(feature), "%s.%s", mod_name, ma->name);
                         xa_freestanding_report_unavailable(
                             ctx, node, feature,
-                            "allocator hooks are not part of the freestanding mem allowlist yet");
+                            xa_freestanding_stdlib_member_reject_suggestion(mod_name));
                     }
                     XrType *mod_result = NULL;
                     // Constant property: signature is ": type" (no parens)

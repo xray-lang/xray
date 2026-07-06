@@ -1425,7 +1425,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 snprintf(feature, sizeof(feature), "%s.%s", fn_links->module_name, member);
                 xa_freestanding_report_unavailable(
                     ctx, node, feature,
-                    "allocator hooks are not part of the freestanding mem allowlist yet");
+                    xa_freestanding_stdlib_member_reject_suggestion(fn_links->module_name));
             }
         }
         if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION) {
