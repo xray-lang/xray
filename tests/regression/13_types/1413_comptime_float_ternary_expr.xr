@@ -2,6 +2,10 @@ fn runtime_only_value() -> int {
     return 99
 }
 
+fn runtime_only_string() -> string {
+    return "runtime"
+}
+
 @test
 fn test_comptime_float_numeric_ops() {
     var sum = comptime (1.5 + 2.5)
@@ -34,4 +38,13 @@ fn test_comptime_ternary_evaluates_only_selected_branch() {
     var arr: [int; LEN] = [3; LEN]
     assert_eq(arr.length, 4)
     assert_eq(arr[3], 3)
+}
+
+@test
+fn test_comptime_nullish_coalesce_evaluates_only_selected_branch() {
+    var fallback = comptime (null ?? "fallback")
+    assert_eq(fallback, "fallback")
+
+    var kept = comptime ("value" ?? runtime_only_string())
+    assert_eq(kept, "value")
 }

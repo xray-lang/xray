@@ -461,6 +461,18 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
         case AST_BINARY_OR:
             ok = ct_eval_binary(analyzer, expr, out, err, stack, depth);
             break;
+        case AST_NULLISH_COALESCE: {
+            XrCtValue left = {0};
+            if (!ct_eval_impl(analyzer, expr->as.binary.left, &left, err, stack, depth + 1))
+                return false;
+            if (left.kind != XR_CT_NULL) {
+                *out = left;
+                ok = true;
+                break;
+            }
+            ok = ct_eval_impl(analyzer, expr->as.binary.right, out, err, stack, depth + 1);
+            break;
+        }
         case AST_TERNARY: {
             XrCtValue cond = {0};
             if (!ct_eval_impl(analyzer, expr->as.ternary.condition, &cond, err, stack, depth + 1))
