@@ -1,0 +1,16 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="system_libs": []
+contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
+c_contains=#include "xrt_core_freestanding.h"
+c_not_contains=#include <math.h>
+c_not_contains=fmin(
+c_not_contains=fmax(
+c_not_contains=isnan(
+c_not_contains=xrt_math_
+not_contains=freestanding profile rejects math.min
+not_contains=freestanding profile rejects math.max
+not_contains=freestanding profile rejects math.clamp
+not_contains=unsupported AOT math builtin

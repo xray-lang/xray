@@ -1028,6 +1028,18 @@ static const char *xa_math_module_call_member(XaInferContext *ctx, CallExprNode 
     return ma->name;
 }
 
+static const char *xa_math_call_member(XaInferContext *ctx, CallExprNode *call,
+                                       XaSymbolLinks *fn_links) {
+    const char *member = xa_math_module_call_member(ctx, call);
+    if (member)
+        return member;
+    if (!call || !call->callee || call->callee->type != AST_VARIABLE || !fn_links ||
+        !fn_links->module_name || strcmp(fn_links->module_name, "math") != 0)
+        return NULL;
+    return fn_links->import_member_name ? fn_links->import_member_name
+                                        : call->callee->as.variable.name;
+}
+
 static bool xa_all_args_are_int(XrType **arg_types, int arg_count) {
     if (!arg_types || arg_count <= 0)
         return false;
@@ -1036,6 +1048,33 @@ static bool xa_all_args_are_int(XrType **arg_types, int arg_count) {
             return false;
     }
     return true;
+}
+
+static bool xa_freestanding_math_call_supported(const char *member, XrType **arg_types,
+                                                int arg_count) {
+    if (!member)
+        return true;
+    if ((strcmp(member, "min") == 0 || strcmp(member, "max") == 0) && arg_count > 0)
+        return xa_all_args_are_int(arg_types, arg_count);
+    if (strcmp(member, "clamp") == 0 && arg_count == 3)
+        return xa_all_args_are_int(arg_types, arg_count);
+    return false;
+}
+
+static void xa_check_freestanding_math_call(XaInferContext *ctx, AstNode *node, CallExprNode *call,
+                                            XaSymbolLinks *fn_links, XrType **arg_types,
+                                            int arg_count) {
+    if (!ctx || !ctx->analyzer || !xa_freestanding_profile_enabled(ctx->analyzer))
+        return;
+    const char *member = xa_math_call_member(ctx, call, fn_links);
+    if (!member || xa_freestanding_math_call_supported(member, arg_types, arg_count))
+        return;
+    char feature[192];
+    snprintf(feature, sizeof(feature), "math.%s", member);
+    xa_freestanding_report_unavailable(
+        ctx, node, feature,
+        "freestanding math currently allows literal constants and int-only min/max/clamp; "
+        "libm-backed or floating math helpers are hosted-only");
 }
 
 static uint8_t xa_call_param_mode(XrType *callee_type, int slot) {
@@ -1453,8 +1492,9 @@ static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *c
 }
 
 static XrType *xa_math_runtime_shape_return_type(XaInferContext *ctx, CallExprNode *call,
-                                                 XrType **arg_types, int arg_count) {
-    const char *member = xa_math_module_call_member(ctx, call);
+                                                 XaSymbolLinks *fn_links, XrType **arg_types,
+                                                 int arg_count) {
+    const char *member = xa_math_call_member(ctx, call, fn_links);
     if (!member)
         return NULL;
     if (strcmp(member, "abs") == 0 && arg_count == 1 && xa_all_args_are_int(arg_types, 1))
@@ -2349,6 +2389,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    xa_check_freestanding_math_call(ctx, node, call, fn_links, effective_arg_types, arg_count);
+
     XrType *return_type = callee_type->function.return_type;
 
     if (method_name && callee_obj_type) {
@@ -2408,7 +2450,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return_type = builtin_override;
 
     XrType *math_shape_type =
-        xa_math_runtime_shape_return_type(ctx, call, effective_arg_types, arg_count);
+        xa_math_runtime_shape_return_type(ctx, call, fn_links, effective_arg_types, arg_count);
     if (math_shape_type)
         return_type = math_shape_type;
 

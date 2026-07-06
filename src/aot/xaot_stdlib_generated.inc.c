@@ -324,6 +324,12 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
         return true;
     if (strcmp(symbol, "mem.PROT_EXEC") == 0)
         return true;
+    if (strcmp(symbol, "math.min") == 0)
+        return true;
+    if (strcmp(symbol, "math.max") == 0)
+        return true;
+    if (strcmp(symbol, "math.clamp") == 0)
+        return true;
     return false;
 }
 
