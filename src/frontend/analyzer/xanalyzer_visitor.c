@@ -2922,8 +2922,6 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
     }
 }
 
-static XrType *xa_visit_comptime_block_expr(XaInferContext *ctx, AstNode *node);
-
 static XrType *xa_visit_comptime_expr(XaInferContext *ctx, AstNode *node) {
     AstNode *inner = node ? node->as.comptime_expr.expr : NULL;
     if (!ctx || !ctx->analyzer || !node || !inner)
@@ -3521,6 +3519,12 @@ static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx
         return XA_COMPTIME_FLOW_NORMAL;
 
     if (stmt->type == AST_CONST_DECL || stmt->type == AST_VAR_DECL) {
+        VarDeclNode *var = &stmt->as.var_decl;
+        if (ctx->analyzer && ctx->analyzer->current_scope && var->name &&
+            !xa_scope_lookup_local(ctx->analyzer->current_scope, var->name)) {
+            var->symbol_id = 0;
+            xa_visit_collect_var_decl(ctx, stmt);
+        }
         xa_visit_infer_stmt(ctx, stmt);
         return XA_COMPTIME_FLOW_NORMAL;
     }
@@ -3584,7 +3588,7 @@ static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx
     return XA_COMPTIME_FLOW_NORMAL;
 }
 
-static XrType *xa_visit_comptime_block_expr(XaInferContext *ctx, AstNode *node) {
+XrType *xa_visit_comptime_block_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node || !xa_is_comptime_block_expr(node))
         return xr_type_new_unknown(NULL);
 
