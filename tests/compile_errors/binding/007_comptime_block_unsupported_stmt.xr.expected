@@ -1,1 +1,1 @@
-comptime block currently supports const declarations, compile_assert(...) and compile_error(...)
+comptime block currently supports const/var declarations, local var assignments, compile_assert(...) and compile_error(...)

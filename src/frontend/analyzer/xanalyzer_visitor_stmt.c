@@ -1300,6 +1300,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         links->const_initializer = sym->is_const ? var->initializer : NULL;
         links->has_ct_value = false;
         links->ct_value = (XrCtValue) {0};
+        links->is_comptime_local = ctx->comptime_block_depth > 0;
     }
     if (xa_freestanding_profile_enabled(ctx->analyzer) && node->type == AST_SHARED_DECL) {
         xa_freestanding_report_unavailable(
@@ -1429,15 +1430,29 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     // Variables with type annotations are initialized to the type zero value.
     links->is_definitely_assigned = (var->initializer != NULL) || (links->declared_type != NULL);
 
-    // A const with a proven compile-time initializer can be reused by later
-    // consteval expressions without repeatedly expanding its initializer.
-    if (sym->is_const && var->initializer) {
+    // A const with a proven compile-time initializer, or any comptime-block
+    // local binding, can be reused by later consteval expressions.
+    if ((sym->is_const || links->is_comptime_local) && var->initializer) {
         XrCtValue value = {0};
-        if (xa_consteval_expr(ctx->analyzer, var->initializer, &value, NULL)) {
+        const char *err = NULL;
+        if (xa_consteval_expr(ctx->analyzer, var->initializer, &value, &err)) {
             links->has_ct_value = true;
             links->ct_value = value;
             links->is_const_foldable = true;
+        } else if (links->is_comptime_local) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            char msg[256];
+            snprintf(
+                msg, sizeof(msg),
+                "comptime block local binding initializer must be evaluable at compile time%s%s",
+                err ? ": " : "", err ? err : "");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
         }
+    } else if (links->is_comptime_local && !var->initializer) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   "comptime block local binding requires an initializer", &loc);
     }
     links->assign_count = var->initializer ? 1 : 0;
 

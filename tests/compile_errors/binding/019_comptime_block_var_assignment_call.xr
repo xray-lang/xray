@@ -1,0 +1,8 @@
+fn runtimeValue() -> int {
+    return 2
+}
+
+comptime {
+    var x = 1
+    x = runtimeValue()
+}
