@@ -5,9 +5,9 @@ fn xray_builtin_string_reject(x: int) -> int {
     return 0
 }
 
-@c_export("xray_builtin_typeof_reject")
-fn xray_builtin_typeof_reject(x: int) -> int {
-    var s = typeof(x)
+@c_export("xray_builtin_typename_reject")
+fn xray_builtin_typename_reject(x: int) -> int {
+    var s = typename(x)
     print(s)
     return 0
 }

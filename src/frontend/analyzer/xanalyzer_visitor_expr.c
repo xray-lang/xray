@@ -21,6 +21,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
 #include "../../../stdlib/prelude/prelude.h"
+#include "../../runtime/value/xtype_names.h"
 #include <limits.h>
 #include <stdint.h>
 
@@ -1036,6 +1037,33 @@ static void xa_check_null_comparison(XaInferContext *ctx, AstNode *node, XrType 
                                &loc);
 }
 
+static bool xa_node_is_typeof_call(AstNode *node) {
+    if (!node || node->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &node->as.call_expr;
+    return call->callee && call->callee->type == AST_VARIABLE &&
+           call->callee->as.variable.name &&
+           strcmp(call->callee->as.variable.name, "typeof") == 0;
+}
+
+static bool xa_node_is_string_literal(AstNode *node) {
+    return node && node->type == AST_LITERAL_STRING;
+}
+
+static void xa_check_removed_typeof_string_compare(XaInferContext *ctx, AstNode *node) {
+    AstNode *left = node->as.binary.left;
+    AstNode *right = node->as.binary.right;
+    if (!((xa_node_is_typeof_call(left) && xa_node_is_string_literal(right)) ||
+          (xa_node_is_typeof_call(right) && xa_node_is_string_literal(left))))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                               "typeof() returns TypeId; compare with Type.xxx or use typename() "
+                               "for debug strings",
+                               &loc);
+}
+
 XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
@@ -1074,6 +1102,7 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         case AST_BINARY_EQ:
         case AST_BINARY_NE:
             xa_check_null_comparison(ctx, node, left, right);
+            xa_check_removed_typeof_string_compare(ctx, node);
             return xr_type_new_bool(NULL);
         case AST_BINARY_LT:
         case AST_BINARY_LE:
@@ -1181,6 +1210,19 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
 
     MemberAccessNode *ma = &node->as.member_access;
+
+    if (ma->object && ma->object->type == AST_VARIABLE &&
+        ma->object->as.variable.name &&
+        strcmp(ma->object->as.variable.name, "Type") == 0) {
+        if (xr_type_from_name(ma->name) >= 0)
+            return xr_type_new_int(ctx->analyzer->isolate);
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Unknown TypeId constant 'Type.%s'", ma->name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_UNDEFINED_VAR, msg, &loc);
+        return xr_type_new_unknown(NULL);
+    }
 
     XrType *raw_pointer_static_fn =
         xa_raw_pointer_static_method_type(ctx, node, ma->object, ma->name);
@@ -1330,6 +1372,14 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                             }
                         }
                     }
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    char msg[160];
+                    snprintf(msg, sizeof(msg), "enum '%s' has no member '%s'",
+                             obj_type->enum_type.enum_name, ma->name ? ma->name : "");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+                    return xr_type_new_unknown(NULL);
                 } else if (el->class_info) {
                     XaSymbol *member =
                         xa_class_info_lookup_instance_member(el->class_info, ma->name);
@@ -1341,16 +1391,30 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                             return ml->type;
                         }
                     }
-                    // Precise .value type: use the enum's actual backing type
-                    // instead of the generic `: Json` from the builtin table.
-                    if (strcmp(ma->name, "value") == 0 && el->enum_value_type) {
-                        return el->enum_value_type;
+                }
+                if (!is_namespace) {
+                    if (strcmp(ma->name, "name") == 0) {
+                        return xr_type_new_string(NULL);
                     }
+                    if (strcmp(ma->name, "ordinal") == 0) {
+                        return xr_type_new_int(NULL);
+                    }
+                    if (strcmp(ma->name, "toString") == 0) {
+                        XrType *ret = xr_type_new_string(NULL);
+                        return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, ret, false);
+                    }
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    char msg[160];
+                    snprintf(msg, sizeof(msg), "enum value has no member '%s'",
+                             ma->name ? ma->name : "");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+                    return xr_type_new_unknown(NULL);
                 }
             }
         }
-        // Fall through: name/ordinal/toString handled by EnumValue
-        // builtin table below.
+        return xr_type_new_unknown(NULL);
     }
 
     // Class static member access: ClassName.staticMethod
@@ -1560,8 +1624,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Built-in non-method properties (e.g. EnumValue.name/value/ordinal,
-    // Channel.closed). The signature for properties is just `: T` with
+    // Built-in non-method properties (e.g. Channel.closed). The signature for properties is just `: T` with
     // no parameter list. Skip the method substitution machinery above
     // because there are no type-parameter container fields exposed as
     // property kind today.
@@ -1627,6 +1690,19 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     }
                     XaSelectionKind sk =
                         (member->kind == XA_SYM_METHOD) ? XA_SEL_METHOD : XA_SEL_FIELD;
+                    if (sk == XA_SEL_FIELD && class_info && class_info->struct_layout &&
+                        class_info->struct_layout->kind == XR_STRUCT_LAYOUT_UNION &&
+                        ctx->unsafe_depth == 0) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        char msg[192];
+                        snprintf(msg, sizeof(msg),
+                                 "union field read '%s.%s' must be inside an `unsafe { }` block",
+                                 class_info->name ? class_info->name : "union",
+                                 ma->name ? ma->name : "?");
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+                    }
                     record_selection(ctx, node, sk, obj_type, member, -1, member_type, false);
                     return member_type;
                 }

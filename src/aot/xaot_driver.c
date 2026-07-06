@@ -147,8 +147,6 @@ static void features_apply_generated_stdlib_caps(XaotFeatureSet *fs, const char 
         fs->need_deep_copy = true;
     if (caps & XAOT_STDLIB_CAP_EXCEPTION)
         fs->need_exception = true;
-    if (caps & XAOT_STDLIB_CAP_REFLECTION)
-        fs->need_reflection = true;
     if (caps & XAOT_STDLIB_CAP_STACKTRACE)
         fs->need_stacktrace = true;
     if (caps & XAOT_STDLIB_CAP_INSTANCEOF)
@@ -666,11 +664,6 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
             return false;
         needs_aot_runtime = true;
     }
-    if (features->need_reflection) {
-        if (!add_runtime_cap(manifest, "reflection"))
-            return false;
-        needs_aot_runtime = true;
-    }
     if (features->need_instanceof) {
         if (!add_runtime_cap(manifest, "type"))
             return false;
@@ -710,7 +703,7 @@ static bool xaot_fast_test_can_skip_size_link_flags(const XaotFeatureSet *featur
            !features->need_task && !features->need_atomic && !features->need_work_queue &&
            !features->need_result_group && !features->need_countdown_latch &&
            !features->need_semaphore && !features->need_event_count && !features->need_generator &&
-           !features->need_reflection && !features->need_stacktrace && !features->need_instanceof &&
+           !features->need_stacktrace && !features->need_instanceof &&
            features->stdlib == 0 && features->n_stdlib_symbols == 0 &&
            features->n_extern_dylibs == 0;
 }

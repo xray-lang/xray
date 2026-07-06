@@ -6,7 +6,7 @@ enum Color {
 
 var t = (1, "two", true)
 print(t)
-print(typeof(t))
+print(typename(t))
 var (a, b, c) = t
 print(a)
 print(b)
@@ -16,7 +16,3 @@ var color = Color.Green
 print(color.name)
 print(color.ordinal)
 print(color.toString())
-
-for (member in Color) {
-    print(member.name)
-}

@@ -61,12 +61,12 @@ fn pack(sum: int, count: int) -> int {
     return (sum << 32) | (count & 0xFFFFFFFF)
 }
 
-fn unpackSum(packed: int) -> int {
-    return packed >> 32
+fn unpackSum(bits: int) -> int {
+    return bits >> 32
 }
 
-fn unpackCount(packed: int) -> int {
-    return packed & 0xFFFFFFFF
+fn unpackCount(bits: int) -> int {
+    return bits & 0xFFFFFFFF
 }
 
 fn worker(src: Bytes, queue: WorkQueue<int>, id: int, blockSize: int) -> int {
@@ -116,9 +116,9 @@ var actualCount = 0
 var actualSum = 0
 w = 0
 while (w < tasks.length) {
-    var packed: int = await tasks[w]
-    actualCount = actualCount + unpackCount(packed)
-    actualSum = (actualSum + unpackSum(packed)) & 0xFFFFFFFF
+    var packedBits: int = await tasks[w]
+    actualCount = actualCount + unpackCount(packedBits)
+    actualSum = (actualSum + unpackSum(packedBits)) & 0xFFFFFFFF
     w = w + 1
 }
 

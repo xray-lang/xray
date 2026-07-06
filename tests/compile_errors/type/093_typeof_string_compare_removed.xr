@@ -1,0 +1,4 @@
+var x = 1
+if (typeof(x) == "int") {
+    print("old typeof string")
+}

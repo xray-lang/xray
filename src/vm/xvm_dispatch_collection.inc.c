@@ -1280,10 +1280,10 @@ vmcase(OP_ARRAY_RESIZE) {
             (out_endian) = XR_TO_INT(_endian_value);                                               \
         } else if (XR_IS_ENUM_VALUE(_endian_value)) {                                              \
             XrEnumValue *_endian_enum = (XrEnumValue *) XR_TO_PTR(_endian_value);                  \
-            if (!_endian_enum || !XR_IS_INT(_endian_enum->raw_value)) {                            \
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Endian value must have int backing");      \
+            if (!_endian_enum) {                                                                   \
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Endian value must be valid");             \
             }                                                                                      \
-            (out_endian) = XR_TO_INT(_endian_enum->raw_value);                                     \
+            (out_endian) = (int64_t) _endian_enum->member_index;                                   \
         } else {                                                                                   \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "ByteSpan load/store expects Endian");          \
         }                                                                                          \

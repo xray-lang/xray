@@ -73,8 +73,7 @@ typedef struct XrAttribute {
     // String argument for attributes that carry one: @extern("C") (ABI name),
     // @dylib("name") (library name), @c_export("name") (C symbol),
     // @section("name") (AOT linker section).
-    // Arena-allocated, NUL-terminated; NULL when absent. @align(N) stores N in
-    // `timeout`.
+    // Arena-allocated, NUL-terminated; NULL when absent.
     const char *str_arg;
 } XrAttribute;
 

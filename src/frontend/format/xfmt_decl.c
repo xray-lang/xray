@@ -68,15 +68,6 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
                              attr->str_arg ? (int) strlen(attr->str_arg) : 0);
             xfmt_write_char(ctx, ')');
             break;
-        case ATTR_REPR_C:
-            xfmt_write_str(ctx, "@repr(C)");
-            break;
-        case ATTR_REPR_PACKED:
-            xfmt_write_str(ctx, "@repr(packed)");
-            break;
-        case ATTR_ALIGN:
-            xfmt_write_fmt(ctx, "@align(%d)", attr->timeout);
-            break;
         default:
             break;
     }
@@ -160,17 +151,26 @@ void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
 }
 
 void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
-    ClassDeclNode *cls = &node->as.class_decl;
+    bool is_struct = node && node->type == AST_STRUCT_DECL;
+    bool is_union = node && node->type == AST_UNION_DECL;
+    ClassDeclNode *cls = is_union ? &node->as.union_decl
+                         : is_struct ? &node->as.struct_decl
+                                     : &node->as.class_decl;
     xfmt_emit_attributes(ctx, cls->attributes, cls->attr_count);
     xfmt_write_indent(ctx);
 
-    if (cls->is_abstract)
+    if (!is_struct && !is_union && cls->is_abstract)
         xfmt_write_str(ctx, "abstract ");
-    xfmt_write_str(ctx, "class ");
+    if (is_struct && cls->is_packed)
+        xfmt_write_str(ctx, "packed ");
+    xfmt_write_str(ctx, is_union ? "union " : is_struct ? "struct " : "class ");
     xfmt_write_str(ctx, cls->name);
-    xfmt_emit_generic_params(ctx, cls->type_params, cls->type_param_count);
+    if (!is_union)
+        xfmt_emit_generic_params(ctx, cls->type_params, cls->type_param_count);
+    if ((is_struct || is_union) && cls->explicit_align != 0)
+        xfmt_write_fmt(ctx, " align(%u)", (unsigned) cls->explicit_align);
 
-    if (cls->super_name) {
+    if (!is_struct && !is_union && cls->super_name) {
         xfmt_write_str(ctx, " extends ");
         if (cls->super_module) {
             xfmt_write_str(ctx, cls->super_module);
@@ -179,7 +179,7 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_str(ctx, cls->super_name);
     }
 
-    if (cls->interface_count > 0) {
+    if (!is_union && cls->interface_count > 0) {
         xfmt_write_str(ctx, " implements ");
         for (int i = 0; i < cls->interface_count; i++) {
             if (i > 0)
@@ -249,13 +249,13 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_newline(ctx);
     }
 
-    if (cls->field_count > 0 && cls->method_count > 0) {
+    if (!is_union && cls->field_count > 0 && cls->method_count > 0) {
         xfmt_write_newline(ctx);
     }
 
     // Methods — getter/setter pairs are emitted as property accessor syntax:
     //   propname: type { fn() { ... } fn(v: type) { ... } }
-    for (int i = 0; i < cls->method_count; i++) {
+    for (int i = 0; !is_union && i < cls->method_count; i++) {
         AstNode *method = cls->methods[i];
         MethodDeclNode *m = &method->as.method_decl;
 
@@ -544,29 +544,9 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
 
     xfmt_write_str(ctx, "enum ");
     xfmt_write_str(ctx, en->name);
-    if (en->type_hint) {
-        xfmt_write_str(ctx, ": ");
-        xfmt_write_str(ctx, en->type_hint);
-    }
     xfmt_write_str(ctx, " {");
     xfmt_write_newline(ctx);
     ctx->indent_level++;
-
-    // When alignment is enabled, compute the widest member name among
-    // entries that carry an explicit `= value`. Members without a value
-    // are not aligned (no `=` to align), so they don't participate.
-    int max_name_width = 0;
-    bool align = ctx->config && ctx->config->align_enum_values && en->member_count > 1;
-    if (align) {
-        for (int i = 0; i < en->member_count; i++) {
-            EnumMemberNode *m = &en->members[i]->as.enum_member;
-            if (m->value) {
-                int w = (int) strlen(m->name);
-                if (w > max_name_width)
-                    max_name_width = w;
-            }
-        }
-    }
 
     for (int i = 0; i < en->member_count; i++) {
         AstNode *member = en->members[i];
@@ -574,15 +554,6 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
 
         xfmt_write_indent(ctx);
         xfmt_write_str(ctx, m->name);
-        if (m->value) {
-            if (align) {
-                int pad = max_name_width - (int) strlen(m->name);
-                for (int j = 0; j < pad; j++)
-                    xfmt_write_char(ctx, ' ');
-            }
-            xfmt_write_str(ctx, " = ");
-            xfmt_emit_expression(ctx, m->value);
-        }
         if (i < en->member_count - 1) {
             xfmt_write_char(ctx, ',');
         }

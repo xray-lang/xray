@@ -1,0 +1,5 @@
+enum Code : int {
+    OK
+}
+
+print(Code.OK)

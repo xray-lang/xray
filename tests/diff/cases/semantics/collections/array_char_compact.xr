@@ -1,7 +1,7 @@
 // anchor: array-char-compact
 var chars: Array<char> = ['b', '中', '\u{1F600}']
 print(chars.length)
-print(typeof(chars[0]))
+print(typename(chars[0]))
 print(chars[0])
 print(chars[1].ord())
 print(chars[2].ord())
@@ -33,4 +33,4 @@ for (ch in "A中\u{1F600}") {
     from_string.push(ch)
 }
 print(from_string.join("-"))
-print(typeof(from_string[2]))
+print(typename(from_string[2]))

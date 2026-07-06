@@ -273,8 +273,11 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
         }
 
         case AST_CLASS_DECL:
-        case AST_STRUCT_DECL: {
-            ClassDeclNode *cls = &node->as.class_decl;
+        case AST_STRUCT_DECL:
+        case AST_UNION_DECL: {
+            ClassDeclNode *cls = (node->type == AST_CLASS_DECL) ? &node->as.class_decl
+                                : (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl
+                                                                  : &node->as.union_decl;
             if (cls->name) {
                 int col = node->column > 0 ? node->column - 1 : 0;
                 int mods = XLSP_MOD_DECLARATION | XLSP_MOD_DEFINITION;

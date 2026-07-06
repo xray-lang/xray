@@ -27,7 +27,7 @@
 #include "xclass_builder.h"
 #include "xclass_system.h"
 #include "xisolate_api.h"
-#include "xreflect_registry.h"
+#include "xtype_registry.h"
 #include "../xjson.h"
 #include "../xmap.h"
 #include "../xtuple.h"
@@ -256,7 +256,7 @@ static XrClass *create_json_utility_class(XrVMRuntime *X) {
 void xr_json_api_init(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "xr_json_api_init: NULL isolate");
     // create_json_utility_class goes through xr_class_builder_finalize,
-    // which already registers the resulting class with the reflection
+    // which already registers the resulting class with the type registry
     // type registry. No manual registration is required here.
     XrClass *jsonClass = create_json_utility_class(X);
 

@@ -18,7 +18,7 @@
 #include "../mem/xfixed_heap.h"
 #include "xclass.h"
 #include "xinstance.h"
-#include "xreflect_registry.h"
+#include "xtype_registry.h"
 #include "xclass_system.h"
 #include <string.h>
 #include <stdlib.h>
@@ -27,7 +27,7 @@
 /* ========== Enum Creation ========== */
 
 XrEnumValue *xr_enum_value_new(XrVMRuntime *X, const char *enum_name, const char *member_name,
-                               XrValue raw_value, uint32_t index) {
+                               uint32_t index) {
     XR_DCHECK(X != NULL, "enum_value_new: NULL isolate");
     XR_DCHECK(enum_name != NULL, "enum_value_new: NULL enum_name");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
@@ -41,7 +41,6 @@ XrEnumValue *xr_enum_value_new(XrVMRuntime *X, const char *enum_name, const char
     // is stable for the life of the isolate and must not be freed.
     enum_val->enum_name = xr_symbol_intern(X, enum_name);
     enum_val->member_name = xr_symbol_intern(X, member_name);
-    enum_val->raw_value = raw_value;
     enum_val->member_index = index;
     enum_val->parent_type = NULL;  // Set by xr_enum_type_new after member creation
 
@@ -49,7 +48,7 @@ XrEnumValue *xr_enum_value_new(XrVMRuntime *X, const char *enum_name, const char
 }
 
 XrEnumValue *xr_enum_value_new_core(XrRuntimeCore *core, const char *enum_name,
-                                    const char *member_name, XrValue raw_value, uint32_t index) {
+                                    const char *member_name, uint32_t index) {
     XR_DCHECK(core != NULL, "enum_value_new_core: NULL core");
     XR_DCHECK(enum_name != NULL, "enum_value_new_core: NULL enum_name");
     XR_DCHECK(member_name != NULL, "enum_value_new_core: NULL member_name");
@@ -61,7 +60,6 @@ XrEnumValue *xr_enum_value_new_core(XrRuntimeCore *core, const char *enum_name,
     enum_val->klass = NULL;
     enum_val->enum_name = enum_name;
     enum_val->member_name = member_name;
-    enum_val->raw_value = raw_value;
     enum_val->member_index = index;
     enum_val->parent_type = NULL;
     return enum_val;
@@ -80,8 +78,7 @@ static XrClass *xr_enum_minimal_adt_class_new(const char *name, uint16_t field_c
     return cls;
 }
 
-XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, int base_type, char **member_names,
-                             XrValue *member_values, int count) {
+XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, char **member_names, int count) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XrEnumType *enum_type = (XrEnumType *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X),
                                                                sizeof(XrEnumType), XR_TINSTANCE);
@@ -90,21 +87,16 @@ XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, int base_type, ch
     enum_type->klass = (core && core->enumTypeClass) ? core->enumTypeClass : NULL;
     XrClass *enum_base = core ? core->enumClass : NULL;
     // xr_class_new -> builder finalize registers the class with the
-    // reflection type registry automatically, so the enum is visible
+    // type registry automatically, so the enum is visible
     // through Type.getTypeByName without any follow-up call here.
     XrClass *enum_class = xr_class_new(X, name, enum_base);
     enum_type->enum_class = enum_class;
 
     enum_type->name = xr_symbol_intern(X, name);
-    enum_type->base_type = base_type;
     enum_type->member_count = count;
 
     enum_type->symbol_to_index = NULL;
     enum_type->symbol_map_capacity = 0;
-    enum_type->is_contiguous_int = false;
-    enum_type->min_int_value = 0;
-    enum_type->value_to_index = NULL;
-    enum_type->value_map_range = 0;
     enum_type->is_adt = false;
     enum_type->max_payload = 0;
     enum_type->payload_counts = NULL;
@@ -119,9 +111,7 @@ XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, int base_type, ch
     for (int i = 0; i < count; i++) {
         enum_type->members[i].name = xr_symbol_intern(X, member_names[i]);
         enum_type->members[i].symbol = -1;
-        enum_type->members[i].value = member_values[i];
-        enum_type->members[i].instance =
-            xr_enum_value_new(X, name, member_names[i], member_values[i], i);
+        enum_type->members[i].instance = xr_enum_value_new(X, name, member_names[i], i);
         if (enum_type->members[i].instance)
             enum_type->members[i].instance->parent_type = enum_type;
     }
@@ -129,61 +119,12 @@ XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, int base_type, ch
     // Initialize symbol mapping for O(1) lookup
     xr_enum_type_init_symbols(enum_type, X);
 
-    /* Build reverse lookup structure for int enums.
-     * Three-tier strategy using array/hash split:
-     *   Tier 1 (contiguous): values are min,min+1,...,min+N-1 → direct index
-     *   Tier 2 (sparse array): range <= count*4 → offset array, O(1)
-     *            (each sparse slot = 4 bytes vs 8-byte XrValue scan)
-     *   Tier 3 (fallback): linear scan O(n) */
-    if (base_type == XR_TINT && count > 0) {
-        int64_t min_val = XR_TO_INT(member_values[0]);
-        int64_t max_val = min_val;
-        bool contiguous = true;
-
-        for (int i = 0; i < count; i++) {
-            int64_t v = XR_TO_INT(member_values[i]);
-            if (v < min_val)
-                min_val = v;
-            if (v > max_val)
-                max_val = v;
-            if (v != XR_TO_INT(member_values[0]) + i)
-                contiguous = false;
-        }
-
-        enum_type->min_int_value = min_val;
-
-        if (contiguous) {
-            // Tier 1: perfect contiguous sequence
-            enum_type->is_contiguous_int = true;
-        } else {
-            int64_t range = max_val - min_val + 1;
-            // Tier 2: sparse array if range is bounded (Lua-inspired threshold)
-            if (range > 0 && range <= (int64_t) count * 4 && range <= 1024) {
-                int r = (int) range;
-                enum_type->value_map_range = r;
-                enum_type->value_to_index = (int *) xr_malloc(sizeof(int) * r);
-                if (!enum_type->value_to_index) {
-                    enum_type->value_map_range = 0;
-                    return enum_type;
-                }
-                for (int i = 0; i < r; i++) {
-                    enum_type->value_to_index[i] = -1;
-                }
-                for (int i = 0; i < count; i++) {
-                    int slot = (int) (XR_TO_INT(member_values[i]) - min_val);
-                    enum_type->value_to_index[slot] = i;
-                }
-            }
-            // Tier 3: no optimization, linear scan at runtime
-        }
-    }
-
     return enum_type;
 }
 
-XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *name, int base_type,
-                                  char **member_names, XrValue *member_values, int count) {
-    if (!core || !name || !member_names || !member_values || count <= 0)
+XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *name, char **member_names,
+                                  int count) {
+    if (!core || !name || !member_names || count <= 0)
         return NULL;
 
     XrEnumType *enum_type =
@@ -193,14 +134,9 @@ XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *name, int bas
     enum_type->klass = NULL;
     enum_type->enum_class = NULL;
     enum_type->name = name;
-    enum_type->base_type = base_type;
     enum_type->member_count = (uint32_t) count;
     enum_type->symbol_to_index = NULL;
     enum_type->symbol_map_capacity = 0;
-    enum_type->is_contiguous_int = false;
-    enum_type->min_int_value = 0;
-    enum_type->value_to_index = NULL;
-    enum_type->value_map_range = 0;
     enum_type->is_adt = false;
     enum_type->max_payload = 0;
     enum_type->payload_counts = NULL;
@@ -213,48 +149,10 @@ XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *name, int bas
     for (int i = 0; i < count; i++) {
         enum_type->members[i].name = member_names[i];
         enum_type->members[i].symbol = -1;
-        enum_type->members[i].value = member_values[i];
         enum_type->members[i].instance =
-            xr_enum_value_new_core(core, name, member_names[i], member_values[i], (uint32_t) i);
+            xr_enum_value_new_core(core, name, member_names[i], (uint32_t) i);
         if (enum_type->members[i].instance)
             enum_type->members[i].instance->parent_type = enum_type;
-    }
-
-    if (base_type == XR_TINT && count > 0) {
-        int64_t min_val = XR_TO_INT(member_values[0]);
-        int64_t max_val = min_val;
-        bool contiguous = true;
-
-        for (int i = 0; i < count; i++) {
-            int64_t v = XR_TO_INT(member_values[i]);
-            if (v < min_val)
-                min_val = v;
-            if (v > max_val)
-                max_val = v;
-            if (v != XR_TO_INT(member_values[0]) + i)
-                contiguous = false;
-        }
-
-        enum_type->min_int_value = min_val;
-        if (contiguous) {
-            enum_type->is_contiguous_int = true;
-        } else {
-            int64_t range = max_val - min_val + 1;
-            if (range > 0 && range <= (int64_t) count * 4 && range <= INT32_MAX) {
-                enum_type->value_map_range = (int) range;
-                enum_type->value_to_index = (int *) xr_malloc(sizeof(int) * (size_t) range);
-                if (enum_type->value_to_index) {
-                    for (int64_t i = 0; i < range; i++)
-                        enum_type->value_to_index[i] = -1;
-                    for (int i = 0; i < count; i++) {
-                        int64_t slot = XR_TO_INT(member_values[i]) - min_val;
-                        enum_type->value_to_index[slot] = i;
-                    }
-                } else {
-                    enum_type->value_map_range = 0;
-                }
-            }
-        }
     }
 
     return enum_type;
@@ -362,57 +260,6 @@ XrEnumValue *xr_enum_get_member_by_symbol(XrEnumType *enum_type, int symbol) {
     return NULL;
 }
 
-XrEnumValue *xr_enum_from_value(XrEnumType *enum_type, XrValue value) {
-    XR_DCHECK(enum_type != NULL, "enum_from_value: NULL enum_type");
-    if (XR_IS_INT(value)) {
-        int64_t v = XR_TO_INT(value);
-        int64_t offset = v - enum_type->min_int_value;
-
-        // Tier 1: contiguous int — direct index
-        if (enum_type->is_contiguous_int) {
-            if (offset >= 0 && offset < (int64_t) enum_type->member_count) {
-                return enum_type->members[offset].instance;
-            }
-            return NULL;
-        }
-
-        // Tier 2: sparse array — O(1) with bounded waste
-        if (enum_type->value_to_index != NULL) {
-            if (offset >= 0 && offset < enum_type->value_map_range) {
-                int idx = enum_type->value_to_index[offset];
-                if (idx >= 0) {
-                    return enum_type->members[idx].instance;
-                }
-            }
-            return NULL;
-        }
-    }
-
-    // Tier 3: linear scan (non-int enums or unbounded int range)
-    for (uint32_t i = 0; i < enum_type->member_count; i++) {
-        XrValue member_val = enum_type->members[i].value;
-
-        bool equals = false;
-        if (XR_IS_INT(value) && XR_IS_INT(member_val)) {
-            equals = (XR_TO_INT(value) == XR_TO_INT(member_val));
-        } else if (XR_IS_STRING(value) && XR_IS_STRING(member_val)) {
-            // Cannot rely on pointer equality: user input may carry a
-            // non-interned XrString even though enum members are interned.
-            equals = xr_string_equal(XR_TO_STRING(value), XR_TO_STRING(member_val));
-        } else if (XR_IS_FLOAT(value) && XR_IS_FLOAT(member_val)) {
-            equals = (XR_TO_FLOAT(value) == XR_TO_FLOAT(member_val));
-        } else if (XR_IS_BOOL(value) && XR_IS_BOOL(member_val)) {
-            equals = (XR_TO_BOOL(value) == XR_TO_BOOL(member_val));
-        }
-
-        if (equals) {
-            return enum_type->members[i].instance;
-        }
-    }
-
-    return NULL;
-}
-
 const char *xr_enum_value_name(XrEnumValue *enum_val) {
     XR_DCHECK(enum_val != NULL, "enum_value_name: NULL enum_val");
     return enum_val->member_name;
@@ -496,10 +343,6 @@ void xr_obj_destroy_enum_type(XrObjHeader *obj, XrCoroHeap *owner_heap) {
         xr_free(enum_type->symbol_to_index);
         enum_type->symbol_to_index = NULL;
     }
-    if (enum_type->value_to_index) {
-        xr_free(enum_type->value_to_index);
-        enum_type->value_to_index = NULL;
-    }
     if (enum_type->payload_counts) {
         xr_free(enum_type->payload_counts);
         enum_type->payload_counts = NULL;
@@ -515,12 +358,11 @@ void xr_obj_destroy_enum_type(XrObjHeader *obj, XrCoroHeap *owner_heap) {
 /* ========== Native Body Descriptors ========== */
 
 // EnumValue body: everything after klass pointer.
-// body_size = offsetof(XrEnumValue, member_index) + sizeof(uint32_t) - offsetof(XrEnumValue,
-// enum_name) Simpler: sizeof(XrEnumValue) - sizeof(XrObjHeader) - sizeof(XrClass*)
+// body_size = sizeof(XrEnumValue) - sizeof(XrObjHeader) - sizeof(XrClass*)
 
 static void enum_value_body_destroy(void *body) {
     (void) body;
-    // No-op: interned names are not owned, raw_value is a tagged value.
+    // No-op: interned names are not owned.
 }
 
 static XrNativeBodyDesc enum_value_body_desc = {
@@ -543,10 +385,6 @@ static void enum_type_body_destroy(void *body) {
     if (et->symbol_to_index) {
         xr_free(et->symbol_to_index);
         et->symbol_to_index = NULL;
-    }
-    if (et->value_to_index) {
-        xr_free(et->value_to_index);
-        et->value_to_index = NULL;
     }
 }
 

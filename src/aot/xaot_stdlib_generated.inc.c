@@ -18,10 +18,9 @@ enum {
     XAOT_STDLIB_CAP_OBJECTS = 1u << 7,
     XAOT_STDLIB_CAP_DEEP_COPY = 1u << 8,
     XAOT_STDLIB_CAP_EXCEPTION = 1u << 9,
-    XAOT_STDLIB_CAP_REFLECTION = 1u << 10,
-    XAOT_STDLIB_CAP_STACKTRACE = 1u << 11,
-    XAOT_STDLIB_CAP_INSTANCEOF = 1u << 12,
-    XAOT_STDLIB_CAP_SCOPE = 1u << 13,
+    XAOT_STDLIB_CAP_STACKTRACE = 1u << 10,
+    XAOT_STDLIB_CAP_INSTANCEOF = 1u << 11,
+    XAOT_STDLIB_CAP_SCOPE = 1u << 12,
 };
 
 static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {

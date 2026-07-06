@@ -833,11 +833,6 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.enum_access.enum_name = clone_str(node->as.enum_access.enum_name);
             n->as.enum_access.member_name = clone_str(node->as.enum_access.member_name);
             break;
-        case AST_ENUM_CONVERT:
-            n->as.enum_convert.enum_name = clone_str(node->as.enum_convert.enum_name);
-            n->as.enum_convert.value_expr =
-                xr_ast_clone_ctx(node->as.enum_convert.value_expr, map, mc, clone_ctx);
-            break;
         case AST_ENUM_INDEX:
             n->as.enum_index.collection =
                 xr_ast_clone_ctx(node->as.enum_index.collection, map, mc, clone_ctx);
@@ -846,12 +841,15 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             break;
 
         // === Class/struct declaration (deep clone for mono) ===
+        case AST_UNION_DECL:
         case AST_STRUCT_DECL:
         case AST_CLASS_DECL: {
-            ClassDeclNode *src =
-                (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl : &node->as.class_decl;
-            ClassDeclNode *dst =
-                (n->type == AST_STRUCT_DECL) ? &n->as.struct_decl : &n->as.class_decl;
+            ClassDeclNode *src = (node->type == AST_CLASS_DECL) ? &node->as.class_decl
+                                : (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl
+                                                                  : &node->as.union_decl;
+            ClassDeclNode *dst = (n->type == AST_CLASS_DECL) ? &n->as.class_decl
+                                : (n->type == AST_STRUCT_DECL) ? &n->as.struct_decl
+                                                               : &n->as.union_decl;
             dst->name = clone_str(src->name);
             dst->super_name = clone_str(src->super_name);
             dst->super_module = clone_str(src->super_module);
@@ -864,6 +862,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->is_abstract = src->is_abstract;
             dst->is_final = src->is_final;
             dst->is_native = src->is_native;
+            dst->is_packed = src->is_packed;
+            dst->explicit_align = src->explicit_align;
             dst->attributes = src->attributes;
             dst->attr_count = src->attr_count;
             dst->type_params = NULL;  // Cleared: mono version has no type params
@@ -1804,7 +1804,7 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             cloned->as.class_decl.is_monomorphized = true;
             cloned->as.class_decl.generic_origin_name = xr_strdup(inst->generic_name);
             cloned->as.class_decl.display_name = xr_strdup(inst->generic_name);
-            /* Store concrete type arg display names for Reflect.typeOf */
+            /* Store concrete type arg display names for cold typename/debug metadata. */
             if (inst->type_arg_count > 0 && inst->type_args) {
                 const char **names =
                     (const char **) xr_calloc(inst->type_arg_count, sizeof(const char *));

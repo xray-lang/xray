@@ -678,8 +678,8 @@ else
         "freestanding profile rejects builtin string()" \
         "freestanding-profile: rejects builtin string conversion"
     expect_log_contains "$FREESTANDING_BUILTIN_LOG" \
-        "freestanding profile rejects builtin typeof()" \
-        "freestanding-profile: rejects builtin typeof"
+        "freestanding profile rejects builtin typename()" \
+        "freestanding-profile: rejects builtin typename"
     expect_log_contains "$FREESTANDING_BUILTIN_LOG" \
         "freestanding profile rejects builtin copy()" \
         "freestanding-profile: rejects builtin copy"

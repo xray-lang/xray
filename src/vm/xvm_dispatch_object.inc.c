@@ -163,7 +163,13 @@ vmcase(OP_MAP_SETKS) {
     XrInstance *inst_obj = xr_value_to_instance(R(a));
     for (int j = 0; j < count; j++) {
         XrValue val = R(a + 1 + j);
-        inst_obj->fields[j] = val;
+        if (inst_obj->klass && inst_obj->klass->struct_layout) {
+            if (!xr_vm_instance_struct_set_field(isolate, inst_obj, j, val)) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
+            }
+        } else {
+            inst_obj->fields[j] = val;
+        }
     }
     vmbreak;
 }
@@ -176,7 +182,13 @@ vmcase(OP_GETFIELD) {
 
     XrValue inst_val = R(b);
     XrInstance *inst_obj = xr_value_to_instance(inst_val);
-    R(a) = inst_obj->fields[field_idx];
+    if (inst_obj->klass && inst_obj->klass->struct_layout) {
+        if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
+        }
+    } else {
+        R(a) = inst_obj->fields[field_idx];
+    }
     vmbreak;
 }
 
@@ -189,7 +201,13 @@ vmcase(OP_SETFIELD) {
     XrValue inst_val = R(a);
     XrInstance *inst_obj = xr_value_to_instance(inst_val);
     XrValue val = R(c);
-    inst_obj->fields[field_idx] = val;
+    if (inst_obj->klass && inst_obj->klass->struct_layout) {
+        if (!xr_vm_instance_struct_set_field(isolate, inst_obj, field_idx, val)) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
+        }
+    } else {
+        inst_obj->fields[field_idx] = val;
+    }
     vmbreak;
 }
 
@@ -226,13 +244,25 @@ vmcase(OP_GETFIELD_IC) {
 
     // Fast path: monomorphic IC hit
     if (cache && xr_ic_field_lookup_mono(cache, cls, field_name_idx, &field_idx)) {
-        R(a) = inst_obj->fields[field_idx];
+        if (cls->struct_layout) {
+            if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
+            }
+        } else {
+            R(a) = inst_obj->fields[field_idx];
+        }
         vmbreak;
     }
 
     // Fast path: polymorphic IC hit
     if (cache && xr_ic_field_lookup_poly(cache, cls, field_name_idx, &field_idx)) {
-        R(a) = inst_obj->fields[field_idx];
+        if (cls->struct_layout) {
+            if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
+            }
+        } else {
+            R(a) = inst_obj->fields[field_idx];
+        }
         vmbreak;
     }
 
@@ -248,7 +278,13 @@ vmcase(OP_GETFIELD_IC) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "field '%s' not found", field_name->data);
     }
 
-    R(a) = inst_obj->fields[field_idx];
+    if (cls->struct_layout) {
+        if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
+        }
+    } else {
+        R(a) = inst_obj->fields[field_idx];
+    }
 
     // Update IC cache
     if (cache) {
@@ -628,14 +664,26 @@ getprop_instance:;
     // Fast path 1: Monomorphic IC hit (verify symbol match)
     if (cache && xr_ic_field_lookup_mono(cache, inst_class, prop_symbol, &field_index)) {
         // Monomorphic hit: direct field access!
-        R(a) = inst->fields[field_index];
+        if (inst_class->struct_layout) {
+            if (!xr_vm_instance_struct_get_field(isolate, inst, field_index, &R(a))) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
+            }
+        } else {
+            R(a) = inst->fields[field_index];
+        }
         vmbreak;
     }
 
     // Fast path 2: Polymorphic IC hit (verify symbol match)
     if (cache && xr_ic_field_lookup_poly(cache, inst_class, prop_symbol, &field_index)) {
         // Polymorphic hit: direct field access!
-        R(a) = inst->fields[field_index];
+        if (inst_class->struct_layout) {
+            if (!xr_vm_instance_struct_get_field(isolate, inst, field_index, &R(a))) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
+            }
+        } else {
+            R(a) = inst->fields[field_index];
+        }
         vmbreak;
     }
 
@@ -653,7 +701,13 @@ getprop_instance:;
         }
 
         // Field exists: access and update IC
-        R(a) = inst->fields[field_index];
+        if (inst_class->struct_layout) {
+            if (!xr_vm_instance_struct_get_field(isolate, inst, field_index, &R(a))) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
+            }
+        } else {
+            R(a) = inst->fields[field_index];
+        }
 
         // Update IC cache (pass symbol)
         if (cache) {
@@ -789,13 +843,25 @@ vmcase(OP_SETPROP) {
 
     // Fast path 1: Monomorphic IC hit (verify symbol match)
     if (cache && xr_ic_field_lookup_mono(cache, inst_class, prop_symbol, &field_index)) {
-        inst_s->fields[field_index] = value;
+        if (inst_class->struct_layout) {
+            if (!xr_vm_instance_struct_set_field(isolate, inst_s, field_index, value)) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
+            }
+        } else {
+            inst_s->fields[field_index] = value;
+        }
         vmbreak;
     }
 
     // Fast path 2: Polymorphic IC hit (verify symbol match)
     if (cache && xr_ic_field_lookup_poly(cache, inst_class, prop_symbol, &field_index)) {
-        inst_s->fields[field_index] = value;
+        if (inst_class->struct_layout) {
+            if (!xr_vm_instance_struct_set_field(isolate, inst_s, field_index, value)) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
+            }
+        } else {
+            inst_s->fields[field_index] = value;
+        }
         vmbreak;
     }
 
@@ -803,7 +869,13 @@ vmcase(OP_SETPROP) {
     field_index = xr_class_lookup_field(inst_class, prop_symbol);
 
     if (field_index >= 0) {
-        inst_s->fields[field_index] = value;
+        if (inst_class->struct_layout) {
+            if (!xr_vm_instance_struct_set_field(isolate, inst_s, field_index, value)) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
+            }
+        } else {
+            inst_s->fields[field_index] = value;
+        }
 
         // Update IC cache (pass symbol)
         if (cache) {

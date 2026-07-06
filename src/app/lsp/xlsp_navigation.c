@@ -390,7 +390,8 @@ static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
             break;
 
         case AST_CLASS_DECL:
-        case AST_STRUCT_DECL: {
+        case AST_STRUCT_DECL:
+        case AST_UNION_DECL: {
             // Check class/struct name
             if (node->as.class_decl.name &&
                 strcmp(node->as.class_decl.name, ctx->target_name) == 0) {

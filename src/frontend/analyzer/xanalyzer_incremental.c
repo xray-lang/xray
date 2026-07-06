@@ -615,6 +615,8 @@ static void collect_functions(AstNode *node, uint32_t **ids, int *count, int *ca
         for (int i = 0; i < node->as.struct_decl.method_count; i++) {
             collect_functions(node->as.struct_decl.methods[i], ids, count, capacity, analyzer);
         }
+    } else if (node->type == AST_UNION_DECL) {
+        return;
     }
 }
 

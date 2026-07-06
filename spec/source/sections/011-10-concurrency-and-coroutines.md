@@ -404,15 +404,15 @@ shared rate = Atomic(3.14)         // Atomic<float>
 
 ```xray
 enum Ordering {
-    Relaxed = 0,          // 无跨线程排序保证
-    Acquire = 1,          // 读屏障
-    Release = 2,          // 写屏障
-    AcquireRelease = 3,   // 读写屏障
-    SeqCst = 4,           // 顺序一致（默认）
+    Relaxed,          // 无跨线程排序保证
+    Acquire,          // 读屏障
+    Release,          // 写屏障
+    AcquireRelease,   // 读写屏障
+    SeqCst,           // 顺序一致（默认）
 }
 ```
 
-`Ordering` 枚举由编译器自动注入（prelude），无需 import。
+`Ordering` 枚举由编译器自动注入（prelude），无需 import；底层 intrinsic 读取声明顺序 tag，不依赖用户可见 backing value。
 
 ```xray
 shared counter = Atomic(0)
@@ -853,15 +853,15 @@ All methods accepting an `ord?` parameter take an `Ordering` enum to specify mem
 
 ```xray
 enum Ordering {
-    Relaxed = 0,          // No cross-thread ordering guarantee
-    Acquire = 1,          // Read barrier
-    Release = 2,          // Write barrier
-    AcquireRelease = 3,   // Read-write barrier
-    SeqCst = 4,           // Sequential consistency (default)
+    Relaxed,          // No cross-thread ordering guarantee
+    Acquire,          // Read barrier
+    Release,          // Write barrier
+    AcquireRelease,   // Read-write barrier
+    SeqCst,           // Sequential consistency (default)
 }
 ```
 
-The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed.
+The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed. Low-level intrinsics read the declaration-order tag and do not rely on user-visible backing values.
 
 ```xray
 shared counter = Atomic(0)

@@ -35,23 +35,6 @@ XrValue xr_enum_get_name(XrVMRuntime *isolate, XrValue *args, int nargs) {
     return xr_string_value(str);
 }
 
-/* ========== Enum.value ========== */
-XrValue xr_enum_get_value(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    if (nargs < 1)
-        return xr_null();
-    XrValue self = args[0];
-    if (!XR_IS_PTR(self))
-        return xr_null();
-
-    if (!XR_IS_ENUM_VALUE(self))
-        return xr_null();
-
-    XrEnumValue *enum_val = (XrEnumValue *) XR_TO_PTR(self);
-
-    return enum_val->raw_value;
-}
-
 /* ========== Enum.ordinal ========== */
 XrValue xr_enum_get_ordinal(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
@@ -90,47 +73,4 @@ XrValue xr_enum_toString(XrVMRuntime *isolate, XrValue *args, int nargs) {
     size_t len = strlen(buffer);
     XrString *str = xr_string_intern(isolate, buffer, len, 0);
     return xr_string_value(str);
-}
-
-/* ========== EnumType.memberCount ========== */
-XrValue xr_enum_type_get_member_count(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    if (nargs < 1)
-        return xr_null();
-    XrValue self = args[0];
-    if (!XR_IS_PTR(self))
-        return xr_null();
-
-    if (!XR_IS_ENUM_TYPE(self))
-        return xr_null();
-
-    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(self);
-
-    return xr_int(enum_type->member_count);
-}
-
-/* ========== EnumType.getMember ========== */
-XrValue xr_enum_type_get_member(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    if (nargs < 2)
-        return xr_null();
-    XrValue self = args[0];
-    XrValue index_val = args[1];
-    if (!XR_IS_PTR(self))
-        return xr_null();
-    if (!XR_IS_INT(index_val))
-        return xr_null();
-
-    if (!XR_IS_ENUM_TYPE(self))
-        return xr_null();
-
-    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(self);
-    int index = XR_TO_INT(index_val);
-
-    if (index < 0 || index >= (int) enum_type->member_count) {
-        return xr_null();
-    }
-
-    XrEnumValue *enum_val = enum_type->members[index].instance;
-    return XR_FROM_PTR(enum_val);
 }

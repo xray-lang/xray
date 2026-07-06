@@ -469,8 +469,6 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     new_arr->elem_size = array->elem_size;
     new_arr->elem_tid = array->elem_tid;
     new_arr->contains_refs = array->contains_refs;
-    new_arr->adt_enum_name = array->adt_enum_name;
-    new_arr->adt_member_name = array->adt_member_name;
     new_arr->data_on_region_heap = 0;  // data allocated via xr_malloc (system heap)
     memset(new_arr->_pad, 0, sizeof(new_arr->_pad));
 
@@ -890,8 +888,6 @@ bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, 
     t->elem_size = src->elem_size;
     t->elem_tid = src->elem_tid;
     t->contains_refs = 0;
-    t->adt_enum_name = src->adt_enum_name;
-    t->adt_member_name = src->adt_member_name;
     t->data_on_region_heap = 0;
     memset(t->_pad, 0, sizeof(t->_pad));
 
@@ -948,8 +944,6 @@ bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine
     r->elem_size = t->elem_size;
     r->elem_tid = t->elem_tid;
     r->contains_refs = 0;
-    r->adt_enum_name = t->adt_enum_name;
-    r->adt_member_name = t->adt_member_name;
     r->data_on_region_heap = 0; /* malloc-backed buffer, freed by the array dtor */
     memset(r->_pad, 0, sizeof(r->_pad));
 
@@ -1137,8 +1131,6 @@ XrValue xr_to_shared_array(struct XrVMRuntime *X, XrObjHeader *obj) {
     if (!new_arr)
         return XR_NULL_VAL;
     xr_array_init_inplace(new_arr, length > 0 ? length : 4, array->elem_type);
-    new_arr->adt_enum_name = array->adt_enum_name;
-    new_arr->adt_member_name = array->adt_member_name;
     XR_OBJ_SET_STORAGE(&new_arr->hdr, XR_OBJ_STORAGE_SHARED);
     xr_shared_set_refc(&new_arr->hdr, 1);
     if (array->elem_type == XR_ELEM_ANY) {

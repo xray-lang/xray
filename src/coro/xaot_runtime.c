@@ -240,8 +240,6 @@ static XrValue aot_bridge_array_to_runtime(XrRuntimeCore *core, XrCoroutine *own
         xr_array_with_capacity_typed(owner, (int) src->length, (XrArrayElemType) elem_type);
     if (!dst)
         return XR_NULL_VAL;
-    dst->adt_enum_name = src->adt_enum_name;
-    dst->adt_member_name = src->adt_member_name;
     if (elem_type == XR_ELEM_ANY) {
         for (int64_t i = 0; i < src->length; i++) {
             XrValue item = xr_typed_get(src->data, (int32_t) i, elem_type);

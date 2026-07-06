@@ -32,7 +32,6 @@
 typedef struct XrClass XrClass;
 typedef struct XrInstance XrInstance;
 typedef struct XrArena XrArena;
-typedef struct XrReflectCache XrReflectCache;
 typedef struct XrCoroHeap XrCoroHeap;
 typedef struct XrCopyContext XrCopyContext;
 
@@ -74,7 +73,7 @@ typedef enum XrFieldAccessKind {
 // Field descriptor (determined at compile time, immutable)
 typedef struct XrFieldDescriptor {
     const char *name;
-    const char *type_name;  // Declared type name (NULL = untyped), for reflection
+    const char *type_name;  // Declared type name (NULL = untyped), for type metadata
     int symbol;
     uint16_t offset;  // Byte offset in instance
     uint16_t flags;
@@ -261,14 +260,7 @@ struct XrClass {
     // override. Set via xr_class_builder_set_native_body().
     XrNativeBodyDesc *native_body;
 
-    /* === Reflection Cache === */
-    // Eagerly built by xr_class_builder_finalize; guaranteed non-NULL
-    // for any class that survives finalize, unless its allocation hit
-    // OOM. reflection clients can treat NULL as "degraded, no cache"
-    // but never as "not built yet".
-    struct XrReflectCache *reflect_cache;
-    // Also eagerly populated by finalize via xr_registry_register_class.
-    struct XrTypeMetadata *type_metadata;
+    /* Type metadata wrapper/cache data is intentionally not part of the hot class. */
 };
 
 // Class flags

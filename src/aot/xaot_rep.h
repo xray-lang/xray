@@ -36,8 +36,8 @@ typedef struct XaotValueRep {
 } XaotValueRep;
 
 enum {
-    XAOT_VALUE_FLAG_ADT = 1u << 0,
-    XAOT_VALUE_FLAG_ADT_SINGLE_PAYLOAD = 1u << 1,
+    XAOT_VALUE_FLAG_ENUM = 1u << 0,
+    XAOT_VALUE_FLAG_ENUM_AGGREGATE = 1u << 1,
     XAOT_VALUE_FLAG_STRUCT = 1u << 2,
     XAOT_VALUE_FLAG_SPAN = 1u << 3,
     XAOT_VALUE_FLAG_OWNED_C_TYPE = 1u << 31,

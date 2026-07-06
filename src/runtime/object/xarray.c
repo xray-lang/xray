@@ -293,8 +293,6 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
     arr->contains_refs = 0;
     arr->content_version = XR_ARRAY_CONTENT_VERSION_INIT;
     arr->deferred_submit_version = 0;
-    arr->adt_enum_name = NULL;
-    arr->adt_member_name = NULL;
     arr->data_on_region_heap = 0;
     memset(arr->_pad, 0, sizeof(arr->_pad));
 
@@ -337,8 +335,6 @@ void xr_array_init_inplace(XrArray *arr, int capacity, uint8_t elem_type) {
     arr->contains_refs = 0;
     arr->content_version = XR_ARRAY_CONTENT_VERSION_INIT;
     arr->deferred_submit_version = 0;
-    arr->adt_enum_name = NULL;
-    arr->adt_member_name = NULL;
     arr->data_on_region_heap = 0;  // always 0 for inplace arrays
     memset(arr->_pad, 0, sizeof(arr->_pad));
 

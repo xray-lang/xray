@@ -103,6 +103,7 @@ struct AstNode {
         SetLiteralNode set_literal;
         ClassDeclNode class_decl;
         ClassDeclNode struct_decl;
+        ClassDeclNode union_decl;
         StructLiteralNode struct_literal;
         InterfaceDeclNode interface_decl;
         InterfaceMethodNode interface_method;
@@ -116,7 +117,6 @@ struct AstNode {
         EnumDeclNode enum_decl;
         EnumMemberNode enum_member;
         EnumAccessNode enum_access;
-        EnumConvertNode enum_convert;
         EnumIndexNode enum_index;
         TryCatchNode try_catch;
         ThrowStmtNode throw_stmt;

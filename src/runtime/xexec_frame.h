@@ -13,7 +13,7 @@
  *   (src/vm/) reads and writes these structures but
  *   does not own their public shape; the isolate fallback and VM coroutine
  *   backend state carry concrete instances. Lives at the runtime layer so GC,
- *   reflection and error handling never reverse-include into vm/.
+ *   type metadata and error handling never reverse-include into vm/.
  */
 
 #ifndef XEXEC_FRAME_H

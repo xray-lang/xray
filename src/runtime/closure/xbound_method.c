@@ -10,7 +10,6 @@
 
 #include "xbound_method.h"
 #include "../../base/xchecks.h"
-#include "../class/xenum.h"
 #include "../class/xclass.h"
 #include "../mem/xheap.h"
 #include "../object/xnative_type.h"
@@ -115,23 +114,4 @@ MethodHandler xr_string_get_handler(XrVMRuntime *isolate, int symbol) {
     if (symbol == SYMBOL_ITERATOR)
         return bound_method_stub;
     return NULL;
-}
-
-XrValue xr_enum_get_member_handler(XrVMRuntime *isolate, XrValue receiver, XrValue *args,
-                                   int argc) {
-    (void) isolate;
-    if (argc < 1 || !XR_IS_INT(args[0]))
-        return xr_null();
-    if (!XR_IS_PTR(receiver))
-        return xr_null();
-
-    if (!XR_IS_ENUM_TYPE(receiver))
-        return xr_null();
-
-    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(receiver);
-    int index = XR_TO_INT(args[0]);
-    if (index < 0 || index >= (int) enum_type->member_count) {
-        return xr_null();
-    }
-    return XR_FROM_PTR(enum_type->members[index].instance);
 }

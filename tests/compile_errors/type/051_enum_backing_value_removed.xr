@@ -1,0 +1,5 @@
+enum Code {
+    OK = 200
+}
+
+print(Code.OK)

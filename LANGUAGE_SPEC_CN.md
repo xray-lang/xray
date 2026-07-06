@@ -63,7 +63,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 | **并发** | 内置 M:N 协程（go / await / Channel / scope / select），并发安全在编译期由"显式共享"规则保证 |
 | **运行模式** | VM 解释 / JIT / AOT 三档，对开发者透明；语义在三种模式下严格一致 |
 | **错误处理** | 值返回错误通道（throw / try / catch + enum 错误）+ panic 边界（catch panic）+ 可空类型（T?）+ defer 资源管理 |
-| **元编程** | 注解（`@test` / `@native` / `@deprecated`）+ 运行时反射（Reflect）+ 泛型 reified |
+| **元编程** | 注解（`@test` / `@native` / `@deprecated`）+ 编译期/derive 元数据 + 泛型单态化 |
 | **互操作** | C ABI 内置；stdlib 模块可由 C 编写并通过 `XR_DEFINE_BUILTIN` 暴露 |
 
 设计参考来源：TypeScript（类型推断 + nullable）、Go（结构化并发 + Channel）、Rust（所有权语义的轻量版 move）、Swift（协议 + 可空链）。**Xray 不是其中任何一者的克隆**。
@@ -507,9 +507,9 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 1. **类型推断**：变量声明几乎不用写类型；分析器从初始值/上下文推导。
 2. **Nullable 分离**：`T` 永不为 `null`；`T?` 是 `T | null` 的语法糖。
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
-4. **Generic reified**：泛型类型参数运行时可反射。
+4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
 5. **Structural Json + Nominal class**：Json 对象按字段结构兼容（duck typing），class 按名义兼容。
-6. **运行时反射**：`typeof` / `Reflect.*` API。
+6. **最小类型身份**：`typeof` / `typename` / `is` / `as`；默认没有运行时 `Reflect` 模块。
 
 ### 2.2 类型分类
 
@@ -608,7 +608,7 @@ if (!s.isEmpty()) { }    // OK
 var a: char = 'a'
 var zh = '中'
 var smile = '\u{1F600}'
-print(typeof(a))          // "char"
+print(typename(a))        // "char"
 print(int(smile))         // 128512
 ```
 
@@ -781,7 +781,7 @@ var init = Bytes([72, 101, 108, 108, 111])
 // Record/Json 对象字面量：标识符或字符串 key + 冒号 ':'
 var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
 var user = { name: "Bob", age: 25 }       // 默认类型为 sealed Record
-typeof(user)                              // "Record"
+typename(user)                            // "Record"
 data.name              // 类型: Json（字段访问返回 Json）
 data["name"]           // 等价
 
@@ -1019,21 +1019,18 @@ typename(value)   // 返回类型名字符串
 `Type.Array`、`Type.Map`、`Type.Set`、`Type.Channel`、`Type.Json`、
 `Type.function`、`Type.class`、`Type.struct`、`Type.enum`、`Type.module`、`Type.bigint`、...
 
-完整列表见 `stdlib/types/enum.xr` / `src/runtime/value/xtype.h`。
+完整列表见 `src/runtime/value/xtype_names.h` 中的 `XrTypeId`。
 
-### 2.12 运行时反射
+### 2.12 元数据与类型身份边界
 
-`Reflect` 模块（内置）：
+Xray 默认只保留最小类型身份层：
 
-```xray
-Reflect.getType(obj)        // 获取类型信息（Json）
-Reflect.typeOf(obj)         // 获取类型名（string）
-Reflect.isInstance(obj, cls)// 是否某类实例
-Reflect.fieldCount(obj)     // 字段数量
-Reflect.getAllTypes()       // 所有已注册类型
-```
+- `typeof(x)` 返回稳定的 `Type` / `TypeId`，适合分支、`match` 和 analyzer narrowing。
+- `typename(x)` 返回调试/日志用的类型名字符串，是冷路径能力。
+- 名义类型判断使用 `x is T` / `x as T`，不要通过字符串比较类型名。
+- 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
-详见 §13 与 §14。
+`Reflect` 全局模块以及用户可见的 `Type` / `Field` / `Method` / `Constructor` / `Parameter` wrapper 类已删除，不提供兼容层。
 
 ---
 
@@ -1738,7 +1735,7 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 | `Json` | key (string) | (key, value) |
 | `string` | `char` | (index, char) |
 | `Range`（`a..b`） | int | — |
-| Enum 类型 | EnumValue | — |
+| Enum 类型 | 具体 enum 值 | — |
 | 自定义 `Iterator<T>` | T | — |
 
 #### 自定义迭代器
@@ -2501,54 +2498,57 @@ class Buffer implements SizedCollection<int> {
 
 ### 5.6 `enum` 声明
 
-xray 的 `enum` 是**代数数据类型 (Algebraic Data Type)**：每个变体可以是无 payload 的简单标签（C 风格枚举），也可以**携带类型化的 payload 数据**（ADT 风格）。两者可在同一个 enum 中混用。
+xray 的 `enum` 是**安全 tagged aggregate**：每个值包含编译器分配的声明顺序 tag，并且只有当前 tag 对应的 payload 可读。无 payload 的简单 enum 只是 payload size 为 0 的 tagged aggregate；带 payload 的 enum 是同一模型下的安全 sum type。
 
 ```ebnf
 EnumDecl       ::= 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
-                |  Identifier '=' BackingValue                // 简单枚举的显式 backing value
 EnumMethod     ::= 'static'? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
-BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 ```
 
 > 变体声明必须排在前面（逗号分隔），方法声明排在所有变体之后（无逗号，靠块边界分隔，与 `class` 内方法一致）。详见 §5.6.7。
 
-#### 5.6.1 简单枚举（无 payload）
+#### 5.6.1 简单枚举（0-payload enum）
 
 ```xray
 enum Color { Red, Green, Blue }
-Color.Red.value     // 0
-Color.Blue.value    // 2
+
+Color.Red.ordinal     // 0
+Color.Blue.ordinal    // 2
+Color.Red.name        // "Red"
+Color.Red.toString()  // "Color.Red"
 
 enum HttpStatus {
-    OK = 200,
-    NotFound = 404,
-    InternalError = 500,
-}
+    OK,
+    NotFound,
+    InternalError
 
-enum Direction { North = "N", South = "S", East = "E", West = "W" }
-enum Flag      { On = true, Off = false }
-enum Pi        { Approximate = 3.14, Better = 3.14159 }
+    fn code() -> int {
+        return match (this) {
+            HttpStatus.OK -> 200,
+            HttpStatus.NotFound -> 404,
+            HttpStatus.InternalError -> 500
+        }
+    }
+}
 ```
 
-简单枚举的所有成员必须使用相同 backing type（全 int / 全 float / 全 string / 全 bool）；混合类型编译错误 `XR_ERR_ANALYZE_ENUM_MIXED_TYPE`。
+显式 backing value 已删除：不支持 `enum E : int`，也不支持 `Variant = 200` / `"N"` / `true` / `3.14`。协议数值、字符串符号等应通过 `const`、方法或显式转换函数表达。
 
-#### 5.6.2 ADT 枚举（带 payload）
+#### 5.6.2 Payload enum
 
 变体名后跟括号声明 payload 字段（位置参数或具名字段）：
 
 ```xray
-// 位置 payload
 enum Option<T> {
     Some(T),
     None,
 }
 
-// 具名字段 payload（推荐：可读性更好）
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
@@ -2556,42 +2556,21 @@ enum NetEvent {
     Error(code: int, message: string),
 }
 
-// 状态机
-enum ConnState {
-    Idle,
-    Connecting(retry: int),
-    Connected(peer: string, since: int),
-    Failed(reason: string),
-}
-
-// AST 节点
 enum Expr {
     Number(int),
-    Binary(op: string, left: Expr, right: Expr),
+    Binary(op: string, left: Box<Expr>, right: Box<Expr>),
     Call(name: string, args: Array<Expr>),
 }
 ```
 
-**ADT 与简单枚举的区别**：
-
-| 特性 | 简单枚举 | ADT 枚举 |
-|------|--|--|
-| 携带数据 | ❌ | ✅ 每变体独立的字段集 |
-| `.value` / `.ordinal` | ✅ | 仅对无 payload 的变体可用 |
-| backing value (`= 200`) | ✅ | ❌ 不能与 payload 混用 |
-| 泛型 | ❌ | ✅ `enum Option<T> { ... }` |
-| match 解构 | 仅按值 | 按变体 + 解构 payload |
-| `for-in` 遍历 | ✅ 按声明顺序 | ❌ 含 payload 时无意义 |
-| 内存表示 | 整数/字符串值 | tag + payload |
-
-混合：一个 enum 可以同时含有"无 payload"和"带 payload"的变体（见上面的 `NetEvent` / `ConnState`）。
+直接按值递归的 enum payload 会导致无限大小，必须编译拒绝。递归数据结构需要显式间接化，例如 `Box<Expr>`、class 节点或引用容器槽。
 
 #### 5.6.3 构造与解构
 
 构造：
 
 ```xray
-var c = Color.Red                                   // 简单
+var c = Color.Red
 var r1 = Option.Some(42)                            // 位置 payload
 var e1 = NetEvent.DataReceived(bytes: b)            // 具名 payload，可写字段名
 var e2 = NetEvent.Error(404, "not found")           // 也可省略字段名按位置传
@@ -2611,41 +2590,40 @@ match (event) {
 
 详见 §6.3。
 
-#### 5.6.4 简单枚举的 Member API
-
-仅适用于**无 payload** 的变体（含 ADT 中的"纯标签"变体）。
+#### 5.6.4 enum 值 API
 
 实例属性（作用在枚举值上）：
 
 ```xray
 Color.Red.name        // "Red"          变体名 (string)
-Color.Red.value       // 0              backing value
-Color.Red.ordinal     // 0              声明顺序索引 (int，从 0)
+Color.Red.ordinal     // 0              声明顺序 tag (int，从 0)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
 ```
 
-类静态属性/方法：
-
-```xray
-Color.memberCount     // 3              简单变体总数 (int)
-Color.getMember(0)    // Color.Red      按 ordinal 取
-```
-
-含 payload 的 ADT 变体**不**支持 `.value` / `.ordinal` / `getMember`，但仍可调用 `.name` 与 `toString()`（后者会带 payload 摘要，如 `Option.Some(42)`）。
+`.value`、`memberCount`、`getMember`、用户可见 `EnumValue` / `EnumType` 已删除。若需要遍历所有 case，后续使用显式生成 metadata 的 `CaseIterable` 风格能力，而不是默认 runtime enum object。
 
 #### 5.6.5 遍历
 
-简单枚举可被 `for-in` 按声明顺序遍历：
+enum 默认不可 `for-in` 遍历：
 
 ```xray
-for (c in Color) { print(c.name) }        // "Red" "Green" "Blue"
+for (c in Color) { print(c.name) }        // 编译错误
 ```
 
-含 payload 的 ADT enum **不**支持直接 `for-in`——遍历"所有可能值"无意义（`Option<int>` 有无穷多个）。
+原因是 case 列表属于可裁剪 metadata，不应成为每个 enum 的默认 runtime 对象能力。需要 case iteration 时应显式 opt-in，由编译器生成只读 case 表。
 
 #### 5.6.6 反查（从值到成员）
 
-简单整数枚举编译器优化反查（Tier 1/2 contiguous/sparse；其他类型走线性扫描）。ADT 变体不支持反查。
+默认不支持 `Enum(value)` 或从 backing value 反查 enum。协议解析应写成显式函数：
+
+```xray
+fn statusFromCode(code: int) -> HttpStatus? {
+    if (code == 200) { return HttpStatus.OK }
+    if (code == 404) { return HttpStatus.NotFound }
+    if (code == 500) { return HttpStatus.InternalError }
+    return null
+}
+```
 
 #### 5.6.7 enum 方法
 
@@ -3236,7 +3214,7 @@ try {
 
 **规则**：
 - 无类型注解的 `catch (e)` 是 catch-all，匹配所有错误值
-- 有类型注解的 `catch (e: EnumType)` 仅当错误值 `is EnumType` 为真时匹配
+- 有类型注解的 `catch (e: SomeErr)` 仅当错误值 `is SomeErr` 为真时匹配，其中 `SomeErr` 是具体 enum 错误类型
 - 多个 `catch` 子句按声明顺序匹配，首个匹配者执行
 - 若所有类型化子句均不匹配且没有 catch-all，错误继续向上传播
 - 一个 `try` **必须**至少跟随 `catch`（普通 `catch` 或 `catch panic`）
@@ -3661,16 +3639,16 @@ var result = identity<float>(0)            // 0 默认 int，强制 float
 **实现策略**：构建期 monomorphization（单态化），按泛型种类采用不同表示策略。
 
 - **函数泛型**：编译器收集具体调用点，按运行时表示做 rep-sharing。当前表示组为 I64 / F64 / PTR / BOOL，同一函数最多生成 4 个表示版本；同为 PTR 表示的引用类型共享一份函数体，避免因引用类型数量导致代码体积爆炸。
-- **class / struct 泛型**：逐具体类型组合完整单态化，按 mangled name 去重，不按 PTR 表示合并。`Box<string>` 与 `Box<MyClass>` 即使同为 PTR 表示也保留不同类型身份，以保证字段布局、反射与名义类型语义精确。
+- **class / struct 泛型**：逐具体类型组合完整单态化，按 mangled name 去重，不按 PTR 表示合并。`Box<string>` 与 `Box<MyClass>` 即使同为 PTR 表示也保留不同类型身份，以保证字段布局、调试类型名与名义类型语义精确。
 - 名字修饰（name mangling）：`identity<int>` → `identity$i64`，`Pair<string, int>` → `Pair$str$i64`。
 - 单态化实例总数受 `XR_MONO_MAX_INSTANCES = 256` 保护，防止递归/组合爆炸。
-- 编译期严格类型检查保证安全；运行时保留具体类型参数信息供 `Reflect.typeOf` 使用。
+- 编译期严格类型检查保证安全；冷路径类型名元数据可在启用 names/debug profile 时保留具体类型参数显示信息。
 
 > 真值源：`src/frontend/analyzer/xanalyzer_mono.c`（单态化 pass）、`xanalyzer_mono.h`（API）。
 
 **性能影响**：
 - 函数泛型 rep-sharing 让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path，同时让引用类型共享 PTR 版本。
-- class / struct 泛型不做 rep-sharing 会增加代码和元数据体积（大致按“类型组合数 × 类体积”增长），但换来精确布局、反射保真和按类型特化；未来体积敏感场景可考虑对纯 PTR class 泛型增加显式 opt-in rep-sharing。
+- class / struct 泛型不做 rep-sharing 会增加代码和元数据体积（大致按“类型组合数 × 类体积”增长），但换来精确布局、调试类型名保真和按类型特化；未来体积敏感场景可考虑对纯 PTR class 泛型增加显式 opt-in rep-sharing。
 - 内置特化容器（`Array<int>`、`Bytes`）进一步避免装箱开销。
 - 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
 
@@ -3718,19 +3696,20 @@ describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字�
 - 容器类型：**不变**（`Array<Dog>` 不是 `Array<Animal>` 的子类型）。
 - 函数类型：参数逆变、返回值协变（标准规则）。
 
-### 9.7 泛型与运行时反射
+### 9.7 泛型与类型身份
 
-由于 monomorphization，每个具体实例化在运行时都有独立的类/函数定义，且保留了类型参数信息：
+由于 monomorphization，每个具体实例化都有独立的类/函数定义。运行时类型判断使用名义身份，调试输出通过 `typename` 的冷路径名字表提供：
 
 ```xray
 class Container<T> {
     items: Array<T>
 }
 var c = Container<int>()
-print(Reflect.typeOf(c))       // "Container<int>"
+print(c is Container<int>)     // true
+print(typename(c))             // "Container<int>" when type names are enabled
 ```
 
-对具体值的类型检查使用 `is` / `as`。
+结构化字段/方法元数据不会由默认运行时自动提供；需要 inspect/serialization 等能力时应使用显式 derive 或编译期生成。
 
 ---
 
@@ -4132,15 +4111,15 @@ shared rate = Atomic(3.14)         // Atomic<float>
 
 ```xray
 enum Ordering {
-    Relaxed = 0,          // 无跨线程排序保证
-    Acquire = 1,          // 读屏障
-    Release = 2,          // 写屏障
-    AcquireRelease = 3,   // 读写屏障
-    SeqCst = 4,           // 顺序一致（默认）
+    Relaxed,          // 无跨线程排序保证
+    Acquire,          // 读屏障
+    Release,          // 写屏障
+    AcquireRelease,   // 读写屏障
+    SeqCst,           // 顺序一致（默认）
 }
 ```
 
-`Ordering` 枚举由编译器自动注入（prelude），无需 import。
+`Ordering` 枚举由编译器自动注入（prelude），无需 import；底层 intrinsic 读取声明顺序 tag，不依赖用户可见 backing value。
 
 ```xray
 shared counter = Atomic(0)
@@ -4496,14 +4475,16 @@ fn oldAPI() { return }
 
 | 函数 / 表达式 | 签名 | 说明 |
 |---|---|---|
-| `typeof(x)` | `(value) -> string` | 返回运行时类型名字符串 |
+| `typeof(x)` | `(value) -> Type` | 返回稳定 TypeId / `Type.xxx` 值 |
+| `typename(x)` | `(value) -> string` | 返回调试/日志用类型名字符串 |
 | `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
 
 ```xray
 var x = 42
-print(typeof(x))                // "int"
+print(typeof(x) == Type.int)    // true
+print(typename(x))              // "int"
 print(x is int)                 // true
-print(typeof(x) == "int")       // true
+// typeof(x) == "int"           // compile error: use Type.int or typename(x)
 ```
 
 ### 13.4 协程
@@ -4765,9 +4746,9 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 
 内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `constructor(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
 
-### 14.17 `Task<T>` / `EnumValue` / `EnumType`
+### 14.17 `Task<T>` 与 enum 值
 
-`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`；`TaskResult.Failed(error)` 以 `unknown` 保留原始失败值（业务 enum 错误或 `PanicInfo`），plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。`EnumValue` 属性：`name`、`value`、`ordinal`，方法：`toString()`。`EnumType` 属性：`name`、`memberCount`，方法：`getMember(name)`。
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`；`TaskResult.Failed(error)` 以 `unknown` 保留原始失败值（业务 enum 错误或 `PanicInfo`），plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。enum 值保留冷路径属性 `name`、`ordinal` 与方法 `toString()`；用户可见 `EnumValue` / `EnumType` wrapper 类已删除。
 
 ### 14.18 其他 prelude 类型（`Logger` / `NetConn` / `NetListener`）
 
@@ -5196,7 +5177,6 @@ Bytecode  →  AOT (machine code)
 | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | 协程闭包捕获了不安全变量 |
 | `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` 操作数不是 `Task` |
 | `XR_ERR_ANALYZE_MISSING_TYPE` | 变量需要类型注解或初始化器 |
-| `XR_ERR_ANALYZE_ENUM_MIXED_TYPE` | enum 成员 backing type 混合 |
 | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 类未实现声明的接口 |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | 用非数字 key 访问 tuple |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段下标越界 |
@@ -5616,7 +5596,7 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // 例如 @extern("C")、@dylib("m")、@c_export("sym")、@repr(C)
+AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // 例如 @extern("C")、@dylib("m")、@c_export("sym")
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

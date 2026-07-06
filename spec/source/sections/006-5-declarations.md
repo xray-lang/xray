@@ -596,54 +596,57 @@ class Buffer implements SizedCollection<int> {
 
 ### 5.6 `enum` 声明
 
-xray 的 `enum` 是**代数数据类型 (Algebraic Data Type)**：每个变体可以是无 payload 的简单标签（C 风格枚举），也可以**携带类型化的 payload 数据**（ADT 风格）。两者可在同一个 enum 中混用。
+xray 的 `enum` 是**安全 tagged aggregate**：每个值包含编译器分配的声明顺序 tag，并且只有当前 tag 对应的 payload 可读。无 payload 的简单 enum 只是 payload size 为 0 的 tagged aggregate；带 payload 的 enum 是同一模型下的安全 sum type。
 
 ```ebnf
 EnumDecl       ::= 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
-                |  Identifier '=' BackingValue                // 简单枚举的显式 backing value
 EnumMethod     ::= 'static'? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
-BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 ```
 
 > 变体声明必须排在前面（逗号分隔），方法声明排在所有变体之后（无逗号，靠块边界分隔，与 `class` 内方法一致）。详见 §5.6.7。
 
-#### 5.6.1 简单枚举（无 payload）
+#### 5.6.1 简单枚举（0-payload enum）
 
 ```xray @id=decl-enum-simple
 enum Color { Red, Green, Blue }
-Color.Red.value     // 0
-Color.Blue.value    // 2
+
+Color.Red.ordinal     // 0
+Color.Blue.ordinal    // 2
+Color.Red.name        // "Red"
+Color.Red.toString()  // "Color.Red"
 
 enum HttpStatus {
-    OK = 200,
-    NotFound = 404,
-    InternalError = 500,
-}
+    OK,
+    NotFound,
+    InternalError
 
-enum Direction { North = "N", South = "S", East = "E", West = "W" }
-enum Flag      { On = true, Off = false }
-enum Pi        { Approximate = 3.14, Better = 3.14159 }
+    fn code() -> int {
+        return match (this) {
+            HttpStatus.OK -> 200,
+            HttpStatus.NotFound -> 404,
+            HttpStatus.InternalError -> 500
+        }
+    }
+}
 ```
 
-简单枚举的所有成员必须使用相同 backing type（全 int / 全 float / 全 string / 全 bool）；混合类型编译错误 `XR_ERR_ANALYZE_ENUM_MIXED_TYPE`。
+显式 backing value 已删除：不支持 `enum E : int`，也不支持 `Variant = 200` / `"N"` / `true` / `3.14`。协议数值、字符串符号等应通过 `const`、方法或显式转换函数表达。
 
-#### 5.6.2 ADT 枚举（带 payload）
+#### 5.6.2 Payload enum
 
 变体名后跟括号声明 payload 字段（位置参数或具名字段）：
 
 ```xray @id=decl-enum-payload
-// 位置 payload
 enum Option<T> {
     Some(T),
     None,
 }
 
-// 具名字段 payload（推荐：可读性更好）
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
@@ -651,42 +654,21 @@ enum NetEvent {
     Error(code: int, message: string),
 }
 
-// 状态机
-enum ConnState {
-    Idle,
-    Connecting(retry: int),
-    Connected(peer: string, since: int),
-    Failed(reason: string),
-}
-
-// AST 节点
 enum Expr {
     Number(int),
-    Binary(op: string, left: Expr, right: Expr),
+    Binary(op: string, left: Box<Expr>, right: Box<Expr>),
     Call(name: string, args: Array<Expr>),
 }
 ```
 
-**ADT 与简单枚举的区别**：
-
-| 特性 | 简单枚举 | ADT 枚举 |
-|------|--|--|
-| 携带数据 | ❌ | ✅ 每变体独立的字段集 |
-| `.value` / `.ordinal` | ✅ | 仅对无 payload 的变体可用 |
-| backing value (`= 200`) | ✅ | ❌ 不能与 payload 混用 |
-| 泛型 | ❌ | ✅ `enum Option<T> { ... }` |
-| match 解构 | 仅按值 | 按变体 + 解构 payload |
-| `for-in` 遍历 | ✅ 按声明顺序 | ❌ 含 payload 时无意义 |
-| 内存表示 | 整数/字符串值 | tag + payload |
-
-混合：一个 enum 可以同时含有"无 payload"和"带 payload"的变体（见上面的 `NetEvent` / `ConnState`）。
+直接按值递归的 enum payload 会导致无限大小，必须编译拒绝。递归数据结构需要显式间接化，例如 `Box<Expr>`、class 节点或引用容器槽。
 
 #### 5.6.3 构造与解构
 
 构造：
 
 ```xray
-var c = Color.Red                                   // 简单
+var c = Color.Red
 var r1 = Option.Some(42)                            // 位置 payload
 var e1 = NetEvent.DataReceived(bytes: b)            // 具名 payload，可写字段名
 var e2 = NetEvent.Error(404, "not found")           // 也可省略字段名按位置传
@@ -706,41 +688,40 @@ match (event) {
 
 详见 §6.3。
 
-#### 5.6.4 简单枚举的 Member API
-
-仅适用于**无 payload** 的变体（含 ADT 中的"纯标签"变体）。
+#### 5.6.4 enum 值 API
 
 实例属性（作用在枚举值上）：
 
 ```xray @id=decl-enum-properties
 Color.Red.name        // "Red"          变体名 (string)
-Color.Red.value       // 0              backing value
-Color.Red.ordinal     // 0              声明顺序索引 (int，从 0)
+Color.Red.ordinal     // 0              声明顺序 tag (int，从 0)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
 ```
 
-类静态属性/方法：
-
-```xray
-Color.memberCount     // 3              简单变体总数 (int)
-Color.getMember(0)    // Color.Red      按 ordinal 取
-```
-
-含 payload 的 ADT 变体**不**支持 `.value` / `.ordinal` / `getMember`，但仍可调用 `.name` 与 `toString()`（后者会带 payload 摘要，如 `Option.Some(42)`）。
+`.value`、`memberCount`、`getMember`、用户可见 `EnumValue` / `EnumType` 已删除。若需要遍历所有 case，后续使用显式生成 metadata 的 `CaseIterable` 风格能力，而不是默认 runtime enum object。
 
 #### 5.6.5 遍历
 
-简单枚举可被 `for-in` 按声明顺序遍历：
+enum 默认不可 `for-in` 遍历：
 
 ```xray @id=decl-enum-iteration
-for (c in Color) { print(c.name) }        // "Red" "Green" "Blue"
+for (c in Color) { print(c.name) }        // 编译错误
 ```
 
-含 payload 的 ADT enum **不**支持直接 `for-in`——遍历"所有可能值"无意义（`Option<int>` 有无穷多个）。
+原因是 case 列表属于可裁剪 metadata，不应成为每个 enum 的默认 runtime 对象能力。需要 case iteration 时应显式 opt-in，由编译器生成只读 case 表。
 
 #### 5.6.6 反查（从值到成员）
 
-简单整数枚举编译器优化反查（Tier 1/2 contiguous/sparse；其他类型走线性扫描）。ADT 变体不支持反查。
+默认不支持 `Enum(value)` 或从 backing value 反查 enum。协议解析应写成显式函数：
+
+```xray
+fn statusFromCode(code: int) -> HttpStatus? {
+    if (code == 200) { return HttpStatus.OK }
+    if (code == 404) { return HttpStatus.NotFound }
+    if (code == 500) { return HttpStatus.InternalError }
+    return null
+}
+```
 
 #### 5.6.7 enum 方法
 
@@ -1466,54 +1447,57 @@ class Buffer implements SizedCollection<int> {
 
 ### 5.6 `enum` declaration
 
-xray's `enum` is an **algebraic data type (ADT)**: each variant may be a payload-free tag (C-style enum) or carry typed payload data (ADT-style). Both styles can be mixed in the same enum.
+xray's `enum` is a **safe tagged aggregate**: each value contains a compiler-assigned declaration-order tag, and only the payload for the active tag may be read. A payload-free enum is just a tagged aggregate whose variants have payload size 0; payload enums are the same model used as a safe sum type.
 
 ```ebnf
 EnumDecl       ::= 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
-                |  Identifier '=' BackingValue                // explicit backing value for simple enums
 EnumMethod     ::= 'static'? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
-BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 ```
 
 > Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.
 
-#### 5.6.1 Simple enums (no payload)
+#### 5.6.1 Simple enums (0-payload enum)
 
 ```xray @id=decl-enum-simple
 enum Color { Red, Green, Blue }
-Color.Red.value     // 0
-Color.Blue.value    // 2
+
+Color.Red.ordinal     // 0
+Color.Blue.ordinal    // 2
+Color.Red.name        // "Red"
+Color.Red.toString()  // "Color.Red"
 
 enum HttpStatus {
-    OK = 200,
-    NotFound = 404,
-    InternalError = 500,
-}
+    OK,
+    NotFound,
+    InternalError
 
-enum Direction { North = "N", South = "S", East = "E", West = "W" }
-enum Flag      { On = true, Off = false }
-enum Pi        { Approximate = 3.14, Better = 3.14159 }
+    fn code() -> int {
+        return match (this) {
+            HttpStatus.OK -> 200,
+            HttpStatus.NotFound -> 404,
+            HttpStatus.InternalError -> 500
+        }
+    }
+}
 ```
 
-All members of a simple enum must use the same backing type (all `int`, all `float`, all `string`, or all `bool`). Mixed types are a compile error `XR_ERR_ANALYZE_ENUM_MIXED_TYPE`.
+Explicit backing values have been removed: `enum E : int` is not supported, and neither is `Variant = 200` / `"N"` / `true` / `3.14`. Protocol numbers, string symbols, and similar external values should be expressed with `const`, methods, or explicit conversion functions.
 
-#### 5.6.2 ADT enums (with payload)
+#### 5.6.2 Payload enum
 
 A variant name may be followed by parentheses declaring payload fields (positional or named):
 
 ```xray @id=decl-enum-payload
-// positional payload
 enum Option<T> {
     Some(T),
     None,
 }
 
-// named-field payload (recommended for readability)
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
@@ -1521,42 +1505,21 @@ enum NetEvent {
     Error(code: int, message: string),
 }
 
-// state machine
-enum ConnState {
-    Idle,
-    Connecting(retry: int),
-    Connected(peer: string, since: int),
-    Failed(reason: string),
-}
-
-// AST nodes
 enum Expr {
     Number(int),
-    Binary(op: string, left: Expr, right: Expr),
+    Binary(op: string, left: Box<Expr>, right: Box<Expr>),
     Call(name: string, args: Array<Expr>),
 }
 ```
 
-**ADT vs. simple enums**:
-
-| Feature | Simple enum | ADT enum |
-|------|--|--|
-| Carries data | ❌ | ✅ Each variant has its own field set |
-| `.value` / `.ordinal` | ✅ | Available only on payload-free variants |
-| Backing value (`= 200`) | ✅ | ❌ Cannot coexist with payloads |
-| Generics | ❌ | ✅ `enum Option<T> { ... }` |
-| `match` destructuring | By value only | By variant + payload destructuring |
-| `for-in` iteration | ✅ In declaration order | ❌ Meaningless when payloads are present |
-| Memory layout | Integer/string value | tag + payload |
-
-Mixing: a single enum may contain both payload-free and payload-bearing variants (see `NetEvent` / `ConnState` above).
+A directly recursive enum payload would have infinite size and must be rejected at compile time. Recursive data structures need explicit indirection such as `Box<Expr>`, class nodes, or reference-container slots.
 
 #### 5.6.3 Construction and destructuring
 
 Construction:
 
 ```xray
-var c = Color.Red                                   // simple
+var c = Color.Red
 var r1 = Option.Some(42)                            // positional payload
 var e1 = NetEvent.DataReceived(bytes: b)            // named payload, field name allowed
 var e2 = NetEvent.Error(404, "not found")           // field name omitted, positional
@@ -1576,41 +1539,40 @@ match (event) {
 
 See §6.3.
 
-#### 5.6.4 Member API for simple enums
-
-Applies only to **payload-free** variants (including pure-tag variants inside an ADT enum).
+#### 5.6.4 Enum value API
 
 Instance properties (act on the enum value):
 
 ```xray @id=decl-enum-properties
 Color.Red.name        // "Red"          variant name (string)
-Color.Red.value       // 0              backing value
-Color.Red.ordinal     // 0              declaration index (int, zero-based)
+Color.Red.ordinal     // 0              declaration-order tag (int, zero-based)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
 ```
 
-Class statics:
-
-```xray
-Color.memberCount     // 3              count of simple variants (int)
-Color.getMember(0)    // Color.Red      lookup by ordinal
-```
-
-ADT variants with payloads do **not** support `.value` / `.ordinal` / `getMember`, but `.name` and `toString()` are still available (the latter includes a payload summary, e.g. `Option.Some(42)`).
+`.value`, `memberCount`, `getMember`, and the user-visible `EnumValue` / `EnumType` wrapper classes have been removed. If code needs to iterate all cases, it should use an explicit generated-metadata capability in the style of `CaseIterable`, not a default runtime enum object.
 
 #### 5.6.5 Iteration
 
-Simple enums can be iterated with `for-in` in declaration order:
+Enums are not iterable by default:
 
 ```xray @id=decl-enum-iteration
-for (c in Color) { print(c.name) }        // "Red" "Green" "Blue"
+for (c in Color) { print(c.name) }        // compile error
 ```
 
-ADT enums with payloads do **not** support direct `for-in`—iterating "all possible values" is meaningless (`Option<int>` has infinitely many).
+The case list is strippable metadata and should not become a default runtime object capability for every enum. Case iteration should be explicit opt-in and compiler-generated when needed.
 
 #### 5.6.6 Reverse lookup (value to member)
 
-Simple integer enums benefit from reverse-lookup optimization (Tier 1/2 contiguous/sparse; other types fall back to a linear scan). ADT variants do not support reverse lookup.
+`Enum(value)` and reverse lookup from backing values are not supported by default. Protocol parsing should be written as an explicit function:
+
+```xray
+fn statusFromCode(code: int) -> HttpStatus? {
+    if (code == 200) { return HttpStatus.OK }
+    if (code == 404) { return HttpStatus.NotFound }
+    if (code == 500) { return HttpStatus.InternalError }
+    return null
+}
+```
 
 #### 5.6.7 Enum methods
 

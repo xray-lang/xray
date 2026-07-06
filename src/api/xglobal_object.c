@@ -115,13 +115,6 @@ bool xr_global_register_all_core_classes(XrGlobalObject *global, XrVMRuntime *is
     REG_OR_FAIL(TYPE_NAME_UPVALUE, core->upvalueClass);
     REG_OR_FAIL(TYPE_NAME_CFUNCTION, core->cfunctionClass);
 
-    REG_OR_FAIL(CLASS_NAME_REFLECT, core->reflectClass);
-    REG_OR_FAIL(CLASS_NAME_TYPE, core->typeClass);
-    REG_OR_FAIL(CLASS_NAME_FIELD, core->fieldClass);
-    REG_OR_FAIL(CLASS_NAME_METHOD, core->methodClass);
-    REG_OR_FAIL(CLASS_NAME_CONSTRUCTOR, core->constructorClass);
-    REG_OR_FAIL(CLASS_NAME_PARAMETER, core->parameterClass);
-
     REG_OR_FAIL(CLASS_NAME_ENUM, core->enumClass);
 
     REG_OR_FAIL(TYPE_NAME_STRINGBUILDER, core->stringBuilderClass);

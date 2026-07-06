@@ -1,6 +1,5 @@
 import mem
 
-@repr(C)
 struct Header {
     magic: uint8
     version: uint16
@@ -8,20 +7,17 @@ struct Header {
     length: uint32
 }
 
-@repr(packed)
-struct PackedHeader {
+packed struct PackedHeader {
     magic: uint8
     length: uint32
     flags: uint16
 }
 
-@repr(C)
 struct Inner {
     code: uint16
     tag: uint8
 }
 
-@repr(C)
 struct Outer {
     header: Header
     inner: Inner

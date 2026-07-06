@@ -5,10 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xclass_lookup.h - Fast class lookup independent of reflection
+ * xclass_lookup.h - Fast class lookup independent of runtime metadata wrappers
  *
  * KEY CONCEPT:
- *   Direct lookup without triggering reflection registration.
+ *   Direct lookup without triggering type registration.
  *   O(1) for core classes, O(n) for user classes.
  */
 

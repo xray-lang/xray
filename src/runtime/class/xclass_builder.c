@@ -15,8 +15,6 @@
 #include "xclass.h"
 #include "xclass_internal.h"
 #include "xmethod.h"
-#include "xreflect_cache.h"
-#include "xreflect_registry.h"
 #include "../object/xstring.h"
 #include "../xerror.h"
 #include "../../base/xmalloc.h"

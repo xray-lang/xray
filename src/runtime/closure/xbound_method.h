@@ -50,17 +50,10 @@ XR_FUNC bool xr_value_is_bound_method(XrValue v);
  * closure-taking methods (foreach / map / filter / reduce / find / ...)
  * that need a bytecode-interpreting adapter resolve to a stub that
  * returns XR_NOTFOUND.
- *
- * Enum getMember takes an integer index, so it gets its own thin
- * wrapper here. */
+ */
 XR_FUNC MethodHandler xr_map_get_handler(struct XrVMRuntime *isolate, int symbol);
 XR_FUNC MethodHandler xr_array_get_handler(struct XrVMRuntime *isolate, int symbol);
 XR_FUNC MethodHandler xr_set_get_handler(struct XrVMRuntime *isolate, int symbol);
 XR_FUNC MethodHandler xr_string_get_handler(struct XrVMRuntime *isolate, int symbol);
-
-/* Enum.getMember(int) -> XrEnumValue. Exported as a MethodHandler so
- * GETPROP can wrap it in a bound method without a special opcode. */
-XR_FUNC XrValue xr_enum_get_member_handler(struct XrVMRuntime *isolate, XrValue receiver,
-                                           XrValue *args, int argc);
 
 #endif  // XBOUND_METHOD_H

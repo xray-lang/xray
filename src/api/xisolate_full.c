@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Implements the explicit full VM constructor that initializes compiler,
- *   analyzer, classes, modules, reflection, regex, etc.
+ *   analyzer, classes, modules, regex, etc.
  *
  * WHY THIS DESIGN:
  *   This is a separate .o so that bytecode-bundled executables never link
@@ -29,10 +29,9 @@
 #include "../base/xconfig.h"
 #include "../frontend/parser/xparse.h"
 #include "../frontend/parser/xast.h"
-#include "../runtime/class/xreflect_registry.h"
+#include "../runtime/class/xtype_registry.h"
 #include "../module/xmodule.h"
 #include "../runtime/xstdlib_bridge.h"
-#include "../runtime/class/xreflect_api.h"
 #include "../runtime/object/builtins/xjson_builtins.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../coro/xscope_transfer.h"
@@ -76,9 +75,6 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     // Core class system (creates Object, String, Array, etc.)
     xr_core_init(isolate);
     xr_scope_transfer_enable_core(isolate->core_rt);
-
-    // Reflection API (needs core->objectClass, so must be after core_init)
-    xr_reflect_api_init(isolate);
 
     // Json utility class (static methods: Json.keys(), Json.has(), etc.)
     xr_json_api_init(isolate);
@@ -124,9 +120,6 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     // Register core classes to VM builtins array (must be after all classes created).
     // init_globals() in xr_vm_init ran before full VM initialization.
     if (isolate->core) {
-        if (isolate->core->reflectClass)
-            isolate->vm.builtins[XR_GLOBAL_VAR_REFLECT] =
-                xr_value_from_class(isolate->core->reflectClass);
         if (isolate->core->arrayClass)
             isolate->vm.builtins[XR_GLOBAL_VAR_ARRAY] =
                 xr_value_from_class(isolate->core->arrayClass);

@@ -38,27 +38,14 @@ typedef struct XiModuleExport {
     bool is_live_binding;      /* true for mutable export (re-assignable) */
 } XiModuleExport;
 
-typedef enum XiEnumLiteralKind {
-    XI_ENUM_LITERAL_NULL,
-    XI_ENUM_LITERAL_INT,
-    XI_ENUM_LITERAL_FLOAT,
-    XI_ENUM_LITERAL_BOOL,
-    XI_ENUM_LITERAL_STRING,
-} XiEnumLiteralKind;
-
 typedef struct XiEnumMemberData {
     const char *name;
-    XiEnumLiteralKind value_kind;
-    int64_t int_value;
-    double float_value;
-    bool bool_value;
-    const char *string_value;
+    uint32_t ordinal;
     int payload_count;
 } XiEnumMemberData;
 
 typedef struct XiEnumData {
     const char *name;
-    int base_type;
     uint32_t member_count;
     bool is_adt;
     int max_payload;

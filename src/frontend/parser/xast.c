@@ -1027,6 +1027,8 @@ AstNode *xr_ast_class_decl(XrCompilerSession *session, const char *name, const c
     node->as.class_decl.methods = methods;
     node->as.class_decl.method_count = method_count;
     node->as.class_decl.is_abstract = false;
+    node->as.class_decl.is_packed = false;
+    node->as.class_decl.explicit_align = 0;
     node->as.class_decl.attributes = NULL;
     node->as.class_decl.attr_count = 0;
     return node;
@@ -1047,10 +1049,36 @@ AstNode *xr_ast_struct_decl(XrCompilerSession *session, const char *name, AstNod
     node->as.struct_decl.method_count = method_count;
     node->as.struct_decl.is_abstract = false;
     node->as.struct_decl.is_final = true;  // structs are implicitly final
+    node->as.struct_decl.is_packed = false;
+    node->as.struct_decl.explicit_align = 0;
     node->as.struct_decl.attributes = NULL;
     node->as.struct_decl.attr_count = 0;
     node->as.struct_decl.type_params = NULL;
     node->as.struct_decl.type_param_count = 0;
+    return node;
+}
+
+// Create union declaration node (fixed-layout untagged overlay)
+AstNode *xr_ast_union_decl(XrCompilerSession *session, const char *name, AstNode **fields,
+                           int field_count, int line) {
+    AstNode *node = alloc_node(session, AST_UNION_DECL, line);
+    node->as.union_decl.name = (char *) name;
+    node->as.union_decl.super_name = NULL;
+    node->as.union_decl.super_module = NULL;
+    node->as.union_decl.interfaces = NULL;
+    node->as.union_decl.interface_count = 0;
+    node->as.union_decl.fields = fields;
+    node->as.union_decl.field_count = field_count;
+    node->as.union_decl.methods = NULL;
+    node->as.union_decl.method_count = 0;
+    node->as.union_decl.is_abstract = false;
+    node->as.union_decl.is_final = true;
+    node->as.union_decl.is_packed = false;
+    node->as.union_decl.explicit_align = 0;
+    node->as.union_decl.attributes = NULL;
+    node->as.union_decl.attr_count = 0;
+    node->as.union_decl.type_params = NULL;
+    node->as.union_decl.type_param_count = 0;
     return node;
 }
 
@@ -1215,15 +1243,13 @@ AstNode *xr_ast_member_set(XrCompilerSession *session, AstNode *object, const ch
 /* ========== Enum Node Creation ========== */
 
 // Create enum declaration node
-// Simple: enum Status : int { Success = 200, Error = 500 }
-// ADT:    enum Result<T, E> { Ok(T), Err(E)  fn isOk() -> bool { ... } }
-AstNode *xr_ast_enum_decl(XrCompilerSession *session, const char *name, const char *type_hint,
-                          AstNode **members, int member_count, AstNode **methods, int method_count,
+// enum Result<T, E> { Ok(T), Err(E)  fn isOk() -> bool { ... } }
+AstNode *xr_ast_enum_decl(XrCompilerSession *session, const char *name, AstNode **members,
+                          int member_count, AstNode **methods, int method_count,
                           XrGenericParam **type_params, int type_param_count,
                           XrTypeRef **interfaces, int interface_count, int line) {
     AstNode *node = alloc_node(session, AST_ENUM_DECL, line);
     node->as.enum_decl.name = ast_strdup(session, name);
-    node->as.enum_decl.type_hint = ast_strdup(session, type_hint);
 
     // Copy member array
     node->as.enum_decl.members =
@@ -1273,14 +1299,11 @@ AstNode *xr_ast_enum_decl(XrCompilerSession *session, const char *name, const ch
 }
 
 // Create enum member node
-// Simple: Success = 200
-// ADT:    Ok(T)  or  Error(code: int, message: string)
-AstNode *xr_ast_enum_member(XrCompilerSession *session, const char *name, AstNode *value,
-                            char **payload_names, XrTypeRef **payload_types, int payload_count,
-                            int line) {
+// Red  or  Ok(T)  or  Error(code: int, message: string)
+AstNode *xr_ast_enum_member(XrCompilerSession *session, const char *name, char **payload_names,
+                            XrTypeRef **payload_types, int payload_count, int line) {
     AstNode *node = alloc_node(session, AST_ENUM_MEMBER, line);
     node->as.enum_member.name = ast_strdup(session, name);
-    node->as.enum_member.value = value;
 
     // Copy ADT payload fields
     if (payload_count > 0 && payload_types) {
@@ -1309,16 +1332,6 @@ AstNode *xr_ast_enum_access(XrCompilerSession *session, const char *enum_name,
     AstNode *node = alloc_node(session, AST_ENUM_ACCESS, line);
     node->as.enum_access.enum_name = ast_strdup(session, enum_name);
     node->as.enum_access.member_name = ast_strdup(session, member_name);
-    return node;
-}
-
-// Create enum conversion node
-// Status(200)
-AstNode *xr_ast_enum_convert(XrCompilerSession *session, const char *enum_name, AstNode *value_expr,
-                             int line) {
-    AstNode *node = alloc_node(session, AST_ENUM_CONVERT, line);
-    node->as.enum_convert.enum_name = ast_strdup(session, enum_name);
-    node->as.enum_convert.value_expr = value_expr;
     return node;
 }
 
@@ -1585,6 +1598,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "ClassDecl";
         case AST_STRUCT_DECL:
             return "StructDecl";
+        case AST_UNION_DECL:
+            return "UnionDecl";
         case AST_STRUCT_LITERAL:
             return "StructLiteral";
         case AST_FIELD_DECL:
@@ -1605,8 +1620,6 @@ const char *xr_ast_typename(AstNodeType type) {
             return "EnumMember";
         case AST_ENUM_ACCESS:
             return "EnumAccess";
-        case AST_ENUM_CONVERT:
-            return "EnumConvert";
         case AST_ENUM_INDEX:
             return "EnumIndex";
         case AST_TRY_CATCH:

@@ -60,28 +60,6 @@ static int xa_fixed_array_elem_native_lane(XrType *elem) {
     return XR_NATIVE_VALUE;
 }
 
-static bool xa_class_attr_has(const ClassDeclNode *cls, AttributeKind kind) {
-    if (!cls || !cls->attributes)
-        return false;
-    for (int i = 0; i < cls->attr_count; i++) {
-        if (cls->attributes[i] && cls->attributes[i]->kind == kind)
-            return true;
-    }
-    return false;
-}
-
-static uint8_t xa_class_attr_align(const ClassDeclNode *cls) {
-    if (!cls || !cls->attributes)
-        return 0;
-    for (int i = 0; i < cls->attr_count; i++) {
-        XrAttribute *attr = cls->attributes[i];
-        if (attr && attr->kind == ATTR_ALIGN && attr->timeout > 0 && attr->timeout <= UINT8_MAX) {
-            return (uint8_t) attr->timeout;
-        }
-    }
-    return 0;
-}
-
 static XrAttribute *xa_function_attr(const FunctionDeclNode *fn, AttributeKind kind) {
     if (!fn || !fn->attributes)
         return NULL;
@@ -127,8 +105,8 @@ static bool xa_c_export_native_scalar_supported(uint8_t native_type) {
 }
 
 static bool xa_c_export_struct_layout_supported_depth(const XrStructLayout *layout, int depth) {
-    if (!layout || !xr_struct_layout_is_headerless(layout) || depth > 8 ||
-        layout->field_count == 0 || layout->field_count > XR_MAX_STRUCT_FIELDS)
+    if (!layout || depth > 8 || layout->field_count == 0 ||
+        layout->field_count > XR_MAX_STRUCT_FIELDS)
         return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {
         const XrStructFieldLayout *field = &layout->fields[i];
@@ -151,6 +129,42 @@ static bool xa_c_export_struct_type_supported(XrType *type) {
         !type->instance.class_ref || !type->instance.class_ref->struct_layout)
         return false;
     return xa_c_export_struct_layout_supported_depth(type->instance.class_ref->struct_layout, 0);
+}
+
+static bool xa_native_lane_bitwise_reinterpretable(uint8_t native_type) {
+    return xa_c_export_native_scalar_supported(native_type);
+}
+
+static bool xa_struct_layout_bitwise_reinterpretable_depth(const XrStructLayout *layout,
+                                                           int depth) {
+    if (!layout || depth > 8)
+        return false;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const XrStructFieldLayout *field = &layout->fields[i];
+        if (field->native_type == XR_NATIVE_STRUCT) {
+            if (!xa_struct_layout_bitwise_reinterpretable_depth(field->sub_layout, depth + 1))
+                return false;
+            continue;
+        }
+        if (field->native_type == XR_NATIVE_ARRAY) {
+            if (!xa_native_lane_bitwise_reinterpretable(field->elem_native_type))
+                return false;
+            continue;
+        }
+        if (!xa_native_lane_bitwise_reinterpretable(field->native_type))
+            return false;
+    }
+    return true;
+}
+
+static bool xa_struct_field_bitwise_reinterpretable(const XrStructFieldLayout *field) {
+    if (!field)
+        return false;
+    if (field->native_type == XR_NATIVE_STRUCT)
+        return xa_struct_layout_bitwise_reinterpretable_depth(field->sub_layout, 0);
+    if (field->native_type == XR_NATIVE_ARRAY)
+        return xa_native_lane_bitwise_reinterpretable(field->elem_native_type);
+    return xa_native_lane_bitwise_reinterpretable(field->native_type);
 }
 
 static bool xa_c_export_type_supported(XrType *type, bool is_return) {
@@ -2520,16 +2534,25 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     if (!node)
         return;
 
-    ClassDeclNode *cls = &node->as.class_decl;
+    bool is_struct_decl = node->type == AST_STRUCT_DECL;
+    bool is_union_decl = node->type == AST_UNION_DECL;
+    bool is_aggregate_decl = is_struct_decl || is_union_decl;
+    const char *decl_label = is_union_decl ? "union" : is_struct_decl ? "struct" : "class";
+    const char *diag_label = is_union_decl ? "Union" : is_struct_decl ? "Struct" : "Class";
+    ClassDeclNode *cls = (node->type == AST_CLASS_DECL) ? &node->as.class_decl
+                        : is_struct_decl                ? &node->as.struct_decl
+                                                        : &node->as.union_decl;
 
     // @native class is reserved for builtin type declarations embedded at
     // compile time.  User code cannot bind C implementations, so reject early.
     if (cls->is_native) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line};
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-                                   "'@native class' cannot be used in user code — "
-                                   "it is reserved for builtin type declarations",
-                                   &loc);
+        char msg[192];
+        snprintf(msg, sizeof(msg),
+                 "'@native %s' cannot be used in user code — it is reserved for builtin type "
+                 "declarations",
+                 decl_label);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg, &loc);
         return;
     }
 
@@ -2546,8 +2569,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
             snprintf(msg, sizeof(msg),
                      "%s '%s' conflicts with the builtin native handle type '%s.%s' — "
                      "choose a different name",
-                     node->type == AST_STRUCT_DECL ? "struct" : "class", cls->name, handle_module,
-                     cls->name);
+                     decl_label, cls->name, handle_module, cls->name);
             XrLocation loc = {.file = ctx->file_path, .line = node->line};
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg, &loc);
             return;
@@ -2573,8 +2595,29 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     links->class_info = info;
     links->type = xr_type_new_class(ctx->analyzer->isolate, cls->name);
     links->type->instance.class_ref = info;
-    if (node->type == AST_STRUCT_DECL) {
+    if (is_aggregate_decl) {
         links->type->is_value_type = true;
+    }
+
+    if (is_union_decl) {
+        if (cls->type_param_count > 0) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                       "Union declarations cannot be generic", &loc);
+        }
+        if (cls->interface_count > 0) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                       "Union declarations cannot implement interfaces", &loc);
+        }
+        if (cls->method_count > 0) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                       "Union declarations cannot declare methods", &loc);
+        }
     }
 
     // Resolve every entry in the 'implements' clause to a runtime XrType
@@ -2681,9 +2724,9 @@ skip_interfaces:
         }
     }
 
-    // Check struct-only value-type constraints before layout construction.
+    // Check fixed-layout aggregate constraints before layout construction.
     bool struct_field_types_valid = true;
-    if (node->type == AST_STRUCT_DECL) {
+    if (is_aggregate_decl) {
         for (int i = 0; i < info->field_count; i++) {
             XaSymbol *fs = info->fields[i];
             if (!fs)
@@ -2697,13 +2740,29 @@ skip_interfaces:
                 XrLocation loc = {.file = ctx->file_path, .line = fs->location.line};
                 char msg[256];
                 snprintf(msg, sizeof(msg),
-                         "Struct '%s' field '%s' cannot use a dynamic container type; "
+                         "%s '%s' field '%s' cannot use a dynamic container type; "
                          "use a class field or a fixed array [T; N]",
-                         cls->name ? cls->name : "?", fs->name ? fs->name : "?");
+                         diag_label, cls->name ? cls->name : "?", fs->name ? fs->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 struct_field_types_valid = false;
                 continue;
+            }
+
+            if (is_union_decl) {
+                AstNode *field_node = (i < cls->field_count) ? cls->fields[i] : NULL;
+                if (field_node && field_node->type == AST_FIELD_DECL &&
+                    field_node->as.field_decl.initializer) {
+                    XrLocation loc = {.file = ctx->file_path, .line = field_node->line};
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                             "Union '%s' field '%s' cannot have a default initializer",
+                             cls->name ? cls->name : "?", fs->name ? fs->name : "?");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                    struct_field_types_valid = false;
+                    continue;
+                }
             }
 
             if (!cls->name)
@@ -2718,9 +2777,9 @@ skip_interfaces:
                 XrLocation loc = {.file = ctx->file_path, .line = node->line};
                 char msg[256];
                 snprintf(msg, sizeof(msg),
-                         "Struct '%s' cannot have a field of its own type — "
+                         "%s '%s' cannot have a field of its own type — "
                          "this creates infinite size. Use a class instead for recursive data",
-                         cls->name);
+                         diag_label, cls->name);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 struct_field_types_valid = false;
@@ -2728,27 +2787,30 @@ skip_interfaces:
         }
     }
 
-    // Compute struct layout (VALUE_TYPE only, skip generic templates)
+    // Compute fixed-layout aggregate layout (VALUE_TYPE only, skip generic struct templates)
     int struct_type_param_count =
-        (node->type == AST_STRUCT_DECL) ? node->as.struct_decl.type_param_count : 0;
-    if (node->type == AST_STRUCT_DECL && info->field_count > 0 && struct_type_param_count == 0 &&
+        is_struct_decl ? node->as.struct_decl.type_param_count : 0;
+    if (is_aggregate_decl && info->field_count > 0 && struct_type_param_count == 0 &&
         struct_field_types_valid) {
         XrStructLayout *layout = xr_calloc(1, sizeof(XrStructLayout));
         if (!layout)
             goto skip_layout;
         layout->field_count = (uint16_t) info->field_count;
-        if (xa_class_attr_has(cls, ATTR_REPR_PACKED)) {
-            layout->repr = XR_STRUCT_REPR_PACKED;
-        } else if (xa_class_attr_has(cls, ATTR_REPR_C)) {
-            layout->repr = XR_STRUCT_REPR_C;
+        ClassDeclNode *st = is_union_decl ? &node->as.union_decl : &node->as.struct_decl;
+        if (is_union_decl) {
+            layout->kind = XR_STRUCT_LAYOUT_UNION;
+        } else if (st->is_packed) {
+            layout->kind = XR_STRUCT_LAYOUT_PACKED;
+        } else {
+            layout->kind = XR_STRUCT_LAYOUT_STRUCT;
         }
-        layout->explicit_align = xa_class_attr_align(cls);
+        layout->explicit_align = st->explicit_align;
         bool layout_valid = true;
         if (layout->explicit_align != 0 &&
-            (layout->explicit_align & (uint8_t) (layout->explicit_align - 1)) != 0) {
+            (layout->explicit_align & (layout->explicit_align - 1)) != 0) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line};
             char msg[256];
-            snprintf(msg, sizeof(msg), "Struct '%s' @align value must be a power of two",
+            snprintf(msg, sizeof(msg), "%s '%s' align value must be a power of two", diag_label,
                      cls->name ? cls->name : "?");
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
@@ -2777,9 +2839,9 @@ skip_interfaces:
                 XrLocation loc = {.file = ctx->file_path, .line = node->line};
                 char msg[256];
                 snprintf(msg, sizeof(msg),
-                         "Struct '%s' field '%s' must have an explicit type annotation "
+                         "%s '%s' field '%s' must have an explicit type annotation "
                          "(int, float, bool, string, fixed array, or struct)",
-                         cls->name ? cls->name : "?", fs->name ? fs->name : "?");
+                         diag_label, cls->name ? cls->name : "?", fs->name ? fs->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 layout_valid = false;
@@ -2796,8 +2858,8 @@ skip_interfaces:
                         XrLocation loc = {.file = ctx->file_path, .line = node->line};
                         char msg[256];
                         snprintf(msg, sizeof(msg),
-                                 "Struct '%s' field '%s': fixed array length must be positive",
-                                 cls->name ? cls->name : "?", fs->name ? fs->name : "?");
+                                 "%s '%s' field '%s': fixed array length must be positive",
+                                 diag_label, cls->name ? cls->name : "?", fs->name ? fs->name : "?");
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                         layout_valid = false;
@@ -2823,6 +2885,18 @@ skip_interfaces:
                     layout->fields[i].native_type = XR_NATIVE_ARRAY;
                     layout->fields[i].elem_native_type = (uint8_t) elem_native;
                     layout->fields[i].elem_count = (uint16_t) ft->fixed_array.length;
+                    if (is_union_decl &&
+                        !xa_struct_field_bitwise_reinterpretable(&layout->fields[i])) {
+                        XrLocation loc = {.file = ctx->file_path, .line = fs->location.line};
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                                 "Union '%s' field '%s' must be bitwise-reinterpretable",
+                                 cls->name ? cls->name : "?", fs->name ? fs->name : "?");
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                        layout_valid = false;
+                        break;
+                    }
                     continue;
                 }
                 // Check if field type is a nested struct with known layout
@@ -2843,31 +2917,30 @@ skip_interfaces:
                     }
                 }
                 if (sub_layout) {
-                    if (xr_struct_layout_is_headerless(layout) &&
-                        !xr_struct_layout_is_headerless(sub_layout)) {
-                        XrLocation loc = {.file = ctx->file_path, .line = node->line};
+                    layout->fields[i].native_type = XR_NATIVE_STRUCT;
+                    layout->fields[i].size = (uint16_t) xr_struct_layout_storage_size(sub_layout);
+                    layout->fields[i].sub_layout_id = sub_layout->layout_id;
+                    layout->fields[i].sub_layout = sub_layout;
+                    if (is_union_decl &&
+                        !xa_struct_field_bitwise_reinterpretable(&layout->fields[i])) {
+                        XrLocation loc = {.file = ctx->file_path, .line = fs->location.line};
                         char msg[256];
                         snprintf(msg, sizeof(msg),
-                                 "@repr(C) struct '%s' field '%s' must use a @repr(C) or "
-                                 "@repr(packed) nested struct",
+                                 "Union '%s' field '%s' must be bitwise-reinterpretable",
                                  cls->name ? cls->name : "?", fs->name ? fs->name : "?");
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                         layout_valid = false;
                         break;
                     }
-                    layout->fields[i].native_type = XR_NATIVE_STRUCT;
-                    layout->fields[i].size = (uint16_t) xr_struct_layout_storage_size(sub_layout);
-                    layout->fields[i].sub_layout_id = sub_layout->layout_id;
-                    layout->fields[i].sub_layout = sub_layout;
                 } else {
                     XrLocation loc = {.file = ctx->file_path, .line = node->line};
                     char msg[256];
                     snprintf(msg, sizeof(msg),
-                             "Struct '%s' field '%s' has unsupported type — "
+                             "%s '%s' field '%s' has unsupported type — "
                              "only int, float, bool, string, fixed arrays and other structs are "
                              "supported",
-                             cls->name ? cls->name : "?", fs->name ? fs->name : "?");
+                             diag_label, cls->name ? cls->name : "?", fs->name ? fs->name : "?");
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                     layout_valid = false;
@@ -2877,6 +2950,17 @@ skip_interfaces:
             }
 
             layout->fields[i].native_type = (uint8_t) native;
+            if (is_union_decl && !xa_struct_field_bitwise_reinterpretable(&layout->fields[i])) {
+                XrLocation loc = {.file = ctx->file_path, .line = fs->location.line};
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "Union '%s' field '%s' must be bitwise-reinterpretable",
+                         cls->name ? cls->name : "?", fs->name ? fs->name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                layout_valid = false;
+                break;
+            }
         }
 
         if (layout_valid && info->field_count <= XR_MAX_STRUCT_FIELDS) {
@@ -2885,9 +2969,9 @@ skip_interfaces:
                 XrLocation loc = {.file = ctx->file_path, .line = node->line};
                 char msg[256];
                 snprintf(msg, sizeof(msg),
-                         "Struct '%s' total size exceeds maximum (%u bytes > 65535). "
+                         "%s '%s' total size exceeds maximum (%u bytes > 65535). "
                          "For larger data, use a class with Array<T> fields.",
-                         cls->name ? cls->name : "?", (unsigned) layout->total_size);
+                         diag_label, cls->name ? cls->name : "?", (unsigned) layout->total_size);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 xr_free(layout->field_names);
@@ -2903,7 +2987,7 @@ skip_interfaces:
 skip_layout:
 
     // Collect methods
-    for (int i = 0; i < cls->method_count; i++) {
+    for (int i = 0; !is_union_decl && i < cls->method_count; i++) {
         AstNode *method = cls->methods[i];
         if (method && method->type == AST_METHOD_DECL) {
             MethodDeclNode *md = &method->as.method_decl;

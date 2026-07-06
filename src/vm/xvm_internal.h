@@ -52,6 +52,17 @@ XR_FUNC uint8_t *xr_vm_struct_ref_payload(XrVMRuntime *isolate, XrValue ref,
                                           XrStructLayout **layout_out);
 XR_FUNC int xr_vm_struct_layout_field_index(XrVMRuntime *isolate, const XrStructLayout *layout,
                                             int prop_symbol);
+XR_FUNC uint8_t *xr_vm_instance_struct_field_ptr(XrVMRuntime *isolate, XrInstance *inst,
+                                                 int field_index,
+                                                 XrStructFieldLayout **field_out);
+XR_FUNC bool xr_vm_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
+                                           XrStructFieldLayout *field, XrValue *out);
+XR_FUNC bool xr_vm_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
+                                            const XrStructFieldLayout *field, XrValue src);
+XR_FUNC bool xr_vm_instance_struct_get_field(XrVMRuntime *isolate, XrInstance *inst,
+                                             int field_index, XrValue *out);
+XR_FUNC bool xr_vm_instance_struct_set_field(XrVMRuntime *isolate, XrInstance *inst,
+                                             int field_index, XrValue value);
 
 /* ========== Inline Helper Functions ========== */
 
@@ -170,7 +181,7 @@ static inline bool vm_is_truthy(XrValue value) {
  */
 #include "../runtime/closure/xbound_method.h"
 /* Symbol -> MethodHandler bridges (xr_*_get_handler,
- * xr_enum_get_member_handler) are declared in xbound_method.h above
+ * primitive native bound-method handlers are declared in xbound_method.h above
  * and implemented under runtime/closure. */
 
 /* ========== Helper Functions (in xvm_helpers.c) ========== */

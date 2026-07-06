@@ -721,6 +721,7 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
 
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:
+        case AST_UNION_DECL:
             return xa_node_array_uses_symbol_name(node->as.class_decl.fields,
                                                   node->as.class_decl.field_count, name) ||
                    xa_node_array_uses_symbol_name(node->as.class_decl.methods,
@@ -740,9 +741,7 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
                    xa_node_array_uses_symbol_name(node->as.enum_decl.methods,
                                                   node->as.enum_decl.method_count, name);
         case AST_ENUM_MEMBER:
-            return xa_node_uses_symbol_name(node->as.enum_member.value, name);
-        case AST_ENUM_CONVERT:
-            return xa_node_uses_symbol_name(node->as.enum_convert.value_expr, name);
+            return false;
         case AST_ENUM_INDEX:
             return xa_node_uses_symbol_name(node->as.enum_index.collection, name) ||
                    xa_node_uses_symbol_name(node->as.enum_index.index_expr, name);
@@ -1566,7 +1565,7 @@ void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
 
     // Flow graph handles all type narrowing via TRUE_CONDITION / FALSE_CONDITION
     // nodes. apply_condition_narrowing() in xanalyzer_flow.c recognizes patterns:
-    //   x != null, typeof(x) == "type", x is Type, truthiness, &&, ||
+    //   x != null, typeof(x) == Type.xxx, x is Type, truthiness, &&, ||
     // Early-return narrowing is automatic: when then-branch terminates,
     // its flow becomes unreachable → merge label only has the false-condition
     // path → opposite narrowing applies to subsequent code.

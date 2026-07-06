@@ -183,51 +183,9 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         if (payload && fidx >= 0 && fidx < slayout->field_count) {
             XrStructFieldLayout *sf = &slayout->fields[fidx];
             uint8_t *fp = payload + sf->offset;
-            switch (sf->native_type) {
-                case XR_NATIVE_I64:
-                    *(int64_t *) fp = XR_TO_INT(value);
-                    break;
-                case XR_NATIVE_U64:
-                    *(uint64_t *) fp = (uint64_t) XR_TO_INT(value);
-                    break;
-                case XR_NATIVE_F64:
-                    *(double *) fp = XR_TO_FLOAT(value);
-                    break;
-                case XR_NATIVE_BOOL:
-                    *(uint8_t *) fp = (uint8_t) value.i;
-                    break;
-                case XR_NATIVE_I32:
-                    *(int32_t *) fp = (int32_t) XR_TO_INT(value);
-                    break;
-                case XR_NATIVE_U32:
-                    *(uint32_t *) fp = (uint32_t) XR_TO_INT(value);
-                    break;
-                case XR_NATIVE_I16:
-                    *(int16_t *) fp = (int16_t) XR_TO_INT(value);
-                    break;
-                case XR_NATIVE_U16:
-                    *(uint16_t *) fp = (uint16_t) XR_TO_INT(value);
-                    break;
-                case XR_NATIVE_I8:
-                    *(int8_t *) fp = (int8_t) XR_TO_INT(value);
-                    break;
-                case XR_NATIVE_U8:
-                    *(uint8_t *) fp = (uint8_t) XR_TO_INT(value);
-                    break;
-                case XR_NATIVE_F32:
-                    *(float *) fp = (float) XR_TO_FLOAT(value);
-                    break;
-                case XR_NATIVE_STRING:
-                    *(XrString **) fp = (XrString *) value.ptr;
-                    break;
-                case XR_NATIVE_ARRAY_REF:
-                case XR_NATIVE_MAP_REF:
-                case XR_NATIVE_SET_REF:
-                case XR_NATIVE_VALUE:
-                    *(XrValue *) fp = value;
-                    break;
-                default:
-                    break;
+            if (!xr_vm_struct_write_field_value(isolate, fp, sf, value)) {
+                VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
+                         "invalid value for struct field write");
             }
             return XR_DISP_NEXT;
         }
@@ -291,6 +249,7 @@ XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrVMRuntime *isolate, XrVMCo
                                                     XrInstance *inst, XrValue obj, int prop_symbol,
                                                     XrValue value, XrValue *base, int c,
                                                     XrBcCallFrame *frame, XrInstruction *pc) {
+    (void) c;
     XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
     const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
     if (!prop_name)
@@ -508,9 +467,6 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
                 XrString *str = xr_string_intern(isolate, enum_val->member_name, len, 0);
                 base[a] = xr_string_value(str);
                 return XR_DISP_NEXT;
-            } else if (prop_symbol == SYMBOL_VALUE) {
-                base[a] = enum_val->raw_value;
-                return XR_DISP_NEXT;
             } else if (prop_symbol == SYMBOL_ORDINAL) {
                 base[a] = xr_int(enum_val->member_index);
                 return XR_DISP_NEXT;
@@ -520,14 +476,6 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
 
         if (XR_IS_ENUM_TYPE(obj)) {
             XrEnumType *enum_type = (XrEnumType *) gc;
-            if (prop_symbol == SYMBOL_MEMBER_COUNT) {
-                base[a] = xr_int(enum_type->member_count);
-                return XR_DISP_NEXT;
-            } else if (prop_symbol == SYMBOL_GET_MEMBER) {
-                XrBoundMethod *bm = xr_bound_method_new(isolate, obj, xr_enum_get_member_handler);
-                base[a] = xr_value_from_bound_method(bm);
-                return XR_DISP_NEXT;
-            }
             XrEnumValue *found = xr_enum_get_member_by_symbol(enum_type, prop_symbol);
             if (found) {
                 /* A bare non-payload variant of an ADT enum is a tagged instance

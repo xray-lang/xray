@@ -151,7 +151,7 @@ typedef struct XrVMState {
     void *strings_map;  // interned strings table
 
     // Builtin globals (read-only, predefined) + shared variables (user-defined)
-    XrValue builtins[XR_GLOBALS_MAX];  // predefined builtin globals (Reflect, Array, etc.)
+    XrValue builtins[XR_GLOBALS_MAX];  // predefined builtin globals (Array, etc.)
     int builtin_count;
     XrSharedArray shared;  // dynamic shared variable storage (legacy slot-indexed top-level;
                            // being phased out in favor of `globals` below)

@@ -441,6 +441,19 @@ static bool deep_compare(CompareContext *ctx, XrValue a, XrValue b) {
         if (ia->klass && (ia->klass->builtin_kind == XR_BK_ENUM_VALUE ||
                           ia->klass->builtin_kind == XR_BK_ENUM_TYPE))
             return ia == ib;
+        if (ia->klass && ia->klass->struct_layout) {
+            XrStructLayout *layout = ia->klass->struct_layout;
+            for (uint16_t i = 0; i < layout->field_count; i++) {
+                XrValue va = xr_null();
+                XrValue vb = xr_null();
+                if (!xr_vm_instance_struct_get_field(ctx->isolate, ia, i, &va) ||
+                    !xr_vm_instance_struct_get_field(ctx->isolate, ib, i, &vb))
+                    return false;
+                if (!deep_compare(ctx, va, vb))
+                    return false;
+            }
+            return true;
+        }
         int fc = ia->klass->field_count;
         for (int i = 0; i < fc; i++) {
             if (!deep_compare(ctx, ia->fields[i], ib->fields[i]))

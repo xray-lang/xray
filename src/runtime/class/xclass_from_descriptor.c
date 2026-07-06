@@ -207,6 +207,20 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
         }
     }
 
+    if (desc->struct_layout && desc->struct_layout->total_size > 0) {
+        XrNativeBodyDesc *body_desc = (XrNativeBodyDesc *) xr_calloc(1, sizeof(*body_desc));
+        if (!body_desc) {
+            xr_log_warning("class", "from_descriptor: failed to allocate aggregate body for '%s'",
+                           desc->class_name);
+            xr_class_builder_destroy(builder);
+            return NULL;
+        }
+        body_desc->body_size = desc->struct_layout->total_size;
+        body_desc->body_align = (uint16_t) desc->struct_layout->alignment;
+        body_desc->copy_policy = XR_NATIVE_BODY_COPY_DEEP;
+        xr_class_builder_set_native_body(builder, body_desc);
+    }
+
     // Finalize - class is immutable after this point
     XrClass *cls = xr_class_builder_finalize(builder);
     if (!cls) {
@@ -214,7 +228,7 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
         return NULL;
     }
 
-    // Backfill field type_name from descriptor entries (for reflection)
+    // Backfill field type_name from descriptor entries (for type metadata)
     if (cls->fields) {
         for (uint32_t i = 0; i < desc->instance_field_count && (int) i < cls->own_field_count;
              i++) {

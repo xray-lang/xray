@@ -108,6 +108,8 @@ typedef enum {
     TK_FALSE,     // false
     TK_CLASS,     // class
     TK_STRUCT,    // struct
+    TK_UNION,     // union
+    TK_PACKED,    // packed
     TK_EXTENDS,   // extends
     TK_INTERFACE,    // interface
     TK_IMPLEMENTS,   // implements

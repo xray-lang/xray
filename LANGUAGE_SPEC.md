@@ -62,7 +62,7 @@ Xray is a **lightweight statically typed scripting language with native concurre
 | **Concurrency** | Built-in M:N coroutines (go / await / Channel / scope / select); concurrency safety is enforced at compile time by the "explicit sharing" rules |
 | **Execution** | VM interpreter / JIT / AOT — all transparent to the developer; semantics are strictly identical across modes |
 | **Error handling** | Value-return error channel (throw / try / catch + enum errors) + panic boundary (catch panic) + nullable types (T?) + `defer`-based resource management |
-| **Metaprogramming** | Attributes (`@test` / `@native` / `@deprecated`) + runtime reflection (Reflect) + reified generics |
+| **Metaprogramming** | Attributes (`@test` / `@native` / `@deprecated`) + compile-time/derive metadata + monomorphized generics |
 | **Interop** | C ABI is built-in; stdlib modules can be authored in C and exposed via `XR_DEFINE_BUILTIN` |
 
 Design influences: TypeScript (type inference + nullable), Go (structured concurrency + Channel), Rust (a lightweight take on ownership/`move`), Swift (protocols + optional chaining). **Xray is not a clone of any of them.**
@@ -506,9 +506,9 @@ Xray is statically typed; every expression has a determined type at compile time
 1. **Type inference**: variable declarations rarely require type annotations; the analyzer infers from the initializer / context.
 2. **Nullable separation**: `T` is never `null`; `T?` is sugar for `T | null`.
 3. **Union types**: `A | B | ...` (up to 6 members).
-4. **Reified generics**: generic type parameters are reflectable at runtime.
+4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
 5. **Structural Json + Nominal class**: Json objects are field-structure compatible (duck typing); classes are nominally compatible.
-6. **Runtime reflection**: `typeof` / `Reflect.*` APIs.
+6. **Minimal type identity**: `typeof`, `typename`, `is`, and `as`; there is no default runtime `Reflect` module.
 
 ### 2.2 Type Categories
 
@@ -780,7 +780,7 @@ The key difference between an **object literal** `{ field: value, ... }` and a M
 // Record/Json object literal: identifier or string key + colon ':'
 var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
 var user = { name: "Bob", age: 25 }       // default type is sealed Record
-typeof(user)                              // "Record"
+typename(user)                            // "Record"
 data.name              // type: Json (field access returns Json)
 data["name"]           // equivalent
 
@@ -1024,21 +1024,18 @@ typename(value)   // returns the type name as a string
 `Type.Array`, `Type.Map`, `Type.Set`, `Type.Channel`, `Type.Json`,
 `Type.function`, `Type.class`, `Type.struct`, `Type.enum`, `Type.module`, `Type.bigint`, ...
 
-Full list: see `stdlib/types/enum.xr` / `src/runtime/value/xtype.h`.
+Full list: see `XrTypeId` in `src/runtime/value/xtype_names.h`.
 
-### 2.12 Runtime Reflection
+### 2.12 Metadata and Type Identity Boundary
 
-The `Reflect` module (built in):
+Xray keeps only the minimal type identity layer by default:
 
-```xray
-Reflect.getType(obj)        // get type info (Json)
-Reflect.typeOf(obj)         // get the type name (string)
-Reflect.isInstance(obj, cls)// whether obj is an instance of cls
-Reflect.fieldCount(obj)     // number of fields
-Reflect.getAllTypes()       // all registered types
-```
+- `typeof(x)` returns a stable `Type` / `TypeId` for branches, `match`, and analyzer narrowing.
+- `typename(x)` returns a debug/logging type-name string and is a cold-path capability.
+- Nominal type checks use `x is T` / `x as T`; do not compare type-name strings.
+- Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 
-See §13 and §14 for more.
+The global `Reflect` module and the user-visible `Type` / `Field` / `Method` / `Constructor` / `Parameter` wrapper classes have been removed without a compatibility layer.
 
 ---
 
@@ -1743,7 +1740,7 @@ Iteration source / yield mapping:
 | `Json` | key (string) | (key, value) |
 | `string` | `char` | (index, char) |
 | `Range` (`a..b`) | int | — |
-| Enum type | EnumValue | — |
+| Enum type | concrete enum value | — |
 | Custom `Iterator<T>` | T | — |
 
 #### Custom iterators
@@ -2508,54 +2505,57 @@ class Buffer implements SizedCollection<int> {
 
 ### 5.6 `enum` declaration
 
-xray's `enum` is an **algebraic data type (ADT)**: each variant may be a payload-free tag (C-style enum) or carry typed payload data (ADT-style). Both styles can be mixed in the same enum.
+xray's `enum` is a **safe tagged aggregate**: each value contains a compiler-assigned declaration-order tag, and only the payload for the active tag may be read. A payload-free enum is just a tagged aggregate whose variants have payload size 0; payload enums are the same model used as a safe sum type.
 
 ```ebnf
 EnumDecl       ::= 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
-                |  Identifier '=' BackingValue                // explicit backing value for simple enums
 EnumMethod     ::= 'static'? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
-BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 ```
 
 > Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.
 
-#### 5.6.1 Simple enums (no payload)
+#### 5.6.1 Simple enums (0-payload enum)
 
 ```xray
 enum Color { Red, Green, Blue }
-Color.Red.value     // 0
-Color.Blue.value    // 2
+
+Color.Red.ordinal     // 0
+Color.Blue.ordinal    // 2
+Color.Red.name        // "Red"
+Color.Red.toString()  // "Color.Red"
 
 enum HttpStatus {
-    OK = 200,
-    NotFound = 404,
-    InternalError = 500,
-}
+    OK,
+    NotFound,
+    InternalError
 
-enum Direction { North = "N", South = "S", East = "E", West = "W" }
-enum Flag      { On = true, Off = false }
-enum Pi        { Approximate = 3.14, Better = 3.14159 }
+    fn code() -> int {
+        return match (this) {
+            HttpStatus.OK -> 200,
+            HttpStatus.NotFound -> 404,
+            HttpStatus.InternalError -> 500
+        }
+    }
+}
 ```
 
-All members of a simple enum must use the same backing type (all `int`, all `float`, all `string`, or all `bool`). Mixed types are a compile error `XR_ERR_ANALYZE_ENUM_MIXED_TYPE`.
+Explicit backing values have been removed: `enum E : int` is not supported, and neither is `Variant = 200` / `"N"` / `true` / `3.14`. Protocol numbers, string symbols, and similar external values should be expressed with `const`, methods, or explicit conversion functions.
 
-#### 5.6.2 ADT enums (with payload)
+#### 5.6.2 Payload enum
 
 A variant name may be followed by parentheses declaring payload fields (positional or named):
 
 ```xray
-// positional payload
 enum Option<T> {
     Some(T),
     None,
 }
 
-// named-field payload (recommended for readability)
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
@@ -2563,42 +2563,21 @@ enum NetEvent {
     Error(code: int, message: string),
 }
 
-// state machine
-enum ConnState {
-    Idle,
-    Connecting(retry: int),
-    Connected(peer: string, since: int),
-    Failed(reason: string),
-}
-
-// AST nodes
 enum Expr {
     Number(int),
-    Binary(op: string, left: Expr, right: Expr),
+    Binary(op: string, left: Box<Expr>, right: Box<Expr>),
     Call(name: string, args: Array<Expr>),
 }
 ```
 
-**ADT vs. simple enums**:
-
-| Feature | Simple enum | ADT enum |
-|------|--|--|
-| Carries data | ❌ | ✅ Each variant has its own field set |
-| `.value` / `.ordinal` | ✅ | Available only on payload-free variants |
-| Backing value (`= 200`) | ✅ | ❌ Cannot coexist with payloads |
-| Generics | ❌ | ✅ `enum Option<T> { ... }` |
-| `match` destructuring | By value only | By variant + payload destructuring |
-| `for-in` iteration | ✅ In declaration order | ❌ Meaningless when payloads are present |
-| Memory layout | Integer/string value | tag + payload |
-
-Mixing: a single enum may contain both payload-free and payload-bearing variants (see `NetEvent` / `ConnState` above).
+A directly recursive enum payload would have infinite size and must be rejected at compile time. Recursive data structures need explicit indirection such as `Box<Expr>`, class nodes, or reference-container slots.
 
 #### 5.6.3 Construction and destructuring
 
 Construction:
 
 ```xray
-var c = Color.Red                                   // simple
+var c = Color.Red
 var r1 = Option.Some(42)                            // positional payload
 var e1 = NetEvent.DataReceived(bytes: b)            // named payload, field name allowed
 var e2 = NetEvent.Error(404, "not found")           // field name omitted, positional
@@ -2618,41 +2597,40 @@ match (event) {
 
 See §6.3.
 
-#### 5.6.4 Member API for simple enums
-
-Applies only to **payload-free** variants (including pure-tag variants inside an ADT enum).
+#### 5.6.4 Enum value API
 
 Instance properties (act on the enum value):
 
 ```xray
 Color.Red.name        // "Red"          variant name (string)
-Color.Red.value       // 0              backing value
-Color.Red.ordinal     // 0              declaration index (int, zero-based)
+Color.Red.ordinal     // 0              declaration-order tag (int, zero-based)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
 ```
 
-Class statics:
-
-```xray
-Color.memberCount     // 3              count of simple variants (int)
-Color.getMember(0)    // Color.Red      lookup by ordinal
-```
-
-ADT variants with payloads do **not** support `.value` / `.ordinal` / `getMember`, but `.name` and `toString()` are still available (the latter includes a payload summary, e.g. `Option.Some(42)`).
+`.value`, `memberCount`, `getMember`, and the user-visible `EnumValue` / `EnumType` wrapper classes have been removed. If code needs to iterate all cases, it should use an explicit generated-metadata capability in the style of `CaseIterable`, not a default runtime enum object.
 
 #### 5.6.5 Iteration
 
-Simple enums can be iterated with `for-in` in declaration order:
+Enums are not iterable by default:
 
 ```xray
-for (c in Color) { print(c.name) }        // "Red" "Green" "Blue"
+for (c in Color) { print(c.name) }        // compile error
 ```
 
-ADT enums with payloads do **not** support direct `for-in`—iterating "all possible values" is meaningless (`Option<int>` has infinitely many).
+The case list is strippable metadata and should not become a default runtime object capability for every enum. Case iteration should be explicit opt-in and compiler-generated when needed.
 
 #### 5.6.6 Reverse lookup (value to member)
 
-Simple integer enums benefit from reverse-lookup optimization (Tier 1/2 contiguous/sparse; other types fall back to a linear scan). ADT variants do not support reverse lookup.
+`Enum(value)` and reverse lookup from backing values are not supported by default. Protocol parsing should be written as an explicit function:
+
+```xray
+fn statusFromCode(code: int) -> HttpStatus? {
+    if (code == 200) { return HttpStatus.OK }
+    if (code == 404) { return HttpStatus.NotFound }
+    if (code == 500) { return HttpStatus.InternalError }
+    return null
+}
+```
 
 #### 5.6.7 Enum methods
 
@@ -3243,7 +3221,7 @@ try {
 
 **Rules**:
 - An untyped `catch (e)` is the catch-all and matches any error value.
-- A typed `catch (e: EnumType)` matches only when the error value satisfies `is EnumType`.
+- A typed `catch (e: SomeErr)` matches only when the error value satisfies `is SomeErr`, where `SomeErr` is a concrete enum error type.
 - Multiple `catch` clauses are tried in declaration order; the first match wins.
 - If every typed clause fails and there is no catch-all, the error continues propagating.
 - A `try` **must** be followed by at least one of `catch` or `catch panic`.
@@ -3672,16 +3650,16 @@ var result = identity<float>(0)            // 0 defaults to int; force float
 **Implementation strategy**: build-time monomorphization, with different representation policies for different generic kinds.
 
 - **Generic functions**: the compiler collects concrete call sites and applies rep-sharing by runtime representation. The current representation groups are I64 / F64 / PTR / BOOL, so one generic function produces at most four representation versions. Reference types that share the PTR representation reuse one function body, avoiding code-size growth proportional to the number of reference types.
-- **Generic classes / structs**: each concrete type-argument combination is fully monomorphized and deduplicated by mangled name, not by PTR representation. `Box<string>` and `Box<MyClass>` remain distinct even though both use PTR representation, preserving exact type identity, field layout, and reflection semantics.
+- **Generic classes / structs**: each concrete type-argument combination is fully monomorphized and deduplicated by mangled name, not by PTR representation. `Box<string>` and `Box<MyClass>` remain distinct even though both use PTR representation, preserving exact type identity, field layout, and debug type-name semantics.
 - Name mangling: `identity<int>` → `identity$i64`, `Pair<string, int>` → `Pair$str$i64`.
 - The total number of monomorphization instances is capped by `XR_MONO_MAX_INSTANCES = 256` to prevent recursive or combinatorial explosion.
-- Strict compile-time type checking ensures safety; concrete type-parameter information is retained at runtime for `Reflect.typeOf`.
+- Strict compile-time type checking ensures safety; cold-path type-name metadata may retain concrete type-parameter display information when the names/debug profile enables it.
 
 > Source of truth: `src/frontend/analyzer/xanalyzer_mono.c` (monomorphization pass), `xanalyzer_mono.h` (API).
 
 **Performance impact**:
 - Function-level rep-sharing lets AOT generate unboxed fast paths for I64 / F64 / BOOL value representations while sharing one PTR version for reference types.
-- Generic classes / structs do not use rep-sharing, so code and metadata size grow roughly with "type combinations x class body size"; this buys exact layout, faithful reflection, and per-type specialization. A future size-sensitive mode may add explicit opt-in rep-sharing for pure-PTR class generics.
+- Generic classes / structs do not use rep-sharing, so code and metadata size grow roughly with "type combinations x class body size"; this buys exact layout, faithful debug type names, and per-type specialization. A future size-sensitive mode may add explicit opt-in rep-sharing for pure-PTR class generics.
 - Built-in specialized containers (`Array<int>`, `Bytes`) further avoid boxing overhead.
 - Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
 
@@ -3729,19 +3707,20 @@ Explicit variance annotations (`out T` / `in T`) are not currently supported. De
 - Container types: **invariant** (`Array<Dog>` is not a subtype of `Array<Animal>`).
 - Function types: parameters contravariant, return values covariant (the standard rule).
 
-### 9.7 Generics and Runtime Reflection
+### 9.7 Generics and Type Identity
 
-Because of monomorphization, every concrete instantiation has its own class/function definition at runtime, with type-parameter information retained:
+Because of monomorphization, every concrete instantiation has its own class/function definition. Runtime checks use nominal identity, and debug output goes through `typename`'s cold-path name table:
 
 ```xray
 class Container<T> {
     items: Array<T>
 }
 var c = Container<int>()
-print(Reflect.typeOf(c))       // "Container<int>"
+print(c is Container<int>)     // true
+print(typename(c))             // "Container<int>" when type names are enabled
 ```
 
-Type checks on concrete values use `is` / `as`.
+Structured field/method metadata is not provided automatically by the default runtime; use explicit derive or compile-time generation for inspect/serialization use cases.
 
 ---
 
@@ -4143,15 +4122,15 @@ All methods accepting an `ord?` parameter take an `Ordering` enum to specify mem
 
 ```xray
 enum Ordering {
-    Relaxed = 0,          // No cross-thread ordering guarantee
-    Acquire = 1,          // Read barrier
-    Release = 2,          // Write barrier
-    AcquireRelease = 3,   // Read-write barrier
-    SeqCst = 4,           // Sequential consistency (default)
+    Relaxed,          // No cross-thread ordering guarantee
+    Acquire,          // Read barrier
+    Release,          // Write barrier
+    AcquireRelease,   // Read-write barrier
+    SeqCst,           // Sequential consistency (default)
 }
 ```
 
-The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed.
+The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed. Low-level intrinsics read the declaration-order tag and do not rely on user-visible backing values.
 
 ```xray
 shared counter = Atomic(0)
@@ -4509,14 +4488,16 @@ These global functions and built-in constructor/static functions are usable with
 
 | Function / expression | Signature | Description |
 |---|---|---|
-| `typeof(x)` | `(value) -> string` | returns the runtime type-name string |
+| `typeof(x)` | `(value) -> Type` | returns a stable TypeId / `Type.xxx` value |
+| `typename(x)` | `(value) -> string` | returns the debug/logging type-name string |
 | `x is T` | expression | runtime type check; the analyzer may narrow types |
 
 ```xray
 var x = 42
-print(typeof(x))                // "int"
+print(typeof(x) == Type.int)    // true
+print(typename(x))              // "int"
 print(x is int)                 // true
-print(typeof(x) == "int")       // true
+// typeof(x) == "int"           // compile error: use Type.int or typename(x)
 ```
 
 ### 13.4 Coroutines
@@ -4778,9 +4759,9 @@ The `import datetime` module provides factory functions: `now`, `utc`, `create`,
 
 The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `constructor(message: string = "", cause: PanicInfo? = null)`, and `toString()`.
 
-### 14.17 `Task<T>` / `EnumValue` / `EnumType`
+### 14.17 `Task<T>` and Enum Values
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>`; `TaskResult.Failed(error)` preserves the original failure value (business enum error or `PanicInfo`) as `unknown`, while plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. `EnumValue` properties: `name`, `value`, `ordinal`; methods: `toString()`. `EnumType` properties: `name`, `memberCount`; methods: `getMember(name)`.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>`; `TaskResult.Failed(error)` preserves the original failure value (business enum error or `PanicInfo`) as `unknown`, while plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. Enum values keep the cold-path `name`, `ordinal`, and `toString()` surface; user-visible `EnumValue` / `EnumType` wrapper classes have been removed.
 
 ### 14.18 Other Prelude Types (`Logger` / `NetConn` / `NetListener`)
 
@@ -5209,7 +5190,6 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | coroutine closure captured an unsafe variable |
 | `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` operand is not a `Task` |
 | `XR_ERR_ANALYZE_MISSING_TYPE` | variable requires a type annotation or initializer |
-| `XR_ERR_ANALYZE_ENUM_MIXED_TYPE` | enum members have mixed backing types |
 | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | class does not implement a declared interface |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple accessed with a non-numeric key |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field index out of range |
@@ -5629,7 +5609,7 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // e.g. @extern("C"), @dylib("m"), @c_export("sym"), @repr(C)
+AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // e.g. @extern("C"), @dylib("m"), @c_export("sym")
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

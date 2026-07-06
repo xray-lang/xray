@@ -96,15 +96,19 @@ static inline XrValue xr_aot_bridge_runtime_adt_to_xrt(XrValue value) {
         return value;
     }
 
-    XrValue out = xrt_array_with_capacity((int64_t) payload_count + 1);
-    xrt_array_t *arr = (xrt_array_t *) out.ptr;
-    arr->adt_enum_name = enum_name;
-    arr->adt_member_name = member_name;
-    xrt_array_push(out, XR_FROM_INT((int64_t) member_index));
+    if (payload_count <= 0)
+        return xrt_enum_value_new_payloads(enum_name, member_name, member_index, 0, NULL);
+
+    XrValue *payloads = (XrValue *) XRT_CALLOC((size_t) payload_count, sizeof(XrValue));
+    if (!payloads)
+        return XR_NULL_VAL;
     for (int i = 0; i < payload_count; i++) {
         XrValue payload = xr_aot_runtime_adt_payload(value, i);
-        xrt_array_push(out, xr_aot_bridge_value_to_xrt(payload));
+        payloads[i] = xr_aot_bridge_value_to_xrt(payload);
     }
+    XrValue out = xrt_enum_value_new_payloads(enum_name, member_name, member_index,
+                                              (uint32_t) payload_count, payloads);
+    XRT_FREE(payloads);
     return out;
 }
 
@@ -155,8 +159,6 @@ static inline XrValue xr_aot_bridge_array_to_xrt(XrValue value) {
     XrValue dst_value = xrt_array_new_typed((int64_t) src->length, elem_type);
     xrt_array_t *dst = (xrt_array_t *) dst_value.ptr;
     dst->length = (int64_t) src->length;
-    dst->adt_enum_name = src->adt_enum_name;
-    dst->adt_member_name = src->adt_member_name;
     if (src->length == 0 || !src->data)
         return dst_value;
 

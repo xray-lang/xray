@@ -72,7 +72,6 @@ static int xi_lower_builtin_class_global_index(const char *name) {
         const char *name;
         int index;
     } builtin_classes[] = {
-        {"Reflect", XR_GLOBAL_VAR_REFLECT},
         {"Array", XR_GLOBAL_VAR_ARRAY},
         {"Set", XR_GLOBAL_VAR_SET},
         {"Map", XR_GLOBAL_VAR_MAP},
@@ -102,6 +101,10 @@ static int xi_lower_builtin_class_global_index(const char *name) {
             return builtin_classes[i].index;
     }
     return -1;
+}
+
+static int xi_lower_type_constant_id(const char *name) {
+    return xr_type_from_name(name);
 }
 
 static XiValue *xi_lower_emit_builtin_class(XiLower *l, const char *name, int line) {
@@ -1241,6 +1244,18 @@ static struct XrType *lower_math_call_result_type(XiLower *l, const char *member
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
 
+    if (ma->object && ma->object->type == AST_VARIABLE &&
+        ma->object->as.variable.name &&
+        strcmp(ma->object->as.variable.name, "Type") == 0) {
+        int tid = xi_lower_type_constant_id(ma->name);
+        if (tid >= 0) {
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
+            if (v)
+                v->aux_int = tid;
+            return v;
+        }
+    }
+
     XiValue *obj = xi_lower_expr(l, ma->object);
     if (!obj)
         return NULL;
@@ -2240,10 +2255,19 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         v->line = (uint32_t) line;
         return xi_const_null(l->func, l->cur_block, l->type_null);
     }
-    /* typeof(x) → XI_TYPEOF aux_int=1 (returns string).
-     * Returns the runtime type name as a string. For class/enum
-     * instances the concrete name is returned. */
+    /* typeof(x) → TypeId int. */
     if (strcmp(fname, "typeof") == 0 && call->arg_count == 1) {
+        XiValue *arg = xi_lower_expr(l, call->arguments[0]);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_TYPEOF, l->type_int, 1);
+        if (!v)
+            return xi_const_null(l->func, l->cur_block, l->type_null);
+        v->args[0] = arg;
+        v->aux_int = 0; /* emit OP_TYPEOF: returns TypeId int */
+        v->line = (uint32_t) line;
+        return v;
+    }
+    /* typename(x) → cold/debug type display name string. */
+    if (strcmp(fname, "typename") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_TYPEOF, l->type_string, 1);
         if (!v)
@@ -7116,11 +7140,9 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         case AST_SUPER_CALL:
             return lower_super_call(l, node);
 
-        /* Enum access / convert / index */
+        /* Enum access / index */
         case AST_ENUM_ACCESS:
             return xi_lower_enum_access(l, node);
-        case AST_ENUM_CONVERT:
-            return xi_lower_enum_convert(l, node);
         case AST_ENUM_INDEX:
             return xi_lower_enum_access(l, node); /* same pattern: load field */
 

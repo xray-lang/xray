@@ -257,7 +257,6 @@
     _(COPY, FMT_AB, KOP_AB_UNARY, "R[A] = copy(R[B])")                                             \
     _(CHR, FMT_AB, KOP_AB_UNARY, "R[A] = chr(R[B])")                                               \
     _(ENUM_ACCESS, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].variant[R[C]]")                              \
-    _(ENUM_CONVERT, FMT_ABC, KOP_ABC_BIN, "R[A] = enum_convert(R[B], R[C])")                       \
     _(ENUM_NAME, FMT_AB, KOP_AB_UNARY, "R[A] = enum_name(R[B])")                                   \
     _(TRY, FMT_SPECIAL, KOP_SPECIAL, "try block start")                                            \
     _(CATCH, FMT_A, KOP_A_LOAD, "catch block")                                                     \

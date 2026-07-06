@@ -1,0 +1,6 @@
+@repr(C)
+struct OldPoint {
+    x: int32
+}
+
+print(1)

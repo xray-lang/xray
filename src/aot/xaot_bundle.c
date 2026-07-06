@@ -185,6 +185,7 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xr_free(bundle->array_class_field_alloc_plans);
     xr_free(bundle->func_attr_plans);
     xr_free(bundle->bounds_plans);
+    xr_free(bundle->span_access_plans);
     xr_free(bundle->alias_plans);
     xr_free(bundle->boundary_steps);
     xaot_ptr_index_free(&bundle->value_index);
@@ -194,6 +195,7 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xaot_ptr_index_free(&bundle->array_class_field_index);
     xaot_ptr_index_free(&bundle->func_attr_index);
     xaot_ptr_index_free(&bundle->bounds_index);
+    xaot_ptr_index_free(&bundle->span_access_index);
     xaot_ptr_index_free(&bundle->alias_index);
     memset(bundle, 0, sizeof(*bundle));
 }
@@ -590,6 +592,56 @@ XR_FUNC const XaotBoundsPlan *xaot_bundle_find_bounds_plan(const XaotBundle *bun
     return NULL;
 }
 
+XR_FUNC XaotSpanAccessPlan *
+xaot_bundle_add_span_access_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,
+                                 uint8_t kind, uint32_t evidence,
+                                 uint32_t eliminated_checks, uint8_t unproven_reason) {
+    XaotSpanAccessPlan *plan;
+
+    if (!bundle || !func || !value || kind == 0 ||
+        (eliminated_checks == 0) == (unproven_reason == XAOT_SPAN_UNPROVEN_NONE))
+        return NULL;
+    plan = (XaotSpanAccessPlan *) xaot_bundle_find_span_access_plan(bundle, value);
+    if (plan)
+        return plan;
+    if (bundle->nspan_access_plans == bundle->span_access_plan_cap) {
+        uint32_t new_cap =
+            bundle->span_access_plan_cap < 16 ? 16 : bundle->span_access_plan_cap * 2;
+        XaotSpanAccessPlan *new_plans = (XaotSpanAccessPlan *) xr_realloc(
+            bundle->span_access_plans, sizeof(XaotSpanAccessPlan) * new_cap);
+        if (!new_plans)
+            return NULL;
+        bundle->span_access_plans = new_plans;
+        bundle->span_access_plan_cap = new_cap;
+    }
+    plan = &bundle->span_access_plans[bundle->nspan_access_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->func = func;
+    plan->value = value;
+    plan->kind = kind;
+    plan->evidence = evidence;
+    plan->eliminated_checks = eliminated_checks;
+    plan->unproven_reason = unproven_reason;
+    if (!xaot_ptr_index_put(&bundle->span_access_index, value,
+                            bundle->nspan_access_plans - 1)) {
+        bundle->error_msg = "failed to index AOT Span access plan";
+        return NULL;
+    }
+    return plan;
+}
+
+XR_FUNC const XaotSpanAccessPlan *
+xaot_bundle_find_span_access_plan(const XaotBundle *bundle, const XiValue *value) {
+    uint32_t idx;
+
+    if (!bundle || !value)
+        return NULL;
+    if (xaot_ptr_index_get(&bundle->span_access_index, value, &idx) &&
+        idx < bundle->nspan_access_plans)
+        return &bundle->span_access_plans[idx];
+    return NULL;
+}
+
 XR_FUNC XaotAliasPlan *xaot_bundle_add_alias_plan(XaotBundle *bundle, const XiFunc *func,
                                                   const XiValue *value, uint8_t kind,
                                                   uint32_t evidence) {
@@ -704,6 +756,109 @@ static void value_ref(char *buf, size_t bufsz, const XiValue *value) {
         return;
     }
     snprintf(buf, bufsz, "%s%u", value->op == XI_PHI ? "phi" : "v", value->id);
+}
+
+static const char *span_access_kind_name(uint8_t kind) {
+    switch ((XaotSpanAccessKind) kind) {
+        case XAOT_SPAN_ACCESS_INDEX_GET:
+            return "index_get";
+        case XAOT_SPAN_ACCESS_INDEX_SET:
+            return "index_set";
+        case XAOT_SPAN_ACCESS_BYTE_LOAD:
+            return "byte_load";
+        case XAOT_SPAN_ACCESS_BYTE_STORE:
+            return "byte_store";
+        case XAOT_SPAN_ACCESS_BYTE_FILL:
+            return "byte_fill";
+        case XAOT_SPAN_ACCESS_BYTE_COPY:
+            return "byte_copy";
+        case XAOT_SPAN_ACCESS_BYTE_COMPARE:
+            return "byte_compare";
+        case XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX:
+            return "byte_common_prefix";
+        case XAOT_SPAN_ACCESS_BYTE_REPEAT:
+            return "byte_repeat";
+        case XAOT_SPAN_ACCESS_SPAN_AS_BYTES:
+            return "span_as_bytes";
+        case XAOT_SPAN_ACCESS_SPAN_FILL:
+            return "span_fill";
+        case XAOT_SPAN_ACCESS_SPAN_COPY:
+            return "span_copy";
+        case XAOT_SPAN_ACCESS_SPAN_COMPARE:
+            return "span_compare";
+        case XAOT_SPAN_ACCESS_REINTERPRET:
+            return "reinterpret";
+        default:
+            return "unknown";
+    }
+}
+
+static void print_span_access_bits(FILE *out, uint32_t bits, bool evidence) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                     \
+    do {                                                                                          \
+        if ((bits & (mask)) != 0) {                                                               \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                    \
+            first = false;                                                                        \
+        }                                                                                         \
+    } while (0)
+    if (evidence) {
+        PRINT_BIT(XAOT_SPAN_EV_RECV_AGGREGATE, "recv_agg");
+        PRINT_BIT(XAOT_SPAN_EV_RECV_BYTE_SPAN, "byte_span");
+        PRINT_BIT(XAOT_SPAN_EV_RECV_POD, "pod");
+        PRINT_BIT(XAOT_SPAN_EV_ELEM_MATCH, "elem_match");
+        PRINT_BIT(XAOT_SPAN_EV_WRITABLE, "writable");
+        PRINT_BIT(XAOT_SPAN_EV_RANGE_PROVEN, "range");
+        PRINT_BIT(XAOT_SPAN_EV_LENGTH_REL_PROVEN, "len_rel");
+        PRINT_BIT(XAOT_SPAN_EV_BYTE_LEN_NO_OVERFLOW, "no_overflow");
+        PRINT_BIT(XAOT_SPAN_EV_DATA_VALID, "data_valid");
+        PRINT_BIT(XAOT_SPAN_EV_ENDIAN_CONST, "endian_const");
+        PRINT_BIT(XAOT_SPAN_EV_NO_CLOBBER, "no_clobber");
+    } else {
+        PRINT_BIT(XAOT_SPAN_DROP_BOUNDS, "bounds");
+        PRINT_BIT(XAOT_SPAN_DROP_READONLY, "readonly");
+        PRINT_BIT(XAOT_SPAN_DROP_TYPE, "type");
+        PRINT_BIT(XAOT_SPAN_DROP_POD, "pod");
+        PRINT_BIT(XAOT_SPAN_DROP_NULL_DATA, "null_data");
+        PRINT_BIT(XAOT_SPAN_DROP_OVERFLOW, "overflow");
+        PRINT_BIT(XAOT_SPAN_DROP_HELPER, "helper");
+    }
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
+static const char *span_access_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_SPAN_UNPROVEN_NONE:
+            return "none";
+        case XAOT_SPAN_UNPROVEN_DYNAMIC_RECV:
+            return "dynamic_recv";
+        case XAOT_SPAN_UNPROVEN_NOT_BYTE_SPAN:
+            return "not_byte_span";
+        case XAOT_SPAN_UNPROVEN_NOT_POD:
+            return "not_pod";
+        case XAOT_SPAN_UNPROVEN_READONLY_MAYBE:
+            return "readonly_maybe";
+        case XAOT_SPAN_UNPROVEN_RANGE:
+            return "range";
+        case XAOT_SPAN_UNPROVEN_LENGTH_REL:
+            return "length_rel";
+        case XAOT_SPAN_UNPROVEN_OVERFLOW:
+            return "overflow";
+        case XAOT_SPAN_UNPROVEN_DATA_NULL:
+            return "data_null";
+        case XAOT_SPAN_UNPROVEN_ENDIAN_DYNAMIC:
+            return "endian_dynamic";
+        case XAOT_SPAN_UNPROVEN_CLOBBER:
+            return "clobber";
+        case XAOT_SPAN_UNPROVEN_DYNAMIC_BOUNDARY:
+            return "dynamic_boundary";
+        case XAOT_SPAN_UNPROVEN_ELEM_MISMATCH:
+            return "elem_mismatch";
+        default:
+            return "unknown";
+    }
 }
 
 XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
@@ -841,6 +996,27 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 bp->unproven_reason < 5 ? reason_names[bp->unproven_reason] : "unknown";
             fprintf(out, "bounds-unproven %u func=%s access=%s op=%s reason=%s\n", ai,
                     safe_str(bp->func ? bp->func->name : NULL), access_buf, op_name, reason);
+        }
+    }
+
+    for (uint32_t ai = 0; ai < bundle->nspan_access_plans; ai++) {
+        const XaotSpanAccessPlan *sp = &bundle->span_access_plans[ai];
+        char value_buf[32];
+        value_ref(value_buf, sizeof(value_buf), sp->value);
+        if (sp->eliminated_checks != 0) {
+            fprintf(out, "span-access %u func=%s value=%s kind=%s evidence=", ai,
+                    safe_str(sp->func ? sp->func->name : NULL), value_buf,
+                    span_access_kind_name(sp->kind));
+            print_span_access_bits(out, sp->evidence, true);
+            fprintf(out, " drop=");
+            print_span_access_bits(out, sp->eliminated_checks, false);
+            fprintf(out, "\n");
+        } else {
+            fprintf(out, "span-access-unproven %u func=%s value=%s kind=%s evidence=", ai,
+                    safe_str(sp->func ? sp->func->name : NULL), value_buf,
+                    span_access_kind_name(sp->kind));
+            print_span_access_bits(out, sp->evidence, true);
+            fprintf(out, " reason=%s\n", span_access_reason_name(sp->unproven_reason));
         }
     }
 

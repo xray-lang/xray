@@ -1,0 +1,7 @@
+union BadString {
+    raw: uint64
+    text: string
+}
+
+var b = BadString{raw: 1}
+print(unsafe { b.raw })

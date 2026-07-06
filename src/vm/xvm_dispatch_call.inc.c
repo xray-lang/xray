@@ -60,26 +60,8 @@ op_call_entry:;
         goto op_call_closure;
     if (XR_IS_CFUNCTION(func_val))
         goto op_call_cfunc;
-    // Enum conversion: Status(200) -> Status.Success
-    // Check if this is a call on enum type object
     if (XR_IS_PTR(func_val)) {
         XrObjHeader *gc = (XrObjHeader *) XR_TO_PTR(func_val);
-
-        // Check enum type via class flag
-        if (XR_IS_ENUM_TYPE(func_val) && nargs == 1) {
-            // Enum conversion: Status(200)
-            XrValue value = R(a + 1);  // First argument
-            XrEnumValue *result = xr_enum_from_value((XrEnumType *) gc, value);
-
-            if (result) {
-                R(a) = XR_FROM_PTR(result);
-                vmbreak;  // Successfully converted as enum
-            } else {
-                // Conversion failed, return Null
-                R(a) = xr_null();
-                vmbreak;
-            }
-        }
 
         // ADT enum variant construction: Result.Ok(42)
         // XrEnumValue with ADT parent → construct instance with tag + payload

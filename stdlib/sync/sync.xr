@@ -18,8 +18,7 @@
 
 // CachePadded<T> — cache-line aligned wrapper for counters/flags that should
 // not share a line with adjacent values.
-@align(64)
-struct CachePadded<T> {
+struct CachePadded<T> align(64) {
     value: T
 }
 

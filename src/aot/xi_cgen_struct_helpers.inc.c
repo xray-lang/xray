@@ -129,7 +129,7 @@ static uint64_t cg_struct_layout_hash_depth(const XrStructLayout *sl, int depth)
         return h ^ UINT64_C(0x9e3779b97f4a7c15);
     h ^= sl->field_count;
     h *= UINT64_C(1099511628211);
-    h ^= sl->repr;
+    h ^= sl->kind;
     h *= UINT64_C(1099511628211);
     h ^= sl->explicit_align;
     h *= UINT64_C(1099511628211);
@@ -163,7 +163,7 @@ static bool cg_struct_layout_same_shape_depth(const XrStructLayout *a, const XrS
                                               int depth) {
     if (a == b)
         return true;
-    if (!a || !b || a->field_count != b->field_count || a->repr != b->repr ||
+    if (!a || !b || a->field_count != b->field_count || a->kind != b->kind ||
         a->explicit_align != b->explicit_align || depth > 8)
         return false;
     for (uint16_t i = 0; i < a->field_count; i++) {
@@ -218,11 +218,12 @@ static void emit_struct_field_decl(FILE *out, const XrStructLayout *sl, int64_t 
 static void emit_struct_native_typedef(FILE *out, const XrStructLayout *sl, const char *prefix) {
     char tname[128];
     cg_struct_heap_type_name(tname, sizeof(tname), prefix, sl);
-    fprintf(out, "typedef struct");
-    if (sl && (sl->repr == XR_STRUCT_REPR_PACKED || sl->explicit_align != 0)) {
+    bool is_union = sl && sl->kind == XR_STRUCT_LAYOUT_UNION;
+    fprintf(out, "typedef %s", is_union ? "union" : "struct");
+    if (sl && (sl->kind == XR_STRUCT_LAYOUT_PACKED || sl->explicit_align != 0)) {
         fprintf(out, " __attribute__((");
         bool need_comma = false;
-        if (sl->repr == XR_STRUCT_REPR_PACKED) {
+        if (!is_union && sl->kind == XR_STRUCT_LAYOUT_PACKED) {
             fprintf(out, "packed");
             need_comma = true;
         }
@@ -700,7 +701,8 @@ static void emit_struct_field_ref(FILE *out, const XrStructLayout *sl, const XiV
 }
 
 static void emit_struct_inline_field_get_expr(FILE *out, const XrStructLayout *sl,
-                                              const XiValue *origin, int64_t idx) {
+                                              const XiValue *origin, int64_t idx,
+                                              XrRep result_rep) {
     const XrStructFieldLayout *field = cg_struct_field(sl, idx);
     if (field && field->native_type == XR_NATIVE_STRUCT) {
         fprintf(out, "xr_struct_ref(&");
@@ -711,6 +713,12 @@ static void emit_struct_inline_field_get_expr(FILE *out, const XrStructLayout *s
         return;
     }
     if (field && field->native_type == XR_NATIVE_ARRAY) {
+        if (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR) {
+            fprintf(out, "&");
+            emit_struct_field_ref(out, sl, origin, idx);
+            fprintf(out, "[0]");
+            return;
+        }
         fprintf(out, "xr_array_ref(&");
         emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, "[0], %u, %u)", (unsigned) field->elem_native_type,

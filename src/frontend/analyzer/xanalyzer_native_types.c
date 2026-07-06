@@ -265,8 +265,6 @@ static const NativeTypeMapping type_mappings[] = {
     {"BigInt", XR_TID_BIGINT, TYPE_NAME_BIGINT},
     {"StringBuilder", XR_TID_STRINGBUILDER, TYPE_NAME_STRINGBUILDER},
     {"Channel", XR_TID_CHANNEL, TYPE_NAME_CHANNEL},
-    {"EnumValue", XR_TID_ENUM_VALUE, TYPE_NAME_ENUM_VALUE},
-    {"EnumType", XR_TID_ENUM_TYPE, TYPE_NAME_ENUM_TYPE},
     {"Regex", XR_TID_REGEX, TYPE_NAME_REGEX},
     {"PanicInfo", XR_TID_PANIC_INFO, TYPE_NAME_PANIC_INFO},
     {"Task", XR_TID_COROUTINE, TYPE_NAME_TASK},

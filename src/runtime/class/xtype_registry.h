@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xreflect_registry.h - Type registry for reflection system
+ * xtype_registry.h - Type registry for type metadata system
  *
  * KEY CONCEPT:
  *   Global registry storing metadata for all types.
@@ -13,10 +13,10 @@
  *   Auto-registers types when classes are created.
  */
 
-#ifndef XREFLECT_REGISTRY_H
-#define XREFLECT_REGISTRY_H
+#ifndef XTYPE_REGISTRY_H
+#define XTYPE_REGISTRY_H
 
-#include "xreflect_internal.h"
+#include "xtype_registry_internal.h"
 #include "../../base/xhashmap.h"
 #include <stdbool.h>
 
@@ -101,4 +101,4 @@ XR_FUNC XrTypeMetadata *xr_registry_from_xa_type(XrVMRuntime *X, struct XrType *
 // Get XrType flags as runtime type kind string (for debugging)
 XR_FUNC const char *xr_xr_type_kind_name(struct XrType *xa_type);
 
-#endif  // XREFLECT_REGISTRY_H
+#endif  // XTYPE_REGISTRY_H

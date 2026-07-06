@@ -23,7 +23,7 @@
 // Frame count: supports deep recursion (10000 levels)
 #define XR_FRAMES_MAX 10000
 
-// Max builtin globals (Reflect, Array, Map, etc.)
+// Max builtin globals (Array, Map, etc.)
 #define XR_GLOBALS_MAX 256
 
 // Exception handler stack depth

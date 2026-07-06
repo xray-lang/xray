@@ -63,7 +63,6 @@ typedef struct XrAotEnumValueViewCompat {
     void *klass;
     const char *enum_name;
     const char *member_name;
-    XrValue raw_value;
     uint32_t member_index;
 } XrAotEnumValueViewCompat;
 
@@ -621,13 +620,10 @@ static XrEnumType *aot_runtime_register_prelude_enum(XrAotRuntime *runtime, int 
     if (!core)
         return NULL;
 
-    XrValue values[8];
-    if (member_count <= 0 || member_count > (int) (sizeof(values) / sizeof(values[0])))
+    if (member_count <= 0)
         return NULL;
-    for (int i = 0; i < member_count; i++)
-        values[i] = XR_FROM_INT(i);
 
-    XrEnumType *type = xr_enum_type_new_core(core, name, XR_TINT, members, values, member_count);
+    XrEnumType *type = xr_enum_type_new_core(core, name, members, member_count);
     if (!type)
         return NULL;
     if (payload_counts && !xr_enum_type_set_adt_payloads(type, payload_counts, member_count))
@@ -3264,8 +3260,8 @@ int64_t xr_aot_atomic_ordering_from_value(XrValue value) {
     }
     if (XR_IS_ENUM_VALUE(value)) {
         XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(value);
-        if (ev && XR_IS_INT(ev->raw_value)) {
-            int64_t raw = XR_TO_INT(ev->raw_value);
+        if (ev) {
+            int64_t raw = (int64_t) ev->member_index;
             return (raw >= XR_AOT_ORDERING_RELAXED && raw <= XR_AOT_ORDERING_SEQ_CST)
                        ? raw
                        : XR_AOT_ORDERING_SEQ_CST;
@@ -3274,12 +3270,6 @@ int64_t xr_aot_atomic_ordering_from_value(XrValue value) {
     if (value.tag == XR_AOT_VALUE_TAG_ENUM && value.ptr) {
         const XrAotEnumValueViewCompat *ev = (const XrAotEnumValueViewCompat *) value.ptr;
         if (ev->enum_name && strcmp(ev->enum_name, "Ordering") == 0) {
-            if (XR_IS_INT(ev->raw_value)) {
-                int64_t raw = XR_TO_INT(ev->raw_value);
-                return (raw >= XR_AOT_ORDERING_RELAXED && raw <= XR_AOT_ORDERING_SEQ_CST)
-                           ? raw
-                           : XR_AOT_ORDERING_SEQ_CST;
-            }
             return ev->member_index <= XR_AOT_ORDERING_SEQ_CST ? (int64_t) ev->member_index
                                                                : XR_AOT_ORDERING_SEQ_CST;
         }

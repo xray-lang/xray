@@ -78,7 +78,7 @@ fn test_mem_info_keys() {
     assert(info["liveObjects"] >= 0)
     // Automatic cycle collector state
     assert(info["cycleCollections"] >= 0)
-    assert_eq(typeof(info["cycleCollectionEnabled"]), "bool")
+    assert_eq(typename(info["cycleCollectionEnabled"]), "bool")
     assert(info["finalizerCount"] >= 0)
     // Region block stats
     assert(info["blocks"] >= 0)

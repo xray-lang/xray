@@ -279,7 +279,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"cacheLineSize", XLSP_SYM_FUNCTION, "fn(): int", "CPU cache line size in bytes", NULL, 0},
     {"sizeOf", XLSP_SYM_FUNCTION, "fn(): int", "Compile-time size in bytes of a statically laid out type T", NULL, 0},
     {"alignOf", XLSP_SYM_FUNCTION, "fn(): int", "Compile-time alignment in bytes of a statically laid out type T", NULL, 0},
-    {"offsetOf", XLSP_SYM_FUNCTION, "fn(field: string): int", "Compile-time byte offset of a field in a @repr(C) or @repr(packed) struct T", NULL, 0},
+    {"offsetOf", XLSP_SYM_FUNCTION, "fn(field: string): int", "Compile-time byte offset of a field in a fixed-layout struct T", NULL, 0},
     {"alloc", XLSP_SYM_FUNCTION, "fn(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", NULL, 0},
     {"allocZeroed", XLSP_SYM_FUNCTION, "fn(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", NULL, 0},
     {"allocAligned", XLSP_SYM_FUNCTION, "fn(n: int, align: int): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", NULL, 0},

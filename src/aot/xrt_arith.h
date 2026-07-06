@@ -210,8 +210,28 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
             xrt_fmt_cstr(sb, "null");
             return;
         case XR_TAG_ENUM: {
-            char buf[256];
-            xrt_fmt_cstr(sb, xr_to_cstr(v, buf, sizeof(buf)));
+            const XrAotEnumValueView *ev = xrt_enum_value_view(v);
+            if (!ev) {
+                xrt_fmt_cstr(sb, "<enum>");
+                return;
+            }
+            if (ev->enum_name)
+                xrt_fmt_cstr(sb, ev->enum_name);
+            else
+                xrt_fmt_cstr(sb, "<enum>");
+            xrt_fmt_char(sb, '.');
+            xrt_fmt_cstr(sb, ev->member_name ? ev->member_name : "?");
+            if (ev->payload_count > 0) {
+                xrt_fmt_char(sb, '(');
+                for (uint32_t i = 0; i < ev->payload_count; i++) {
+                    if (i > 0)
+                        xrt_fmt_cstr(sb, ", ");
+                    XrValue payload =
+                        ev->payloads ? ev->payloads[i] : (i == 0 ? ev->payload0 : XR_NULL_VAL);
+                    xrt_format_value(payload, sb, depth + 1);
+                }
+                xrt_fmt_char(sb, ')');
+            }
             return;
         }
         case XR_TAG_RANGE: {
@@ -232,22 +252,6 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
     switch (xrt_value_kind(v)) {
         case XR_TAG_ARRAY: {
             xrt_array_t *a = (xrt_array_t *) v.ptr;
-            if (a && a->adt_enum_name && a->adt_member_name) {
-                char hdr[256];
-                int n = snprintf(hdr, sizeof(hdr), "%s.%s", a->adt_enum_name, a->adt_member_name);
-                xrt_fmt_puts(sb, hdr, (size_t) n);
-                if (a->length > 1) {
-                    xrt_fmt_char(sb, '(');
-                    for (int64_t i = 1; i < a->length; i++) {
-                        if (i > 1)
-                            xrt_fmt_cstr(sb, ", ");
-                        xrt_format_value(xr_typed_get(a->data, (int32_t) i, a->elem_type), sb,
-                                         depth + 1);
-                    }
-                    xrt_fmt_char(sb, ')');
-                }
-                return;
-            }
             int64_t len = a ? a->length : 0;
             int64_t limit = len > XRT_FORMAT_MAX_ELEMENTS ? XRT_FORMAT_MAX_ELEMENTS : len;
             xrt_fmt_char(sb, '[');
@@ -385,12 +389,8 @@ static inline int64_t xrt_typeof_id(XrValue v) {
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
             return 12; /* XR_TID_STRING */
-        case XR_TAG_ARRAY: {
-            const xrt_array_t *arr = (const xrt_array_t *) v.ptr;
-            if (arr && arr->adt_enum_name)
-                return 25; /* XR_TID_ENUM_VALUE */
-            return 14;     /* XR_TID_ARRAY */
-        }
+        case XR_TAG_ARRAY:
+            return 14; /* XR_TID_ARRAY */
         case XR_TAG_SET:
             return 15; /* XR_TID_SET */
         case XR_TAG_MAP:
@@ -446,12 +446,8 @@ static inline XrValue xrt_typeof_str(XrValue v) {
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
             return xr_str_lit(&xs_string);
-        case XR_TAG_ARRAY: {
-            const xrt_array_t *arr = (const xrt_array_t *) v.ptr;
-            if (arr && arr->adt_enum_name)
-                return xr_box_str(arr->adt_enum_name);
+        case XR_TAG_ARRAY:
             return xr_str_lit(&xs_array);
-        }
         case XR_TAG_SET:
             return xr_str_lit(&xs_set);
         case XR_TAG_MAP:

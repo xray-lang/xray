@@ -60,7 +60,7 @@ fn test_selective_const_nested() {
 fn test_selective_typeof_nested() {
     // typeof 在嵌套作用域里看到的应是真实 class，不是 null
     fn check() -> string {
-        return typeof(Box)
+        return typename(Box)
     }
     var t = check()
     // 修复前：t == "null" — slot 永远为 null

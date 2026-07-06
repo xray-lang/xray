@@ -1773,13 +1773,19 @@ static int cg_class_descriptor_slot_for_data(XiCgenCtx *ctx, const XiClassData *
     return cg_class_native_data_matches(slot_cd, cd) ? slot : -1;
 }
 
+static const XrStructLayout *cg_class_descriptor_layout_data(const XiClassData *cd) {
+    if (!cd)
+        return NULL;
+    return cd->instance_layout ? cd->instance_layout : cd->struct_layout;
+}
+
 static bool cg_class_descriptor_native_stack_only_data(const XiClassData *cd) {
-    return cd && cd->instance_layout && !cd->is_monomorphized &&
-           !cg_class_native_layout_has_ref_fields(cd->instance_layout);
+    const XrStructLayout *layout = cg_class_descriptor_layout_data(cd);
+    return cd && layout && !cd->is_monomorphized && !cg_class_native_layout_has_ref_fields(layout);
 }
 
 static bool cg_class_descriptor_elidable_native_data(const XiClassData *cd) {
-    return cd && cd->instance_layout && !cd->is_monomorphized;
+    return cd && cg_class_descriptor_layout_data(cd) && !cd->is_monomorphized;
 }
 
 static bool cg_class_descriptor_ctor_call_is_elidable(XiCgenCtx *ctx, const XiFunc *owner,
@@ -1793,7 +1799,8 @@ static bool cg_class_descriptor_ctor_call_is_elidable(XiCgenCtx *ctx, const XiFu
         return false;
     if (cg_class_descriptor_native_stack_only_data(call_cd))
         return cg_class_native_ctor_can_inline(ctx, owner, call);
-    return cg_class_native_layout_has_ref_fields(call_cd->instance_layout) &&
+    const XrStructLayout *call_layout = cg_class_descriptor_layout_data(call_cd);
+    return call_layout && cg_class_native_layout_has_ref_fields(call_layout) &&
            cg_class_native_ref_stack_return_consumes_ctor(ctx, owner, call);
 }
 
@@ -1826,6 +1833,12 @@ static bool cg_class_descriptor_value_uses_are_elidable(XiCgenCtx *ctx, const Xi
                     case XI_CALL:
                         if (ai != 0 ||
                             !cg_class_descriptor_ctor_call_is_elidable(ctx, owner, user, cd))
+                            return false;
+                        if (saw_elidable_use)
+                            *saw_elidable_use = true;
+                        break;
+                    case XI_STRUCT_NEW:
+                        if (ai != 0 || !user->aux)
                             return false;
                         if (saw_elidable_use)
                             *saw_elidable_use = true;
@@ -1888,17 +1901,20 @@ static bool cg_class_descriptor_slot_uses_are_elidable(XiCgenCtx *ctx, const XiF
 static bool cg_class_descriptor_slot_can_elide_depth(XiCgenCtx *ctx, const XiFunc *current,
                                                      int slot, const XiClassData *cd, int depth) {
     (void) current;
-    if (!ctx || !ctx->module || !ctx->module->init || ctx->all_nmodules > 1 || slot < 0 ||
-        depth > 8)
+    if (!ctx || !ctx->module || !ctx->module->init || slot < 0 || depth > 8)
+        return false;
+    if (ctx->all_nmodules > 1 && cg_class_shared_native_slot_is_exported(ctx, slot))
         return false;
     const XiClassData *slot_cd = cg_class_descriptor_slot_data(ctx, slot);
+    if (!slot_cd)
+        slot_cd = cd;
     if (!cg_class_native_data_matches(slot_cd, cd) ||
         !cg_class_descriptor_elidable_native_data(slot_cd))
         return false;
     bool saw_elidable_use = false;
+    (void) saw_elidable_use;
     return cg_class_descriptor_slot_uses_are_elidable(ctx, ctx->module->init, slot, slot_cd,
-                                                      depth + 1, &saw_elidable_use) &&
-           saw_elidable_use;
+                                                      depth + 1, &saw_elidable_use);
 }
 
 static bool cg_class_descriptor_slot_can_elide(XiCgenCtx *ctx, const XiFunc *current, int slot,
@@ -3590,8 +3606,8 @@ static void emit_debug_source_var_declarations(XiCgenCtx *ctx, FILE *out, const 
         fprintf(out, " = ");
         if (strcmp(info.ctype, "xr_span_t") == 0)
             fprintf(out, "xrt_span_empty()");
-        else if (strcmp(info.ctype, "XrAotAdtValue") == 0)
-            fprintf(out, "xrt_adt_value_zero()");
+        else if (strcmp(info.ctype, "XrAotEnumAggregate") == 0)
+            fprintf(out, "xrt_enum_aggregate_zero()");
         else if (strncmp(info.ctype, "xrt_struct_", 11) == 0)
             fprintf(out, "((%s){0})", info.ctype);
         else if (info.rep == XR_REP_TAGGED)
@@ -3625,11 +3641,11 @@ static void emit_debug_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *
         }
     } else if (cg_value_plan_is_struct_aggregate(ctx, storage_v)) {
         emit_vref(out, storage_v);
-    } else if (strcmp(info.ctype, "XrAotAdtValue") == 0) {
+    } else if (strcmp(info.ctype, "XrAotEnumAggregate") == 0) {
         if (cg_value_plan_is_aggregate(ctx, storage_v)) {
             emit_vref(out, storage_v);
         } else {
-            fprintf(out, "xrt_adt_value_from_boxed(");
+            fprintf(out, "xrt_enum_aggregate_from_boxed(");
             emit_value_as_rep_ctx(ctx, out, storage_v, XR_REP_TAGGED);
             fprintf(out, ")");
         }
@@ -4660,7 +4676,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                         ctx->error = true;
                         emit_aggregate_zero_expr(out, cg_func_return_abi_value_rep(ctx, f));
                     } else {
-                        fprintf(out, "xrt_adt_value_from_boxed(");
+                        fprintf(out, "xrt_enum_aggregate_from_boxed(");
                         emit_value_as_rep_ctx(ctx, out, blk->control, XR_REP_TAGGED);
                         fprintf(out, ")");
                     }
@@ -5969,7 +5985,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
                 fprintf(out, "}\n\n");
                 return;
             } else if (ret_is_aggregate)
-                fprintf(out, "xrt_adt_value_box(");
+                fprintf(out, "xrt_enum_aggregate_box(");
             else if (ret_rep != XR_REP_VOID)
                 conv_suffix = emit_conversion_prefix(out, f->return_type, ret_rep, XR_REP_TAGGED);
             emit_fname(ctx, out, prefix, f);

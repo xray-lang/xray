@@ -1,7 +1,7 @@
 args=--profile freestanding
 status=fail
 contains=freestanding profile rejects builtin string()
-contains=freestanding profile rejects builtin typeof()
+contains=freestanding profile rejects builtin typename()
 contains=freestanding profile rejects builtin copy()
 contains=freestanding profile rejects builtin char()
 contains=freestanding profile rejects builtin chr()

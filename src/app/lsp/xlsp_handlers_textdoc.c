@@ -614,7 +614,8 @@ static void collect_code_lens(AstNode *node, XrJsonValue *lenses, RefCountTable 
         add_code_lens(lenses, node->as.function_decl.name, line, ref_table);
     }
 
-    if ((node->type == AST_CLASS_DECL || node->type == AST_STRUCT_DECL) &&
+    if ((node->type == AST_CLASS_DECL || node->type == AST_STRUCT_DECL ||
+         node->type == AST_UNION_DECL) &&
         node->as.class_decl.name) {
         int line = node->line > 0 ? node->line - 1 : 0;
         add_code_lens(lenses, node->as.class_decl.name, line, ref_table);

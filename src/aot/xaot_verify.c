@@ -322,6 +322,33 @@ static bool verify_bounds_plan(const XaotBundle *bundle, const XaotBoundsPlan *p
     return true;
 }
 
+static bool verify_span_access_plan(const XaotBundle *bundle, const XaotSpanAccessPlan *plan,
+                                    char *errbuf, size_t errbuf_len) {
+    XaotSpanAccessPlan derived;
+
+    if (!bundle || !plan)
+        return set_error(errbuf, errbuf_len, "AOT Span access plan is NULL");
+    if (!plan->func || !plan->value)
+        return set_error(errbuf, errbuf_len, "AOT Span access plan lacks func or value");
+    if (!xaot_bundle_find_func_plan(bundle, plan->func))
+        return set_error(errbuf, errbuf_len, "AOT Span access plan func has no func plan");
+    if ((plan->eliminated_checks == 0) ==
+        (plan->unproven_reason == XAOT_SPAN_UNPROVEN_NONE))
+        return set_error(errbuf, errbuf_len,
+                         "AOT Span access plan drop/reason are inconsistent");
+    if (!xaot_prepare_span_access_plan_for_value(bundle, plan->func, plan->value, &derived))
+        return set_error(errbuf, errbuf_len, "AOT Span access plan value no longer re-derives");
+    if (plan->kind != derived.kind)
+        return set_error(errbuf, errbuf_len, "AOT Span access plan kind does not re-derive");
+    if (plan->evidence != derived.evidence)
+        return set_error(errbuf, errbuf_len, "AOT Span access plan evidence does not re-derive");
+    if (plan->eliminated_checks != derived.eliminated_checks)
+        return set_error(errbuf, errbuf_len, "AOT Span access plan drops do not re-derive");
+    if (plan->unproven_reason != derived.unproven_reason)
+        return set_error(errbuf, errbuf_len, "AOT Span access plan reason does not re-derive");
+    return true;
+}
+
 /* Re-derive the uniqueness proof behind an alias plan. A wrong restrict is
  * undefined behaviour in the generated C, so any mismatch between recorded
  * and freshly derived evidence is a hard fail. */
@@ -663,6 +690,10 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
     }
     for (fi = 0; fi < bundle->nbounds_plans; fi++) {
         if (!verify_bounds_plan(bundle, &bundle->bounds_plans[fi], errbuf, errbuf_len))
+            return false;
+    }
+    for (fi = 0; fi < bundle->nspan_access_plans; fi++) {
+        if (!verify_span_access_plan(bundle, &bundle->span_access_plans[fi], errbuf, errbuf_len))
             return false;
     }
     for (fi = 0; fi < bundle->nalias_plans; fi++) {

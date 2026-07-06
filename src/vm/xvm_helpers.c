@@ -129,6 +129,229 @@ int xr_vm_struct_layout_field_index(XrVMRuntime *isolate, const XrStructLayout *
     return -1;
 }
 
+static bool xr_vm_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst,
+                                              XrInstance *inst);
+
+static bool xr_vm_struct_write_array_bytes(uint8_t *fp, const XrStructFieldLayout *field,
+                                           XrValue src) {
+    uint8_t es = xr_native_type_size(field->elem_native_type);
+    if (XR_IS_ARRAY(src)) {
+        XrArray *arr = (XrArray *) src.ptr;
+        int count = arr->length < field->elem_count ? arr->length : field->elem_count;
+        for (int idx = 0; idx < count; idx++) {
+            XrValue elem = xr_array_get(arr, idx);
+            XrStructFieldLayout elem_field = {.native_type = field->elem_native_type};
+            if (!xr_vm_struct_write_field_value(NULL, fp + idx * es, &elem_field, elem))
+                return false;
+        }
+        if (count < field->elem_count)
+            memset(fp + count * es, 0, (field->elem_count - count) * es);
+        return true;
+    }
+    if (XR_IS_ARRAY_REF(src)) {
+        memcpy(fp, src.ptr, field->size);
+        return true;
+    }
+    return false;
+}
+
+XR_FUNC bool xr_vm_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
+                                           XrStructFieldLayout *field, XrValue *out) {
+    if (!fp || !field || !out)
+        return false;
+
+    switch (field->native_type) {
+        case XR_NATIVE_I64:
+            *out = XR_FROM_INT(*(int64_t *) fp);
+            return true;
+        case XR_NATIVE_U64:
+            *out = XR_FROM_INT((int64_t) *(uint64_t *) fp);
+            return true;
+        case XR_NATIVE_F64:
+            *out = XR_FROM_FLOAT(*(double *) fp);
+            return true;
+        case XR_NATIVE_BOOL:
+            out->descriptor = 0;
+            out->i = *(uint8_t *) fp ? 1 : 0;
+            out->tag = XR_TAG_BOOL;
+            return true;
+        case XR_NATIVE_I32:
+            *out = XR_FROM_INT((int64_t) *(int32_t *) fp);
+            return true;
+        case XR_NATIVE_U32:
+            *out = XR_FROM_INT((int64_t) *(uint32_t *) fp);
+            return true;
+        case XR_NATIVE_I16:
+            *out = XR_FROM_INT((int64_t) *(int16_t *) fp);
+            return true;
+        case XR_NATIVE_U16:
+            *out = XR_FROM_INT((int64_t) *(uint16_t *) fp);
+            return true;
+        case XR_NATIVE_I8:
+            *out = XR_FROM_INT((int64_t) *(int8_t *) fp);
+            return true;
+        case XR_NATIVE_U8:
+            *out = XR_FROM_INT((int64_t) *(uint8_t *) fp);
+            return true;
+        case XR_NATIVE_F32:
+            *out = XR_FROM_FLOAT((double) *(float *) fp);
+            return true;
+        case XR_NATIVE_STRING: {
+            XrString *s = *(XrString **) fp;
+            *out = s ? XR_FROM_STR(s) : xr_null();
+            return true;
+        }
+        case XR_NATIVE_STRUCT:
+            if (field->sub_layout && field->sub_layout_id == 0 && isolate)
+                field->sub_layout_id =
+                    xr_vm_struct_layout_register(&isolate->vm, field->sub_layout);
+            *out = xr_struct_ref(fp, field->sub_layout_id);
+            return true;
+        case XR_NATIVE_ARRAY:
+            *out = xr_array_ref(fp, field->elem_native_type, field->elem_count);
+            return true;
+        case XR_NATIVE_ARRAY_REF:
+        case XR_NATIVE_MAP_REF:
+        case XR_NATIVE_SET_REF:
+        case XR_NATIVE_VALUE:
+            *out = *(XrValue *) fp;
+            return true;
+        default:
+            return false;
+    }
+}
+
+XR_FUNC bool xr_vm_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
+                                            const XrStructFieldLayout *field, XrValue src) {
+    if (!fp || !field)
+        return false;
+
+    switch (field->native_type) {
+        case XR_NATIVE_I64:
+            *(int64_t *) fp = XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_U64:
+            *(uint64_t *) fp = (uint64_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_F64:
+            *(double *) fp = XR_TO_FLOAT(src);
+            return true;
+        case XR_NATIVE_BOOL:
+            *(uint8_t *) fp = (uint8_t) src.i;
+            return true;
+        case XR_NATIVE_I32:
+            *(int32_t *) fp = (int32_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_U32:
+            *(uint32_t *) fp = (uint32_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_I16:
+            *(int16_t *) fp = (int16_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_U16:
+            *(uint16_t *) fp = (uint16_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_I8:
+            *(int8_t *) fp = (int8_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_U8:
+            *(uint8_t *) fp = (uint8_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_F32:
+            *(float *) fp = (float) XR_TO_FLOAT(src);
+            return true;
+        case XR_NATIVE_STRING:
+            *(XrString **) fp = (XrString *) src.ptr;
+            return true;
+        case XR_NATIVE_STRUCT:
+            if (XR_IS_STRUCT_REF(src)) {
+                uint8_t *src_ptr = (uint8_t *) xr_to_struct_ptr(src);
+                memcpy(fp, src_ptr, field->size);
+                return true;
+            }
+            if (XR_IS_INSTANCE(src))
+                return xr_vm_struct_write_instance_bytes(isolate, fp, XR_TO_INSTANCE(src));
+            return false;
+        case XR_NATIVE_ARRAY:
+            return xr_vm_struct_write_array_bytes(fp, field, src);
+        case XR_NATIVE_ARRAY_REF:
+        case XR_NATIVE_MAP_REF:
+        case XR_NATIVE_SET_REF:
+        case XR_NATIVE_VALUE:
+            *(XrValue *) fp = src;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool xr_vm_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst,
+                                              XrInstance *inst) {
+    if (!dst || !inst || !inst->klass || !inst->klass->struct_layout)
+        return false;
+
+    XrStructLayout *layout = inst->klass->struct_layout;
+    if (isolate)
+        xr_vm_struct_layout_register(&isolate->vm, layout);
+
+    void *body = xr_instance_native_body(inst);
+    if (body) {
+        memcpy(dst, body, layout->total_size);
+        return true;
+    }
+
+    if (layout->field_count > xr_class_instance_field_count(inst->klass))
+        return false;
+
+    memset(dst, 0, layout->total_size);
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        XrStructFieldLayout *field = &layout->fields[i];
+        uint8_t *fp = dst + field->offset;
+        if (!xr_vm_struct_write_field_value(isolate, fp, field, inst->fields[i]))
+            return false;
+    }
+    return true;
+}
+
+XR_FUNC uint8_t *xr_vm_instance_struct_field_ptr(XrVMRuntime *isolate, XrInstance *inst,
+                                                 int field_index,
+                                                 XrStructFieldLayout **field_out) {
+    if (field_out)
+        *field_out = NULL;
+    if (!inst || !inst->klass || !inst->klass->struct_layout)
+        return NULL;
+
+    XrStructLayout *layout = inst->klass->struct_layout;
+    if (field_index < 0 || field_index >= layout->field_count)
+        return NULL;
+
+    if (isolate)
+        xr_vm_struct_layout_register(&isolate->vm, layout);
+
+    uint8_t *payload = (uint8_t *) xr_instance_native_body(inst);
+    if (!payload)
+        return NULL;
+
+    XrStructFieldLayout *field = &layout->fields[field_index];
+    if (field_out)
+        *field_out = field;
+    return payload + field->offset;
+}
+
+XR_FUNC bool xr_vm_instance_struct_get_field(XrVMRuntime *isolate, XrInstance *inst,
+                                             int field_index, XrValue *out) {
+    XrStructFieldLayout *field = NULL;
+    uint8_t *fp = xr_vm_instance_struct_field_ptr(isolate, inst, field_index, &field);
+    return xr_vm_struct_read_field_value(isolate, fp, field, out);
+}
+
+XR_FUNC bool xr_vm_instance_struct_set_field(XrVMRuntime *isolate, XrInstance *inst,
+                                             int field_index, XrValue value) {
+    XrStructFieldLayout *field = NULL;
+    uint8_t *fp = xr_vm_instance_struct_field_ptr(isolate, inst, field_index, &field);
+    return xr_vm_struct_write_field_value(isolate, fp, field, value);
+}
+
 /* ========== Runtime Error Handling ========== */
 
 /*
@@ -348,17 +571,6 @@ void xr_vm_vm_init(XrVMRuntime *isolate) {
 
     // Initialize dynamic shared variable array
     xr_shared_array_init(&isolate->vm.shared);
-
-    // Set reflection API class as global variable
-    if (isolate && isolate->core) {
-        // Register Reflect class to global variable index 0
-        if (isolate->core->reflectClass) {
-            isolate->vm.builtins[0] = xr_value_from_class(isolate->core->reflectClass);
-            if (isolate->vm.builtin_count < 1)
-                isolate->vm.builtin_count = 1;
-            VM_DEBUG_PRINT("Reflect class registered as global variable (index=0)\n");
-        }
-    }
 
     // Global constructor registration (register as class objects to support static methods)
     if (isolate && isolate->core) {

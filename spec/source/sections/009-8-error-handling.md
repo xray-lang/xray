@@ -91,7 +91,7 @@ try {
 
 **规则**：
 - 无类型注解的 `catch (e)` 是 catch-all，匹配所有错误值
-- 有类型注解的 `catch (e: EnumType)` 仅当错误值 `is EnumType` 为真时匹配
+- 有类型注解的 `catch (e: SomeErr)` 仅当错误值 `is SomeErr` 为真时匹配，其中 `SomeErr` 是具体 enum 错误类型
 - 多个 `catch` 子句按声明顺序匹配，首个匹配者执行
 - 若所有类型化子句均不匹配且没有 catch-all，错误继续向上传播
 - 一个 `try` **必须**至少跟随 `catch`（普通 `catch` 或 `catch panic`）
@@ -483,7 +483,7 @@ try {
 
 **Rules**:
 - An untyped `catch (e)` is the catch-all and matches any error value.
-- A typed `catch (e: EnumType)` matches only when the error value satisfies `is EnumType`.
+- A typed `catch (e: SomeErr)` matches only when the error value satisfies `is SomeErr`, where `SomeErr` is a concrete enum error type.
 - Multiple `catch` clauses are tried in declaration order; the first match wins.
 - If every typed clause fails and there is no catch-all, the error continues propagating.
 - A `try` **must** be followed by at least one of `catch` or `catch panic`.

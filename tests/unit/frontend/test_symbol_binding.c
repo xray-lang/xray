@@ -275,9 +275,6 @@ static int count_unresolved_vars(AstNode *node) {
             for (int i = 0; i < node->as.enum_decl.member_count; i++)
                 count += count_unresolved_vars(node->as.enum_decl.members[i]);
             break;
-        case AST_ENUM_CONVERT:
-            count += count_unresolved_vars(node->as.enum_convert.value_expr);
-            break;
         case AST_ENUM_INDEX:
             count += count_unresolved_vars(node->as.enum_index.collection);
             count += count_unresolved_vars(node->as.enum_index.index_expr);

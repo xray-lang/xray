@@ -1,0 +1,1 @@
+union field read 'U32Bits.i' must be inside an `unsafe { }` block

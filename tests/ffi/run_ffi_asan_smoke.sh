@@ -153,12 +153,12 @@ record_pass "xray ASan build detected"
 declare -a CASE_NAMES=(
     "ffi_ptr_memory"
     "ffi_cfn_bsearch"
-    "repr_c_struct"
+    "fixed_layout_struct"
 )
 declare -a CASE_SRCS=(
     "$PROJECT_DIR/tests/diff/cases/semantics/ffi/ptr_memory.xr"
     "$PROJECT_DIR/tests/diff/cases/semantics/ffi/cfn_bsearch.xr"
-    "$PROJECT_DIR/tests/diff/cases/semantics/oop/repr_c_struct.xr"
+    "$PROJECT_DIR/tests/diff/cases/semantics/oop/fixed_layout_struct.xr"
 )
 declare -a CASE_EXPECTED=(
     $'10\n20\n30\n40\n30\nfalse\nfalse'

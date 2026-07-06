@@ -120,12 +120,6 @@
 
 #define CLASS_NAME_OBJECT "Object"
 #define CLASS_NAME_ENUM "Enum"
-#define CLASS_NAME_REFLECT "Reflect"
-#define CLASS_NAME_TYPE "Type"
-#define CLASS_NAME_FIELD "Field"
-#define CLASS_NAME_METHOD "Method"
-#define CLASS_NAME_CONSTRUCTOR "Constructor"
-#define CLASS_NAME_PARAMETER "Parameter"
 
 /* ========== Builtin Global Names ========== */
 

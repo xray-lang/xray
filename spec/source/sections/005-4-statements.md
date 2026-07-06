@@ -143,7 +143,7 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 | `Json` | key (string) | (key, value) |
 | `string` | `char` | (index, char) |
 | `Range`（`a..b`） | int | — |
-| Enum 类型 | EnumValue | — |
+| Enum 类型 | 具体 enum 值 | — |
 | 自定义 `Iterator<T>` | T | — |
 
 #### 自定义迭代器
@@ -455,7 +455,7 @@ Iteration source / yield mapping:
 | `Json` | key (string) | (key, value) |
 | `string` | `char` | (index, char) |
 | `Range` (`a..b`) | int | — |
-| Enum type | EnumValue | — |
+| Enum type | concrete enum value | — |
 | Custom `Iterator<T>` | T | — |
 
 #### Custom iterators

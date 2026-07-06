@@ -39,8 +39,6 @@ XR_FUNC const char *xaot_boundary_reason_name(XaotBoundaryReason reason) {
             return "shared-slot";
         case XAOT_BOUNDARY_IMPORT_EXPORT:
             return "import-export";
-        case XAOT_BOUNDARY_REFLECTION:
-            return "reflection";
         case XAOT_BOUNDARY_UNION_NULLABLE:
             return "union-nullable";
         case XAOT_BOUNDARY_RUNTIME_HELPER:

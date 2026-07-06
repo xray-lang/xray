@@ -77,6 +77,12 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             }
             break;
 
+        case AST_UNION_DECL:
+            for (int i = 0; i < node->as.union_decl.field_count; i++) {
+                visit_node(node->as.union_decl.fields[i], v);
+            }
+            break;
+
         case AST_METHOD_DECL:
             visit_node(node->as.method_decl.body, v);
             break;
@@ -298,6 +304,9 @@ static void visit_node(AstNode *node, XaAstVisitor *v) {
         case AST_STRUCT_DECL:
             call_callback(v->visit_class_decl, node, v);  // reuse class visitor
             break;
+        case AST_UNION_DECL:
+            call_callback(v->visit_class_decl, node, v);  // reuse class visitor
+            break;
         case AST_METHOD_DECL:
             call_callback(v->visit_method_decl, node, v);
             break;
@@ -410,6 +419,7 @@ static void decl_visitor(AstNode *node, void *ctx) {
         case AST_SHARED_DECL:
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:
+        case AST_UNION_DECL:
         case AST_METHOD_DECL:
         case AST_FIELD_DECL:
         case AST_INTERFACE_DECL:

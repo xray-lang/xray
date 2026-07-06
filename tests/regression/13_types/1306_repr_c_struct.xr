@@ -1,13 +1,11 @@
-// 1306_repr_c_struct.xr
-// @repr(C) value structs use headerless payload storage.
+// 1306_fixed_layout_struct.xr
+// fixed-layout structs use headerless payload storage.
 
-@repr(C)
 struct CPoint {
     x: int32
     y: int32
 }
 
-@repr(C)
 struct CBox {
     p: CPoint
     tag: uint8
@@ -18,7 +16,7 @@ fn make_point() -> CPoint {
 }
 
 @test
-fn test_repr_c_struct_return_set_and_eq() {
+fn test_fixed_layout_struct_return_set_and_eq() {
     var p = make_point()
     p.x = p.x + 2
     var q = CPoint{x: 12, y: 20}
@@ -28,7 +26,7 @@ fn test_repr_c_struct_return_set_and_eq() {
 }
 
 @test
-fn test_repr_c_nested_struct_field_access() {
+fn test_fixed_layout_nested_struct_field_access() {
     var b = CBox{p: CPoint{x: 1, y: 2}, tag: 3}
     b.p.x = b.p.x + b.tag
     assert_eq(b.p.x, 4)

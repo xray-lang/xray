@@ -1,0 +1,8 @@
+enum Color {
+    Red,
+    Green
+}
+
+for (c in Color) {
+    print(c.name)
+}

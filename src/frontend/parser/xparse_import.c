@@ -461,12 +461,28 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
         if (declaration && declaration->type == AST_CLASS_DECL) {
             export_name = declaration->as.class_decl.name;
         }
+    } else if (xr_parser_match(parser, TK_PACKED)) {
+        // export packed struct Header {}
+        xr_parser_consume(parser, TK_STRUCT, "expected 'struct' after 'packed'");
+        declaration = xr_parse_struct_declaration(parser);
+
+        if (declaration && declaration->type == AST_STRUCT_DECL) {
+            declaration->as.struct_decl.is_packed = true;
+            export_name = declaration->as.struct_decl.name;
+        }
     } else if (xr_parser_match(parser, TK_STRUCT)) {
         // export struct Point {}
         declaration = xr_parse_struct_declaration(parser);
 
         if (declaration && declaration->type == AST_STRUCT_DECL) {
             export_name = declaration->as.struct_decl.name;
+        }
+    } else if (xr_parser_match(parser, TK_UNION)) {
+        // export union U {}
+        declaration = xr_parse_union_declaration(parser);
+
+        if (declaration && declaration->type == AST_UNION_DECL) {
+            export_name = declaration->as.union_decl.name;
         }
     } else if (xr_parser_check(parser, TK_VAR)) {
         xr_parser_error(parser, "mutable export is not supported; use 'export const' instead");

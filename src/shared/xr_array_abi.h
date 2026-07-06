@@ -77,9 +77,7 @@ typedef struct XrArrayStorage {
     uint8_t elem_tid;      /* XrTypeId for reified generics (0 = any) */                           \
     uint8_t contains_refs; /* monotonic: 1 once any object reference was stored */                 \
     uint64_t content_version;         /* bumps when the visible element set changes */             \
-    uint64_t deferred_submit_version; /* last content_version submitted as deferred task batch */  \
-    const char *adt_enum_name;  /* AOT ADT enum lowering metadata, NULL for ordinary arrays */     \
-    const char *adt_member_name /* AOT ADT enum lowering metadata, NULL for ordinary arrays */
+    uint64_t deferred_submit_version  /* last content_version submitted as deferred task batch */
 
 #define XR_ARRAY_CONTENT_VERSION_INIT 1u
 

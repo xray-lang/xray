@@ -8,7 +8,7 @@ fn test_implicit_return_int() {
     }
     var result = add(2, 3)
     assert_eq(result, 5)
-    assert_eq(typeof(result), "int")
+    assert_eq(typename(result), "int")
 }
 
 @test
@@ -18,7 +18,7 @@ fn test_implicit_return_string() {
     }
     var result = greet("World")
     assert_eq(result, "Hello, World")
-    assert_eq(typeof(result), "string")
+    assert_eq(typename(result), "string")
 }
 
 @test
@@ -28,7 +28,7 @@ fn test_explicit_return_type() {
     }
     var result = double(5)
     assert_eq(result, 10)
-    assert_eq(typeof(result), "int")
+    assert_eq(typename(result), "int")
 }
 
 @test

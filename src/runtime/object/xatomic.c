@@ -107,14 +107,12 @@ static XrAtomicOrdering parse_ordering(XrValue *args, int nargs, int ord_idx) {
         return XR_ORDERING_SEQ_CST;
     XrValue v = args[ord_idx];
 
-    /* Ordering enum value: extract the backing int via raw_value. */
+    /* Ordering enum value: declaration-order ordinal mirrors XrAtomicOrdering. */
     if (XR_IS_ENUM_VALUE(v)) {
         XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(v);
-        if (XR_IS_INT(ev->raw_value)) {
-            int64_t ival = XR_TO_INT(ev->raw_value);
-            if (ival >= XR_ORDERING_RELAXED && ival <= XR_ORDERING_SEQ_CST)
-                return (XrAtomicOrdering) ival;
-        }
+        int64_t ival = ev ? (int64_t) ev->member_index : -1;
+        if (ival >= XR_ORDERING_RELAXED && ival <= XR_ORDERING_SEQ_CST)
+            return (XrAtomicOrdering) ival;
         return XR_ORDERING_SEQ_CST;
     }
     /* Raw int fallback for internal/test use. */

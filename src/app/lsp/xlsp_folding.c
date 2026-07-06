@@ -45,6 +45,7 @@ static void collect_folding_ranges(AstNode *node, XrJsonValue *ranges) {
             break;
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:
+        case AST_UNION_DECL:
             ADD_NODE_FOLD(ranges, node->line - 1, node, "region");
             for (int i = 0; i < node->as.class_decl.method_count; i++) {
                 collect_folding_ranges(node->as.class_decl.methods[i], ranges);

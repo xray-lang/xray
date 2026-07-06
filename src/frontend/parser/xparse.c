@@ -510,6 +510,9 @@ void xr_parser_synchronize(Parser *parser) {
             switch (parser->current.type) {
                 // Declaration keywords
                 case TK_CLASS:
+                case TK_STRUCT:
+                case TK_UNION:
+                case TK_PACKED:
                 case TK_INTERFACE:
                 case TK_ENUM:
                 case TK_FN:

@@ -1,0 +1,10 @@
+union I32Bits {
+    i: int32
+    u: uint32
+}
+
+var bits = I32Bits{i: -1}
+print(int(unsafe { bits.u }))
+
+bits.u = 0x7fffffff
+print(unsafe { bits.i })

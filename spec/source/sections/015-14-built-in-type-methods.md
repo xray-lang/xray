@@ -231,9 +231,9 @@ order: 015
 
 内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `constructor(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
 
-### 14.17 `Task<T>` / `EnumValue` / `EnumType`
+### 14.17 `Task<T>` 与 enum 值
 
-`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`；`TaskResult.Failed(error)` 以 `unknown` 保留原始失败值（业务 enum 错误或 `PanicInfo`），plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。`EnumValue` 属性：`name`、`value`、`ordinal`，方法：`toString()`。`EnumType` 属性：`name`、`memberCount`，方法：`getMember(name)`。
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`；`TaskResult.Failed(error)` 以 `unknown` 保留原始失败值（业务 enum 错误或 `PanicInfo`），plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。enum 值保留冷路径属性 `name`、`ordinal` 与方法 `toString()`；用户可见 `EnumValue` / `EnumType` wrapper 类已删除。
 
 ### 14.18 其他 prelude 类型（`Logger` / `NetConn` / `NetListener`）
 
@@ -487,9 +487,9 @@ The `import datetime` module provides factory functions: `now`, `utc`, `create`,
 
 The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `constructor(message: string = "", cause: PanicInfo? = null)`, and `toString()`.
 
-### 14.17 `Task<T>` / `EnumValue` / `EnumType`
+### 14.17 `Task<T>` and Enum Values
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>`; `TaskResult.Failed(error)` preserves the original failure value (business enum error or `PanicInfo`) as `unknown`, while plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. `EnumValue` properties: `name`, `value`, `ordinal`; methods: `toString()`. `EnumType` properties: `name`, `memberCount`; methods: `getMember(name)`.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>`; `TaskResult.Failed(error)` preserves the original failure value (business enum error or `PanicInfo`) as `unknown`, while plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. Enum values keep the cold-path `name`, `ordinal`, and `toString()` surface; user-visible `EnumValue` / `EnumType` wrapper classes have been removed.
 
 ### 14.18 Other Prelude Types (`Logger` / `NetConn` / `NetListener`)
 
