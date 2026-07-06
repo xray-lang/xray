@@ -20,6 +20,7 @@
 #include "xi_effect.h"
 #include "xi_module.h"
 #include "xi_vec_scalar_lower.h"
+#include "../runtime/value/xtype.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include <string.h>
@@ -119,6 +120,34 @@ static bool backend_math_call_arity_ok(const char *name, int nargs) {
     return false;
 }
 
+static bool backend_math_preserves_int_arg_shape(const char *member) {
+    return member && (strcmp(member, "min") == 0 || strcmp(member, "max") == 0 ||
+                      strcmp(member, "clamp") == 0);
+}
+
+static XiValue *backend_unwrap_int_to_float_convert(XiValue *v) {
+    if (!v || v->op != XI_CONVERT || v->nargs != 1 || !v->args[0] || !v->type ||
+        !XR_TYPE_IS_FLOAT(v->type) || !v->args[0]->type || !XR_TYPE_IS_INT(v->args[0]->type))
+        return v;
+    return v->args[0];
+}
+
+static void backend_restore_math_int_args(const char *member, XiValue *v) {
+    if (!backend_math_preserves_int_arg_shape(member) || !v || v->nargs <= 0 || !v->type ||
+        !XR_TYPE_IS_INT(v->type))
+        return;
+    XiValue *restored[64];
+    if (v->nargs > (uint16_t) (sizeof(restored) / sizeof(restored[0])))
+        return;
+    for (uint16_t i = 0; i < v->nargs; i++) {
+        restored[i] = backend_unwrap_int_to_float_convert(v->args[i]);
+        if (!restored[i] || !restored[i]->type || !XR_TYPE_IS_INT(restored[i]->type))
+            return;
+    }
+    for (uint16_t i = 0; i < v->nargs; i++)
+        v->args[i] = restored[i];
+}
+
 static const char *backend_math_builtin_name(XiFunc *f, const char *member) {
     if (!f || !member)
         return NULL;
@@ -140,6 +169,7 @@ static bool rewrite_call_drop_first_arg_to_math_builtin(XiFunc *f, XiValue *v, c
     if (v->nargs > 1)
         memmove(v->args, v->args + 1, (size_t) (v->nargs - 1) * sizeof(v->args[0]));
     v->nargs--;
+    backend_restore_math_int_args(member, v);
     v->op = XI_CALL_BUILTIN;
     v->aux = (void *) builtin_name;
     v->aux_int = 0;

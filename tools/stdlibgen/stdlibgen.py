@@ -38,6 +38,13 @@ CAP_BITS = {
 }
 
 
+FREESTANDING_DIRECT_BUILTINS = {
+    "math.min",
+    "math.max",
+    "math.clamp",
+}
+
+
 @dataclasses.dataclass(frozen=True)
 class StdlibEntry:
     module: str
@@ -863,6 +870,16 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
             if c.aot_const_kind in ("int64", "float64") and not c.link_object
         }.values()
     )
+    freestanding_direct_builtin_rows = list(
+        {
+            e.symbol: e
+            for e in entries
+            if e.symbol in FREESTANDING_DIRECT_BUILTINS
+            and e.aot_direct
+            and e.aot_kind == "builtin"
+            and not e.link_object
+        }.values()
+    )
     lines = generated_header("xaot_stdlib_generated.inc.c - AOT stdlib driver metadata")
     lines.extend(
         [
@@ -941,6 +958,8 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
     lines.append("        return false;")
     for c in freestanding_header_only_const_rows:
         lines.append(f"    if (strcmp(symbol, {c_string(c.symbol)}) == 0)\n        return true;")
+    for e in freestanding_direct_builtin_rows:
+        lines.append(f"    if (strcmp(symbol, {c_string(e.symbol)}) == 0)\n        return true;")
     lines.append("    return false;")
     lines.append("}")
     lines.append("")

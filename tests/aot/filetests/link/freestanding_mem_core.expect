@@ -13,6 +13,7 @@ c_contains=xrt_mem_cache_flush
 c_contains=xrt_mem_cache_invalidate
 c_contains=xrt_mem_nontemporal_store
 c_contains=xrt_mem_volatile_load
+c_contains=xrt_mem_cache_line_size
 c_not_contains=#include "xrt_mem.h"
 not_contains=xray_rt_coro
 not_contains=xray_core

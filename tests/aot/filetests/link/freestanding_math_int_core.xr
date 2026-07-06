@@ -1,0 +1,11 @@
+import math
+import { min, max, clamp } from "math"
+
+@c_export("xray_math_int_core")
+fn xray_math_int_core(a: int, b: int) -> int {
+    var lo = min(a, b, 5)
+    var hi = math.max(a, b, 10)
+    var c1 = clamp(a, 0, b)
+    var c2 = math.clamp(b, a, 10)
+    return lo + hi + c1 + c2
+}

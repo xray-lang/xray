@@ -1,0 +1,7 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects math.min
+contains=freestanding profile rejects math.clamp
+contains=int-only min/max/clamp
+not_contains=unsupported AOT math builtin
+not_contains=CRASH

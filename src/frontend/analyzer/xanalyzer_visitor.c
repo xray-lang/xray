@@ -209,7 +209,9 @@ static bool xa_freestanding_math_member_allowed(const char *member_name) {
            strcmp(member_name, "LOG2E") == 0 || strcmp(member_name, "LOG10E") == 0 ||
            strcmp(member_name, "EPSILON") == 0 || strcmp(member_name, "MAX_INT") == 0 ||
            strcmp(member_name, "MIN_INT") == 0 || strcmp(member_name, "MAX_FLOAT") == 0 ||
-           strcmp(member_name, "INF") == 0 || strcmp(member_name, "NAN") == 0;
+           strcmp(member_name, "INF") == 0 || strcmp(member_name, "NAN") == 0 ||
+           strcmp(member_name, "min") == 0 || strcmp(member_name, "max") == 0 ||
+           strcmp(member_name, "clamp") == 0;
 }
 
 XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
