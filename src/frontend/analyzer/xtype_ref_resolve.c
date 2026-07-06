@@ -257,23 +257,51 @@ static bool ct_eval_tuple_literal(XaAnalyzer *analyzer, const AstNode *expr, XrC
     if (tup->count <= 0)
         return ct_fail(err, "unit tuple consteval is not supported in this phase");
 
-    XrCtValue *values = ct_alloc_values(analyzer, tup->count, err);
-    if (!values)
+    XrCtValue *raw_values = ct_alloc_values(analyzer, tup->count, err);
+    if (!raw_values)
         return false;
 
+    int total_count = 0;
     for (int i = 0; i < tup->count; i++) {
         AstNode *elem = tup->elements ? tup->elements[i] : NULL;
         if (!elem)
             return ct_fail(err, "missing tuple consteval element");
-        if (elem->type == AST_SPREAD_EXPR)
-            return ct_fail(err, "tuple consteval literal cannot use spread in this phase");
-        if (!ct_eval_impl(analyzer, elem, &values[i], err, stack, depth + 1))
-            return false;
+        if (elem->type == AST_SPREAD_EXPR) {
+            if (!ct_eval_impl(analyzer, elem->as.spread_expr.expr, &raw_values[i], err, stack,
+                              depth + 1))
+                return false;
+            if (raw_values[i].kind != XR_CT_TUPLE)
+                return ct_fail(err, "tuple consteval spread source must be a tuple constant");
+            total_count += raw_values[i].as.tuple_val.count;
+        } else {
+            if (!ct_eval_impl(analyzer, elem, &raw_values[i], err, stack, depth + 1))
+                return false;
+            total_count++;
+        }
+    }
+
+    if (total_count <= 0)
+        return ct_fail(err, "tuple consteval literal must have at least one element");
+
+    XrCtValue *values = ct_alloc_values(analyzer, total_count, err);
+    if (!values)
+        return false;
+
+    int slot = 0;
+    for (int i = 0; i < tup->count; i++) {
+        AstNode *elem = tup->elements ? tup->elements[i] : NULL;
+        if (elem && elem->type == AST_SPREAD_EXPR) {
+            XrCtTupleValue *spread = &raw_values[i].as.tuple_val;
+            for (int j = 0; j < spread->count; j++)
+                values[slot++] = spread->elements[j];
+        } else {
+            values[slot++] = raw_values[i];
+        }
     }
 
     out->kind = XR_CT_TUPLE;
     out->as.tuple_val.elements = values;
-    out->as.tuple_val.count = tup->count;
+    out->as.tuple_val.count = total_count;
     return true;
 }
 
