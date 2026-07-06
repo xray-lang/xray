@@ -1,0 +1,37 @@
+fn runtime_only_value() -> int {
+    return 99
+}
+
+@test
+fn test_comptime_float_numeric_ops() {
+    var sum = comptime (1.5 + 2.5)
+    assert_eq(sum, 4.0)
+
+    var mixed = comptime (1 + 2.5 * 2)
+    assert_eq(mixed, 6.0)
+
+    var neg = comptime -1.5
+    assert_eq(neg, -1.5)
+
+    var div = comptime (5 / 2.0)
+    assert_eq(div, 2.5)
+}
+
+@test
+fn test_comptime_numeric_text_and_char_comparisons() {
+    assert_eq(comptime (1 == 1.0), true)
+    assert_eq(comptime (3.5 > 2), true)
+    assert_eq(comptime ("abc" < "abd"), true)
+    assert_eq(comptime ('b' == 'b'), true)
+}
+
+@test
+fn test_comptime_ternary_evaluates_only_selected_branch() {
+    var picked = comptime (true ? 7 : runtime_only_value())
+    assert_eq(picked, 7)
+
+    const LEN = comptime ((1.5 < 2.5) ? 4 : runtime_only_value())
+    var arr: [int; LEN] = [3; LEN]
+    assert_eq(arr.length, 4)
+    assert_eq(arr[3], 3)
+}

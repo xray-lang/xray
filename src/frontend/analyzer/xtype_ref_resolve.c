@@ -57,11 +57,28 @@ static bool ct_expect_kind(const XrCtValue *v, XrCtValueKind kind, const char **
     return ct_fail(err, message);
 }
 
+static bool ct_is_numeric(const XrCtValue *v) {
+    return v && (v->kind == XR_CT_INT || v->kind == XR_CT_FLOAT);
+}
+
+static double ct_as_double(const XrCtValue *v) {
+    return v->kind == XR_CT_FLOAT ? v->as.float_val : (double) v->as.int_val;
+}
+
 static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
                          const char **err, uint32_t *stack, int depth);
 
 static bool ct_values_equal(const XrCtValue *a, const XrCtValue *b, bool *out) {
-    if (!a || !b || !out || a->kind != b->kind)
+    if (!a || !b || !out)
+        return false;
+    if (ct_is_numeric(a) && ct_is_numeric(b)) {
+        if (a->kind == XR_CT_INT && b->kind == XR_CT_INT)
+            *out = a->as.int_val == b->as.int_val;
+        else
+            *out = ct_as_double(a) == ct_as_double(b);
+        return true;
+    }
+    if (a->kind != b->kind)
         return false;
     switch (a->kind) {
         case XR_CT_INT:
@@ -109,7 +126,14 @@ static bool ct_eval_unary(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *
 
     switch (expr->type) {
         case AST_UNARY_NEG:
-            if (!ct_expect_kind(&v, XR_CT_INT, err, "unary '-' requires an integer constant"))
+            if (!ct_is_numeric(&v))
+                return ct_fail(err, "unary '-' requires a numeric constant");
+            if (v.kind == XR_CT_FLOAT) {
+                out->kind = XR_CT_FLOAT;
+                out->as.float_val = -v.as.float_val;
+                return true;
+            }
+            if (!ct_expect_kind(&v, XR_CT_INT, err, "unary '-' requires a numeric constant"))
                 return false;
             if (v.as.int_val == INT64_MIN)
                 return ct_fail(err, "integer constant overflow");
@@ -164,7 +188,53 @@ static bool ct_eval_binary(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue 
         case AST_BINARY_ADD:
         case AST_BINARY_SUB:
         case AST_BINARY_MUL:
-        case AST_BINARY_DIV:
+        case AST_BINARY_DIV: {
+            if (!ct_is_numeric(&left) || !ct_is_numeric(&right))
+                return ct_fail(err, "numeric operator requires numeric constants");
+            if (left.kind == XR_CT_INT && right.kind == XR_CT_INT) {
+                int64_t l = left.as.int_val;
+                int64_t r = right.as.int_val;
+                out->kind = XR_CT_INT;
+                switch (expr->type) {
+                    case AST_BINARY_ADD:
+                        out->as.int_val = l + r;
+                        return true;
+                    case AST_BINARY_SUB:
+                        out->as.int_val = l - r;
+                        return true;
+                    case AST_BINARY_MUL:
+                        out->as.int_val = l * r;
+                        return true;
+                    case AST_BINARY_DIV:
+                        if (r == 0)
+                            return ct_fail(err, "division by zero in constant expression");
+                        out->as.int_val = l / r;
+                        return true;
+                    default:
+                        break;
+                }
+            }
+            double l = ct_as_double(&left);
+            double r = ct_as_double(&right);
+            out->kind = XR_CT_FLOAT;
+            switch (expr->type) {
+                case AST_BINARY_ADD:
+                    out->as.float_val = l + r;
+                    return true;
+                case AST_BINARY_SUB:
+                    out->as.float_val = l - r;
+                    return true;
+                case AST_BINARY_MUL:
+                    out->as.float_val = l * r;
+                    return true;
+                case AST_BINARY_DIV:
+                    out->as.float_val = l / r;
+                    return true;
+                default:
+                    break;
+            }
+            break;
+        }
         case AST_BINARY_MOD:
         case AST_BINARY_BAND:
         case AST_BINARY_BOR:
@@ -177,20 +247,6 @@ static bool ct_eval_binary(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue 
             int64_t r = right.as.int_val;
             out->kind = XR_CT_INT;
             switch (expr->type) {
-                case AST_BINARY_ADD:
-                    out->as.int_val = l + r;
-                    return true;
-                case AST_BINARY_SUB:
-                    out->as.int_val = l - r;
-                    return true;
-                case AST_BINARY_MUL:
-                    out->as.int_val = l * r;
-                    return true;
-                case AST_BINARY_DIV:
-                    if (r == 0)
-                        return ct_fail(err, "division by zero in constant expression");
-                    out->as.int_val = l / r;
-                    return true;
                 case AST_BINARY_MOD:
                     if (r == 0)
                         return ct_fail(err, "modulo by zero in constant expression");
@@ -233,28 +289,68 @@ static bool ct_eval_binary(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue 
         case AST_BINARY_LE:
         case AST_BINARY_GT:
         case AST_BINARY_GE: {
-            if (left.kind != XR_CT_INT || right.kind != XR_CT_INT)
-                return ct_fail(err, "comparison requires integer constants");
-            int64_t l = left.as.int_val;
-            int64_t r = right.as.int_val;
             out->kind = XR_CT_BOOL;
-            switch (expr->type) {
-                case AST_BINARY_LT:
-                    out->as.bool_val = l < r;
-                    return true;
-                case AST_BINARY_LE:
-                    out->as.bool_val = l <= r;
-                    return true;
-                case AST_BINARY_GT:
-                    out->as.bool_val = l > r;
-                    return true;
-                case AST_BINARY_GE:
-                    out->as.bool_val = l >= r;
-                    return true;
-                default:
-                    break;
+            if (ct_is_numeric(&left) && ct_is_numeric(&right)) {
+                if (left.kind == XR_CT_INT && right.kind == XR_CT_INT) {
+                    int64_t l = left.as.int_val;
+                    int64_t r = right.as.int_val;
+                    switch (expr->type) {
+                        case AST_BINARY_LT:
+                            out->as.bool_val = l < r;
+                            return true;
+                        case AST_BINARY_LE:
+                            out->as.bool_val = l <= r;
+                            return true;
+                        case AST_BINARY_GT:
+                            out->as.bool_val = l > r;
+                            return true;
+                        case AST_BINARY_GE:
+                            out->as.bool_val = l >= r;
+                            return true;
+                        default:
+                            break;
+                    }
+                }
+                double l = ct_as_double(&left);
+                double r = ct_as_double(&right);
+                switch (expr->type) {
+                    case AST_BINARY_LT:
+                        out->as.bool_val = l < r;
+                        return true;
+                    case AST_BINARY_LE:
+                        out->as.bool_val = l <= r;
+                        return true;
+                    case AST_BINARY_GT:
+                        out->as.bool_val = l > r;
+                        return true;
+                    case AST_BINARY_GE:
+                        out->as.bool_val = l >= r;
+                        return true;
+                    default:
+                        break;
+                }
             }
-            break;
+            if (left.kind == XR_CT_STRING && right.kind == XR_CT_STRING) {
+                int cmp = strcmp(left.as.string_val ? left.as.string_val : "",
+                                 right.as.string_val ? right.as.string_val : "");
+                switch (expr->type) {
+                    case AST_BINARY_LT:
+                        out->as.bool_val = cmp < 0;
+                        return true;
+                    case AST_BINARY_LE:
+                        out->as.bool_val = cmp <= 0;
+                        return true;
+                    case AST_BINARY_GT:
+                        out->as.bool_val = cmp > 0;
+                        return true;
+                    case AST_BINARY_GE:
+                        out->as.bool_val = cmp >= 0;
+                        return true;
+                    default:
+                        break;
+                }
+            }
+            return ct_fail(err, "comparison requires numeric or string constants");
         }
         case AST_BINARY_AND:
         case AST_BINARY_OR:
@@ -365,6 +461,18 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
         case AST_BINARY_OR:
             ok = ct_eval_binary(analyzer, expr, out, err, stack, depth);
             break;
+        case AST_TERNARY: {
+            XrCtValue cond = {0};
+            if (!ct_eval_impl(analyzer, expr->as.ternary.condition, &cond, err, stack, depth + 1))
+                return false;
+            if (!ct_expect_kind(&cond, XR_CT_BOOL, err,
+                                "ternary condition requires a bool constant"))
+                return false;
+            AstNode *selected =
+                cond.as.bool_val ? expr->as.ternary.true_expr : expr->as.ternary.false_expr;
+            ok = ct_eval_impl(analyzer, selected, out, err, stack, depth + 1);
+            break;
+        }
         case AST_CALL_EXPR:
             return ct_fail(err, "function calls are not consteval-safe in this phase");
         case AST_BLOCK:
