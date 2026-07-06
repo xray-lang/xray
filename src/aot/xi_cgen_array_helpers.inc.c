@@ -28,6 +28,140 @@ static bool cg_value_type_is_fixed_array(const XiValue *value) {
     return v && v->type && v->type->kind == XR_KIND_FIXED_ARRAY;
 }
 
+static void emit_array_i64_arg(FILE *out, const XiValue *value);
+
+typedef struct CgFixedArrayLaneInfo {
+    const XiValue *stack_origin;
+    const char *ctype;
+    XrRep rep;
+    uint16_t count;
+} CgFixedArrayLaneInfo;
+
+static bool cg_fixed_array_lane_info_from_type(const XrType *type, CgFixedArrayLaneInfo *out) {
+    if (!type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
+        type->fixed_array.length <= 0 || type->fixed_array.length > UINT16_MAX || !out)
+        return false;
+    XrType *elem = type->fixed_array.element_type;
+    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    if (elem->is_nullable || native == XR_NATIVE_STRING || native < 0)
+        native = XR_NATIVE_VALUE;
+    *out = (CgFixedArrayLaneInfo) {
+        .stack_origin = NULL,
+        .ctype = cg_struct_native_c_type((uint8_t) native),
+        .rep = cg_struct_native_rep((uint8_t) native),
+        .count = (uint16_t) type->fixed_array.length,
+    };
+    return true;
+}
+
+static bool cg_fixed_array_lane_info_from_value(const XiValue *value, CgFixedArrayLaneInfo *out) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!v || !cg_fixed_array_lane_info_from_type(v->type, out))
+        return false;
+    if (v->op == XI_FIXED_ARRAY_NEW)
+        out->stack_origin = v;
+    return true;
+}
+
+static void emit_fixed_array_lane_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiValue *value,
+                                           const CgFixedArrayLaneInfo *info) {
+    if (info->stack_origin) {
+        fprintf(out, "_fa%u", info->stack_origin->id);
+        return;
+    }
+    fprintf(out, "((%s*)(", info->ctype);
+    emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
+    fprintf(out, ").ptr)");
+}
+
+static void emit_fixed_array_lane_load_prefix(FILE *out, const CgFixedArrayLaneInfo *info) {
+    if (info->rep == XR_REP_F64)
+        fprintf(out, "(double)");
+    else if (info->rep != XR_REP_TAGGED)
+        fprintf(out, "(int64_t)");
+}
+
+static void emit_fixed_array_lane_oob_fallback(FILE *out, const CgFixedArrayLaneInfo *info) {
+    if (info->rep == XR_REP_F64)
+        fprintf(out, "0.0");
+    else if (info->rep == XR_REP_TAGGED)
+        fprintf(out, "XR_NULL_VAL");
+    else
+        fprintf(out, "0");
+}
+
+static void emit_fixed_array_lane_store_value(XiCgenCtx *ctx, FILE *out,
+                                              const CgFixedArrayLaneInfo *info,
+                                              const XiValue *value) {
+    if (info->rep == XR_REP_TAGGED) {
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
+        return;
+    }
+    fprintf(out, "(%s)", info->ctype);
+    emit_value_as_rep_ctx(ctx, out, value, info->rep);
+}
+
+static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                            const XiValue *v) {
+    CgFixedArrayLaneInfo info;
+    if (!v || v->op != XI_INDEX_GET || v->nargs < 2 ||
+        !cg_fixed_array_lane_info_from_value(v->args[0], &info))
+        return false;
+
+    (void) f;
+    bool unchecked = cg_fixed_array_index_bounds_proven(v, info.count);
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, info.rep, cg_value_plan_storage_rep(ctx, v));
+    if (!unchecked) {
+        fprintf(out, "({ int64_t _idx = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, "; XR_LIKELY(_idx >= 0 && _idx < %u) ? ", (unsigned) info.count);
+    }
+    emit_fixed_array_lane_load_prefix(out, &info);
+    emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &info);
+    fprintf(out, "[");
+    if (unchecked)
+        emit_array_i64_arg(out, v->args[1]);
+    else
+        fprintf(out, "_idx");
+    fprintf(out, "]");
+    if (!unchecked) {
+        fprintf(out, " : (xrt_fixed_index_oob(_idx, %u), ", (unsigned) info.count);
+        emit_fixed_array_lane_oob_fallback(out, &info);
+        fprintf(out, "); })");
+    }
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+static bool emit_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                            const XiValue *v) {
+    CgFixedArrayLaneInfo info;
+    if (!v || v->op != XI_INDEX_SET || v->nargs < 3 ||
+        !cg_fixed_array_lane_info_from_value(v->args[0], &info))
+        return false;
+
+    bool unchecked = cg_fixed_array_index_bounds_proven(v, info.count);
+    (void) f;
+    fprintf(out, "({ ");
+    if (!unchecked) {
+        fprintf(out, "int64_t _idx = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, "; if (XR_UNLIKELY(_idx < 0 || _idx >= %u)) xrt_fixed_index_oob(_idx, %u); ",
+                (unsigned) info.count, (unsigned) info.count);
+    }
+    emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &info);
+    fprintf(out, "[");
+    if (unchecked)
+        emit_array_i64_arg(out, v->args[1]);
+    else
+        fprintf(out, "_idx");
+    fprintf(out, "] = ");
+    emit_fixed_array_lane_store_value(ctx, out, &info, v->args[2]);
+    fprintf(out, "; XR_NULL_VAL; })");
+    return true;
+}
+
 static bool cg_span_elem_info_from_value(XiCgenCtx *ctx, const XiValue *value,
                                          CgArrayElemInfo *out) {
     const XiValue *v = cg_unwrap_identity_value(value);

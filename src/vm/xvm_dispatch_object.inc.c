@@ -487,6 +487,9 @@ vmcase(OP_GETPROP) {
                 case XR_NATIVE_I64:
                     R(a) = XR_FROM_INT(*(int64_t *) fp);
                     break;
+                case XR_NATIVE_U64:
+                    R(a) = XR_FROM_INT((int64_t) *(uint64_t *) fp);
+                    break;
                 case XR_NATIVE_F64:
                     R(a) = XR_FROM_FLOAT(*(double *) fp);
                     break;
@@ -497,6 +500,21 @@ vmcase(OP_GETPROP) {
                     break;
                 case XR_NATIVE_I32:
                     R(a) = XR_FROM_INT((int64_t) *(int32_t *) fp);
+                    break;
+                case XR_NATIVE_U32:
+                    R(a) = XR_FROM_INT((int64_t) *(uint32_t *) fp);
+                    break;
+                case XR_NATIVE_I16:
+                    R(a) = XR_FROM_INT((int64_t) *(int16_t *) fp);
+                    break;
+                case XR_NATIVE_U16:
+                    R(a) = XR_FROM_INT((int64_t) *(uint16_t *) fp);
+                    break;
+                case XR_NATIVE_I8:
+                    R(a) = XR_FROM_INT((int64_t) *(int8_t *) fp);
+                    break;
+                case XR_NATIVE_U8:
+                    R(a) = XR_FROM_INT((int64_t) *(uint8_t *) fp);
                     break;
                 case XR_NATIVE_F32:
                     R(a) = XR_FROM_FLOAT((double) *(float *) fp);

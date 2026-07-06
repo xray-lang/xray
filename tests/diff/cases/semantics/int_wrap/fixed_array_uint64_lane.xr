@@ -1,0 +1,8 @@
+var acc: [uint64; 4] = [11, 12, 13, 14]
+print(acc[0] + acc[1] + acc[2] + acc[3])
+
+acc[2] = 99
+print(acc[2])
+
+var i = 1
+print(acc[i])
