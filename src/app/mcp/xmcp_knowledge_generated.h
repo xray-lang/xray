@@ -31,9 +31,10 @@ typedef struct XmcpGeneratedTopic {
     const char *body; /* Markdown returned verbatim to the caller. */
 } XmcpGeneratedTopic;
 
-/* A single stdlib symbol. Sourced from `xray builtin-dump`, not from the
- * Markdown docs, so signatures stay in lock-step with the analyzer's
- * builtin registry. `summary` is optional and may be empty. */
+/* A single stdlib symbol. Sourced from the source-derived API inventory, not
+ * from Markdown docs, so signatures stay in lock-step with the analyzer,
+ * pure-Xray stdlib exports, and native type declarations. `summary` is
+ * optional and may be empty. */
 typedef struct XmcpGeneratedStdlibSymbol {
     const char *name;
     const char *signature;
@@ -43,7 +44,7 @@ typedef struct XmcpGeneratedStdlibSymbol {
 /* A single stdlib module. `summary` is the one-line description used by
  * ranked search; `body` is the long-form Markdown shown by xray_definition
  * and the `xray://stdlib/<module>` resource. The `symbols` array is empty
- * when no builtin-dump JSON was supplied to the generator. */
+ * when the source-derived inventory has no public symbols for the module. */
 typedef struct XmcpGeneratedStdlibEntry {
     const char *module;
     const char *summary;

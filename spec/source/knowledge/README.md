@@ -10,14 +10,14 @@
 docs/spec/source/
   sections/*.md           # 中英文语言参考手册的结构化源
   cards/topics/*.json     # MCP topic 结构化投影源
-  cards/stdlib/*.json     # stdlib 模块说明源；API 表由 analyzer metadata 注入
+  cards/stdlib/*.json     # stdlib 模块说明源；API 表由源码 inventory 注入
   cards/resources/*.json  # MCP resource 结构化投影源
   knowledge/README.md     # 本 README 的源
 ```
 
 `scripts/gen_language_docs.py` 从上述源生成 `LANGUAGE_SPEC_CN.md`、
 `LANGUAGE_SPEC.md` 和本目录内容；`scripts/gen_mcp_knowledge.py` 再把本目录和
-`xray builtin-dump` 输出合成为 `xmcp_knowledge_generated.c`。
+`scripts/gen_api_inventory.py` 的源码 API 清单合成为 `xmcp_knowledge_generated.c`。
 
 ## 真相层级
 
@@ -26,7 +26,7 @@ docs/spec/source/
 | 实现代码 | 语言语义的最终事实 | parser / analyzer / runtime 与文档冲突时，必须修正代码或文档 |
 | `docs/spec/source/sections/*.md` | 人类可读语言参考手册的唯一手写源 | 同时维护中文、英文正文；必须保持当前文档质量不降级 |
 | `LANGUAGE_SPEC_CN.md` / `LANGUAGE_SPEC.md` | 生成出来的人类可读语言参考手册 | 不手写；由结构化 spec source 生成 |
-| analyzer builtin metadata | 标准库 API 签名事实 | 由 analyzer builtin 表和 `xray builtin-dump` 导出，不在 Markdown 手写复制 |
+| source-derived API inventory | 标准库 API 签名事实和覆盖门禁 | 由 analyzer builtin 表、纯 Xray 导出、native type 声明等源码入口合成，不在 Markdown 手写复制 |
 | `docs/spec/source/cards` | MCP 面向 AI 的结构化投影源 | 只写 aliases、短说明、示例引用和 gotchas；必须链接到生成后的语言参考手册 anchor |
 | `docs/knowledge` | MCP knowledge 生成输出 | 不手写；由结构化 spec source 生成 |
 | `xmcp_knowledge_generated.c` | 生成产物 | 不手写；由 generator 覆盖 |
@@ -96,8 +96,7 @@ MCP tool/resource 输出。
 * `summary` — 单行摘要，用于 ranked `xray_stdlib_search`。
 
 JSON 只写人工说明、使用场景、示例和注意事项。每个 symbol 的 signature / summary 来自
-analyzer builtin metadata，由 `xray builtin-dump` 导出并在生成时自动注入 `## API`
-表格，避免 Markdown 与实际 API 漂移。
+source-derived API inventory，并在生成时自动注入 `## API` 表格，避免 Markdown 与实际 API 漂移。
 
 ### `resources/*.json`
 
@@ -123,10 +122,11 @@ analyzer builtin metadata，由 `xray builtin-dump` 导出并在生成时自动�
 
 ### 标准库 API 变更
 
-1. 修改标准库实现和 analyzer builtin metadata。
+1. 修改标准库实现和源码 API 入口（analyzer builtin metadata、纯 Xray 导出、native type 声明等）。
 2. 通过 `xray builtin-dump` 导出 API metadata。
-3. 只在 `docs/spec/source/cards/stdlib/*.json` 更新人工说明、示例和 gotchas。
-4. 重新生成 MCP knowledge。
+3. 通过 `scripts/gen_api_inventory.py` 合并标准库模块、纯 Xray 导出、native type、全局 builtin、prelude、接口、关键字和 IR intrinsic。
+4. 只在 `spec/source/cards/stdlib/*.json` 更新人工说明、示例和 gotchas。
+5. 重新生成 MCP knowledge。
 
 ## 生成与校验
 
@@ -142,14 +142,26 @@ cmake --build build --target regen-mcp-knowledge
 python3 scripts/gen_language_docs.py --root .
 ```
 
-然后运行 `xray builtin-dump`，再调用 MCP generator：
+然后运行 `xray builtin-dump`，生成完整 API inventory，再调用 MCP generator：
 
 ```sh
+./build/xray builtin-dump > build/xmcp_builtin_dump.json
+python3 scripts/gen_api_inventory.py \
+    --root . \
+    --builtin-dump build/xmcp_builtin_dump.json \
+    --json build/xray_api_inventory.json \
+    --check-docs
 python3 scripts/gen_mcp_knowledge.py \
     --docs docs/knowledge \
     --spec LANGUAGE_SPEC_CN.md \
-    --builtins build/xmcp_builtin_dump.json \
+    --api-inventory build/xray_api_inventory.json \
     --out src/app/mcp/xmcp_knowledge_generated.c
+```
+
+需要交互式查看源码 API 清单时，可以单独运行：
+
+```sh
+cmake --build build --target api-inventory
 ```
 
 `tests/mcp/test_knowledge_generation.py` 会检查：
@@ -159,8 +171,9 @@ python3 scripts/gen_mcp_knowledge.py \
 * 生成后的 SPEC 必须满足质量门禁，防止章节、示例、表格和 EBNF 内容意外减少。
 * `topics/*.json` 的 `spec_anchor` 必须存在于语言参考手册。
 * 所有 `xray` code fence 必须能被 parser 接受。
-* generated C 必须和当前 docs / builtin dump 保持一致。
-* generated stdlib symbols 必须来自 analyzer builtin dump。
+* generated C 必须和当前 docs / API inventory 保持一致。
+* generated stdlib symbols 必须与源码 API inventory 双向一致。
+* source API module 必须有对应 stdlib knowledge card 和生成后的 markdown。
 * prompt smoke examples 必须保持可解析。
 
 ## 禁止事项

@@ -177,23 +177,78 @@ def generated_symbol_index(generated: Path) -> dict[str, set[str]]:
     return result
 
 
-def builtin_symbol_index(root: Path, xray: Path) -> dict[str, set[str]]:
+def source_symbol_index(root: Path, xray: Path) -> dict[str, set[str]]:
     proc = run([str(xray), "builtin-dump"], root)
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr or proc.stdout)
-    data = json.loads(proc.stdout)
-    return {m["name"]: {s["name"] for s in m.get("symbols", [])} for m in data.get("modules", [])}
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+        tmp.write(proc.stdout)
+        builtins_path = Path(tmp.name)
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+        inventory_path = Path(tmp.name)
+    try:
+        inv = run(
+            [
+                sys.executable,
+                str(root / "scripts/gen_api_inventory.py"),
+                "--root",
+                str(root),
+                "--builtin-dump",
+                str(builtins_path),
+                "--json",
+                str(inventory_path),
+                "--check-docs",
+            ],
+            root,
+        )
+        if inv.returncode != 0:
+            raise RuntimeError(inv.stderr or inv.stdout)
+        data = json.loads(inventory_path.read_text(encoding="utf-8"))
+    finally:
+        builtins_path.unlink(missing_ok=True)
+        inventory_path.unlink(missing_ok=True)
+
+    index: dict[str, set[str]] = {}
+    for item in data.get("items", []):
+        if item.get("doc_surface") != "stdlib":
+            continue
+        module = item.get("doc_module") or item.get("namespace")
+        name = item.get("name", "")
+        if not module or not name or item.get("kind") == "module":
+            continue
+        namespace = item.get("namespace", "")
+        qualified = item.get("qualified", name)
+        if namespace and namespace != module:
+            name = qualified
+        index.setdefault(module, set()).add(name)
+    return index
 
 
 def check_symbol_subset(root: Path, xray: Path) -> list[str]:
     generated = generated_symbol_index(root / "src/app/mcp/xmcp_knowledge_generated.c")
-    builtins = builtin_symbol_index(root, xray)
+    source = source_symbol_index(root, xray)
     errors: list[str] = []
     for module, symbols in sorted(generated.items()):
-        missing = symbols - builtins.get(module, set())
+        extra = symbols - source.get(module, set())
+        if extra:
+            preview = ", ".join(sorted(extra)[:8])
+            errors.append(f"{module}: generated symbols missing from source API inventory: {preview}")
+    for module, symbols in sorted(source.items()):
+        missing = symbols - generated.get(module, set())
         if missing:
             preview = ", ".join(sorted(missing)[:8])
-            errors.append(f"{module}: generated symbols missing from analyzer builtin dump: {preview}")
+            errors.append(f"{module}: source API symbols missing from generated knowledge: {preview}")
+    return errors
+
+
+def check_generated_symbol_names(root: Path) -> list[str]:
+    generated = generated_symbol_index(root / "src/app/mcp/xmcp_knowledge_generated.c")
+    errors: list[str] = []
+    for module, symbols in sorted(generated.items()):
+        private = [symbol for symbol in symbols if any(part.startswith("_") for part in symbol.split("."))]
+        if private:
+            preview = ", ".join(sorted(private)[:8])
+            errors.append(f"{module}: generated stdlib API exposes private symbol(s): {preview}")
     return errors
 
 
@@ -209,8 +264,26 @@ def check_generated_is_current(root: Path, xray: Path) -> list[str]:
         return [proc.stderr or proc.stdout]
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tmp:
         tmp.write(proc.stdout)
-        tmp_path = Path(tmp.name)
+        builtins_path = Path(tmp.name)
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+        inventory_path = Path(tmp.name)
     try:
+        inv = run(
+            [
+                sys.executable,
+                str(root / "scripts/gen_api_inventory.py"),
+                "--root",
+                str(root),
+                "--builtin-dump",
+                str(builtins_path),
+                "--json",
+                str(inventory_path),
+                "--check-docs",
+            ],
+            root,
+        )
+        if inv.returncode != 0:
+            return [inv.stderr or inv.stdout]
         check = run(
             [
                 sys.executable,
@@ -219,8 +292,8 @@ def check_generated_is_current(root: Path, xray: Path) -> list[str]:
                 str(root / "docs/knowledge"),
                 "--spec",
                 str(root / "LANGUAGE_SPEC_CN.md"),
-                "--builtins",
-                str(tmp_path),
+                "--api-inventory",
+                str(inventory_path),
                 "--out",
                 str(root / "src/app/mcp/xmcp_knowledge_generated.c"),
                 "--check",
@@ -228,7 +301,8 @@ def check_generated_is_current(root: Path, xray: Path) -> list[str]:
             root,
         )
     finally:
-        tmp_path.unlink(missing_ok=True)
+        builtins_path.unlink(missing_ok=True)
+        inventory_path.unlink(missing_ok=True)
     if check.returncode != 0:
         return [check.stderr or check.stdout]
     return []
@@ -343,6 +417,7 @@ def main(argv: list[str]) -> int:
 
     errors.extend(check_spec_quality_gate(root))
     errors.extend(check_symbol_subset(root, xray))
+    errors.extend(check_generated_symbol_names(root))
     errors.extend(check_generated_stdlib_api_tables(root))
     errors.extend(check_prompt_smoke_examples(root, xray))
 

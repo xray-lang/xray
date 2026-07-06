@@ -1,0 +1,5 @@
+{
+  "module": "Coro",
+  "summary": "Coroutine diagnostics and coroutine-local helpers",
+  "lead": "Coroutine diagnostics, cooperative yielding, thread pinning, named coroutine lookup, and coroutine-local storage helpers."
+}

@@ -1,0 +1,5 @@
+{
+  "module": "CoroPool",
+  "summary": "Runtime coroutine pool helper namespace",
+  "lead": "Runtime coroutine pool helper namespace for submitting function work and closing the pool."
+}
