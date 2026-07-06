@@ -6,6 +6,13 @@ fn xray_mem_addr_roundtrip(addr: int) -> int {
     return mem.addressOf(p)
 }
 
+@c_export("xray_mem_typed_addr_null")
+fn xray_mem_typed_addr_null() -> int {
+    var p = RawPtr<uint32>.null()
+    var q = RawMut<uint64>.null()
+    return mem.addressOf(p) + mem.addressOf(q)
+}
+
 @c_export("xray_mem_bits")
 fn xray_mem_bits(x: int, n: int) -> int {
     // Bit/wrapping intrinsics are int methods (task 153); the freestanding

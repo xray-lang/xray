@@ -2843,8 +2843,8 @@ module mem {
   }
 
   fn addressOf {
-    signature: "(ptr: RawPtr<uint8>): int"
-    doc: "Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)"
+    signature: "(ptr: RawPtr<unknown>): int"
+    doc: "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)"
     vm: "mem_address_of"
     aot: "xrt_mem_address_of"
     argc: 1

@@ -396,7 +396,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"pageProtect", "(ptr: RawMut<uint8>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", true, false},
     {"pageFree", "(ptr: RawMut<uint8>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false},
     {"fromAddress", "(addr: int): RawMut<uint8>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", true, false},
-    {"addressOf", "(ptr: RawPtr<uint8>): int", "Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", true, false},
+    {"addressOf", "(ptr: RawPtr<unknown>): int", "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", true, false},
     {"copy", "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false},
     {"move", "(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false},
     {"set", "(dst: RawMut<uint8>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", true, false},
