@@ -3024,7 +3024,7 @@ static const XiPassDesc xi_pass_table[] = {
      0},
     {"call_specialize", xi_opt_call_specialize, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW,
      XI_STAGE_RAW, 0, 0},
-    {"comptime_eval", xi_opt_comptime_eval, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
+    {"const_fixpoint", xi_opt_const_fixpoint, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
      0, 0},
 };
 

@@ -17,14 +17,14 @@
 #include "xi_opt_sccp.h"
 #include "xi_pass.h"
 
-XR_FUNC XiPassChange xi_opt_comptime_eval(XiFunc *f) {
+XR_FUNC XiPassChange xi_opt_const_fixpoint(XiFunc *f) {
     if (!f)
         return xi_pass_no_change();
 
     XiPassChange total = xi_pass_no_change();
 
     /* Fixpoint of const-fold + copy-prop + SCCP + DCE. */
-    for (int round = 0; round < XI_COMPTIME_MAX_ROUNDS; round++) {
+    for (int round = 0; round < XI_CONST_FIXPOINT_MAX_ROUNDS; round++) {
         XiPassChange round_chg = xi_pass_no_change();
 
         round_chg = xi_pass_merge(round_chg, xi_opt_const_fold(f));
