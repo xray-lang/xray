@@ -1475,6 +1475,13 @@ static const XiClassData *cg_class_native_ctor_call_data(XiCgenCtx *ctx, const X
                                                          const XiFunc **out_target,
                                                          const char **out_prefix);
 
+static bool cg_class_native_shared_copy_wrapper(const XiValue *v) {
+    if (!v || v->op != XI_CALL_BUILTIN || !v->aux || v->nargs != 1)
+        return false;
+    const char *name = (const char *) v->aux;
+    return strcmp(name, "copy") == 0 || strcmp(name, "to_shared") == 0;
+}
+
 typedef struct {
     uint16_t set_count;
     bool invalid;
@@ -1941,7 +1948,9 @@ static const XiValue *cg_class_native_trace_ctor_origin(XiCgenCtx *ctx, const Xi
                                                         const XiValue *v, int depth) {
     if (!v || depth > 8)
         return NULL;
-    while (v && (xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && v->nargs >= 1) {
+    while (v && ((xi_copy_is_identity_alias(v) || v->op == XI_MOVE ||
+                  cg_class_native_shared_copy_wrapper(v)) &&
+                 v->nargs >= 1)) {
         if (++depth > 8)
             return NULL;
         v = v->args[0];
@@ -1995,7 +2004,9 @@ static bool cg_class_native_ctor_uses_safe(XiCgenCtx *ctx, const XiFunc *f, cons
                         return false;
                     continue;
                 }
-                if ((xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && ai == 0) {
+                if ((xi_copy_is_identity_alias(v) || v->op == XI_MOVE ||
+                     cg_class_native_shared_copy_wrapper(v)) &&
+                    ai == 0) {
                     if (cg_class_native_trace_ctor_origin(ctx, f, v, depth + 1) != origin)
                         return false;
                     if (!cg_class_native_ctor_uses_safe(ctx, f, v, origin, depth + 1))
@@ -3151,6 +3162,15 @@ static bool cg_class_shared_native_value_is_elided(XiCgenCtx *ctx, const XiFunc 
     const XiValue *target = v;
     if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1)
         target = v->args[0];
+    if (cg_class_native_shared_copy_wrapper(target)) {
+        const XiValue *origin = cg_class_native_trace_ctor_origin(ctx, f, target, 0);
+        int limit = ctx->nshared < ctx->shared_cap ? ctx->nshared : ctx->shared_cap;
+        for (int s = 0; origin && s < limit; s++) {
+            if (cg_class_shared_native_slot_active(ctx, s) &&
+                ctx->shared_native_instances[s].ctor_call == origin)
+                return true;
+        }
+    }
     if (cg_class_shared_native_slot_for_value(ctx, target, &slot))
         return cg_class_shared_native_alias_safe_uses(ctx, f, target, slot, 0);
     const CgSharedNativeExport *exp = NULL;

@@ -3033,6 +3033,35 @@ static XiValue *stmt_lower_shared_initializer(XiLower *l, AstNode *decl, XiValue
     return stmt_wrap_to_shared(l, init_val, init->line ? init->line : decl->line);
 }
 
+static XiFunc *stmt_static_function_value_target(XiValue *value) {
+    while (value &&
+           (value->op == XI_BOX || value->op == XI_UNBOX || xi_copy_is_identity_alias(value) ||
+            value->op == XI_MOVE) &&
+           value->nargs >= 1) {
+        value = value->args[0];
+    }
+    if (!value)
+        return NULL;
+    if ((value->op == XI_CLOSURE_NEW ||
+         (value->op == XI_STACK_ALLOC && value->aux_int == XI_CLOSURE_NEW)) &&
+        value->aux) {
+        return (XiFunc *) value->aux;
+    }
+    return NULL;
+}
+
+static void stmt_record_shared_function_value(XiLower *l, int slot, XiValue *value) {
+    if (!l || slot < 0)
+        return;
+    XiFunc *target = stmt_static_function_value_target(value);
+    if (!target)
+        return;
+    if (slot < l->var_cap)
+        l->shared_slot_funcs[slot] = target;
+    if (l->func && l->func->shared_slot_funcs && slot < (int) l->func->shared_slot_func_count)
+        l->func->shared_slot_funcs[slot] = target;
+}
+
 static void lower_var_decl(XiLower *l, AstNode *node) {
     const char *name = node->as.var_decl.name;
     uint32_t sid = node->as.var_decl.symbol_id;
@@ -3159,6 +3188,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
         b.slot = l->shared_map[var_id];
         b.name = l->vars[var_id].name;
         b.type = l->vars[var_id].type;
+        stmt_record_shared_function_value(l, b.slot, init_val);
         xi_lower_emit_top_store(l, b, init_val);
     }
 }
