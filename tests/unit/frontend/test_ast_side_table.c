@@ -258,6 +258,48 @@ TEST(node_table_scope_symbol_bindings) {
     xa_node_table_free(t);
 }
 
+TEST(node_table_ct_value_round_trip) {
+    XaNodeTable *t = xa_node_table_new();
+    ASSERT_NOT_NULL(t);
+
+    AstNode n = make_node(600);
+    XrCtValue value = {.kind = XR_CT_BOOL, .as.bool_val = true};
+    XrCtValue got = {0};
+
+    ASSERT(!xa_node_table_get_ct_value(t, &n, &got));
+    xa_node_table_set_ct_value(t, &n, &value);
+    ASSERT_EQ_INT(xa_node_table_size(t), 1);
+    ASSERT(xa_node_table_get_ct_value(t, &n, &got));
+    ASSERT_EQ_INT(got.kind, XR_CT_BOOL);
+    ASSERT_EQ_INT(got.as.bool_val, true);
+
+    xa_node_table_set_ct_value(t, &n, NULL);
+    ASSERT(!xa_node_table_get_ct_value(t, &n, &got));
+    ASSERT_EQ_INT(xa_node_table_size(t), 0);
+
+    xa_node_table_free(t);
+}
+
+TEST(node_table_ct_value_preserves_type_entry) {
+    XaNodeTable *t = xa_node_table_new();
+    ASSERT_NOT_NULL(t);
+
+    AstNode n = make_node(601);
+    XrType ty;
+    ty.kind = XR_KIND_CHAR;
+    XrCtValue value = {.kind = XR_CT_CHAR, .as.char_val = 'x'};
+
+    xa_node_table_set_type(t, &n, &ty);
+    xa_node_table_set_ct_value(t, &n, &value);
+    ASSERT_EQ_INT(xa_node_table_size(t), 1);
+
+    xa_node_table_set_ct_value(t, &n, NULL);
+    ASSERT_EQ_PTR(xa_node_table_get_type(t, &n), &ty);
+    ASSERT_EQ_INT(xa_node_table_size(t), 1);
+
+    xa_node_table_free(t);
+}
+
 /* ====================================================================== */
 /* Analyzer-API wrapper tests                                              */
 /* ====================================================================== */
@@ -367,6 +409,8 @@ RUN_TEST(node_table_clear_drops_all_entries);
 RUN_TEST(node_table_growth_preserves_entries);
 RUN_TEST(node_table_null_safe_api);
 RUN_TEST(node_table_scope_symbol_bindings);
+RUN_TEST(node_table_ct_value_round_trip);
+RUN_TEST(node_table_ct_value_preserves_type_entry);
 
 RUN_TEST_SUITE("xa_analyzer node_type wrappers");
 RUN_TEST(analyzer_node_type_null_safe);

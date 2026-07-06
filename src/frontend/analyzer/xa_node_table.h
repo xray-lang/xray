@@ -28,7 +28,9 @@
 #ifndef XA_NODE_TABLE_H
 #define XA_NODE_TABLE_H
 
+#include "xconsteval.h"
 #include "../../base/xdefs.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 struct AstNode;
@@ -56,6 +58,13 @@ XR_FUNC void xa_node_table_set(XaNodeTable *t, struct AstNode *node, struct XrTy
 // Retrieve scope / symbol binding for a node.
 XR_FUNC struct XaScope *xa_node_table_get_scope(const XaNodeTable *t, const struct AstNode *node);
 XR_FUNC struct XaSymbol *xa_node_table_get_symbol(const XaNodeTable *t, const struct AstNode *node);
+
+// Store / retrieve a compile-time value fact for `node`.
+// Passing NULL for `value` clears only the ct-value fact.
+XR_FUNC void xa_node_table_set_ct_value(XaNodeTable *t, const struct AstNode *node,
+                                        const XrCtValue *value);
+XR_FUNC bool xa_node_table_get_ct_value(const XaNodeTable *t, const struct AstNode *node,
+                                        XrCtValue *out_value);
 
 // Drop all entries, keep the bucket array allocated. Used between
 // analyses of the same file when the analyzer reuses its scratch state.
