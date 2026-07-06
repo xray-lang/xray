@@ -371,6 +371,152 @@ static inline XRT_COLD XRT_NORETURN void xrt_freestanding_trap(const char *messa
 #endif
 }
 
+static inline XRT_COLD XRT_NORETURN void xrt_index_oob(int64_t idx, int64_t length) {
+    (void) idx;
+    (void) length;
+    xrt_freestanding_trap("array index out of range");
+}
+
+static inline XRT_COLD XRT_NORETURN void xrt_fixed_index_oob(int64_t idx, int64_t length) {
+    (void) idx;
+    (void) length;
+    xrt_freestanding_trap("fixed array index out of range");
+}
+
+static inline size_t xrt_value_native_type_size(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_BOOL:
+            return 1;
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+            return 2;
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_F32:
+            return 4;
+        case XR_NATIVE_VALUE:
+            return sizeof(XrValue);
+        default:
+            return 8;
+    }
+}
+
+static inline int64_t xr_value_to_int64_coerce(XrValue v) {
+    if (XR_IS_INT(v) || XR_IS_CHAR(v) || XR_IS_BOOL(v))
+        return v.i;
+    if (XR_IS_FLOAT(v))
+        return (int64_t) v.f;
+    return 0;
+}
+
+static inline double xr_value_to_f64_coerce(XrValue v) {
+    if (XR_IS_FLOAT(v))
+        return v.f;
+    if (XR_IS_INT(v) || XR_IS_CHAR(v) || XR_IS_BOOL(v))
+        return (double) v.i;
+    return 0.0;
+}
+
+static inline XrValue xrt_fixed_array_get(void *base, uint8_t native_type, int64_t idx) {
+    uint8_t *p = (uint8_t *) base + (size_t) idx * xrt_value_native_type_size(native_type);
+    switch (native_type) {
+        case XR_NATIVE_F32:
+            return XR_FROM_FLOAT((double) *(float *) p);
+        case XR_NATIVE_F64:
+            return XR_FROM_FLOAT(*(double *) p);
+        case XR_NATIVE_BOOL:
+            return *(uint8_t *) p ? XR_TRUE_VAL : XR_FALSE_VAL;
+        case XR_NATIVE_VALUE:
+            return *(XrValue *) p;
+        case XR_NATIVE_I8:
+            return XR_FROM_INT((int64_t) *(int8_t *) p);
+        case XR_NATIVE_I16:
+            return XR_FROM_INT((int64_t) *(int16_t *) p);
+        case XR_NATIVE_I32:
+            return XR_FROM_INT((int64_t) *(int32_t *) p);
+        case XR_NATIVE_U8:
+            return XR_FROM_INT((int64_t) *(uint8_t *) p);
+        case XR_NATIVE_U16:
+            return XR_FROM_INT((int64_t) *(uint16_t *) p);
+        case XR_NATIVE_U32:
+            return XR_FROM_INT((int64_t) *(uint32_t *) p);
+        case XR_NATIVE_U64:
+            return XR_FROM_INT((int64_t) *(uint64_t *) p);
+        default:
+            return XR_FROM_INT(*(int64_t *) p);
+    }
+}
+
+static inline void xrt_fixed_array_set(void *base, uint8_t native_type, int64_t idx,
+                                       XrValue value) {
+    uint8_t *p = (uint8_t *) base + (size_t) idx * xrt_value_native_type_size(native_type);
+    switch (native_type) {
+        case XR_NATIVE_F32:
+            *(float *) p = (float) xr_value_to_f64_coerce(value);
+            break;
+        case XR_NATIVE_F64:
+            *(double *) p = xr_value_to_f64_coerce(value);
+            break;
+        case XR_NATIVE_BOOL:
+            *(uint8_t *) p = (uint8_t) xr_value_to_int64_coerce(value);
+            break;
+        case XR_NATIVE_VALUE:
+            *(XrValue *) p = value;
+            break;
+        case XR_NATIVE_I8:
+            *(int8_t *) p = (int8_t) xr_value_to_int64_coerce(value);
+            break;
+        case XR_NATIVE_I16:
+            *(int16_t *) p = (int16_t) xr_value_to_int64_coerce(value);
+            break;
+        case XR_NATIVE_I32:
+            *(int32_t *) p = (int32_t) xr_value_to_int64_coerce(value);
+            break;
+        case XR_NATIVE_U8:
+            *(uint8_t *) p = (uint8_t) xr_value_to_int64_coerce(value);
+            break;
+        case XR_NATIVE_U16:
+            *(uint16_t *) p = (uint16_t) xr_value_to_int64_coerce(value);
+            break;
+        case XR_NATIVE_U32:
+            *(uint32_t *) p = (uint32_t) xr_value_to_int64_coerce(value);
+            break;
+        case XR_NATIVE_U64:
+            *(uint64_t *) p = (uint64_t) xr_value_to_int64_coerce(value);
+            break;
+        default:
+            *(int64_t *) p = xr_value_to_int64_coerce(value);
+            break;
+    }
+}
+
+static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
+    if (XR_IS_ARRAY_REF(obj) && XR_IS_INT(key)) {
+        int64_t idx = key.i;
+        uint16_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
+        if (XR_LIKELY(idx >= 0 && idx < count))
+            return xrt_fixed_array_get(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx);
+        xrt_fixed_index_oob(idx, count);
+    }
+    xrt_freestanding_trap("freestanding index get supports only fixed arrays");
+    return XR_NULL_VAL;
+}
+
+static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
+    if (XR_IS_ARRAY_REF(obj) && XR_IS_INT(key)) {
+        int64_t idx = key.i;
+        uint16_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
+        if (XR_LIKELY(idx >= 0 && idx < count)) {
+            xrt_fixed_array_set(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx, val);
+            return;
+        }
+        xrt_fixed_index_oob(idx, count);
+    }
+    xrt_freestanding_trap("freestanding index set supports only fixed arrays");
+}
+
 static inline void xrt_write_bytes(const char *bytes, size_t len) {
     if (bytes && len > 0)
         xr_hook_write(bytes, len);

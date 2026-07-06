@@ -1,0 +1,6 @@
+@c_export("xray_fixed_array_sum")
+fn xray_fixed_array_sum() -> int {
+    var xs: [int; 3] = [1, 2, 3]
+    xs[1] = 5
+    return xs[0] + xs[1] + xs[2]
+}

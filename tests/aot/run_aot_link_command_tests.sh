@@ -473,6 +473,40 @@ else
     sed 's/^/      /' "$FREESTANDING_RAWPTR_NULL_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_FIXED_ARRAY_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_fixed_array.xr"
+FREESTANDING_FIXED_ARRAY_OBJ="$WORK/freestanding_fixed_array.o"
+FREESTANDING_FIXED_ARRAY_LOG="$WORK/freestanding_fixed_array.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_FIXED_ARRAY_OBJ" \
+        "$FREESTANDING_FIXED_ARRAY_SRC" >"$FREESTANDING_FIXED_ARRAY_LOG" 2>&1; then
+    FREESTANDING_FIXED_ARRAY_KEPT_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_FIXED_ARRAY_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_FIXED_ARRAY_KEPT_C" ]; then
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "#include \"xrt_core_freestanding.h\"" \
+            "freestanding-profile/fixed-array: generated C uses freestanding prelude"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "#include \"xrt.h\"" \
+            "freestanding-profile/fixed-array: generated C avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/fixed-array: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_FIXED_ARRAY_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_FIXED_ARRAY_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_FIXED_ARRAY_OBJ")"
+    FREESTANDING_FIXED_ARRAY_UNEXPECTED="$(printf '%s\n' "$FREESTANDING_FIXED_ARRAY_UNDEFINED" |
+        sed '/^[[:space:]]*$/d' |
+        grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic)$' || true)"
+    if [ -z "$FREESTANDING_FIXED_ARRAY_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/fixed-array: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/fixed-array: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_FIXED_ARRAY_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/fixed-array: object build failed"
+    sed 's/^/      /' "$FREESTANDING_FIXED_ARRAY_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_SHARED_CONST_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_shared_const_reject.xr"
 FREESTANDING_SHARED_CONST_LOG="$WORK/freestanding_shared_const_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
