@@ -806,6 +806,14 @@ static bool xa_call_is_rawptr_load_le_unchecked(CallExprNode *call, XrType *rece
     return ma->name && strcmp(ma->name, "loadLEUnchecked") == 0;
 }
 
+static bool xa_call_is_rawmut_store_le_unchecked(CallExprNode *call, XrType *receiver_type) {
+    if (!call || !receiver_type || !xa_type_is_raw_u8_ptr_view(receiver_type) || !call->callee ||
+        call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    return ma->name && strcmp(ma->name, "storeLEUnchecked") == 0;
+}
+
 static bool xa_type_is_supported_raw_load_le_result(XrType *type) {
     return type && XR_TYPE_IS_INT(type) &&
            (type->native_width == XR_NATIVE_U16 || type->native_width == XR_NATIVE_U32 ||
@@ -2344,6 +2352,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     if (xa_call_is_rawptr_load_le_unchecked(call, callee_obj_type))
         return_type = xa_load_le_return_type(ctx, node, call, "RawPtr.loadLEUnchecked<T>()", false);
+
+    if (xa_call_is_rawmut_store_le_unchecked(call, callee_obj_type)) {
+        (void) xa_bytes_typed_type_arg(ctx, node, call, "RawMut.storeLEUnchecked<T>()", false);
+        return_type = xr_type_new_unit(ctx->analyzer->isolate);
+    }
 
     // Apply type substitution for generic method calls: obj.method<T>()
     if (callee_obj_type && call->callee->type == AST_MEMBER_ACCESS) {

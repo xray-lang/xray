@@ -467,6 +467,29 @@ static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, con
         }
         return fn;
     }
+    if (strcmp(name, "storeLEUnchecked") == 0 && xa_type_is_raw_u8_ptr(receiver)) {
+        if (node) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            if (ctx->unsafe_depth == 0) {
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                    "RawMut.storeLEUnchecked() must be inside an unsafe block", &loc);
+            }
+            if (!receiver->ptr_is_mut) {
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
+                    "cannot store through a const `RawPtr<T>` (use `RawMut<T>`)", &loc);
+            }
+        }
+        XrType *value = xr_type_new_type_param(X, "T", 0);
+        XrType *params[2] = {xr_type_new_int(X), value};
+        XrType *fn = xr_type_new_function(X, params, 2, xr_type_new_unit(X), false);
+        if (fn) {
+            const char *names[1] = {"T"};
+            xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
+        }
+        return fn;
+    }
     if (strcmp(name, "offset") == 0)
         return xa_function_type1(ctx, xr_type_new_int(X), receiver);
     if (strcmp(name, "isNull") == 0)
