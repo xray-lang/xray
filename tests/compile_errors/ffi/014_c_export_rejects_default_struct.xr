@@ -1,0 +1,8 @@
+struct DefaultStruct {
+    a: int32
+}
+
+@c_export("xr_bad_default_struct")
+fn bad_default_struct(p: DefaultStruct) -> int32 {
+    return 0
+}

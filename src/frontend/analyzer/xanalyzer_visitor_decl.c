@@ -127,7 +127,7 @@ static bool xa_c_export_native_scalar_supported(uint8_t native_type) {
 }
 
 static bool xa_c_export_struct_layout_supported_depth(const XrStructLayout *layout, int depth) {
-    if (!layout || layout->repr != XR_STRUCT_REPR_C || layout->explicit_align != 0 || depth > 8 ||
+    if (!layout || !xr_struct_layout_is_headerless(layout) || depth > 8 ||
         layout->field_count == 0 || layout->field_count > XR_MAX_STRUCT_FIELDS)
         return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {

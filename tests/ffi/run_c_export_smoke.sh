@@ -98,6 +98,12 @@ OUTER_TYPE=""
 OUTER_TYPE_FOR_C="struct xray_missing_outer_type"
 BYTES4_TYPE=""
 BYTES4_TYPE_FOR_C="struct xray_missing_bytes4_type"
+PACKED_TYPE=""
+PACKED_TYPE_FOR_C="struct xray_missing_packed_type"
+ALIGNED_TYPE=""
+ALIGNED_TYPE_FOR_C="struct xray_missing_aligned_type"
+PACKED_ALIGNED_TYPE=""
+PACKED_ALIGNED_TYPE_FOR_C="struct xray_missing_packed_aligned_type"
 
 cat >"$SRC" <<'XR'
 @repr(C)
@@ -121,6 +127,25 @@ struct Outer {
 struct Bytes4 {
     data: [uint8; 4]
     bias: int32
+}
+
+@repr(packed)
+struct PackedPair {
+    tag: uint8
+    value: uint32
+}
+
+@repr(C)
+@align(16)
+struct AlignedWord {
+    value: int32
+}
+
+@repr(packed)
+@align(16)
+struct PackedAligned {
+    tag: uint8
+    value: uint32
 }
 
 @c_export("xr_add_i32")
@@ -183,6 +208,36 @@ fn bytes4_make(a: uint8, b: uint8, c: uint8, d: uint8, bias: int32) -> Bytes4 {
     return Bytes4{data: [a, b, c, d], bias: bias}
 }
 
+@c_export("xr_packed_sum")
+fn packed_sum(p: PackedPair) -> int32 {
+    return p.tag as int32 + p.value as int32
+}
+
+@c_export("xr_packed_make")
+fn packed_make(tag: uint8, value: uint32) -> PackedPair {
+    return PackedPair{tag: tag, value: value}
+}
+
+@c_export("xr_aligned_sum")
+fn aligned_sum(p: AlignedWord) -> int32 {
+    return p.value
+}
+
+@c_export("xr_aligned_make")
+fn aligned_make(value: int32) -> AlignedWord {
+    return AlignedWord{value: value}
+}
+
+@c_export("xr_packed_aligned_sum")
+fn packed_aligned_sum(p: PackedAligned) -> int32 {
+    return p.tag as int32 + p.value as int32
+}
+
+@c_export("xr_packed_aligned_make")
+fn packed_aligned_make(tag: uint8, value: uint32) -> PackedAligned {
+    return PackedAligned{tag: tag, value: value}
+}
+
 print(add_i32(19, 23))
 XR
 
@@ -197,6 +252,9 @@ if [ -f "$GEN_H" ]; then
     PAIR_TYPE=$(awk '/xr_pair_make/ { print $1; exit }' "$GEN_H")
     OUTER_TYPE=$(awk '/xr_outer_make/ { print $1; exit }' "$GEN_H")
     BYTES4_TYPE=$(awk '/xr_bytes4_make/ { print $1; exit }' "$GEN_H")
+    PACKED_TYPE=$(awk '/xr_packed_make/ { print $1; exit }' "$GEN_H")
+    ALIGNED_TYPE=$(awk '/xr_aligned_make/ { print $1; exit }' "$GEN_H")
+    PACKED_ALIGNED_TYPE=$(awk '/xr_packed_aligned_make/ { print $1; exit }' "$GEN_H")
     if [ -n "$PAIR_TYPE" ] && grep -Fq "typedef struct $PAIR_TYPE {" "$GEN_H"; then
         case "$PAIR_TYPE" in
             xrt_struct_*)
@@ -242,6 +300,51 @@ if [ -f "$GEN_H" ]; then
         record_fail "header exposes fixed-array repr(C) struct typedef"
         sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
     fi
+    if [ -n "$PACKED_TYPE" ] && grep -Fq "typedef struct __attribute__((packed)) $PACKED_TYPE {" "$GEN_H"; then
+        case "$PACKED_TYPE" in
+            xrt_struct_*)
+                PACKED_TYPE_FOR_C="$PACKED_TYPE"
+                record_pass "header exposes packed repr struct typedef"
+                ;;
+            *)
+                record_fail "header exposes packed repr struct typedef"
+                sed 's/^/      /' "$GEN_H" | sed -n '1,160p'
+                ;;
+        esac
+    else
+        record_fail "header exposes packed repr struct typedef"
+        sed 's/^/      /' "$GEN_H" | sed -n '1,160p'
+    fi
+    if [ -n "$ALIGNED_TYPE" ] && grep -Fq "typedef struct __attribute__((aligned(16))) $ALIGNED_TYPE {" "$GEN_H"; then
+        case "$ALIGNED_TYPE" in
+            xrt_struct_*)
+                ALIGNED_TYPE_FOR_C="$ALIGNED_TYPE"
+                record_pass "header exposes aligned repr(C) struct typedef"
+                ;;
+            *)
+                record_fail "header exposes aligned repr(C) struct typedef"
+                sed 's/^/      /' "$GEN_H" | sed -n '1,160p'
+                ;;
+        esac
+    else
+        record_fail "header exposes aligned repr(C) struct typedef"
+        sed 's/^/      /' "$GEN_H" | sed -n '1,160p'
+    fi
+    if [ -n "$PACKED_ALIGNED_TYPE" ] && grep -Fq "typedef struct __attribute__((packed, aligned(16))) $PACKED_ALIGNED_TYPE {" "$GEN_H"; then
+        case "$PACKED_ALIGNED_TYPE" in
+            xrt_struct_*)
+                PACKED_ALIGNED_TYPE_FOR_C="$PACKED_ALIGNED_TYPE"
+                record_pass "header exposes packed aligned repr struct typedef"
+                ;;
+            *)
+                record_fail "header exposes packed aligned repr struct typedef"
+                sed 's/^/      /' "$GEN_H" | sed -n '1,160p'
+                ;;
+        esac
+    else
+        record_fail "header exposes packed aligned repr struct typedef"
+        sed 's/^/      /' "$GEN_H" | sed -n '1,160p'
+    fi
 fi
 
 if [ -f "$GEN_C" ]; then
@@ -273,6 +376,24 @@ if [ -f "$GEN_C" ]; then
         expect_file_contains "$GEN_C" \
             "$BYTES4_TYPE xr_bytes4_make(uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3, int32_t p4);" \
             "declares fixed-array repr(C) struct return export"
+    fi
+    if [ -n "$PACKED_TYPE" ]; then
+        expect_file_contains "$GEN_C" "int32_t xr_packed_sum($PACKED_TYPE p0);" \
+            "declares packed repr struct parameter export"
+        expect_file_contains "$GEN_C" "$PACKED_TYPE xr_packed_make(uint8_t p0, uint32_t p1);" \
+            "declares packed repr struct return export"
+    fi
+    if [ -n "$ALIGNED_TYPE" ]; then
+        expect_file_contains "$GEN_C" "int32_t xr_aligned_sum($ALIGNED_TYPE p0);" \
+            "declares aligned repr(C) struct parameter export"
+        expect_file_contains "$GEN_C" "$ALIGNED_TYPE xr_aligned_make(int32_t p0);" \
+            "declares aligned repr(C) struct return export"
+    fi
+    if [ -n "$PACKED_ALIGNED_TYPE" ]; then
+        expect_file_contains "$GEN_C" "int32_t xr_packed_aligned_sum($PACKED_ALIGNED_TYPE p0);" \
+            "declares packed aligned repr struct parameter export"
+        expect_file_contains "$GEN_C" "$PACKED_ALIGNED_TYPE xr_packed_aligned_make(uint8_t p0, uint32_t p1);" \
+            "declares packed aligned repr struct return export"
     fi
     expect_file_not_contains "$GEN_C" "static int32_t xr_add_i32" \
         "int32 export is public"
@@ -312,6 +433,24 @@ if [ -f "$GEN_H" ]; then
             "$BYTES4_TYPE xr_bytes4_make(uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3, int32_t p4);" \
             "header declares fixed-array repr(C) struct return export"
     fi
+    if [ -n "$PACKED_TYPE" ]; then
+        expect_file_contains "$GEN_H" "int32_t xr_packed_sum($PACKED_TYPE p0);" \
+            "header declares packed repr struct parameter export"
+        expect_file_contains "$GEN_H" "$PACKED_TYPE xr_packed_make(uint8_t p0, uint32_t p1);" \
+            "header declares packed repr struct return export"
+    fi
+    if [ -n "$ALIGNED_TYPE" ]; then
+        expect_file_contains "$GEN_H" "int32_t xr_aligned_sum($ALIGNED_TYPE p0);" \
+            "header declares aligned repr(C) struct parameter export"
+        expect_file_contains "$GEN_H" "$ALIGNED_TYPE xr_aligned_make(int32_t p0);" \
+            "header declares aligned repr(C) struct return export"
+    fi
+    if [ -n "$PACKED_ALIGNED_TYPE" ]; then
+        expect_file_contains "$GEN_H" "int32_t xr_packed_aligned_sum($PACKED_ALIGNED_TYPE p0);" \
+            "header declares packed aligned repr struct parameter export"
+        expect_file_contains "$GEN_H" "$PACKED_ALIGNED_TYPE xr_packed_aligned_make(uint8_t p0, uint32_t p1);" \
+            "header declares packed aligned repr struct return export"
+    fi
 fi
 
 if cc -O2 -Wall -Wno-initializer-overrides -Wno-unused-function -Wno-unused-variable \
@@ -328,8 +467,17 @@ cat >"$CALLER_C" <<C
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stddef.h>
 
 #include "c_export_link.h"
+
+_Static_assert(sizeof($PACKED_TYPE_FOR_C) == 5, "packed size");
+_Static_assert(offsetof($PACKED_TYPE_FOR_C, value) == 1, "packed offset");
+_Static_assert(sizeof($ALIGNED_TYPE_FOR_C) == 16, "aligned size");
+_Static_assert(_Alignof($ALIGNED_TYPE_FOR_C) == 16, "aligned alignment");
+_Static_assert(sizeof($PACKED_ALIGNED_TYPE_FOR_C) == 16, "packed aligned size");
+_Static_assert(_Alignof($PACKED_ALIGNED_TYPE_FOR_C) == 16, "packed aligned alignment");
+_Static_assert(offsetof($PACKED_ALIGNED_TYPE_FOR_C, value) == 1, "packed aligned offset");
 
 int main(void) {
     double d;
@@ -358,6 +506,15 @@ int main(void) {
         return 18;
     if (bytes.data[2] != 30 || bytes.bias != 7)
         return 19;
+    $PACKED_TYPE_FOR_C packed = xr_packed_make(5, 37);
+    if (xr_packed_sum(packed) != 42)
+        return 20;
+    $ALIGNED_TYPE_FOR_C aligned = xr_aligned_make(42);
+    if (xr_aligned_sum(aligned) != 42)
+        return 21;
+    $PACKED_ALIGNED_TYPE_FOR_C packed_aligned = xr_packed_aligned_make(6, 36);
+    if (xr_packed_aligned_sum(packed_aligned) != 42)
+        return 22;
     puts("ok");
     return 0;
 }

@@ -218,7 +218,22 @@ static void emit_struct_field_decl(FILE *out, const XrStructLayout *sl, int64_t 
 static void emit_struct_native_typedef(FILE *out, const XrStructLayout *sl, const char *prefix) {
     char tname[128];
     cg_struct_heap_type_name(tname, sizeof(tname), prefix, sl);
-    fprintf(out, "typedef struct %s { ", tname);
+    fprintf(out, "typedef struct");
+    if (sl && (sl->repr == XR_STRUCT_REPR_PACKED || sl->explicit_align != 0)) {
+        fprintf(out, " __attribute__((");
+        bool need_comma = false;
+        if (sl->repr == XR_STRUCT_REPR_PACKED) {
+            fprintf(out, "packed");
+            need_comma = true;
+        }
+        if (sl->explicit_align != 0) {
+            if (need_comma)
+                fprintf(out, ", ");
+            fprintf(out, "aligned(%u)", (unsigned) sl->explicit_align);
+        }
+        fprintf(out, "))");
+    }
+    fprintf(out, " %s { ", tname);
     if (xr_struct_layout_header_size(sl) != 0)
         fprintf(out, "uint32_t _size; uint32_t _layout; ");
     for (uint16_t i = 0; i < sl->field_count; i++) {

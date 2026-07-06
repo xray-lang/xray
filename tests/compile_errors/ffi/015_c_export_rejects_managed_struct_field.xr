@@ -1,0 +1,9 @@
+@repr(C)
+struct HasString {
+    s: string
+}
+
+@c_export("xr_bad_managed_struct")
+fn bad_managed_struct(p: HasString) -> int32 {
+    return 0
+}

@@ -1,0 +1,60 @@
+import mem
+
+@repr(packed)
+struct PackedPair {
+    tag: uint8
+    value: uint32
+}
+
+@repr(C)
+@align(16)
+struct AlignedWord {
+    value: int32
+}
+
+@repr(packed)
+@align(16)
+struct PackedAligned {
+    tag: uint8
+    value: uint32
+}
+
+fn sum_packed(p: PackedPair) -> int32 {
+    return p.tag as int32 + p.value as int32
+}
+
+fn make_packed(tag: uint8, value: uint32) -> PackedPair {
+    return PackedPair{tag: tag, value: value}
+}
+
+fn read_aligned(p: AlignedWord) -> int32 {
+    return p.value
+}
+
+fn make_aligned(value: int32) -> AlignedWord {
+    return AlignedWord{value: value}
+}
+
+fn sum_packed_aligned(p: PackedAligned) -> int32 {
+    return p.tag as int32 + p.value as int32
+}
+
+fn make_packed_aligned(tag: uint8, value: uint32) -> PackedAligned {
+    return PackedAligned{tag: tag, value: value}
+}
+
+var packed = make_packed(5, 37)
+var aligned = make_aligned(42)
+var packed_aligned = make_packed_aligned(6, 36)
+
+print(sum_packed(packed))
+print(read_aligned(aligned))
+print(sum_packed_aligned(packed_aligned))
+print(mem.sizeOf<PackedPair>())
+print(mem.alignOf<PackedPair>())
+print(mem.offsetOf<PackedPair>("value"))
+print(mem.sizeOf<AlignedWord>())
+print(mem.alignOf<AlignedWord>())
+print(mem.sizeOf<PackedAligned>())
+print(mem.alignOf<PackedAligned>())
+print(mem.offsetOf<PackedAligned>("value"))
