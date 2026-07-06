@@ -24,3 +24,10 @@ fn test_comptime_fixed_array_const_cache() {
     assert_eq(cached[0], 5)
     assert_eq(cached[3], 5)
 }
+
+@test
+fn test_comptime_fixed_array_index_access() {
+    const table: [int; 3] = comptime [1, COUNT, 9]
+    var picked = comptime (table[0] + table[1] + table[2])
+    assert_eq(picked, 14)
+}

@@ -377,6 +377,28 @@ static bool ct_eval_member_access(XaAnalyzer *analyzer, const AstNode *expr, XrC
     return ct_fail(err, "consteval member access requires a tuple or struct constant");
 }
 
+static bool ct_eval_index_get(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
+                              const char **err, uint32_t *stack, int depth) {
+    const IndexGetNode *ig = &expr->as.index_get;
+    XrCtValue array = {0};
+    if (!ct_eval_impl(analyzer, ig->array, &array, err, stack, depth + 1))
+        return false;
+    if (array.kind != XR_CT_FIXED_ARRAY)
+        return ct_fail(err, "consteval index access requires a fixed array constant");
+
+    XrCtValue index = {0};
+    if (!ct_eval_impl(analyzer, ig->index, &index, err, stack, depth + 1))
+        return false;
+    if (index.kind != XR_CT_INT)
+        return ct_fail(err, "fixed array consteval index must be an integer constant");
+    if (index.as.int_val < 0 || index.as.int_val >= array.as.fixed_array_val.count)
+        return ct_fail(err, "fixed array consteval index is out of range");
+
+    int slot = (int) index.as.int_val;
+    *out = array.as.fixed_array_val.elements[slot];
+    return true;
+}
+
 static XaSymbol *ct_lookup_const_symbol(XaAnalyzer *analyzer, const AstNode *expr) {
     if (!analyzer || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
         return NULL;
@@ -700,6 +722,9 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
             break;
         case AST_MEMBER_ACCESS:
             ok = ct_eval_member_access(analyzer, expr, out, err, stack, depth);
+            break;
+        case AST_INDEX_GET:
+            ok = ct_eval_index_get(analyzer, expr, out, err, stack, depth);
             break;
         case AST_UNARY_NEG:
         case AST_UNARY_BNOT:
