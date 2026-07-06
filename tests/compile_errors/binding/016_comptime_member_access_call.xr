@@ -1,0 +1,11 @@
+struct CtPair {
+    x: int
+    y: int
+}
+
+fn runtimePair() -> CtPair {
+    return CtPair{x: 1, y: 2}
+}
+
+var value = comptime runtimePair().x
+print(value)
