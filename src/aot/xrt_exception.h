@@ -135,6 +135,7 @@ static inline const char *xrt_exception_message_cstr(XrValue exc) {
 XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc);
 XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length);
 XRT_COLD _Noreturn void xrt_fixed_index_oob(int64_t idx, int64_t length);
+XRT_COLD _Noreturn void xrt_type_no_index(const char *message);
 XRT_COLD _Noreturn void xrt_throw_type_mismatch(int64_t expected_tid, int64_t actual_tid);
 
 /* Header-only XrTypeId -> canonical name, mirroring the VM's xr_typeid_name with
@@ -284,6 +285,14 @@ XRT_COLD _Noreturn void xrt_fixed_index_oob(int64_t idx, int64_t length) {
     char buf[XR_ERROR_CORE_INDEX_OOB_BUFSZ];
     xr_error_core_format_fixed_array_index_oob(buf, sizeof(buf), idx, length);
     xrt_throw_exc(xrt_exception_new_value(XR_ERR_INDEX_OUT_OF_BOUNDS, buf, strlen(buf)));
+}
+
+/* Unsupported index operation -> E0402, matching the VM generic OP_INDEX_GET /
+ * OP_INDEX_SET fallback. */
+XRT_COLD _Noreturn void xrt_type_no_index(const char *message) {
+    if (!message)
+        message = "type does not support indexing";
+    xrt_throw_exc(xrt_exception_new_value(XR_ERR_TYPE_NO_INDEX, message, strlen(message)));
 }
 
 /* Type mismatch (unsafe `as`, dynamic→concrete checktype) → E0404, identical
