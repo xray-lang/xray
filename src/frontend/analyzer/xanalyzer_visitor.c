@@ -204,9 +204,8 @@ XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
     if (strcmp(module_name, "mem") != 0)
         return true;
     return strcmp(member_name, "alloc") != 0 && strcmp(member_name, "allocZeroed") != 0 &&
-           strcmp(member_name, "allocAligned") != 0 && strcmp(member_name, "realloc") != 0 &&
-           strcmp(member_name, "pageAlloc") != 0 && strcmp(member_name, "pageProtect") != 0 &&
-           strcmp(member_name, "pageFree") != 0;
+           strcmp(member_name, "allocAligned") != 0 && strcmp(member_name, "pageAlloc") != 0 &&
+           strcmp(member_name, "pageProtect") != 0 && strcmp(member_name, "pageFree") != 0;
 }
 
 XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *node,
@@ -223,6 +222,19 @@ XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *no
         snprintf(msg, sizeof(msg), "freestanding profile rejects %s",
                  feature ? feature : "this construct");
     }
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg, &loc);
+}
+
+XR_FUNC void xa_report_unknown_stdlib_member(XaInferContext *ctx, AstNode *node,
+                                             const char *module_name, const char *member_name) {
+    if (!ctx || !ctx->analyzer || !node || !module_name || !member_name)
+        return;
+    if (!xa_builtin_get_module_info(module_name))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg), "stdlib module '%s' has no member '%s'", module_name, member_name);
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg, &loc);
 }
 
@@ -2034,6 +2046,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links) {
                     XrType *member_type = NULL;
+                    const char *builtin_sig = NULL;
 
                     // Priority 1: resolve from graph exports (user modules)
                     if (export_sym) {
@@ -2043,13 +2056,17 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
 
                     // Priority 2: resolve from builtin module signatures (stdlib)
                     if (!member_type) {
-                        const char *sig =
+                        builtin_sig =
                             xa_builtin_get_module_func_signature(import->module_name, member->name);
-                        if (sig) {
-                            member_type =
-                                xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
+                        if (builtin_sig) {
+                            member_type = xa_builtin_parse_full_signature(ctx->analyzer->isolate,
+                                                                          builtin_sig);
                         }
                     }
+
+                    if (!export_sym && !builtin_sig)
+                        xa_report_unknown_stdlib_member(ctx, node, import->module_name,
+                                                        member->name);
 
                     if (!export_sym) {
                         links->type = member_type ? member_type : xr_type_new_unknown(NULL);
