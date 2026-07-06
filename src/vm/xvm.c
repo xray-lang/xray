@@ -176,6 +176,55 @@ static inline XrValue vm_bigint_divop(void *ctx, XrValue left, XrValue right, Xr
         }                                                                                          \
     } while (0)
 
+static bool vm_rescue_array_ref_to_ret_arena(XrVMContext *vm_ctx, XrValue *slot) {
+    if (!vm_ctx || !slot || !XR_IS_ARRAY_REF(*slot) || !slot->ptr)
+        return true;
+
+    uint8_t *src = (uint8_t *) slot->ptr;
+    if (vm_ctx->struct_ret_arena && src >= vm_ctx->struct_ret_arena &&
+        src < vm_ctx->struct_ret_arena + vm_ctx->struct_ret_arena_used)
+        return true;
+
+    uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(*slot);
+    uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(*slot);
+    uint8_t elem_size = xr_native_type_size(elem_type);
+    if (elem_size == 0 || elem_count == 0)
+        return false;
+
+    uint32_t bytes = (uint32_t) elem_size * (uint32_t) elem_count;
+    if (elem_count != 0 && bytes / elem_count != elem_size)
+        return false;
+
+    uint32_t total = (bytes + 15u) & ~15u;
+    if (total < bytes || vm_ctx->struct_ret_arena_used > UINT32_MAX - total)
+        return false;
+
+    uint32_t need = vm_ctx->struct_ret_arena_used + total;
+    if (need > vm_ctx->struct_ret_arena_cap) {
+        uint32_t new_cap = vm_ctx->struct_ret_arena_cap;
+        if (new_cap < 512)
+            new_cap = 512;
+        while (new_cap < need) {
+            if (new_cap > UINT32_MAX / 2u)
+                return false;
+            new_cap *= 2u;
+        }
+        uint8_t *new_arena = (uint8_t *) xr_realloc(vm_ctx->struct_ret_arena, new_cap);
+        if (!new_arena)
+            return false;
+        vm_ctx->struct_ret_arena = new_arena;
+        vm_ctx->struct_ret_arena_cap = new_cap;
+    }
+
+    uint8_t *dst = vm_ctx->struct_ret_arena + vm_ctx->struct_ret_arena_used;
+    memcpy(dst, src, bytes);
+    if (total > bytes)
+        memset(dst + bytes, 0, total - bytes);
+    vm_ctx->struct_ret_arena_used = need;
+    slot->ptr = dst;
+    return true;
+}
+
 static bool vm_struct_write_field_bytes(XrVMRuntime *isolate, uint8_t *fp,
                                         const XrStructFieldLayout *field, XrValue src);
 

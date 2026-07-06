@@ -3452,7 +3452,7 @@ done:
     return XA_COMPTIME_FLOW_NORMAL;
 }
 
-static bool xa_ct_value_is_scalar(const XrCtValue *value) {
+static bool xa_ct_value_is_comptime_block_runtime_value(const XrCtValue *value) {
     if (!value)
         return false;
     switch (value->kind) {
@@ -3462,6 +3462,8 @@ static bool xa_ct_value_is_scalar(const XrCtValue *value) {
         case XR_CT_STRING:
         case XR_CT_CHAR:
         case XR_CT_NULL:
+        case XR_CT_FIXED_ARRAY:
+        case XR_CT_TUPLE:
             return true;
         default:
             return false;
@@ -3499,11 +3501,11 @@ static XaComptimeBlockFlow xa_visit_comptime_block_return_stmt(XaInferContext *c
         xa_report_comptime_block_error(ctx, value_expr, msg);
         return XA_COMPTIME_FLOW_NORMAL;
     }
-    if (!xa_ct_value_is_scalar(&value)) {
+    if (!xa_ct_value_is_comptime_block_runtime_value(&value)) {
         xa_report_comptime_block_error(
             ctx, value_expr,
-            "comptime block expression return value must be a scalar compile-time value in this "
-            "phase");
+            "comptime block expression return value must be a scalar, fixed-array, or tuple "
+            "compile-time value in this phase");
         return XA_COMPTIME_FLOW_NORMAL;
     }
 

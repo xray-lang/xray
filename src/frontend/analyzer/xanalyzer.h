@@ -32,6 +32,7 @@
 // Forward declarations
 typedef struct XaAnalyzer XaAnalyzer;
 typedef struct AstNode XrAstNode;
+typedef struct XrArena XrArena;
 typedef struct XrCompilerSession XrCompilerSession;
 typedef struct XrVMRuntime XrVMRuntime;
 
@@ -122,6 +123,9 @@ struct XaAnalyzer {
     // with semantic state. Forward-declared as void* to keep the public
     // analyzer header free of frontend-internal types.
     void *node_table;  // XaNodeTable* (forward declared)
+
+    // Arena-owned compile-time aggregate values cached in symbols/nodes.
+    XrArena *consteval_arena;
 
     // AST -> selection facts table. Populated during Pass 2 for
     // member access, method call, index, and module export nodes.

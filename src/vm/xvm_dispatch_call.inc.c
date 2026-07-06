@@ -876,9 +876,12 @@ vmcase(OP_RETURN1) {
         *return_slot = ret_val;
     }
 
-    /* Rescue struct_ref pointing to callee's struct_area:
-     * append to struct_ret_arena so it survives frame reuse */
-    if (return_slot && XR_IS_STRUCT_REF(ret_val)) {
+    /* Rescue frame-backed value refs so they survive frame reuse. */
+    if (return_slot && XR_IS_ARRAY_REF(ret_val)) {
+        if (!vm_rescue_array_ref_to_ret_arena(vm_ctx, return_slot)) {
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to rescue fixed array return value");
+        }
+    } else if (return_slot && XR_IS_STRUCT_REF(ret_val) && !XR_IS_SPAN_REF(ret_val)) {
         int sa_idx = VM_FRAME_COUNT - 1;
         if (vm_ctx->struct_areas && sa_idx < vm_ctx->struct_areas_cap) {
             uint8_t *sa = vm_ctx->struct_areas[sa_idx];
