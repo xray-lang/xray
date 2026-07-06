@@ -513,8 +513,12 @@ static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSe
 }
 
 static bool add_stdlib_symbol_manifest_entries(XaotLinkManifest *manifest,
-                                               const XaotFeatureSet *features) {
+                                               const XaotFeatureSet *features,
+                                               bool freestanding_profile) {
     for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
+        if (freestanding_profile &&
+            xaot_stdlib_generated_symbol_is_freestanding_header_only(features->stdlib_symbols[i]))
+            continue;
         if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_SYMBOL,
                                            features->stdlib_symbols[i]))
             return false;
@@ -711,7 +715,8 @@ static bool xaot_fast_test_can_skip_size_link_flags(const XaotFeatureSet *featur
            features->n_extern_dylibs == 0;
 }
 
-static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest) {
+static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest,
+                                bool freestanding_profile) {
     XaotTarget target;
     bool ok = false;
     bool fast_test;
@@ -762,7 +767,7 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
         goto done;
     if (!add_stdlib_generated_define_manifest_entries(manifest, features))
         goto done;
-    if (!add_stdlib_symbol_manifest_entries(manifest, features))
+    if (!add_stdlib_symbol_manifest_entries(manifest, features, freestanding_profile))
         goto done;
     ok = true;
 
@@ -1144,7 +1149,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     /* Infer runtime features before freeing IR */
     XaotFeatureSet features;
     infer_features(ir_funcs, nmodules, &features);
-    if (!build_link_manifest(&features, &link_manifest)) {
+    if (!build_link_manifest(&features, &link_manifest,
+                             profile == XAOT_BUILD_PROFILE_FREESTANDING)) {
         fprintf(stderr, "Error: failed to build AOT link manifest\n");
         goto fail_free_ir;
     }

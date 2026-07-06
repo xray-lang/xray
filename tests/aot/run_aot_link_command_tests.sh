@@ -507,6 +507,56 @@ else
     sed 's/^/      /' "$FREESTANDING_FIXED_ARRAY_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_MATH_CONST_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_math_constants.xr"
+FREESTANDING_MATH_CONST_OBJ="$WORK/freestanding_math_constants.o"
+FREESTANDING_MATH_CONST_LOG="$WORK/freestanding_math_constants.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_MATH_CONST_OBJ" \
+        "$FREESTANDING_MATH_CONST_SRC" >"$FREESTANDING_MATH_CONST_LOG" 2>&1; then
+    FREESTANDING_MATH_CONST_KEPT_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_MATH_CONST_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_MATH_CONST_KEPT_C" ]; then
+        expect_log_contains "$FREESTANDING_MATH_CONST_KEPT_C" \
+            "#include \"xrt_core_freestanding.h\"" \
+            "freestanding-profile/math-constants: generated C uses freestanding prelude"
+        expect_log_not_contains "$FREESTANDING_MATH_CONST_KEPT_C" "#include \"xrt.h\"" \
+            "freestanding-profile/math-constants: generated C avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/math-constants: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_MATH_CONST_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_MATH_CONST_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_MATH_CONST_OBJ")"
+    FREESTANDING_MATH_CONST_UNEXPECTED="$(printf '%s\n' "$FREESTANDING_MATH_CONST_UNDEFINED" |
+        sed '/^[[:space:]]*$/d' |
+        grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic)$' || true)"
+    if [ -z "$FREESTANDING_MATH_CONST_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/math-constants: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/math-constants: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_MATH_CONST_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/math-constants: object build failed"
+    sed 's/^/      /' "$FREESTANDING_MATH_CONST_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_MATH_CALL_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_math_call_reject.xr"
+FREESTANDING_MATH_CALL_LOG="$WORK/freestanding_math_call_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_math_call_reject" \
+        "$FREESTANDING_MATH_CALL_SRC" >"$FREESTANDING_MATH_CALL_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects libm/system math helpers"
+    sed 's/^/      /' "$FREESTANDING_MATH_CALL_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_MATH_CALL_LOG" \
+        "freestanding profile rejects math.sqrt" \
+        "freestanding-profile: rejects libm-backed math helper"
+    expect_log_contains "$FREESTANDING_MATH_CALL_LOG" \
+        "freestanding profile rejects math.random" \
+        "freestanding-profile: rejects system-random math helper"
+fi
+
 FREESTANDING_SHARED_CONST_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_shared_const_reject.xr"
 FREESTANDING_SHARED_CONST_LOG="$WORK/freestanding_shared_const_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \

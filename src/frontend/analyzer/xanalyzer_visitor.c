@@ -198,15 +198,39 @@ XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name) {
            strcmp(module_name, "mem") == 0;
 }
 
+static bool xa_freestanding_math_member_allowed(const char *member_name) {
+    if (!member_name)
+        return true;
+    return strcmp(member_name, "PI") == 0 || strcmp(member_name, "E") == 0 ||
+           strcmp(member_name, "TAU") == 0 || strcmp(member_name, "SQRT2") == 0 ||
+           strcmp(member_name, "LN2") == 0 || strcmp(member_name, "LN10") == 0 ||
+           strcmp(member_name, "LOG2E") == 0 || strcmp(member_name, "LOG10E") == 0 ||
+           strcmp(member_name, "EPSILON") == 0 || strcmp(member_name, "MAX_INT") == 0 ||
+           strcmp(member_name, "MIN_INT") == 0 || strcmp(member_name, "MAX_FLOAT") == 0 ||
+           strcmp(member_name, "INF") == 0 || strcmp(member_name, "NAN") == 0;
+}
+
 XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
                                                    const char *member_name) {
     if (!module_name || !member_name)
         return true;
+    if (strcmp(module_name, "math") == 0)
+        return xa_freestanding_math_member_allowed(member_name);
     if (strcmp(module_name, "mem") != 0)
         return true;
     return strcmp(member_name, "alloc") != 0 && strcmp(member_name, "allocZeroed") != 0 &&
            strcmp(member_name, "allocAligned") != 0 && strcmp(member_name, "pageAlloc") != 0 &&
            strcmp(member_name, "pageProtect") != 0 && strcmp(member_name, "pageFree") != 0;
+}
+
+XR_FUNC const char *xa_freestanding_stdlib_member_reject_suggestion(const char *module_name) {
+    if (module_name && strcmp(module_name, "math") == 0) {
+        return "libm-backed and system-random math helpers are not part of the freestanding "
+               "no-libc subset yet";
+    }
+    if (module_name && strcmp(module_name, "mem") == 0)
+        return "allocator hooks are not part of the freestanding mem allowlist yet";
+    return "this stdlib member is not part of the freestanding allowlist yet";
 }
 
 XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *node,
@@ -2017,7 +2041,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                          import->module_name ? import->module_name : "?", member->name);
                 xa_freestanding_report_unavailable(
                     ctx, node, feature,
-                    "allocator hooks are not part of the freestanding mem allowlist yet");
+                    xa_freestanding_stdlib_member_reject_suggestion(import->module_name));
             }
             const char *local_name = member->alias ? member->alias : member->name;
             XaSymbol *export_sym =

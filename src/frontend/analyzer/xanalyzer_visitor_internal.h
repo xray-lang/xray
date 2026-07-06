@@ -74,6 +74,7 @@ XR_FUNC bool xa_freestanding_stdlib_module_known(const char *module_name);
 XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name);
 XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
                                                    const char *member_name);
+XR_FUNC const char *xa_freestanding_stdlib_member_reject_suggestion(const char *module_name);
 XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *node,
                                                 const char *feature, const char *suggestion);
 XR_FUNC void xa_report_unknown_stdlib_member(XaInferContext *ctx, AstNode *node,

@@ -856,6 +856,13 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
         {e.symbol: e for e in entries if e.aot_direct and e.aot_kind == "builtin"}.values()
     )
     const_rows = list({c.symbol: c for c in constants if c.aot_const_kind}.values())
+    freestanding_header_only_const_rows = list(
+        {
+            c.symbol: c
+            for c in constants
+            if c.aot_const_kind in ("int64", "float64") and not c.link_object
+        }.values()
+    )
     lines = generated_header("xaot_stdlib_generated.inc.c - AOT stdlib driver metadata")
     lines.extend(
         [
@@ -924,6 +931,15 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
     lines.append("    if (!symbol)")
     lines.append("        return false;")
     for c in const_rows:
+        lines.append(f"    if (strcmp(symbol, {c_string(c.symbol)}) == 0)\n        return true;")
+    lines.append("    return false;")
+    lines.append("}")
+    lines.append("")
+    lines.append("static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(")
+    lines.append("    const char *symbol) {")
+    lines.append("    if (!symbol)")
+    lines.append("        return false;")
+    for c in freestanding_header_only_const_rows:
         lines.append(f"    if (strcmp(symbol, {c_string(c.symbol)}) == 0)\n        return true;")
     lines.append("    return false;")
     lines.append("}")

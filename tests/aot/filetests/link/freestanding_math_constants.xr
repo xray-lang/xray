@@ -1,0 +1,11 @@
+import math
+
+@c_export("xray_math_pi")
+fn xray_math_pi(x: float) -> float {
+    return math.PI + x
+}
+
+@c_export("xray_math_max_int")
+fn xray_math_max_int() -> int {
+    return math.MAX_INT
+}
