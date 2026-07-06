@@ -161,6 +161,33 @@ static inline int64_t xrt_ptr_load_u64_le_unchecked_raw(const void *ptr) {
     return (int64_t) value;
 }
 
+static inline void xrt_ptr_store_u16_le_unchecked_raw(void *ptr, int64_t raw_value) {
+    uint16_t value = (uint16_t) raw_value;
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    value = __builtin_bswap16(value);
+#endif
+    memcpy(ptr, &value, sizeof(value));
+}
+
+static inline void xrt_ptr_store_u32_le_unchecked_raw(void *ptr, int64_t raw_value) {
+    uint32_t value = (uint32_t) raw_value;
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    value = __builtin_bswap32(value);
+#endif
+    memcpy(ptr, &value, sizeof(value));
+}
+
+static inline void xrt_ptr_store_u64_le_unchecked_raw(void *ptr, int64_t raw_value) {
+    uint64_t value = (uint64_t) raw_value;
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    value = __builtin_bswap64(value);
+#endif
+    memcpy(ptr, &value, sizeof(value));
+}
+
 static inline int64_t xrt_bytes_load_u16_le_unchecked_raw(xrt_array_t *a, int64_t off) {
     const uint8_t *p = (const uint8_t *) a->data + off;
     uint16_t value;

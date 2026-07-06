@@ -1,0 +1,30 @@
+// anchor: rawmut-store-le-unchecked-shared-core
+// RawMut<uint8>.storeLEUnchecked<T> is the write-side pair of
+// RawPtr<uint8>.loadLEUnchecked<T>: unsafe, unchecked, little-endian, and
+// intentionally limited to uint16/uint32/uint64.
+fn run() {
+    var bytes = Bytes(16)
+    var view: ByteSpan = bytes[:]
+    unsafe {
+        var p = view.dataMutPtrUnchecked()
+        p.storeLEUnchecked<uint16>(1, 0x1234)
+        p.storeLEUnchecked<uint32>(4, 0x01020304)
+        p.storeLEUnchecked<uint64>(8, 0x0102030405060708)
+
+        var rp: RawPtr<uint8> = p
+        print(int(rp.loadLEUnchecked<uint16>(1)))
+        print(int(rp.loadLEUnchecked<uint32>(4)))
+        print(int(rp.loadLEUnchecked<uint64>(8)))
+    }
+
+    print(bytes[1])
+    print(bytes[2])
+    print(bytes[4])
+    print(bytes[5])
+    print(bytes[6])
+    print(bytes[7])
+    print(bytes[8])
+    print(bytes[15])
+}
+
+run()

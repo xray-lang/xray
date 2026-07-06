@@ -51,6 +51,30 @@ static uint64_t xr_ffi_ptr_load_u64_le(uintptr_t addr) {
     return value;
 }
 
+static void xr_ffi_ptr_store_u16_le(uintptr_t addr, uint16_t value) {
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    value = __builtin_bswap16(value);
+#endif
+    memcpy((void *) addr, &value, sizeof(value));
+}
+
+static void xr_ffi_ptr_store_u32_le(uintptr_t addr, uint32_t value) {
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    value = __builtin_bswap32(value);
+#endif
+    memcpy((void *) addr, &value, sizeof(value));
+}
+
+static void xr_ffi_ptr_store_u64_le(uintptr_t addr, uint64_t value) {
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    value = __builtin_bswap64(value);
+#endif
+    memcpy((void *) addr, &value, sizeof(value));
+}
+
 /* FFI raw-pointer scalar load/store. The pointee width is the XrFFIType code
  * recorded on XI_PTR_LOAD/STORE; these back the VM's OP_PTR_LOAD / OP_PTR_STORE.
  * Independent of libffi (plain typed memory access). No bounds or null check:
@@ -104,6 +128,21 @@ void xr_ffi_ptr_store(uintptr_t addr, uint8_t ffi_type, XrValue val) {
     uint8_t code = xr_ffi_ptr_aux_type(ffi_type);
     double f = XR_IS_FLOAT(val) ? XR_TO_FLOAT(val) : (double) XR_TO_INT(val);
     xr_Integer iv = XR_IS_FLOAT(val) ? (xr_Integer) XR_TO_FLOAT(val) : XR_TO_INT(val);
+    if ((ffi_type & XR_FFI_PTR_AUX_LITTLE_ENDIAN) != 0) {
+        switch ((XrFFIType) code) {
+            case XR_FFI_T_U16:
+                xr_ffi_ptr_store_u16_le(addr, (uint16_t) iv);
+                return;
+            case XR_FFI_T_U32:
+                xr_ffi_ptr_store_u32_le(addr, (uint32_t) iv);
+                return;
+            case XR_FFI_T_U64:
+                xr_ffi_ptr_store_u64_le(addr, (uint64_t) iv);
+                return;
+            default:
+                return;
+        }
+    }
     switch ((XrFFIType) code) {
         case XR_FFI_T_I8:
             *(int8_t *) addr = (int8_t) iv;

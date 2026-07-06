@@ -3380,7 +3380,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return v;
         }
 
-        /* FFI raw pointer methods: deref()/offset(i)/loadLEUnchecked<T>(i)/isNull(). */
+        /* FFI raw pointer methods: deref()/offset(i), LE typed load/store, isNull(). */
         if (recv->type && XR_TYPE_IS_POINTER(recv->type) && ma->name) {
             if (strcmp(ma->name, "loadLEUnchecked") == 0 && n == 1 &&
                 xi_pointer_pointee_is_u8(recv->type) && call->type_arg_count == 1 &&
@@ -3400,6 +3400,27 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     v->args[0] = addr;
                     v->aux_int = (int64_t) xr_ffi_ptr_aux(code, true);
                     v->flags |= XI_FLAG_READS_MEM;
+                    v->line = (uint32_t) node->line;
+                    return v;
+                }
+            }
+            if (strcmp(ma->name, "storeLEUnchecked") == 0 && n == 2 &&
+                xi_pointer_pointee_is_u8(recv->type) && call->type_arg_count == 1 &&
+                call->type_args && call->type_args[0]) {
+                XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
+                uint8_t code = xr_ffi_type_from_xrtype(target, false);
+                if (code == XR_FFI_T_U16 || code == XR_FFI_T_U32 || code == XR_FFI_T_U64) {
+                    XiValue *addr = xi_lower_ptr_scaled_addr(l, node, recv, arg_vals[0], recv->type,
+                                                             recv->type);
+                    if (!addr)
+                        return NULL;
+                    XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_STORE, l->type_unit, 2);
+                    if (!v)
+                        return NULL;
+                    v->args[0] = addr;
+                    v->args[1] = arg_vals[1];
+                    v->aux_int = (int64_t) xr_ffi_ptr_aux(code, true);
+                    v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
                     v->line = (uint32_t) node->line;
                     return v;
                 }

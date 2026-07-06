@@ -1,0 +1,6 @@
+fn write(src: ByteSpan) {
+    unsafe {
+        var p = src.dataPtrUnchecked()
+        p.storeLEUnchecked<uint16>(0, 1)
+    }
+}

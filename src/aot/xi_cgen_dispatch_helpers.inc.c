@@ -6265,6 +6265,20 @@ static const char *cg_ffi_ptr_le_load_helper(uint8_t code) {
     }
 }
 
+static const char *cg_ffi_ptr_le_store_helper(uint8_t code) {
+    code = xr_ffi_ptr_aux_type(code);
+    switch ((XrFFIType) code) {
+        case XR_FFI_T_U16:
+            return "xrt_ptr_store_u16_le_unchecked_raw";
+        case XR_FFI_T_U32:
+            return "xrt_ptr_store_u32_le_unchecked_raw";
+        case XR_FFI_T_U64:
+            return "xrt_ptr_store_u64_le_unchecked_raw";
+        default:
+            return NULL;
+    }
+}
+
 /* Unsafe Array<T>/Span<T> data pointer borrow. VM/tagged values keep the address
  * as an integer; AOT hot code carries RawPtr/RawMut as a non-owning C pointer. */
 static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -6331,7 +6345,21 @@ static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
                              const char *prefix) {
     (void) f;
     (void) prefix;
-    uint8_t code = xr_ffi_ptr_aux_type((uint8_t) (v->aux_int & 0xff));
+    uint8_t aux = (uint8_t) (v->aux_int & 0xff);
+    uint8_t code = xr_ffi_ptr_aux_type(aux);
+    if ((aux & XR_FFI_PTR_AUX_LITTLE_ENDIAN) != 0) {
+        const char *helper = cg_ffi_ptr_le_store_helper(code);
+        if (!helper) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "%s(", helper);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ")");
+        return;
+    }
     const char *cty = cg_ffi_pointee_c_type(code);
     fprintf(out, "(*(%s *)(", cty);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
