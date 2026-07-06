@@ -1,3 +1,5 @@
+c_contains=((uint32_t)(
+c_contains= * (uint32_t)(
 c_contains=(uint64_t)(
 c_contains= * (uint64_t)(
 c_not_contains=(int64_t)((uint64_t)
