@@ -1429,7 +1429,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     // Variables with type annotations are initialized to the type zero value.
     links->is_definitely_assigned = (var->initializer != NULL) || (links->declared_type != NULL);
 
-    // A const with a scalar compile-time initializer can be reused by later
+    // A const with a proven compile-time initializer can be reused by later
     // consteval expressions without repeatedly expanding its initializer.
     if (sym->is_const && var->initializer) {
         XrCtValue value = {0};
