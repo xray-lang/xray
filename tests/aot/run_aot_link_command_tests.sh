@@ -546,6 +546,38 @@ else
         "freestanding-profile: rejects array literals"
 fi
 
+FREESTANDING_STRING_MEMBER_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_string_member_reject.xr"
+FREESTANDING_STRING_MEMBER_LOG="$WORK/freestanding_string_member_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_string_member_reject" \
+        "$FREESTANDING_STRING_MEMBER_SRC" >"$FREESTANDING_STRING_MEMBER_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects hosted string member helpers"
+    sed 's/^/      /' "$FREESTANDING_STRING_MEMBER_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
+        "freestanding profile rejects string.toBytes" \
+        "freestanding-profile: rejects hosted string-to-Bytes bridge"
+    expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
+        "freestanding profile rejects string.byteLength" \
+        "freestanding-profile: rejects hosted string property helper"
+fi
+
+FREESTANDING_BYTES_STATIC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_bytes_static_reject.xr"
+FREESTANDING_BYTES_STATIC_LOG="$WORK/freestanding_bytes_static_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_bytes_static_reject" \
+        "$FREESTANDING_BYTES_STATIC_SRC" >"$FREESTANDING_BYTES_STATIC_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects owned Bytes static constructors"
+    sed 's/^/      /' "$FREESTANDING_BYTES_STATIC_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_BYTES_STATIC_LOG" \
+        "freestanding profile rejects Bytes.withCapacity" \
+        "freestanding-profile: rejects Bytes.withCapacity"
+    expect_log_contains "$FREESTANDING_BYTES_STATIC_LOG" \
+        "freestanding profile rejects Bytes.fromString" \
+        "freestanding-profile: rejects Bytes.fromString"
+fi
+
 FREESTANDING_ENUM_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_reject.xr"
 FREESTANDING_ENUM_LOG="$WORK/freestanding_enum_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \

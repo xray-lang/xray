@@ -104,6 +104,41 @@ static bool xa_type_is_raw_u8_ptr(XrType *type) {
     return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
 }
 
+static XrType *xa_freestanding_reject_owned_static_member(XaInferContext *ctx, AstNode *object,
+                                                          const char *name, AstNode *node) {
+    if (!ctx || !object || object->type != AST_VARIABLE || !name ||
+        !xa_freestanding_profile_enabled(ctx->analyzer))
+        return NULL;
+
+    const char *type_name = object->as.variable.name;
+    if (!type_name)
+        return NULL;
+    if (strcmp(type_name, "Bytes") != 0 && strcmp(type_name, "Array") != 0 &&
+        strcmp(type_name, "StringBuilder") != 0)
+        return NULL;
+
+    char feature[160];
+    snprintf(feature, sizeof(feature), "%s.%s", type_name, name);
+    xa_freestanding_report_unavailable(
+        ctx, node ? node : object, feature,
+        "owned heap-backed containers are not part of the freestanding no-heap subset");
+    return xr_type_new_unknown(NULL);
+}
+
+static bool xa_freestanding_reject_string_member(XaInferContext *ctx, AstNode *node,
+                                                 XrType *receiver, const char *name) {
+    if (!ctx || !XR_TYPE_IS_STRING(receiver) || !name ||
+        !xa_freestanding_profile_enabled(ctx->analyzer))
+        return false;
+
+    char feature[160];
+    snprintf(feature, sizeof(feature), "string.%s", name);
+    xa_freestanding_report_unavailable(
+        ctx, node, feature,
+        "string literals may be passed or printed, but string member access needs hosted helpers");
+    return true;
+}
+
 static bool xa_type_has_collection_size_alias(XrType *type) {
     return type &&
            (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type) ||
@@ -1129,10 +1164,18 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (raw_pointer_static_fn)
         return raw_pointer_static_fn;
 
+    XrType *freestanding_static_member =
+        xa_freestanding_reject_owned_static_member(ctx, ma->object, ma->name, node);
+    if (freestanding_static_member)
+        return freestanding_static_member;
+
     XrType *obj_type = xa_visit_infer_expr(ctx, ma->object);
 
     // Reject `.member` on a possibly-null receiver (strict null checks).
     xa_check_nullable_access(ctx, node, obj_type, "member access");
+
+    if (xa_freestanding_reject_string_member(ctx, node, obj_type, ma->name))
+        return xr_type_new_unknown(NULL);
 
     XrType *static_capacity_fn = xa_static_capacity_method_type(ctx, ma->object, ma->name);
     if (static_capacity_fn)
@@ -2743,6 +2786,9 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
         // Reuse member access logic by creating a temporary lookup
         // For now, handle common cases inline
         const char *prop_name = node->as.optional_chain.name;
+
+        if (xa_freestanding_reject_string_member(ctx, node, base_type, prop_name))
+            return xr_type_new_unknown(NULL);
 
         // Built-in properties — result is nullable (object may be null)
         if (xa_symbol_is_collection_length(xr_builtin_symbol_from_name(prop_name), base_type)) {

@@ -1,0 +1,6 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects string.toBytes
+contains=freestanding profile rejects string.byteLength
+not_contains=CRASH
+not_contains=unsupported AOT
