@@ -1,4 +1,4 @@
-// Test: generic class/struct `is` checks and Reflect.typeOf
+// Test: generic class/struct `is` checks after removing runtime type-string checks
 // Covers: instanceof with generic_origin, struct generics, rep-sharing correctness
 
 class Box<T> {
@@ -36,33 +36,40 @@ fn test_generic_instanceof() {
 }
 
 @test
-fn test_generic_typeof() {
-    // T2: Reflect.typeOf for generic class
+fn test_generic_runtime_behavior() {
+    // T2: Generic class values preserve origin and payload behavior.
     var b = Box<int>(42)
-    assert_eq(Reflect.typeOf(b), "Box<int>")
+    assert(b is Box)
+    assert_eq(b.value, 42)
 
     var bs = Box<string>("hello")
-    assert_eq(Reflect.typeOf(bs), "Box<string>")
+    assert(bs is Box)
+    assert_eq(bs.value, "hello")
 
     // T7: Multiple type parameters
     var p = Pair<int, string>{first: 1, second: "x"}
-    assert_eq(Reflect.typeOf(p), "Pair<int, string>")
+    assert(p is Pair)
+    assert_eq(p.first, 1)
+    assert_eq(p.second, "x")
 
     // T8: Non-generic instance
     var plain = Box(99)
-    assert_eq(Reflect.typeOf(plain), "Box")
+    assert(plain is Box)
+    assert_eq(plain.value, 99)
 }
 
 @test
 fn test_struct_generic_is_typeof() {
-    // T9: Struct generic `is` + Reflect.typeOf
+    // T9: Struct generic `is` + value behavior
     var p1 = Pair<int, string>{first: 1, second: "x"}
     assert(p1 is Pair)
-    assert_eq(Reflect.typeOf(p1), "Pair<int, string>")
+    assert_eq(p1.first, 1)
+    assert_eq(p1.second, "x")
 
     var p2 = Pair<float, bool>{first: 3.14, second: true}
     assert(p2 is Pair)
-    assert_eq(Reflect.typeOf(p2), "Pair<float, bool>")
+    assert_eq(p2.first, 3.14)
+    assert_eq(p2.second, true)
 
     // Non-struct should not match
     var b = Box<int>(1)
@@ -77,8 +84,8 @@ fn test_rep_sharing_correctness() {
     var ws = Wrapper<string>("hello")
     var wi = Wrapper<int>(42)
 
-    assert_eq(Reflect.typeOf(ws), "Wrapper<string>")
-    assert_eq(Reflect.typeOf(wi), "Wrapper<int>")
+    assert_eq(ws.value, "hello")
+    assert_eq(wi.value, 42)
 
     // Both should be Wrapper via generic_origin
     assert(ws is Wrapper)

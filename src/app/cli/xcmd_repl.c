@@ -85,7 +85,7 @@ static const char *const k_repl_keywords[] = {
     "Map",          "Set",       "Json",       "Channel", "Bytes",     "BigInt",   "StringBuilder",
     "PanicInfo",    "Regex",     "print",      "dump",    "typeof",    "assert",   "assert_true",
     "assert_false", "assert_eq", "assert_ne",  "copy",    "chr",       "Coro",     "CoroPool",
-    "Reflect",      NULL,
+    NULL,
 };
 
 /* Set during repl_run() so the readline generator can reach the
@@ -299,7 +299,8 @@ static void print_help_types(ReplState *state) {
     printf("  int(3.14)      // 3\n");
     printf("  float(\"3.14\")  // 3.14\n");
     printf("  string(123)    // \"123\"\n");
-    printf("  typeof(x)      // \"int\"\n");
+    printf("  typeof(x)      // Type.int\n");
+    printf("  typename(x)    // \"int\"\n");
     printf("\n");
 }
 

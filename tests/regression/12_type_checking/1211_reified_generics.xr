@@ -1,17 +1,15 @@
-// Test reified generics - Reflect.elementType/keyType/valueType
-
-// === Test 1: Untyped containers default to "any" ===
+// Test generic container and class behavior after removing the Reflect surface.
 
 class Box<T> {
-    value: int
-    constructor(v) {
+    value: T
+    constructor(v: T) {
         this.value = v
     }
 }
 class Pair<A, B> {
-    first: int
-    second: int
-    constructor(a, b) {
+    first: A
+    second: B
+    constructor(a: A, b: B) {
         this.first = a
         this.second = b
     }
@@ -19,121 +17,109 @@ class Pair<A, B> {
 
 @test
 fn test_reified_generics() {
+    // === Test 1: Runtime container names stay shape-based ===
     var arr = [1, 2, 3]
-    assert_eq(Reflect.elementType(arr), "any")
+    assert_eq(typename(arr), "Array")
 
     var map = #{"a": 1, "b": 2}
-    assert_eq(Reflect.keyType(map), "any")
-    assert_eq(Reflect.valueType(map), "any")
+    assert_eq(typename(map), "Map")
 
     var set = Set()
-    assert_eq(Reflect.elementType(set), "any")
+    assert_eq(typename(set), "Set")
 
-    // === Test 2: Typed Array ===
+    // === Test 2: Typed containers keep their checked behavior ===
     var int_arr: Array<int> = [10, 20, 30]
-    assert_eq(Reflect.elementType(int_arr), "int")
+    assert_eq(typename(int_arr), "Array")
 
     var float_arr: Array<float> = [1.0, 2.0]
-    assert_eq(Reflect.elementType(float_arr), "float")
+    assert_eq(typename(float_arr), "Array")
 
     var str_arr: Array<string> = ["hello", "world"]
-    assert_eq(Reflect.elementType(str_arr), "string")
+    assert_eq(typename(str_arr), "Array")
 
     var bool_arr: Array<bool> = [true, false]
-    assert_eq(Reflect.elementType(bool_arr), "bool")
+    assert_eq(typename(bool_arr), "Array")
 
     var byte_arr: Array<uint8> = [65, 66]
-    assert_eq(Reflect.elementType(byte_arr), "uint8")
-    assert_eq(Reflect.typeOf(byte_arr), "Array<uint8>")
+    assert_eq(typename(byte_arr), "Array")
 
     // === Test 3: Empty typed containers ===
     var empty_int: Array<int> = []
-    assert_eq(Reflect.elementType(empty_int), "int")
+    empty_int.push(1)
+    assert_eq(empty_int[0], 1)
 
-    // === Test 4: Non-container types return "any" ===
-    assert_eq(Reflect.elementType(42), "any")
-    assert_eq(Reflect.elementType("hello"), "any")
-    assert_eq(Reflect.keyType(42), "any")
-    assert_eq(Reflect.valueType("hello"), "any")
+    // === Test 4: Non-container type names use typename() ===
+    assert_eq(typename(42), "int")
+    assert_eq(typename("hello"), "string")
 
-    // === Test 5: Slice preserves elem_tid ===
+    // === Test 5: Slice preserves typed access behavior ===
     var src: Array<int> = [1, 2, 3, 4, 5]
     var sliced: Span<int> = src[1:4]
-    assert_eq(Reflect.elementType(sliced), "int")
+    assert_eq(typename(sliced), "Span")
+    assert_eq(sliced[0], 2)
 
-    // === Test 6: Reflect.typeOf - full generic type strings ===
-    assert_eq(Reflect.typeOf(int_arr), "Array<int>")
-    assert_eq(Reflect.typeOf(float_arr), "Array<float>")
-    assert_eq(Reflect.typeOf(str_arr), "Array<string>")
-    assert_eq(Reflect.typeOf(arr), "Array")
+    // === Test 6: Generic containers retain typed operations ===
+    assert_eq(int_arr[0], 10)
+    assert_eq(float_arr[0], 1.0)
+    assert_eq(str_arr[0], "hello")
+    assert_eq(bool_arr[0], true)
 
-    // Map typeOf
     var typed_map: Map<string, int> = #{"x": 1}
-    assert_eq(Reflect.typeOf(typed_map), "Map<string, int>")
-    assert_eq(Reflect.typeOf(map), "Map")
+    assert_eq(typename(typed_map), "Map")
+    assert_eq(typed_map["x"], 1)
 
-    // Set typeOf
     var typed_set: Set<string> = Set()
-    assert_eq(Reflect.typeOf(typed_set), "Set<string>")
-    assert_eq(Reflect.typeOf(set), "Set")
+    assert_eq(typename(typed_set), "Set")
 
-    // Channel typeOf
     shared typed_channel = Channel<int>(1)
-    assert_eq(Reflect.elementType(typed_channel), "int")
-    assert_eq(Reflect.typeOf(typed_channel), "Channel<int>")
+    assert_eq(typename(typed_channel), "Channel")
     typed_channel.close()
 
     shared annotated_channel: Channel<string> = Channel(1)
-    assert_eq(Reflect.elementType(annotated_channel), "string")
-    assert_eq(Reflect.typeOf(annotated_channel), "Channel<string>")
+    assert_eq(typename(annotated_channel), "Channel")
     annotated_channel.close()
 
     shared zero_channel = Channel<bool>()
-    assert_eq(Reflect.elementType(zero_channel), "bool")
-    assert_eq(Reflect.typeOf(zero_channel), "Channel<bool>")
+    assert_eq(typename(zero_channel), "Channel")
     zero_channel.close()
 
     shared annotated_zero: Channel<float> = Channel()
-    assert_eq(Reflect.elementType(annotated_zero), "float")
-    assert_eq(Reflect.typeOf(annotated_zero), "Channel<float>")
+    assert_eq(typename(annotated_zero), "Channel")
     annotated_zero.close()
-
-    // Non-container typeOf
-    assert_eq(Reflect.typeOf(42), "int")
-    assert_eq(Reflect.typeOf(3.14), "float")
-    assert_eq(Reflect.typeOf("hello"), "string")
-    assert_eq(Reflect.typeOf(true), "bool")
-    assert_eq(Reflect.typeOf(null), "any")
 
     // === Test 7: Typed Array compact storage + operations ===
     int_arr.push(40)
     assert_eq(int_arr.length, 4)
     assert_eq(int_arr[3], 40)
 
-    // Slice from typed array preserves typeOf
-    assert_eq(Reflect.typeOf(sliced), "Span<int>")
-
     var mapped_bytes = byte_arr.map(fn(x: uint8) -> int { return x + 1 })
-    assert_eq(Reflect.elementType(mapped_bytes), "int")
+    assert_eq(typename(mapped_bytes), "Array")
     assert_eq(mapped_bytes[0], 66)
 
-    // === Test 8: User-defined generic class reified ===
+    // === Test 8: User-defined generic classes retain origin and value behavior ===
 
     var int_box = Box<int>(42)
-    assert_eq(Reflect.typeOf(int_box), "Box<int>")
+    assert(int_box is Box)
+    assert_eq(int_box.value, 42)
 
     var str_box = Box<string>("hello")
-    assert_eq(Reflect.typeOf(str_box), "Box<string>")
+    assert(str_box is Box)
+    assert_eq(str_box.value, "hello")
 
     // Non-generic instance
     var plain_box = Box(99)
-    assert_eq(Reflect.typeOf(plain_box), "Box")
+    assert(plain_box is Box)
+    assert_eq(plain_box.value, 99)
 
     // Two type params
 
     var pair = Pair<int, string>(1, "one")
-    assert_eq(Reflect.typeOf(pair), "Pair<int, string>")
+    assert(pair is Pair)
+    assert_eq(pair.first, 1)
+    assert_eq(pair.second, "one")
 
     var plain_pair = Pair(1, 2)
-    assert_eq(Reflect.typeOf(plain_pair), "Pair")
+    assert(plain_pair is Pair)
+    assert_eq(plain_pair.first, 1)
+    assert_eq(plain_pair.second, 2)
 }

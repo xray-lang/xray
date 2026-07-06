@@ -83,7 +83,8 @@ static const XlspDocEntry keyword_docs[] = {
 
 static const XlspDocEntry builtin_docs[] = {
     {"print", "```xray\nprint(value, ...)\n```\n\nPrints values to stdout."},
-    {"typeof", "```xray\ntypeof(value): string\n```\n\nReturns the type name of a value."},
+    {"typeof", "```xray\ntypeof(value): int\n```\n\nReturns the stable TypeId for a value."},
+    {"typename", "```xray\ntypename(value): string\n```\n\nReturns the debug/display type name of a value."},
     {"assert", "```xray\nassert(condition, message?)\n```\n\nAsserts that condition is true."},
     {"assert_true", "```xray\nassert_true(value)\n```\n\nAsserts that value is truthy."},
     {"assert_false", "```xray\nassert_false(value)\n```\n\nAsserts that value is falsy."},
@@ -1189,7 +1190,9 @@ static const char *assert_ne_param_docs[] = {"Actual value", "Unexpected value"}
 
 static const FunctionSignature builtin_signatures[] = {
     {"print", "print(value, ...)", "Prints values to stdout", print_params, print_param_docs, 2},
-    {"typeof", "typeof(value): string", "Returns type name of value", typeof_params,
+    {"typeof", "typeof(value): int", "Returns stable TypeId for value", typeof_params,
+     typeof_param_docs, 1},
+    {"typename", "typename(value): string", "Returns debug/display type name of value", typeof_params,
      typeof_param_docs, 1},
     {"assert", "assert(condition, message?)", "Asserts condition is true", assert_params,
      assert_param_docs, 2},
