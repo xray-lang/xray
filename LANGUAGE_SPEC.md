@@ -607,7 +607,7 @@ Internally uses ARC; runtime short strings are coroutine-local by default (lock-
 var a: char = 'a'
 var zh = '中'
 var smile = '\u{1F600}'
-print(typeof(a))          // "char"
+print(typename(a))        // "char"
 print(int(smile))         // 128512
 ```
 
