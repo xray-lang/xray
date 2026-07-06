@@ -84,11 +84,22 @@ static bool emit_native_unsigned_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, cons
     if (!ctx || !out || !v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
         cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
         return false;
-    /* For unsigned result storage, uint64 arithmetic followed by the normal C
-     * conversion to uint8/16/32/64 preserves the same low bits as Xray's i64
-     * wrap path, even when an inlined argument originated as an int constant. */
     if (!cg_type_is_unsigned_int(v->type))
         return false;
+
+    const char *ctype = NULL;
+    switch (v->type->native_width) {
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+            ctype = "uint32_t";
+            break;
+        case XR_NATIVE_U64:
+            ctype = "uint64_t";
+            break;
+        default:
+            return false;
+    }
 
     const char *op = NULL;
     switch (v->op) {
@@ -105,9 +116,9 @@ static bool emit_native_unsigned_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, cons
             return false;
     }
 
-    fprintf(out, "((uint64_t)(");
+    fprintf(out, "((%s)(", ctype);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-    fprintf(out, ") %s (uint64_t)(", op);
+    fprintf(out, ") %s (%s)(", op, ctype);
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     fprintf(out, "))");
     return true;

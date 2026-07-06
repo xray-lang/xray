@@ -1668,6 +1668,8 @@ static bool sr_convert_can_return_null(const XiValue *v) {
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
             return false;
+        case XR_KIND_POINTER:
+            return v->type->kind != XR_KIND_INT;
         default:
             return true;
     }
@@ -3039,6 +3041,7 @@ static void validate_pass_table(void) {
 
     for (size_t i = 0; i < XI_PASS_TABLE_SIZE; i++) {
         const XiPassDesc *d = &xi_pass_table[i];
+        (void) d;
         XR_DCHECK(d->name != NULL, "pass table entry has NULL name");
         XR_DCHECK(d->fn != NULL, "pass table entry has NULL fn");
         /* output_stage must be >= input_stage (stages never go backwards) */
