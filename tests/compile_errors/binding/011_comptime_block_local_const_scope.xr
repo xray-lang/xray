@@ -1,0 +1,6 @@
+comptime {
+    const LOCAL_ONLY = 7
+    compile_assert(LOCAL_ONLY == 7)
+}
+
+const ESCAPE = comptime LOCAL_ONLY

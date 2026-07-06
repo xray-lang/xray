@@ -2978,6 +2978,11 @@ static bool xa_eval_comptime_block_arg(XaInferContext *ctx, AstNode *arg, XrCtVa
     return false;
 }
 
+static const char *xa_comptime_block_supported_message(void) {
+    return "comptime block currently supports const declarations, compile_assert(...) and "
+           "compile_error(...)";
+}
+
 static void xa_visit_comptime_compile_assert(XaInferContext *ctx, AstNode *stmt,
                                              CallExprNode *call) {
     if (!ctx || !stmt || !call)
@@ -3046,18 +3051,24 @@ static void xa_visit_comptime_compile_error(XaInferContext *ctx, AstNode *stmt,
 }
 
 static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node || !xa_is_comptime_block_expr(node))
+    if (!ctx || !ctx->analyzer || !node || !xa_is_comptime_block_expr(node))
         return;
+
+    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
 
     BlockNode *block = &node->as.comptime_expr.expr->as.block;
     for (int i = 0; i < block->count; i++) {
         AstNode *stmt = block->statements[i];
+        if (stmt && stmt->type == AST_CONST_DECL) {
+            xa_visit_infer_stmt(ctx, stmt);
+            continue;
+        }
+
         AstNode *expr = stmt && stmt->type == AST_EXPR_STMT ? stmt->as.expr_stmt : NULL;
         if (!expr || expr->type != AST_CALL_EXPR || !expr->as.call_expr.callee ||
             expr->as.call_expr.callee->type != AST_VARIABLE) {
             xa_report_comptime_block_error(ctx, stmt ? stmt : node,
-                                           "comptime block currently supports only "
-                                           "compile_assert(...) and compile_error(...)");
+                                           xa_comptime_block_supported_message());
             continue;
         }
 
@@ -3068,11 +3079,11 @@ static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
         } else if (name && strcmp(name, "compile_error") == 0) {
             xa_visit_comptime_compile_error(ctx, expr, call);
         } else {
-            xa_report_comptime_block_error(ctx, expr,
-                                           "comptime block currently supports only "
-                                           "compile_assert(...) and compile_error(...)");
+            xa_report_comptime_block_error(ctx, expr, xa_comptime_block_supported_message());
         }
     }
+
+    xa_analyzer_exit_scope(ctx->analyzer);
 }
 
 XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
