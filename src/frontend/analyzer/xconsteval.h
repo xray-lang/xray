@@ -23,14 +23,18 @@ typedef enum XrCtValueKind {
     XR_CT_CHAR,
     XR_CT_NULL,
     XR_CT_FIXED_ARRAY,
+    XR_CT_TUPLE,
 } XrCtValueKind;
 
 typedef struct XrCtValue XrCtValue;
 
-typedef struct XrCtFixedArrayValue {
+typedef struct XrCtElementListValue {
     XrCtValue *elements;
     int count;
-} XrCtFixedArrayValue;
+} XrCtElementListValue;
+
+typedef XrCtElementListValue XrCtFixedArrayValue;
+typedef XrCtElementListValue XrCtTupleValue;
 
 struct XrCtValue {
     XrCtValueKind kind;
@@ -41,6 +45,7 @@ struct XrCtValue {
         const char *string_val;
         uint32_t char_val;
         XrCtFixedArrayValue fixed_array_val;
+        XrCtTupleValue tuple_val;
     } as;
 };
 
