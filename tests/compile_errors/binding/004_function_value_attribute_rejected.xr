@@ -1,0 +1,4 @@
+@c_export("bad")
+const f = fn() -> int {
+    return 1
+}

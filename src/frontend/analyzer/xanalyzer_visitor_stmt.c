@@ -1240,6 +1240,34 @@ static void xa_check_shared_initializer_boundary(XaInferContext *ctx, AstNode *d
                                &loc);
 }
 
+static void xa_check_const_initializer_alias_boundary(XaInferContext *ctx, AstNode *decl_node,
+                                                      XrType *init_type) {
+    if (!ctx || !decl_node || decl_node->type != AST_CONST_DECL)
+        return;
+
+    VarDeclNode *var = &decl_node->as.var_decl;
+    if (!var->initializer || xa_call_is_copy_builtin(var->initializer))
+        return;
+    if (!xa_type_needs_borrow_escape_guard(init_type) || xr_type_is_const(init_type))
+        return;
+
+    XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, var->initializer);
+    if (!root || root->kind != XA_SYM_VARIABLE || root->is_readonly_binding || root->is_shared)
+        return;
+
+    XrLocation loc = {
+        .file = ctx->file_path,
+        .line = var->initializer->line ? var->initializer->line : decl_node->line,
+        .column = var->initializer->column ? var->initializer->column : decl_node->column,
+    };
+    const char *name = root->name ? root->name : "?";
+    char msg[256];
+    snprintf(msg, sizeof(msg), "const binding from mutable reference value '%s' requires copy(%s)",
+             name, name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 /* ============================================================================
  * Pass 2: Statement Visitors
  * ============================================================================
@@ -1312,6 +1340,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         // (the canonical source for downstream codegen / LSP).
         xa_analyzer_set_node_type(ctx->analyzer, var->initializer, init_type);
         xa_check_shared_initializer_boundary(ctx, node, init_type);
+        xa_check_const_initializer_alias_boundary(ctx, node, init_type);
 
         if (links->declared_type && !XR_TYPE_IS_UNKNOWN(links->declared_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};

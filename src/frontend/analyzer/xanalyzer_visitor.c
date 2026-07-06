@@ -15,6 +15,7 @@
 
 #include "xanalyzer_visitor_internal.h"
 #include "xanalyzer_errorset.h"
+#include "xconsteval.h"
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 #include "../../module/xmodule_graph.h"
@@ -2853,13 +2854,12 @@ static XrType *xa_visit_comptime_expr(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType *inner_type = xa_visit_infer_expr(ctx, inner);
-    int64_t ignored = 0;
+    XrCtValue ignored = {0};
     const char *err = NULL;
-    if (!xa_eval_const_int_expr(ctx->analyzer, inner, &ignored, &err)) {
+    if (!xa_consteval_expr(ctx->analyzer, inner, &ignored, &err)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[256];
-        snprintf(msg, sizeof(msg),
-                 "comptime expression must be an integer expression evaluable at compile time%s%s",
+        snprintf(msg, sizeof(msg), "comptime expression must be evaluable at compile time%s%s",
                  err ? ": " : "", err ? err : "");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                                    msg, &loc);

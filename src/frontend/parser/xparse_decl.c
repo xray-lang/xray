@@ -323,7 +323,10 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         return func;
     }
 
-    xr_parser_error_at_current(parser, "expected 'fn', 'class', or 'struct' after attribute");
+    xr_parser_error_at_current(
+        parser,
+        "attributes can only annotate declaration items; use 'fn name(...)' for function item "
+        "attributes");
     return NULL;
 }
 

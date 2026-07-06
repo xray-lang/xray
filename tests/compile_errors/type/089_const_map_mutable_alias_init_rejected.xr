@@ -1,0 +1,2 @@
+var m = #{"a": 1}
+const frozen = m

@@ -1,0 +1,10 @@
+class Box {
+    value: int
+
+    constructor(v: int) {
+        this.value = v
+    }
+}
+
+var b = Box(1)
+const frozen = b
