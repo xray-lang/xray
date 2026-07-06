@@ -1006,6 +1006,28 @@ static bool lower_value_is_whole_module_import(XiLower *l, const XiValue *v,
            ref->member_name == NULL;
 }
 
+static bool lower_call_object_is_module(XiLower *l, AstNode *object, const char *module_name) {
+    if (!l || !l->analyzer || !object || object->type != AST_VARIABLE || !module_name)
+        return false;
+
+    VariableNode *var = &object->as.variable;
+    XaSymbol *sym = NULL;
+    if (var->symbol_id)
+        sym = xa_scope_lookup_by_id(l->analyzer->global_scope, var->symbol_id);
+    if (!sym && var->name)
+        sym = xa_analyzer_lookup(l->analyzer, var->name);
+    if (!sym && var->name)
+        sym = xa_analyzer_lookup_in_scope(l->analyzer, var->name, l->analyzer->global_scope);
+    if (!sym && var->name)
+        sym = xa_analyzer_lookup_deep(l->analyzer, var->name);
+    if (!sym || sym->kind != XA_SYM_MODULE)
+        return false;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+    const char *resolved = links && links->module_name ? links->module_name : var->name;
+    return resolved && strcmp(resolved, module_name) == 0;
+}
+
 static bool lower_mem_layout_member_name(const char *name) {
     return name && (strcmp(name, "sizeOf") == 0 || strcmp(name, "alignOf") == 0 ||
                     strcmp(name, "offsetOf") == 0);
@@ -3257,6 +3279,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 return coro_op;
             /* Unknown Coro method — fall through to generic path which
              * will report "unresolved variable" for Coro. */
+        }
+
+        if (ma->name && lower_call_object_is_module(l, ma->object, "mem")) {
+            XiValue *layout_const = lower_mem_layout_call(l, node, call, ma->name);
+            if (layout_const)
+                return layout_const;
         }
 
         XiValue *recv = xi_lower_expr(l, ma->object);
