@@ -8,14 +8,14 @@
  * xglobal_indices.h - Predefined global variable indices (shared by compiler and VM)
  *
  * KEY CONCEPT:
- *   Reserved indices for builtin global objects (Reflect, Array, etc.).
+ *   Reserved indices for builtin global objects (Array, etc.).
  *   User-defined globals start at XR_USER_GLOBALS_START.
  */
 
 #ifndef XGLOBAL_INDICES_H
 #define XGLOBAL_INDICES_H
 
-#define XR_GLOBAL_VAR_REFLECT 0
+#define XR_GLOBAL_VAR_RESERVED0 0
 #define XR_GLOBAL_VAR_ARRAY 1
 #define XR_GLOBAL_VAR_SET 2
 #define XR_GLOBAL_VAR_MAP 3

@@ -1174,6 +1174,19 @@ static XrType *resolve_type_ref_symbol_type(XaAnalyzer *analyzer, const char *na
     return NULL;
 }
 
+static bool is_removed_enum_runtime_wrapper_name(const char *name) {
+    return name && (strcmp(name, "EnumValue") == 0 || strcmp(name, "EnumType") == 0);
+}
+
+static void report_removed_enum_runtime_wrapper_type(XaAnalyzer *analyzer, const char *name) {
+    if (!analyzer || !name)
+        return;
+    XrLocation loc = {.file = analyzer->current_file, .line = 0, .column = 0};
+    char msg[192];
+    snprintf(msg, sizeof(msg), "runtime enum wrapper type '%s' has been removed", name);
+    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE, msg, &loc);
+}
+
 XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {
     if (!tref)
         return xr_type_new_unknown(NULL);
@@ -1183,6 +1196,10 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
     /* Named class lookup preserves the inheritance chain that
      * xr_type_new_class() would otherwise drop. */
     if (tref->kind == XR_TREF_NAMED && tref->name) {
+        if (is_removed_enum_runtime_wrapper_name(tref->name)) {
+            report_removed_enum_runtime_wrapper_type(analyzer, tref->name);
+            return xr_type_new_unknown(NULL);
+        }
         XrType *cls = resolve_type_ref_symbol_type(analyzer, tref->name);
         if (cls)
             return cls;
@@ -1191,6 +1208,10 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
     /* Generic form: preserve declaration-backed class/interface identity so
      * member lookup and conformance checks do not fall back to a bare name. */
     if (tref->kind == XR_TREF_GENERIC && tref->name) {
+        if (is_removed_enum_runtime_wrapper_name(tref->name)) {
+            report_removed_enum_runtime_wrapper_type(analyzer, tref->name);
+            return xr_type_new_unknown(NULL);
+        }
         XaSymbol *sym = resolve_type_symbol(analyzer, tref->name);
         XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
         const char *sync_class_name = NULL;

@@ -1,5 +1,0 @@
-{
-  "module": "Reflect",
-  "summary": "Runtime reflection helpers",
-  "lead": "Runtime reflection helpers for type lookup, type names, container element/key/value type queries, and instance checks."
-}

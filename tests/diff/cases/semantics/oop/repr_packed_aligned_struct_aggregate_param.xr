@@ -1,20 +1,15 @@
 import mem
 
-@repr(packed)
-struct PackedPair {
+packed struct PackedPair {
     tag: uint8
     value: uint32
 }
 
-@repr(C)
-@align(16)
-struct AlignedWord {
+struct AlignedWord align(16) {
     value: int32
 }
 
-@repr(packed)
-@align(16)
-struct PackedAligned {
+packed struct PackedAligned align(16) {
     tag: uint8
     value: uint32
 }
@@ -43,11 +38,11 @@ fn make_packed_aligned(tag: uint8, value: uint32) -> PackedAligned {
     return PackedAligned{tag: tag, value: value}
 }
 
-var packed = make_packed(5, 37)
+var packedPair = make_packed(5, 37)
 var aligned = make_aligned(42)
 var packed_aligned = make_packed_aligned(6, 36)
 
-print(sum_packed(packed))
+print(sum_packed(packedPair))
 print(read_aligned(aligned))
 print(sum_packed_aligned(packed_aligned))
 print(mem.sizeOf<PackedPair>())

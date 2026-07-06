@@ -993,15 +993,6 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, node->as.enum_access.member_name);
             break;
 
-        // Enum convert
-        case AST_ENUM_CONVERT:
-            xfmt_write_indent(ctx);
-            xfmt_write_str(ctx, node->as.enum_convert.enum_name);
-            xfmt_write_char(ctx, '(');
-            xfmt_emit_expression(ctx, node->as.enum_convert.value_expr);
-            xfmt_write_char(ctx, ')');
-            break;
-
         // Go expression
         case AST_GO_EXPR: {
             xfmt_write_indent(ctx);

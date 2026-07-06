@@ -1,0 +1,7 @@
+union U32Bits {
+    u: uint32
+    i: int32
+}
+
+var bits = U32Bits{u: 1}
+print(bits.i)

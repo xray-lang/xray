@@ -42,10 +42,10 @@ struct XrStructLayout;
 typedef struct XrType XrType;
 
 typedef enum {
-    XR_STRUCT_REPR_XRAY = 0,    // Xray value struct: [XrClass*][payload]
-    XR_STRUCT_REPR_C = 1,       // C ABI payload only
-    XR_STRUCT_REPR_PACKED = 2,  // C ABI payload only, byte-packed fields
-} XrStructRepr;
+    XR_STRUCT_LAYOUT_STRUCT = 0,
+    XR_STRUCT_LAYOUT_PACKED = 1,
+    XR_STRUCT_LAYOUT_UNION = 2,
+} XrStructLayoutKind;
 
 // Per-field descriptor within a struct layout
 typedef struct {
@@ -68,21 +68,22 @@ typedef struct {
  */
 typedef struct XrStructLayout {
     uint16_t total_size;       // total struct size in bytes (aligned)
-    uint16_t alignment;        // alignment requirement
+    uint32_t alignment;        // alignment requirement
     uint16_t field_count;      // number of fields
     uint16_t layout_id;        // global layout registry index
-    uint8_t repr;              // XrStructRepr
-    uint8_t explicit_align;    // @align(N), 0 = natural
+    uint8_t kind;              // XrStructLayoutKind
+    uint32_t explicit_align;   // align(N), 0 = natural
     const char **field_names;  // [field_count] parallel to fields[], NULL-able
     XrStructFieldLayout fields[XR_MAX_STRUCT_FIELDS];
 } XrStructLayout;
 
 static inline bool xr_struct_layout_is_headerless(const XrStructLayout *layout) {
-    return layout && (layout->repr == XR_STRUCT_REPR_C || layout->repr == XR_STRUCT_REPR_PACKED);
+    return layout != NULL;
 }
 
 static inline uint16_t xr_struct_layout_header_size(const XrStructLayout *layout) {
-    return xr_struct_layout_is_headerless(layout) ? 0 : 8;
+    (void) layout;
+    return 0;
 }
 
 static inline uint32_t xr_struct_layout_storage_size(const XrStructLayout *layout) {
@@ -104,9 +105,9 @@ XR_FUNC void xr_struct_layout_compute(XrStructLayout *layout);
  *
  * Returns true only when the type has an unambiguous low-level layout:
  * native scalars, raw pointers, fixed arrays whose element is statically
- * laid out, and @repr(C)/@repr(packed) value structs. Managed/default Xray
- * object layouts are intentionally rejected instead of exposing runtime
- * implementation details as a C ABI contract.
+ * laid out, and fixed-layout value structs. Managed references are
+ * intentionally rejected for C ABI contracts even when they have a known
+ * storage lane inside Xray aggregates.
  */
 XR_FUNC bool xr_type_static_layout(const XrType *type, uint32_t *out_size, uint32_t *out_align);
 XR_FUNC bool xr_type_static_field_offset(const XrType *type, const char *field_name,

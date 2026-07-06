@@ -892,6 +892,7 @@ static AstNode *prescan_extract_decl(XiLower *l, AstNode *s, const char **out_na
             *out_sid = s->as.class_decl.symbol_id;
             break;
         case AST_STRUCT_DECL:
+        case AST_UNION_DECL:
             *out_name = s->as.struct_decl.name;
             *out_sid = s->as.struct_decl.symbol_id;
             break;
@@ -1443,7 +1444,8 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
             continue;
         AstNode *decl = (s->type == AST_EXPORT_STMT) ? s->as.export_stmt.declaration : s;
         if (decl && (decl->type == AST_FUNCTION_DECL || decl->type == AST_CLASS_DECL ||
-                     decl->type == AST_STRUCT_DECL || decl->type == AST_ENUM_DECL)) {
+                     decl->type == AST_STRUCT_DECL || decl->type == AST_UNION_DECL ||
+                     decl->type == AST_ENUM_DECL)) {
             xi_lower_stmt(&l, decl);
         }
     }
@@ -1457,7 +1459,8 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
             continue;
         AstNode *decl = (s->type == AST_EXPORT_STMT) ? s->as.export_stmt.declaration : s;
         if (decl && (decl->type == AST_FUNCTION_DECL || decl->type == AST_CLASS_DECL ||
-                     decl->type == AST_STRUCT_DECL || decl->type == AST_ENUM_DECL))
+                     decl->type == AST_STRUCT_DECL || decl->type == AST_UNION_DECL ||
+                     decl->type == AST_ENUM_DECL))
             continue; /* already hoisted above */
         xi_lower_stmt(&l, s);
     }

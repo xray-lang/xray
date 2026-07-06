@@ -32,7 +32,7 @@ static bool xa_freestanding_builtin_call_rejected(const char *name) {
     if (!name)
         return false;
     return strcmp(name, "string") == 0 || strcmp(name, "char") == 0 || strcmp(name, "chr") == 0 ||
-           strcmp(name, "typeof") == 0 || strcmp(name, "copy") == 0 || strcmp(name, "dump") == 0;
+           strcmp(name, "typename") == 0 || strcmp(name, "copy") == 0 || strcmp(name, "dump") == 0;
 }
 
 static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *object) {

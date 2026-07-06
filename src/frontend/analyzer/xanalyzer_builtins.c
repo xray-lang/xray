@@ -52,8 +52,6 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_STRINGBUILDER;
     if (type->kind == XR_KIND_CHANNEL)
         return XR_TID_CHANNEL;
-    if (type->kind == XR_KIND_ENUM)
-        return XR_TID_ENUM_VALUE;
     if (xr_type_is_named_class(type, "Regex"))
         return XR_TID_REGEX;
     if (xr_type_is_named_class(type, "PanicInfo"))
@@ -673,27 +671,11 @@ static const XaBuiltinMember g_rt_coropool_functions[] = {
 #define RT_COROPOOL_FUNCTION_COUNT                                                                 \
     ((int) (sizeof(g_rt_coropool_functions) / sizeof(g_rt_coropool_functions[0])))
 
-static const XaBuiltinMember g_rt_reflect_functions[] = {
-    {"getType", "(obj: any): Json", "Get type info of object", true, true},
-    {"getTypeByName", "(name: string): Json", "Get type info by name", true, true},
-    {"getAllTypes", "(): Array<Json>", "Get all registered types", true, true},
-    {"isInstance", "(obj: any, cls: any): bool", "Check if obj is instance of cls", true, true},
-    {"isInstanceOf", "(obj: any, name: string): bool", "Check by class name", true, true},
-    {"fieldCount", "(obj: any): int", "Get field count of object", true, true},
-    {"elementType", "(obj: any): string", "Get element type of container", true, true},
-    {"keyType", "(obj: any): string", "Get key type of map", true, true},
-    {"valueType", "(obj: any): string", "Get value type of map", true, true},
-    {"typeOf", "(obj: any): string", "Get type name string", true, true},
-};
-#define RT_REFLECT_FUNCTION_COUNT                                                                  \
-    ((int) (sizeof(g_rt_reflect_functions) / sizeof(g_rt_reflect_functions[0])))
-
 static const XaBuiltinModule g_rt_builtin_modules[] = {
     {"Coro", g_rt_coro_functions, RT_CORO_FUNCTION_COUNT, NULL, 0},
     {"CoroPool", g_rt_coropool_functions, RT_COROPOOL_FUNCTION_COUNT, NULL, 0},
-    {"Reflect", g_rt_reflect_functions, RT_REFLECT_FUNCTION_COUNT, NULL, 0},
 };
-#define RT_BUILTIN_MODULE_COUNT 3
+#define RT_BUILTIN_MODULE_COUNT 2
 
 // Script directory for .xrd search (set by analyzer or LSP)
 static const char *g_script_dir = NULL;
@@ -721,7 +703,7 @@ const XaBuiltinModule *xa_builtin_get_module_info(const char *module_name) {
     if (!module_name)
         return NULL;
 
-    // 1. Search runtime modules (Coro, CoroPool, Reflect, Type)
+    // 1. Search runtime intrinsic modules (Coro, CoroPool)
     for (int i = 0; i < RT_BUILTIN_MODULE_COUNT; i++) {
         if (strcmp(g_rt_builtin_modules[i].name, module_name) == 0) {
             return &g_rt_builtin_modules[i];

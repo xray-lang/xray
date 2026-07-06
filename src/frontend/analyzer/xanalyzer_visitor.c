@@ -1978,7 +1978,8 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
             continue;
         if (stmt->type == AST_FUNCTION_DECL) {
             xa_visit_collect_function_decl_only(ctx, stmt);
-        } else if (stmt->type == AST_CLASS_DECL || stmt->type == AST_STRUCT_DECL) {
+        } else if (stmt->type == AST_CLASS_DECL || stmt->type == AST_STRUCT_DECL ||
+                   stmt->type == AST_UNION_DECL) {
             xa_visit_collect_class(ctx, stmt);
         } else if (stmt->type == AST_ENUM_DECL) {
             xa_visit_collect(ctx, stmt);
@@ -1986,7 +1987,8 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
             AstNode *decl = stmt->as.export_stmt.declaration;
             if (decl->type == AST_FUNCTION_DECL) {
                 xa_visit_collect_function_decl_only(ctx, decl);
-            } else if (decl->type == AST_CLASS_DECL || decl->type == AST_STRUCT_DECL) {
+            } else if (decl->type == AST_CLASS_DECL || decl->type == AST_STRUCT_DECL ||
+                       decl->type == AST_UNION_DECL) {
                 xa_visit_collect_class(ctx, decl);
             } else if (decl->type == AST_ENUM_DECL) {
                 xa_visit_collect(ctx, decl);
@@ -2006,11 +2008,11 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
             if (decl->type == AST_FUNCTION_DECL) {
                 xa_visit_collect_function_body(ctx, decl);
             } else if (decl->type != AST_CLASS_DECL && decl->type != AST_STRUCT_DECL &&
-                       decl->type != AST_ENUM_DECL) {
+                       decl->type != AST_UNION_DECL && decl->type != AST_ENUM_DECL) {
                 xa_visit_collect(ctx, decl);
             }
         } else if (stmt->type != AST_CLASS_DECL && stmt->type != AST_STRUCT_DECL &&
-                   stmt->type != AST_ENUM_DECL) {
+                   stmt->type != AST_UNION_DECL && stmt->type != AST_ENUM_DECL) {
             /* Bare block statements need a scope so inner var/const
              * declarations get distinct symbol_ids from outer variables
              * with the same name (variable shadowing).  Matches Pass 2's
@@ -2290,6 +2292,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:
+        case AST_UNION_DECL:
             xa_visit_collect_class(ctx, node);
             break;
         case AST_VAR_DECL:
@@ -2338,102 +2341,41 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 }
                 links->is_adt_enum = is_adt;
 
-                // Store enum member names for exhaustiveness checking
+                // Store enum member names and payload metadata for exhaustiveness checking.
                 if (edecl->member_count > 0) {
                     links->enum_member_names =
                         xr_malloc(sizeof(const char *) * (size_t) edecl->member_count);
                     links->enum_member_count = 0;
-
-                    if (is_adt) {
-                        // ADT enum: store per-variant payload counts and types
-                        links->enum_payload_counts =
-                            xr_calloc((size_t) edecl->member_count, sizeof(int));
-                        links->enum_payload_types =
-                            xr_calloc((size_t) edecl->member_count, sizeof(XrType **));
-                        for (int m = 0; m < edecl->member_count; m++) {
-                            AstNode *mem = edecl->members[m];
-                            if (!mem || mem->type != AST_ENUM_MEMBER || !mem->as.enum_member.name)
-                                continue;
-                            int idx = links->enum_member_count;
-                            links->enum_member_names[idx] = mem->as.enum_member.name;
-                            int pc = mem->as.enum_member.payload_count;
-                            links->enum_payload_counts[idx] = pc;
-                            if (pc > 0 && mem->as.enum_member.payload_types) {
-                                XrType **ptypes = xr_calloc((size_t) pc, sizeof(XrType *));
-                                for (int p = 0; p < pc; p++) {
-                                    XrTypeRef *tref = mem->as.enum_member.payload_types[p];
-                                    XrType *ptype =
-                                        tref ? xr_tref_resolve_in_analyzer(ctx->analyzer, tref)
-                                             : xr_type_new_unknown(NULL);
-                                    if (ptype && edecl->type_param_count > 0 &&
-                                        edecl->type_params && links->type_param_names) {
-                                        ptype = resolve_class_to_type_param(
-                                            ctx->analyzer->isolate, ptype, links->type_param_names,
-                                            links->type_param_count);
-                                    }
-                                    ptypes[p] = ptype;
+                    links->enum_payload_counts =
+                        xr_calloc((size_t) edecl->member_count, sizeof(int));
+                    links->enum_payload_types =
+                        xr_calloc((size_t) edecl->member_count, sizeof(XrType **));
+                    for (int m = 0; m < edecl->member_count; m++) {
+                        AstNode *mem = edecl->members[m];
+                        if (!mem || mem->type != AST_ENUM_MEMBER || !mem->as.enum_member.name)
+                            continue;
+                        int idx = links->enum_member_count;
+                        links->enum_member_names[idx] = mem->as.enum_member.name;
+                        int pc = mem->as.enum_member.payload_count;
+                        links->enum_payload_counts[idx] = pc;
+                        if (pc > 0 && mem->as.enum_member.payload_types) {
+                            XrType **ptypes = xr_calloc((size_t) pc, sizeof(XrType *));
+                            for (int p = 0; p < pc; p++) {
+                                XrTypeRef *tref = mem->as.enum_member.payload_types[p];
+                                XrType *ptype =
+                                    tref ? xr_tref_resolve_in_analyzer(ctx->analyzer, tref)
+                                         : xr_type_new_unknown(NULL);
+                                if (ptype && edecl->type_param_count > 0 && edecl->type_params &&
+                                    links->type_param_names) {
+                                    ptype = resolve_class_to_type_param(
+                                        ctx->analyzer->isolate, ptype, links->type_param_names,
+                                        links->type_param_count);
                                 }
-                                links->enum_payload_types[idx] = ptypes;
+                                ptypes[p] = ptype;
                             }
-                            links->enum_member_count++;
+                            links->enum_payload_types[idx] = ptypes;
                         }
-                        links->enum_value_type = xr_type_new_int(NULL);
-                    } else {
-                        // Simple enum: infer backing value type from member initializers.
-                        // All members must share the same value type.
-                        unsigned seen_types = 0;
-                        for (int m = 0; m < edecl->member_count; m++) {
-                            AstNode *mem = edecl->members[m];
-                            if (mem && mem->type == AST_ENUM_MEMBER && mem->as.enum_member.name) {
-                                links->enum_member_names[links->enum_member_count++] =
-                                    mem->as.enum_member.name;
-                                AstNode *val = mem->as.enum_member.value;
-                                if (!val) {
-                                    seen_types |= 1;  // auto-increment → int
-                                } else if (val->type == AST_LITERAL_INT) {
-                                    seen_types |= 1;
-                                } else if (val->type == AST_LITERAL_FLOAT) {
-                                    seen_types |= 2;
-                                } else if (val->type == AST_LITERAL_STRING) {
-                                    seen_types |= 4;
-                                } else if (val->type == AST_LITERAL_CHAR) {
-                                    seen_types |= 16;
-                                } else if (val->type == AST_LITERAL_TRUE ||
-                                           val->type == AST_LITERAL_FALSE) {
-                                    seen_types |= 8;
-                                } else {
-                                    seen_types |= 1;
-                                }
-                            }
-                        }
-                        if (seen_types == 0)
-                            seen_types = 1;
-                        bool mixed = (seen_types & (seen_types - 1)) != 0;
-                        if (mixed) {
-                            XrLocation loc = {
-                                .file = ctx->file_path, .line = node->line, .column = node->column};
-                            xa_analyzer_add_diagnostic(
-                                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ENUM_MIXED_TYPE,
-                                "Enum members must all have the same value type "
-                                "(int, float, string, or bool)",
-                                &loc);
-                            links->enum_value_type = xr_type_new_int(NULL);
-                        } else if (seen_types & 4) {
-                            links->enum_value_type = xr_type_new_string(NULL);
-                        } else if (seen_types & 2) {
-                            links->enum_value_type = xr_type_new_float(NULL);
-                        } else if (seen_types & 8) {
-                            links->enum_value_type = xr_type_new_bool(NULL);
-                        } else if (seen_types & 16) {
-                            XrLocation loc = {
-                                .file = ctx->file_path, .line = node->line, .column = node->column};
-                            xa_analyzer_add_diagnostic(
-                                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ENUM_MIXED_TYPE,
-                                "Enum member values cannot use char as the backing type", &loc);
-                            links->enum_value_type = xr_type_new_int(NULL);
-                        } else {
-                            links->enum_value_type = xr_type_new_int(NULL);
-                        }
+                        links->enum_member_count++;
                     }
                 }
 
@@ -3072,8 +3014,8 @@ typedef struct XaComptimeBlockFlow {
     AstNode *node;
 } XaComptimeBlockFlow;
 
-static XaComptimeBlockFlow xa_comptime_block_flow(XaComptimeBlockFlowKind kind,
-                                                  const char *label, AstNode *node) {
+static XaComptimeBlockFlow xa_comptime_block_flow(XaComptimeBlockFlowKind kind, const char *label,
+                                                  AstNode *node) {
     XaComptimeBlockFlow flow = {.kind = kind, .label = label, .node = node};
     return flow;
 }
@@ -3105,8 +3047,8 @@ static void xa_report_unhandled_comptime_loop_control(XaInferContext *ctx,
             snprintf(msg, sizeof(msg), "unknown loop label '%s' for 'break'", flow->label);
             xa_report_comptime_block_error(ctx, node, msg);
         } else {
-            xa_report_comptime_block_error(
-                ctx, node, "comptime break can only be used inside comptime loop");
+            xa_report_comptime_block_error(ctx, node,
+                                           "comptime break can only be used inside comptime loop");
         }
         return;
     }
@@ -3646,7 +3588,8 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_in_stmt(XaInferContext *c
 
     XrType *element_type = NULL;
     if (collection_type) {
-        if (collection_type->kind == XR_KIND_FIXED_ARRAY && collection_type->fixed_array.element_type)
+        if (collection_type->kind == XR_KIND_FIXED_ARRAY &&
+            collection_type->fixed_array.element_type)
             element_type = collection_type->fixed_array.element_type;
         else if ((XR_TYPE_IS_ARRAY(collection_type) || XR_TYPE_IS_VIEW(collection_type) ||
                   XR_TYPE_IS_SPAN(collection_type)) &&
@@ -3667,11 +3610,10 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_in_stmt(XaInferContext *c
     XrType *value_type = element_type;
     XaSymbol *item_sym =
         xa_ensure_comptime_for_in_symbol(ctx, stmt, fi->item_name, &fi->item_symbol_id, item_type);
-    XaSymbol *value_sym =
-        fi->is_keyvalue && fi->value_name
-            ? xa_ensure_comptime_for_in_symbol(ctx, stmt, fi->value_name, &fi->value_symbol_id,
-                                               value_type)
-            : NULL;
+    XaSymbol *value_sym = fi->is_keyvalue && fi->value_name
+                              ? xa_ensure_comptime_for_in_symbol(ctx, stmt, fi->value_name,
+                                                                 &fi->value_symbol_id, value_type)
+                              : NULL;
 
     int count = collection.as.fixed_array_val.count;
     for (int i = 0; i < count; i++) {
@@ -4253,14 +4195,6 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             }
             break;
         }
-        case AST_ENUM_CONVERT: {
-            if (node->as.enum_convert.value_expr)
-                xa_visit_infer_expr(ctx, node->as.enum_convert.value_expr);
-            result = node->as.enum_convert.enum_name
-                         ? xr_type_new_enum(ctx->analyzer->isolate, node->as.enum_convert.enum_name)
-                         : xr_type_new_unknown(NULL);
-            break;
-        }
         case AST_ENUM_ACCESS:
             result = node->as.enum_access.enum_name
                          ? xr_type_new_enum(ctx->analyzer->isolate, node->as.enum_access.enum_name)
@@ -4829,10 +4763,12 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             break;
         case AST_CLASS_DECL:
-        case AST_STRUCT_DECL: {
-            // Infer method bodies inside the class/struct
-            ClassDeclNode *cls =
-                (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl : &node->as.class_decl;
+        case AST_STRUCT_DECL:
+        case AST_UNION_DECL: {
+            // Infer method bodies inside the class/struct. Unions have none.
+            ClassDeclNode *cls = (node->type == AST_CLASS_DECL)    ? &node->as.class_decl
+                                 : (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl
+                                                                   : &node->as.union_decl;
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
             // Establish class context so member-visibility and const-field
             // checks know which class body they are inside.
@@ -5093,7 +5029,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
              *   Span<T>    → item: T
              *   Map<K,V>   → item: Json (entry), or k: K, v: V
              *   Set<T>     → item: T
-             *   Enum       → item: EnumValue
              *   Range      → item: int
              *   Channel<T> → item: T
              *   string     → item: string
@@ -5103,7 +5038,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType *value_type = xr_type_new_unknown(NULL);
 
             if (is_enum_iter) {
-                item_type = xr_type_new_enum(ctx->analyzer->isolate, enum_name);
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[192];
+                snprintf(msg, sizeof(msg),
+                         "enum '%s' is not iterable; enum case iteration requires explicit "
+                         "generated metadata",
+                         enum_name ? enum_name : "<unknown>");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
             } else if (fi->collection && fi->collection->type == AST_RANGE) {
                 item_type = xr_type_new_int(NULL);
             } else if (coll_type) {

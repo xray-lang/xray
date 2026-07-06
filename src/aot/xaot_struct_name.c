@@ -97,7 +97,7 @@ static uint64_t struct_layout_hash_depth(const XrStructLayout *sl, int depth) {
         return h ^ UINT64_C(0x9e3779b97f4a7c15);
     h ^= sl->field_count;
     h *= UINT64_C(1099511628211);
-    h ^= sl->repr;
+    h ^= sl->kind;
     h *= UINT64_C(1099511628211);
     h ^= sl->explicit_align;
     h *= UINT64_C(1099511628211);

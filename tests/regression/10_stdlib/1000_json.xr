@@ -153,12 +153,12 @@ fn test_isValid() {
 
 @test
 fn test_typeof() {
-    assert_eq(typeof(Json.parse("42")), "int")
-    assert_eq(typeof(Json.parse("\"hello\"")), "string")
-    assert_eq(typeof(Json.parse("true")), "bool")
-    assert_eq(typeof(Json.parse("null")), "null")
-    assert_eq(typeof(Json.parse("[1,2,3]")), "Array")
-    assert_eq(typeof(Json.parse("{}")), "Json")
+    assert_eq(typename(Json.parse("42")), "int")
+    assert_eq(typename(Json.parse("\"hello\"")), "string")
+    assert_eq(typename(Json.parse("true")), "bool")
+    assert_eq(typename(Json.parse("null")), "null")
+    assert_eq(typename(Json.parse("[1,2,3]")), "Array")
+    assert_eq(typename(Json.parse("{}")), "Json")
 }
 
 // ===== 特殊字符 =====

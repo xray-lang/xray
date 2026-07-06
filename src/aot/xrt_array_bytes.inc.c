@@ -273,8 +273,8 @@ static inline int64_t xrt_endian_arg(XrValue value) {
         endian = XR_TO_INT(value);
     } else if (value.tag == XR_TAG_ENUM) {
         const XrAotEnumValueView *ev = (const XrAotEnumValueView *) value.ptr;
-        if (ev && XR_IS_INT(ev->raw_value))
-            endian = XR_TO_INT(ev->raw_value);
+        if (ev)
+            endian = (int64_t) ev->member_index;
     }
     if (endian < XR_ENDIAN_NATIVE || endian > XR_ENDIAN_BE)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "invalid Endian value");

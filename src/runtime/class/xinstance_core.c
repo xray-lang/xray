@@ -45,13 +45,6 @@ XrInstance *xr_instance_new_core(XrRuntimeCore *core, XrCoroutine *coro, XrClass
         inst->hdr._rsv = XR_CYCLE_NOT_IN_ROOTS;
     }
 
-    XrNativeBodyDesc *desc = cls->native_body;
-    if (desc && desc->init) {
-        void *body = xr_instance_native_body(inst);
-        XR_DCHECK(body != NULL, "native body pointer must not be NULL");
-        desc->init(inst, body);
-    }
-
     return inst;
 }
 
@@ -79,6 +72,17 @@ void xr_instance_init_inplace(XrInstance *inst, XrClass *cls) {
     } else {
         for (uint32_t i = 0; i < slot_count; i++) {
             inst->fields[i] = xr_null();
+        }
+    }
+
+    XrNativeBodyDesc *desc = cls->native_body;
+    if (desc) {
+        void *body = xr_instance_native_body(inst);
+        XR_DCHECK(body != NULL, "native body pointer must not be NULL");
+        if (desc->init) {
+            desc->init(inst, body);
+        } else {
+            memset(body, 0, desc->body_size);
         }
     }
 }

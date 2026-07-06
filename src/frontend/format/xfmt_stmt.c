@@ -329,6 +329,7 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
 
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:
+        case AST_UNION_DECL:
             xfmt_emit_class_decl(ctx, node);
             break;
 
@@ -644,8 +645,8 @@ void xfmt_emit_program(XrFmtContext *ctx, AstNode *node) {
         AstNode *stmt = prog->statements[i];
 
         int is_decl = (stmt->type == AST_FUNCTION_DECL || stmt->type == AST_CLASS_DECL ||
-                       stmt->type == AST_STRUCT_DECL || stmt->type == AST_INTERFACE_DECL ||
-                       stmt->type == AST_ENUM_DECL);
+                       stmt->type == AST_STRUCT_DECL || stmt->type == AST_UNION_DECL ||
+                       stmt->type == AST_INTERFACE_DECL || stmt->type == AST_ENUM_DECL);
 
         if (i > 0 && (is_decl || last_was_decl)) {
             xfmt_write_newline(ctx);

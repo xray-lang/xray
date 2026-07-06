@@ -21,7 +21,7 @@
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/mem/xobj_destroy_ops.h"
 #include "../base/xconfig.h"
-#include "../runtime/class/xreflect_registry.h"
+#include "../runtime/class/xtype_registry.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xvalue.h"
@@ -43,13 +43,7 @@ static XrEnumType *runtime_register_prelude_enum(XrVMRuntime *isolate, const cha
     if (!isolate || !name || !members || member_count <= 0)
         return NULL;
 
-    XrValue values[8];
-    if (member_count > (int) (sizeof(values) / sizeof(values[0])))
-        return NULL;
-    for (int i = 0; i < member_count; i++)
-        values[i] = XR_FROM_INT(i);
-
-    XrEnumType *type = xr_enum_type_new(isolate, name, XR_TINT, members, values, member_count);
+    XrEnumType *type = xr_enum_type_new(isolate, name, members, member_count);
     if (!type || !payload_counts)
         return type;
 
@@ -121,9 +115,6 @@ static void isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
 static void isolate_register_vm_builtins(XrVMRuntime *isolate) {
     if (!isolate || !isolate->core)
         return;
-    if (isolate->core->reflectClass)
-        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_REFLECT,
-                             xr_value_from_class(isolate->core->reflectClass));
     if (isolate->core->arrayClass)
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_ARRAY,
                              xr_value_from_class(isolate->core->arrayClass));

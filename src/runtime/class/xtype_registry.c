@@ -5,13 +5,13 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xreflect_registry.c - Type registry implementation
+ * xtype_registry.c - Type registry implementation
  */
 
-#include "xreflect_registry.h"
+#include "xtype_registry.h"
 #include "../../base/xchecks.h"
 #include "../../base/xlog.h"
-#include "xreflect_internal.h"
+#include "xtype_registry_internal.h"
 #include "xclass_system.h"
 #include "../xisolate_api.h"
 #include "../../base/xmalloc.h"
@@ -23,8 +23,8 @@
 #include <stdio.h>
 #include "../xglobals_table.h"
 
-// #define REFLECTION_DEBUG
-#ifdef REFLECTION_DEBUG
+// #define TYPE_REGISTRY_DEBUG
+#ifdef TYPE_REGISTRY_DEBUG
 #define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
 #else
 #define DEBUG_PRINT(...)                                                                           \
@@ -54,7 +54,7 @@ void xr_registry_init(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "registry_init: NULL isolate");
     XrTypeRegistry *registry = (XrTypeRegistry *) xr_malloc(sizeof(XrTypeRegistry));
     if (!registry) {
-        xr_log_warning("reflect", "Failed to allocate XrTypeRegistry");
+        xr_log_warning("type-registry", "Failed to allocate XrTypeRegistry");
         return;
     }
 
@@ -111,7 +111,7 @@ static void registry_grow(XrTypeRegistry *registry) {
     XrTypeMetadata **new_types =
         (XrTypeMetadata **) xr_realloc(registry->types, sizeof(XrTypeMetadata *) * new_capacity);
     if (!new_types) {
-        xr_log_warning("reflect", "failed to grow registry");
+        xr_log_warning("type-registry", "failed to grow registry");
         return;
     }
 
@@ -158,7 +158,7 @@ bool xr_registry_register_type(XrVMRuntime *X, XrTypeMetadata *meta) {
         return false;
 
     if (registry_find_index(registry, type_name) >= 0) {
-        xr_log_warning("reflect", "type '%s' already registered", type_name);
+        xr_log_warning("type-registry", "type '%s' already registered", type_name);
         return false;
     }
 
@@ -180,11 +180,6 @@ bool xr_registry_register_type(XrVMRuntime *X, XrTypeMetadata *meta) {
         registry->types[index] = NULL;
         registry->type_count--;
         return false;
-    }
-
-    // Cache on class for O(1) reverse lookup
-    if (meta->klass) {
-        meta->klass->type_metadata = meta;
     }
 
     // Cache builtin types
@@ -285,18 +280,12 @@ XrTypeMetadata *xr_registry_find_type_by_class(XrVMRuntime *X, XrClass *klass) {
     if (!klass)
         return NULL;
 
-    // O(1) cached lookup
-    if (klass->type_metadata)
-        return klass->type_metadata;
-
-    // Fallback: linear scan (first access before registration)
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
     if (!registry)
         return NULL;
 
     for (int i = 0; i < registry->type_count; i++) {
         if (registry->types[i]->klass == klass) {
-            klass->type_metadata = registry->types[i];
             return registry->types[i];
         }
     }

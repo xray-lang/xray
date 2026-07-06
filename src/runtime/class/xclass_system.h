@@ -42,14 +42,6 @@ typedef struct XrayCoreClasses {
     XrClass *upvalueClass;
     XrClass *cfunctionClass;
 
-    // Reflection API
-    XrClass *reflectClass;
-    XrClass *typeClass;
-    XrClass *fieldClass;
-    XrClass *methodClass;
-    XrClass *constructorClass;
-    XrClass *parameterClass;
-
     // Enum
     XrClass *enumClass;
     XrClass *enumValueClass;  // Internal class for XrEnumValue instances

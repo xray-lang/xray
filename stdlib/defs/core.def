@@ -2697,7 +2697,7 @@ module mem {
 
   fn offsetOf {
     signature: "(field: string): int"
-    doc: "Compile-time byte offset of a field in a @repr(C) or @repr(packed) struct T"
+    doc: "Compile-time byte offset of a field in a fixed-layout struct T"
     vm: "mem_offset_of"
     argc: 1
     arg_spec: "v"

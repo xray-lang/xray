@@ -1,0 +1,7 @@
+union BadMethod {
+    x: uint32
+
+    value() -> int {
+        return 1
+    }
+}

@@ -35,14 +35,16 @@ order: 014
 
 | 函数 / 表达式 | 签名 | 说明 |
 |---|---|---|
-| `typeof(x)` | `(value) -> string` | 返回运行时类型名字符串 |
+| `typeof(x)` | `(value) -> Type` | 返回稳定 TypeId / `Type.xxx` 值 |
+| `typename(x)` | `(value) -> string` | 返回调试/日志用类型名字符串 |
 | `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
 
 ```xray @id=builtin-typeof-is
 var x = 42
-print(typeof(x))                // "int"
+print(typeof(x) == Type.int)    // true
+print(typename(x))              // "int"
 print(x is int)                 // true
-print(typeof(x) == "int")       // true
+// typeof(x) == "int"           // compile error: use Type.int or typename(x)
 ```
 
 ### 13.4 协程
@@ -110,14 +112,16 @@ These global functions and built-in constructor/static functions are usable with
 
 | Function / expression | Signature | Description |
 |---|---|---|
-| `typeof(x)` | `(value) -> string` | returns the runtime type-name string |
+| `typeof(x)` | `(value) -> Type` | returns a stable TypeId / `Type.xxx` value |
+| `typename(x)` | `(value) -> string` | returns the debug/logging type-name string |
 | `x is T` | expression | runtime type check; the analyzer may narrow types |
 
 ```xray @id=builtin-typeof-is
 var x = 42
-print(typeof(x))                // "int"
+print(typeof(x) == Type.int)    // true
+print(typename(x))              // "int"
 print(x is int)                 // true
-print(typeof(x) == "int")       // true
+// typeof(x) == "int"           // compile error: use Type.int or typename(x)
 ```
 
 ### 13.4 Coroutines

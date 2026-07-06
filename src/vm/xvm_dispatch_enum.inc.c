@@ -14,7 +14,6 @@
  *
  * Owns:
  *   - OP_ENUM_ACCESS  : enum_type[index]   -> XrEnumValue
- *   - OP_ENUM_CONVERT : XrEnumValue from underlying value
  *   - OP_ENUM_NAME    : member_name interned as string
  */
 
@@ -28,16 +27,6 @@ vmcase(OP_ENUM_ACCESS) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "enum member index out of bounds");
     }
     R(a) = XR_FROM_PTR(enum_type->members[member_index].instance);
-    vmbreak;
-}
-
-vmcase(OP_ENUM_CONVERT) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    int c = GETARG_C(i);
-    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(R(b));
-    XrEnumValue *result = xr_enum_from_value(enum_type, R(c));
-    R(a) = result ? XR_FROM_PTR(result) : xr_null();
     vmbreak;
 }
 

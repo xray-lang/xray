@@ -388,7 +388,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"cacheLineSize", "(): int", "CPU cache line size in bytes", true, false},
     {"sizeOf", "(): int", "Compile-time size in bytes of a statically laid out type T", true, false},
     {"alignOf", "(): int", "Compile-time alignment in bytes of a statically laid out type T", true, false},
-    {"offsetOf", "(field: string): int", "Compile-time byte offset of a field in a @repr(C) or @repr(packed) struct T", true, false},
+    {"offsetOf", "(field: string): int", "Compile-time byte offset of a field in a fixed-layout struct T", true, false},
     {"alloc", "(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false},
     {"allocZeroed", "(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false},
     {"allocAligned", "(n: int, align: int): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false},

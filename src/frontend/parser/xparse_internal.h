@@ -186,6 +186,7 @@ XR_FUNC AstNode *xr_parse_enum_declaration(Parser *parser);
 
 XR_FUNC AstNode *xr_parse_class_declaration(Parser *parser);
 XR_FUNC AstNode *xr_parse_struct_declaration(Parser *parser);
+XR_FUNC AstNode *xr_parse_union_declaration(Parser *parser);
 XR_FUNC AstNode *xr_parse_interface_declaration(Parser *parser);
 // Parse one interface body entry (method signature or property signature).
 XR_FUNC AstNode *xr_parse_interface_member(Parser *parser);

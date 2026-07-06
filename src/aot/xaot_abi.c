@@ -362,8 +362,8 @@ static XaotValueRep compact_adt_value_rep_for_type(const XrType *type) {
     rep.kind = XAOT_VALUE_AGGREGATE;
     rep.rep = XAOT_REP_TAGGED;
     rep.type = type;
-    rep.c_type = "XrAotAdtValue";
-    rep.flags = XAOT_VALUE_FLAG_ADT | XAOT_VALUE_FLAG_ADT_SINGLE_PAYLOAD;
+    rep.c_type = "XrAotEnumAggregate";
+    rep.flags = XAOT_VALUE_FLAG_ENUM | XAOT_VALUE_FLAG_ENUM_AGGREGATE;
     return rep;
 }
 

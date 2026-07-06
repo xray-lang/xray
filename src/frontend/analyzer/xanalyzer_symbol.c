@@ -658,7 +658,6 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     dst->class_info = src->class_info;
     dst->enum_member_names = src->enum_member_names;
     dst->enum_member_count = src->enum_member_count;
-    dst->enum_value_type = src->enum_value_type;
     dst->is_adt_enum = src->is_adt_enum;
     if (src->enum_member_count > 0 && src->enum_payload_counts) {
         dst->enum_payload_counts = xr_malloc((size_t) src->enum_member_count * sizeof(int));

@@ -21,7 +21,7 @@
 #include "../../base/xchecks.h"
 #include "../xisolate_api.h"
 #include "xclass.h"
-#include "xreflect_registry.h"
+#include "xtype_registry.h"
 
 XrClass *xr_class_lookup_by_name(XrVMRuntime *X, const char *class_name) {
     if (!X || !class_name)

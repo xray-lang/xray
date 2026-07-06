@@ -33,9 +33,9 @@
       ]
     },
     {
-      "heading": "Runtime reflection",
+      "heading": "Type identity",
       "fences": [
-        "generics-reflection"
+        "generics-type-identity"
       ]
     }
   ]

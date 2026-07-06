@@ -261,33 +261,38 @@ typedef struct XrAotEnumValueView {
     void *klass;
     const char *enum_name;
     const char *member_name;
-    XrValue raw_value;
     uint32_t member_index;
+    uint32_t payload_count;
+    XrValue payload0;
+    XrValue *payloads;
 } XrAotEnumValueView;
 
-typedef struct XrAotAdtValue {
+typedef struct XrAotEnumAggregate {
     const char *enum_name;
     const char *member_name;
     int64_t tag;
     uint32_t payload_count;
     XrValue payload0;
-} XrAotAdtValue;
+    XrValue *payloads;
+} XrAotEnumAggregate;
 
-static inline XrAotAdtValue xrt_adt_value_zero(void) {
-    XrAotAdtValue out = {0};
+static inline XrAotEnumAggregate xrt_enum_aggregate_zero(void) {
+    XrAotEnumAggregate out = {0};
     out.payload0 = XR_NULL_VAL;
+    out.payloads = NULL;
     return out;
 }
 
-static inline XrAotAdtValue xrt_adt_value_make(int64_t tag, uint32_t payload_count,
+static inline XrAotEnumAggregate xrt_enum_aggregate_make(int64_t tag, uint32_t payload_count,
                                                const char *enum_name, const char *member_name,
                                                XrValue payload0) {
-    XrAotAdtValue out;
+    XrAotEnumAggregate out;
     out.enum_name = enum_name;
     out.member_name = member_name;
     out.tag = tag;
     out.payload_count = payload_count;
     out.payload0 = payload_count > 0 ? payload0 : XR_NULL_VAL;
+    out.payloads = NULL;
     return out;
 }
 
@@ -500,23 +505,33 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
             return xrt_fixed_array_get(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx);
         xrt_fixed_index_oob(idx, count);
     }
+    if (obj.tag == XR_TAG_ENUM && XR_IS_INT(key)) {
+        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) obj.ptr;
+        if (!ev)
+            return XR_NULL_VAL;
+        if (key.i == 0)
+            return XR_FROM_INT(ev->member_index);
+        if (key.i > 0 && ev->payloads && (uint32_t) key.i <= ev->payload_count)
+            return ev->payloads[key.i - 1];
+        if (key.i == 1 && ev->payload_count > 0)
+            return ev->payload0;
+    }
     xrt_freestanding_trap("freestanding index get supports only fixed arrays");
     return XR_NULL_VAL;
 }
+
 static inline XrValue xrt_enum_field_get(XrValue boxed, int64_t index) {
-    if (boxed.tag == XR_TAG_ENUM && boxed.ptr) {
-        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) boxed.ptr;
-        if (index == 0)
-            return XR_FROM_INT(ev->member_index);
-        if (index == 1)
-            return ev->raw_value;
+    if (boxed.tag != XR_TAG_ENUM || !boxed.ptr)
         return XR_NULL_VAL;
-    }
-    (void) boxed;
-    (void) index;
+    const XrAotEnumValueView *ev = (const XrAotEnumValueView *) boxed.ptr;
+    if (index == 0)
+        return XR_FROM_INT(ev->member_index);
+    if (index > 0 && ev->payloads && (uint32_t) index <= ev->payload_count)
+        return ev->payloads[index - 1];
+    if (index == 1 && ev->payload_count > 0)
+        return ev->payload0;
     return XR_NULL_VAL;
 }
-
 
 static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
     if (XR_IS_ARRAY_REF(obj) && XR_IS_INT(key)) {

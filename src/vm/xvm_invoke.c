@@ -705,10 +705,6 @@ XR_FUNC XrDispatchAction vm_invoke_enum(XrVMRuntime *isolate, XrValue receiver, 
             base[a] = xr_string_value(str);
             return XR_DISP_NEXT;
         }
-        if (nargs == 0 && method_symbol == SYMBOL_VALUE) {
-            base[a] = enum_val->raw_value;
-            return XR_DISP_NEXT;
-        }
         if (nargs == 0 && method_symbol == SYMBOL_ORDINAL) {
             base[a] = xr_int(enum_val->member_index);
             return XR_DISP_NEXT;
@@ -732,22 +728,6 @@ XR_FUNC XrDispatchAction vm_invoke_enum(XrVMRuntime *isolate, XrValue receiver, 
 
     if (XR_IS_ENUM_TYPE(receiver)) {
         XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(receiver);
-
-        if (nargs == 1 && method_symbol == SYMBOL_GET_MEMBER) {
-            XrValue index_val = base[a + 2];
-            if (XR_IS_INT(index_val)) {
-                int index = XR_TO_INT(index_val);
-                if (index >= 0 && index < (int) enum_type->member_count) {
-                    XrEnumValue *eval = enum_type->members[index].instance;
-                    base[a] = XR_FROM_PTR(eval);
-                } else {
-                    base[a] = xr_null();
-                }
-            } else {
-                base[a] = xr_null();
-            }
-            return XR_DISP_NEXT;
-        }
 
         /* ADT variant construction via OP_INVOKE: Shape.Circle(5.0)
          * Every variant of an ADT enum is a tagged instance (field[0] = ordinal,

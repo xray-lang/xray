@@ -4,9 +4,9 @@ import http
 
 @test
 fn test_h2_apis_exist() {
-    assert(typeof(http.h2Get) == "function")
-    assert(typeof(http.h2Post) == "function")
-    assert(typeof(http.h2Request) == "function")
+    assert(typename(http.h2Get) == "function")
+    assert(typename(http.h2Post) == "function")
+    assert(typename(http.h2Request) == "function")
 }
 
 @test

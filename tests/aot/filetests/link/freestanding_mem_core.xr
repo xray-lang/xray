@@ -1,6 +1,5 @@
 import mem
 
-@repr(C)
 struct XrayMemHeader {
     tag: uint8
     value: uint32

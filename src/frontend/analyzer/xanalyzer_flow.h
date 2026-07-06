@@ -153,6 +153,7 @@ XR_FUNC XaFlowNode *xa_flow_create_move(XaFlowBuilder *builder, const char *name
 XR_FUNC bool xa_flow_is_moved(XaFlowBuilder *builder, const char *name, XaFlowNode *at_node);
 
 // Narrowing helpers
+XR_FUNC XrType *xa_narrow_by_typeid(XrType *type, XrTypeId type_id, bool assume_true);
 XR_FUNC XrType *xa_narrow_by_typeof(XrType *type, const char *type_name, bool assume_true);
 XR_FUNC XrType *xa_narrow_by_null_check(XrType *type, bool is_equal_null, bool assume_true);
 XR_FUNC XrType *xa_narrow_by_truthiness(XrType *type, bool assume_true);

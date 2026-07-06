@@ -45,8 +45,9 @@ void xr_struct_layout_compute(XrStructLayout *layout) {
         return;
     }
 
-    uint16_t offset = 0;
-    uint16_t max_align = 1;
+    uint32_t offset = 0;
+    uint32_t max_align = 1;
+    uint32_t max_size = 0;
 
     for (int i = 0; i < layout->field_count; i++) {
         XrStructFieldLayout *f = &layout->fields[i];
@@ -60,21 +61,30 @@ void xr_struct_layout_compute(XrStructLayout *layout) {
             f->size = xr_native_type_size(f->native_type);
         }
 
-        uint8_t field_align;
-        if (layout->repr == XR_STRUCT_REPR_PACKED) {
+        uint32_t field_align;
+        if (layout->kind == XR_STRUCT_LAYOUT_PACKED) {
             field_align = 1;
         } else if (f->native_type == XR_NATIVE_STRUCT) {
-            field_align = f->sub_layout ? (uint8_t) f->sub_layout->alignment : 8;
+            field_align = f->sub_layout ? f->sub_layout->alignment : 8;
         } else if (f->native_type == XR_NATIVE_ARRAY) {
             field_align = xr_native_type_align(f->elem_native_type);
         } else {
             field_align = xr_native_type_align(f->native_type);
         }
 
+        if (layout->kind == XR_STRUCT_LAYOUT_UNION) {
+            f->offset = 0;
+            if (f->size > max_size)
+                max_size = f->size;
+            if (field_align > max_align)
+                max_align = field_align;
+            continue;
+        }
+
         // Align offset to field alignment
         offset = (offset + field_align - 1) & ~(field_align - 1);
 
-        f->offset = offset;
+        f->offset = (uint16_t) offset;
         offset += f->size;
 
         if (field_align > max_align) {
@@ -87,7 +97,8 @@ void xr_struct_layout_compute(XrStructLayout *layout) {
     }
 
     // Pad total size to alignment
-    layout->total_size = (offset + max_align - 1) & ~(max_align - 1);
+    uint32_t raw_size = (layout->kind == XR_STRUCT_LAYOUT_UNION) ? max_size : offset;
+    layout->total_size = (uint16_t) ((raw_size + max_align - 1) & ~(max_align - 1));
     layout->alignment = max_align;
 }
 
@@ -100,7 +111,7 @@ static const XrStructLayout *static_layout_struct_from_type(const XrType *type) 
     if (!info || !info->struct_layout)
         return NULL;
     const XrStructLayout *layout = info->struct_layout;
-    return xr_struct_layout_is_headerless(layout) ? layout : NULL;
+    return layout;
 }
 
 bool xr_type_static_layout(const XrType *type, uint32_t *out_size, uint32_t *out_align) {

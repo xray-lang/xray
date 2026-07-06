@@ -78,7 +78,9 @@ typedef struct ClassDeclNode {
     bool is_abstract;
     bool is_final;
     bool is_native;            // @native: C runtime provides implementation
-    XrAttribute **attributes;  // Declaration attributes (@repr, @align, ...)
+    bool is_packed;            // struct-only: `packed struct`
+    uint32_t explicit_align;   // struct-only: `struct S align(N)`, 0 = natural
+    XrAttribute **attributes;  // Declaration attributes
     int attr_count;
     XrGenericParam **type_params;  // Generic type parameters
     int type_param_count;
@@ -206,7 +208,6 @@ typedef struct TypeAliasNode {
 
 typedef struct EnumMemberNode {
     char *name;
-    AstNode *value; /* backing value (= 200) for simple enums */
     /* ADT variant payload fields (positional or named) */
     char **payload_names;      /* field names; NULL entry = positional */
     XrTypeRef **payload_types; /* type annotations per field */
@@ -215,7 +216,6 @@ typedef struct EnumMemberNode {
 
 typedef struct EnumDeclNode {
     char *name;
-    char *type_hint;   /* base type hint for simple enums (: int) */
     AstNode **members; /* AST_ENUM_MEMBER variants */
     int member_count;
     AstNode **methods; /* AST_METHOD_DECL nodes inside enum body */
@@ -231,11 +231,6 @@ typedef struct EnumAccessNode {
     char *enum_name;
     char *member_name;
 } EnumAccessNode;
-
-typedef struct EnumConvertNode {
-    char *enum_name;
-    AstNode *value_expr;
-} EnumConvertNode;
 
 // Enum index node (compiler-generated for for-in desugaring)
 typedef struct EnumIndexNode {

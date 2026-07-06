@@ -111,16 +111,13 @@ static void bind_class_global(XrVMRuntime *X, int global_index, void *cls) {
  * same XrEnumType — giving cross-module `Result` / `Ordering` values a
  * single type identity.  Replaces the former per-module AST injection,
  * which created a distinct enum type per module and broke cross-module
- * pattern matching.  Members/values are interned/copied by
- * xr_enum_type_new, so the input arrays are freed here. */
+ * pattern matching. Members are copied into the symbol table by
+ * xr_enum_type_new, so the input array is freed here. */
 static XrEnumType *make_prelude_enum(XrVMRuntime *X, const char *name, const char **member_names,
-                                     const int *member_values, int count, const int *payload_counts,
-                                     bool is_adt) {
+                                     int count, const int *payload_counts, bool is_adt) {
     char **names = (char **) xr_malloc(sizeof(char *) * (size_t) count);
-    XrValue *values = (XrValue *) xr_malloc(sizeof(XrValue) * (size_t) count);
-    if (!names || !values) {
+    if (!names) {
         xr_free(names);
-        xr_free(values);
         return NULL;
     }
     for (int i = 0; i < count; i++) {
@@ -128,10 +125,9 @@ static XrEnumType *make_prelude_enum(XrVMRuntime *X, const char *name, const cha
         names[i] = (char *) xr_malloc(len);
         if (names[i])
             memcpy(names[i], member_names[i], len);
-        values[i] = xr_int(member_values[i]);
     }
 
-    XrEnumType *et = xr_enum_type_new(X, name, XR_TINT, names, values, count);
+    XrEnumType *et = xr_enum_type_new(X, name, names, count);
 
     if (et && is_adt) {
         et->is_adt = true;
@@ -156,7 +152,6 @@ static XrEnumType *make_prelude_enum(XrVMRuntime *X, const char *name, const cha
     for (int i = 0; i < count; i++)
         xr_free(names[i]);
     xr_free(names);
-    xr_free(values);
     return et;
 }
 
@@ -164,62 +159,52 @@ static void xr_prelude_register_builtin_enums(XrVMRuntime *X) {
     if (!X)
         return;
 
-    /* Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst } — values
+    /* Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst } — ordinals
      * must match XrAtomicOrdering. */
     static const char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease",
                                              "SeqCst"};
-    static const int ordering_values[] = {0, 1, 2, 3, 4};
-    XrEnumType *ordering_et =
-        make_prelude_enum(X, "Ordering", ordering_members, ordering_values, 5, NULL, false);
+    XrEnumType *ordering_et = make_prelude_enum(X, "Ordering", ordering_members, 5, NULL, false);
     if (ordering_et)
         bind_builtin_value(X, XR_GLOBAL_VAR_ORDERING, XR_FROM_PTR(ordering_et));
 
     static const char *endian_members[] = {"Native", "LE", "BE"};
-    static const int endian_values[] = {0, 1, 2};
-    XrEnumType *endian_et =
-        make_prelude_enum(X, "Endian", endian_members, endian_values, 3, NULL, false);
+    XrEnumType *endian_et = make_prelude_enum(X, "Endian", endian_members, 3, NULL, false);
     if (endian_et)
         bind_builtin_value(X, XR_GLOBAL_VAR_ENDIAN, XR_FROM_PTR(endian_et));
 
     static const char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
-    static const int recv_values[] = {0, 1, 2, 3};
     static const int recv_payload_counts[] = {1, 0, 0, 0};
-    XrEnumType *recv_et =
-        make_prelude_enum(X, "Recv", recv_members, recv_values, 4, recv_payload_counts, true);
+    XrEnumType *recv_et = make_prelude_enum(X, "Recv", recv_members, 4, recv_payload_counts, true);
     if (recv_et)
         bind_builtin_value(X, XR_GLOBAL_VAR_RECV, XR_FROM_PTR(recv_et));
 
     static const char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
-    static const int send_result_values[] = {0, 1, 2, 3};
     XrEnumType *send_result_et =
-        make_prelude_enum(X, "SendResult", send_result_members, send_result_values, 4, NULL, false);
+        make_prelude_enum(X, "SendResult", send_result_members, 4, NULL, false);
     if (send_result_et)
         bind_builtin_value(X, XR_GLOBAL_VAR_SEND_RESULT, XR_FROM_PTR(send_result_et));
 
     static const char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout",
                                                 "Pending"};
-    static const int task_result_values[] = {0, 1, 2, 3, 4};
     static const int task_result_payload_counts[] = {1, 1, 0, 0, 0};
     XrEnumType *task_result_et =
-        make_prelude_enum(X, "TaskResult", task_result_members, task_result_values, 5,
-                          task_result_payload_counts, true);
+        make_prelude_enum(X, "TaskResult", task_result_members, 5, task_result_payload_counts,
+                          true);
     if (task_result_et)
         bind_builtin_value(X, XR_GLOBAL_VAR_TASK_RESULT, XR_FROM_PTR(task_result_et));
 
     static const char *task_outcome_members[] = {"Success", "Failed", "Cancelled"};
-    static const int task_outcome_values[] = {0, 1, 2};
     static const int task_outcome_payload_counts[] = {1, 1, 0};
     XrEnumType *task_outcome_et =
-        make_prelude_enum(X, "TaskOutcome", task_outcome_members, task_outcome_values, 3,
-                          task_outcome_payload_counts, true);
+        make_prelude_enum(X, "TaskOutcome", task_outcome_members, 3, task_outcome_payload_counts,
+                          true);
     if (task_outcome_et)
         bind_builtin_value(X, XR_GLOBAL_VAR_TASK_OUTCOME, XR_FROM_PTR(task_outcome_et));
 
     static const char *task_status_members[] = {"Pending", "Running", "Success", "Failed",
                                                 "Cancelled"};
-    static const int task_status_values[] = {0, 1, 2, 3, 4};
     XrEnumType *task_status_et =
-        make_prelude_enum(X, "TaskStatus", task_status_members, task_status_values, 5, NULL, false);
+        make_prelude_enum(X, "TaskStatus", task_status_members, 5, NULL, false);
     if (task_status_et)
         bind_builtin_value(X, XR_GLOBAL_VAR_TASK_STATUS, XR_FROM_PTR(task_status_et));
 

@@ -809,8 +809,11 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             break;
 
         case AST_CLASS_DECL:
-        case AST_STRUCT_DECL: {
-            ClassDeclNode *cls = &node->as.class_decl;
+        case AST_STRUCT_DECL:
+        case AST_UNION_DECL: {
+            ClassDeclNode *cls = (node->type == AST_CLASS_DECL) ? &node->as.class_decl
+                                : (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl
+                                                                  : &node->as.union_decl;
             for (int i = 0; i < cls->method_count; i++) {
                 ea_walk(ctx, cls->methods[i]);
             }

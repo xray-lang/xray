@@ -83,7 +83,6 @@ order: 019
 | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | 协程闭包捕获了不安全变量 |
 | `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` 操作数不是 `Task` |
 | `XR_ERR_ANALYZE_MISSING_TYPE` | 变量需要类型注解或初始化器 |
-| `XR_ERR_ANALYZE_ENUM_MIXED_TYPE` | enum 成员 backing type 混合 |
 | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 类未实现声明的接口 |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | 用非数字 key 访问 tuple |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段下标越界 |
@@ -290,7 +289,6 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | coroutine closure captured an unsafe variable |
 | `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` operand is not a `Task` |
 | `XR_ERR_ANALYZE_MISSING_TYPE` | variable requires a type annotation or initializer |
-| `XR_ERR_ANALYZE_ENUM_MIXED_TYPE` | enum members have mixed backing types |
 | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | class does not implement a declared interface |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple accessed with a non-numeric key |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field index out of range |

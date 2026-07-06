@@ -8,15 +8,32 @@ enum Color {
     Blue
 }
 enum HttpStatus {
-    OK = 200,
-    NotFound = 404,
-    ServerError = 500
+    OK,
+    NotFound,
+    ServerError
+
+    fn code() -> int {
+        return match (this) {
+            HttpStatus.OK -> 200,
+            HttpStatus.NotFound -> 404,
+            HttpStatus.ServerError -> 500
+        }
+    }
 }
 enum Direction {
-    North = "N",
-    South = "S",
-    East = "E",
-    West = "W"
+    North,
+    South,
+    East,
+    West
+
+    fn symbol() -> string {
+        return match (this) {
+            Direction.North -> "N",
+            Direction.South -> "S",
+            Direction.East -> "E",
+            Direction.West -> "W"
+        }
+    }
 }
 enum Day {
     Monday,
@@ -45,29 +62,25 @@ fn test_enum() {
     assert_eq(Color.Red == Color.Red, true)
     assert_eq(Color.Red != Color.Blue, true)
 
-    // ===== Enum with explicit int values =====
+    // ===== Protocol values via explicit methods =====
 
 
-    assert_eq(HttpStatus.OK.value, 200)
-    assert_eq(HttpStatus.NotFound.value, 404)
-    assert_eq(HttpStatus.ServerError.value, 500)
+    assert_eq(HttpStatus.OK.code(), 200)
+    assert_eq(HttpStatus.NotFound.code(), 404)
+    assert_eq(HttpStatus.ServerError.code(), 500)
 
-    // ===== String enum =====
+    // ===== String protocol symbols via explicit methods =====
 
 
-    assert_eq(Direction.North.value, "N")
-    assert_eq(Direction.East.value, "E")
-    assert_eq(Direction.West.value, "W")
+    assert_eq(Direction.North.symbol(), "N")
+    assert_eq(Direction.East.symbol(), "E")
+    assert_eq(Direction.West.symbol(), "W")
 
-    // ===== Enum properties: name, value, ordinal =====
+    // ===== Enum properties: name, ordinal =====
 
     assert_eq(Color.Red.name, "Red")
     assert_eq(Color.Green.name, "Green")
     assert_eq(Color.Blue.name, "Blue")
-
-    assert_eq(Color.Red.value, 0)
-    assert_eq(Color.Green.value, 1)
-    assert_eq(Color.Blue.value, 2)
 
     assert_eq(Color.Red.ordinal, 0)
     assert_eq(Color.Green.ordinal, 1)
@@ -82,62 +95,6 @@ fn test_enum() {
     assert_eq(Color.Red.toString(), "Color.Red")
     assert_eq(Color.Green.toString(), "Color.Green")
     assert_eq(Direction.North.toString(), "Direction.North")
-
-    // ===== Enum memberCount and getMember =====
-
-    assert_eq(Color.memberCount, 3)
-    assert_eq(HttpStatus.memberCount, 3)
-    assert_eq(Direction.memberCount, 4)
-
-    var m0 = Color.getMember(0)
-    var m1 = Color.getMember(1)
-    var m2 = Color.getMember(2)
-    assert_eq(m0 == Color.Red, true)
-    assert_eq(m1 == Color.Green, true)
-    assert_eq(m2 == Color.Blue, true)
-    assert_eq(m0.name, "Red")
-    assert_eq(m1.value, 1)
-
-    // getMember loop
-    for (var i = 0; i < Color.memberCount; i++) {
-        var member = Color.getMember(i)
-        assert_eq(member.ordinal, i)
-    }
-
-    // ===== Enum for-in iteration =====
-
-
-    var count = 0
-    for (day in Day) {
-        count++
-    }
-    assert_eq(count, 7)
-
-    // for-in with properties
-    var names: Array<string> = []
-    for (d in Color) {
-        names.push(d.name)
-    }
-    assert_eq(names.length, 3)
-    assert_eq(names[0], "Red")
-    assert_eq(names[1], "Green")
-    assert_eq(names[2], "Blue")
-
-    // for-in string enum
-    var vals: Array<string> = []
-    for (dir in Direction) {
-        vals.push(dir.value)
-    }
-    assert_eq(vals.length, 4)
-    assert_eq(vals[0], "N")
-    assert_eq(vals[3], "W")
-
-    // for-in blank identifier
-    var total = 0
-    for (_ in Day) {
-        total++
-    }
-    assert_eq(total, 7)
 
     // ===== Enum in match =====
 
@@ -171,4 +128,3 @@ fn test_enum() {
     assert_eq(colors[0] == Color.Red, true)
     assert_eq(colors[2] == Color.Blue, true)
 }
-

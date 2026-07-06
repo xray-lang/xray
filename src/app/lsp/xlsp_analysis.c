@@ -788,6 +788,7 @@ static void symbol_extract_visitor(AstNode *node, void *ctx) {
 
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:
+        case AST_UNION_DECL:
             if (node->as.class_decl.name) {
                 symbol_table_add(table, node->as.class_decl.name, LSP_SYMBOL_CLASS, node->line - 1,
                                  0, node->line - 1, (int) strlen(node->as.class_decl.name));
@@ -1021,7 +1022,8 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
         }
 
         case AST_CLASS_DECL:
-        case AST_STRUCT_DECL: {
+        case AST_STRUCT_DECL:
+        case AST_UNION_DECL: {
             XrJsonValue *sym = emit_decl_symbol(node, node->as.class_decl.name, LSP_SYMBOL_CLASS);
             if (!sym)
                 break;

@@ -1,15 +1,12 @@
-@repr(C)
 struct Inner {
     x: int32
 }
 
-@repr(C)
 struct Outer {
     inner: Inner
     y: int32
 }
 
-@repr(C)
 struct Buf {
     data: [uint8; 4]
     bias: int32

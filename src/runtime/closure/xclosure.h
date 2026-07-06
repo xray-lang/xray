@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   XrClosure pairs a compiled prototype (XrProto) with captured upvalues.
  *   It is a heap-allocated, GC-managed first-class value used by all callers
- *   (VM, class methods, reflection). Closure lives at the runtime class
+ *   (VM, class methods, type metadata). Closure lives at the runtime class
  *   layer so both lower runtime (value/object) and upper backends (vm)
  *   can reference it without creating upward dependencies.
  */

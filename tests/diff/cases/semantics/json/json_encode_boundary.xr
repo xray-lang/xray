@@ -1,13 +1,13 @@
 var user = { name: "Bob", scores: [10, 20], nested: { ok: true } }
 var encoded = Json.encode(user)
-print(typeof(encoded))
+print(typename(encoded))
 print(encoded.name)
 print(encoded.scores[1])
 print(encoded.nested.ok)
 
 var m = #{ "a": 1, "b": { tag: "bee" } }
 var jm = Json.encode(m)
-print(typeof(jm))
+print(typename(jm))
 print(jm.a)
 print(jm.b.tag)
 

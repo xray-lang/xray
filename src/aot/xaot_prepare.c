@@ -11,10 +11,12 @@
 #include "xaot_prepare.h"
 #include "xaot_boundary.h"
 #include "xaot_class_native.h"
+#include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_effect.h"
 #include "../ir/xi_range.h"
+#include "../shared/xr_array_core.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -1585,6 +1587,298 @@ XR_FUNC uint32_t xaot_prepare_array_access_bounds_evidence(const XaotBundle *bun
     return 0;
 }
 
+static bool prepare_span_access_kind_for_value(const XiValue *value, uint8_t *out_kind) {
+    if (!value || !out_kind)
+        return false;
+    switch ((XiOp) value->op) {
+        case XI_INDEX_GET:
+            *out_kind = XAOT_SPAN_ACCESS_INDEX_GET;
+            return true;
+        case XI_INDEX_SET:
+            *out_kind = XAOT_SPAN_ACCESS_INDEX_SET;
+            return true;
+        case XI_BYTES_LOAD_U16:
+        case XI_BYTES_LOAD_U32:
+        case XI_BYTES_LOAD_U64:
+        case XI_BYTES_LOAD_F32:
+        case XI_BYTES_LOAD_F64:
+            *out_kind = XAOT_SPAN_ACCESS_BYTE_LOAD;
+            return true;
+        case XI_BYTES_STORE_U16:
+        case XI_BYTES_STORE_U32:
+        case XI_BYTES_STORE_U64:
+        case XI_BYTES_STORE_F32:
+        case XI_BYTES_STORE_F64:
+            *out_kind = XAOT_SPAN_ACCESS_BYTE_STORE;
+            return true;
+        case XI_BYTES_SPAN_FILL:
+            *out_kind = XAOT_SPAN_ACCESS_BYTE_FILL;
+            return true;
+        case XI_BYTES_SPAN_COPY:
+            *out_kind = XAOT_SPAN_ACCESS_BYTE_COPY;
+            return true;
+        case XI_BYTES_SPAN_COMPARE:
+            *out_kind = XAOT_SPAN_ACCESS_BYTE_COMPARE;
+            return true;
+        case XI_BYTES_SPAN_COMMON_PREFIX:
+            *out_kind = XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX;
+            return true;
+        case XI_BYTES_SPAN_REPEAT:
+            *out_kind = XAOT_SPAN_ACCESS_BYTE_REPEAT;
+            return true;
+        case XI_SPAN_AS_BYTES:
+            *out_kind = XAOT_SPAN_ACCESS_SPAN_AS_BYTES;
+            return true;
+        case XI_SPAN_FILL:
+            *out_kind = XAOT_SPAN_ACCESS_SPAN_FILL;
+            return true;
+        case XI_SPAN_COPY:
+            *out_kind = XAOT_SPAN_ACCESS_SPAN_COPY;
+            return true;
+        case XI_SPAN_COMPARE:
+            *out_kind = XAOT_SPAN_ACCESS_SPAN_COMPARE;
+            return true;
+        case XI_SPAN_REINTERPRET:
+            *out_kind = XAOT_SPAN_ACCESS_REINTERPRET;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool prepare_value_plan_is_span_aggregate(const XaotBundle *bundle, const XiValue *value) {
+    const XaotValuePlan *plan;
+    const XiValue *origin = unwrap_identity_value(value);
+    if (!bundle || !origin)
+        return false;
+    plan = xaot_bundle_find_value_plan(bundle, origin);
+    return plan && plan->rep.kind == XAOT_VALUE_AGGREGATE &&
+           (plan->rep.flags & XAOT_VALUE_FLAG_SPAN) != 0;
+}
+
+static bool prepare_span_elem_plan_for_value(const XaotBundle *bundle, const XiValue *value,
+                                             XaotContainerElemPlan *out) {
+    XaotContainerPlan plan;
+    const XiValue *origin = unwrap_identity_value(value);
+    if (!origin || !origin->type || origin->type->kind != XR_KIND_SPAN ||
+        !prepare_value_plan_is_span_aggregate(bundle, origin))
+        return false;
+    if (!xaot_container_plan_for_type(origin->type, &plan) || plan.kind != XAOT_CONTAINER_ARRAY)
+        return false;
+    if (out)
+        *out = plan.elem;
+    return true;
+}
+
+static bool prepare_span_elem_is_byte(const XaotContainerElemPlan *elem) {
+    return elem && elem->elem_name && strcmp(elem->elem_name, "XR_ELEM_U8") == 0;
+}
+
+static bool prepare_span_elem_is_pod(const XaotContainerElemPlan *elem) {
+    return elem && elem->elem_name && strcmp(elem->elem_name, "XR_ELEM_ANY") != 0 &&
+           elem->rep != XAOT_REP_TAGGED;
+}
+
+static bool prepare_span_elem_matches(const XaotContainerElemPlan *a,
+                                      const XaotContainerElemPlan *b) {
+    return a && b && a->elem_name && b->elem_name && a->c_type && b->c_type &&
+           strcmp(a->elem_name, b->elem_name) == 0 && strcmp(a->c_type, b->c_type) == 0 &&
+           a->rep == b->rep && a->storage_rep == b->storage_rep;
+}
+
+static bool prepare_endian_member_index(const char *name, int64_t *out_index) {
+    if (!name || !out_index)
+        return false;
+    if (strcmp(name, "Native") == 0) {
+        *out_index = XR_ENDIAN_NATIVE;
+        return true;
+    }
+    if (strcmp(name, "LE") == 0) {
+        *out_index = XR_ENDIAN_LE;
+        return true;
+    }
+    if (strcmp(name, "BE") == 0) {
+        *out_index = XR_ENDIAN_BE;
+        return true;
+    }
+    return false;
+}
+
+static bool prepare_value_is_endian_member(const XiValue *value, int64_t *out_index) {
+    const XiValue *origin = unwrap_identity_value(value);
+    const XiValue *receiver;
+    if (!origin || origin->op != XI_LOAD_FIELD || origin->nargs < 1 || !origin->aux)
+        return false;
+    receiver = unwrap_identity_value(origin->args[0]);
+    if (!receiver || receiver->op != XI_GET_BUILTIN || receiver->aux_int != XR_GLOBAL_VAR_ENDIAN)
+        return false;
+    return prepare_endian_member_index((const char *) origin->aux, out_index);
+}
+
+static bool prepare_value_is_const_endian(const XiValue *value, int64_t *out_index) {
+    const XiValue *origin;
+    if (!out_index)
+        return false;
+    if (!value) {
+        *out_index = XR_ENDIAN_NATIVE;
+        return true;
+    }
+    if (prepare_value_is_endian_member(value, out_index))
+        return true;
+    origin = unwrap_identity_value(value);
+    if (origin && origin->op == XI_CONST && origin->type && origin->type->kind == XR_KIND_INT &&
+        origin->aux_int >= XR_ENDIAN_NATIVE && origin->aux_int <= XR_ENDIAN_BE) {
+        *out_index = origin->aux_int;
+        return true;
+    }
+    return false;
+}
+
+static bool prepare_span_access_is_index(uint8_t kind) {
+    return kind == XAOT_SPAN_ACCESS_INDEX_GET || kind == XAOT_SPAN_ACCESS_INDEX_SET;
+}
+
+static bool prepare_span_access_is_byte(uint8_t kind) {
+    return kind == XAOT_SPAN_ACCESS_BYTE_LOAD || kind == XAOT_SPAN_ACCESS_BYTE_STORE ||
+           kind == XAOT_SPAN_ACCESS_BYTE_FILL || kind == XAOT_SPAN_ACCESS_BYTE_COPY ||
+           kind == XAOT_SPAN_ACCESS_BYTE_COMPARE ||
+           kind == XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX || kind == XAOT_SPAN_ACCESS_BYTE_REPEAT ||
+           kind == XAOT_SPAN_ACCESS_REINTERPRET;
+}
+
+XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, const XiFunc *func,
+                                                     const XiValue *value,
+                                                     XaotSpanAccessPlan *out) {
+    XaotContainerElemPlan recv_elem;
+    XaotContainerElemPlan other_elem;
+    uint8_t kind = 0;
+    uint32_t evidence = 0;
+    uint32_t drop = 0;
+    uint8_t reason = XAOT_SPAN_UNPROVEN_NONE;
+    int64_t endian = XR_ENDIAN_NATIVE;
+
+    if (!out || !prepare_span_access_kind_for_value(value, &kind))
+        return false;
+    memset(out, 0, sizeof(*out));
+    out->func = func;
+    out->value = value;
+    out->kind = kind;
+
+    if (!value || value->nargs < 1)
+        return false;
+    if (!value->args[0] || !value->args[0]->type || value->args[0]->type->kind != XR_KIND_SPAN) {
+        if (prepare_span_access_is_index(kind))
+            return false;
+        reason = XAOT_SPAN_UNPROVEN_DYNAMIC_RECV;
+        goto done;
+    }
+    if (!prepare_span_elem_plan_for_value(bundle, value->args[0], &recv_elem)) {
+        reason = XAOT_SPAN_UNPROVEN_DYNAMIC_RECV;
+        goto done;
+    }
+    evidence |= XAOT_SPAN_EV_RECV_AGGREGATE;
+    if (prepare_span_elem_is_byte(&recv_elem))
+        evidence |= XAOT_SPAN_EV_RECV_BYTE_SPAN;
+    if (prepare_span_elem_is_pod(&recv_elem))
+        evidence |= XAOT_SPAN_EV_RECV_POD;
+
+    if (prepare_span_access_is_index(kind)) {
+        uint8_t bounds_reason = XAOT_BOUNDS_UNPROVEN_NONE;
+        uint32_t bounds_evidence =
+            xaot_prepare_array_access_bounds_evidence(bundle, func, value, &bounds_reason);
+        if (bounds_evidence != 0) {
+            evidence |= XAOT_SPAN_EV_RANGE_PROVEN;
+            drop |= XAOT_SPAN_DROP_BOUNDS;
+        } else {
+            reason = XAOT_SPAN_UNPROVEN_RANGE;
+        }
+        goto done;
+    }
+
+    if (prepare_span_access_is_byte(kind) && (evidence & XAOT_SPAN_EV_RECV_BYTE_SPAN) == 0) {
+        reason = XAOT_SPAN_UNPROVEN_NOT_BYTE_SPAN;
+        goto done;
+    }
+
+    switch ((XaotSpanAccessKind) kind) {
+        case XAOT_SPAN_ACCESS_BYTE_LOAD:
+            if (prepare_value_is_const_endian(value->nargs >= 3 ? value->args[2] : NULL,
+                                              &endian)) {
+                (void) endian;
+                evidence |= XAOT_SPAN_EV_ENDIAN_CONST;
+            }
+            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
+            break;
+        case XAOT_SPAN_ACCESS_BYTE_STORE:
+            if (prepare_value_is_const_endian(value->nargs >= 4 ? value->args[3] : NULL,
+                                              &endian)) {
+                (void) endian;
+                evidence |= XAOT_SPAN_EV_ENDIAN_CONST;
+            }
+            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
+            break;
+        case XAOT_SPAN_ACCESS_BYTE_FILL:
+        case XAOT_SPAN_ACCESS_BYTE_REPEAT:
+            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
+            break;
+        case XAOT_SPAN_ACCESS_BYTE_COPY:
+        case XAOT_SPAN_ACCESS_BYTE_COMPARE:
+        case XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX:
+            if (value->nargs < 2 ||
+                !prepare_span_elem_plan_for_value(bundle, value->args[1], &other_elem) ||
+                !prepare_span_elem_is_byte(&other_elem)) {
+                reason = XAOT_SPAN_UNPROVEN_DYNAMIC_BOUNDARY;
+                break;
+            }
+            evidence |= XAOT_SPAN_EV_ELEM_MATCH;
+            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
+            break;
+        case XAOT_SPAN_ACCESS_SPAN_AS_BYTES:
+        case XAOT_SPAN_ACCESS_SPAN_FILL:
+            if ((evidence & XAOT_SPAN_EV_RECV_POD) == 0) {
+                reason = XAOT_SPAN_UNPROVEN_NOT_POD;
+                break;
+            }
+            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
+            break;
+        case XAOT_SPAN_ACCESS_SPAN_COPY:
+        case XAOT_SPAN_ACCESS_SPAN_COMPARE:
+            if ((evidence & XAOT_SPAN_EV_RECV_POD) == 0) {
+                reason = XAOT_SPAN_UNPROVEN_NOT_POD;
+                break;
+            }
+            if (value->nargs < 2 ||
+                !prepare_span_elem_plan_for_value(bundle, value->args[1], &other_elem) ||
+                !prepare_span_elem_is_pod(&other_elem)) {
+                reason = XAOT_SPAN_UNPROVEN_DYNAMIC_BOUNDARY;
+                break;
+            }
+            if (!prepare_span_elem_matches(&recv_elem, &other_elem)) {
+                reason = XAOT_SPAN_UNPROVEN_ELEM_MISMATCH;
+                break;
+            }
+            evidence |= XAOT_SPAN_EV_ELEM_MATCH;
+            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
+            break;
+        case XAOT_SPAN_ACCESS_REINTERPRET:
+            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
+            break;
+        default:
+            reason = XAOT_SPAN_UNPROVEN_DYNAMIC_BOUNDARY;
+            break;
+    }
+
+done:
+    if (drop != 0)
+        reason = XAOT_SPAN_UNPROVEN_NONE;
+    else if (reason == XAOT_SPAN_UNPROVEN_NONE)
+        reason = XAOT_SPAN_UNPROVEN_DYNAMIC_BOUNDARY;
+    out->evidence = evidence;
+    out->eliminated_checks = drop;
+    out->unproven_reason = reason;
+    return true;
+}
+
 /* Prove every index access in the function and record the result — proven
  * ones with evidence, unproven ones with a reason — in the bounds plan.
  * Emission consults only the plan (no pattern matching in Cgen), so the
@@ -1604,6 +1898,27 @@ static bool prepare_func_bounds_plans(XaotBundle *bundle, const XiFunc *func) {
                 xaot_prepare_array_access_bounds_evidence(bundle, func, value, &reason);
             if (!xaot_bundle_add_bounds_plan(bundle, func, value, evidence, reason)) {
                 bundle->error_msg = "failed to allocate AOT bounds plan";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool prepare_func_span_access_plans(XaotBundle *bundle, const XiFunc *func) {
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *blk = func->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *value = blk->values[vi];
+            XaotSpanAccessPlan plan;
+            if (!xaot_prepare_span_access_plan_for_value(bundle, func, value, &plan))
+                continue;
+            if (!xaot_bundle_add_span_access_plan(bundle, func, value, plan.kind, plan.evidence,
+                                                  plan.eliminated_checks,
+                                                  plan.unproven_reason)) {
+                bundle->error_msg = "failed to allocate AOT Span access plan";
                 return false;
             }
         }
@@ -2566,6 +2881,8 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     if (!prepare_func_array_class_field_alloc_plans(bundle, func))
         return false;
     if (!prepare_func_bounds_plans(bundle, func))
+        return false;
+    if (!prepare_func_span_access_plans(bundle, func))
         return false;
     /* After bounds plans: the uniqueness proof requires every index access
      * to be raw (bounds-proven), which it reads from the bounds plans. */

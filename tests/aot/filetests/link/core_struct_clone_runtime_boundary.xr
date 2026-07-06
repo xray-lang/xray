@@ -1,10 +1,8 @@
-@repr(C)
 struct CPoint {
     x: int32
     y: int32
 }
 
-@repr(C)
 struct CBox {
     p: CPoint
     tag: uint8

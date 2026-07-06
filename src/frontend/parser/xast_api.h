@@ -232,6 +232,10 @@ XR_FUNC AstNode *xr_ast_class_decl(XrCompilerSession *session, const char *name,
 XR_FUNC AstNode *xr_ast_struct_decl(XrCompilerSession *session, const char *name, AstNode **fields,
                                     int field_count, AstNode **methods, int method_count, int line);
 
+// Create union declaration node (fixed-layout untagged overlay).
+XR_FUNC AstNode *xr_ast_union_decl(XrCompilerSession *session, const char *name, AstNode **fields,
+                                   int field_count, int line);
+
 // Create struct literal node: Point{x: 1.0, y: 2.0}
 XR_FUNC AstNode *xr_ast_struct_literal(XrCompilerSession *session, const char *name,
                                        char **field_names, AstNode **field_values, int field_count,
@@ -283,23 +287,19 @@ XR_FUNC AstNode *xr_ast_member_set(XrCompilerSession *session, AstNode *object, 
 
 // Create enum declaration node (ADT enum with optional generics, methods, interfaces)
 XR_FUNC AstNode *xr_ast_enum_decl(XrCompilerSession *session, const char *name,
-                                  const char *type_hint, AstNode **members, int member_count,
-                                  AstNode **methods, int method_count, XrGenericParam **type_params,
-                                  int type_param_count, XrTypeRef **interfaces, int interface_count,
-                                  int line);
+                                  AstNode **members, int member_count, AstNode **methods,
+                                  int method_count, XrGenericParam **type_params,
+                                  int type_param_count, XrTypeRef **interfaces,
+                                  int interface_count, int line);
 
 // Create enum member node (ADT variant with optional payload)
-XR_FUNC AstNode *xr_ast_enum_member(XrCompilerSession *session, const char *name, AstNode *value,
+XR_FUNC AstNode *xr_ast_enum_member(XrCompilerSession *session, const char *name,
                                     char **payload_names, XrTypeRef **payload_types,
                                     int payload_count, int line);
 
 // Create enum access node
 XR_FUNC AstNode *xr_ast_enum_access(XrCompilerSession *session, const char *enum_name,
                                     const char *member_name, int line);
-
-// Create enum conversion node
-XR_FUNC AstNode *xr_ast_enum_convert(XrCompilerSession *session, const char *enum_name,
-                                     AstNode *value_expr, int line);
 
 // Create enum index node (compiler-generated for for-in desugaring)
 XR_FUNC AstNode *xr_ast_enum_index(XrCompilerSession *session, AstNode *collection,

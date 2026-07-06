@@ -1,0 +1,6 @@
+@align(16)
+struct OldAligned {
+    x: int32
+}
+
+print(1)

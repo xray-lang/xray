@@ -123,5 +123,5 @@ fn test_dump_in_loop() {
 fn test_dump_return_is_null() {
     // dump() is statically unit-valued; the runtime sentinel remains null.
     var r = dump(42)
-    assert_eq(typeof(r), "null")
+    assert_eq(typename(r), "null")
 }

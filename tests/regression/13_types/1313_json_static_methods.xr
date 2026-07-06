@@ -61,7 +61,7 @@ fn test_json_stringify_object() {
 fn test_json_encode_record() {
     var user = { name: "Bob", scores: [10, 20] }
     var encoded = Json.encode(user)
-    assert_eq(typeof(encoded), "Json")
+    assert_eq(typename(encoded), "Json")
     assert_eq(encoded.name, "Bob")
     assert_eq(encoded.scores[1], 20)
 }

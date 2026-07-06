@@ -66,7 +66,14 @@ static int tests_failed = 0;
     } while (0)
 
 #define ASSERT_EQ(a, b) ASSERT((a) == (b))
-#define ASSERT_STR_EQ(a, b) ASSERT(strcmp((a), (b)) == 0)
+#define ASSERT_STR_EQ(a, b)                                                                         \
+    do {                                                                                           \
+        const char *_assert_str_a = (a);                                                            \
+        const char *_assert_str_b = (b);                                                            \
+        ASSERT(_assert_str_a != NULL);                                                              \
+        ASSERT(_assert_str_b != NULL);                                                              \
+        ASSERT(strcmp(_assert_str_a, _assert_str_b) == 0);                                          \
+    } while (0)
 #define ASSERT_NOT_NULL(p) ASSERT((p) != NULL)
 
 static XrJsonValue *parse_json(const char *json) {

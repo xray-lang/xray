@@ -55,7 +55,7 @@ static bool cg_value_plan_is_aggregate(XiCgenCtx *ctx, const XiValue *v) {
 }
 
 static bool cg_value_rep_is_adt_aggregate(XaotValueRep rep) {
-    return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_ADT) != 0;
+    return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_ENUM) != 0;
 }
 
 static bool cg_value_rep_is_struct_aggregate(XaotValueRep rep) {
@@ -122,7 +122,7 @@ static void emit_aggregate_zero_expr(FILE *out, XaotValueRep rep) {
         fprintf(out, "((%s){0})", rep.c_type ? rep.c_type : "XrValue");
         return;
     }
-    fprintf(out, "xrt_adt_value_zero()");
+    fprintf(out, "xrt_enum_aggregate_zero()");
 }
 
 static void emit_value_plan_zero_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
@@ -592,7 +592,7 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
     }
     if (plan && plan->rep.kind == XAOT_VALUE_AGGREGATE) {
         if (target_rep == XR_REP_TAGGED && cg_value_rep_is_adt_aggregate(plan->rep)) {
-            fprintf(out, "xrt_adt_value_box(");
+            fprintf(out, "xrt_enum_aggregate_box(");
             emit_vref(out, v);
             fprintf(out, ")");
             return;
@@ -682,7 +682,7 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
             call_plan->rep.kind != XAOT_VALUE_AGGREGATE &&
             xaot_value_storage_rep(call_plan->rep) == XR_REP_TAGGED &&
             cg_value_rep_is_adt_aggregate(target_rep)) {
-            fprintf(out, "xrt_adt_value_box(");
+            fprintf(out, "xrt_enum_aggregate_box(");
             return ")";
         }
         if (!xaot_value_reps_equal(target_rep, call_plan->rep)) {
@@ -756,7 +756,7 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     if (arg_plan && arg_plan->rep.kind == XAOT_VALUE_AGGREGATE) {
         if (xaot_value_storage_rep(slot_rep) == XR_REP_TAGGED &&
             cg_value_rep_is_adt_aggregate(arg_plan->rep)) {
-            fprintf(out, "xrt_adt_value_box(");
+            fprintf(out, "xrt_enum_aggregate_box(");
             emit_vref(out, arg);
             fprintf(out, ")");
             return;

@@ -12,7 +12,7 @@ fn mkzero() -> int { return 0 }
 @test
 fn test_new_exception_stack_is_array() {
     var e = PanicInfo("hello")
-    assert_eq(typeof(e.stack), "Array")
+    assert_eq(typename(e.stack), "Array")
 }
 
 @test
@@ -32,7 +32,7 @@ fn test_panic_stack_is_array() {
     try {
         inner()
     } catch panic (p) {
-        stack_type = typeof(p.stack)
+        stack_type = typename(p.stack)
     }
     assert_eq(stack_type, "Array")
 }
@@ -68,7 +68,7 @@ fn test_panic_stack_frames_are_strings() {
     } catch panic (p) {
         var idx = 0
         while (idx < p.stack.length) {
-            if (typeof(p.stack[idx]) != "string") {
+            if (typename(p.stack[idx]) != "string") {
                 all_strings = false
             }
             idx = idx + 1
@@ -83,7 +83,7 @@ fn test_subclass_exception_stack_is_array() {
         constructor(m: string) { super(m) }
     }
     var e = MyErr("hi")
-    assert_eq(typeof(e.stack), "Array")
+    assert_eq(typename(e.stack), "Array")
     assert_eq(e.stack.length, 0)
 }
 

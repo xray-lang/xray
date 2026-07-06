@@ -106,44 +106,35 @@ PACKED_ALIGNED_TYPE=""
 PACKED_ALIGNED_TYPE_FOR_C="struct xray_missing_packed_aligned_type"
 
 cat >"$SRC" <<'XR'
-@repr(C)
 struct Pair {
     a: int32
     b: int32
 }
 
-@repr(C)
 struct Inner {
     x: int32
 }
 
-@repr(C)
 struct Outer {
     inner: Inner
     y: int32
 }
 
-@repr(C)
 struct Bytes4 {
     data: [uint8; 4]
     bias: int32
 }
 
-@repr(packed)
-struct PackedPair {
+packed struct PackedPair {
     tag: uint8
     value: uint32
 }
 
-@repr(C)
-@align(16)
-struct AlignedWord {
+struct AlignedWord align(16) {
     value: int32
 }
 
-@repr(packed)
-@align(16)
-struct PackedAligned {
+packed struct PackedAligned align(16) {
     tag: uint8
     value: uint32
 }
@@ -259,90 +250,90 @@ if [ -f "$GEN_H" ]; then
         case "$PAIR_TYPE" in
             xrt_struct_*)
                 PAIR_TYPE_FOR_C="$PAIR_TYPE"
-                record_pass "header exposes repr(C) struct typedef"
+                record_pass "header exposes fixed-layout struct typedef"
                 ;;
             *)
-                record_fail "header exposes repr(C) struct typedef"
+                record_fail "header exposes fixed-layout struct typedef"
                 sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
                 ;;
         esac
     else
-        record_fail "header exposes repr(C) struct typedef"
+        record_fail "header exposes fixed-layout struct typedef"
         sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
     fi
     if [ -n "$OUTER_TYPE" ] && grep -Fq "typedef struct $OUTER_TYPE {" "$GEN_H"; then
         case "$OUTER_TYPE" in
             xrt_struct_*)
                 OUTER_TYPE_FOR_C="$OUTER_TYPE"
-                record_pass "header exposes nested repr(C) struct typedef"
+                record_pass "header exposes nested fixed-layout struct typedef"
                 ;;
             *)
-                record_fail "header exposes nested repr(C) struct typedef"
+                record_fail "header exposes nested fixed-layout struct typedef"
                 sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
                 ;;
         esac
     else
-        record_fail "header exposes nested repr(C) struct typedef"
+        record_fail "header exposes nested fixed-layout struct typedef"
         sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
     fi
     if [ -n "$BYTES4_TYPE" ] && grep -Fq "typedef struct $BYTES4_TYPE {" "$GEN_H"; then
         case "$BYTES4_TYPE" in
             xrt_struct_*)
                 BYTES4_TYPE_FOR_C="$BYTES4_TYPE"
-                record_pass "header exposes fixed-array repr(C) struct typedef"
+                record_pass "header exposes fixed-array fixed-layout struct typedef"
                 ;;
             *)
-                record_fail "header exposes fixed-array repr(C) struct typedef"
+                record_fail "header exposes fixed-array fixed-layout struct typedef"
                 sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
                 ;;
         esac
     else
-        record_fail "header exposes fixed-array repr(C) struct typedef"
+        record_fail "header exposes fixed-array fixed-layout struct typedef"
         sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
     fi
     if [ -n "$PACKED_TYPE" ] && grep -Fq "typedef struct __attribute__((packed)) $PACKED_TYPE {" "$GEN_H"; then
         case "$PACKED_TYPE" in
             xrt_struct_*)
                 PACKED_TYPE_FOR_C="$PACKED_TYPE"
-                record_pass "header exposes packed repr struct typedef"
+                record_pass "header exposes packed struct typedef"
                 ;;
             *)
-                record_fail "header exposes packed repr struct typedef"
+                record_fail "header exposes packed struct typedef"
                 sed 's/^/      /' "$GEN_H" | sed -n '1,160p'
                 ;;
         esac
     else
-        record_fail "header exposes packed repr struct typedef"
+        record_fail "header exposes packed struct typedef"
         sed 's/^/      /' "$GEN_H" | sed -n '1,160p'
     fi
     if [ -n "$ALIGNED_TYPE" ] && grep -Fq "typedef struct __attribute__((aligned(16))) $ALIGNED_TYPE {" "$GEN_H"; then
         case "$ALIGNED_TYPE" in
             xrt_struct_*)
                 ALIGNED_TYPE_FOR_C="$ALIGNED_TYPE"
-                record_pass "header exposes aligned repr(C) struct typedef"
+                record_pass "header exposes aligned fixed-layout struct typedef"
                 ;;
             *)
-                record_fail "header exposes aligned repr(C) struct typedef"
+                record_fail "header exposes aligned fixed-layout struct typedef"
                 sed 's/^/      /' "$GEN_H" | sed -n '1,160p'
                 ;;
         esac
     else
-        record_fail "header exposes aligned repr(C) struct typedef"
+        record_fail "header exposes aligned fixed-layout struct typedef"
         sed 's/^/      /' "$GEN_H" | sed -n '1,160p'
     fi
     if [ -n "$PACKED_ALIGNED_TYPE" ] && grep -Fq "typedef struct __attribute__((packed, aligned(16))) $PACKED_ALIGNED_TYPE {" "$GEN_H"; then
         case "$PACKED_ALIGNED_TYPE" in
             xrt_struct_*)
                 PACKED_ALIGNED_TYPE_FOR_C="$PACKED_ALIGNED_TYPE"
-                record_pass "header exposes packed aligned repr struct typedef"
+                record_pass "header exposes packed aligned struct typedef"
                 ;;
             *)
-                record_fail "header exposes packed aligned repr struct typedef"
+                record_fail "header exposes packed aligned struct typedef"
                 sed 's/^/      /' "$GEN_H" | sed -n '1,160p'
                 ;;
         esac
     else
-        record_fail "header exposes packed aligned repr struct typedef"
+        record_fail "header exposes packed aligned struct typedef"
         sed 's/^/      /' "$GEN_H" | sed -n '1,160p'
     fi
 fi
@@ -360,40 +351,40 @@ if [ -f "$GEN_C" ]; then
         "declares RawMut export"
     if [ -n "$PAIR_TYPE" ]; then
         expect_file_contains "$GEN_C" "int32_t xr_pair_sum($PAIR_TYPE p0);" \
-            "declares repr(C) struct parameter export"
+            "declares fixed-layout struct parameter export"
         expect_file_contains "$GEN_C" "$PAIR_TYPE xr_pair_make(int32_t p0, int32_t p1);" \
-            "declares repr(C) struct return export"
+            "declares fixed-layout struct return export"
     fi
     if [ -n "$OUTER_TYPE" ]; then
         expect_file_contains "$GEN_C" "int32_t xr_outer_sum($OUTER_TYPE p0);" \
-            "declares nested repr(C) struct parameter export"
+            "declares nested fixed-layout struct parameter export"
         expect_file_contains "$GEN_C" "$OUTER_TYPE xr_outer_make(int32_t p0, int32_t p1);" \
-            "declares nested repr(C) struct return export"
+            "declares nested fixed-layout struct return export"
     fi
     if [ -n "$BYTES4_TYPE" ]; then
         expect_file_contains "$GEN_C" "int32_t xr_bytes4_sum($BYTES4_TYPE p0);" \
-            "declares fixed-array repr(C) struct parameter export"
+            "declares fixed-array fixed-layout struct parameter export"
         expect_file_contains "$GEN_C" \
             "$BYTES4_TYPE xr_bytes4_make(uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3, int32_t p4);" \
-            "declares fixed-array repr(C) struct return export"
+            "declares fixed-array fixed-layout struct return export"
     fi
     if [ -n "$PACKED_TYPE" ]; then
         expect_file_contains "$GEN_C" "int32_t xr_packed_sum($PACKED_TYPE p0);" \
-            "declares packed repr struct parameter export"
+            "declares packed struct parameter export"
         expect_file_contains "$GEN_C" "$PACKED_TYPE xr_packed_make(uint8_t p0, uint32_t p1);" \
-            "declares packed repr struct return export"
+            "declares packed struct return export"
     fi
     if [ -n "$ALIGNED_TYPE" ]; then
         expect_file_contains "$GEN_C" "int32_t xr_aligned_sum($ALIGNED_TYPE p0);" \
-            "declares aligned repr(C) struct parameter export"
+            "declares aligned fixed-layout struct parameter export"
         expect_file_contains "$GEN_C" "$ALIGNED_TYPE xr_aligned_make(int32_t p0);" \
-            "declares aligned repr(C) struct return export"
+            "declares aligned fixed-layout struct return export"
     fi
     if [ -n "$PACKED_ALIGNED_TYPE" ]; then
         expect_file_contains "$GEN_C" "int32_t xr_packed_aligned_sum($PACKED_ALIGNED_TYPE p0);" \
-            "declares packed aligned repr struct parameter export"
+            "declares packed aligned struct parameter export"
         expect_file_contains "$GEN_C" "$PACKED_ALIGNED_TYPE xr_packed_aligned_make(uint8_t p0, uint32_t p1);" \
-            "declares packed aligned repr struct return export"
+            "declares packed aligned struct return export"
     fi
     expect_file_not_contains "$GEN_C" "static int32_t xr_add_i32" \
         "int32 export is public"
@@ -416,40 +407,40 @@ if [ -f "$GEN_H" ]; then
         "header declares RawMut export"
     if [ -n "$PAIR_TYPE" ]; then
         expect_file_contains "$GEN_H" "int32_t xr_pair_sum($PAIR_TYPE p0);" \
-            "header declares repr(C) struct parameter export"
+            "header declares fixed-layout struct parameter export"
         expect_file_contains "$GEN_H" "$PAIR_TYPE xr_pair_make(int32_t p0, int32_t p1);" \
-            "header declares repr(C) struct return export"
+            "header declares fixed-layout struct return export"
     fi
     if [ -n "$OUTER_TYPE" ]; then
         expect_file_contains "$GEN_H" "int32_t xr_outer_sum($OUTER_TYPE p0);" \
-            "header declares nested repr(C) struct parameter export"
+            "header declares nested fixed-layout struct parameter export"
         expect_file_contains "$GEN_H" "$OUTER_TYPE xr_outer_make(int32_t p0, int32_t p1);" \
-            "header declares nested repr(C) struct return export"
+            "header declares nested fixed-layout struct return export"
     fi
     if [ -n "$BYTES4_TYPE" ]; then
         expect_file_contains "$GEN_H" "int32_t xr_bytes4_sum($BYTES4_TYPE p0);" \
-            "header declares fixed-array repr(C) struct parameter export"
+            "header declares fixed-array fixed-layout struct parameter export"
         expect_file_contains "$GEN_H" \
             "$BYTES4_TYPE xr_bytes4_make(uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3, int32_t p4);" \
-            "header declares fixed-array repr(C) struct return export"
+            "header declares fixed-array fixed-layout struct return export"
     fi
     if [ -n "$PACKED_TYPE" ]; then
         expect_file_contains "$GEN_H" "int32_t xr_packed_sum($PACKED_TYPE p0);" \
-            "header declares packed repr struct parameter export"
+            "header declares packed struct parameter export"
         expect_file_contains "$GEN_H" "$PACKED_TYPE xr_packed_make(uint8_t p0, uint32_t p1);" \
-            "header declares packed repr struct return export"
+            "header declares packed struct return export"
     fi
     if [ -n "$ALIGNED_TYPE" ]; then
         expect_file_contains "$GEN_H" "int32_t xr_aligned_sum($ALIGNED_TYPE p0);" \
-            "header declares aligned repr(C) struct parameter export"
+            "header declares aligned fixed-layout struct parameter export"
         expect_file_contains "$GEN_H" "$ALIGNED_TYPE xr_aligned_make(int32_t p0);" \
-            "header declares aligned repr(C) struct return export"
+            "header declares aligned fixed-layout struct return export"
     fi
     if [ -n "$PACKED_ALIGNED_TYPE" ]; then
         expect_file_contains "$GEN_H" "int32_t xr_packed_aligned_sum($PACKED_ALIGNED_TYPE p0);" \
-            "header declares packed aligned repr struct parameter export"
+            "header declares packed aligned struct parameter export"
         expect_file_contains "$GEN_H" "$PACKED_ALIGNED_TYPE xr_packed_aligned_make(uint8_t p0, uint32_t p1);" \
-            "header declares packed aligned repr struct return export"
+            "header declares packed aligned struct return export"
     fi
 fi
 

@@ -10,11 +10,11 @@ print((255).toHex())
 
 var f = 3.7
 print(f.floor())
-print(typeof(f.floor()))
+print(typename(f.floor()))
 print(f.ceil())
-print(typeof(f.ceil()))
+print(typename(f.ceil()))
 print(f.round())
-print(typeof(f.round()))
+print(typename(f.round()))
 
 var g = 1.25
 print(g.toFixed(2))

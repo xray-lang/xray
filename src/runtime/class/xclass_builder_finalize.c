@@ -27,8 +27,7 @@
 #include "xclass_internal.h"
 #include "xclass_builder.h"
 #include "xclass_builder_internal.h"
-#include "xreflect_cache.h"
-#include "xreflect_registry.h"
+#include "xtype_registry.h"
 #include "xmethod.h"
 #include "../xisolate_api.h"
 #include "../../base/xmalloc.h"
@@ -129,7 +128,7 @@ static void finalize_static_methods(const XrClassBuilder *b, XrClass *cls, int f
 static bool finalize_interfaces(const XrClassBuilder *b, XrClass *cls);
 static bool finalize_abstract_methods(const XrClassBuilder *b, XrClass *cls);
 static bool finalize_method_symbol_map(XrClass *cls);
-static void finalize_eager_reflection(XrClassBuilder *b, XrClass *cls);
+static void finalize_type_identity(XrClassBuilder *b, XrClass *cls);
 static void write_method_slot(XrMethod *method, XrMethodBuildItem *item, bool is_static);
 
 /* ========== Finalize (top-level dispatcher) ========== */
@@ -227,7 +226,7 @@ XrClass *xr_class_builder_finalize(XrClassBuilder *builder) {
     }
     xr_class_compute_operator_flags(cls);
 
-    finalize_eager_reflection(builder, cls);
+    finalize_type_identity(builder, cls);
 
     builder->finalized = true;
     xr_class_builder_destroy(builder);
@@ -597,26 +596,12 @@ static bool finalize_method_symbol_map(XrClass *cls) {
     return true;
 }
 
-// Eagerly build reflect_cache + register type_metadata. Both outputs
-// are mandatory for any class that reaches the end of finalize, which
-// is why no caller anywhere else in the tree needs to re-register a
-// freshly created class. Allocation failures are logged but
-// non-fatal: reader sites tolerate a NULL cache or a missing registry
-// entry and behave as if the old lazy path were still active.
-static void finalize_eager_reflection(XrClassBuilder *b, XrClass *cls) {
+// Register minimal name -> class identity for runtime lookup. This does not
+// build type metadata wrapper objects or attach metadata to XrClass.
+static void finalize_type_identity(XrClassBuilder *b, XrClass *cls) {
     if (b->isolate == NULL)
         return;
-
-    if (cls->reflect_cache == NULL) {
-        XrReflectCache *rcache = xr_reflect_cache_create(b->isolate, cls);
-        if (rcache != NULL) {
-            cls->reflect_cache = rcache;
-        } else {
-            xr_log_warning("class", "finalize: reflect_cache allocation failed for '%s'",
-                           cls->name ? cls->name : "<anonymous>");
-        }
-    }
-    if (cls->type_metadata == NULL && xr_isolate_get_type_registry(b->isolate) != NULL) {
+    if (xr_isolate_get_type_registry(b->isolate) != NULL) {
         (void) xr_registry_register_class(b->isolate, cls);
     }
 }

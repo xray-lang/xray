@@ -145,7 +145,7 @@ void xr_core_init(XrVMRuntime *X) {
     // and xr_class_builder_finalize already registers every finished
     // class with the type registry. The explicit registration loop that
     // used to live here was pure duplication -- kept around only because
-    // the old lazy-reflection design did not guarantee registration at
+    // the old lazy-type metadata design did not guarantee registration at
     // construction time.
 }
 

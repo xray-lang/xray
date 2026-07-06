@@ -57,7 +57,7 @@ static XrJsonValue *make_completion_item(const char *label, int kind, const char
     return item;
 }
 
-// Generate completions for enum value instance (name, value, ordinal, toString)
+// Generate completions for enum value instance (name, ordinal, toString)
 static XrJsonValue *make_enum_value_completions(const char *enum_name) {
     XrJsonValue *items = xjson_new_array();
     char detail[256];
@@ -67,19 +67,14 @@ static XrJsonValue *make_enum_value_completions(const char *enum_name) {
     xjson_object_set(i1, "sortText", xjson_new_string("0"));
     xjson_array_push(items, i1);
 
-    snprintf(detail, sizeof(detail), "%s.value: Json", enum_name);
-    XrJsonValue *i2 = make_completion_item("value", 10, detail);
-    xjson_object_set(i2, "sortText", xjson_new_string("1"));
-    xjson_array_push(items, i2);
-
     snprintf(detail, sizeof(detail), "%s.ordinal: int", enum_name);
     XrJsonValue *i3 = make_completion_item("ordinal", 10, detail);
-    xjson_object_set(i3, "sortText", xjson_new_string("2"));
+    xjson_object_set(i3, "sortText", xjson_new_string("1"));
     xjson_array_push(items, i3);
 
     snprintf(detail, sizeof(detail), "%s.toString(): string", enum_name);
     XrJsonValue *i4 = make_completion_item("toString", 2, detail);
-    xjson_object_set(i4, "sortText", xjson_new_string("3"));
+    xjson_object_set(i4, "sortText", xjson_new_string("2"));
     xjson_array_push(items, i4);
 
     return items;
@@ -500,8 +495,7 @@ static XrJsonValue *complete_stdlib_module(const char *prefix) {
     return items;
 }
 
-// Runtime global objects: Coro, CoroPool, Reflect, Type, ... (registered
-// in xanalyzer_builtins).
+// Runtime intrinsic modules: Coro and CoroPool (registered in xanalyzer_builtins).
 static XrJsonValue *complete_runtime_module(const char *prefix) {
     const XaBuiltinModule *rt_mod = xa_builtin_get_module_info(prefix);
     if (!rt_mod)

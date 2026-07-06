@@ -1459,8 +1459,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "addressOf",
-        .signature = "(ptr: RawPtr<uint8>): int",
-        .summary = "Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)",
+        .signature = "(ptr: RawPtr<unknown>): int",
+        .summary = "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)",
+    },
+    {
+        .name = "alignOf",
+        .signature = "(): int",
+        .summary = "Compile-time alignment in bytes of a statically laid out type T",
     },
     {
         .name = "alloc",
@@ -1523,6 +1528,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available",
     },
     {
+        .name = "offsetOf",
+        .signature = "(field: string): int",
+        .summary = "Compile-time byte offset of a field in a fixed-layout struct T",
+    },
+    {
         .name = "pageAlloc",
         .signature = "(bytes: int, prot?: int): RawMut<uint8>",
         .summary = "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree",
@@ -1546,6 +1556,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "set",
         .signature = "(dst: RawMut<uint8>, byte: int, n: int): ()",
         .summary = "Fill n bytes at dst with byte (memset)",
+    },
+    {
+        .name = "sizeOf",
+        .signature = "(): int",
+        .summary = "Compile-time size in bytes of a statically laid out type T",
     },
     {
         .name = "volatileLoad",
@@ -3294,31 +3309,37 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Simple enum\n"
             "```xray\n"
             "enum Color { Red, Green, Blue }\n"
-            "Color.Red.value     // 0\n"
-            "Color.Blue.value    // 2\n"
+            "\n"
+            "Color.Red.ordinal     // 0\n"
+            "Color.Blue.ordinal    // 2\n"
+            "Color.Red.name        // \"Red\"\n"
+            "Color.Red.toString()  // \"Color.Red\"\n"
             "\n"
             "enum HttpStatus {\n"
-            "    OK = 200,\n"
-            "    NotFound = 404,\n"
-            "    InternalError = 500,\n"
-            "}\n"
+            "    OK,\n"
+            "    NotFound,\n"
+            "    InternalError\n"
             "\n"
-            "enum Direction { North = \"N\", South = \"S\", East = \"E\", West = \"W\" }\n"
-            "enum Flag      { On = true, Off = false }\n"
-            "enum Pi        { Approximate = 3.14, Better = 3.14159 }\n"
+            "    fn code() -> int {\n"
+            "        return match (this) {\n"
+            "            HttpStatus.OK -> 200,\n"
+            "            HttpStatus.NotFound -> 404,\n"
+            "            HttpStatus.InternalError -> 500\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
             "```\n"
             "\n"
             "### Properties\n"
             "```xray\n"
             "Color.Red.name        // \"Red\"          variant name (string)\n"
-            "Color.Red.value       // 0              backing value\n"
-            "Color.Red.ordinal     // 0              declaration index (int, zero-based)\n"
+            "Color.Red.ordinal     // 0              declaration-order tag (int, zero-based)\n"
             "Color.Red.toString()  // \"Color.Red\"    \"<EnumName>.<VariantName>\" format\n"
             "```\n"
             "\n"
             "### Iteration\n"
             "```xray\n"
-            "for (c in Color) { print(c.name) }        // \"Red\" \"Green\" \"Blue\"\n"
+            "for (c in Color) { print(c.name) }        // compile error\n"
             "```\n"
             "\n"
             "### Pattern matching\n"
@@ -3333,13 +3354,11 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### ADT-style payload enum\n"
             "```xray\n"
-            "// positional payload\n"
             "enum Option<T> {\n"
             "    Some(T),\n"
             "    None,\n"
             "}\n"
             "\n"
-            "// named-field payload (recommended for readability)\n"
             "enum NetEvent {\n"
             "    Connected,\n"
             "    Disconnected(reason: string),\n"
@@ -3347,18 +3366,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "    Error(code: int, message: string),\n"
             "}\n"
             "\n"
-            "// state machine\n"
-            "enum ConnState {\n"
-            "    Idle,\n"
-            "    Connecting(retry: int),\n"
-            "    Connected(peer: string, since: int),\n"
-            "    Failed(reason: string),\n"
-            "}\n"
-            "\n"
-            "// AST nodes\n"
             "enum Expr {\n"
             "    Number(int),\n"
-            "    Binary(op: string, left: Expr, right: Expr),\n"
+            "    Binary(op: string, left: Box<Expr>, right: Box<Expr>),\n"
             "    Call(name: string, args: Array<Expr>),\n"
             "}\n"
             "```\n"
@@ -3524,12 +3534,13 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var result = identity<float>(0)            // 0 defaults to int; force float\n"
             "```\n"
             "\n"
-            "### Debug type names\n"
+            "### Type identity\n"
             "```xray\n"
             "class Container<T> {\n"
             "    items: Array<T>\n"
             "}\n"
             "var c = Container<int>()\n"
+            "print(c is Container<int>)     // true\n"
             "print(typename(c))             // \"Container<int>\" when type names are enabled\n"
             "```\n"
             "",
@@ -4597,7 +4608,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.PROT_NONE` | `: int` | No access protection for mem.pageAlloc/pageProtect |\n"
             "| `mem.PROT_READ` | `: int` | Readable page protection bit for mem.pageAlloc/pageProtect |\n"
             "| `mem.PROT_WRITE` | `: int` | Writable page protection bit for mem.pageAlloc/pageProtect |\n"
-            "| `mem.addressOf` | `(ptr: RawPtr<uint8>): int` | Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress) |\n"
+            "| `mem.addressOf` | `(ptr: RawPtr<unknown>): int` | Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress) |\n"
+            "| `mem.alignOf` | `(): int` | Compile-time alignment in bytes of a statically laid out type T |\n"
             "| `mem.alloc` | `(n: int): Buffer` | Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped |\n"
             "| `mem.allocAligned` | `(n: int, align: int): Buffer` | Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*)) |\n"
             "| `mem.allocZeroed` | `(n: int): Buffer` | Allocate n zero-initialized bytes as a managed Buffer |\n"
@@ -4610,11 +4622,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.fromAddress` | `(addr: int): RawMut<uint8>` | Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.move` | `(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
             "| `mem.nontemporalStore` | `(ptr: RawMut<uint8>, v: int, size: int): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
+            "| `mem.offsetOf` | `(field: string): int` | Compile-time byte offset of a field in a fixed-layout struct T |\n"
             "| `mem.pageAlloc` | `(bytes: int, prot?: int): RawMut<uint8>` | Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
             "| `mem.pageFree` | `(ptr: RawMut<uint8>, bytes: int): bool` | Release anonymous pages from mem.pageAlloc; returns false on OS failure |\n"
             "| `mem.pageProtect` | `(ptr: RawMut<uint8>, bytes: int, prot: int): bool` | Change anonymous page protection bits; returns false on OS failure |\n"
             "| `mem.prefetch` | `(ptr: RawPtr<uint8>, rw: int): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
             "| `mem.set` | `(dst: RawMut<uint8>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
+            "| `mem.sizeOf` | `(): int` | Compile-time size in bytes of a statically laid out type T |\n"
             "| `mem.volatileLoad` | `(ptr: RawPtr<uint8>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "| `mem.volatileStore` | `(ptr: RawMut<uint8>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "",
@@ -5104,7 +5118,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),
     },
 };
-XR_DATADEF const int xmcp_generated_stdlib_count = 29;
+XR_DATADEF const int xmcp_generated_stdlib_count = 28;
 
 XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "# Xray Language Cheatsheet\n"
@@ -5259,18 +5273,25 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "```\n"
     "```xray\n"
     "enum Color { Red, Green, Blue }\n"
-    "Color.Red.value     // 0\n"
-    "Color.Blue.value    // 2\n"
+    "\n"
+    "Color.Red.ordinal     // 0\n"
+    "Color.Blue.ordinal    // 2\n"
+    "Color.Red.name        // \"Red\"\n"
+    "Color.Red.toString()  // \"Color.Red\"\n"
     "\n"
     "enum HttpStatus {\n"
-    "    OK = 200,\n"
-    "    NotFound = 404,\n"
-    "    InternalError = 500,\n"
-    "}\n"
+    "    OK,\n"
+    "    NotFound,\n"
+    "    InternalError\n"
     "\n"
-    "enum Direction { North = \"N\", South = \"S\", East = \"E\", West = \"W\" }\n"
-    "enum Flag      { On = true, Off = false }\n"
-    "enum Pi        { Approximate = 3.14, Better = 3.14159 }\n"
+    "    fn code() -> int {\n"
+    "        return match (this) {\n"
+    "            HttpStatus.OK -> 200,\n"
+    "            HttpStatus.NotFound -> 404,\n"
+    "            HttpStatus.InternalError -> 500\n"
+    "        }\n"
+    "    }\n"
+    "}\n"
     "```\n"
     "\n"
     "## Collections\n"
@@ -5294,7 +5315,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "// Record/Json object literal: identifier or string key + colon ':'\n"
     "var data: Json = { name: \"Alice\", tags: [\"a\", \"b\"], age: 30 }\n"
     "var user = { name: \"Bob\", age: 25 }       // default type is sealed Record\n"
-    "typeof(user)                              // \"Record\"\n"
+    "typename(user)                            // \"Record\"\n"
     "data.name              // type: Json (field access returns Json)\n"
     "data[\"name\"]           // equivalent\n"
     "\n"

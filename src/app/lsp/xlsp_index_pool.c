@@ -128,7 +128,8 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
         }
 
         case AST_CLASS_DECL:
-        case AST_STRUCT_DECL: {
+        case AST_STRUCT_DECL:
+        case AST_UNION_DECL: {
             const char *name = node->as.class_decl.name;
             if (name) {
                 XrLspIndexSymbol *sym =

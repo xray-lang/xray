@@ -7,34 +7,41 @@ enum Color {
 }
 
 enum Direction {
-    North = "N",
-    East = "E",
+    North,
+    East
+
+    fn symbol() -> string {
+        return match (this) {
+            Direction.North -> "N",
+            Direction.East -> "E"
+        }
+    }
 }
 
 enum HttpStatus {
-    OK = 200,
-    NotFound = 404,
+    OK,
+    NotFound
+
+    fn code() -> int {
+        return match (this) {
+            HttpStatus.OK -> 200,
+            HttpStatus.NotFound -> 404
+        }
+    }
 }
 
 var colors = [Color.Red, Color.Green, Color.Blue]
 print(colors.join("|"))
 
 print(Color.Red.name)
-print(Color.Green.value)
+print(Color.Green.ordinal)
 print(Color.Blue.ordinal)
 print(Color.Red.toString())
-print(Color.memberCount)
 
-var middle = Color.getMember(1)
+var middle = Color.Green
 print(middle == Color.Green)
-print(middle.name + ":" + string(middle.value) + ":" + string(middle.ordinal))
+print(middle.name + ":" + string(middle.ordinal))
 
-print(Direction.North.value)
+print(Direction.North.symbol())
 print(Direction.North.toString())
-print(HttpStatus.NotFound.value)
-
-var names: Array<string> = []
-for (c in Color) {
-    names.push(c.name)
-}
-print(names.join(","))
+print(HttpStatus.NotFound.code())

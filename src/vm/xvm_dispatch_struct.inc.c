@@ -117,7 +117,7 @@ vmcase(OP_NEW_STRUCT) {
     XR_DCHECK(layout != NULL, "OP_NEW_STRUCT requires struct_layout");
     uint16_t layout_id = xr_vm_struct_layout_register(&isolate->vm, layout);
     if (XR_UNLIKELY(layout_id == 0 && xr_struct_layout_is_headerless(layout))) {
-        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to register @repr(C) struct layout");
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to register fixed-layout struct layout");
     }
     XR_DCHECK(vm_ctx->struct_areas && vm_ctx->struct_areas[VM_FRAME_COUNT - 1],
               "OP_NEW_STRUCT requires allocated struct_area");
@@ -138,52 +138,7 @@ vmcase(OP_NEW_STRUCT) {
                 continue;
             XrStructFieldLayout *fl = &layout->fields[fi];
             uint8_t *fp = payload + fl->offset;
-            switch (fl->native_type) {
-                case XR_NATIVE_I64:
-                    *(int64_t *) fp = XR_TO_INT(dv);
-                    break;
-                case XR_NATIVE_U64:
-                    *(uint64_t *) fp = (uint64_t) XR_TO_INT(dv);
-                    break;
-                case XR_NATIVE_F64:
-                    *(double *) fp = XR_TO_FLOAT(dv);
-                    break;
-                case XR_NATIVE_BOOL:
-                    *(uint8_t *) fp = (uint8_t) dv.i;
-                    break;
-                case XR_NATIVE_I32:
-                    *(int32_t *) fp = (int32_t) XR_TO_INT(dv);
-                    break;
-                case XR_NATIVE_U32:
-                    *(uint32_t *) fp = (uint32_t) XR_TO_INT(dv);
-                    break;
-                case XR_NATIVE_I16:
-                    *(int16_t *) fp = (int16_t) XR_TO_INT(dv);
-                    break;
-                case XR_NATIVE_U16:
-                    *(uint16_t *) fp = (uint16_t) XR_TO_INT(dv);
-                    break;
-                case XR_NATIVE_I8:
-                    *(int8_t *) fp = (int8_t) XR_TO_INT(dv);
-                    break;
-                case XR_NATIVE_U8:
-                    *(uint8_t *) fp = (uint8_t) XR_TO_INT(dv);
-                    break;
-                case XR_NATIVE_F32:
-                    *(float *) fp = (float) XR_TO_FLOAT(dv);
-                    break;
-                case XR_NATIVE_STRING:
-                    *(XrString **) fp = (XrString *) dv.ptr;
-                    break;
-                case XR_NATIVE_ARRAY_REF:
-                case XR_NATIVE_MAP_REF:
-                case XR_NATIVE_SET_REF:
-                case XR_NATIVE_VALUE:
-                    *(XrValue *) fp = dv;
-                    break;
-                default:
-                    break;
-            }
+            (void) xr_vm_struct_write_field_value(isolate, fp, fl, dv);
         }
     }
 
@@ -206,66 +161,8 @@ vmcase(OP_STRUCT_GET) {
     }
     XrStructFieldLayout *field = &layout->fields[c];
     uint8_t *fp = payload + field->offset;
-
-    switch (field->native_type) {
-        case XR_NATIVE_I64:
-            R(a) = XR_FROM_INT(*(int64_t *) fp);
-            break;
-        case XR_NATIVE_U64:
-            R(a) = XR_FROM_INT((int64_t) *(uint64_t *) fp);
-            break;
-        case XR_NATIVE_F64:
-            R(a) = XR_FROM_FLOAT(*(double *) fp);
-            break;
-        case XR_NATIVE_BOOL:
-            R(a).descriptor = 0;
-            R(a).i = *(uint8_t *) fp ? 1 : 0;
-            R(a).tag = XR_TAG_BOOL;
-            break;
-        case XR_NATIVE_I32:
-            R(a) = XR_FROM_INT((int64_t) *(int32_t *) fp);
-            break;
-        case XR_NATIVE_U32:
-            R(a) = XR_FROM_INT((int64_t) *(uint32_t *) fp);
-            break;
-        case XR_NATIVE_I16:
-            R(a) = XR_FROM_INT((int64_t) *(int16_t *) fp);
-            break;
-        case XR_NATIVE_U16:
-            R(a) = XR_FROM_INT((int64_t) *(uint16_t *) fp);
-            break;
-        case XR_NATIVE_I8:
-            R(a) = XR_FROM_INT((int64_t) *(int8_t *) fp);
-            break;
-        case XR_NATIVE_U8:
-            R(a) = XR_FROM_INT((int64_t) *(uint8_t *) fp);
-            break;
-        case XR_NATIVE_F32:
-            R(a) = XR_FROM_FLOAT((double) *(float *) fp);
-            break;
-        case XR_NATIVE_STRING: {
-            XrString *s = *(XrString **) fp;
-            R(a) = s ? XR_FROM_STR(s) : xr_null();
-            break;
-        }
-        case XR_NATIVE_STRUCT:
-            if (field->sub_layout && field->sub_layout_id == 0)
-                field->sub_layout_id =
-                    xr_vm_struct_layout_register(&isolate->vm, field->sub_layout);
-            R(a) = xr_struct_ref(fp, field->sub_layout_id);
-            break;
-        case XR_NATIVE_ARRAY:
-            R(a) = xr_array_ref(fp, field->elem_native_type, field->elem_count);
-            break;
-        case XR_NATIVE_ARRAY_REF:
-        case XR_NATIVE_MAP_REF:
-        case XR_NATIVE_SET_REF:
-        case XR_NATIVE_VALUE:
-            R(a) = *(XrValue *) fp;
-            break;
-        default:
-            R(a) = xr_null();
-            break;
+    if (!xr_vm_struct_read_field_value(isolate, fp, field, &R(a))) {
+        R(a) = xr_null();
     }
     vmbreak;
 }
@@ -286,120 +183,8 @@ vmcase(OP_STRUCT_SET) {
     XrStructFieldLayout *field = &layout->fields[b];
     uint8_t *fp = payload + field->offset;
     XrValue src = R(c);
-
-    switch (field->native_type) {
-        case XR_NATIVE_I64:
-            *(int64_t *) fp = XR_TO_INT(src);
-            break;
-        case XR_NATIVE_U64:
-            *(uint64_t *) fp = (uint64_t) XR_TO_INT(src);
-            break;
-        case XR_NATIVE_F64:
-            *(double *) fp = XR_TO_FLOAT(src);
-            break;
-        case XR_NATIVE_BOOL:
-            *(uint8_t *) fp = (uint8_t) src.i;
-            break;
-        case XR_NATIVE_I32:
-            *(int32_t *) fp = (int32_t) XR_TO_INT(src);
-            break;
-        case XR_NATIVE_U32:
-            *(uint32_t *) fp = (uint32_t) XR_TO_INT(src);
-            break;
-        case XR_NATIVE_I16:
-            *(int16_t *) fp = (int16_t) XR_TO_INT(src);
-            break;
-        case XR_NATIVE_U16:
-            *(uint16_t *) fp = (uint16_t) XR_TO_INT(src);
-            break;
-        case XR_NATIVE_I8:
-            *(int8_t *) fp = (int8_t) XR_TO_INT(src);
-            break;
-        case XR_NATIVE_U8:
-            *(uint8_t *) fp = (uint8_t) XR_TO_INT(src);
-            break;
-        case XR_NATIVE_F32:
-            *(float *) fp = (float) XR_TO_FLOAT(src);
-            break;
-        case XR_NATIVE_STRING: {
-            *(XrString **) fp = (XrString *) src.ptr;
-            break;
-        }
-        case XR_NATIVE_STRUCT: {
-            if (!vm_struct_write_field_bytes(isolate, fp, field, src)) {
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                                 "cannot assign non-struct value to nested struct field");
-            }
-            break;
-        }
-        case XR_NATIVE_ARRAY: {
-            // Copy from heap Array into inline storage
-            if (XR_IS_ARRAY(src)) {
-                XrArray *arr = (XrArray *) src.ptr;
-                int count = arr->length < field->elem_count ? arr->length : field->elem_count;
-                uint8_t es = xr_native_type_size(field->elem_native_type);
-                for (int idx = 0; idx < count; idx++) {
-                    XrValue elem = xr_array_get(arr, idx);
-                    uint8_t *ep = fp + idx * es;
-                    switch (field->elem_native_type) {
-                        case XR_NATIVE_I64:
-                            *(int64_t *) ep = XR_TO_INT(elem);
-                            break;
-                        case XR_NATIVE_U64:
-                            *(uint64_t *) ep = (uint64_t) XR_TO_INT(elem);
-                            break;
-                        case XR_NATIVE_F64:
-                            *(double *) ep = XR_TO_FLOAT(elem);
-                            break;
-                        case XR_NATIVE_BOOL:
-                            *(uint8_t *) ep = (uint8_t) elem.i;
-                            break;
-                        case XR_NATIVE_I32:
-                            *(int32_t *) ep = (int32_t) XR_TO_INT(elem);
-                            break;
-                        case XR_NATIVE_U32:
-                            *(uint32_t *) ep = (uint32_t) XR_TO_INT(elem);
-                            break;
-                        case XR_NATIVE_I16:
-                            *(int16_t *) ep = (int16_t) XR_TO_INT(elem);
-                            break;
-                        case XR_NATIVE_U16:
-                            *(uint16_t *) ep = (uint16_t) XR_TO_INT(elem);
-                            break;
-                        case XR_NATIVE_I8:
-                            *(int8_t *) ep = (int8_t) XR_TO_INT(elem);
-                            break;
-                        case XR_NATIVE_U8:
-                            *(uint8_t *) ep = (uint8_t) XR_TO_INT(elem);
-                            break;
-                        case XR_NATIVE_F32:
-                            *(float *) ep = (float) XR_TO_FLOAT(elem);
-                            break;
-                        case XR_NATIVE_VALUE:
-                            *(XrValue *) ep = elem;
-                            break;
-                        default:
-                            break;
-                    }
-                }
-                // Zero remaining elements if array shorter than field
-                if (count < field->elem_count) {
-                    memset(fp + count * es, 0, (field->elem_count - count) * es);
-                }
-            } else if (XR_IS_ARRAY_REF(src)) {
-                // Copy from another struct's array_ref
-                memcpy(fp, src.ptr, field->size);
-            }
-            break;
-        }
-        case XR_NATIVE_ARRAY_REF:
-        case XR_NATIVE_MAP_REF:
-        case XR_NATIVE_SET_REF:
-        case XR_NATIVE_VALUE:
-            *(XrValue *) fp = src;
-            break;
-        default:
-            break;
+    if (!xr_vm_struct_write_field_value(isolate, fp, field, src)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
     }
     vmbreak;
 }

@@ -91,13 +91,13 @@ fn test_parse_big_numbers() {
     // parse_number_should_parse_big_numbers
     // Very large numbers overflow to Infinity (float) — just verify they parse without crash
     var v1 = Json.parse("9999999999999999999999999999999999999999999999912345678901234567")
-    assert_eq(typeof(v1), "float")
+    assert_eq(typename(v1), "float")
 
     var v2 = Json.parse("9999999999999999999999999999999999999999999999912345678901234567E10")
-    assert_eq(typeof(v2), "float")
+    assert_eq(typename(v2), "float")
 
     var v3 = Json.parse("999999999999999999999999999999999999999999999991234567890.1234567")
-    assert_eq(typeof(v3), "float")
+    assert_eq(typename(v3), "float")
     assert_true(v3 > 0.0)
 }
 

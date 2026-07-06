@@ -17,18 +17,18 @@
 #include "../../base/xmalloc.h"
 #include <string.h>
 
-// Helper: extract type-name string from a string literal.
-// Used for typeof(x) == "string" narrowing.
-static const char *get_string_literal(AstNode *node) {
-    if (!node)
-        return NULL;
-    if (node->type == AST_LITERAL_STRING)
-        return node->as.literal.raw_value.string_val;
-    return NULL;
+static int type_member_to_tid(AstNode *node) {
+    if (!node || node->type != AST_MEMBER_ACCESS)
+        return -1;
+    MemberAccessNode *ma = &node->as.member_access;
+    if (!ma->object || ma->object->type != AST_VARIABLE || !ma->object->as.variable.name ||
+        strcmp(ma->object->as.variable.name, "Type") != 0)
+        return -1;
+    return xr_type_from_name(ma->name);
 }
 
 // Apply type narrowing based on condition expression
-// Analyzes common patterns: x != null, x == null, typeof x == "type", truthiness
+    // Analyzes common patterns: x != null, x == null, typeof(x) == Type.xxx, truthiness
 static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, XrType *base_type,
                                          bool assume_true) {
     if (!expr || !var_name || !base_type)
@@ -56,7 +56,7 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
     }
 
     // Pattern: x == null, x != null
-    // Pattern: typeof x == "type"
+    // Pattern: typeof(x) == Type.xxx
     if (type == AST_BINARY_EQ || type == AST_BINARY_NE) {
         AstNode *left = node->as.binary.left;
         AstNode *right = node->as.binary.right;
@@ -75,10 +75,10 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
             return xa_narrow_by_null_check(base_type, is_equal, assume_true);
         }
 
-        // Check for typeof pattern: typeof(x) == "string"
+        // Check for typeof pattern: typeof(x) == Type.xxx
         // In xray, typeof is a builtin function call: AST_CALL_EXPR
         AstNode *typeof_operand = NULL;
-        const char *type_name = NULL;
+        int type_id = -1;
 
         // Check left side for typeof(x) call
         if (left && left->type == AST_CALL_EXPR && left->as.call_expr.callee &&
@@ -87,7 +87,7 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
             strcmp(left->as.call_expr.callee->as.variable.name, "typeof") == 0 &&
             left->as.call_expr.arg_count == 1) {
             typeof_operand = left->as.call_expr.arguments[0];
-            type_name = get_string_literal(right);
+            type_id = type_member_to_tid(right);
         }
         // Check right side for typeof(x) call
         else if (right && right->type == AST_CALL_EXPR && right->as.call_expr.callee &&
@@ -96,16 +96,16 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
                  strcmp(right->as.call_expr.callee->as.variable.name, "typeof") == 0 &&
                  right->as.call_expr.arg_count == 1) {
             typeof_operand = right->as.call_expr.arguments[0];
-            type_name = get_string_literal(left);
+            type_id = type_member_to_tid(left);
         }
 
-        if (typeof_operand && type_name && typeof_operand->type == AST_VARIABLE &&
+        if (typeof_operand && type_id >= 0 && typeof_operand->type == AST_VARIABLE &&
             typeof_operand->as.variable.name &&
             strcmp(typeof_operand->as.variable.name, var_name) == 0) {
-            // typeof(x) == "type" with assume_true => narrow to type
-            // typeof(x) != "type" with assume_true => exclude type
+            // typeof(x) == Type.xxx with assume_true => narrow to type
+            // typeof(x) != Type.xxx with assume_true => exclude type
             bool effective_true = (is_equal == assume_true);
-            return xa_narrow_by_typeof(base_type, type_name, effective_true);
+            return xa_narrow_by_typeid(base_type, (XrTypeId) type_id, effective_true);
         }
     }
 
@@ -581,30 +581,53 @@ XrType *xa_flow_get_type_of_reference(XaFlowBuilder *builder, const char *name,
     return get_type_at_flow_node(builder, name, declared_type, flow_node, cache, 0);
 }
 
-// Narrow by typeof
-XrType *xa_narrow_by_typeof(XrType *type, const char *type_name, bool assume_true) {
-    if (!type || !type_name)
+// Narrow by typeof TypeId
+XrType *xa_narrow_by_typeid(XrType *type, XrTypeId type_id, bool assume_true) {
+    if (!type)
         return type;
 
-    // Use -1 as sentinel since XR_KIND_INT == 0
     int target_kind = -1;
-    if (strcmp(type_name, TYPE_NAME_INT64) == 0 || strcmp(type_name, TYPE_NAME_INT) == 0) {
-        target_kind = XR_KIND_INT;
-    } else if (strcmp(type_name, TYPE_NAME_FLOAT64) == 0 ||
-               strcmp(type_name, TYPE_NAME_FLOAT) == 0) {
-        target_kind = XR_KIND_FLOAT;
-    } else if (strcmp(type_name, TYPE_NAME_STRING) == 0) {
-        target_kind = XR_KIND_STRING;
-    } else if (strcmp(type_name, TYPE_NAME_BOOL) == 0) {
-        target_kind = XR_KIND_BOOL;
-    } else if (strcmp(type_name, TYPE_NAME_FUNCTION) == 0) {
-        target_kind = XR_KIND_FUNCTION;
-    } else if (strcmp(type_name, TYPE_NAME_ARRAY) == 0) {
-        target_kind = XR_KIND_ARRAY;
-    } else if (strcmp(type_name, TYPE_NAME_MAP) == 0) {
-        target_kind = XR_KIND_MAP;
-    } else if (strcmp(type_name, TYPE_NAME_NULL) == 0) {
-        target_kind = XR_KIND_NULL;
+    switch (type_id) {
+        case XR_TID_INT8:
+        case XR_TID_UINT8:
+        case XR_TID_INT16:
+        case XR_TID_UINT16:
+        case XR_TID_INT32:
+        case XR_TID_UINT32:
+        case XR_TID_INT:
+        case XR_TID_UINT64:
+            target_kind = XR_KIND_INT;
+            break;
+        case XR_TID_FLOAT32:
+        case XR_TID_FLOAT:
+            target_kind = XR_KIND_FLOAT;
+            break;
+        case XR_TID_STRING:
+            target_kind = XR_KIND_STRING;
+            break;
+        case XR_TID_BOOL:
+            target_kind = XR_KIND_BOOL;
+            break;
+        case XR_TID_CHAR:
+            target_kind = XR_KIND_CHAR;
+            break;
+        case XR_TID_FUNCTION:
+            target_kind = XR_KIND_FUNCTION;
+            break;
+        case XR_TID_ARRAY:
+            target_kind = XR_KIND_ARRAY;
+            break;
+        case XR_TID_MAP:
+            target_kind = XR_KIND_MAP;
+            break;
+        case XR_TID_SET:
+            target_kind = XR_KIND_SET;
+            break;
+        case XR_TID_NULL:
+            target_kind = XR_KIND_NULL;
+            break;
+        default:
+            break;
     }
 
     if (target_kind < 0)
@@ -615,6 +638,10 @@ XrType *xa_narrow_by_typeof(XrType *type, const char *type_name, bool assume_tru
     } else {
         return xr_type_exclude(NULL, type, (XrTypeKind) target_kind);
     }
+}
+
+XrType *xa_narrow_by_typeof(XrType *type, const char *type_name, bool assume_true) {
+    return xa_narrow_by_typeid(type, (XrTypeId) xr_type_from_name(type_name), assume_true);
 }
 
 // Narrow by null check

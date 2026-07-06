@@ -25,8 +25,6 @@
 #include "../xisolate_api.h"
 #include "../object/xnative_type.h"
 #include "xclass_system.h"
-#include "xreflect_registry.h"
-#include "xreflect_cache.h"
 #include "../value/xvalue.h"
 #include "../symbol/xsymbol_table.h"
 #include <stdio.h>
@@ -133,7 +131,7 @@ XrClass *xr_class_new(XrVMRuntime *X, const char *name, XrClass *super) {
     // output of "empty builder + finalize", so we funnel everything
     // through the same code path.
     //
-    // Callers remain responsible for reflection registration; xr_core_init
+    // Callers remain responsible for type registration; xr_core_init
     // batches it for the builtin classes and xr_enum_type_new registers
     // each enum class right after construction.
     XrClassBuilder *builder = xr_class_builder_new(X, name, super);
@@ -690,12 +688,6 @@ void xr_class_free(XrClass *cls) {
     if (cls->abstract_methods) {
         xr_free(cls->abstract_methods);
         cls->abstract_methods = NULL;
-    }
-
-    // Free reflection cache
-    if (cls->reflect_cache) {
-        xr_reflect_cache_free(cls->reflect_cache);
-        cls->reflect_cache = NULL;
     }
 
     // Free secondary supers hash (only allocated when depth >= 8).

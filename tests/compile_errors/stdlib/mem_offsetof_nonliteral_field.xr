@@ -1,6 +1,5 @@
 import mem
 
-@repr(C)
 struct Header {
     x: uint8
 }

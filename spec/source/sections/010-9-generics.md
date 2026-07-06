@@ -126,16 +126,16 @@ var result = identity<float>(0)            // 0 默认 int，强制 float
 **实现策略**：构建期 monomorphization（单态化），按泛型种类采用不同表示策略。
 
 - **函数泛型**：编译器收集具体调用点，按运行时表示做 rep-sharing。当前表示组为 I64 / F64 / PTR / BOOL，同一函数最多生成 4 个表示版本；同为 PTR 表示的引用类型共享一份函数体，避免因引用类型数量导致代码体积爆炸。
-- **class / struct 泛型**：逐具体类型组合完整单态化，按 mangled name 去重，不按 PTR 表示合并。`Box<string>` 与 `Box<MyClass>` 即使同为 PTR 表示也保留不同类型身份，以保证字段布局、反射与名义类型语义精确。
+- **class / struct 泛型**：逐具体类型组合完整单态化，按 mangled name 去重，不按 PTR 表示合并。`Box<string>` 与 `Box<MyClass>` 即使同为 PTR 表示也保留不同类型身份，以保证字段布局、调试类型名与名义类型语义精确。
 - 名字修饰（name mangling）：`identity<int>` → `identity$i64`，`Pair<string, int>` → `Pair$str$i64`。
 - 单态化实例总数受 `XR_MONO_MAX_INSTANCES = 256` 保护，防止递归/组合爆炸。
-- 编译期严格类型检查保证安全；运行时保留具体类型参数信息供 `Reflect.typeOf` 使用。
+- 编译期严格类型检查保证安全；冷路径类型名元数据可在启用 names/debug profile 时保留具体类型参数显示信息。
 
 > 真值源：`src/frontend/analyzer/xanalyzer_mono.c`（单态化 pass）、`xanalyzer_mono.h`（API）。
 
 **性能影响**：
 - 函数泛型 rep-sharing 让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path，同时让引用类型共享 PTR 版本。
-- class / struct 泛型不做 rep-sharing 会增加代码和元数据体积（大致按“类型组合数 × 类体积”增长），但换来精确布局、反射保真和按类型特化；未来体积敏感场景可考虑对纯 PTR class 泛型增加显式 opt-in rep-sharing。
+- class / struct 泛型不做 rep-sharing 会增加代码和元数据体积（大致按“类型组合数 × 类体积”增长），但换来精确布局、调试类型名保真和按类型特化；未来体积敏感场景可考虑对纯 PTR class 泛型增加显式 opt-in rep-sharing。
 - 内置特化容器（`Array<int>`、`Bytes`）进一步避免装箱开销。
 - 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
 
@@ -183,19 +183,20 @@ describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字�
 - 容器类型：**不变**（`Array<Dog>` 不是 `Array<Animal>` 的子类型）。
 - 函数类型：参数逆变、返回值协变（标准规则）。
 
-### 9.7 泛型与运行时反射
+### 9.7 泛型与类型身份
 
-由于 monomorphization，每个具体实例化在运行时都有独立的类/函数定义，且保留了类型参数信息：
+由于 monomorphization，每个具体实例化都有独立的类/函数定义。运行时类型判断使用名义身份，调试输出通过 `typename` 的冷路径名字表提供：
 
-```xray @id=generics-reflection
+```xray @id=generics-type-identity
 class Container<T> {
     items: Array<T>
 }
 var c = Container<int>()
-print(Reflect.typeOf(c))       // "Container<int>"
+print(c is Container<int>)     // true
+print(typename(c))             // "Container<int>" when type names are enabled
 ```
 
-对具体值的类型检查使用 `is` / `as`。
+结构化字段/方法元数据不会由默认运行时自动提供；需要 inspect/serialization 等能力时应使用显式 derive 或编译期生成。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -325,16 +326,16 @@ var result = identity<float>(0)            // 0 defaults to int; force float
 **Implementation strategy**: build-time monomorphization, with different representation policies for different generic kinds.
 
 - **Generic functions**: the compiler collects concrete call sites and applies rep-sharing by runtime representation. The current representation groups are I64 / F64 / PTR / BOOL, so one generic function produces at most four representation versions. Reference types that share the PTR representation reuse one function body, avoiding code-size growth proportional to the number of reference types.
-- **Generic classes / structs**: each concrete type-argument combination is fully monomorphized and deduplicated by mangled name, not by PTR representation. `Box<string>` and `Box<MyClass>` remain distinct even though both use PTR representation, preserving exact type identity, field layout, and reflection semantics.
+- **Generic classes / structs**: each concrete type-argument combination is fully monomorphized and deduplicated by mangled name, not by PTR representation. `Box<string>` and `Box<MyClass>` remain distinct even though both use PTR representation, preserving exact type identity, field layout, and debug type-name semantics.
 - Name mangling: `identity<int>` → `identity$i64`, `Pair<string, int>` → `Pair$str$i64`.
 - The total number of monomorphization instances is capped by `XR_MONO_MAX_INSTANCES = 256` to prevent recursive or combinatorial explosion.
-- Strict compile-time type checking ensures safety; concrete type-parameter information is retained at runtime for `Reflect.typeOf`.
+- Strict compile-time type checking ensures safety; cold-path type-name metadata may retain concrete type-parameter display information when the names/debug profile enables it.
 
 > Source of truth: `src/frontend/analyzer/xanalyzer_mono.c` (monomorphization pass), `xanalyzer_mono.h` (API).
 
 **Performance impact**:
 - Function-level rep-sharing lets AOT generate unboxed fast paths for I64 / F64 / BOOL value representations while sharing one PTR version for reference types.
-- Generic classes / structs do not use rep-sharing, so code and metadata size grow roughly with "type combinations x class body size"; this buys exact layout, faithful reflection, and per-type specialization. A future size-sensitive mode may add explicit opt-in rep-sharing for pure-PTR class generics.
+- Generic classes / structs do not use rep-sharing, so code and metadata size grow roughly with "type combinations x class body size"; this buys exact layout, faithful debug type names, and per-type specialization. A future size-sensitive mode may add explicit opt-in rep-sharing for pure-PTR class generics.
 - Built-in specialized containers (`Array<int>`, `Bytes`) further avoid boxing overhead.
 - Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
 
@@ -382,17 +383,18 @@ Explicit variance annotations (`out T` / `in T`) are not currently supported. De
 - Container types: **invariant** (`Array<Dog>` is not a subtype of `Array<Animal>`).
 - Function types: parameters contravariant, return values covariant (the standard rule).
 
-### 9.7 Generics and Runtime Reflection
+### 9.7 Generics and Type Identity
 
-Because of monomorphization, every concrete instantiation has its own class/function definition at runtime, with type-parameter information retained:
+Because of monomorphization, every concrete instantiation has its own class/function definition. Runtime checks use nominal identity, and debug output goes through `typename`'s cold-path name table:
 
-```xray @id=generics-reflection
+```xray @id=generics-type-identity
 class Container<T> {
     items: Array<T>
 }
 var c = Container<int>()
-print(Reflect.typeOf(c))       // "Container<int>"
+print(c is Container<int>)     // true
+print(typename(c))             // "Container<int>" when type names are enabled
 ```
 
-Type checks on concrete values use `is` / `as`.
+Structured field/method metadata is not provided automatically by the default runtime; use explicit derive or compile-time generation for inspect/serialization use cases.
 <!-- /xr-spec:en -->

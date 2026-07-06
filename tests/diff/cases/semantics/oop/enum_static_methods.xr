@@ -30,16 +30,19 @@ enum Color {
     }
 }
 
-enum Code : int {
-    Ok = 200,
-    Err = 500
+enum Code {
+    Ok,
+    Err
 
     static fn ok() -> Code {
         return Code.Ok
     }
 
     fn code() -> int {
-        return this.value
+        return match (this) {
+            Code.Ok -> 200,
+            Code.Err -> 500
+        }
     }
 }
 

@@ -132,7 +132,6 @@ static bool is_expression_node(AstNodeType t) {
         case AST_SUPER_CALL:
         /* Enum */
         case AST_ENUM_ACCESS:
-        case AST_ENUM_CONVERT:
         case AST_ENUM_INDEX:
         /* Coroutine */
         case AST_GO_EXPR:
@@ -414,10 +413,6 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
         case AST_ENUM_DECL:
             for (int i = 0; i < node->as.enum_decl.member_count; i++)
                 check_node(ctx, node->as.enum_decl.members[i]);
-            break;
-
-        case AST_ENUM_CONVERT:
-            check_node(ctx, node->as.enum_convert.value_expr);
             break;
 
         case AST_ENUM_INDEX:

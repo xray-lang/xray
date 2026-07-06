@@ -5,13 +5,11 @@ struct Sample {
     byte: uint8
 }
 
-@repr(C)
 struct CPoint {
     x: int32
     y: int32
 }
 
-@repr(C)
 struct CBox {
     p: CPoint
     tag: uint8
@@ -27,7 +25,7 @@ fn sample_score() -> int {
     return 0
 }
 
-fn c_repr_score() -> int {
+fn fixed_layout_score() -> int {
     var p = CPoint{x: 10, y: 20}
     p.x = p.x + 2
 
@@ -38,4 +36,4 @@ fn c_repr_score() -> int {
 }
 
 print(sample_score())
-print(c_repr_score())
+print(fixed_layout_score())

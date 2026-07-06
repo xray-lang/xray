@@ -17,9 +17,9 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 1. **类型推断**：变量声明几乎不用写类型；分析器从初始值/上下文推导。
 2. **Nullable 分离**：`T` 永不为 `null`；`T?` 是 `T | null` 的语法糖。
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
-4. **Generic reified**：泛型类型参数运行时可反射。
+4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
 5. **Structural Json + Nominal class**：Json 对象按字段结构兼容（duck typing），class 按名义兼容。
-6. **运行时反射**：`typeof` / `Reflect.*` API。
+6. **最小类型身份**：`typeof` / `typename` / `is` / `as`；默认没有运行时 `Reflect` 模块。
 
 ### 2.2 类型分类
 
@@ -118,7 +118,7 @@ if (!s.isEmpty()) { }    // OK
 var a: char = 'a'
 var zh = '中'
 var smile = '\u{1F600}'
-print(typeof(a))          // "char"
+print(typename(a))        // "char"
 print(int(smile))         // 128512
 ```
 
@@ -291,7 +291,7 @@ var init = Bytes([72, 101, 108, 108, 111])
 // Record/Json 对象字面量：标识符或字符串 key + 冒号 ':'
 var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
 var user = { name: "Bob", age: 25 }       // 默认类型为 sealed Record
-typeof(user)                              // "Record"
+typename(user)                            // "Record"
 data.name              // 类型: Json（字段访问返回 Json）
 data["name"]           // 等价
 
@@ -529,21 +529,18 @@ typename(value)   // 返回类型名字符串
 `Type.Array`、`Type.Map`、`Type.Set`、`Type.Channel`、`Type.Json`、
 `Type.function`、`Type.class`、`Type.struct`、`Type.enum`、`Type.module`、`Type.bigint`、...
 
-完整列表见 `stdlib/types/enum.xr` / `src/runtime/value/xtype.h`。
+完整列表见 `src/runtime/value/xtype_names.h` 中的 `XrTypeId`。
 
-### 2.12 运行时反射
+### 2.12 元数据与类型身份边界
 
-`Reflect` 模块（内置）：
+Xray 默认只保留最小类型身份层：
 
-```xray
-Reflect.getType(obj)        // 获取类型信息（Json）
-Reflect.typeOf(obj)         // 获取类型名（string）
-Reflect.isInstance(obj, cls)// 是否某类实例
-Reflect.fieldCount(obj)     // 字段数量
-Reflect.getAllTypes()       // 所有已注册类型
-```
+- `typeof(x)` 返回稳定的 `Type` / `TypeId`，适合分支、`match` 和 analyzer narrowing。
+- `typename(x)` 返回调试/日志用的类型名字符串，是冷路径能力。
+- 名义类型判断使用 `x is T` / `x as T`，不要通过字符串比较类型名。
+- 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
-详见 §13 与 §14。
+`Reflect` 全局模块以及用户可见的 `Type` / `Field` / `Method` / `Constructor` / `Parameter` wrapper 类已删除，不提供兼容层。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -560,9 +557,9 @@ Xray is statically typed; every expression has a determined type at compile time
 1. **Type inference**: variable declarations rarely require type annotations; the analyzer infers from the initializer / context.
 2. **Nullable separation**: `T` is never `null`; `T?` is sugar for `T | null`.
 3. **Union types**: `A | B | ...` (up to 6 members).
-4. **Reified generics**: generic type parameters are reflectable at runtime.
+4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
 5. **Structural Json + Nominal class**: Json objects are field-structure compatible (duck typing); classes are nominally compatible.
-6. **Runtime reflection**: `typeof` / `Reflect.*` APIs.
+6. **Minimal type identity**: `typeof`, `typename`, `is`, and `as`; there is no default runtime `Reflect` module.
 
 ### 2.2 Type Categories
 
@@ -834,7 +831,7 @@ The key difference between an **object literal** `{ field: value, ... }` and a M
 // Record/Json object literal: identifier or string key + colon ':'
 var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
 var user = { name: "Bob", age: 25 }       // default type is sealed Record
-typeof(user)                              // "Record"
+typename(user)                            // "Record"
 data.name              // type: Json (field access returns Json)
 data["name"]           // equivalent
 
@@ -1078,19 +1075,16 @@ typename(value)   // returns the type name as a string
 `Type.Array`, `Type.Map`, `Type.Set`, `Type.Channel`, `Type.Json`,
 `Type.function`, `Type.class`, `Type.struct`, `Type.enum`, `Type.module`, `Type.bigint`, ...
 
-Full list: see `stdlib/types/enum.xr` / `src/runtime/value/xtype.h`.
+Full list: see `XrTypeId` in `src/runtime/value/xtype_names.h`.
 
-### 2.12 Runtime Reflection
+### 2.12 Metadata and Type Identity Boundary
 
-The `Reflect` module (built in):
+Xray keeps only the minimal type identity layer by default:
 
-```xray
-Reflect.getType(obj)        // get type info (Json)
-Reflect.typeOf(obj)         // get the type name (string)
-Reflect.isInstance(obj, cls)// whether obj is an instance of cls
-Reflect.fieldCount(obj)     // number of fields
-Reflect.getAllTypes()       // all registered types
-```
+- `typeof(x)` returns a stable `Type` / `TypeId` for branches, `match`, and analyzer narrowing.
+- `typename(x)` returns a debug/logging type-name string and is a cold-path capability.
+- Nominal type checks use `x is T` / `x as T`; do not compare type-name strings.
+- Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 
-See §13 and §14 for more.
+The global `Reflect` module and the user-visible `Type` / `Field` / `Method` / `Constructor` / `Parameter` wrapper classes have been removed without a compatibility layer.
 <!-- /xr-spec:en -->

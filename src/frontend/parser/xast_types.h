@@ -147,6 +147,7 @@ typedef enum {
     // OOP nodes
     AST_CLASS_DECL,          // class Dog extends Animal {...}
     AST_STRUCT_DECL,         // struct Point { x: float, y: float }
+    AST_UNION_DECL,          // union U32Bytes { u32: uint32, bytes: [uint8; 4] }
     AST_STRUCT_LITERAL,      // Point{x: 1.0, y: 2.0}
     AST_INTERFACE_DECL,      // interface Drawable {...}
     AST_INTERFACE_METHOD,    // Interface method signature: draw(): void;
@@ -159,10 +160,9 @@ typedef enum {
     AST_MEMBER_SET,          // obj.field = value
 
     // Enum nodes
-    AST_ENUM_DECL,     // enum Status : int { Success = 200 }
-    AST_ENUM_MEMBER,   // Success = 200
+    AST_ENUM_DECL,     // enum Status { Success }
+    AST_ENUM_MEMBER,   // Success
     AST_ENUM_ACCESS,   // Status.Success
-    AST_ENUM_CONVERT,  // Status(200)
     AST_ENUM_INDEX,    // enum_type.members[idx] (compiler-generated for for-in)
 
     // Exception handling
@@ -245,9 +245,6 @@ typedef enum {
     ATTR_EXTERN,        // @extern("C") — foreign function (FFI), calling convention in str_arg
     ATTR_DYLIB,         // @dylib("name") — resolve symbol from a named dynamic library
     ATTR_C_EXPORT,      // @c_export("name") — expose an AOT C ABI wrapper symbol
-    ATTR_REPR_C,        // @repr(C) — struct laid out per C ABI
-    ATTR_REPR_PACKED,   // @repr(packed) — struct with no inter-field padding
-    ATTR_ALIGN,         // @align(N) — struct alignment override (N in timeout)
     ATTR_SECTION,       // @section("name") — place AOT function/C export in section
     ATTR_WEAK,          // @weak — emit weak AOT C export symbol
     ATTR_USED,          // @used — force AOT function/C export emission

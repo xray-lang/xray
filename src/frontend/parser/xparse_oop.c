@@ -39,6 +39,31 @@ static char *token_to_string(Parser *parser, Token *token) {
     return str;
 }
 
+static uint32_t xr_parse_struct_align_clause(Parser *parser) {
+    if (!xr_parser_match_name(parser, "align"))
+        return 0;
+    xr_parser_consume(parser, TK_LPAREN, "expected '(' after align");
+    uint32_t result = 0;
+    if (xr_parser_check(parser, TK_LITERAL_INT)) {
+        Token n = parser->current;
+        xr_parser_advance(parser);
+        char buf[32];
+        int len = n.length < 31 ? n.length : 31;
+        memcpy(buf, n.start, len);
+        buf[len] = '\0';
+        unsigned long parsed = strtoul(buf, NULL, 0);
+        if (parsed > UINT32_MAX) {
+            xr_parser_error(parser, "align value is too large");
+        } else {
+            result = (uint32_t) parsed;
+        }
+    } else {
+        xr_parser_error(parser, "align requires an integer, e.g. align(64)");
+    }
+    xr_parser_consume(parser, TK_RPAREN, "expected ')' to close align clause");
+    return result;
+}
+
 static bool current_is_removed_public_modifier(Parser *parser) {
     if (!xr_parser_check_name(parser, "public"))
         return false;
@@ -344,6 +369,8 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
         xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
     }
 
+    uint32_t explicit_align = xr_parse_struct_align_clause(parser);
+
     // Register generic type params in type_scope for field/method type parsing.
     XrTypeScope *saved_scope = parser->type_scope;
     if (type_param_count > 0) {
@@ -488,8 +515,120 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
     struct_node->as.struct_decl.interface_count = interface_count;
     struct_node->as.struct_decl.type_params = type_params;
     struct_node->as.struct_decl.type_param_count = type_param_count;
+    struct_node->as.struct_decl.explicit_align = explicit_align;
 
     return struct_node;
+}
+
+/* ========== Union Declaration Parsing ========== */
+
+AstNode *xr_parse_union_declaration(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_union_declaration: NULL parser");
+    int line = parser->previous.line;  // 'union' already consumed
+
+    xr_parser_consume(parser, TK_NAME, "expected union name");
+    char *union_name = token_to_string(parser, &parser->previous);
+    int name_column = parser->previous.column;
+
+    if (xr_parser_check(parser, TK_LT)) {
+        xr_parser_error_at_current(parser, "union declarations cannot be generic");
+        int depth = 0;
+        do {
+            if (xr_parser_match(parser, TK_LT)) {
+                depth++;
+            } else if (xr_parser_match(parser, TK_GT)) {
+                depth--;
+            } else {
+                xr_parser_advance(parser);
+            }
+        } while (depth > 0 && !xr_parser_check(parser, TK_EOF));
+        parser->panic_mode = 0;
+    }
+
+    uint32_t explicit_align = xr_parse_struct_align_clause(parser);
+
+    if (xr_parser_match(parser, TK_IMPLEMENTS)) {
+        xr_parser_error_at_previous(parser, "union declarations cannot implement interfaces");
+        do {
+            (void) xr_parse_type_annotation(parser);
+        } while (xr_parser_match(parser, TK_COMMA));
+        parser->panic_mode = 0;
+    }
+
+    xr_parser_consume(parser, TK_LBRACE, "expected '{' to start union body");
+
+    AstNode **fields = NULL;
+    int field_count = 0;
+    int field_capacity = 0;
+
+    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+        if (parser->panic_mode) {
+            xr_parser_synchronize(parser);
+            if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
+                break;
+            parser->panic_mode = 0;
+        }
+
+        if (xr_parser_match(parser, TK_SEMICOLON))
+            continue;
+
+        if (xr_parser_check(parser, TK_STATIC) || xr_parser_check(parser, TK_PRIVATE) ||
+            xr_parser_check(parser, TK_PROTECTED) || xr_parser_check(parser, TK_CONST) ||
+            xr_parser_check(parser, TK_OPERATOR) || xr_parser_check(parser, TK_FN) ||
+            xr_parser_check(parser, TK_CONSTRUCTOR)) {
+            xr_parser_error_at_current(parser,
+                                       "union declarations may contain only plain typed fields");
+            xr_parser_advance(parser);
+            continue;
+        }
+
+        xr_parser_consume(parser, TK_NAME, "expected union field name");
+        Token name_tok = parser->previous;
+        char *field_name = token_to_string(parser, &name_tok);
+
+        if (xr_parser_check(parser, TK_LPAREN) || xr_parser_check(parser, TK_LT)) {
+            xr_parser_error_at_current(parser, "union declarations cannot declare methods");
+            while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_SEMICOLON) &&
+                   !xr_parser_check(parser, TK_EOF)) {
+                xr_parser_advance(parser);
+            }
+            xr_parser_match(parser, TK_SEMICOLON);
+            parser->panic_mode = 0;
+            continue;
+        }
+
+        xr_parser_consume(parser, TK_COLON, "expected ':' after union field name");
+        XrTypeRef *field_type = xr_parse_type_annotation(parser);
+
+        AstNode *initializer = NULL;
+        if (xr_parser_match(parser, TK_ASSIGN)) {
+            xr_parser_error_at_previous(parser,
+                                        "union fields cannot have default initializers");
+            initializer = xr_parse_expression(parser);
+            parser->panic_mode = 0;
+        }
+
+        AstNode *field = xr_ast_field_decl(parser->compiler_session, field_name, field_type, false,
+                                           false, initializer, name_tok.line);
+        if (field) {
+            field->column = name_tok.column;
+            field->end_line = name_tok.line;
+            field->end_column = name_tok.column + name_tok.length;
+            XR_PARSE_PUSH(parser, fields, field_count, field_capacity, field);
+        }
+    }
+
+    xr_parser_consume(parser, TK_RBRACE, "expected '}' to end union body");
+    int union_end_line = parser->previous.line;
+    int union_end_column = parser->previous.column + 1;
+
+    AstNode *union_node = xr_ast_union_decl(parser->compiler_session, union_name, fields,
+                                            field_count, line);
+    union_node->column = name_column;
+    union_node->end_line = union_end_line;
+    union_node->end_column = union_end_column;
+    union_node->as.union_decl.explicit_align = explicit_align;
+    return union_node;
 }
 
 /* ========== Field Declaration Parsing ========== */
@@ -1807,10 +1946,9 @@ static AstNode *parse_enum_method(Parser *parser, bool is_static) {
                                        /* is_abstract */ false);
 }
 
-// Parse enum declaration (simple or ADT)
+// Parse enum declaration (safe tagged aggregate)
 // Syntax:
 //   enum Color { Red, Green, Blue }
-//   enum Status : int { Success = 200, Error = 500 }
 //   enum Result<T, E> { Ok(T), Err(E)  fn isOk() -> bool { ... } }
 //   enum Shape implements Printable { Circle(float), Rect(float, float) }
 AstNode *xr_parse_enum_declaration(Parser *parser) {
@@ -1863,37 +2001,11 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         parser->type_scope = generic_scope;
     }
 
-    // Parse type hint (optional, simple enums only): ': int'
-    // Mutually exclusive with generic type params.
-    char *type_hint = NULL;
     if (xr_parser_match(parser, TK_COLON)) {
-        if (type_param_count > 0) {
-            xr_parser_error(parser,
-                            "ADT enum with type parameters cannot have a backing type hint");
-        }
-        if (xr_parser_match(parser, TK_INT)) {
-            type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_INT);
-        } else if (xr_parser_match(parser, TK_STRING)) {
-            type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_STRING);
-        } else if (xr_parser_match(parser, TK_FLOAT)) {
-            type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_FLOAT);
-        } else if (xr_parser_match(parser, TK_BOOL)) {
-            type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_BOOL);
-        } else if (xr_parser_match(parser, TK_NAME)) {
-            Token t = parser->previous;
-            if (t.length == 3 && memcmp(t.start, "int", 3) == 0) {
-                type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_INT);
-            } else if (t.length == 6 && memcmp(t.start, "string", 6) == 0) {
-                type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_STRING);
-            } else if (t.length == 5 && memcmp(t.start, "float", 5) == 0) {
-                type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_FLOAT);
-            } else if (t.length == 4 && memcmp(t.start, "bool", 4) == 0) {
-                type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_BOOL);
-            } else {
-                xr_parser_error(parser, "enum type must be int, string, float or bool");
-            }
-        } else {
-            xr_parser_error(parser, "enum type must be int, string, float or bool");
+        xr_parser_error(parser, "enum backing types have been removed");
+        while (!xr_parser_check(parser, TK_LBRACE) && !xr_parser_check(parser, TK_IMPLEMENTS) &&
+               !xr_parser_check(parser, TK_EOF)) {
+            xr_parser_advance(parser);
         }
     }
 
@@ -1953,28 +2065,22 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         char **payload_names = NULL;
         XrTypeRef **payload_types = NULL;
         int payload_count = 0;
-        AstNode *member_value = NULL;
 
         if (xr_parser_match(parser, TK_LPAREN)) {
             /* ADT variant with payload */
             parse_enum_variant_payload(parser, &payload_names, &payload_types, &payload_count);
             xr_parser_consume(parser, TK_RPAREN, "expected ')' after variant payload");
         } else if (xr_parser_match(parser, TK_ASSIGN)) {
-            /* Simple enum with backing value: Name = expr */
-            member_value = xr_parse_expression(parser);
+            xr_parser_error(parser, "enum backing values have been removed");
+            (void) xr_parse_expression(parser);
         }
 
         AstNode *member =
-            xr_ast_enum_member(parser->compiler_session, member_name, member_value, payload_names,
-                               payload_types, payload_count, member_line);
+            xr_ast_enum_member(parser->compiler_session, member_name, payload_names, payload_types,
+                               payload_count, member_line);
         member->column = member_col;
-        if (member_value && member_value->end_line > 0) {
-            member->end_line = member_value->end_line;
-            member->end_column = member_value->end_column;
-        } else {
-            member->end_line = member_line;
-            member->end_column = member_col + member_name_len;
-        }
+        member->end_line = member_line;
+        member->end_column = member_col + member_name_len;
 
         XR_PARSE_PUSH(parser, members, member_count, member_capacity, member);
 
@@ -2028,9 +2134,9 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         parser->type_scope = saved_scope;
     }
 
-    AstNode *node = xr_ast_enum_decl(parser->compiler_session, enum_name, type_hint, members,
-                                     member_count, methods, method_count, type_params,
-                                     type_param_count, interfaces, interface_count, line);
+    AstNode *node = xr_ast_enum_decl(parser->compiler_session, enum_name, members, member_count,
+                                     methods, method_count, type_params, type_param_count,
+                                     interfaces, interface_count, line);
     node->column = name_column;
     node->end_line = enum_end_line;
     node->end_column = enum_end_column;

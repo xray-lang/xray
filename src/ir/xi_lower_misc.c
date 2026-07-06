@@ -7,7 +7,7 @@
  *
  * xi_lower_misc.c - Miscellaneous expression lowering helpers
  *
- * Contains: enum access/decl/convert, object literal, catch expr,
+ * Contains: enum access/decl, object literal, catch expr,
  * cancelled/move lowering.  Extracted from xi_lower_expr.c to keep
  * individual translation units within the 3000-line limit.
  */
@@ -164,75 +164,12 @@ XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, AstNode *node) {
     return v;
 }
 
-/* ========== Enum Constant Evaluation ========== */
-
-/* Evaluate compile-time constant for enum member values. */
-static XrValue enum_eval_const(XiLower *l, AstNode *expr) {
-    if (!expr)
-        return xr_null();
-    switch (expr->type) {
-        case AST_LITERAL_INT:
-            return xr_int(expr->as.literal.raw_value.int_val);
-        case AST_LITERAL_FLOAT:
-            return xr_float(expr->as.literal.raw_value.float_val);
-        case AST_LITERAL_STRING: {
-            const char *s = expr->as.literal.raw_value.string_val;
-            XrString *xs = xr_compile_time_intern(l->isolate, s, strlen(s));
-            return xr_string_value(xs);
-        }
-        case AST_LITERAL_TRUE:
-            return xr_bool(true);
-        case AST_LITERAL_FALSE:
-            return xr_bool(false);
-        default:
-            return xr_null();
-    }
-}
-
-static void enum_member_data_set_int(XiEnumMemberData *dst, int64_t value) {
-    dst->value_kind = XI_ENUM_LITERAL_INT;
-    dst->int_value = value;
-}
-
-static void enum_member_data_set_literal(XiLower *l, XiEnumMemberData *dst, AstNode *expr,
-                                         int64_t fallback_int) {
-    if (!dst)
-        return;
-    if (!expr) {
-        enum_member_data_set_int(dst, fallback_int);
-        return;
-    }
-    switch (expr->type) {
-        case AST_LITERAL_INT:
-            enum_member_data_set_int(dst, expr->as.literal.raw_value.int_val);
-            break;
-        case AST_LITERAL_FLOAT:
-            dst->value_kind = XI_ENUM_LITERAL_FLOAT;
-            dst->float_value = expr->as.literal.raw_value.float_val;
-            break;
-        case AST_LITERAL_STRING:
-            dst->value_kind = XI_ENUM_LITERAL_STRING;
-            dst->string_value = arena_strdup(l->func, expr->as.literal.raw_value.string_val);
-            break;
-        case AST_LITERAL_TRUE:
-            dst->value_kind = XI_ENUM_LITERAL_BOOL;
-            dst->bool_value = true;
-            break;
-        case AST_LITERAL_FALSE:
-            dst->value_kind = XI_ENUM_LITERAL_BOOL;
-            dst->bool_value = false;
-            break;
-        default:
-            dst->value_kind = XI_ENUM_LITERAL_NULL;
-            break;
-    }
-}
-
 /* ========== Enum Declaration ========== */
 
 /* Lower AST_ENUM_DECL: create XrEnumType at compile time, store as
  * shared variable so enum member access can find it.
- * Handles both simple enums (backing values) and ADT enums (tag + payload). */
+ * Handles both zero-payload enums and payload enums. The temporary runtime
+ * object model stores only declaration-order tags and cold metadata. */
 XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     EnumDeclNode *ed = &node->as.enum_decl;
     XR_DCHECK(ed->name != NULL, "enum name must not be NULL");
@@ -240,10 +177,8 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
 
     int n = ed->member_count;
     char **names = (char **) xr_malloc(sizeof(char *) * (size_t) n);
-    XrValue *values = (XrValue *) xr_malloc(sizeof(XrValue) * (size_t) n);
-    if (!names || !values) {
+    if (!names) {
         xr_free(names);
-        xr_free(values);
         return;
     }
 
@@ -257,8 +192,6 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
         }
     }
 
-    int detected_base = XR_TINT;
-    int64_t auto_val = 0;
     XiEnumData *enum_data = (XiEnumData *) xi_func_arena_alloc(l->func, sizeof(XiEnumData));
     XiEnumMemberData *enum_members = NULL;
     if (enum_data) {
@@ -277,39 +210,18 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     }
     for (int i = 0; i < n; i++) {
         EnumMemberNode *m = &ed->members[i]->as.enum_member;
-        names[i] = strdup(m->name);
+        names[i] = xr_strdup(m->name);
         if (enum_members) {
             enum_members[i].name = arena_strdup(l->func, m->name);
+            enum_members[i].ordinal = (uint32_t) i;
             enum_members[i].payload_count = m->payload_count;
-        }
-        if (is_adt) {
-            /* ADT enum: all variants get tag index as backing value */
-            values[i] = xr_int(i);
-            if (enum_members)
-                enum_member_data_set_int(&enum_members[i], i);
-        } else if (m->value) {
-            values[i] = enum_eval_const(l, m->value);
-            if (enum_members)
-                enum_member_data_set_literal(l, &enum_members[i], m->value, auto_val);
-            if (XR_IS_INT(values[i])) {
-                auto_val = XR_TO_INT(values[i]) + 1;
-            } else if (XR_IS_STRING(values[i])) {
-                detected_base = XR_TSTRING;
-            } else if (XR_IS_FLOAT(values[i])) {
-                detected_base = XR_TFLOAT;
-            } else if (XR_IS_BOOL(values[i])) {
-                detected_base = XR_TBOOL;
-            }
-        } else {
-            values[i] = xr_int(auto_val);
-            if (enum_members)
-                enum_member_data_set_int(&enum_members[i], auto_val);
-            auto_val++;
         }
     }
 
-    XrEnumType *et = xr_enum_type_new(l->isolate, ed->name, detected_base, names, values, n);
-    /* names/values ownership transferred to xr_enum_type_new */
+    XrEnumType *et = xr_enum_type_new(l->isolate, ed->name, names, n);
+    for (int i = 0; i < n; i++)
+        xr_free(names[i]);
+    xr_free(names);
 
     /* Set ADT metadata on the created enum type */
     if (et && is_adt) {
@@ -340,7 +252,6 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
         }
     }
     if (enum_data) {
-        enum_data->base_type = detected_base;
         enum_data->runtime_type = et;
     }
 
@@ -366,26 +277,6 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     }
 
     lower_enum_methods(l, ed);
-}
-
-/* ========== Enum Convert ========== */
-
-XR_FUNC XiValue *xi_lower_enum_convert(XiLower *l, AstNode *node) {
-    EnumConvertNode *ec = &node->as.enum_convert;
-    XiValue *val = xi_lower_expr(l, ec->value_expr);
-    if (!val)
-        return NULL;
-    struct XrType *result_type = xi_lower_node_type(l, node);
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, result_type, 1);
-    if (!v)
-        return NULL;
-    v->args[0] = val;
-    /* tid=-1 (unknown) → emitter degenerates to move, which is correct
-     * for enum conversions (runtime handles via enum type metadata). */
-    v->aux_int = ((int64_t) (uint32_t) -1 << 1) | 0;
-    v->aux = (void *) arena_strdup(l->func, ec->enum_name);
-    v->line = (uint32_t) node->line;
-    return v;
 }
 
 /* ========== Cancelled / Move ========== */

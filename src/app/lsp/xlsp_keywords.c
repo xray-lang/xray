@@ -14,7 +14,7 @@
 // xray language keywords
 const char *xr_keywords[] = {
     // Declarations
-    "var", "const", "fn", "class", "interface", "enum", "type",
+    "var", "const", "fn", "class", "struct", "packed", "union", "interface", "enum", "type",
     // Control flow
     "if", "else", "while", "for", "in", "is", "to", "break", "continue", "return", "match",
     "default",
@@ -38,4 +38,4 @@ const char *xr_keywords[] = {
 const char *xr_builtins[] = {"print",        "dump",      "typeof",    "assert", "assert_true",
                              "assert_false", "assert_eq", "assert_ne", "int",    "float",
                              "string",       "bool",      "copy",      "chr",    "Coro",
-                             "CoroPool",     "Reflect",   NULL};
+                             "CoroPool",     NULL};

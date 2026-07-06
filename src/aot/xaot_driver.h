@@ -87,7 +87,6 @@ typedef struct {
     bool need_objects;
     bool need_deep_copy;
     bool need_exception;
-    bool need_reflection;
     bool need_stacktrace;
     bool need_instanceof;
     XaotStdlibSet stdlib;

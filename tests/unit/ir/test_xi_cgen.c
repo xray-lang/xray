@@ -980,8 +980,7 @@ TEST(cgen_emits_shadowed_debug_source_var_slots) {
 }
 
 TEST(cgen_struct_debug_source_var_slots_use_typed_pointers) {
-    const char *src = "@repr(C)\n"
-                      "struct Point {\n"
+    const char *src = "struct Point {\n"
                       "    x: int32\n"
                       "    y: int32\n"
                       "}\n"
@@ -2580,16 +2579,20 @@ TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
                       "    src[1] = 2\n"
                       "    src[2] = 3\n"
                       "    src[3] = 4\n"
-                      "    var view: ByteSpan = src\n"
+                      "    var view: ByteSpan = src[:]\n"
                       "    var dst = Bytes.withCapacity(460)\n"
                       "    dst.reserve(460)\n"
                       "    dst.appendFrom(view[0:4])\n"
                       "    dst.repeatFrom(2, 2)\n"
                       "    dst.appendFrom(view[0:4])\n"
-                      "    var dstView: ByteSpan = dst\n"
+                      "    var dstView: ByteSpan = dst[:]\n"
                       "    dstView.repeatFrom(6, 2, 2)\n"
-                      "    dstView[8:10].copyFrom(dstView[6:8])\n"
-                      "    var prefix = dstView[0:2].commonPrefix(dstView[4:6])\n"
+                      "    var dstWindow: ByteSpan = dstView[8:10]\n"
+                      "    var srcWindow: ByteSpan = dstView[6:8]\n"
+                      "    dstWindow.copyFrom(srcWindow)\n"
+                      "    var prefixLeft: ByteSpan = dstView[0:2]\n"
+                      "    var prefixRight: ByteSpan = dstView[4:6]\n"
+                      "    var prefix = prefixLeft.commonPrefix(prefixRight)\n"
                       "    var v16: uint16 = view.load<uint16>(0, Endian.LE)\n"
                       "    var v32: uint32 = view.load<uint32>(0, Endian.LE)\n"
                       "    var v64: uint64 = view.load<uint64>(0, Endian.LE)\n"
@@ -2621,8 +2624,8 @@ TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
            "ByteSpan.load<uint32>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_load_u64_le_unchecked_raw(") > 0 &&
            "ByteSpan.load<uint64>(Endian.LE) must lower to the trusted LE load helper");
-    assert(count_between(fn_body, fn_end, "xrt_span_bytes_store_u16_checked_raw(") > 0 &&
-           "ByteSpan.store<uint16> must lower to the span AOT helper");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_store_u16(") > 0 &&
+           "ByteSpan.store<uint16> must lower to the plan-driven core store helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_copy_nonoverlap_bytes(") > 0 &&
            "Bytes.appendFrom must lower to the inline Bytes+ByteSpan non-overlap fast path");
     assert(count_between(fn_body, fn_end, "xr_array_core_copy_or_move_bytes(") > 0 &&
@@ -2656,6 +2659,8 @@ TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
            count_between(fn_body, fn_end, "xrt_span_bytes_load_u32_checked_raw(") == 0 &&
            count_between(fn_body, fn_end, "xrt_span_bytes_load_u64_checked_raw(") == 0 &&
            "static ByteSpan.load hot path must not keep dynamic span checks");
+    assert(count_between(fn_body, fn_end, "xrt_span_bytes_store_u16_checked_raw(") == 0 &&
+           "static ByteSpan.store hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_common_prefix_checked_raw(") == 0 &&
            "static ByteSpan.commonPrefix hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_span_bytes_repeat_from_checked_raw(") == 0 &&
@@ -3534,9 +3539,8 @@ TEST(cgen_escaping_struct_string_field_uses_heap_native_storage) {
     xi_func_free(ir);
 }
 
-TEST(cgen_repr_c_struct_omits_native_header) {
-    const char *src = "@repr(C)\n"
-                      "struct CPair {\n"
+TEST(cgen_fixed_layout_struct_omits_native_header) {
+    const char *src = "struct CPair {\n"
                       "    a: int32\n"
                       "    b: uint8\n"
                       "}\n"
@@ -3550,24 +3554,24 @@ TEST(cgen_repr_c_struct_omits_native_header) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "@repr(C) struct path should generate");
+    assert(!had_error && "fixed-layout struct path should generate");
 
     const char *typedef_start = strstr(code, "typedef struct xrt_struct_test_");
-    assert(typedef_start != NULL && "@repr(C) struct must emit a native typedef");
+    assert(typedef_start != NULL && "fixed-layout struct must emit a native typedef");
     const char *typedef_end = strstr(typedef_start, ";\n");
     assert(typedef_end != NULL && "typedef should be bounded");
     assert(count_between(typedef_start, typedef_end, "_size") == 0 &&
-           "@repr(C) typedef must not include the Xray size header");
+           "fixed-layout typedef must not include the Xray size header");
     assert(count_between(typedef_start, typedef_end, "_layout") == 0 &&
-           "@repr(C) typedef must not include the Xray layout header");
+           "fixed-layout typedef must not include the Xray layout header");
     assert(count_between(typedef_start, typedef_end, "int32_t a") == 1 &&
-           "@repr(C) int32 field must be placed at payload offset 0");
+           "fixed-layout int32 field must be placed at payload offset 0");
     assert(count_between(typedef_start, typedef_end, "uint8_t b") == 1 &&
-           "@repr(C) uint8 field must be emitted as raw C storage");
+           "fixed-layout uint8 field must be emitted as raw C storage");
     assert(contains(code, "xr_struct_ref(_s, (uint16_t)sizeof(") &&
-           "@repr(C) struct refs must carry storage size outside the payload");
+           "fixed-layout struct refs must carry storage size outside the payload");
 
-    printf("  Generated @repr(C) headerless struct path %zu bytes of C code\n", strlen(code));
+    printf("  Generated fixed-layout struct path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -4579,12 +4583,12 @@ TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
     xi_func_free(ir);
 }
 
-TEST(cgen_typeof_as_and_slice_use_direct_drivers) {
+TEST(cgen_typename_as_and_slice_use_direct_drivers) {
     const char *src = "fn run() -> int {\n"
                       "    var arr: Array<int> = [1, 2, 3]\n"
                       "    var s = arr[0:2]\n"
                       "    var label = 42 as string\n"
-                      "    if (typeof(s) == \"Array\" && label == \"42\") {\n"
+                      "    if (typename(s) == \"Array\" && label == \"42\") {\n"
                       "        return s.length\n"
                       "    }\n"
                       "    return 0\n"
@@ -4597,16 +4601,16 @@ TEST(cgen_typeof_as_and_slice_use_direct_drivers) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "typeof/as/slice direct drivers should generate");
+    assert(!had_error && "typename/as/slice direct drivers should generate");
 
-    assert(contains(code, "xrt_typeof_str(") && "typeof() must use the direct AOT typename helper");
+    assert(contains(code, "xrt_typeof_str(") && "typename() must use the direct AOT typename helper");
     assert(contains(code, "xrt_to_string(") &&
            "unsafe as string must use the direct AOT conversion helper");
     assert(contains(code, "xrt_slice(") && "slice expression must use the direct AOT slice helper");
     assert(!contains(code, "xr_typename(") && !contains(code, "xr_typeof_id(") &&
            "AOT code must not reference stale typeof helper names");
 
-    printf("  Generated typeof/as/slice direct drivers %zu bytes of C code\n", strlen(code));
+    printf("  Generated typename/as/slice direct drivers %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -4616,7 +4620,7 @@ TEST(cgen_range_uses_direct_aot_driver) {
                       "var ri = 2..=6\n"
                       "print(r)\n"
                       "print(ri)\n"
-                      "print(typeof(r))\n";
+                      "print(typename(r))\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -4630,7 +4634,7 @@ TEST(cgen_range_uses_direct_aot_driver) {
            "range expression must use the direct AOT range helper");
     assert(contains(code, ", false)") && "half-open range must pass inclusive=false");
     assert(contains(code, ", true)") && "inclusive range must pass inclusive=true");
-    assert(contains(code, "xrt_typeof_str(") && "typeof(range) must use direct typeof helper");
+    assert(contains(code, "xrt_typeof_str(") && "typename(range) must use direct typename helper");
     assert(!contains(code, "xrt_range(XR_FROM_INT") &&
            "range creation must not box start/end before the AOT helper");
 
@@ -5512,11 +5516,11 @@ TEST(cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain) {
     const char *src = "fn packParts(high: int, low: int) -> int {\n"
                       "    return (high << 32) | (low & 0xFFFFFFFF)\n"
                       "}\n"
-                      "fn highPart(packed: int) -> int {\n"
-                      "    return packed >> 32\n"
+                      "fn highPart(bits: int) -> int {\n"
+                      "    return bits >> 32\n"
                       "}\n"
-                      "fn lowPart(packed: int) -> int {\n"
-                      "    return packed & 0xFFFFFFFF\n"
+                      "fn lowPart(bits: int) -> int {\n"
+                      "    return bits & 0xFFFFFFFF\n"
                       "}\n"
                       "fn combine(a: int, b: int) -> int {\n"
                       "    if (a < 0 || b < 0) { return -1 }\n"
@@ -8386,7 +8390,7 @@ int main(void) {
     run_cgen_escaping_struct_uses_heap_native_storage();
     run_cgen_same_shape_structs_keep_distinct_source_field_names();
     run_cgen_escaping_struct_string_field_uses_heap_native_storage();
-    run_cgen_repr_c_struct_omits_native_header();
+    run_cgen_fixed_layout_struct_omits_native_header();
     run_cgen_nested_struct_field_uses_embedded_heap_native_storage();
     run_cgen_fixed_array_struct_field_uses_embedded_heap_native_storage();
     run_cgen_fixed_array_local_uses_stack_array_ref_storage();
@@ -8404,7 +8408,7 @@ int main(void) {
     run_cgen_class_map_bool_value_unguarded_explicit_true_uses_tagged_compare();
     run_cgen_inherited_class_uses_native_base_layout();
     run_cgen_typed_array_slice_preserves_raw_storage_fast_path();
-    run_cgen_typeof_as_and_slice_use_direct_drivers();
+    run_cgen_typename_as_and_slice_use_direct_drivers();
     run_cgen_range_uses_direct_aot_driver();
     run_cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load();
     run_cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store();

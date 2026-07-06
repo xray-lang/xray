@@ -1,0 +1,3 @@
+union BadGeneric<T> {
+    x: uint32
+}

@@ -160,17 +160,20 @@ typedef struct XrAotEnumValueView {
     void *klass;
     const char *enum_name;
     const char *member_name;
-    XrValue raw_value;
     uint32_t member_index;
+    uint32_t payload_count;
+    XrValue payload0;
+    XrValue *payloads;
 } XrAotEnumValueView;
 
-typedef struct XrAotAdtValue {
+typedef struct XrAotEnumAggregate {
     const char *enum_name;
     const char *member_name;
     int64_t tag;
     uint32_t payload_count;
     XrValue payload0;
-} XrAotAdtValue;
+    XrValue *payloads;
+} XrAotEnumAggregate;
 
 static inline const char *xrt_enum_to_cstr(XrValue v, char *buf, size_t bufsz) {
     const XrAotEnumValueView *ev = (const XrAotEnumValueView *) v.ptr;
@@ -417,21 +420,23 @@ static inline XrValue xr_mkf64(double v, uint8_t tag) {
 #define XR_TO_FLOAT(v) ((v).f)
 #define XR_TO_CHAR(v) ((uint32_t) (v).i)
 
-static inline XrAotAdtValue xrt_adt_value_zero(void) {
-    XrAotAdtValue out = {0};
+static inline XrAotEnumAggregate xrt_enum_aggregate_zero(void) {
+    XrAotEnumAggregate out = {0};
     out.payload0 = XR_NULL_VAL;
+    out.payloads = NULL;
     return out;
 }
 
-static inline XrAotAdtValue xrt_adt_value_make(int64_t tag, uint32_t payload_count,
+static inline XrAotEnumAggregate xrt_enum_aggregate_make(int64_t tag, uint32_t payload_count,
                                                const char *enum_name, const char *member_name,
                                                XrValue payload0) {
-    XrAotAdtValue out;
+    XrAotEnumAggregate out;
     out.enum_name = enum_name;
     out.member_name = member_name;
     out.tag = tag;
     out.payload_count = payload_count;
     out.payload0 = payload_count > 0 ? payload0 : XR_NULL_VAL;
+    out.payloads = NULL;
     return out;
 }
 

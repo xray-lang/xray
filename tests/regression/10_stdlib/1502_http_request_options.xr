@@ -21,7 +21,7 @@ fn test_request_options_object() {
 
 @test
 fn test_request_api_exists() {
-    assert(typeof(http.request) == "function")
+    assert(typename(http.request) == "function")
 }
 
 print("All http request options tests passed")

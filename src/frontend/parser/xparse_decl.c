@@ -164,41 +164,6 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
         attr->kind = ATTR_WEAK;
     } else if (name_token.length == 4 && memcmp(name_token.start, "used", 4) == 0) {
         attr->kind = ATTR_USED;
-    } else if (name_token.length == 4 && memcmp(name_token.start, "repr", 4) == 0) {
-        // @repr(C) / @repr(packed) — layout control. The variant is a closed
-        // compiler-known set, hence a bare identifier rather than a string.
-        attr->kind = ATTR_REPR_C;
-        xr_parser_consume(parser, TK_LPAREN, "expected '(' after @repr");
-        if (xr_parser_check(parser, TK_NAME)) {
-            Token v = parser->current;
-            xr_parser_advance(parser);
-            if (v.length == 1 && memcmp(v.start, "C", 1) == 0) {
-                attr->kind = ATTR_REPR_C;
-            } else if (v.length == 6 && memcmp(v.start, "packed", 6) == 0) {
-                attr->kind = ATTR_REPR_PACKED;
-            } else {
-                xr_parser_error(parser, "unknown @repr kind (expected C or packed)");
-            }
-        } else {
-            xr_parser_error(parser, "@repr requires a kind: @repr(C) or @repr(packed)");
-        }
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @repr");
-    } else if (name_token.length == 5 && memcmp(name_token.start, "align", 5) == 0) {
-        // @align(N) — explicit struct alignment; N is numeric.
-        attr->kind = ATTR_ALIGN;
-        xr_parser_consume(parser, TK_LPAREN, "expected '(' after @align");
-        if (xr_parser_check(parser, TK_LITERAL_INT)) {
-            Token n = parser->current;
-            xr_parser_advance(parser);
-            char buf[32];
-            int len = n.length < 31 ? n.length : 31;
-            memcpy(buf, n.start, len);
-            buf[len] = '\0';
-            attr->timeout = atoi(buf);
-        } else {
-            xr_parser_error(parser, "@align requires an integer, e.g. @align(8)");
-        }
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @align");
     } else {
         xr_parser_error(parser, "unknown attribute name");
         return NULL;
@@ -289,8 +254,13 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         return cls;
     }
 
-    // @native struct
-    if (xr_parser_match(parser, TK_STRUCT)) {
+    // @native struct / @native packed struct
+    bool is_packed_struct = false;
+    if (xr_parser_match(parser, TK_PACKED)) {
+        is_packed_struct = true;
+        xr_parser_consume(parser, TK_STRUCT, "expected 'struct' after 'packed'");
+    }
+    if (is_packed_struct || xr_parser_match(parser, TK_STRUCT)) {
         if (is_c_export) {
             xr_parser_error(parser, "@c_export can only annotate a module-level function");
             return NULL;
@@ -304,10 +274,29 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         parser->parsing_native_class = false;
         if (!st)
             return NULL;
+        st->as.struct_decl.is_packed = is_packed_struct;
         st->as.class_decl.is_native = is_native;
         st->as.class_decl.attributes = attributes;
         st->as.class_decl.attr_count = attr_count;
         return st;
+    }
+
+    if (xr_parser_match(parser, TK_UNION)) {
+        if (is_c_export) {
+            xr_parser_error(parser, "@c_export can only annotate a module-level function");
+            return NULL;
+        }
+        if (has_symbol_layout_attr) {
+            xr_parser_error(parser, "@section/@weak/@used can only annotate a function");
+            return NULL;
+        }
+        AstNode *un = xr_parse_union_declaration(parser);
+        if (!un)
+            return NULL;
+        un->as.union_decl.is_native = is_native;
+        un->as.union_decl.attributes = attributes;
+        un->as.union_decl.attr_count = attr_count;
+        return un;
     }
 
     // @test fn ..., @native fn ..., @extern("C") fn ..., @c_export("sym") fn ...
@@ -1417,8 +1406,20 @@ AstNode *xr_parse_declaration(Parser *parser) {
     }
 
     // Struct declaration
-    if (xr_parser_match(parser, TK_STRUCT)) {
-        return xr_parse_struct_declaration(parser);
+    bool is_packed_struct = false;
+    if (xr_parser_match(parser, TK_PACKED)) {
+        is_packed_struct = true;
+        xr_parser_consume(parser, TK_STRUCT, "expected 'struct' after 'packed'");
+    }
+    if (is_packed_struct || xr_parser_match(parser, TK_STRUCT)) {
+        AstNode *st = xr_parse_struct_declaration(parser);
+        if (st)
+            st->as.struct_decl.is_packed = is_packed_struct;
+        return st;
+    }
+
+    if (xr_parser_match(parser, TK_UNION)) {
+        return xr_parse_union_declaration(parser);
     }
 
     // Interface declaration

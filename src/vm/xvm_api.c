@@ -177,7 +177,7 @@ XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *ar
     frame->u.l.pending_operator_check = false;
 
     // Copy arguments to stack. C callers of xr_vm_call_closure (container
-    // higher-order methods like map/filter/reduce/forEach, reflection,
+    // higher-order methods like map/filter/reduce/forEach, type metadata,
     // comparators) pass their arguments BORROWED: they read an element out
     // of a container they do not give up. The closure body, however, was
     // compiled under the owned-parameter ABI — it drops each RC parameter at

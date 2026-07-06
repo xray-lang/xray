@@ -162,7 +162,6 @@ if ! grep -Eq "ok = .*(true|1|\\\\x01)" "$LLDB_LOG"; then
 fi
 
 cat > "$AGG_SRC" <<'XR'
-@repr(C)
 struct Point {
     x: int32
     y: int32

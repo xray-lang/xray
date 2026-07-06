@@ -1,2 +1,4 @@
 contains=function 1 name=copy_words module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
-c_contains=xrt_span_copy_checked_raw(
+regex=span-access [0-9]+ func=copy_words value=v[0-9]+ kind=span_copy evidence=recv_agg\+pod\+elem_match drop=type\+pod\+helper
+c_contains=memmove(_dst.data, _src.data
+c_not_contains=xrt_span_copy_checked_raw(

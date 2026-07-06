@@ -872,8 +872,11 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
 
         /* ---- Class / struct (walk fields and methods) ---- */
         case AST_CLASS_DECL:
-        case AST_STRUCT_DECL: {
-            ClassDeclNode *cls = &node->as.class_decl;
+        case AST_STRUCT_DECL:
+        case AST_UNION_DECL: {
+            ClassDeclNode *cls = (node->type == AST_CLASS_DECL) ? &node->as.class_decl
+                                : (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl
+                                                                  : &node->as.union_decl;
             for (int i = 0; i < cls->field_count; i++)
                 canon_node(ctx, cls->fields[i]);
             for (int i = 0; i < cls->method_count; i++)
@@ -885,10 +888,6 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_ENUM_DECL:
             for (int i = 0; i < node->as.enum_decl.member_count; i++)
                 canon_node(ctx, node->as.enum_decl.members[i]);
-            break;
-
-        case AST_ENUM_CONVERT:
-            canon_node(ctx, node->as.enum_convert.value_expr);
             break;
 
         case AST_ENUM_INDEX:

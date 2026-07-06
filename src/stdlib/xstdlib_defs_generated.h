@@ -285,7 +285,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"mem", "cacheLineSize", "(): int", "CPU cache line size in bytes", "mem_cache_line_size", "normal", "", "xrt_mem_cache_line_size", "", "value", "", "", "core", "method", 0, true},
     {"mem", "sizeOf", "(): int", "Compile-time size in bytes of a statically laid out type T", "mem_size_of", "normal", "", "", "", "value", "", "", "core", "", 0, false},
     {"mem", "alignOf", "(): int", "Compile-time alignment in bytes of a statically laid out type T", "mem_align_of", "normal", "", "", "", "value", "", "", "core", "", 0, false},
-    {"mem", "offsetOf", "(field: string): int", "Compile-time byte offset of a field in a @repr(C) or @repr(packed) struct T", "mem_offset_of", "normal", "", "", "v", "value", "", "", "core", "", 1, false},
+    {"mem", "offsetOf", "(field: string): int", "Compile-time byte offset of a field in a fixed-layout struct T", "mem_offset_of", "normal", "", "", "v", "value", "", "", "core", "", 1, false},
     {"mem", "alloc", "(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", "mem_alloc", "normal", "", "xrt_mem_alloc", "v", "value", "", "", "core", "method", 1, true},
     {"mem", "allocZeroed", "(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", "mem_alloc_zeroed", "normal", "", "xrt_mem_alloc_zeroed", "v", "value", "", "", "core", "method", 1, true},
     {"mem", "allocAligned", "(n: int, align: int): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", "mem_alloc_aligned", "normal", "", "xrt_mem_alloc_aligned", "vv", "value", "", "", "core", "method", 2, true},

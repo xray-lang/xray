@@ -166,7 +166,6 @@ XR_FUNC void xi_lower_reprop_error(XiLower *l, XiValue *val, struct AstNode *nod
 /* ========== Misc Expression Lowering (xi_lower_misc.c) ========== */
 
 XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, struct AstNode *node);
-XR_FUNC XiValue *xi_lower_enum_convert(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_cancelled_expr(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_move_expr(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, struct AstNode *node);

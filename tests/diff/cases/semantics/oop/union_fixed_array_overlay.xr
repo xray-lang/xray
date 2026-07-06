@@ -1,0 +1,15 @@
+union U32Bytes {
+    u: uint32
+    b: [uint8; 4]
+}
+
+var x = U32Bytes{u: 0x01020304}
+var bytes = unsafe { x.b }
+
+print(bytes[0])
+print(bytes[1])
+print(bytes[2])
+print(bytes[3])
+
+bytes[0] = 255
+print(int(unsafe { x.u }))

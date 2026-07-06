@@ -1,6 +1,6 @@
 c_contains=FastResult
-c_contains=XrAotAdtValue
-c_contains=xrt_adt_value_make(
+c_contains=XrAotEnumAggregate
+c_contains=xrt_enum_aggregate_make(
 c_contains=.payload0
 c_contains=.tag
 c_not_contains=xrt_array_with_capacity(

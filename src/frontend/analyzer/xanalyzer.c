@@ -151,9 +151,12 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     fn_weakset->function.min_params = 0;
     register_builtin_func(analyzer, "WeakSet", fn_weakset);
 
-    // typeof: fn(any) -> string (returns runtime type name)
-    XrType *fn_typeof = xr_type_new_function(analyzer->isolate, &p_any, 1, t_string, false);
+    // typeof: fn(any) -> int (returns stable XrTypeId for fast Type.xxx comparison)
+    XrType *fn_typeof = xr_type_new_function(analyzer->isolate, &p_any, 1, t_int, false);
     register_builtin_func(analyzer, "typeof", fn_typeof);
+    // typename: fn(any) -> string (cold/debug type display name)
+    XrType *fn_typename = xr_type_new_function(analyzer->isolate, &p_any, 1, t_string, false);
+    register_builtin_func(analyzer, "typename", fn_typename);
     // chr: fn(int) -> string
     XrType *fn_chr = xr_type_new_function(analyzer->isolate, &t_int, 1, t_string, false);
     register_builtin_func(analyzer, "chr", fn_chr);
@@ -173,7 +176,6 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_module(analyzer, "Coro");
     register_builtin_module(analyzer, "CoroPool");
     register_builtin_module(analyzer, "Channel");
-    register_builtin_module(analyzer, "Reflect");
 
     // Runtime global variables (set by xray_vm_set_script_info)
     register_builtin_var(analyzer, "process", p_any, true);
@@ -204,7 +206,6 @@ static void register_prelude_enum_full(XaAnalyzer *analyzer, const char *name,
     links->declared_type = links->type;
     links->is_definitely_assigned = true;
     links->is_adt_enum = is_adt;
-    links->enum_value_type = xr_type_new_int(NULL);
     if (type_param_count > 0 && type_param_names) {
         xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL, type_param_count);
     }
@@ -476,6 +477,7 @@ static const char *get_export_decl_name(AstNode *decl) {
             return decl->as.function_decl.name;
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:
+        case AST_UNION_DECL:
             return decl->as.class_decl.name;
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
