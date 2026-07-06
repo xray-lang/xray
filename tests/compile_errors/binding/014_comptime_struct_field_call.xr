@@ -1,0 +1,11 @@
+struct CtPoint {
+    x: int
+    y: int
+}
+
+fn runtimeOnly() -> int {
+    return 2
+}
+
+var p = comptime CtPoint{x: 1, y: runtimeOnly()}
+print(p.x)

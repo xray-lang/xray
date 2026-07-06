@@ -1,0 +1,34 @@
+struct CtPoint {
+    x: int
+    y: int
+}
+
+struct CtBox {
+    p: CtPoint
+    tag: int
+}
+
+const COUNT = comptime 4
+
+@test
+fn test_comptime_struct_value() {
+    var p = comptime CtPoint{x: 1, y: COUNT}
+    assert_eq(p.x, 1)
+    assert_eq(p.y, 4)
+}
+
+@test
+fn test_comptime_struct_const_cache() {
+    const local = comptime CtPoint{x: COUNT, y: 7}
+    var cached = comptime local
+    assert_eq(cached.x, 4)
+    assert_eq(cached.y, 7)
+}
+
+@test
+fn test_comptime_nested_struct_value() {
+    var box = comptime CtBox{p: CtPoint{x: 2, y: 3}, tag: COUNT}
+    assert_eq(box.p.x, 2)
+    assert_eq(box.p.y, 3)
+    assert_eq(box.tag, 4)
+}
