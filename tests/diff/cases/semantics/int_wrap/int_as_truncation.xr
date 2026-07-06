@@ -1,0 +1,21 @@
+// anchor: int-as-truncation
+// `as` casts to narrow integer types must truncate exactly like annotated
+// assignment/parameter narrowing. This protects C-port casts such as
+// `(uint32_t)x` from silently staying in the wider int domain.
+
+var big = 4294967297
+var castU32 = big as uint32
+var assignedU32: uint32 = big
+print(castU32)
+print(assignedU32)
+
+var neg = -1
+var castU8 = neg as uint8
+var assignedU8: uint8 = neg
+print(castU8)
+print(assignedU8)
+
+print(2147483648 as int32)
+
+var wide: uint64 = 4294967297
+print(wide as uint32)
