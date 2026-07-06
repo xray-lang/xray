@@ -15,25 +15,40 @@ comptime {
     counter = counter + 1
     counter = counter * 10
     compile_assert(counter == 20, "local var state")
+    counter += 2
+    compile_assert(counter == 22, "local var compound assignment")
 
     var pair = comptime Point{x: 1, y: 2}
     pair = comptime Point{x: pair.y, y: pair.x + counter}
     compile_assert(pair.x == 2)
-    compile_assert(pair.y == 21)
+    compile_assert(pair.y == 23)
 
-    if (counter == 20) {
+    if (counter == 22) {
         counter = counter + 2
     } else {
         compile_error("unselected comptime branch")
     }
-    compile_assert(counter == 22, "comptime if selected branch")
+    compile_assert(counter == 24, "comptime if selected branch")
 
     if (false) {
         compile_error("false comptime branch")
     } else {
         const branched = counter + 1
-        compile_assert(branched == 23)
+        compile_assert(branched == 25)
     }
+
+    var ops = comptime 5
+    ops += 3
+    ops -= 2
+    ops *= 7
+    ops /= 6
+    ops %= 4
+    ops <<= 3
+    ops >>= 2
+    ops &= 5
+    ops |= 2
+    ops ^= 3
+    compile_assert(ops == 5, "compound assignment ops")
 }
 
 @test
