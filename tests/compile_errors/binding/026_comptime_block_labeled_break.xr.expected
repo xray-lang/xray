@@ -1,1 +1,1 @@
-labeled comptime break is not supported in this phase
+unknown loop label 'missing' for 'break'

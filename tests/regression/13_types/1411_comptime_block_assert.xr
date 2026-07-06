@@ -93,6 +93,51 @@ comptime {
         forSum += j
     }
     compile_assert(forSum == 8, "comptime for control flow")
+
+    var labeledBreakWhile = comptime 0
+    outer_break: while (true) {
+        labeledBreakWhile += 1
+        while (true) {
+            break outer_break
+        }
+        compile_error("unreachable after labeled break")
+    }
+    compile_assert(labeledBreakWhile == 1, "comptime labeled break exits outer while")
+
+    var labeledBreakFor = comptime 0
+    break_for: for (var k = 0; k < 4; k += 1) {
+        labeledBreakFor += 1
+        while (true) {
+            break break_for
+        }
+        compile_error("unreachable after labeled for break")
+    }
+    compile_assert(labeledBreakFor == 1, "comptime labeled break exits outer for")
+
+    var continueWhile = comptime 0
+    continue_outer: while (continueWhile < 3) {
+        continueWhile += 1
+        while (true) {
+            continue continue_outer
+        }
+        compile_error("unreachable after labeled while continue")
+    }
+    compile_assert(continueWhile == 3, "comptime labeled continue targets outer while")
+
+    var continueForVisits = comptime 0
+    var continueForLanded = comptime 0
+    continue_for: for (var m = 0; m < 4; m += 1) {
+        continueForVisits += 1
+        while (true) {
+            if (m < 2) {
+                continue continue_for
+            }
+            break
+        }
+        continueForLanded += m
+    }
+    compile_assert(continueForVisits == 4, "comptime labeled continue visits outer for")
+    compile_assert(continueForLanded == 5, "comptime labeled continue runs for increment")
 }
 
 @test
