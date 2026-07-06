@@ -1,0 +1,17 @@
+@c_export("xray_scalar_compare")
+fn xray_scalar_compare(a: float, b: float, x: int, y: int) -> int {
+    var n = 0
+    if (a < b) {
+        n = n + 1
+    }
+    if (a <= b) {
+        n = n + 2
+    }
+    if (x > y) {
+        n = n + 4
+    }
+    if (x >= y) {
+        n = n + 8
+    }
+    return n
+}

@@ -689,6 +689,18 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
     return a.ptr == b.ptr && a.ext == b.ext;
 }
 
+static inline int64_t xrt_lt(XrValue a, XrValue b) {
+    if (XR_IS_INT(a) && XR_IS_INT(b))
+        return a.i < b.i;
+    return xrt_math_number(a) < xrt_math_number(b);
+}
+
+static inline int64_t xrt_le(XrValue a, XrValue b) {
+    if (XR_IS_INT(a) && XR_IS_INT(b))
+        return a.i <= b.i;
+    return xrt_math_number(a) <= xrt_math_number(b);
+}
+
 static inline XrValue xrt_add(XrValue a, XrValue b) {
     if (XR_IS_INT(a) && XR_IS_INT(b))
         return XR_FROM_INT(xrt_i64_add(a.i, b.i));

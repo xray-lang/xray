@@ -541,6 +541,44 @@ else
     sed 's/^/      /' "$FREESTANDING_MATH_CONST_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_SCALAR_COMPARE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_scalar_compare.xr"
+FREESTANDING_SCALAR_COMPARE_OBJ="$WORK/freestanding_scalar_compare.o"
+FREESTANDING_SCALAR_COMPARE_LOG="$WORK/freestanding_scalar_compare.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_SCALAR_COMPARE_OBJ" \
+        "$FREESTANDING_SCALAR_COMPARE_SRC" >"$FREESTANDING_SCALAR_COMPARE_LOG" 2>&1; then
+    FREESTANDING_SCALAR_COMPARE_KEPT_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_SCALAR_COMPARE_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_SCALAR_COMPARE_KEPT_C" ]; then
+        expect_log_contains "$FREESTANDING_SCALAR_COMPARE_KEPT_C" \
+            "#include \"xrt_core_freestanding.h\"" \
+            "freestanding-profile/scalar-compare: generated C uses freestanding prelude"
+        expect_log_contains "$FREESTANDING_SCALAR_COMPARE_KEPT_C" " < " \
+            "freestanding-profile/scalar-compare: generated C uses direct less-than compare"
+        expect_log_contains "$FREESTANDING_SCALAR_COMPARE_KEPT_C" " <= " \
+            "freestanding-profile/scalar-compare: generated C uses direct less-or-equal compare"
+        expect_log_not_contains "$FREESTANDING_SCALAR_COMPARE_KEPT_C" "#include \"xrt.h\"" \
+            "freestanding-profile/scalar-compare: generated C avoids hosted umbrella"
+    else
+        record_fail "freestanding-profile/scalar-compare: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_SCALAR_COMPARE_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_SCALAR_COMPARE_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_SCALAR_COMPARE_OBJ")"
+    FREESTANDING_SCALAR_COMPARE_UNEXPECTED="$(printf '%s\n' "$FREESTANDING_SCALAR_COMPARE_UNDEFINED" |
+        sed '/^[[:space:]]*$/d' |
+        grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic)$' || true)"
+    if [ -z "$FREESTANDING_SCALAR_COMPARE_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/scalar-compare: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/scalar-compare: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_SCALAR_COMPARE_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/scalar-compare: object build failed"
+    sed 's/^/      /' "$FREESTANDING_SCALAR_COMPARE_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_MATH_CALL_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_math_call_reject.xr"
 FREESTANDING_MATH_CALL_LOG="$WORK/freestanding_math_call_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
