@@ -517,6 +517,18 @@ static inline XrValue xrt_adt_value_field(XrAotAdtValue value, int64_t index) {
     return XR_NULL_VAL;
 }
 
+static inline XrValue xrt_enum_field_get(XrValue boxed, int64_t index) {
+    if (!XR_IS_ARRAY(boxed) || !boxed.ptr || index < 0)
+        return XR_NULL_VAL;
+    xrt_array_t *arr = (xrt_array_t *) boxed.ptr;
+    if (index >= arr->length || !arr->data)
+        return XR_NULL_VAL;
+    if (arr->elem_type != XR_ELEM_ANY)
+        return XR_NULL_VAL;
+    XrValue *items = (XrValue *) arr->data;
+    return items[index];
+}
+
 /* Splice every element of `src_val` onto the end of `dst_val` (array spread
  * `[...a]`).  Borrowed source: each copied element is retained because the
  * source array keeps its own references.  Typed primitive arrays bulk-copy
