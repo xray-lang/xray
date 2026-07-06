@@ -4751,20 +4751,22 @@ static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_struct_set: need struct + value");
     if (cg_value_plan_is_struct_aggregate(ctx, v->args[0])) {
-        char fname[128];
         XrStructLayout *sl = (XrStructLayout *) v->aux;
-        cg_struct_field_c_name(sl, v->aux_int, fname, sizeof(fname));
-        fprintf(out, "(");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ".%s = ", fname);
-        emit_struct_field_store_value(out, sl, v->aux_int, v->args[1]);
-        fprintf(out, ")");
+        if (emit_struct_heap_field_set_expr(ctx, out, f, sl, v->aux_int, v->args[0], v->args[1],
+                                            prefix))
+            return;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: cannot emit aggregate struct field set v%u field %" PRId64
+                " in %s\n",
+                v->args[0] ? v->args[0]->id : 0, v->aux_int, f && f->name ? f->name : "?");
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
         return;
     }
     const XiValue *origin = cg_trace_struct_new(v->args[0]);
     if (origin && cg_struct_can_inline(f, origin)) {
-        emit_struct_inline_field_set_expr(out, (XrStructLayout *) origin->aux, origin, v->aux_int,
-                                          v->args[1]);
+        emit_struct_inline_field_set_expr(ctx, out, (XrStructLayout *) origin->aux, origin,
+                                          v->aux_int, v->args[1]);
     } else {
         XrStructLayout *sl = (XrStructLayout *) v->aux;
         emit_struct_fallback_field_set(ctx, out, f, sl, v->aux_int, v->args[0], v->args[1], prefix);

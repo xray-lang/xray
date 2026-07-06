@@ -717,28 +717,36 @@ static void emit_struct_inline_field_get_expr(FILE *out, const XrStructLayout *s
     emit_struct_field_ref(out, sl, origin, idx);
 }
 
-static void emit_struct_field_store_value(FILE *out, const XrStructLayout *sl, int64_t idx,
-                                          const XiValue *value) {
+static void emit_struct_field_store_value(XiCgenCtx *ctx, FILE *out, const XrStructLayout *sl,
+                                          int64_t idx, const XiValue *value) {
     const XrStructFieldLayout *field = cg_struct_field(sl, idx);
     if (field && field->native_type == XR_NATIVE_ARRAY_REF) {
         fprintf(out, "(xrt_array_t*)(");
-        emit_value_as_rep(out, value, XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
         fprintf(out, ").ptr");
         return;
     }
     if (field && field->native_type == XR_NATIVE_MAP_REF) {
         fprintf(out, "(xrt_map_t*)(");
-        emit_value_as_rep(out, value, XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
         fprintf(out, ").ptr");
         return;
     }
     XrRep field_rep = cg_struct_field_rep(sl, idx);
     if (field_rep != XR_REP_TAGGED)
         fprintf(out, "(%s)", cg_struct_field_c_type(sl, idx));
-    emit_value_as_rep(out, value, field_rep);
+    emit_value_as_rep_ctx(ctx, out, value, field_rep);
 }
 
-static void emit_struct_inline_field_set_expr(FILE *out, const XrStructLayout *sl,
+static void emit_struct_set_result_value(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
+    if (cg_value_plan_is_aggregate(ctx, value)) {
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
+        return;
+    }
+    emit_value_as_rep_ctx(ctx, out, value, cg_rep(value));
+}
+
+static void emit_struct_inline_field_set_expr(XiCgenCtx *ctx, FILE *out, const XrStructLayout *sl,
                                               const XiValue *origin, int64_t idx,
                                               const XiValue *value) {
     const XrStructFieldLayout *field = cg_struct_field(sl, idx);
@@ -746,11 +754,11 @@ static void emit_struct_inline_field_set_expr(FILE *out, const XrStructLayout *s
         fprintf(out, "(memcpy(&");
         emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, ", ");
-        emit_value_as_rep(out, value, XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
         fprintf(out, ".ptr, sizeof(");
         emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, ")), ");
-        emit_value_as_rep(out, value, cg_rep(value));
+        emit_struct_set_result_value(ctx, out, value);
         fprintf(out, ")");
         return;
     }
@@ -758,17 +766,17 @@ static void emit_struct_inline_field_set_expr(FILE *out, const XrStructLayout *s
         fprintf(out, "(xrt_fixed_array_copy(&");
         emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, "[0], ");
-        emit_value_as_rep(out, value, XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
         fprintf(out, ", %u, %u), ", (unsigned) field->elem_native_type,
                 (unsigned) field->elem_count);
-        emit_value_as_rep(out, value, cg_rep(value));
+        emit_struct_set_result_value(ctx, out, value);
         fprintf(out, ")");
         return;
     }
     fprintf(out, "(");
     emit_struct_field_ref(out, sl, origin, idx);
     fprintf(out, " = ");
-    emit_struct_field_store_value(out, sl, idx, value);
+    emit_struct_field_store_value(ctx, out, sl, idx, value);
     fprintf(out, ")");
 }
 
@@ -934,6 +942,9 @@ static void emit_struct_heap_object_ptr_expr(XiCgenCtx *ctx, FILE *out, const Xi
 
 static bool emit_struct_heap_nested_object_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                     const XiValue *object, const char *prefix);
+static void emit_struct_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                     const XrStructLayout *sl, int64_t idx, const XiValue *object,
+                                     const char *prefix);
 
 static void emit_struct_heap_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                           const XrStructLayout *sl, int64_t idx,
@@ -954,6 +965,25 @@ static void emit_struct_heap_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFun
     fprintf(out, ")->%s", fname);
 }
 
+static void emit_struct_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                     const XrStructLayout *sl, int64_t idx, const XiValue *object,
+                                     const char *prefix) {
+    const XiValue *origin = cg_trace_struct_new(object);
+    if (origin && cg_struct_can_inline(f, origin) &&
+        cg_struct_layout_same_shape((const XrStructLayout *) origin->aux, sl)) {
+        emit_struct_field_ref(out, sl, origin, idx);
+        return;
+    }
+    if (cg_value_plan_is_struct_aggregate(ctx, object)) {
+        char fname[128];
+        cg_struct_field_c_name(sl, idx, fname, sizeof(fname));
+        emit_vref(out, object);
+        fprintf(out, ".%s", fname);
+        return;
+    }
+    emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+}
+
 static bool emit_struct_heap_nested_object_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                     const XiValue *object, const char *prefix) {
     const XiValue *target = object;
@@ -963,7 +993,7 @@ static bool emit_struct_heap_nested_object_ptr_expr(XiCgenCtx *ctx, FILE *out, c
         return false;
     const XrStructLayout *parent = (const XrStructLayout *) target->aux;
     fprintf(out, "&");
-    emit_struct_heap_field_lvalue(ctx, out, f, parent, target->aux_int, target->args[0], prefix);
+    emit_struct_field_lvalue(ctx, out, f, parent, target->aux_int, target->args[0], prefix);
     return true;
 }
 
@@ -976,38 +1006,38 @@ static bool emit_struct_heap_field_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     const XrStructFieldLayout *field = cg_struct_field(sl, idx);
     if (field && field->native_type == XR_NATIVE_STRUCT) {
         fprintf(out, "xr_struct_ref(&");
-        emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+        emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, ", (uint16_t)sizeof(");
-        emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+        emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, "))");
         return true;
     }
     if (field && field->native_type == XR_NATIVE_ARRAY) {
         if (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR) {
             fprintf(out, "&");
-            emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+            emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
             fprintf(out, "[0]");
             return true;
         }
         fprintf(out, "xr_array_ref(&");
-        emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+        emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, "[0], %u, %u)", (unsigned) field->elem_native_type,
                 (unsigned) field->elem_count);
         return true;
     }
     if (field && field->native_type == XR_NATIVE_ARRAY_REF) {
         fprintf(out, "xr_mkptr(");
-        emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+        emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, ", XR_TAG_ARRAY)");
         return true;
     }
     if (field && field->native_type == XR_NATIVE_MAP_REF) {
         fprintf(out, "xr_mkptr(");
-        emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+        emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, ", XR_TAG_MAP)");
         return true;
     }
-    emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+    emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
     return true;
 }
 
@@ -1029,31 +1059,31 @@ static bool emit_struct_heap_field_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     const XrStructFieldLayout *field = cg_struct_field(sl, idx);
     if (field && field->native_type == XR_NATIVE_STRUCT) {
         fprintf(out, "(memcpy(&");
-        emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+        emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, ", ");
-        emit_value_as_rep(out, value, XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
         fprintf(out, ".ptr, sizeof(");
-        emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+        emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, ")), ");
-        emit_value_as_rep(out, value, cg_rep(value));
+        emit_struct_set_result_value(ctx, out, value);
         fprintf(out, ")");
         return true;
     }
     if (field && field->native_type == XR_NATIVE_ARRAY) {
         fprintf(out, "(xrt_fixed_array_copy(&");
-        emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+        emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, "[0], ");
-        emit_value_as_rep(out, value, XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
         fprintf(out, ", %u, %u), ", (unsigned) field->elem_native_type,
                 (unsigned) field->elem_count);
-        emit_value_as_rep(out, value, cg_rep(value));
+        emit_struct_set_result_value(ctx, out, value);
         fprintf(out, ")");
         return true;
     }
     fprintf(out, "(");
-    emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+    emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
     fprintf(out, " = ");
-    emit_struct_field_store_value(out, sl, idx, value);
+    emit_struct_field_store_value(ctx, out, sl, idx, value);
     fprintf(out, ")");
     return true;
 }
@@ -1185,7 +1215,7 @@ static bool emit_struct_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, co
                 (unsigned) field->elem_count, (unsigned) field->elem_count);
     }
     fprintf(out, elem_rep == XR_REP_F64 ? "(double)" : "(int64_t)");
-    emit_struct_heap_field_lvalue(ctx, out, f, sl, ref->aux_int, ref->args[0], prefix);
+    emit_struct_field_lvalue(ctx, out, f, sl, ref->aux_int, ref->args[0], prefix);
     fprintf(out, "[");
     if (unchecked)
         emit_value_as_rep(out, v->args[1], XR_REP_I64);
@@ -1218,7 +1248,7 @@ static bool emit_struct_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "; if (XR_UNLIKELY(_idx < 0 || _idx >= %u)) xrt_fixed_index_oob(_idx, %u); ",
                 (unsigned) field->elem_count, (unsigned) field->elem_count);
     }
-    emit_struct_heap_field_lvalue(ctx, out, f, sl, ref->aux_int, ref->args[0], prefix);
+    emit_struct_field_lvalue(ctx, out, f, sl, ref->aux_int, ref->args[0], prefix);
     fprintf(out, "[");
     if (unchecked)
         emit_value_as_rep(out, v->args[1], XR_REP_I64);

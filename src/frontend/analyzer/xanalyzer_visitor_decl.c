@@ -134,6 +134,12 @@ static bool xa_c_export_struct_layout_supported_depth(const XrStructLayout *layo
         const XrStructFieldLayout *field = &layout->fields[i];
         if (xa_c_export_native_scalar_supported(field->native_type))
             continue;
+        if (field->native_type == XR_NATIVE_ARRAY && field->elem_count > 0 &&
+            xa_c_export_native_scalar_supported(field->elem_native_type))
+            continue;
+        if (field->native_type == XR_NATIVE_STRUCT &&
+            xa_c_export_struct_layout_supported_depth(field->sub_layout, depth + 1))
+            continue;
         return false;
     }
     return true;

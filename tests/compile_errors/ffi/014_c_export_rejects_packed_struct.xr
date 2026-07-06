@@ -1,0 +1,10 @@
+@repr(packed)
+struct Packed {
+    a: uint8
+    b: uint32
+}
+
+@c_export("xr_bad_packed_struct")
+fn bad_packed_struct(p: Packed) -> int32 {
+    return 0
+}
