@@ -1,0 +1,16 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_caps": []
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="stdlib_symbols": []
+contains="system_libs": []
+contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
+contains="ld_flags": ["-nostdlib"]
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=xrt_freestanding_trap("Assertion failed
+c_contains=xrt_freestanding_trap("assert_eq failed
+c_contains=xrt_freestanding_trap("assert_ne failed
+c_not_contains=fprintf(stderr
+c_not_contains=abort()
+undefined=xr_hook_panic

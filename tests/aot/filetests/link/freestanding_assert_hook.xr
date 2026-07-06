@@ -1,0 +1,9 @@
+@c_export("xray_assert_hook_shape")
+fn xray_assert_hook_shape(x: int) -> int {
+    assert(x >= 0)
+    assert_eq(x, x)
+    assert_ne(x, x + 1)
+    assert_true(true)
+    assert_false(false)
+    return x
+}

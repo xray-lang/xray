@@ -578,6 +578,34 @@ else
         "freestanding-profile: rejects Bytes.fromString"
 fi
 
+FREESTANDING_BUILTIN_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_builtin_reject.xr"
+FREESTANDING_BUILTIN_LOG="$WORK/freestanding_builtin_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_builtin_reject" \
+        "$FREESTANDING_BUILTIN_SRC" >"$FREESTANDING_BUILTIN_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects hosted builtin helpers"
+    sed 's/^/      /' "$FREESTANDING_BUILTIN_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_BUILTIN_LOG" \
+        "freestanding profile rejects builtin string()" \
+        "freestanding-profile: rejects builtin string conversion"
+    expect_log_contains "$FREESTANDING_BUILTIN_LOG" \
+        "freestanding profile rejects builtin typeof()" \
+        "freestanding-profile: rejects builtin typeof"
+    expect_log_contains "$FREESTANDING_BUILTIN_LOG" \
+        "freestanding profile rejects builtin copy()" \
+        "freestanding-profile: rejects builtin copy"
+    expect_log_contains "$FREESTANDING_BUILTIN_LOG" \
+        "freestanding profile rejects builtin char()" \
+        "freestanding-profile: rejects builtin char conversion"
+    expect_log_contains "$FREESTANDING_BUILTIN_LOG" \
+        "freestanding profile rejects builtin chr()" \
+        "freestanding-profile: rejects builtin chr conversion"
+    expect_log_contains "$FREESTANDING_BUILTIN_LOG" \
+        "freestanding profile rejects builtin dump()" \
+        "freestanding-profile: rejects builtin dump"
+fi
+
 FREESTANDING_ENUM_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_reject.xr"
 FREESTANDING_ENUM_LOG="$WORK/freestanding_enum_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
@@ -608,6 +636,37 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
 else
     record_fail "freestanding-profile: panic hook object build failed"
     sed 's/^/      /' "$FREESTANDING_HOOK_REAL_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_ASSERT_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_assert_hook.xr"
+FREESTANDING_ASSERT_OBJ="$WORK/freestanding_assert_hook.o"
+FREESTANDING_ASSERT_REAL_LOG="$WORK/freestanding_assert_hook.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_ASSERT_OBJ" \
+        "$FREESTANDING_ASSERT_SRC" >"$FREESTANDING_ASSERT_REAL_LOG" 2>&1; then
+    FREESTANDING_ASSERT_KEPT_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_ASSERT_REAL_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_ASSERT_KEPT_C" ]; then
+        expect_log_contains "$FREESTANDING_ASSERT_KEPT_C" "xrt_freestanding_trap(\"Assertion failed" \
+            "freestanding-profile/assert: generated C uses panic hook trap"
+        expect_log_not_contains "$FREESTANDING_ASSERT_KEPT_C" "fprintf(stderr" \
+            "freestanding-profile/assert: generated C avoids fprintf"
+        expect_log_not_contains "$FREESTANDING_ASSERT_KEPT_C" "abort()" \
+            "freestanding-profile/assert: generated C avoids abort"
+    else
+        record_fail "freestanding-profile/assert: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_ASSERT_REAL_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_ASSERT_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_ASSERT_OBJ")"
+    if [ "$FREESTANDING_ASSERT_UNDEFINED" = "xr_hook_panic" ]; then
+        record_pass "freestanding-profile: assert path depends only on panic hook"
+    else
+        record_fail "freestanding-profile: assert path has unexpected undefined symbols"
+        nm -u "$FREESTANDING_ASSERT_OBJ" 2>&1 | sed '/^[[:space:]]*$/d' | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile: assert hook object build failed"
+    sed 's/^/      /' "$FREESTANDING_ASSERT_REAL_LOG" | sed -n '1,120p'
 fi
 
 FREESTANDING_WRITE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_write_hook.xr"
