@@ -66,6 +66,21 @@ comptime {
         countdown -= 1
     }
     compile_assert(countdown == 0, "comptime while countdown")
+
+    var control = comptime 0
+    var kept = comptime 0
+    while (true) {
+        control += 1
+        if (control == 2) {
+            continue
+        }
+        if (control == 5) {
+            break
+        }
+        kept += control
+    }
+    compile_assert(control == 5, "comptime while break")
+    compile_assert(kept == 8, "comptime while continue")
 }
 
 @test
