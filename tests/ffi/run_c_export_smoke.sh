@@ -92,8 +92,16 @@ case "$(uname -s)" in
         SHARED_LINK_FLAG="-shared"
         ;;
 esac
+PAIR_TYPE=""
+PAIR_TYPE_FOR_C="struct xray_missing_pair_type"
 
 cat >"$SRC" <<'XR'
+@repr(C)
+struct Pair {
+    a: int32
+    b: int32
+}
+
 @c_export("xr_add_i32")
 fn add_i32(a: int32, b: int32) -> int32 {
     return a + b
@@ -124,6 +132,16 @@ fn write_i32_ptr(p: RawMut<int32>, v: int32) -> int32 {
     }
 }
 
+@c_export("xr_pair_sum")
+fn pair_sum(p: Pair) -> int32 {
+    return p.a + p.b
+}
+
+@c_export("xr_pair_make")
+fn pair_make(a: int32, b: int32) -> Pair {
+    return Pair{a: a, b: b}
+}
+
 print(add_i32(19, 23))
 XR
 
@@ -132,6 +150,25 @@ if "$XRAY" build --native -c --c-header "$GEN_H" -o "$GEN_C" "$SRC" >"$GEN_LOG" 
 else
     record_fail "generate native C source and export header"
     sed 's/^/      /' "$GEN_LOG" | sed -n '1,120p'
+fi
+
+if [ -f "$GEN_H" ]; then
+    PAIR_TYPE=$(awk '/xr_pair_make/ { print $1; exit }' "$GEN_H")
+    if [ -n "$PAIR_TYPE" ] && grep -Fq "typedef struct $PAIR_TYPE {" "$GEN_H"; then
+        case "$PAIR_TYPE" in
+            xrt_struct_*)
+                PAIR_TYPE_FOR_C="$PAIR_TYPE"
+                record_pass "header exposes repr(C) struct typedef"
+                ;;
+            *)
+                record_fail "header exposes repr(C) struct typedef"
+                sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
+                ;;
+        esac
+    else
+        record_fail "header exposes repr(C) struct typedef"
+        sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
+    fi
 fi
 
 if [ -f "$GEN_C" ]; then
@@ -145,6 +182,12 @@ if [ -f "$GEN_C" ]; then
         "declares RawPtr export"
     expect_file_contains "$GEN_C" "int32_t xr_write_i32_ptr(void * p0, int32_t p1);" \
         "declares RawMut export"
+    if [ -n "$PAIR_TYPE" ]; then
+        expect_file_contains "$GEN_C" "int32_t xr_pair_sum($PAIR_TYPE p0);" \
+            "declares repr(C) struct parameter export"
+        expect_file_contains "$GEN_C" "$PAIR_TYPE xr_pair_make(int32_t p0, int32_t p1);" \
+            "declares repr(C) struct return export"
+    fi
     expect_file_not_contains "$GEN_C" "static int32_t xr_add_i32" \
         "int32 export is public"
 fi
@@ -164,6 +207,12 @@ if [ -f "$GEN_H" ]; then
         "header declares RawPtr export"
     expect_file_contains "$GEN_H" "int32_t xr_write_i32_ptr(void * p0, int32_t p1);" \
         "header declares RawMut export"
+    if [ -n "$PAIR_TYPE" ]; then
+        expect_file_contains "$GEN_H" "int32_t xr_pair_sum($PAIR_TYPE p0);" \
+            "header declares repr(C) struct parameter export"
+        expect_file_contains "$GEN_H" "$PAIR_TYPE xr_pair_make(int32_t p0, int32_t p1);" \
+            "header declares repr(C) struct return export"
+    fi
 fi
 
 if cc -O2 -Wall -Wno-initializer-overrides -Wno-unused-function -Wno-unused-variable \
@@ -176,7 +225,7 @@ else
     sed 's/^/      /' "$OBJ_LOG" | sed -n '1,160p'
 fi
 
-cat >"$CALLER_C" <<'C'
+cat >"$CALLER_C" <<C
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -199,6 +248,9 @@ int main(void) {
         return 14;
     if (value != 77)
         return 15;
+    $PAIR_TYPE_FOR_C pair = xr_pair_make(20, 22);
+    if (xr_pair_sum(pair) != 42)
+        return 16;
     puts("ok");
     return 0;
 }

@@ -5363,29 +5363,223 @@ static void emit_cfn_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     fprintf(out, "}\n\n");
 }
 
+static bool cg_c_export_native_scalar_supported(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_I64:
+        case XR_NATIVE_F64:
+        case XR_NATIVE_BOOL:
+        case XR_NATIVE_I8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_F32:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool cg_c_export_struct_layout_supported_depth(const XrStructLayout *layout, int depth) {
+    if (!layout || layout->repr != XR_STRUCT_REPR_C || layout->explicit_align != 0 || depth > 8 ||
+        layout->field_count == 0 || layout->field_count > XR_MAX_STRUCT_FIELDS ||
+        !cg_struct_native_heap_supported(layout))
+        return false;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const XrStructFieldLayout *field = &layout->fields[i];
+        if (cg_c_export_native_scalar_supported(field->native_type))
+            continue;
+        return false;
+    }
+    return true;
+}
+
+static const XrStructLayout *cg_c_export_struct_layout_for_type(XiCgenCtx *ctx,
+                                                                const XrType *type) {
+    const XrStructLayout *layout = cg_type_struct_layout(type);
+    if (cg_c_export_struct_layout_supported_depth(layout, 0))
+        return layout;
+    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
+        !type->instance.class_name)
+        return NULL;
+    const XiClassData *cd = cg_class_native_data_by_name(ctx, type->instance.class_name);
+    if (cd && cg_c_export_struct_layout_supported_depth(cd->struct_layout, 0))
+        return cd->struct_layout;
+    for (int mi = 0; ctx && mi < ctx->all_nmodules; mi++) {
+        const XiModule *module = ctx->all_modules ? ctx->all_modules[mi] : NULL;
+        if (!module || !module->classes)
+            continue;
+        for (uint16_t ci = 0; ci < module->nclasses; ci++) {
+            cd = module->classes[ci];
+            if (cd && cd->class_name && strcmp(cd->class_name, type->instance.class_name) == 0 &&
+                cg_c_export_struct_layout_supported_depth(cd->struct_layout, 0))
+                return cd->struct_layout;
+        }
+    }
+    return NULL;
+}
+
+static bool cg_c_export_abi_slot_is_struct_aggregate(const XaotAbiSlot *slot) {
+    return slot && cg_value_rep_is_struct_aggregate(xaot_abi_slot_value_rep(slot));
+}
+
+static bool cg_c_export_xray_func_signature_supported(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f || f->is_vararg)
+        return false;
+    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
+    if (!plan)
+        return false;
+    if (!cg_cfn_value_type_supported(f->return_type, true) &&
+        !cg_c_export_abi_slot_is_struct_aggregate(&plan->abi.ret))
+        return false;
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
+        if (cg_cfn_value_type_supported(pt, false))
+            continue;
+        if (i >= plan->abi.nparams || !plan->abi.params ||
+            !cg_c_export_abi_slot_is_struct_aggregate(&plan->abi.params[i]))
+            return false;
+    }
+    return true;
+}
+
+static const char *cg_c_export_func_prefix(XiCgenCtx *ctx, const XiFunc *f) {
+    const XiModule *module = cg_cfn_module_for_func(ctx, f);
+    return module && module->name && module->name[0] ? module->name : "mod";
+}
+
+static void emit_c_export_value_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                       const char *prefix, const XrType *type, bool is_return) {
+    const char *scalar_type = cg_cfn_value_c_type(type, is_return);
+    if (scalar_type) {
+        fprintf(out, "%s", scalar_type);
+        return;
+    }
+    const XrStructLayout *layout = cg_c_export_struct_layout_for_type(ctx, type);
+    if (layout) {
+        char tname[128];
+        cg_struct_heap_type_name(tname, sizeof(tname),
+                                 prefix ? prefix : cg_c_export_func_prefix(ctx, f), layout);
+        fprintf(out, "%s", tname);
+        return;
+    }
+    if (ctx)
+        ctx->error = true;
+    fprintf(out, "%s", is_return ? "void" : "int64_t");
+}
+
+static void emit_c_export_return_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                        const char *prefix) {
+    const char *scalar_type = cg_cfn_value_c_type(f ? f->return_type : NULL, true);
+    if (scalar_type) {
+        fprintf(out, "%s", scalar_type);
+        return;
+    }
+    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
+    if (plan && cg_c_export_abi_slot_is_struct_aggregate(&plan->abi.ret) && plan->abi.ret.c_type) {
+        fprintf(out, "%s", plan->abi.ret.c_type);
+        return;
+    }
+    emit_c_export_value_c_type(ctx, out, f, prefix, f ? f->return_type : NULL, true);
+}
+
+static void emit_c_export_param_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                       const char *prefix, uint16_t index) {
+    const XrType *pt = f && f->params && f->params[index] ? f->params[index]->type : NULL;
+    const char *scalar_type = cg_cfn_value_c_type(pt, false);
+    if (scalar_type) {
+        fprintf(out, "%s", scalar_type);
+        return;
+    }
+    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
+    if (plan && index < plan->abi.nparams && plan->abi.params &&
+        cg_c_export_abi_slot_is_struct_aggregate(&plan->abi.params[index]) &&
+        plan->abi.params[index].c_type) {
+        fprintf(out, "%s", plan->abi.params[index].c_type);
+        return;
+    }
+    emit_c_export_value_c_type(ctx, out, f, prefix, pt, false);
+}
+
 static bool cg_func_can_have_c_export_stub(XiCgenCtx *ctx, const XiFunc *f) {
     if (!f || !f->c_export || !f->c_export_symbol || !f->c_export_symbol[0] || f->is_extern ||
         !cg_cfn_func_has_module_level_storage(ctx, f) || f->ncaptures > 0 ||
         cg_func_needs_aot_coro_ctx(ctx, f))
         return false;
-    return cg_cfn_xray_func_signature_supported(f);
+    return cg_c_export_xray_func_signature_supported(ctx, f);
 }
 
-static void emit_c_export_stub_signature(FILE *out, const XiFunc *f, bool with_attrs) {
+static void emit_c_export_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                         const char *prefix, bool with_attrs) {
     if (with_attrs)
         emit_aot_symbol_attrs(out, f, true);
-    fprintf(out, "%s %s(", cg_cfn_value_c_type(f->return_type, true), f->c_export_symbol);
+    emit_c_export_return_c_type(ctx, out, f, prefix);
+    fprintf(out, " %s(", f->c_export_symbol);
     if (f->nparams == 0) {
         fprintf(out, "void");
     } else {
         for (uint16_t i = 0; i < f->nparams; i++) {
             if (i > 0)
                 fprintf(out, ", ");
-            const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
-            fprintf(out, "%s p%u", cg_cfn_value_c_type(pt, false), i);
+            emit_c_export_param_c_type(ctx, out, f, prefix, i);
+            fprintf(out, " p%u", i);
         }
     }
     fprintf(out, ")");
+}
+
+typedef struct CgCExportStructTypedef {
+    const XrStructLayout *layout;
+    const char *prefix;
+    char c_name[128];
+} CgCExportStructTypedef;
+
+static void cg_c_export_collect_struct_typedef(const char *prefix, const XrStructLayout *layout,
+                                               CgCExportStructTypedef *items, int *count) {
+    if (!prefix || !layout || !items || !count || *count >= CG_STRUCT_TYPEDEF_MAX ||
+        !cg_c_export_struct_layout_supported_depth(layout, 0))
+        return;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        if (layout->fields[i].native_type == XR_NATIVE_STRUCT)
+            cg_c_export_collect_struct_typedef(prefix, layout->fields[i].sub_layout, items, count);
+    }
+
+    char c_name[128];
+    cg_struct_heap_type_name(c_name, sizeof(c_name), prefix, layout);
+    for (int i = 0; i < *count; i++) {
+        if (strcmp(items[i].c_name, c_name) == 0)
+            return;
+    }
+    items[*count].layout = layout;
+    items[*count].prefix = prefix;
+    snprintf(items[*count].c_name, sizeof(items[*count].c_name), "%s", c_name);
+    (*count)++;
+}
+
+static void cg_c_export_collect_signature_typedefs(XiCgenCtx *ctx, const XiFunc *f,
+                                                   CgCExportStructTypedef *items, int *count) {
+    if (!f)
+        return;
+    if (f->c_export && cg_func_can_have_c_export_stub(ctx, f)) {
+        const char *prefix = cg_c_export_func_prefix(ctx, f);
+        const XaotFuncPlan *plan = cg_func_plan(ctx, f);
+        if (plan && cg_c_export_abi_slot_is_struct_aggregate(&plan->abi.ret)) {
+            const XrStructLayout *layout = cg_c_export_struct_layout_for_type(ctx, f->return_type);
+            cg_c_export_collect_struct_typedef(prefix, layout, items, count);
+        }
+        for (uint16_t i = 0; plan && i < f->nparams && i < plan->abi.nparams; i++) {
+            if (!plan->abi.params ||
+                !cg_c_export_abi_slot_is_struct_aggregate(&plan->abi.params[i]))
+                continue;
+            const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
+            const XrStructLayout *layout = cg_c_export_struct_layout_for_type(ctx, pt);
+            cg_c_export_collect_struct_typedef(prefix, layout, items, count);
+        }
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        cg_c_export_collect_signature_typedefs(ctx, f->children[i], items, count);
 }
 
 static void emit_c_export_header_func(XiCgenCtx *ctx, FILE *out, const XiFunc *f, uint32_t *count) {
@@ -5400,7 +5594,7 @@ static void emit_c_export_header_func(XiCgenCtx *ctx, FILE *out, const XiFunc *f
             ctx->error = true;
             return;
         }
-        emit_c_export_stub_signature(out, f, false);
+        emit_c_export_stub_signature(ctx, out, f, cg_c_export_func_prefix(ctx, f), false);
         fprintf(out, ";\n");
         if (count)
             (*count)++;
@@ -5413,14 +5607,27 @@ XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule 
                                      int nmodules, const char *guard) {
     const char *header_guard = (guard && guard[0]) ? guard : "XRAY_AOT_C_EXPORTS_H";
     uint32_t count = 0;
+    CgCExportStructTypedef typedefs[CG_STRUCT_TYPEDEF_MAX];
+    int typedef_count = 0;
 
     XR_DCHECK(ctx != NULL, "xi_cgen_c_export_header: NULL ctx");
     XR_DCHECK(out != NULL, "xi_cgen_c_export_header: NULL out");
+
+    memset(typedefs, 0, sizeof(typedefs));
+    for (int i = 0; i < nmodules; i++) {
+        if (!modules || !modules[i] || !modules[i]->init)
+            continue;
+        cg_c_export_collect_signature_typedefs(ctx, modules[i]->init, typedefs, &typedef_count);
+    }
 
     fprintf(out, "#ifndef %s\n", header_guard);
     fprintf(out, "#define %s\n\n", header_guard);
     fprintf(out, "#include <stdint.h>\n");
     fprintf(out, "#include <stddef.h>\n\n");
+    for (int i = 0; i < typedef_count; i++)
+        emit_struct_native_typedef(out, typedefs[i].layout, typedefs[i].prefix);
+    if (typedef_count > 0)
+        fprintf(out, "\n");
     fprintf(out, "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
 
     for (int i = 0; i < nmodules; i++) {
@@ -5433,6 +5640,33 @@ XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule 
 
     fprintf(out, "\n#ifdef __cplusplus\n}\n#endif\n\n");
     fprintf(out, "#endif /* %s */\n", header_guard);
+}
+
+static void emit_c_export_c_param_storage_expr(FILE *out, const XiFunc *f, uint16_t index) {
+    const XrType *type = f->params && f->params[index] ? f->params[index]->type : NULL;
+    emit_cfn_c_param_storage_expr(out, type, index);
+}
+
+static void emit_c_export_target_call_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const char *prefix) {
+    emit_fname(ctx, out, prefix, f);
+    fprintf(out, "(NULL");
+    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
+        fprintf(out, ", ");
+        if (plan && i < plan->abi.nparams && plan->abi.params &&
+            cg_c_export_abi_slot_is_struct_aggregate(&plan->abi.params[i])) {
+            fprintf(out, "p%u", i);
+            continue;
+        }
+        XrRep from_rep = cg_cfn_value_storage_rep(pt, false);
+        XrRep to_rep = cg_func_param_abi_rep(ctx, f, i);
+        const char *suffix = emit_conversion_prefix(out, pt, from_rep, to_rep);
+        emit_c_export_c_param_storage_expr(out, f, i);
+        emit_conversion_suffix(out, suffix);
+    }
+    fprintf(out, ")");
 }
 
 static void emit_c_export_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -5453,13 +5687,22 @@ static void emit_c_export_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFun
         return;
     }
 
-    emit_c_export_stub_signature(out, f, true);
+    emit_c_export_stub_signature(ctx, out, f, prefix, true);
     fprintf(out, " {\n");
 
     ret_type = f->return_type;
     if (!ret_type || ret_type->kind == XR_KIND_UNIT) {
         fprintf(out, "    ");
-        emit_cfn_target_call_expr(ctx, out, f, prefix);
+        emit_c_export_target_call_expr(ctx, out, f, prefix);
+        fprintf(out, ";\n");
+        fprintf(out, "}\n\n");
+        return;
+    }
+
+    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
+    if (plan && cg_c_export_abi_slot_is_struct_aggregate(&plan->abi.ret)) {
+        fprintf(out, "    return ");
+        emit_c_export_target_call_expr(ctx, out, f, prefix);
         fprintf(out, ";\n");
         fprintf(out, "}\n\n");
         return;
@@ -5473,17 +5716,17 @@ static void emit_c_export_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFun
     if (ret_type->kind == XR_KIND_POINTER) {
         if (ret_rep == XR_REP_PTR || ret_rep == XR_REP_RAWPTR) {
             fprintf(out, "(%s)", ret_c_type);
-            emit_cfn_target_call_expr(ctx, out, f, prefix);
+            emit_c_export_target_call_expr(ctx, out, f, prefix);
         } else {
             fprintf(out, "(%s)(uintptr_t)(", ret_c_type);
-            emit_cfn_target_call_expr(ctx, out, f, prefix);
+            emit_c_export_target_call_expr(ctx, out, f, prefix);
             fprintf(out, ")");
         }
     } else {
         const char *suffix;
         fprintf(out, "(%s)(", ret_c_type);
         suffix = emit_conversion_prefix(out, ret_type, ret_rep, c_ret_rep);
-        emit_cfn_target_call_expr(ctx, out, f, prefix);
+        emit_c_export_target_call_expr(ctx, out, f, prefix);
         emit_conversion_suffix(out, suffix);
         fprintf(out, ")");
     }
@@ -5729,7 +5972,7 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, ";\n");
     }
     if (cg_func_can_have_c_export_stub(ctx, f)) {
-        emit_c_export_stub_signature(out, f, false);
+        emit_c_export_stub_signature(ctx, out, f, prefix, false);
         fprintf(out, ";\n");
     }
 
