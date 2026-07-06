@@ -1285,6 +1285,20 @@ struct XrType *xa_analyzer_get_node_type(XaAnalyzer *analyzer, const struct AstN
     return xa_node_table_get_type((XaNodeTable *) analyzer->node_table, node);
 }
 
+void xa_analyzer_set_node_ct_value(XaAnalyzer *analyzer, const struct AstNode *node,
+                                   const XrCtValue *value) {
+    if (!analyzer || !node)
+        return;
+    xa_node_table_set_ct_value((XaNodeTable *) analyzer->node_table, node, value);
+}
+
+bool xa_analyzer_get_node_ct_value(XaAnalyzer *analyzer, const struct AstNode *node,
+                                   XrCtValue *out_value) {
+    if (!analyzer || !node)
+        return false;
+    return xa_node_table_get_ct_value((XaNodeTable *) analyzer->node_table, node, out_value);
+}
+
 const struct XaSelection *xa_analyzer_get_selection(XaAnalyzer *analyzer,
                                                     const struct AstNode *node) {
     if (!analyzer || !node)

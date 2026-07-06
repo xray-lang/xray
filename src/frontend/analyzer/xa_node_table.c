@@ -30,6 +30,8 @@ typedef struct XaNodeEntry {
     struct XrType *type;
     struct XaScope *scope;    // enclosing scope at this node
     struct XaSymbol *symbol;  // resolved symbol (NULL for non-binding nodes)
+    bool has_ct_value;
+    XrCtValue ct_value;
     struct XaNodeEntry *next;
 } XaNodeEntry;
 
@@ -156,25 +158,35 @@ static const XaNodeEntry *find_entry(const XaNodeTable *t, uint32_t id) {
     return NULL;
 }
 
+static bool entry_has_no_facts(const XaNodeEntry *e) {
+    return e && !e->type && !e->scope && !e->symbol && !e->has_ct_value;
+}
+
+static void remove_entry_by_id(XaNodeTable *t, uint32_t id) {
+    if (!t)
+        return;
+    int b = bucket_of(t, id);
+    XaNodeEntry **pp = &t->buckets[b];
+    while (*pp) {
+        if ((*pp)->node_id == id) {
+            XaNodeEntry *to_free = *pp;
+            *pp = to_free->next;
+            xr_free(to_free);
+            t->size--;
+            return;
+        }
+        pp = &(*pp)->next;
+    }
+}
+
 void xa_node_table_set_type(XaNodeTable *t, struct AstNode *node, struct XrType *type) {
     if (!t || !node)
         return;
     uint32_t id = node->node_id;
 
     if (type == NULL) {
-        /* Clear entry */
-        int b = bucket_of(t, id);
-        XaNodeEntry **pp = &t->buckets[b];
-        while (*pp) {
-            if ((*pp)->node_id == id) {
-                XaNodeEntry *to_free = *pp;
-                *pp = to_free->next;
-                xr_free(to_free);
-                t->size--;
-                return;
-            }
-            pp = &(*pp)->next;
-        }
+        /* Historical API: clearing the type drops the whole node entry. */
+        remove_entry_by_id(t, id);
         return;
     }
 
@@ -214,4 +226,38 @@ struct XaSymbol *xa_node_table_get_symbol(const XaNodeTable *t, const struct Ast
         return NULL;
     const XaNodeEntry *e = find_entry(t, node->node_id);
     return e ? e->symbol : NULL;
+}
+
+void xa_node_table_set_ct_value(XaNodeTable *t, const struct AstNode *node,
+                                const XrCtValue *value) {
+    if (!t || !node)
+        return;
+    if (!value) {
+        XaNodeEntry *e = (XaNodeEntry *) find_entry(t, node->node_id);
+        if (!e)
+            return;
+        e->has_ct_value = false;
+        e->ct_value = (XrCtValue) {0};
+        if (entry_has_no_facts(e))
+            remove_entry_by_id(t, node->node_id);
+        return;
+    }
+
+    XaNodeEntry *e = find_or_create(t, node->node_id);
+    if (!e)
+        return;
+    e->has_ct_value = true;
+    e->ct_value = *value;
+}
+
+bool xa_node_table_get_ct_value(const XaNodeTable *t, const struct AstNode *node,
+                                XrCtValue *out_value) {
+    if (!t || !node)
+        return false;
+    const XaNodeEntry *e = find_entry(t, node->node_id);
+    if (!e || !e->has_ct_value)
+        return false;
+    if (out_value)
+        *out_value = e->ct_value;
+    return true;
 }

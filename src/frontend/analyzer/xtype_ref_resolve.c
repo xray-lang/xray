@@ -279,39 +279,53 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
     if (depth > XA_CONSTEVAL_MAX_DEPTH)
         return ct_fail(err, "constant expression is too deeply nested");
 
+    if (xa_analyzer_get_node_ct_value(analyzer, expr, out))
+        return true;
+
+    bool ok = false;
+
     switch (expr->type) {
         case AST_COMPTIME_EXPR:
-            return ct_eval_impl(analyzer, expr->as.comptime_expr.expr, out, err, stack, depth + 1);
+            ok = ct_eval_impl(analyzer, expr->as.comptime_expr.expr, out, err, stack, depth + 1);
+            break;
         case AST_GROUPING:
-            return ct_eval_impl(analyzer, expr->as.grouping, out, err, stack, depth + 1);
+            ok = ct_eval_impl(analyzer, expr->as.grouping, out, err, stack, depth + 1);
+            break;
         case AST_LITERAL_INT:
             out->kind = XR_CT_INT;
             out->as.int_val = expr->as.literal.raw_value.int_val;
-            return true;
+            ok = true;
+            break;
         case AST_LITERAL_FLOAT:
             out->kind = XR_CT_FLOAT;
             out->as.float_val = expr->as.literal.raw_value.float_val;
-            return true;
+            ok = true;
+            break;
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
             out->kind = XR_CT_BOOL;
             out->as.bool_val = expr->type == AST_LITERAL_TRUE;
-            return true;
+            ok = true;
+            break;
         case AST_LITERAL_STRING:
             out->kind = XR_CT_STRING;
             out->as.string_val = expr->as.literal.raw_value.string_val;
-            return true;
+            ok = true;
+            break;
         case AST_LITERAL_CHAR:
             out->kind = XR_CT_CHAR;
             out->as.char_val = expr->as.literal.raw_value.char_val;
-            return true;
+            ok = true;
+            break;
         case AST_LITERAL_NULL:
             out->kind = XR_CT_NULL;
-            return true;
+            ok = true;
+            break;
         case AST_UNARY_NEG:
         case AST_UNARY_BNOT:
         case AST_UNARY_NOT:
-            return ct_eval_unary(analyzer, expr, out, err, stack, depth);
+            ok = ct_eval_unary(analyzer, expr, out, err, stack, depth);
+            break;
         case AST_VARIABLE: {
             XaSymbol *sym = ct_lookup_const_symbol(analyzer, expr);
             XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
@@ -319,7 +333,8 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
                 return ct_fail(err, "identifier is not a compile-time const value");
             if (links->has_ct_value) {
                 *out = links->ct_value;
-                return true;
+                ok = true;
+                break;
             }
             if (!links->const_initializer)
                 return ct_fail(err, "identifier is not a compile-time const value");
@@ -327,7 +342,8 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
                 return ct_fail(err, "cyclic const expression");
             if (depth < XA_CONSTEVAL_MAX_DEPTH)
                 stack[depth] = sym->id;
-            return ct_eval_impl(analyzer, links->const_initializer, out, err, stack, depth + 1);
+            ok = ct_eval_impl(analyzer, links->const_initializer, out, err, stack, depth + 1);
+            break;
         }
         case AST_BINARY_ADD:
         case AST_BINARY_SUB:
@@ -347,7 +363,8 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
         case AST_BINARY_GE:
         case AST_BINARY_AND:
         case AST_BINARY_OR:
-            return ct_eval_binary(analyzer, expr, out, err, stack, depth);
+            ok = ct_eval_binary(analyzer, expr, out, err, stack, depth);
+            break;
         case AST_CALL_EXPR:
             return ct_fail(err, "function calls are not consteval-safe in this phase");
         case AST_BLOCK:
@@ -356,7 +373,13 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
             break;
     }
 
-    return ct_fail(err, "expression is not consteval-safe");
+    if (!ok) {
+        if (err && *err)
+            return false;
+        return ct_fail(err, "expression is not consteval-safe");
+    }
+    xa_analyzer_set_node_ct_value(analyzer, expr, out);
+    return true;
 }
 
 bool xa_consteval_expr(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out_value,
