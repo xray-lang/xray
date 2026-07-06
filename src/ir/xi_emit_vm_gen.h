@@ -36,7 +36,8 @@
     X(ASSERT_EQ, xi_emit_assert_eq) \
     X(ASSERT_NE, xi_emit_assert_ne) \
     X(ASSERT_THROWS, xi_emit_assert_throws) \
-    X(TYPEOF, xi_emit_typeof) \
+    X(TYPEID, xi_emit_typeid) \
+    X(TYPENAME, xi_emit_typename) \
     X(GET_BUILTIN, xi_emit_get_builtin) \
     X(GET_GLOBAL, xi_emit_get_global) \
     X(SET_GLOBAL, xi_emit_set_global) \

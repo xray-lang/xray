@@ -156,11 +156,17 @@
   :required-targets (vm-bytecode)
   :vm-bytecode (driver xi_emit_assert_throws))
 
-(lower xi.typeof
+(lower xi.typeid
   :match ()
   :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_typeof)
-  :aot-c (driver xicgen_typeof))
+  :vm-bytecode (driver xi_emit_typeid)
+  :aot-c (driver xicgen_typeid))
+
+(lower xi.typename
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_typename)
+  :aot-c (driver xicgen_typename))
 
 (lower xi.get.builtin
   :match ()

@@ -351,11 +351,10 @@ static void test_backend_lower_preserves_type_slice_and_range_ops(void) {
     XiValue *end = xi_const_int(f, entry, 1, &stub_int);
     assert(end != NULL);
 
-    XiValue *typeof_v = xi_value_new(f, entry, XI_TYPEOF, &stub_string, 1);
+    XiValue *typeof_v = xi_value_new(f, entry, XI_TYPENAME, &stub_string, 1);
     assert(typeof_v != NULL);
     typeof_v->args[0] = value;
-    typeof_v->flags = xi_op_default_effects(XI_TYPEOF);
-    typeof_v->aux_int = 1;
+    typeof_v->flags = xi_op_default_effects(XI_TYPENAME);
 
     XiValue *as_v = xi_value_new(f, entry, XI_AS, &stub_int, 1);
     assert(as_v != NULL);
@@ -380,7 +379,7 @@ static void test_backend_lower_preserves_type_slice_and_range_ops(void) {
     xi_backend_lower(f);
 
     assert(f->stage == XI_STAGE_BACKEND);
-    assert(typeof_v->op == XI_TYPEOF);
+    assert(typeof_v->op == XI_TYPENAME);
     assert(as_v->op == XI_AS);
     assert(slice_v->op == XI_SLICE);
     assert(range_v->op == XI_RANGE);
