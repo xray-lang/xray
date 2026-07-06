@@ -110,59 +110,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_CoroPool[] = {
     },
 };
 
-static const XmcpGeneratedStdlibSymbol _symbols_Reflect[] = {
-    {
-        .name = "elementType",
-        .signature = "(obj: any): string",
-        .summary = "Get element type of container",
-    },
-    {
-        .name = "fieldCount",
-        .signature = "(obj: any): int",
-        .summary = "Get field count of object",
-    },
-    {
-        .name = "getAllTypes",
-        .signature = "(): Array<Json>",
-        .summary = "Get all registered types",
-    },
-    {
-        .name = "getType",
-        .signature = "(obj: any): Json",
-        .summary = "Get type info of object",
-    },
-    {
-        .name = "getTypeByName",
-        .signature = "(name: string): Json",
-        .summary = "Get type info by name",
-    },
-    {
-        .name = "isInstance",
-        .signature = "(obj: any, cls: any): bool",
-        .summary = "Check if obj is instance of cls",
-    },
-    {
-        .name = "isInstanceOf",
-        .signature = "(obj: any, name: string): bool",
-        .summary = "Check by class name",
-    },
-    {
-        .name = "keyType",
-        .signature = "(obj: any): string",
-        .summary = "Get key type of map",
-    },
-    {
-        .name = "typeOf",
-        .signature = "(obj: any): string",
-        .summary = "Get type name string",
-    },
-    {
-        .name = "valueType",
-        .signature = "(obj: any): string",
-        .summary = "Get value type of map",
-    },
-};
-
 static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
     {
         .name = "decode",
@@ -2739,7 +2686,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Core built-ins\n"
             "- `print(value)` \xe2\x80\x94 print with newline\n"
             "- `dump(value)` \xe2\x80\x94 debug print with type info\n"
-            "- `typeof(value)` \xe2\x80\x94 return the runtime type name\n"
+            "- `typeof(value)` \xe2\x80\x94 return a stable TypeId / `Type.xxx` value\n"
+            "- `typename(value)` \xe2\x80\x94 return the debug/logging type name\n"
             "- `x is T` \xe2\x80\x94 runtime type check with analyzer narrowing\n"
             "- `int(value)` / `float(value)` / `string(value)` / `bool(value)` \xe2\x80\x94 explicit conversions\n"
             "- `assert(condition)` and `assert_*` helpers \xe2\x80\x94 testing assertions\n"
@@ -2754,9 +2702,10 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Type inspection\n"
             "```xray\n"
             "var x = 42\n"
-            "print(typeof(x))                // \"int\"\n"
+            "print(typeof(x) == Type.int)    // true\n"
+            "print(typename(x))              // \"int\"\n"
             "print(x is int)                 // true\n"
-            "print(typeof(x) == \"int\")       // true\n"
+            "// typeof(x) == \"int\"           // compile error: use Type.int or typename(x)\n"
             "```\n"
             "",
     },
@@ -2923,7 +2872,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "// Record/Json object literal: identifier or string key + colon ':'\n"
             "var data: Json = { name: \"Alice\", tags: [\"a\", \"b\"], age: 30 }\n"
             "var user = { name: \"Bob\", age: 25 }       // default type is sealed Record\n"
-            "typeof(user)                              // \"Record\"\n"
+            "typename(user)                            // \"Record\"\n"
             "data.name              // type: Json (field access returns Json)\n"
             "data[\"name\"]           // equivalent\n"
             "\n"
@@ -3575,13 +3524,13 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var result = identity<float>(0)            // 0 defaults to int; force float\n"
             "```\n"
             "\n"
-            "### Runtime reflection\n"
+            "### Debug type names\n"
             "```xray\n"
             "class Container<T> {\n"
             "    items: Array<T>\n"
             "}\n"
             "var c = Container<int>()\n"
-            "print(Reflect.typeOf(c))       // \"Container<int>\"\n"
+            "print(typename(c))             // \"Container<int>\" when type names are enabled\n"
             "```\n"
             "",
     },
@@ -4146,34 +4095,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "",
         .symbols = _symbols_CoroPool,
         .symbol_count = (int)(sizeof(_symbols_CoroPool) / sizeof(_symbols_CoroPool[0])),
-    },
-    {
-        .module = "Reflect",
-        .summary = "Runtime reflection helpers",
-        .body =
-            "# Reflect module\n"
-            "\n"
-            "Runtime reflection helpers for type lookup, type names, container element/key/value type queries, and instance checks.\n"
-            "\n"
-            "Usage: `import Reflect` then call `Reflect.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `Reflect.elementType` | `(obj: any): string` | Get element type of container |\n"
-            "| `Reflect.fieldCount` | `(obj: any): int` | Get field count of object |\n"
-            "| `Reflect.getAllTypes` | `(): Array<Json>` | Get all registered types |\n"
-            "| `Reflect.getType` | `(obj: any): Json` | Get type info of object |\n"
-            "| `Reflect.getTypeByName` | `(name: string): Json` | Get type info by name |\n"
-            "| `Reflect.isInstance` | `(obj: any, cls: any): bool` | Check if obj is instance of cls |\n"
-            "| `Reflect.isInstanceOf` | `(obj: any, name: string): bool` | Check by class name |\n"
-            "| `Reflect.keyType` | `(obj: any): string` | Get key type of map |\n"
-            "| `Reflect.typeOf` | `(obj: any): string` | Get type name string |\n"
-            "| `Reflect.valueType` | `(obj: any): string` | Get value type of map |\n"
-            "",
-        .symbols = _symbols_Reflect,
-        .symbol_count = (int)(sizeof(_symbols_Reflect) / sizeof(_symbols_Reflect[0])),
     },
     {
         .module = "base64",
