@@ -1,0 +1,1 @@
+comptime block return value must be evaluable at compile time: function calls are not consteval-safe in this phase

@@ -538,6 +538,27 @@ static XiValue *lower_literal(XiLower *l, AstNode *node) {
     }
 }
 
+static XiValue *lower_ct_scalar_value(XiLower *l, const XrCtValue *value) {
+    if (!l || !value)
+        return NULL;
+    switch (value->kind) {
+        case XR_CT_INT:
+            return xi_const_int(l->func, l->cur_block, value->as.int_val, l->type_int);
+        case XR_CT_FLOAT:
+            return xi_const_float(l->func, l->cur_block, value->as.float_val, l->type_float);
+        case XR_CT_BOOL:
+            return xi_const_bool(l->func, l->cur_block, value->as.bool_val, l->type_bool);
+        case XR_CT_STRING:
+            return xi_const_str(l->func, l->cur_block, value->as.string_val, l->type_string);
+        case XR_CT_CHAR:
+            return xi_const_char(l->func, l->cur_block, value->as.char_val, l->type_char);
+        case XR_CT_NULL:
+            return xi_const_null(l->func, l->cur_block, l->type_null);
+        default:
+            return NULL;
+    }
+}
+
 static uint16_t xi_narrow_op_for_native_type(uint8_t native_type);
 
 static bool xi_binary_needs_wrap(uint16_t op) {
@@ -6849,6 +6870,16 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         case AST_GROUPING:
             return xi_lower_expr(l, node->as.grouping);
         case AST_COMPTIME_EXPR:
+            if (node->as.comptime_expr.expr && node->as.comptime_expr.expr->type == AST_BLOCK) {
+                XrCtValue value = {0};
+                if (xa_analyzer_get_node_ct_value(l->analyzer, node, &value)) {
+                    XiValue *lowered = lower_ct_scalar_value(l, &value);
+                    if (lowered)
+                        return lowered;
+                }
+                l->had_error = true;
+                return xi_const_null(l->func, l->cur_block, l->type_null);
+            }
             return xi_lower_expr(l, node->as.comptime_expr.expr);
 
         /* Variables and assignment */
