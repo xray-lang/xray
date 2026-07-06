@@ -13,6 +13,7 @@
  */
 
 #include "xtype_ref_resolve.h"
+#include "xconsteval.h"
 #include "xanalyzer.h"
 #include "xanalyzer_builtin_interfaces.h"
 #include "xanalyzer_symbol.h"
@@ -31,9 +32,9 @@
 /* Resolve child type refs recursively. */
 static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t);
 
-#define XA_CONST_EVAL_MAX_DEPTH 64
+#define XA_CONSTEVAL_MAX_DEPTH 64
 
-static bool xa_const_stack_contains(const uint32_t *stack, int depth, uint32_t id) {
+static bool ct_stack_contains(const uint32_t *stack, int depth, uint32_t id) {
     if (!stack || id == 0)
         return false;
     for (int i = 0; i < depth; i++) {
@@ -43,85 +44,123 @@ static bool xa_const_stack_contains(const uint32_t *stack, int depth, uint32_t i
     return false;
 }
 
-static bool xa_eval_const_int_expr_impl(XaAnalyzer *analyzer, const AstNode *expr, int64_t *out,
-                                        const char **err, uint32_t *stack, int depth) {
-    if (!expr || !out) {
-        if (err)
-            *err = "missing expression";
+static bool ct_fail(const char **err, const char *message) {
+    if (err)
+        *err = message;
+    return false;
+}
+
+static bool ct_expect_kind(const XrCtValue *v, XrCtValueKind kind, const char **err,
+                           const char *message) {
+    if (v && v->kind == kind)
+        return true;
+    return ct_fail(err, message);
+}
+
+static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
+                         const char **err, uint32_t *stack, int depth);
+
+static bool ct_values_equal(const XrCtValue *a, const XrCtValue *b, bool *out) {
+    if (!a || !b || !out || a->kind != b->kind)
         return false;
+    switch (a->kind) {
+        case XR_CT_INT:
+            *out = a->as.int_val == b->as.int_val;
+            return true;
+        case XR_CT_FLOAT:
+            *out = a->as.float_val == b->as.float_val;
+            return true;
+        case XR_CT_BOOL:
+            *out = a->as.bool_val == b->as.bool_val;
+            return true;
+        case XR_CT_STRING:
+            *out = strcmp(a->as.string_val ? a->as.string_val : "",
+                          b->as.string_val ? b->as.string_val : "") == 0;
+            return true;
+        case XR_CT_CHAR:
+            *out = a->as.char_val == b->as.char_val;
+            return true;
+        case XR_CT_NULL:
+            *out = true;
+            return true;
+        default:
+            return false;
     }
-    if (depth > XA_CONST_EVAL_MAX_DEPTH) {
-        if (err)
-            *err = "constant expression is too deeply nested";
+}
+
+static XaSymbol *ct_lookup_const_symbol(XaAnalyzer *analyzer, const AstNode *expr) {
+    if (!analyzer || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
+        return NULL;
+    XaSymbol *sym = NULL;
+    if (expr->as.variable.symbol_id != 0)
+        sym = xa_scope_lookup_by_id(analyzer->global_scope, expr->as.variable.symbol_id);
+    if (!sym && analyzer->current_scope)
+        sym = xa_scope_lookup(analyzer->current_scope, expr->as.variable.name);
+    if (!sym && analyzer->global_scope)
+        sym = xa_scope_lookup(analyzer->global_scope, expr->as.variable.name);
+    return sym;
+}
+
+static bool ct_eval_unary(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
+                          const char **err, uint32_t *stack, int depth) {
+    XrCtValue v = {0};
+    if (!ct_eval_impl(analyzer, expr->as.unary.operand, &v, err, stack, depth + 1))
         return false;
-    }
 
     switch (expr->type) {
-        case AST_COMPTIME_EXPR:
-            return xa_eval_const_int_expr_impl(analyzer, expr->as.comptime_expr.expr, out, err,
-                                               stack, depth + 1);
-
-        case AST_LITERAL_INT:
-            *out = expr->as.literal.raw_value.int_val;
+        case AST_UNARY_NEG:
+            if (!ct_expect_kind(&v, XR_CT_INT, err, "unary '-' requires an integer constant"))
+                return false;
+            if (v.as.int_val == INT64_MIN)
+                return ct_fail(err, "integer constant overflow");
+            out->kind = XR_CT_INT;
+            out->as.int_val = -v.as.int_val;
             return true;
-
-        case AST_GROUPING:
-            return xa_eval_const_int_expr_impl(analyzer, expr->as.grouping, out, err, stack,
-                                               depth + 1);
-
-        case AST_UNARY_NEG: {
-            int64_t v = 0;
-            if (!xa_eval_const_int_expr_impl(analyzer, expr->as.unary.operand, &v, err, stack,
-                                             depth + 1))
+        case AST_UNARY_BNOT:
+            if (!ct_expect_kind(&v, XR_CT_INT, err, "unary '~' requires an integer constant"))
                 return false;
-            if (v == INT64_MIN) {
-                if (err)
-                    *err = "integer constant overflow";
+            out->kind = XR_CT_INT;
+            out->as.int_val = ~v.as.int_val;
+            return true;
+        case AST_UNARY_NOT:
+            if (!ct_expect_kind(&v, XR_CT_BOOL, err, "unary '!' requires a bool constant"))
                 return false;
-            }
-            *out = -v;
+            out->kind = XR_CT_BOOL;
+            out->as.bool_val = !v.as.bool_val;
+            return true;
+        default:
+            break;
+    }
+    return ct_fail(err, "unsupported unary consteval expression");
+}
+
+static bool ct_eval_binary(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
+                           const char **err, uint32_t *stack, int depth) {
+    XrCtValue left = {0};
+    XrCtValue right = {0};
+
+    if (!ct_eval_impl(analyzer, expr->as.binary.left, &left, err, stack, depth + 1))
+        return false;
+
+    if (expr->type == AST_BINARY_AND || expr->type == AST_BINARY_OR) {
+        if (!ct_expect_kind(&left, XR_CT_BOOL, err, "logical operator requires bool constants"))
+            return false;
+        if (expr->type == AST_BINARY_AND && !left.as.bool_val) {
+            out->kind = XR_CT_BOOL;
+            out->as.bool_val = false;
             return true;
         }
-
-        case AST_UNARY_BNOT: {
-            int64_t v = 0;
-            if (!xa_eval_const_int_expr_impl(analyzer, expr->as.unary.operand, &v, err, stack,
-                                             depth + 1))
-                return false;
-            *out = ~v;
+        if (expr->type == AST_BINARY_OR && left.as.bool_val) {
+            out->kind = XR_CT_BOOL;
+            out->as.bool_val = true;
             return true;
         }
+    }
 
-        case AST_VARIABLE: {
-            if (!analyzer || !expr->as.variable.name) {
-                if (err)
-                    *err = "identifier is not a compile-time constant";
-                return false;
-            }
-            XaSymbol *sym = NULL;
-            if (expr->as.variable.symbol_id != 0)
-                sym = xa_scope_lookup_by_id(analyzer->global_scope, expr->as.variable.symbol_id);
-            if (!sym && analyzer->current_scope)
-                sym = xa_scope_lookup(analyzer->current_scope, expr->as.variable.name);
-            if (!sym && analyzer->global_scope)
-                sym = xa_scope_lookup(analyzer->global_scope, expr->as.variable.name);
-            XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
-            if (!sym || !sym->is_const || !links || !links->const_initializer) {
-                if (err)
-                    *err = "identifier is not a const integer";
-                return false;
-            }
-            if (xa_const_stack_contains(stack, depth, sym->id)) {
-                if (err)
-                    *err = "cyclic const integer expression";
-                return false;
-            }
-            if (depth < XA_CONST_EVAL_MAX_DEPTH)
-                stack[depth] = sym->id;
-            return xa_eval_const_int_expr_impl(analyzer, links->const_initializer, out, err, stack,
-                                               depth + 1);
-        }
+    if (!ct_eval_impl(analyzer, expr->as.binary.right, &right, err, stack, depth + 1))
+        return false;
 
+    switch (expr->type) {
         case AST_BINARY_ADD:
         case AST_BINARY_SUB:
         case AST_BINARY_MUL:
@@ -132,87 +171,216 @@ static bool xa_eval_const_int_expr_impl(XaAnalyzer *analyzer, const AstNode *exp
         case AST_BINARY_BXOR:
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT: {
-            int64_t left = 0;
-            int64_t right = 0;
-            if (!xa_eval_const_int_expr_impl(analyzer, expr->as.binary.left, &left, err, stack,
-                                             depth + 1) ||
-                !xa_eval_const_int_expr_impl(analyzer, expr->as.binary.right, &right, err, stack,
-                                             depth + 1)) {
-                return false;
-            }
+            if (left.kind != XR_CT_INT || right.kind != XR_CT_INT)
+                return ct_fail(err, "integer operator requires integer constants");
+            int64_t l = left.as.int_val;
+            int64_t r = right.as.int_val;
+            out->kind = XR_CT_INT;
             switch (expr->type) {
                 case AST_BINARY_ADD:
-                    *out = left + right;
+                    out->as.int_val = l + r;
                     return true;
                 case AST_BINARY_SUB:
-                    *out = left - right;
+                    out->as.int_val = l - r;
                     return true;
                 case AST_BINARY_MUL:
-                    *out = left * right;
+                    out->as.int_val = l * r;
                     return true;
                 case AST_BINARY_DIV:
-                    if (right == 0) {
-                        if (err)
-                            *err = "division by zero in constant expression";
-                        return false;
-                    }
-                    *out = left / right;
+                    if (r == 0)
+                        return ct_fail(err, "division by zero in constant expression");
+                    out->as.int_val = l / r;
                     return true;
                 case AST_BINARY_MOD:
-                    if (right == 0) {
-                        if (err)
-                            *err = "modulo by zero in constant expression";
-                        return false;
-                    }
-                    *out = left % right;
+                    if (r == 0)
+                        return ct_fail(err, "modulo by zero in constant expression");
+                    out->as.int_val = l % r;
                     return true;
                 case AST_BINARY_BAND:
-                    *out = left & right;
+                    out->as.int_val = l & r;
                     return true;
                 case AST_BINARY_BOR:
-                    *out = left | right;
+                    out->as.int_val = l | r;
                     return true;
                 case AST_BINARY_BXOR:
-                    *out = left ^ right;
+                    out->as.int_val = l ^ r;
                     return true;
                 case AST_BINARY_LSHIFT:
-                    if (left < 0 || right < 0 || right >= 63) {
-                        if (err)
-                            *err = "bit shift is out of range";
-                        return false;
-                    }
-                    *out = left << right;
+                    if (l < 0 || r < 0 || r >= 63)
+                        return ct_fail(err, "bit shift is out of range");
+                    out->as.int_val = l << r;
                     return true;
                 case AST_BINARY_RSHIFT:
-                    if (right < 0 || right >= 63) {
-                        if (err)
-                            *err = "bit shift is out of range";
-                        return false;
-                    }
-                    *out = left >> right;
+                    if (r < 0 || r >= 63)
+                        return ct_fail(err, "bit shift is out of range");
+                    out->as.int_val = l >> r;
                     return true;
                 default:
                     break;
             }
             break;
         }
-
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE: {
+            bool eq = false;
+            if (!ct_values_equal(&left, &right, &eq))
+                return ct_fail(err, "equality requires constants of the same consteval kind");
+            out->kind = XR_CT_BOOL;
+            out->as.bool_val = expr->type == AST_BINARY_EQ ? eq : !eq;
+            return true;
+        }
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE: {
+            if (left.kind != XR_CT_INT || right.kind != XR_CT_INT)
+                return ct_fail(err, "comparison requires integer constants");
+            int64_t l = left.as.int_val;
+            int64_t r = right.as.int_val;
+            out->kind = XR_CT_BOOL;
+            switch (expr->type) {
+                case AST_BINARY_LT:
+                    out->as.bool_val = l < r;
+                    return true;
+                case AST_BINARY_LE:
+                    out->as.bool_val = l <= r;
+                    return true;
+                case AST_BINARY_GT:
+                    out->as.bool_val = l > r;
+                    return true;
+                case AST_BINARY_GE:
+                    out->as.bool_val = l >= r;
+                    return true;
+                default:
+                    break;
+            }
+            break;
+        }
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+            if (right.kind != XR_CT_BOOL)
+                return ct_fail(err, "logical operator requires bool constants");
+            out->kind = XR_CT_BOOL;
+            out->as.bool_val = expr->type == AST_BINARY_AND
+                                   ? (left.as.bool_val && right.as.bool_val)
+                                   : (left.as.bool_val || right.as.bool_val);
+            return true;
         default:
             break;
     }
 
-    if (err)
-        *err = "expression is not an integer constant";
-    return false;
+    return ct_fail(err, "unsupported binary consteval expression");
+}
+
+static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
+                         const char **err, uint32_t *stack, int depth) {
+    if (!expr || !out)
+        return ct_fail(err, "missing expression");
+    if (depth > XA_CONSTEVAL_MAX_DEPTH)
+        return ct_fail(err, "constant expression is too deeply nested");
+
+    switch (expr->type) {
+        case AST_COMPTIME_EXPR:
+            return ct_eval_impl(analyzer, expr->as.comptime_expr.expr, out, err, stack, depth + 1);
+        case AST_GROUPING:
+            return ct_eval_impl(analyzer, expr->as.grouping, out, err, stack, depth + 1);
+        case AST_LITERAL_INT:
+            out->kind = XR_CT_INT;
+            out->as.int_val = expr->as.literal.raw_value.int_val;
+            return true;
+        case AST_LITERAL_FLOAT:
+            out->kind = XR_CT_FLOAT;
+            out->as.float_val = expr->as.literal.raw_value.float_val;
+            return true;
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+            out->kind = XR_CT_BOOL;
+            out->as.bool_val = expr->type == AST_LITERAL_TRUE;
+            return true;
+        case AST_LITERAL_STRING:
+            out->kind = XR_CT_STRING;
+            out->as.string_val = expr->as.literal.raw_value.string_val;
+            return true;
+        case AST_LITERAL_CHAR:
+            out->kind = XR_CT_CHAR;
+            out->as.char_val = expr->as.literal.raw_value.char_val;
+            return true;
+        case AST_LITERAL_NULL:
+            out->kind = XR_CT_NULL;
+            return true;
+        case AST_UNARY_NEG:
+        case AST_UNARY_BNOT:
+        case AST_UNARY_NOT:
+            return ct_eval_unary(analyzer, expr, out, err, stack, depth);
+        case AST_VARIABLE: {
+            XaSymbol *sym = ct_lookup_const_symbol(analyzer, expr);
+            XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
+            if (!sym || !sym->is_const || !links || !links->const_initializer)
+                return ct_fail(err, "identifier is not a compile-time const value");
+            if (ct_stack_contains(stack, depth, sym->id))
+                return ct_fail(err, "cyclic const expression");
+            if (depth < XA_CONSTEVAL_MAX_DEPTH)
+                stack[depth] = sym->id;
+            return ct_eval_impl(analyzer, links->const_initializer, out, err, stack, depth + 1);
+        }
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+            return ct_eval_binary(analyzer, expr, out, err, stack, depth);
+        case AST_CALL_EXPR:
+            return ct_fail(err, "function calls are not consteval-safe in this phase");
+        case AST_BLOCK:
+            return ct_fail(err, "comptime block engine is not implemented in this phase");
+        default:
+            break;
+    }
+
+    return ct_fail(err, "expression is not consteval-safe");
+}
+
+bool xa_consteval_expr(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out_value,
+                       const char **out_error) {
+    uint32_t stack[XA_CONSTEVAL_MAX_DEPTH + 1];
+    memset(stack, 0, sizeof(stack));
+    if (out_error)
+        *out_error = NULL;
+    XrCtValue tmp = {0};
+    bool ok = ct_eval_impl(analyzer, expr, out_value ? out_value : &tmp, out_error, stack, 0);
+    if (!ok && out_value)
+        out_value->kind = XR_CT_NONE;
+    return ok;
+}
+
+bool xa_consteval_int_expr(XaAnalyzer *analyzer, const AstNode *expr, int64_t *out_value,
+                           const char **out_error) {
+    XrCtValue value = {0};
+    if (!xa_consteval_expr(analyzer, expr, &value, out_error))
+        return false;
+    if (value.kind != XR_CT_INT)
+        return ct_fail(out_error, "expression is not an integer constant");
+    if (out_value)
+        *out_value = value.as.int_val;
+    return true;
 }
 
 XR_FUNC bool xa_eval_const_int_expr(XaAnalyzer *analyzer, const AstNode *expr, int64_t *out_value,
                                     const char **out_error) {
-    uint32_t stack[XA_CONST_EVAL_MAX_DEPTH + 1];
-    memset(stack, 0, sizeof(stack));
-    if (out_error)
-        *out_error = NULL;
-    return xa_eval_const_int_expr_impl(analyzer, expr, out_value, out_error, stack, 0);
+    return xa_consteval_int_expr(analyzer, expr, out_value, out_error);
 }
 
 static void xa_report_fixed_array_length_diag(XaAnalyzer *analyzer, const AstNode *expr,

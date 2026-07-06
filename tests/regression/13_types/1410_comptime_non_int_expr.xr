@@ -1,0 +1,11 @@
+const ALWAYS = comptime (1 < 2)
+const GREETING = comptime "hi"
+const LETTER = comptime 'x'
+
+@test
+fn test_comptime_bool_string_char_expr() {
+    var flag = comptime (ALWAYS && (GREETING == "hi"))
+    assert_eq(flag, true)
+    assert_eq(GREETING, "hi")
+    assert_eq(LETTER, 'x')
+}
