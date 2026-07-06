@@ -1,8 +1,12 @@
 const LIMIT = comptime (8 * 4)
 
 comptime {
+    const LOCAL_BASE = comptime (LIMIT / 4)
+    const LOCAL_SUM = LOCAL_BASE + 6
     compile_assert(1 + 1 == 2, "math")
     compile_assert(LIMIT == 32)
+    compile_assert(LOCAL_BASE == 8)
+    compile_assert(LOCAL_SUM == 14, "local const chain")
     compile_assert(true)
 }
 
