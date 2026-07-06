@@ -209,6 +209,27 @@ static XrValue mem_cache_line_size(XrVMRuntime *isolate, XrValue *args, int argc
     return xr_int(XR_CACHE_LINE);
 }
 
+static XrValue mem_size_of(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    return xr_int(0);
+}
+
+static XrValue mem_align_of(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    return xr_int(0);
+}
+
+static XrValue mem_offset_of(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    return xr_int(0);
+}
+
 /* Managed allocation face (mem.alloc/allocZeroed/allocAligned). */
 static inline XrValue mem_ptr_result(void *p) {
     return xr_int((int64_t) (intptr_t) p);

@@ -1,0 +1,9 @@
+import mem
+
+@repr(C)
+struct Header {
+    x: uint8
+}
+
+var n = mem.offsetOf<Header>("missing")
+print(n)

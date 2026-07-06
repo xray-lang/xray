@@ -386,6 +386,9 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"cacheInvalidate", "(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false},
     {"nontemporalStore", "(ptr: RawMut<uint8>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false},
     {"cacheLineSize", "(): int", "CPU cache line size in bytes", true, false},
+    {"sizeOf", "(): int", "Compile-time size in bytes of a statically laid out type T", true, false},
+    {"alignOf", "(): int", "Compile-time alignment in bytes of a statically laid out type T", true, false},
+    {"offsetOf", "(field: string): int", "Compile-time byte offset of a field in a @repr(C) or @repr(packed) struct T", true, false},
     {"alloc", "(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false},
     {"allocZeroed", "(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false},
     {"allocAligned", "(n: int, align: int): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false},
@@ -406,7 +409,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"PROT_WRITE", ": int", "Writable page protection bit for mem.pageAlloc/pageProtect", false, false},
     {"PROT_EXEC", ": int", "Executable page protection bit for mem.pageAlloc/pageProtect", false, false},
 };
-#define GEN_MEM_FUNCTION_COUNT 24
+#define GEN_MEM_FUNCTION_COUNT 27
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {

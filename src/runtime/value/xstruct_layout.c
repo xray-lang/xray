@@ -10,6 +10,10 @@
 
 #include "xstruct_layout.h"
 #include "xtype.h"
+#include "../class/xclass_info.h"
+
+#include <stddef.h>
+#include <string.h>
 
 int xr_type_kind_to_native(int kind, uint8_t native_width) {
     switch ((XrTypeKind) kind) {
@@ -85,4 +89,94 @@ void xr_struct_layout_compute(XrStructLayout *layout) {
     // Pad total size to alignment
     layout->total_size = (offset + max_align - 1) & ~(max_align - 1);
     layout->alignment = max_align;
+}
+
+static const XrStructLayout *static_layout_struct_from_type(const XrType *type) {
+    if (!type || type->is_nullable)
+        return NULL;
+    if (type->kind != XR_KIND_INSTANCE && type->kind != XR_KIND_CLASS)
+        return NULL;
+    XrClassInfo *info = type->instance.class_ref;
+    if (!info || !info->struct_layout)
+        return NULL;
+    const XrStructLayout *layout = info->struct_layout;
+    return xr_struct_layout_is_headerless(layout) ? layout : NULL;
+}
+
+bool xr_type_static_layout(const XrType *type, uint32_t *out_size, uint32_t *out_align) {
+    if (out_size)
+        *out_size = 0;
+    if (out_align)
+        *out_align = 0;
+    if (!type || type->is_nullable)
+        return false;
+
+    int native = xr_type_kind_to_native(type->kind, type->native_width);
+    if (native >= 0) {
+        uint8_t size = xr_native_type_size((uint8_t) native);
+        uint8_t align = xr_native_type_align((uint8_t) native);
+        if (size == 0 || align == 0)
+            return false;
+        if (out_size)
+            *out_size = size;
+        if (out_align)
+            *out_align = align;
+        return true;
+    }
+
+    if (type->kind == XR_KIND_POINTER) {
+        if (out_size)
+            *out_size = (uint32_t) sizeof(void *);
+        if (out_align)
+            *out_align = (uint32_t) _Alignof(void *);
+        return true;
+    }
+
+    if (type->kind == XR_KIND_FIXED_ARRAY && type->fixed_array.length > 0 &&
+        type->fixed_array.element_type) {
+        uint32_t elem_size = 0;
+        uint32_t elem_align = 0;
+        if (!xr_type_static_layout(type->fixed_array.element_type, &elem_size, &elem_align))
+            return false;
+        uint64_t total = (uint64_t) elem_size * (uint64_t) type->fixed_array.length;
+        if (total > UINT32_MAX)
+            return false;
+        if (out_size)
+            *out_size = (uint32_t) total;
+        if (out_align)
+            *out_align = elem_align;
+        return true;
+    }
+
+    const XrStructLayout *layout = static_layout_struct_from_type(type);
+    if (layout) {
+        if (out_size)
+            *out_size = layout->total_size;
+        if (out_align)
+            *out_align = layout->alignment;
+        return true;
+    }
+
+    return false;
+}
+
+bool xr_type_static_field_offset(const XrType *type, const char *field_name, uint32_t *out_offset) {
+    if (out_offset)
+        *out_offset = 0;
+    if (!field_name)
+        return false;
+
+    const XrStructLayout *layout = static_layout_struct_from_type(type);
+    if (!layout || !layout->field_names)
+        return false;
+
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const char *name = layout->field_names[i];
+        if (name && strcmp(name, field_name) == 0) {
+            if (out_offset)
+                *out_offset = layout->fields[i].offset;
+            return true;
+        }
+    }
+    return false;
 }

@@ -1,0 +1,67 @@
+import mem
+
+@repr(C)
+struct Header {
+    magic: uint8
+    version: uint16
+    flags: uint8
+    length: uint32
+}
+
+@repr(packed)
+struct PackedHeader {
+    magic: uint8
+    length: uint32
+    flags: uint16
+}
+
+@repr(C)
+struct Inner {
+    code: uint16
+    tag: uint8
+}
+
+@repr(C)
+struct Outer {
+    header: Header
+    inner: Inner
+    tail: uint8
+}
+
+print(mem.sizeOf<uint8>())
+print(mem.alignOf<uint8>())
+print(mem.sizeOf<uint16>())
+print(mem.alignOf<uint16>())
+print(mem.sizeOf<uint32>())
+print(mem.alignOf<uint32>())
+print(mem.sizeOf<uint64>())
+print(mem.alignOf<uint64>())
+print(mem.sizeOf<float32>())
+print(mem.alignOf<float32>())
+print(mem.sizeOf<float64>())
+print(mem.alignOf<float64>())
+print(mem.sizeOf<RawPtr<uint8>>())
+print(mem.alignOf<RawPtr<uint8>>())
+print(mem.sizeOf<[uint16; 3]>())
+print(mem.alignOf<[uint16; 3]>())
+
+print(mem.sizeOf<Header>())
+print(mem.alignOf<Header>())
+print(mem.offsetOf<Header>("magic"))
+print(mem.offsetOf<Header>("version"))
+print(mem.offsetOf<Header>("flags"))
+print(mem.offsetOf<Header>("length"))
+
+print(mem.sizeOf<PackedHeader>())
+print(mem.alignOf<PackedHeader>())
+print(mem.offsetOf<PackedHeader>("magic"))
+print(mem.offsetOf<PackedHeader>("length"))
+print(mem.offsetOf<PackedHeader>("flags"))
+
+print(mem.sizeOf<Inner>())
+print(mem.alignOf<Inner>())
+print(mem.sizeOf<Outer>())
+print(mem.alignOf<Outer>())
+print(mem.offsetOf<Outer>("header"))
+print(mem.offsetOf<Outer>("inner"))
+print(mem.offsetOf<Outer>("tail"))

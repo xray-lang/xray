@@ -939,6 +939,86 @@ static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object,
     return links && links->module_name && strcmp(links->module_name, module_name) == 0;
 }
 
+static bool xa_mem_layout_member_name(const char *name) {
+    return name && (strcmp(name, "sizeOf") == 0 || strcmp(name, "alignOf") == 0 ||
+                    strcmp(name, "offsetOf") == 0);
+}
+
+static const char *xa_mem_layout_call_member(XaInferContext *ctx, CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    if (!xa_mem_layout_member_name(ma->name) || !xa_call_object_is_module(ctx, ma->object, "mem"))
+        return NULL;
+    return ma->name;
+}
+
+static XrType *xa_mem_layout_return_type(XaInferContext *ctx, AstNode *node, CallExprNode *call,
+                                         const char *member) {
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
+        char msg[160];
+        snprintf(msg, sizeof(msg), "mem.%s<T>() expects exactly one type argument", member);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   msg, &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+
+    bool is_offset = strcmp(member, "offsetOf") == 0;
+    int expected_args = is_offset ? 1 : 0;
+    if (call->arg_count != expected_args) {
+        char msg[180];
+        if (is_offset) {
+            snprintf(msg, sizeof(msg),
+                     "mem.offsetOf<T>() expects exactly one string literal field name");
+        } else {
+            snprintf(msg, sizeof(msg), "mem.%s<T>() expects no value arguments", member);
+        }
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+
+    XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+    uint32_t size = 0;
+    uint32_t align = 0;
+    if (!xr_type_static_layout(target, &size, &align)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "mem.%s<T>() requires T to have a static C-compatible layout, got '%s'", member,
+                 xr_type_to_string(target));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+
+    if (is_offset) {
+        AstNode *field_arg = call->arguments[0];
+        if (!field_arg || field_arg->type != AST_LITERAL_STRING ||
+            !field_arg->as.literal.raw_value.string_val) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "mem.offsetOf<T>() field name must be a string literal",
+                                       &loc);
+            return xr_type_new_unknown(ctx->analyzer->isolate);
+        }
+        const char *field = field_arg->as.literal.raw_value.string_val;
+        uint32_t offset = 0;
+        if (!xr_type_static_field_offset(target, field, &offset)) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "mem.offsetOf<T>(): field '%s' not found in '%s'", field,
+                     xr_type_to_string(target));
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+            return xr_type_new_unknown(ctx->analyzer->isolate);
+        }
+    }
+
+    (void) size;
+    (void) align;
+    return xr_type_new_int(ctx->analyzer->isolate);
+}
+
 static const char *xa_math_module_call_member(XaInferContext *ctx, CallExprNode *call) {
     if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return NULL;
@@ -1463,6 +1543,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // resolve to NULL here and are unaffected.
         fn_links = xa_module_member_fn_links(ctx, call->callee);
     }
+
+    const char *mem_layout_member = xa_mem_layout_call_member(ctx, call);
+    if (mem_layout_member)
+        return xa_mem_layout_return_type(ctx, node, call, mem_layout_member);
 
     // Check generic type argument count and constraints
     if (call->type_arg_count > 0 && fn_links) {
