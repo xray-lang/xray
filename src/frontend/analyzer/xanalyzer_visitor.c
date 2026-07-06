@@ -21,6 +21,7 @@
 #include "../../module/xmodule_graph.h"
 #include "../../runtime/value/xstruct_layout.h"
 #include "../../runtime/value/xtype_internal.h"
+#include "../../toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -2982,10 +2983,50 @@ static bool xa_eval_comptime_block_arg(XaInferContext *ctx, AstNode *arg, XrCtVa
 
 static const char *xa_comptime_block_supported_message(void) {
     return "comptime block currently supports const/var declarations, local var assignments, "
-           "compile-time if statements, compile_assert(...) and compile_error(...)";
+           "local var compound assignments, compile-time if statements, compile_assert(...) "
+           "and compile_error(...)";
 }
 
 static void xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt);
+
+static bool xa_comptime_compound_op_to_binary(XrTokenType op, AstNodeType *out) {
+    if (!out)
+        return false;
+    switch (op) {
+        case TK_PLUS_ASSIGN:
+            *out = AST_BINARY_ADD;
+            return true;
+        case TK_MINUS_ASSIGN:
+            *out = AST_BINARY_SUB;
+            return true;
+        case TK_MUL_ASSIGN:
+            *out = AST_BINARY_MUL;
+            return true;
+        case TK_DIV_ASSIGN:
+            *out = AST_BINARY_DIV;
+            return true;
+        case TK_MOD_ASSIGN:
+            *out = AST_BINARY_MOD;
+            return true;
+        case TK_AND_ASSIGN:
+            *out = AST_BINARY_BAND;
+            return true;
+        case TK_OR_ASSIGN:
+            *out = AST_BINARY_BOR;
+            return true;
+        case TK_XOR_ASSIGN:
+            *out = AST_BINARY_BXOR;
+            return true;
+        case TK_LSHIFT_ASSIGN:
+            *out = AST_BINARY_LSHIFT;
+            return true;
+        case TK_RSHIFT_ASSIGN:
+            *out = AST_BINARY_RSHIFT;
+            return true;
+        default:
+            return false;
+    }
+}
 
 static void xa_visit_comptime_block_assignment(XaInferContext *ctx, AstNode *stmt,
                                                AssignmentNode *assign) {
@@ -3016,6 +3057,81 @@ static void xa_visit_comptime_block_assignment(XaInferContext *ctx, AstNode *stm
         snprintf(msg, sizeof(msg),
                  "comptime block assignment must be evaluable at compile time%s%s", err ? ": " : "",
                  err ? err : "");
+        xa_report_comptime_block_error(ctx, stmt, msg);
+        return;
+    }
+
+    links->has_ct_value = true;
+    links->ct_value = value;
+    links->is_const_foldable = true;
+    links->assign_count++;
+}
+
+static void xa_visit_comptime_block_compound_assignment(XaInferContext *ctx, AstNode *stmt,
+                                                        CompoundAssignmentNode *compound) {
+    if (!ctx || !ctx->analyzer || !stmt || !compound || !compound->name)
+        return;
+    if (compound->object) {
+        xa_report_comptime_block_error(
+            ctx, stmt, "comptime block compound assignment target must be a block-local var");
+        return;
+    }
+
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, compound->name);
+    XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
+    if (!sym || !links || !links->is_comptime_local || sym->is_const || sym->is_shared ||
+        !sym->is_rebindable) {
+        xa_report_comptime_block_error(
+            ctx, stmt, "comptime block compound assignment target must be a block-local var");
+        return;
+    }
+
+    AstNodeType binary_type = AST_BINARY_ADD;
+    if (!xa_comptime_compound_op_to_binary(compound->op, &binary_type)) {
+        xa_report_comptime_block_error(ctx, stmt,
+                                       "unsupported comptime block compound assignment operator");
+        return;
+    }
+
+    XrCompilerSession *session = ctx->analyzer->compiler_session;
+    if (!session) {
+        xa_report_comptime_block_error(ctx, stmt,
+                                       "comptime block compound assignment requires a compiler "
+                                       "session");
+        return;
+    }
+
+    compound->symbol_id = sym->id;
+    AstNode lhs = {0};
+    lhs.type = AST_VARIABLE;
+    lhs.node_id = xr_compiler_session_next_ast_node_id(session);
+    lhs.line = stmt->line;
+    lhs.column = stmt->column;
+    lhs.as.variable.name = compound->name;
+    lhs.as.variable.symbol_id = sym->id;
+
+    AstNode binary = {0};
+    binary.type = binary_type;
+    binary.node_id = xr_compiler_session_next_ast_node_id(session);
+    binary.line = stmt->line;
+    binary.column = stmt->column;
+    binary.as.binary.left = &lhs;
+    binary.as.binary.right = compound->value;
+
+    XrType *value_type = xa_visit_infer_expr(ctx, &binary);
+    XrType *target_type = links->type ? links->type : xa_analyzer_get_type(ctx->analyzer, sym);
+    XrLocation loc = {.file = ctx->file_path, .line = stmt->line, .column = stmt->column};
+    if (target_type && value_type &&
+        !xa_analyzer_check_assignment(ctx->analyzer, target_type, value_type, &loc))
+        return;
+
+    XrCtValue value = {0};
+    const char *err = NULL;
+    if (!xa_consteval_expr(ctx->analyzer, &binary, &value, &err)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "comptime block compound assignment must be evaluable at compile time%s%s",
+                 err ? ": " : "", err ? err : "");
         xa_report_comptime_block_error(ctx, stmt, msg);
         return;
     }
@@ -3147,6 +3263,10 @@ static void xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt
     AstNode *expr = stmt->type == AST_EXPR_STMT ? stmt->as.expr_stmt : stmt;
     if (expr && expr->type == AST_ASSIGNMENT) {
         xa_visit_comptime_block_assignment(ctx, expr, &expr->as.assignment);
+        return;
+    }
+    if (expr && expr->type == AST_COMPOUND_ASSIGNMENT) {
+        xa_visit_comptime_block_compound_assignment(ctx, expr, &expr->as.compound_assignment);
         return;
     }
 
