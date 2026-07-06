@@ -94,6 +94,8 @@ static XrCtValue *ct_alloc_values(XaAnalyzer *analyzer, int count, const char **
     return values;
 }
 
+static bool ct_element_lists_equal(const XrCtElementListValue *a, const XrCtElementListValue *b);
+
 static bool ct_values_equal(const XrCtValue *a, const XrCtValue *b, bool *out) {
     if (!a || !b || !out)
         return false;
@@ -127,20 +129,25 @@ static bool ct_values_equal(const XrCtValue *a, const XrCtValue *b, bool *out) {
             *out = true;
             return true;
         case XR_CT_FIXED_ARRAY:
-            if (a->as.fixed_array_val.count != b->as.fixed_array_val.count)
-                return false;
-            for (int i = 0; i < a->as.fixed_array_val.count; i++) {
-                bool elem_eq = false;
-                if (!ct_values_equal(&a->as.fixed_array_val.elements[i],
-                                     &b->as.fixed_array_val.elements[i], &elem_eq) ||
-                    !elem_eq)
-                    return false;
-            }
-            *out = true;
+            *out = ct_element_lists_equal(&a->as.fixed_array_val, &b->as.fixed_array_val);
+            return true;
+        case XR_CT_TUPLE:
+            *out = ct_element_lists_equal(&a->as.tuple_val, &b->as.tuple_val);
             return true;
         default:
             return false;
     }
+}
+
+static bool ct_element_lists_equal(const XrCtElementListValue *a, const XrCtElementListValue *b) {
+    if (!a || !b || a->count != b->count)
+        return false;
+    for (int i = 0; i < a->count; i++) {
+        bool elem_eq = false;
+        if (!ct_values_equal(&a->elements[i], &b->elements[i], &elem_eq) || !elem_eq)
+            return false;
+    }
+    return true;
 }
 
 static bool ct_eval_array_literal(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
@@ -194,6 +201,32 @@ static bool ct_eval_array_literal(XaAnalyzer *analyzer, const AstNode *expr, XrC
     out->kind = XR_CT_FIXED_ARRAY;
     out->as.fixed_array_val.elements = values;
     out->as.fixed_array_val.count = arr->count;
+    return true;
+}
+
+static bool ct_eval_tuple_literal(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
+                                  const char **err, uint32_t *stack, int depth) {
+    const TupleLiteralNode *tup = &expr->as.tuple_literal;
+    if (tup->count <= 0)
+        return ct_fail(err, "unit tuple consteval is not supported in this phase");
+
+    XrCtValue *values = ct_alloc_values(analyzer, tup->count, err);
+    if (!values)
+        return false;
+
+    for (int i = 0; i < tup->count; i++) {
+        AstNode *elem = tup->elements ? tup->elements[i] : NULL;
+        if (!elem)
+            return ct_fail(err, "missing tuple consteval element");
+        if (elem->type == AST_SPREAD_EXPR)
+            return ct_fail(err, "tuple consteval literal cannot use spread in this phase");
+        if (!ct_eval_impl(analyzer, elem, &values[i], err, stack, depth + 1))
+            return false;
+    }
+
+    out->kind = XR_CT_TUPLE;
+    out->as.tuple_val.elements = values;
+    out->as.tuple_val.count = tup->count;
     return true;
 }
 
@@ -511,6 +544,9 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
             break;
         case AST_ARRAY_LITERAL:
             ok = ct_eval_array_literal(analyzer, expr, out, err, stack, depth);
+            break;
+        case AST_TUPLE_LITERAL:
+            ok = ct_eval_tuple_literal(analyzer, expr, out, err, stack, depth);
             break;
         case AST_UNARY_NEG:
         case AST_UNARY_BNOT:
