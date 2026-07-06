@@ -1,0 +1,28 @@
+struct CtPair {
+    x: int
+    y: int
+}
+
+const CT_TUPLE = comptime (1, (2, 3), "tail")
+const CT_PAIR = comptime CtPair{x: CT_TUPLE.1.0, y: CT_TUPLE.1.1}
+
+@test
+fn test_comptime_tuple_field_access() {
+    var value = comptime (CT_TUPLE.0 + CT_TUPLE.1.0 + CT_TUPLE.1.1)
+    assert_eq(value, 6)
+}
+
+@test
+fn test_comptime_struct_field_access() {
+    var value = comptime (CT_PAIR.x * 10 + CT_PAIR.y)
+    assert_eq(value, 23)
+}
+
+@test
+fn test_comptime_field_access_in_block_assert() {
+    comptime {
+        compile_assert(CT_PAIR.x == 2, "x should come from nested tuple")
+        compile_assert(CT_TUPLE.2 == "tail", "tuple tail should be available")
+    }
+    assert_eq(true, true)
+}

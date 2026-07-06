@@ -29,6 +29,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Resolve child type refs recursively. */
@@ -336,6 +337,44 @@ static bool ct_eval_struct_literal(XaAnalyzer *analyzer, const AstNode *expr, Xr
     out->as.struct_val.field_values = field_values;
     out->as.struct_val.field_count = sl->field_count;
     return true;
+}
+
+static bool ct_eval_member_access(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
+                                  const char **err, uint32_t *stack, int depth) {
+    const MemberAccessNode *ma = &expr->as.member_access;
+    XrCtValue object = {0};
+    if (!ct_eval_impl(analyzer, ma->object, &object, err, stack, depth + 1))
+        return false;
+    const char *name = ma->name ? ma->name : "";
+
+    if (object.kind == XR_CT_TUPLE) {
+        if (!*name)
+            return ct_fail(err, "tuple consteval field requires a numeric member name");
+        for (const char *p = name; *p; p++) {
+            if (*p < '0' || *p > '9')
+                return ct_fail(err, "tuple consteval field must use a numeric .N member");
+        }
+        char *end = NULL;
+        long index = strtol(name, &end, 10);
+        if (!end || *end != '\0' || index < 0 || index >= object.as.tuple_val.count)
+            return ct_fail(err, "tuple consteval field index is out of range");
+        *out = object.as.tuple_val.elements[index];
+        return true;
+    }
+
+    if (object.kind == XR_CT_STRUCT_VALUE) {
+        const XrCtStructValue *st = &object.as.struct_val;
+        for (int i = 0; i < st->field_count; i++) {
+            const char *field = st->field_names ? st->field_names[i] : NULL;
+            if (field && strcmp(field, name) == 0) {
+                *out = st->field_values[i];
+                return true;
+            }
+        }
+        return ct_fail(err, "struct consteval field was not found");
+    }
+
+    return ct_fail(err, "consteval member access requires a tuple or struct constant");
 }
 
 static XaSymbol *ct_lookup_const_symbol(XaAnalyzer *analyzer, const AstNode *expr) {
@@ -658,6 +697,9 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
             break;
         case AST_STRUCT_LITERAL:
             ok = ct_eval_struct_literal(analyzer, expr, out, err, stack, depth);
+            break;
+        case AST_MEMBER_ACCESS:
+            ok = ct_eval_member_access(analyzer, expr, out, err, stack, depth);
             break;
         case AST_UNARY_NEG:
         case AST_UNARY_BNOT:
