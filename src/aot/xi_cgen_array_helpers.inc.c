@@ -1412,6 +1412,26 @@ static bool cg_array_index_access_bounds_proven(XiCgenCtx *ctx, const XiFunc *f,
     return plan != NULL && plan->evidence != 0;
 }
 
+static const XaotSpanAccessPlan *cg_span_index_access_plan(XiCgenCtx *ctx, const XiValue *v,
+                                                           uint8_t kind) {
+    const XaotSpanAccessPlan *plan = xaot_bundle_find_span_access_plan(cg_ctx_aot_bundle(ctx), v);
+    return plan && plan->kind == kind ? plan : NULL;
+}
+
+static bool cg_span_index_plan_drops(XiCgenCtx *ctx, const XiValue *v, uint8_t kind,
+                                     uint32_t drops) {
+    const XaotSpanAccessPlan *plan = cg_span_index_access_plan(ctx, v, kind);
+    return plan && (plan->eliminated_checks & drops) == drops;
+}
+
+static bool cg_span_index_bounds_proven(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
+                                        uint8_t kind) {
+    (void) f;
+    if (v && (v->op == XI_INDEX_GET || v->op == XI_INDEX_SET) && (v->aux_int & 1))
+        return true;
+    return cg_span_index_plan_drops(ctx, v, kind, XAOT_SPAN_DROP_BOUNDS);
+}
+
 static void emit_typed_array_store_value(FILE *out, const CgArrayElemInfo *info,
                                          const XiValue *value) {
     if (info->rep == XR_REP_TAGGED) {
@@ -1823,7 +1843,7 @@ static bool emit_span_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         return false;
 
     XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
-    bool unchecked = cg_array_index_access_bounds_proven(ctx, f, v);
+    bool unchecked = cg_span_index_bounds_proven(ctx, f, v, XAOT_SPAN_ACCESS_INDEX_GET);
     bool borrowed_tagged = target_rep == XR_REP_TAGGED && info.rep == XR_REP_TAGGED &&
                            cg_tagged_array_index_get_can_borrow(ctx, f, v);
     const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
@@ -1862,14 +1882,20 @@ static bool emit_span_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         !cg_span_elem_info_from_value(ctx, v->args[0], &info))
         return false;
 
-    bool unchecked = cg_array_index_access_bounds_proven(ctx, f, v);
+    bool unchecked = cg_span_index_bounds_proven(ctx, f, v, XAOT_SPAN_ACCESS_INDEX_SET);
+    bool skip_readonly =
+        cg_span_index_plan_drops(ctx, v, XAOT_SPAN_ACCESS_INDEX_SET, XAOT_SPAN_DROP_READONLY);
     fprintf(out, "({ xr_span_t _s = ");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _idx = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-    fprintf(out, "; if (XR_UNLIKELY(xrt_span_is_readonly(_s))) ");
-    fprintf(out,
+    fprintf(out, "; ");
+    if (!skip_readonly) {
+        fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) ");
+        fprintf(
+            out,
             "xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+    }
     if (!unchecked)
         fprintf(out, "if (XR_LIKELY(_idx >= 0 && _idx < _s.length)) { ");
     fprintf(out, "((%s*)_s.data)[_idx] = ", info.ctype);
