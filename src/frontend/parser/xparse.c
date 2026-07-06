@@ -548,6 +548,59 @@ void xr_parser_synchronize(Parser *parser) {
 
 /* ========== Expression Parsing ========== */
 
+static void skip_invalid_inline_attribute_tail(Parser *parser, int start_line) {
+    int brace_depth = 0;
+    int paren_depth = 0;
+    int bracket_depth = 0;
+
+    while (!xr_parser_check(parser, TK_EOF)) {
+        if (brace_depth == 0 && paren_depth == 0 && bracket_depth == 0) {
+            if (xr_parser_check(parser, TK_SEMICOLON) || parser->current.line > start_line) {
+                return;
+            }
+        }
+
+        XrTokenType type = parser->current.type;
+        switch (type) {
+            case TK_LBRACE:
+                brace_depth++;
+                break;
+            case TK_RBRACE:
+                if (brace_depth == 0) {
+                    return;
+                }
+                brace_depth--;
+                xr_parser_advance(parser);
+                if (brace_depth == 0 && paren_depth == 0 && bracket_depth == 0) {
+                    return;
+                }
+                continue;
+            case TK_LPAREN:
+                paren_depth++;
+                break;
+            case TK_RPAREN:
+                if (paren_depth == 0) {
+                    return;
+                }
+                paren_depth--;
+                break;
+            case TK_LBRACKET:
+                bracket_depth++;
+                break;
+            case TK_RBRACKET:
+                if (bracket_depth == 0) {
+                    return;
+                }
+                bracket_depth--;
+                break;
+            default:
+                break;
+        }
+
+        xr_parser_advance(parser);
+    }
+}
+
 // Pratt parser core: parse expression by precedence.
 // Inner implementation; the public xr_parse_precedence wraps this with the
 // recursion-depth guard.
@@ -573,7 +626,15 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
 
     PrefixParseFn prefix_rule = xr_get_rule(parser->previous.type)->prefix;
     if (prefix_rule == NULL) {
-        xr_parser_error(parser, "expected expression");
+        if (parser->previous.type == TK_AT) {
+            xr_parser_error_at_previous(
+                parser,
+                "attributes can only annotate declaration items; use 'fn name(...)' for function "
+                "item attributes");
+            skip_invalid_inline_attribute_tail(parser, parser->previous.line);
+        } else {
+            xr_parser_error(parser, "expected expression");
+        }
         return NULL;
     }
 
