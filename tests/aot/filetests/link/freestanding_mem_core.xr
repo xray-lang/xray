@@ -1,8 +1,28 @@
 import mem
 
+@repr(C)
+struct XrayMemHeader {
+    tag: uint8
+    value: uint32
+}
+
 @c_export("xray_mem_addr_roundtrip")
 fn xray_mem_addr_roundtrip(addr: int) -> int {
     var p = mem.fromAddress(addr)
+    return mem.addressOf(p)
+}
+
+@c_export("xray_mem_layout_constants")
+fn xray_mem_layout_constants() -> int {
+    var size = mem.sizeOf<XrayMemHeader>()
+    var align = mem.alignOf<XrayMemHeader>()
+    var off = mem.offsetOf<XrayMemHeader>("value")
+    return size + align + off
+}
+
+@c_export("xray_mem_typed_from_address")
+fn xray_mem_typed_from_address(addr: int) -> int {
+    var p = mem.fromAddress(addr) as RawMut<uint32>
     return mem.addressOf(p)
 }
 
