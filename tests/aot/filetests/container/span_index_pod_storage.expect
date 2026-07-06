@@ -4,6 +4,8 @@ contains=  param 1 class=scalar kind=scalar rep=i64 c_type=int64_t
 contains=  param 2 class=scalar kind=scalar rep=u32 c_type=uint32_t
 regex=  value v[0-9]+ op=INDEX_GET kind=scalar rep=u32 c_type=uint32_t
 regex=  value v[0-9]+ op=INDEX_SET kind=void rep=void c_type=void
+regex=span-access-unproven [0-9]+ func=bump_word value=v[0-9]+ kind=index_get evidence=recv_agg\+pod reason=range
+regex=span-access-unproven [0-9]+ func=bump_word value=v[0-9]+ kind=index_set evidence=recv_agg\+pod reason=range
 regex=array-storage [0-9]+ func=bump_word value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U32/u32/uint32_t
 c_contains=xr_span_t p0
 c_contains=((uint32_t*)_s.data)[_idx]

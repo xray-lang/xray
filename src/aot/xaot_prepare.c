@@ -1679,6 +1679,55 @@ static bool prepare_span_elem_is_pod(const XaotContainerElemPlan *elem) {
            elem->rep != XAOT_REP_TAGGED;
 }
 
+static bool prepare_span_source_owner_is_writable(const XiValue *value) {
+    const XiValue *origin = unwrap_identity_value(value);
+    if (!origin || !origin->type)
+        return false;
+    return (origin->type->kind == XR_KIND_ARRAY || origin->type->kind == XR_KIND_FIXED_ARRAY) &&
+           !xr_type_is_const(origin->type);
+}
+
+static bool prepare_span_value_writable_proven(const XaotBundle *bundle, const XiValue *value,
+                                               uint8_t depth) {
+    const XiValue *origin = unwrap_identity_value(value);
+    if (!bundle || !origin || depth > 8 || !origin->type || origin->type->kind != XR_KIND_SPAN ||
+        !prepare_value_plan_is_span_aggregate(bundle, origin))
+        return false;
+
+    switch ((XiOp) origin->op) {
+        case XI_SLICE:
+            if (origin->nargs < 1)
+                return false;
+            if (origin->args[0] && origin->args[0]->type &&
+                origin->args[0]->type->kind == XR_KIND_SPAN)
+                return prepare_span_value_writable_proven(bundle, origin->args[0], depth + 1);
+            return prepare_span_source_owner_is_writable(origin->args[0]);
+        case XI_SPAN_AS_BYTES:
+        case XI_SPAN_REINTERPRET:
+            return origin->nargs >= 1 &&
+                   prepare_span_value_writable_proven(bundle, origin->args[0], depth + 1);
+        case XI_CALL_METHOD:
+            return origin->aux && strcmp((const char *) origin->aux, "asSpan") == 0 &&
+                   origin->nargs >= 1 && origin->args[0] && origin->args[0]->type &&
+                   xr_type_is_named_class(origin->args[0]->type, "Buffer") &&
+                   !xr_type_is_const(origin->args[0]->type);
+        case XI_PHI: {
+            bool saw_arg = false;
+            for (uint16_t i = 0; i < origin->nargs; i++) {
+                const XiValue *arg = unwrap_identity_value(origin->args[i]);
+                if (!arg || arg == origin)
+                    continue;
+                if (!prepare_span_value_writable_proven(bundle, arg, depth + 1))
+                    return false;
+                saw_arg = true;
+            }
+            return saw_arg;
+        }
+        default:
+            return false;
+    }
+}
+
 static bool prepare_span_elem_matches(const XaotContainerElemPlan *a,
                                       const XaotContainerElemPlan *b) {
     return a && b && a->elem_name && b->elem_name && a->c_type && b->c_type &&
@@ -1741,9 +1790,8 @@ static bool prepare_span_access_is_index(uint8_t kind) {
 static bool prepare_span_access_is_byte(uint8_t kind) {
     return kind == XAOT_SPAN_ACCESS_BYTE_LOAD || kind == XAOT_SPAN_ACCESS_BYTE_STORE ||
            kind == XAOT_SPAN_ACCESS_BYTE_FILL || kind == XAOT_SPAN_ACCESS_BYTE_COPY ||
-           kind == XAOT_SPAN_ACCESS_BYTE_COMPARE ||
-           kind == XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX || kind == XAOT_SPAN_ACCESS_BYTE_REPEAT ||
-           kind == XAOT_SPAN_ACCESS_REINTERPRET;
+           kind == XAOT_SPAN_ACCESS_BYTE_COMPARE || kind == XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX ||
+           kind == XAOT_SPAN_ACCESS_BYTE_REPEAT || kind == XAOT_SPAN_ACCESS_REINTERPRET;
 }
 
 XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, const XiFunc *func,
@@ -1792,6 +1840,11 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
         } else {
             reason = XAOT_SPAN_UNPROVEN_RANGE;
         }
+        if (kind == XAOT_SPAN_ACCESS_INDEX_SET &&
+            prepare_span_value_writable_proven(bundle, value->args[0], 0)) {
+            evidence |= XAOT_SPAN_EV_WRITABLE;
+            drop |= XAOT_SPAN_DROP_READONLY;
+        }
         goto done;
     }
 
@@ -1802,16 +1855,14 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
 
     switch ((XaotSpanAccessKind) kind) {
         case XAOT_SPAN_ACCESS_BYTE_LOAD:
-            if (prepare_value_is_const_endian(value->nargs >= 3 ? value->args[2] : NULL,
-                                              &endian)) {
+            if (prepare_value_is_const_endian(value->nargs >= 3 ? value->args[2] : NULL, &endian)) {
                 (void) endian;
                 evidence |= XAOT_SPAN_EV_ENDIAN_CONST;
             }
             drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
             break;
         case XAOT_SPAN_ACCESS_BYTE_STORE:
-            if (prepare_value_is_const_endian(value->nargs >= 4 ? value->args[3] : NULL,
-                                              &endian)) {
+            if (prepare_value_is_const_endian(value->nargs >= 4 ? value->args[3] : NULL, &endian)) {
                 (void) endian;
                 evidence |= XAOT_SPAN_EV_ENDIAN_CONST;
             }
@@ -1916,8 +1967,7 @@ static bool prepare_func_span_access_plans(XaotBundle *bundle, const XiFunc *fun
             if (!xaot_prepare_span_access_plan_for_value(bundle, func, value, &plan))
                 continue;
             if (!xaot_bundle_add_span_access_plan(bundle, func, value, plan.kind, plan.evidence,
-                                                  plan.eliminated_checks,
-                                                  plan.unproven_reason)) {
+                                                  plan.eliminated_checks, plan.unproven_reason)) {
                 bundle->error_msg = "failed to allocate AOT Span access plan";
                 return false;
             }

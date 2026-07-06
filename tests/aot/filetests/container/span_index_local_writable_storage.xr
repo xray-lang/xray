@@ -1,0 +1,9 @@
+fn local_bump() -> int {
+    var words = Array<uint32>(3, 0)
+    words[0] = 1
+    words[1] = 2
+    words[2] = 3
+    var view: Span<uint32> = words[:]
+    view[1] = view[1] + 7
+    return int(view[1])
+}
