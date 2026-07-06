@@ -1,0 +1,1053 @@
+#!/usr/bin/env python3
+"""Generate a source-derived Xray API inventory.
+
+The inventory is intentionally broader than `xray builtin-dump`: it merges
+analyzer-visible stdlib modules, pure-Xray stdlib exports, native type
+declarations, global builtins, prelude names, builtin interfaces, keywords, and
+IR intrinsics into one machine-readable list.  The same JSON can drive a human
+HTML explorer and documentation coverage checks.
+"""
+
+from __future__ import annotations
+
+import argparse
+import html
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+
+ITEM_SORT_KEY = lambda item: (
+    item.get("category", ""),
+    item.get("namespace", ""),
+    item.get("name", ""),
+    item.get("kind", ""),
+)
+
+
+GLOBAL_SIGNATURES = {
+    "assert": "(value: any, ...): ()",
+    "assert_eq": "(left: any, right: any, ...): ()",
+    "assert_ne": "(left: any, right: any, ...): ()",
+    "assert_true": "(value: any): ()",
+    "assert_false": "(value: any): ()",
+    "assert_throws": "(fn: function, ...): ()",
+    "likely": "(value: bool): bool",
+    "unlikely": "(value: bool): bool",
+    "int": "(value: any): int",
+    "float": "(value: any): float",
+    "string": "(value: any): string",
+    "bool": "(value: any): bool",
+    "char": "(value: any): char",
+    "Array": "(...items: any): Array<any>",
+    "Map": "(...items: any): Map<any, any>",
+    "Set": "(...items: any): Set<any>",
+    "Bytes": "(...items: any): Bytes",
+    "WeakMap": "(...items: any): Map<any, any>",
+    "WeakSet": "(...items: any): Set<any>",
+    "typeof": "(value: any): string",
+    "chr": "(codepoint: int): string",
+    "copy": "(value: any): any",
+    "dump": "(value: any, ...): ()",
+    "print": "(...values: any): ()",
+}
+
+GLOBAL_SUMMARIES = {
+    "assert": "Assert that a value is truthy.",
+    "assert_eq": "Assert equality in tests.",
+    "assert_ne": "Assert inequality in tests.",
+    "assert_true": "Assert that a value is true.",
+    "assert_false": "Assert that a value is false.",
+    "assert_throws": "Assert that a callable throws.",
+    "likely": "Branch-probability hint for true-biased conditions.",
+    "unlikely": "Branch-probability hint for false-biased conditions.",
+    "int": "Convert a value to int.",
+    "float": "Convert a value to float.",
+    "string": "Convert a value to string.",
+    "bool": "Convert a value to bool.",
+    "char": "Construct a char from a codepoint.",
+    "Array": "Construct an Array.",
+    "Map": "Construct a Map.",
+    "Set": "Construct a Set.",
+    "Bytes": "Construct a byte array.",
+    "WeakMap": "Construct a weak map.",
+    "WeakSet": "Construct a weak set.",
+    "typeof": "Return the runtime type name.",
+    "chr": "Construct a one-character string from a codepoint.",
+    "copy": "Deep-copy a runtime value where supported.",
+    "dump": "Print debug representation of values.",
+    "print": "Print values.",
+    "process": "Runtime process metadata.",
+    "__file__": "Current source file path.",
+    "__dir__": "Current source directory.",
+}
+
+PRELUDE_ENUMS = {
+    "Ordering": ["Relaxed", "Acquire", "Release", "AcquireRelease", "SeqCst"],
+    "Endian": ["Native", "LE", "BE"],
+    "Recv": ["Value", "Empty", "Timeout", "Closed"],
+    "SendResult": ["Sent", "Full", "Timeout", "Closed"],
+    "TaskResult": ["Success", "Failed", "Cancelled", "Timeout", "Pending"],
+    "TaskOutcome": ["Success", "Failed", "Cancelled"],
+    "TaskStatus": ["Pending", "Running", "Success", "Failed", "Cancelled"],
+}
+
+
+def rel(root: Path, path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(root.resolve()))
+    except ValueError:
+        return str(path)
+
+
+def line_for_offset(text: str, offset: int) -> int:
+    return text.count("\n", 0, max(offset, 0)) + 1
+
+
+def item(
+    *,
+    category: str,
+    namespace: str,
+    name: str,
+    kind: str,
+    signature: str = "",
+    summary: str = "",
+    source: str,
+    line: int = 1,
+    doc_surface: str = "",
+    doc_module: str = "",
+) -> dict[str, Any]:
+    qualified = f"{namespace}.{name}" if namespace and name and name != namespace else name
+    return {
+        "category": category,
+        "namespace": namespace,
+        "name": name,
+        "qualified": qualified,
+        "kind": kind,
+        "signature": signature,
+        "summary": summary,
+        "source": source,
+        "line": line,
+        "doc_surface": doc_surface,
+        "doc_module": doc_module,
+    }
+
+
+def stdlib_doc_surface_for_name(doc_surface: str, doc_module: str, name: str) -> tuple[str, str]:
+    if doc_surface != "stdlib" or not name.startswith("_"):
+        return doc_surface, doc_module
+    return "", ""
+
+
+def strip_line_comment(line: str) -> str:
+    in_string = False
+    escaped = False
+    out: list[str] = []
+    for ch in line:
+        if escaped:
+            out.append(ch)
+            escaped = False
+            continue
+        if ch == "\\" and in_string:
+            out.append(ch)
+            escaped = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            out.append(ch)
+            continue
+        if ch == "/" and not in_string:
+            # Caller passes one line; keep this simple and conservative.
+            pass
+        out.append(ch)
+    text = "".join(out)
+    return re.sub(r"\s*//.*$", "", text)
+
+
+def split_top_level_commas(text: str) -> list[str]:
+    parts: list[str] = []
+    start = 0
+    angle = paren = bracket = brace = 0
+    in_string = False
+    escaped = False
+    for i, ch in enumerate(text):
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\" and in_string:
+            escaped = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "<":
+            angle += 1
+        elif ch == ">" and angle:
+            angle -= 1
+        elif ch == "(":
+            paren += 1
+        elif ch == ")" and paren:
+            paren -= 1
+        elif ch == "[":
+            bracket += 1
+        elif ch == "]" and bracket:
+            bracket -= 1
+        elif ch == "{":
+            brace += 1
+        elif ch == "}" and brace:
+            brace -= 1
+        elif ch == "," and not (angle or paren or bracket or brace):
+            part = text[start:i].strip()
+            if part:
+                parts.append(part)
+            start = i + 1
+    tail = text[start:].strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def matching_brace_index(text: str, open_index: int) -> int:
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(open_index, len(text)):
+        ch = text[i]
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\" and in_string:
+            escaped = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def brace_delta(text: str) -> int:
+    delta = 0
+    in_string = False
+    escaped = False
+    for ch in text:
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\" and in_string:
+            escaped = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            delta += 1
+        elif ch == "}":
+            delta -= 1
+    return delta
+
+
+def normalize_signature(params: str, ret: str | None) -> str:
+    params = " ".join(params.strip().split())
+    ret = " ".join((ret or "()").strip().split())
+    return f"({params}): {ret}"
+
+
+def infer_const_type(value: str, annotation: str | None) -> str:
+    if annotation:
+        return annotation.strip()
+    value = value.strip()
+    if value.startswith('"'):
+        return "string"
+    if value in {"true", "false"}:
+        return "bool"
+    if re.fullmatch(r"-?(?:0x[0-9A-Fa-f]+|\d+)", value):
+        return "int"
+    if re.fullmatch(r"-?\d+\.\d+", value):
+        return "float"
+    return "unknown"
+
+
+def parse_exported_names(text: str) -> list[str]:
+    match = re.search(r"export\s*\{(?P<body>.*?)\}", text, re.S)
+    if not match:
+        return []
+    body = re.sub(r"//.*", "", match.group("body"))
+    return [part.strip() for part in split_top_level_commas(body) if part.strip()]
+
+
+CLASS_RE = re.compile(r"(?m)^(?:@native\s*\n)?class\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\{")
+TOP_FN_RE = re.compile(
+    r"(?m)^fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((?P<params>[^)]*)\)\s*(?:->\s*(?P<ret>[^{\n]+))?"
+)
+TOP_CONST_RE = re.compile(
+    r"(?m)^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([^=\n]+))?\s*=\s*([^\n]+)"
+)
+MEMBER_METHOD_RE = re.compile(
+    r"^\s*(static\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\((?P<params>[^)]*)\)\s*(?:->\s*(?P<ret>[^/{\n]+))?"
+)
+MEMBER_SIGNATURE_START_RE = re.compile(r"^\s*(?:static\s+)?[A-Za-z_][A-Za-z0-9_]*(?:<[^>{]+>)?\s*\(")
+MEMBER_FIELD_RE = re.compile(r"^\s*(?:const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^=\n]+)$")
+
+
+def parse_class_body(
+    root: Path,
+    path: Path,
+    text: str,
+    class_name: str,
+    body: str,
+    body_offset: int,
+    category: str,
+    doc_surface: str = "",
+    doc_module: str = "",
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    depth = 0
+    pending_signature = False
+    for local_lineno, raw in enumerate(body.splitlines(), 1):
+        line = strip_line_comment(raw).rstrip()
+        if not line.strip() or line.strip().startswith("@"):
+            depth = max(0, depth + brace_delta(line))
+            continue
+        if pending_signature:
+            if "{" in line:
+                pending_signature = False
+                depth = max(0, depth + brace_delta(line))
+            continue
+        if depth != 0:
+            depth = max(0, depth + brace_delta(line))
+            continue
+        method = MEMBER_METHOD_RE.match(line)
+        if method:
+            static = bool(method.group(1))
+            name = method.group(2)
+            kind = "static-method" if static else "method"
+            surface, module = stdlib_doc_surface_for_name(doc_surface, doc_module, name)
+            out.append(
+                item(
+                    category=category,
+                    namespace=class_name,
+                    name=name,
+                    kind=kind,
+                    signature=normalize_signature(method.group("params"), method.group("ret")),
+                    source=rel(root, path),
+                    line=line_for_offset(text, body_offset) + local_lineno - 1,
+                    doc_surface=surface,
+                    doc_module=module,
+                )
+            )
+            depth = max(0, depth + brace_delta(line))
+            continue
+        if MEMBER_SIGNATURE_START_RE.match(line):
+            pending_signature = "{" not in line
+            depth = max(0, depth + brace_delta(line))
+            continue
+        field = MEMBER_FIELD_RE.match(line)
+        if field:
+            name = field.group(1)
+            surface, module = stdlib_doc_surface_for_name(doc_surface, doc_module, name)
+            out.append(
+                item(
+                    category=category,
+                    namespace=class_name,
+                    name=name,
+                    kind="field",
+                    signature=f": {' '.join(field.group(2).strip().split())}",
+                    source=rel(root, path),
+                    line=line_for_offset(text, body_offset) + local_lineno - 1,
+                    doc_surface=surface,
+                    doc_module=module,
+                )
+            )
+        depth = max(0, depth + brace_delta(line))
+    return out
+
+
+def parse_xray_classes(
+    root: Path,
+    path: Path,
+    category: str,
+    exported: set[str] | None = None,
+    doc_surface: str = "",
+    doc_module: str = "",
+) -> list[dict[str, Any]]:
+    text = path.read_text(encoding="utf-8")
+    out: list[dict[str, Any]] = []
+    for match in CLASS_RE.finditer(text):
+        class_name = match.group(1)
+        if exported is not None and class_name not in exported:
+            continue
+        open_index = text.find("{", match.end() - 1)
+        close_index = matching_brace_index(text, open_index)
+        if close_index < 0:
+            continue
+        out.append(
+            item(
+                category=category,
+                namespace=class_name,
+                name=class_name,
+                kind="type",
+                signature=class_name,
+                source=rel(root, path),
+                line=line_for_offset(text, match.start()),
+                doc_surface=doc_surface,
+                doc_module=doc_module,
+            )
+        )
+        out.extend(
+            parse_class_body(
+                root,
+                path,
+                text,
+                class_name,
+                text[open_index + 1 : close_index],
+                open_index + 1,
+                category,
+                doc_surface,
+                doc_module,
+            )
+        )
+    return out
+
+
+def load_builtin_dump(root: Path, xray: Path | None, builtin_dump: Path | None) -> dict[str, Any]:
+    if builtin_dump:
+        return json.loads(builtin_dump.read_text(encoding="utf-8"))
+    if xray is None:
+        candidate = root / "build" / "xray"
+        if candidate.exists():
+            xray = candidate
+    if xray is None:
+        return {"modules": []}
+    proc = subprocess.run(
+        [str(xray), "builtin-dump"],
+        cwd=str(root),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=20,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr or proc.stdout)
+    return json.loads(proc.stdout)
+
+
+def collect_builtin_modules(root: Path, data: dict[str, Any]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    source = "xray builtin-dump"
+    for mod in data.get("modules", []):
+        module = mod.get("name", "")
+        for sym in mod.get("symbols", []):
+            name = sym.get("name", "")
+            surface, doc_module = stdlib_doc_surface_for_name("stdlib", module, name)
+            out.append(
+                item(
+                    category="stdlib-module",
+                    namespace=module,
+                    name=name,
+                    kind=sym.get("kind", "function"),
+                    signature=sym.get("signature", ""),
+                    summary=sym.get("summary", ""),
+                    source=source,
+                    line=1,
+                    doc_surface=surface,
+                    doc_module=doc_module,
+                )
+            )
+    return out
+
+
+def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    stdlib = root / "stdlib"
+    for path in sorted(stdlib.glob("*/*.xr")):
+        module = path.parent.name
+        if module == "types" or module.startswith("_") or path.stem != module:
+            continue
+        text = path.read_text(encoding="utf-8")
+        exports = parse_exported_names(text)
+        if not exports:
+            continue
+        exported = set(exports)
+        for match in TOP_CONST_RE.finditer(text):
+            name = match.group(1)
+            if name not in exported:
+                continue
+            surface, doc_module = stdlib_doc_surface_for_name("stdlib", module, name)
+            out.append(
+                item(
+                    category="stdlib-module",
+                    namespace=module,
+                    name=name,
+                    kind="const",
+                    signature=f": {infer_const_type(match.group(3), match.group(2))}",
+                    source=rel(root, path),
+                    line=line_for_offset(text, match.start()),
+                    doc_surface=surface,
+                    doc_module=doc_module,
+                )
+            )
+        for match in TOP_FN_RE.finditer(text):
+            name = match.group(1)
+            if name not in exported:
+                continue
+            surface, doc_module = stdlib_doc_surface_for_name("stdlib", module, name)
+            out.append(
+                item(
+                    category="stdlib-module",
+                    namespace=module,
+                    name=name,
+                    kind="function",
+                    signature=normalize_signature(match.group("params"), match.group("ret")),
+                    source=rel(root, path),
+                    line=line_for_offset(text, match.start()),
+                    doc_surface=surface,
+                    doc_module=doc_module,
+                )
+            )
+        out.extend(
+            parse_xray_classes(
+                root,
+                path,
+                "stdlib-module",
+                exported=exported,
+                doc_surface="stdlib",
+                doc_module=module,
+            )
+        )
+    return out
+
+
+def collect_native_types(root: Path) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    cards = {path.stem for path in (root / "spec/source/cards/stdlib").glob("*.json")}
+    for path in sorted((root / "stdlib/types").glob("*.xr")):
+        text = path.read_text(encoding="utf-8")
+        for match in CLASS_RE.finditer(text):
+            class_name = match.group(1)
+            doc_module = class_name.lower() if class_name.lower() in cards else ""
+            doc_surface = "stdlib" if doc_module else ""
+            open_index = text.find("{", match.end() - 1)
+            close_index = matching_brace_index(text, open_index)
+            if close_index < 0:
+                continue
+            out.append(
+                item(
+                    category="native-type",
+                    namespace=class_name,
+                    name=class_name,
+                    kind="type",
+                    signature=class_name,
+                    source=rel(root, path),
+                    line=line_for_offset(text, match.start()),
+                    doc_surface=doc_surface,
+                    doc_module=doc_module,
+                )
+            )
+            out.extend(
+                parse_class_body(
+                    root,
+                    path,
+                    text,
+                    class_name,
+                    text[open_index + 1 : close_index],
+                    open_index + 1,
+                    "native-type",
+                    doc_surface,
+                    doc_module,
+                )
+            )
+    return out
+
+
+def collect_globals(root: Path) -> list[dict[str, Any]]:
+    path = root / "src/frontend/analyzer/xanalyzer.c"
+    text = path.read_text(encoding="utf-8")
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for kind, pattern in (
+        ("function", r'register_builtin_func\s*\(\s*analyzer\s*,\s*"([^"]+)"'),
+        ("module", r'register_builtin_module\s*\(\s*analyzer\s*,\s*"([^"]+)"'),
+        ("variable", r'register_builtin_var\s*\(\s*analyzer\s*,\s*"([^"]+)"'),
+    ):
+        for match in re.finditer(pattern, text):
+            name = match.group(1)
+            key = (kind, name)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(
+                item(
+                    category="global-builtin",
+                    namespace="global",
+                    name=name,
+                    kind=kind,
+                    signature=GLOBAL_SIGNATURES.get(name, ""),
+                    summary=GLOBAL_SUMMARIES.get(name, ""),
+                    source=rel(root, path),
+                    line=line_for_offset(text, match.start()),
+                )
+            )
+    return out
+
+
+def collect_prelude(root: Path) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    path = root / "stdlib/prelude/prelude_types.def"
+    text = path.read_text(encoding="utf-8")
+    for match in re.finditer(r'XR_PRELUDE_TYPE\("([^"]+)",\s*([^,]+),\s*([A-Z0-9_]+)\)', text):
+        name = match.group(1)
+        out.append(
+            item(
+                category="prelude",
+                namespace="prelude",
+                name=name,
+                kind="type",
+                signature=match.group(3),
+                summary=f"Visible without import; native type {match.group(2).strip()}",
+                source=rel(root, path),
+                line=line_for_offset(text, match.start()),
+            )
+        )
+    enum_source = root / "src/frontend/analyzer/xanalyzer.c"
+    enum_text = enum_source.read_text(encoding="utf-8")
+    for name, members in PRELUDE_ENUMS.items():
+        marker = enum_text.find(f'"{name}"')
+        out.append(
+            item(
+                category="prelude",
+                namespace="prelude",
+                name=name,
+                kind="enum",
+                signature=" | ".join(members),
+                summary="Built-in prelude enum.",
+                source=rel(root, enum_source),
+                line=line_for_offset(enum_text, marker) if marker >= 0 else 1,
+            )
+        )
+    return out
+
+
+def collect_interfaces(root: Path) -> list[dict[str, Any]]:
+    path = root / "src/frontend/analyzer/xanalyzer_builtin_interfaces.c"
+    text = path.read_text(encoding="utf-8")
+    method_counts: dict[str, int] = {}
+    method_names: dict[str, list[str]] = {}
+    for match in re.finditer(r"static\s+XaInterfaceMethod\s+(\w+)_methods\[\]\s*=\s*\{(.*?)\};", text, re.S):
+        key = match.group(1)
+        names = re.findall(r'\{\s*"([^"]+)"', match.group(2))
+        method_names[key] = names
+        method_counts[key] = len(names)
+    out: list[dict[str, Any]] = []
+    for match in re.finditer(r'\[XA_IFACE_[^\]]+\]\s*=\s*\{"([^"]+)",\s*(\w+)_methods,\s*(\d+)\}', text):
+        iface = match.group(1)
+        method_key = match.group(2)
+        out.append(
+            item(
+                category="interface",
+                namespace=iface,
+                name=iface,
+                kind="interface",
+                signature=f"{method_counts.get(method_key, int(match.group(3)))} method(s)",
+                source=rel(root, path),
+                line=line_for_offset(text, match.start()),
+            )
+        )
+        for method in method_names.get(method_key, []):
+            out.append(
+                item(
+                    category="interface",
+                    namespace=iface,
+                    name=method,
+                    kind="method",
+                    source=rel(root, path),
+                    line=line_for_offset(text, match.start()),
+                )
+            )
+    return out
+
+
+def collect_keywords(root: Path) -> list[dict[str, Any]]:
+    path = root / "src/frontend/lexer/xkeywords.def"
+    text = path.read_text(encoding="utf-8")
+    out: list[dict[str, Any]] = []
+    for match in re.finditer(r'XR_KW\(\s*"([^"]+)"\s*,\s*(\d+)\s*,\s*([A-Z_]+)\s*\)', text):
+        out.append(
+            item(
+                category="language-keyword",
+                namespace="keyword",
+                name=match.group(1),
+                kind="keyword",
+                signature=match.group(3),
+                source=rel(root, path),
+                line=line_for_offset(text, match.start()),
+            )
+        )
+    return out
+
+
+def collect_intrinsics(root: Path) -> list[dict[str, Any]]:
+    path = root / "src/ir/xi_intrinsic.def"
+    text = path.read_text(encoding="utf-8")
+    out: list[dict[str, Any]] = []
+    for match in re.finditer(
+        r"XI_INTRINSIC\(\s*([A-Z0-9_]+)\s*,\s*([0-9]+)\s*,\s*(-?[0-9]+)\s*,\s*([A-Za-z0-9_]+)\s*,\s*([^,]+),\s*([A-Z0-9_]+)\s*\)",
+        text,
+    ):
+        out.append(
+            item(
+                category="ir-intrinsic",
+                namespace="intrinsic",
+                name=match.group(1),
+                kind="intrinsic",
+                signature=f"id={match.group(2)}, arity={match.group(3)}, ret={match.group(6)}",
+                summary=f"Helper {match.group(4)}; effects {match.group(5).strip()}",
+                source=rel(root, path),
+                line=line_for_offset(text, match.start()),
+            )
+        )
+    return out
+
+
+def dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+    for entry in items:
+        key = (
+            entry.get("category", ""),
+            entry.get("namespace", ""),
+            entry.get("name", ""),
+            entry.get("kind", ""),
+            entry.get("signature", ""),
+        )
+        if key not in seen:
+            seen[key] = entry
+    return sorted(seen.values(), key=ITEM_SORT_KEY)
+
+
+def build_inventory(root: Path, xray: Path | None, builtin_dump: Path | None) -> dict[str, Any]:
+    builtin_data = load_builtin_dump(root, xray, builtin_dump)
+    items: list[dict[str, Any]] = []
+    items.extend(collect_builtin_modules(root, builtin_data))
+    items.extend(collect_pure_stdlib(root))
+    items.extend(collect_native_types(root))
+    items.extend(collect_globals(root))
+    items.extend(collect_prelude(root))
+    items.extend(collect_interfaces(root))
+    items.extend(collect_keywords(root))
+    items.extend(collect_intrinsics(root))
+    items = dedupe(items)
+    return {
+        "schema": 1,
+        "root": str(root),
+        "counts": {
+            "items": len(items),
+            "stdlib_symbols": sum(1 for i in items if i.get("doc_surface") == "stdlib"),
+            "categories": len({i["category"] for i in items}),
+            "namespaces": len({i["namespace"] for i in items}),
+        },
+        "items": items,
+    }
+
+
+def stdlib_symbol_index(inventory: dict[str, Any]) -> dict[str, set[str]]:
+    index: dict[str, set[str]] = {}
+    for entry in inventory.get("items", []):
+        if entry.get("doc_surface") != "stdlib":
+            continue
+        module = entry.get("doc_module") or entry.get("namespace")
+        name = entry.get("name", "")
+        kind = entry.get("kind", "")
+        if not module or not name or kind in {"module"}:
+            continue
+        namespace = entry.get("namespace", "")
+        qualified = entry.get("qualified", name)
+        symbol_name = qualified if namespace and namespace != module else name
+        index.setdefault(module, set()).add(symbol_name)
+    return index
+
+
+def check_docs(root: Path, inventory: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    cards_dir = root / "spec/source/cards/stdlib"
+    docs_dir = root / "docs/knowledge/stdlib"
+    required_modules = sorted(stdlib_symbol_index(inventory))
+    for module in required_modules:
+        if not (cards_dir / f"{module}.json").exists():
+            errors.append(f"missing stdlib knowledge card for source API module `{module}`")
+        if docs_dir.exists() and not (docs_dir / f"{module}.md").exists():
+            errors.append(f"missing generated stdlib knowledge markdown for `{module}`")
+    return errors
+
+
+def render_html(inventory: dict[str, Any]) -> str:
+    data = json.dumps(inventory["items"], ensure_ascii=False)
+    count = inventory["counts"]["items"]
+    stdlib_count = inventory["counts"]["stdlib_symbols"]
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xray API Inventory</title>
+<style>
+:root {{
+  color-scheme: light;
+  --bg: #f7f8fb;
+  --panel: #ffffff;
+  --text: #172033;
+  --muted: #667085;
+  --line: #d8dee9;
+  --accent: #147d64;
+  --accent-soft: #e5f4ef;
+  --warn: #9a5b00;
+}}
+* {{ box-sizing: border-box; }}
+body {{
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+}}
+header {{
+  padding: 22px 28px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}}
+h1 {{
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0;
+}}
+.meta {{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+}}
+.pill {{
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #fff;
+}}
+main {{ padding: 16px 28px 28px; }}
+.toolbar {{
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 180px 180px 150px;
+  gap: 10px;
+  margin-bottom: 14px;
+}}
+input, select {{
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}}
+.table-wrap {{
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  max-height: calc(100vh - 170px);
+}}
+table {{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 1180px;
+}}
+th, td {{
+  padding: 8px 10px;
+  border-bottom: 1px solid #edf0f4;
+  vertical-align: top;
+  text-align: left;
+}}
+th {{
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f0f3f7;
+  color: #344054;
+  font-weight: 650;
+}}
+tbody tr:hover {{ background: #f8fbfa; }}
+code {{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}}
+.kind {{
+  display: inline-block;
+  border-radius: 5px;
+  padding: 2px 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  white-space: nowrap;
+}}
+.undoc {{ color: var(--warn); }}
+.source {{ color: var(--muted); font-size: 12px; }}
+.empty {{
+  padding: 28px;
+  color: var(--muted);
+  text-align: center;
+}}
+@media (max-width: 900px) {{
+  header, main {{ padding-left: 16px; padding-right: 16px; }}
+  .toolbar {{ grid-template-columns: 1fr; }}
+  .table-wrap {{ max-height: none; }}
+}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Xray API Inventory</h1>
+  <div class="meta">
+    <span class="pill">{count} source-derived items</span>
+    <span class="pill">{stdlib_count} stdlib/documented-surface symbols</span>
+    <span class="pill">Generated by scripts/gen_api_inventory.py</span>
+  </div>
+</header>
+<main>
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="Search name, signature, summary, source">
+    <select id="category"><option value="">All categories</option></select>
+    <select id="namespace"><option value="">All namespaces</option></select>
+    <select id="docs"><option value="">All doc states</option><option value="stdlib">Stdlib documented surface</option><option value="none">No stdlib doc surface</option></select>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Namespace</th>
+          <th>Name</th>
+          <th>Kind</th>
+          <th>Signature</th>
+          <th>Summary</th>
+          <th>Docs</th>
+          <th>Source</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="empty" class="empty" hidden>No matching API items.</div>
+  </div>
+</main>
+<script>
+const ITEMS = {data};
+const rows = document.getElementById('rows');
+const empty = document.getElementById('empty');
+const search = document.getElementById('search');
+const category = document.getElementById('category');
+const namespace = document.getElementById('namespace');
+const docs = document.getElementById('docs');
+
+function esc(value) {{
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({{
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }}[ch]));
+}}
+
+function fillSelect(select, values) {{
+  for (const value of values) {{
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  }}
+}}
+
+fillSelect(category, [...new Set(ITEMS.map(i => i.category))].sort());
+fillSelect(namespace, [...new Set(ITEMS.map(i => i.namespace).filter(Boolean))].sort());
+
+function matches(item) {{
+  const q = search.value.trim().toLowerCase();
+  if (category.value && item.category !== category.value) return false;
+  if (namespace.value && item.namespace !== namespace.value) return false;
+  if (docs.value === 'stdlib' && item.doc_surface !== 'stdlib') return false;
+  if (docs.value === 'none' && item.doc_surface === 'stdlib') return false;
+  if (!q) return true;
+  const haystack = [
+    item.category, item.namespace, item.name, item.qualified, item.kind,
+    item.signature, item.summary, item.source, item.doc_module
+  ].join(' ').toLowerCase();
+  return haystack.includes(q);
+}}
+
+function render() {{
+  const shown = ITEMS.filter(matches);
+  rows.innerHTML = shown.map(item => `
+    <tr>
+      <td>${{esc(item.category)}}</td>
+      <td><code>${{esc(item.namespace)}}</code></td>
+      <td><code>${{esc(item.qualified)}}</code></td>
+      <td><span class="kind">${{esc(item.kind)}}</span></td>
+      <td><code>${{esc(item.signature)}}</code></td>
+      <td>${{esc(item.summary)}}</td>
+      <td>${{item.doc_surface === 'stdlib' ? esc(item.doc_module) : '<span class="undoc">not stdlib docs</span>'}}</td>
+      <td class="source">${{esc(item.source)}}:${{esc(item.line)}}</td>
+    </tr>
+  `).join('');
+  empty.hidden = shown.length !== 0;
+}}
+
+[search, category, namespace, docs].forEach(el => el.addEventListener('input', render));
+render();
+</script>
+</body>
+</html>
+"""
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, default=Path("."))
+    parser.add_argument("--xray", type=Path, default=None, help="xray executable for builtin-dump")
+    parser.add_argument("--builtin-dump", type=Path, default=None, help="JSON from `xray builtin-dump`")
+    parser.add_argument("--json", type=Path, default=None, help="write inventory JSON")
+    parser.add_argument("--html", type=Path, default=None, help="write interactive HTML inventory")
+    parser.add_argument("--check-docs", action="store_true", help="fail if source API modules lack docs")
+    args = parser.parse_args(argv)
+
+    root = args.root.resolve()
+    inventory = build_inventory(root, args.xray, args.builtin_dump)
+
+    if args.json:
+        args.json.parent.mkdir(parents=True, exist_ok=True)
+        args.json.write_text(json.dumps(inventory, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if args.html:
+        args.html.parent.mkdir(parents=True, exist_ok=True)
+        args.html.write_text(render_html(inventory), encoding="utf-8")
+
+    errors: list[str] = []
+    if args.check_docs:
+        errors.extend(check_docs(root, inventory))
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    if not args.json and not args.html:
+        print(json.dumps(inventory, indent=2, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

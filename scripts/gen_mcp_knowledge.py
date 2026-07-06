@@ -18,18 +18,17 @@ string literal. Emission is deterministic — entries are sorted by id /
 module before output so review diffs reflect only real changes.
 
 --spec points to the language reference manual. Each topic must declare a
-`spec` anchor that exists in that file. Optional --builtins points to the
-JSON produced by `xray builtin-dump`; when present, per-symbol metadata
-(signature, summary) is merged into the matching stdlib entry and rendered as
-an API table. Without --builtins the symbol arrays are empty and only the
-human-authored prose round-trips.
+`spec` anchor that exists in that file. --api-inventory points to the complete
+source-derived JSON produced by scripts/gen_api_inventory.py; per-symbol
+metadata from that inventory is merged into the matching stdlib entry and
+rendered as an API table.
 
 Usage:
     python3 scripts/gen_mcp_knowledge.py \\
         --docs   docs/knowledge \\
         --spec   LANGUAGE_SPEC_CN.md \\
-        --out    src/app/mcp/xmcp_knowledge_generated.c \\
-        [--builtins build/builtin_dump.json]
+        --api-inventory build/xray_api_inventory.json \\
+        --out    src/app/mcp/xmcp_knowledge_generated.c
 """
 
 from __future__ import annotations
@@ -205,7 +204,7 @@ def load_topics(docs: Path, spec_anchors: set[str]) -> list[dict[str, Any]]:
     return out
 
 
-def load_stdlib(docs: Path, builtins_index: dict[str, list[dict[str, str]]]) -> list[dict[str, Any]]:
+def load_stdlib(docs: Path, api_index: dict[str, list[dict[str, str]]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     stdlib_dir = docs / "stdlib"
     for path in sorted(stdlib_dir.glob("*.md")):
@@ -217,7 +216,7 @@ def load_stdlib(docs: Path, builtins_index: dict[str, list[dict[str, str]]]) -> 
             raise ValueError(
                 f"{path}: filename stem {path.stem!r} does not match module {module!r}"
             )
-        symbols = builtins_index.get(module, [])
+        symbols = api_index.get(module, [])
         out.append({
             "module": module,
             "summary": meta.get("summary", ""),
@@ -235,9 +234,10 @@ def render_stdlib_body(module: str, body: str, symbols: list[dict[str, str]]) ->
     lines = [text, "\n## API\n\n", "| Symbol | Signature | Summary |\n", "|--|--|--|\n"]
     for s in symbols:
         name = s.get("name", "")
+        display = s.get("display", "")
         signature = markdown_table_cell(s.get("signature", ""))
         summary = markdown_table_cell(s.get("summary", ""))
-        qualified = name if "." in name else f"{module}.{name}"
+        qualified = display or (name if "." in name else f"{module}.{name}")
         lines.append(f"| `{qualified}` | `{signature}` | {summary} |\n")
     return "".join(lines)
 
@@ -261,39 +261,32 @@ def load_resources(docs: Path) -> dict[str, str]:
     return out
 
 
-def load_builtins(path: Path | None) -> dict[str, list[dict[str, str]]]:
-    """Read xray builtin-dump JSON, return {module: [{name, signature, summary}, ...]}."""
-    if path is None or not path.exists():
-        return {}
+def load_api_inventory(path: Path) -> dict[str, list[dict[str, str]]]:
+    """Read scripts/gen_api_inventory.py JSON, return stdlib API symbols by module."""
+    if not path.exists():
+        raise ValueError(f"{path}: missing API inventory; run scripts/gen_api_inventory.py")
     data = json.loads(path.read_text(encoding="utf-8"))
     index: dict[str, list[dict[str, str]]] = {}
-    # Accepted shapes:
-    #   {"modules": [{"name": "json", "symbols": [{...}, ...]}, ...]}
-    #   {"json": [{...}, ...]}
-    if isinstance(data, dict) and "modules" in data:
-        for mod in data["modules"]:
-            module = mod["name"]
-            symbols = mod.get("symbols", [])
-            index[module] = [
-                {
-                    "name": s.get("name", ""),
-                    "signature": s.get("signature", ""),
-                    "summary": s.get("summary", ""),
-                }
-                for s in symbols
-            ]
-    elif isinstance(data, dict):
-        for module, symbols in data.items():
-            index[module] = [
-                {
-                    "name": s.get("name", ""),
-                    "signature": s.get("signature", ""),
-                    "summary": s.get("summary", ""),
-                }
-                for s in symbols
-            ]
-    else:
-        raise ValueError(f"{path}: unrecognised builtin-dump shape")
+    if not isinstance(data, dict) or "items" not in data:
+        raise ValueError(f"{path}: unrecognised API inventory shape")
+    for item in data.get("items", []):
+        if item.get("doc_surface") != "stdlib":
+            continue
+        module = item.get("doc_module") or item.get("namespace")
+        name = item.get("name", "")
+        if not module or not name or item.get("kind") == "module":
+            continue
+        namespace = item.get("namespace", "")
+        qualified = item.get("qualified", name)
+        display = qualified if namespace and namespace != module else f"{module}.{name}"
+        if namespace and namespace != module:
+            name = qualified
+        index.setdefault(module, []).append({
+            "name": name,
+            "display": display,
+            "signature": item.get("signature", ""),
+            "summary": item.get("summary", ""),
+        })
     for module, symbols in index.items():
         symbols.sort(key=lambda s: s["name"])
     return index
@@ -307,7 +300,7 @@ BANNER = (
     "/* @generated by scripts/gen_mcp_knowledge.py — DO NOT EDIT.\n"
     " *\n"
     " * The generator embeds MCP knowledge projection source files\n"
-    " * and optional analyzer builtin metadata as static C tables. */\n"
+    " * and source-derived API inventory metadata as static C tables. */\n"
 )
 
 
@@ -429,7 +422,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--docs", required=True, type=Path)
     p.add_argument("--spec", required=True, type=Path)
     p.add_argument("--out", required=True, type=Path)
-    p.add_argument("--builtins", type=Path, default=None)
+    p.add_argument("--api-inventory", required=True, type=Path)
     p.add_argument(
         "--check",
         action="store_true",
@@ -442,9 +435,9 @@ def main(argv: list[str]) -> int:
         return 2
 
     spec_anchors = load_spec_anchors(args.spec)
-    builtins_index = load_builtins(args.builtins)
+    api_index = load_api_inventory(args.api_inventory)
     topics = load_topics(args.docs, spec_anchors)
-    stdlib = load_stdlib(args.docs, builtins_index)
+    stdlib = load_stdlib(args.docs, api_index)
     resources = load_resources(args.docs)
 
     rendered = render(topics, stdlib, resources)
@@ -455,11 +448,10 @@ def main(argv: list[str]) -> int:
             return 1
         existing = args.out.read_text(encoding="utf-8")
         if existing != rendered:
-            builtins_arg = f" --builtins {args.builtins}" if args.builtins else ""
             print(
                 f"error: {args.out}: stale; rerun "
                 f"`python3 scripts/gen_mcp_knowledge.py --docs {args.docs} --spec {args.spec}"
-                f"{builtins_arg} --out {args.out}`",
+                f" --api-inventory {args.api_inventory} --out {args.out}`",
                 file=sys.stderr,
             )
             return 1
