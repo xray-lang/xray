@@ -291,6 +291,9 @@ vmcase(OP_STRUCT_SET) {
         case XR_NATIVE_I64:
             *(int64_t *) fp = XR_TO_INT(src);
             break;
+        case XR_NATIVE_U64:
+            *(uint64_t *) fp = (uint64_t) XR_TO_INT(src);
+            break;
         case XR_NATIVE_F64:
             *(double *) fp = XR_TO_FLOAT(src);
             break;
@@ -341,6 +344,9 @@ vmcase(OP_STRUCT_SET) {
                     switch (field->elem_native_type) {
                         case XR_NATIVE_I64:
                             *(int64_t *) ep = XR_TO_INT(elem);
+                            break;
+                        case XR_NATIVE_U64:
+                            *(uint64_t *) ep = (uint64_t) XR_TO_INT(elem);
                             break;
                         case XR_NATIVE_F64:
                             *(double *) ep = XR_TO_FLOAT(elem);

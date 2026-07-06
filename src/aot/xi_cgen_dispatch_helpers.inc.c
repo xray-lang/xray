@@ -5385,6 +5385,7 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
                              const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_index_get: need obj and key");
     if (emit_struct_fixed_array_index_get_expr(ctx, out, f, v, prefix) ||
+        emit_fixed_array_index_get_expr(ctx, out, f, v) ||
         emit_span_index_get_expr(ctx, out, f, v) ||
         emit_typed_array_index_get_expr(ctx, out, f, v, prefix) ||
         emit_class_native_array_index_get_expr(ctx, out, f, v))
@@ -5403,6 +5404,8 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
                              const char *prefix) {
     XR_DCHECK(v->nargs >= 3, "xicgen_index_set: need obj, key, and value");
     if (emit_struct_fixed_array_index_set_expr(ctx, out, f, v, prefix))
+        return;
+    if (emit_fixed_array_index_set_expr(ctx, out, f, v))
         return;
     if (emit_span_index_set_expr(ctx, out, f, v))
         return;

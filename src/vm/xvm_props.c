@@ -187,6 +187,9 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
                 case XR_NATIVE_I64:
                     *(int64_t *) fp = XR_TO_INT(value);
                     break;
+                case XR_NATIVE_U64:
+                    *(uint64_t *) fp = (uint64_t) XR_TO_INT(value);
+                    break;
                 case XR_NATIVE_F64:
                     *(double *) fp = XR_TO_FLOAT(value);
                     break;
