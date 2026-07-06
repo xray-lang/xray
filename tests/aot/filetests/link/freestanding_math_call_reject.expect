@@ -1,0 +1,4 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects math.sqrt
+contains=freestanding profile rejects math.random

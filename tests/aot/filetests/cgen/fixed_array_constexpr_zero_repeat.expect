@@ -1,5 +1,6 @@
 contains=xaot-plan v0
 c_contains=uint8_t _fa
 c_contains=xr_array_ref(_fa
-c_contains=xrt_index_get(
+c_contains=[INT64_C(0)]
+c_not_contains=xrt_index_get(
 c_not_contains=xrt_index_set(
