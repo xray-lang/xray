@@ -10,6 +10,18 @@ comptime {
     compile_assert(true)
 }
 
+comptime {
+    var counter = comptime 1
+    counter = counter + 1
+    counter = counter * 10
+    compile_assert(counter == 20, "local var state")
+
+    var pair = comptime Point{x: 1, y: 2}
+    pair = comptime Point{x: pair.y, y: pair.x + counter}
+    compile_assert(pair.x == 2)
+    compile_assert(pair.y == 21)
+}
+
 @test
 fn test_comptime_block_erased() {
     var x = 3

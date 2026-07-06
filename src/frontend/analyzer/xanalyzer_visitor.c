@@ -2981,8 +2981,47 @@ static bool xa_eval_comptime_block_arg(XaInferContext *ctx, AstNode *arg, XrCtVa
 }
 
 static const char *xa_comptime_block_supported_message(void) {
-    return "comptime block currently supports const declarations, compile_assert(...) and "
-           "compile_error(...)";
+    return "comptime block currently supports const/var declarations, local var assignments, "
+           "compile_assert(...) and compile_error(...)";
+}
+
+static void xa_visit_comptime_block_assignment(XaInferContext *ctx, AstNode *stmt,
+                                               AssignmentNode *assign) {
+    if (!ctx || !ctx->analyzer || !stmt || !assign || !assign->name)
+        return;
+
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, assign->name);
+    XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
+    if (!sym || !links || !links->is_comptime_local || sym->is_const || sym->is_shared ||
+        !sym->is_rebindable) {
+        xa_report_comptime_block_error(
+            ctx, stmt, "comptime block assignment target must be a block-local var");
+        return;
+    }
+
+    assign->symbol_id = sym->id;
+    XrType *value_type = xa_visit_infer_expr(ctx, assign->value);
+    XrType *target_type = links->type ? links->type : xa_analyzer_get_type(ctx->analyzer, sym);
+    XrLocation loc = {.file = ctx->file_path, .line = stmt->line, .column = stmt->column};
+    if (target_type && value_type &&
+        !xa_analyzer_check_assignment(ctx->analyzer, target_type, value_type, &loc))
+        return;
+
+    XrCtValue value = {0};
+    const char *err = NULL;
+    if (!xa_consteval_expr(ctx->analyzer, assign->value, &value, &err)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "comptime block assignment must be evaluable at compile time%s%s", err ? ": " : "",
+                 err ? err : "");
+        xa_report_comptime_block_error(ctx, stmt, msg);
+        return;
+    }
+
+    links->has_ct_value = true;
+    links->ct_value = value;
+    links->is_const_foldable = true;
+    links->assign_count++;
 }
 
 static void xa_visit_comptime_compile_assert(XaInferContext *ctx, AstNode *stmt,
@@ -3057,16 +3096,23 @@ static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
         return;
 
     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+    int saved_comptime_depth = ctx->comptime_block_depth;
+    ctx->comptime_block_depth++;
 
     BlockNode *block = &node->as.comptime_expr.expr->as.block;
     for (int i = 0; i < block->count; i++) {
         AstNode *stmt = block->statements[i];
-        if (stmt && stmt->type == AST_CONST_DECL) {
+        if (stmt && (stmt->type == AST_CONST_DECL || stmt->type == AST_VAR_DECL)) {
             xa_visit_infer_stmt(ctx, stmt);
             continue;
         }
 
-        AstNode *expr = stmt && stmt->type == AST_EXPR_STMT ? stmt->as.expr_stmt : NULL;
+        AstNode *expr = stmt && stmt->type == AST_EXPR_STMT ? stmt->as.expr_stmt : stmt;
+        if (expr && expr->type == AST_ASSIGNMENT) {
+            xa_visit_comptime_block_assignment(ctx, expr, &expr->as.assignment);
+            continue;
+        }
+
         if (!expr || expr->type != AST_CALL_EXPR || !expr->as.call_expr.callee ||
             expr->as.call_expr.callee->type != AST_VARIABLE) {
             xa_report_comptime_block_error(ctx, stmt ? stmt : node,
@@ -3085,6 +3131,7 @@ static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    ctx->comptime_block_depth = saved_comptime_depth;
     xa_analyzer_exit_scope(ctx->analyzer);
 }
 

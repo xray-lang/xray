@@ -88,6 +88,10 @@ typedef struct XaInferContext {
     // extern-function calls: those are errors at depth 0 (Rust model).
     int unsafe_depth;
 
+    // Nonzero while analyzing a `comptime {}` statement block. Local bindings
+    // in this scope must carry compile-time values and are erased before lowering.
+    int comptime_block_depth;
+
     // Active loop stack for validating break/continue and resolving labels.
     XaLoopScope *loop_scope;
     int loop_depth;

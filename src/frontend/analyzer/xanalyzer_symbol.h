@@ -137,6 +137,7 @@ struct XaSymbolLinks {
     struct AstNode *const_initializer;  // const initializer expression for compile-time eval
     bool has_ct_value;                  // const initializer proved to a compile-time value
     XrCtValue ct_value;                 // cached compile-time value
+    bool is_comptime_local;             // binding exists only in a comptime block
     bool is_loop_variable;              // Defined/mutated inside a loop
 
     // Reference tracking (for LSP Find References)
