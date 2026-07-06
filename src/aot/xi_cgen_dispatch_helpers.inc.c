@@ -4898,6 +4898,45 @@ static void xicgen_cast_i64_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     emit_value_as_rep_ctx(ctx, out, arg, XR_REP_I64);
 }
 
+static bool xicgen_unsigned_narrow_lowbits_binop(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (!ctx || !out || !v)
+        return false;
+
+    const char *cast_ctype = cg_unsigned_narrow_cast_ctype(v->op);
+    if (!cast_ctype)
+        return false;
+
+    const char *op_ctype = "uint32_t";
+    const XiValue *arg = cg_unsigned_narrow_lowbits_binop_arg(v);
+    if (!arg)
+        return false;
+
+    const char *op = NULL;
+    switch ((XiOp) arg->op) {
+        case XI_ADD:
+        case XI_SUB:
+        case XI_MUL:
+            op = xi_to_c_template_arith_native_op(arg->op);
+            break;
+        case XI_BAND:
+        case XI_BOR:
+        case XI_BXOR:
+            op = xi_to_c_template_bitwise_binary_op(arg->op);
+            break;
+        default:
+            return false;
+    }
+    if (!op || !*op)
+        return false;
+
+    fprintf(out, "(%s)((%s)(", cast_ctype, op_ctype);
+    emit_value_as_rep_ctx(ctx, out, arg->args[0], XR_REP_I64);
+    fprintf(out, ") %s (%s)(", op, op_ctype);
+    emit_value_as_rep_ctx(ctx, out, arg->args[1], XR_REP_I64);
+    fprintf(out, "))");
+    return true;
+}
+
 static void xicgen_f32_roundtrip(FILE *out, const XiValue *v, bool preserve_loaded_float32) {
     fputs(preserve_loaded_float32 ? "" : "(double)(float)", out);
     emit_vref(out, v->args[0]);
@@ -4908,6 +4947,8 @@ static void xicgen_template_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     (void) prefix;
     switch (xi_to_c_template_width_kind(v->op)) {
         case AOT_WIDTH_TEMPLATE_CAST_I64:
+            if (xicgen_unsigned_narrow_lowbits_binop(ctx, out, v))
+                return;
             xicgen_cast_i64_arg(ctx, out, f, v, xi_to_c_template_width_cast_type(v->op));
             return;
         case AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP:

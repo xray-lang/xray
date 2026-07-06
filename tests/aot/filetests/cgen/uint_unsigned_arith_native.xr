@@ -3,10 +3,19 @@ fn hash32(seq: uint32) -> uint32 {
     return seq * prime
 }
 
+fn compound32(acc: uint32, input: uint32) -> uint32 {
+    var hash = acc
+    var prime: uint32 = 2246822519
+    hash += input * prime
+    hash ^= hash >> 13
+    return hash
+}
+
 fn mix64(seq: uint64) -> uint64 {
     var prime: uint64 = 889523592379
     return (seq + prime) * prime
 }
 
 print(hash32(123456))
+print(compound32(123456, 789))
 print(mix64(123456))
