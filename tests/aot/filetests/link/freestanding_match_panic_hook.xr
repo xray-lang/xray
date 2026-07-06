@@ -1,0 +1,6 @@
+@c_export("xray_match_panic")
+fn xray_match_panic(x: int) -> int {
+    return match (x) {
+        0 -> 1
+    }
+}

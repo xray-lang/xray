@@ -720,6 +720,39 @@ else
         "freestanding-profile: rejects force unwrap value-error channel"
 fi
 
+FREESTANDING_MATCH_PANIC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_match_panic_hook.xr"
+FREESTANDING_MATCH_PANIC_OBJ="$WORK/freestanding_match_panic_hook.o"
+FREESTANDING_MATCH_PANIC_LOG="$WORK/freestanding_match_panic_hook.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_MATCH_PANIC_OBJ" \
+        "$FREESTANDING_MATCH_PANIC_SRC" >"$FREESTANDING_MATCH_PANIC_LOG" 2>&1; then
+    FREESTANDING_MATCH_PANIC_KEPT_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_MATCH_PANIC_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_MATCH_PANIC_KEPT_C" ]; then
+        expect_log_contains "$FREESTANDING_MATCH_PANIC_KEPT_C" "xrt_freestanding_trap" \
+            "freestanding-profile/match: generated C uses panic hook trap"
+        expect_log_not_contains "$FREESTANDING_MATCH_PANIC_KEPT_C" "xrt_throw_exc" \
+            "freestanding-profile/match: generated C avoids hosted throw helper"
+        expect_log_not_contains "$FREESTANDING_MATCH_PANIC_KEPT_C" \
+            "xrt_exception_from_message_value" \
+            "freestanding-profile/match: generated C avoids hosted exception constructor"
+    else
+        record_fail "freestanding-profile/match: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_MATCH_PANIC_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_MATCH_PANIC_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_MATCH_PANIC_OBJ")"
+    if [ "$FREESTANDING_MATCH_PANIC_UNDEFINED" = "xr_hook_panic" ]; then
+        record_pass "freestanding-profile/match: panic path depends only on panic hook"
+    else
+        record_fail "freestanding-profile/match: unexpected undefined symbols"
+        nm -u "$FREESTANDING_MATCH_PANIC_OBJ" 2>&1 | sed '/^[[:space:]]*$/d' | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/match: object build failed"
+    sed 's/^/      /' "$FREESTANDING_MATCH_PANIC_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_HOOK_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_panic_hook.xr"
 FREESTANDING_HOOK_OBJ="$WORK/freestanding_panic_hook.o"
 FREESTANDING_HOOK_REAL_LOG="$WORK/freestanding_panic_hook.log"

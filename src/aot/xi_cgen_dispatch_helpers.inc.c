@@ -4073,6 +4073,10 @@ static bool xicgen_emit_panicinfo_constructor(XiCgenCtx *ctx, FILE *out, const X
     if (!v || v->nargs < 1 ||
         !xicgen_receiver_is_builtin_global(v->args[0], XR_GLOBAL_VAR_PANIC_INFO))
         return false;
+    if (ctx && ctx->freestanding_profile) {
+        fprintf(out, "XR_NULL_VAL");
+        return true;
+    }
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
     if (v->nargs >= 2) {
         fprintf(out, "xrt_exception_from_message_value(");
@@ -4636,10 +4640,13 @@ static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
 
 static void xicgen_throw(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_throw: need arg");
+    if (ctx && ctx->freestanding_profile) {
+        fprintf(out, "xrt_freestanding_trap(\"freestanding panic\")");
+        return;
+    }
     fprintf(out, "xrt_throw_exc(");
     emit_vref(out, v->args[0]);
     fprintf(out, ")");
