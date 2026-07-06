@@ -1,0 +1,13 @@
+const LIMIT = comptime (8 * 4)
+
+comptime {
+    compile_assert(1 + 1 == 2, "math")
+    compile_assert(LIMIT == 32)
+    compile_assert(true)
+}
+
+@test
+fn test_comptime_block_erased() {
+    var x = 3
+    assert_eq(x, 3)
+}

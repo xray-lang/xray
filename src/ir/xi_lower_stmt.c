@@ -32,6 +32,11 @@
 /* Forward declaration */
 static void lower_stmts(XiLower *l, AstNode **stmts, int count);
 
+static bool lower_is_comptime_block_expr(AstNode *node) {
+    return node && node->type == AST_COMPTIME_EXPR && node->as.comptime_expr.expr &&
+           node->as.comptime_expr.expr->type == AST_BLOCK;
+}
+
 static int xi_lower_sync_runtime_class_global_index(const char *name) {
     if (!name)
         return -1;
@@ -4095,6 +4100,8 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
             break;
 
         case AST_EXPR_STMT: {
+            if (lower_is_comptime_block_expr(node->as.expr_stmt))
+                break;
             XiValue *expr = xi_lower_expr(l, node->as.expr_stmt);
             if (expr && expr->op == XI_GO)
                 expr->flags |= XI_FLAG_FIRE_AND_FORGET;
@@ -4192,6 +4199,10 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
         case AST_MEMBER_SET:
         case AST_INDEX_SET:
         case AST_COMPTIME_EXPR:
+            if (lower_is_comptime_block_expr(node))
+                break;
+            xi_lower_expr(l, node);
+            break;
         case AST_GO_EXPR:
         case AST_AWAIT_EXPR:
         case AST_NEW_EXPR:

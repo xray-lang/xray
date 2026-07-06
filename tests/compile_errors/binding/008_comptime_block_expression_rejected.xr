@@ -1,0 +1,3 @@
+var x = comptime {
+    compile_assert(true)
+}

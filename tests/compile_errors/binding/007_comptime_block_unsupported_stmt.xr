@@ -1,0 +1,3 @@
+comptime {
+    var x = 1
+}
