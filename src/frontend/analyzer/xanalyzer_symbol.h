@@ -20,6 +20,7 @@
 #ifndef XANALYZER_SYMBOL_H
 #define XANALYZER_SYMBOL_H
 
+#include "xconsteval.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xerror_set.h"
 #include "../../runtime/class/xclass_info.h"
@@ -134,6 +135,8 @@ struct XaSymbolLinks {
     int assign_count;                   // Number of assignments
     bool is_const_foldable;             // const with literal init, can inline
     struct AstNode *const_initializer;  // const initializer expression for compile-time eval
+    bool has_ct_value;                  // const initializer proved to a compile-time value
+    XrCtValue ct_value;                 // cached scalar compile-time value
     bool is_loop_variable;              // Defined/mutated inside a loop
 
     // Reference tracking (for LSP Find References)

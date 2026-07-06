@@ -1,0 +1,11 @@
+const BASE_FLAG = comptime ("xr" == "xr")
+const NEGATED_FLAG = comptime (!BASE_FLAG)
+const LETTER = comptime 'z'
+const LETTER_OK = comptime (LETTER == 'z')
+
+@test
+fn test_comptime_scalar_const_chain() {
+    assert_eq(BASE_FLAG, true)
+    assert_eq(NEGATED_FLAG, false)
+    assert_eq(LETTER_OK, true)
+}

@@ -315,7 +315,13 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
         case AST_VARIABLE: {
             XaSymbol *sym = ct_lookup_const_symbol(analyzer, expr);
             XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
-            if (!sym || !sym->is_const || !links || !links->const_initializer)
+            if (!sym || !sym->is_const || !links)
+                return ct_fail(err, "identifier is not a compile-time const value");
+            if (links->has_ct_value) {
+                *out = links->ct_value;
+                return true;
+            }
+            if (!links->const_initializer)
                 return ct_fail(err, "identifier is not a compile-time const value");
             if (ct_stack_contains(stack, depth, sym->id))
                 return ct_fail(err, "cyclic const expression");
