@@ -28,6 +28,13 @@
 #include "../../base/xconstants.h"
 #include "../../base/xhashmap.h"
 
+static bool xa_freestanding_builtin_call_rejected(const char *name) {
+    if (!name)
+        return false;
+    return strcmp(name, "string") == 0 || strcmp(name, "char") == 0 || strcmp(name, "chr") == 0 ||
+           strcmp(name, "typeof") == 0 || strcmp(name, "copy") == 0 || strcmp(name, "dump") == 0;
+}
+
 static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *object) {
     if (!ctx || !object || object->type != AST_NEW_EXPR)
         return NULL;
@@ -1397,6 +1404,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     if (call->callee && call->callee->type == AST_VARIABLE) {
         const char *fn_name = call->callee->as.variable.name;
+        if (xa_freestanding_profile_enabled(ctx->analyzer) &&
+            xa_freestanding_builtin_call_rejected(fn_name)) {
+            char feature[160];
+            snprintf(feature, sizeof(feature), "builtin %s()", fn_name ? fn_name : "?");
+            xa_freestanding_report_unavailable(
+                ctx, node, feature,
+                "this builtin depends on hosted conversion, cloning, or debug helpers");
+        }
         fn_sym = xa_lookup_visible_symbol(ctx, fn_name);
         if (fn_sym) {
             fn_links = xa_analyzer_get_links(ctx->analyzer, fn_sym);

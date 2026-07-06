@@ -730,12 +730,29 @@ static void xicgen_store_upval(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
 
 static void xicgen_assert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                           const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_assert: need cond");
     const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
     bool invert = (v->aux_int == 1);
+    if (ctx && ctx->freestanding_profile) {
+        if (invert) {
+            fprintf(out, "(xr_truthy(");
+            emit_vref(out, v->args[0]);
+            fprintf(out,
+                    ") ? (xrt_freestanding_trap(\"Assertion failed (expected false): %s\"), "
+                    "XR_NULL_VAL) : XR_NULL_VAL)",
+                    loc);
+        } else {
+            fprintf(out, "(!xr_truthy(");
+            emit_vref(out, v->args[0]);
+            fprintf(out,
+                    ") ? (xrt_freestanding_trap(\"Assertion failed: %s\"), XR_NULL_VAL) "
+                    ": XR_NULL_VAL)",
+                    loc);
+        }
+        return;
+    }
     if (invert) {
         fprintf(out, "(xr_truthy(");
         emit_vref(out, v->args[0]);
@@ -755,11 +772,21 @@ static void xicgen_assert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVa
 
 static void xicgen_assert_eq(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 2, "xicgen_assert_eq: need 2 args");
     const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
+    if (ctx && ctx->freestanding_profile) {
+        fprintf(out, "(xrt_eq(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", ");
+        emit_vref(out, v->args[1]);
+        fprintf(out,
+                ") ? XR_NULL_VAL : (xrt_freestanding_trap(\"assert_eq failed: %s\"), "
+                "XR_NULL_VAL))",
+                loc);
+        return;
+    }
     fprintf(out, "(xrt_eq(");
     emit_vref(out, v->args[0]);
     fprintf(out, ", ");
@@ -772,11 +799,21 @@ static void xicgen_assert_eq(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
 
 static void xicgen_assert_ne(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 2, "xicgen_assert_ne: need 2 args");
     const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
+    if (ctx && ctx->freestanding_profile) {
+        fprintf(out, "(!xrt_eq(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", ");
+        emit_vref(out, v->args[1]);
+        fprintf(out,
+                ") ? XR_NULL_VAL : (xrt_freestanding_trap(\"assert_ne failed: %s\"), "
+                "XR_NULL_VAL))",
+                loc);
+        return;
+    }
     fprintf(out, "(!xrt_eq(");
     emit_vref(out, v->args[0]);
     fprintf(out, ", ");
