@@ -1,0 +1,7 @@
+fn runtimeValue() -> int {
+    return 42
+}
+
+const VALUE = comptime {
+    return runtimeValue()
+}

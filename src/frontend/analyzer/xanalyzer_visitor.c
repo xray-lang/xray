@@ -2922,18 +2922,15 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
     }
 }
 
+static XrType *xa_visit_comptime_block_expr(XaInferContext *ctx, AstNode *node);
+
 static XrType *xa_visit_comptime_expr(XaInferContext *ctx, AstNode *node) {
     AstNode *inner = node ? node->as.comptime_expr.expr : NULL;
     if (!ctx || !ctx->analyzer || !node || !inner)
         return xr_type_new_unknown(NULL);
 
-    if (inner->type == AST_BLOCK) {
-        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                   "comptime block can only be used as a statement in this phase",
-                                   &loc);
-        return xr_type_new_unit(NULL);
-    }
+    if (inner->type == AST_BLOCK)
+        return xa_visit_comptime_block_expr(ctx, node);
 
     XrType *inner_type = xa_visit_infer_expr(ctx, inner);
     XrCtValue ignored = {0};
@@ -3068,9 +3065,18 @@ typedef enum XaComptimeBlockFlow {
     XA_COMPTIME_FLOW_NORMAL = 0,
     XA_COMPTIME_FLOW_BREAK,
     XA_COMPTIME_FLOW_CONTINUE,
+    XA_COMPTIME_FLOW_RETURN,
 } XaComptimeBlockFlow;
 
-static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt);
+typedef struct XaComptimeBlockReturn {
+    bool allow_return;
+    bool has_value;
+    XrCtValue value;
+    XrType *type;
+} XaComptimeBlockReturn;
+
+static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt,
+                                                             XaComptimeBlockReturn *ret);
 
 static bool xa_comptime_compound_op_to_binary(XrTokenType op, AstNodeType *out) {
     if (!out)
@@ -3295,18 +3301,19 @@ static void xa_visit_comptime_compile_error(XaInferContext *ctx, AstNode *stmt,
 }
 
 static XaComptimeBlockFlow xa_visit_comptime_block_nested_block(XaInferContext *ctx,
-                                                                AstNode *block_node) {
+                                                                AstNode *block_node,
+                                                                XaComptimeBlockReturn *ret) {
     if (!ctx || !block_node)
         return XA_COMPTIME_FLOW_NORMAL;
     if (block_node->type != AST_BLOCK) {
-        return xa_visit_comptime_block_statement(ctx, block_node);
+        return xa_visit_comptime_block_statement(ctx, block_node, ret);
     }
 
     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, block_node);
     BlockNode *block = &block_node->as.block;
     XaComptimeBlockFlow flow = XA_COMPTIME_FLOW_NORMAL;
     for (int i = 0; i < block->count; i++) {
-        flow = xa_visit_comptime_block_statement(ctx, block->statements[i]);
+        flow = xa_visit_comptime_block_statement(ctx, block->statements[i], ret);
         if (flow != XA_COMPTIME_FLOW_NORMAL)
             break;
     }
@@ -3315,7 +3322,8 @@ static XaComptimeBlockFlow xa_visit_comptime_block_nested_block(XaInferContext *
 }
 
 static XaComptimeBlockFlow xa_visit_comptime_block_if_stmt(XaInferContext *ctx, AstNode *stmt,
-                                                           IfStmtNode *if_stmt) {
+                                                           IfStmtNode *if_stmt,
+                                                           XaComptimeBlockReturn *ret) {
     if (!ctx || !stmt || !if_stmt)
         return XA_COMPTIME_FLOW_NORMAL;
 
@@ -3330,14 +3338,15 @@ static XaComptimeBlockFlow xa_visit_comptime_block_if_stmt(XaInferContext *ctx, 
 
     AstNode *selected = condition.as.bool_val ? if_stmt->then_branch : if_stmt->else_branch;
     if (selected)
-        return xa_visit_comptime_block_nested_block(ctx, selected);
+        return xa_visit_comptime_block_nested_block(ctx, selected, ret);
     return XA_COMPTIME_FLOW_NORMAL;
 }
 
 #define XA_COMPTIME_WHILE_MAX_ITERATIONS 100000
 
 static XaComptimeBlockFlow xa_visit_comptime_block_while_stmt(XaInferContext *ctx, AstNode *stmt,
-                                                              WhileStmtNode *while_stmt) {
+                                                              WhileStmtNode *while_stmt,
+                                                              XaComptimeBlockReturn *ret) {
     if (!ctx || !stmt || !while_stmt)
         return XA_COMPTIME_FLOW_NORMAL;
 
@@ -3357,13 +3366,15 @@ static XaComptimeBlockFlow xa_visit_comptime_block_while_stmt(XaInferContext *ct
         int body_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
         XaComptimeBlockFlow flow = XA_COMPTIME_FLOW_NORMAL;
         if (while_stmt->body)
-            flow = xa_visit_comptime_block_nested_block(ctx, while_stmt->body);
+            flow = xa_visit_comptime_block_nested_block(ctx, while_stmt->body, ret);
         if (ctx->analyzer && ctx->analyzer->diagnostic_count > body_diag_count)
             return XA_COMPTIME_FLOW_NORMAL;
         if (flow == XA_COMPTIME_FLOW_BREAK)
             return XA_COMPTIME_FLOW_NORMAL;
         if (flow == XA_COMPTIME_FLOW_CONTINUE)
             continue;
+        if (flow == XA_COMPTIME_FLOW_RETURN)
+            return XA_COMPTIME_FLOW_RETURN;
     }
 
     xa_report_comptime_block_error(ctx, stmt, "comptime while loop exceeded iteration limit");
@@ -3371,7 +3382,8 @@ static XaComptimeBlockFlow xa_visit_comptime_block_while_stmt(XaInferContext *ct
 }
 
 static XaComptimeBlockFlow xa_visit_comptime_block_for_stmt(XaInferContext *ctx, AstNode *stmt,
-                                                            ForStmtNode *for_stmt) {
+                                                            ForStmtNode *for_stmt,
+                                                            XaComptimeBlockReturn *ret) {
     if (!ctx || !stmt || !for_stmt)
         return XA_COMPTIME_FLOW_NORMAL;
 
@@ -3380,7 +3392,7 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_stmt(XaInferContext *ctx,
 
     if (for_stmt->initializer) {
         int init_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
-        result = xa_visit_comptime_block_statement(ctx, for_stmt->initializer);
+        result = xa_visit_comptime_block_statement(ctx, for_stmt->initializer, ret);
         if (ctx->analyzer && ctx->analyzer->diagnostic_count > init_diag_count)
             goto done;
         if (result != XA_COMPTIME_FLOW_NORMAL) {
@@ -3409,16 +3421,20 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_stmt(XaInferContext *ctx,
         int body_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
         XaComptimeBlockFlow flow = XA_COMPTIME_FLOW_NORMAL;
         if (for_stmt->body)
-            flow = xa_visit_comptime_block_nested_block(ctx, for_stmt->body);
+            flow = xa_visit_comptime_block_nested_block(ctx, for_stmt->body, ret);
         if (ctx->analyzer && ctx->analyzer->diagnostic_count > body_diag_count)
             goto done;
         if (flow == XA_COMPTIME_FLOW_BREAK)
             goto done;
+        if (flow == XA_COMPTIME_FLOW_RETURN) {
+            result = XA_COMPTIME_FLOW_RETURN;
+            goto done;
+        }
 
         if (for_stmt->increment) {
             int inc_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
             XaComptimeBlockFlow inc_flow =
-                xa_visit_comptime_block_statement(ctx, for_stmt->increment);
+                xa_visit_comptime_block_statement(ctx, for_stmt->increment, ret);
             if (ctx->analyzer && ctx->analyzer->diagnostic_count > inc_diag_count)
                 goto done;
             if (inc_flow != XA_COMPTIME_FLOW_NORMAL) {
@@ -3438,7 +3454,69 @@ done:
     return XA_COMPTIME_FLOW_NORMAL;
 }
 
-static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt) {
+static bool xa_ct_value_is_scalar(const XrCtValue *value) {
+    if (!value)
+        return false;
+    switch (value->kind) {
+        case XR_CT_INT:
+        case XR_CT_FLOAT:
+        case XR_CT_BOOL:
+        case XR_CT_STRING:
+        case XR_CT_CHAR:
+        case XR_CT_NULL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static XaComptimeBlockFlow xa_visit_comptime_block_return_stmt(XaInferContext *ctx, AstNode *stmt,
+                                                               ReturnStmtNode *return_stmt,
+                                                               XaComptimeBlockReturn *ret) {
+    if (!ctx || !stmt || !return_stmt)
+        return XA_COMPTIME_FLOW_NORMAL;
+    if (!ret || !ret->allow_return) {
+        xa_report_comptime_block_error(ctx, stmt,
+                                       "comptime return can only be used in a comptime block "
+                                       "expression");
+        return XA_COMPTIME_FLOW_NORMAL;
+    }
+    if (return_stmt->value_count != 1 || !return_stmt->values || !return_stmt->values[0]) {
+        xa_report_comptime_block_error(
+            ctx, stmt, "comptime block expression return expects exactly one value");
+        return XA_COMPTIME_FLOW_NORMAL;
+    }
+
+    AstNode *value_expr = return_stmt->values[0];
+    xa_clear_ct_value_cache_expr(ctx->analyzer, value_expr);
+    XrType *value_type = xa_visit_infer_expr(ctx, value_expr);
+
+    XrCtValue value = {0};
+    const char *err = NULL;
+    if (!xa_consteval_expr(ctx->analyzer, value_expr, &value, &err)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "comptime block return value must be evaluable at compile time%s%s",
+                 err ? ": " : "", err ? err : "");
+        xa_report_comptime_block_error(ctx, value_expr, msg);
+        return XA_COMPTIME_FLOW_NORMAL;
+    }
+    if (!xa_ct_value_is_scalar(&value)) {
+        xa_report_comptime_block_error(
+            ctx, value_expr,
+            "comptime block expression return value must be a scalar compile-time value in this "
+            "phase");
+        return XA_COMPTIME_FLOW_NORMAL;
+    }
+
+    ret->has_value = true;
+    ret->value = value;
+    ret->type = value_type ? value_type : xr_type_new_unknown(NULL);
+    return XA_COMPTIME_FLOW_RETURN;
+}
+
+static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt,
+                                                             XaComptimeBlockReturn *ret) {
     if (!ctx || !stmt)
         return XA_COMPTIME_FLOW_NORMAL;
 
@@ -3447,16 +3525,19 @@ static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx
         return XA_COMPTIME_FLOW_NORMAL;
     }
     if (stmt->type == AST_BLOCK) {
-        return xa_visit_comptime_block_nested_block(ctx, stmt);
+        return xa_visit_comptime_block_nested_block(ctx, stmt, ret);
     }
     if (stmt->type == AST_IF_STMT) {
-        return xa_visit_comptime_block_if_stmt(ctx, stmt, &stmt->as.if_stmt);
+        return xa_visit_comptime_block_if_stmt(ctx, stmt, &stmt->as.if_stmt, ret);
     }
     if (stmt->type == AST_WHILE_STMT) {
-        return xa_visit_comptime_block_while_stmt(ctx, stmt, &stmt->as.while_stmt);
+        return xa_visit_comptime_block_while_stmt(ctx, stmt, &stmt->as.while_stmt, ret);
     }
     if (stmt->type == AST_FOR_STMT) {
-        return xa_visit_comptime_block_for_stmt(ctx, stmt, &stmt->as.for_stmt);
+        return xa_visit_comptime_block_for_stmt(ctx, stmt, &stmt->as.for_stmt, ret);
+    }
+    if (stmt->type == AST_RETURN_STMT) {
+        return xa_visit_comptime_block_return_stmt(ctx, stmt, &stmt->as.return_stmt, ret);
     }
     if (stmt->type == AST_BREAK_STMT) {
         if (stmt->as.break_stmt.label) {
@@ -3503,6 +3584,49 @@ static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx
     return XA_COMPTIME_FLOW_NORMAL;
 }
 
+static XrType *xa_visit_comptime_block_expr(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node || !xa_is_comptime_block_expr(node))
+        return xr_type_new_unknown(NULL);
+
+    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+    int saved_comptime_depth = ctx->comptime_block_depth;
+    ctx->comptime_block_depth++;
+    int start_diag_count = ctx->analyzer->diagnostic_count;
+
+    XaComptimeBlockReturn ret = {.allow_return = true};
+    BlockNode *block = &node->as.comptime_expr.expr->as.block;
+    for (int i = 0; i < block->count; i++) {
+        AstNode *stmt = block->statements[i];
+        XaComptimeBlockFlow flow = xa_visit_comptime_block_statement(ctx, stmt ? stmt : node, &ret);
+        if (flow == XA_COMPTIME_FLOW_BREAK) {
+            xa_report_comptime_block_error(ctx, stmt ? stmt : node,
+                                           "comptime break can only be used inside comptime loop");
+            break;
+        }
+        if (flow == XA_COMPTIME_FLOW_CONTINUE) {
+            xa_report_comptime_block_error(
+                ctx, stmt ? stmt : node, "comptime continue can only be used inside comptime loop");
+            break;
+        }
+        if (flow == XA_COMPTIME_FLOW_RETURN)
+            break;
+    }
+
+    ctx->comptime_block_depth = saved_comptime_depth;
+    xa_analyzer_exit_scope(ctx->analyzer);
+
+    if (ret.has_value) {
+        xa_analyzer_set_node_ct_value(ctx->analyzer, node, &ret.value);
+        return ret.type ? ret.type : xr_type_new_unknown(NULL);
+    }
+
+    if (ctx->analyzer->diagnostic_count == start_diag_count) {
+        xa_report_comptime_block_error(ctx, node,
+                                       "comptime block expression must return exactly one value");
+    }
+    return xr_type_new_unknown(NULL);
+}
+
 static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node || !xa_is_comptime_block_expr(node))
         return;
@@ -3514,7 +3638,7 @@ static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
     BlockNode *block = &node->as.comptime_expr.expr->as.block;
     for (int i = 0; i < block->count; i++) {
         AstNode *stmt = block->statements[i];
-        XaComptimeBlockFlow flow = xa_visit_comptime_block_statement(ctx, stmt ? stmt : node);
+        XaComptimeBlockFlow flow = xa_visit_comptime_block_statement(ctx, stmt ? stmt : node, NULL);
         if (flow == XA_COMPTIME_FLOW_BREAK) {
             xa_report_comptime_block_error(ctx, stmt ? stmt : node,
                                            "comptime break can only be used inside comptime loop");
@@ -3523,6 +3647,12 @@ static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
         if (flow == XA_COMPTIME_FLOW_CONTINUE) {
             xa_report_comptime_block_error(
                 ctx, stmt ? stmt : node, "comptime continue can only be used inside comptime loop");
+            break;
+        }
+        if (flow == XA_COMPTIME_FLOW_RETURN) {
+            xa_report_comptime_block_error(ctx, stmt ? stmt : node,
+                                           "comptime return can only be used in a comptime block "
+                                           "expression");
             break;
         }
     }

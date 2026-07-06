@@ -1,0 +1,41 @@
+fn runtimeOnlyInt() -> int {
+    return 99
+}
+
+const BLOCK_SUM = comptime {
+    var total = comptime 0
+    for (var i = 0; i < 5; i += 1) {
+        total += i
+    }
+    return total
+}
+
+const BLOCK_TEXT = comptime {
+    if (BLOCK_SUM == 10) {
+        return "ok"
+    }
+    return runtimeOnlyInt()
+}
+
+const BLOCK_LOCAL = comptime {
+    var n = comptime 1
+    while (n < 4) {
+        n += 1
+    }
+    return n
+}
+
+@test
+fn test_comptime_block_returns_scalar_value() {
+    assert_eq(BLOCK_SUM, 10)
+    assert_eq(BLOCK_TEXT, "ok")
+
+    var local = comptime {
+        var value = comptime 2
+        value *= 6
+        return value
+    }
+    assert_eq(local, 12)
+
+    assert_eq(BLOCK_LOCAL, 4)
+}

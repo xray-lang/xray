@@ -1,1 +1,1 @@
-comptime block can only be used as a statement in this phase
+comptime block expression must return exactly one value
