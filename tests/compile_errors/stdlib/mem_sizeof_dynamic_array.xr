@@ -1,0 +1,4 @@
+import mem
+
+var n = mem.sizeOf<Array<int>>()
+print(n)

@@ -1,0 +1,1 @@
+mem.sizeOf<T>() requires T to have a static C-compatible layout

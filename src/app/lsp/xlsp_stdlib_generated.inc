@@ -277,6 +277,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"cacheInvalidate", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
     {"nontemporalStore", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", NULL, 0},
     {"cacheLineSize", XLSP_SYM_FUNCTION, "fn(): int", "CPU cache line size in bytes", NULL, 0},
+    {"sizeOf", XLSP_SYM_FUNCTION, "fn(): int", "Compile-time size in bytes of a statically laid out type T", NULL, 0},
+    {"alignOf", XLSP_SYM_FUNCTION, "fn(): int", "Compile-time alignment in bytes of a statically laid out type T", NULL, 0},
+    {"offsetOf", XLSP_SYM_FUNCTION, "fn(field: string): int", "Compile-time byte offset of a field in a @repr(C) or @repr(packed) struct T", NULL, 0},
     {"alloc", XLSP_SYM_FUNCTION, "fn(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", NULL, 0},
     {"allocZeroed", XLSP_SYM_FUNCTION, "fn(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", NULL, 0},
     {"allocAligned", XLSP_SYM_FUNCTION, "fn(n: int, align: int): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", NULL, 0},
@@ -296,7 +299,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"PROT_WRITE", XLSP_SYM_CONSTANT, "int", "Writable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_EXEC", XLSP_SYM_CONSTANT, "int", "Executable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 24
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 27
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {

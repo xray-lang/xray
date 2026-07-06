@@ -39,6 +39,7 @@
 #include "../../shared/xr_native_type_core.h"
 
 struct XrStructLayout;
+typedef struct XrType XrType;
 
 typedef enum {
     XR_STRUCT_REPR_XRAY = 0,    // Xray value struct: [XrClass*][payload]
@@ -97,6 +98,19 @@ static inline uint32_t xr_struct_layout_storage_size(const XrStructLayout *layou
  * nested structs before calling. For non-STRUCT fields, size is
  * auto-computed from native_type. */
 XR_FUNC void xr_struct_layout_compute(XrStructLayout *layout);
+
+/*
+ * Static layout query for C-porting surfaces.
+ *
+ * Returns true only when the type has an unambiguous low-level layout:
+ * native scalars, raw pointers, fixed arrays whose element is statically
+ * laid out, and @repr(C)/@repr(packed) value structs. Managed/default Xray
+ * object layouts are intentionally rejected instead of exposing runtime
+ * implementation details as a C ABI contract.
+ */
+XR_FUNC bool xr_type_static_layout(const XrType *type, uint32_t *out_size, uint32_t *out_align);
+XR_FUNC bool xr_type_static_field_offset(const XrType *type, const char *field_name,
+                                         uint32_t *out_offset);
 
 /*
  * Convert XrTypeKind + native_width to XrNativeType for value struct fields.

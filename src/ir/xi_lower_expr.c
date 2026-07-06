@@ -1006,6 +1006,46 @@ static bool lower_value_is_whole_module_import(XiLower *l, const XiValue *v,
            ref->member_name == NULL;
 }
 
+static bool lower_mem_layout_member_name(const char *name) {
+    return name && (strcmp(name, "sizeOf") == 0 || strcmp(name, "alignOf") == 0 ||
+                    strcmp(name, "offsetOf") == 0);
+}
+
+static XiValue *lower_mem_layout_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                      const char *member) {
+    if (!l || !node || !call || !lower_mem_layout_member_name(member) ||
+        call->type_arg_count != 1 || !call->type_args || !call->type_args[0])
+        return NULL;
+
+    XrType *target = l->analyzer ? xr_tref_resolve_in_analyzer(l->analyzer, call->type_args[0])
+                                 : xr_tref_resolve(l->isolate, call->type_args[0]);
+    uint32_t size = 0;
+    uint32_t align = 0;
+    if (!xr_type_static_layout(target, &size, &align))
+        return NULL;
+
+    uint32_t value = 0;
+    if (strcmp(member, "sizeOf") == 0) {
+        if (call->arg_count != 0)
+            return NULL;
+        value = size;
+    } else if (strcmp(member, "alignOf") == 0) {
+        if (call->arg_count != 0)
+            return NULL;
+        value = align;
+    } else {
+        if (call->arg_count != 1 || !call->arguments || !call->arguments[0] ||
+            call->arguments[0]->type != AST_LITERAL_STRING ||
+            !call->arguments[0]->as.literal.raw_value.string_val)
+            return NULL;
+        if (!xr_type_static_field_offset(
+                target, call->arguments[0]->as.literal.raw_value.string_val, &value))
+            return NULL;
+    }
+
+    return xi_const_int(l->func, l->cur_block, (int64_t) value, l->type_int);
+}
+
 static bool lower_math_constant(XiLower *l, const char *name, XiValue **out) {
     if (!out)
         return false;
@@ -3227,6 +3267,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             xi_lower_builtin_class_global_index(ma->name) >= 0) {
             return lower_construct(l, node, xi_lower_node_type(l, node), "sync", ma->name,
                                    call->arguments, call->arg_count);
+        }
+
+        if (lower_value_is_whole_module_import(l, recv, "mem") && ma->name) {
+            XiValue *layout_const = lower_mem_layout_call(l, node, call, ma->name);
+            if (layout_const)
+                return layout_const;
         }
 
         XiValue *chan_send = lower_channel_send_boundary_call(l, node, call, ma->name, recv);

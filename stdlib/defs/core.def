@@ -2673,6 +2673,39 @@ module mem {
     layer: "core"
   }
 
+  fn sizeOf {
+    signature: "(): int"
+    doc: "Compile-time size in bytes of a statically laid out type T"
+    vm: "mem_size_of"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "core"
+  }
+
+  fn alignOf {
+    signature: "(): int"
+    doc: "Compile-time alignment in bytes of a statically laid out type T"
+    vm: "mem_align_of"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "core"
+  }
+
+  fn offsetOf {
+    signature: "(field: string): int"
+    doc: "Compile-time byte offset of a field in a @repr(C) or @repr(packed) struct T"
+    vm: "mem_offset_of"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: false
+    link_object: false
+    layer: "core"
+  }
+
   const PROT_NONE {
     signature: ": int"
     doc: "No access protection for mem.pageAlloc/pageProtect"

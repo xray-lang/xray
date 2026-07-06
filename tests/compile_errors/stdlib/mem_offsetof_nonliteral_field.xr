@@ -1,0 +1,10 @@
+import mem
+
+@repr(C)
+struct Header {
+    x: uint8
+}
+
+var field = "x"
+var n = mem.offsetOf<Header>(field)
+print(n)
