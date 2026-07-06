@@ -80,9 +80,16 @@ static AstNode *alloc_node(XrCompilerSession *session, AstNodeType type, int lin
     return node;
 }
 AstNode *xr_ast_literal_int(XrCompilerSession *session, xr_Integer value, int line) {
+    return xr_ast_literal_int_bits(session, (uint64_t) value, false, line);
+}
+
+AstNode *xr_ast_literal_int_bits(XrCompilerSession *session, uint64_t bits, bool overflows_i64,
+                                 int line) {
     AstNode *node = alloc_node(session, AST_LITERAL_INT, line);
     node->as.literal.kind = LITERAL_KIND_INT;
-    node->as.literal.raw_value.int_val = value;  // Store raw value directly
+    node->as.literal.int_bits = bits;
+    node->as.literal.int_overflows_i64 = overflows_i64;
+    node->as.literal.raw_value.int_val = (int64_t) bits;  // Signed view of the literal bits
     return node;
 }
 
@@ -1660,7 +1667,10 @@ void xr_ast_print(AstNode *node, int indent) {
     // Print node details - print raw values
     switch (node->type) {
         case AST_LITERAL_INT:
-            printf("(%lld)", (long long) node->as.literal.raw_value.int_val);  // Print raw value
+            if (node->as.literal.int_overflows_i64)
+                printf("(%llu)", (unsigned long long) node->as.literal.int_bits);
+            else
+                printf("(%lld)", (long long) node->as.literal.raw_value.int_val);
             break;
         case AST_LITERAL_FLOAT:
             printf("(%g)", node->as.literal.raw_value.float_val);  // Print raw value

@@ -20,6 +20,8 @@
 #include "../../base/xdefs.h"
 
 XR_FUNC AstNode *xr_ast_literal_int(XrCompilerSession *session, xr_Integer value, int line);
+XR_FUNC AstNode *xr_ast_literal_int_bits(XrCompilerSession *session, uint64_t bits,
+                                         bool overflows_i64, int line);
 XR_FUNC AstNode *xr_ast_literal_float(XrCompilerSession *session, xr_Number value, int line);
 XR_FUNC AstNode *xr_ast_literal_bigint(XrCompilerSession *session, const char *value, int line);
 XR_FUNC AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, int line);

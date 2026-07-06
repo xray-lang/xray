@@ -76,7 +76,8 @@ static uint64_t hash_ast_node(AstNode *node, uint64_t hash) {
     // Hash based on node type
     switch (node->type) {
         case AST_LITERAL_INT:
-            hash = hash_int_into(node->as.literal.raw_value.int_val, hash);
+            hash = hash_int_into((int64_t) node->as.literal.int_bits, hash);
+            hash = hash_int_into(node->as.literal.int_overflows_i64 ? 1 : 0, hash);
             break;
         case AST_LITERAL_FLOAT: {
             int64_t fbits;

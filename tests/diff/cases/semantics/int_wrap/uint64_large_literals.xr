@@ -1,0 +1,18 @@
+// anchor: uint64-large-literals
+// C-port constants above INT64_MAX must keep their raw 64-bit bit pattern.
+
+var prime: uint64 = 0x9E3779B185EBCA87
+print(prime)
+
+var maxDec: uint64 = 18446744073709551615
+print(maxDec)
+
+var highBit: uint64 = 9223372036854775808
+print(highBit)
+
+print(0xffff_ffff_ffff_ffff as uint64)
+print(9223372036854775808 as uint64)
+print((-1) as uint64)
+
+var min: int64 = -9223372036854775808
+print(min)

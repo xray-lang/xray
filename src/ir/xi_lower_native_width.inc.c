@@ -98,7 +98,21 @@ static XiValue *xi_lower_narrow_for_static_type(XiLower *l, AstNode *node, XiVal
                                                 struct XrType *target_type) {
     if (!target_type || !val)
         return val;
-    return xi_lower_narrow_for_native_type(l, node, val, target_type, target_type->native_width);
+    XiValue *narrowed =
+        xi_lower_narrow_for_native_type(l, node, val, target_type, target_type->native_width);
+    if (narrowed != val)
+        return narrowed;
+    if (val->type && !xr_type_equals(target_type, val->type) &&
+        ((XR_TYPE_IS_INT(target_type) && XR_TYPE_IS_INT(val->type)) ||
+         (XR_TYPE_IS_FLOAT(target_type) && XR_TYPE_IS_FLOAT(val->type)))) {
+        XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, target_type, 1);
+        if (!copy)
+            return val;
+        copy->args[0] = val;
+        copy->line = (uint32_t) node->line;
+        return copy;
+    }
+    return val;
 }
 
 static void xi_lower_check_map_method_args(XiLower *l, AstNode *node, const char *method,
