@@ -94,7 +94,32 @@ static XrCtValue *ct_alloc_values(XaAnalyzer *analyzer, int count, const char **
     return values;
 }
 
+static const char **ct_alloc_field_names(XaAnalyzer *analyzer, int count, const char **err) {
+    if (count <= 0)
+        return NULL;
+    if (!analyzer || !analyzer->compiler_session) {
+        if (err)
+            *err = "consteval storage is unavailable";
+        return NULL;
+    }
+    XrArena *arena = xr_compiler_session_current_arena(analyzer->compiler_session);
+    if (!arena) {
+        if (err)
+            *err = "consteval storage is unavailable";
+        return NULL;
+    }
+    const char **names =
+        (const char **) xr_arena_alloc_array(arena, sizeof(const char *), (size_t) count);
+    if (!names) {
+        if (err)
+            *err = "out of memory while evaluating compile-time struct";
+        return NULL;
+    }
+    return names;
+}
+
 static bool ct_element_lists_equal(const XrCtElementListValue *a, const XrCtElementListValue *b);
+static bool ct_struct_values_equal(const XrCtStructValue *a, const XrCtStructValue *b);
 
 static bool ct_values_equal(const XrCtValue *a, const XrCtValue *b, bool *out) {
     if (!a || !b || !out)
@@ -134,6 +159,9 @@ static bool ct_values_equal(const XrCtValue *a, const XrCtValue *b, bool *out) {
         case XR_CT_TUPLE:
             *out = ct_element_lists_equal(&a->as.tuple_val, &b->as.tuple_val);
             return true;
+        case XR_CT_STRUCT_VALUE:
+            *out = ct_struct_values_equal(&a->as.struct_val, &b->as.struct_val);
+            return true;
         default:
             return false;
     }
@@ -145,6 +173,25 @@ static bool ct_element_lists_equal(const XrCtElementListValue *a, const XrCtElem
     for (int i = 0; i < a->count; i++) {
         bool elem_eq = false;
         if (!ct_values_equal(&a->elements[i], &b->elements[i], &elem_eq) || !elem_eq)
+            return false;
+    }
+    return true;
+}
+
+static bool ct_struct_values_equal(const XrCtStructValue *a, const XrCtStructValue *b) {
+    if (!a || !b || a->field_count != b->field_count)
+        return false;
+    const char *an = a->struct_name ? a->struct_name : "";
+    const char *bn = b->struct_name ? b->struct_name : "";
+    if (strcmp(an, bn) != 0)
+        return false;
+    for (int i = 0; i < a->field_count; i++) {
+        const char *af = a->field_names && a->field_names[i] ? a->field_names[i] : "";
+        const char *bf = b->field_names && b->field_names[i] ? b->field_names[i] : "";
+        if (strcmp(af, bf) != 0)
+            return false;
+        bool field_eq = false;
+        if (!ct_values_equal(&a->field_values[i], &b->field_values[i], &field_eq) || !field_eq)
             return false;
     }
     return true;
@@ -227,6 +274,39 @@ static bool ct_eval_tuple_literal(XaAnalyzer *analyzer, const AstNode *expr, XrC
     out->kind = XR_CT_TUPLE;
     out->as.tuple_val.elements = values;
     out->as.tuple_val.count = tup->count;
+    return true;
+}
+
+static bool ct_eval_struct_literal(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
+                                   const char **err, uint32_t *stack, int depth) {
+    const StructLiteralNode *sl = &expr->as.struct_literal;
+    if (!sl->struct_name)
+        return ct_fail(err, "struct consteval literal is missing a type name");
+    if (sl->field_count <= 0)
+        return ct_fail(err, "struct consteval literal must have at least one field");
+
+    const char **field_names = ct_alloc_field_names(analyzer, sl->field_count, err);
+    if (!field_names)
+        return false;
+    XrCtValue *field_values = ct_alloc_values(analyzer, sl->field_count, err);
+    if (!field_values)
+        return false;
+
+    for (int i = 0; i < sl->field_count; i++) {
+        const char *name = sl->field_names ? sl->field_names[i] : NULL;
+        AstNode *value = sl->field_values ? sl->field_values[i] : NULL;
+        if (!name || !value)
+            return ct_fail(err, "missing struct consteval field");
+        field_names[i] = name;
+        if (!ct_eval_impl(analyzer, value, &field_values[i], err, stack, depth + 1))
+            return false;
+    }
+
+    out->kind = XR_CT_STRUCT_VALUE;
+    out->as.struct_val.struct_name = sl->struct_name;
+    out->as.struct_val.field_names = field_names;
+    out->as.struct_val.field_values = field_values;
+    out->as.struct_val.field_count = sl->field_count;
     return true;
 }
 
@@ -547,6 +627,9 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
             break;
         case AST_TUPLE_LITERAL:
             ok = ct_eval_tuple_literal(analyzer, expr, out, err, stack, depth);
+            break;
+        case AST_STRUCT_LITERAL:
+            ok = ct_eval_struct_literal(analyzer, expr, out, err, stack, depth);
             break;
         case AST_UNARY_NEG:
         case AST_UNARY_BNOT:
