@@ -1,0 +1,9 @@
+fn runtimeFlag() -> bool {
+    return true
+}
+
+comptime {
+    if (runtimeFlag()) {
+        compile_assert(true)
+    }
+}

@@ -2982,8 +2982,10 @@ static bool xa_eval_comptime_block_arg(XaInferContext *ctx, AstNode *arg, XrCtVa
 
 static const char *xa_comptime_block_supported_message(void) {
     return "comptime block currently supports const/var declarations, local var assignments, "
-           "compile_assert(...) and compile_error(...)";
+           "compile-time if statements, compile_assert(...) and compile_error(...)";
 }
+
+static void xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt);
 
 static void xa_visit_comptime_block_assignment(XaInferContext *ctx, AstNode *stmt,
                                                AssignmentNode *assign) {
@@ -3091,6 +3093,80 @@ static void xa_visit_comptime_compile_error(XaInferContext *ctx, AstNode *stmt,
     xa_report_comptime_block_error(ctx, stmt, msg);
 }
 
+static void xa_visit_comptime_block_nested_block(XaInferContext *ctx, AstNode *block_node) {
+    if (!ctx || !block_node)
+        return;
+    if (block_node->type != AST_BLOCK) {
+        xa_visit_comptime_block_statement(ctx, block_node);
+        return;
+    }
+
+    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, block_node);
+    BlockNode *block = &block_node->as.block;
+    for (int i = 0; i < block->count; i++)
+        xa_visit_comptime_block_statement(ctx, block->statements[i]);
+    xa_analyzer_exit_scope(ctx->analyzer);
+}
+
+static void xa_visit_comptime_block_if_stmt(XaInferContext *ctx, AstNode *stmt,
+                                            IfStmtNode *if_stmt) {
+    if (!ctx || !stmt || !if_stmt)
+        return;
+
+    XrCtValue condition = {0};
+    if (!xa_eval_comptime_block_arg(ctx, if_stmt->condition, &condition, "comptime if condition"))
+        return;
+    if (condition.kind != XR_CT_BOOL) {
+        xa_report_comptime_block_error(ctx, if_stmt->condition,
+                                       "comptime if condition must be a compile-time bool");
+        return;
+    }
+
+    AstNode *selected = condition.as.bool_val ? if_stmt->then_branch : if_stmt->else_branch;
+    if (selected)
+        xa_visit_comptime_block_nested_block(ctx, selected);
+}
+
+static void xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt) {
+    if (!ctx || !stmt)
+        return;
+
+    if (stmt->type == AST_CONST_DECL || stmt->type == AST_VAR_DECL) {
+        xa_visit_infer_stmt(ctx, stmt);
+        return;
+    }
+    if (stmt->type == AST_BLOCK) {
+        xa_visit_comptime_block_nested_block(ctx, stmt);
+        return;
+    }
+    if (stmt->type == AST_IF_STMT) {
+        xa_visit_comptime_block_if_stmt(ctx, stmt, &stmt->as.if_stmt);
+        return;
+    }
+
+    AstNode *expr = stmt->type == AST_EXPR_STMT ? stmt->as.expr_stmt : stmt;
+    if (expr && expr->type == AST_ASSIGNMENT) {
+        xa_visit_comptime_block_assignment(ctx, expr, &expr->as.assignment);
+        return;
+    }
+
+    if (!expr || expr->type != AST_CALL_EXPR || !expr->as.call_expr.callee ||
+        expr->as.call_expr.callee->type != AST_VARIABLE) {
+        xa_report_comptime_block_error(ctx, stmt, xa_comptime_block_supported_message());
+        return;
+    }
+
+    CallExprNode *call = &expr->as.call_expr;
+    const char *name = call->callee->as.variable.name;
+    if (name && strcmp(name, "compile_assert") == 0) {
+        xa_visit_comptime_compile_assert(ctx, expr, call);
+    } else if (name && strcmp(name, "compile_error") == 0) {
+        xa_visit_comptime_compile_error(ctx, expr, call);
+    } else {
+        xa_report_comptime_block_error(ctx, expr, xa_comptime_block_supported_message());
+    }
+}
+
 static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node || !xa_is_comptime_block_expr(node))
         return;
@@ -3102,33 +3178,7 @@ static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
     BlockNode *block = &node->as.comptime_expr.expr->as.block;
     for (int i = 0; i < block->count; i++) {
         AstNode *stmt = block->statements[i];
-        if (stmt && (stmt->type == AST_CONST_DECL || stmt->type == AST_VAR_DECL)) {
-            xa_visit_infer_stmt(ctx, stmt);
-            continue;
-        }
-
-        AstNode *expr = stmt && stmt->type == AST_EXPR_STMT ? stmt->as.expr_stmt : stmt;
-        if (expr && expr->type == AST_ASSIGNMENT) {
-            xa_visit_comptime_block_assignment(ctx, expr, &expr->as.assignment);
-            continue;
-        }
-
-        if (!expr || expr->type != AST_CALL_EXPR || !expr->as.call_expr.callee ||
-            expr->as.call_expr.callee->type != AST_VARIABLE) {
-            xa_report_comptime_block_error(ctx, stmt ? stmt : node,
-                                           xa_comptime_block_supported_message());
-            continue;
-        }
-
-        CallExprNode *call = &expr->as.call_expr;
-        const char *name = call->callee->as.variable.name;
-        if (name && strcmp(name, "compile_assert") == 0) {
-            xa_visit_comptime_compile_assert(ctx, expr, call);
-        } else if (name && strcmp(name, "compile_error") == 0) {
-            xa_visit_comptime_compile_error(ctx, expr, call);
-        } else {
-            xa_report_comptime_block_error(ctx, expr, xa_comptime_block_supported_message());
-        }
+        xa_visit_comptime_block_statement(ctx, stmt ? stmt : node);
     }
 
     ctx->comptime_block_depth = saved_comptime_depth;
