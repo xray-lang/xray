@@ -5,7 +5,7 @@ struct Sample {
     byte: uint8
 }
 
-var p = Sample{x: 41, y: 2.5, ok: true, byte: 300}
+var p = Sample{x: 41, y: 2.5, ok: true, byte: 30}
 p.x = p.x + 1
 p.byte = p.byte + 1
 

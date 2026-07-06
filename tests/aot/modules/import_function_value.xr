@@ -1,0 +1,10 @@
+// AOT multi-module test: import function value bindings from another module.
+import { plus_one, twice, item_inc } from "./function_value_lib"
+
+print(plus_one(41))
+print(twice(21))
+
+var op = plus_one
+print(op(4))
+
+print(item_inc(5))

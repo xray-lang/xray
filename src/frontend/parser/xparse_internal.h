@@ -177,6 +177,7 @@ XR_FUNC AstNode *xr_parse_throw_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_declaration(Parser *parser);
 XR_FUNC AstNode *xr_parse_var_declaration(Parser *parser, int is_const);
 XR_FUNC AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const);
+XR_FUNC AstNode *xr_parse_shared_declaration(Parser *parser);
 XR_FUNC AstNode *xr_parse_function_declaration(Parser *parser);
 XR_FUNC AstNode *xr_parse_type_alias_declaration(Parser *parser);
 XR_FUNC AstNode *xr_parse_enum_declaration(Parser *parser);

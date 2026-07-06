@@ -30,4 +30,4 @@ export class SharedBag {
     }
 }
 
-export const shared_bag = SharedBag()
+export shared shared_bag = SharedBag()

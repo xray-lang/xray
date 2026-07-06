@@ -335,8 +335,8 @@ static bool cg_import_ref_is_module(const XiValue *v, const char *module_name) {
            !ref->member_name;
 }
 
-static const XiImportRef *cg_shared_slot_import_ref(const XiFunc *f, int slot) {
-    if (!f || slot < 0)
+static const XiImportRef *cg_shared_slot_import_ref_depth(const XiFunc *f, int slot, int depth) {
+    if (!f || slot < 0 || depth > 8)
         return NULL;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -349,9 +349,19 @@ static const XiImportRef *cg_shared_slot_import_ref(const XiFunc *f, int slot) {
             const XiImportRef *ref = cg_value_import_ref(v->args[0]);
             if (ref)
                 return ref;
+            const XiValue *source = cg_unwrap_identity_value(v->args[0]);
+            if (source && source->op == XI_GET_SHARED && (int) source->aux_int != slot) {
+                ref = cg_shared_slot_import_ref_depth(f, (int) source->aux_int, depth + 1);
+                if (ref)
+                    return ref;
+            }
         }
     }
     return NULL;
+}
+
+static const XiImportRef *cg_shared_slot_import_ref(const XiFunc *f, int slot) {
+    return cg_shared_slot_import_ref_depth(f, slot, 0);
 }
 
 static bool cg_shared_slot_is_module_import(const XiFunc *f, int slot, const char *module_name) {

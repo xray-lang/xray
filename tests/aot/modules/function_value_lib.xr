@@ -1,0 +1,12 @@
+// AOT module test: exported function values are value exports, not function items.
+export const plus_one = fn(x: int) -> int {
+    return x + 1
+}
+
+export const twice = fn(x: int) -> int {
+    return x * 2
+}
+
+export fn item_inc(x: int) -> int {
+    return x + 10
+}

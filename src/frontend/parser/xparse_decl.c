@@ -1703,42 +1703,8 @@ AstNode *xr_parse_declaration(Parser *parser) {
         return first_decl;
     }
 
-    /* shared variable declaration (stored in global heap, pass by reference)
-     * Syntax: shared x = value or shared x: Type = value
-     */
     if (xr_parser_match(parser, TK_SHARED)) {
-        // Parse variable name
-        xr_parser_consume(parser, TK_NAME, "expected shared binding name");
-        char *name =
-            (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
-        memcpy(name, parser->previous.start, parser->previous.length);
-        name[parser->previous.length] = '\0';
-        int line = parser->previous.line;
-        int column = parser->previous.column;
-        int name_length = parser->previous.length;
-
-        // Parse optional type annotation (: Type)
-        XrTypeRef *type_annotation = NULL;
-        if (xr_parser_match(parser, TK_COLON)) {
-            type_annotation = xr_parse_type_annotation(parser);
-        }
-
-        // shared must have initialization expression
-        xr_parser_consume(parser, TK_ASSIGN, "shared variable must have initializer");
-        AstNode *initializer = xr_parse_precedence(parser, PREC_TERNARY);
-
-        AstNode *decl = xr_ast_var_decl_with_mode(parser->compiler_session, name, initializer,
-                                                  false, XR_STORAGE_SHARED, line);
-        decl->column = column;
-        if (initializer && initializer->end_line > 0) {
-            decl->end_line = initializer->end_line;
-            decl->end_column = initializer->end_column;
-        } else {
-            decl->end_line = line;
-            decl->end_column = column + name_length;
-        }
-        decl->as.var_decl.type_annotation = type_annotation;
-        return decl;
+        return xr_parse_shared_declaration(parser);
     }
 
     // Code block

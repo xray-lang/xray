@@ -4,7 +4,7 @@ struct Buf {
 }
 
 var buf = Buf{data: [1, 2, 3, 4], bias: 5}
-buf.data[1] = 300
+buf.data[1] = 30
 print(buf.data[0] + buf.data[1] + buf.data[2] + buf.data[3] + buf.bias)
 
 fn copy_last(n: int) -> int {
