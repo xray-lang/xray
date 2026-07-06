@@ -287,7 +287,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"pageProtect", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", NULL, 0},
     {"pageFree", XLSP_SYM_FUNCTION, "fn(ptr: RawMut<uint8>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", NULL, 0},
     {"fromAddress", XLSP_SYM_FUNCTION, "fn(addr: int): RawMut<uint8>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", NULL, 0},
-    {"addressOf", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<uint8>): int", "Numeric address of a raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", NULL, 0},
+    {"addressOf", XLSP_SYM_FUNCTION, "fn(ptr: RawPtr<unknown>): int", "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", NULL, 0},
     {"copy", XLSP_SYM_FUNCTION, "fn(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", NULL, 0},
     {"move", XLSP_SYM_FUNCTION, "fn(dst: RawMut<uint8>, src: RawPtr<uint8>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", NULL, 0},
     {"set", XLSP_SYM_FUNCTION, "fn(dst: RawMut<uint8>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", NULL, 0},

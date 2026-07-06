@@ -30,6 +30,13 @@ unsafe { print(q15[0]) }
 // addressOf is stable: same pointer, same address.
 print(mem.addressOf(q) == addr)
 
+// addressOf is pointee-type agnostic: C pointer comparisons/differences often
+// start from typed pointers, not only byte pointers.
+var typed_null = RawPtr<uint32>.null()
+var typed_mut_null = RawMut<uint64>.null()
+print(mem.addressOf(typed_null))
+print(mem.addressOf(typed_mut_null))
+
 // Alignment observation: an allocAligned(_, 64) buffer's address is 64-aligned.
 var ab = mem.allocAligned(128, 64)
 var a = unsafe { ab.ptrUnchecked() }

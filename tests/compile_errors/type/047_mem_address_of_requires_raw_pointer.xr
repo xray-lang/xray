@@ -1,0 +1,6 @@
+// Expected: compile error - mem.addressOf accepts only raw pointer values.
+import mem
+
+fn bad() -> int {
+    return mem.addressOf(123)
+}
