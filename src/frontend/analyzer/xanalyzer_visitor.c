@@ -3341,8 +3341,11 @@ static void xa_visit_comptime_block_while_stmt(XaInferContext *ctx, AstNode *stm
         if (!condition.as.bool_val)
             return;
 
+        int body_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
         if (while_stmt->body)
             xa_visit_comptime_block_nested_block(ctx, while_stmt->body);
+        if (ctx->analyzer && ctx->analyzer->diagnostic_count > body_diag_count)
+            return;
     }
 
     xa_report_comptime_block_error(ctx, stmt, "comptime while loop exceeded iteration limit");
