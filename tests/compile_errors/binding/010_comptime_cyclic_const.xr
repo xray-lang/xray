@@ -1,0 +1,4 @@
+const A = comptime (B + 1)
+const B = comptime (A + 1)
+
+print(A)

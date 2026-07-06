@@ -13,6 +13,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xconsteval.h"
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 #include <stdint.h>
@@ -1295,8 +1296,11 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         var->symbol_id = sym->id;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    if (links)
+    if (links) {
         links->const_initializer = sym->is_const ? var->initializer : NULL;
+        links->has_ct_value = false;
+        links->ct_value = (XrCtValue) {0};
+    }
     if (xa_freestanding_profile_enabled(ctx->analyzer) && node->type == AST_SHARED_DECL) {
         xa_freestanding_report_unavailable(
             ctx, node, "shared declaration",
@@ -1425,19 +1429,14 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     // Variables with type annotations are initialized to the type zero value.
     links->is_definitely_assigned = (var->initializer != NULL) || (links->declared_type != NULL);
 
-    // A const with a literal initializer, or an integer constant expression,
-    // can be constant-folded downstream.
+    // A const with a scalar compile-time initializer can be reused by later
+    // consteval expressions without repeatedly expanding its initializer.
     if (sym->is_const && var->initializer) {
-        AstNodeType init_t = var->initializer->type;
-        if (init_t == AST_LITERAL_INT || init_t == AST_LITERAL_FLOAT ||
-            init_t == AST_LITERAL_CHAR || init_t == AST_LITERAL_STRING ||
-            init_t == AST_LITERAL_TRUE || init_t == AST_LITERAL_FALSE ||
-            init_t == AST_LITERAL_NULL) {
+        XrCtValue value = {0};
+        if (xa_consteval_expr(ctx->analyzer, var->initializer, &value, NULL)) {
+            links->has_ct_value = true;
+            links->ct_value = value;
             links->is_const_foldable = true;
-        } else {
-            int64_t ignored = 0;
-            if (xa_eval_const_int_expr(ctx->analyzer, var->initializer, &ignored, NULL))
-                links->is_const_foldable = true;
         }
     }
     links->assign_count = var->initializer ? 1 : 0;
