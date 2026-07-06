@@ -475,13 +475,25 @@ static XrType *xa_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *objec
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
 }
 
-static XrType *xa_raw_pointer_static_method_type(XaInferContext *ctx, AstNode *object,
-                                                 const char *name) {
+static XrType *xa_raw_pointer_static_method_type(XaInferContext *ctx, AstNode *node,
+                                                 AstNode *object, const char *name) {
     XrType *ptr_type = xa_raw_pointer_type_namespace(ctx, object);
     if (!ptr_type)
         return NULL;
     if (name && strcmp(name, "null") == 0)
         return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, ptr_type, false);
+    if (name && strcmp(name, "of") == 0) {
+        XrLocation loc = {
+            .file = ctx->file_path,
+            .line = node ? node->line : (object ? object->line : 0),
+            .column = node ? node->column : (object ? object->column : 0),
+        };
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+            "RawPtr.of/RawMut.of is not supported yet; use mem.fromAddress for absolute "
+            "addresses or owner dataPtrUnchecked/ptrUnchecked escape hatches",
+            &loc);
+    }
     return xr_type_new_unknown(ctx->analyzer->isolate);
 }
 
@@ -1112,7 +1124,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
 
     MemberAccessNode *ma = &node->as.member_access;
 
-    XrType *raw_pointer_static_fn = xa_raw_pointer_static_method_type(ctx, ma->object, ma->name);
+    XrType *raw_pointer_static_fn =
+        xa_raw_pointer_static_method_type(ctx, node, ma->object, ma->name);
     if (raw_pointer_static_fn)
         return raw_pointer_static_fn;
 
