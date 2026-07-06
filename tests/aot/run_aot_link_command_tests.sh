@@ -707,6 +707,19 @@ else
         "freestanding-profile: rejects enum value channel"
 fi
 
+FREESTANDING_FORCE_UNWRAP_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_force_unwrap_reject.xr"
+FREESTANDING_FORCE_UNWRAP_LOG="$WORK/freestanding_force_unwrap_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_force_unwrap_reject" \
+        "$FREESTANDING_FORCE_UNWRAP_SRC" >"$FREESTANDING_FORCE_UNWRAP_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects force unwrap value-error channel"
+    sed 's/^/      /' "$FREESTANDING_FORCE_UNWRAP_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_FORCE_UNWRAP_LOG" \
+        "freestanding profile rejects force unwrap" \
+        "freestanding-profile: rejects force unwrap value-error channel"
+fi
+
 FREESTANDING_HOOK_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_panic_hook.xr"
 FREESTANDING_HOOK_OBJ="$WORK/freestanding_panic_hook.o"
 FREESTANDING_HOOK_REAL_LOG="$WORK/freestanding_panic_hook.log"
