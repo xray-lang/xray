@@ -3138,6 +3138,63 @@ TEST(cgen_rawptr_load_le_unchecked_uses_pointer_helper) {
     xi_func_free(ir);
 }
 
+TEST(cgen_rawmut_store_le_unchecked_uses_pointer_helper) {
+    const char *src = "fn write(dst: Bytes) {\n"
+                      "    var view: ByteSpan = dst[:]\n"
+                      "    unsafe {\n"
+                      "        var p = view.dataMutPtrUnchecked()\n"
+                      "        p.storeLEUnchecked<uint16>(1, 0x1234)\n"
+                      "        p.storeLEUnchecked<uint32>(4, 0x01020304)\n"
+                      "        p.storeLEUnchecked<uint64>(8, 0x0102030405060708)\n"
+                      "    }\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    var dst = Bytes(16)\n"
+                      "    write(dst)\n"
+                      "    return int(dst[1]) + int(dst[4]) + int(dst[8])\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "RawMut.storeLEUnchecked should generate");
+
+    const char *fn = strstr(code, "static void test_write_");
+    assert(fn != NULL && "write declaration should exist");
+    fn = strstr(fn + 1, "static void test_write_");
+    assert(fn != NULL && "write definition should exist");
+    const char *fn_end = next_static_after(fn);
+    assert(fn_end != NULL && "write function body should be bounded");
+
+    assert(count_between(fn, fn_end, "xrt_ptr_store_u16_le_unchecked_raw(") > 0 &&
+           "RawMut.storeLEUnchecked<uint16> must lower to the raw pointer helper");
+    assert(count_between(fn, fn_end, "xrt_ptr_store_u32_le_unchecked_raw(") > 0 &&
+           "RawMut.storeLEUnchecked<uint32> must lower to the raw pointer helper");
+    assert(count_between(fn, fn_end, "xrt_ptr_store_u64_le_unchecked_raw(") > 0 &&
+           "RawMut.storeLEUnchecked<uint64> must lower to the raw pointer helper");
+    assert(count_between(fn, fn_end, "void *") > 0 &&
+           "RawMut.storeLEUnchecked should keep the data pointer in native C storage");
+    assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
+           "RawMut.storeLEUnchecked hot path must not round-trip through integer pointer casts");
+    assert(count_between(fn, fn_end, "XR_FROM_INT(") == 0 &&
+           count_between(fn, fn_end, "XR_TO_INT(") == 0 &&
+           "RawMut.storeLEUnchecked hot path must not box or unbox pointer values");
+    assert(count_between(fn, fn_end, "xrt_span_bytes_store_") == 0 &&
+           "RawMut.storeLEUnchecked must not route back through ByteSpan helpers");
+    assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
+           "RawMut.storeLEUnchecked hot path must not keep a dead ERR_CHECK");
+    assert(!contains(code, "storeLEUnchecked") &&
+           "RawMut.storeLEUnchecked method name must not survive as dynamic dispatch");
+
+    printf("  Generated RawMut storeLE fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
     const char *src = "fn readByteAt(src: in ByteSpan, pos: int) -> int {\n"
                       "    unsafe {\n"
@@ -3610,10 +3667,13 @@ TEST(cgen_fixed_array_local_uses_stack_array_ref_storage) {
     const char *src = "fn first(key: [uint8; 4]) -> int {\n"
                       "    return key[0]\n"
                       "}\n"
+                      "fn at(key: [uint8; 4], i: int) -> int {\n"
+                      "    return key[i]\n"
+                      "}\n"
                       "fn run() -> int {\n"
                       "    var key: [uint8; 4] = [1, 2, 3, 4]\n"
                       "    key[1] = 9\n"
-                      "    return key.length + first(key) + key[1]\n"
+                      "    return key.length + first(key) + key[1] + at(key, 2)\n"
                       "}\n"
                       "print(run())\n";
 
@@ -3630,8 +3690,14 @@ TEST(cgen_fixed_array_local_uses_stack_array_ref_storage) {
            "local fixed array must expose storage as an array ref");
     assert(contains(code, "XR_ARRAY_REF_ELEM_COUNT") &&
            "local fixed array length must read array-ref metadata");
-    assert(contains(code, "xrt_index_get(") && contains(code, "xrt_index_set(") &&
-           "local fixed array index operations should use array-ref runtime helpers");
+    assert(contains(code, "[INT64_C(1)] = (uint8_t)") &&
+           "local fixed array constant stores should use direct stack lanes");
+    assert(contains(code, "((uint8_t*)") && contains(code, ".ptr)[INT64_C(0)]") &&
+           "fixed-array parameters should use direct typed lanes");
+    assert(contains(code, "xrt_fixed_index_oob(_idx, 4)") &&
+           "dynamic fixed-array parameter indexes should use fixed-array OOB checks");
+    assert(!contains(code, "xrt_index_get(") && !contains(code, "xrt_index_set(") &&
+           "fixed array index operations should not call generic index helpers");
     assert(!contains(code, "((xrt_array_t*)") &&
            "local fixed array array-ref storage must not be cast to dynamic array header");
 
@@ -8311,6 +8377,7 @@ int main(void) {
     run_cgen_bytes_append_from_slice_elides_dead_err_check();
     run_cgen_bytes_repeat_from_tail_elides_dead_err_check();
     run_cgen_rawptr_load_le_unchecked_uses_pointer_helper();
+    run_cgen_rawmut_store_le_unchecked_uses_pointer_helper();
     run_cgen_stack_borrow_slice_allows_local_rawptr_read_chain();
     run_cgen_stack_borrow_slice_rejects_returned_rawptr();
     run_cgen_typed_array_i16_and_u32_use_raw_storage_fast_path();

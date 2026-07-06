@@ -5,8 +5,10 @@ contains="stdlib_objects": []
 contains="system_libs": []
 contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
 c_contains=#include "xrt_core_freestanding.h"
-c_contains=xrt_index_get(
-c_contains=xrt_index_set(
+c_contains=[INT64_C(0)]
+c_contains=[INT64_C(1)] = (int64_t)
+c_not_contains=xrt_index_get(
+c_not_contains=xrt_index_set(
 c_not_contains=#include "xrt.h"
 not_contains=xray_rt_coro
 not_contains=xray_core
