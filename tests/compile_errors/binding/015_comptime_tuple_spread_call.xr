@@ -1,0 +1,6 @@
+fn runtimeTuple() -> (int, int) {
+    return (1, 2)
+}
+
+var values = comptime (...runtimeTuple(), 3)
+print(values.0)

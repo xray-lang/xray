@@ -24,3 +24,16 @@ fn test_comptime_nested_tuple_value() {
     assert_eq(nested.1.0, 3)
     assert_eq(nested.1.1, 4)
 }
+
+@test
+fn test_comptime_tuple_spread_value() {
+    const head = comptime (1, 2)
+    const tail = comptime (4, COUNT)
+    var mixed = comptime (0, ...head, 3, ...tail)
+    assert_eq(mixed.0, 0)
+    assert_eq(mixed.1, 1)
+    assert_eq(mixed.2, 2)
+    assert_eq(mixed.3, 3)
+    assert_eq(mixed.4, 4)
+    assert_eq(mixed.5, 4)
+}
