@@ -107,6 +107,46 @@ static bool xa_c_symbol_is_identifier(const char *name) {
     return true;
 }
 
+static bool xa_c_export_native_scalar_supported(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_I64:
+        case XR_NATIVE_F64:
+        case XR_NATIVE_BOOL:
+        case XR_NATIVE_I8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_F32:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool xa_c_export_struct_layout_supported_depth(const XrStructLayout *layout, int depth) {
+    if (!layout || layout->repr != XR_STRUCT_REPR_C || layout->explicit_align != 0 || depth > 8 ||
+        layout->field_count == 0 || layout->field_count > XR_MAX_STRUCT_FIELDS)
+        return false;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const XrStructFieldLayout *field = &layout->fields[i];
+        if (xa_c_export_native_scalar_supported(field->native_type))
+            continue;
+        return false;
+    }
+    return true;
+}
+
+static bool xa_c_export_struct_type_supported(XrType *type) {
+    if (!type || type->is_nullable ||
+        (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
+        !type->instance.class_ref || !type->instance.class_ref->struct_layout)
+        return false;
+    return xa_c_export_struct_layout_supported_depth(type->instance.class_ref->struct_layout, 0);
+}
+
 static bool xa_c_export_type_supported(XrType *type, bool is_return) {
     if (!type)
         return false;
@@ -118,6 +158,9 @@ static bool xa_c_export_type_supported(XrType *type, bool is_return) {
         case XR_KIND_INT:
         case XR_KIND_POINTER:
             return true;
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+            return xa_c_export_struct_type_supported(type);
         default:
             return false;
     }
