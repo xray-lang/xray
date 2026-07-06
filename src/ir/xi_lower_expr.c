@@ -1068,6 +1068,32 @@ static XiValue *lower_mem_layout_call(XiLower *l, AstNode *node, CallExprNode *c
     return xi_const_int(l->func, l->cur_block, (int64_t) value, l->type_int);
 }
 
+static XiValue *lower_mem_address_of_rawptr_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                                 const char *member) {
+    if (!l || !node || !call || !member || strcmp(member, "addressOf") != 0 ||
+        call->arg_count != 1 || call->type_arg_count != 0 || !call->arguments ||
+        !call->arguments[0])
+        return NULL;
+
+    struct XrType *arg_type = xi_lower_node_type(l, call->arguments[0]);
+    if (!arg_type || !XR_TYPE_IS_POINTER(arg_type))
+        return NULL;
+
+    XiValue *ptr = xi_lower_expr(l, call->arguments[0]);
+    if (!ptr)
+        return NULL;
+
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    if (!result_type || !XR_TYPE_IS_INT(result_type))
+        result_type = l->type_int;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CONVERT, result_type, 1);
+    if (!v)
+        return NULL;
+    v->args[0] = ptr;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
 static bool lower_math_constant(XiLower *l, const char *name, XiValue **out) {
     if (!out)
         return false;
@@ -3285,6 +3311,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *layout_const = lower_mem_layout_call(l, node, call, ma->name);
             if (layout_const)
                 return layout_const;
+            XiValue *addr_of = lower_mem_address_of_rawptr_call(l, node, call, ma->name);
+            if (addr_of)
+                return addr_of;
         }
 
         XiValue *recv = xi_lower_expr(l, ma->object);
@@ -3301,6 +3330,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *layout_const = lower_mem_layout_call(l, node, call, ma->name);
             if (layout_const)
                 return layout_const;
+            XiValue *addr_of = lower_mem_address_of_rawptr_call(l, node, call, ma->name);
+            if (addr_of)
+                return addr_of;
         }
 
         XiValue *chan_send = lower_channel_send_boundary_call(l, node, call, ma->name, recv);
