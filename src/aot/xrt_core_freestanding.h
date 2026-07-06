@@ -788,11 +788,6 @@ static inline XrValue xrt_mem_alloc_aligned(XrValue n, XrValue align) {
     xrt_freestanding_trap("freestanding profile rejects mem.allocAligned managed Buffer");
 }
 
-static inline XrValue xrt_mem_free(XrValue ptr) {
-    (void) ptr;
-    xrt_freestanding_trap("freestanding profile rejects mem.free");
-}
-
 static inline XrValue xrt_mem_from_address(XrValue addr) {
     return xr_mkptr((void *) (uintptr_t) (int64_t) xrt_mem_int_arg(addr), XR_TAG_PTR);
 }

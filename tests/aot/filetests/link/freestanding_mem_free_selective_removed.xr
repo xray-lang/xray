@@ -1,0 +1,7 @@
+import { free } from "mem"
+
+@c_export("xray_bad_mem_free_selective")
+fn xray_bad_mem_free_selective(p: RawMut<uint8>) -> int {
+    free(p)
+    return 0
+}

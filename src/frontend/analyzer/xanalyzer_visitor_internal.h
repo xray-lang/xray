@@ -76,6 +76,8 @@ XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
                                                    const char *member_name);
 XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *node,
                                                 const char *feature, const char *suggestion);
+XR_FUNC void xa_report_unknown_stdlib_member(XaInferContext *ctx, AstNode *node,
+                                             const char *module_name, const char *member_name);
 
 // Expression visitors (defined in xanalyzer_visitor_expr.c)
 XR_FUNC XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node);

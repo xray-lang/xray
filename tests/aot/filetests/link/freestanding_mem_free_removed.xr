@@ -1,0 +1,7 @@
+import mem
+
+@c_export("xray_bad_mem_free")
+fn xray_bad_mem_free(p: RawMut<uint8>) -> int {
+    mem.free(p)
+    return 0
+}

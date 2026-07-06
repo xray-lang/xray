@@ -1163,7 +1163,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     }
                     return mod_result;
                 }
-                // Known module but unknown member - still unknown for extensibility
+                xa_report_unknown_stdlib_member(ctx, node, mod_name, ma->name);
                 return xr_type_new_unknown(NULL);
             }
 

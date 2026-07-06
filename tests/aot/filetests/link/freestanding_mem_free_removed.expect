@@ -1,0 +1,6 @@
+args=--profile freestanding
+status=fail
+contains=stdlib module 'mem' has no member 'free'
+not_contains=unsupported AOT stdlib call
+not_contains=unresolved AOT import
+not_contains=CRASH
