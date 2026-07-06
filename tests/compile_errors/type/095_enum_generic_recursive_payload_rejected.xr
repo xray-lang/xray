@@ -1,0 +1,6 @@
+enum List<T> {
+    Nil,
+    Cons(T, List<T>)
+}
+
+print(1)
