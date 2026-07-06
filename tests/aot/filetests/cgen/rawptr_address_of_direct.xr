@@ -1,0 +1,11 @@
+import mem
+
+@c_export("xray_rawptr_address_before")
+fn xray_rawptr_address_before(p: RawPtr<uint8>, q: RawPtr<uint8>) -> bool {
+    return mem.addressOf(p) < mem.addressOf(q)
+}
+
+@c_export("xray_rawmut_address")
+fn xray_rawmut_address(p: RawMut<uint32>) -> int {
+    return mem.addressOf(p)
+}
