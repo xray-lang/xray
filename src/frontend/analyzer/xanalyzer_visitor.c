@@ -2954,6 +2954,81 @@ static bool xa_is_comptime_block_expr(const AstNode *node) {
            node->as.comptime_expr.expr->type == AST_BLOCK;
 }
 
+static void xa_clear_ct_value_cache_expr(XaAnalyzer *analyzer, AstNode *expr) {
+    if (!analyzer || !expr)
+        return;
+
+    xa_analyzer_set_node_ct_value(analyzer, expr, NULL);
+    switch (expr->type) {
+        case AST_COMPTIME_EXPR:
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.comptime_expr.expr);
+            break;
+        case AST_GROUPING:
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.grouping);
+            break;
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.unary.operand);
+            break;
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_NULLISH_COALESCE:
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.binary.left);
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.binary.right);
+            break;
+        case AST_TERNARY:
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.ternary.condition);
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.ternary.true_expr);
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.ternary.false_expr);
+            break;
+        case AST_ARRAY_LITERAL:
+            if (expr->as.array_literal.is_repeat) {
+                xa_clear_ct_value_cache_expr(analyzer, expr->as.array_literal.repeat_value);
+                xa_clear_ct_value_cache_expr(analyzer, expr->as.array_literal.repeat_count);
+            }
+            for (int i = 0; i < expr->as.array_literal.count; i++)
+                xa_clear_ct_value_cache_expr(analyzer, expr->as.array_literal.elements[i]);
+            break;
+        case AST_TUPLE_LITERAL:
+            for (int i = 0; i < expr->as.tuple_literal.count; i++)
+                xa_clear_ct_value_cache_expr(analyzer, expr->as.tuple_literal.elements[i]);
+            break;
+        case AST_SPREAD_EXPR:
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.spread_expr.expr);
+            break;
+        case AST_STRUCT_LITERAL:
+            for (int i = 0; i < expr->as.struct_literal.field_count; i++)
+                xa_clear_ct_value_cache_expr(analyzer, expr->as.struct_literal.field_values[i]);
+            break;
+        case AST_MEMBER_ACCESS:
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.member_access.object);
+            break;
+        case AST_INDEX_GET:
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.index_get.array);
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.index_get.index);
+            break;
+        default:
+            break;
+    }
+}
+
 static void xa_report_comptime_block_error(XaInferContext *ctx, AstNode *loc_node,
                                            const char *message) {
     if (!ctx || !ctx->analyzer || !message)
@@ -2969,6 +3044,7 @@ static bool xa_eval_comptime_block_arg(XaInferContext *ctx, AstNode *arg, XrCtVa
                                        const char *subject) {
     if (!ctx || !arg || !out)
         return false;
+    xa_clear_ct_value_cache_expr(ctx->analyzer, arg);
     xa_visit_infer_expr(ctx, arg);
     const char *err = NULL;
     if (xa_consteval_expr(ctx->analyzer, arg, out, &err))
@@ -2983,8 +3059,8 @@ static bool xa_eval_comptime_block_arg(XaInferContext *ctx, AstNode *arg, XrCtVa
 
 static const char *xa_comptime_block_supported_message(void) {
     return "comptime block currently supports const/var declarations, local var assignments, "
-           "local var compound assignments, compile-time if statements, compile_assert(...) "
-           "and compile_error(...)";
+           "local var compound assignments, compile-time if/while statements, "
+           "compile_assert(...) and compile_error(...)";
 }
 
 static void xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt);
@@ -3043,6 +3119,7 @@ static void xa_visit_comptime_block_assignment(XaInferContext *ctx, AstNode *stm
     }
 
     assign->symbol_id = sym->id;
+    xa_clear_ct_value_cache_expr(ctx->analyzer, assign->value);
     XrType *value_type = xa_visit_infer_expr(ctx, assign->value);
     XrType *target_type = links->type ? links->type : xa_analyzer_get_type(ctx->analyzer, sym);
     XrLocation loc = {.file = ctx->file_path, .line = stmt->line, .column = stmt->column};
@@ -3118,6 +3195,7 @@ static void xa_visit_comptime_block_compound_assignment(XaInferContext *ctx, Ast
     binary.as.binary.left = &lhs;
     binary.as.binary.right = compound->value;
 
+    xa_clear_ct_value_cache_expr(ctx->analyzer, compound->value);
     XrType *value_type = xa_visit_infer_expr(ctx, &binary);
     XrType *target_type = links->type ? links->type : xa_analyzer_get_type(ctx->analyzer, sym);
     XrLocation loc = {.file = ctx->file_path, .line = stmt->line, .column = stmt->column};
@@ -3243,6 +3321,33 @@ static void xa_visit_comptime_block_if_stmt(XaInferContext *ctx, AstNode *stmt,
         xa_visit_comptime_block_nested_block(ctx, selected);
 }
 
+#define XA_COMPTIME_WHILE_MAX_ITERATIONS 100000
+
+static void xa_visit_comptime_block_while_stmt(XaInferContext *ctx, AstNode *stmt,
+                                               WhileStmtNode *while_stmt) {
+    if (!ctx || !stmt || !while_stmt)
+        return;
+
+    for (int iteration = 0; iteration < XA_COMPTIME_WHILE_MAX_ITERATIONS; iteration++) {
+        XrCtValue condition = {0};
+        if (!xa_eval_comptime_block_arg(ctx, while_stmt->condition, &condition,
+                                        "comptime while condition"))
+            return;
+        if (condition.kind != XR_CT_BOOL) {
+            xa_report_comptime_block_error(ctx, while_stmt->condition,
+                                           "comptime while condition must be a compile-time bool");
+            return;
+        }
+        if (!condition.as.bool_val)
+            return;
+
+        if (while_stmt->body)
+            xa_visit_comptime_block_nested_block(ctx, while_stmt->body);
+    }
+
+    xa_report_comptime_block_error(ctx, stmt, "comptime while loop exceeded iteration limit");
+}
+
 static void xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt) {
     if (!ctx || !stmt)
         return;
@@ -3257,6 +3362,10 @@ static void xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt
     }
     if (stmt->type == AST_IF_STMT) {
         xa_visit_comptime_block_if_stmt(ctx, stmt, &stmt->as.if_stmt);
+        return;
+    }
+    if (stmt->type == AST_WHILE_STMT) {
+        xa_visit_comptime_block_while_stmt(ctx, stmt, &stmt->as.while_stmt);
         return;
     }
 

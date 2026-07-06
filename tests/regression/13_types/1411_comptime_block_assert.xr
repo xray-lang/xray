@@ -51,6 +51,23 @@ comptime {
     compile_assert(ops == 5, "compound assignment ops")
 }
 
+comptime {
+    var i = comptime 0
+    var sum = comptime 0
+    while (i < 5) {
+        sum += i
+        i += 1
+    }
+    compile_assert(sum == 10, "comptime while sum")
+    compile_assert(i == 5, "comptime while condition refresh")
+
+    var countdown = comptime 3
+    while (countdown > 0) {
+        countdown -= 1
+    }
+    compile_assert(countdown == 0, "comptime while countdown")
+}
+
 @test
 fn test_comptime_block_erased() {
     var x = 3
