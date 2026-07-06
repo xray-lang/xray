@@ -22,9 +22,17 @@ typedef enum XrCtValueKind {
     XR_CT_STRING,
     XR_CT_CHAR,
     XR_CT_NULL,
+    XR_CT_FIXED_ARRAY,
 } XrCtValueKind;
 
-typedef struct XrCtValue {
+typedef struct XrCtValue XrCtValue;
+
+typedef struct XrCtFixedArrayValue {
+    XrCtValue *elements;
+    int count;
+} XrCtFixedArrayValue;
+
+struct XrCtValue {
     XrCtValueKind kind;
     union {
         int64_t int_val;
@@ -32,8 +40,9 @@ typedef struct XrCtValue {
         bool bool_val;
         const char *string_val;
         uint32_t char_val;
+        XrCtFixedArrayValue fixed_array_val;
     } as;
-} XrCtValue;
+};
 
 XR_FUNC bool xa_consteval_expr(struct XaAnalyzer *analyzer, const struct AstNode *expr,
                                XrCtValue *out_value, const char **out_error);

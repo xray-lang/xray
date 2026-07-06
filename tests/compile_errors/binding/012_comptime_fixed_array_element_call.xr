@@ -1,0 +1,6 @@
+fn runtimeOnly() -> int {
+    return 2
+}
+
+var values: [int; 2] = comptime [1, runtimeOnly()]
+print(values[0])

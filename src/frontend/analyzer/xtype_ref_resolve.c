@@ -23,7 +23,9 @@
 #include "../../runtime/value/xtype_names.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../base/xchecks.h"
+#include "../../base/xarena.h"
 #include "../../../stdlib/prelude/prelude.h"
+#include "../../toolchain/xcompiler_session.h"
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -68,6 +70,30 @@ static double ct_as_double(const XrCtValue *v) {
 static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
                          const char **err, uint32_t *stack, int depth);
 
+static XrCtValue *ct_alloc_values(XaAnalyzer *analyzer, int count, const char **err) {
+    if (count <= 0)
+        return NULL;
+    if (!analyzer || !analyzer->compiler_session) {
+        if (err)
+            *err = "consteval storage is unavailable";
+        return NULL;
+    }
+    XrArena *arena = xr_compiler_session_current_arena(analyzer->compiler_session);
+    if (!arena) {
+        if (err)
+            *err = "consteval storage is unavailable";
+        return NULL;
+    }
+    XrCtValue *values =
+        (XrCtValue *) xr_arena_alloc_array(arena, sizeof(XrCtValue), (size_t) count);
+    if (!values) {
+        if (err)
+            *err = "out of memory while evaluating compile-time array";
+        return NULL;
+    }
+    return values;
+}
+
 static bool ct_values_equal(const XrCtValue *a, const XrCtValue *b, bool *out) {
     if (!a || !b || !out)
         return false;
@@ -100,9 +126,75 @@ static bool ct_values_equal(const XrCtValue *a, const XrCtValue *b, bool *out) {
         case XR_CT_NULL:
             *out = true;
             return true;
+        case XR_CT_FIXED_ARRAY:
+            if (a->as.fixed_array_val.count != b->as.fixed_array_val.count)
+                return false;
+            for (int i = 0; i < a->as.fixed_array_val.count; i++) {
+                bool elem_eq = false;
+                if (!ct_values_equal(&a->as.fixed_array_val.elements[i],
+                                     &b->as.fixed_array_val.elements[i], &elem_eq) ||
+                    !elem_eq)
+                    return false;
+            }
+            *out = true;
+            return true;
         default:
             return false;
     }
+}
+
+static bool ct_eval_array_literal(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
+                                  const char **err, uint32_t *stack, int depth) {
+    const ArrayLiteralNode *arr = &expr->as.array_literal;
+    if (arr->is_repeat) {
+        XrCtValue count_value = {0};
+        if (!ct_eval_impl(analyzer, arr->repeat_count, &count_value, err, stack, depth + 1))
+            return false;
+        if (count_value.kind != XR_CT_INT)
+            return ct_fail(err, "fixed array repeat count must be an integer constant");
+        if (count_value.as.int_val <= 0)
+            return ct_fail(err, "fixed array repeat count must be greater than zero");
+        if (count_value.as.int_val > 65535)
+            return ct_fail(err, "fixed array repeat count exceeds maximum of 65535 elements");
+
+        XrCtValue elem = {0};
+        if (!ct_eval_impl(analyzer, arr->repeat_value, &elem, err, stack, depth + 1))
+            return false;
+
+        int count = (int) count_value.as.int_val;
+        XrCtValue *values = ct_alloc_values(analyzer, count, err);
+        if (!values)
+            return false;
+        for (int i = 0; i < count; i++)
+            values[i] = elem;
+
+        out->kind = XR_CT_FIXED_ARRAY;
+        out->as.fixed_array_val.elements = values;
+        out->as.fixed_array_val.count = count;
+        return true;
+    }
+
+    if (arr->count <= 0)
+        return ct_fail(err, "fixed array consteval literal must have at least one element");
+
+    XrCtValue *values = ct_alloc_values(analyzer, arr->count, err);
+    if (!values)
+        return false;
+
+    for (int i = 0; i < arr->count; i++) {
+        AstNode *elem = arr->elements ? arr->elements[i] : NULL;
+        if (!elem)
+            return ct_fail(err, "missing fixed array consteval element");
+        if (elem->type == AST_SPREAD_EXPR)
+            return ct_fail(err, "fixed array consteval literal cannot use spread");
+        if (!ct_eval_impl(analyzer, elem, &values[i], err, stack, depth + 1))
+            return false;
+    }
+
+    out->kind = XR_CT_FIXED_ARRAY;
+    out->as.fixed_array_val.elements = values;
+    out->as.fixed_array_val.count = arr->count;
+    return true;
 }
 
 static XaSymbol *ct_lookup_const_symbol(XaAnalyzer *analyzer, const AstNode *expr) {
@@ -416,6 +508,9 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
         case AST_LITERAL_NULL:
             out->kind = XR_CT_NULL;
             ok = true;
+            break;
+        case AST_ARRAY_LITERAL:
+            ok = ct_eval_array_literal(analyzer, expr, out, err, stack, depth);
             break;
         case AST_UNARY_NEG:
         case AST_UNARY_BNOT:
