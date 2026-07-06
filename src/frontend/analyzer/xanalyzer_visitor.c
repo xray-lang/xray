@@ -74,6 +74,35 @@ static bool xa_type_is_byte_array_or_view(XrType *type) {
     return elem && XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
 }
 
+static bool xa_enum_payload_contains_by_value(XrType *type, const char *enum_name) {
+    if (!type || !enum_name)
+        return false;
+
+    switch (type->kind) {
+        case XR_KIND_ENUM:
+            return type->enum_type.enum_name && strcmp(type->enum_type.enum_name, enum_name) == 0;
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+            return type->instance.class_name && strcmp(type->instance.class_name, enum_name) == 0;
+        case XR_KIND_FIXED_ARRAY:
+            return xa_enum_payload_contains_by_value(type->fixed_array.element_type, enum_name);
+        case XR_KIND_TUPLE:
+            for (int i = 0; i < type->tuple.element_count; i++) {
+                if (xa_enum_payload_contains_by_value(type->tuple.element_types[i], enum_name))
+                    return true;
+            }
+            return false;
+        case XR_KIND_UNION:
+            for (int i = 0; i < type->union_type.member_count; i++) {
+                if (xa_enum_payload_contains_by_value(type->union_type.members[i], enum_name))
+                    return true;
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
 static XrType *xa_span_type_from_view_source(XaInferContext *ctx, XrType *src) {
     if (!ctx || !ctx->analyzer || !src)
         return xr_type_new_unknown(NULL);
@@ -2370,6 +2399,25 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                                     ptype = resolve_class_to_type_param(
                                         ctx->analyzer->isolate, ptype, links->type_param_names,
                                         links->type_param_count);
+                                }
+                                if (ptype &&
+                                    xa_enum_payload_contains_by_value(ptype, edecl->name)) {
+                                    XrLocation loc = {.file = ctx->file_path,
+                                                      .line = mem->line,
+                                                      .column = mem->column};
+                                    char msg[256];
+                                    snprintf(msg, sizeof(msg),
+                                             "enum '%s' variant '%s' cannot contain '%s' by value; "
+                                             "use explicit indirection such as Box<%s> or a class "
+                                             "node for recursive data",
+                                             edecl->name ? edecl->name : "?",
+                                             mem->as.enum_member.name ? mem->as.enum_member.name
+                                                                      : "?",
+                                             edecl->name ? edecl->name : "?",
+                                             edecl->name ? edecl->name : "?");
+                                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                                                               &loc);
                                 }
                                 ptypes[p] = ptype;
                             }

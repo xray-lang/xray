@@ -1,0 +1,6 @@
+enum Expr {
+    Number(int),
+    Binary(left: Expr, right: Expr)
+}
+
+print(1)
