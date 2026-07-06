@@ -3060,7 +3060,8 @@ static bool xa_eval_comptime_block_arg(XaInferContext *ctx, AstNode *arg, XrCtVa
 static const char *xa_comptime_block_supported_message(void) {
     return "comptime block currently supports const/var declarations, local var assignments, "
            "local var compound assignments, compile-time if/while statements, "
-           "break/continue inside comptime while, compile_assert(...) and compile_error(...)";
+           "C-style for loops, break/continue inside comptime loops, compile_assert(...) "
+           "and compile_error(...)";
 }
 
 typedef enum XaComptimeBlockFlow {
@@ -3369,6 +3370,74 @@ static XaComptimeBlockFlow xa_visit_comptime_block_while_stmt(XaInferContext *ct
     return XA_COMPTIME_FLOW_NORMAL;
 }
 
+static XaComptimeBlockFlow xa_visit_comptime_block_for_stmt(XaInferContext *ctx, AstNode *stmt,
+                                                            ForStmtNode *for_stmt) {
+    if (!ctx || !stmt || !for_stmt)
+        return XA_COMPTIME_FLOW_NORMAL;
+
+    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, stmt);
+    XaComptimeBlockFlow result = XA_COMPTIME_FLOW_NORMAL;
+
+    if (for_stmt->initializer) {
+        int init_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
+        result = xa_visit_comptime_block_statement(ctx, for_stmt->initializer);
+        if (ctx->analyzer && ctx->analyzer->diagnostic_count > init_diag_count)
+            goto done;
+        if (result != XA_COMPTIME_FLOW_NORMAL) {
+            xa_report_comptime_block_error(ctx, for_stmt->initializer,
+                                           "comptime for initializer cannot use loop control");
+            result = XA_COMPTIME_FLOW_NORMAL;
+            goto done;
+        }
+    }
+
+    for (int iteration = 0; iteration < XA_COMPTIME_WHILE_MAX_ITERATIONS; iteration++) {
+        if (for_stmt->condition) {
+            XrCtValue condition = {0};
+            if (!xa_eval_comptime_block_arg(ctx, for_stmt->condition, &condition,
+                                            "comptime for condition"))
+                goto done;
+            if (condition.kind != XR_CT_BOOL) {
+                xa_report_comptime_block_error(
+                    ctx, for_stmt->condition, "comptime for condition must be a compile-time bool");
+                goto done;
+            }
+            if (!condition.as.bool_val)
+                goto done;
+        }
+
+        int body_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
+        XaComptimeBlockFlow flow = XA_COMPTIME_FLOW_NORMAL;
+        if (for_stmt->body)
+            flow = xa_visit_comptime_block_nested_block(ctx, for_stmt->body);
+        if (ctx->analyzer && ctx->analyzer->diagnostic_count > body_diag_count)
+            goto done;
+        if (flow == XA_COMPTIME_FLOW_BREAK)
+            goto done;
+
+        if (for_stmt->increment) {
+            int inc_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
+            XaComptimeBlockFlow inc_flow =
+                xa_visit_comptime_block_statement(ctx, for_stmt->increment);
+            if (ctx->analyzer && ctx->analyzer->diagnostic_count > inc_diag_count)
+                goto done;
+            if (inc_flow != XA_COMPTIME_FLOW_NORMAL) {
+                xa_report_comptime_block_error(ctx, for_stmt->increment,
+                                               "comptime for increment cannot use loop control");
+                goto done;
+            }
+        }
+        if (flow == XA_COMPTIME_FLOW_CONTINUE)
+            continue;
+    }
+
+    xa_report_comptime_block_error(ctx, stmt, "comptime for loop exceeded iteration limit");
+
+done:
+    xa_analyzer_exit_scope(ctx->analyzer);
+    return XA_COMPTIME_FLOW_NORMAL;
+}
+
 static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt) {
     if (!ctx || !stmt)
         return XA_COMPTIME_FLOW_NORMAL;
@@ -3385,6 +3454,9 @@ static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx
     }
     if (stmt->type == AST_WHILE_STMT) {
         return xa_visit_comptime_block_while_stmt(ctx, stmt, &stmt->as.while_stmt);
+    }
+    if (stmt->type == AST_FOR_STMT) {
+        return xa_visit_comptime_block_for_stmt(ctx, stmt, &stmt->as.for_stmt);
     }
     if (stmt->type == AST_BREAK_STMT) {
         if (stmt->as.break_stmt.label) {
@@ -3445,13 +3517,12 @@ static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
         XaComptimeBlockFlow flow = xa_visit_comptime_block_statement(ctx, stmt ? stmt : node);
         if (flow == XA_COMPTIME_FLOW_BREAK) {
             xa_report_comptime_block_error(ctx, stmt ? stmt : node,
-                                           "comptime break can only be used inside comptime while");
+                                           "comptime break can only be used inside comptime loop");
             break;
         }
         if (flow == XA_COMPTIME_FLOW_CONTINUE) {
             xa_report_comptime_block_error(
-                ctx, stmt ? stmt : node,
-                "comptime continue can only be used inside comptime while");
+                ctx, stmt ? stmt : node, "comptime continue can only be used inside comptime loop");
             break;
         }
     }
