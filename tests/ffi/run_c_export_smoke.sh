@@ -94,12 +94,33 @@ case "$(uname -s)" in
 esac
 PAIR_TYPE=""
 PAIR_TYPE_FOR_C="struct xray_missing_pair_type"
+OUTER_TYPE=""
+OUTER_TYPE_FOR_C="struct xray_missing_outer_type"
+BYTES4_TYPE=""
+BYTES4_TYPE_FOR_C="struct xray_missing_bytes4_type"
 
 cat >"$SRC" <<'XR'
 @repr(C)
 struct Pair {
     a: int32
     b: int32
+}
+
+@repr(C)
+struct Inner {
+    x: int32
+}
+
+@repr(C)
+struct Outer {
+    inner: Inner
+    y: int32
+}
+
+@repr(C)
+struct Bytes4 {
+    data: [uint8; 4]
+    bias: int32
 }
 
 @c_export("xr_add_i32")
@@ -142,6 +163,26 @@ fn pair_make(a: int32, b: int32) -> Pair {
     return Pair{a: a, b: b}
 }
 
+@c_export("xr_outer_sum")
+fn outer_sum(p: Outer) -> int32 {
+    return p.inner.x + p.y
+}
+
+@c_export("xr_outer_make")
+fn outer_make(x: int32, y: int32) -> Outer {
+    return Outer{inner: Inner{x: x}, y: y}
+}
+
+@c_export("xr_bytes4_sum")
+fn bytes4_sum(p: Bytes4) -> int32 {
+    return p.data[0] as int32 + p.data[1] as int32 + p.bias
+}
+
+@c_export("xr_bytes4_make")
+fn bytes4_make(a: uint8, b: uint8, c: uint8, d: uint8, bias: int32) -> Bytes4 {
+    return Bytes4{data: [a, b, c, d], bias: bias}
+}
+
 print(add_i32(19, 23))
 XR
 
@@ -154,6 +195,8 @@ fi
 
 if [ -f "$GEN_H" ]; then
     PAIR_TYPE=$(awk '/xr_pair_make/ { print $1; exit }' "$GEN_H")
+    OUTER_TYPE=$(awk '/xr_outer_make/ { print $1; exit }' "$GEN_H")
+    BYTES4_TYPE=$(awk '/xr_bytes4_make/ { print $1; exit }' "$GEN_H")
     if [ -n "$PAIR_TYPE" ] && grep -Fq "typedef struct $PAIR_TYPE {" "$GEN_H"; then
         case "$PAIR_TYPE" in
             xrt_struct_*)
@@ -167,6 +210,36 @@ if [ -f "$GEN_H" ]; then
         esac
     else
         record_fail "header exposes repr(C) struct typedef"
+        sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
+    fi
+    if [ -n "$OUTER_TYPE" ] && grep -Fq "typedef struct $OUTER_TYPE {" "$GEN_H"; then
+        case "$OUTER_TYPE" in
+            xrt_struct_*)
+                OUTER_TYPE_FOR_C="$OUTER_TYPE"
+                record_pass "header exposes nested repr(C) struct typedef"
+                ;;
+            *)
+                record_fail "header exposes nested repr(C) struct typedef"
+                sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
+                ;;
+        esac
+    else
+        record_fail "header exposes nested repr(C) struct typedef"
+        sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
+    fi
+    if [ -n "$BYTES4_TYPE" ] && grep -Fq "typedef struct $BYTES4_TYPE {" "$GEN_H"; then
+        case "$BYTES4_TYPE" in
+            xrt_struct_*)
+                BYTES4_TYPE_FOR_C="$BYTES4_TYPE"
+                record_pass "header exposes fixed-array repr(C) struct typedef"
+                ;;
+            *)
+                record_fail "header exposes fixed-array repr(C) struct typedef"
+                sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
+                ;;
+        esac
+    else
+        record_fail "header exposes fixed-array repr(C) struct typedef"
         sed 's/^/      /' "$GEN_H" | sed -n '1,120p'
     fi
 fi
@@ -187,6 +260,19 @@ if [ -f "$GEN_C" ]; then
             "declares repr(C) struct parameter export"
         expect_file_contains "$GEN_C" "$PAIR_TYPE xr_pair_make(int32_t p0, int32_t p1);" \
             "declares repr(C) struct return export"
+    fi
+    if [ -n "$OUTER_TYPE" ]; then
+        expect_file_contains "$GEN_C" "int32_t xr_outer_sum($OUTER_TYPE p0);" \
+            "declares nested repr(C) struct parameter export"
+        expect_file_contains "$GEN_C" "$OUTER_TYPE xr_outer_make(int32_t p0, int32_t p1);" \
+            "declares nested repr(C) struct return export"
+    fi
+    if [ -n "$BYTES4_TYPE" ]; then
+        expect_file_contains "$GEN_C" "int32_t xr_bytes4_sum($BYTES4_TYPE p0);" \
+            "declares fixed-array repr(C) struct parameter export"
+        expect_file_contains "$GEN_C" \
+            "$BYTES4_TYPE xr_bytes4_make(uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3, int32_t p4);" \
+            "declares fixed-array repr(C) struct return export"
     fi
     expect_file_not_contains "$GEN_C" "static int32_t xr_add_i32" \
         "int32 export is public"
@@ -212,6 +298,19 @@ if [ -f "$GEN_H" ]; then
             "header declares repr(C) struct parameter export"
         expect_file_contains "$GEN_H" "$PAIR_TYPE xr_pair_make(int32_t p0, int32_t p1);" \
             "header declares repr(C) struct return export"
+    fi
+    if [ -n "$OUTER_TYPE" ]; then
+        expect_file_contains "$GEN_H" "int32_t xr_outer_sum($OUTER_TYPE p0);" \
+            "header declares nested repr(C) struct parameter export"
+        expect_file_contains "$GEN_H" "$OUTER_TYPE xr_outer_make(int32_t p0, int32_t p1);" \
+            "header declares nested repr(C) struct return export"
+    fi
+    if [ -n "$BYTES4_TYPE" ]; then
+        expect_file_contains "$GEN_H" "int32_t xr_bytes4_sum($BYTES4_TYPE p0);" \
+            "header declares fixed-array repr(C) struct parameter export"
+        expect_file_contains "$GEN_H" \
+            "$BYTES4_TYPE xr_bytes4_make(uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3, int32_t p4);" \
+            "header declares fixed-array repr(C) struct return export"
     fi
 fi
 
@@ -251,6 +350,14 @@ int main(void) {
     $PAIR_TYPE_FOR_C pair = xr_pair_make(20, 22);
     if (xr_pair_sum(pair) != 42)
         return 16;
+    $OUTER_TYPE_FOR_C outer = xr_outer_make(35, 7);
+    if (xr_outer_sum(outer) != 42)
+        return 17;
+    $BYTES4_TYPE_FOR_C bytes = xr_bytes4_make(10, 20, 30, 40, 7);
+    if (xr_bytes4_sum(bytes) != 37)
+        return 18;
+    if (bytes.data[2] != 30 || bytes.bias != 7)
+        return 19;
     puts("ok");
     return 0;
 }

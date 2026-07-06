@@ -1,9 +1,0 @@
-@repr(C)
-struct Buf {
-    data: [uint8; 4]
-}
-
-@c_export("xr_bad_array_struct")
-fn bad_array_struct(p: Buf) -> int32 {
-    return 0
-}
