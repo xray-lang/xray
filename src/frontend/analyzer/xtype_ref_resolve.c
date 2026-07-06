@@ -16,6 +16,7 @@
 #include "xconsteval.h"
 #include "xanalyzer.h"
 #include "xanalyzer_builtin_interfaces.h"
+#include "xanalyzer_visitor.h"
 #include "xanalyzer_symbol.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xtype_ref.h"
@@ -675,9 +676,23 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
     bool ok = false;
 
     switch (expr->type) {
-        case AST_COMPTIME_EXPR:
-            ok = ct_eval_impl(analyzer, expr->as.comptime_expr.expr, out, err, stack, depth + 1);
+        case AST_COMPTIME_EXPR: {
+            AstNode *inner = expr->as.comptime_expr.expr;
+            if (inner && inner->type == AST_BLOCK) {
+                XaInferContext *ctx = xa_infer_context_new(analyzer);
+                if (!ctx)
+                    return ct_fail(err, "comptime block engine is unavailable");
+                ctx->file_path = analyzer ? analyzer->current_file : NULL;
+                xa_visit_comptime_block_expr(ctx, (AstNode *) expr);
+                xa_infer_context_free(ctx);
+                ok = xa_analyzer_get_node_ct_value(analyzer, expr, out);
+                if (!ok)
+                    return ct_fail(err, "comptime block expression did not produce a value");
+                break;
+            }
+            ok = ct_eval_impl(analyzer, inner, out, err, stack, depth + 1);
             break;
+        }
         case AST_GROUPING:
             ok = ct_eval_impl(analyzer, expr->as.grouping, out, err, stack, depth + 1);
             break;
