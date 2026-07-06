@@ -503,6 +503,20 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
     xrt_freestanding_trap("freestanding index get supports only fixed arrays");
     return XR_NULL_VAL;
 }
+static inline XrValue xrt_enum_field_get(XrValue boxed, int64_t index) {
+    if (boxed.tag == XR_TAG_ENUM && boxed.ptr) {
+        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) boxed.ptr;
+        if (index == 0)
+            return XR_FROM_INT(ev->member_index);
+        if (index == 1)
+            return ev->raw_value;
+        return XR_NULL_VAL;
+    }
+    (void) boxed;
+    (void) index;
+    return XR_NULL_VAL;
+}
+
 
 static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
     if (XR_IS_ARRAY_REF(obj) && XR_IS_INT(key)) {
