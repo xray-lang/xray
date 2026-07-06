@@ -1,0 +1,7 @@
+comptime {
+    var i = comptime 0
+    while (i < 2) {
+        i += 1
+        compile_error("while body")
+    }
+}
