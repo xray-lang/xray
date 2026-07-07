@@ -407,6 +407,7 @@ typedef struct XaotMethodDispatchPlan {
     uint32_t body_ordinal;
     XgMethodId method_id;
     XgClassId receiver_static_class_id;
+    XgInterfaceId receiver_static_interface_id;
     uint8_t kind;
     uint32_t dispatch_slot;
     uint32_t target_start;

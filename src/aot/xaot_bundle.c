@@ -552,6 +552,7 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
     plan->body_ordinal = call->body_ordinal;
     plan->method_id = method ? method->method_id : call->method_id;
     plan->receiver_static_class_id = call->receiver_static_class_id;
+    plan->receiver_static_interface_id = call->receiver_static_interface_id;
     plan->kind = kind;
     plan->dispatch_slot = UINT32_MAX;
     plan->target_start = target_start;
@@ -2556,21 +2557,22 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         if (dp->dispatch_slot == UINT32_MAX) {
             fprintf(out,
                     "method-dispatch %u callsite=%u span=%u kind=%s owner=%u ordinal=%u method=%u "
-                    "recv_class=%u "
+                    "recv_class=%u recv_iface=%u "
                     "slot=- targets=%u+%u evidence=0x%x reason=%s\n",
                     di, dp->callsite_id, dp->source_span_id, dispatch_kind_name(dp->kind),
                     dp->owner_func_id, dp->body_ordinal, dp->method_id,
-                    dp->receiver_static_class_id, dp->target_start, (unsigned) dp->target_count,
-                    dp->evidence, dispatch_unproven_reason_name(dp->unproven_reason));
+                    dp->receiver_static_class_id, dp->receiver_static_interface_id,
+                    dp->target_start, (unsigned) dp->target_count, dp->evidence,
+                    dispatch_unproven_reason_name(dp->unproven_reason));
         } else {
             fprintf(out,
                     "method-dispatch %u callsite=%u span=%u kind=%s owner=%u ordinal=%u method=%u "
-                    "recv_class=%u "
+                    "recv_class=%u recv_iface=%u "
                     "slot=%u targets=%u+%u evidence=0x%x reason=%s\n",
                     di, dp->callsite_id, dp->source_span_id, dispatch_kind_name(dp->kind),
                     dp->owner_func_id, dp->body_ordinal, dp->method_id,
-                    dp->receiver_static_class_id, dp->dispatch_slot, dp->target_start,
-                    (unsigned) dp->target_count, dp->evidence,
+                    dp->receiver_static_class_id, dp->receiver_static_interface_id,
+                    dp->dispatch_slot, dp->target_start, (unsigned) dp->target_count, dp->evidence,
                     dispatch_unproven_reason_name(dp->unproven_reason));
         }
     }
