@@ -278,6 +278,8 @@ static inline int64_t xrt_endian_arg(XrValue value) {
     }
     if (endian < XR_ENDIAN_NATIVE || endian > XR_ENDIAN_BE)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "invalid Endian value");
+    if (endian == XR_ENDIAN_NATIVE)
+        return XRT_TARGET_NATIVE_ENDIAN;
     return endian;
 }
 

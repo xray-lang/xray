@@ -310,6 +310,7 @@ fi
 
 FREESTANDING_EXPORT_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_export.xr"
 FREESTANDING_UINTSIZE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_uintsize_target.xr"
+FREESTANDING_ENDIAN_NATIVE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_endian_native_target.xr"
 FREESTANDING_EXPORT_BIN="$WORK/freestanding_export"
 FREESTANDING_EXPORT_LOG="$WORK/freestanding_export.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
@@ -529,6 +530,51 @@ if command -v zig >/dev/null 2>&1 && command -v llvm-readelf >/dev/null 2>&1 &&
     else
         record_fail "freestanding-profile/riscv32-uintsize: real object build failed"
         sed 's/^/      /' "$FREESTANDING_UINTSIZE_RISCV32_LOG" | sed -n '1,120p'
+    fi
+
+    FREESTANDING_ENDIAN_NATIVE_RISCV32_OBJ="$WORK/freestanding_endian_native_riscv32.o"
+    FREESTANDING_ENDIAN_NATIVE_RISCV32_LOG="$WORK/freestanding_endian_native_riscv32.log"
+    FREESTANDING_ENDIAN_NATIVE_RISCV32_UNDEF="$WORK/freestanding_endian_native_riscv32.undefined"
+    if ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}" \
+            ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}" \
+            "$XRAY" build --native --profile freestanding --shared \
+            --target riscv32imac-unknown-none-elf --toolchain zig --keep-c --rebuild \
+            --dump-link-command --cache-dir "$BUILD_CACHE" \
+            -o "$FREESTANDING_ENDIAN_NATIVE_RISCV32_OBJ" \
+            "$FREESTANDING_ENDIAN_NATIVE_SRC" >"$FREESTANDING_ENDIAN_NATIVE_RISCV32_LOG" 2>&1; then
+        FREESTANDING_ENDIAN_NATIVE_RISCV32_C="$(sed -n 's/^Kept C source: //p' \
+            "$FREESTANDING_ENDIAN_NATIVE_RISCV32_LOG" | tail -n 1)"
+        if [ -f "$FREESTANDING_ENDIAN_NATIVE_RISCV32_C" ]; then
+            expect_log_contains "$FREESTANDING_ENDIAN_NATIVE_RISCV32_C" \
+                "XRT_TARGET_NATIVE_ENDIAN" \
+                "freestanding-profile/riscv32-endian-native: Endian.Native uses target macro"
+            expect_log_not_contains "$FREESTANDING_ENDIAN_NATIVE_RISCV32_C" "XR_ENDIAN_NATIVE" \
+                "freestanding-profile/riscv32-endian-native: Endian.Native is not emitted as raw Native ordinal"
+        else
+            record_fail "freestanding-profile/riscv32-endian-native: kept C source missing"
+            sed 's/^/      /' "$FREESTANDING_ENDIAN_NATIVE_RISCV32_LOG" | sed -n '1,120p'
+        fi
+        if llvm-nm -u "$FREESTANDING_ENDIAN_NATIVE_RISCV32_OBJ" \
+                >"$FREESTANDING_ENDIAN_NATIVE_RISCV32_UNDEF" 2>&1; then
+            FREESTANDING_ENDIAN_NATIVE_RISCV32_UNEXPECTED="$(
+                sed '/^[[:space:]]*$/d' "$FREESTANDING_ENDIAN_NATIVE_RISCV32_UNDEF" |
+                    sed 's/.*[[:space:]]//; s/^_//' |
+                    grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic)$' || true)"
+            if [ -z "$FREESTANDING_ENDIAN_NATIVE_RISCV32_UNEXPECTED" ]; then
+                record_pass \
+                    "freestanding-profile/riscv32-endian-native: undefined symbols stay in hook/memcpy family"
+            else
+                record_fail \
+                    "freestanding-profile/riscv32-endian-native: unexpected undefined symbols"
+                printf '%s\n' "$FREESTANDING_ENDIAN_NATIVE_RISCV32_UNEXPECTED" | sed 's/^/      /'
+            fi
+        else
+            record_fail "freestanding-profile/riscv32-endian-native: llvm-nm failed"
+            sed 's/^/      /' "$FREESTANDING_ENDIAN_NATIVE_RISCV32_UNDEF" | sed -n '1,80p'
+        fi
+    else
+        record_fail "freestanding-profile/riscv32-endian-native: real object build failed"
+        sed 's/^/      /' "$FREESTANDING_ENDIAN_NATIVE_RISCV32_LOG" | sed -n '1,120p'
     fi
 else
     record_skip "freestanding-profile/riscv32-target: real object (requires zig, llvm-readelf and llvm-nm)"
