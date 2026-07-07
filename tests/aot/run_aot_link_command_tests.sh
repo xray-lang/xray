@@ -368,7 +368,7 @@ cat >"$FREESTANDING_TARGET_CONFIG_DIR/xray.toml" <<EOF
 name = "freestanding-target-config"
 main = "src/main.xr"
 
-[target.x86_64-linux-musl]
+[target.x86_64-unknown-none]
 profile = "freestanding"
 toolchain = "zig"
 linker_script = "kernel.ld"
@@ -383,12 +383,12 @@ FREESTANDING_TARGET_CONFIG_OBJ_REAL="$(
     cd "$FREESTANDING_TARGET_CONFIG_DIR" && pwd -P
 )/kernel.bin"
 FREESTANDING_TARGET_CONFIG_LOG="$WORK/freestanding_target_config.log"
-if "$XRAY" build --native --target x86_64-linux-musl --dry-run-link --dump-link-command \
+if "$XRAY" build --native --target x86_64-unknown-none --dry-run-link --dump-link-command \
         --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_TARGET_CONFIG_BIN" \
         "$FREESTANDING_TARGET_CONFIG_DIR/src/main.xr" >"$FREESTANDING_TARGET_CONFIG_LOG" 2>&1; then
     expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" \
-        "Link command: zig cc -target x86_64-linux-musl" \
-        "freestanding-profile/target-config: uses configured toolchain"
+        "Link command: zig cc -target x86_64-freestanding-none" \
+        "freestanding-profile/target-config: maps bare-metal target through configured toolchain"
     expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" "-DXRAY_PROFILE_FREESTANDING=1" \
         "freestanding-profile/target-config: uses configured profile"
     expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" "-nostdlib" \

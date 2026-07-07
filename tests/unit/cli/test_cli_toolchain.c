@@ -45,10 +45,25 @@ TEST(list_supported_targets) {
     const char *const *targets = xr_cli_build_target_supported_names(&count);
 
     ASSERT_NOT_NULL(targets);
-    ASSERT_EQ_INT((int) count, 5);
+    ASSERT_EQ_INT((int) count, 6);
     ASSERT_STR_EQ(targets[0], "native");
-    ASSERT_STR_EQ(targets[1], "x86_64-linux-musl");
-    ASSERT_STR_EQ(targets[4], "aarch64-windows-gnu");
+    ASSERT_STR_EQ(targets[1], "x86_64-unknown-none");
+    ASSERT_STR_EQ(targets[2], "x86_64-linux-musl");
+    ASSERT_STR_EQ(targets[5], "aarch64-windows-gnu");
+}
+
+TEST(parse_x86_64_none_target) {
+    XrCliBuildTarget target;
+    char err[256];
+
+    ASSERT_TRUE(xr_cli_build_target_parse("x86_64-unknown-none", &target, err, sizeof(err)));
+    ASSERT_FALSE(target.is_native);
+    ASSERT_STR_EQ(target.name, "x86_64-unknown-none");
+    ASSERT_STR_EQ(target.zig_triple, "x86_64-freestanding-none");
+    ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_X86_64);
+    ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_NONE);
+    ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_NONE);
+    ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.out");
 }
 
 TEST(parse_linux_musl_target) {
@@ -218,6 +233,7 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("AOT Target Parser");
 RUN_TEST(parse_native_target);
 RUN_TEST(list_supported_targets);
+RUN_TEST(parse_x86_64_none_target);
 RUN_TEST(parse_linux_musl_target);
 RUN_TEST(parse_windows_gnu_target);
 RUN_TEST(reject_unknown_target);

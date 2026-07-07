@@ -252,6 +252,14 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *triple = "x86_64-linux-musl";
         return true;
     }
+    if (strcmp(name, "x86_64-unknown-none") == 0) {
+        *arch = "x86_64";
+        *os = "none";
+        *abi = "none";
+        *object_format = "elf";
+        *triple = "x86_64-unknown-none";
+        return true;
+    }
     if (strcmp(name, "aarch64-linux-musl") == 0) {
         *arch = "aarch64";
         *os = "linux";

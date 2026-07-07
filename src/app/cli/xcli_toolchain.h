@@ -23,12 +23,14 @@ typedef enum XrCliTargetArch {
 
 typedef enum XrCliTargetOs {
     XR_CLI_TARGET_OS_NATIVE,
+    XR_CLI_TARGET_OS_NONE,
     XR_CLI_TARGET_OS_LINUX,
     XR_CLI_TARGET_OS_WINDOWS
 } XrCliTargetOs;
 
 typedef enum XrCliTargetAbi {
     XR_CLI_TARGET_ABI_NATIVE,
+    XR_CLI_TARGET_ABI_NONE,
     XR_CLI_TARGET_ABI_MUSL,
     XR_CLI_TARGET_ABI_GNU
 } XrCliTargetAbi;
