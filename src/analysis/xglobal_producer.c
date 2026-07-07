@@ -799,6 +799,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.is_expr.expr);
             break;
         case AST_COMPTIME_EXPR:
+            bc->static_data_use_bits |= XG_STATIC_DATA_COMPTIME_VALUE;
             walk_body_for_calls(bc, node->as.comptime_expr.expr);
             break;
         case AST_ARRAY_LITERAL:

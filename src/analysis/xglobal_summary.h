@@ -117,6 +117,14 @@ enum {
     XG_METADATA_TOOLING = 1u << 3,
 };
 
+enum {
+    XG_STATIC_DATA_COMPTIME_VALUE = 1u << 0,
+    XG_STATIC_DATA_FIXED_LAYOUT = 1u << 1,
+    XG_STATIC_DATA_RODATA = 1u << 2,
+    XG_STATIC_DATA_FREESTANDING_SAFE = 1u << 3,
+    XG_STATIC_DATA_RUNTIME_INIT = 1u << 4,
+};
+
 typedef struct XgBuildKey {
     uint64_t source_hash;
     uint64_t compiler_semver_hash;
@@ -225,6 +233,8 @@ XR_FUNC const char *xg_capability_name(uint32_t capability);
 XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count);
 XR_FUNC const char *xg_metadata_name(uint32_t metadata);
 XR_FUNC const uint32_t *xg_metadata_catalog(uint32_t *out_count);
+XR_FUNC const char *xg_static_data_name(uint32_t static_data);
+XR_FUNC const uint32_t *xg_static_data_catalog(uint32_t *out_count);
 
 XR_FUNC void xg_global_evidence_init(XgGlobalEvidence *evidence, XgBuildKey key);
 XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence);

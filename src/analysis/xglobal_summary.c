@@ -296,6 +296,33 @@ XR_FUNC const uint32_t *xg_metadata_catalog(uint32_t *out_count) {
     return metadata;
 }
 
+XR_FUNC const char *xg_static_data_name(uint32_t static_data) {
+    switch (static_data) {
+        case XG_STATIC_DATA_COMPTIME_VALUE:
+            return "comptime_value";
+        case XG_STATIC_DATA_FIXED_LAYOUT:
+            return "fixed_layout";
+        case XG_STATIC_DATA_RODATA:
+            return "rodata";
+        case XG_STATIC_DATA_FREESTANDING_SAFE:
+            return "freestanding_safe";
+        case XG_STATIC_DATA_RUNTIME_INIT:
+            return "runtime_init";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const uint32_t *xg_static_data_catalog(uint32_t *out_count) {
+    static const uint32_t static_data[] = {
+        XG_STATIC_DATA_COMPTIME_VALUE,    XG_STATIC_DATA_FIXED_LAYOUT, XG_STATIC_DATA_RODATA,
+        XG_STATIC_DATA_FREESTANDING_SAFE, XG_STATIC_DATA_RUNTIME_INIT,
+    };
+    if (out_count)
+        *out_count = (uint32_t) (sizeof(static_data) / sizeof(static_data[0]));
+    return static_data;
+}
+
 XR_FUNC void xg_global_evidence_init(XgGlobalEvidence *evidence, XgBuildKey key) {
     if (!evidence)
         return;

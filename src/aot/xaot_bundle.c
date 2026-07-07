@@ -188,6 +188,11 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->capability_plans = NULL;
     bundle->ncapability_plans = 0;
     bundle->capability_plan_cap = 0;
+
+    xr_free(bundle->static_data_plans);
+    bundle->static_data_plans = NULL;
+    bundle->nstatic_data_plans = 0;
+    bundle->static_data_plan_cap = 0;
 }
 
 static const char *arg_class_name(XaotArgClass cls) {
@@ -567,6 +572,49 @@ static bool xaot_bundle_add_capability_plans(XaotBundle *bundle, const XgGlobalE
     return true;
 }
 
+static uint32_t xaot_static_data_action(uint32_t profile, uint32_t static_data) {
+    if (profile == XG_BUILD_FREESTANDING && static_data == XG_STATIC_DATA_RUNTIME_INIT)
+        return XAOT_STATIC_DATA_ACTION_REJECT;
+    if (static_data == XG_STATIC_DATA_RUNTIME_INIT)
+        return XAOT_STATIC_DATA_ACTION_RUNTIME_INIT;
+    return XAOT_STATIC_DATA_ACTION_MATERIALIZE;
+}
+
+static bool xaot_bundle_add_static_data_plan(XaotBundle *bundle, uint32_t static_data,
+                                             uint32_t body_count) {
+    XaotStaticDataPlan *plan;
+    if (!bundle || static_data == 0 || body_count == 0)
+        return true;
+    if (!reserve_plan_array((void **) &bundle->static_data_plans, &bundle->static_data_plan_cap,
+                            bundle->nstatic_data_plans + 1, sizeof(XaotStaticDataPlan), 8))
+        return false;
+    plan = &bundle->static_data_plans[bundle->nstatic_data_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->static_data = static_data;
+    plan->body_count = body_count;
+    plan->evidence = XAOT_STATIC_DATA_EV_GLOBAL_BODY;
+    plan->action = xaot_static_data_action(bundle->global_evidence_plan.profile, static_data);
+    plan->unproven_reason = XAOT_STATIC_DATA_UNPROVEN_NONE;
+    return true;
+}
+
+static bool xaot_bundle_add_static_data_plans(XaotBundle *bundle,
+                                              const XgGlobalEvidence *evidence) {
+    uint32_t static_data_count = 0;
+    const uint32_t *static_data = xg_static_data_catalog(&static_data_count);
+    for (uint32_t si = 0; si < static_data_count; si++) {
+        uint32_t bit = static_data[si];
+        uint32_t body_count = 0;
+        for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+            if ((evidence->bodies[bi].static_data_use_bits & bit) != 0)
+                body_count++;
+        }
+        if (!xaot_bundle_add_static_data_plan(bundle, bit, body_count))
+            return false;
+    }
+    return true;
+}
+
 static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
                                                       const XgGlobalEvidence *evidence) {
     if (!bundle || !evidence)
@@ -607,6 +655,10 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     }
     if (!xaot_bundle_add_capability_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT capability plan";
+        return false;
+    }
+    if (!xaot_bundle_add_static_data_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT static data plan";
         return false;
     }
     return true;
@@ -721,6 +773,17 @@ XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBun
     for (uint32_t i = 0; i < bundle->ncapability_plans; i++) {
         if (bundle->capability_plans[i].capability == capability)
             return &bundle->capability_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotStaticDataPlan *xaot_bundle_find_static_data_plan(const XaotBundle *bundle,
+                                                                    uint32_t static_data) {
+    if (!bundle || static_data == 0)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nstatic_data_plans; i++) {
+        if (bundle->static_data_plans[i].static_data == static_data)
+            return &bundle->static_data_plans[i];
     }
     return NULL;
 }
@@ -1624,6 +1687,30 @@ static const char *metadata_unproven_reason_name(uint8_t reason) {
     }
 }
 
+static const char *static_data_action_name(uint32_t action) {
+    switch ((XaotStaticDataAction) action) {
+        case XAOT_STATIC_DATA_ACTION_MATERIALIZE:
+            return "materialize";
+        case XAOT_STATIC_DATA_ACTION_RUNTIME_INIT:
+            return "runtime_init";
+        case XAOT_STATIC_DATA_ACTION_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *static_data_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_STATIC_DATA_UNPROVEN_NONE:
+            return "none";
+        case XAOT_STATIC_DATA_UNPROVEN_NO_BODY:
+            return "no_body";
+        default:
+            return "unknown";
+    }
+}
+
 static void print_class_layout_flags(FILE *out, uint32_t flags) {
     bool first = true;
 #define PRINT_BIT(mask, name)                                                                      \
@@ -1885,6 +1972,14 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 xg_capability_name(cp->capability), cp->body_count,
                 capability_action_name(cp->profile_action), cp->evidence,
                 capability_unproven_reason_name(cp->unproven_reason));
+    }
+
+    for (uint32_t si = 0; si < bundle->nstatic_data_plans; si++) {
+        const XaotStaticDataPlan *sp = &bundle->static_data_plans[si];
+        fprintf(out, "static-data %u name=%s bodies=%u action=%s evidence=0x%x reason=%s\n", si,
+                xg_static_data_name(sp->static_data), sp->body_count,
+                static_data_action_name(sp->action), sp->evidence,
+                static_data_unproven_reason_name(sp->unproven_reason));
     }
 
     for (fi = 0; fi < bundle->nfunc_plans; fi++) {

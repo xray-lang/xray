@@ -547,6 +547,14 @@ static uint32_t verify_capability_profile_action(uint32_t profile, uint32_t capa
     return XAOT_CAPABILITY_ACTION_LINK;
 }
 
+static uint32_t verify_static_data_action(uint32_t profile, uint32_t static_data) {
+    if (profile == XG_BUILD_FREESTANDING && static_data == XG_STATIC_DATA_RUNTIME_INIT)
+        return XAOT_STATIC_DATA_ACTION_REJECT;
+    if (static_data == XG_STATIC_DATA_RUNTIME_INIT)
+        return XAOT_STATIC_DATA_ACTION_RUNTIME_INIT;
+    return XAOT_STATIC_DATA_ACTION_MATERIALIZE;
+}
+
 static bool verify_has_interface_impl(const XgGlobalEvidence *ev, XgInterfaceId interface_id,
                                       XgClassId implementor_class_id) {
     if (!ev || interface_id == XG_NO_ID || implementor_class_id == XG_NO_ID)
@@ -566,10 +574,13 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     const uint32_t *capabilities = xg_capability_catalog(&capability_count);
     uint32_t metadata_count = 0;
     const uint32_t *metadata = xg_metadata_catalog(&metadata_count);
+    uint32_t static_data_count = 0;
+    const uint32_t *static_data = xg_static_data_catalog(&static_data_count);
     uint32_t runtime_class_count = 0;
     uint32_t expected_dispatch_plans = 0;
     uint32_t expected_metadata_plans = 0;
     uint32_t expected_capability_plans = 0;
+    uint32_t expected_static_data_plans = 0;
 
     if (!bundle)
         return set_error(errbuf, errbuf_len, "AOT global evidence verifier has no bundle");
@@ -710,6 +721,34 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->ncapability_plans != expected_capability_plans)
         return set_error(errbuf, errbuf_len, "AOT capability plan count mismatches evidence");
+
+    for (uint32_t si = 0; si < static_data_count; si++) {
+        uint32_t bit = static_data[si];
+        uint32_t body_count = 0;
+        const XaotStaticDataPlan *plan;
+        for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
+            if ((ev->bodies[bi].static_data_use_bits & bit) != 0)
+                body_count++;
+        }
+        plan = xaot_bundle_find_static_data_plan(bundle, bit);
+        if (body_count == 0) {
+            if (plan)
+                return set_error(errbuf, errbuf_len, "AOT static-data plan has no body evidence");
+            continue;
+        }
+        expected_static_data_plans++;
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT static-data has no plan");
+        if (plan->body_count != body_count)
+            return set_error(errbuf, errbuf_len, "AOT static-data body count mismatches evidence");
+        if (plan->evidence != XAOT_STATIC_DATA_EV_GLOBAL_BODY ||
+            plan->unproven_reason != XAOT_STATIC_DATA_UNPROVEN_NONE)
+            return set_error(errbuf, errbuf_len, "AOT static-data plan lacks evidence");
+        if (plan->action != verify_static_data_action(bundle->global_evidence_plan.profile, bit))
+            return set_error(errbuf, errbuf_len, "AOT static-data action does not re-derive");
+    }
+    if (bundle->nstatic_data_plans != expected_static_data_plans)
+        return set_error(errbuf, errbuf_len, "AOT static-data plan count mismatches evidence");
 
     return true;
 }

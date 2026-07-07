@@ -402,6 +402,29 @@ typedef struct XaotCapabilityPlan {
     uint8_t unproven_reason;
 } XaotCapabilityPlan;
 
+enum {
+    XAOT_STATIC_DATA_EV_GLOBAL_BODY = 1u << 0,
+};
+
+typedef enum XaotStaticDataAction {
+    XAOT_STATIC_DATA_ACTION_MATERIALIZE = 1,
+    XAOT_STATIC_DATA_ACTION_RUNTIME_INIT,
+    XAOT_STATIC_DATA_ACTION_REJECT,
+} XaotStaticDataAction;
+
+enum {
+    XAOT_STATIC_DATA_UNPROVEN_NONE = 0,
+    XAOT_STATIC_DATA_UNPROVEN_NO_BODY = 1,
+};
+
+typedef struct XaotStaticDataPlan {
+    uint32_t static_data;
+    uint32_t body_count;
+    uint32_t evidence;
+    uint32_t action;
+    uint8_t unproven_reason;
+} XaotStaticDataPlan;
+
 typedef struct XaotPrepareStats {
     uint32_t functions_total;
     uint32_t functions_native_abi;
@@ -484,6 +507,9 @@ typedef struct XaotBundle {
     XaotCapabilityPlan *capability_plans;
     uint32_t ncapability_plans;
     uint32_t capability_plan_cap;
+    XaotStaticDataPlan *static_data_plans;
+    uint32_t nstatic_data_plans;
+    uint32_t static_data_plan_cap;
     XaotBoundaryStep *boundary_steps;
     uint32_t nboundary_steps;
     uint32_t boundary_step_cap;
@@ -518,6 +544,8 @@ XR_FUNC const XaotMetadataReachabilityPlan *xaot_bundle_find_metadata_plan(const
                                                                            uint32_t metadata);
 XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,
                                                                    uint32_t capability);
+XR_FUNC const XaotStaticDataPlan *xaot_bundle_find_static_data_plan(const XaotBundle *bundle,
+                                                                    uint32_t static_data);
 XR_FUNC XaotFuncPlan *xaot_bundle_add_func_plan(XaotBundle *bundle, XiFunc *func,
                                                 uint32_t module_index, uint16_t depth);
 XR_FUNC const XaotFuncPlan *xaot_bundle_find_func_plan(const XaotBundle *bundle,
