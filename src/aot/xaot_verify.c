@@ -760,6 +760,64 @@ static bool verify_interface_implementor_set(const XgGlobalEvidence *ev, const X
     return true;
 }
 
+static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
+                                       size_t errbuf_len) {
+    if (!ev)
+        return set_error(errbuf, errbuf_len, "AOT global evidence verifier has no evidence");
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        const XgBodySummary *body = &ev->bodies[i];
+        if (body->func_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT global evidence body has no function id");
+        if (body->module_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT global evidence body has no module id");
+        switch ((XgBodyKind) body->kind) {
+            case XG_BODY_MODULE_INIT:
+                if (body->owner_decl_id != XG_NO_ID || body->owner_class_id != XG_NO_ID ||
+                    body->owner_method_id != XG_NO_ID)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT global evidence module body has stale owner identity");
+                break;
+            case XG_BODY_FUNCTION:
+                if (body->owner_decl_id == XG_NO_ID || body->owner_class_id != XG_NO_ID ||
+                    body->owner_method_id != XG_NO_ID || body->source_span_id == 0)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT global evidence function body identity is stale");
+                break;
+            case XG_BODY_METHOD:
+                if (body->owner_decl_id == XG_NO_ID || body->owner_class_id == XG_NO_ID ||
+                    body->owner_method_id == XG_NO_ID || body->source_span_id == 0)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT global evidence method body identity is stale");
+                break;
+            default:
+                return set_error(errbuf, errbuf_len, "AOT global evidence body kind is invalid");
+        }
+        if (body->callsite_count == 0) {
+            if (body->callsite_start != 0)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence empty body has callsite range");
+            continue;
+        }
+        if (body->callsite_start == XG_NO_ID)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence body callsite range is missing");
+        for (uint32_t j = 0; j < body->callsite_count; j++) {
+            const XgCallsiteSummary *call =
+                xg_global_evidence_find_callsite(ev, (XgCallsiteId) (body->callsite_start + j));
+            if (!call)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence body callsite range is stale");
+            if (call->owner_func_id != body->func_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence body callsite owner does not re-derive");
+            if (call->body_ordinal != j)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence body callsite ordinal does not re-derive");
+        }
+    }
+    return true;
+}
+
 static bool verify_dispatch_target_anchor_rederives(
     const XgGlobalEvidence *ev, const XaotBundle *bundle, const XaotMethodDispatchPlan *plan,
     uint8_t expected_kind, const XgClassId *expected_classes, const XgMethodId *expected_methods,
@@ -1051,6 +1109,9 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         return set_error(errbuf, errbuf_len, "AOT bundle has no global evidence plan");
     if (bundle->global_evidence_plan.evidence_hash != xg_global_evidence_hash(ev))
         return set_error(errbuf, errbuf_len, "AOT global evidence hash is stale");
+
+    if (!verify_body_summary_ranges(ev, errbuf, errbuf_len))
+        return false;
 
     for (uint32_t i = 0; i < ev->nclasses; i++) {
         const XgClassSummary *cls = &ev->classes[i];
