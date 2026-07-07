@@ -26,6 +26,7 @@
 #include <windows.h>
 
 #define XR_PROC_MAX_LIVE 64
+#define XR_PROC_KILLED_EXIT_CODE ((DWORD) 0xE0000001u)
 
 static struct {
     DWORD pid;
@@ -168,7 +169,7 @@ int xr_proc_wait(XrProcId pid, int *exit_code) {
         return -1;
     }
     if (exit_code) {
-        *exit_code = (int) code;
+        *exit_code = code == XR_PROC_KILLED_EXIT_CODE ? -1 : (int) code;
     }
     return 0;
 }
@@ -183,7 +184,7 @@ int xr_proc_kill(XrProcId pid, int signal) {
         return -1;
     }
 
-    BOOL ok = TerminateProcess(h, (UINT) signal);
+    BOOL ok = TerminateProcess(h, XR_PROC_KILLED_EXIT_CODE);
     CloseHandle(h);
     return ok ? 0 : -1;
 }

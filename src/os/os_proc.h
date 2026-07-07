@@ -77,8 +77,9 @@ XR_FUNC int xr_proc_wait(XrProcId pid, int *exit_code);
 
 // Send `signal` to the child identified by `pid`. Returns 0 on success
 // and -1 on failure. POSIX uses kill(2). Windows has no POSIX signal
-// model, so the portable subset maps to TerminateProcess with the
-// signal number as the exit code.
+// model, so the portable subset maps to TerminateProcess; xr_proc_wait
+// reports such forced termination as -1, matching the POSIX signaled
+// path.
 XR_FUNC int xr_proc_kill(XrProcId pid, int signal);
 
 // Current process id. Always succeeds.
