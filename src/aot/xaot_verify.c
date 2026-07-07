@@ -893,6 +893,45 @@ static bool verify_interface_extends_rows(const XgGlobalEvidence *ev, char *errb
     return true;
 }
 
+static bool verify_interface_method_visible_from(const XgGlobalEvidence *ev,
+                                                 XgInterfaceId receiver_interface_id,
+                                                 const XgInterfaceMethodSummary *method) {
+    if (!ev || receiver_interface_id == XG_NO_ID || !method)
+        return false;
+    return verify_interface_extends_reaches(ev, receiver_interface_id, method->owner_interface_id, 0);
+}
+
+static bool verify_interface_method_visibility(const XgGlobalEvidence *ev, char *errbuf,
+                                               size_t errbuf_len) {
+    if (!ev)
+        return set_error(errbuf, errbuf_len,
+                         "AOT global evidence interface method verifier has no evidence");
+    for (uint32_t di = 0; di < ev->ndecls; di++) {
+        const XgDeclSummary *decl = &ev->decls[di];
+        if (decl->kind != XG_DECL_INTERFACE)
+            continue;
+        for (uint32_t i = 0; i < ev->ninterface_methods; i++) {
+            const XgInterfaceMethodSummary *left = &ev->interface_methods[i];
+            if (!verify_interface_method_visible_from(ev, decl->name_id, left))
+                continue;
+            for (uint32_t j = i + 1; j < ev->ninterface_methods; j++) {
+                const XgInterfaceMethodSummary *right = &ev->interface_methods[j];
+                if (!verify_interface_method_visible_from(ev, decl->name_id, right))
+                    continue;
+                if (left->name_id != right->name_id)
+                    continue;
+                if (left->signature_key == right->signature_key)
+                    return set_error(
+                        errbuf, errbuf_len,
+                        "AOT global evidence interface method inherited slot is ambiguous");
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence interface method inherited name conflicts");
+            }
+        }
+    }
+    return true;
+}
+
 static bool verify_interface_method_rows(const XgGlobalEvidence *ev, char *errbuf,
                                          size_t errbuf_len) {
     if (!ev)
@@ -948,6 +987,8 @@ static bool verify_interface_method_rows(const XgGlobalEvidence *ev, char *errbu
             return set_error(errbuf, errbuf_len,
                              "AOT global evidence interface method count does not re-derive");
     }
+    if (!verify_interface_method_visibility(ev, errbuf, errbuf_len))
+        return false;
     return true;
 }
 

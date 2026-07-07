@@ -3490,6 +3490,65 @@ TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods) {
+    setup_parser_session();
+    const char *source = "interface Left {\n"
+                         "    draw() -> int\n"
+                         "}\n"
+                         "interface Right {\n"
+                         "    draw() -> int\n"
+                         "}\n"
+                         "interface Drawable extends Left, Right {\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.ninterface_extends, 2);
+    ASSERT_EQ_UINT(ev.ninterface_methods, 2);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(
+        strstr(err, "AOT global evidence interface method inherited slot is ambiguous"));
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_metadata_reachability) {
     setup_parser_session();
     const char *source = "@derive(Inspect)\n"
@@ -3869,6 +3928,7 @@ RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispat
 RUN_TEST(global_evidence_producer_marks_native_methods_bodyless);
 RUN_TEST(global_evidence_producer_resolves_interface_callsite_receivers);
 RUN_TEST(global_evidence_producer_resolves_interface_extends_callsite_methods);
+RUN_TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
