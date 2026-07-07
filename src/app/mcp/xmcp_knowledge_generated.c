@@ -2610,7 +2610,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Process.spawn",
-        .signature = "(program: string, args: Array<string> = []): Process?",
+        .signature = "(program: string, args: Array<string>, options: ProcessOptions?): Process?",
         .summary = "",
     },
     {
@@ -5395,7 +5395,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Process.constructor` | `(id: int): ()` |  |\n"
             "| `Process.id` | `: int { fn() { return this._id } }` |  |\n"
             "| `Process.kill` | `(signal: Signal = Signal.TERM): bool` |  |\n"
-            "| `Process.spawn` | `(program: string, args: Array<string> = []): Process?` |  |\n"
+            "| `Process.spawn` | `(program: string, args: Array<string>, options: ProcessOptions?): Process?` |  |\n"
             "| `Process.tryWait` | `(): int?` |  |\n"
             "| `Process.wait` | `(): int` |  |\n"
             "| `sys.cpuCount` | `(): int` | Return the number of CPUs available to OS-thread work |\n"

@@ -26,7 +26,8 @@
 #include <sys/sysctl.h>
 #endif
 
-XrProcId xr_proc_spawn(const char *prog, const char *const argv[]) {
+XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
+                          const XrProcSpawnOptions *options) {
     if (prog == NULL || argv == NULL) {
         return XR_PROC_INVALID;
     }
@@ -36,6 +37,9 @@ XrProcId xr_proc_spawn(const char *prog, const char *const argv[]) {
     }
     if (pid == 0) {
         // Child: exec, never returns on success.
+        if (options && options->cwd && options->cwd[0] != '\0' && chdir(options->cwd) != 0) {
+            _exit(127);
+        }
         execvp(prog, (char *const *) argv);
         // exec failed; emit a short message and exit with 127 so
         // the parent's wait observes the failure. 127 matches the
@@ -43,6 +47,10 @@ XrProcId xr_proc_spawn(const char *prog, const char *const argv[]) {
         _exit(127);
     }
     return (XrProcId) pid;
+}
+
+XrProcId xr_proc_spawn(const char *prog, const char *const argv[]) {
+    return xr_proc_spawn_ex(prog, argv, NULL);
 }
 
 int xr_proc_wait(XrProcId pid, int *exit_code) {

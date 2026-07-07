@@ -2,13 +2,18 @@
 //
 // The C layer exposes only private double-underscore helpers. This script
 // layer keeps the public surface typed and small: Process, Pipe, and portable
-// signal names. cwd/env overrides and stdio redirection stay out until a
-// general process-options design lands.
+// signal names. ProcessOptions grows only through general process capability
+// fields; env overrides and stdio redirection stay out until they are wired as
+// one coherent process-options design.
 
 enum Signal {
     TERM,
     KILL,
     INT
+}
+
+struct ProcessOptions {
+    cwd: string
 }
 
 class Process {
@@ -48,8 +53,12 @@ class Process {
         return __processKill(this._id, sig)
     }
 
-    static spawn(program: string, args: Array<string> = []) -> Process? {
-        var id = __processSpawn(program, args)
+    static spawn(program: string, args: Array<string>, options: ProcessOptions?) -> Process? {
+        var cwd: string? = null
+        if (options != null) {
+            cwd = options!.cwd
+        }
+        var id = __processSpawn(program, args, cwd)
         if (id <= 0) { return null }
         return Process(id)
     }
@@ -105,4 +114,4 @@ class Pipe {
     }
 }
 
-export { Process, Signal, Pipe }
+export { Process, ProcessOptions, Signal, Pipe }

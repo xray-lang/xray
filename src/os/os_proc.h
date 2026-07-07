@@ -16,7 +16,7 @@
  *
  *   This header gives a minimal, opinionated process surface:
  *     - Spawn a child with an argv vector. The child inherits the
- *       parent's stdio, cwd, and environment. Search-PATH semantics
+ *       parent's stdio and environment by default. Search-PATH semantics
  *       match execvp on POSIX and CreateProcess(lpApplicationName=NULL)
  *       on Windows (the resolver walks PATHEXT for unqualified names).
  *     - Wait for a child, returning its non-negative exit code on a
@@ -26,9 +26,8 @@
  *     - Query the current process id.
  *     - Detect whether a debugger is attached.
  *
- *   Anything more (signal forwarding, pipe redirection, env overrides,
- *   working-directory overrides) is intentionally out of scope until a
- *   concrete in-tree caller needs it.
+ *   Anything more (signal forwarding, pipe redirection, env overrides) is
+ *   intentionally out of scope until a concrete in-tree caller needs it.
  */
 
 #ifndef XR_OS_OS_PROC_H
@@ -61,16 +60,27 @@ typedef enum XrProcWaitResult {
     XR_PROC_WAIT_EXITED = 1,
 } XrProcWaitResult;
 
+typedef struct XrProcSpawnOptions {
+    // NULL or empty means inherit the parent's current working directory.
+    const char *cwd;
+} XrProcSpawnOptions;
+
 // Spawn a child process running `prog`. `argv` is a NULL-terminated
 // array; argv[0] is conventionally the program name. The child
-// inherits the parent's stdin / stdout / stderr, current working
-// directory, and environment. PATH is searched for unqualified
-// program names (POSIX execvp / Win32 CreateProcessA with
-// lpApplicationName=NULL).
+// inherits the parent's stdin / stdout / stderr and environment. PATH is
+// searched for unqualified program names (POSIX execvp / Win32 CreateProcessA
+// with lpApplicationName=NULL).
 //
 // Returns the child's process id on success, XR_PROC_INVALID on
 // failure (no fork/CreateProcess possible, exec failed, etc.).
 XR_FUNC XrProcId xr_proc_spawn(const char *prog, const char *const argv[]);
+
+// Spawn with structured options. Unsupported / empty fields behave like
+// xr_proc_spawn. The options object is intentionally small and grows only when
+// a general process capability needs it; it must not become a bag of
+// algorithm-specific switches.
+XR_FUNC XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
+                                  const XrProcSpawnOptions *options);
 
 // Wait for the child identified by `pid` to exit. Blocks until the
 // child terminates. On a clean exit, writes the child's exit status

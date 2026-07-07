@@ -1,7 +1,8 @@
 // Typed sys.Process lifecycle handle. This keeps process management separate
 // from os.exec/os.spawn convenience capture helpers and does not introduce
-// pipe/env/cwd options in the first slice.
+// parallel process APIs.
 import sys
+import { ProcessOptions } from sys
 
 var p = sys.Process.spawn("sh", ["-c", "exit 7"])
 print(p != null)
@@ -46,6 +47,14 @@ if (missing != null) {
     print(true)
 }
 print(sys.Signal.TERM != sys.Signal.KILL)
+
+var cwdProc = sys.Process.spawn("sh", ["-c", "test -f sys_process_direct.xr"], ProcessOptions{
+    cwd: "tests/diff/cases/semantics/stdlib"
+})
+print(cwdProc != null)
+if (cwdProc != null) {
+    print(cwdProc!.wait())
+}
 
 var pipe = sys.Pipe.open()
 print(pipe != null)
