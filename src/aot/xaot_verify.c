@@ -443,6 +443,19 @@ static bool xg_verify_class_is_runtime_class(const XgClassSummary *cls) {
     return cls && (cls->decl_kind == 0 || cls->decl_kind == XG_DECL_CLASS);
 }
 
+static bool xg_verify_class_has_subclass(const XgGlobalEvidence *ev, XgClassId class_id) {
+    if (!ev || class_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        const XgClassSummary *candidate = &ev->classes[i];
+        if (!xg_verify_class_is_runtime_class(candidate))
+            continue;
+        if (candidate->parent_class_id == class_id)
+            return true;
+    }
+    return false;
+}
+
 static const XgCallsiteSummary *verify_find_evidence_callsite(const XgGlobalEvidence *ev,
                                                               XgCallsiteId callsite_id) {
     if (!ev || callsite_id == XG_NO_ID)
@@ -673,16 +686,26 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         const XgClassSummary *cls = &ev->classes[i];
         const XaotClassHierarchyPlan *hier;
         const XaotClassLayoutPlan *layout;
+        bool actual_has_subclass;
+        bool flag_has_subclass;
+        bool expected_inferred_final;
         if (!xg_verify_class_is_runtime_class(cls))
             continue;
         runtime_class_count++;
-        if ((cls->flags & XG_CLASS_EXPLICIT_FINAL) != 0 &&
-            (cls->flags & XG_CLASS_HAS_SUBCLASS) != 0)
-            return set_error(errbuf, errbuf_len, "AOT global evidence final class has subclass");
-        if ((cls->flags & XG_CLASS_HAS_SUBCLASS) != 0 &&
-            (cls->flags & XG_CLASS_INFERRED_FINAL) != 0)
+        if (cls->parent_class_id != XG_NO_ID &&
+            !verify_find_evidence_class(ev, cls->parent_class_id))
+            return set_error(errbuf, errbuf_len, "AOT global evidence class parent is missing");
+        actual_has_subclass = xg_verify_class_has_subclass(ev, cls->class_id);
+        flag_has_subclass = (cls->flags & XG_CLASS_HAS_SUBCLASS) != 0;
+        expected_inferred_final = !actual_has_subclass;
+        if (flag_has_subclass != actual_has_subclass)
             return set_error(errbuf, errbuf_len,
-                             "AOT global evidence class is both subclassed and inferred-final");
+                             "AOT global evidence has_subclass flag does not re-derive");
+        if (((cls->flags & XG_CLASS_INFERRED_FINAL) != 0) != expected_inferred_final)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence inferred-final flag does not re-derive");
+        if ((cls->flags & XG_CLASS_EXPLICIT_FINAL) != 0 && actual_has_subclass)
+            return set_error(errbuf, errbuf_len, "AOT global evidence final class has subclass");
         hier = xaot_bundle_find_class_hierarchy_plan(bundle, cls->class_id);
         if (!hier)
             return set_error(errbuf, errbuf_len, "AOT class has no hierarchy plan");
