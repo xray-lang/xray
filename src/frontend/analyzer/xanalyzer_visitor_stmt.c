@@ -406,6 +406,8 @@ static void xa_thread_lint_scan_expr_array(XaThreadHandleLintState *states, AstN
 static void xa_thread_lint_note_var_alias(XaThreadHandleLintState *states, VarDeclNode *var) {
     if (!states || !var || var->symbol_id == 0 || !var->initializer)
         return;
+    if (var->storage_mode != XR_STORAGE_NORMAL)
+        return;
     uint32_t src_id = xa_thread_lint_expr_symbol_id(var->initializer);
     XaThreadHandleLintState *state = xa_thread_lint_find_by_symbol_id(states, src_id);
     if (state)
