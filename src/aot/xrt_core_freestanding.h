@@ -22,7 +22,6 @@
 #include <limits.h>
 #include <float.h>
 #include <stdatomic.h>
-#include <string.h>
 
 #ifdef memcpy
 #undef memcpy
@@ -36,6 +35,11 @@
 #ifdef memcmp
 #undef memcmp
 #endif
+
+void *memcpy(void *dst, const void *src, size_t n);
+void *memmove(void *dst, const void *src, size_t n);
+void *memset(void *dst, int value, size_t n);
+int memcmp(const void *a, const void *b, size_t n);
 
 #include "../shared/xr_obj_header.h"
 #include "../shared/xr_elem_type.h"
