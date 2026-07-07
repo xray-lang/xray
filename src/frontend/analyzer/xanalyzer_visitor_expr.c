@@ -1264,6 +1264,16 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                                          member_type, false);
                         return member_type;
                     }
+                    if (member_sym->kind == XA_SYM_CLASS && member_links &&
+                        member_links->class_info) {
+                        XrType *class_type =
+                            xr_type_new_class(ctx->analyzer->isolate, member_sym->name);
+                        if (class_type)
+                            class_type->instance.class_ref = member_links->class_info;
+                        record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
+                                         class_type, false);
+                        return class_type ? class_type : xr_type_new_unknown(NULL);
+                    }
                 }
             }
 
@@ -1447,20 +1457,23 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
 
     // Class static member access: ClassName.staticMethod
     if (obj_type->kind == XR_KIND_CLASS && obj_type->instance.class_name) {
-        XaSymbol *class_sym =
-            xa_scope_lookup(ctx->analyzer->current_scope, obj_type->instance.class_name);
-        if (class_sym && class_sym->kind == XA_SYM_CLASS) {
-            XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
-            if (class_links && class_links->class_info) {
-                XaSymbol *member =
-                    xa_class_info_lookup_static_member(class_links->class_info, ma->name);
-                if (member) {
-                    XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
-                    if (ml && ml->type) {
-                        record_selection(ctx, node, XA_SEL_STATIC_MEMBER, obj_type, member, -1,
-                                         ml->type, false);
-                        return ml->type;
-                    }
+        XrClassInfo *class_info = obj_type->instance.class_ref;
+        if (!class_info) {
+            XaSymbol *class_sym =
+                xa_scope_lookup(ctx->analyzer->current_scope, obj_type->instance.class_name);
+            XaSymbolLinks *class_links = class_sym && class_sym->kind == XA_SYM_CLASS
+                                             ? xa_analyzer_get_links(ctx->analyzer, class_sym)
+                                             : NULL;
+            class_info = class_links ? class_links->class_info : NULL;
+        }
+        if (class_info) {
+            XaSymbol *member = xa_class_info_lookup_static_member(class_info, ma->name);
+            if (member) {
+                XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
+                if (ml && ml->type) {
+                    record_selection(ctx, node, XA_SEL_STATIC_MEMBER, obj_type, member, -1,
+                                     ml->type, false);
+                    return ml->type;
                 }
             }
         }
