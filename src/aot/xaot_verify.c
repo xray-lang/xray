@@ -780,6 +780,11 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
         const XgDeclSummary *owner_decl = NULL;
         if (body->func_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT global evidence body has no function id");
+        for (uint32_t j = i + 1; j < ev->nbodies; j++) {
+            if (ev->bodies[j].func_id == body->func_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence body function id is duplicated");
+        }
         if (body->module_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT global evidence body has no module id");
         if (body->name_id == 0)
@@ -787,7 +792,7 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
         switch ((XgBodyKind) body->kind) {
             case XG_BODY_MODULE_INIT:
                 if (body->owner_decl_id != XG_NO_ID || body->owner_class_id != XG_NO_ID ||
-                    body->owner_method_id != XG_NO_ID)
+                    body->owner_method_id != XG_NO_ID || body->signature_key != 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence module body has stale owner identity");
                 break;

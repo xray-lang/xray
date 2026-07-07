@@ -1633,6 +1633,106 @@ TEST(global_evidence_verifier_rederives_method_body_signature) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_verifier_rejects_stale_body_identity_rows) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x61,
+                      .compiler_semver_hash = 0x62,
+                      .profile_hash = 0x63,
+                      .imported_summary_hash = 0x64,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary decls[2] = {
+        {.module_id = 1,
+         .decl_id = 1,
+         .kind = XG_DECL_FUNC,
+         .name_id = 101,
+         .signature_key = 201,
+         .source_span_id = 3},
+        {.module_id = 1,
+         .decl_id = 2,
+         .kind = XG_DECL_FUNC,
+         .name_id = 102,
+         .signature_key = 202,
+         .source_span_id = 4},
+    };
+    XgBodySummary bodies[2] = {
+        {.func_id = 1,
+         .module_id = 1,
+         .owner_decl_id = 1,
+         .name_id = 101,
+         .signature_key = 201,
+         .source_span_id = 3,
+         .kind = XG_BODY_FUNCTION,
+         .body_hash = 0x6101},
+        {.func_id = 1,
+         .module_id = 1,
+         .owner_decl_id = 2,
+         .name_id = 102,
+         .signature_key = 202,
+         .source_span_id = 4,
+         .kind = XG_BODY_FUNCTION,
+         .body_hash = 0x6102},
+    };
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    char err[256];
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decls[0]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decls[1]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &bodies[0]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &bodies[1]));
+
+    XaotBundle duplicate_body;
+    memset(&duplicate_body, 0, sizeof(duplicate_body));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&duplicate_body, &ev, XG_BUILD_NATIVE_RELEASE));
+    duplicate_body.modules = modules;
+    duplicate_body.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&duplicate_body, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&duplicate_body, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence body function id is duplicated"));
+    xaot_bundle_free(&duplicate_body);
+    xg_global_evidence_free(&ev);
+
+    XgGlobalEvidence module_ev;
+    XgBuildKey module_key = key;
+    XgBodySummary module_body = {.func_id = 1,
+                                 .module_id = 1,
+                                 .owner_decl_id = XG_NO_ID,
+                                 .owner_class_id = XG_NO_ID,
+                                 .owner_method_id = XG_NO_ID,
+                                 .name_id = 999,
+                                 .signature_key = 77,
+                                 .kind = XG_BODY_MODULE_INIT,
+                                 .body_hash = 0x6201};
+    module_key.source_hash = 0x65;
+    xg_global_evidence_init(&module_ev, module_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&module_ev, &module_body));
+
+    XaotBundle stale_module_body;
+    memset(&stale_module_body, 0, sizeof(stale_module_body));
+    ASSERT_TRUE(
+        xaot_bundle_set_global_evidence(&stale_module_body, &module_ev, XG_BUILD_NATIVE_RELEASE));
+    stale_module_body.modules = modules;
+    stale_module_body.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_module_body, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_module_body, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence module body has stale owner identity"));
+    xaot_bundle_free(&stale_module_body);
+    xg_global_evidence_free(&module_ev);
+}
+
 TEST(global_evidence_verifier_rederives_link_dependency_plans) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x31,
@@ -2318,6 +2418,7 @@ RUN_TEST(global_evidence_verifier_rederives_interface_implementor_set);
 RUN_TEST(global_evidence_verifier_rederives_profile_actions);
 RUN_TEST(global_evidence_verifier_rederives_body_callsite_ranges);
 RUN_TEST(global_evidence_verifier_rederives_method_body_signature);
+RUN_TEST(global_evidence_verifier_rejects_stale_body_identity_rows);
 RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
