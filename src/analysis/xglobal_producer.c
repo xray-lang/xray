@@ -723,6 +723,21 @@ static bool body_member_receiver_is_module(const MemberAccessNode *member, const
     return strcmp(member->object->as.variable.name, name) == 0;
 }
 
+static bool body_call_is_sys_thread_spawn(const CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    const MemberAccessNode *spawn = &call->callee->as.member_access;
+    if (!spawn->name || strcmp(spawn->name, "spawn") != 0 || !spawn->object ||
+        spawn->object->type != AST_MEMBER_ACCESS)
+        return false;
+    const MemberAccessNode *thread = &spawn->object->as.member_access;
+    if (!thread->name || strcmp(thread->name, "Thread") != 0 || !thread->object ||
+        thread->object->type != AST_VARIABLE)
+        return false;
+    const char *module_name = thread->object->as.variable.name;
+    return module_name && strcmp(module_name, "sys") == 0;
+}
+
 static uint32_t body_capabilities_for_builtin_member_constructor(const MemberAccessNode *member) {
     if (!body_member_receiver_is_module(member, "sync"))
         return 0;
@@ -742,6 +757,10 @@ static XgClassId body_parent_class_id(XgBodyCollect *bc) {
 static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     XgCallsiteSummary row;
     const AstNode *callee;
+    if (body_call_is_sys_thread_spawn(&call->as.call_expr)) {
+        bc->effect_bits |= XG_BODY_MAY_ALLOC;
+        bc->capability_bits |= XG_CAP_SYS_THREAD | XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_OBJECTS;
+    }
     memset(&row, 0, sizeof(row));
     row.callsite_id = (XgCallsiteId) (bc->evidence->ncallsites + 1);
     row.owner_func_id = bc->owner_func_id;
