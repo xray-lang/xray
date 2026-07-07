@@ -1,0 +1,18 @@
+fn worker(x: int) -> int {
+    return x + 1
+}
+
+fn sum(xs: Array<int>) -> int {
+    return xs.length
+}
+
+shared ch: Channel<Array<int>> = Channel(1)
+
+var a = go worker(41)
+var xs = [1, 2, 3]
+var b = go sum(copy(xs))
+var ys = [4, 5]
+ch.send(move ys)
+
+print(await a)
+print(await b)
