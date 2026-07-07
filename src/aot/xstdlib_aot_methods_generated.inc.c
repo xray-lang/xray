@@ -44,6 +44,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"sys", "pinToCpu", 1, "xrt_sys_pin_to_cpu", "v", CG_AOT_RET_VALUE, NULL},
     {"sys", "__processSpawn", 2, "xrt_sys_process_spawn", "sv", CG_AOT_RET_VALUE, NULL},
     {"sys", "__processWait", 1, "xrt_sys_process_wait", "v", CG_AOT_RET_VALUE, NULL},
+    {"sys", "__processTryWait", 1, "xrt_sys_process_try_wait", "v", CG_AOT_RET_VALUE, NULL},
     {"sys", "__processKill", 2, "xrt_sys_process_kill", "vv", CG_AOT_RET_VALUE, NULL},
     {"regex", "compile", 1, "xrt_regex_compile_default", "s", CG_AOT_RET_VALUE, NULL},
     {"regex", "compile", 2, "xrt_regex_compile_with_flags", "ss", CG_AOT_RET_VALUE, NULL},

@@ -644,6 +644,20 @@ static XrValue sys_process_wait(XrVMRuntime *isolate, XrValue *args, int argc) {
     return xr_int((int64_t) code);
 }
 
+static XrValue sys_process_try_wait(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_int(-1);
+
+    int code = -1;
+    XrProcWaitResult result = xr_proc_try_wait((XrProcId) XR_TO_INT(args[0]), &code);
+    if (result == XR_PROC_WAIT_RUNNING)
+        return xr_null();
+    if (result == XR_PROC_WAIT_ERROR)
+        code = -1;
+    return xr_int((int64_t) code);
+}
+
 static XrValue sys_process_kill(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
