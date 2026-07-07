@@ -380,16 +380,6 @@ static void xr_stdlib_vm_bind_time_generated(XrVMRuntime *isolate, XrModule *mod
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_TIME */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_TOML
-static void xr_stdlib_vm_bind_toml_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "parse", toml_parse);
-    XRS_EXPORT(module, isolate, "parseStrict", toml_parse_strict);
-    XRS_EXPORT(module, isolate, "stringify", toml_stringify);
-    XRS_EXPORT(module, isolate, "parseFile", toml_parse_file);
-    XRS_EXPORT(module, isolate, "writeFile", toml_write_file);
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_TOML */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_WS
 static void xr_stdlib_vm_bind_ws_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT_YIELDABLE(module, isolate, "connect", ws_connect_yieldable);

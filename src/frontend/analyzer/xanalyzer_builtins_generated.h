@@ -528,16 +528,6 @@ static const XaBuiltinMember g_gen_time_functions[] = {
 };
 #define GEN_TIME_FUNCTION_COUNT 8
 
-// toml module functions
-static const XaBuiltinMember g_gen_toml_functions[] = {
-    {"parse", "(data: string): Json", "Parse TOML string", true, false, false},
-    {"parseStrict", "(data: string): Json", "Parse TOML strictly", true, false, false},
-    {"stringify", "(value: Json): string", "Convert to TOML string", true, false, false},
-    {"parseFile", "(path: string): Json", "Parse TOML file", true, false, false},
-    {"writeFile", "(path: string, value: Json): bool", "Write TOML file", true, false, false},
-};
-#define GEN_TOML_FUNCTION_COUNT 5
-
 // ws.WsConn handle fields
 static const XaBuiltinHandleField g_gen_ws_wsconn_fields[] = {
     {"wsid", "int", true},
@@ -618,12 +608,11 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0},
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0},
-    {"toml", g_gen_toml_functions, GEN_TOML_FUNCTION_COUNT, NULL, 0},
     {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT},
     {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
     {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 18
+#define GEN_BUILTIN_MODULE_COUNT 17
 
 /* clang-format on */
 

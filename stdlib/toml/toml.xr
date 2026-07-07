@@ -1,0 +1,826 @@
+// toml - pure-Xray TOML parser and writer.
+//
+// TOML is an L4 format module: user-facing parse/stringify semantics live here.
+// The C side only anchors `import toml` and project/tooling config continues to
+// use the low-level `src/base/xtoml` parser.
+
+import io
+
+const TOML_MAX_DEPTH = 256
+
+fn _isDigit(c: string) -> bool {
+    if (c.length == 0) { return false }
+    var o = c.ord()!
+    return o >= 48 && o <= 57
+}
+
+fn _isAlpha(c: string) -> bool {
+    if (c.length == 0) { return false }
+    var o = c.ord()!
+    return (o >= 65 && o <= 90) || (o >= 97 && o <= 122)
+}
+
+fn _isAlphaNum(c: string) -> bool {
+    return _isAlpha(c) || _isDigit(c)
+}
+
+fn _isHexDigit(c: string) -> bool {
+    if (c.length == 0) { return false }
+    var o = c.ord()!
+    return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
+}
+
+fn _hexValue(c: string) -> int {
+    var o = c.ord()!
+    if (o >= 48 && o <= 57) { return o - 48 }
+    if (o >= 65 && o <= 70) { return o - 55 }
+    if (o >= 97 && o <= 102) { return o - 87 }
+    return -1
+}
+
+fn _isBareKeyChar(c: string) -> bool {
+    return _isAlphaNum(c) || c == "_" || c == "-"
+}
+
+fn _isBareKey(key: string) -> bool {
+    if (key.length == 0) { return false }
+    for (var i = 0; i < key.length; i++) {
+        if (!_isBareKeyChar(key.charAt(i))) { return false }
+    }
+    return true
+}
+
+fn _stripUnderscores(s: string) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < s.length; i++) {
+        var c = s.charAt(i)
+        if (c != "_") { out.append(c) }
+    }
+    return out.toString()
+}
+
+fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
+    if (pos + prefix.length > s.length) { return false }
+    return s.slice(pos, pos + prefix.length) == prefix
+}
+
+fn _isValueTerminator(c: string) -> bool {
+    return c.length == 0 || c == "\n" || c == "\r" || c == "#" || c == "," ||
+           c == "]" || c == "}"
+}
+
+fn _errorObject(typ: string, line: int, column: int, message: string) -> Json {
+    return {
+        type: typ,
+        line: line,
+        row: -1,
+        column: column,
+        message: message
+    }
+}
+
+class TomlParser {
+    data: string
+    pos: int
+    line: int
+    column: int
+    root: Json
+    current: Json
+    errors: Json
+    definedTables: Json
+    keyCount: int
+
+    constructor(data: string) {
+        this.data = data
+        this.pos = 0
+        this.line = 1
+        this.column = 1
+        this.root = {}
+        this.current = this.root
+        this.errors = []
+        this.definedTables = {}
+        this.keyCount = 0
+    }
+
+    atEnd() -> bool {
+        return this.pos >= this.data.length
+    }
+
+    peek() -> string {
+        if (this.atEnd()) { return "" }
+        return this.data.charAt(this.pos)
+    }
+
+    peekAt(offset: int) -> string {
+        var p = this.pos + offset
+        if (p < 0 || p >= this.data.length) { return "" }
+        return this.data.charAt(p)
+    }
+
+    advance() -> string {
+        var c = this.peek()
+        if (c.length == 0) { return c }
+        this.pos = this.pos + 1
+        if (c == "\n") {
+            this.line = this.line + 1
+            this.column = 1
+        } else {
+            this.column = this.column + 1
+        }
+        return c
+    }
+
+    addError(typ: string, message: string) {
+        this.errors.push(_errorObject(typ, this.line, this.column, message))
+    }
+
+    addExpected(expected: string) {
+        if (this.atEnd()) {
+            this.addError("SyntaxError", "Expected " + expected + " but reached end of input")
+        } else {
+            this.addError("SyntaxError", "Expected " + expected + " but got '" + this.peek() + "'")
+        }
+    }
+
+    skipWs() {
+        while (!this.atEnd() && (this.peek() == " " || this.peek() == "\t")) {
+            this.advance()
+        }
+    }
+
+    skipWsAndNewlines() {
+        while (!this.atEnd()) {
+            var c = this.peek()
+            if (c == " " || c == "\t" || c == "\n") {
+                this.advance()
+            } else if (c == "\r") {
+                this.advance()
+                if (this.peek() == "\n") { this.advance() }
+                this.line = this.line + 1
+                this.column = 1
+            } else if (c == "#") {
+                this.skipToEol()
+            } else {
+                break
+            }
+        }
+    }
+
+    skipToEol() {
+        while (!this.atEnd() && this.peek() != "\n" && this.peek() != "\r") {
+            this.advance()
+        }
+    }
+
+    parseBareKey() -> string {
+        var start = this.pos
+        while (!this.atEnd() && _isBareKeyChar(this.peek())) {
+            this.advance()
+        }
+        if (this.pos == start) {
+            this.addError("InvalidKey", "Expected key name")
+            return ""
+        }
+        return this.data.slice(start, this.pos)
+    }
+
+    parseBasicString() -> string {
+        if (this.peek() != "\"") { return "" }
+        this.advance()
+
+        var multiline = false
+        if (this.peek() == "\"") {
+            this.advance()
+            if (this.peek() == "\"") {
+                multiline = true
+                this.advance()
+                if (this.peek() == "\n") { this.advance() }
+            } else {
+                return ""
+            }
+        }
+
+        var out = StringBuilder()
+        while (!this.atEnd()) {
+            if (multiline && this.peek() == "\"" && this.peekAt(1) == "\"" &&
+                this.peekAt(2) == "\"") {
+                this.advance()
+                this.advance()
+                this.advance()
+                break
+            }
+            if (!multiline && this.peek() == "\"") {
+                this.advance()
+                break
+            }
+            if (!multiline && (this.peek() == "\n" || this.peek() == "\r")) {
+                this.addError("UnterminatedString", "Unterminated string")
+                return out.toString()
+            }
+
+            if (this.peek() == "\\") {
+                this.advance()
+                if (this.atEnd()) { break }
+                var esc = this.advance()
+                if (esc == "n") {
+                    out.append("\n")
+                } else if (esc == "t") {
+                    out.append("\t")
+                } else if (esc == "r") {
+                    out.append("\r")
+                } else if (esc == "\\") {
+                    out.append("\\")
+                } else if (esc == "\"") {
+                    out.append("\"")
+                } else if (esc == "b") {
+                    out.append("\u{0008}")
+                } else if (esc == "f") {
+                    out.append("\u{000C}")
+                } else if (esc == "u" || esc == "U") {
+                    var digits = 4
+                    if (esc == "U") { digits = 8 }
+                    var cp = 0
+                    var ok = true
+                    for (var i = 0; i < digits; i++) {
+                        var h = this.peek()
+                        if (!_isHexDigit(h)) {
+                            ok = false
+                            break
+                        }
+                        cp = cp * 16 + _hexValue(h)
+                        this.advance()
+                    }
+                    if (!ok || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF) {
+                        this.addError("InvalidEscape", "Invalid Unicode codepoint")
+                    } else if (cp < 128) {
+                        out.append("?")
+                    } else {
+                        out.append("?")
+                    }
+                } else if (multiline && (esc == "\n" || esc == "\r")) {
+                    while (!this.atEnd() &&
+                           (this.peek() == " " || this.peek() == "\t" ||
+                            this.peek() == "\n" || this.peek() == "\r")) {
+                        this.advance()
+                    }
+                } else {
+                    out.append(esc)
+                }
+            } else {
+                out.append(this.advance())
+            }
+        }
+        return out.toString()
+    }
+
+    parseLiteralString() -> string {
+        if (this.peek() != "'") { return "" }
+        this.advance()
+
+        var multiline = false
+        if (this.peek() == "'") {
+            this.advance()
+            if (this.peek() == "'") {
+                multiline = true
+                this.advance()
+                if (this.peek() == "\n") { this.advance() }
+            } else {
+                return ""
+            }
+        }
+
+        var out = StringBuilder()
+        while (!this.atEnd()) {
+            if (multiline && this.peek() == "'" && this.peekAt(1) == "'" &&
+                this.peekAt(2) == "'") {
+                this.advance()
+                this.advance()
+                this.advance()
+                break
+            }
+            if (!multiline && this.peek() == "'") {
+                this.advance()
+                break
+            }
+            if (!multiline && (this.peek() == "\n" || this.peek() == "\r")) {
+                this.addError("UnterminatedString", "Unterminated string")
+                return out.toString()
+            }
+            out.append(this.advance())
+        }
+        return out.toString()
+    }
+
+    parseKeyPath() -> Array<string> {
+        var keys: Array<string> = []
+        while (!this.atEnd()) {
+            this.skipWs()
+            var key = ""
+            if (this.peek() == "\"") {
+                key = this.parseBasicString()
+            } else if (this.peek() == "'") {
+                key = this.parseLiteralString()
+            } else {
+                key = this.parseBareKey()
+            }
+            keys.push(key)
+            this.skipWs()
+            if (this.peek() != ".") { break }
+            this.advance()
+        }
+        return keys
+    }
+
+    scanLiteral() -> string {
+        var start = this.pos
+        while (!this.atEnd() && !_isValueTerminator(this.peek())) {
+            this.advance()
+        }
+        return this.data.slice(start, this.pos).trimEnd()
+    }
+
+    parseBaseInt(raw: string, base: int) -> int {
+        var s = _stripUnderscores(raw)
+        var start = 0
+        var sign = 1
+        if (s.length > 0 && s.charAt(0) == "-") {
+            sign = -1
+            start = 1
+        } else if (s.length > 0 && s.charAt(0) == "+") {
+            start = 1
+        }
+        if (start + 1 < s.length && s.charAt(start) == "0") {
+            var p = s.charAt(start + 1).toLowerCase()
+            if (p == "x" || p == "o" || p == "b") { start = start + 2 }
+        }
+        var out = 0
+        for (var i = start; i < s.length; i++) {
+            var d = _hexValue(s.charAt(i))
+            if (d < 0 || d >= base) { break }
+            out = out * base + d
+        }
+        return sign * out
+    }
+
+    parseNumberLiteral(raw: string) -> unknown {
+        var s = _stripUnderscores(raw)
+        if (s == "inf" || s == "+inf") { return 1.0e308 }
+        if (s == "-inf") { return -1.0e308 }
+        if (s == "nan" || s == "+nan" || s == "-nan") { return 0.0 }
+
+        var signOffset = 0
+        if (s.startsWith("+") || s.startsWith("-")) { signOffset = 1 }
+        if (signOffset + 1 < s.length && s.charAt(signOffset) == "0") {
+            var p = s.charAt(signOffset + 1).toLowerCase()
+            if (p == "x") { return this.parseBaseInt(s, 16) }
+            if (p == "o") { return this.parseBaseInt(s, 8) }
+            if (p == "b") { return this.parseBaseInt(s, 2) }
+        }
+
+        if (s.includes(".") || s.includes("e") || s.includes("E")) {
+            var f = s.toFloat()
+            if (f != null) { return f! }
+            this.addError("InvalidNumber", "Invalid number")
+            return 0.0
+        }
+        var i = s.toInt()
+        if (i != null) { return i! }
+        this.addError("InvalidNumber", "Invalid number")
+        return 0
+    }
+
+    parseDateTimeLiteral(raw: string) -> unknown {
+        return TomlDateTime(raw)
+    }
+
+    parseArray() -> Json {
+        this.advance()
+        var arr: Json = []
+        this.skipWsAndNewlines()
+        if (this.peek() == "]") {
+            this.advance()
+            return arr
+        }
+        while (!this.atEnd()) {
+            this.skipWsAndNewlines()
+            arr.push(this.parseValue())
+            this.skipWsAndNewlines()
+            if (this.peek() == "]") {
+                this.advance()
+                break
+            }
+            if (this.peek() == ",") {
+                this.advance()
+                continue
+            }
+            this.addExpected("',' or ']'")
+            break
+        }
+        return arr
+    }
+
+    parseInlineTable() -> Json {
+        this.advance()
+        var obj: Json = {}
+        this.skipWs()
+        if (this.peek() == "}") {
+            this.advance()
+            return obj
+        }
+        while (!this.atEnd()) {
+            this.skipWs()
+            var keys = this.parseKeyPath()
+            this.skipWs()
+            if (this.peek() != "=") {
+                this.addExpected("'='")
+                break
+            }
+            this.advance()
+            this.skipWs()
+            this.setNestedValue(obj, keys, this.parseValue())
+            this.skipWs()
+            if (this.peek() == "}") {
+                this.advance()
+                break
+            }
+            if (this.peek() == ",") {
+                this.advance()
+                continue
+            }
+            this.addExpected("',' or '}'")
+            break
+        }
+        return obj
+    }
+
+    parseValue() -> unknown {
+        this.skipWs()
+        if (this.atEnd()) {
+            this.addError("SyntaxError", "Expected value")
+            return null
+        }
+        var c = this.peek()
+        if (c == "\"") { return this.parseBasicString() }
+        if (c == "'") { return this.parseLiteralString() }
+        if (_startsWithAt(this.data, this.pos, "true") && !_isAlphaNum(this.peekAt(4))) {
+            this.pos = this.pos + 4
+            this.column = this.column + 4
+            return true
+        }
+        if (_startsWithAt(this.data, this.pos, "false") && !_isAlphaNum(this.peekAt(5))) {
+            this.pos = this.pos + 5
+            this.column = this.column + 5
+            return false
+        }
+        if (c == "[") { return this.parseArray() }
+        if (c == "{") { return this.parseInlineTable() }
+
+        var raw = this.scanLiteral()
+        if (raw.length >= 5 && _isDigit(raw.charAt(0)) && _isDigit(raw.charAt(1)) &&
+            _isDigit(raw.charAt(2)) && _isDigit(raw.charAt(3)) && raw.charAt(4) == "-") {
+            return this.parseDateTimeLiteral(raw)
+        }
+        if (raw == "inf" || raw == "+inf" || raw == "-inf" || raw == "nan" ||
+            raw == "+nan" || raw == "-nan" || raw.length > 0) {
+            return this.parseNumberLiteral(raw)
+        }
+        this.addError("InvalidValue", "Invalid value")
+        return null
+    }
+
+    setNestedValue(rootObj: Json, keys: Array<string>, value: unknown) {
+        var current = rootObj
+        if (keys.length == 0) { return }
+        for (var i = 0; i < keys.length - 1; i++) {
+            var key = keys[i]
+            var existing = Json.get(current, key, null)
+            if (typename(existing) != "Json") {
+                var child: Json = {}
+                current[key] = child
+                current = child
+            } else {
+                current = existing
+            }
+        }
+        var last = keys[keys.length - 1]
+        if (Json.has(current, last)) {
+            this.addError("DuplicateKey", "Duplicate key")
+            return
+        }
+        current[last] = value
+        this.keyCount = this.keyCount + 1
+    }
+
+    tablePath(keys: Array<string>) -> string {
+        var out = StringBuilder()
+        for (var i = 0; i < keys.length; i++) {
+            if (i > 0) { out.append(".") }
+            out.append(keys[i])
+        }
+        return out.toString()
+    }
+
+    getOrCreateTable(keys: Array<string>) -> Json {
+        var path = this.tablePath(keys)
+        if (Json.has(this.definedTables, path)) {
+            this.addError("DuplicateKey", "Table already defined")
+        }
+        this.definedTables[path] = true
+
+        var current = this.root
+        for (var i = 0; i < keys.length; i++) {
+            var key = keys[i]
+            var existing = Json.get(current, key, null)
+            if (existing == null) {
+                var child: Json = {}
+                current[key] = child
+                current = child
+            } else if (typename(existing) == "Json") {
+                current = existing
+            } else {
+                this.addError("TableConflict", "Table definition conflict")
+                return this.root
+            }
+        }
+        return current
+    }
+
+    getOrCreateArrayTable(keys: Array<string>) -> Json {
+        var current = this.root
+        for (var i = 0; i < keys.length - 1; i++) {
+            var key = keys[i]
+            var existing = Json.get(current, key, null)
+            if (existing == null) {
+                var child: Json = {}
+                current[key] = child
+                current = child
+            } else if (typename(existing) == "Json") {
+                current = existing
+            } else if (typename(existing) == "Array" && existing.length > 0 &&
+                       typename(existing[existing.length - 1]) == "Json") {
+                current = existing[existing.length - 1]
+            } else {
+                return this.root
+            }
+        }
+        if (keys.length == 0) { return current }
+        var last = keys[keys.length - 1]
+        var slot = Json.get(current, last, null)
+        var arr: Json = []
+        if (slot == null) {
+            current[last] = arr
+        } else if (typename(slot) == "Array") {
+            arr = slot
+        } else {
+            return this.root
+        }
+        var table: Json = {}
+        arr.push(table)
+        return table
+    }
+
+    parseDocument() -> Json {
+        while (!this.atEnd()) {
+            this.skipWsAndNewlines()
+            if (this.atEnd()) { break }
+
+            if (this.peek() == "[") {
+                var isArrayTable = _startsWithAt(this.data, this.pos, "[[")
+                if (isArrayTable) {
+                    this.pos = this.pos + 2
+                    this.column = this.column + 2
+                } else {
+                    this.advance()
+                }
+                this.skipWs()
+                var tableKeys = this.parseKeyPath()
+                this.skipWs()
+                if (this.peek() != "]") {
+                    this.addExpected("']'")
+                    this.skipToEol()
+                    continue
+                }
+                this.advance()
+                if (isArrayTable) {
+                    if (this.peek() != "]") {
+                        this.addExpected("']]")
+                        this.skipToEol()
+                        continue
+                    }
+                    this.advance()
+                    this.current = this.getOrCreateArrayTable(tableKeys)
+                } else {
+                    this.current = this.getOrCreateTable(tableKeys)
+                }
+                this.skipToEol()
+                continue
+            }
+
+            var keys = this.parseKeyPath()
+            this.skipWs()
+            if (this.peek() != "=") {
+                this.addExpected("'='")
+                this.skipToEol()
+                continue
+            }
+            this.advance()
+            this.skipWs()
+            var value = this.parseValue()
+            this.setNestedValue(this.current, keys, value)
+            this.skipToEol()
+        }
+        return this.root
+    }
+}
+
+class TomlDateTime {
+    raw: string
+
+    constructor(raw: string) {
+        this.raw = raw
+    }
+
+    toString() -> string {
+        var s = this.raw
+        if (s.endsWith("Z") || s.endsWith("z")) {
+            s = s.slice(0, s.length - 1)
+        }
+        var dot = s.indexOf(".")
+        if (dot >= 0) { s = s.slice(0, dot) }
+        return s.replace("T", " ").replace("t", " ")
+    }
+
+    toISOString() -> string {
+        return this.raw
+    }
+}
+
+fn _parseWithDetails(data: string) -> unknown {
+    var parser = TomlParser(data)
+    parser.parseDocument()
+    return parser
+}
+
+fn parse(data: string) -> Json {
+    return _parseWithDetails(data).root
+}
+
+fn parseStrict(data: string) -> Json {
+    var parser = _parseWithDetails(data)
+    return {
+        data: parser.root,
+        errors: parser.errors,
+        meta: {
+            lines: parser.line,
+            keys: parser.keyCount
+        }
+    }
+}
+
+fn _escapeString(value: string) -> string {
+    var out = StringBuilder()
+    out.append("\"")
+    for (var i = 0; i < value.length; i++) {
+        var c = value.charAt(i)
+        if (c == "\"") {
+            out.append("\\\"")
+        } else if (c == "\\") {
+            out.append("\\\\")
+        } else if (c == "\n") {
+            out.append("\\n")
+        } else if (c == "\r") {
+            out.append("\\r")
+        } else if (c == "\t") {
+            out.append("\\t")
+        } else {
+            var o = c.ord()!
+            if (o < 32 || o == 127) {
+                out.append("\\u")
+                var hex = "0123456789ABCDEF"
+                out.append(hex.charAt((o / 4096) % 16))
+                out.append(hex.charAt((o / 256) % 16))
+                out.append(hex.charAt((o / 16) % 16))
+                out.append(hex.charAt(o % 16))
+            } else {
+                out.append(c)
+            }
+        }
+    }
+    out.append("\"")
+    return out.toString()
+}
+
+fn _writeKey(key: string) -> string {
+    if (_isBareKey(key)) { return key }
+    return _escapeString(key)
+}
+
+fn _isArrayOfTables(value: Json) -> bool {
+    return typename(value) == "Array" && value.length > 0 && typename(value[0]) == "Json"
+}
+
+fn _valueText(value: unknown, depth: int = 0) -> string {
+    if (depth > TOML_MAX_DEPTH) { return "\"\"" }
+    if (value == null) { return "\"\"" }
+    var kind = typename(value)
+    if (kind == "string") { return _escapeString(value as string) }
+    if (kind == "bool") { return string(value as bool) }
+    if (kind == "int") { return string(value as int) }
+    if (kind == "float") {
+        var s = string(value as float)
+        if (!s.includes(".") && !s.includes("e") && !s.includes("E")) { s = s + ".0" }
+        return s
+    }
+    if (kind == "TomlDateTime") { return value.toISOString() }
+    if (kind == "Array") {
+        var arr = value as Array
+        var out = StringBuilder()
+        out.append("[")
+        for (var i = 0; i < arr.length; i++) {
+            if (i > 0) { out.append(", ") }
+            out.append(_valueText(arr[i], depth + 1))
+        }
+        out.append("]")
+        return out.toString()
+    }
+    if (kind == "Json") {
+        var obj = value as Json
+        var out = StringBuilder()
+        out.append("{")
+        var first = true
+        for (key in obj) {
+            if (!first) { out.append(", ") }
+            first = false
+            out.append(_writeKey(key))
+            out.append(" = ")
+            out.append(_valueText(obj[key], depth + 1))
+        }
+        out.append("}")
+        return out.toString()
+    }
+    return _escapeString("")
+}
+
+fn _tablePrefix(prefix: string, key: string) -> string {
+    if (prefix.length == 0) { return key }
+    return prefix + "." + key
+}
+
+fn _arrayTableText(arr: Array, prefix: string, depth: int) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < arr.length; i++) {
+        var item = arr[i]
+        if (typename(item) != "Json") { continue }
+        out.append("\n[[")
+        out.append(prefix)
+        out.append("]]\n")
+        out.append(_tableText(item as Json, prefix, depth + 1))
+    }
+    return out.toString()
+}
+
+fn _tableText(obj: Json, prefix: string, depth: int = 0) -> string {
+    if (depth > TOML_MAX_DEPTH) { return "" }
+    var out = StringBuilder()
+    var keys = obj.keys()
+    for (var ki = 0; ki < keys.length; ki++) {
+        var key = keys[ki]
+        var value = obj[key]
+        var p = _tablePrefix(prefix, key)
+        if (typename(value) == "Json") {
+            out.append("\n[")
+            out.append(p)
+            out.append("]\n")
+            out.append(_tableText(value as Json, p, depth + 1))
+        } else if (_isArrayOfTables(value)) {
+            out.append(_arrayTableText(value as Array, p, depth))
+        } else {
+            out.append(_writeKey(key))
+            out.append(" = ")
+            out.append(_valueText(value))
+            out.append("\n")
+        }
+    }
+    return out.toString()
+}
+
+fn stringify(value: unknown) -> string {
+    var obj = Json.encode(value)
+    if (typename(obj) != "Json") { return "" }
+    return _tableText(obj, "")
+}
+
+fn parseFile(path: string) -> Json {
+    var content = io.readFile(path)
+    if (content == null) {
+        var empty: Json = {}
+        return empty
+    }
+    return parse(content!)
+}
+
+fn writeFile(path: string, value: unknown) -> bool {
+    return io.writeFile(path, stringify(value))
+}
+
+export { parse, parseStrict, stringify, parseFile, writeFile }

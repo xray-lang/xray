@@ -4120,63 +4120,6 @@ module ws {
   }
 }
 
-module toml {
-  fn parse {
-    signature: "(data: string): Json"
-    doc: "Parse TOML string"
-    vm: "toml_parse"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "alloc"
-  }
-
-  fn parseStrict {
-    signature: "(data: string): Json"
-    doc: "Parse TOML strictly"
-    vm: "toml_parse_strict"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "alloc"
-  }
-
-  fn stringify {
-    signature: "(value: Json): string"
-    doc: "Convert to TOML string"
-    vm: "toml_stringify"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "alloc"
-  }
-
-  fn parseFile {
-    signature: "(path: string): Json"
-    doc: "Parse TOML file"
-    vm: "toml_parse_file"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "system"
-  }
-
-  fn writeFile {
-    signature: "(path: string, value: Json): bool"
-    doc: "Write TOML file"
-    vm: "toml_write_file"
-    argc: 2
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "system"
-  }
-}
-
 module yaml {
   fn parse {
     signature: "(data: string): Json"

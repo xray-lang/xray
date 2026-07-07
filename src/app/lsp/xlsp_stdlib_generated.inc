@@ -460,11 +460,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {
 
 // toml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_toml_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string): Json", "Parse TOML string", NULL, 0},
-    {"parseStrict", XLSP_SYM_FUNCTION, "fn(data: string): Json", "Parse TOML strictly", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(value: Json): string", "Convert to TOML string", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string): Json", "Parse TOML file", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, value: Json): bool", "Write TOML file", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string): Json", "", NULL, 0},
+    {"parseStrict", XLSP_SYM_FUNCTION, "fn(data: string): Json", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(value: unknown): string", "", NULL, 0},
+    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string): Json", "", NULL, 0},
+    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, value: unknown): bool", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_TOML_SYMBOL_COUNT 5
 
