@@ -9,6 +9,7 @@
  */
 
 #include "../test_framework.h"
+#include "os/os_pipe.h"
 #include "os/os_proc.h"
 #include "os/os_thread.h"
 #include "shared/xr_os_core.h"
@@ -379,6 +380,24 @@ TEST(os_proc_try_wait_reaps_finished_child) {
     ASSERT_EQ_INT(code, 7);
 }
 
+TEST(os_pipe_round_trips_bytes) {
+    XrPipe pipe_pair;
+    ASSERT_EQ_INT(xr_pipe_create(&pipe_pair, NULL), 0);
+    ASSERT_NE(pipe_pair.read, XR_PIPE_INVALID);
+    ASSERT_NE(pipe_pair.write, XR_PIPE_INVALID);
+
+    const char payload[] = "pipe-ok";
+    char buf[sizeof(payload)] = {0};
+    ASSERT_EQ_INT(xr_pipe_write(pipe_pair.write, payload, sizeof(payload) - 1),
+                  (int) sizeof(payload) - 1);
+    ASSERT_EQ_INT(xr_pipe_read(pipe_pair.read, buf, sizeof(payload) - 1),
+                  (int) sizeof(payload) - 1);
+    ASSERT_MEM_EQ(buf, payload, sizeof(payload) - 1);
+
+    ASSERT_EQ_INT(xr_pipe_close(pipe_pair.read), 0);
+    ASSERT_EQ_INT(xr_pipe_close(pipe_pair.write), 0);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("OS Core - platform");
@@ -421,5 +440,8 @@ RUN_TEST(os_core_exec_windows_exit_code_decodes_low_byte);
 RUN_TEST_SUITE("OS Proc");
 RUN_TEST(os_proc_try_wait_reports_running_then_killed);
 RUN_TEST(os_proc_try_wait_reaps_finished_child);
+
+RUN_TEST_SUITE("OS Pipe");
+RUN_TEST(os_pipe_round_trips_bytes);
 
 TEST_MAIN_END()
