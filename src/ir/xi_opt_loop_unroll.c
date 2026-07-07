@@ -236,16 +236,7 @@ static void lu_replace_all_uses(XiFunc *f, XiValue *old_val, XiValue *new_val) {
 /* ========== Full Unroll ========== */
 
 static void clone_value_metadata(XiValue *dst, const XiValue *src) {
-    dst->flags = src->flags;
-    dst->var_id = src->var_id;
-    dst->rep = src->rep;
-    dst->transfer_mode = src->transfer_mode;
-    dst->aux_kind = src->aux_kind;
-    dst->escape = src->escape;
-    dst->mem_group = src->mem_group;
-    dst->aux_int = src->aux_int;
-    dst->aux = src->aux;
-    dst->line = src->line;
+    xi_value_copy_metadata(dst, src);
 }
 
 static XiValue *resolve_arg(const UnrollMap *map, XiValue *arg) {

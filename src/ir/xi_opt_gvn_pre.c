@@ -308,15 +308,7 @@ static XiValue *pre_clone_value(XiFunc *f, XiBlock *pred, const XiValue *tmpl) {
         return NULL;
     for (uint16_t a = 0; a < tmpl->nargs; a++)
         ins->args[a] = tmpl->args[a];
-    ins->flags = tmpl->flags;
-    ins->rep = tmpl->rep;
-    ins->transfer_mode = tmpl->transfer_mode;
-    ins->aux_kind = tmpl->aux_kind;
-    ins->escape = tmpl->escape;
-    ins->mem_group = tmpl->mem_group;
-    ins->aux_int = tmpl->aux_int;
-    ins->aux = tmpl->aux;
-    ins->line = tmpl->line;
+    xi_value_copy_metadata(ins, tmpl);
     return ins;
 }
 

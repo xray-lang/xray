@@ -352,6 +352,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->nargs = nargs;
     v->uses = -1; /* not yet computed */
     v->line = 0;
+    v->xg_callsite_id = 0;
     v->block = blk;
 }
 
