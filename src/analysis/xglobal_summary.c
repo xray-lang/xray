@@ -225,9 +225,48 @@ XR_FUNC const char *xg_capability_name(uint32_t capability) {
             return "instanceof";
         case XG_CAP_SYS_THREAD:
             return "sys_thread";
+        case XG_CAP_SCOPE:
+            return "scope";
+        case XG_CAP_TIMER:
+            return "timer";
+        case XG_CAP_NETPOLL:
+            return "netpoll";
+        case XG_CAP_TASK:
+            return "task";
+        case XG_CAP_ATOMIC:
+            return "atomic";
+        case XG_CAP_WORK_QUEUE:
+            return "work_queue";
+        case XG_CAP_RESULT_GROUP:
+            return "result_group";
+        case XG_CAP_COUNTDOWN_LATCH:
+            return "countdown_latch";
+        case XG_CAP_SEMAPHORE:
+            return "semaphore";
+        case XG_CAP_EVENT_COUNT:
+            return "event_count";
+        case XG_CAP_GENERATOR:
+            return "generator";
+        case XG_CAP_STACKTRACE:
+            return "stacktrace";
         default:
             return "unknown";
     }
+}
+
+XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count) {
+    static const uint32_t capabilities[] = {
+        XG_CAP_COROUTINE,    XG_CAP_CHANNEL,         XG_CAP_EXCEPTION,
+        XG_CAP_NATIVE,       XG_CAP_EXTERN,          XG_CAP_OBJECTS,
+        XG_CAP_DEEP_COPY,    XG_CAP_INSTANCEOF,      XG_CAP_SYS_THREAD,
+        XG_CAP_SCOPE,        XG_CAP_TIMER,           XG_CAP_NETPOLL,
+        XG_CAP_TASK,         XG_CAP_ATOMIC,          XG_CAP_WORK_QUEUE,
+        XG_CAP_RESULT_GROUP, XG_CAP_COUNTDOWN_LATCH, XG_CAP_SEMAPHORE,
+        XG_CAP_EVENT_COUNT,  XG_CAP_GENERATOR,       XG_CAP_STACKTRACE,
+    };
+    if (out_count)
+        *out_count = (uint32_t) (sizeof(capabilities) / sizeof(capabilities[0]));
+    return capabilities;
 }
 
 XR_FUNC void xg_global_evidence_init(XgGlobalEvidence *evidence, XgBuildKey key) {
