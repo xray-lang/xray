@@ -1,0 +1,6 @@
+@c_export("xray_spin")
+fn xray_spin() -> int32 {
+    while (true) {
+    }
+    return 0
+}

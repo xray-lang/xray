@@ -66,6 +66,8 @@ static bool try_eliminate_empty(XiFunc *f, XiBlock *blk) {
 
     XiBlock *succ = blk->succs[0];
     XR_DCHECK(succ != NULL, "empty block has NULL successor");
+    if (succ == blk)
+        return false;
 
     if (xi_cfg_phi_count(succ) > 0) {
         for (uint16_t i = 0; i < blk->npreds; i++) {
@@ -137,6 +139,8 @@ static bool try_merge_into_pred(XiFunc *f, XiBlock *blk) {
 
     XiBlock *pred = blk->preds[0];
     XR_DCHECK(pred != NULL, "single pred is NULL");
+    if (pred == blk)
+        return false;
 
     /* Pred must have exactly one successor (this block). */
     if (pred->kind != XI_BLOCK_PLAIN)

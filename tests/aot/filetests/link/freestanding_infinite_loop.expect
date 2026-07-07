@@ -1,0 +1,5 @@
+args=--profile freestanding
+contains=xaot-plan v0
+c_contains=#include "xrt_core_freestanding.h"
+c_regex=goto L[0-9]+;
+not_contains=CRASH
