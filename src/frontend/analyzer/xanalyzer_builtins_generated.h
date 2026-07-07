@@ -567,21 +567,6 @@ static const XaBuiltinMember g_gen_ws_functions[] = {
 };
 #define GEN_WS_FUNCTION_COUNT 13
 
-// xml module functions
-static const XaBuiltinMember g_gen_xml_functions[] = {
-    {"parse", "(data: string, options?: Json): Json", "Parse XML string", true, false, false},
-    {"parseDetailed", "(data: string): Json", "Parse XML with details", true, false, false},
-    {"parseFile", "(path: string): Json", "Parse XML file", true, false, false},
-    {"stringify", "(node: Json, options?: Json): string", "Convert to XML string", true, false, false},
-    {"writeFile", "(path: string, node: Json): bool", "Write XML file", true, false, false},
-    {"document", "(): Json", "Create XML document node", true, false, false},
-    {"element", "(name: string, attrs?: Json): Json", "Create XML element node", true, false, false},
-    {"text", "(content: string): Json", "Create XML text node", true, false, false},
-    {"comment", "(content: string): Json", "Create XML comment node", true, false, false},
-    {"cdata", "(content: string): Json", "Create XML CDATA node", true, false, false},
-};
-#define GEN_XML_FUNCTION_COUNT 10
-
 // yaml module functions
 static const XaBuiltinMember g_gen_yaml_functions[] = {
     {"parse", "(data: string): Json", "Parse YAML string", true, false, false},
@@ -610,10 +595,9 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0},
     {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT},
-    {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
     {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 17
+#define GEN_BUILTIN_MODULE_COUNT 16
 
 /* clang-format on */
 

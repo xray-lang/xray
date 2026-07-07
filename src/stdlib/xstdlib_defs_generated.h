@@ -403,16 +403,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"yaml", "stringify", "(value: Json): string", "Convert to YAML string", "yaml_stringify", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
     {"yaml", "parseFile", "(path: string): Json", "Parse YAML file", "yaml_parse_file", "normal", "", "", "", "value", "", "", "system", "", 1, false},
     {"yaml", "writeFile", "(path: string, value: Json): bool", "Write YAML file", "yaml_write_file", "normal", "", "", "", "value", "", "", "system", "", 2, false},
-    {"xml", "parse", "(data: string, options?: Json): Json", "Parse XML string", "xml_parse_fn", "normal", "", "", "", "value", "", "", "alloc", "", 2, false},
-    {"xml", "parseDetailed", "(data: string): Json", "Parse XML with details", "xml_parse_detailed", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
-    {"xml", "parseFile", "(path: string): Json", "Parse XML file", "xml_parse_file", "normal", "", "", "", "value", "", "", "system", "", 1, false},
-    {"xml", "stringify", "(node: Json, options?: Json): string", "Convert to XML string", "xml_stringify_fn", "normal", "", "", "", "value", "", "", "alloc", "", 2, false},
-    {"xml", "writeFile", "(path: string, node: Json): bool", "Write XML file", "xml_write_file", "normal", "", "", "", "value", "", "", "system", "", 2, false},
-    {"xml", "document", "(): Json", "Create XML document node", "xml_document_fn", "normal", "", "", "", "value", "", "", "alloc", "", 0, false},
-    {"xml", "element", "(name: string, attrs?: Json): Json", "Create XML element node", "xml_element_fn", "normal", "", "", "", "value", "", "", "alloc", "", 2, false},
-    {"xml", "text", "(content: string): Json", "Create XML text node", "xml_text_fn", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
-    {"xml", "comment", "(content: string): Json", "Create XML comment node", "xml_comment_fn", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
-    {"xml", "cdata", "(content: string): Json", "Create XML CDATA node", "xml_cdata_fn", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
 };
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
 

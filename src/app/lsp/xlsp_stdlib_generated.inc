@@ -506,16 +506,16 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: Json): Json", "Parse XML string", NULL, 0},
-    {"parseDetailed", XLSP_SYM_FUNCTION, "fn(data: string): Json", "Parse XML with details", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string): Json", "Parse XML file", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(node: Json, options?: Json): string", "Convert to XML string", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, node: Json): bool", "Write XML file", NULL, 0},
-    {"document", XLSP_SYM_FUNCTION, "fn(): Json", "Create XML document node", NULL, 0},
-    {"element", XLSP_SYM_FUNCTION, "fn(name: string, attrs?: Json): Json", "Create XML element node", NULL, 0},
-    {"text", XLSP_SYM_FUNCTION, "fn(content: string): Json", "Create XML text node", NULL, 0},
-    {"comment", XLSP_SYM_FUNCTION, "fn(content: string): Json", "Create XML comment node", NULL, 0},
-    {"cdata", XLSP_SYM_FUNCTION, "fn(content: string): Json", "Create XML CDATA node", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Json", "", NULL, 0},
+    {"parseDetailed", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Json", "", NULL, 0},
+    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string, options?: unknown): Json", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(node: unknown, options?: unknown): string", "", NULL, 0},
+    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, node: unknown, options?: unknown): bool", "", NULL, 0},
+    {"document", XLSP_SYM_FUNCTION, "fn(): Json", "", NULL, 0},
+    {"element", XLSP_SYM_FUNCTION, "fn(tag: string, attrsValue?: unknown): Json", "", NULL, 0},
+    {"text", XLSP_SYM_FUNCTION, "fn(content: string): Json", "", NULL, 0},
+    {"comment", XLSP_SYM_FUNCTION, "fn(content: string): Json", "", NULL, 0},
+    {"cdata", XLSP_SYM_FUNCTION, "fn(content: string): Json", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_XML_SYMBOL_COUNT 10
 
