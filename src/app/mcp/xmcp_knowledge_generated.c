@@ -1033,11 +1033,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Set low-level HTTP connection handler",
     },
     {
-        .name = "static",
-        .signature = "(method: string, path: string, content: string): ()",
-        .summary = "Register a prebuilt static route response",
-    },
-    {
         .name = "stopServer",
         .signature = "(): ()",
         .summary = "Stop the HTTP server",
@@ -4959,7 +4954,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.sendResponse` | `(fd: int, body: string, status?: int): bool` | Send HTTP response on fd |\n"
             "| `http.serverStats` | `(): Json` | Return HTTP server counters |\n"
             "| `http.setConnHandler` | `(handler: fn(fd: int): ()): ()` | Set low-level HTTP connection handler |\n"
-            "| `http.static` | `(method: string, path: string, content: string): ()` | Register a prebuilt static route response |\n"
             "| `http.stopServer` | `(): ()` | Stop the HTTP server |\n"
             "| `http.urlDecode` | `(s: string): string` |  |\n"
             "| `http.urlEncode` | `(s: string): string` |  |\n"
