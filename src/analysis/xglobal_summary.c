@@ -132,6 +132,13 @@ static uint64_t hash_body_summary(uint64_t hash, const XgBodySummary *row) {
     if (!row)
         return hash_u32(hash, 0);
     hash = hash_u32(hash, row->func_id);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->owner_decl_id);
+    hash = hash_u32(hash, row->owner_class_id);
+    hash = hash_u32(hash, row->owner_method_id);
+    hash = hash_u32(hash, row->name_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u8(hash, row->kind);
     hash = hash_u64(hash, row->body_hash);
     hash = hash_u32(hash, row->effect_bits);
     hash = hash_u32(hash, row->escape_bits);
@@ -240,6 +247,19 @@ XR_FUNC const char *xg_callsite_kind_name(uint8_t kind) {
             return "native";
         case XG_CALL_EXTERN:
             return "extern";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *xg_body_kind_name(uint8_t kind) {
+    switch ((XgBodyKind) kind) {
+        case XG_BODY_MODULE_INIT:
+            return "module_init";
+        case XG_BODY_FUNCTION:
+            return "function";
+        case XG_BODY_METHOD:
+            return "method";
         default:
             return "unknown";
     }
@@ -607,11 +627,13 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->nbodies; i++) {
         const XgBodySummary *b = &evidence->bodies[i];
         fprintf(out,
-                "body %u func=%u hash=%016" PRIx64
+                "body %u func=%u module=%u decl=%u class=%u method=%u name=%u span=%u kind=%s "
+                "hash=%016" PRIx64
                 " effect=0x%x escape=0x%x caps=0x%x callsites=%u+%u metadata=0x%x static=0x%x\n",
-                i, b->func_id, b->body_hash, b->effect_bits, b->escape_bits, b->capability_bits,
-                b->callsite_start, b->callsite_count, b->metadata_use_bits,
-                b->static_data_use_bits);
+                i, b->func_id, b->module_id, b->owner_decl_id, b->owner_class_id,
+                b->owner_method_id, b->name_id, b->source_span_id, xg_body_kind_name(b->kind),
+                b->body_hash, b->effect_bits, b->escape_bits, b->capability_bits, b->callsite_start,
+                b->callsite_count, b->metadata_use_bits, b->static_data_use_bits);
     }
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {
         const XgCallsiteSummary *c = &evidence->callsites[i];

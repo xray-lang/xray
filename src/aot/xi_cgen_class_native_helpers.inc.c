@@ -1388,19 +1388,31 @@ static bool cg_class_native_value_has_ptr_storage(XiCgenCtx *ctx, const XiValue 
            cg_value_plan_storage_rep(ctx, v) == XR_REP_PTR;
 }
 
-static const XiClassData *cg_class_native_call_result_data(XiCgenCtx *ctx, const XiFunc *f,
-                                                           const XiValue *v) {
-    if (!ctx || !v)
-        return NULL;
-    v = cg_unwrap_identity_value(v);
-    if (!v || v->op != XI_CALL || v->nargs < 1)
-        return NULL;
-    CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, v->args[0]);
+static const XiClassData *cg_class_native_static_call_result_data(XiCgenCtx *ctx,
+                                                                  CgStaticFunctionCall call) {
     if (call.is_class_constructor && call.class_data && call.class_data->instance_layout)
         return call.class_data;
     if (!call.func)
         return NULL;
     return cg_class_native_data_for_abi_type(ctx, call.func->return_type);
+}
+
+static const XiClassData *cg_class_native_call_result_data(XiCgenCtx *ctx, const XiFunc *f,
+                                                           const XiValue *v) {
+    if (!ctx || !v)
+        return NULL;
+    v = cg_unwrap_identity_value(v);
+    if (!v || v->nargs < 1)
+        return NULL;
+    if (v->op == XI_CALL) {
+        CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, v->args[0]);
+        return cg_class_native_static_call_result_data(ctx, call);
+    }
+    if (v->op == XI_CALL_METHOD && v->aux) {
+        CgStaticFunctionCall call = cg_resolve_module_member_call(ctx, f, v, (const char *) v->aux);
+        return cg_class_native_static_call_result_data(ctx, call);
+    }
+    return NULL;
 }
 
 static const XiClassData *
@@ -2597,28 +2609,50 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
     return true;
 }
 
-static bool emit_class_native_getter_field_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                const char *prefix, const XiValue *v) {
-    if (!ctx || !out || !f || !v || v->nargs < 1 || !v->aux)
-        return false;
+static const XiFunc *cg_class_native_resolve_getter_field_method(XiCgenCtx *ctx, const XiFunc *f,
+                                                                 const XiValue *v,
+                                                                 const XiClassData **out_source,
+                                                                 const char **out_method_prefix) {
+    if (out_source)
+        *out_source = NULL;
+    if (out_method_prefix)
+        *out_method_prefix = NULL;
+    if (!ctx || !f || !v || v->op != XI_LOAD_FIELD || v->nargs < 1 || !v->aux)
+        return NULL;
 
     const XiClassData *source = cg_class_native_instance_data(ctx, f, v->args[0]);
     if (!source || !source->class_name)
-        return false;
+        return NULL;
 
     char getter_name[256];
     int n = snprintf(getter_name, sizeof(getter_name), "get:%s", (const char *) v->aux);
     if (n < 0 || (size_t) n >= sizeof(getter_name))
-        return false;
+        return NULL;
 
     const char *method_prefix = NULL;
     const XiFunc *mfunc = cg_lookup_method(ctx, getter_name, source->class_name, &method_prefix);
     if (!mfunc) {
         mfunc = cg_lookup_method(ctx, (const char *) v->aux, source->class_name, &method_prefix);
         if (!mfunc || !mfunc->name || strcmp(mfunc->name, getter_name) != 0)
-            return false;
+            return NULL;
     }
     if (!mfunc || cg_func_needs_aot_coro(mfunc) || !cg_class_func_uses_native_receiver(ctx, mfunc))
+        return NULL;
+    if (out_source)
+        *out_source = source;
+    if (out_method_prefix)
+        *out_method_prefix = method_prefix;
+    return mfunc;
+}
+
+static bool emit_class_native_getter_field_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                const char *prefix, const XiValue *v) {
+    if (!out)
+        return false;
+    const char *method_prefix = NULL;
+    const XiFunc *mfunc =
+        cg_class_native_resolve_getter_field_method(ctx, f, v, NULL, &method_prefix);
+    if (!mfunc)
         return false;
 
     return emit_class_native_method_call_expr(ctx, out, f, prefix, v, mfunc, method_prefix);

@@ -65,7 +65,13 @@ typedef struct XgProducer {
 
 typedef struct XgPendingBody {
     XgFuncId func_id;
+    XgModuleId module_id;
+    XgDeclId owner_decl_id;
     XgClassId current_class_id;
+    XgMethodId owner_method_id;
+    uint32_t name_id;
+    uint32_t source_span_id;
+    uint8_t kind;
     const AstNode *body;
     const MethodDeclNode *method;
     const FunctionDeclNode *function;
@@ -390,9 +396,11 @@ static bool producer_reserve_bodies(XgProducer *p, uint32_t needed) {
     return true;
 }
 
-static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgClassId current_class_id,
-                                  const AstNode *body, const MethodDeclNode *method,
-                                  const FunctionDeclNode *function) {
+static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgModuleId module_id,
+                                  XgDeclId owner_decl_id, XgClassId current_class_id,
+                                  XgMethodId owner_method_id, uint32_t name_id,
+                                  uint32_t source_span_id, uint8_t kind, const AstNode *body,
+                                  const MethodDeclNode *method, const FunctionDeclNode *function) {
     XgPendingBody *row;
     if (!body)
         return true;
@@ -401,7 +409,13 @@ static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgClassId cur
     row = &p->bodies[p->nbodies++];
     memset(row, 0, sizeof(*row));
     row->func_id = func_id;
+    row->module_id = module_id;
+    row->owner_decl_id = owner_decl_id;
     row->current_class_id = current_class_id;
+    row->owner_method_id = owner_method_id;
+    row->name_id = name_id;
+    row->source_span_id = source_span_id;
+    row->kind = kind;
     row->body = body;
     row->method = method;
     row->function = function;
@@ -1263,6 +1277,13 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
 
     memset(&row, 0, sizeof(row));
     row.func_id = pending->func_id;
+    row.module_id = pending->module_id;
+    row.owner_decl_id = pending->owner_decl_id;
+    row.owner_class_id = pending->current_class_id;
+    row.owner_method_id = pending->owner_method_id;
+    row.name_id = pending->name_id;
+    row.source_span_id = pending->source_span_id;
+    row.kind = pending->kind;
     row.body_hash = hash_ast_shape(pending->body, XR_FNV64_OFFSET_BASIS);
     row.effect_bits = bc.effect_bits;
     row.capability_bits = bc.capability_bits;
@@ -1327,7 +1348,9 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     }
     if (!producer_register_func(p, fn->name, func_id))
         return false;
-    return producer_enqueue_body(p, func_id, XG_NO_ID, fn->body, NULL, fn);
+    return producer_enqueue_body(p, func_id, module_id, decl_id, XG_NO_ID, XG_NO_ID,
+                                 hash_name32(fn->name), (uint32_t) node->line, XG_BODY_FUNCTION,
+                                 fn->body, NULL, fn);
 }
 
 static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNode *node,
@@ -1377,7 +1400,9 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         if (!xg_global_evidence_add_method(p->evidence, &method))
             return false;
         method_count++;
-        if (!producer_enqueue_body(p, method_func_id, class_id, m->body, m, NULL))
+        if (!producer_enqueue_body(p, method_func_id, module_id, decl_id, class_id,
+                                   method.method_id, hash_name32(m->name),
+                                   (uint32_t) method_node->line, XG_BODY_METHOD, m->body, m, NULL))
             return false;
     }
 
@@ -1509,7 +1534,9 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
     }
     if (has_module_body) {
         XgFuncId module_func_id = producer_next_func_id(p);
-        if (!producer_enqueue_body(p, module_func_id, XG_NO_ID, ast, NULL, NULL))
+        if (!producer_enqueue_body(p, module_func_id, module_id, XG_NO_ID, XG_NO_ID, XG_NO_ID,
+                                   hash_name32("<module-init>"), 0, XG_BODY_MODULE_INIT, ast, NULL,
+                                   NULL))
             return false;
     }
     return true;
