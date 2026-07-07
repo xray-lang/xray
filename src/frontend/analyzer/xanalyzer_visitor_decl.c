@@ -1728,6 +1728,14 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
             xr_free((void *) tp_names);
     }
 
+    for (int i = 0; i < fn->param_count; i++) {
+        char context[160];
+        snprintf(context, sizeof(context), "function parameter '%s'",
+                 param_names && param_names[i] ? param_names[i] : "?");
+        xa_freestanding_report_tagged_type_unavailable(ctx, node, param_types[i], context);
+    }
+    xa_freestanding_report_tagged_type_unavailable(ctx, node, return_type, "function return type");
+
     XrType *fn_type = xr_type_new_function(ctx->analyzer->isolate, param_types, fn->param_count,
                                            return_type, has_rest);
     xa_set_function_type_params_from_ast(ctx, fn_type, fn->type_params, fn->type_param_count);

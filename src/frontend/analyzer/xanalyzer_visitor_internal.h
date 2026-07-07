@@ -81,6 +81,58 @@ XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *no
 XR_FUNC void xa_report_unknown_stdlib_member(XaInferContext *ctx, AstNode *node,
                                              const char *module_name, const char *member_name);
 
+static inline bool xa_freestanding_type_requires_tagged_value(const XrType *type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_JSON:
+        case XR_KIND_RECORD:
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+        case XR_KIND_FUNCTION:
+            return true;
+        case XR_KIND_UNION:
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                if (xa_freestanding_type_requires_tagged_value(type->union_type.members[i]))
+                    return true;
+            }
+            return false;
+        case XR_KIND_TUPLE:
+            for (int i = 0; i < type->tuple.element_count; i++) {
+                if (xa_freestanding_type_requires_tagged_value(type->tuple.element_types[i]))
+                    return true;
+            }
+            return false;
+        case XR_KIND_FIXED_ARRAY:
+            return xa_freestanding_type_requires_tagged_value(type->fixed_array.element_type);
+        case XR_KIND_SPAN:
+        case XR_KIND_VIEW:
+        case XR_KIND_POINTER:
+            return xa_freestanding_type_requires_tagged_value(type->container.element_type);
+        default:
+            return false;
+    }
+}
+
+static inline void xa_freestanding_report_tagged_type_unavailable(XaInferContext *ctx,
+                                                                  AstNode *node, const XrType *type,
+                                                                  const char *context) {
+    if (!ctx || !node || !xa_freestanding_type_requires_tagged_value(type))
+        return;
+    char feature[192];
+    if (context && context[0]) {
+        snprintf(feature, sizeof(feature), "tagged/dynamic value type in %s", context);
+    } else {
+        snprintf(feature, sizeof(feature), "tagged/dynamic value type");
+    }
+    xa_freestanding_report_unavailable(
+        ctx, node, feature,
+        "use fixed-layout structs, fixed arrays, Span/ByteSpan, enum value-structs, Buffer, or "
+        "raw pointers instead");
+}
+
 // Expression visitors (defined in xanalyzer_visitor_expr.c)
 XR_FUNC XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node);

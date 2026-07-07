@@ -3382,6 +3382,11 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     if (sym->is_readonly_binding && var_type)
         var_type = xr_type_make_const(ctx->analyzer->isolate, var_type);
 
+    char freestanding_var_context[160];
+    snprintf(freestanding_var_context, sizeof(freestanding_var_context), "variable '%s'",
+             var->name ? var->name : "?");
+    xa_freestanding_report_tagged_type_unavailable(ctx, node, var_type, freestanding_var_context);
+
     links->type = var_type;
     xa_update_borrowed_alias_root(ctx, sym, var->initializer, var_type);
     xa_register_active_span_borrow(ctx, sym, var->initializer, var_type);
@@ -3754,6 +3759,7 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
 
     // Collect return type for function inference
     xa_infer_add_return_type(ctx, return_type);
+    xa_freestanding_report_tagged_type_unavailable(ctx, node, return_type, "return value");
 
     // Check against expected return type (strict: Unit and concrete types enforced)
     if (ctx->expected_return_type && !XR_TYPE_IS_UNKNOWN(ctx->expected_return_type)) {

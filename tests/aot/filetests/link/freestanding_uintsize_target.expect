@@ -1,0 +1,17 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="system_libs": []
+contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=size_t xray_uintsize_roundtrip
+c_contains=ptrdiff_t xray_intsize_roundtrip
+c_contains=sizeof(size_t)
+c_contains=_Alignof(size_t)
+c_contains=sizeof(ptrdiff_t)
+c_contains=_Alignof(ptrdiff_t)
+c_not_contains=uint64_t xray_uintsize_roundtrip
+c_not_contains=int64_t xray_intsize_roundtrip
+not_contains=xray_rt_coro
+not_contains=xray_core
