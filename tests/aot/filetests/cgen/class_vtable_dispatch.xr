@@ -1,0 +1,32 @@
+class Shape {
+    kind: int
+
+    constructor(kind: int) {
+        this.kind = kind
+    }
+
+    area() -> int {
+        return this.kind
+    }
+}
+
+class Rect extends Shape {
+    w: int
+    h: int
+
+    constructor(w: int, h: int) {
+        super(1)
+        this.w = w
+        this.h = h
+    }
+
+    area() -> int {
+        return this.w * this.h
+    }
+}
+
+fn score(shape: Shape) -> int {
+    return shape.area()
+}
+
+print(score(Shape(5)) + score(Rect(3, 4)))

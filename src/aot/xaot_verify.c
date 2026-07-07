@@ -475,6 +475,11 @@ static bool xg_verify_class_is_descendant_of(const XgGlobalEvidence *ev, XgClass
     return false;
 }
 
+static bool xg_verify_class_is_descendant_or_self(const XgGlobalEvidence *ev, XgClassId class_id,
+                                                  XgClassId ancestor_id) {
+    return class_id == ancestor_id || xg_verify_class_is_descendant_of(ev, class_id, ancestor_id);
+}
+
 static bool xg_verify_method_participates_in_override(const XgMethodSummary *method) {
     return method && (method->flags & XG_METHOD_STATIC) == 0 &&
            (method->flags & XG_METHOD_CONSTRUCTOR) == 0;
@@ -1363,6 +1368,48 @@ static bool verify_dispatch_target_anchor_rederives(
     return true;
 }
 
+static bool verify_dispatch_vtable_targets_rederive(
+    const XgGlobalEvidence *ev, const XaotBundle *bundle, const XaotMethodDispatchPlan *plan,
+    const XgCallsiteSummary *call, uint32_t expected_evidence, char *errbuf, size_t errbuf_len) {
+    uint16_t expected_count = 0;
+
+    if (!ev || !bundle || !plan || !call)
+        return set_error(errbuf, errbuf_len, "AOT dispatch vtable verifier has incomplete input");
+    if (call->receiver_static_class_id == XG_NO_ID || call->method_name_id == 0 ||
+        call->method_signature_key == 0)
+        return set_error(errbuf, errbuf_len, "AOT dispatch vtable callsite is incomplete");
+    if (plan->target_start == 0 || plan->target_start > bundle->ndispatch_target_cases)
+        return set_error(errbuf, errbuf_len, "AOT dispatch vtable targets do not re-derive");
+
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        const XgClassSummary *candidate = &ev->classes[i];
+        const XgMethodSummary *target_method;
+        const XaotDispatchTargetCase *target;
+        if (!xg_verify_class_is_runtime_class(candidate))
+            continue;
+        if (!xg_verify_class_is_descendant_or_self(ev, candidate->class_id,
+                                                   call->receiver_static_class_id))
+            continue;
+        target_method = verify_find_evidence_method_by_signature_in_hierarchy(
+            ev, candidate->class_id, call->method_name_id, call->method_signature_key, false);
+        if (!target_method)
+            return set_error(errbuf, errbuf_len, "AOT dispatch vtable target method is missing");
+        if (plan->target_start - 1 + expected_count >= bundle->ndispatch_target_cases)
+            return set_error(errbuf, errbuf_len, "AOT dispatch vtable targets do not re-derive");
+        target = &bundle->dispatch_target_cases[plan->target_start - 1 + expected_count];
+        if (target->callsite_id != plan->callsite_id ||
+            target->receiver_class_id != candidate->class_id ||
+            target->method_id != target_method->method_id || target->evidence != expected_evidence)
+            return set_error(errbuf, errbuf_len, "AOT dispatch vtable targets do not re-derive");
+        expected_count++;
+    }
+
+    if (expected_count == 0 || plan->target_count != expected_count ||
+        plan->target_start - 1 + plan->target_count > bundle->ndispatch_target_cases)
+        return set_error(errbuf, errbuf_len, "AOT dispatch vtable targets do not re-derive");
+    return true;
+}
+
 static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
                                                   const XaotBundle *bundle,
                                                   const XaotMethodDispatchPlan *plan,
@@ -1461,6 +1508,7 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
         } else {
             expected_kind = XAOT_DISPATCH_VTABLE;
             expected_reason = XAOT_DISPATCH_UNPROVEN_POLYMORPHIC;
+            expected_evidence |= XAOT_DISPATCH_EV_OVERRIDE_GRAPH;
         }
     }
 
@@ -1497,10 +1545,15 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
         return set_error(errbuf, errbuf_len, "AOT dispatch plan kind does not re-derive");
     if (plan->dispatch_slot != expected_dispatch_slot)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan slot does not re-derive");
-    if (!verify_dispatch_target_anchor_rederives(ev, bundle, plan, expected_kind, expected_classes,
-                                                 expected_methods, expected_target_count, errbuf,
-                                                 errbuf_len))
+    if (expected_kind == XAOT_DISPATCH_VTABLE) {
+        if (!verify_dispatch_vtable_targets_rederive(ev, bundle, plan, call, expected_evidence,
+                                                     errbuf, errbuf_len))
+            return false;
+    } else if (!verify_dispatch_target_anchor_rederives(
+                   ev, bundle, plan, expected_kind, expected_classes, expected_methods,
+                   expected_target_count, errbuf, errbuf_len)) {
         return false;
+    }
     if (plan->evidence != expected_evidence)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan evidence does not re-derive");
     if (plan->unproven_reason != expected_reason)
