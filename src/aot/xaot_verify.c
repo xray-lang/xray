@@ -491,6 +491,17 @@ static const XgCallsiteSummary *verify_find_evidence_callsite(const XgGlobalEvid
     return NULL;
 }
 
+static const XgBodySummary *verify_find_evidence_body_by_func(const XgGlobalEvidence *ev,
+                                                              XgFuncId func_id) {
+    if (!ev || func_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        if (ev->bodies[i].func_id == func_id)
+            return &ev->bodies[i];
+    }
+    return NULL;
+}
+
 static const XgDeclSummary *verify_find_evidence_decl(const XgGlobalEvidence *ev,
                                                       XgDeclId decl_id) {
     if (!ev || decl_id == XG_NO_ID)
@@ -784,6 +795,14 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 if (call->static_target_func_id == XG_NO_ID)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence direct callsite has no target");
+                {
+                    const XgBodySummary *target_body =
+                        verify_find_evidence_body_by_func(ev, call->static_target_func_id);
+                    if (!target_body || target_body->kind != XG_BODY_FUNCTION)
+                        return set_error(
+                            errbuf, errbuf_len,
+                            "AOT global evidence direct callsite target body is missing");
+                }
                 break;
             case XG_CALL_METHOD:
                 if (call->receiver_static_class_id == XG_NO_ID || call->method_id == XG_NO_ID ||
