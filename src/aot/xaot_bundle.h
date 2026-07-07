@@ -386,6 +386,8 @@ enum {
     XAOT_DISPATCH_EV_INFERRED_FINAL = 1u << 2,
     XAOT_DISPATCH_EV_METHOD_NOT_OVERRIDDEN = 1u << 3,
     XAOT_DISPATCH_EV_INTERFACE_OBJECT = 1u << 4,
+    XAOT_DISPATCH_EV_SINGLE_IMPLEMENTOR = 1u << 5,
+    XAOT_DISPATCH_EV_SMALL_IMPLEMENTOR_SET = 1u << 6,
 };
 
 enum {
@@ -393,6 +395,9 @@ enum {
     XAOT_DISPATCH_UNPROVEN_NO_RECEIVER_TYPE = 1,
     XAOT_DISPATCH_UNPROVEN_NO_METHOD_ID = 2,
     XAOT_DISPATCH_UNPROVEN_POLYMORPHIC = 3,
+    XAOT_DISPATCH_UNPROVEN_NO_INTERFACE_ID = 4,
+    XAOT_DISPATCH_UNPROVEN_NO_TARGET_METHOD = 5,
+    XAOT_DISPATCH_UNPROVEN_LARGE_IMPLEMENTOR_SET = 6,
 };
 
 typedef struct XaotMethodDispatchPlan {
@@ -406,6 +411,13 @@ typedef struct XaotMethodDispatchPlan {
     uint32_t evidence;
     uint8_t unproven_reason;
 } XaotMethodDispatchPlan;
+
+typedef struct XaotDispatchTargetCase {
+    XgCallsiteId callsite_id;
+    XgClassId receiver_class_id;
+    XgMethodId method_id;
+    uint32_t evidence;
+} XaotDispatchTargetCase;
 
 enum {
     XAOT_INTERFACE_USE_REASON_IMPLEMENTS = 1u << 0,
@@ -578,6 +590,9 @@ typedef struct XaotBundle {
     XaotMethodDispatchPlan *method_dispatch_plans;
     uint32_t nmethod_dispatch_plans;
     uint32_t method_dispatch_plan_cap;
+    XaotDispatchTargetCase *dispatch_target_cases;
+    uint32_t ndispatch_target_cases;
+    uint32_t dispatch_target_case_cap;
     XaotInterfaceUsePlan *interface_use_plans;
     uint32_t ninterface_use_plans;
     uint32_t interface_use_plan_cap;

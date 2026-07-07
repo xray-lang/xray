@@ -174,6 +174,11 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->nmethod_dispatch_plans = 0;
     bundle->method_dispatch_plan_cap = 0;
 
+    xr_free(bundle->dispatch_target_cases);
+    bundle->dispatch_target_cases = NULL;
+    bundle->ndispatch_target_cases = 0;
+    bundle->dispatch_target_case_cap = 0;
+
     xr_free(bundle->interface_use_plans);
     bundle->interface_use_plans = NULL;
     bundle->ninterface_use_plans = 0;
@@ -302,6 +307,22 @@ static const XgMethodSummary *xg_evidence_find_method_in_class(const XgGlobalEvi
     return NULL;
 }
 
+static const XgMethodSummary *
+xg_evidence_find_method_by_signature_in_class(const XgGlobalEvidence *ev, const XgClassSummary *cls,
+                                              uint32_t name_id, uint32_t signature_key) {
+    if (!ev || !cls || cls->method_start == 0 || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < cls->method_count; i++) {
+        uint32_t idx = cls->method_start - 1 + i;
+        const XgMethodSummary *method = idx < ev->nmethods ? &ev->methods[idx] : NULL;
+        if (method && method->owner_class_id == cls->class_id && method->name_id == name_id &&
+            method->signature_key == signature_key && (method->flags & XG_METHOD_STATIC) == 0 &&
+            (method->flags & XG_METHOD_CONSTRUCTOR) == 0)
+            return method;
+    }
+    return NULL;
+}
+
 static const XgMethodSummary *xg_evidence_find_method_in_hierarchy(const XgGlobalEvidence *ev,
                                                                    XgClassId class_id,
                                                                    XgMethodId method_or_name_id) {
@@ -316,6 +337,42 @@ static const XgMethodSummary *xg_evidence_find_method_in_hierarchy(const XgGloba
         cls = xg_evidence_find_class(ev, cls->parent_class_id);
     }
     return NULL;
+}
+
+static const XgMethodSummary *
+xg_evidence_find_method_by_signature_in_hierarchy(const XgGlobalEvidence *ev, XgClassId class_id,
+                                                  uint32_t name_id, uint32_t signature_key) {
+    const XgClassSummary *cls = xg_evidence_find_class(ev, class_id);
+    while (cls) {
+        const XgMethodSummary *method =
+            xg_evidence_find_method_by_signature_in_class(ev, cls, name_id, signature_key);
+        if (method)
+            return method;
+        if (cls->parent_class_id == XG_NO_ID)
+            break;
+        cls = xg_evidence_find_class(ev, cls->parent_class_id);
+    }
+    return NULL;
+}
+
+static bool xaot_bundle_add_dispatch_target_case(XaotBundle *bundle, XgCallsiteId callsite_id,
+                                                 XgClassId receiver_class_id, XgMethodId method_id,
+                                                 uint32_t evidence) {
+    XaotDispatchTargetCase *target;
+    if (!bundle || callsite_id == XG_NO_ID || receiver_class_id == XG_NO_ID ||
+        method_id == XG_NO_ID)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->dispatch_target_cases,
+                            &bundle->dispatch_target_case_cap, bundle->ndispatch_target_cases + 1,
+                            sizeof(XaotDispatchTargetCase), 8))
+        return false;
+    target = &bundle->dispatch_target_cases[bundle->ndispatch_target_cases++];
+    memset(target, 0, sizeof(*target));
+    target->callsite_id = callsite_id;
+    target->receiver_class_id = receiver_class_id;
+    target->method_id = method_id;
+    target->evidence = evidence;
+    return true;
 }
 
 static bool xaot_bundle_add_class_hierarchy_plan(XaotBundle *bundle,
@@ -370,12 +427,17 @@ static bool xaot_bundle_add_class_layout_plan(XaotBundle *bundle, const XgClassS
 
 static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCallsiteSummary *call,
                                                  const XgGlobalEvidence *ev) {
+    enum {
+        XAOT_DISPATCH_SMALL_IMPLEMENTOR_LIMIT = 4
+    };
     XaotMethodDispatchPlan *plan;
     const XgClassSummary *receiver_cls = NULL;
     const XgMethodSummary *method = NULL;
     uint8_t kind = XAOT_DISPATCH_RUNTIME_FALLBACK;
     uint32_t evidence = XAOT_DISPATCH_EV_GLOBAL_CALLSITE;
     uint8_t reason = XAOT_DISPATCH_UNPROVEN_NONE;
+    uint32_t target_start = 0;
+    uint16_t target_count = 0;
 
     if (!bundle || !call || !ev)
         return false;
@@ -385,8 +447,39 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
         return false;
 
     if (call->kind == XG_CALL_INTERFACE) {
-        kind = XAOT_DISPATCH_ITABLE;
+        uint32_t implementor_count = 0;
+        bool all_targets_resolved = true;
         evidence |= XAOT_DISPATCH_EV_INTERFACE_OBJECT;
+        if (call->receiver_static_interface_id == XG_NO_ID) {
+            kind = XAOT_DISPATCH_ITABLE;
+            reason = XAOT_DISPATCH_UNPROVEN_NO_INTERFACE_ID;
+        } else {
+            for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
+                const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
+                const XgMethodSummary *target_method;
+                if (impl->interface_id != call->receiver_static_interface_id)
+                    continue;
+                implementor_count++;
+                target_method = xg_evidence_find_method_by_signature_in_hierarchy(
+                    ev, impl->implementor_class_id, call->method_name_id,
+                    call->method_signature_key);
+                if (!target_method)
+                    all_targets_resolved = false;
+            }
+            if (implementor_count == 0 || !all_targets_resolved) {
+                kind = XAOT_DISPATCH_ITABLE;
+                reason = XAOT_DISPATCH_UNPROVEN_NO_TARGET_METHOD;
+            } else if (implementor_count == 1) {
+                kind = XAOT_DISPATCH_DIRECT;
+                evidence |= XAOT_DISPATCH_EV_SINGLE_IMPLEMENTOR;
+            } else if (implementor_count <= XAOT_DISPATCH_SMALL_IMPLEMENTOR_LIMIT) {
+                kind = XAOT_DISPATCH_TYPE_SWITCH;
+                evidence |= XAOT_DISPATCH_EV_SMALL_IMPLEMENTOR_SET;
+            } else {
+                kind = XAOT_DISPATCH_ITABLE;
+                reason = XAOT_DISPATCH_UNPROVEN_LARGE_IMPLEMENTOR_SET;
+            }
+        }
     } else if (call->method_id == XG_NO_ID) {
         reason = XAOT_DISPATCH_UNPROVEN_NO_METHOD_ID;
     } else if (call->receiver_static_class_id == XG_NO_ID) {
@@ -410,6 +503,31 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
         }
     }
 
+    if (kind == XAOT_DISPATCH_DIRECT && method) {
+        target_start = bundle->ndispatch_target_cases + 1;
+        if (!xaot_bundle_add_dispatch_target_case(bundle, call->callsite_id,
+                                                  call->receiver_static_class_id, method->method_id,
+                                                  evidence))
+            return false;
+        target_count = 1;
+    } else if ((kind == XAOT_DISPATCH_DIRECT || kind == XAOT_DISPATCH_TYPE_SWITCH) &&
+               call->kind == XG_CALL_INTERFACE) {
+        target_start = bundle->ndispatch_target_cases + 1;
+        for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
+            const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
+            const XgMethodSummary *target_method;
+            if (impl->interface_id != call->receiver_static_interface_id)
+                continue;
+            target_method = xg_evidence_find_method_by_signature_in_hierarchy(
+                ev, impl->implementor_class_id, call->method_name_id, call->method_signature_key);
+            if (!target_method || !xaot_bundle_add_dispatch_target_case(
+                                      bundle, call->callsite_id, impl->implementor_class_id,
+                                      target_method->method_id, evidence))
+                return false;
+            target_count++;
+        }
+    }
+
     plan = &bundle->method_dispatch_plans[bundle->nmethod_dispatch_plans++];
     memset(plan, 0, sizeof(*plan));
     plan->callsite_id = call->callsite_id;
@@ -417,8 +535,8 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
     plan->receiver_static_class_id = call->receiver_static_class_id;
     plan->kind = kind;
     plan->dispatch_slot = UINT32_MAX;
-    plan->target_start = method ? method->method_id : 0;
-    plan->target_count = method && kind == XAOT_DISPATCH_DIRECT ? 1 : 0;
+    plan->target_start = target_start;
+    plan->target_count = target_count;
     plan->evidence = kind == XAOT_DISPATCH_RUNTIME_FALLBACK ? 0 : evidence;
     plan->unproven_reason = reason;
     return true;
@@ -1768,6 +1886,12 @@ static const char *dispatch_unproven_reason_name(uint8_t reason) {
             return "no_method_id";
         case XAOT_DISPATCH_UNPROVEN_POLYMORPHIC:
             return "polymorphic";
+        case XAOT_DISPATCH_UNPROVEN_NO_INTERFACE_ID:
+            return "no_interface_id";
+        case XAOT_DISPATCH_UNPROVEN_NO_TARGET_METHOD:
+            return "no_target_method";
+        case XAOT_DISPATCH_UNPROVEN_LARGE_IMPLEMENTOR_SET:
+            return "large_implementor_set";
         default:
             return "unknown";
     }
@@ -2190,6 +2314,12 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                     (unsigned) dp->target_count, dp->evidence,
                     dispatch_unproven_reason_name(dp->unproven_reason));
         }
+    }
+
+    for (uint32_t ti = 0; ti < bundle->ndispatch_target_cases; ti++) {
+        const XaotDispatchTargetCase *tc = &bundle->dispatch_target_cases[ti];
+        fprintf(out, "dispatch-target %u callsite=%u recv_class=%u method=%u evidence=0x%x\n", ti,
+                tc->callsite_id, tc->receiver_class_id, tc->method_id, tc->evidence);
     }
 
     for (uint32_t ii = 0; ii < bundle->ninterface_use_plans; ii++) {
