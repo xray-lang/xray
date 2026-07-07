@@ -32,9 +32,9 @@ static const char *token_type_names[] = {
     "string",        "number",    "regexp",   "operator"};
 
 // Token modifier names for legend
-static const char *token_modifier_names[] = {
-    "declaration", "definition", "readonly",     "static",        "deprecated",
-    "abstract",    "async",      "modification", "documentation", "defaultLibrary"};
+static const char *token_modifier_names[] = {"declaration",  "definition",    "readonly",
+                                             "static",       "deprecated",    "async",
+                                             "modification", "documentation", "defaultLibrary"};
 
 // Get semantic tokens legend
 XrJsonValue *xlsp_semantic_tokens_legend(void) {
@@ -369,7 +369,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                     if (mname) {
                         int mcol = method->column > 0 ? method->column - 1 : 0;
                         result_add(result, method->line - 1, mcol, strlen(mname), XLSP_TOKEN_METHOD,
-                                   XLSP_MOD_ABSTRACT);
+                                   0);
                     }
                 }
             }
@@ -380,7 +380,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                     const char *pname = prop->as.interface_property.name;
                     if (pname) {
                         int pcol = prop->column > 0 ? prop->column - 1 : 0;
-                        int mods = XLSP_MOD_ABSTRACT;
+                        int mods = 0;
                         if (prop->as.interface_property.is_readonly)
                             mods |= XLSP_MOD_READONLY;
                         result_add(result, prop->line - 1, pcol, strlen(pname), XLSP_TOKEN_PROPERTY,

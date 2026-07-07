@@ -122,8 +122,6 @@ typedef enum {
     TK_PRIVATE,      // private
     TK_PROTECTED,    // protected
     TK_OPERATOR,     // operator
-    TK_ABSTRACT,     // abstract
-    TK_OVERRIDE,     // override
     TK_FINAL,        // final
     TK_PARALLEL,     // parallel (batch-parallel control flow)
     TK_ENUM,         // enum

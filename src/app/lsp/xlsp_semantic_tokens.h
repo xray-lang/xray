@@ -52,11 +52,10 @@ typedef enum {
     XLSP_MOD_READONLY = 1 << 2,
     XLSP_MOD_STATIC = 1 << 3,
     XLSP_MOD_DEPRECATED = 1 << 4,
-    XLSP_MOD_ABSTRACT = 1 << 5,
-    XLSP_MOD_ASYNC = 1 << 6,
-    XLSP_MOD_MODIFICATION = 1 << 7,
-    XLSP_MOD_DOCUMENTATION = 1 << 8,
-    XLSP_MOD_DEFAULT_LIBRARY = 1 << 9
+    XLSP_MOD_ASYNC = 1 << 5,
+    XLSP_MOD_MODIFICATION = 1 << 6,
+    XLSP_MOD_DOCUMENTATION = 1 << 7,
+    XLSP_MOD_DEFAULT_LIBRARY = 1 << 8
 } XlspSemanticTokenModifier;
 
 // Semantic token entry
