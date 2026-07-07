@@ -12,8 +12,10 @@
 #include "../../../src/analysis/xglobal_producer.h"
 #include "../../../src/analysis/xglobal_summary.h"
 #include "../../../src/aot/xaot_bundle.h"
+#include "../../../src/aot/xaot_verify.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/frontend/parser/xparse.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "xray_vm.h"
@@ -334,6 +336,79 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     xr_free(dump);
 
     xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_verifier_rederives_dispatch_plans) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x21,
+                      .compiler_semver_hash = 0x22,
+                      .profile_hash = 0x23,
+                      .imported_summary_hash = 0x24,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgClassSummary cls = {.class_id = 1,
+                          .parent_class_id = XG_NO_ID,
+                          .flags = XG_CLASS_INFERRED_FINAL,
+                          .field_start = 0,
+                          .field_count = 0,
+                          .method_start = 1,
+                          .method_count = 1,
+                          .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary method = {.method_id = 1,
+                              .owner_class_id = 1,
+                              .name_id = 700,
+                              .signature_key = 701,
+                              .override_of = XG_NO_ID,
+                              .default_arg_contract_id = XG_NO_ID,
+                              .flags = 0};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 9,
+                              .kind = XG_CALL_METHOD,
+                              .receiver_static_class_id = 1,
+                              .method_id = 1};
+    XiFunc init_func;
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    XiModule module;
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    XiModule *modules[1] = {&module};
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+
+    XaotBundle good;
+    memset(&good, 0, sizeof(good));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&good, &ev, XG_BUILD_NATIVE_RELEASE));
+    good.modules = modules;
+    good.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    good.method_dispatch_plans[0].kind = XAOT_DISPATCH_VTABLE;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan kind does not re-derive"));
+    xaot_bundle_free(&good);
+
+    XaotBundle missing;
+    memset(&missing, 0, sizeof(missing));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&missing, &ev, XG_BUILD_NATIVE_RELEASE));
+    missing.modules = modules;
+    missing.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&missing, &init_func, 0, 0));
+    missing.nmethod_dispatch_plans = 0;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&missing, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT method callsite has no dispatch plan"));
+    xaot_bundle_free(&missing);
+
     xg_global_evidence_free(&ev);
 }
 
@@ -691,6 +766,7 @@ RUN_TEST(global_evidence_adds_rows_and_grows);
 RUN_TEST(global_evidence_hash_is_content_stable);
 RUN_TEST(global_evidence_dump_lists_core_rows);
 RUN_TEST(global_evidence_lowers_to_aot_class_plans);
+RUN_TEST(global_evidence_verifier_rederives_dispatch_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
