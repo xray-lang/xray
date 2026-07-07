@@ -709,6 +709,14 @@ static uint32_t attrs_derive_flags(XrAttribute **attrs, int count) {
     return flags;
 }
 
+static XrAttribute *attrs_find(XrAttribute **attrs, int count, AttributeKind kind) {
+    for (int i = 0; i < count; i++) {
+        if (attrs[i] && attrs[i]->kind == kind)
+            return attrs[i];
+    }
+    return NULL;
+}
+
 static bool body_member_receiver_is_module(const MemberAccessNode *member, const char *name) {
     if (!member || !member->object || member->object->type != AST_VARIABLE || !name)
         return false;
@@ -1260,6 +1268,10 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     XgDeclSummary decl;
     XgDeclId decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     XgFuncId func_id = producer_next_func_id(p);
+    XrAttribute *extern_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_EXTERN);
+    XrAttribute *native_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_NATIVE);
+    XrAttribute *c_export_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_C_EXPORT);
+    XrAttribute *dylib_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_DYLIB);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
     decl.decl_id = decl_id;
@@ -1267,8 +1279,31 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     decl.name_id = hash_name32(fn->name);
     decl.signature_key = hash_function_signature(fn);
     decl.source_span_id = (uint32_t) node->line;
+    if (native_attr)
+        decl.flags |= XG_DECL_NATIVE;
+    if (extern_attr)
+        decl.flags |= XG_DECL_EXTERN;
+    if (c_export_attr)
+        decl.flags |= XG_DECL_C_EXPORT;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
+    if (extern_attr && dylib_attr && dylib_attr->str_arg && dylib_attr->str_arg[0]) {
+        XgLinkDependencySummary dep;
+        size_t len = strlen(dylib_attr->str_arg);
+        if (len >= XG_LINK_DEP_NAME_MAX)
+            len = XG_LINK_DEP_NAME_MAX - 1;
+        memset(&dep, 0, sizeof(dep));
+        dep.link_id = (XgLinkId) (p->evidence->nlink_deps + 1);
+        dep.module_id = module_id;
+        dep.decl_id = decl_id;
+        dep.source_span_id = (uint32_t) node->line;
+        dep.kind = XG_LINK_DEP_EXTERN_DYLIB;
+        dep.name_id = hash_name32(dylib_attr->str_arg);
+        memcpy(dep.name, dylib_attr->str_arg, len);
+        dep.name[len] = '\0';
+        if (!xg_global_evidence_add_link_dependency(p->evidence, &dep))
+            return false;
+    }
     if (!producer_register_func(p, fn->name, func_id))
         return false;
     return producer_enqueue_body(p, func_id, XG_NO_ID, fn->body, NULL, fn);

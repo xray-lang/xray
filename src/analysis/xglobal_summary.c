@@ -65,6 +65,15 @@ static uint64_t hash_u64(uint64_t hash, uint64_t value) {
     return hash_mix(hash, &value, sizeof(value));
 }
 
+static size_t bounded_cstr_len(const char *s, size_t max_len) {
+    size_t len = 0;
+    if (!s)
+        return 0;
+    while (len < max_len && s[len])
+        len++;
+    return len;
+}
+
 static uint64_t hash_decl_summary(uint64_t hash, const XgDeclSummary *row) {
     if (!row)
         return hash_u32(hash, 0);
@@ -151,6 +160,22 @@ static uint64_t hash_callsite_summary(uint64_t hash, const XgCallsiteSummary *ro
     return hash_u32(hash, row->flags);
 }
 
+static uint64_t hash_link_dependency_summary(uint64_t hash, const XgLinkDependencySummary *row) {
+    size_t name_len;
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->link_id);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->decl_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->name_id);
+    hash = hash_u8(hash, row->kind);
+    hash = hash_u32(hash, row->flags);
+    name_len = bounded_cstr_len(row->name, sizeof(row->name));
+    hash = hash_u32(hash, (uint32_t) name_len);
+    return hash_mix(hash, row->name, name_len);
+}
+
 static uint64_t hash_build_key(uint64_t hash, const XgBuildKey *key) {
     if (!key)
         return hash_u32(hash, 0);
@@ -214,6 +239,17 @@ XR_FUNC const char *xg_callsite_kind_name(uint8_t kind) {
             return "native";
         case XG_CALL_EXTERN:
             return "extern";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const char *xg_link_dependency_kind_name(uint8_t kind) {
+    switch ((XgLinkDependencyKind) kind) {
+        case XG_LINK_DEP_EXTERN_DYLIB:
+            return "extern_dylib";
+        case XG_LINK_DEP_STDLIB_SYMBOL:
+            return "stdlib_symbol";
         default:
             return "unknown";
     }
@@ -353,6 +389,7 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->interface_impls);
     xr_free(evidence->bodies);
     xr_free(evidence->callsites);
+    xr_free(evidence->link_deps);
     memset(evidence, 0, sizeof(*evidence));
 }
 
@@ -386,6 +423,11 @@ XR_FUNC bool xg_global_evidence_reserve_bodies(XgGlobalEvidence *evidence, uint3
 XR_FUNC bool xg_global_evidence_reserve_callsites(XgGlobalEvidence *evidence, uint32_t capacity) {
     return evidence && reserve_array((void **) &evidence->callsites, &evidence->callsite_cap,
                                      capacity, sizeof(XgCallsiteSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_link_deps(XgGlobalEvidence *evidence, uint32_t capacity) {
+    return evidence && reserve_array((void **) &evidence->link_deps, &evidence->link_dep_cap,
+                                     capacity, sizeof(XgLinkDependencySummary));
 }
 
 XR_FUNC XgDeclSummary *xg_global_evidence_add_decl(XgGlobalEvidence *evidence,
@@ -454,6 +496,19 @@ XR_FUNC XgCallsiteSummary *xg_global_evidence_add_callsite(XgGlobalEvidence *evi
     return row;
 }
 
+XR_FUNC XgLinkDependencySummary *
+xg_global_evidence_add_link_dependency(XgGlobalEvidence *evidence,
+                                       const XgLinkDependencySummary *summary) {
+    XgLinkDependencySummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_link_deps(evidence, evidence->nlink_deps + 1))
+        return NULL;
+    row = &evidence->link_deps[evidence->nlink_deps++];
+    *row = *summary;
+    row->name[XG_LINK_DEP_NAME_MAX - 1] = '\0';
+    return row;
+}
+
 XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobalEvidence *evidence,
                                                                   XgCallsiteId callsite_id) {
     if (!evidence || callsite_id == XG_NO_ID)
@@ -476,6 +531,7 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_mix(hash, &evidence->ninterface_impls, sizeof(evidence->ninterface_impls));
     hash = hash_mix(hash, &evidence->nbodies, sizeof(evidence->nbodies));
     hash = hash_mix(hash, &evidence->ncallsites, sizeof(evidence->ncallsites));
+    hash = hash_mix(hash, &evidence->nlink_deps, sizeof(evidence->nlink_deps));
     for (uint32_t i = 0; i < evidence->ndecls; i++)
         hash = hash_decl_summary(hash, &evidence->decls[i]);
     for (uint32_t i = 0; i < evidence->nclasses; i++)
@@ -488,6 +544,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_body_summary(hash, &evidence->bodies[i]);
     for (uint32_t i = 0; i < evidence->ncallsites; i++)
         hash = hash_callsite_summary(hash, &evidence->callsites[i]);
+    for (uint32_t i = 0; i < evidence->nlink_deps; i++)
+        hash = hash_link_dependency_summary(hash, &evidence->link_deps[i]);
     return hash == 0 ? 1 : hash;
 }
 
@@ -511,9 +569,10 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             evidence->key.module_id, evidence->key.source_hash, evidence->key.compiler_semver_hash,
             evidence->key.profile_hash, evidence->key.imported_summary_hash);
     fprintf(out,
-            "counts decls=%u classes=%u methods=%u interface_impls=%u bodies=%u callsites=%u\n",
+            "counts decls=%u classes=%u methods=%u interface_impls=%u bodies=%u callsites=%u "
+            "link_deps=%u\n",
             evidence->ndecls, evidence->nclasses, evidence->nmethods, evidence->ninterface_impls,
-            evidence->nbodies, evidence->ncallsites);
+            evidence->nbodies, evidence->ncallsites, evidence->nlink_deps);
 
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
@@ -563,6 +622,14 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 c->receiver_static_class_id, c->receiver_static_interface_id, c->method_id,
                 c->method_name_id, c->method_signature_key, c->arg_type_key_start,
                 (unsigned) c->arg_count, c->flags);
+    }
+    for (uint32_t i = 0; i < evidence->nlink_deps; i++) {
+        const XgLinkDependencySummary *dep = &evidence->link_deps[i];
+        fprintf(out,
+                "link-dep %u id=%u module=%u decl=%u span=%u kind=%s name_id=%u name=%s "
+                "flags=0x%x\n",
+                i, dep->link_id, dep->module_id, dep->decl_id, dep->source_span_id,
+                xg_link_dependency_kind_name(dep->kind), dep->name_id, dep->name, dep->flags);
     }
 
     if (ferror(out)) {

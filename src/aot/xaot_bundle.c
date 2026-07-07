@@ -198,6 +198,11 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->static_data_plans = NULL;
     bundle->nstatic_data_plans = 0;
     bundle->static_data_plan_cap = 0;
+
+    xr_free(bundle->link_dependency_plans);
+    bundle->link_dependency_plans = NULL;
+    bundle->nlink_dependency_plans = 0;
+    bundle->link_dependency_plan_cap = 0;
 }
 
 static const char *arg_class_name(XaotArgClass cls) {
@@ -765,6 +770,39 @@ static bool xaot_bundle_add_static_data_plans(XaotBundle *bundle,
     return true;
 }
 
+static bool xaot_bundle_add_link_dependency_plan(XaotBundle *bundle,
+                                                 const XgLinkDependencySummary *summary) {
+    XaotLinkDependencyPlan *plan;
+    if (!bundle || !summary || summary->link_id == XG_NO_ID || summary->kind == 0 ||
+        !summary->name[0])
+        return true;
+    if (!reserve_plan_array((void **) &bundle->link_dependency_plans,
+                            &bundle->link_dependency_plan_cap, bundle->nlink_dependency_plans + 1,
+                            sizeof(XaotLinkDependencyPlan), 8))
+        return false;
+    plan = &bundle->link_dependency_plans[bundle->nlink_dependency_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->link_id = summary->link_id;
+    plan->kind = summary->kind;
+    plan->name_id = summary->name_id;
+    plan->evidence = XAOT_LINK_DEP_EV_GLOBAL_SUMMARY;
+    plan->unproven_reason = XAOT_LINK_DEP_UNPROVEN_NONE;
+    memcpy(plan->name, summary->name, sizeof(plan->name));
+    plan->name[XG_LINK_DEP_NAME_MAX - 1] = '\0';
+    return true;
+}
+
+static bool xaot_bundle_add_link_dependency_plans(XaotBundle *bundle,
+                                                  const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->nlink_deps; i++) {
+        if (!xaot_bundle_add_link_dependency_plan(bundle, &evidence->link_deps[i]))
+            return false;
+    }
+    return true;
+}
+
 static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
                                                       const XgGlobalEvidence *evidence) {
     if (!bundle || !evidence)
@@ -804,6 +842,10 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     }
     if (!xaot_bundle_add_static_data_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT static data plan";
+        return false;
+    }
+    if (!xaot_bundle_add_link_dependency_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT link dependency plan";
         return false;
     }
     return true;
@@ -1137,6 +1179,17 @@ XR_FUNC const XaotStaticDataPlan *xaot_bundle_find_static_data_plan(const XaotBu
     for (uint32_t i = 0; i < bundle->nstatic_data_plans; i++) {
         if (bundle->static_data_plans[i].static_data == static_data)
             return &bundle->static_data_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotLinkDependencyPlan *
+xaot_bundle_find_link_dependency_plan(const XaotBundle *bundle, XgLinkId link_id) {
+    if (!bundle || link_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nlink_dependency_plans; i++) {
+        if (bundle->link_dependency_plans[i].link_id == link_id)
+            return &bundle->link_dependency_plans[i];
     }
     return NULL;
 }
@@ -2458,13 +2511,14 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         const XgGlobalEvidence *ev = bundle->global_evidence_plan.evidence;
         fprintf(out,
                 "global-evidence profile=%s hash=%016" PRIx64
-                " decls=%u classes=%u methods=%u interface_impls=%u bodies=%u callsites=%u\n",
+                " decls=%u classes=%u methods=%u interface_impls=%u bodies=%u callsites=%u "
+                "link_deps=%u\n",
                 xg_build_profile_name(bundle->global_evidence_plan.profile),
                 bundle->global_evidence_plan.evidence_hash, ev->ndecls, ev->nclasses, ev->nmethods,
-                ev->ninterface_impls, ev->nbodies, ev->ncallsites);
+                ev->ninterface_impls, ev->nbodies, ev->ncallsites, ev->nlink_deps);
     } else {
         fprintf(out, "global-evidence profile=none hash=0000000000000000 decls=0 classes=0 "
-                     "methods=0 interface_impls=0 bodies=0 callsites=0\n");
+                     "methods=0 interface_impls=0 bodies=0 callsites=0 link_deps=0\n");
     }
     for (mi = 0; mi < bundle->nmodules; mi++) {
         const XiModule *mod = bundle->modules ? bundle->modules[mi] : NULL;
@@ -2556,6 +2610,14 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 xg_static_data_name(sp->static_data), sp->body_count,
                 static_data_action_name(sp->action), sp->evidence,
                 static_data_unproven_reason_name(sp->unproven_reason));
+    }
+
+    for (uint32_t li = 0; li < bundle->nlink_dependency_plans; li++) {
+        const XaotLinkDependencyPlan *lp = &bundle->link_dependency_plans[li];
+        fprintf(out,
+                "link-dependency %u id=%u kind=%s name_id=%u name=%s evidence=0x%x reason=%u\n", li,
+                lp->link_id, xg_link_dependency_kind_name(lp->kind), lp->name_id, lp->name,
+                lp->evidence, (unsigned) lp->unproven_reason);
     }
 
     for (fi = 0; fi < bundle->nfunc_plans; fi++) {

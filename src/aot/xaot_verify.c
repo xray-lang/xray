@@ -1025,6 +1025,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_metadata_plans = 0;
     uint32_t expected_capability_plans = 0;
     uint32_t expected_static_data_plans = 0;
+    uint32_t expected_link_dependency_plans = 0;
 
     if (!bundle)
         return set_error(errbuf, errbuf_len, "AOT global evidence verifier has no bundle");
@@ -1221,6 +1222,25 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->nstatic_data_plans != expected_static_data_plans)
         return set_error(errbuf, errbuf_len, "AOT static-data plan count mismatches evidence");
+
+    for (uint32_t li = 0; li < ev->nlink_deps; li++) {
+        const XgLinkDependencySummary *dep = &ev->link_deps[li];
+        const XaotLinkDependencyPlan *plan;
+        if (dep->link_id == XG_NO_ID || dep->kind == 0 || !dep->name[0])
+            return set_error(errbuf, errbuf_len, "AOT link dependency evidence is incomplete");
+        expected_link_dependency_plans++;
+        plan = xaot_bundle_find_link_dependency_plan(bundle, dep->link_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT link dependency has no plan");
+        if (plan->kind != dep->kind || plan->name_id != dep->name_id ||
+            strcmp(plan->name, dep->name) != 0)
+            return set_error(errbuf, errbuf_len, "AOT link dependency plan mismatches evidence");
+        if (plan->evidence != XAOT_LINK_DEP_EV_GLOBAL_SUMMARY ||
+            plan->unproven_reason != XAOT_LINK_DEP_UNPROVEN_NONE)
+            return set_error(errbuf, errbuf_len, "AOT link dependency plan lacks evidence");
+    }
+    if (bundle->nlink_dependency_plans != expected_link_dependency_plans)
+        return set_error(errbuf, errbuf_len, "AOT link dependency plan count mismatches evidence");
 
     return true;
 }

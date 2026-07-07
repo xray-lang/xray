@@ -512,6 +512,24 @@ typedef struct XaotStaticDataPlan {
     uint8_t unproven_reason;
 } XaotStaticDataPlan;
 
+enum {
+    XAOT_LINK_DEP_EV_GLOBAL_SUMMARY = 1u << 0,
+};
+
+enum {
+    XAOT_LINK_DEP_UNPROVEN_NONE = 0,
+    XAOT_LINK_DEP_UNPROVEN_NO_SUMMARY = 1,
+};
+
+typedef struct XaotLinkDependencyPlan {
+    XgLinkId link_id;
+    uint8_t kind;
+    uint32_t name_id;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+    char name[XG_LINK_DEP_NAME_MAX];
+} XaotLinkDependencyPlan;
+
 typedef struct XaotPrepareStats {
     uint32_t functions_total;
     uint32_t functions_native_abi;
@@ -606,6 +624,9 @@ typedef struct XaotBundle {
     XaotStaticDataPlan *static_data_plans;
     uint32_t nstatic_data_plans;
     uint32_t static_data_plan_cap;
+    XaotLinkDependencyPlan *link_dependency_plans;
+    uint32_t nlink_dependency_plans;
+    uint32_t link_dependency_plan_cap;
     XaotBoundaryStep *boundary_steps;
     uint32_t nboundary_steps;
     uint32_t boundary_step_cap;
@@ -651,6 +672,8 @@ XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBun
 XR_FUNC bool xaot_bundle_sync_transfer_capability_plans(XaotBundle *bundle);
 XR_FUNC const XaotStaticDataPlan *xaot_bundle_find_static_data_plan(const XaotBundle *bundle,
                                                                     uint32_t static_data);
+XR_FUNC const XaotLinkDependencyPlan *
+xaot_bundle_find_link_dependency_plan(const XaotBundle *bundle, XgLinkId link_id);
 XR_FUNC XaotFuncPlan *xaot_bundle_add_func_plan(XaotBundle *bundle, XiFunc *func,
                                                 uint32_t module_index, uint16_t depth);
 XR_FUNC const XaotFuncPlan *xaot_bundle_find_func_plan(const XaotBundle *bundle,
