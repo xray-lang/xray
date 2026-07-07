@@ -1,0 +1,11 @@
+import sys
+
+fn joinInDestructure() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    var (joined,) = (t.join(),)
+    print(joined)
+}
+
+joinInDestructure()
