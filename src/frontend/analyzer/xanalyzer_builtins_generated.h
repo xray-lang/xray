@@ -190,10 +190,6 @@ static const XaBuiltinMember g_gen_http_functions[] = {
     {"sendResponse", "(fd: int, body: string, status?: int): bool", "Send HTTP response on fd", true, false, false},
     {"download", "(url: string, path: string): DownloadResult", "Download file from URL", true, false, false},
     {"getContentLength", "(url: string): int", "Get content length of URL", true, false, false},
-    {"formDataNew", "(maxTotalSize?: int, maxFileSize?: int): bool", "Create new multipart form data context", true, false, false},
-    {"formDataAppend", "(name: string, value: string): ()", "Append field to current form data", true, false, false},
-    {"formDataAppendFile", "(name: string, path: string): bool", "Append file to current form data", true, false, false},
-    {"formDataPost", "(url: string): Json", "POST current multipart form data", true, false, false},
     {"setProxy", "(url: string): ()", "Set HTTP proxy", true, false, false},
     {"clearProxy", "(): ()", "Clear HTTP proxy", true, false, false},
     {"h2Get", "(url: string, options?: Json): Json", "HTTP/2 GET request", true, false, false},
@@ -204,7 +200,7 @@ static const XaBuiltinMember g_gen_http_functions[] = {
     {"h2Stop", "(): ()", "Stop HTTP/2 server", true, false, false},
     {"h2Push", "(path: string, contentType: string, data: string): bool", "Push HTTP/2 response data", true, false, false},
 };
-#define GEN_HTTP_FUNCTION_COUNT 33
+#define GEN_HTTP_FUNCTION_COUNT 29
 
 // io.FileStat handle fields
 static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {

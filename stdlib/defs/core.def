@@ -3461,50 +3461,6 @@ module http {
     layer: "runtime"
   }
 
-  fn formDataNew {
-    signature: "(maxTotalSize?: int, maxFileSize?: int): bool"
-    doc: "Create new multipart form data context"
-    vm: "http_form_data_new"
-    argc: 2
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn formDataAppend {
-    signature: "(name: string, value: string): ()"
-    doc: "Append field to current form data"
-    vm: "http_form_data_append"
-    argc: 2
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn formDataAppendFile {
-    signature: "(name: string, path: string): bool"
-    doc: "Append file to current form data"
-    vm: "http_form_data_append_file"
-    argc: 2
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn formDataPost {
-    signature: "(url: string): Json"
-    doc: "POST current multipart form data"
-    vm: "http_form_data_post"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn setProxy {
     signature: "(url: string): ()"
     doc: "Set HTTP proxy"

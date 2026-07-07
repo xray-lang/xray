@@ -1,0 +1,56 @@
+// HTTP multipart/form-data pure-Xray builder.
+
+import http
+import { formData } from http
+import io
+
+@test
+fn test_formdata_text_build() {
+    var form = formData()
+    assert(form.append("name", "Xray"))
+
+    var built = form.build()
+    assert(built.contentType.startsWith("multipart/form-data; boundary=----XrayFormBoundary"))
+    assert(built.body.includes("Content-Disposition: form-data; name=\"name\"\r\n\r\n"))
+    assert(built.body.includes("\r\n\r\nXray\r\n"))
+    assert(built.body.endsWith("--\r\n"))
+}
+
+@test
+fn test_formdata_file_build() {
+    var dir = io.tempDir()!
+    var path = dir + "/upload.txt"
+    assert(io.writeFile(path, "file-data"))
+
+    var form = http.formData()
+    assert(form.appendFile("upload", path))
+
+    var built = form.build()
+    assert(built.body.includes("name=\"upload\"; filename=\"upload.txt\""))
+    assert(built.body.includes("Content-Type: text/plain\r\n\r\n"))
+    assert(built.body.includes("\r\n\r\nfile-data\r\n"))
+}
+
+@test
+fn test_formdata_limits() {
+    var limited = formData(3, 3)
+    assert(!limited.append("field", "abcd"))
+    assert_eq(limited.totalSize, 0)
+
+    var unlimited = formData(0, 0)
+    assert(unlimited.append("field", "abcd"))
+    assert_eq(unlimited.totalSize, 4)
+}
+
+@test
+fn test_formdata_file_limit() {
+    var dir = io.tempDir()!
+    var path = dir + "/big.bin"
+    assert(io.writeFile(path, "abcd"))
+
+    var limited = formData(0, 3)
+    assert(!limited.appendFile("file", path))
+    assert_eq(limited.totalSize, 0)
+}
+
+print("All http formdata pure tests passed")

@@ -330,81 +330,211 @@ static const XmcpGeneratedStdlibSymbol _symbols_crypto[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
     {
         .name = "parse",
-        .signature = "(data: string, options?: Json): Array<Array<string>> | Array<Json>",
-        .summary = "Parse CSV string",
+        .signature = "(data: string, options: unknown = null): Array<Json>",
+        .summary = "",
     },
     {
         .name = "parseAuto",
-        .signature = "(data: string): Array<Array<string>>",
-        .summary = "Auto-detect delimiter and parse",
+        .signature = "(data: string, options: unknown = null): Array<Json>",
+        .summary = "",
     },
     {
         .name = "parseDetailed",
-        .signature = "(data: string, options?: Json): Json",
-        .summary = "Parse CSV with headers",
+        .signature = "(data: string, options: unknown = null): Json",
+        .summary = "",
     },
     {
         .name = "parseFile",
-        .signature = "(path: string, options?: Json): Array<Array<string>>",
-        .summary = "Parse CSV file",
+        .signature = "(path: string, options: unknown = null): Array<Json>",
+        .summary = "",
     },
     {
         .name = "parseTsv",
-        .signature = "(data: string): Array<Array<string>>",
-        .summary = "Parse TSV string",
+        .signature = "(data: string, options: unknown = null): Array<Json>",
+        .summary = "",
     },
     {
         .name = "stringify",
-        .signature = "(data: Array<Array<string>>, options?: Json): string",
-        .summary = "Convert to CSV string",
+        .signature = "(data: unknown, options: unknown = null): string",
+        .summary = "",
     },
     {
         .name = "writeFile",
-        .signature = "(path: string, data: Array<Array<string>>, options?: Json): bool",
-        .summary = "Write CSV file",
+        .signature = "(path: string, data: unknown, options: unknown = null): bool",
+        .summary = "",
     },
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
     {
+        .name = "DateTime",
+        .signature = "DateTime",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.add",
+        .signature = "(amount: int, unit: string): DateTime",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.constructor",
+        .signature = "(timestamp: int, millisecond: int = 0, tzOffset: int = 0, isUtc: bool = true): ()",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.day",
+        .signature = ": int { fn() { return this._day } }",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.daysInMonth",
+        .signature = "(): int",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.diff",
+        .signature = "(other: DateTime, unit: string = \"seconds\"): int",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.equals",
+        .signature = "(other: DateTime): bool",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.format",
+        .signature = "(pattern: string = \"YYYY-MM-DD HH:mm:ss\"): string",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.hour",
+        .signature = ": int { fn() { return this._hour } }",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.isAfter",
+        .signature = "(other: DateTime): bool",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.isBefore",
+        .signature = "(other: DateTime): bool",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.isLeapYear",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.isUtc",
+        .signature = ": bool { fn() { return this._isUtc } }",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.millisecond",
+        .signature = ": int { fn() { return this._millisecond } }",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.minute",
+        .signature = ": int { fn() { return this._minute } }",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.month",
+        .signature = ": int { fn() { return this._month } }",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.second",
+        .signature = ": int { fn() { return this._second } }",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.timestamp",
+        .signature = ": int { fn() { return this._timestamp } }",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.toISOString",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.toLocal",
+        .signature = "(): DateTime",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.toString",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.toUTC",
+        .signature = "(): DateTime",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.tzOffset",
+        .signature = ": int { fn() { return this._tzOffset } }",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.weekday",
+        .signature = ": int { fn() { return this._weekday } }",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.year",
+        .signature = ": int { fn() { return this._year } }",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.yearday",
+        .signature = ": int { fn() { return this._yearday } }",
+        .summary = "",
+    },
+    {
         .name = "create",
-        .signature = "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime",
-        .summary = "Create local datetime",
+        .signature = "(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0, second: int = 0): DateTime",
+        .summary = "",
     },
     {
         .name = "createUTC",
-        .signature = "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime",
-        .summary = "Create UTC datetime",
+        .signature = "(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0, second: int = 0): DateTime",
+        .summary = "",
     },
     {
         .name = "fromTimestamp",
         .signature = "(ts: int): DateTime",
-        .summary = "Create datetime from Unix timestamp (seconds)",
+        .summary = "",
     },
     {
         .name = "fromTimestampMs",
         .signature = "(ts: int): DateTime",
-        .summary = "Create datetime from Unix timestamp (milliseconds)",
+        .summary = "",
     },
     {
         .name = "now",
         .signature = "(): DateTime",
-        .summary = "Get current local datetime",
+        .summary = "",
     },
     {
         .name = "offset",
         .signature = "(): int",
-        .summary = "Get UTC offset in minutes",
+        .summary = "",
     },
     {
         .name = "parse",
-        .signature = "(s: string, format?: string): DateTime?",
-        .summary = "Parse datetime string",
+        .signature = "(s: string, format: string = \"ISO8601\"): DateTime?",
+        .summary = "",
     },
     {
         .name = "utc",
         .signature = "(): DateTime",
-        .summary = "Get current UTC datetime",
+        .summary = "",
     },
 };
 
@@ -498,6 +628,56 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Handle field",
     },
     {
+        .name = "FormData",
+        .signature = "FormData",
+        .summary = "",
+    },
+    {
+        .name = "FormData.append",
+        .signature = "(name: string, value: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "FormData.appendFile",
+        .signature = "(name: string, path: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "FormData.boundary",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "FormData.build",
+        .signature = "(): MultipartBody",
+        .summary = "",
+    },
+    {
+        .name = "FormData.constructor",
+        .signature = "(maxTotalSize: int, maxFileSize: int): ()",
+        .summary = "",
+    },
+    {
+        .name = "FormData.fields",
+        .signature = ": Array<_FormField>",
+        .summary = "",
+    },
+    {
+        .name = "FormData.maxFileSize",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "FormData.maxTotalSize",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "FormData.totalSize",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
         .name = "HttpRequest",
         .signature = "HttpRequest",
         .summary = "Handle type",
@@ -578,6 +758,26 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Handle field",
     },
     {
+        .name = "MultipartBody",
+        .signature = "MultipartBody",
+        .summary = "",
+    },
+    {
+        .name = "MultipartBody.body",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "MultipartBody.constructor",
+        .signature = "(body: string, contentType: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "MultipartBody.contentType",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
         .name = "clearProxy",
         .signature = "(): ()",
         .summary = "Clear HTTP proxy",
@@ -603,24 +803,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Download file from URL",
     },
     {
-        .name = "formDataAppend",
-        .signature = "(name: string, value: string): ()",
-        .summary = "Append field to current form data",
-    },
-    {
-        .name = "formDataAppendFile",
-        .signature = "(name: string, path: string): bool",
-        .summary = "Append file to current form data",
-    },
-    {
-        .name = "formDataNew",
-        .signature = "(maxTotalSize?: int, maxFileSize?: int): bool",
-        .summary = "Create new multipart form data context",
-    },
-    {
-        .name = "formDataPost",
-        .signature = "(url: string): Json",
-        .summary = "POST current multipart form data",
+        .name = "formData",
+        .signature = "(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData",
+        .summary = "",
     },
     {
         .name = "get",
@@ -699,8 +884,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "response",
-        .signature = "(status: int, body?: string | Json): string",
-        .summary = "Format an HTTP response string",
+        .signature = "(status: int, body: unknown = null): string",
+        .summary = "",
     },
     {
         .name = "route",
@@ -740,12 +925,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "urlDecode",
         .signature = "(s: string): string",
-        .summary = "URL-decode a string",
+        .summary = "",
     },
     {
         .name = "urlEncode",
         .signature = "(s: string): string",
-        .summary = "URL-encode a string",
+        .summary = "",
     },
     {
         .name = "ws",
@@ -1089,92 +1274,162 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     {
         .name = "DEBUG",
         .signature = ": int",
-        .summary = "Debug log level",
+        .summary = "",
     },
     {
         .name = "ERROR",
         .signature = ": int",
-        .summary = "Error log level",
+        .summary = "",
     },
     {
         .name = "FATAL",
         .signature = ": int",
-        .summary = "Fatal log level",
+        .summary = "",
     },
     {
         .name = "INFO",
         .signature = ": int",
-        .summary = "Info log level",
+        .summary = "",
+    },
+    {
+        .name = "Logger",
+        .signature = "Logger",
+        .summary = "",
+    },
+    {
+        .name = "Logger.asyncMode",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "Logger.child",
+        .signature = "(...fields: unknown): Logger",
+        .summary = "",
+    },
+    {
+        .name = "Logger.debug",
+        .signature = "(...args: unknown): ()",
+        .summary = "",
+    },
+    {
+        .name = "Logger.error",
+        .signature = "(...args: unknown): ()",
+        .summary = "",
+    },
+    {
+        .name = "Logger.fatal",
+        .signature = "(...args: unknown): ()",
+        .summary = "",
+    },
+    {
+        .name = "Logger.format",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "Logger.info",
+        .signature = "(...args: unknown): ()",
+        .summary = "",
+    },
+    {
+        .name = "Logger.jsonContext",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "Logger.level",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "Logger.output",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "Logger.source",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "Logger.textContext",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "Logger.warn",
+        .signature = "(...args: unknown): ()",
+        .summary = "",
     },
     {
         .name = "WARN",
         .signature = ": int",
-        .summary = "Warning log level",
+        .summary = "",
     },
     {
         .name = "child",
         .signature = "(...fields: unknown): Logger",
-        .summary = "Create child logger",
+        .summary = "",
     },
     {
         .name = "debug",
         .signature = "(...args: unknown): ()",
-        .summary = "Log debug message",
+        .summary = "",
     },
     {
         .name = "enableAsync",
-        .signature = "(enabled: bool): ()",
-        .summary = "Enable async logging",
+        .signature = "(enabled: bool = true): ()",
+        .summary = "",
     },
     {
         .name = "enableSource",
-        .signature = "(enabled: bool): ()",
-        .summary = "Enable source location in logs",
+        .signature = "(enabled: bool = true): ()",
+        .summary = "",
     },
     {
         .name = "error",
         .signature = "(...args: unknown): ()",
-        .summary = "Log error message",
+        .summary = "",
     },
     {
         .name = "fatal",
         .signature = "(...args: unknown): ()",
-        .summary = "Log fatal message",
+        .summary = "",
     },
     {
         .name = "flush",
         .signature = "(): ()",
-        .summary = "Flush log buffer",
+        .summary = "",
     },
     {
         .name = "info",
         .signature = "(...args: unknown): ()",
-        .summary = "Log info message",
+        .summary = "",
     },
     {
         .name = "isEnabled",
         .signature = "(level: int): bool",
-        .summary = "Check if log level enabled",
+        .summary = "",
     },
     {
         .name = "setFormat",
         .signature = "(format: string): ()",
-        .summary = "Set log format",
+        .summary = "",
     },
     {
         .name = "setLevel",
-        .signature = "(level: int): ()",
-        .summary = "Set log level",
+        .signature = "(level: unknown): ()",
+        .summary = "",
     },
     {
         .name = "setOutput",
         .signature = "(path: string): ()",
-        .summary = "Set log output file",
+        .summary = "",
     },
     {
         .name = "warn",
         .signature = "(...args: unknown): ()",
-        .summary = "Log warning message",
+        .summary = "",
     },
 };
 
@@ -2216,6 +2471,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
+        .name = "Mutex.tryLock",
+        .signature = "(body: (T): U) -> U?",
+        .summary = "",
+    },
+    {
         .name = "Mutex.value",
         .signature = ": T",
         .summary = "",
@@ -2299,6 +2559,81 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "Create an OS-domain read-write lock",
     },
     {
+        .name = "Pipe",
+        .signature = "Pipe",
+        .summary = "",
+    },
+    {
+        .name = "Pipe.close",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "Pipe.closeRead",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "Pipe.closeWrite",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "Pipe.constructor",
+        .signature = "(readHandle: int, writeHandle: int): ()",
+        .summary = "",
+    },
+    {
+        .name = "Pipe.open",
+        .signature = "(): Pipe?",
+        .summary = "",
+    },
+    {
+        .name = "Pipe.read",
+        .signature = "(maxBytes: int = 8192): Bytes?",
+        .summary = "",
+    },
+    {
+        .name = "Pipe.write",
+        .signature = "(data: Bytes): int",
+        .summary = "",
+    },
+    {
+        .name = "Process",
+        .signature = "Process",
+        .summary = "",
+    },
+    {
+        .name = "Process.constructor",
+        .signature = "(id: int): ()",
+        .summary = "",
+    },
+    {
+        .name = "Process.id",
+        .signature = ": int { fn() { return this._id } }",
+        .summary = "",
+    },
+    {
+        .name = "Process.kill",
+        .signature = "(signal: Signal = Signal.TERM): bool",
+        .summary = "",
+    },
+    {
+        .name = "Process.spawn",
+        .signature = "(program: string, args: Array<string> = []): Process?",
+        .summary = "",
+    },
+    {
+        .name = "Process.tryWait",
+        .signature = "(): int?",
+        .summary = "",
+    },
+    {
+        .name = "Process.wait",
+        .signature = "(): int",
+        .summary = "",
+    },
+    {
         .name = "cpuCount",
         .signature = "(): int",
         .summary = "Return the number of CPUs available to OS-thread work",
@@ -2325,6 +2660,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_time[] = {
         .name = "clock",
         .signature = "(): int",
         .summary = "CPU clock time in milliseconds",
+    },
+    {
+        .name = "localOffset",
+        .signature = "(): int",
+        .summary = "Local UTC offset in minutes for the current wall time",
+    },
+    {
+        .name = "localOffsetAt",
+        .signature = "(timestamp: int): int",
+        .summary = "Local UTC offset in minutes at a Unix timestamp",
     },
     {
         .name = "micros",
@@ -2357,27 +2702,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     {
         .name = "parse",
         .signature = "(data: string): Json",
-        .summary = "Parse TOML string",
+        .summary = "",
     },
     {
         .name = "parseFile",
         .signature = "(path: string): Json",
-        .summary = "Parse TOML file",
+        .summary = "",
     },
     {
         .name = "parseStrict",
         .signature = "(data: string): Json",
-        .summary = "Parse TOML strictly",
+        .summary = "",
     },
     {
         .name = "stringify",
-        .signature = "(value: Json): string",
-        .summary = "Convert to TOML string",
+        .signature = "(value: unknown): string",
+        .summary = "",
     },
     {
         .name = "writeFile",
-        .signature = "(path: string, value: Json): bool",
-        .summary = "Write TOML file",
+        .signature = "(path: string, value: unknown): bool",
+        .summary = "",
     },
 };
 
@@ -2606,85 +2951,85 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     {
         .name = "cdata",
         .signature = "(content: string): Json",
-        .summary = "Create XML CDATA node",
+        .summary = "",
     },
     {
         .name = "comment",
         .signature = "(content: string): Json",
-        .summary = "Create XML comment node",
+        .summary = "",
     },
     {
         .name = "document",
         .signature = "(): Json",
-        .summary = "Create XML document node",
+        .summary = "",
     },
     {
         .name = "element",
-        .signature = "(name: string, attrs?: Json): Json",
-        .summary = "Create XML element node",
+        .signature = "(tag: string, attrsValue: unknown = null): Json",
+        .summary = "",
     },
     {
         .name = "parse",
-        .signature = "(data: string, options?: Json): Json",
-        .summary = "Parse XML string",
+        .signature = "(data: string, options: unknown = null): Json",
+        .summary = "",
     },
     {
         .name = "parseDetailed",
-        .signature = "(data: string): Json",
-        .summary = "Parse XML with details",
+        .signature = "(data: string, options: unknown = null): Json",
+        .summary = "",
     },
     {
         .name = "parseFile",
-        .signature = "(path: string): Json",
-        .summary = "Parse XML file",
+        .signature = "(path: string, options: unknown = null): Json",
+        .summary = "",
     },
     {
         .name = "stringify",
-        .signature = "(node: Json, options?: Json): string",
-        .summary = "Convert to XML string",
+        .signature = "(node: unknown, options: unknown = null): string",
+        .summary = "",
     },
     {
         .name = "text",
         .signature = "(content: string): Json",
-        .summary = "Create XML text node",
+        .summary = "",
     },
     {
         .name = "writeFile",
-        .signature = "(path: string, node: Json): bool",
-        .summary = "Write XML file",
+        .signature = "(path: string, node: unknown, options: unknown = null): bool",
+        .summary = "",
     },
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     {
         .name = "parse",
-        .signature = "(data: string): Json",
-        .summary = "Parse YAML string",
+        .signature = "(data: string, options: unknown = null): Json",
+        .summary = "",
     },
     {
         .name = "parseAll",
         .signature = "(data: string): Array<Json>",
-        .summary = "Parse all YAML documents",
+        .summary = "",
     },
     {
         .name = "parseFile",
         .signature = "(path: string): Json",
-        .summary = "Parse YAML file",
+        .summary = "",
     },
     {
         .name = "parseStrict",
         .signature = "(data: string): Json",
-        .summary = "Parse YAML strictly",
+        .summary = "",
     },
     {
         .name = "stringify",
-        .signature = "(value: Json): string",
-        .summary = "Convert to YAML string",
+        .signature = "(value: unknown, options: unknown = null): string",
+        .summary = "",
     },
     {
         .name = "writeFile",
-        .signature = "(path: string, value: Json): bool",
-        .summary = "Write YAML file",
+        .signature = "(path: string, value: unknown): bool",
+        .summary = "",
     },
 };
 
@@ -4236,13 +4581,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `csv.parse` | `(data: string, options?: Json): Array<Array<string>> \\| Array<Json>` | Parse CSV string |\n"
-            "| `csv.parseAuto` | `(data: string): Array<Array<string>>` | Auto-detect delimiter and parse |\n"
-            "| `csv.parseDetailed` | `(data: string, options?: Json): Json` | Parse CSV with headers |\n"
-            "| `csv.parseFile` | `(path: string, options?: Json): Array<Array<string>>` | Parse CSV file |\n"
-            "| `csv.parseTsv` | `(data: string): Array<Array<string>>` | Parse TSV string |\n"
-            "| `csv.stringify` | `(data: Array<Array<string>>, options?: Json): string` | Convert to CSV string |\n"
-            "| `csv.writeFile` | `(path: string, data: Array<Array<string>>, options?: Json): bool` | Write CSV file |\n"
+            "| `csv.parse` | `(data: string, options: unknown = null): Array<Json>` |  |\n"
+            "| `csv.parseAuto` | `(data: string, options: unknown = null): Array<Json>` |  |\n"
+            "| `csv.parseDetailed` | `(data: string, options: unknown = null): Json` |  |\n"
+            "| `csv.parseFile` | `(path: string, options: unknown = null): Array<Json>` |  |\n"
+            "| `csv.parseTsv` | `(data: string, options: unknown = null): Array<Json>` |  |\n"
+            "| `csv.stringify` | `(data: unknown, options: unknown = null): string` |  |\n"
+            "| `csv.writeFile` | `(path: string, data: unknown, options: unknown = null): bool` |  |\n"
             "",
         .symbols = _symbols_csv,
         .symbol_count = (int)(sizeof(_symbols_csv) / sizeof(_symbols_csv[0])),
@@ -4261,14 +4606,40 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `datetime.create` | `(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime` | Create local datetime |\n"
-            "| `datetime.createUTC` | `(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime` | Create UTC datetime |\n"
-            "| `datetime.fromTimestamp` | `(ts: int): DateTime` | Create datetime from Unix timestamp (seconds) |\n"
-            "| `datetime.fromTimestampMs` | `(ts: int): DateTime` | Create datetime from Unix timestamp (milliseconds) |\n"
-            "| `datetime.now` | `(): DateTime` | Get current local datetime |\n"
-            "| `datetime.offset` | `(): int` | Get UTC offset in minutes |\n"
-            "| `datetime.parse` | `(s: string, format?: string): DateTime?` | Parse datetime string |\n"
-            "| `datetime.utc` | `(): DateTime` | Get current UTC datetime |\n"
+            "| `DateTime` | `DateTime` |  |\n"
+            "| `DateTime.add` | `(amount: int, unit: string): DateTime` |  |\n"
+            "| `DateTime.constructor` | `(timestamp: int, millisecond: int = 0, tzOffset: int = 0, isUtc: bool = true): ()` |  |\n"
+            "| `DateTime.day` | `: int { fn() { return this._day } }` |  |\n"
+            "| `DateTime.daysInMonth` | `(): int` |  |\n"
+            "| `DateTime.diff` | `(other: DateTime, unit: string = \"seconds\"): int` |  |\n"
+            "| `DateTime.equals` | `(other: DateTime): bool` |  |\n"
+            "| `DateTime.format` | `(pattern: string = \"YYYY-MM-DD HH:mm:ss\"): string` |  |\n"
+            "| `DateTime.hour` | `: int { fn() { return this._hour } }` |  |\n"
+            "| `DateTime.isAfter` | `(other: DateTime): bool` |  |\n"
+            "| `DateTime.isBefore` | `(other: DateTime): bool` |  |\n"
+            "| `DateTime.isLeapYear` | `(): bool` |  |\n"
+            "| `DateTime.isUtc` | `: bool { fn() { return this._isUtc } }` |  |\n"
+            "| `DateTime.millisecond` | `: int { fn() { return this._millisecond } }` |  |\n"
+            "| `DateTime.minute` | `: int { fn() { return this._minute } }` |  |\n"
+            "| `DateTime.month` | `: int { fn() { return this._month } }` |  |\n"
+            "| `DateTime.second` | `: int { fn() { return this._second } }` |  |\n"
+            "| `DateTime.timestamp` | `: int { fn() { return this._timestamp } }` |  |\n"
+            "| `DateTime.toISOString` | `(): string` |  |\n"
+            "| `DateTime.toLocal` | `(): DateTime` |  |\n"
+            "| `DateTime.toString` | `(): string` |  |\n"
+            "| `DateTime.toUTC` | `(): DateTime` |  |\n"
+            "| `DateTime.tzOffset` | `: int { fn() { return this._tzOffset } }` |  |\n"
+            "| `DateTime.weekday` | `: int { fn() { return this._weekday } }` |  |\n"
+            "| `DateTime.year` | `: int { fn() { return this._year } }` |  |\n"
+            "| `DateTime.yearday` | `: int { fn() { return this._yearday } }` |  |\n"
+            "| `datetime.create` | `(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0, second: int = 0): DateTime` |  |\n"
+            "| `datetime.createUTC` | `(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0, second: int = 0): DateTime` |  |\n"
+            "| `datetime.fromTimestamp` | `(ts: int): DateTime` |  |\n"
+            "| `datetime.fromTimestampMs` | `(ts: int): DateTime` |  |\n"
+            "| `datetime.now` | `(): DateTime` |  |\n"
+            "| `datetime.offset` | `(): int` |  |\n"
+            "| `datetime.parse` | `(s: string, format: string = \"ISO8601\"): DateTime?` |  |\n"
+            "| `datetime.utc` | `(): DateTime` |  |\n"
             "",
         .symbols = _symbols_datetime,
         .symbol_count = (int)(sizeof(_symbols_datetime) / sizeof(_symbols_datetime[0])),
@@ -4322,6 +4693,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.DownloadResult.error` | `const string` | Handle field |\n"
             "| `http.DownloadResult.status` | `const int` | Handle field |\n"
             "| `http.DownloadResult.total` | `const int` | Handle field |\n"
+            "| `FormData` | `FormData` |  |\n"
+            "| `FormData.append` | `(name: string, value: string): bool` |  |\n"
+            "| `FormData.appendFile` | `(name: string, path: string): bool` |  |\n"
+            "| `FormData.boundary` | `: string` |  |\n"
+            "| `FormData.build` | `(): MultipartBody` |  |\n"
+            "| `FormData.constructor` | `(maxTotalSize: int, maxFileSize: int): ()` |  |\n"
+            "| `FormData.fields` | `: Array<_FormField>` |  |\n"
+            "| `FormData.maxFileSize` | `: int` |  |\n"
+            "| `FormData.maxTotalSize` | `: int` |  |\n"
+            "| `FormData.totalSize` | `: int` |  |\n"
             "| `http.HttpRequest` | `HttpRequest` | Handle type |\n"
             "| `http.HttpRequest.body` | `const string` | Handle field |\n"
             "| `http.HttpRequest.contentLength` | `const int` | Handle field |\n"
@@ -4338,15 +4719,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.HttpResponse.ok` | `const bool` | Handle field |\n"
             "| `http.HttpResponse.status` | `const int` | Handle field |\n"
             "| `http.HttpResponse.statusText` | `const string` | Handle field |\n"
+            "| `MultipartBody` | `MultipartBody` |  |\n"
+            "| `MultipartBody.body` | `: string` |  |\n"
+            "| `MultipartBody.constructor` | `(body: string, contentType: string): ()` |  |\n"
+            "| `MultipartBody.contentType` | `: string` |  |\n"
             "| `http.clearProxy` | `(): ()` | Clear HTTP proxy |\n"
             "| `http.closeStream` | `(resp: Json): ()` | Close a streaming HTTP response |\n"
             "| `http.config` | `(opts: Json): ()` | Configure HTTP server limits and timeouts |\n"
             "| `http.delete` | `(url: string): HttpResponse` | HTTP DELETE request |\n"
             "| `http.download` | `(url: string, path: string): DownloadResult` | Download file from URL |\n"
-            "| `http.formDataAppend` | `(name: string, value: string): ()` | Append field to current form data |\n"
-            "| `http.formDataAppendFile` | `(name: string, path: string): bool` | Append file to current form data |\n"
-            "| `http.formDataNew` | `(maxTotalSize?: int, maxFileSize?: int): bool` | Create new multipart form data context |\n"
-            "| `http.formDataPost` | `(url: string): Json` | POST current multipart form data |\n"
+            "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
             "| `http.get` | `(url: string): HttpResponse` | HTTP GET request |\n"
             "| `http.getContentLength` | `(url: string): int` | Get content length of URL |\n"
             "| `http.h2CreateServer` | `(options?: Json): bool` | Create HTTP/2 server |\n"
@@ -4362,7 +4744,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.put` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP PUT request |\n"
             "| `http.readChunk` | `(resp: Json, maxBytes?: int): string?` | Read the next chunk from a streaming HTTP response |\n"
             "| `http.request` | `(options: Json): HttpResponse` | Generic HTTP request |\n"
-            "| `http.response` | `(status: int, body?: string \\| Json): string` | Format an HTTP response string |\n"
+            "| `http.response` | `(status: int, body: unknown = null): string` |  |\n"
             "| `http.route` | `(method: string, path: string, handler: fn \\| string \\| Json): ()` | Register a route handler or static response |\n"
             "| `http.sendResponse` | `(fd: int, body: string, status?: int): bool` | Send HTTP response on fd |\n"
             "| `http.serverStats` | `(): Json` | Return HTTP server counters |\n"
@@ -4370,8 +4752,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.setProxy` | `(url: string): ()` | Set HTTP proxy |\n"
             "| `http.static` | `(method: string, path: string, content: string): ()` | Register a prebuilt static route response |\n"
             "| `http.stopServer` | `(): ()` | Stop the HTTP server |\n"
-            "| `http.urlDecode` | `(s: string): string` | URL-decode a string |\n"
-            "| `http.urlEncode` | `(s: string): string` | URL-encode a string |\n"
+            "| `http.urlDecode` | `(s: string): string` |  |\n"
+            "| `http.urlEncode` | `(s: string): string` |  |\n"
             "| `http.ws` | `(path: string, handler: fn(conn: WsConn): ()): ()` | Register WebSocket upgrade route on HTTP server |\n"
             "",
         .symbols = _symbols_http,
@@ -4501,24 +4883,38 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `log.DEBUG` | `: int` | Debug log level |\n"
-            "| `log.ERROR` | `: int` | Error log level |\n"
-            "| `log.FATAL` | `: int` | Fatal log level |\n"
-            "| `log.INFO` | `: int` | Info log level |\n"
-            "| `log.WARN` | `: int` | Warning log level |\n"
-            "| `log.child` | `(...fields: unknown): Logger` | Create child logger |\n"
-            "| `log.debug` | `(...args: unknown): ()` | Log debug message |\n"
-            "| `log.enableAsync` | `(enabled: bool): ()` | Enable async logging |\n"
-            "| `log.enableSource` | `(enabled: bool): ()` | Enable source location in logs |\n"
-            "| `log.error` | `(...args: unknown): ()` | Log error message |\n"
-            "| `log.fatal` | `(...args: unknown): ()` | Log fatal message |\n"
-            "| `log.flush` | `(): ()` | Flush log buffer |\n"
-            "| `log.info` | `(...args: unknown): ()` | Log info message |\n"
-            "| `log.isEnabled` | `(level: int): bool` | Check if log level enabled |\n"
-            "| `log.setFormat` | `(format: string): ()` | Set log format |\n"
-            "| `log.setLevel` | `(level: int): ()` | Set log level |\n"
-            "| `log.setOutput` | `(path: string): ()` | Set log output file |\n"
-            "| `log.warn` | `(...args: unknown): ()` | Log warning message |\n"
+            "| `log.DEBUG` | `: int` |  |\n"
+            "| `log.ERROR` | `: int` |  |\n"
+            "| `log.FATAL` | `: int` |  |\n"
+            "| `log.INFO` | `: int` |  |\n"
+            "| `Logger` | `Logger` |  |\n"
+            "| `Logger.asyncMode` | `: bool` |  |\n"
+            "| `Logger.child` | `(...fields: unknown): Logger` |  |\n"
+            "| `Logger.debug` | `(...args: unknown): ()` |  |\n"
+            "| `Logger.error` | `(...args: unknown): ()` |  |\n"
+            "| `Logger.fatal` | `(...args: unknown): ()` |  |\n"
+            "| `Logger.format` | `: string` |  |\n"
+            "| `Logger.info` | `(...args: unknown): ()` |  |\n"
+            "| `Logger.jsonContext` | `: string` |  |\n"
+            "| `Logger.level` | `: int` |  |\n"
+            "| `Logger.output` | `: string` |  |\n"
+            "| `Logger.source` | `: bool` |  |\n"
+            "| `Logger.textContext` | `: string` |  |\n"
+            "| `Logger.warn` | `(...args: unknown): ()` |  |\n"
+            "| `log.WARN` | `: int` |  |\n"
+            "| `log.child` | `(...fields: unknown): Logger` |  |\n"
+            "| `log.debug` | `(...args: unknown): ()` |  |\n"
+            "| `log.enableAsync` | `(enabled: bool = true): ()` |  |\n"
+            "| `log.enableSource` | `(enabled: bool = true): ()` |  |\n"
+            "| `log.error` | `(...args: unknown): ()` |  |\n"
+            "| `log.fatal` | `(...args: unknown): ()` |  |\n"
+            "| `log.flush` | `(): ()` |  |\n"
+            "| `log.info` | `(...args: unknown): ()` |  |\n"
+            "| `log.isEnabled` | `(level: int): bool` |  |\n"
+            "| `log.setFormat` | `(format: string): ()` |  |\n"
+            "| `log.setLevel` | `(level: unknown): ()` |  |\n"
+            "| `log.setOutput` | `(path: string): ()` |  |\n"
+            "| `log.warn` | `(...args: unknown): ()` |  |\n"
             "",
         .symbols = _symbols_log,
         .symbol_count = (int)(sizeof(_symbols_log) / sizeof(_symbols_log[0])),
@@ -4899,6 +5295,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Mutex.constructor` | `(v: T): ()` |  |\n"
             "| `Mutex.lock` | `(body: (T): U) -> U` |  |\n"
             "| `Mutex.replace` | `(body: (T): T) -> T` |  |\n"
+            "| `Mutex.tryLock` | `(body: (T): U) -> U?` |  |\n"
             "| `Mutex.value` | `: T` |  |\n"
             "| `Once` | `Once` |  |\n"
             "| `Once.call` | `(body: (): ())` |  |\n"
@@ -4933,6 +5330,21 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `sys.OsMutex` | `(): OsMutex` | Create an OS-domain mutex |\n"
             "| `sys.OsOnce` | `(): OsOnce` | Create an OS-domain once gate |\n"
             "| `sys.OsRwLock` | `(): OsRwLock` | Create an OS-domain read-write lock |\n"
+            "| `Pipe` | `Pipe` |  |\n"
+            "| `Pipe.close` | `(): bool` |  |\n"
+            "| `Pipe.closeRead` | `(): bool` |  |\n"
+            "| `Pipe.closeWrite` | `(): bool` |  |\n"
+            "| `Pipe.constructor` | `(readHandle: int, writeHandle: int): ()` |  |\n"
+            "| `Pipe.open` | `(): Pipe?` |  |\n"
+            "| `Pipe.read` | `(maxBytes: int = 8192): Bytes?` |  |\n"
+            "| `Pipe.write` | `(data: Bytes): int` |  |\n"
+            "| `Process` | `Process` |  |\n"
+            "| `Process.constructor` | `(id: int): ()` |  |\n"
+            "| `Process.id` | `: int { fn() { return this._id } }` |  |\n"
+            "| `Process.kill` | `(signal: Signal = Signal.TERM): bool` |  |\n"
+            "| `Process.spawn` | `(program: string, args: Array<string> = []): Process?` |  |\n"
+            "| `Process.tryWait` | `(): int?` |  |\n"
+            "| `Process.wait` | `(): int` |  |\n"
             "| `sys.cpuCount` | `(): int` | Return the number of CPUs available to OS-thread work |\n"
             "| `sys.pinToCpu` | `(cpu: int): bool` | Best-effort pin of the current OS thread to a CPU index |\n"
             "| `sys.sleepMs` | `(ms: int): ()` | Block the current OS thread for at least ms milliseconds |\n"
@@ -4956,6 +5368,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `time.clock` | `(): int` | CPU clock time in milliseconds |\n"
+            "| `time.localOffset` | `(): int` | Local UTC offset in minutes for the current wall time |\n"
+            "| `time.localOffsetAt` | `(timestamp: int): int` | Local UTC offset in minutes at a Unix timestamp |\n"
             "| `time.micros` | `(): int` | Monotonic time in microseconds |\n"
             "| `time.monotonic` | `(): int` | Monotonic time in milliseconds |\n"
             "| `time.nanos` | `(): int` | Monotonic time in nanoseconds |\n"
@@ -4979,11 +5393,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `toml.parse` | `(data: string): Json` | Parse TOML string |\n"
-            "| `toml.parseFile` | `(path: string): Json` | Parse TOML file |\n"
-            "| `toml.parseStrict` | `(data: string): Json` | Parse TOML strictly |\n"
-            "| `toml.stringify` | `(value: Json): string` | Convert to TOML string |\n"
-            "| `toml.writeFile` | `(path: string, value: Json): bool` | Write TOML file |\n"
+            "| `toml.parse` | `(data: string): Json` |  |\n"
+            "| `toml.parseFile` | `(path: string): Json` |  |\n"
+            "| `toml.parseStrict` | `(data: string): Json` |  |\n"
+            "| `toml.stringify` | `(value: unknown): string` |  |\n"
+            "| `toml.writeFile` | `(path: string, value: unknown): bool` |  |\n"
             "",
         .symbols = _symbols_toml,
         .symbol_count = (int)(sizeof(_symbols_toml) / sizeof(_symbols_toml[0])),
@@ -5081,16 +5495,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `xml.cdata` | `(content: string): Json` | Create XML CDATA node |\n"
-            "| `xml.comment` | `(content: string): Json` | Create XML comment node |\n"
-            "| `xml.document` | `(): Json` | Create XML document node |\n"
-            "| `xml.element` | `(name: string, attrs?: Json): Json` | Create XML element node |\n"
-            "| `xml.parse` | `(data: string, options?: Json): Json` | Parse XML string |\n"
-            "| `xml.parseDetailed` | `(data: string): Json` | Parse XML with details |\n"
-            "| `xml.parseFile` | `(path: string): Json` | Parse XML file |\n"
-            "| `xml.stringify` | `(node: Json, options?: Json): string` | Convert to XML string |\n"
-            "| `xml.text` | `(content: string): Json` | Create XML text node |\n"
-            "| `xml.writeFile` | `(path: string, node: Json): bool` | Write XML file |\n"
+            "| `xml.cdata` | `(content: string): Json` |  |\n"
+            "| `xml.comment` | `(content: string): Json` |  |\n"
+            "| `xml.document` | `(): Json` |  |\n"
+            "| `xml.element` | `(tag: string, attrsValue: unknown = null): Json` |  |\n"
+            "| `xml.parse` | `(data: string, options: unknown = null): Json` |  |\n"
+            "| `xml.parseDetailed` | `(data: string, options: unknown = null): Json` |  |\n"
+            "| `xml.parseFile` | `(path: string, options: unknown = null): Json` |  |\n"
+            "| `xml.stringify` | `(node: unknown, options: unknown = null): string` |  |\n"
+            "| `xml.text` | `(content: string): Json` |  |\n"
+            "| `xml.writeFile` | `(path: string, node: unknown, options: unknown = null): bool` |  |\n"
             "",
         .symbols = _symbols_xml,
         .symbol_count = (int)(sizeof(_symbols_xml) / sizeof(_symbols_xml[0])),
@@ -5109,12 +5523,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `yaml.parse` | `(data: string): Json` | Parse YAML string |\n"
-            "| `yaml.parseAll` | `(data: string): Array<Json>` | Parse all YAML documents |\n"
-            "| `yaml.parseFile` | `(path: string): Json` | Parse YAML file |\n"
-            "| `yaml.parseStrict` | `(data: string): Json` | Parse YAML strictly |\n"
-            "| `yaml.stringify` | `(value: Json): string` | Convert to YAML string |\n"
-            "| `yaml.writeFile` | `(path: string, value: Json): bool` | Write YAML file |\n"
+            "| `yaml.parse` | `(data: string, options: unknown = null): Json` |  |\n"
+            "| `yaml.parseAll` | `(data: string): Array<Json>` |  |\n"
+            "| `yaml.parseFile` | `(path: string): Json` |  |\n"
+            "| `yaml.parseStrict` | `(data: string): Json` |  |\n"
+            "| `yaml.stringify` | `(value: unknown, options: unknown = null): string` |  |\n"
+            "| `yaml.writeFile` | `(path: string, value: unknown): bool` |  |\n"
             "",
         .symbols = _symbols_yaml,
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),
