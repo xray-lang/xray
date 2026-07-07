@@ -9,6 +9,8 @@
  */
 
 #include "../test_framework.h"
+#include "os/os_proc.h"
+#include "os/os_thread.h"
 #include "shared/xr_os_core.h"
 
 #include <limits.h>
@@ -323,6 +325,60 @@ TEST(os_core_exec_windows_exit_code_decodes_low_byte) {
     ASSERT_EQ_INT(xr_os_core_exec_windows_exit_code(0x1234), 0x34);
 }
 
+static XrProcId spawn_exit_code_child(int code) {
+#ifdef XR_OS_WINDOWS
+    char code_arg[32];
+    snprintf(code_arg, sizeof(code_arg), "exit /B %d", code);
+    const char *argv[] = {"cmd.exe", "/C", code_arg, NULL};
+    return xr_proc_spawn("cmd.exe", argv);
+#else
+    char code_arg[32];
+    snprintf(code_arg, sizeof(code_arg), "exit %d", code);
+    const char *argv[] = {"sh", "-c", code_arg, NULL};
+    return xr_proc_spawn("sh", argv);
+#endif
+}
+
+static XrProcId spawn_sleep_child(void) {
+#ifdef XR_OS_WINDOWS
+    const char *argv[] = {"cmd.exe", "/C", "ping -n 6 127.0.0.1 >NUL", NULL};
+    return xr_proc_spawn("cmd.exe", argv);
+#else
+    const char *argv[] = {"sh", "-c", "sleep 5", NULL};
+    return xr_proc_spawn("sh", argv);
+#endif
+}
+
+TEST(os_proc_try_wait_reports_running_then_killed) {
+    XrProcId pid = spawn_sleep_child();
+    ASSERT_NE(pid, XR_PROC_INVALID);
+
+    int code = 12345;
+    ASSERT_EQ_INT(xr_proc_try_wait(pid, &code), XR_PROC_WAIT_RUNNING);
+    ASSERT_EQ_INT(code, 12345);
+
+    ASSERT_EQ_INT(xr_proc_kill(pid, 9), 0);
+    ASSERT_EQ_INT(xr_proc_wait(pid, &code), 0);
+    ASSERT_EQ_INT(code, -1);
+}
+
+TEST(os_proc_try_wait_reaps_finished_child) {
+    XrProcId pid = spawn_exit_code_child(7);
+    ASSERT_NE(pid, XR_PROC_INVALID);
+
+    int code = -1;
+    XrProcWaitResult result = XR_PROC_WAIT_RUNNING;
+    for (int i = 0; i < 200; i++) {
+        result = xr_proc_try_wait(pid, &code);
+        if (result != XR_PROC_WAIT_RUNNING)
+            break;
+        xr_thread_sleep_ms(10);
+    }
+
+    ASSERT_EQ_INT(result, XR_PROC_WAIT_EXITED);
+    ASSERT_EQ_INT(code, 7);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("OS Core - platform");
@@ -361,5 +417,9 @@ RUN_TEST(os_core_exec_result_schema_is_stable);
 RUN_TEST(os_core_exec_buffer_capacity_doubles_from_initial_cap);
 RUN_TEST(os_core_exec_buffer_append_raw_preserves_nul_terminator);
 RUN_TEST(os_core_exec_windows_exit_code_decodes_low_byte);
+
+RUN_TEST_SUITE("OS Proc");
+RUN_TEST(os_proc_try_wait_reports_running_then_killed);
+RUN_TEST(os_proc_try_wait_reaps_finished_child);
 
 TEST_MAIN_END()
