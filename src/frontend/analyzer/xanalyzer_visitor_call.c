@@ -56,31 +56,6 @@ static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
 }
 
-static bool xa_object_literal_bool_field(AstNode *node, const char *field_name, bool *out_value) {
-    if (!node || node->type != AST_OBJECT_LITERAL || !field_name || !out_value)
-        return false;
-    ObjectLiteralNode *obj = &node->as.object_literal;
-    for (int i = 0; i < obj->count; i++) {
-        if (obj->computed && obj->computed[i])
-            continue;
-        AstNode *key = obj->keys ? obj->keys[i] : NULL;
-        AstNode *value = obj->values ? obj->values[i] : NULL;
-        if (!key || key->type != AST_LITERAL_STRING || !value)
-            continue;
-        if (strcmp(key->as.literal.raw_value.string_val, field_name) != 0)
-            continue;
-        if (value->type == AST_LITERAL_TRUE) {
-            *out_value = true;
-            return true;
-        }
-        if (value->type == AST_LITERAL_FALSE) {
-            *out_value = false;
-            return true;
-        }
-    }
-    return false;
-}
-
 static bool xa_type_is_c_callback(const XrType *type) {
     return type && XR_TYPE_IS_C_FUNCTION(type);
 }
@@ -138,17 +113,6 @@ static void xa_report_c_callback_signature_mismatch(XaInferContext *ctx, AstNode
              callback_type ? xr_type_to_string(callback_type) : "<unknown>");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                &loc);
-}
-
-static bool xa_is_module_call(CallExprNode *call, const char *module_name, const char *func_name) {
-    if (!call || !module_name || !func_name || !call->callee ||
-        call->callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    if (!ma->name || strcmp(ma->name, func_name) != 0 || !ma->object ||
-        ma->object->type != AST_VARIABLE)
-        return false;
-    return strcmp(ma->object->as.variable.name, module_name) == 0;
 }
 
 static const XaEnumVariantInfo *xa_call_payload_enum_variant(XaInferContext *ctx,
@@ -1239,22 +1203,6 @@ static XrType *xa_bytespan_reinterpret_return_type(XaInferContext *ctx, AstNode 
         return xr_type_new_unknown(NULL);
     }
     return xr_type_new_span(ctx->analyzer->isolate, target);
-}
-
-static XrType *xa_csv_parse_return_type(XaInferContext *ctx, CallExprNode *call) {
-    if (!xa_is_module_call(call, "csv", "parse"))
-        return NULL;
-    XrType *row_array =
-        xr_type_new_array(ctx->analyzer->isolate, xr_type_new_string(ctx->analyzer->isolate));
-    XrType *rows_array = xr_type_new_array(ctx->analyzer->isolate, row_array);
-    if (call->arg_count < 2 || !call->arguments[1])
-        return rows_array;
-    bool header = false;
-    if (xa_object_literal_bool_field(call->arguments[1], "header", &header))
-        return header ? xr_type_new_array(ctx->analyzer->isolate,
-                                          xr_type_new_json(ctx->analyzer->isolate))
-                      : rows_array;
-    return NULL;
 }
 
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object,
@@ -2807,10 +2755,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return_type = xa_substitute_generic_call(ctx, fn_links, callee_type, return_type, call,
                                                  arg_count, effective_arg_types);
     }
-
-    XrType *builtin_override = xa_csv_parse_return_type(ctx, call);
-    if (builtin_override)
-        return_type = builtin_override;
 
     XrType *math_shape_type =
         xa_math_runtime_shape_return_type(ctx, call, fn_links, effective_arg_types, arg_count);

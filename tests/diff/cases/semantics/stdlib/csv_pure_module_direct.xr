@@ -1,0 +1,27 @@
+import csv
+
+var rows = csv.parse("name,age\nAlice,30\nBob,25", {header: true, dynamicTyping: true})
+print(rows.length)
+print(rows[0]["name"])
+print(rows[0]["age"])
+print(typename(rows[0]["age"]))
+
+var detail = csv.parseDetailed("a,b\n1,2\n3")
+print(detail["data"].length)
+print(detail["errors"].length)
+print(detail["meta"]["columns"])
+
+var auto = csv.parseAuto("a;b;c\n1;2;3")
+print(auto[1][2])
+
+var tsv = csv.parseTsv("x\ty\n4\t5")
+print(tsv[1][1])
+
+var out = csv.stringify([["a", "b"], ["hello, world", "quote \" me"]])
+print(out.includes("\"hello, world\""))
+print(out.includes("\"quote \"\" me\""))
+
+var dyn = csv.parse("v\n3.14x\n1e2\nNULL", {dynamicTyping: true})
+print(typename(dyn[1][0]))
+print(dyn[2][0])
+print(dyn[3][0] == null)

@@ -71,13 +71,13 @@ static const XlspSymbolInfo g_xlsp_stdlib_crypto_symbols[] = {
 
 // csv module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_csv_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: Json): Array<Array<string>> | Array<Json>", "Parse CSV string", NULL, 0},
-    {"parseDetailed", XLSP_SYM_FUNCTION, "fn(data: string, options?: Json): Json", "Parse CSV with headers", NULL, 0},
-    {"parseTsv", XLSP_SYM_FUNCTION, "fn(data: string): Array<Array<string>>", "Parse TSV string", NULL, 0},
-    {"parseAuto", XLSP_SYM_FUNCTION, "fn(data: string): Array<Array<string>>", "Auto-detect delimiter and parse", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(data: Array<Array<string>>, options?: Json): string", "Convert to CSV string", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string, options?: Json): Array<Array<string>>", "Parse CSV file", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, data: Array<Array<string>>, options?: Json): bool", "Write CSV file", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Array<Json>", "Parse CSV text into row arrays, or Json objects when header/columns is enabled.", NULL, 0},
+    {"parseDetailed", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Json", "Parse CSV text and return data, errors, and parser metadata.", NULL, 0},
+    {"parseTsv", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Array<Json>", "Parse tab-separated text.", NULL, 0},
+    {"parseAuto", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Array<Json>", "Detect a common delimiter and parse the text.", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(data: unknown, options?: unknown): string", "Convert row arrays or Json object rows to CSV text.", NULL, 0},
+    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string, options?: unknown): Array<Json>", "Read a file through io and parse its CSV text.", NULL, 0},
+    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, data: unknown, options?: unknown): bool", "Stringify data and write it through io.", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_CSV_SYMBOL_COUNT 7
 

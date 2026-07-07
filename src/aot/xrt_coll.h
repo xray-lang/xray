@@ -2807,6 +2807,43 @@ static inline XrValue xrt_json_get_name_owned(XrValue obj, const char *name) {
     return xrt_value_to_owned(xrt_json_get_name(obj, name));
 }
 
+static inline int xrt_json_has_name(XrValue obj, const char *name) {
+    if (obj.tag != XR_TAG_PTR || !obj.ptr || !name)
+        return 0;
+    xrt_json_t *j = (xrt_json_t *) obj.ptr;
+    if (xrt_json_find_field(j, name) >= 0)
+        return 1;
+    if (!j->dynamic_fields)
+        return 0;
+    XrValue key = xr_box_str(name);
+    uint32_t hash = xrt_hash32_value(key);
+    uint8_t key_tt = xrt_value_type_tag(key);
+    return xrt_map_find_entry(j->dynamic_fields, key, hash, key_tt) >= 0;
+}
+
+static inline int64_t xrt_json_static_has(XrValue obj, XrValue key) {
+    return XR_IS_STR(key) && xrt_json_has_name(obj, xr_str_data(key)) ? 1 : 0;
+}
+
+static inline XrValue xrt_json_static_get(XrValue obj, XrValue key, XrValue fallback) {
+    if (!XR_IS_STR(key))
+        return fallback;
+    const char *name = xr_str_data(key);
+    if (!xrt_json_has_name(obj, name))
+        return fallback;
+    return xrt_json_get_name_owned(obj, name);
+}
+
+static inline int64_t xrt_json_static_size(XrValue obj) {
+    if (obj.tag != XR_TAG_PTR || !obj.ptr)
+        return 0;
+    return xrt_json_iter_count((const xrt_json_t *) obj.ptr);
+}
+
+static inline int64_t xrt_json_static_is_empty(XrValue obj) {
+    return xrt_json_static_size(obj) == 0 ? 1 : 0;
+}
+
 static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue val) {
     if (obj.tag != XR_TAG_PTR || !obj.ptr || !name)
         return val;
@@ -3006,6 +3043,227 @@ static inline XrValue xrt_json_encode_value(XrValue val, int depth) {
 
 static inline XrValue xrt_json_encode(XrValue val) {
     return xrt_json_encode_value(val, 0);
+}
+
+static void xrt_json_stringify_value(xrt_strbuf_t *sb, XrValue val, int depth);
+
+#define XRT_JSON_STRINGIFY_MAX_DEPTH 512
+
+static inline void xrt_json_sb_puts(xrt_strbuf_t *sb, const char *s, size_t n) {
+    xrt_strbuf_grow(sb, (int64_t) n);
+    memcpy(sb->buf + sb->len, s, n);
+    sb->len += (int64_t) n;
+    sb->buf[sb->len] = 0;
+}
+
+static inline void xrt_json_sb_cstr(xrt_strbuf_t *sb, const char *s) {
+    xrt_json_sb_puts(sb, s, strlen(s));
+}
+
+static inline void xrt_json_sb_char(xrt_strbuf_t *sb, char c) {
+    xrt_json_sb_puts(sb, &c, 1);
+}
+
+static inline void xrt_json_stringify_abort(const char *msg, XrValue val) {
+    fprintf(stderr, "Json.stringify: %s (tag=%u, heap_type=%u)\n",
+            msg ? msg : "unsupported value", (unsigned) val.tag, (unsigned) val.heap_type);
+    abort();
+}
+
+static void xrt_json_stringify_string(xrt_strbuf_t *sb, const char *s, size_t len) {
+    xrt_json_sb_char(sb, '"');
+    size_t i = 0;
+    while (i < len) {
+        size_t start = i;
+        while (i < len) {
+            unsigned char c = (unsigned char) s[i];
+            if (c < 32 || c == '"' || c == '\\')
+                break;
+            i++;
+        }
+        if (i > start)
+            xrt_json_sb_puts(sb, s + start, i - start);
+        if (i >= len)
+            break;
+        unsigned char c = (unsigned char) s[i];
+        switch (c) {
+            case '"':
+                xrt_json_sb_cstr(sb, "\\\"");
+                break;
+            case '\\':
+                xrt_json_sb_cstr(sb, "\\\\");
+                break;
+            case '\n':
+                xrt_json_sb_cstr(sb, "\\n");
+                break;
+            case '\r':
+                xrt_json_sb_cstr(sb, "\\r");
+                break;
+            case '\t':
+                xrt_json_sb_cstr(sb, "\\t");
+                break;
+            case '\b':
+                xrt_json_sb_cstr(sb, "\\b");
+                break;
+            case '\f':
+                xrt_json_sb_cstr(sb, "\\f");
+                break;
+            default: {
+                char buf[8];
+                int n = snprintf(buf, sizeof(buf), "\\u%04x", (unsigned) c);
+                xrt_json_sb_puts(sb, buf, (size_t) n);
+                break;
+            }
+        }
+        i++;
+    }
+    xrt_json_sb_char(sb, '"');
+}
+
+static void xrt_json_stringify_array(xrt_strbuf_t *sb, xrt_array_t *arr, int depth) {
+    xrt_json_sb_char(sb, '[');
+    int64_t len = arr ? arr->length : 0;
+    for (int64_t i = 0; i < len; i++) {
+        if (i > 0)
+            xrt_json_sb_char(sb, ',');
+        xrt_json_stringify_value(sb, xr_typed_get(arr->data, (int32_t) i, arr->elem_type),
+                                 depth + 1);
+    }
+    xrt_json_sb_char(sb, ']');
+}
+
+static void xrt_json_stringify_map_key(xrt_strbuf_t *sb, XrValue key) {
+    if (XR_IS_STR(key)) {
+        xrt_json_stringify_string(sb, xr_str_data(key), (size_t) xr_str_len(key));
+        return;
+    }
+    if (key.tag == XR_TAG_I64) {
+        char buf[32];
+        int n = snprintf(buf, sizeof(buf), "%lld", (long long) key.i);
+        xrt_json_stringify_string(sb, buf, (size_t) n);
+        return;
+    }
+    xrt_json_stringify_abort("object key must be string or int", key);
+}
+
+static void xrt_json_stringify_map(xrt_strbuf_t *sb, xrt_map_t *m, int depth) {
+    xrt_json_sb_char(sb, '{');
+    int64_t emitted = 0;
+    int64_t n_slots = !m ? 0 : (xrt_map_is_typed(m) ? m->order_len : (int64_t) m->nentries);
+    for (int64_t i = 0; i < n_slots; i++) {
+        int64_t slot = xrt_map_is_typed(m) ? m->order[i] : i;
+        if (!xrt_map_slot_is_full(m, slot))
+            continue;
+        if (emitted > 0)
+            xrt_json_sb_char(sb, ',');
+        xrt_json_stringify_map_key(sb, xrt_map_slot_key(m, slot));
+        xrt_json_sb_char(sb, ':');
+        xrt_json_stringify_value(sb, xrt_map_slot_value(m, slot), depth + 1);
+        emitted++;
+    }
+    xrt_json_sb_char(sb, '}');
+}
+
+static void xrt_json_stringify_object_fields(xrt_strbuf_t *sb, xrt_json_t *j, int depth) {
+    xrt_json_sb_char(sb, '{');
+    int64_t emitted = 0;
+    if (j) {
+        for (int64_t i = 0; i < j->field_count; i++) {
+            if (emitted > 0)
+                xrt_json_sb_char(sb, ',');
+            const char *name = (j->field_names && j->field_names[i]) ? j->field_names[i] : "";
+            xrt_json_stringify_string(sb, name, strlen(name));
+            xrt_json_sb_char(sb, ':');
+            xrt_json_stringify_value(sb, j->fields[i], depth + 1);
+            emitted++;
+        }
+        if (j->dynamic_fields) {
+            xrt_map_t *m = j->dynamic_fields;
+            for (uint32_t i = 0; i < m->nentries; i++) {
+                XrMapEntry *entry = &m->entries[i];
+                if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+                    continue;
+                if (emitted > 0)
+                    xrt_json_sb_char(sb, ',');
+                xrt_json_stringify_map_key(sb, entry->key);
+                xrt_json_sb_char(sb, ':');
+                xrt_json_stringify_value(sb, entry->value, depth + 1);
+                emitted++;
+            }
+        }
+    }
+    xrt_json_sb_char(sb, '}');
+}
+
+static void xrt_json_stringify_value(xrt_strbuf_t *sb, XrValue val, int depth) {
+    if (depth > XRT_JSON_STRINGIFY_MAX_DEPTH)
+        xrt_json_stringify_abort("value is too deeply nested", val);
+    switch (xrt_value_kind(val)) {
+        case XR_TAG_NULL:
+            xrt_json_sb_cstr(sb, "null");
+            return;
+        case XR_TAG_BOOL:
+            xrt_json_sb_cstr(sb, val.i ? "true" : "false");
+            return;
+        case XR_TAG_I64: {
+            char buf[32];
+            int n = snprintf(buf, sizeof(buf), "%lld", (long long) val.i);
+            xrt_json_sb_puts(sb, buf, (size_t) n);
+            return;
+        }
+        case XR_TAG_F64: {
+            if (!isfinite(val.f)) {
+                xrt_json_sb_cstr(sb, "null");
+                return;
+            }
+            char buf[64];
+            int n = xr_format_float(buf, sizeof(buf), val.f);
+            xrt_json_sb_puts(sb, buf, (size_t) n);
+            return;
+        }
+        case XR_TAG_STR:
+        case XR_TAG_STR_ARC:
+            xrt_json_stringify_string(sb, xr_str_data(val), (size_t) xr_str_len(val));
+            return;
+        case XR_TAG_CHAR: {
+            char buf[4];
+            int n = xrt_char_utf8_encode(XR_TO_CHAR(val), buf);
+            if (n > 0)
+                xrt_json_stringify_string(sb, buf, (size_t) n);
+            else
+                xrt_json_sb_cstr(sb, "null");
+            return;
+        }
+        case XR_TAG_ARRAY:
+            xrt_json_stringify_array(sb, (xrt_array_t *) val.ptr, depth);
+            return;
+        case XR_TAG_MAP:
+            xrt_json_stringify_map(sb, (xrt_map_t *) val.ptr, depth);
+            return;
+        case XR_TAG_ENUM: {
+            const char *member_name = NULL;
+            if (xrt_enum_key_parts(val, NULL, &member_name, NULL, NULL) && member_name)
+                xrt_json_stringify_string(sb, member_name, strlen(member_name));
+            else
+                xrt_json_sb_cstr(sb, "null");
+            return;
+        }
+        case XR_TAG_PTR:
+            if (val.ptr && val.heap_type == 0) {
+                xrt_json_stringify_object_fields(sb, (xrt_json_t *) val.ptr, depth);
+                return;
+            }
+            break;
+        default:
+            break;
+    }
+    xrt_json_stringify_abort("cannot serialize value to JSON", val);
+}
+
+static inline XrValue xrt_json_stringify(XrValue val) {
+    XrValue sbv = xrt_strbuf_new();
+    xrt_json_stringify_value((xrt_strbuf_t *) sbv.ptr, val, 0);
+    return xrt_strbuf_finish(sbv);
 }
 
 static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {

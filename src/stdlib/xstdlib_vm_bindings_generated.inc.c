@@ -63,18 +63,6 @@ static void xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *m
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CRYPTO */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_CSV
-static void xr_stdlib_vm_bind_csv_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "parse", csv_parse);
-    XRS_EXPORT(module, isolate, "parseDetailed", csv_parse_detailed);
-    XRS_EXPORT(module, isolate, "parseTsv", csv_parse_tsv);
-    XRS_EXPORT(module, isolate, "parseAuto", csv_parse_auto);
-    XRS_EXPORT(module, isolate, "stringify", csv_stringify);
-    XRS_EXPORT(module, isolate, "parseFile", csv_parse_file);
-    XRS_EXPORT(module, isolate, "writeFile", csv_write_file);
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_CSV */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_HTTP
 static void xr_stdlib_vm_bind_http_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT_SLOW(module, isolate, "get", http_get);
