@@ -27,6 +27,7 @@ typedef struct XaBuiltinMember {
     const char *doc;        // Documentation
     bool is_method;         // true = method, false = property
     bool is_static;         // true = static member
+    bool is_internal;       // true = visible only to stdlib implementation modules
 } XaBuiltinMember;
 
 // Built-in type info

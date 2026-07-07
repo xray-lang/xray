@@ -337,7 +337,10 @@ static int prepare_test_module_graph(XrVMRuntime *X, XrCompilerSession *session,
             XrModuleSpec *spec = &graph->specs[idx];
             if (!spec->source_path)
                 continue;
-            XrValue val = xr_module_import(X, spec->source_path);
+            const char *import_name = (spec->kind == XR_MOD_STDLIB && spec->canonical)
+                                          ? spec->canonical
+                                          : spec->source_path;
+            XrValue val = xr_module_import(X, import_name);
             if (!XR_IS_NULL(val))
                 mod_table[ti] = xr_value_to_module(val);
         }

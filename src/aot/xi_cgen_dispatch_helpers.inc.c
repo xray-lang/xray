@@ -814,7 +814,10 @@ static bool xicgen_import_ref_is_core_math_member(const XiImportRef *ref) {
 
 /* Both defined in xi_cgen_stdlib_helpers.inc.c (included later in this TU). */
 static bool xicgen_emit_stdlib_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v);
+static bool xicgen_emit_stdlib_import_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *v);
 static bool cg_module_has_aot_direct_calls(const char *module);
+static bool cg_aot_stdlib_has_direct_member(const char *module, const char *member);
 /* Resolve a `import { CONST } from "module"` reference to a generated stdlib
  * constant (path.sep, encoding.LE, ...); defined in xi_cgen_stdlib_helpers.inc.c. */
 static bool cg_emit_aot_stdlib_generated_constant_import_ref(XiCgenCtx *ctx, FILE *out,
@@ -867,6 +870,10 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             fprintf(out, "XR_NULL_VAL /* builtin module: %s */", ref->module_path);
         } else if (xicgen_import_ref_is_core_math_member(ref)) {
             fprintf(out, "XR_NULL_VAL /* builtin math.%s */", ref->member_name);
+        } else if (ref && ref->module_path && ref->member_name &&
+                   cg_aot_stdlib_has_direct_member(ref->module_path, ref->member_name)) {
+            fprintf(out, "XR_NULL_VAL /* builtin function: %s.%s */", ref->module_path,
+                    ref->member_name);
         } else if (cg_emit_aot_stdlib_generated_constant_import_ref(ctx, out, v, ref)) {
             /* Resolved to a generated stdlib constant (path.sep, encoding.LE, ...). */
         } else {
@@ -1944,6 +1951,8 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                         const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call: need callee");
     XiValue *callee = v->args[0];
+    if (xicgen_emit_stdlib_import_call(ctx, out, f, v))
+        return;
     CgStaticFunctionCall static_call = cg_resolve_static_function_call(ctx, f, callee);
     const XiFunc *target = static_call.func;
     const char *call_prefix = static_call.prefix;

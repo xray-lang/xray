@@ -186,6 +186,9 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"sys", "threadYield", "(): ()", "Yield the current OS thread to another runnable OS thread", "sys_thread_yield", "normal", "", "xrt_sys_thread_yield", "", "value", "", "", "system", "method", 0, true},
     {"sys", "sleepMs", "(ms: int): ()", "Block the current OS thread for at least ms milliseconds", "sys_sleep_ms", "normal", "", "xrt_sys_sleep_ms", "v", "value", "", "", "system", "method", 1, true},
     {"sys", "pinToCpu", "(cpu: int): bool", "Best-effort pin of the current OS thread to a CPU index", "sys_pin_to_cpu", "normal", "", "xrt_sys_pin_to_cpu", "v", "value", "", "", "system", "method", 1, true},
+    {"sys", "__processSpawn", "(program: string, args: Array<string>): int", "Spawn a process and return an opaque process handle token, or -1 on failure", "sys_process_spawn", "normal", "", "xrt_sys_process_spawn", "sv", "value", "", "", "system", "method", 2, true},
+    {"sys", "__processWait", "(id: int): int", "Wait for a process handle token and return its exit code, or -1 on failure", "sys_process_wait", "normal", "", "xrt_sys_process_wait", "v", "value", "", "", "system", "method", 1, true},
+    {"sys", "__processKill", "(id: int, signal: int): bool", "Send a portable process signal to a process handle token", "sys_process_kill", "normal", "", "xrt_sys_process_kill", "vv", "value", "", "", "system", "method", 2, true},
     {"regex", "compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", "regex_compile", "normal", "", "xrt_regex_compile_default", "s", "value", "regex.compile", "XRT_ENABLE_REGEX", "alloc", "method", 1, true},
     {"regex", "compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", "regex_compile", "normal", "", "xrt_regex_compile_with_flags", "ss", "value", "regex.compile", "XRT_ENABLE_REGEX", "alloc", "method", 2, true},
     {"regex", "test", "(pattern: Regex, s: string): bool", "Test if regex matches", "regex_test", "normal", "", "xrt_regex_test", "vs", "value", "regex.test", "XRT_ENABLE_REGEX", "alloc", "method", 2, true},
@@ -550,6 +553,18 @@ static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
     {"mem", "Buffer", "asSpan", "(): ByteSpan", "Borrow this buffer as a mutable ByteSpan value"},
     {"mem", "Buffer", "ptrUnchecked", "(): RawMut<uint8>", "Return the underlying raw pointer; unsafe escape hatch"},
     {"mem", "Buffer", "resize", "(n: int): bool", "Resize this buffer; returns false on allocation failure"},
+    {"datetime", "DateTime", "toString", "(): string", "Convert datetime to string"},
+    {"datetime", "DateTime", "format", "(pattern?: string): string", "Format datetime to string"},
+    {"datetime", "DateTime", "toISOString", "(): string", "Convert datetime to ISO string"},
+    {"datetime", "DateTime", "add", "(amount: int, unit: string): DateTime", "Add a duration to this datetime"},
+    {"datetime", "DateTime", "diff", "(other: DateTime, unit?: string): int", "Difference from another datetime"},
+    {"datetime", "DateTime", "toUTC", "(): DateTime", "Convert datetime to UTC"},
+    {"datetime", "DateTime", "toLocal", "(): DateTime", "Convert datetime to local time"},
+    {"datetime", "DateTime", "isBefore", "(other: DateTime): bool", "Check whether this datetime is before another"},
+    {"datetime", "DateTime", "isAfter", "(other: DateTime): bool", "Check whether this datetime is after another"},
+    {"datetime", "DateTime", "equals", "(other: DateTime): bool", "Check whether this datetime equals another"},
+    {"datetime", "DateTime", "isLeapYear", "(): bool", "Check whether this datetime is in a leap year"},
+    {"datetime", "DateTime", "daysInMonth", "(): int", "Get days in current month"},
 };
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
 

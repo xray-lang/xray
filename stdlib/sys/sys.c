@@ -3,12 +3,14 @@
 #include "../common.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/module/xmodule.h"
+#include "../../src/os/os_proc.h"
 #include "../../src/os/os_thread.h"
 #include "../../src/runtime/class/xclass.h"
 #include "../../src/runtime/class/xclass_builder.h"
 #include "../../src/runtime/class/xclass_system.h"
 #include "../../src/runtime/class/xinstance.h"
 #include "../../src/runtime/mem/xsystem_heap.h"
+#include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xpanic_info.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/xisolate_api.h"
@@ -16,6 +18,11 @@
 #include "../../src/runtime/xvm_call.h"
 #include "../../src/vm/xvm.h"
 #include "../../src/vm/xvm_closure.h"
+
+#ifndef XR_OS_WINDOWS
+#include <signal.h>
+#include <unistd.h>
+#endif
 
 typedef struct XrSysMutexBody {
     xr_mutex_t mutex;
@@ -595,6 +602,63 @@ static XrValue sys_pin_to_cpu(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (cpu < 0)
         return xr_bool(false);
     return xr_bool(xr_thread_pin_to_cpu((unsigned int) cpu) == 0);
+}
+
+static XrValue sys_process_spawn(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2)
+        return xr_int((int64_t) XR_PROC_INVALID);
+
+    const char *program = xrs_string_arg(args[0], NULL);
+    if (!program || program[0] == '\0' || !XR_IS_ARRAY(args[1]))
+        return xr_int((int64_t) XR_PROC_INVALID);
+
+    XrArray *arg_arr = XR_TO_ARRAY(args[1]);
+    int extra = arg_arr ? arg_arr->length : 0;
+    if (extra < 0 || (size_t) extra > (SIZE_MAX / sizeof(char *)) - 2)
+        return xr_int((int64_t) XR_PROC_INVALID);
+
+    const char **argv = (const char **) xr_malloc(sizeof(char *) * ((size_t) extra + 2));
+    if (!argv)
+        return xr_int((int64_t) XR_PROC_INVALID);
+
+    argv[0] = program;
+    for (int i = 0; i < extra; i++) {
+        const char *s = xrs_string_arg(xr_array_get(arg_arr, i), NULL);
+        if (!s) {
+            xr_free(argv);
+            return xr_int((int64_t) XR_PROC_INVALID);
+        }
+        argv[i + 1] = s;
+    }
+    argv[extra + 1] = NULL;
+
+    XrProcId pid = xr_proc_spawn(program, argv);
+    xr_free(argv);
+    return xr_int((int64_t) pid);
+}
+
+static XrValue sys_process_wait(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_int(-1);
+
+    int code = -1;
+    if (xr_proc_wait((XrProcId) XR_TO_INT(args[0]), &code) != 0)
+        code = -1;
+    return xr_int((int64_t) code);
+}
+
+static XrValue sys_process_kill(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+        return xr_bool(false);
+
+#ifdef XR_OS_WINDOWS
+    return xr_bool(false);
+#else
+    return xr_bool(kill((pid_t) XR_TO_INT(args[0]), (int) XR_TO_INT(args[1])) == 0);
+#endif
 }
 
 #define XR_STDLIB_VM_BIND_CLASS_OS_CONDVAR 1

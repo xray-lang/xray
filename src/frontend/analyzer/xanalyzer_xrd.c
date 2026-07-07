@@ -272,6 +272,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                         methods[midx].doc = xrd_strdup("");
                         methods[midx].is_method = (sig[0] == '(');
                         methods[midx].is_static = false;
+                        methods[midx].is_internal = false;
                         h->method_count++;
                     }
                 }
@@ -310,6 +311,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                 xrd->functions[idx].doc = xrd_strdup("");
                 xrd->functions[idx].is_method = (sig[0] == '(');
                 xrd->functions[idx].is_static = false;
+                xrd->functions[idx].is_internal = false;
                 xrd->module.function_count++;
             }
 

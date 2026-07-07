@@ -216,7 +216,11 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                                 XrModuleSpec *spec = &graph->specs[idx];
                                 if (!spec->source_path)
                                     continue;
-                                XrValue val = xr_module_import(iso, spec->source_path);
+                                const char *import_name =
+                                    (spec->kind == XR_MOD_STDLIB && spec->canonical)
+                                        ? spec->canonical
+                                        : spec->source_path;
+                                XrValue val = xr_module_import(iso, import_name);
                                 if (!XR_IS_NULL(val))
                                     mod_table[ti] = xr_value_to_module(val);
                             }

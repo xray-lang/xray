@@ -24,6 +24,7 @@
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xa_selection.h"
 #include "../frontend/analyzer/xconsteval.h"
 #include "../frontend/lexer/xlex.h"
@@ -172,6 +173,63 @@ static XrClassInfo *xi_lower_lookup_class_info(XiLower *l, const char *name) {
         return NULL;
     XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
     return links ? links->class_info : NULL;
+}
+
+static XiValue *xi_lower_emit_import_ref(XiLower *l, const char *module_name,
+                                         const char *member_name, struct XrType *type, int line) {
+    if (!l || !module_name)
+        return NULL;
+
+    XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiImportRef));
+    if (!ref)
+        return NULL;
+    memset(ref, 0, sizeof(*ref));
+
+    uint32_t ml = (uint32_t) strlen(module_name);
+    char *mc = (char *) xi_func_arena_alloc(l->func, ml + 1);
+    if (!mc)
+        return NULL;
+    memcpy(mc, module_name, ml + 1);
+    ref->module_path = mc;
+
+    if (member_name) {
+        uint32_t nl = (uint32_t) strlen(member_name);
+        char *nc = (char *) xi_func_arena_alloc(l->func, nl + 1);
+        if (!nc)
+            return NULL;
+        memcpy(nc, member_name, nl + 1);
+        ref->member_name = nc;
+    }
+
+    ref->resolved_mod_index = -1;
+    ref->resolved_shared_slot = -1;
+
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type ? type : l->type_any, 0);
+    if (!v)
+        return NULL;
+    v->aux = (void *) ref;
+    v->aux_int = -1;
+    v->line = (uint32_t) line;
+    return v;
+}
+
+static XiValue *xi_lower_builtin_module_function_ref(XiLower *l, uint32_t sid,
+                                                     const char *fallback_name, int line) {
+    if (!l || !l->analyzer || sid == 0)
+        return NULL;
+
+    XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, sid);
+    if (!sym || !sym->is_builtin || sym->kind != XA_SYM_FUNCTION)
+        return NULL;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+    const char *module_name = links ? links->module_name : NULL;
+    const char *member_name =
+        links && links->import_member_name ? links->import_member_name : fallback_name;
+    if (!module_name || !member_name)
+        return NULL;
+
+    return xi_lower_emit_import_ref(l, module_name, member_name, links->type, line);
 }
 
 static XrAggregateLayout *xi_lower_type_struct_layout(XiLower *l, struct XrType *type) {
@@ -814,6 +872,10 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
     /* Builtin class names (PascalCase) resolve to runtime class globals.
      * Used as namespaces for static method dispatch like Json.parse(s). */
     if (name) {
+        XiValue *module_func = xi_lower_builtin_module_function_ref(l, sid, name, (int) node->line);
+        if (module_func)
+            return module_func;
+
         XiValue *builtin_class = xi_lower_emit_builtin_class(l, name, node->line);
         if (builtin_class)
             return builtin_class;
