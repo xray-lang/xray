@@ -372,10 +372,16 @@ main = "src/main.xr"
 profile = "freestanding"
 toolchain = "zig"
 linker_script = "kernel.ld"
+objcopy = "llvm-objcopy"
+objcopy_output = "kernel.bin"
 cc_flags = ["-DXRAY_TARGET_CONFIG_TEST=1"]
 ld_flags = ["-Wl,-z,max-page-size=4096"]
+objcopy_flags = ["-O", "binary"]
 EOF
-FREESTANDING_TARGET_CONFIG_BIN="$WORK/freestanding_target_config"
+FREESTANDING_TARGET_CONFIG_BIN="$WORK/freestanding_target_config.elf"
+FREESTANDING_TARGET_CONFIG_OBJ_REAL="$(
+    cd "$FREESTANDING_TARGET_CONFIG_DIR" && pwd -P
+)/kernel.bin"
 FREESTANDING_TARGET_CONFIG_LOG="$WORK/freestanding_target_config.log"
 if "$XRAY" build --native --target x86_64-linux-musl --dry-run-link --dump-link-command \
         --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_TARGET_CONFIG_BIN" \
@@ -394,6 +400,9 @@ if "$XRAY" build --native --target x86_64-linux-musl --dry-run-link --dump-link-
         "freestanding-profile/target-config: applies configured cc flags"
     expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" "-Wl,-z,max-page-size=4096" \
         "freestanding-profile/target-config: applies configured ld flags"
+    expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" \
+        "Objcopy command: llvm-objcopy -O binary $FREESTANDING_TARGET_CONFIG_BIN $FREESTANDING_TARGET_CONFIG_OBJ_REAL" \
+        "freestanding-profile/target-config: applies configured objcopy"
 else
     record_fail "freestanding-profile/target-config: build failed"
     sed 's/^/      /' "$FREESTANDING_TARGET_CONFIG_LOG" | sed -n '1,120p'

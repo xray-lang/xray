@@ -41,10 +41,14 @@ typedef struct XrTargetConfig {
     char *zig;
     char *sysroot;
     char *linker_script;
+    char *objcopy;
+    char *objcopy_output;
     char **cc_flags;
     int n_cc_flags;
     char **ld_flags;
     int n_ld_flags;
+    char **objcopy_flags;
+    int n_objcopy_flags;
 } XrTargetConfig;
 
 /* ========== Project Configuration ========== */

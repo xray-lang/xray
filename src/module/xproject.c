@@ -91,8 +91,11 @@ static XrTargetConfig *load_target_config(const char *name, XrTomlValue *tbl) {
     cfg->zig = get_toml_str(tbl, "zig");
     cfg->sysroot = get_toml_str(tbl, "sysroot");
     cfg->linker_script = get_toml_str(tbl, "linker_script");
+    cfg->objcopy = get_toml_str(tbl, "objcopy");
+    cfg->objcopy_output = get_toml_str(tbl, "objcopy_output");
     if (!cfg->name || !get_toml_str_array(tbl, "cc_flags", &cfg->cc_flags, &cfg->n_cc_flags) ||
-        !get_toml_str_array(tbl, "ld_flags", &cfg->ld_flags, &cfg->n_ld_flags)) {
+        !get_toml_str_array(tbl, "ld_flags", &cfg->ld_flags, &cfg->n_ld_flags) ||
+        !get_toml_str_array(tbl, "objcopy_flags", &cfg->objcopy_flags, &cfg->n_objcopy_flags)) {
         free_target_config(cfg);
         return NULL;
     }
@@ -238,8 +241,11 @@ static void free_target_config(XrTargetConfig *cfg) {
     xr_free(cfg->zig);
     xr_free(cfg->sysroot);
     xr_free(cfg->linker_script);
+    xr_free(cfg->objcopy);
+    xr_free(cfg->objcopy_output);
     free_string_list(cfg->cc_flags, cfg->n_cc_flags);
     free_string_list(cfg->ld_flags, cfg->n_ld_flags);
+    free_string_list(cfg->objcopy_flags, cfg->n_objcopy_flags);
     xr_free(cfg);
 }
 

@@ -672,6 +672,75 @@ static void xaot_cli_link_print_command(const XaotCliLinkCommand *cmd) {
     xaot_cli_print_command("Link command", cmd);
 }
 
+static void xaot_cli_objcopy_print_command(const XaotCliLinkCommand *cmd) {
+    xaot_cli_print_command("Objcopy command", cmd);
+}
+
+static bool xaot_cli_target_config_has_objcopy(const XrTargetConfig *config) {
+    return config &&
+           ((config->objcopy && config->objcopy[0]) ||
+            (config->objcopy_output && config->objcopy_output[0]) || config->n_objcopy_flags > 0);
+}
+
+static bool xaot_cli_build_objcopy_command(const XrTargetConfig *config, const char *input_file,
+                                           const char *output_file, XaotCliLinkCommand *cmd,
+                                           char *err, size_t err_size) {
+    const char *program;
+
+    if (!config || !output_file || !output_file[0] || !cmd) {
+        snprintf(err, err_size, "missing objcopy command input");
+        return false;
+    }
+    if (!input_file || !input_file[0]) {
+        snprintf(err, err_size, "missing objcopy input file");
+        return false;
+    }
+
+    memset(cmd, 0, sizeof(*cmd));
+    program = (config->objcopy && config->objcopy[0]) ? config->objcopy : "objcopy";
+    cmd->program = program;
+    if (!xaot_cli_link_add_arg(cmd, program, err, err_size))
+        return false;
+    for (int i = 0; i < config->n_objcopy_flags; i++) {
+        const char *flag = config->objcopy_flags ? config->objcopy_flags[i] : NULL;
+        if (flag && flag[0] && !xaot_cli_link_add_arg(cmd, flag, err, err_size))
+            return false;
+    }
+    return xaot_cli_link_add_arg(cmd, input_file, err, err_size) &&
+           xaot_cli_link_add_arg(cmd, output_file, err, err_size);
+}
+
+static int invoke_target_objcopy(const XrTargetConfig *config, const char *input_file,
+                                 const char *output_file, bool dump_objcopy_command,
+                                 bool dry_run_objcopy) {
+    char err[512];
+    XaotCliLinkCommand cmd;
+
+    if (!config || !output_file || !output_file[0])
+        return 0;
+
+    if (!xaot_cli_build_objcopy_command(config, input_file, output_file, &cmd, err, sizeof(err))) {
+        fprintf(stderr, "Error: %s\n", err);
+        return 1;
+    }
+    if (dump_objcopy_command)
+        xaot_cli_objcopy_print_command(&cmd);
+    if (dry_run_objcopy)
+        return 0;
+
+    XrProcId pid = xr_proc_spawn(cmd.program, cmd.argv);
+    if (pid == XR_PROC_INVALID) {
+        fprintf(stderr, "Error: failed to start objcopy tool '%s'\n", cmd.program);
+        return 1;
+    }
+    int code = -1;
+    if (xr_proc_wait(pid, &code) != 0 || code != 0) {
+        fprintf(stderr, "Error: post-link objcopy failed for '%s'\n", input_file);
+        return 1;
+    }
+    return 0;
+}
+
 static bool xaot_cli_build_compile_command(const XrCliToolchainPlan *plan,
                                            const XrCliBuildTarget *target,
                                            const XaotLinkManifest *manifest, const char *opt_flag,
@@ -1102,15 +1171,17 @@ static const char *default_shared_library_output(void) {
 static int cmd_build_bytecode(const char *input, const char *output, const char *cc,
                               const char *opt_flag, bool c_only, bool strip, bool debug_symbols,
                               const char *sysroot);
-static int
-cmd_build_native(const char *input, const char *output, const char *cc, const char *opt_flag,
-                 const char *cpu, bool c_only, bool strip, bool debug_symbols, bool shared_library,
-                 XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
-                 const char *sysroot, const char *linker_script, bool verbose, bool dump_xaot_plan,
-                 bool dump_global_evidence, bool dump_link_manifest, bool dump_link_command,
-                 bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg,
-                 bool rebuild, bool lto, const XrCliBuildTarget *target,
-                 const XrCliToolchainPlan *toolchain_plan, const XrTargetConfig *target_config);
+static int cmd_build_native(const char *input, const char *output, const char *cc,
+                            const char *opt_flag, const char *cpu, bool c_only, bool strip,
+                            bool debug_symbols, bool shared_library, XrCliBuildProfile profile,
+                            XiCgenTypeNameProfile type_name_profile, const char *sysroot,
+                            const char *linker_script, bool verbose, bool dump_xaot_plan,
+                            bool dump_global_evidence, bool dump_link_manifest,
+                            bool dump_link_command, bool dry_run_link, const char *c_header,
+                            bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto,
+                            const XrCliBuildTarget *target,
+                            const XrCliToolchainPlan *toolchain_plan,
+                            const XrTargetConfig *target_config, const char *objcopy_output);
 
 /* ========== CLI Entry Point ========== */
 
@@ -1145,12 +1216,14 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     const XrTargetConfig *target_config = NULL;
     char project_root[XR_PATH_MAX];
     char linker_script_from_config[XR_PATH_MAX];
+    char objcopy_output_from_config[XR_PATH_MAX];
     const char *cc;
     const char *sysroot;
     const char *toolchain_arg;
     const char *zig_path;
     const char *profile_arg;
     const char *linker_script;
+    const char *objcopy_output;
     XrCliBuildTarget target;
     XrCliBuildProfile profile;
     XiCgenTypeNameProfile type_name_profile;
@@ -1167,6 +1240,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
 
     project_root[0] = '\0';
     linker_script_from_config[0] = '\0';
+    objcopy_output_from_config[0] = '\0';
     if (native_mode && build_find_project_root(input_file, project_root, sizeof(project_root))) {
         project = xr_project_load(NULL, project_root);
         if (project)
@@ -1190,6 +1264,13 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
                                 target_config->linker_script, linker_script_from_config,
                                 sizeof(linker_script_from_config))) {
         linker_script = linker_script_from_config;
+    }
+    objcopy_output = NULL;
+    if (target_config && target_config->objcopy_output && target_config->objcopy_output[0] &&
+        build_join_project_path(project ? project->root : project_root,
+                                target_config->objcopy_output, objcopy_output_from_config,
+                                sizeof(objcopy_output_from_config))) {
+        objcopy_output = objcopy_output_from_config;
     }
 
     if (!xr_cli_build_target_parse(target_arg, &target, parse_err, sizeof(parse_err))) {
@@ -1280,6 +1361,22 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     }
     if (c_only && !xr_cli_opt_present(&inv->options, "linker-script"))
         linker_script = NULL;
+    if (c_only) {
+        objcopy_output = NULL;
+    } else if (target_config && target_config->objcopy_output &&
+               !target_config->objcopy_output[0]) {
+        fprintf(stderr, "Error: xray.toml target objcopy requires non-empty objcopy_output\n");
+        CMD_BUILD_RETURN(2);
+    } else if (target_config && xaot_cli_target_config_has_objcopy(target_config) &&
+               (!target_config->objcopy_output || !target_config->objcopy_output[0])) {
+        fprintf(stderr, "Error: xray.toml target objcopy requires non-empty objcopy_output\n");
+        CMD_BUILD_RETURN(2);
+    } else if (target_config && target_config->objcopy_output && target_config->objcopy_output[0] &&
+               (!objcopy_output || !objcopy_output[0])) {
+        fprintf(stderr, "Error: xray.toml target objcopy_output path is too long: %s\n",
+                target_config->objcopy_output);
+        CMD_BUILD_RETURN(2);
+    }
     bool freestanding_shared_object =
         shared_library && profile == XR_CLI_BUILD_PROFILE_FREESTANDING;
     if (shared_library && !target.is_native && !freestanding_shared_object) {
@@ -1343,7 +1440,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
                               type_name_profile, sysroot, linker_script, verbose, dump_xaot_plan,
                               dump_global_evidence, dump_link_manifest, dump_link_command,
                               dry_run_link, c_header, keep_c, cache_dir_arg, rebuild, effective_lto,
-                              &target, &toolchain_plan, target_config);
+                              &target, &toolchain_plan, target_config, objcopy_output);
         CMD_BUILD_RETURN(rc);
     }
     rc = cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
@@ -2013,15 +2110,17 @@ static bool xaot_cli_fast_test_direct_link_allowed(const XaotLinkManifest *manif
            manifest->n_stdlib_objects == 0;
 }
 
-static int
-cmd_build_native(const char *input, const char *output, const char *cc, const char *opt_flag,
-                 const char *cpu, bool c_only, bool strip, bool debug_symbols, bool shared_library,
-                 XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
-                 const char *sysroot, const char *linker_script, bool verbose, bool dump_xaot_plan,
-                 bool dump_global_evidence, bool dump_link_manifest, bool dump_link_command,
-                 bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg,
-                 bool rebuild, bool lto, const XrCliBuildTarget *target,
-                 const XrCliToolchainPlan *toolchain_plan, const XrTargetConfig *target_config) {
+static int cmd_build_native(const char *input, const char *output, const char *cc,
+                            const char *opt_flag, const char *cpu, bool c_only, bool strip,
+                            bool debug_symbols, bool shared_library, XrCliBuildProfile profile,
+                            XiCgenTypeNameProfile type_name_profile, const char *sysroot,
+                            const char *linker_script, bool verbose, bool dump_xaot_plan,
+                            bool dump_global_evidence, bool dump_link_manifest,
+                            bool dump_link_command, bool dry_run_link, const char *c_header,
+                            bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto,
+                            const XrCliBuildTarget *target,
+                            const XrCliToolchainPlan *toolchain_plan,
+                            const XrTargetConfig *target_config, const char *objcopy_output) {
     XaotBuildResult aot_result;
     XaotBuildProfile aot_profile = profile == XR_CLI_BUILD_PROFILE_FREESTANDING
                                        ? XAOT_BUILD_PROFILE_FREESTANDING
@@ -2202,8 +2301,9 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
         return 1;
     }
 
-    bool use_link_output_cache = !rebuild && !dry_run_link && !dump_link_command && !verbose &&
-                                 !debug_symbols && !shared_library && !keep_c;
+    bool has_objcopy = target_config && objcopy_output && objcopy_output[0];
+    bool use_link_output_cache = !has_objcopy && !rebuild && !dry_run_link && !dump_link_command &&
+                                 !verbose && !debug_symbols && !shared_library && !keep_c;
     uint64_t link_output_cache_key = 0;
     if (use_link_output_cache) {
         link_output_cache_key = xaot_link_output_cache_key(
@@ -2245,6 +2345,9 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
         if (ret == 0 && strip)
             remove_dsym_bundle(output);
 #endif
+        if (ret == 0 && has_objcopy)
+            ret = invoke_target_objcopy(target_config, output, objcopy_output,
+                                        dump_link_command || verbose, false);
         if (ret == 0 && use_link_output_cache)
             xaot_store_link_output_cache(cache_dir, link_output_cache_key, output);
         if (ret == 0)
@@ -2284,6 +2387,10 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
 #else
     (void) build_dsym;
 #endif
+
+    if (ret == 0 && has_objcopy)
+        ret = invoke_target_objcopy(target_config, output, objcopy_output,
+                                    dump_link_command || verbose || dry_run_link, dry_run_link);
 
     xr_free(obj_bufs);
     xr_free(obj_ptrs);
