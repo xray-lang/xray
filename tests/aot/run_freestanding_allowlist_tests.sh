@@ -31,6 +31,38 @@ record_fail() {
     FAIL=$((FAIL + 1))
 }
 
+allowlist_modules() {
+    while IFS= read -r raw || [ -n "$raw" ]; do
+        line="${raw%%#*}"
+        set -- $line
+        [ "$#" -eq 0 ] && continue
+        if [ "$#" -eq 2 ]; then
+            printf '%s\n' "$1"
+        fi
+    done < "$ALLOWLIST" | sort
+}
+
+analyzer_allowed_modules() {
+    sed -n '/XR_FUNC bool xa_freestanding_stdlib_module_allowed/,/^}/p' \
+        "$PROJECT_DIR/src/frontend/analyzer/xanalyzer_visitor.c" |
+        grep -o 'strcmp(module_name, "[^"]*")' |
+        sed 's/strcmp(module_name, "\([^"]*\)")/\1/' |
+        sort
+}
+
+check_analyzer_allowlist_sync() {
+    local expected="$WORK/allowlist_modules.txt"
+    local actual="$WORK/analyzer_modules.txt"
+    allowlist_modules >"$expected"
+    analyzer_allowed_modules >"$actual"
+    if diff -u "$expected" "$actual" >"$WORK/allowlist_sync.diff"; then
+        record_pass "analyzer module allowlist matches stdlib/freestanding_allowlist"
+        return
+    fi
+    record_fail "analyzer module allowlist drifted from stdlib/freestanding_allowlist"
+    sed 's/^/      /' "$WORK/allowlist_sync.diff"
+}
+
 nm_undefined_normalized() {
     nm -u "$1" 2>&1 |
         sed '/^[[:space:]]*$/d' |
@@ -102,6 +134,8 @@ if [ ! -f "$ALLOWLIST" ]; then
     echo "FAIL: freestanding allowlist missing: $ALLOWLIST" >&2
     exit 1
 fi
+
+check_analyzer_allowlist_sync
 
 while IFS= read -r raw || [ -n "$raw" ]; do
     line="${raw%%#*}"
