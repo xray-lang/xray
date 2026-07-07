@@ -3448,6 +3448,165 @@ static bool xicgen_emit_direct_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     return true;
 }
 
+static const XgClassSummary *xicgen_dispatch_evidence_class(const XaotBundle *bundle,
+                                                            XgClassId class_id) {
+    const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
+    if (!ev || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        if (ev->classes[i].class_id == class_id)
+            return &ev->classes[i];
+    }
+    return NULL;
+}
+
+static bool xicgen_class_data_name_matches_id(const XiClassData *class_data, uint32_t name_id) {
+    if (!class_data || name_id == 0)
+        return false;
+    if (xg_name_id(class_data->class_name) == name_id)
+        return true;
+    if (xg_name_id(class_data->display_name) == name_id)
+        return true;
+    return xg_name_id(class_data->generic_origin_name) == name_id;
+}
+
+static const XiClassData *xicgen_find_class_data_in_module(const XiModule *module,
+                                                           const XgClassSummary *class_summary) {
+    if (!module || !class_summary || class_summary->name_id == 0)
+        return NULL;
+    for (uint16_t i = 0; i < module->nclasses; i++) {
+        const XiClassData *cd = module->classes ? module->classes[i] : NULL;
+        if (xicgen_class_data_name_matches_id(cd, class_summary->name_id))
+            return cd;
+    }
+    return NULL;
+}
+
+static const XiClassData *xicgen_find_dispatch_class_data(XiCgenCtx *ctx, const XaotBundle *bundle,
+                                                          XgClassId class_id) {
+    const XgClassSummary *class_summary = xicgen_dispatch_evidence_class(bundle, class_id);
+    if (!ctx || !class_summary)
+        return NULL;
+    for (uint32_t mi = 0; bundle && mi < bundle->nmodules; mi++) {
+        const XiModule *module = bundle->modules ? bundle->modules[mi] : NULL;
+        if (class_summary->module_id != 0 && class_summary->module_id != mi + 1)
+            continue;
+        const XiClassData *cd = xicgen_find_class_data_in_module(module, class_summary);
+        if (cd)
+            return cd;
+    }
+    if (ctx->module) {
+        const XiClassData *cd = xicgen_find_class_data_in_module(ctx->module, class_summary);
+        if (cd)
+            return cd;
+    }
+    for (int i = 0; i < ctx->all_nmodules; i++) {
+        const XiModule *module = ctx->all_modules ? ctx->all_modules[i] : NULL;
+        const XiClassData *cd = xicgen_find_class_data_in_module(module, class_summary);
+        if (cd)
+            return cd;
+    }
+    for (int i = 0; i < ctx->nimports; i++) {
+        const XiClassData *cd = ctx->imports[i].target_class;
+        if (xicgen_class_data_name_matches_id(cd, class_summary->name_id))
+            return cd;
+    }
+    return NULL;
+}
+
+static bool xicgen_emit_planned_type_switch_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                   const XiValue *v, const char *prefix,
+                                                   const XaotMethodDispatchPlan *dispatch_plan) {
+    const XaotBundle *bundle;
+    bool void_like;
+    if (!dispatch_plan || dispatch_plan->kind != XAOT_DISPATCH_TYPE_SWITCH)
+        return false;
+    if (dispatch_plan->receiver_static_interface_id == XG_NO_ID)
+        return false;
+    bundle = cg_ctx_aot_bundle(ctx);
+    if (!bundle || dispatch_plan->target_count == 0 || dispatch_plan->target_start == 0 ||
+        dispatch_plan->target_start - 1 + dispatch_plan->target_count >
+            bundle->ndispatch_target_cases) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: verified AOT type-switch dispatch plan at line %u has no "
+                "target cases\n",
+                (unsigned) v->line);
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+
+    void_like = cg_is_void_like(v);
+    fprintf(out, "({ XrValue _xr_ts_recv_%u = ", v->id);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, "; bool _xr_ts_matched_%u = false; ", v->id);
+    if (!void_like) {
+        fprintf(out,
+                "%s _xr_ts_result_%u; memset(&_xr_ts_result_%u, 0, sizeof(_xr_ts_result_%u)); ",
+                local_ctype_str_ctx(ctx, f, v), v->id, v->id, v->id);
+    }
+
+    for (uint16_t i = 0; i < dispatch_plan->target_count; i++) {
+        const XaotDispatchTargetCase *target =
+            &bundle->dispatch_target_cases[dispatch_plan->target_start - 1 + i];
+        const XiClassData *target_class =
+            xicgen_find_dispatch_class_data(ctx, bundle, target->receiver_class_id);
+        const char *target_prefix = NULL;
+        const XiFunc *target_func =
+            xaot_bundle_find_dispatch_target_func(bundle, target, &target_prefix);
+        if (!target_class || !target_func) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: verified AOT type-switch target %u/%u for method '%s' at "
+                    "line %u has no Xi class/function\n",
+                    (unsigned) target->receiver_class_id, (unsigned) target->method_id,
+                    v->aux ? (const char *) v->aux : "?", (unsigned) v->line);
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        fprintf(out, "%s (xrt_instanceof(_xr_ts_recv_%u, (uint16_t)", i == 0 ? "if" : "else if",
+                v->id);
+        if (!emit_class_native_type_id_expr(ctx, out, target_class)) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: verified AOT type-switch class %u for method '%s' at line "
+                    "%u has no native type id\n",
+                    (unsigned) target->receiver_class_id, v->aux ? (const char *) v->aux : "?",
+                    (unsigned) v->line);
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        fprintf(out, ")) { ");
+        if (void_like) {
+            fprintf(out, "(void)(");
+            if (!xicgen_emit_direct_method(ctx, out, f, v, prefix, target_func, target_prefix)) {
+                ctx->error = true;
+                emit_codegen_abort_expr(out);
+                return true;
+            }
+            fprintf(out, "); ");
+        } else {
+            fprintf(out, "_xr_ts_result_%u = ", v->id);
+            if (!xicgen_emit_direct_method(ctx, out, f, v, prefix, target_func, target_prefix)) {
+                ctx->error = true;
+                emit_codegen_abort_expr(out);
+                return true;
+            }
+            fprintf(out, "; ");
+        }
+        fprintf(out, "_xr_ts_matched_%u = true; } ", v->id);
+    }
+    fprintf(out,
+            "if (!_xr_ts_matched_%u) { fprintf(stderr, \"xray AOT: verified interface "
+            "type-switch dispatch missed\\n\"); abort(); } ",
+            v->id);
+    if (void_like)
+        fprintf(out, "XR_NULL_VAL; })");
+    else
+        fprintf(out, "_xr_ts_result_%u; })", v->id);
+    return true;
+}
+
 static bool xicgen_emit_planned_direct_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                               const XiValue *v, const char *prefix,
                                               const XaotMethodDispatchPlan *dispatch_plan) {
@@ -4931,6 +5090,8 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (xicgen_emit_task_method(ctx, out, f, v, method, nargs))
         return;
     if (xicgen_emit_planned_direct_method(ctx, out, f, v, prefix, dispatch_plan))
+        return;
+    if (xicgen_emit_planned_type_switch_method(ctx, out, f, v, prefix, dispatch_plan))
         return;
     if (xicgen_emit_direct_method(ctx, out, f, v, prefix, mfunc, method_prefix))
         return;
