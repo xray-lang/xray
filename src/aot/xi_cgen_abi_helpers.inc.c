@@ -210,9 +210,7 @@ static const char *cg_func_return_abi_c_type(XiCgenCtx *ctx, const XiFunc *f) {
  * Pointee precision is unnecessary at the call boundary: deref/index sites cast
  * to the exact element type. */
 static const char *cg_extern_ptr_boundary_c_type(const XrType *t) {
-    if (t && t->kind == XR_KIND_POINTER)
-        return t->ptr_is_mut ? "void *" : "const void *";
-    return NULL;
+    return xaot_raw_pointer_c_type(t);
 }
 
 static bool cg_type_is_c_callback(const XrType *type) {
@@ -249,7 +247,7 @@ static const char *cg_cfn_value_c_type(const XrType *type, bool is_return) {
                     return "int64_t";
             }
         case XR_KIND_POINTER:
-            return type->ptr_is_mut ? "void *" : "const void *";
+            return xaot_raw_pointer_c_type(type);
         default:
             return NULL;
     }

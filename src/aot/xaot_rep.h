@@ -48,5 +48,6 @@ XR_FUNC XaotValueRep xaot_value_rep_for_value(const struct XiValue *value);
 XR_FUNC XrRep xaot_value_storage_rep(XaotValueRep rep);
 XR_FUNC bool xaot_value_reps_equal(XaotValueRep a, XaotValueRep b);
 XR_FUNC const char *xaot_value_kind_name(XaotValueKind kind);
+XR_FUNC const char *xaot_raw_pointer_c_type(const XrType *type);
 
 #endif  // XAOT_REP_H
