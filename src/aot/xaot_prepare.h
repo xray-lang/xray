@@ -29,8 +29,7 @@ XR_FUNC uint32_t xaot_prepare_array_access_bounds_evidence(const XaotBundle *bun
  * eliminated checks or an unproven reason; the verifier re-derives the same
  * row before CGen is allowed to consume it. */
 XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, const XiFunc *func,
-                                                     const XiValue *value,
-                                                     XaotSpanAccessPlan *out);
+                                                     const XiValue *value, XaotSpanAccessPlan *out);
 
 /* Uniqueness proof for an array data cache (XAOT_ALIAS_UNIQUE_DATA).
  * Returns the XAOT_ALIAS_EV_* evidence bits when the cached data pointer is
@@ -40,5 +39,13 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
 XR_FUNC uint32_t xaot_prepare_array_cache_alias_evidence(const XaotBundle *bundle,
                                                          const XiFunc *func,
                                                          const XaotArrayCachePlan *cache_plan);
+
+/* Closure allocation representation evidence.  Returns false for non-closure
+ * values. Recognized allocation values fill `out` with the runtime/stack
+ * representation, target/capture evidence, and any unproven reason; the
+ * closure-plan pass records one row for every closure allocation and the
+ * verifier re-derives the same row. */
+XR_FUNC bool xaot_prepare_closure_plan_for_value(const XiFunc *func, const XiValue *value,
+                                                 XaotClosurePlan *out);
 
 #endif  // XAOT_PREPARE_H

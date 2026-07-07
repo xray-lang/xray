@@ -1,0 +1,8 @@
+fn run(x: int) -> int {
+    const add = fn(y: int) -> int {
+        return x + y
+    }
+    return add(1)
+}
+
+print(run(2))

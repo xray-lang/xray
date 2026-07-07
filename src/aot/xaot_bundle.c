@@ -683,6 +683,7 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xr_free(bundle->bounds_plans);
     xr_free(bundle->span_access_plans);
     xr_free(bundle->alias_plans);
+    xr_free(bundle->closure_plans);
     xaot_bundle_clear_global_lowered_plans(bundle);
     xr_free(bundle->boundary_steps);
     xaot_ptr_index_free(&bundle->value_index);
@@ -694,6 +695,7 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xaot_ptr_index_free(&bundle->bounds_index);
     xaot_ptr_index_free(&bundle->span_access_index);
     xaot_ptr_index_free(&bundle->alias_index);
+    xaot_ptr_index_free(&bundle->closure_index);
     memset(bundle, 0, sizeof(*bundle));
 }
 
@@ -1532,6 +1534,49 @@ XR_FUNC const XaotAliasPlan *xaot_bundle_find_alias_plan(const XaotBundle *bundl
     return NULL;
 }
 
+XR_FUNC XaotClosurePlan *
+xaot_bundle_add_closure_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,
+                             const XiFunc *target_func, uint16_t capture_count,
+                             uint8_t representation, uint32_t evidence, uint8_t unproven_reason) {
+    XaotClosurePlan *plan;
+
+    if (!bundle || !func || !value || representation == 0 || evidence == 0)
+        return NULL;
+    plan = (XaotClosurePlan *) xaot_bundle_find_closure_plan(bundle, value);
+    if (plan)
+        return plan;
+    if (!reserve_plan_array((void **) &bundle->closure_plans, &bundle->closure_plan_cap,
+                            bundle->nclosure_plans + 1, sizeof(XaotClosurePlan), 16))
+        return NULL;
+    plan = &bundle->closure_plans[bundle->nclosure_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->func = func;
+    plan->value = value;
+    plan->target_func = target_func;
+    plan->capture_count = capture_count;
+    plan->representation = representation;
+    plan->evidence = evidence;
+    plan->unproven_reason = unproven_reason;
+    if (!xaot_ptr_index_put(&bundle->closure_index, value, bundle->nclosure_plans - 1)) {
+        bundle->nclosure_plans--;
+        memset(plan, 0, sizeof(*plan));
+        bundle->error_msg = "failed to index AOT closure plan";
+        return NULL;
+    }
+    return plan;
+}
+
+XR_FUNC const XaotClosurePlan *xaot_bundle_find_closure_plan(const XaotBundle *bundle,
+                                                             const XiValue *value) {
+    uint32_t idx;
+
+    if (!bundle || !value)
+        return NULL;
+    if (xaot_ptr_index_get(&bundle->closure_index, value, &idx) && idx < bundle->nclosure_plans)
+        return &bundle->closure_plans[idx];
+    return NULL;
+}
+
 XR_FUNC XaotBoundaryStep *xaot_bundle_add_boundary_step(XaotBundle *bundle,
                                                         XaotBoundaryStepKind kind,
                                                         const XiFunc *func, const XiValue *value,
@@ -1871,6 +1916,48 @@ static const char *span_access_reason_name(uint8_t reason) {
     }
 }
 
+static const char *closure_representation_name(uint8_t representation) {
+    switch ((XaotClosureRepresentation) representation) {
+        case XAOT_CLOSURE_RUNTIME:
+            return "runtime";
+        case XAOT_CLOSURE_STACK:
+            return "stack";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *closure_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_CLOSURE_UNPROVEN_NONE:
+            return "none";
+        case XAOT_CLOSURE_UNPROVEN_NO_TARGET:
+            return "no_target";
+        case XAOT_CLOSURE_UNPROVEN_CAPTURE_ARITY:
+            return "capture_arity";
+        default:
+            return "unknown";
+    }
+}
+
+static void print_closure_evidence_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_CLOSURE_EV_XI_VALUE, "xi_value");
+    PRINT_BIT(XAOT_CLOSURE_EV_TARGET_FUNC, "target");
+    PRINT_BIT(XAOT_CLOSURE_EV_CAPTURE_ARITY, "captures");
+    PRINT_BIT(XAOT_CLOSURE_EV_NOESCAPE_STACK, "noescape_stack");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
 XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     char *buf = NULL;
     size_t bufsz = 0;
@@ -2140,6 +2227,18 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 (ap->evidence & XAOT_ALIAS_EV_ALL_ACCESS_RAW) ? "+raw" : "",
                 (ap->evidence & XAOT_ALIAS_EV_USE_WHITELIST) ? "+whitelist" : "",
                 (ap->evidence & XAOT_ALIAS_EV_SOLE_CACHE) ? "+sole" : "");
+    }
+
+    for (uint32_t ci = 0; ci < bundle->nclosure_plans; ci++) {
+        const XaotClosurePlan *cp = &bundle->closure_plans[ci];
+        char value_buf[32];
+        value_ref(value_buf, sizeof(value_buf), cp->value);
+        fprintf(out, "closure %u func=%s value=%s target=%s captures=%u repr=%s evidence=", ci,
+                safe_str(cp->func ? cp->func->name : NULL), value_buf,
+                safe_str(cp->target_func ? cp->target_func->name : NULL),
+                (unsigned) cp->capture_count, closure_representation_name(cp->representation));
+        print_closure_evidence_bits(out, cp->evidence);
+        fprintf(out, " reason=%s\n", closure_unproven_reason_name(cp->unproven_reason));
     }
 
     for (uint32_t bi = 0; bi < bundle->nboundary_steps; bi++) {
