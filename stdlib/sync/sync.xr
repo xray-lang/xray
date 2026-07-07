@@ -53,17 +53,20 @@ class Mutex<T> {
     }
 }
 
-// RwLock<T> — many readers XOR one writer. A `Semaphore(1)` write/read gate is
-// held for the whole write, and by the first reader in / last reader out; the
-// reader count is guarded by a short `Atomic<bool>` spinlock so the defer-side
-// cleanup stays non-suspendable.
+// RwLock<T> — many readers XOR one writer. `_entry` serializes reader entry so
+// a first reader cannot publish `_readers = 1` before it owns `_gate`; otherwise
+// a writer could slip in and a later reader could enter the body while the
+// writer still holds the gate. The reader count is guarded by a short
+// `Atomic<bool>` spinlock so the defer-side cleanup stays non-suspendable.
 class RwLock<T> {
+    _entry: Semaphore
     _gate: Semaphore
     _rflag: Atomic<bool>
     _readers: int
     value: T
 
     constructor(v: T) {
+        this._entry = Semaphore(1)
         this._gate = Semaphore(1)
         this._rflag = Atomic<bool>(false)
         this._readers = 0
@@ -78,11 +81,13 @@ class RwLock<T> {
     }
 
     read<U>(body: (T) -> U) -> U {
+        this._entry.acquire()
         this._lockCounter()
         this._readers = this._readers + 1
         var first = this._readers == 1
         this._rflag.store(false, Ordering.Release)
         if (first) { this._gate.acquire() }
+        this._entry.release()
         defer {
             this._lockCounter()
             this._readers = this._readers - 1
