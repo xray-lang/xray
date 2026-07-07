@@ -584,6 +584,63 @@ vmcase(OP_TAILCALL) {
     // Get the called function
     XrValue func_val = R(a);
 
+    if (XR_IS_CFUNCTION(func_val)) {
+        XrCFunction *cfunc = xr_value_to_cfunction(func_val);
+
+        {
+            XrWorker *_w = xr_current_worker();
+            if (_w && _w->m)
+                atomic_store_explicit(&_w->m->current_cfunc, cfunc, memory_order_relaxed);
+        }
+
+        bool is_slow =
+            (atomic_load_explicit(&cfunc->cfunc_class, memory_order_acquire) == XR_CFUNC_SLOW);
+        bool handoff_p = is_slow && !cfunc->is_yieldable;
+        if (handoff_p)
+            xr_worker_entersyscall();
+
+        if (cfunc->is_yieldable) {
+            ci->cfunc_result_slot = (int16_t) a;
+            ci->has_cfunc_result = false;
+            savepc();
+
+            XrValue result;
+            XrCFuncResult status = cfunc->as.yieldable(isolate, &R(a + 1), nargs, &result);
+
+            if (handoff_p)
+                xr_worker_exitsyscall();
+            VM_REBIND_AFTER_NATIVE_CALL();
+
+            switch (status) {
+                case XR_CFUNC_DONE:
+                    R(a) = result;
+                    vmbreak;
+
+                case XR_CFUNC_BLOCKED:
+                    return XR_VM_BLOCKED;
+
+                case XR_CFUNC_YIELD:
+                    return XR_VM_YIELD;
+
+                case XR_CFUNC_CALL_CLOSURE:
+                    goto startfunc;
+
+                case XR_CFUNC_WOULD_BLOCK:
+                case XR_CFUNC_ERROR:
+                    return XR_VM_RUNTIME_ERROR;
+            }
+        } else {
+            XrValue result = cfunc->as.func(isolate, &R(a + 1), nargs);
+
+            if (handoff_p)
+                xr_worker_exitsyscall();
+            VM_REBIND_AFTER_NATIVE_CALL();
+
+            R(a) = result;
+            vmbreak;
+        }
+    }
+
     // Type check (class calls have tail call disabled at compile time)
     if (!XR_IS_FUNCTION(func_val)) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "attempt to call a non-function value");
