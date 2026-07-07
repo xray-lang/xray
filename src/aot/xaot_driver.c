@@ -629,8 +629,10 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
         /* Thread handle destructor (xrt_coll.h dispatch) calls the extern
          * xr_thread_detach; only enable it when threads can actually be
          * spawned so thread-free binaries don't need the OS thread object. */
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_ENABLE_SYS_THREAD"))
+        if (!add_runtime_cap(manifest, "sys_thread") ||
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_ENABLE_SYS_THREAD"))
             return false;
+        needs_aot_runtime = true;
     }
     if (features->need_scope) {
         if (!add_runtime_cap(manifest, "transfer"))
