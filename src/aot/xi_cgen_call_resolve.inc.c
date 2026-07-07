@@ -37,6 +37,53 @@ static CgStaticFunctionCall cg_import_entry_static_call(const CgImportEntry *imp
                              : cg_static_function_call(target, imp->target_mod_name);
 }
 
+static CgStaticFunctionCall cg_module_export_static_call(const XiModule *mod,
+                                                         const char *member_name) {
+    if (!mod || !member_name)
+        return cg_no_static_function_call();
+    for (uint16_t ei = 0; ei < mod->nexports; ei++) {
+        const XiModuleExport *exp = &mod->exports[ei];
+        if (!exp->name || strcmp(exp->name, member_name) != 0)
+            continue;
+        const XiFunc *target = exp->function;
+        const XiClassData *target_class = exp->class_data;
+        if (!target && target_class && mod->init)
+            target = cg_find_constructor(mod->init, target_class);
+        if (!target && !target_class)
+            return cg_no_static_function_call();
+        return target_class ? cg_static_class_constructor_data_call(target, mod->name, target_class)
+                            : cg_static_function_call(target, mod->name);
+    }
+    return cg_no_static_function_call();
+}
+
+static CgStaticFunctionCall cg_resolve_module_export_static_call(XiCgenCtx *ctx,
+                                                                 const XiImportRef *module_ref,
+                                                                 const char *member_name) {
+    if (!ctx || !module_ref || !member_name)
+        return cg_no_static_function_call();
+    if (module_ref->resolved_mod_index >= 0 && module_ref->resolved_mod_index < ctx->all_nmodules) {
+        CgStaticFunctionCall call = cg_module_export_static_call(
+            ctx->all_modules[module_ref->resolved_mod_index], member_name);
+        if (call.func || call.is_class_constructor)
+            return call;
+    }
+    if (!module_ref->module_path)
+        return cg_no_static_function_call();
+    for (int mi = 0; mi < ctx->all_nmodules; mi++) {
+        const XiModule *mod = ctx->all_modules[mi];
+        if (!mod)
+            continue;
+        if ((mod->path && strcmp(mod->path, module_ref->module_path) == 0) ||
+            (mod->name && strcmp(mod->name, module_ref->module_path) == 0)) {
+            CgStaticFunctionCall call = cg_module_export_static_call(mod, member_name);
+            if (call.func || call.is_class_constructor)
+                return call;
+        }
+    }
+    return cg_no_static_function_call();
+}
+
 static CgStaticFunctionCall cg_resolve_import_function_call(XiCgenCtx *ctx,
                                                             const XiImportRef *ref) {
     if (!ctx || !ref || !ref->member_name)
@@ -108,7 +155,7 @@ static CgStaticFunctionCall cg_resolve_module_member_call(XiCgenCtx *ctx, const 
         if (cg_import_entry_matches_ref(ctx, imp, module_ref, member_name))
             return cg_import_entry_static_call(imp);
     }
-    return cg_no_static_function_call();
+    return cg_resolve_module_export_static_call(ctx, module_ref, member_name);
 }
 
 static const XiFunc *cg_resolve_local_shared_function(XiCgenCtx *ctx, const XiFunc *current,
