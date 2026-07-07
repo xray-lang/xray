@@ -619,6 +619,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         row.kind = XG_CALL_METHOD;
         row.receiver_static_class_id = receiver_class;
         row.method_id = method ? method->method_id : (XgMethodId) method_name_id;
+        row.method_name_id = method ? method->name_id : method_name_id;
+        row.method_signature_key = method ? method->signature_key : 0;
     }
     if (bc->callsite_count == 0)
         bc->callsite_start = row.callsite_id;
@@ -642,6 +644,8 @@ static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
     row.kind = XG_CALL_METHOD;
     row.receiver_static_class_id = parent_class;
     row.method_id = method ? method->method_id : (XgMethodId) method_name_id;
+    row.method_name_id = method ? method->name_id : method_name_id;
+    row.method_signature_key = method ? method->signature_key : 0;
     row.arg_count =
         (uint16_t) (call->as.super_call.arg_count < UINT16_MAX ? call->as.super_call.arg_count
                                                                : UINT16_MAX);

@@ -131,7 +131,10 @@ static uint64_t hash_callsite_summary(uint64_t hash, const XgCallsiteSummary *ro
     hash = hash_u8(hash, row->kind);
     hash = hash_u32(hash, row->static_target_func_id);
     hash = hash_u32(hash, row->receiver_static_class_id);
+    hash = hash_u32(hash, row->receiver_static_interface_id);
     hash = hash_u32(hash, row->method_id);
+    hash = hash_u32(hash, row->method_name_id);
+    hash = hash_u32(hash, row->method_signature_key);
     hash = hash_u32(hash, row->arg_type_key_start);
     hash = hash_u32(hash, row->arg_count);
     return hash_u32(hash, row->flags);
@@ -531,11 +534,12 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {
         const XgCallsiteSummary *c = &evidence->callsites[i];
         fprintf(out,
-                "callsite %u id=%u owner=%u kind=%s target=%u recv_class=%u method=%u args=%u+%u "
-                "flags=0x%x\n",
+                "callsite %u id=%u owner=%u kind=%s target=%u recv_class=%u recv_iface=%u "
+                "method=%u method_name=%u method_sig=%u args=%u+%u flags=0x%x\n",
                 i, c->callsite_id, c->owner_func_id, xg_callsite_kind_name(c->kind),
-                c->static_target_func_id, c->receiver_static_class_id, c->method_id,
-                c->arg_type_key_start, (unsigned) c->arg_count, c->flags);
+                c->static_target_func_id, c->receiver_static_class_id,
+                c->receiver_static_interface_id, c->method_id, c->method_name_id,
+                c->method_signature_key, c->arg_type_key_start, (unsigned) c->arg_count, c->flags);
     }
 
     if (ferror(out)) {

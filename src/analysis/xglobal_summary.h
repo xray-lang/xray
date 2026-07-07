@@ -195,7 +195,10 @@ typedef struct XgCallsiteSummary {
     uint8_t kind;
     XgFuncId static_target_func_id;
     XgClassId receiver_static_class_id;
+    XgInterfaceId receiver_static_interface_id;
     XgMethodId method_id;
+    uint32_t method_name_id;
+    uint32_t method_signature_key;
     uint32_t arg_type_key_start;
     uint16_t arg_count;
     uint32_t flags;

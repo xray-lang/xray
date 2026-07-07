@@ -455,6 +455,104 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_lowers_interface_call_to_type_switch) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x81,
+                      .compiler_semver_hash = 0x82,
+                      .profile_hash = 0x83,
+                      .imported_summary_hash = 0x84,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgClassSummary circle = {.class_id = 1,
+                             .parent_class_id = XG_NO_ID,
+                             .flags = XG_CLASS_INFERRED_FINAL,
+                             .method_start = 1,
+                             .method_count = 1,
+                             .interface_start = 1,
+                             .interface_count = 1,
+                             .decl_kind = XG_DECL_CLASS};
+    XgClassSummary rect = {.class_id = 2,
+                           .parent_class_id = XG_NO_ID,
+                           .flags = XG_CLASS_INFERRED_FINAL,
+                           .method_start = 2,
+                           .method_count = 1,
+                           .interface_start = 2,
+                           .interface_count = 1,
+                           .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary circle_draw = {.method_id = 1,
+                                   .owner_class_id = 1,
+                                   .name_id = 700,
+                                   .signature_key = 701,
+                                   .override_of = XG_NO_ID,
+                                   .flags = 0};
+    XgMethodSummary rect_draw = {.method_id = 2,
+                                 .owner_class_id = 2,
+                                 .name_id = 700,
+                                 .signature_key = 701,
+                                 .override_of = XG_NO_ID,
+                                 .flags = 0};
+    XgInterfaceImplSummary impls[] = {
+        {.implementor_class_id = 1, .interface_id = 77, .name_id = 77, .type_key = 770},
+        {.implementor_class_id = 2, .interface_id = 77, .name_id = 77, .type_key = 770},
+    };
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 9,
+                              .kind = XG_CALL_INTERFACE,
+                              .receiver_static_interface_id = 77,
+                              .method_id = 700,
+                              .method_name_id = 700,
+                              .method_signature_key = 701};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    const XaotMethodDispatchPlan *plan;
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &circle));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &rect));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &circle_draw));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &rect_draw));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impls[0]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impls[1]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+
+    plan = xaot_bundle_find_method_dispatch_plan(&bundle, 1);
+    ASSERT_NOT_NULL(plan);
+    ASSERT_EQ_UINT(plan->kind, XAOT_DISPATCH_TYPE_SWITCH);
+    ASSERT_EQ_UINT(plan->target_count, 2);
+    ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 2);
+    ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].receiver_class_id, 1);
+    ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].method_id, 1);
+    ASSERT_EQ_UINT(bundle.dispatch_target_cases[1].receiver_class_id, 2);
+    ASSERT_EQ_UINT(bundle.dispatch_target_cases[1].method_id, 2);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+
+    bundle.dispatch_target_cases[1].method_id = 1;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch type-switch targets do not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 static void assert_class_graph_verifier_rejects(const XgClassSummary *classes, uint32_t nclasses,
                                                 const char *expected_error) {
     XgGlobalEvidence ev;
@@ -1275,6 +1373,7 @@ RUN_TEST(global_evidence_hash_is_content_stable);
 RUN_TEST(global_evidence_dump_lists_core_rows);
 RUN_TEST(global_evidence_lowers_to_aot_class_plans);
 RUN_TEST(global_evidence_verifier_rederives_dispatch_plans);
+RUN_TEST(global_evidence_lowers_interface_call_to_type_switch);
 RUN_TEST(global_evidence_verifier_rederives_class_graph_flags);
 RUN_TEST(global_evidence_verifier_rederives_method_override_graph);
 RUN_TEST(global_evidence_verifier_rederives_interface_implementor_set);
