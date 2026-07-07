@@ -21,6 +21,7 @@
 #endif
 #include <signal.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <time.h>
 
 #ifdef _WIN32
@@ -220,6 +221,12 @@ static inline XrValue xrt_os_environ(void) {
         xrt_os_environ_set_entry(map, *env);
 #endif
     return map_value;
+}
+
+static inline XrValue xrt_os_exit(XrValue code_value) {
+    int code = XR_IS_INT(code_value) ? (int) XR_TO_INT(code_value) : 0;
+    exit(code);
+    return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_os_getpid(void) {
