@@ -1326,7 +1326,10 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     }
 
     memset(&csum, 0, sizeof(csum));
+    csum.module_id = module_id;
+    csum.decl_id = decl_id;
     csum.class_id = class_id;
+    csum.name_id = hash_name32(cls->name);
     csum.parent_class_id = producer_lookup_class(p, cls->super_name);
     if (cls->explicit_final)
         csum.flags |= XG_CLASS_EXPLICIT_FINAL;

@@ -307,6 +307,17 @@ static const XgMethodSummary *xg_evidence_find_method_in_class(const XgGlobalEvi
     return NULL;
 }
 
+static const XgMethodSummary *xg_evidence_find_method_by_id(const XgGlobalEvidence *ev,
+                                                            XgMethodId method_id) {
+    if (!ev || method_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nmethods; i++) {
+        if (ev->methods[i].method_id == method_id)
+            return &ev->methods[i];
+    }
+    return NULL;
+}
+
 static const XgMethodSummary *
 xg_evidence_find_method_by_signature_in_class(const XgGlobalEvidence *ev, const XgClassSummary *cls,
                                               uint32_t name_id, uint32_t signature_key) {
@@ -913,6 +924,98 @@ xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, cons
         match = plan;
     }
     return match;
+}
+
+static bool xi_class_data_name_matches_id(const XiClassData *class_data, uint32_t name_id) {
+    if (!class_data || name_id == 0)
+        return false;
+    if (xg_name_id(class_data->class_name) == name_id)
+        return true;
+    if (xg_name_id(class_data->display_name) == name_id)
+        return true;
+    return xg_name_id(class_data->generic_origin_name) == name_id;
+}
+
+static const XiFunc *xaot_bundle_find_method_func_in_module(const XiModule *module,
+                                                            const XgClassSummary *class_summary,
+                                                            const XgMethodSummary *method_summary) {
+    const XiFunc *match = NULL;
+    bool want_static;
+    if (!module || !module->init || !class_summary || !method_summary ||
+        class_summary->name_id == 0 || method_summary->name_id == 0)
+        return NULL;
+    want_static = (method_summary->flags & XG_METHOD_STATIC) != 0;
+    for (uint16_t ci = 0; ci < module->nclasses; ci++) {
+        const XiClassData *class_data = module->classes ? module->classes[ci] : NULL;
+        if (!xi_class_data_name_matches_id(class_data, class_summary->name_id) ||
+            !class_data->methods || !class_data->child_idx)
+            continue;
+        for (uint16_t mi = 0; mi < class_data->nmethod; mi++) {
+            const XiClassMethod *method = &class_data->methods[mi];
+            uint16_t child_idx;
+            const XiFunc *func;
+            if (method->is_static_constructor || method->is_static != want_static ||
+                xg_name_id(method->name) != method_summary->name_id ||
+                mi >= class_data->ninst + class_data->nstat)
+                continue;
+            child_idx = class_data->child_idx[mi];
+            if (child_idx >= module->init->nchildren)
+                continue;
+            func = module->init->children[child_idx];
+            if (!func)
+                continue;
+            if (match && match != func)
+                return NULL;
+            match = func;
+        }
+    }
+    return match;
+}
+
+XR_FUNC const XiFunc *xaot_bundle_find_method_func(const XaotBundle *bundle, XgMethodId method_id,
+                                                   const char **out_module_prefix) {
+    const XgGlobalEvidence *evidence;
+    const XgMethodSummary *method;
+    const XgClassSummary *class_summary;
+    const XiFunc *match = NULL;
+    const char *match_prefix = NULL;
+    if (out_module_prefix)
+        *out_module_prefix = NULL;
+    if (!bundle || method_id == XG_NO_ID)
+        return NULL;
+    evidence = bundle->global_evidence_plan.evidence;
+    method = xg_evidence_find_method_by_id(evidence, method_id);
+    class_summary = method ? xg_evidence_find_class(evidence, method->owner_class_id) : NULL;
+    if (!method || !class_summary)
+        return NULL;
+
+    for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+        const XiModule *module = bundle->modules ? bundle->modules[mi] : NULL;
+        const XiFunc *func;
+        if (class_summary->module_id != 0 && class_summary->module_id != mi + 1)
+            continue;
+        func = xaot_bundle_find_method_func_in_module(module, class_summary, method);
+        if (!func)
+            continue;
+        if (match && match != func)
+            return NULL;
+        match = func;
+        match_prefix = module ? module->name : NULL;
+    }
+
+    if (match && out_module_prefix)
+        *out_module_prefix = match_prefix;
+    return match;
+}
+
+XR_FUNC const XiFunc *xaot_bundle_find_dispatch_target_func(const XaotBundle *bundle,
+                                                            const XaotDispatchTargetCase *target,
+                                                            const char **out_module_prefix) {
+    if (out_module_prefix)
+        *out_module_prefix = NULL;
+    if (!target)
+        return NULL;
+    return xaot_bundle_find_method_func(bundle, target->method_id, out_module_prefix);
 }
 
 XR_FUNC const XaotInterfaceUsePlan *
