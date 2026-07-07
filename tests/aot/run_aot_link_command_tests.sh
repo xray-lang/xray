@@ -454,6 +454,68 @@ else
     sed 's/^/      /' "$FREESTANDING_ATTR_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_KERNEL_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_kernel_shape.xr"
+FREESTANDING_KERNEL_OBJ="$WORK/freestanding_kernel_shape.o"
+FREESTANDING_KERNEL_LOG="$WORK/freestanding_kernel_shape.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_KERNEL_OBJ" \
+        "$FREESTANDING_KERNEL_SRC" >"$FREESTANDING_KERNEL_LOG" 2>&1; then
+    FREESTANDING_KERNEL_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_KERNEL_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_KERNEL_C" ]; then
+        expect_log_contains "$FREESTANDING_KERNEL_C" \
+            "XRT_ATTR_SECTION(\"__DATA,.xray_multiboot\") XRT_ATTR_USED" \
+            "freestanding-profile/kernel-shape: emits multiboot data section"
+        expect_log_contains "$FREESTANDING_KERNEL_C" \
+            "XRT_ATTR_SECTION(\"__TEXT,.xray_boot\") XRT_ATTR_USED int32_t xray_kernel_entry" \
+            "freestanding-profile/kernel-shape: emits boot entry section"
+        expect_log_not_contains "$FREESTANDING_KERNEL_C" "xrt_shared[" \
+            "freestanding-profile/kernel-shape: generated C avoids shared slots"
+        expect_log_not_contains "$FREESTANDING_KERNEL_C" "static XrValue xrt_shared" \
+            "freestanding-profile/kernel-shape: generated C avoids shared storage"
+    else
+        record_fail "freestanding-profile/kernel-shape: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_KERNEL_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_KERNEL_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_KERNEL_OBJ")"
+    if [ -z "$FREESTANDING_KERNEL_UNDEFINED" ]; then
+        record_pass "freestanding-profile/kernel-shape: no undefined symbols"
+    else
+        record_fail "freestanding-profile/kernel-shape: unexpected undefined symbols"
+        nm -u "$FREESTANDING_KERNEL_OBJ" 2>&1 | sed '/^[[:space:]]*$/d' | sed 's/^/      /'
+    fi
+    if nm -g "$FREESTANDING_KERNEL_OBJ" 2>/dev/null |
+            grep -Eq '(^|[[:space:]])_?xray_kernel_entry$'; then
+        record_pass "freestanding-profile/kernel-shape: exports boot symbol"
+    else
+        record_fail "freestanding-profile/kernel-shape: missing boot symbol"
+        nm -g "$FREESTANDING_KERNEL_OBJ" 2>/dev/null | sed 's/^/      /'
+    fi
+    FREESTANDING_KERNEL_SECTIONS="$WORK/freestanding_kernel_shape.sections"
+    if otool -l "$FREESTANDING_KERNEL_OBJ" >"$FREESTANDING_KERNEL_SECTIONS" 2>/dev/null; then
+        if grep -Fq "sectname .xray_boot" "$FREESTANDING_KERNEL_SECTIONS" &&
+           grep -Fq "sectname .xray_multiboot" "$FREESTANDING_KERNEL_SECTIONS"; then
+            record_pass "freestanding-profile/kernel-shape: object contains boot sections"
+        else
+            record_fail "freestanding-profile/kernel-shape: object missing boot sections"
+            sed 's/^/      /' "$FREESTANDING_KERNEL_SECTIONS" | sed -n '1,120p'
+        fi
+    elif objdump -h "$FREESTANDING_KERNEL_OBJ" >"$FREESTANDING_KERNEL_SECTIONS" 2>/dev/null; then
+        if grep -Fq ".xray_boot" "$FREESTANDING_KERNEL_SECTIONS" &&
+           grep -Fq ".xray_multiboot" "$FREESTANDING_KERNEL_SECTIONS"; then
+            record_pass "freestanding-profile/kernel-shape: object contains boot sections"
+        else
+            record_fail "freestanding-profile/kernel-shape: object missing boot sections"
+            sed 's/^/      /' "$FREESTANDING_KERNEL_SECTIONS" | sed -n '1,120p'
+        fi
+    else
+        record_fail "freestanding-profile/kernel-shape: section dump failed"
+    fi
+else
+    record_fail "freestanding-profile/kernel-shape: object build failed"
+    sed 's/^/      /' "$FREESTANDING_KERNEL_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_RAWPTR_NULL_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_null.xr"
 FREESTANDING_RAWPTR_NULL_OBJ="$WORK/freestanding_rawptr_null.o"
 FREESTANDING_RAWPTR_NULL_LOG="$WORK/freestanding_rawptr_null.log"
