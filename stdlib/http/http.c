@@ -24,7 +24,6 @@
 #include "http_server.h"
 #include "../../src/base/xplatform.h"
 #include "http_stream.h"
-#include "http_multipart.h"
 #include "http_proxy.h"
 #include "../common.h"
 #include "../../src/runtime/object/xjson_serde.h"
@@ -623,12 +622,6 @@ void xr_http_module_context_free(XrHttpContext *ctx) {
         ctx->server = NULL;
     }
 
-    // Free form data
-    if (ctx->form_data) {
-        xr_form_data_free(ctx->form_data);
-        ctx->form_data = NULL;
-    }
-
     // Free Cookie Jar
     if (ctx->cookie_jar) {
         xr_cookie_jar_free(ctx->cookie_jar);
@@ -1118,141 +1111,6 @@ static XrValue http_get_content_length(XrVMRuntime *X, XrValue *args, int argc) 
     URL_COPY_END();
 
     return xr_int(size);
-}
-
-/* ========== Multipart Form API ========== */
-
-// http.formDataNew(maxTotalSize?, maxFileSize?) -> bool
-// Pass 0 to disable the corresponding limit.
-// Omit to use defaults (64MB total, 32MB per file).
-static XrValue http_form_data_new(XrVMRuntime *X, XrValue *args, int argc) {
-    XrHttpContext *ctx = xr_http_get_context(X);
-    if (!ctx)
-        return xr_bool(false);
-
-    if (ctx->form_data) {
-        xr_form_data_free(ctx->form_data);
-    }
-    ctx->form_data = xr_form_data_new();
-    if (!ctx->form_data)
-        return xr_bool(false);
-
-    // Optional: override max total size
-    if (argc >= 1 && XR_IS_INT(args[0])) {
-        int64_t v = XR_TO_INT(args[0]);
-        ctx->form_data->max_total_size = (v <= 0) ? 0 : (size_t) v;
-    }
-    // Optional: override max per-file size
-    if (argc >= 2 && XR_IS_INT(args[1])) {
-        int64_t v = XR_TO_INT(args[1]);
-        ctx->form_data->max_file_size = (v <= 0) ? 0 : (size_t) v;
-    }
-
-    return xr_bool(true);
-}
-
-// http.formDataAppend(name, value) -> void
-static XrValue http_form_data_append(XrVMRuntime *X, XrValue *args, int argc) {
-    XrHttpContext *ctx = xr_http_get_context(X);
-    if (argc < 2 || !ctx || !ctx->form_data)
-        return xr_null();
-
-    size_t name_len, value_len;
-    const char *name = xrs_string_arg(args[0], &name_len);
-    const char *value = xrs_string_arg(args[1], &value_len);
-    if (!name || !value)
-        return xr_null();
-
-    // Need null-terminated string
-    char *name_copy = (char *) xr_malloc(name_len + 1);
-    if (!name_copy)
-        return xr_null();
-    memcpy(name_copy, name, name_len);
-    name_copy[name_len] = '\0';
-
-    xr_form_data_append(ctx->form_data, name_copy, value, value_len);
-    xr_free(name_copy);
-
-    return xr_null();
-}
-
-// http.formDataAppendFile(name, filepath) -> bool
-static XrValue http_form_data_append_file(XrVMRuntime *X, XrValue *args, int argc) {
-    XrHttpContext *ctx = xr_http_get_context(X);
-    if (argc < 2 || !ctx || !ctx->form_data)
-        return xr_bool(false);
-
-    size_t name_len, path_len;
-    const char *name = xrs_string_arg(args[0], &name_len);
-    const char *path = xrs_string_arg(args[1], &path_len);
-    if (!name || !path)
-        return xr_bool(false);
-
-    char *name_copy = (char *) xr_malloc(name_len + 1);
-    if (!name_copy)
-        return xr_bool(false);
-    char *path_copy = (char *) xr_malloc(path_len + 1);
-    if (!path_copy) {
-        xr_free(name_copy);
-        return xr_bool(false);
-    }
-    memcpy(name_copy, name, name_len);
-    memcpy(path_copy, path, path_len);
-    name_copy[name_len] = '\0';
-    path_copy[path_len] = '\0';
-
-    int ret = xr_form_data_append_file_path(ctx->form_data, name_copy, path_copy);
-
-    xr_free(name_copy);
-    xr_free(path_copy);
-
-    return xr_bool(ret == 0);
-}
-
-// http.formDataPost(url) -> Json
-static XrValue http_form_data_post(XrVMRuntime *X, XrValue *args, int argc) {
-    XrHttpContext *ctx = xr_http_get_context(X);
-    if (argc < 1 || !ctx || !ctx->form_data)
-        return xr_null();
-
-    size_t url_len;
-    const char *url = xrs_string_arg(args[0], &url_len);
-    if (!url)
-        return xr_null();
-
-    // URL copy (stack allocation optimization)
-    URL_COPY_BEGIN(url, url_len)
-
-    // Build form data
-    char *body = NULL;
-    size_t body_len = 0;
-    char *content_type = NULL;
-
-    if (xr_form_data_build(ctx->form_data, &body, &body_len, &content_type) < 0) {
-        URL_COPY_END();
-        return xr_null();
-    }
-
-    // Send POST request
-    XrHttpResult result = xr_http_post(X, url_copy, body, body_len, content_type);
-
-    URL_COPY_END();
-    xr_free(body);
-    xr_free(content_type);
-
-    // Clean up form data
-    xr_form_data_free(ctx->form_data);
-    ctx->form_data = NULL;
-
-    // Build return result
-    XrJson *json = xr_json_new(xr_current_coro(X));
-    xr_json_set_by_key(X, json, "status", xr_int(result.status_code));
-    if (result.body && result.body_len > 0) {
-        xr_json_set_by_key(X, json, "body", xrs_string_value_n(X, result.body, result.body_len));
-    }
-    xr_http_result_free(&result);
-
-    return xr_json_value(json);
 }
 
 /* ========== Proxy Settings API ========== */

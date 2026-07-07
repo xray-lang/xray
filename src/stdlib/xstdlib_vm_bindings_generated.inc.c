@@ -85,10 +85,6 @@ static void xr_stdlib_vm_bind_http_generated(XrVMRuntime *isolate, XrModule *mod
     XRS_EXPORT(module, isolate, "sendResponse", http_send_response_fast);
     XRS_EXPORT_SLOW(module, isolate, "download", http_download);
     XRS_EXPORT(module, isolate, "getContentLength", http_get_content_length);
-    XRS_EXPORT(module, isolate, "formDataNew", http_form_data_new);
-    XRS_EXPORT(module, isolate, "formDataAppend", http_form_data_append);
-    XRS_EXPORT(module, isolate, "formDataAppendFile", http_form_data_append_file);
-    XRS_EXPORT(module, isolate, "formDataPost", http_form_data_post);
     XRS_EXPORT(module, isolate, "setProxy", http_set_proxy);
     XRS_EXPORT(module, isolate, "clearProxy", http_clear_proxy);
     XRS_EXPORT(module, isolate, "h2Get", h2_get);

@@ -249,7 +249,6 @@ add_xray_unit_test(test_unicode encoding/test_unicode.c)
 
 add_xray_unit_test(test_http_parser http/test_http_parser.c)
 add_xray_unit_test(test_http_cookie http/test_http_cookie.c)
-add_xray_unit_test(test_http_multipart http/test_http_multipart.c)
 add_xray_unit_test(test_http2_huffman http/test_http2_huffman.c)
 
 # ============================================================================

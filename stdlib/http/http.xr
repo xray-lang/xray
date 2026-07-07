@@ -1,9 +1,201 @@
 // http - pure-Xray helpers layered on top of the native HTTP runtime.
 //
 // Socket I/O, TLS, streaming, server state, and HTTP/2 remain native runtime
-// boundaries. Public formatting and percent-encoding helpers live here.
+// boundaries. Public formatting, percent-encoding, and multipart assembly live
+// here.
 
 import { encode, decodeForm } from url
+import crypto
+import io
+
+class _FormField {
+    kind: string
+    name: string
+    value: string
+    filename: string
+    contentType: string
+
+    constructor(
+        kind: string,
+        name: string,
+        value: string,
+        filename: string,
+        contentType: string
+    ) {
+        this.kind = kind
+        this.name = name
+        this.value = value
+        this.filename = filename
+        this.contentType = contentType
+    }
+}
+
+fn _normalizeLimit(limit: int) -> int {
+    if (limit <= 0) { return 0 }
+    return limit
+}
+
+fn _limitExceeded(limit: int, current: int, added: int) -> bool {
+    return limit > 0 && current + added > limit
+}
+
+fn _boundary() -> string {
+    return "----XrayFormBoundary" + crypto.randomBytes(16)
+}
+
+fn _basename(path: string) -> string {
+    var start = 0
+    for (var i = 0; i < path.length; i++) {
+        var c = path.charAt(i)
+        if (c == "/" || c == "\\") { start = i + 1 }
+    }
+    return path.slice(start)
+}
+
+fn _guessMimeType(filename: string) -> string {
+    var dot = filename.lastIndexOf(".")
+    if (dot < 0 || dot + 1 >= filename.length) {
+        return "application/octet-stream"
+    }
+
+    var ext = filename.slice(dot + 1).toLowerCase()
+    if (ext == "txt") { return "text/plain" }
+    if (ext == "html" || ext == "htm") { return "text/html" }
+    if (ext == "css") { return "text/css" }
+    if (ext == "js") { return "application/javascript" }
+    if (ext == "json") { return "application/json" }
+    if (ext == "xml") { return "application/xml" }
+    if (ext == "pdf") { return "application/pdf" }
+    if (ext == "zip") { return "application/zip" }
+    if (ext == "gz") { return "application/gzip" }
+    if (ext == "tar") { return "application/x-tar" }
+    if (ext == "png") { return "image/png" }
+    if (ext == "jpg" || ext == "jpeg") { return "image/jpeg" }
+    if (ext == "gif") { return "image/gif" }
+    if (ext == "svg") { return "image/svg+xml" }
+    if (ext == "ico") { return "image/x-icon" }
+    if (ext == "mp3") { return "audio/mpeg" }
+    if (ext == "mp4") { return "video/mp4" }
+    if (ext == "webm") { return "video/webm" }
+    return "application/octet-stream"
+}
+
+fn _headerParam(s: string) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < s.length; i++) {
+        var c = s.charAt(i)
+        if (c == "\"") {
+            out.append("\\\"")
+        } else if (c == "\\") {
+            out.append("\\\\")
+        } else if (c == "\r" || c == "\n") {
+            out.append("_")
+        } else {
+            out.append(c)
+        }
+    }
+    return out.toString()
+}
+
+// MultipartBody - Built multipart/form-data payload and matching Content-Type.
+class MultipartBody {
+    body: string
+    contentType: string
+
+    constructor(body: string, contentType: string) {
+        this.body = body
+        this.contentType = contentType
+    }
+}
+
+// FormData - Explicit multipart/form-data builder.
+class FormData {
+    boundary: string
+    fields: Array<_FormField>
+    totalSize: int
+    maxTotalSize: int
+    maxFileSize: int
+
+    constructor(maxTotalSize: int, maxFileSize: int) {
+        this.boundary = _boundary()
+        this.fields = []
+        this.totalSize = 0
+        this.maxTotalSize = _normalizeLimit(maxTotalSize)
+        this.maxFileSize = _normalizeLimit(maxFileSize)
+    }
+
+    append(name: string, value: string) -> bool {
+        var size = value.byteLength
+        if (_limitExceeded(this.maxTotalSize, this.totalSize, size)) {
+            return false
+        }
+        this.fields.push(_FormField("text", name, value, "", ""))
+        this.totalSize = this.totalSize + size
+        return true
+    }
+
+    appendFile(name: string, path: string) -> bool {
+        var data = io.readFile(path)
+        if (data == null) { return false }
+
+        var content = data!
+        var size = content.byteLength
+        if (size <= 0) { return false }
+        if (_limitExceeded(this.maxFileSize, 0, size)) { return false }
+        if (_limitExceeded(this.maxTotalSize, this.totalSize, size)) { return false }
+
+        var filename = _basename(path)
+        if (filename.length == 0) { filename = "file" }
+        this.fields.push(_FormField("file", name, content, filename, _guessMimeType(filename)))
+        this.totalSize = this.totalSize + size
+        return true
+    }
+
+    build() -> MultipartBody {
+        var out = StringBuilder()
+        for (var i = 0; i < this.fields.length; i++) {
+            var field = this.fields[i]
+            out.append("--")
+            out.append(this.boundary)
+            out.append("\r\n")
+
+            if (field.kind == "text") {
+                out.append("Content-Disposition: form-data; name=\"")
+                out.append(_headerParam(field.name))
+                out.append("\"\r\n\r\n")
+                out.append(field.value)
+            } else {
+                out.append("Content-Disposition: form-data; name=\"")
+                out.append(_headerParam(field.name))
+                out.append("\"; filename=\"")
+                out.append(_headerParam(field.filename))
+                out.append("\"\r\n")
+                out.append("Content-Type: ")
+                out.append(field.contentType)
+                out.append("\r\n\r\n")
+                out.append(field.value)
+            }
+            out.append("\r\n")
+        }
+
+        out.append("--")
+        out.append(this.boundary)
+        out.append("--\r\n")
+
+        return MultipartBody(
+            out.toString(),
+            "multipart/form-data; boundary=" + this.boundary
+        )
+    }
+}
+
+// formData - Create an explicit multipart/form-data builder.
+fn formData(
+    maxTotalSize: int = 67108864,
+    maxFileSize: int = 33554432
+) -> FormData {
+    return FormData(maxTotalSize, maxFileSize)
+}
 
 fn _statusReason(status: int) -> string {
     if (status == 200) { return "OK" }
@@ -66,5 +258,8 @@ fn response(status: int, body: unknown = null) -> string {
 export {
     urlEncode,
     urlDecode,
-    response
+    response,
+    formData,
+    MultipartBody,
+    FormData
 }

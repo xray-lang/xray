@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Provides HTTP client and server functionality with support for
- *   HTTP/1.1, HTTP/2, cookies, proxy, and multipart forms.
+ *   HTTP/1.1, HTTP/2, cookies, and proxy state.
  *   Each Isolate has its own XrHttpContext for multi-instance support.
  *
  * NOTE: WebSocket has been moved to separate 'ws' module.
@@ -21,7 +21,6 @@
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/module/xmodule.h"
 #include "http_server.h"
-#include "http_multipart.h"
 #include "http_cookie.h"
 #include "http_proxy.h"
 #include "http2_server.h"
@@ -44,9 +43,6 @@ typedef struct XrHttpContext {
     /* === Server Stats (atomic, lock-free) === */
     _Atomic uint64_t total_requests;        // Total requests served
     _Atomic uint64_t total_conns_accepted;  // Total connections accepted
-
-    /* === Form Data === */
-    XrFormData *form_data;
 
     /* === Cookie === */
     XrCookieJar *cookie_jar;
