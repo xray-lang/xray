@@ -21,6 +21,8 @@
 #include "../os/os_thread.h"
 #include <stdatomic.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #if defined(XR_OS_WINDOWS)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -221,6 +223,79 @@ static inline char **xrt_sys_process_argv_from_array(const char *program_data, i
     return argv;
 }
 
+static inline int xrt_sys_process_env_key_valid(const char *key) {
+    if (!key || key[0] == '\0')
+        return 0;
+    return strchr(key, '=') == NULL;
+}
+
+static inline void xrt_sys_process_env_free(char **keys, char **values, size_t count) {
+    if (keys) {
+        for (size_t i = 0; i < count; i++)
+            XRT_FREE(keys[i]);
+        XRT_FREE(keys);
+    }
+    if (values) {
+        for (size_t i = 0; i < count; i++)
+            XRT_FREE(values[i]);
+        XRT_FREE(values);
+    }
+}
+
+static inline int xrt_sys_process_env_from_arrays(XrValue keys_value, XrValue values_value,
+                                                  char ***out_keys, char ***out_values,
+                                                  size_t *out_count) {
+    *out_keys = NULL;
+    *out_values = NULL;
+    *out_count = 0;
+
+    if (XR_IS_NULL(keys_value) && XR_IS_NULL(values_value))
+        return 1;
+    if (!XR_IS_ARRAY(keys_value) || !XR_IS_ARRAY(values_value) || !keys_value.ptr ||
+        !values_value.ptr)
+        return 0;
+
+    xrt_sys_array_view_t *keys_arr = (xrt_sys_array_view_t *) keys_value.ptr;
+    xrt_sys_array_view_t *values_arr = (xrt_sys_array_view_t *) values_value.ptr;
+    if (keys_arr->length < 0 || keys_arr->length > INT32_MAX ||
+        keys_arr->length != values_arr->length)
+        return 0;
+    if (keys_arr->length == 0)
+        return 1;
+    if (!keys_arr->data || !values_arr->data)
+        return 0;
+
+    size_t count = (size_t) keys_arr->length;
+    if (count > SIZE_MAX / sizeof(char *))
+        return 0;
+    char **keys = (char **) XRT_CALLOC(count, sizeof(char *));
+    char **values = (char **) XRT_CALLOC(count, sizeof(char *));
+    if (!keys || !values) {
+        xrt_sys_process_env_free(keys, values, count);
+        return 0;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        XrValue key_value = xr_typed_get(keys_arr->data, (int32_t) i, keys_arr->elem_type);
+        XrValue value_value = xr_typed_get(values_arr->data, (int32_t) i, values_arr->elem_type);
+        if (!XR_IS_STR(key_value) || !XR_IS_STR(value_value)) {
+            xrt_sys_process_env_free(keys, values, count);
+            return 0;
+        }
+        keys[i] = xrt_sys_cstr_dup_arg(xr_str_data(key_value), xr_str_len(key_value));
+        values[i] = xrt_sys_cstr_dup_arg(xr_str_data(value_value), xr_str_len(value_value));
+        if (!xrt_sys_process_env_key_valid(keys[i]) || !values[i]) {
+            xrt_sys_process_env_free(keys, values, count);
+            return 0;
+        }
+    }
+
+    *out_keys = keys;
+    *out_values = values;
+    *out_count = count;
+    return 1;
+}
+
 #if defined(XR_OS_WINDOWS)
 static inline void xrt_sys_process_append_escaped_arg(char *buf, size_t *pos, const char *arg) {
     size_t backslashes = 0;
@@ -265,6 +340,142 @@ static inline char *xrt_sys_process_build_command_line(const char *prog, char *c
     }
     buf[pos] = '\0';
     return buf;
+}
+
+static inline char *xrt_sys_process_strdup(const char *s) {
+    size_t len = strlen(s);
+    char *out = (char *) XRT_MALLOC(len + 1u);
+    if (!out)
+        return NULL;
+    memcpy(out, s, len + 1u);
+    return out;
+}
+
+static inline int xrt_sys_process_env_entry_matches_key(const char *entry, const char *key) {
+    const char *eq = entry ? strchr(entry, '=') : NULL;
+    if (!eq || eq == entry || !key)
+        return 0;
+    size_t name_len = (size_t) (eq - entry);
+    return strlen(key) == name_len && _strnicmp(entry, key, name_len) == 0;
+}
+
+static inline int xrt_sys_process_env_entry_cmp(const void *a, const void *b) {
+    const char *ea = *(const char *const *) a;
+    const char *eb = *(const char *const *) b;
+    return _stricmp(ea, eb);
+}
+
+typedef struct xrt_sys_process_env_entries {
+    char **items;
+    size_t count;
+    size_t cap;
+} xrt_sys_process_env_entries_t;
+
+static inline void xrt_sys_process_env_entries_free(xrt_sys_process_env_entries_t *entries) {
+    if (!entries)
+        return;
+    for (size_t i = 0; i < entries->count; i++)
+        XRT_FREE(entries->items[i]);
+    XRT_FREE(entries->items);
+    entries->items = NULL;
+    entries->count = 0;
+    entries->cap = 0;
+}
+
+static inline int xrt_sys_process_env_entries_push(xrt_sys_process_env_entries_t *entries,
+                                                   char *item) {
+    if (entries->count == entries->cap) {
+        size_t next_cap = entries->cap ? entries->cap * 2u : 32u;
+        char **next = (char **) XRT_REALLOC(entries->items, next_cap * sizeof(char *));
+        if (!next)
+            return 0;
+        entries->items = next;
+        entries->cap = next_cap;
+    }
+    entries->items[entries->count++] = item;
+    return 1;
+}
+
+static inline int xrt_sys_process_env_key_overridden(char *const env_keys[], size_t env_count,
+                                                     const char *entry) {
+    for (size_t i = 0; i < env_count; i++) {
+        if (xrt_sys_process_env_entry_matches_key(entry, env_keys[i]))
+            return 1;
+    }
+    return 0;
+}
+
+static inline char *xrt_sys_process_env_pair_new(const char *key, const char *value) {
+    size_t key_len = strlen(key);
+    size_t value_len = strlen(value);
+    if (key_len > SIZE_MAX - value_len - 2u)
+        return NULL;
+    char *out = (char *) XRT_MALLOC(key_len + value_len + 2u);
+    if (!out)
+        return NULL;
+    memcpy(out, key, key_len);
+    out[key_len] = '=';
+    memcpy(out + key_len + 1u, value, value_len + 1u);
+    return out;
+}
+
+static inline char *xrt_sys_process_env_block_build(char *const env_keys[],
+                                                    char *const env_values[], size_t env_count) {
+    if (env_count == 0)
+        return NULL;
+
+    xrt_sys_process_env_entries_t entries = {0};
+    LPCH current = GetEnvironmentStringsA();
+    if (current) {
+        for (const char *p = current; *p; p += strlen(p) + 1u) {
+            if (xrt_sys_process_env_key_overridden(env_keys, env_count, p))
+                continue;
+            char *copy = xrt_sys_process_strdup(p);
+            if (!copy || !xrt_sys_process_env_entries_push(&entries, copy)) {
+                XRT_FREE(copy);
+                FreeEnvironmentStringsA(current);
+                xrt_sys_process_env_entries_free(&entries);
+                return NULL;
+            }
+        }
+        FreeEnvironmentStringsA(current);
+    }
+
+    for (size_t i = 0; i < env_count; i++) {
+        char *pair = xrt_sys_process_env_pair_new(env_keys[i], env_values[i]);
+        if (!pair || !xrt_sys_process_env_entries_push(&entries, pair)) {
+            XRT_FREE(pair);
+            xrt_sys_process_env_entries_free(&entries);
+            return NULL;
+        }
+    }
+
+    qsort(entries.items, entries.count, sizeof(char *), xrt_sys_process_env_entry_cmp);
+
+    size_t bytes = 1u;
+    for (size_t i = 0; i < entries.count; i++) {
+        size_t len = strlen(entries.items[i]);
+        if (bytes > SIZE_MAX - len - 1u) {
+            xrt_sys_process_env_entries_free(&entries);
+            return NULL;
+        }
+        bytes += len + 1u;
+    }
+
+    char *block = (char *) XRT_MALLOC(bytes);
+    if (!block) {
+        xrt_sys_process_env_entries_free(&entries);
+        return NULL;
+    }
+    char *dst = block;
+    for (size_t i = 0; i < entries.count; i++) {
+        size_t len = strlen(entries.items[i]) + 1u;
+        memcpy(dst, entries.items[i], len);
+        dst += len;
+    }
+    *dst = '\0';
+    xrt_sys_process_env_entries_free(&entries);
+    return block;
 }
 #endif
 
@@ -630,7 +841,8 @@ static inline XrValue xrt_sys_pin_to_cpu(XrValue cpu_value) {
 }
 
 static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t program_len,
-                                            XrValue args_value, XrValue cwd_value) {
+                                            XrValue args_value, XrValue cwd_value,
+                                            XrValue env_keys_value, XrValue env_values_value) {
     char **argv = xrt_sys_process_argv_from_array(program_data, program_len, args_value);
     if (!argv)
         return XR_FROM_INT(-1);
@@ -646,10 +858,21 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
         return XR_FROM_INT(-1);
     }
 
+    char **env_keys = NULL;
+    char **env_values = NULL;
+    size_t env_count = 0;
+    if (!xrt_sys_process_env_from_arrays(env_keys_value, env_values_value, &env_keys, &env_values,
+                                         &env_count)) {
+        xrt_sys_process_argv_free(argv);
+        XRT_FREE(cwd);
+        return XR_FROM_INT(-1);
+    }
+
 #if defined(XR_OS_WINDOWS)
     char *cmdline = xrt_sys_process_build_command_line(argv[0], argv);
     if (!cmdline) {
         xrt_sys_process_argv_free(argv);
+        xrt_sys_process_env_free(env_keys, env_values, env_count);
         XRT_FREE(cwd);
         return XR_FROM_INT(-1);
     }
@@ -658,10 +881,20 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
-    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL,
+    char *env_block = xrt_sys_process_env_block_build(env_keys, env_values, env_count);
+    if (env_count > 0 && !env_block) {
+        XRT_FREE(cmdline);
+        xrt_sys_process_argv_free(argv);
+        xrt_sys_process_env_free(env_keys, env_values, env_count);
+        XRT_FREE(cwd);
+        return XR_FROM_INT(-1);
+    }
+    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, env_block,
                              (cwd && cwd[0] != '\0') ? cwd : NULL, &si, &pi);
+    XRT_FREE(env_block);
     XRT_FREE(cmdline);
     xrt_sys_process_argv_free(argv);
+    xrt_sys_process_env_free(env_keys, env_values, env_count);
     XRT_FREE(cwd);
     if (!ok)
         return XR_FROM_INT(-1);
@@ -671,16 +904,22 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
     pid_t pid = fork();
     if (pid < 0) {
         xrt_sys_process_argv_free(argv);
+        xrt_sys_process_env_free(env_keys, env_values, env_count);
         XRT_FREE(cwd);
         return XR_FROM_INT(-1);
     }
     if (pid == 0) {
         if (cwd && cwd[0] != '\0' && chdir(cwd) != 0)
             _exit(127);
+        for (size_t i = 0; i < env_count; i++) {
+            if (setenv(env_keys[i], env_values[i], 1) != 0)
+                _exit(127);
+        }
         execvp(argv[0], argv);
         _exit(127);
     }
     xrt_sys_process_argv_free(argv);
+    xrt_sys_process_env_free(env_keys, env_values, env_count);
     XRT_FREE(cwd);
     return XR_FROM_INT((int64_t) pid);
 #endif

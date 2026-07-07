@@ -26,8 +26,9 @@
  *     - Query the current process id.
  *     - Detect whether a debugger is attached.
  *
- *   Anything more (signal forwarding, pipe redirection, env overrides) is
- *   intentionally out of scope until a concrete in-tree caller needs it.
+ *   Anything more (signal forwarding, pipe redirection) is intentionally out
+ *   of scope until a concrete in-tree caller needs it. Environment overrides
+ *   are supported as a small add/update overlay on the inherited environment.
  */
 
 #ifndef XR_OS_OS_PROC_H
@@ -63,6 +64,11 @@ typedef enum XrProcWaitResult {
 typedef struct XrProcSpawnOptions {
     // NULL or empty means inherit the parent's current working directory.
     const char *cwd;
+    // Optional environment overrides. NULL / count 0 means inherit the
+    // parent's environment unchanged; entries override or add variables.
+    const char *const *env_keys;
+    const char *const *env_values;
+    size_t env_count;
 } XrProcSpawnOptions;
 
 // Spawn a child process running `prog`. `argv` is a NULL-terminated

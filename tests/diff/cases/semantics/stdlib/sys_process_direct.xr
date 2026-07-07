@@ -54,12 +54,33 @@ if (missing != null) {
 }
 print(sys.Signal.TERM != sys.Signal.KILL)
 
-var cwdProc = sys.Process.spawn("sh", ["-c", "test -f sys_process_direct.xr"], ProcessOptions{
-    cwd: "tests/diff/cases/semantics/stdlib"
-})
+var cwdProc = sys.Process.spawn("sh", ["-c", "test -f sys_process_direct.xr"],
+    ProcessOptions("tests/diff/cases/semantics/stdlib", null))
 print(cwdProc != null)
 if (cwdProc != null) {
     print(cwdProc!.wait())
+}
+
+var envProc = sys.Process.spawn("sh", ["-c", "test \"$XRAY_SYS_TEST_ENV\" = hello"],
+    ProcessOptions(null, #{"XRAY_SYS_TEST_ENV": "hello"}))
+print(envProc != null)
+if (envProc != null) {
+    print(envProc!.wait())
+}
+
+var cwdEnvProc = sys.Process.spawn("sh", ["-c", "test -f sys_process_direct.xr && test \"$XRAY_SYS_TEST_ENV\" = cwd"],
+    ProcessOptions("tests/diff/cases/semantics/stdlib", #{"XRAY_SYS_TEST_ENV": "cwd"}))
+print(cwdEnvProc != null)
+if (cwdEnvProc != null) {
+    print(cwdEnvProc!.wait())
+}
+
+var invalidEnv = sys.Process.spawn("sh", ["-c", "exit 0"], ProcessOptions(null, #{"BAD=KEY": "x"}))
+if (invalidEnv != null) {
+    print(false)
+    print(invalidEnv!.wait())
+} else {
+    print(true)
 }
 
 var pipe = sys.Pipe.open()
