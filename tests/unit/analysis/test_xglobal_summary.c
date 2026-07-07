@@ -1937,6 +1937,55 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     xaot_bundle_free(&method_no_signature_bundle);
     xg_global_evidence_free(&method_no_signature_ev);
 
+    XgGlobalEvidence method_wrong_target_ev;
+    XgBuildKey method_wrong_target_key = key;
+    XgDeclSummary method_owner_decl = {
+        .module_id = 1, .decl_id = 2, .kind = XG_DECL_CLASS, .name_id = 500, .source_span_id = 5};
+    XgClassSummary method_owner_class = {.module_id = 1,
+                                         .decl_id = 2,
+                                         .class_id = 1,
+                                         .name_id = 500,
+                                         .flags = XG_CLASS_INFERRED_FINAL,
+                                         .method_start = 1,
+                                         .method_count = 1,
+                                         .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary real_method = {
+        .method_id = 501, .owner_class_id = 1, .name_id = 502, .signature_key = 503};
+    XgBodySummary method_wrong_target_body = body;
+    XgCallsiteSummary method_wrong_target_call = call;
+    method_wrong_target_key.source_hash = 0x83;
+    method_wrong_target_body.callsite_start = 1;
+    method_wrong_target_body.callsite_count = 1;
+    method_wrong_target_call.kind = XG_CALL_METHOD;
+    method_wrong_target_call.static_target_func_id = XG_NO_ID;
+    method_wrong_target_call.receiver_static_class_id = 1;
+    method_wrong_target_call.method_id = 999;
+    method_wrong_target_call.method_name_id = 502;
+    method_wrong_target_call.method_signature_key = 503;
+    xg_global_evidence_init(&method_wrong_target_ev, method_wrong_target_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&method_wrong_target_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&method_wrong_target_ev, &method_owner_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&method_wrong_target_ev, &method_owner_class));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&method_wrong_target_ev, &real_method));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_body(&method_wrong_target_ev, &method_wrong_target_body));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_callsite(&method_wrong_target_ev, &method_wrong_target_call));
+
+    XaotBundle method_wrong_target_bundle;
+    memset(&method_wrong_target_bundle, 0, sizeof(method_wrong_target_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&method_wrong_target_bundle,
+                                                &method_wrong_target_ev, XG_BUILD_NATIVE_RELEASE));
+    method_wrong_target_bundle.modules = modules;
+    method_wrong_target_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&method_wrong_target_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&method_wrong_target_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence method callsite target does not re-derive"));
+    xaot_bundle_free(&method_wrong_target_bundle);
+    xg_global_evidence_free(&method_wrong_target_ev);
+
     XgGlobalEvidence interface_stale_ev;
     XgBuildKey interface_stale_key = key;
     XgBodySummary interface_stale_body = body;
