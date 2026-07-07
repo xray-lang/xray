@@ -1,0 +1,13 @@
+# Freestanding stdlib commitment surface.
+#
+# Format:
+#   module probe-source
+#
+# Each listed probe must compile with:
+#   xray build --native --profile freestanding --shared -nostdlib
+#
+# The compiler's analyzer still enforces the finer member-level subset. This
+# file names the modules whose freestanding contract is guarded by CI probes.
+prelude tests/aot/filetests/link/freestanding_export.xr
+math tests/aot/filetests/link/freestanding_math_constants.xr
+mem tests/aot/filetests/link/freestanding_mem_core.xr

@@ -71,6 +71,19 @@ class DateTime {
         this._yearday = p.yearday
     }
 
+    timestamp: int { fn() { return this._timestamp } }
+    millisecond: int { fn() { return this._millisecond } }
+    tzOffset: int { fn() { return this._tzOffset } }
+    isUtc: bool { fn() { return this._isUtc } }
+    year: int { fn() { return this._year } }
+    month: int { fn() { return this._month } }
+    day: int { fn() { return this._day } }
+    hour: int { fn() { return this._hour } }
+    minute: int { fn() { return this._minute } }
+    second: int { fn() { return this._second } }
+    weekday: int { fn() { return this._weekday } }
+    yearday: int { fn() { return this._yearday } }
+
     toString() -> string {
         return this.format("YYYY-MM-DD HH:mm:ss")
     }

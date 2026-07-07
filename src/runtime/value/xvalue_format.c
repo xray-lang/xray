@@ -53,6 +53,23 @@
 #define XR_FORMAT_MAX_DEPTH 3
 #define XR_FORMAT_MAX_ELEMENTS 32
 
+static bool class_is_named_datetime(XrClass *cls) {
+    const char *name = cls ? xr_class_display_name(cls) : NULL;
+    return name && strcmp(name, "DateTime") == 0;
+}
+
+static bool format_datetime_method(XrVMRuntime *isolate, XrStrBuf *sb, XrInstance *inst,
+                                   const char *method) {
+    if (!isolate || !sb || !inst || !method)
+        return false;
+    XrValue result = xr_instance_call_method(isolate, inst, method, NULL, 0);
+    if (!XR_IS_STRING(result))
+        return false;
+    XrString *str = XR_TO_STRING(result);
+    xr_strbuf_append_str(sb, str);
+    return true;
+}
+
 /* ========== Container helpers (static) ========== */
 
 static void format_array(XrVMRuntime *isolate, XrStrBuf *sb, XrArray *arr, int depth) {
@@ -352,6 +369,9 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
                     xr_strbuf_append_cstr(sb, buf, (size_t) n);
                 else
                     xr_strbuf_append_cstr(sb, "<DateTime>", 10);
+            } else if (class_is_named_datetime(cls)) {
+                if (!format_datetime_method(isolate, sb, inst, "toString"))
+                    xr_strbuf_append_cstr(sb, "DateTime{...}", 13);
             } else if (cls && cls->builtin_kind == XR_BK_REGEX) {
                 struct XrRegex *re = xr_value_to_regex(val);
                 const char *pat = re ? xr_regex_pattern(re) : NULL;
