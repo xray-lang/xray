@@ -69,6 +69,7 @@ XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, X
                                        bool is_write);
 XR_FUNC bool xa_type_is_concurrency_handle(const XrType *type);
 XR_FUNC const char *xa_concurrency_handle_label(const XrType *type);
+XR_FUNC bool xa_expr_is_sys_thread_spawn_call(AstNode *expr);
 XR_FUNC bool xa_freestanding_profile_enabled(XaAnalyzer *analyzer);
 XR_FUNC bool xa_freestanding_stdlib_module_known(const char *module_name);
 XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name);

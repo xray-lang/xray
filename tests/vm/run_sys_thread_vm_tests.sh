@@ -73,6 +73,7 @@ DETACH_SRC="$PROJECT_DIR/tests/vm/sys_thread_detach.xr"
 ARRAY_SRC="$PROJECT_DIR/tests/vm/sys_thread_join_array.xr"
 OPTIONS_SRC="$PROJECT_DIR/tests/vm/sys_thread_spawn_options.xr"
 ORPHAN_SRC="$PROJECT_DIR/tests/vm/sys_thread_orphan_warning.xr"
+UNUSED_LOCAL_SRC="$PROJECT_DIR/tests/vm/sys_thread_unused_local_warning.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -82,6 +83,9 @@ expect_output "join_array" "$ARRAY_SRC" "42"
 expect_output "spawn_options" "$OPTIONS_SRC" "42"
 expect_warning "orphan" "$ORPHAN_SRC" "orphan" \
     "sys.Thread.spawn returns a Thread handle; call join() or detach() explicitly"
+expect_warning "unused_local" "$UNUSED_LOCAL_SRC" "unused-local" \
+    "Thread handle 't' from sys.Thread.spawn is never used" \
+    "call join() or detach() explicitly"
 
 "$XRAY" run --dump-bytecode "$JOIN_SRC" >"$WORK/join.dump" 2>"$WORK/join.dump.err"
 if grep -Eq '^[0-9]+.*[[:space:]]THREAD_SPAWN[[:space:]]' "$WORK/join.dump"; then

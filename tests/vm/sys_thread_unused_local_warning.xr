@@ -1,0 +1,10 @@
+import sys
+
+fn spawnUnused() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    print("unused-local")
+}
+
+spawnUnused()
