@@ -37,6 +37,7 @@
 #include "xi_analysis.h"
 #include "xi_cfg_edit.h"
 #include "xi_core_api.h"
+#include "xi_module.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -497,7 +498,91 @@ static bool arc_raw_pointer_borrow_flows_to_user(const XiValue *member, const Xi
  * receiving coroutine's heap). Receive loops would otherwise leak one
  * wrapper per message. Extend this table as more native return-ownership
  * facts are encoded. */
-static bool call_returns_fresh(const XiValue *v) {
+static const XiValue *arc_unwrap_import_source(const XiValue *v) {
+    while (v &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
+            v->op == XI_MOVE) &&
+           v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+static const XiImportRef *arc_direct_import_ref(const XiValue *v) {
+    v = arc_unwrap_import_source(v);
+    return (v && v->op == XI_IMPORT_REF && v->aux) ? (const XiImportRef *) v->aux : NULL;
+}
+
+static const XiImportRef *arc_shared_slot_import_ref_in_func(const XiFunc *f, int slot) {
+    if (!f || slot < 0)
+        return NULL;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *value = blk->values[vi];
+            if (!value || value->op != XI_SET_SHARED || (int) value->aux_int != slot ||
+                value->nargs < 1)
+                continue;
+            const XiImportRef *ref = arc_direct_import_ref(value->args[0]);
+            if (ref)
+                return ref;
+        }
+    }
+    return NULL;
+}
+
+static const XiImportRef *arc_shared_slot_import_ref(const XiFunc *f, int slot) {
+    if (!f || slot < 0)
+        return NULL;
+    if (f->module && slot < (int) f->module->nslots && f->module->slot_imports &&
+        f->module->slot_imports[slot])
+        return f->module->slot_imports[slot];
+    for (const XiFunc *cur = f; cur; cur = cur->parent_func) {
+        const XiImportRef *ref = arc_shared_slot_import_ref_in_func(cur, slot);
+        if (ref)
+            return ref;
+    }
+    if (f->module && f->module->init && f->module->init != f)
+        return arc_shared_slot_import_ref_in_func(f->module->init, slot);
+    return NULL;
+}
+
+static const XiImportRef *arc_import_ref_from_value(const XiFunc *f, const XiValue *v) {
+    v = arc_unwrap_import_source(v);
+    if (!v)
+        return NULL;
+    if (v->op == XI_IMPORT_REF && v->aux)
+        return (const XiImportRef *) v->aux;
+    if (v->op == XI_GET_SHARED)
+        return arc_shared_slot_import_ref(f, (int) v->aux_int);
+    return NULL;
+}
+
+static bool arc_mem_allocator_returns_fresh_buffer(const XiFunc *f, const XiValue *v) {
+    if (!v || !xr_type_is_named_class(v->type, "Buffer"))
+        return false;
+
+    const char *member = NULL;
+    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1) {
+        const XiImportRef *ref = arc_import_ref_from_value(f, v->args[0]);
+        if (!ref || !ref->module_path || strcmp(ref->module_path, "mem") != 0 || ref->member_name)
+            return false;
+        member = (const char *) v->aux;
+    } else if (v->op == XI_CALL && v->nargs >= 1) {
+        const XiImportRef *ref = arc_import_ref_from_value(f, v->args[0]);
+        if (!ref || !ref->module_path || strcmp(ref->module_path, "mem") != 0)
+            return false;
+        member = ref->member_name;
+    }
+
+    return member && (strcmp(member, "alloc") == 0 || strcmp(member, "allocZeroed") == 0 ||
+                      strcmp(member, "allocAligned") == 0);
+}
+
+static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
+    if (arc_mem_allocator_returns_fresh_buffer(f, v))
+        return true;
     if (v->op != XI_CALL_METHOD || v->nargs < 1 || !v->args[0])
         return false;
     const struct XrType *recv_type = v->args[0]->type;

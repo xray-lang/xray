@@ -539,6 +539,20 @@ static const XgDeclSummary *verify_find_evidence_decl_by_kind_name(const XgGloba
     return NULL;
 }
 
+static const XgInterfaceMethodSummary *
+verify_find_evidence_interface_method(const XgGlobalEvidence *ev, XgInterfaceId interface_id,
+                                      uint32_t name_id, uint32_t signature_key) {
+    if (!ev || interface_id == XG_NO_ID || name_id == 0 || signature_key == 0)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ninterface_methods; i++) {
+        const XgInterfaceMethodSummary *method = &ev->interface_methods[i];
+        if (method->owner_interface_id == interface_id && method->name_id == name_id &&
+            method->signature_key == signature_key)
+            return method;
+    }
+    return NULL;
+}
+
 static const XgClassSummary *verify_find_evidence_class(const XgGlobalEvidence *ev,
                                                         XgClassId class_id) {
     if (!ev || class_id == XG_NO_ID)
@@ -808,6 +822,64 @@ static bool verify_interface_implementor_set(const XgGlobalEvidence *ev, const X
     return true;
 }
 
+static bool verify_interface_method_rows(const XgGlobalEvidence *ev, char *errbuf,
+                                         size_t errbuf_len) {
+    if (!ev)
+        return set_error(errbuf, errbuf_len,
+                         "AOT global evidence interface method verifier has no evidence");
+
+    for (uint32_t i = 0; i < ev->ninterface_methods; i++) {
+        const XgInterfaceMethodSummary *method = &ev->interface_methods[i];
+        const XgDeclSummary *owner;
+        uint32_t owner_count = 0;
+        if (method->interface_method_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT global evidence interface method has no id");
+        for (uint32_t j = i + 1; j < ev->ninterface_methods; j++) {
+            if (ev->interface_methods[j].interface_method_id == method->interface_method_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence interface method id is duplicated");
+        }
+        owner = verify_find_evidence_decl_by_kind_name(ev, XG_DECL_INTERFACE,
+                                                       method->owner_interface_id);
+        if (!owner)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface method owner is missing");
+        if (method->name_id == 0 || method->signature_key == 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface method identity is stale");
+        for (uint32_t j = 0; j < ev->ninterface_methods; j++) {
+            const XgInterfaceMethodSummary *candidate = &ev->interface_methods[j];
+            if (candidate->owner_interface_id != method->owner_interface_id)
+                continue;
+            if (candidate != method && candidate->ordinal == method->ordinal)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence interface method ordinal is duplicated");
+            owner_count++;
+        }
+        if (owner_count != owner->signature_key)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface method count does not re-derive");
+        if (method->ordinal >= owner->signature_key)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface method ordinal is stale");
+    }
+
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        const XgDeclSummary *decl = &ev->decls[i];
+        uint32_t method_count = 0;
+        if (decl->kind != XG_DECL_INTERFACE)
+            continue;
+        for (uint32_t j = 0; j < ev->ninterface_methods; j++) {
+            if (ev->interface_methods[j].owner_interface_id == decl->name_id)
+                method_count++;
+        }
+        if (method_count != decl->signature_key)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface method count does not re-derive");
+    }
+    return true;
+}
+
 static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                                        size_t errbuf_len) {
     if (!ev)
@@ -856,8 +928,8 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
             case XG_CALL_INTERFACE:
                 if (call->static_target_func_id != XG_NO_ID ||
                     call->receiver_static_class_id != XG_NO_ID ||
-                    call->receiver_static_interface_id == XG_NO_ID || call->method_name_id == 0 ||
-                    call->method_signature_key == 0)
+                    call->receiver_static_interface_id == XG_NO_ID || call->method_id == XG_NO_ID ||
+                    call->method_name_id == 0 || call->method_signature_key == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence interface callsite identity is stale");
                 if (!verify_find_evidence_decl_by_kind_name(ev, XG_DECL_INTERFACE,
@@ -865,6 +937,17 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                     return set_error(
                         errbuf, errbuf_len,
                         "AOT global evidence interface callsite declaration is missing");
+                {
+                    const XgInterfaceMethodSummary *interface_method =
+                        verify_find_evidence_interface_method(
+                            ev, call->receiver_static_interface_id, call->method_name_id,
+                            call->method_signature_key);
+                    if (!interface_method ||
+                        interface_method->interface_method_id != call->method_id)
+                        return set_error(
+                            errbuf, errbuf_len,
+                            "AOT global evidence interface callsite method does not re-derive");
+                }
                 break;
             case XG_CALL_CLOSURE:
                 if (call->static_target_func_id != XG_NO_ID ||
@@ -1357,6 +1440,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         return set_error(errbuf, errbuf_len, "AOT global evidence hash is stale");
 
     if (!verify_body_summary_ranges(ev, errbuf, errbuf_len))
+        return false;
+    if (!verify_interface_method_rows(ev, errbuf, errbuf_len))
         return false;
 
     for (uint32_t i = 0; i < ev->nclasses; i++) {
