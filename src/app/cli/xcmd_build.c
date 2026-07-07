@@ -813,10 +813,13 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
     for (i = 0; i < manifest->n_ld_flags; i++) {
         if (!xaot_cli_link_ld_flag_supported(target, manifest->ld_flags[i]))
             continue;
+        if (shared_library && freestanding_profile &&
+            strcmp(manifest->ld_flags[i], "-Wl,--gc-sections") == 0)
+            continue;
         if (!xaot_cli_link_add_arg(cmd, manifest->ld_flags[i], err, err_size))
             return false;
     }
-    if (!target->is_native &&
+    if (!target->is_native && !(shared_library && freestanding_profile) &&
         !xaot_link_manifest_contains(manifest, XAOT_LINK_LD_FLAG, "-Wl,--gc-sections")) {
         if (!xaot_cli_link_add_arg(cmd, "-Wl,--gc-sections", err, err_size))
             return false;
@@ -1134,12 +1137,14 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: --linker-script cannot be combined with --c-only\n");
         return 2;
     }
-    if (shared_library && !target.is_native) {
+    bool freestanding_shared_object =
+        shared_library && profile == XR_CLI_BUILD_PROFILE_FREESTANDING;
+    if (shared_library && !target.is_native && !freestanding_shared_object) {
         fprintf(stderr, "Error: --shared currently requires native target\n");
         return 2;
     }
 #ifdef XR_OS_WINDOWS
-    if (shared_library) {
+    if (shared_library && !freestanding_shared_object) {
         fprintf(stderr, "Error: --shared is not implemented for Windows hosts yet\n");
         return 2;
     }
@@ -1169,7 +1174,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: %s\n", parse_err);
         return 2;
     }
-    if (shared_library && toolchain_plan.kind != XR_CLI_TOOLCHAIN_HOST) {
+    if (shared_library && toolchain_plan.kind != XR_CLI_TOOLCHAIN_HOST &&
+        !freestanding_shared_object) {
         fprintf(stderr, "Error: --shared currently requires the host toolchain\n");
         return 2;
     }

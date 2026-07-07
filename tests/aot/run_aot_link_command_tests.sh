@@ -53,6 +53,10 @@ record_fail() {
     FAIL=$((FAIL + 1))
 }
 
+record_skip() {
+    echo "  SKIP: $1"
+}
+
 nm_undefined_normalized() {
     nm -u "$1" 2>&1 |
         sed '/^[[:space:]]*$/d' |
@@ -514,6 +518,78 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
 else
     record_fail "freestanding-profile/kernel-shape: object build failed"
     sed 's/^/      /' "$FREESTANDING_KERNEL_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_KERNEL_TARGET_OBJ="$WORK/freestanding_kernel_shape_x86_64.o"
+FREESTANDING_KERNEL_TARGET_LOG="$WORK/freestanding_kernel_shape_x86_64.log"
+if "$XRAY" build --native --profile freestanding --shared --target x86_64-linux-musl \
+        --toolchain zig --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_KERNEL_TARGET_OBJ" \
+        "$FREESTANDING_KERNEL_SRC" >"$FREESTANDING_KERNEL_TARGET_LOG" 2>&1; then
+    expect_log_contains "$FREESTANDING_KERNEL_TARGET_LOG" \
+        "Link command: zig cc -target x86_64-linux-musl" \
+        "freestanding-profile/kernel-shape: cross target uses zig target"
+    expect_log_contains "$FREESTANDING_KERNEL_TARGET_LOG" " -r " \
+        "freestanding-profile/kernel-shape: cross shared output is relocatable object"
+    expect_log_contains "$FREESTANDING_KERNEL_TARGET_LOG" "-nostdlib" \
+        "freestanding-profile/kernel-shape: cross target keeps no-libc link"
+    expect_log_contains "$FREESTANDING_KERNEL_TARGET_LOG" "-DXR_AOT_CROSS_TARGET=1" \
+        "freestanding-profile/kernel-shape: cross target defines target marker"
+    expect_log_not_contains "$FREESTANDING_KERNEL_TARGET_LOG" "-Wl,--gc-sections" \
+        "freestanding-profile/kernel-shape: cross relocatable keeps boot sections"
+    expect_log_not_contains "$FREESTANDING_KERNEL_TARGET_LOG" "-dynamiclib" \
+        "freestanding-profile/kernel-shape: cross target avoids hosted dylib"
+    expect_log_not_contains "$FREESTANDING_KERNEL_TARGET_LOG" " -shared " \
+        "freestanding-profile/kernel-shape: cross target avoids hosted shared library"
+else
+    record_fail "freestanding-profile/kernel-shape: cross target dry-run failed"
+    sed 's/^/      /' "$FREESTANDING_KERNEL_TARGET_LOG" | sed -n '1,120p'
+fi
+
+if command -v zig >/dev/null 2>&1 && command -v llvm-readelf >/dev/null 2>&1; then
+    FREESTANDING_KERNEL_TARGET_REAL_OBJ="$WORK/freestanding_kernel_shape_x86_64_real.o"
+    FREESTANDING_KERNEL_TARGET_REAL_LOG="$WORK/freestanding_kernel_shape_x86_64_real.log"
+    FREESTANDING_KERNEL_TARGET_REAL_ELF="$WORK/freestanding_kernel_shape_x86_64_real.elf"
+    FREESTANDING_KERNEL_TARGET_REAL_SECTIONS="$WORK/freestanding_kernel_shape_x86_64_real.sections"
+    FREESTANDING_KERNEL_TARGET_REAL_SYMBOLS="$WORK/freestanding_kernel_shape_x86_64_real.symbols"
+    if ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}" \
+            ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}" \
+            "$XRAY" build --native --profile freestanding --shared \
+            --target x86_64-linux-musl --toolchain zig --keep-c --rebuild \
+            --dump-link-command --cache-dir "$BUILD_CACHE" \
+            -o "$FREESTANDING_KERNEL_TARGET_REAL_OBJ" \
+            "$FREESTANDING_KERNEL_SRC" >"$FREESTANDING_KERNEL_TARGET_REAL_LOG" 2>&1; then
+        llvm-readelf -h "$FREESTANDING_KERNEL_TARGET_REAL_OBJ" >"$FREESTANDING_KERNEL_TARGET_REAL_ELF" 2>&1
+        llvm-readelf -S "$FREESTANDING_KERNEL_TARGET_REAL_OBJ" >"$FREESTANDING_KERNEL_TARGET_REAL_SECTIONS" 2>&1
+        llvm-readelf -s "$FREESTANDING_KERNEL_TARGET_REAL_OBJ" >"$FREESTANDING_KERNEL_TARGET_REAL_SYMBOLS" 2>&1
+        expect_log_contains "$FREESTANDING_KERNEL_TARGET_REAL_ELF" "Class:                             ELF64" \
+            "freestanding-profile/kernel-shape: cross object is ELF64"
+        expect_log_contains "$FREESTANDING_KERNEL_TARGET_REAL_ELF" \
+            "Type:                              REL (Relocatable file)" \
+            "freestanding-profile/kernel-shape: cross object is relocatable"
+        expect_log_contains "$FREESTANDING_KERNEL_TARGET_REAL_ELF" \
+            "Machine:                           Advanced Micro Devices X86-64" \
+            "freestanding-profile/kernel-shape: cross object targets x86-64"
+        expect_log_contains "$FREESTANDING_KERNEL_TARGET_REAL_SECTIONS" ".xray_boot" \
+            "freestanding-profile/kernel-shape: cross object keeps boot section"
+        expect_log_contains "$FREESTANDING_KERNEL_TARGET_REAL_SECTIONS" ".xray_multiboot" \
+            "freestanding-profile/kernel-shape: cross object keeps multiboot section"
+        expect_log_contains "$FREESTANDING_KERNEL_TARGET_REAL_SYMBOLS" "xray_kernel_entry" \
+            "freestanding-profile/kernel-shape: cross object exports boot symbol"
+        FREESTANDING_KERNEL_TARGET_REAL_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_KERNEL_TARGET_REAL_OBJ")"
+        if [ -z "$FREESTANDING_KERNEL_TARGET_REAL_UNDEFINED" ]; then
+            record_pass "freestanding-profile/kernel-shape: cross object has no undefined symbols"
+        else
+            record_fail "freestanding-profile/kernel-shape: cross object has unexpected undefined symbols"
+            nm -u "$FREESTANDING_KERNEL_TARGET_REAL_OBJ" 2>&1 |
+                sed '/^[[:space:]]*$/d' | sed 's/^/      /'
+        fi
+    else
+        record_fail "freestanding-profile/kernel-shape: cross target real object build failed"
+        sed 's/^/      /' "$FREESTANDING_KERNEL_TARGET_REAL_LOG" | sed -n '1,120p'
+    fi
+else
+    record_skip "freestanding-profile/kernel-shape: cross target real object (requires zig and llvm-readelf)"
 fi
 
 FREESTANDING_RAWPTR_NULL_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_null.xr"
