@@ -1779,15 +1779,14 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
 
     XaotBundle method_no_receiver_bundle;
     memset(&method_no_receiver_bundle, 0, sizeof(method_no_receiver_bundle));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&method_no_receiver_bundle,
-                                                &method_no_receiver_ev,
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&method_no_receiver_bundle, &method_no_receiver_ev,
                                                 XG_BUILD_NATIVE_RELEASE));
     method_no_receiver_bundle.modules = modules;
     method_no_receiver_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&method_no_receiver_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&method_no_receiver_bundle, XAOT_VERIFY_AOT_READY, err,
-                                    sizeof(err)));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&method_no_receiver_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence method callsite identity is stale"));
     xaot_bundle_free(&method_no_receiver_bundle);
     xg_global_evidence_free(&method_no_receiver_ev);
@@ -1807,21 +1806,21 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     method_no_signature_call.method_signature_key = 0;
     xg_global_evidence_init(&method_no_signature_ev, method_no_signature_key);
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&method_no_signature_ev, &decl));
-    ASSERT_NOT_NULL(xg_global_evidence_add_body(&method_no_signature_ev, &method_no_signature_body));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_body(&method_no_signature_ev, &method_no_signature_body));
     ASSERT_NOT_NULL(
         xg_global_evidence_add_callsite(&method_no_signature_ev, &method_no_signature_call));
 
     XaotBundle method_no_signature_bundle;
     memset(&method_no_signature_bundle, 0, sizeof(method_no_signature_bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&method_no_signature_bundle,
-                                                &method_no_signature_ev,
-                                                XG_BUILD_NATIVE_RELEASE));
+                                                &method_no_signature_ev, XG_BUILD_NATIVE_RELEASE));
     method_no_signature_bundle.modules = modules;
     method_no_signature_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&method_no_signature_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&method_no_signature_bundle, XAOT_VERIFY_AOT_READY, err,
-                                    sizeof(err)));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&method_no_signature_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence method callsite identity is stale"));
     xaot_bundle_free(&method_no_signature_bundle);
     xg_global_evidence_free(&method_no_signature_ev);
@@ -2399,6 +2398,44 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) {
+    setup_parser_session();
+    const char *source = "fn clampScore(x: int) -> int {\n"
+                         "    return math.min(x, 10)\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nclasses, 0);
+    ASSERT_EQ_UINT(ev.ncallsites, 1);
+    ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_NATIVE);
+    ASSERT_EQ_UINT(ev.callsites[0].receiver_static_class_id, XG_NO_ID);
+    ASSERT_TRUE(ev.callsites[0].method_name_id != 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nmethod_dispatch_plans, 0);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     setup_parser_session();
     const char *source = "interface Shape {\n"
@@ -2872,6 +2909,7 @@ RUN_TEST(global_evidence_verifier_rejects_stale_body_identity_rows);
 RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
+RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
 RUN_TEST(global_evidence_producer_resolves_interface_callsite_receivers);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
