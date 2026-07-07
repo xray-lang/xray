@@ -859,7 +859,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->fields = clone_node_array(src->fields, src->field_count, map, mc, clone_ctx);
             dst->method_count = src->method_count;
             dst->methods = clone_node_array(src->methods, src->method_count, map, mc, clone_ctx);
-            dst->is_final = src->is_final;
+            dst->explicit_final = src->explicit_final;
             dst->is_native = src->is_native;
             dst->is_packed = src->is_packed;
             dst->explicit_align = src->explicit_align;

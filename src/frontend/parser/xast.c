@@ -1050,7 +1050,7 @@ AstNode *xr_ast_struct_decl(XrCompilerSession *session, const char *name, AstNod
     node->as.struct_decl.field_count = field_count;
     node->as.struct_decl.methods = methods;
     node->as.struct_decl.method_count = method_count;
-    node->as.struct_decl.is_final = true;  // structs are implicitly final
+    node->as.struct_decl.explicit_final = true;  // fixed-layout aggregates cannot be extended
     node->as.struct_decl.is_packed = false;
     node->as.struct_decl.explicit_align = 0;
     node->as.struct_decl.attributes = NULL;
@@ -1073,7 +1073,7 @@ AstNode *xr_ast_union_decl(XrCompilerSession *session, const char *name, AstNode
     node->as.union_decl.field_count = field_count;
     node->as.union_decl.methods = NULL;
     node->as.union_decl.method_count = 0;
-    node->as.union_decl.is_final = true;
+    node->as.union_decl.explicit_final = true;
     node->as.union_decl.is_packed = false;
     node->as.union_decl.explicit_align = 0;
     node->as.union_decl.attributes = NULL;

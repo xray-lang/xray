@@ -1199,7 +1199,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
     desc->super_global_index = -1;
     desc->descriptor_version = XR_CLASS_DESCRIPTOR_VERSION;
     desc->clinit_proto_index = -1;
-    if (cd->is_final)
+    if (cd->explicit_final)
         desc->flags |= XR_CLASS_FINAL;
     desc->flags |=
         xr_class_flags_from_derive(emit_decl_derive_flags(cd->attributes, cd->attr_count));
