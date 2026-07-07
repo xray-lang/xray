@@ -5,196 +5,30 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * yaml.c - YAML module binding
+ * yaml.c - `yaml` module loader (pure-Xray YAML parser/writer)
  *
  * KEY CONCEPT:
- *   Module interface connecting xray with YAML parser/serializer.
+ *   `yaml` is a pure-Xray stdlib module. Parsing, strict diagnostics,
+ *   multi-document splitting, stringification, and file wrappers live in
+ *   stdlib/yaml/yaml.xr.
+ *
+ *   This loader only creates the empty native module so the resolver recognises
+ *   `import yaml` as stdlib; the script-extension path compiles
+ *   stdlib/yaml/yaml.xr and populates the module exports.
  */
 
-#include "yaml.h"
-#include "yaml_parser.h"
-#include "../../src/base/xmalloc.h"
-#include "../common.h"
-#include "../common_io.h"
-#include "../common_parser.h"
-#include <stdio.h>
-#include <string.h>
-
-// Emitter function (defined in yaml_emitter.c). Declared XR_FUNC so the
-// attribute/ABI matches the definition; previously it was a bare
-// `extern` which works on every current platform but would diverge from
-// the definition on a hypothetical amalgamated build.
-XR_FUNC XrValue yaml_emit(XrVMRuntime *isolate, XrValue value, int indent, int flow_level);
-
-// ========== Public API ==========
-
-XrValue xr_yaml_parse(XrVMRuntime *isolate, const char *data, size_t len) {
-    YamlConfig config;
-    yaml_config_init(&config);
-
-    YamlParser parser;
-    yaml_parser_init(&parser, isolate, data, len, &config);
-    XrValue result = yaml_parser_parse(&parser);
-    yaml_parser_cleanup(&parser);
-
-    return result;
-}
-
-XrValue xr_yaml_parse_all(XrVMRuntime *isolate, const char *data, size_t len) {
-    YamlConfig config;
-    yaml_config_init(&config);
-
-    YamlParser parser;
-    yaml_parser_init(&parser, isolate, data, len, &config);
-    XrArray *docs = yaml_parser_parse_all(&parser);
-    yaml_parser_cleanup(&parser);
-
-    return xr_value_from_array(docs);
-}
-
-XrValue xr_yaml_stringify(XrVMRuntime *isolate, XrValue value, int indent) {
-    return yaml_emit(isolate, value, indent, -1);
-}
-
-// ========== Module Functions ==========
-
-// parse(str, config?)
-static XrValue yaml_parse(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0])) {
-        return xr_null();
-    }
-    XrString *str = XR_TO_STRING(args[0]);
-
-    YamlConfig config;
-    yaml_config_init(&config);
-
-    if (argc >= 2 && xr_value_is_json(args[1])) {
-        XrJson *json = xr_value_to_json(args[1]);
-        yaml_config_from_json(X, &config, json);
-    }
-
-    YamlParser parser;
-    yaml_parser_init(&parser, X, str->data, str->length, &config);
-    XrValue result = yaml_parser_parse(&parser);
-    yaml_parser_cleanup(&parser);
-
-    return result;
-}
-
-// parseStrict(str)
-static XrValue yaml_parse_strict(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0])) {
-        XrMap *result = xr_map_new(xr_current_coro(X));
-        xr_map_set(result, xr_string_value(xr_string_intern(X, "data", 4, 0)), xr_null());
-        xr_map_set(result, xr_string_value(xr_string_intern(X, "errors", 6, 0)),
-                   xr_value_from_array(xr_array_new(xr_current_coro(X))));
-        return xr_value_from_map(result);
-    }
-    XrString *str = XR_TO_STRING(args[0]);
-
-    YamlConfig config;
-    yaml_config_init(&config);
-    config.safe = true;
-
-    YamlParser parser;
-    yaml_parser_init(&parser, X, str->data, str->length, &config);
-    YamlResult parse_result = yaml_parser_parse_strict(&parser);
-    yaml_parser_cleanup(&parser);
-
-    XrMap *result = xr_map_new(xr_current_coro(X));
-    xr_map_set(result, xr_string_value(xr_string_intern(X, "data", 4, 0)), parse_result.data);
-    xr_map_set(result, xr_string_value(xr_string_intern(X, "errors", 6, 0)),
-               xr_value_from_array(parse_result.errors));
-
-    XrMap *meta = xr_map_new(xr_current_coro(X));
-    xr_map_set(meta, xr_string_value(xr_string_intern(X, "lines", 5, 0)),
-               xr_int(parse_result.meta.lines));
-    xr_map_set(meta, xr_string_value(xr_string_intern(X, "documents", 9, 0)),
-               xr_int(parse_result.meta.documents));
-    xr_map_set(meta, xr_string_value(xr_string_intern(X, "anchors", 7, 0)),
-               xr_int(parse_result.meta.anchors));
-    xr_map_set(result, xr_string_value(xr_string_intern(X, "meta", 4, 0)), xr_value_from_map(meta));
-
-    return xr_value_from_map(result);
-}
-
-// parseAll(str)
-static XrValue yaml_parse_all(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0])) {
-        return xr_value_from_array(xr_array_new(xr_current_coro(X)));
-    }
-    XrString *str = XR_TO_STRING(args[0]);
-    return xr_yaml_parse_all(X, str->data, str->length);
-}
-
-// stringify(value, config?)
-static XrValue yaml_stringify(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1) {
-        return xr_string_value(xr_string_intern(X, "", 0, 0));
-    }
-
-    int indent = 2;
-    int flow_level = -1;
-
-    if (argc >= 2 && xr_value_is_json(args[1])) {
-        XrJson *json = xr_value_to_json(args[1]);
-        xrs_cfg_get_int(X, json, "indent", &indent);
-        xrs_cfg_get_int(X, json, "flowLevel", &flow_level);
-    } else if (argc >= 2 && XR_IS_INT(args[1])) {
-        indent = (int) XR_TO_INT(args[1]);
-    }
-
-    return yaml_emit(X, args[0], indent, flow_level);
-}
-
-// parseFile(path). Currently synchronous — see stdlib/common_io.h for
-// the P9 async-migration plan; this binding will switch to yieldable
-// semantics once the shared file helper gains an async variant.
-static XrValue yaml_parse_file(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0])) {
-        return xr_null();
-    }
-    XrString *path = XR_TO_STRING(args[0]);
-
-    char *content = NULL;
-    size_t content_len = 0;
-    if (!xrs_file_read_all_sync(path->data, &content, &content_len)) {
-        return xr_null();
-    }
-
-    XrValue result = xr_yaml_parse(X, content, content_len);
-    xr_free(content);
-    return result;
-}
-
-// writeFile(path, value). Synchronous; see parseFile note above.
-static XrValue yaml_write_file(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 2 || !XR_IS_STRING(args[0])) {
-        return xr_bool(false);
-    }
-    XrString *path = XR_TO_STRING(args[0]);
-    XrValue yaml_str = xr_yaml_stringify(X, args[1], 2);
-
-    if (!XR_IS_STRING(yaml_str))
-        return xr_bool(false);
-    XrString *str = XR_TO_STRING(yaml_str);
-
-    return xr_bool(xrs_file_write_all_sync(path->data, str->data, str->length));
-}
-
-// ========== Module Loading ===========
-
-#define XR_STDLIB_VM_BIND_MODULE_YAML 1
-#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
-#undef XR_STDLIB_VM_BIND_MODULE_YAML
+#include "../../src/base/xchecks.h"
+#include "../../src/module/xmodule.h"
+#include "../../src/runtime/xisolate_api.h"
 
 XR_FUNC XrModule *xr_load_module_yaml(XrVMRuntime *isolate) {
-    XrModule *mod = xr_module_create_native(isolate, "yaml");
-    if (!mod)
+    XR_DCHECK(isolate != NULL, "xr_load_module_yaml: NULL isolate");
+
+    XrModule *module = xr_module_create_native(isolate, "yaml");
+    if (!module)
         return NULL;
 
-    xr_stdlib_vm_bind_yaml_generated(isolate, mod);
-
-    mod->loaded = true;
-    return mod;
+    module->requires_script = true;
+    module->loaded = true;
+    return module;
 }

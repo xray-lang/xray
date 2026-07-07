@@ -1,0 +1,867 @@
+// yaml - pure-Xray YAML parser and writer.
+//
+// This module implements the stdlib YAML surface in Xray code. It intentionally
+// targets the common configuration subset used by the existing stdlib tests:
+// block mappings/sequences, nested flow collections, anchors/aliases, block
+// scalars, multi-document splitting, and JSON roundtrip-oriented emission.
+
+import io
+
+const YAML_MAX_DEPTH = 256
+
+fn _isWs(c: string) -> bool {
+    return c == " " || c == "\t" || c == "\r" || c == "\n"
+}
+
+fn _isDigit(c: string) -> bool {
+    if (c.length == 0) { return false }
+    var o = c.ord()!
+    return o >= 48 && o <= 57
+}
+
+fn _isAlpha(c: string) -> bool {
+    if (c.length == 0) { return false }
+    var o = c.ord()!
+    return (o >= 65 && o <= 90) || (o >= 97 && o <= 122)
+}
+
+fn _isHexDigit(c: string) -> bool {
+    if (c.length == 0) { return false }
+    var o = c.ord()!
+    return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
+}
+
+fn _hexValue(c: string) -> int {
+    var o = c.ord()!
+    if (o >= 48 && o <= 57) { return o - 48 }
+    if (o >= 65 && o <= 70) { return o - 55 }
+    if (o >= 97 && o <= 102) { return o - 87 }
+    return -1
+}
+
+fn _trimCR(line: string) -> string {
+    if (line.endsWith("\r")) { return line.slice(0, line.length - 1) }
+    return line
+}
+
+fn _lines(data: string) -> Array<string> {
+    var raw = data.split("\n")
+    var out: Array<string> = []
+    for (var i = 0; i < raw.length; i++) {
+        out.push(_trimCR(raw[i]))
+    }
+    return out
+}
+
+fn _countIndent(line: string) -> int {
+    var n = 0
+    while (n < line.length && line.charAt(n) == " ") { n = n + 1 }
+    return n
+}
+
+fn _stripInlineComment(line: string) -> string {
+    var quote = ""
+    var escape = false
+    for (var i = 0; i < line.length; i++) {
+        var c = line.charAt(i)
+        if (escape) {
+            escape = false
+            continue
+        }
+        if (quote == "\"") {
+            if (c == "\\") { escape = true }
+            else if (c == "\"") { quote = "" }
+            continue
+        }
+        if (quote == "'") {
+            if (c == "'") { quote = "" }
+            continue
+        }
+        if (c == "\"" || c == "'") {
+            quote = c
+            continue
+        }
+        if (c == "#" && (i == 0 || _isWs(line.charAt(i - 1)))) {
+            return line.slice(0, i).trimEnd()
+        }
+    }
+    return line.trimEnd()
+}
+
+fn _lineClean(line: string) -> string {
+    return _stripInlineComment(_trimCR(line))
+}
+
+fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
+    if (pos < 0 || pos + prefix.length > s.length) { return false }
+    return s.slice(pos, pos + prefix.length) == prefix
+}
+
+fn _findTopColon(s: string) -> int {
+    var quote = ""
+    var escape = false
+    var depth = 0
+    for (var i = 0; i < s.length; i++) {
+        var c = s.charAt(i)
+        if (escape) {
+            escape = false
+            continue
+        }
+        if (quote == "\"") {
+            if (c == "\\") { escape = true }
+            else if (c == "\"") { quote = "" }
+            continue
+        }
+        if (quote == "'") {
+            if (c == "'") { quote = "" }
+            continue
+        }
+        if (c == "\"" || c == "'") {
+            quote = c
+            continue
+        }
+        if (c == "[" || c == "{") { depth = depth + 1 }
+        else if (c == "]" || c == "}") { depth = depth - 1 }
+        else if (c == ":" && depth == 0) { return i }
+    }
+    return -1
+}
+
+fn _utf8Len(cp: int) -> int {
+    if (cp < 0x80) { return 1 }
+    if (cp < 0x800) { return 2 }
+    if (cp < 0x10000) { return 3 }
+    return 4
+}
+
+fn _putUtf8(out: Bytes, oi: int, cp: int) -> int {
+    if (cp < 0x80) {
+        out[oi] = cp
+        return oi + 1
+    } else if (cp < 0x800) {
+        out[oi] = 0xC0 | (cp >> 6)
+        out[oi + 1] = 0x80 | (cp & 0x3F)
+        return oi + 2
+    } else if (cp < 0x10000) {
+        out[oi] = 0xE0 | (cp >> 12)
+        out[oi + 1] = 0x80 | ((cp >> 6) & 0x3F)
+        out[oi + 2] = 0x80 | (cp & 0x3F)
+        return oi + 3
+    }
+    out[oi] = 0xF0 | (cp >> 18)
+    out[oi + 1] = 0x80 | ((cp >> 12) & 0x3F)
+    out[oi + 2] = 0x80 | ((cp >> 6) & 0x3F)
+    out[oi + 3] = 0x80 | (cp & 0x3F)
+    return oi + 4
+}
+
+fn _codepointString(cp: int) -> string {
+    if (cp <= 0 || cp > 0x10FFFF) { return "" }
+    var out = Bytes(_utf8Len(cp))
+    _putUtf8(out, 0, cp)
+    return out.toString()
+}
+
+fn _decodeDoubleQuotedBody(body: string) -> string {
+    var out = StringBuilder()
+    var i = 0
+    while (i < body.length) {
+        var c = body.charAt(i)
+        if (c != "\\") {
+            out.append(c)
+            i = i + 1
+            continue
+        }
+        i = i + 1
+        if (i >= body.length) { break }
+        var esc = body.charAt(i)
+        if (esc == "n") { out.append("\n") }
+        else if (esc == "t") { out.append("\t") }
+        else if (esc == "r") { out.append("\r") }
+        else if (esc == "\"") { out.append("\"") }
+        else if (esc == "\\") { out.append("\\") }
+        else if (esc == "u" || esc == "U") {
+            var digits = 4
+            if (esc == "U") { digits = 8 }
+            var cp = 0
+            var ok = true
+            for (var j = 0; j < digits; j++) {
+                i = i + 1
+                if (i >= body.length || !_isHexDigit(body.charAt(i))) {
+                    ok = false
+                    break
+                }
+                cp = cp * 16 + _hexValue(body.charAt(i))
+            }
+            if (ok) { out.append(_codepointString(cp)) }
+        } else {
+            out.append(esc)
+        }
+        i = i + 1
+    }
+    return out.toString()
+}
+
+fn _parseQuotedLiteral(raw: string) -> string {
+    if (raw.length < 2) { return raw }
+    var q = raw.charAt(0)
+    if (q != "\"" && q != "'") { return raw }
+    var end = raw.length - 1
+    if (raw.charAt(end) != q) { end = raw.length }
+    var body = raw.slice(1, end)
+    if (q == "\"") { return _decodeDoubleQuotedBody(body) }
+    return body.replace("''", "'")
+}
+
+fn _parseBaseInt(raw: string, base: int, start: int, sign: int) -> int {
+    var out = 0
+    for (var i = start; i < raw.length; i++) {
+        var d = _hexValue(raw.charAt(i))
+        if (d < 0 || d >= base) { break }
+        out = out * base + d
+    }
+    return sign * out
+}
+
+fn _looksDecimalNumber(s: string) -> bool {
+    if (s.length == 0) { return false }
+    var i = 0
+    if (s.charAt(0) == "-" || s.charAt(0) == "+") { i = 1 }
+    if (i >= s.length) { return false }
+    var sawDigit = false
+    while (i < s.length) {
+        var c = s.charAt(i)
+        if (_isDigit(c)) {
+            sawDigit = true
+        } else if (c != "." && c != "e" && c != "E" && c != "-" && c != "+") {
+            return false
+        }
+        i = i + 1
+    }
+    return sawDigit
+}
+
+fn _parsePlainScalar(rawValue: string) -> unknown {
+    var raw = rawValue.trim()
+    var lower = raw.toLowerCase()
+    if (raw.length == 0) { return null }
+    if (lower == "null" || raw == "~") { return null }
+    if (lower == "true") { return true }
+    if (lower == "false") { return false }
+    if (lower == ".inf" || lower == "+.inf") { return 1.0 / 0.0 }
+    if (lower == "-.inf") { return -1.0 / 0.0 }
+    if (lower == ".nan" || lower == "+.nan" || lower == "-.nan") { return 0.0 / 0.0 }
+    if (raw.startsWith("\"") || raw.startsWith("'")) { return _parseQuotedLiteral(raw) }
+
+    var sign = 1
+    var offset = 0
+    if (raw.startsWith("-")) {
+        sign = -1
+        offset = 1
+    } else if (raw.startsWith("+")) {
+        offset = 1
+    }
+    if (offset + 2 < raw.length && raw.charAt(offset) == "0") {
+        var p = raw.charAt(offset + 1).toLowerCase()
+        if (p == "x") { return _parseBaseInt(raw, 16, offset + 2, sign) }
+        if (p == "o") { return _parseBaseInt(raw, 8, offset + 2, sign) }
+    }
+    if (_looksDecimalNumber(raw)) {
+        if (raw.includes(".") || raw.includes("e") || raw.includes("E")) {
+            var f = raw.toFloat()
+            if (f != null) { return f! }
+        } else {
+            var i = raw.toInt()
+            if (i != null) { return i! }
+        }
+    }
+    return raw
+}
+
+fn _parseKeyText(raw: string) -> string {
+    var key = raw.trim()
+    if (key.startsWith("\"") || key.startsWith("'")) { return _parseQuotedLiteral(key) }
+    return key
+}
+
+class YamlFlowParser {
+    src: string
+    pos: int
+    errors: Json
+    anchors: Json
+
+    constructor(src: string, errors: Json, anchors: Json) {
+        this.src = src
+        this.pos = 0
+        this.errors = errors
+        this.anchors = anchors
+    }
+
+    atEnd() -> bool {
+        return this.pos >= this.src.length
+    }
+
+    peek() -> string {
+        if (this.atEnd()) { return "" }
+        return this.src.charAt(this.pos)
+    }
+
+    advance() -> string {
+        var c = this.peek()
+        if (c.length > 0) { this.pos = this.pos + 1 }
+        return c
+    }
+
+    skipWs() {
+        while (!this.atEnd() && _isWs(this.peek())) { this.advance() }
+    }
+
+    parseQuoted() -> string {
+        var quote = this.advance()
+        var out = StringBuilder()
+        var escape = false
+        while (!this.atEnd()) {
+            var c = this.advance()
+            if (quote == "\"" && escape) {
+                if (c == "n") { out.append("\n") }
+                else if (c == "t") { out.append("\t") }
+                else if (c == "r") { out.append("\r") }
+                else if (c == "\"" || c == "\\") { out.append(c) }
+                else if (c == "u" || c == "U") {
+                    var digits = 4
+                    if (c == "U") { digits = 8 }
+                    var cp = 0
+                    var ok = true
+                    for (var i = 0; i < digits; i++) {
+                        if (this.atEnd() || !_isHexDigit(this.peek())) {
+                            ok = false
+                            break
+                        }
+                        cp = cp * 16 + _hexValue(this.advance())
+                    }
+                    if (ok) { out.append(_codepointString(cp)) }
+                } else {
+                    out.append(c)
+                }
+                escape = false
+                continue
+            }
+            if (quote == "\"" && c == "\\") {
+                escape = true
+                continue
+            }
+            if (c == quote) { return out.toString() }
+            out.append(c)
+        }
+        return out.toString()
+    }
+
+    parseKey() -> string {
+        this.skipWs()
+        if (this.peek() == "\"" || this.peek() == "'") { return this.parseQuoted() }
+        var start = this.pos
+        while (!this.atEnd() && this.peek() != ":") { this.advance() }
+        return this.src.slice(start, this.pos).trim()
+    }
+
+    parsePlain() -> unknown {
+        var start = this.pos
+        while (!this.atEnd() && this.peek() != "," && this.peek() != "]" && this.peek() != "}") {
+            this.advance()
+        }
+        return _parsePlainScalar(this.src.slice(start, this.pos))
+    }
+
+    parseValue() -> unknown {
+        this.skipWs()
+        if (this.atEnd()) { return null }
+        var c = this.peek()
+        if (c == "[") { return this.parseSequence() }
+        if (c == "{") { return this.parseMapping() }
+        if (c == "\"" || c == "'") { return this.parseQuoted() }
+        return this.parsePlain()
+    }
+
+    parseSequence() -> Json {
+        var arr: Json = []
+        this.advance()
+        this.skipWs()
+        if (this.peek() == "]") {
+            this.advance()
+            return arr
+        }
+        while (!this.atEnd()) {
+            arr.push(this.parseValue())
+            this.skipWs()
+            if (this.peek() == "]") {
+                this.advance()
+                break
+            }
+            if (this.peek() == ",") {
+                this.advance()
+                continue
+            }
+            break
+        }
+        return arr
+    }
+
+    parseMapping() -> Json {
+        var obj: Json = {}
+        this.advance()
+        this.skipWs()
+        if (this.peek() == "}") {
+            this.advance()
+            return obj
+        }
+        while (!this.atEnd()) {
+            var key = this.parseKey()
+            this.skipWs()
+            if (this.peek() == ":") { this.advance() }
+            this.skipWs()
+            obj[key] = this.parseValue()
+            this.skipWs()
+            if (this.peek() == "}") {
+                this.advance()
+                break
+            }
+            if (this.peek() == ",") {
+                this.advance()
+                this.skipWs()
+                continue
+            }
+            break
+        }
+        return obj
+    }
+}
+
+class YamlParser {
+    lines: Array<string>
+    index: int
+    errors: Json
+    anchors: Json
+
+    constructor(data: string) {
+        this.lines = _lines(data)
+        this.index = 0
+        this.errors = []
+        this.anchors = {}
+    }
+
+    atEnd() -> bool {
+        return this.index >= this.lines.length
+    }
+
+    cleanLine() -> string {
+        if (this.atEnd()) { return "" }
+        return _lineClean(this.lines[this.index])
+    }
+
+    addError(typ: string, message: string) {
+        this.errors.push({
+            type: typ,
+            line: this.index + 1,
+            row: -1,
+            column: 1,
+            message: message
+        })
+    }
+
+    skipIgnorable() {
+        while (!this.atEnd()) {
+            var t = this.cleanLine().trim()
+            if (t == "" || t == "---") {
+                this.index = this.index + 1
+            } else {
+                break
+            }
+        }
+    }
+
+    nextIndent() -> int {
+        var p = this.index
+        while (p < this.lines.length) {
+            var clean = _lineClean(this.lines[p])
+            var t = clean.trim()
+            if (t.length > 0 && t != "---" && t != "...") { return _countIndent(clean) }
+            p = p + 1
+        }
+        return -1
+    }
+
+    parseValueText(text: string) -> unknown {
+        var raw = _stripInlineComment(text).trim()
+        if (raw.length == 0) { return null }
+        if (raw.startsWith("&")) {
+            var i = 1
+            while (i < raw.length && !_isWs(raw.charAt(i))) { i = i + 1 }
+            var name = raw.slice(1, i)
+            var rest = raw.slice(i, raw.length).trim()
+            var value: unknown = null
+            if (rest.length > 0) { value = this.parseValueText(rest) }
+            this.anchors[name] = value
+            return value
+        }
+        if (raw.startsWith("*")) {
+            var nameEnd = 1
+            while (nameEnd < raw.length && !_isWs(raw.charAt(nameEnd))) { nameEnd = nameEnd + 1 }
+            return Json.get(this.anchors, raw.slice(1, nameEnd), null)
+        }
+        if (raw.startsWith("[") || raw.startsWith("{")) {
+            var fp = YamlFlowParser(raw, this.errors, this.anchors)
+            return fp.parseValue()
+        }
+        return _parsePlainScalar(raw)
+    }
+
+    parseBlockScalar(header: string, parentIndent: int) -> string {
+        var style = header.charAt(0)
+        var chomp = ""
+        if (header.length > 1) {
+            var c = header.charAt(1)
+            if (c == "-" || c == "+") { chomp = c }
+        }
+        this.index = this.index + 1
+        var blockIndent = -1
+        var parts: Array<string> = []
+        while (!this.atEnd()) {
+            var raw = _trimCR(this.lines[this.index])
+            if (raw.trim().length == 0) {
+                if (blockIndent >= 0) { parts.push("") }
+                this.index = this.index + 1
+                continue
+            }
+            var indent = _countIndent(raw)
+            if (indent <= parentIndent) { break }
+            if (blockIndent < 0) { blockIndent = indent }
+            if (indent < blockIndent) { break }
+            parts.push(raw.slice(blockIndent, raw.length))
+            this.index = this.index + 1
+        }
+
+        var out = StringBuilder()
+        if (style == "|") {
+            for (var i = 0; i < parts.length; i++) {
+                if (i > 0) { out.append("\n") }
+                out.append(parts[i])
+            }
+        } else {
+            for (var i = 0; i < parts.length; i++) {
+                var part = parts[i]
+                if (part.length == 0) {
+                    out.append("\n")
+                } else {
+                    var current = out.toString()
+                    if (current.length > 0 && !current.endsWith("\n")) { out.append(" ") }
+                    out.append(part)
+                }
+            }
+        }
+        if (chomp != "-" && parts.length > 0) { out.append("\n") }
+        return out.toString()
+    }
+
+    parseMappingLineInto(obj: Json, content: string, indent: int) {
+        var colon = _findTopColon(content)
+        if (colon < 0) {
+            this.addError("invalid_mapping", "expected ':' in mapping entry")
+            this.index = this.index + 1
+            return
+        }
+        var key = _parseKeyText(content.slice(0, colon))
+        var rest = content.slice(colon + 1, content.length).trim()
+        if (rest.startsWith("|") || rest.startsWith(">")) {
+            obj[key] = this.parseBlockScalar(rest, indent)
+            return
+        }
+        this.index = this.index + 1
+        if (rest.length == 0) {
+            var ni = this.nextIndent()
+            if (ni > indent) { obj[key] = this.parseBlock(ni, 0) }
+            else { obj[key] = null }
+        } else {
+            var value = this.parseValueText(rest)
+            obj[key] = value
+        }
+    }
+
+    parseMapping(indent: int, depth: int) -> Json {
+        var obj: Json = {}
+        while (!this.atEnd()) {
+            this.skipIgnorable()
+            if (this.atEnd()) { break }
+            var clean = this.cleanLine()
+            var t = clean.trim()
+            if (t == "...") { break }
+            var lineIndent = _countIndent(clean)
+            if (lineIndent < indent) { break }
+            if (lineIndent > indent) { break }
+            var content = clean.slice(indent, clean.length)
+            if (content.startsWith("-")) { break }
+            this.parseMappingLineInto(obj, content, indent)
+        }
+        return obj
+    }
+
+    parseSequenceInlineMapping(afterDash: string, indent: int, depth: int) -> Json {
+        var obj: Json = {}
+        var colon = _findTopColon(afterDash)
+        if (colon < 0) {
+            this.index = this.index + 1
+            return obj
+        }
+        var key = _parseKeyText(afterDash.slice(0, colon))
+        var rest = afterDash.slice(colon + 1, afterDash.length).trim()
+        if (rest.startsWith("|") || rest.startsWith(">")) {
+            obj[key] = this.parseBlockScalar(rest, indent)
+        } else {
+            this.index = this.index + 1
+            if (rest.length == 0) {
+                var ni = this.nextIndent()
+                if (ni > indent) { obj[key] = this.parseBlock(ni, depth + 1) }
+                else { obj[key] = null }
+            } else {
+                obj[key] = this.parseValueText(rest)
+            }
+        }
+
+        var tailIndent = indent + 2
+        while (!this.atEnd()) {
+            this.skipIgnorable()
+            if (this.atEnd()) { break }
+            var clean = this.cleanLine()
+            var t = clean.trim()
+            if (t == "...") { break }
+            var lineIndent = _countIndent(clean)
+            if (lineIndent != tailIndent) { break }
+            var content = clean.slice(tailIndent, clean.length)
+            if (content.startsWith("-")) { break }
+            this.parseMappingLineInto(obj, content, tailIndent)
+        }
+        return obj
+    }
+
+    parseSequence(indent: int, depth: int) -> Json {
+        var arr: Json = []
+        while (!this.atEnd()) {
+            this.skipIgnorable()
+            if (this.atEnd()) { break }
+            var clean = this.cleanLine()
+            var t = clean.trim()
+            if (t == "...") { break }
+            var lineIndent = _countIndent(clean)
+            if (lineIndent != indent) { break }
+            var content = clean.slice(indent, clean.length)
+            if (!content.startsWith("-")) { break }
+            var afterDash = content.slice(1, content.length).trim()
+            if (afterDash.length == 0) {
+                this.index = this.index + 1
+                var ni = this.nextIndent()
+                if (ni > indent) { arr.push(this.parseBlock(ni, depth + 1)) }
+                else { arr.push(null) }
+                continue
+            }
+            if (!afterDash.startsWith("[") && !afterDash.startsWith("{") &&
+                !afterDash.startsWith("\"") && !afterDash.startsWith("'") &&
+                _findTopColon(afterDash) >= 0) {
+                arr.push(this.parseSequenceInlineMapping(afterDash, indent, depth))
+            } else {
+                arr.push(this.parseValueText(afterDash))
+                this.index = this.index + 1
+            }
+        }
+        return arr
+    }
+
+    parseBlock(indent: int, depth: int) -> Json {
+        if (depth > YAML_MAX_DEPTH) {
+            this.addError("max_depth", "maximum nesting depth exceeded")
+            return null
+        }
+        this.skipIgnorable()
+        if (this.atEnd()) { return null }
+        var clean = this.cleanLine()
+        if (clean.trim() == "...") { return null }
+        var lineIndent = _countIndent(clean)
+        if (lineIndent < indent) { return null }
+        var content = clean.slice(lineIndent, clean.length)
+        if (content.startsWith("-")) { return this.parseSequence(lineIndent, depth) }
+        return this.parseMapping(lineIndent, depth)
+    }
+
+    parseDocument() -> Json {
+        return this.parseBlock(0, 0)
+    }
+}
+
+fn _parseOne(data: string) -> YamlParser {
+    var parser = YamlParser(data)
+    parser.parseDocument()
+    return parser
+}
+
+fn parse(data: string, options: unknown = null) -> Json {
+    var parser = YamlParser(data)
+    return parser.parseDocument()
+}
+
+fn parseStrict(data: string) -> Json {
+    var parser = YamlParser(data)
+    var value = parser.parseDocument()
+    return {
+        data: value,
+        errors: parser.errors,
+        meta: {
+            lines: parser.lines.length,
+            documents: 1,
+            anchors: parser.anchors.keys().length
+        }
+    }
+}
+
+fn parseAll(data: string) -> Array<Json> {
+    var docs: Array<Json> = []
+    var lines = _lines(data)
+    var current: Array<string> = []
+    for (var i = 0; i < lines.length; i++) {
+        var t = _lineClean(lines[i]).trim()
+        if (t == "---") {
+            if (current.length > 0) {
+                docs.push(parse(current.join("\n")))
+                current = []
+            }
+        } else if (t == "...") {
+            docs.push(parse(current.join("\n")))
+            current = []
+        } else {
+            current.push(lines[i])
+        }
+    }
+    if (current.length > 0) { docs.push(parse(current.join("\n"))) }
+    return docs
+}
+
+fn _indent(level: int, spaces: int) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < level * spaces; i++) { out.append(" ") }
+    return out.toString()
+}
+
+fn _quoteString(s: string) -> string {
+    var out = StringBuilder()
+    out.append("\"")
+    for (var i = 0; i < s.length; i++) {
+        var c = s.charAt(i)
+        if (c == "\"") { out.append("\\\"") }
+        else if (c == "\\") { out.append("\\\\") }
+        else if (c == "\n") { out.append("\\n") }
+        else if (c == "\r") { out.append("\\r") }
+        else if (c == "\t") { out.append("\\t") }
+        else { out.append(c) }
+    }
+    out.append("\"")
+    return out.toString()
+}
+
+fn _keyText(key: string) -> string {
+    if (key.length == 0) { return "\"\"" }
+    for (var i = 0; i < key.length; i++) {
+        var c = key.charAt(i)
+        if (!_isAlpha(c) && !_isDigit(c) && c != "_" && c != "-") {
+            return _quoteString(key)
+        }
+    }
+    return key
+}
+
+fn _scalarText(value: unknown) -> string {
+    if (value == null) { return "null" }
+    var kind = typename(value)
+    if (kind == "string") { return _quoteString(value as string) }
+    if (kind == "bool") {
+        if (value as bool) { return "true" }
+        return "false"
+    }
+    if (kind == "int") { return string(value as int) }
+    if (kind == "float") { return string(value as float) }
+    return _quoteString(string(value))
+}
+
+fn _isScalar(value: unknown) -> bool {
+    var kind = typename(value)
+    return value == null || kind == "string" || kind == "bool" || kind == "int" ||
+           kind == "float"
+}
+
+fn _emitValue(value: unknown, level: int, indent: int) -> string {
+    if (_isScalar(value)) { return _scalarText(value) }
+    var kind = typename(value)
+    if (kind == "Array") {
+        var arr = value as Array
+        if (arr.length == 0) { return "[]" }
+        var out = StringBuilder()
+        for (var i = 0; i < arr.length; i++) {
+            out.append(_indent(level, indent))
+            out.append("-")
+            if (_isScalar(arr[i])) {
+                out.append(" ")
+                out.append(_scalarText(arr[i]))
+                out.append("\n")
+            } else {
+                out.append("\n")
+                out.append(_emitValue(arr[i], level + 1, indent))
+            }
+        }
+        return out.toString()
+    }
+    if (kind == "Json") {
+        var obj = value as Json
+        var keys = obj.keys()
+        if (keys.length == 0) { return "{}" }
+        var out = StringBuilder()
+        for (var i = 0; i < keys.length; i++) {
+            var key = keys[i]
+            var item = Json.get(obj, key, null)
+            out.append(_indent(level, indent))
+            out.append(_keyText(key))
+            out.append(":")
+            if (_isScalar(item)) {
+                out.append(" ")
+                out.append(_scalarText(item))
+                out.append("\n")
+            } else {
+                out.append("\n")
+                out.append(_emitValue(item, level + 1, indent))
+            }
+        }
+        return out.toString()
+    }
+    return _scalarText(value)
+}
+
+fn stringify(value: unknown, options: unknown = null) -> string {
+    var indent = 2
+    var opts = Json.encode(options)
+    if (typename(opts) == "Json") {
+        var iv = Json.get(opts, "indent", indent)
+        if (typename(iv) == "int") { indent = iv }
+    } else if (typename(options) == "int") {
+        indent = options as int
+    }
+    if (indent <= 0) { indent = 2 }
+    var encoded = Json.encode(value)
+    return _emitValue(encoded, 0, indent)
+}
+
+fn parseFile(path: string) -> Json {
+    var content = io.readFile(path)
+    if (content == null) { return null }
+    return parse(content!)
+}
+
+fn writeFile(path: string, value: unknown) -> bool {
+    return io.writeFile(path, stringify(value))
+}
+
+export { parse, parseStrict, parseAll, stringify, parseFile, writeFile }

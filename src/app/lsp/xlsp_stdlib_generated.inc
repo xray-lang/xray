@@ -521,12 +521,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
 
 // yaml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_yaml_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string): Json", "Parse YAML string", NULL, 0},
-    {"parseStrict", XLSP_SYM_FUNCTION, "fn(data: string): Json", "Parse YAML strictly", NULL, 0},
-    {"parseAll", XLSP_SYM_FUNCTION, "fn(data: string): Array<Json>", "Parse all YAML documents", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(value: Json): string", "Convert to YAML string", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string): Json", "Parse YAML file", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, value: Json): bool", "Write YAML file", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: unknown): Json", "", NULL, 0},
+    {"parseStrict", XLSP_SYM_FUNCTION, "fn(data: string): Json", "", NULL, 0},
+    {"parseAll", XLSP_SYM_FUNCTION, "fn(data: string): Array<Json>", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(value: unknown, options?: unknown): string", "", NULL, 0},
+    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: string): Json", "", NULL, 0},
+    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: string, value: unknown): bool", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_YAML_SYMBOL_COUNT 6
 
