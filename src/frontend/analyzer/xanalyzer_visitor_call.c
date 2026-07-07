@@ -516,7 +516,8 @@ static bool xa_thread_spawn_sync_method_name(const char *class_name, const char 
     if (!xa_thread_spawn_sync_class_name(class_name) || !method_name)
         return false;
     if (strcmp(class_name, "Mutex") == 0)
-        return strcmp(method_name, "lock") == 0 || strcmp(method_name, "replace") == 0;
+        return strcmp(method_name, "lock") == 0 || strcmp(method_name, "tryLock") == 0 ||
+               strcmp(method_name, "replace") == 0;
     if (strcmp(class_name, "RwLock") == 0)
         return strcmp(method_name, "read") == 0 || strcmp(method_name, "write") == 0 ||
                strcmp(method_name, "replace") == 0;
