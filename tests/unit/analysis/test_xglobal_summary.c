@@ -3293,6 +3293,7 @@ TEST(global_evidence_producer_marks_native_methods_bodyless) {
     char err[256];
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -3401,6 +3402,7 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     char err[256];
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -3484,6 +3486,7 @@ TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
     char err[256];
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -3589,11 +3592,13 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     ASSERT_EQ_UINT(ev.interface_methods[0].owner_interface_id, shape_id);
 
     uint32_t parent_interface_calls = 0;
+    XgCallsiteId parent_callsite_id = XG_NO_ID;
     for (uint32_t i = 0; i < ev.ncallsites; i++) {
         const XgCallsiteSummary *call = &ev.callsites[i];
         if (call->kind != XG_CALL_INTERFACE)
             continue;
         parent_interface_calls++;
+        parent_callsite_id = call->callsite_id;
         ASSERT_EQ_UINT(call->receiver_static_interface_id, shape_id);
         ASSERT_EQ_UINT(call->method_id, ev.interface_methods[0].interface_method_id);
     }
@@ -3623,10 +3628,29 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 2);
     ASSERT_TRUE(bundle.dispatch_target_cases[0].receiver_class_id !=
                 bundle.dispatch_target_cases[1].receiver_class_id);
+    ASSERT_EQ_UINT(bundle.ninterface_use_plans, 5);
+    ASSERT_NOT_NULL(xaot_bundle_find_interface_use_plan(
+        &bundle, shape_id, bundle.dispatch_target_cases[0].receiver_class_id, parent_callsite_id));
+    ASSERT_NOT_NULL(xaot_bundle_find_interface_use_plan(
+        &bundle, shape_id, bundle.dispatch_target_cases[1].receiver_class_id, parent_callsite_id));
 
     char err[256];
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    for (uint32_t i = 0; i < bundle.ninterface_use_plans; i++) {
+        XaotInterfaceUsePlan *use_plan = &bundle.interface_use_plans[i];
+        XgClassId saved_implementor;
+        if (use_plan->use_site_id != parent_callsite_id)
+            continue;
+        saved_implementor = use_plan->implementor_class_id;
+        use_plan->implementor_class_id = 999999;
+        memset(err, 0, sizeof(err));
+        ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+        ASSERT_NOT_NULL(
+            strstr(err, "AOT interface-use plan has no effective implements evidence"));
+        use_plan->implementor_class_id = saved_implementor;
+        break;
+    }
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);

@@ -835,8 +835,16 @@ static bool verify_interface_implementor_set(const XgGlobalEvidence *ev, const X
             return set_error(errbuf, errbuf_len, "AOT interface impl has no use plan");
     }
 
-    if (bundle->ninterface_use_plans != ev->ninterface_impls)
-        return set_error(errbuf, errbuf_len, "AOT interface-use plan count mismatches evidence");
+    {
+        uint32_t explicit_use_plans = 0;
+        for (uint32_t i = 0; i < bundle->ninterface_use_plans; i++) {
+            if (bundle->interface_use_plans[i].use_site_id == XG_NO_ID)
+                explicit_use_plans++;
+        }
+        if (explicit_use_plans != ev->ninterface_impls)
+            return set_error(errbuf, errbuf_len,
+                             "AOT interface-use plan count mismatches evidence");
+    }
     return true;
 }
 
@@ -1553,6 +1561,19 @@ static bool verify_has_interface_impl(const XgGlobalEvidence *ev, XgInterfaceId 
     return false;
 }
 
+static bool verify_has_effective_interface_impl(const XgGlobalEvidence *ev, XgInterfaceId interface_id,
+                                                XgClassId implementor_class_id) {
+    if (!ev || interface_id == XG_NO_ID || implementor_class_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
+        if (impl->implementor_class_id == implementor_class_id &&
+            verify_interface_impl_matches(ev, impl->interface_id, interface_id))
+            return true;
+    }
+    return false;
+}
+
 static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     const XgGlobalEvidence *ev;
     uint32_t capability_count = 0;
@@ -1661,8 +1682,42 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
             !verify_has_interface_impl(ev, plan->interface_id, plan->implementor_class_id))
             return set_error(errbuf, errbuf_len,
                              "AOT interface-use plan has no implements evidence");
-        if (plan->use_site_id != XG_NO_ID && !verify_find_evidence_callsite(ev, plan->use_site_id))
-            return set_error(errbuf, errbuf_len, "AOT interface-use plan has unknown use-site");
+        if (plan->use_site_id != XG_NO_ID) {
+            const XgCallsiteSummary *call = verify_find_evidence_callsite(ev, plan->use_site_id);
+            const XaotMethodDispatchPlan *dispatch =
+                xaot_bundle_find_method_dispatch_plan(bundle, plan->use_site_id);
+            bool target_found = false;
+            if (!call)
+                return set_error(errbuf, errbuf_len, "AOT interface-use plan has unknown use-site");
+            if (call->kind != XG_CALL_INTERFACE || plan->interface_id != call->receiver_static_interface_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT interface-use plan use-site does not re-derive");
+            if ((plan->reason & XAOT_INTERFACE_USE_REASON_VALUE) == 0 ||
+                (plan->flags & XAOT_INTERFACE_USE_NEEDS_IFACE_OBJECT) == 0)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT interface-use plan use-site flags do not re-derive");
+            if (!verify_has_effective_interface_impl(ev, plan->interface_id,
+                                                     plan->implementor_class_id))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT interface-use plan has no effective implements evidence");
+            if (!dispatch ||
+                (dispatch->kind != XAOT_DISPATCH_DIRECT &&
+                 dispatch->kind != XAOT_DISPATCH_TYPE_SWITCH))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT interface-use plan dispatch does not re-derive");
+            for (uint16_t ti = 0; ti < dispatch->target_count; ti++) {
+                const XaotDispatchTargetCase *target =
+                    &bundle->dispatch_target_cases[dispatch->target_start - 1 + ti];
+                if (target->callsite_id == plan->use_site_id &&
+                    target->receiver_class_id == plan->implementor_class_id) {
+                    target_found = true;
+                    break;
+                }
+            }
+            if (!target_found)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT interface-use plan target does not re-derive");
+        }
     }
 
     for (uint32_t mi = 0; mi < metadata_count; mi++) {
