@@ -218,6 +218,82 @@ static bool xa_freestanding_top_const_ct_value_allowed(const XrCtValue *value) {
     }
 }
 
+static int xa_analyzer_error_diagnostic_count(XaAnalyzer *analyzer) {
+    int count = 0;
+    if (!analyzer)
+        return 0;
+    for (XaDiagnostic *d = analyzer->diagnostics; d; d = d->next) {
+        if (d->severity == XR_DIAG_SEV_ERROR)
+            count++;
+    }
+    return count;
+}
+
+static bool xa_warning_already_reported(XaAnalyzer *analyzer, const XrLocation *loc,
+                                        const char *message) {
+    if (!analyzer || !loc || !message)
+        return false;
+    for (XaDiagnostic *d = analyzer->diagnostics; d; d = d->next) {
+        if (d->severity != XR_DIAG_SEV_WARNING || d->code != XR_ERR_ANALYZE || !d->message ||
+            strcmp(d->message, message) != 0)
+            continue;
+        if (d->location.line != loc->line || d->location.column != loc->column)
+            continue;
+        if (d->location.file == loc->file ||
+            (d->location.file && loc->file && strcmp(d->location.file, loc->file) == 0))
+            return true;
+    }
+    return false;
+}
+
+static bool xa_symbol_is_local_thread_handle(XaSymbol *sym, XaScope *current_scope) {
+    if (!sym || sym->kind != XA_SYM_VARIABLE || !current_scope)
+        return false;
+    if (sym->scope != current_scope || sym->scope->kind == XA_SCOPE_GLOBAL)
+        return false;
+    if (sym->is_shared || sym->is_exported || sym->is_imported)
+        return false;
+    XaSymbolLinks *links = &sym->links;
+    return links->type && xr_type_is_named_class(links->type, "Thread");
+}
+
+static void xa_warn_unused_sys_thread_spawn_decl(XaInferContext *ctx, AstNode *stmt) {
+    if (!ctx || !ctx->analyzer || !stmt ||
+        (stmt->type != AST_VAR_DECL && stmt->type != AST_CONST_DECL))
+        return;
+
+    VarDeclNode *var = &stmt->as.var_decl;
+    if (!var->name || !var->initializer || !xa_expr_is_sys_thread_spawn_call(var->initializer))
+        return;
+
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, var->name);
+    if (!xa_symbol_is_local_thread_handle(sym, ctx->analyzer->current_scope))
+        return;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links || links->ref_count != 0)
+        return;
+
+    char msg[192];
+    snprintf(msg, sizeof(msg),
+             "Thread handle '%s' from sys.Thread.spawn is never used; call join() or detach() "
+             "explicitly",
+             var->name);
+    XrLocation loc = {.file = ctx->file_path, .line = stmt->line, .column = stmt->column};
+    if (!xa_warning_already_reported(ctx->analyzer, &loc, msg))
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, msg, &loc);
+}
+
+static void xa_warn_unused_sys_thread_spawns_in_sequence(XaInferContext *ctx, AstNode **statements,
+                                                         int count, int error_count_before) {
+    if (!ctx || !statements || count <= 0)
+        return;
+    if (xa_analyzer_error_diagnostic_count(ctx->analyzer) != error_count_before)
+        return;
+    for (int i = 0; i < count; i++)
+        xa_warn_unused_sys_thread_spawn_decl(ctx, statements[i]);
+}
+
 static bool xa_freestanding_top_const_allowed(XaInferContext *ctx, VarDeclNode *var) {
     if (!ctx || !ctx->analyzer || !var || !var->initializer)
         return false;
@@ -1098,12 +1174,14 @@ XR_FUNC void xa_visit_inline_statement_sequence_with_cursor(XaInferContext *ctx,
         ctx->block_cursor_indices[cursor_slot] = -1;
     }
     ctx->current_block_node = node;
+    int error_count_before = xa_analyzer_error_diagnostic_count(ctx->analyzer);
     for (int i = 0; i < count; i++) {
         ctx->current_block_stmt_index = i;
         if (cursor_slot >= 0)
             ctx->block_cursor_indices[cursor_slot] = i;
         xa_visit_infer_stmt(ctx, statements[i]);
     }
+    xa_warn_unused_sys_thread_spawns_in_sequence(ctx, statements, count, error_count_before);
     ctx->block_cursor_depth = saved_depth;
     ctx->current_block_node = saved_block;
     ctx->current_block_stmt_index = saved_index;

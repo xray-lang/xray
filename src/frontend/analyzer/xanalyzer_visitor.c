@@ -38,7 +38,7 @@ static bool xa_type_is_known_non_int(XrType *type) {
     return type && !XR_TYPE_IS_UNKNOWN(type) && !XR_TYPE_IS_INT(type);
 }
 
-static bool xa_expr_is_sys_thread_spawn_call(AstNode *expr) {
+XR_FUNC bool xa_expr_is_sys_thread_spawn_call(AstNode *expr) {
     if (!expr || expr->type != AST_CALL_EXPR)
         return false;
     CallExprNode *call = &expr->as.call_expr;
