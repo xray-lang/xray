@@ -491,6 +491,17 @@ static const XgCallsiteSummary *verify_find_evidence_callsite(const XgGlobalEvid
     return NULL;
 }
 
+static const XgDeclSummary *verify_find_evidence_decl(const XgGlobalEvidence *ev,
+                                                      XgDeclId decl_id) {
+    if (!ev || decl_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        if (ev->decls[i].decl_id == decl_id)
+            return &ev->decls[i];
+    }
+    return NULL;
+}
+
 static const XgClassSummary *verify_find_evidence_class(const XgGlobalEvidence *ev,
                                                         XgClassId class_id) {
     if (!ev || class_id == XG_NO_ID)
@@ -766,10 +777,13 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
         return set_error(errbuf, errbuf_len, "AOT global evidence verifier has no evidence");
     for (uint32_t i = 0; i < ev->nbodies; i++) {
         const XgBodySummary *body = &ev->bodies[i];
+        const XgDeclSummary *owner_decl = NULL;
         if (body->func_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT global evidence body has no function id");
         if (body->module_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT global evidence body has no module id");
+        if (body->name_id == 0)
+            return set_error(errbuf, errbuf_len, "AOT global evidence body has no name id");
         switch ((XgBodyKind) body->kind) {
             case XG_BODY_MODULE_INIT:
                 if (body->owner_decl_id != XG_NO_ID || body->owner_class_id != XG_NO_ID ||
@@ -782,12 +796,52 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                     body->owner_method_id != XG_NO_ID || body->source_span_id == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence function body identity is stale");
+                owner_decl = verify_find_evidence_decl(ev, body->owner_decl_id);
+                if (!owner_decl)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT global evidence function body owner decl is missing");
+                if (owner_decl->kind != XG_DECL_FUNC || owner_decl->module_id != body->module_id ||
+                    owner_decl->name_id != body->name_id ||
+                    owner_decl->source_span_id != body->source_span_id)
+                    return set_error(
+                        errbuf, errbuf_len,
+                        "AOT global evidence function body owner decl does not re-derive");
                 break;
             case XG_BODY_METHOD:
                 if (body->owner_decl_id == XG_NO_ID || body->owner_class_id == XG_NO_ID ||
                     body->owner_method_id == XG_NO_ID || body->source_span_id == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence method body identity is stale");
+                owner_decl = verify_find_evidence_decl(ev, body->owner_decl_id);
+                if (!owner_decl)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT global evidence method body owner decl is missing");
+                if (owner_decl->kind != XG_DECL_CLASS || owner_decl->module_id != body->module_id)
+                    return set_error(
+                        errbuf, errbuf_len,
+                        "AOT global evidence method body owner decl does not re-derive");
+                {
+                    const XgClassSummary *owner_class =
+                        verify_find_evidence_class(ev, body->owner_class_id);
+                    const XgMethodSummary *owner_method =
+                        verify_find_evidence_method_by_id(ev, body->owner_method_id);
+                    if (!owner_class)
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT global evidence method body owner class is missing");
+                    if (owner_class->decl_id != body->owner_decl_id ||
+                        owner_class->module_id != body->module_id)
+                        return set_error(
+                            errbuf, errbuf_len,
+                            "AOT global evidence method body owner class does not re-derive");
+                    if (!owner_method)
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT global evidence method body owner method is missing");
+                    if (owner_method->owner_class_id != body->owner_class_id ||
+                        owner_method->name_id != body->name_id)
+                        return set_error(
+                            errbuf, errbuf_len,
+                            "AOT global evidence method body owner method does not re-derive");
+                }
                 break;
             default:
                 return set_error(errbuf, errbuf_len, "AOT global evidence body kind is invalid");
