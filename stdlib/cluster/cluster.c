@@ -712,6 +712,19 @@ XrDistChannel *xr_cluster_find_channel(XrCluster *c, const char *name) {
     return NULL;
 }
 
+bool xr_cluster_vm_is_running(XrVMRuntime *X) {
+    return X && xr_cluster_is_running((XrCluster *) X->cluster);
+}
+
+struct XrChannel *xr_cluster_find_channel_local(XrVMRuntime *X, const char *name) {
+    XrDistChannel *dc = xr_cluster_find_channel(X ? (XrCluster *) X->cluster : NULL, name);
+    return dc ? dc->channel : NULL;
+}
+
+void xr_cluster_register_channel_local(XrVMRuntime *X, const char *name, struct XrChannel *ch) {
+    xr_cluster_register_channel(X ? (XrCluster *) X->cluster : NULL, name, ch);
+}
+
 void xr_cluster_unregister_channel(XrCluster *c, const char *name) {
     if (!c || !name)
         return;
@@ -1877,6 +1890,7 @@ XR_FUNC XrModule *xr_load_module_cluster(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "cluster");
 
     xr_stdlib_vm_bind_cluster_generated(isolate, mod);
+    mod->requires_script = true;
 
     return mod;
 }

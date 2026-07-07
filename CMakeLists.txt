@@ -289,7 +289,7 @@ option(XR_STDLIB_NET        "Network modules (net, http)" ON)
 option(XR_STDLIB_CRYPTO     "Crypto modules (crypto)" ON)
 option(XR_STDLIB_DATA       "Data format modules (csv, toml, yaml, xml)" ON)
 option(XR_STDLIB_COMPRESS   "Compression modules (compress)" ON)
-option(XR_STDLIB_CLUSTER    "Cluster module (distributed Named Channel)" OFF)
+option(XR_STDLIB_CLUSTER    "Cluster module (distributed Named Channel)" ON)
 option(XR_BUILD_TEST_MODULES "Build internal stdlib test modules" OFF)
 
 if(XR_BUILD_TEST_MODULES)
