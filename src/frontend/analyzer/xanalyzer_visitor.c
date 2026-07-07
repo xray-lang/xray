@@ -1085,6 +1085,23 @@ static bool xa_is_enum_error_type(XrType *type) {
     return type && !XR_TYPE_IS_UNKNOWN(type) && XR_TYPE_IS_ENUM(type);
 }
 
+static bool xa_enum_error_type_has_payload(XaInferContext *ctx, XrType *type) {
+    if (!xa_is_enum_error_type(type))
+        return false;
+    if (type->enum_type.layout)
+        return !type->enum_type.layout->is_zero_payload;
+    const char *enum_name = type->enum_type.enum_name;
+    if (!ctx || !ctx->analyzer || !enum_name)
+        return false;
+    XaSymbol *sym = xa_analyzer_lookup(ctx->analyzer, enum_name);
+    if (!sym || sym->kind != XA_SYM_ENUM)
+        sym = xa_analyzer_lookup_in_scope(ctx->analyzer, enum_name, ctx->analyzer->global_scope);
+    if (!sym || sym->kind != XA_SYM_ENUM)
+        sym = xa_analyzer_lookup_deep(ctx->analyzer, enum_name);
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    return links && links->enum_info && links->enum_info->is_payload_enum;
+}
+
 static void xa_report_non_enum_catch_type(XaInferContext *ctx, XrCatchClause *cc, XrType *type) {
     if (!ctx || !ctx->analyzer || !cc || !type || XR_TYPE_IS_UNKNOWN(type) ||
         xa_is_enum_error_type(type))
@@ -4963,6 +4980,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                  xr_type_to_string(thrown));
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_THROW_NON_EXCEPTION, msg, &loc);
+                    } else if (xa_freestanding_profile_enabled(ctx->analyzer) &&
+                               xa_enum_error_type_has_payload(ctx, thrown)) {
+                        char feature[192];
+                        snprintf(feature, sizeof(feature), "payload enum error %s",
+                                 xr_type_to_string(thrown));
+                        xa_freestanding_report_unavailable(
+                            ctx, node, feature,
+                            "freestanding enum errors currently support 0-payload variants only; "
+                            "payload variants need a typed no-box error channel");
                     }
                 }
             }

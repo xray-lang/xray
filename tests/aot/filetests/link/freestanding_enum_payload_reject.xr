@@ -4,7 +4,8 @@ enum FsErr {
 
 fn mayFail(n: int) -> int {
     if (n == 0) {
-        throw FsErr.Bad(7)
+        var err = FsErr.Bad(7)
+        throw err
     }
     return n
 }

@@ -2153,16 +2153,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
 
     if (payload_variant) {
-        if (xa_freestanding_profile_enabled(ctx->analyzer)) {
-            char feature[192];
-            snprintf(feature, sizeof(feature), "payload enum variant %s.%s",
-                     payload_enum_name ? payload_enum_name : "?",
-                     payload_variant_name ? payload_variant_name : "?");
-            xa_freestanding_report_unavailable(
-                ctx, node, feature,
-                "freestanding enum errors currently support 0-payload variants only; payload "
-                "variants still need no-box value-struct lowering");
-        }
         xa_check_payload_enum_variant_call(ctx, node, call, payload_variant, payload_enum_name,
                                            payload_variant_name);
         return callee_type ? callee_type : xr_type_new_unknown(NULL);
