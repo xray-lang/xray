@@ -253,7 +253,8 @@ static void features_apply_capability_plan(XaotFeatureSet *fs, uint32_t capabili
             fs->need_deep_copy = true;
             break;
         case XG_CAP_INSTANCEOF:
-            fs->need_instanceof = true;
+            /* AOT `is` over generated type ids is header-only. Keep the evidence row
+             * for audits, but do not link the runtime type archive. */
             break;
         case XG_CAP_SYS_THREAD:
             fs->need_sys_thread = true;
@@ -317,6 +318,21 @@ static bool reject_profile_capability_plans(const XaotBundle *bundle) {
         fprintf(stderr, "Error: %s profile rejects runtime capability '%s'\n",
                 xg_build_profile_name(bundle->global_evidence_plan.profile),
                 xg_capability_name(plan->capability));
+        return false;
+    }
+    return true;
+}
+
+static bool reject_profile_metadata_plans(const XaotBundle *bundle) {
+    if (!bundle)
+        return false;
+    for (uint32_t i = 0; i < bundle->nmetadata_plans; i++) {
+        const XaotMetadataReachabilityPlan *plan = &bundle->metadata_plans[i];
+        if (plan->profile_action != XAOT_CAPABILITY_ACTION_REJECT)
+            continue;
+        fprintf(stderr, "Error: %s profile rejects metadata '%s'\n",
+                xg_build_profile_name(bundle->global_evidence_plan.profile),
+                xg_metadata_name(plan->metadata));
         return false;
     }
     return true;
@@ -1057,6 +1073,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
         }
     }
     if (!reject_profile_capability_plans(&aot_bundle))
+        goto fail_free_ir;
+    if (!reject_profile_metadata_plans(&aot_bundle))
         goto fail_free_ir;
     /* The plan dump is O(functions x values) diagnostics; only build it when
      * the caller actually wants it (--dump-xaot-plan). */

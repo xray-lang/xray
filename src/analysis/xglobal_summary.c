@@ -269,6 +269,33 @@ XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count) {
     return capabilities;
 }
 
+XR_FUNC const char *xg_metadata_name(uint32_t metadata) {
+    switch (metadata) {
+        case XG_METADATA_TYPENAME:
+            return "typename";
+        case XG_METADATA_DERIVE:
+            return "derive";
+        case XG_METADATA_DEBUG:
+            return "debug";
+        case XG_METADATA_TOOLING:
+            return "tooling";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const uint32_t *xg_metadata_catalog(uint32_t *out_count) {
+    static const uint32_t metadata[] = {
+        XG_METADATA_TYPENAME,
+        XG_METADATA_DERIVE,
+        XG_METADATA_DEBUG,
+        XG_METADATA_TOOLING,
+    };
+    if (out_count)
+        *out_count = (uint32_t) (sizeof(metadata) / sizeof(metadata[0]));
+    return metadata;
+}
+
 XR_FUNC void xg_global_evidence_init(XgGlobalEvidence *evidence, XgBuildKey key) {
     if (!evidence)
         return;

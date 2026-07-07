@@ -360,6 +360,25 @@ typedef struct XaotInterfaceUsePlan {
 } XaotInterfaceUsePlan;
 
 enum {
+    XAOT_METADATA_EV_GLOBAL_BODY = 1u << 0,
+    XAOT_METADATA_EV_DECL_ATTRIBUTE = 1u << 1,
+};
+
+enum {
+    XAOT_METADATA_UNPROVEN_NONE = 0,
+    XAOT_METADATA_UNPROVEN_NO_REACHABILITY = 1,
+};
+
+typedef struct XaotMetadataReachabilityPlan {
+    uint32_t metadata;
+    uint32_t body_count;
+    uint32_t decl_count;
+    uint32_t evidence;
+    uint32_t profile_action;
+    uint8_t unproven_reason;
+} XaotMetadataReachabilityPlan;
+
+enum {
     XAOT_CAPABILITY_EV_GLOBAL_BODY = 1u << 0,
 };
 
@@ -459,6 +478,9 @@ typedef struct XaotBundle {
     XaotInterfaceUsePlan *interface_use_plans;
     uint32_t ninterface_use_plans;
     uint32_t interface_use_plan_cap;
+    XaotMetadataReachabilityPlan *metadata_plans;
+    uint32_t nmetadata_plans;
+    uint32_t metadata_plan_cap;
     XaotCapabilityPlan *capability_plans;
     uint32_t ncapability_plans;
     uint32_t capability_plan_cap;
@@ -492,6 +514,8 @@ xaot_bundle_find_method_dispatch_plan(const XaotBundle *bundle, XgCallsiteId cal
 XR_FUNC const XaotInterfaceUsePlan *
 xaot_bundle_find_interface_use_plan(const XaotBundle *bundle, XgInterfaceId interface_id,
                                     XgClassId implementor_class_id, XgCallsiteId use_site_id);
+XR_FUNC const XaotMetadataReachabilityPlan *xaot_bundle_find_metadata_plan(const XaotBundle *bundle,
+                                                                           uint32_t metadata);
 XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,
                                                                    uint32_t capability);
 XR_FUNC XaotFuncPlan *xaot_bundle_add_func_plan(XaotBundle *bundle, XiFunc *func,

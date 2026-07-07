@@ -110,6 +110,13 @@ enum {
     XG_CAP_STACKTRACE = 1u << 20,
 };
 
+enum {
+    XG_METADATA_TYPENAME = 1u << 0,
+    XG_METADATA_DERIVE = 1u << 1,
+    XG_METADATA_DEBUG = 1u << 2,
+    XG_METADATA_TOOLING = 1u << 3,
+};
+
 typedef struct XgBuildKey {
     uint64_t source_hash;
     uint64_t compiler_semver_hash;
@@ -216,6 +223,8 @@ XR_FUNC const char *xg_decl_kind_name(uint8_t kind);
 XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
 XR_FUNC const char *xg_capability_name(uint32_t capability);
 XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count);
+XR_FUNC const char *xg_metadata_name(uint32_t metadata);
+XR_FUNC const uint32_t *xg_metadata_catalog(uint32_t *out_count);
 
 XR_FUNC void xg_global_evidence_init(XgGlobalEvidence *evidence, XgBuildKey key);
 XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence);

@@ -80,6 +80,8 @@ typedef struct XgBodyCollect {
     uint32_t callsite_count;
     uint32_t effect_bits;
     uint32_t capability_bits;
+    uint32_t metadata_use_bits;
+    uint32_t static_data_use_bits;
 } XgBodyCollect;
 
 static uint64_t fold_bytes(uint64_t h, const void *data, size_t len) {
@@ -553,6 +555,15 @@ static uint32_t body_capabilities_for_type_ref(const XrTypeRef *type) {
     return body_capabilities_for_builtin_constructor(xr_tref_head_name(type));
 }
 
+static uint32_t attrs_derive_flags(XrAttribute **attrs, int count) {
+    uint32_t flags = 0;
+    for (int i = 0; i < count; i++) {
+        if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
+            flags |= attrs[i]->derive_flags;
+    }
+    return flags;
+}
+
 static bool body_member_receiver_is_module(const MemberAccessNode *member, const char *name) {
     if (!member || !member->object || member->object->type != AST_VARIABLE || !name)
         return false;
@@ -592,6 +603,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         if (producer_lookup_class(bc->producer, callee->as.variable.name) != XG_NO_ID)
             bc->capability_bits |= XG_CAP_OBJECTS;
         bc->capability_bits |= body_capabilities_for_builtin_constructor(callee_name);
+        if (callee_name && strcmp(callee_name, "typename") == 0)
+            bc->metadata_use_bits |= XG_METADATA_TYPENAME;
         row.kind = XG_CALL_DIRECT_FUNC;
         row.static_target_func_id =
             target != XG_NO_ID ? target : (XgFuncId) hash_name32(callee->as.variable.name);
@@ -868,7 +881,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_GO_EXPR:
             bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC;
-            bc->capability_bits |= XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_NETPOLL;
+            bc->capability_bits |= XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_NETPOLL | XG_CAP_OBJECTS;
             if (node->as.go_expr.spawn_kind == XR_SPAWN_THREAD)
                 bc->capability_bits |= XG_CAP_SYS_THREAD;
             walk_body_for_calls(bc, node->as.go_expr.expr);
@@ -1049,6 +1062,8 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     row.capability_bits = bc.capability_bits;
     row.callsite_start = bc.callsite_start;
     row.callsite_count = bc.callsite_count;
+    row.metadata_use_bits = bc.metadata_use_bits;
+    row.static_data_use_bits = bc.static_data_use_bits;
     xr_free(bc.locals);
     return xg_global_evidence_add_body(producer->evidence, &row) != NULL;
 }
@@ -1093,6 +1108,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     XgClassId class_id = (XgClassId) (p->evidence->nclasses + 1);
     uint32_t method_start = p->evidence->nmethods + 1;
     uint32_t method_count = 0;
+    uint32_t derive_flags = attrs_derive_flags(cls->attributes, cls->attr_count);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
     decl.decl_id = decl_id;
@@ -1103,7 +1119,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         decl.flags |= XG_DECL_NATIVE;
     if (cls->is_final)
         decl.flags |= XG_DECL_FINAL;
-    if (cls->attr_count > 0)
+    if (derive_flags != 0)
         decl.flags |= XG_DECL_DERIVE;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
@@ -1182,6 +1198,7 @@ static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNod
 static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *node) {
     const EnumDeclNode *e = &node->as.enum_decl;
     XgDeclSummary decl;
+    uint32_t derive_flags = attrs_derive_flags(e->attributes, e->attr_count);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
@@ -1189,6 +1206,8 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     decl.name_id = hash_name32(e->name);
     decl.signature_key = (uint32_t) e->member_count;
     decl.source_span_id = (uint32_t) node->line;
+    if (derive_flags != 0)
+        decl.flags |= XG_DECL_DERIVE;
     return xg_global_evidence_add_decl(p->evidence, &decl) != NULL;
 }
 

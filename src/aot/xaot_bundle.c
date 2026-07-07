@@ -179,6 +179,11 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->ninterface_use_plans = 0;
     bundle->interface_use_plan_cap = 0;
 
+    xr_free(bundle->metadata_plans);
+    bundle->metadata_plans = NULL;
+    bundle->nmetadata_plans = 0;
+    bundle->metadata_plan_cap = 0;
+
     xr_free(bundle->capability_plans);
     bundle->capability_plans = NULL;
     bundle->ncapability_plans = 0;
@@ -432,7 +437,72 @@ static bool xaot_bundle_add_interface_use_plan(XaotBundle *bundle,
     return true;
 }
 
+static uint32_t xaot_metadata_profile_action(uint32_t profile, uint32_t metadata) {
+    if (profile == XG_BUILD_FREESTANDING) {
+        switch (metadata) {
+            case XG_METADATA_TYPENAME:
+            case XG_METADATA_DERIVE:
+            case XG_METADATA_DEBUG:
+            case XG_METADATA_TOOLING:
+                return XAOT_CAPABILITY_ACTION_REJECT;
+            default:
+                return XAOT_CAPABILITY_ACTION_LINK;
+        }
+    }
+    if (metadata == XG_METADATA_DEBUG || metadata == XG_METADATA_TOOLING)
+        return XAOT_CAPABILITY_ACTION_DEBUG_ONLY;
+    return XAOT_CAPABILITY_ACTION_LINK;
+}
+
+static bool xaot_bundle_add_metadata_plan(XaotBundle *bundle, uint32_t metadata,
+                                          uint32_t body_count, uint32_t decl_count) {
+    XaotMetadataReachabilityPlan *plan;
+    uint32_t evidence = 0;
+    if (!bundle || metadata == 0 || (body_count == 0 && decl_count == 0))
+        return true;
+    if (!reserve_plan_array((void **) &bundle->metadata_plans, &bundle->metadata_plan_cap,
+                            bundle->nmetadata_plans + 1, sizeof(XaotMetadataReachabilityPlan), 8))
+        return false;
+    if (body_count != 0)
+        evidence |= XAOT_METADATA_EV_GLOBAL_BODY;
+    if (decl_count != 0)
+        evidence |= XAOT_METADATA_EV_DECL_ATTRIBUTE;
+    plan = &bundle->metadata_plans[bundle->nmetadata_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->metadata = metadata;
+    plan->body_count = body_count;
+    plan->decl_count = decl_count;
+    plan->evidence = evidence;
+    plan->profile_action =
+        xaot_metadata_profile_action(bundle->global_evidence_plan.profile, metadata);
+    plan->unproven_reason = XAOT_METADATA_UNPROVEN_NONE;
+    return true;
+}
+
+static bool xaot_bundle_add_metadata_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
+    uint32_t metadata_count = 0;
+    const uint32_t *metadata = xg_metadata_catalog(&metadata_count);
+    for (uint32_t mi = 0; mi < metadata_count; mi++) {
+        uint32_t bit = metadata[mi];
+        uint32_t body_count = 0;
+        uint32_t decl_count = 0;
+        for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+            if ((evidence->bodies[bi].metadata_use_bits & bit) != 0)
+                body_count++;
+        }
+        for (uint32_t di = 0; di < evidence->ndecls; di++) {
+            if (bit == XG_METADATA_DERIVE && (evidence->decls[di].flags & XG_DECL_DERIVE) != 0)
+                decl_count++;
+        }
+        if (!xaot_bundle_add_metadata_plan(bundle, bit, body_count, decl_count))
+            return false;
+    }
+    return true;
+}
+
 static uint32_t xaot_capability_profile_action(uint32_t profile, uint32_t capability) {
+    if (capability == XG_CAP_INSTANCEOF)
+        return XAOT_CAPABILITY_ACTION_ALLOW;
     if (profile == XG_BUILD_FREESTANDING) {
         switch (capability) {
             case XG_CAP_NATIVE:
@@ -531,6 +601,10 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
             return false;
         }
     }
+    if (!xaot_bundle_add_metadata_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT metadata plan";
+        return false;
+    }
     if (!xaot_bundle_add_capability_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT capability plan";
         return false;
@@ -625,6 +699,17 @@ xaot_bundle_find_interface_use_plan(const XaotBundle *bundle, XgInterfaceId inte
         if (plan->interface_id == interface_id &&
             plan->implementor_class_id == implementor_class_id && plan->use_site_id == use_site_id)
             return plan;
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotMetadataReachabilityPlan *xaot_bundle_find_metadata_plan(const XaotBundle *bundle,
+                                                                           uint32_t metadata) {
+    if (!bundle || metadata == 0)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nmetadata_plans; i++) {
+        if (bundle->metadata_plans[i].metadata == metadata)
+            return &bundle->metadata_plans[i];
     }
     return NULL;
 }
@@ -1528,6 +1613,17 @@ static const char *capability_unproven_reason_name(uint8_t reason) {
     }
 }
 
+static const char *metadata_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_METADATA_UNPROVEN_NONE:
+            return "none";
+        case XAOT_METADATA_UNPROVEN_NO_REACHABILITY:
+            return "no_reachability";
+        default:
+            return "unknown";
+    }
+}
+
 static void print_class_layout_flags(FILE *out, uint32_t flags) {
     bool first = true;
 #define PRINT_BIT(mask, name)                                                                      \
@@ -1773,6 +1869,14 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         fprintf(out, " flags=");
         print_interface_flag_bits(out, ip->flags);
         fprintf(out, "\n");
+    }
+
+    for (uint32_t mi = 0; mi < bundle->nmetadata_plans; mi++) {
+        const XaotMetadataReachabilityPlan *mp = &bundle->metadata_plans[mi];
+        fprintf(out, "metadata %u name=%s bodies=%u decls=%u action=%s evidence=0x%x reason=%s\n",
+                mi, xg_metadata_name(mp->metadata), mp->body_count, mp->decl_count,
+                capability_action_name(mp->profile_action), mp->evidence,
+                metadata_unproven_reason_name(mp->unproven_reason));
     }
 
     for (uint32_t ci = 0; ci < bundle->ncapability_plans; ci++) {

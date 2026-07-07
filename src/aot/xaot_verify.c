@@ -404,7 +404,10 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     const XgGlobalEvidence *ev;
     uint32_t capability_count = 0;
     const uint32_t *capabilities = xg_capability_catalog(&capability_count);
+    uint32_t metadata_count = 0;
+    const uint32_t *metadata = xg_metadata_catalog(&metadata_count);
     uint32_t runtime_class_count = 0;
+    uint32_t expected_metadata_plans = 0;
     uint32_t expected_capability_plans = 0;
 
     if (!bundle)
@@ -481,6 +484,44 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         if (plan->use_site_id != XG_NO_ID && !verify_find_evidence_callsite(ev, plan->use_site_id))
             return set_error(errbuf, errbuf_len, "AOT interface-use plan has unknown use-site");
     }
+
+    for (uint32_t mi = 0; mi < metadata_count; mi++) {
+        uint32_t bit = metadata[mi];
+        uint32_t body_count = 0;
+        uint32_t decl_count = 0;
+        uint32_t expected_evidence = 0;
+        const XaotMetadataReachabilityPlan *plan;
+        for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
+            if ((ev->bodies[bi].metadata_use_bits & bit) != 0)
+                body_count++;
+        }
+        for (uint32_t di = 0; di < ev->ndecls; di++) {
+            if (bit == XG_METADATA_DERIVE && (ev->decls[di].flags & XG_DECL_DERIVE) != 0)
+                decl_count++;
+        }
+        plan = xaot_bundle_find_metadata_plan(bundle, bit);
+        if (body_count == 0 && decl_count == 0) {
+            if (plan)
+                return set_error(errbuf, errbuf_len, "AOT metadata plan has no evidence");
+            continue;
+        }
+        expected_metadata_plans++;
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT metadata has no reachability plan");
+        if (plan->body_count != body_count || plan->decl_count != decl_count)
+            return set_error(errbuf, errbuf_len, "AOT metadata plan count mismatches evidence");
+        if (body_count != 0)
+            expected_evidence |= XAOT_METADATA_EV_GLOBAL_BODY;
+        if (decl_count != 0)
+            expected_evidence |= XAOT_METADATA_EV_DECL_ATTRIBUTE;
+        if (plan->evidence != expected_evidence ||
+            plan->unproven_reason != XAOT_METADATA_UNPROVEN_NONE)
+            return set_error(errbuf, errbuf_len, "AOT metadata plan lacks evidence");
+        if (plan->profile_action == 0)
+            return set_error(errbuf, errbuf_len, "AOT metadata plan has no profile action");
+    }
+    if (bundle->nmetadata_plans != expected_metadata_plans)
+        return set_error(errbuf, errbuf_len, "AOT metadata plan count mismatches evidence");
 
     for (uint32_t ci = 0; ci < capability_count; ci++) {
         uint32_t cap = capabilities[ci];
