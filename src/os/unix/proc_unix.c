@@ -14,6 +14,7 @@
 #include <signal.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -26,9 +27,27 @@
 #include <sys/sysctl.h>
 #endif
 
+static bool proc_env_key_valid(const char *key) {
+    if (!key || key[0] == '\0')
+        return false;
+    return strchr(key, '=') == NULL;
+}
+
+static bool proc_spawn_options_valid(const XrProcSpawnOptions *options) {
+    if (!options || options->env_count == 0)
+        return true;
+    if (!options->env_keys || !options->env_values)
+        return false;
+    for (size_t i = 0; i < options->env_count; i++) {
+        if (!proc_env_key_valid(options->env_keys[i]) || !options->env_values[i])
+            return false;
+    }
+    return true;
+}
+
 XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
                           const XrProcSpawnOptions *options) {
-    if (prog == NULL || argv == NULL) {
+    if (prog == NULL || argv == NULL || !proc_spawn_options_valid(options)) {
         return XR_PROC_INVALID;
     }
     pid_t pid = fork();
@@ -39,6 +58,12 @@ XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
         // Child: exec, never returns on success.
         if (options && options->cwd && options->cwd[0] != '\0' && chdir(options->cwd) != 0) {
             _exit(127);
+        }
+        if (options && options->env_count > 0) {
+            for (size_t i = 0; i < options->env_count; i++) {
+                if (setenv(options->env_keys[i], options->env_values[i], 1) != 0)
+                    _exit(127);
+            }
         }
         execvp(prog, (char *const *) argv);
         // exec failed; emit a short message and exit with 127 so

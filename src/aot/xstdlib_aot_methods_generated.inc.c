@@ -42,7 +42,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"sys", "threadYield", 0, "xrt_sys_thread_yield", "", CG_AOT_RET_VALUE, NULL},
     {"sys", "sleepMs", 1, "xrt_sys_sleep_ms", "v", CG_AOT_RET_VALUE, NULL},
     {"sys", "pinToCpu", 1, "xrt_sys_pin_to_cpu", "v", CG_AOT_RET_VALUE, NULL},
-    {"sys", "__processSpawn", 3, "xrt_sys_process_spawn", "svv", CG_AOT_RET_VALUE, NULL},
+    {"sys", "__processSpawn", 5, "xrt_sys_process_spawn", "svvvv", CG_AOT_RET_VALUE, NULL},
     {"sys", "__processWait", 1, "xrt_sys_process_wait", "v", CG_AOT_RET_VALUE, NULL},
     {"sys", "__processTryWait", 1, "xrt_sys_process_try_wait", "v", CG_AOT_RET_VALUE, NULL},
     {"sys", "__processKill", 2, "xrt_sys_process_kill", "vv", CG_AOT_RET_VALUE, NULL},

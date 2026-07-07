@@ -116,9 +116,160 @@ static char *build_command_line(const char *prog, const char *const argv[]) {
     return buf;
 }
 
+static bool proc_env_key_valid(const char *key) {
+    if (!key || key[0] == '\0')
+        return false;
+    return strchr(key, '=') == NULL;
+}
+
+static bool proc_spawn_options_valid(const XrProcSpawnOptions *options) {
+    if (!options || options->env_count == 0)
+        return true;
+    if (!options->env_keys || !options->env_values)
+        return false;
+    for (size_t i = 0; i < options->env_count; i++) {
+        if (!proc_env_key_valid(options->env_keys[i]) || !options->env_values[i])
+            return false;
+    }
+    return true;
+}
+
+static char *proc_strdup(const char *s) {
+    size_t len = strlen(s);
+    char *out = (char *) malloc(len + 1);  // xr:allow-raw-alloc
+    if (!out)
+        return NULL;
+    memcpy(out, s, len + 1);
+    return out;
+}
+
+static bool proc_env_entry_matches_key(const char *entry, const char *key) {
+    const char *eq = entry ? strchr(entry, '=') : NULL;
+    if (!eq || eq == entry || !key)
+        return false;
+    size_t name_len = (size_t) (eq - entry);
+    return strlen(key) == name_len && _strnicmp(entry, key, name_len) == 0;
+}
+
+static bool proc_env_key_is_overridden(const XrProcSpawnOptions *options, const char *entry) {
+    for (size_t i = 0; i < options->env_count; i++) {
+        if (proc_env_entry_matches_key(entry, options->env_keys[i]))
+            return true;
+    }
+    return false;
+}
+
+static int proc_env_entry_cmp(const void *a, const void *b) {
+    const char *ea = *(const char *const *) a;
+    const char *eb = *(const char *const *) b;
+    return _stricmp(ea, eb);
+}
+
+typedef struct ProcEnvEntries {
+    char **items;
+    size_t count;
+    size_t cap;
+} ProcEnvEntries;
+
+static void proc_env_entries_free(ProcEnvEntries *entries) {
+    if (!entries)
+        return;
+    for (size_t i = 0; i < entries->count; i++)
+        free(entries->items[i]);  // xr:allow-raw-alloc
+    free(entries->items);         // xr:allow-raw-alloc
+    entries->items = NULL;
+    entries->count = 0;
+    entries->cap = 0;
+}
+
+static bool proc_env_entries_push(ProcEnvEntries *entries, char *item) {
+    if (entries->count == entries->cap) {
+        size_t next_cap = entries->cap ? entries->cap * 2 : 32;
+        char **next = (char **) realloc(entries->items, next_cap * sizeof(char *));
+        if (!next)
+            return false;
+        entries->items = next;
+        entries->cap = next_cap;
+    }
+    entries->items[entries->count++] = item;
+    return true;
+}
+
+static char *proc_env_pair_new(const char *key, const char *value) {
+    size_t key_len = strlen(key);
+    size_t value_len = strlen(value);
+    if (key_len > SIZE_MAX - value_len - 2)
+        return NULL;
+    char *out = (char *) malloc(key_len + value_len + 2);  // xr:allow-raw-alloc
+    if (!out)
+        return NULL;
+    memcpy(out, key, key_len);
+    out[key_len] = '=';
+    memcpy(out + key_len + 1, value, value_len + 1);
+    return out;
+}
+
+static char *proc_env_block_build(const XrProcSpawnOptions *options) {
+    if (!options || options->env_count == 0)
+        return NULL;
+
+    ProcEnvEntries entries = {0};
+    LPCH current = GetEnvironmentStringsA();
+    if (current) {
+        for (const char *p = current; *p; p += strlen(p) + 1) {
+            if (proc_env_key_is_overridden(options, p))
+                continue;
+            char *copy = proc_strdup(p);
+            if (!copy || !proc_env_entries_push(&entries, copy)) {
+                free(copy);  // xr:allow-raw-alloc
+                FreeEnvironmentStringsA(current);
+                proc_env_entries_free(&entries);
+                return NULL;
+            }
+        }
+        FreeEnvironmentStringsA(current);
+    }
+
+    for (size_t i = 0; i < options->env_count; i++) {
+        char *pair = proc_env_pair_new(options->env_keys[i], options->env_values[i]);
+        if (!pair || !proc_env_entries_push(&entries, pair)) {
+            free(pair);  // xr:allow-raw-alloc
+            proc_env_entries_free(&entries);
+            return NULL;
+        }
+    }
+
+    qsort(entries.items, entries.count, sizeof(char *), proc_env_entry_cmp);
+
+    size_t bytes = 1;
+    for (size_t i = 0; i < entries.count; i++) {
+        size_t len = strlen(entries.items[i]);
+        if (bytes > SIZE_MAX - len - 1) {
+            proc_env_entries_free(&entries);
+            return NULL;
+        }
+        bytes += len + 1;
+    }
+
+    char *block = (char *) malloc(bytes);  // xr:allow-raw-alloc
+    if (!block) {
+        proc_env_entries_free(&entries);
+        return NULL;
+    }
+    char *dst = block;
+    for (size_t i = 0; i < entries.count; i++) {
+        size_t len = strlen(entries.items[i]) + 1;
+        memcpy(dst, entries.items[i], len);
+        dst += len;
+    }
+    *dst = '\0';
+    proc_env_entries_free(&entries);
+    return block;
+}
+
 XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
                           const XrProcSpawnOptions *options) {
-    if (prog == NULL || argv == NULL) {
+    if (prog == NULL || argv == NULL || !proc_spawn_options_valid(options)) {
         return XR_PROC_INVALID;
     }
     char *cmdline = build_command_line(prog, argv);
@@ -131,8 +282,14 @@ XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
     const char *cwd = (options && options->cwd && options->cwd[0] != '\0') ? options->cwd : NULL;
-    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, cwd, &si, &pi);
-    free(cmdline);  // xr:allow-raw-alloc
+    char *env_block = proc_env_block_build(options);
+    if (options && options->env_count > 0 && !env_block) {
+        free(cmdline);  // xr:allow-raw-alloc
+        return XR_PROC_INVALID;
+    }
+    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, env_block, cwd, &si, &pi);
+    free(env_block);  // xr:allow-raw-alloc
+    free(cmdline);    // xr:allow-raw-alloc
     if (!ok) {
         return XR_PROC_INVALID;
     }

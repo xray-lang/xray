@@ -601,9 +601,64 @@ static XrValue sys_pin_to_cpu(XrVMRuntime *isolate, XrValue *args, int argc) {
     return xr_bool(xr_thread_pin_to_cpu((unsigned int) cpu) == 0);
 }
 
+static bool sys_process_env_key_valid(const char *key) {
+    if (!key || key[0] == '\0')
+        return false;
+    return strchr(key, '=') == NULL;
+}
+
+static void sys_process_env_free(const char **keys, const char **values) {
+    xr_free((void *) keys);
+    xr_free((void *) values);
+}
+
+static bool sys_process_env_from_arrays(XrValue keys_value, XrValue values_value,
+                                        const char ***out_keys, const char ***out_values,
+                                        size_t *out_count) {
+    *out_keys = NULL;
+    *out_values = NULL;
+    *out_count = 0;
+
+    if (XR_IS_NULL(keys_value) && XR_IS_NULL(values_value))
+        return true;
+    if (!XR_IS_ARRAY(keys_value) || !XR_IS_ARRAY(values_value))
+        return false;
+
+    XrArray *keys_arr = XR_TO_ARRAY(keys_value);
+    XrArray *values_arr = XR_TO_ARRAY(values_value);
+    int count = keys_arr ? keys_arr->length : -1;
+    if (count < 0 || !values_arr || values_arr->length != count)
+        return false;
+    if (count == 0)
+        return true;
+
+    const char **keys = (const char **) xr_malloc(sizeof(char *) * (size_t) count);
+    const char **values = (const char **) xr_malloc(sizeof(char *) * (size_t) count);
+    if (!keys || !values) {
+        sys_process_env_free(keys, values);
+        return false;
+    }
+
+    for (int i = 0; i < count; i++) {
+        const char *key = xrs_string_arg(xr_array_get(keys_arr, i), NULL);
+        const char *value = xrs_string_arg(xr_array_get(values_arr, i), NULL);
+        if (!sys_process_env_key_valid(key) || !value) {
+            sys_process_env_free(keys, values);
+            return false;
+        }
+        keys[i] = key;
+        values[i] = value;
+    }
+
+    *out_keys = keys;
+    *out_values = values;
+    *out_count = (size_t) count;
+    return true;
+}
+
 static XrValue sys_process_spawn(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
-    if (argc < 3)
+    if (argc < 5)
         return xr_int((int64_t) XR_PROC_INVALID);
 
     const char *program = xrs_string_arg(args[0], NULL);
@@ -632,8 +687,22 @@ static XrValue sys_process_spawn(XrVMRuntime *isolate, XrValue *args, int argc) 
     }
     argv[extra + 1] = NULL;
 
-    XrProcSpawnOptions options = {.cwd = cwd};
+    const char **env_keys = NULL;
+    const char **env_values = NULL;
+    size_t env_count = 0;
+    if (!sys_process_env_from_arrays(args[3], args[4], &env_keys, &env_values, &env_count)) {
+        xr_free(argv);
+        return xr_int((int64_t) XR_PROC_INVALID);
+    }
+
+    XrProcSpawnOptions options = {
+        .cwd = cwd,
+        .env_keys = env_keys,
+        .env_values = env_values,
+        .env_count = env_count,
+    };
     XrProcId pid = xr_proc_spawn_ex(program, argv, &options);
+    sys_process_env_free(env_keys, env_values);
     xr_free(argv);
     return xr_int((int64_t) pid);
 }
