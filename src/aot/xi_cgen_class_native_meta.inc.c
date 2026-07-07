@@ -51,13 +51,17 @@ static const XiClassData *cg_class_native_data_by_name(const XiCgenCtx *ctx, con
     if (ctx->module) {
         for (uint16_t i = 0; i < ctx->module->nclasses; i++) {
             const XiClassData *cd = ctx->module->classes[i];
-            if (cd && cd->class_name && strcmp(cd->class_name, name) == 0)
+            if (cd && ((cd->class_name && strcmp(cd->class_name, name) == 0) ||
+                       (cd->display_name && strcmp(cd->display_name, name) == 0) ||
+                       (cd->generic_origin_name && strcmp(cd->generic_origin_name, name) == 0)))
                 return cd;
         }
     }
     for (int i = 0; i < ctx->nimports; i++) {
         const XiClassData *cd = ctx->imports[i].target_class;
-        if (cd && cd->class_name && strcmp(cd->class_name, name) == 0)
+        if (cd && ((cd->class_name && strcmp(cd->class_name, name) == 0) ||
+                   (cd->display_name && strcmp(cd->display_name, name) == 0) ||
+                   (cd->generic_origin_name && strcmp(cd->generic_origin_name, name) == 0)))
             return cd;
     }
     return NULL;

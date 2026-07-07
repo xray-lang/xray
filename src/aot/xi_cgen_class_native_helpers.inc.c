@@ -1390,7 +1390,10 @@ static bool cg_class_native_value_has_ptr_storage(XiCgenCtx *ctx, const XiValue 
 
 static const XiClassData *cg_class_native_call_result_data(XiCgenCtx *ctx, const XiFunc *f,
                                                            const XiValue *v) {
-    if (!ctx || !v || v->op != XI_CALL || v->nargs < 1)
+    if (!ctx || !v)
+        return NULL;
+    v = cg_unwrap_identity_value(v);
+    if (!v || v->op != XI_CALL || v->nargs < 1)
         return NULL;
     CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, v->args[0]);
     if (call.is_class_constructor && call.class_data && call.class_data->instance_layout)
@@ -1536,6 +1539,13 @@ static void cg_class_native_scan_slot_class_init(XiCgenCtx *ctx, const XiFunc *f
             const XiClassData *cd = cg_class_native_ctor_call_data(ctx, f, origin, NULL, NULL);
             if (!cd) {
                 cd = cg_class_native_imported_class_callee_data(ctx, f, v->args[0]);
+                if (cd)
+                    origin = v->args[0];
+            }
+            if (!cd) {
+                cd = cg_class_native_call_result_data(ctx, f, v->args[0]);
+                if (!cd)
+                    cd = cg_class_static_method_result_data(ctx, f, v->args[0]);
                 if (cd)
                     origin = v->args[0];
             }
@@ -2741,6 +2751,41 @@ static bool cg_class_shared_native_method_call_accepts_slot(XiCgenCtx *ctx, cons
         ctx, current, call, ctx->shared_native_instances[slot].class_data);
 }
 
+static bool cg_class_shared_native_getter_field_accepts_class(XiCgenCtx *ctx, const XiFunc *current,
+                                                              const XiValue *load,
+                                                              const XiClassData *source) {
+    if (!ctx || !load || !source || !source->class_name || load->op != XI_LOAD_FIELD ||
+        load->nargs < 1 || !load->aux)
+        return false;
+    (void) current;
+
+    char getter_name[256];
+    int n = snprintf(getter_name, sizeof(getter_name), "get:%s", (const char *) load->aux);
+    if (n < 0 || (size_t) n >= sizeof(getter_name))
+        return false;
+
+    const char *method_prefix = NULL;
+    const XiFunc *mfunc = cg_lookup_method(ctx, getter_name, source->class_name, &method_prefix);
+    if (!mfunc) {
+        mfunc = cg_lookup_method(ctx, (const char *) load->aux, source->class_name, &method_prefix);
+        if (!mfunc || !mfunc->name || strcmp(mfunc->name, getter_name) != 0)
+            return false;
+    }
+    (void) method_prefix;
+    if (!mfunc || cg_func_needs_aot_coro(mfunc) || !cg_class_func_uses_native_receiver(ctx, mfunc))
+        return false;
+    CgClassNativeFunc target_info = cg_class_native_func(ctx, mfunc);
+    return cg_class_native_can_pass_instance_as(ctx, source, target_info.class_data);
+}
+
+static bool cg_class_shared_native_getter_field_accepts_slot(XiCgenCtx *ctx, const XiFunc *current,
+                                                             const XiValue *load, int slot) {
+    if (!ctx || slot < 0 || slot >= ctx->shared_cap)
+        return false;
+    return cg_class_shared_native_getter_field_accepts_class(
+        ctx, current, load, ctx->shared_native_instances[slot].class_data);
+}
+
 static bool cg_class_shared_native_alias_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
                                                    const XiValue *target, int slot, uint8_t depth) {
     if (!ctx || !f || !target || slot < 0 || depth > 8)
@@ -2771,6 +2816,9 @@ static bool cg_class_shared_native_alias_safe_uses(XiCgenCtx *ctx, const XiFunc 
                     continue;
                 if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && ai == 0 &&
                     cg_class_shared_native_method_call_accepts_slot(ctx, f, v, slot))
+                    continue;
+                if (v->op == XI_LOAD_FIELD && ai == 0 &&
+                    cg_class_shared_native_getter_field_accepts_slot(ctx, f, v, slot))
                     continue;
                 if ((v->op == XI_COPY || v->op == XI_MOVE || v->op == XI_BOX ||
                      v->op == XI_UNBOX) &&
@@ -2921,6 +2969,9 @@ static bool cg_class_shared_native_import_alias_safe_uses(XiCgenCtx *ctx, const 
                     continue;
                 if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && ai == 0 &&
                     cg_class_shared_native_method_call_accepts_class(ctx, f, v, source))
+                    continue;
+                if (v->op == XI_LOAD_FIELD && ai == 0 &&
+                    cg_class_shared_native_getter_field_accepts_class(ctx, f, v, source))
                     continue;
                 if ((v->op == XI_COPY || v->op == XI_MOVE || v->op == XI_BOX ||
                      v->op == XI_UNBOX) &&
