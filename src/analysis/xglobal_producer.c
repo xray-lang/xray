@@ -337,7 +337,8 @@ static XgMethodSummary *producer_find_class_method(XgGlobalEvidence *ev, const X
     for (uint32_t i = 0; i < cls->method_count; i++) {
         uint32_t method_index = cls->method_start - 1 + i;
         XgMethodSummary *method = method_index < ev->nmethods ? &ev->methods[method_index] : NULL;
-        if (method && method->name_id == name_id && method->signature_key == signature_key)
+        if (method && method->name_id == name_id && method->signature_key == signature_key &&
+            (method->flags & XG_METHOD_STATIC) == 0 && (method->flags & XG_METHOD_CONSTRUCTOR) == 0)
             return method;
     }
     return NULL;

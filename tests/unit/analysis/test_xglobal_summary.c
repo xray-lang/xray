@@ -472,6 +472,50 @@ static void assert_class_graph_verifier_rejects(const XgClassSummary *classes, u
     xg_global_evidence_free(&ev);
 }
 
+static void assert_method_graph_verifier_rejects(const XgClassSummary *classes, uint32_t nclasses,
+                                                 const XgMethodSummary *methods, uint32_t nmethods,
+                                                 const char *expected_error) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x51,
+                      .compiler_semver_hash = 0x52,
+                      .profile_hash = 0x53,
+                      .imported_summary_hash = 0x54,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    for (uint32_t i = 0; i < nclasses; i++)
+        ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &classes[i]));
+    for (uint32_t i = 0; i < nmethods; i++)
+        ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &methods[i]));
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, expected_error));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_verifier_rederives_class_graph_flags) {
     XgClassSummary missing_has_subclass[] = {
         {.class_id = 1,
@@ -510,6 +554,98 @@ TEST(global_evidence_verifier_rederives_class_graph_flags) {
          .decl_kind = XG_DECL_CLASS},
     };
     assert_class_graph_verifier_rejects(final_with_subclass, 2, "final class has subclass");
+}
+
+TEST(global_evidence_verifier_rederives_method_override_graph) {
+    XgClassSummary classes[] = {
+        {.class_id = 1,
+         .parent_class_id = XG_NO_ID,
+         .flags = XG_CLASS_HAS_SUBCLASS,
+         .method_start = 1,
+         .method_count = 1,
+         .decl_kind = XG_DECL_CLASS},
+        {.class_id = 2,
+         .parent_class_id = 1,
+         .flags = XG_CLASS_INFERRED_FINAL,
+         .method_start = 2,
+         .method_count = 1,
+         .decl_kind = XG_DECL_CLASS},
+    };
+    XgMethodSummary missing_override_of[] = {
+        {.method_id = 1,
+         .owner_class_id = 1,
+         .name_id = 700,
+         .signature_key = 701,
+         .override_of = XG_NO_ID,
+         .flags = XG_METHOD_OVERRIDDEN},
+        {.method_id = 2,
+         .owner_class_id = 2,
+         .name_id = 700,
+         .signature_key = 701,
+         .override_of = XG_NO_ID,
+         .flags = 0},
+    };
+    XgMethodSummary missing_overridden_flag[] = {
+        {.method_id = 1,
+         .owner_class_id = 1,
+         .name_id = 700,
+         .signature_key = 701,
+         .override_of = XG_NO_ID,
+         .flags = 0},
+        {.method_id = 2,
+         .owner_class_id = 2,
+         .name_id = 700,
+         .signature_key = 701,
+         .override_of = 1,
+         .flags = 0},
+    };
+    XgClassSummary unrelated_classes[] = {
+        {.class_id = 1,
+         .parent_class_id = XG_NO_ID,
+         .flags = XG_CLASS_HAS_SUBCLASS,
+         .method_start = 1,
+         .method_count = 1,
+         .decl_kind = XG_DECL_CLASS},
+        {.class_id = 2,
+         .parent_class_id = 1,
+         .flags = XG_CLASS_INFERRED_FINAL,
+         .method_start = 2,
+         .method_count = 1,
+         .decl_kind = XG_DECL_CLASS},
+        {.class_id = 3,
+         .parent_class_id = XG_NO_ID,
+         .flags = XG_CLASS_INFERRED_FINAL,
+         .method_start = 3,
+         .method_count = 1,
+         .decl_kind = XG_DECL_CLASS},
+    };
+    XgMethodSummary unrelated_override_of[] = {
+        {.method_id = 1,
+         .owner_class_id = 1,
+         .name_id = 700,
+         .signature_key = 701,
+         .override_of = XG_NO_ID,
+         .flags = XG_METHOD_OVERRIDDEN},
+        {.method_id = 2,
+         .owner_class_id = 2,
+         .name_id = 700,
+         .signature_key = 701,
+         .override_of = 3,
+         .flags = 0},
+        {.method_id = 3,
+         .owner_class_id = 3,
+         .name_id = 700,
+         .signature_key = 701,
+         .override_of = XG_NO_ID,
+         .flags = 0},
+    };
+
+    assert_method_graph_verifier_rejects(classes, 2, missing_override_of, 2,
+                                         "method override_of does not re-derive");
+    assert_method_graph_verifier_rejects(classes, 2, missing_overridden_flag, 2,
+                                         "method overridden flag does not re-derive");
+    assert_method_graph_verifier_rejects(unrelated_classes, 3, unrelated_override_of, 3,
+                                         "method override_of does not re-derive");
 }
 
 TEST(global_evidence_verifier_rederives_profile_actions) {
@@ -983,6 +1119,7 @@ RUN_TEST(global_evidence_dump_lists_core_rows);
 RUN_TEST(global_evidence_lowers_to_aot_class_plans);
 RUN_TEST(global_evidence_verifier_rederives_dispatch_plans);
 RUN_TEST(global_evidence_verifier_rederives_class_graph_flags);
+RUN_TEST(global_evidence_verifier_rederives_method_override_graph);
 RUN_TEST(global_evidence_verifier_rederives_profile_actions);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
