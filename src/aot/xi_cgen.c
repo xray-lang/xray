@@ -5505,6 +5505,23 @@ static bool cg_native_receiver_method_call_needs_boxed_adapter(XiCgenCtx *ctx, c
              cg_class_native_can_pass_instance_as(ctx, source_info, target_info.class_data));
 }
 
+static bool cg_native_receiver_getter_field_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *owner,
+                                                                const XiValue *load,
+                                                                const XiFunc *target) {
+    if (!ctx || !owner || !load || !target || load->op != XI_LOAD_FIELD || load->nargs < 1)
+        return false;
+
+    const XiClassData *source_info = NULL;
+    const XiFunc *mfunc =
+        cg_class_native_resolve_getter_field_method(ctx, owner, load, &source_info, NULL);
+    if (mfunc != target)
+        return false;
+
+    CgClassNativeFunc target_info = cg_class_native_func(ctx, target);
+    return !(cg_class_native_instance_origin(ctx, owner, load->args[0]) &&
+             cg_class_native_can_pass_instance_as(ctx, source_info, target_info.class_data));
+}
+
 static bool cg_native_receiver_ctor_call_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *owner,
                                                              const XiValue *call,
                                                              const XiFunc *target) {
@@ -5542,6 +5559,7 @@ static bool cg_func_has_native_receiver_boxed_use(XiCgenCtx *ctx, const XiFunc *
                 !cg_array_closure_value_only_used_by_inline_map(ctx, owner, prefix, v))
                 return true;
             if (cg_native_receiver_method_call_needs_boxed_adapter(ctx, owner, v, target) ||
+                cg_native_receiver_getter_field_needs_boxed_adapter(ctx, owner, v, target) ||
                 cg_native_receiver_ctor_call_needs_boxed_adapter(ctx, owner, v, target))
                 return true;
         }
