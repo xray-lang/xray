@@ -1281,6 +1281,10 @@ static bool xicgen_value_is_const_endian(const XiValue *value, int64_t *out_inde
 static void xicgen_emit_endian_arg_i64(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
     int64_t endian = XR_ENDIAN_NATIVE;
     if (xicgen_value_is_const_endian(value, &endian)) {
+        if (endian == XR_ENDIAN_NATIVE) {
+            fprintf(out, "XRT_TARGET_NATIVE_ENDIAN");
+            return;
+        }
         fprintf(out, "INT64_C(%" PRId64 ")", endian);
         return;
     }

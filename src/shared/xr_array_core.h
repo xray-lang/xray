@@ -81,6 +81,18 @@ typedef enum XrEndianCore {
     XR_ENDIAN_BE = 2,
 } XrEndianCore;
 
+#ifndef XRT_TARGET_NATIVE_ENDIAN
+#if defined(XR_AOT_TARGET_LITTLE_ENDIAN)
+#if XR_AOT_TARGET_LITTLE_ENDIAN
+#define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_LE
+#else
+#define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_BE
+#endif
+#else
+#define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_NATIVE
+#endif
+#endif
+
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) &&                                 \
     __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define XR_ARRAY_CORE_HOST_ENDIAN_KNOWN 1

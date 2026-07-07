@@ -938,6 +938,18 @@ enum {
     XR_ENDIAN_BE = 2,
 };
 
+#ifndef XRT_TARGET_NATIVE_ENDIAN
+#if defined(XR_AOT_TARGET_LITTLE_ENDIAN)
+#if XR_AOT_TARGET_LITTLE_ENDIAN
+#define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_LE
+#else
+#define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_BE
+#endif
+#else
+#define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_NATIVE
+#endif
+#endif
+
 static inline bool xrt_freestanding_host_is_little_endian(void) {
     const uint16_t one = 1;
     return *((const uint8_t *) &one) == 1;
