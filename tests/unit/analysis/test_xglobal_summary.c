@@ -117,6 +117,63 @@ static const XgBodySummary *evidence_find_body_by_func(const XgGlobalEvidence *e
     return NULL;
 }
 
+static void assert_single_callsite_rejected(const XgCallsiteSummary *call,
+                                            const char *expected_error) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x9010,
+                      .compiler_semver_hash = 0x9011,
+                      .profile_hash = 0x9012,
+                      .imported_summary_hash = 0x9013,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary decl = {.module_id = 1,
+                          .decl_id = 1,
+                          .kind = XG_DECL_FUNC,
+                          .name_id = 10,
+                          .signature_key = 20,
+                          .source_span_id = 3};
+    XgBodySummary body = {.func_id = 1,
+                          .module_id = 1,
+                          .owner_decl_id = 1,
+                          .name_id = 10,
+                          .signature_key = 20,
+                          .source_span_id = 3,
+                          .kind = XG_BODY_FUNCTION,
+                          .body_hash = 0x9014,
+                          .callsite_start = 1,
+                          .callsite_count = 1};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, call));
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, expected_error));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_adds_rows_and_grows) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x10,
@@ -1789,6 +1846,64 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence callsite kind is invalid"));
     xaot_bundle_free(&invalid_kind_bundle);
     xg_global_evidence_free(&invalid_kind_ev);
+
+    XgCallsiteSummary direct_with_method_payload = {.callsite_id = 1,
+                                                    .owner_func_id = 1,
+                                                    .source_span_id = 4,
+                                                    .body_ordinal = 0,
+                                                    .kind = XG_CALL_DIRECT_FUNC,
+                                                    .static_target_func_id = 1,
+                                                    .method_id = 123};
+    assert_single_callsite_rejected(&direct_with_method_payload,
+                                    "AOT global evidence direct callsite identity is stale");
+
+    XgCallsiteSummary method_with_direct_payload = {.callsite_id = 1,
+                                                    .owner_func_id = 1,
+                                                    .source_span_id = 4,
+                                                    .body_ordinal = 0,
+                                                    .kind = XG_CALL_METHOD,
+                                                    .static_target_func_id = 1,
+                                                    .receiver_static_class_id = 1,
+                                                    .method_id = 123,
+                                                    .method_name_id = 123,
+                                                    .method_signature_key = 456};
+    assert_single_callsite_rejected(&method_with_direct_payload,
+                                    "AOT global evidence method callsite identity is stale");
+
+    XgCallsiteSummary interface_with_class_payload = {.callsite_id = 1,
+                                                      .owner_func_id = 1,
+                                                      .source_span_id = 4,
+                                                      .body_ordinal = 0,
+                                                      .kind = XG_CALL_INTERFACE,
+                                                      .receiver_static_class_id = 1,
+                                                      .receiver_static_interface_id = 123,
+                                                      .method_id = 123,
+                                                      .method_name_id = 123,
+                                                      .method_signature_key = 456};
+    assert_single_callsite_rejected(&interface_with_class_payload,
+                                    "AOT global evidence interface callsite identity is stale");
+
+    XgCallsiteSummary native_with_receiver_payload = {.callsite_id = 1,
+                                                      .owner_func_id = 1,
+                                                      .source_span_id = 4,
+                                                      .body_ordinal = 0,
+                                                      .kind = XG_CALL_NATIVE,
+                                                      .receiver_static_class_id = 1,
+                                                      .method_id = 123,
+                                                      .method_name_id = 123};
+    assert_single_callsite_rejected(&native_with_receiver_payload,
+                                    "AOT global evidence native callsite identity is stale");
+
+    XgCallsiteSummary extern_with_signature_payload = {.callsite_id = 1,
+                                                       .owner_func_id = 1,
+                                                       .source_span_id = 4,
+                                                       .body_ordinal = 0,
+                                                       .kind = XG_CALL_EXTERN,
+                                                       .method_id = 123,
+                                                       .method_name_id = 123,
+                                                       .method_signature_key = 456};
+    assert_single_callsite_rejected(&extern_with_signature_payload,
+                                    "AOT global evidence extern callsite identity is stale");
 
     XgGlobalEvidence closure_stale_ev;
     XgBuildKey closure_stale_key = key;
