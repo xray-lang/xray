@@ -1,0 +1,127 @@
+// cluster - pure-Xray cluster protocol helpers.
+//
+// Node lifecycle, sockets, TLS, distributed Channel hooks, and frame I/O remain
+// native runtime boundaries. Protocol constants, naming rules, address parsing,
+// and topic-pattern matching live here so the cluster control-plane rules have a
+// visible Xray semantic source.
+
+const HANDSHAKE_VERSION = 2
+const TOPIC_DEFAULT_HOP_LIMIT = 3
+const NODE_NAME_MAX = 63
+const CHANNEL_NAME_MAX = 127
+const SERVICE_NAME_MAX = 127
+const TOPIC_PATTERN_MAX = 127
+
+fn _asciiPrintable(s: string) -> bool {
+    for (var i = 0; i < s.length; i++) {
+        var c = s.charAt(i).ord()!
+        if (c < 0x20 || c > 0x7E) { return false }
+    }
+    return true
+}
+
+fn _validName(s: string, maxLen: int) -> bool {
+    return s.length > 0 && s.length <= maxLen && _asciiPrintable(s)
+}
+
+fn validNodeName(name: string) -> bool {
+    return _validName(name, NODE_NAME_MAX)
+}
+
+fn validChannelName(name: string) -> bool {
+    return _validName(name, CHANNEL_NAME_MAX)
+}
+
+fn validServiceName(name: string) -> bool {
+    return _validName(name, SERVICE_NAME_MAX)
+}
+
+fn _parsePort(raw: string) -> int {
+    if (raw.length == 0) { return 0 }
+    var out = 0
+    for (var i = 0; i < raw.length; i++) {
+        var c = raw.charAt(i).ord()!
+        if (c < 48 || c > 57) { return 0 }
+        out = out * 10 + (c - 48)
+        if (out > 65535) { return 0 }
+    }
+    return out
+}
+
+fn _stripIpv6Brackets(host: string) -> string {
+    if (host.length >= 2 && host.charAt(0) == "[" && host.charAt(host.length - 1) == "]") {
+        return host.slice(1, host.length - 1)
+    }
+    return host
+}
+
+fn parseAddress(addr: string) -> Json {
+    var colon = addr.lastIndexOf(":")
+    if (colon <= 0 || colon + 1 >= addr.length) { return null }
+    var host = _stripIpv6Brackets(addr.slice(0, colon))
+    var port = _parsePort(addr.slice(colon + 1))
+    if (host.length == 0 || port <= 0) { return null }
+    return { host: host, port: port }
+}
+
+fn _hasEmptyTopicSegment(s: string) -> bool {
+    if (s.length == 0) { return true }
+    if (s.charAt(0) == "." || s.charAt(s.length - 1) == ".") { return true }
+    for (var i = 1; i < s.length; i++) {
+        if (s.charAt(i) == "." && s.charAt(i - 1) == ".") { return true }
+    }
+    return false
+}
+
+fn validTopicName(topic: string) -> bool {
+    if (topic.length > TOPIC_PATTERN_MAX || _hasEmptyTopicSegment(topic)) { return false }
+    return topic.indexOf("*") < 0 && topic.indexOf(">") < 0
+}
+
+fn validTopicPattern(pattern: string) -> bool {
+    if (pattern.length > TOPIC_PATTERN_MAX || _hasEmptyTopicSegment(pattern)) { return false }
+    var parts = pattern.split(".")
+    for (var i = 0; i < parts.length; i++) {
+        var part = parts[i]
+        if (part == ">") { return i == parts.length - 1 }
+        if (part == "*") { continue }
+        if (part.indexOf("*") >= 0 || part.indexOf(">") >= 0) { return false }
+    }
+    return true
+}
+
+fn topicMatches(pattern: string, topic: string) -> bool {
+    if (!validTopicPattern(pattern) || !validTopicName(topic)) { return false }
+
+    var p = pattern.split(".")
+    var t = topic.split(".")
+    var pi = 0
+    var ti = 0
+    while (pi < p.length) {
+        var part = p[pi]
+        if (part == ">") {
+            return ti < t.length
+        }
+        if (ti >= t.length) { return false }
+        if (part != "*" && part != t[ti]) { return false }
+        pi = pi + 1
+        ti = ti + 1
+    }
+    return ti == t.length
+}
+
+export {
+    HANDSHAKE_VERSION,
+    TOPIC_DEFAULT_HOP_LIMIT,
+    NODE_NAME_MAX,
+    CHANNEL_NAME_MAX,
+    SERVICE_NAME_MAX,
+    TOPIC_PATTERN_MAX,
+    validNodeName,
+    validChannelName,
+    validServiceName,
+    parseAddress,
+    validTopicName,
+    validTopicPattern,
+    topicMatches
+}

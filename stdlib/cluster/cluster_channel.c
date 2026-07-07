@@ -143,7 +143,7 @@ static int dist_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
 
     // Block on temp Channel — process_node will deliver the result
     // Use blocking recv (yields coroutine until response arrives)
-    XrChanResult rr = xr_channel_recv(rsp_ch, out, coro);
+    XrChanResult rr = xr_channel_recv(rsp_ch, out, coro, -1);
     if (rr != XR_CHAN_OK) {
         *out = xr_null();
         return XR_CHAN_CLOSED;

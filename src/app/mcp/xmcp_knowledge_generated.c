@@ -150,6 +150,36 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
+        .name = "CHANNEL_NAME_MAX",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "HANDSHAKE_VERSION",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "NODE_NAME_MAX",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "SERVICE_NAME_MAX",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "TOPIC_DEFAULT_HOP_LIMIT",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "TOPIC_PATTERN_MAX",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
         .name = "call",
         .signature = "(service: string, args: Json, timeout?: int): Json",
         .summary = "Call remote service",
@@ -185,6 +215,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "List cluster node names",
     },
     {
+        .name = "parseAddress",
+        .signature = "(addr: string): Json",
+        .summary = "",
+    },
+    {
         .name = "publish",
         .signature = "(topic: string, value: Json): bool",
         .summary = "Publish to topic",
@@ -218,6 +253,36 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .name = "subscribe",
         .signature = "(pattern: string): Channel",
         .summary = "Subscribe to topic pattern",
+    },
+    {
+        .name = "topicMatches",
+        .signature = "(pattern: string, topic: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "validChannelName",
+        .signature = "(name: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "validNodeName",
+        .signature = "(name: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "validServiceName",
+        .signature = "(name: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "validTopicName",
+        .signature = "(topic: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "validTopicPattern",
+        .signature = "(pattern: string): bool",
+        .summary = "",
     },
 };
 
@@ -4718,6 +4783,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `cluster.CHANNEL_NAME_MAX` | `: int` |  |\n"
+            "| `cluster.HANDSHAKE_VERSION` | `: int` |  |\n"
+            "| `cluster.NODE_NAME_MAX` | `: int` |  |\n"
+            "| `cluster.SERVICE_NAME_MAX` | `: int` |  |\n"
+            "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: int` |  |\n"
+            "| `cluster.TOPIC_PATTERN_MAX` | `: int` |  |\n"
             "| `cluster.call` | `(service: string, args: Json, timeout?: int): Json` | Call remote service |\n"
             "| `cluster.channel` | `(name: string, size?: int): Channel` | Create or get named distributed channel |\n"
             "| `cluster.discover` | `(): ()` | Start LAN auto-discovery |\n"
@@ -4725,6 +4796,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.join` | `(addr: string): bool` | Join cluster by address |\n"
             "| `cluster.monitor` | `(name: string, coro_name?: string): Channel` | Monitor node or remote coroutine |\n"
             "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
+            "| `cluster.parseAddress` | `(addr: string): Json` |  |\n"
             "| `cluster.publish` | `(topic: string, value: Json): bool` | Publish to topic |\n"
             "| `cluster.reply` | `(req: Json, result: Json): bool` | Reply to service request |\n"
             "| `cluster.self` | `(): string` | Get own node name |\n"
@@ -4732,6 +4804,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.start` | `(config: Json): ()` | Start cluster node |\n"
             "| `cluster.stop` | `(): ()` | Stop cluster node |\n"
             "| `cluster.subscribe` | `(pattern: string): Channel` | Subscribe to topic pattern |\n"
+            "| `cluster.topicMatches` | `(pattern: string, topic: string): bool` |  |\n"
+            "| `cluster.validChannelName` | `(name: string): bool` |  |\n"
+            "| `cluster.validNodeName` | `(name: string): bool` |  |\n"
+            "| `cluster.validServiceName` | `(name: string): bool` |  |\n"
+            "| `cluster.validTopicName` | `(topic: string): bool` |  |\n"
+            "| `cluster.validTopicPattern` | `(pattern: string): bool` |  |\n"
             "",
         .symbols = _symbols_cluster,
         .symbol_count = (int)(sizeof(_symbols_cluster) / sizeof(_symbols_cluster[0])),

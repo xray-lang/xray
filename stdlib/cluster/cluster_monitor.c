@@ -186,7 +186,7 @@ static void coro_monitor_fwd_loop(void *arg) {
 
     // Block until the monitored coroutine exits
     XrValue reason_val;
-    XrChanResult rr = xr_channel_recv(ctx->mon_ch, &reason_val, NULL);
+    XrChanResult rr = xr_channel_recv(ctx->mon_ch, &reason_val, NULL, -1);
 
     const char *reason = "normal";
     if (rr == XR_CHAN_OK && XR_IS_STRING(reason_val)) {

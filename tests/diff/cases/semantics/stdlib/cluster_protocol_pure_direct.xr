@@ -1,0 +1,51 @@
+// Pure-Xray cluster protocol helper surface.
+import cluster
+import {
+    HANDSHAKE_VERSION,
+    TOPIC_DEFAULT_HOP_LIMIT,
+    validNodeName,
+    validChannelName,
+    validServiceName,
+    parseAddress,
+    validTopicName,
+    validTopicPattern,
+    topicMatches
+} from cluster
+
+print(HANDSHAKE_VERSION)
+print(TOPIC_DEFAULT_HOP_LIMIT)
+
+print(validNodeName("node-a"))
+print(validNodeName(""))
+print(validNodeName("bad\nname"))
+print(validChannelName("events.main"))
+print(validServiceName("svc.search"))
+
+var addr = parseAddress("127.0.0.1:9000")
+print(addr["host"])
+print(addr["port"])
+
+var v6 = parseAddress("[::1]:9001")
+print(v6["host"])
+print(v6["port"])
+
+print(parseAddress("missing-port") == null)
+print(parseAddress("host:0") == null)
+print(parseAddress("host:not-a-port") == null)
+
+print(validTopicName("events.user.login"))
+print(validTopicName("events.*"))
+print(validTopicPattern("events.*"))
+print(validTopicPattern("events.>"))
+print(validTopicPattern("events.>.bad"))
+print(validTopicPattern("events..bad"))
+
+print(topicMatches("events.*", "events.user"))
+print(topicMatches("events.*", "events.user.login"))
+print(topicMatches("events.>", "events.user.login"))
+print(topicMatches("events.>", "events"))
+print(topicMatches("events.*.login", "events.user.login"))
+print(topicMatches("events.*.login", "events.user.logout"))
+print(topicMatches(">", "events"))
+print(topicMatches(">", ""))
+print(cluster.topicMatches("chat.room1", "chat.room1"))
