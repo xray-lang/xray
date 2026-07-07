@@ -1790,6 +1790,34 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     xaot_bundle_free(&invalid_kind_bundle);
     xg_global_evidence_free(&invalid_kind_ev);
 
+    XgGlobalEvidence closure_stale_ev;
+    XgBuildKey closure_stale_key = key;
+    XgBodySummary closure_stale_body = body;
+    XgCallsiteSummary closure_stale_call = call;
+    closure_stale_key.source_hash = 0x85;
+    closure_stale_body.callsite_start = 1;
+    closure_stale_body.callsite_count = 1;
+    closure_stale_call.kind = XG_CALL_CLOSURE;
+    closure_stale_call.static_target_func_id = 123;
+    xg_global_evidence_init(&closure_stale_ev, closure_stale_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&closure_stale_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&closure_stale_ev, &closure_stale_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&closure_stale_ev, &closure_stale_call));
+
+    XaotBundle closure_stale_bundle;
+    memset(&closure_stale_bundle, 0, sizeof(closure_stale_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&closure_stale_bundle, &closure_stale_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    closure_stale_bundle.modules = modules;
+    closure_stale_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&closure_stale_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&closure_stale_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence closure callsite identity is stale"));
+    xaot_bundle_free(&closure_stale_bundle);
+    xg_global_evidence_free(&closure_stale_ev);
+
     XgGlobalEvidence direct_no_target_ev;
     XgBuildKey direct_no_target_key = key;
     XgBodySummary direct_no_target_body = body;
