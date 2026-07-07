@@ -916,6 +916,16 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
         return set_error(errbuf, errbuf_len, "AOT dispatch plan body ordinal does not re-derive");
     if (plan->method_id != expected_method_id)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan method does not re-derive");
+    if (plan->method_name_id != call->method_name_id)
+        return set_error(errbuf, errbuf_len, "AOT dispatch plan method name does not re-derive");
+    if (plan->method_signature_key != call->method_signature_key)
+        return set_error(errbuf, errbuf_len,
+                         "AOT dispatch plan method signature does not re-derive");
+    if (plan->arg_type_key_start != call->arg_type_key_start)
+        return set_error(errbuf, errbuf_len,
+                         "AOT dispatch plan argument type range does not re-derive");
+    if (plan->arg_count != call->arg_count)
+        return set_error(errbuf, errbuf_len, "AOT dispatch plan argument count does not re-derive");
     if (plan->receiver_static_class_id != call->receiver_static_class_id)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan receiver class does not re-derive");
     if (plan->receiver_static_interface_id != call->receiver_static_interface_id)
