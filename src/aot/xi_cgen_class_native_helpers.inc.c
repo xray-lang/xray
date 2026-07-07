@@ -2597,15 +2597,15 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
     if (!cg_class_func_uses_native_receiver(ctx, mfunc))
         return false;
     CgClassNativeFunc target_info = cg_class_native_func(ctx, mfunc);
-    XrRep actual_rep = cg_func_return_abi_rep(ctx, mfunc);
     const XiClassData *source_info = cg_class_native_instance_data(ctx, f, v->args[0]);
     if (cg_class_native_instance_origin(ctx, f, v->args[0]) &&
         cg_class_native_can_pass_instance_as(ctx, source_info, target_info.class_data)) {
         bool emit_ctor_stmt_expr = target_info.is_constructor;
-        const char *conv_suffix = emit_ctor_stmt_expr
-                                      ? NULL
-                                      : emit_conversion_prefix(out, v->type, actual_rep,
-                                                               cg_value_plan_storage_rep(ctx, v));
+        const char *conv_suffix =
+            emit_ctor_stmt_expr ? NULL
+                                : emit_direct_call_return_conversion_prefix(ctx, out, f, v, mfunc);
+        if (ctx->error)
+            return true;
         if (emit_ctor_stmt_expr)
             fprintf(out, "({ (void)");
         emit_fname(ctx, out, method_prefix ? method_prefix : prefix, mfunc);
@@ -2622,8 +2622,9 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
         else
             emit_conversion_suffix(out, conv_suffix);
     } else {
+        const XrType *ret_type = mfunc && mfunc->return_type ? mfunc->return_type : v->type;
         const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+            emit_conversion_prefix(out, ret_type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         emit_typed_abi_fname(ctx, out, method_prefix ? method_prefix : prefix, mfunc);
         fprintf(out, "(NULL");
         for (uint16_t a = 0; a < v->nargs; a++) {
