@@ -1671,6 +1671,120 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence body callsite range is stale"));
     xaot_bundle_free(&range_hole_bundle);
     xg_global_evidence_free(&range_hole_ev);
+
+    XgGlobalEvidence invalid_kind_ev;
+    XgBuildKey invalid_kind_key = key;
+    XgBodySummary invalid_kind_body = body;
+    XgCallsiteSummary invalid_kind_call = call;
+    invalid_kind_key.source_hash = 0x78;
+    invalid_kind_body.callsite_start = 1;
+    invalid_kind_body.callsite_count = 1;
+    invalid_kind_call.kind = 0;
+    xg_global_evidence_init(&invalid_kind_ev, invalid_kind_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&invalid_kind_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&invalid_kind_ev, &invalid_kind_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&invalid_kind_ev, &invalid_kind_call));
+
+    XaotBundle invalid_kind_bundle;
+    memset(&invalid_kind_bundle, 0, sizeof(invalid_kind_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&invalid_kind_bundle, &invalid_kind_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    invalid_kind_bundle.modules = modules;
+    invalid_kind_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&invalid_kind_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&invalid_kind_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence callsite kind is invalid"));
+    xaot_bundle_free(&invalid_kind_bundle);
+    xg_global_evidence_free(&invalid_kind_ev);
+
+    XgGlobalEvidence direct_no_target_ev;
+    XgBuildKey direct_no_target_key = key;
+    XgBodySummary direct_no_target_body = body;
+    XgCallsiteSummary direct_no_target_call = call;
+    direct_no_target_key.source_hash = 0x79;
+    direct_no_target_body.callsite_start = 1;
+    direct_no_target_body.callsite_count = 1;
+    direct_no_target_call.static_target_func_id = XG_NO_ID;
+    xg_global_evidence_init(&direct_no_target_ev, direct_no_target_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&direct_no_target_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&direct_no_target_ev, &direct_no_target_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&direct_no_target_ev, &direct_no_target_call));
+
+    XaotBundle direct_no_target_bundle;
+    memset(&direct_no_target_bundle, 0, sizeof(direct_no_target_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&direct_no_target_bundle, &direct_no_target_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    direct_no_target_bundle.modules = modules;
+    direct_no_target_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&direct_no_target_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&direct_no_target_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence direct callsite has no target"));
+    xaot_bundle_free(&direct_no_target_bundle);
+    xg_global_evidence_free(&direct_no_target_ev);
+
+    XgGlobalEvidence method_stale_ev;
+    XgBuildKey method_stale_key = key;
+    XgBodySummary method_stale_body = body;
+    XgCallsiteSummary method_stale_call = call;
+    method_stale_key.source_hash = 0x7a;
+    method_stale_body.callsite_start = 1;
+    method_stale_body.callsite_count = 1;
+    method_stale_call.kind = XG_CALL_METHOD;
+    method_stale_call.static_target_func_id = XG_NO_ID;
+    method_stale_call.method_id = XG_NO_ID;
+    method_stale_call.method_name_id = 333;
+    xg_global_evidence_init(&method_stale_ev, method_stale_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&method_stale_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&method_stale_ev, &method_stale_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&method_stale_ev, &method_stale_call));
+
+    XaotBundle method_stale_bundle;
+    memset(&method_stale_bundle, 0, sizeof(method_stale_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&method_stale_bundle, &method_stale_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    method_stale_bundle.modules = modules;
+    method_stale_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&method_stale_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&method_stale_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence method callsite identity is stale"));
+    xaot_bundle_free(&method_stale_bundle);
+    xg_global_evidence_free(&method_stale_ev);
+
+    XgGlobalEvidence interface_stale_ev;
+    XgBuildKey interface_stale_key = key;
+    XgBodySummary interface_stale_body = body;
+    XgCallsiteSummary interface_stale_call = call;
+    interface_stale_key.source_hash = 0x7b;
+    interface_stale_body.callsite_start = 1;
+    interface_stale_body.callsite_count = 1;
+    interface_stale_call.kind = XG_CALL_INTERFACE;
+    interface_stale_call.static_target_func_id = XG_NO_ID;
+    interface_stale_call.receiver_static_interface_id = XG_NO_ID;
+    interface_stale_call.method_id = 444;
+    interface_stale_call.method_name_id = 444;
+    interface_stale_call.method_signature_key = 555;
+    xg_global_evidence_init(&interface_stale_ev, interface_stale_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&interface_stale_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&interface_stale_ev, &interface_stale_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&interface_stale_ev, &interface_stale_call));
+
+    XaotBundle interface_stale_bundle;
+    memset(&interface_stale_bundle, 0, sizeof(interface_stale_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&interface_stale_bundle, &interface_stale_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    interface_stale_bundle.modules = modules;
+    interface_stale_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&interface_stale_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&interface_stale_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence interface callsite identity is stale"));
+    xaot_bundle_free(&interface_stale_bundle);
+    xg_global_evidence_free(&interface_stale_ev);
 }
 
 TEST(global_evidence_verifier_rederives_method_body_signature) {
