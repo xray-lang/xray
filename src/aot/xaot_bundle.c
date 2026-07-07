@@ -409,6 +409,32 @@ static bool xg_evidence_effective_interface_implementor_seen(
     return false;
 }
 
+static bool xg_evidence_interface_method_visible_from(const XgGlobalEvidence *ev,
+                                                      XgInterfaceId receiver_interface_id,
+                                                      const XgInterfaceMethodSummary *method) {
+    if (!ev || receiver_interface_id == XG_NO_ID || !method)
+        return false;
+    return xg_evidence_interface_extends_reaches(ev, receiver_interface_id,
+                                                 method->owner_interface_id, 0);
+}
+
+static uint32_t xg_evidence_interface_dispatch_slot(const XgGlobalEvidence *ev,
+                                                    XgInterfaceId receiver_interface_id,
+                                                    uint32_t name_id, uint32_t signature_key) {
+    uint32_t slot = 0;
+    if (!ev || receiver_interface_id == XG_NO_ID || name_id == 0 || signature_key == 0)
+        return UINT32_MAX;
+    for (uint32_t i = 0; i < ev->ninterface_methods; i++) {
+        const XgInterfaceMethodSummary *method = &ev->interface_methods[i];
+        if (!xg_evidence_interface_method_visible_from(ev, receiver_interface_id, method))
+            continue;
+        if (method->name_id == name_id && method->signature_key == signature_key)
+            return slot;
+        slot++;
+    }
+    return UINT32_MAX;
+}
+
 static bool xaot_bundle_add_interface_call_use_plan(XaotBundle *bundle,
                                                     const XgCallsiteSummary *call,
                                                     XgClassId implementor_class_id, uint8_t kind);
@@ -500,6 +526,7 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
     uint8_t reason = XAOT_DISPATCH_UNPROVEN_NONE;
     uint32_t target_start = 0;
     uint16_t target_count = 0;
+    uint32_t dispatch_slot = UINT32_MAX;
 
     if (!bundle || !call || !ev)
         return false;
@@ -516,6 +543,9 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
             kind = XAOT_DISPATCH_ITABLE;
             reason = XAOT_DISPATCH_UNPROVEN_NO_INTERFACE_ID;
         } else {
+            dispatch_slot = xg_evidence_interface_dispatch_slot(
+                ev, call->receiver_static_interface_id, call->method_name_id,
+                call->method_signature_key);
             for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
                 const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
                 const XgMethodSummary *target_method;
@@ -615,7 +645,7 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
     plan->receiver_static_class_id = call->receiver_static_class_id;
     plan->receiver_static_interface_id = call->receiver_static_interface_id;
     plan->kind = kind;
-    plan->dispatch_slot = UINT32_MAX;
+    plan->dispatch_slot = dispatch_slot;
     plan->target_start = target_start;
     plan->target_count = target_count;
     plan->evidence = kind == XAOT_DISPATCH_RUNTIME_FALLBACK ? 0 : evidence;
