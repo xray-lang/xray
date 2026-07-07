@@ -815,6 +815,43 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
     return emit_conversion_prefix(out, ret_type, actual_rep, result_rep);
 }
 
+static bool emit_checked_tagged_direct_call_scalar_arg(XiCgenCtx *ctx, FILE *out,
+                                                       const XiFunc *target, const XiValue *call,
+                                                       uint16_t arg_index, const XiValue *arg,
+                                                       XrRep from_rep, XrRep to_rep) {
+    if (!ctx || !out || !target || from_rep != XR_REP_TAGGED || to_rep != XR_REP_I64)
+        return false;
+    const XrType *param_type = cg_func_param_type(target, arg_index);
+    const char *predicate = NULL;
+    const char *extract_prefix = NULL;
+    const char *expected = NULL;
+    if (param_type && param_type->kind == XR_KIND_INT) {
+        predicate = "XR_IS_INT";
+        extract_prefix = "XR_TO_INT(";
+        expected = "int";
+    } else if (param_type && param_type->kind == XR_KIND_BOOL) {
+        predicate = "XR_IS_BOOL";
+        extract_prefix = "XR_TO_INT(";
+        expected = "bool";
+    } else if (param_type && param_type->kind == XR_KIND_CHAR) {
+        predicate = "XR_IS_CHAR";
+        extract_prefix = "(int64_t)XR_TO_CHAR(";
+        expected = "char";
+    } else {
+        return false;
+    }
+
+    unsigned call_id = call ? call->id : 0;
+    fprintf(out, "({ XrValue _xarg_%u_%u = ", call_id, (unsigned) arg_index);
+    emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
+    fprintf(out,
+            "; if (XR_UNLIKELY(!%s(_xarg_%u_%u))) "
+            "xrt_throw_exc(xr_box_str(\"E0404: expected %s argument\")); %s_xarg_%u_%u); })",
+            predicate, call_id, (unsigned) arg_index, expected, extract_prefix, call_id,
+            (unsigned) arg_index);
+    return true;
+}
+
 static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                           const XiValue *call, const XiFunc *target,
                                           uint16_t arg_index, const XiValue *arg) {
@@ -897,7 +934,6 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
         }
     }
 
-    conv_suffix = emit_conversion_prefix(out, arg ? arg->type : NULL, from_rep, to_rep);
     XrRep inner_rep;
     if (to_rep != XR_REP_TAGGED && !cg_func_needs_aot_coro_ctx(ctx, f) &&
         cg_value_box_inner_native_rep(ctx, arg, &inner_rep)) {
@@ -907,6 +943,10 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
+    if (emit_checked_tagged_direct_call_scalar_arg(ctx, out, target, call, arg_index, arg, from_rep,
+                                                   to_rep))
+        return;
+    conv_suffix = emit_conversion_prefix(out, arg ? arg->type : NULL, from_rep, to_rep);
     emit_vref(out, arg);
     emit_conversion_suffix(out, conv_suffix);
 }
