@@ -1,10 +1,11 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-// RwLock<T> as a pure-Xray generic class: a coroutine-aware reader entry gate,
-// a write/read gate (Semaphore), and a short non-suspendable Atomic spinlock
-// guarding the reader count. The reader-release cleanup runs in a `defer`, so
-// it must stay non-suspendable (only Atomic ops + Semaphore.release, which does
-// not yield); Semaphore.acquire (which may yield) is used only in the method
-// body, never in defer. All read/write/replace paths must be VM/AOT identical.
+// RwLock<T> as a pure-Xray generic class: a coroutine-aware reader/writer entry
+// gate, a write/read gate (Semaphore), and a short non-suspendable Atomic
+// spinlock guarding the reader count. The reader-release cleanup runs in a
+// `defer`, so it must stay non-suspendable (only Atomic ops + Semaphore.release,
+// which does not yield); Semaphore.acquire (which may yield) is used only in
+// the method body, never in defer. All read/write/replace paths must be VM/AOT
+// identical.
 
 class RwLock<T> {
     _entry: Semaphore
@@ -47,13 +48,17 @@ class RwLock<T> {
     }
 
     write<U>(body: (T) -> U) -> U {
+        this._entry.acquire()
         this._gate.acquire()
+        this._entry.release()
         defer { this._gate.release() }
         return body(this.value)
     }
 
     replace(body: (T) -> T) -> T {
+        this._entry.acquire()
         this._gate.acquire()
+        this._entry.release()
         defer { this._gate.release() }
         this.value = body(this.value)
         return this.value

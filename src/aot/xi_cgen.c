@@ -2266,10 +2266,15 @@ static XrRep cg_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const Xi
  * departures from the sync local helpers:
  *   - the array native-local override is dropped: coroutine bodies always emit
  *     arrays boxed (XrValue), never as a raw xrt_array_t* local;
+ *   - bool values keep an int64_t slot, matching their XR_REP_I64 suspend-result
+ *     metadata; using a narrower plan c_type would let blocking resume helpers
+ *     overwrite the following frame fields;
  *   - a unit/void value keeps an XrValue slot, since declaring a `void` local is
  *     illegal C and such slots are never read as values. */
 static const char *cg_coro_decl_ctype(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     (void) f;
+    if (cg_value_type_is_bool(v) && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
+        return ctype_str(XR_REP_I64);
     const XaotValuePlan *plan = cg_value_plan(ctx, v);
     const char *t = (plan && plan->rep.c_type) ? plan->rep.c_type : local_ctype_str(v);
     return (t && strcmp(t, "void") == 0) ? "XrValue" : t;
