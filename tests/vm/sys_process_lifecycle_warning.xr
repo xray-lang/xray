@@ -1,0 +1,6 @@
+import sys
+
+var p = sys.Process.spawn("", [])
+if (p != null) {
+    print("started")
+}
