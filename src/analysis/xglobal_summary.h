@@ -146,8 +146,11 @@ typedef struct XgDeclSummary {
 } XgDeclSummary;
 
 typedef struct XgClassSummary {
+    XgModuleId module_id;
+    XgDeclId decl_id;
     XgClassId class_id;
     XgClassId parent_class_id;
+    uint32_t name_id;
     uint32_t flags;
     uint32_t field_start;
     uint32_t field_count;

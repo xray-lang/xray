@@ -171,6 +171,9 @@ TEST(global_evidence_dump_lists_core_rows) {
                           .signature_key = 66,
                           .source_span_id = 77};
     XgClassSummary cls = {.class_id = 2,
+                          .module_id = 1,
+                          .decl_id = 2,
+                          .name_id = 44,
                           .parent_class_id = XG_NO_ID,
                           .flags = XG_CLASS_EXPLICIT_FINAL | XG_CLASS_INFERRED_FINAL,
                           .field_start = 0,
@@ -223,7 +226,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v0 profile=native_release"));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
-    ASSERT_NOT_NULL(strstr(dump, "class 0 id=2 parent=0"));
+    ASSERT_NOT_NULL(strstr(dump, "class 0 id=2 module=1 decl=2 name=44 parent=0"));
     ASSERT_NOT_NULL(strstr(dump, "method 0 id=3 owner=2"));
     ASSERT_NOT_NULL(strstr(dump, "interface-impl 0 class=2 interface=123"));
     ASSERT_NOT_NULL(strstr(dump, "body 0 func=4"));
@@ -367,7 +370,12 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                       .imported_summary_hash = 0x24,
                       .module_id = 1,
                       .profile = XG_BUILD_NATIVE_RELEASE};
+    uint32_t shape_name_id = xg_name_id("Shape");
+    uint32_t draw_name_id = xg_name_id("draw");
     XgClassSummary cls = {.class_id = 1,
+                          .module_id = 1,
+                          .decl_id = 1,
+                          .name_id = shape_name_id,
                           .parent_class_id = XG_NO_ID,
                           .flags = XG_CLASS_INFERRED_FINAL,
                           .field_start = 0,
@@ -375,7 +383,6 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                           .method_start = 1,
                           .method_count = 1,
                           .decl_kind = XG_DECL_CLASS};
-    uint32_t draw_name_id = xg_name_id("draw");
     XgMethodSummary method = {.method_id = 1,
                               .owner_class_id = 1,
                               .name_id = draw_name_id,
@@ -392,13 +399,36 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                               .method_name_id = draw_name_id,
                               .arg_count = 1};
     XiFunc init_func;
+    XiFunc draw_func;
+    XiFunc *children[1];
+    XiClassMethod class_methods[1];
+    uint16_t child_idx[1] = {0};
+    XiClassData class_data;
+    XiClassData *classes[1];
     memset(&init_func, 0, sizeof(init_func));
+    memset(&draw_func, 0, sizeof(draw_func));
+    memset(class_methods, 0, sizeof(class_methods));
+    memset(&class_data, 0, sizeof(class_data));
     init_func.name = "init";
+    draw_func.name = "draw";
+    children[0] = &draw_func;
+    init_func.children = children;
+    init_func.nchildren = 1;
+    class_methods[0].name = "draw";
+    class_methods[0].symbol_id = 17;
+    class_data.class_name = "Shape";
+    class_data.methods = class_methods;
+    class_data.nmethod = 1;
+    class_data.ninst = 1;
+    class_data.child_idx = child_idx;
+    classes[0] = &class_data;
     XiModule module;
     memset(&module, 0, sizeof(module));
     module.path = "test.xr";
     module.name = "test";
     module.init = &init_func;
+    module.classes = classes;
+    module.nclasses = 1;
     XiModule *modules[1] = {&module};
     char err[256];
 
@@ -413,6 +443,15 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     good.modules = modules;
     good.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &draw_func, 0, 1));
+    const char *target_prefix = NULL;
+    ASSERT_EQ_PTR(xaot_bundle_find_method_func(&good, method.method_id, &target_prefix),
+                  &draw_func);
+    ASSERT_STR_EQ(target_prefix, "test");
+    ASSERT_EQ_PTR(xaot_bundle_find_dispatch_target_func(&good, &good.dispatch_target_cases[0],
+                                                        &target_prefix),
+                  &draw_func);
+    ASSERT_STR_EQ(target_prefix, "test");
     XiValue xi_call;
     memset(&xi_call, 0, sizeof(xi_call));
     xi_call.op = XI_CALL_METHOD;
@@ -433,7 +472,7 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
     ev.callsites[0].method_name_id = draw_name_id;
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_MSG(xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
     good.method_dispatch_plans[0].kind = XAOT_DISPATCH_VTABLE;
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));

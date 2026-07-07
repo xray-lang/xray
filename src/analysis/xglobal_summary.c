@@ -81,8 +81,11 @@ static uint64_t hash_decl_summary(uint64_t hash, const XgDeclSummary *row) {
 static uint64_t hash_class_summary(uint64_t hash, const XgClassSummary *row) {
     if (!row)
         return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->decl_id);
     hash = hash_u32(hash, row->class_id);
     hash = hash_u32(hash, row->parent_class_id);
+    hash = hash_u32(hash, row->name_id);
     hash = hash_u32(hash, row->flags);
     hash = hash_u32(hash, row->field_start);
     hash = hash_u32(hash, row->field_count);
@@ -521,9 +524,9 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->nclasses; i++) {
         const XgClassSummary *c = &evidence->classes[i];
         fprintf(out,
-                "class %u id=%u parent=%u kind=%s flags=0x%x fields=%u+%u methods=%u+%u "
-                "interfaces=%u+%u\n",
-                i, c->class_id, c->parent_class_id,
+                "class %u id=%u module=%u decl=%u name=%u parent=%u kind=%s flags=0x%x "
+                "fields=%u+%u methods=%u+%u interfaces=%u+%u\n",
+                i, c->class_id, c->module_id, c->decl_id, c->name_id, c->parent_class_id,
                 xg_decl_kind_name(c->decl_kind ? c->decl_kind : XG_DECL_CLASS), c->flags,
                 c->field_start, c->field_count, c->method_start, c->method_count,
                 c->interface_start, c->interface_count);
