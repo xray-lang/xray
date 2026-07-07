@@ -1755,9 +1755,10 @@ module os {
     signature: "(code?: int): ()"
     doc: "Exit process"
     vm: "os_exit"
+    aot: "xrt_os_exit"
     argc: 1
     arg_spec: "v"
-    aot_direct: false
+    aot_direct: true
     layer: "system"
   }
 
