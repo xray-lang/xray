@@ -5514,6 +5514,17 @@ static bool cg_native_receiver_getter_field_needs_boxed_adapter(XiCgenCtx *ctx, 
     const XiClassData *source_info = NULL;
     const XiFunc *mfunc =
         cg_class_native_resolve_getter_field_method(ctx, owner, load, &source_info, NULL);
+    if (cg_debug_boxed_adapter_enabled() && target->name &&
+        strstr(target->name, "get:") == target->name) {
+        fprintf(
+            stderr,
+            "[xi_cgen][boxed-getter] target=%s owner=%s field=%s source=%s mfunc=%s origin=%d\n",
+            target->name ? target->name : "?", owner->name ? owner->name : "?",
+            load->aux ? (const char *) load->aux : "?",
+            source_info && source_info->class_name ? source_info->class_name : "?",
+            mfunc && mfunc->name ? mfunc->name : "?",
+            cg_class_native_instance_origin(ctx, owner, load->args[0]) ? 1 : 0);
+    }
     if (mfunc != target)
         return false;
 
@@ -5609,7 +5620,7 @@ static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const c
     }
 
     if (native_receiver)
-        return cg_func_has_native_receiver_boxed_use_in_bundle(ctx, f, prefix);
+        return true;
 
     if (cg_func_needs_sync_go_wrapper_ctx(ctx, f) && cg_func_has_native_class_ptr_param(ctx, f))
         return true;
