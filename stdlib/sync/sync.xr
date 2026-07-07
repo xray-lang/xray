@@ -39,6 +39,12 @@ class Mutex<T> {
         return body(this.value)
     }
 
+    tryLock<U>(body: (T) -> U) -> U? {
+        if (!this._sem.tryAcquire()) { return null }
+        defer { this._sem.release() }
+        return body(this.value)
+    }
+
     replace(body: (T) -> T) -> T {
         this._sem.acquire()
         defer { this._sem.release() }
