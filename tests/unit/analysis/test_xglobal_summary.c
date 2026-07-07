@@ -55,6 +55,28 @@ static uint32_t evidence_body_count_with_capability(const XgGlobalEvidence *ev, 
     return count;
 }
 
+static uint32_t evidence_body_count_with_metadata(const XgGlobalEvidence *ev, uint32_t metadata) {
+    uint32_t count = 0;
+    if (!ev)
+        return 0;
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        if ((ev->bodies[i].metadata_use_bits & metadata) != 0)
+            count++;
+    }
+    return count;
+}
+
+static uint32_t evidence_decl_count_with_flags(const XgGlobalEvidence *ev, uint32_t flags) {
+    uint32_t count = 0;
+    if (!ev)
+        return 0;
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        if ((ev->decls[i].flags & flags) == flags)
+            count++;
+    }
+    return count;
+}
+
 TEST(global_evidence_adds_rows_and_grows) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x10,
@@ -261,7 +283,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
                               .capability_bits = XG_CAP_COROUTINE | XG_CAP_CHANNEL,
                               .callsite_start = 0,
                               .callsite_count = 0,
-                              .metadata_use_bits = 0,
+                              .metadata_use_bits = XG_METADATA_TYPENAME,
                               .static_data_use_bits = 0};
     XaotBundle bundle;
     char *dump;
@@ -281,6 +303,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_EQ_UINT(bundle.nclass_layout_plans, 2);
     ASSERT_EQ_UINT(bundle.nmethod_dispatch_plans, 1);
     ASSERT_EQ_UINT(bundle.ninterface_use_plans, 1);
+    ASSERT_EQ_UINT(bundle.nmetadata_plans, 1);
     ASSERT_EQ_UINT(bundle.ncapability_plans, 2);
     ASSERT_NOT_NULL(xaot_bundle_find_class_hierarchy_plan(&bundle, 1));
     ASSERT_NOT_NULL(xaot_bundle_find_class_layout_plan(&bundle, 2));
@@ -293,6 +316,12 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_NOT_NULL(cap);
     ASSERT_EQ_UINT(cap->body_count, 1);
     ASSERT_EQ_UINT(cap->profile_action, XAOT_CAPABILITY_ACTION_LINK);
+    const XaotMetadataReachabilityPlan *metadata =
+        xaot_bundle_find_metadata_plan(&bundle, XG_METADATA_TYPENAME);
+    ASSERT_NOT_NULL(metadata);
+    ASSERT_EQ_UINT(metadata->body_count, 1);
+    ASSERT_EQ_UINT(metadata->decl_count, 0);
+    ASSERT_EQ_UINT(metadata->profile_action, XAOT_CAPABILITY_ACTION_LINK);
 
     dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(dump);
@@ -300,6 +329,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_NOT_NULL(strstr(dump, "class-layout 1 id=2"));
     ASSERT_NOT_NULL(strstr(dump, "method-dispatch 0 callsite=7 kind=direct"));
     ASSERT_NOT_NULL(strstr(dump, "interface-use 0 interface=77 implementor=2"));
+    ASSERT_NOT_NULL(strstr(dump, "metadata 0 name=typename bodies=1 decls=0 action=link"));
     ASSERT_NOT_NULL(strstr(dump, "capability 0 name=coroutine bodies=1 action=link"));
     xr_free(dump);
 
@@ -441,6 +471,65 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     const XaotCapabilityPlan *objects = xaot_bundle_find_capability_plan(&bundle, XG_CAP_OBJECTS);
     ASSERT_NOT_NULL(objects);
     ASSERT_EQ_UINT(objects->body_count, 1);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_marks_metadata_reachability) {
+    setup_parser_session();
+    const char *source = "@derive(Inspect)\n"
+                         "class User {\n"
+                         "    value: int\n"
+                         "}\n"
+                         "fn userTypeName(x: int) -> string {\n"
+                         "    return typename(x)\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(evidence_body_count_with_metadata(&ev, XG_METADATA_TYPENAME), 1);
+    ASSERT_EQ_UINT(evidence_decl_count_with_flags(&ev, XG_DECL_DERIVE), 1);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nmetadata_plans, 2);
+    const XaotMetadataReachabilityPlan *typename_plan =
+        xaot_bundle_find_metadata_plan(&bundle, XG_METADATA_TYPENAME);
+    const XaotMetadataReachabilityPlan *derive_plan =
+        xaot_bundle_find_metadata_plan(&bundle, XG_METADATA_DERIVE);
+    ASSERT_NOT_NULL(typename_plan);
+    ASSERT_NOT_NULL(derive_plan);
+    ASSERT_EQ_UINT(typename_plan->body_count, 1);
+    ASSERT_EQ_UINT(typename_plan->decl_count, 0);
+    ASSERT_EQ_UINT(derive_plan->body_count, 0);
+    ASSERT_EQ_UINT(derive_plan->decl_count, 1);
+    xaot_bundle_free(&bundle);
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_FREESTANDING));
+    typename_plan = xaot_bundle_find_metadata_plan(&bundle, XG_METADATA_TYPENAME);
+    derive_plan = xaot_bundle_find_metadata_plan(&bundle, XG_METADATA_DERIVE);
+    ASSERT_NOT_NULL(typename_plan);
+    ASSERT_NOT_NULL(derive_plan);
+    ASSERT_EQ_UINT(typename_plan->profile_action, XAOT_CAPABILITY_ACTION_REJECT);
+    ASSERT_EQ_UINT(derive_plan->profile_action, XAOT_CAPABILITY_ACTION_REJECT);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -604,6 +693,7 @@ RUN_TEST(global_evidence_dump_lists_core_rows);
 RUN_TEST(global_evidence_lowers_to_aot_class_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
+RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);
 RUN_TEST(global_evidence_producer_marks_module_init_body);

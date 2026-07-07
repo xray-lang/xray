@@ -1,5 +1,5 @@
 contains=xaot-plan v0
-contains="runtime_caps": ["coro", "atomic", "work_queue", "result_group", "countdown_latch", "semaphore", "event_count", "objects"]
+contains="runtime_caps": ["coro", "atomic", "result_group", "countdown_latch", "semaphore", "objects"]
 contains="runtime_objects": ["xray_rt_coro"]
 contains="stdlib_objects": []
 contains="stdlib_symbols": []
