@@ -5,56 +5,21 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * toml.h - TOML standard library
+ * toml.h - TOML standard library module loader
  *
  * KEY CONCEPT:
- *   Provides TOML configuration file parsing and serialization.
- *   Compliant with TOML v1.0.0 specification.
- *
- * Functions:
- *   - parse(str)               Parse TOML string to Map
- *   - parseFile(path)          Parse TOML file
- *   - stringify(value)         Serialize Map to TOML string
- *   - stringify(value, indent) Serialize with indentation
- *   - writeFile(path, value)   Write TOML file
- *
- * Type mapping:
- *   TOML -> xray:
- *     String        -> string
- *     Integer       -> int
- *     Float         -> float
- *     Boolean       -> bool
- *     Datetime      -> string (ISO 8601 format)
- *     Array         -> Array
- *     Table         -> Map
- *     Inline Table  -> Map
- *
- *   xray -> TOML:
- *     string        -> String
- *     int           -> Integer
- *     float         -> Float
- *     bool          -> Boolean
- *     Array         -> Array
- *     Map           -> Table
+ *   TOML's public API is implemented in stdlib/toml/toml.xr. This header only
+ *   exposes the native loader that anchors `import toml` in the stdlib registry.
  */
 
 #ifndef XR_STDLIB_TOML_H
 #define XR_STDLIB_TOML_H
 
 #include "../../src/base/xdefs.h"
-#include "../../src/runtime/value/xvalue.h"
 
 struct XrModule;
+struct XrVMRuntime;
 
-// Parse TOML string
-// Returns: Map object
-XR_FUNC XrValue xr_toml_parse(XrVMRuntime *isolate, const char *data, size_t len);
-
-// Serialize to TOML string
-// value: Map object
-XR_FUNC XrValue xr_toml_stringify(XrVMRuntime *isolate, XrValue value);
-
-// Load toml module
-XR_FUNC struct XrModule *xr_load_module_toml(XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_toml(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_TOML_H

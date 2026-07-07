@@ -1,0 +1,23 @@
+import toml
+
+var basic = toml.parse("name = \"xray\"\nversion = 2\nactive = true")
+print(basic["name"])
+print(basic["version"])
+print(basic["active"])
+
+var nested = toml.parse("fruit.name = \"apple\"\nfruit.color = \"red\"")
+print(nested["fruit"]["name"])
+print(nested["fruit"]["color"])
+
+var products = toml.parse("[[products]]\nname = \"Hammer\"\n\n[[products]]\nname = \"Nail\"")
+print(products["products"].length)
+print(products["products"][1]["name"])
+
+var strict = toml.parseStrict("name = \"Alice\"\nname = \"Bob\"")
+print(strict["errors"].length > 0)
+print(strict["data"]["name"])
+
+var out = toml.stringify({"name": "xray", "version": 1, "enabled": true})
+print(out.includes("name = \"xray\""))
+print(out.includes("version = 1"))
+print(toml.parse(out)["enabled"])
