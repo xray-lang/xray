@@ -30,6 +30,7 @@ c_contains=xr_array_core_bytes_load_f32(
 c_contains=xr_array_core_bytes_load_f64(
 c_contains=xr_array_core_bytes_store_u16(
 c_contains=xr_array_core_bytes_store_f32(
+c_contains=xrt_span_is_readonly(_s)
 regex=  value v[0-9]+ op=NARROW_I16 kind=scalar rep=i16 c_type=int16_t
 regex=  value v[0-9]+ op=NARROW_I32 kind=scalar rep=i32 c_type=int32_t
 c_not_contains=xrt_span_bytes_load_u16_checked_raw(

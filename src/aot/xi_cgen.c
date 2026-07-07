@@ -28,6 +28,7 @@
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_backend_lower.h"
 #include "../shared/xr_array_core.h"
+#include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_ops_gen.h"
@@ -50,6 +51,7 @@
 #include "../base/xmemstream.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xtype_ref.h"
+#include "../frontend/analyzer/xconsteval.h"
 #include <string.h>
 #include <inttypes.h>
 #include <math.h>
@@ -170,30 +172,18 @@ static const XiValue *cg_unwrap_identity_value(const XiValue *v) {
 }
 
 static const char *cg_unsigned_narrow_cast_ctype(uint16_t op) {
-    switch ((XiOp) op) {
-        case XI_NARROW_U8:
-            return "uint8_t";
-        case XI_NARROW_U16:
-            return "uint16_t";
-        case XI_NARROW_U32:
-            return "uint32_t";
-        default:
-            return NULL;
-    }
+    const char *ctype = xi_to_c_template_width_cast_type(op);
+    if (!ctype || !*ctype)
+        return NULL;
+    return (op == XI_NARROW_U8 || op == XI_NARROW_U16 || op == XI_NARROW_U32) ? ctype : NULL;
 }
 
 static bool cg_op_is_lowbits_binop(uint16_t op) {
-    switch ((XiOp) op) {
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-        case XI_BAND:
-        case XI_BOR:
-        case XI_BXOR:
-            return true;
-        default:
-            return false;
-    }
+    const char *arith = xi_to_c_template_arith_native_op(op);
+    if (arith && *arith)
+        return true;
+    const char *bitwise = xi_to_c_template_bitwise_binary_op(op);
+    return bitwise && *bitwise;
 }
 
 static const XiValue *cg_unsigned_narrow_lowbits_binop_arg(const XiValue *v) {
@@ -358,6 +348,19 @@ static bool cg_phi_has_storage(const XiPhi *phi) {
 
 static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx);
 
+static const XaotSpanAccessPlan *cg_span_access_plan(XiCgenCtx *ctx, const XiValue *value,
+                                                     uint8_t kind) {
+    const XiValue *origin = cg_unwrap_identity_value(value);
+    const XaotSpanAccessPlan *plan =
+        xaot_bundle_find_span_access_plan(cg_ctx_aot_bundle(ctx), origin);
+    return plan && plan->kind == kind ? plan : NULL;
+}
+
+static bool cg_span_plan_drops(XiCgenCtx *ctx, const XiValue *value, uint8_t kind, uint32_t drops) {
+    const XaotSpanAccessPlan *plan = cg_span_access_plan(ctx, value, kind);
+    return plan && (plan->eliminated_checks & drops) == drops;
+}
+
 #include "xi_cgen_type_helpers.inc.c"
 
 static const XiImportRef *cg_value_import_ref(const XiValue *v) {
@@ -441,7 +444,7 @@ typedef struct {
     const XiFunc *func;
     const char *module_prefix; /* C function name prefix (NULL = current module) */
     const XiClassData *class_data;
-    const XrStructLayout *instance_layout;
+    const XrAggregateLayout *instance_layout;
 } CgMethodEntry;
 
 typedef struct {
@@ -467,7 +470,7 @@ typedef struct {
     bool active;
     bool native_receiver;
     const XiValue *receiver;
-    const XrStructLayout *layout;
+    const XrAggregateLayout *layout;
     const XiClassData *class_data;
     uint16_t nreceiver_aliases;
     const XiValue *receiver_aliases[CG_MAX_CLASS_FIELD_CACHE_ALIASES];
@@ -558,6 +561,7 @@ struct XiCgenCtx {
     int all_nmodules;
     bool emit_main;
     bool freestanding_profile;
+    XiCgenTypeNameProfile type_name_profile;
     bool error; /* set on fatal codegen errors (unknown builtin, etc.) */
     XiCgenStats stats;
     XiCgenCoroFrameStats coro_frame_stats;
@@ -755,6 +759,11 @@ static void cg_emit_str_value(XiCgenCtx *ctx, FILE *out, const char *s) {
     fprintf(out, "xr_str_lit(&_xstr_%d)", cg_intern_str_lit(ctx, s));
 }
 
+static void cg_emit_static_str_value_initializer(XiCgenCtx *ctx, FILE *out, const char *s) {
+    fprintf(out, "(XrValue){.tag = XR_TAG_STR, .ptr = (void *)&_xstr_%d}",
+            cg_intern_str_lit(ctx, s));
+}
+
 static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx) {
     return ctx ? ctx->aot_bundle : NULL;
 }
@@ -866,6 +875,48 @@ static int cg_find_class_slot(const XiCgenCtx *ctx, const char *class_name) {
             display_match = s;
     }
     return display_match;
+}
+
+static int cg_find_class_slot_by_data(const XiCgenCtx *ctx, const XiClassData *cd) {
+    if (!ctx || !ctx->module || !cd || !ctx->module->slot_classes)
+        return -1;
+    for (uint16_t s = 0; s < ctx->module->nslots; s++) {
+        const XiClassData *slot_cd = ctx->module->slot_classes[s];
+        if (slot_cd == cd)
+            return (int) s;
+        if (slot_cd && slot_cd->class_name && cd->class_name &&
+            strcmp(slot_cd->class_name, cd->class_name) == 0)
+            return (int) s;
+    }
+    return -1;
+}
+
+static bool cg_class_data_is_exported(const XiCgenCtx *ctx, const XiClassData *cd) {
+    int slot = cg_find_class_slot_by_data(ctx, cd);
+    if (!ctx || !ctx->module || !cd)
+        return false;
+    for (uint16_t e = 0; e < ctx->module->nexports; e++) {
+        const XiModuleExport *exp = &ctx->module->exports[e];
+        if (exp->class_data == cd)
+            return true;
+        if (slot >= 0 && exp->shared_slot == (uint16_t) slot && exp->name)
+            return true;
+    }
+    return false;
+}
+
+static bool cg_emit_type_name_for_class(const XiCgenCtx *ctx, const XiClassData *cd) {
+    if (!ctx || !cd)
+        return false;
+    switch (ctx->type_name_profile) {
+        case XI_CGEN_TYPE_NAMES_ALL:
+            return true;
+        case XI_CGEN_TYPE_NAMES_PUBLIC:
+            return cg_class_data_is_exported(ctx, cd);
+        case XI_CGEN_TYPE_NAMES_NONE:
+        default:
+            return false;
+    }
 }
 
 /* Lookup constructor XiFunc for a class by name.
@@ -1699,6 +1750,22 @@ static void emit_value_generated_line_reset(XiCgenCtx *ctx, FILE *out, const XiV
         emit_generated_line_reset(ctx, out);
 }
 
+static void emit_aot_const_data_attrs(FILE *out, const XiConstLiteral *lit) {
+    if (!out || !lit)
+        return;
+    if (lit->data_section) {
+        fprintf(out, " XRT_ATTR_SECTION(");
+        emit_c_string_literal(out, lit->data_section);
+        fprintf(out, ")");
+    }
+    if (lit->data_used)
+        fprintf(out, " XRT_ATTR_USED");
+}
+
+static bool cg_const_literal_has_data_attrs(const XiConstLiteral *lit) {
+    return lit && (lit->data_section || lit->data_used);
+}
+
 static void emit_block_terminator_source_line(XiCgenCtx *ctx, FILE *out, const XiBlock *blk) {
     if (!blk)
         return;
@@ -1745,6 +1812,173 @@ static bool cg_has_exception_handling(const XiFunc *f);
 #include "xi_cgen_class_native_helpers.inc.c"
 #include "xi_cgen_array_helpers.inc.c"
 
+static void cg_emit_static_scalar_const_name(FILE *out, int64_t slot) {
+    fprintf(out, "_xctscalar_%" PRId64, slot);
+}
+
+static void cg_emit_static_string_const_name(FILE *out, int64_t slot) {
+    fprintf(out, "_xctstr_%" PRId64, slot);
+}
+
+static void cg_emit_static_value_const_name(FILE *out, int64_t slot) {
+    fprintf(out, "_xctvalue_%" PRId64, slot);
+}
+
+static bool cg_const_literal_is_static_scalar_object(const XiConstLiteral *lit) {
+    if (!cg_const_literal_has_data_attrs(lit))
+        return false;
+    switch (lit->kind) {
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_FLOAT:
+        case XI_CONST_LITERAL_BOOL:
+        case XI_CONST_LITERAL_CHAR:
+        case XI_CONST_LITERAL_STRING:
+        case XI_CONST_LITERAL_NULL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool cg_freestanding_static_scalar_const_literal(XiCgenCtx *ctx, int64_t slot,
+                                                        const XiConstLiteral **out_lit) {
+    if (out_lit)
+        *out_lit = NULL;
+    if (!ctx || !ctx->freestanding_profile || !ctx->module || !ctx->module->slot_const_literals ||
+        slot < 0 || slot >= ctx->module->nslots)
+        return false;
+    const XiConstLiteral *lit = &ctx->module->slot_const_literals[slot];
+    if (!cg_const_literal_is_static_scalar_object(lit))
+        return false;
+    if (out_lit)
+        *out_lit = lit;
+    return true;
+}
+
+static void cg_emit_static_scalar_i64(FILE *out, int64_t value) {
+    if (value == INT64_MIN)
+        fprintf(out, "INT64_MIN");
+    else
+        fprintf(out, "INT64_C(%" PRId64 ")", value);
+}
+
+static void cg_emit_static_string_header_initializer(FILE *out, const char *s) {
+    if (!s)
+        s = "";
+    size_t len = strlen(s);
+    fprintf(out, "{INT64_C(%zu), 0x%08xu, XRT_STR_LITERAL, (char *) ", len,
+            xr_hash_core_str_hash_bytes(s, len));
+    emit_c_string_literal_bytes(out, s, len);
+    fprintf(out, "}");
+}
+
+static bool cg_emit_freestanding_static_scalar_const_defs(XiCgenCtx *ctx, FILE *out,
+                                                          const XiModule *module) {
+    if (!ctx || !out || !module || !ctx->freestanding_profile || !module->slot_const_literals)
+        return false;
+    bool emitted = false;
+    for (uint16_t slot = 0; slot < module->nslots; slot++) {
+        const XiConstLiteral *lit = &module->slot_const_literals[slot];
+        if (!cg_const_literal_is_static_scalar_object(lit))
+            continue;
+        switch (lit->kind) {
+            case XI_CONST_LITERAL_INT:
+            case XI_CONST_LITERAL_BOOL:
+            case XI_CONST_LITERAL_CHAR:
+                fprintf(out, "static const int64_t ");
+                cg_emit_static_scalar_const_name(out, slot);
+                emit_aot_const_data_attrs(out, lit);
+                fprintf(out, " = ");
+                cg_emit_static_scalar_i64(out, lit->kind == XI_CONST_LITERAL_BOOL
+                                                   ? (lit->bool_value ? 1 : 0)
+                                                   : lit->int_value);
+                fprintf(out, ";\n");
+                emitted = true;
+                break;
+            case XI_CONST_LITERAL_FLOAT:
+                fprintf(out, "static const double ");
+                cg_emit_static_scalar_const_name(out, slot);
+                emit_aot_const_data_attrs(out, lit);
+                fprintf(out, " = ");
+                emit_c_float_literal(out, lit->float_value);
+                fprintf(out, ";\n");
+                emitted = true;
+                break;
+            case XI_CONST_LITERAL_STRING:
+                fprintf(out, "static const xrt_str_t ");
+                cg_emit_static_string_const_name(out, slot);
+                emit_aot_const_data_attrs(out, lit);
+                fprintf(out, " = ");
+                cg_emit_static_string_header_initializer(out, lit->string_value);
+                fprintf(out, ";\n");
+                emitted = true;
+                break;
+            case XI_CONST_LITERAL_NULL:
+                fprintf(out, "static const XrValue ");
+                cg_emit_static_value_const_name(out, slot);
+                emit_aot_const_data_attrs(out, lit);
+                fprintf(out, " = XR_NULL_VAL;\n");
+                emitted = true;
+                break;
+            default:
+                break;
+        }
+    }
+    if (emitted)
+        fprintf(out, "\n");
+    return emitted;
+}
+
+static XrRep cg_static_scalar_const_source_rep(const XiConstLiteral *lit) {
+    if (!lit)
+        return XR_REP_TAGGED;
+    switch (lit->kind) {
+        case XI_CONST_LITERAL_FLOAT:
+            return XR_REP_F64;
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_BOOL:
+        case XI_CONST_LITERAL_CHAR:
+            return XR_REP_I64;
+        case XI_CONST_LITERAL_STRING:
+        case XI_CONST_LITERAL_NULL:
+        default:
+            return XR_REP_TAGGED;
+    }
+}
+
+static bool cg_emit_freestanding_static_scalar_const_ref(XiCgenCtx *ctx, FILE *out,
+                                                         const XiValue *v,
+                                                         const XiConstLiteral *lit) {
+    if (!ctx || !out || !v || !lit || !cg_const_literal_is_static_scalar_object(lit))
+        return false;
+    XrRep from_rep = cg_static_scalar_const_source_rep(lit);
+    XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
+    const XrType *type = lit->type ? lit->type : v->type;
+    const char *suffix = emit_conversion_prefix(out, type, from_rep, to_rep);
+    int64_t slot = v->aux_int;
+    switch (lit->kind) {
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_BOOL:
+        case XI_CONST_LITERAL_CHAR:
+        case XI_CONST_LITERAL_FLOAT:
+            cg_emit_static_scalar_const_name(out, slot);
+            break;
+        case XI_CONST_LITERAL_STRING:
+            fprintf(out, "xr_str_lit(&");
+            cg_emit_static_string_const_name(out, slot);
+            fprintf(out, ")");
+            break;
+        case XI_CONST_LITERAL_NULL:
+            cg_emit_static_value_const_name(out, slot);
+            break;
+        default:
+            emit_conversion_suffix(out, suffix);
+            return false;
+    }
+    emit_conversion_suffix(out, suffix);
+    return true;
+}
+
 static bool cg_class_native_ref_stack_return_consumes_ctor(XiCgenCtx *ctx, const XiFunc *f,
                                                            const XiValue *ctor_call);
 
@@ -1773,14 +2007,14 @@ static int cg_class_descriptor_slot_for_data(XiCgenCtx *ctx, const XiClassData *
     return cg_class_native_data_matches(slot_cd, cd) ? slot : -1;
 }
 
-static const XrStructLayout *cg_class_descriptor_layout_data(const XiClassData *cd) {
+static const XrAggregateLayout *cg_class_descriptor_layout_data(const XiClassData *cd) {
     if (!cd)
         return NULL;
     return cd->instance_layout ? cd->instance_layout : cd->struct_layout;
 }
 
 static bool cg_class_descriptor_native_stack_only_data(const XiClassData *cd) {
-    const XrStructLayout *layout = cg_class_descriptor_layout_data(cd);
+    const XrAggregateLayout *layout = cg_class_descriptor_layout_data(cd);
     return cd && layout && !cd->is_monomorphized && !cg_class_native_layout_has_ref_fields(layout);
 }
 
@@ -1799,7 +2033,7 @@ static bool cg_class_descriptor_ctor_call_is_elidable(XiCgenCtx *ctx, const XiFu
         return false;
     if (cg_class_descriptor_native_stack_only_data(call_cd))
         return cg_class_native_ctor_can_inline(ctx, owner, call);
-    const XrStructLayout *call_layout = cg_class_descriptor_layout_data(call_cd);
+    const XrAggregateLayout *call_layout = cg_class_descriptor_layout_data(call_cd);
     return call_layout && cg_class_native_layout_has_ref_fields(call_layout) &&
            cg_class_native_ref_stack_return_consumes_ctor(ctx, owner, call);
 }
@@ -1837,7 +2071,7 @@ static bool cg_class_descriptor_value_uses_are_elidable(XiCgenCtx *ctx, const Xi
                         if (saw_elidable_use)
                             *saw_elidable_use = true;
                         break;
-                    case XI_STRUCT_NEW:
+                    case XI_AGG_NEW:
                         if (ai != 0 || !user->aux)
                             return false;
                         if (saw_elidable_use)
@@ -2155,57 +2389,6 @@ static void cg_emit_narrow_arith_operand(XiCgenCtx *ctx, const XiFunc *f, FILE *
                                          const XiValue *o) {
     const XiValue *src = cg_arith_narrow_src(ctx, f, o, NULL, NULL);
     emit_vref(out, src ? src : o);
-}
-
-static bool cg_widen_elided_into_narrow_arith(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    if (!f || !v || xi_to_c_template_width_kind(v->op) != AOT_WIDTH_TEMPLATE_CAST_I64 ||
-        v->nargs < 1 || !v->args[0])
-        return false;
-    uint8_t size = 0;
-    bool sign = false;
-    if (!cg_value_narrow_int_rep(ctx, f, v, &size, &sign) || size <= 2)
-        return false;
-    /* Elision is only sound when every operand use resolves through to
-     * args[0] (cg_arith_narrow_src's CAST_I64 look-through branch). A value
-     * whose own rep is narrow (size <= 4, e.g. NARROW_U32 with a u32 plan) is
-     * returned as-is by the first branch of cg_arith_narrow_src, so eliding
-     * its declaration would emit a reference to a C temp that was never
-     * declared (repro: `var t: uint32 = seed + 1; return t + SHARED_CONST`
-     * where select_rep unboxes the shared and the add turns clean). */
-    if (size <= 4)
-        return false;
-    if (!cg_arith_narrow_src(ctx, f, v, NULL, NULL))
-        return false;
-    bool any_user = false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        if (blk->control == v)
-            return false;
-        for (const XiPhi *phi = blk->phis; phi; phi = phi->next)
-            for (uint16_t k = 0; k < phi->value.nargs; k++)
-                if (phi->value.args[k] == v)
-                    return false;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *u = blk->values[vi];
-            if (!u || u == v)
-                continue;
-            bool uses_v = false;
-            for (uint16_t ai = 0; ai < u->nargs; ai++) {
-                if (u->args[ai] == v) {
-                    uses_v = true;
-                    break;
-                }
-            }
-            if (!uses_v)
-                continue;
-            if (!cg_arith_is_clean_narrow(ctx, f, u))
-                return false;
-            any_user = true;
-        }
-    }
-    return any_user;
 }
 
 static bool cg_lowbits_binop_elided_into_unsigned_narrow(const XiFunc *f, const XiValue *v) {
@@ -3344,22 +3527,22 @@ static XrRep cg_debug_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, co
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
 
-static const XrStructLayout *cg_debug_type_struct_layout(const XrType *type) {
+static const XrAggregateLayout *cg_debug_type_struct_layout(const XrType *type) {
     if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
         !type->instance.class_ref)
         return NULL;
     return type->instance.class_ref->struct_layout;
 }
 
-static const XrStructLayout *cg_debug_value_struct_layout(XiCgenCtx *ctx, const XiFunc *f,
-                                                          const XiValue *v) {
+static const XrAggregateLayout *cg_debug_value_struct_layout(XiCgenCtx *ctx, const XiFunc *f,
+                                                             const XiValue *v) {
     if (!v)
         return NULL;
 
     const XiValue *cur = v;
     for (int depth = 0; cur && depth <= 8; depth++) {
-        if (cur->op == XI_STRUCT_NEW)
-            return (const XrStructLayout *) cur->aux;
+        if (cur->op == XI_AGG_NEW)
+            return (const XrAggregateLayout *) cur->aux;
         if ((cur->op == XI_COPY || cur->op == XI_MOVE || cur->op == XI_RETAIN) && cur->nargs >= 1) {
             cur = cur->args[0];
             continue;
@@ -3367,7 +3550,7 @@ static const XrStructLayout *cg_debug_value_struct_layout(XiCgenCtx *ctx, const 
         break;
     }
 
-    const XrStructLayout *shared_layout = NULL;
+    const XrAggregateLayout *shared_layout = NULL;
     if (cg_value_traces_to_heap_struct_shared(ctx, f, v, &shared_layout, NULL))
         return shared_layout;
 
@@ -3378,7 +3561,7 @@ static bool cg_debug_value_struct_ptr_ctype(XiCgenCtx *ctx, const XiFunc *f, con
                                             char *buf, size_t buflen) {
     if (!buf || buflen == 0)
         return false;
-    const XrStructLayout *sl = cg_debug_value_struct_layout(ctx, f, v);
+    const XrAggregateLayout *sl = cg_debug_value_struct_layout(ctx, f, v);
     if (!cg_struct_native_heap_supported(sl))
         return false;
     char type_name[128];
@@ -3448,7 +3631,7 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
             return false;
         return true;
     }
-    if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v))
+    if (v->op == XI_AGG_NEW && cg_struct_can_inline(f, v))
         return false;
     if ((v->op == XI_COPY || v->op == XI_MOVE) && (cg_value_traces_to_inlined_struct(f, v) ||
                                                    cg_value_is_elided_heap_struct_alias(ctx, f, v)))
@@ -3456,6 +3639,10 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
     if (cg_value_traces_to_inlined_struct(f, v) ||
         cg_value_is_elided_heap_struct_alias(ctx, f, v) ||
         cg_value_is_elided_nested_struct_ref(f, v) || cg_value_is_elided_fixed_array_ref(f, v) ||
+        cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
+        cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
+        cg_value_is_elided_static_struct_const_ref(ctx, f, v) ||
         cg_value_is_elided_layout_struct_type_load(f, v))
         return false;
     if (cg_ownership_op_is_noop(v) || cg_shared_static_function_ownership_is_noop(ctx, f, v))
@@ -3608,6 +3795,8 @@ static void emit_debug_source_var_declarations(XiCgenCtx *ctx, FILE *out, const 
             fprintf(out, "xrt_span_empty()");
         else if (strcmp(info.ctype, "XrAotEnumAggregate") == 0)
             fprintf(out, "xrt_enum_aggregate_zero()");
+        else if (strncmp(info.ctype, "xrt_enum_", 9) == 0)
+            fprintf(out, "%s_from_base(xrt_enum_aggregate_zero())", info.ctype);
         else if (strncmp(info.ctype, "xrt_struct_", 11) == 0)
             fprintf(out, "((%s){0})", info.ctype);
         else if (info.rep == XR_REP_TAGGED)
@@ -3641,13 +3830,21 @@ static void emit_debug_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *
         }
     } else if (cg_value_plan_is_struct_aggregate(ctx, storage_v)) {
         emit_vref(out, storage_v);
-    } else if (strcmp(info.ctype, "XrAotEnumAggregate") == 0) {
+    } else if (strcmp(info.ctype, "XrAotEnumAggregate") == 0 ||
+               strncmp(info.ctype, "xrt_enum_", 9) == 0) {
         if (cg_value_plan_is_aggregate(ctx, storage_v)) {
             emit_vref(out, storage_v);
         } else {
+            const XaotValuePlan *plan = cg_value_plan(ctx, storage_v);
+            XaotValueRep rep = plan ? plan->rep : (XaotValueRep) {0};
+            rep.kind = XAOT_VALUE_AGGREGATE;
+            rep.flags |= XAOT_VALUE_FLAG_ENUM;
+            rep.c_type = info.ctype;
+            emit_adt_base_to_value_rep_prefix(out, rep);
             fprintf(out, "xrt_enum_aggregate_from_boxed(");
             emit_value_as_rep_ctx(ctx, out, storage_v, XR_REP_TAGGED);
             fprintf(out, ")");
+            emit_adt_base_to_value_rep_suffix(out, rep);
         }
     } else if (strcmp(info.ctype, "XrValue") == 0) {
         emit_value_as_rep_ctx(ctx, out, storage_v, info.rep);
@@ -4222,8 +4419,6 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
 
-    if (cg_widen_elided_into_narrow_arith(ctx, f, v))
-        return;
     if (cg_lowbits_binop_elided_into_unsigned_narrow(f, v))
         return;
     if (xicgen_slice_value_only_used_by_stack_slice_direct_call(ctx, f, v))
@@ -4238,9 +4433,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
 
     /* Inlined struct: emit local anonymous C struct with native fields. */
-    if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v)) {
-        XrStructLayout *sl = (XrStructLayout *) v->aux;
-        XR_DCHECK(sl != NULL, "inlined XI_STRUCT_NEW: missing layout");
+    if (v->op == XI_AGG_NEW && cg_struct_can_inline(f, v)) {
+        XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
+        XR_DCHECK(sl != NULL, "inlined XI_AGG_NEW: missing layout");
         fprintf(out, "    struct { ");
         for (uint16_t i = 0; i < sl->field_count; i++) {
             char fname[128];
@@ -4283,7 +4478,11 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
 
-    if (cg_value_is_elided_nested_struct_ref(f, v) || cg_value_is_elided_fixed_array_ref(f, v))
+    if (cg_value_is_elided_nested_struct_ref(f, v) || cg_value_is_elided_fixed_array_ref(f, v) ||
+        cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v) ||
+        cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
+        cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
+        cg_value_is_elided_static_struct_const_ref(ctx, f, v))
         return;
     if ((v->op == XI_COPY || v->op == XI_MOVE) && (cg_value_traces_to_inlined_struct(f, v) ||
                                                    cg_value_is_elided_heap_struct_alias(ctx, f, v)))
@@ -4294,6 +4493,10 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
          cg_value_is_elided_heap_struct_alias(ctx, f, v) ||
          cg_value_is_elided_nested_struct_ref(f, v->args[0]) ||
          cg_value_is_elided_fixed_array_ref(f, v->args[0]) ||
+         cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v->args[0]) ||
+         cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v->args[0]) ||
+         cg_value_is_elided_static_tuple_const_ref(ctx, f, v->args[0]) ||
+         cg_value_is_elided_static_struct_const_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_layout_struct_type_load(f, v) ||
          cg_value_is_borrowed_array_slot_alias(ctx, f, v->args[0]) ||
          xicgen_slice_value_only_used_by_stack_slice_direct_call(ctx, f, v->args[0])))
@@ -4676,9 +4879,12 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                         ctx->error = true;
                         emit_aggregate_zero_expr(out, cg_func_return_abi_value_rep(ctx, f));
                     } else {
+                        XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
+                        emit_adt_base_to_value_rep_prefix(out, ret_value_rep);
                         fprintf(out, "xrt_enum_aggregate_from_boxed(");
                         emit_value_as_rep_ctx(ctx, out, blk->control, XR_REP_TAGGED);
                         fprintf(out, ")");
+                        emit_adt_base_to_value_rep_suffix(out, ret_value_rep);
                     }
                     fprintf(out, ";\n");
                 } else {
@@ -4792,7 +4998,7 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         return true;
     if (cg_pure_value_only_feeds_aot_elided_values(ctx, f, v))
         return true;
-    if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v))
+    if (v->op == XI_AGG_NEW && cg_struct_can_inline(f, v))
         return true;
     if ((v->op == XI_COPY || v->op == XI_MOVE) && (cg_value_traces_to_inlined_struct(f, v) ||
                                                    cg_value_is_elided_heap_struct_alias(ctx, f, v)))
@@ -4821,7 +5027,11 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         return true;
     if (cg_class_native_array_method_call_value_is_elided(ctx, f, v))
         return true;
-    if ((v->op == XI_GET_SHARED && cg_value_only_used_by_layout_struct_new(f, v)) ||
+    if (cg_value_is_elided_static_fixed_array_const_ref(ctx, f, v) ||
+        cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v) ||
+        cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
+        cg_value_is_elided_static_struct_const_ref(ctx, f, v) ||
+        (v->op == XI_GET_SHARED && cg_value_only_used_by_layout_struct_new(f, v)) ||
         cg_value_is_elided_heap_struct_alias(ctx, f, v))
         return true;
     if (xicgen_par_for_stack_closure_value_is_elided(ctx, f, v))
@@ -5493,13 +5703,13 @@ static bool cg_c_export_native_scalar_supported(uint8_t native_type) {
     }
 }
 
-static bool cg_c_export_struct_layout_supported_depth(const XrStructLayout *layout, int depth) {
-    if (!layout || !xr_struct_layout_is_headerless(layout) || depth > 8 ||
-        layout->field_count == 0 || layout->field_count > XR_MAX_STRUCT_FIELDS ||
+static bool cg_c_export_struct_layout_supported_depth(const XrAggregateLayout *layout, int depth) {
+    if (!layout || !xr_aggregate_layout_is_headerless(layout) || depth > 8 ||
+        layout->field_count == 0 || layout->field_count > XR_MAX_AGG_FIELDS ||
         !cg_struct_native_heap_supported(layout))
         return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {
-        const XrStructFieldLayout *field = &layout->fields[i];
+        const XrAggregateFieldLayout *field = &layout->fields[i];
         if (cg_c_export_native_scalar_supported(field->native_type))
             continue;
         if (field->native_type == XR_NATIVE_ARRAY && field->elem_count > 0 &&
@@ -5513,9 +5723,9 @@ static bool cg_c_export_struct_layout_supported_depth(const XrStructLayout *layo
     return true;
 }
 
-static const XrStructLayout *cg_c_export_struct_layout_for_type(XiCgenCtx *ctx,
-                                                                const XrType *type) {
-    const XrStructLayout *layout = cg_type_struct_layout(type);
+static const XrAggregateLayout *cg_c_export_struct_layout_for_type(XiCgenCtx *ctx,
+                                                                   const XrType *type) {
+    const XrAggregateLayout *layout = cg_type_struct_layout(type);
     if (cg_c_export_struct_layout_supported_depth(layout, 0))
         return layout;
     if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
@@ -5574,7 +5784,7 @@ static void emit_c_export_value_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc *
         fprintf(out, "%s", scalar_type);
         return;
     }
-    const XrStructLayout *layout = cg_c_export_struct_layout_for_type(ctx, type);
+    const XrAggregateLayout *layout = cg_c_export_struct_layout_for_type(ctx, type);
     if (layout) {
         char tname[128];
         cg_struct_heap_type_name(tname, sizeof(tname),
@@ -5648,12 +5858,12 @@ static void emit_c_export_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc
 }
 
 typedef struct CgCExportStructTypedef {
-    const XrStructLayout *layout;
+    const XrAggregateLayout *layout;
     const char *prefix;
     char c_name[128];
 } CgCExportStructTypedef;
 
-static void cg_c_export_collect_struct_typedef(const char *prefix, const XrStructLayout *layout,
+static void cg_c_export_collect_struct_typedef(const char *prefix, const XrAggregateLayout *layout,
                                                CgCExportStructTypedef *items, int *count) {
     if (!prefix || !layout || !items || !count || *count >= CG_STRUCT_TYPEDEF_MAX ||
         !cg_c_export_struct_layout_supported_depth(layout, 0))
@@ -5683,7 +5893,8 @@ static void cg_c_export_collect_signature_typedefs(XiCgenCtx *ctx, const XiFunc 
         const char *prefix = cg_c_export_func_prefix(ctx, f);
         const XaotFuncPlan *plan = cg_func_plan(ctx, f);
         if (plan && cg_c_export_abi_slot_is_struct_aggregate(&plan->abi.ret)) {
-            const XrStructLayout *layout = cg_c_export_struct_layout_for_type(ctx, f->return_type);
+            const XrAggregateLayout *layout =
+                cg_c_export_struct_layout_for_type(ctx, f->return_type);
             cg_c_export_collect_struct_typedef(prefix, layout, items, count);
         }
         for (uint16_t i = 0; plan && i < f->nparams && i < plan->abi.nparams; i++) {
@@ -5691,7 +5902,7 @@ static void cg_c_export_collect_signature_typedefs(XiCgenCtx *ctx, const XiFunc 
                 !cg_c_export_abi_slot_is_struct_aggregate(&plan->abi.params[i]))
                 continue;
             const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
-            const XrStructLayout *layout = cg_c_export_struct_layout_for_type(ctx, pt);
+            const XrAggregateLayout *layout = cg_c_export_struct_layout_for_type(ctx, pt);
             cg_c_export_collect_struct_typedef(prefix, layout, items, count);
         }
     }
@@ -5984,9 +6195,12 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
                 fprintf(out, ";\n");
                 fprintf(out, "}\n\n");
                 return;
-            } else if (ret_is_aggregate)
+            } else if (ret_is_aggregate) {
                 fprintf(out, "xrt_enum_aggregate_box(");
-            else if (ret_rep != XR_REP_VOID)
+                XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
+                if (cg_value_rep_is_typed_adt_aggregate(ret_value_rep))
+                    fprintf(out, "%s_to_base(", ret_value_rep.c_type);
+            } else if (ret_rep != XR_REP_VOID)
                 conv_suffix = emit_conversion_prefix(out, f->return_type, ret_rep, XR_REP_TAGGED);
             emit_fname(ctx, out, prefix, f);
             fprintf(out, "(_cl");
@@ -5997,9 +6211,12 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
                 emit_boxed_value_as_func_param_abi(ctx, out, f, i, param_expr);
             }
             fprintf(out, ")");
-            if (ret_is_aggregate)
+            if (ret_is_aggregate) {
+                XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
+                if (cg_value_rep_is_typed_adt_aggregate(ret_value_rep))
+                    fprintf(out, ")");
                 fprintf(out, ")");
-            else if (ret_rep != XR_REP_VOID)
+            } else if (ret_rep != XR_REP_VOID)
                 emit_conversion_suffix(out, conv_suffix);
             fprintf(out, ";\n");
             if (ret_rep == XR_REP_VOID)

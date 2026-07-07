@@ -112,6 +112,8 @@ typedef enum {
     XR_TSEMAPHORE,      /* Semaphore shared counting permit primitive (system heap) */
     XR_TEVENTCOUNT,     /* EventCount shared epoch/broadcast primitive (system heap) */
     XR_TTHREAD,         /* sys.Thread shared OS-thread handle (system heap) */
+    XR_TENUM_TYPE,      /* Internal enum namespace/type metadata; not a user wrapper class */
+    XR_TENUM_CTOR,      /* Internal payload variant constructor metadata */
 } XrObjType;
 
 #endif  // XR_OBJ_HEADER_H

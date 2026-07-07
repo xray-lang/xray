@@ -128,9 +128,9 @@
     X(JSON_SET_F, xi_emit_json_set_f) \
     X(JSON_MERGE, xi_emit_json_merge) \
     X(JSON_DECODE, xi_emit_json_decode) \
-    X(STRUCT_NEW, xi_emit_struct_new) \
-    X(STRUCT_GET, xi_emit_struct_get) \
-    X(STRUCT_SET, xi_emit_struct_set) \
+    X(AGG_NEW, xi_emit_struct_new) \
+    X(AGG_GET, xi_emit_struct_get) \
+    X(AGG_SET, xi_emit_struct_set) \
     X(FIXED_ARRAY_NEW, xi_emit_fixed_array_new) \
     X(SCOPE_ENTER, xi_emit_scope_enter) \
     X(SCOPE_EXIT, xi_emit_scope_exit) \

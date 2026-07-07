@@ -1,0 +1,6 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects force unwrap `!`
+contains=value-error channel is not part of the freestanding no-libc subset yet
+not_contains=unsupported AOT
+not_contains=CRASH

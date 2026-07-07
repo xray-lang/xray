@@ -1,0 +1,5 @@
+c_not_contains=PlainPoint_inspect_fields
+c_not_contains=XrtInspectField
+c_not_contains=xrt_type_set_derive(
+c_not_contains=Reflect
+c_not_contains=need_reflection

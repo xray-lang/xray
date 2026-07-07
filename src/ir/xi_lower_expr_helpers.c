@@ -6,7 +6,7 @@
 #include "../runtime/class/xclass_info.h"
 #include <string.h>
 
-XR_FUNC struct XrStructLayout *xi_lower_struct_layout_of(struct XrType *t) {
+XR_FUNC struct XrAggregateLayout *xi_lower_struct_layout_of(struct XrType *t) {
     if (!t)
         return NULL;
     if (t->kind != XR_KIND_INSTANCE && t->kind != XR_KIND_CLASS)
@@ -18,7 +18,7 @@ XR_FUNC struct XrStructLayout *xi_lower_struct_layout_of(struct XrType *t) {
     return t->instance.class_ref->struct_layout;
 }
 
-XR_FUNC int xi_lower_struct_field_index(const struct XrStructLayout *layout, const char *name) {
+XR_FUNC int xi_lower_struct_field_index(const struct XrAggregateLayout *layout, const char *name) {
     if (!layout || !layout->field_names || !name)
         return -1;
     for (int i = 0; i < layout->field_count; i++) {

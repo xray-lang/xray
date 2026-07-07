@@ -9,6 +9,7 @@
  */
 
 #include "xaot_bundle.h"
+#include "xaot_struct_name.h"
 #include "../base/xmalloc.h"
 #include "../base/xmemstream.h"
 #include "../ir/xi_op_name.h"
@@ -106,6 +107,20 @@ static const char *safe_str(const char *s) {
     return s ? s : "?";
 }
 
+static void xaot_enum_plan_free(XaotEnumPlan *plan) {
+    if (!plan)
+        return;
+    if (plan->owns_members && plan->members) {
+        XiEnumMemberData *members = (XiEnumMemberData *) plan->members;
+        for (uint32_t i = 0; i < plan->member_count; i++)
+            xr_free(members[i].payload_types);
+        xr_free(members);
+    }
+    xr_free(plan->type_args);
+    xr_free((void *) plan->c_type);
+    memset(plan, 0, sizeof(*plan));
+}
+
 static const char *arg_class_name(XaotArgClass cls) {
     switch (cls) {
         case XAOT_ARG_VOID:
@@ -168,6 +183,18 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
     bundle->modules = modules;
     bundle->nmodules = nmodules;
     bundle->entry_module = entry_module;
+    for (uint32_t mi = 0; mi < nmodules; mi++) {
+        const XiModule *mod = modules[mi];
+        if (!mod || !mod->slot_enums)
+            continue;
+        for (uint16_t si = 0; si < mod->nslots; si++) {
+            const XiEnumData *ed = mod->slot_enums[si];
+            if (ed && ed->is_adt && !xaot_bundle_add_enum_plan(bundle, ed, mi)) {
+                xaot_bundle_free(bundle);
+                return false;
+            }
+        }
+    }
     return true;
 }
 
@@ -180,6 +207,9 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xr_free(bundle->func_plans);
     xr_free(bundle->value_plans);
     xr_free(bundle->container_plans);
+    for (i = 0; i < bundle->nenum_plans; i++)
+        xaot_enum_plan_free(&bundle->enum_plans[i]);
+    xr_free(bundle->enum_plans);
     xr_free(bundle->array_storage_plans);
     xr_free(bundle->array_cache_plans);
     xr_free(bundle->array_class_field_alloc_plans);
@@ -322,6 +352,265 @@ XR_FUNC const XaotContainerTypePlan *xaot_bundle_find_container_plan(const XaotB
             return &bundle->container_plans[i];
     }
     return NULL;
+}
+
+XR_FUNC XaotEnumPlan *xaot_bundle_add_enum_plan(XaotBundle *bundle, const XiEnumData *enum_data,
+                                                uint32_t module_index) {
+    XaotEnumPlan *plan;
+    char ctype[192];
+
+    if (!bundle || !enum_data || !enum_data->is_adt)
+        return NULL;
+    plan = (XaotEnumPlan *) xaot_bundle_find_enum_plan(bundle, enum_data);
+    if (plan)
+        return plan;
+    if (module_index >= bundle->nmodules)
+        return NULL;
+    if (bundle->nenum_plans == bundle->enum_plan_cap) {
+        uint32_t new_cap = bundle->enum_plan_cap < 8 ? 8 : bundle->enum_plan_cap * 2;
+        XaotEnumPlan *new_plans =
+            (XaotEnumPlan *) xr_realloc(bundle->enum_plans, sizeof(XaotEnumPlan) * new_cap);
+        if (!new_plans)
+            return NULL;
+        bundle->enum_plans = new_plans;
+        bundle->enum_plan_cap = new_cap;
+    }
+    const XiModule *mod = bundle->modules ? bundle->modules[module_index] : NULL;
+    xaot_enum_c_type_name_for_type(ctype, sizeof(ctype), mod && mod->name ? mod->name : "mod",
+                                   enum_data, NULL);
+    plan = &bundle->enum_plans[bundle->nenum_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->enum_data = enum_data;
+    plan->members = enum_data->members;
+    plan->module_index = module_index;
+    plan->member_count = enum_data->member_count;
+    plan->layout_id = enum_data->layout_id;
+    plan->max_payload = enum_data->max_payload > 0 ? (uint16_t) enum_data->max_payload : 0;
+    plan->type_arg_count = 0;
+    plan->c_type = xr_strdup(ctype);
+    if (!plan->c_type) {
+        bundle->nenum_plans--;
+        bundle->error_msg = "failed to allocate AOT enum plan C type";
+        return NULL;
+    }
+    return plan;
+}
+
+XR_FUNC const XaotEnumPlan *xaot_bundle_find_enum_plan(const XaotBundle *bundle,
+                                                       const XiEnumData *enum_data) {
+    if (!bundle || !enum_data)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nenum_plans; i++) {
+        if (bundle->enum_plans[i].enum_data == enum_data &&
+            bundle->enum_plans[i].type_arg_count == 0)
+            return &bundle->enum_plans[i];
+    }
+    return NULL;
+}
+
+static const char *type_enum_name(const XrType *type) {
+    if (!type)
+        return NULL;
+    if (type->kind == XR_KIND_ENUM)
+        return type->enum_type.enum_name ? type->enum_type.enum_name : type->instance.class_name;
+    if ((type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+        type->instance.class_name)
+        return type->instance.class_name;
+    return NULL;
+}
+
+static int type_enum_arg_count(const XrType *type) {
+    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE))
+        return 0;
+    return type->instance.type_arg_count > 0 ? type->instance.type_arg_count : 0;
+}
+
+static XrType **type_enum_args(const XrType *type) {
+    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
+        type->instance.type_arg_count <= 0)
+        return NULL;
+    return type->instance.type_args;
+}
+
+static bool type_args_match(XrType **a, int ac, XrType **b, int bc) {
+    if (ac != bc)
+        return false;
+    if (ac <= 0)
+        return true;
+    if (!a || !b)
+        return false;
+    for (int i = 0; i < ac; i++) {
+        if (!xr_type_equals(a[i], b[i]))
+            return false;
+    }
+    return true;
+}
+
+XR_FUNC const XaotEnumPlan *xaot_bundle_find_enum_plan_for_type(const XaotBundle *bundle,
+                                                                const XrType *type) {
+    const char *name = type_enum_name(type);
+    int argc = type_enum_arg_count(type);
+    XrType **args = type_enum_args(type);
+    const XaotEnumPlan *fallback = NULL;
+
+    if (!bundle || !name)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nenum_plans; i++) {
+        const XaotEnumPlan *plan = &bundle->enum_plans[i];
+        const XiEnumData *ed = plan->enum_data;
+        if (!ed || !ed->is_adt || !ed->name || strcmp(ed->name, name) != 0)
+            continue;
+        if (plan->type_arg_count == 0) {
+            fallback = plan;
+            if (argc == 0)
+                return plan;
+            continue;
+        }
+        if (argc > 0 && type_args_match(plan->type_args, plan->type_arg_count, args, argc))
+            return plan;
+    }
+    return argc == 0 ? fallback : NULL;
+}
+
+static const XiEnumData *find_enum_data_by_name(const XaotBundle *bundle, const char *name,
+                                                uint32_t *module_index_out) {
+    if (!bundle || !name)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nenum_plans; i++) {
+        const XaotEnumPlan *plan = &bundle->enum_plans[i];
+        const XiEnumData *ed = plan->enum_data;
+        if (plan->type_arg_count == 0 && ed && ed->is_adt && ed->name &&
+            strcmp(ed->name, name) == 0) {
+            if (module_index_out)
+                *module_index_out = plan->module_index;
+            return ed;
+        }
+    }
+    for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+        const XiModule *mod = bundle->modules ? bundle->modules[mi] : NULL;
+        if (!mod || !mod->slot_enums)
+            continue;
+        for (uint16_t si = 0; si < mod->nslots; si++) {
+            const XiEnumData *ed = mod->slot_enums[si];
+            if (ed && ed->is_adt && ed->name && strcmp(ed->name, name) == 0) {
+                if (module_index_out)
+                    *module_index_out = mi;
+                return ed;
+            }
+        }
+    }
+    return NULL;
+}
+
+static XaotEnumPlan *xaot_bundle_add_concrete_enum_plan(XaotBundle *bundle,
+                                                        const XiEnumData *enum_data,
+                                                        uint32_t module_index, const XrType *type) {
+    XaotEnumPlan *plan;
+    char ctype[192];
+    int argc = type_enum_arg_count(type);
+    XrType **args = type_enum_args(type);
+
+    if (!bundle || !enum_data || !enum_data->is_adt || !type || argc <= 0 || !args)
+        return NULL;
+    plan = (XaotEnumPlan *) xaot_bundle_find_enum_plan_for_type(bundle, type);
+    if (plan)
+        return plan;
+    if (module_index >= bundle->nmodules)
+        return NULL;
+    if (bundle->nenum_plans == bundle->enum_plan_cap) {
+        uint32_t new_cap = bundle->enum_plan_cap < 8 ? 8 : bundle->enum_plan_cap * 2;
+        XaotEnumPlan *new_plans =
+            (XaotEnumPlan *) xr_realloc(bundle->enum_plans, sizeof(XaotEnumPlan) * new_cap);
+        if (!new_plans)
+            return NULL;
+        bundle->enum_plans = new_plans;
+        bundle->enum_plan_cap = new_cap;
+    }
+
+    const XiModule *mod = bundle->modules ? bundle->modules[module_index] : NULL;
+    xaot_enum_c_type_name_for_type(ctype, sizeof(ctype), mod && mod->name ? mod->name : "mod",
+                                   enum_data, type);
+    plan = &bundle->enum_plans[bundle->nenum_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->enum_data = enum_data;
+    plan->concrete_type = type;
+    plan->module_index = module_index;
+    plan->member_count = enum_data->member_count;
+    plan->layout_id = enum_data->layout_id;
+    plan->max_payload = enum_data->max_payload > 0 ? (uint16_t) enum_data->max_payload : 0;
+    plan->type_arg_count = (uint8_t) argc;
+    plan->type_args = (XrType **) xr_calloc((size_t) argc, sizeof(XrType *));
+    plan->c_type = xr_strdup(ctype);
+    if (!plan->type_args || !plan->c_type) {
+        bundle->nenum_plans--;
+        xaot_enum_plan_free(plan);
+        bundle->error_msg = "failed to allocate concrete AOT enum plan";
+        return NULL;
+    }
+    for (int i = 0; i < argc; i++)
+        plan->type_args[i] = args[i];
+
+    if (enum_data->type_param_count > 0 && enum_data->type_param_names &&
+        enum_data->type_param_count == (uint8_t) argc && enum_data->member_count > 0) {
+        XiEnumMemberData *members =
+            (XiEnumMemberData *) xr_calloc(enum_data->member_count, sizeof(XiEnumMemberData));
+        if (!members) {
+            bundle->nenum_plans--;
+            xaot_enum_plan_free(plan);
+            bundle->error_msg = "failed to allocate concrete AOT enum members";
+            return NULL;
+        }
+        for (uint32_t mi = 0; mi < enum_data->member_count; mi++) {
+            const XiEnumMemberData *src = enum_data->members ? &enum_data->members[mi] : NULL;
+            members[mi].name = src ? src->name : NULL;
+            members[mi].ordinal = src ? src->ordinal : mi;
+            members[mi].payload_count = src ? src->payload_count : 0;
+            if (src && src->payload_count > 0 && src->payload_types) {
+                members[mi].payload_types =
+                    (XrType **) xr_calloc((size_t) src->payload_count, sizeof(XrType *));
+                if (!members[mi].payload_types) {
+                    bundle->nenum_plans--;
+                    plan->members = members;
+                    plan->owns_members = true;
+                    xaot_enum_plan_free(plan);
+                    bundle->error_msg = "failed to allocate concrete AOT enum payload types";
+                    return NULL;
+                }
+                for (int pi = 0; pi < src->payload_count; pi++) {
+                    members[mi].payload_types[pi] = xr_type_substitute(
+                        NULL, src->payload_types[pi], enum_data->type_param_names, args, argc);
+                }
+            }
+        }
+        plan->members = members;
+        plan->owns_members = true;
+    } else {
+        plan->members = enum_data->members;
+    }
+    return plan;
+}
+
+XR_FUNC bool xaot_bundle_prepare_enum_plan_for_type(XaotBundle *bundle, const XrType *type) {
+    const char *name = type_enum_name(type);
+    int argc = type_enum_arg_count(type);
+    uint32_t module_index = 0;
+    const XiEnumData *ed;
+
+    if (!bundle || !type || !name || argc <= 0)
+        return true;
+    if (xaot_bundle_find_enum_plan_for_type(bundle, type))
+        return true;
+    ed = find_enum_data_by_name(bundle, name, &module_index);
+    if (!ed || ed->type_param_count == 0)
+        return true;
+    if (ed->type_param_count != (uint8_t) argc)
+        return true;
+    if (!xaot_bundle_add_concrete_enum_plan(bundle, ed, module_index, type)) {
+        if (!bundle->error_msg)
+            bundle->error_msg = "failed to allocate concrete AOT enum plan";
+        return false;
+    }
+    return true;
 }
 
 XR_FUNC XaotArrayStoragePlan *
@@ -592,10 +881,11 @@ XR_FUNC const XaotBoundsPlan *xaot_bundle_find_bounds_plan(const XaotBundle *bun
     return NULL;
 }
 
-XR_FUNC XaotSpanAccessPlan *
-xaot_bundle_add_span_access_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,
-                                 uint8_t kind, uint32_t evidence,
-                                 uint32_t eliminated_checks, uint8_t unproven_reason) {
+XR_FUNC XaotSpanAccessPlan *xaot_bundle_add_span_access_plan(XaotBundle *bundle, const XiFunc *func,
+                                                             const XiValue *value, uint8_t kind,
+                                                             uint32_t evidence,
+                                                             uint32_t eliminated_checks,
+                                                             uint8_t unproven_reason) {
     XaotSpanAccessPlan *plan;
 
     if (!bundle || !func || !value || kind == 0 ||
@@ -622,16 +912,15 @@ xaot_bundle_add_span_access_plan(XaotBundle *bundle, const XiFunc *func, const X
     plan->evidence = evidence;
     plan->eliminated_checks = eliminated_checks;
     plan->unproven_reason = unproven_reason;
-    if (!xaot_ptr_index_put(&bundle->span_access_index, value,
-                            bundle->nspan_access_plans - 1)) {
+    if (!xaot_ptr_index_put(&bundle->span_access_index, value, bundle->nspan_access_plans - 1)) {
         bundle->error_msg = "failed to index AOT Span access plan";
         return NULL;
     }
     return plan;
 }
 
-XR_FUNC const XaotSpanAccessPlan *
-xaot_bundle_find_span_access_plan(const XaotBundle *bundle, const XiValue *value) {
+XR_FUNC const XaotSpanAccessPlan *xaot_bundle_find_span_access_plan(const XaotBundle *bundle,
+                                                                    const XiValue *value) {
     uint32_t idx;
 
     if (!bundle || !value)
@@ -795,12 +1084,12 @@ static const char *span_access_kind_name(uint8_t kind) {
 
 static void print_span_access_bits(FILE *out, uint32_t bits, bool evidence) {
     bool first = true;
-#define PRINT_BIT(mask, name)                                                                     \
-    do {                                                                                          \
-        if ((bits & (mask)) != 0) {                                                               \
-            fprintf(out, "%s%s", first ? "" : "+", (name));                                    \
-            first = false;                                                                        \
-        }                                                                                         \
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
     } while (0)
     if (evidence) {
         PRINT_BIT(XAOT_SPAN_EV_RECV_AGGREGATE, "recv_agg");
@@ -932,6 +1221,17 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         }
         fprintf(out, " type-key=%016" PRIx64, cp->type_key.fingerprint);
         fprintf(out, "\n");
+    }
+
+    for (uint32_t ei = 0; ei < bundle->nenum_plans; ei++) {
+        const XaotEnumPlan *ep = &bundle->enum_plans[ei];
+        const XiEnumData *ed = ep->enum_data;
+        fprintf(out,
+                "enum %u name=%s module=%u members=%u layout_id=%u max_payload=%u "
+                "type_args=%u c_type=%s\n",
+                ei, safe_str(ed ? ed->name : NULL), ep->module_index, ep->member_count,
+                ep->layout_id, (unsigned) ep->max_payload, (unsigned) ep->type_arg_count,
+                safe_str(ep->c_type));
     }
 
     for (uint32_t ai = 0; ai < bundle->narray_storage_plans; ai++) {

@@ -1,0 +1,12 @@
+struct BlockPoint {
+    x: int
+}
+
+const GOOD = comptime {
+    return BlockPoint{x: 41}
+}
+
+@test
+fn test_comptime_block_struct_value_const_cache() {
+    assert_eq(GOOD.x, 41)
+}

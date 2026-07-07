@@ -25,7 +25,7 @@
 #include "../runtime/value/xtype.h"
 #include <string.h>
 
-struct XrStructLayout;
+struct XrAggregateLayout;
 
 /* ========== Constants ========== */
 
@@ -119,8 +119,8 @@ typedef struct {
     /* Line number tracking for debug info */
     int current_line; /* line of the value being emitted */
 
-    /* Struct-area slot allocator: tracks byte offset for OP_NEW_STRUCT.
-     * Each struct occupies ceil16(xr_struct_layout_storage_size(layout)) bytes.
+    /* Struct-area slot allocator: tracks byte offset for OP_AGG_NEW.
+     * Each struct occupies ceil16(xr_aggregate_layout_storage_size(layout)) bytes.
      * Proto->struct_area_size is set to this at end of emit. */
     uint16_t struct_area_offset; /* running byte offset (in 16-byte units) */
 
@@ -193,7 +193,7 @@ static inline bool xi_emit_var_has_side_cell(const EmitCtx *ctx, XiVarId var_id)
 XR_FUNC void emit_error(EmitCtx *ctx, XiEmitStatus s);
 XR_FUNC int current_pc(EmitCtx *ctx);
 XR_FUNC void emit_inst(EmitCtx *ctx, XrInstruction inst);
-XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const struct XrStructLayout *layout,
+XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const struct XrAggregateLayout *layout,
                                             uint16_t *slot_out);
 XR_FUNC bool xi_emit_alloc_struct_area_bytes(EmitCtx *ctx, uint32_t bytes_needed,
                                              uint16_t *slot_out);

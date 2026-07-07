@@ -341,7 +341,7 @@ static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed)
         if (ed->is_adt)
             fprintf(out, "XR_FROM_INT(%u)", (unsigned) i);
         else {
-            fprintf(out, "xrt_enum_value_new(");
+            fprintf(out, "xrt_enum_box_new(%u, ", ed->layout_id);
             emit_c_string_literal(out, ed->name ? ed->name : "");
             fprintf(out, ", ");
             emit_c_string_literal(out, name);
@@ -428,8 +428,8 @@ static void emit_prelude_enum_member_value_expr(FILE *out, const CgPreludeEnumDa
         return;
     }
     fprintf(out,
-            "({ static const XrAotEnumValueView _ev_%s_%s = {{0, 0}, NULL, \"%s\", "
-            "\"%s\", %u}; XrValue _v = {0}; "
+            "({ static const XrAotEnumBox _ev_%s_%s = {{0, 0}, NULL, \"%s\", "
+            "\"%s\", %u, 0, 0}; XrValue _v = {0}; "
             "_v.tag = XR_TAG_ENUM; _v.ext = %u; "
             "_v.ptr = (void *)&_ev_%s_%s; _v; })",
             ed->enum_name, member->name, ed->enum_name, member->name, (unsigned) member_index,
@@ -450,6 +450,365 @@ static bool emit_prelude_enum_type_expr(FILE *out, int builtin_index) {
     return true;
 }
 
+static bool emit_static_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                               const XiEnumData *ed, uint32_t member_index) {
+    if (!out || !ed || !ed->members || member_index >= ed->member_count)
+        return false;
+    const XiEnumMemberData *member = &ed->members[member_index];
+    if (member->payload_count != 0)
+        return false;
+    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_TAGGED,
+                                                     cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "({ static const XrAotEnumBox _xenum_%u_%u = {{0, 0}, NULL, ",
+            (unsigned) ed->layout_id, (unsigned) member_index);
+    emit_c_string_literal(out, ed->name ? ed->name : "");
+    fprintf(out, ", ");
+    emit_c_string_literal(out, member->name ? member->name : "");
+    fprintf(out,
+            ", %u, 0, %u}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
+            "_v.ptr = (void *)&_xenum_%u_%u; _v; })",
+            (unsigned) member_index, (unsigned) ed->layout_id, (unsigned) member_index,
+            (unsigned) ed->layout_id, (unsigned) member_index);
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+static void emit_enum_variant_c_field_name(FILE *out, const XiEnumMemberData *member,
+                                           uint32_t index) {
+    fprintf(out, "v%u_", (unsigned) index);
+    const char *name = member && member->name ? member->name : "Variant";
+    char first = name[0];
+    if (!((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z') || first == '_'))
+        fputc('_', out);
+    for (const char *p = name; *p; p++) {
+        char c = *p;
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')
+            fputc(c, out);
+        else
+            fputc('_', out);
+    }
+}
+
+static bool emit_enum_payload_type_predicate(XiCgenCtx *ctx, FILE *out, const XrType *type,
+                                             const char *value_expr);
+
+static bool enum_payload_type_predicate_supported(XiCgenCtx *ctx, const XrType *type) {
+    if (!type)
+        return false;
+    if (type->is_nullable && type->kind != XR_KIND_NULL) {
+        XrType tmp = *type;
+        tmp.is_nullable = false;
+        return enum_payload_type_predicate_supported(ctx, &tmp);
+    }
+    switch ((XrTypeKind) type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_POINTER:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_CHAR:
+        case XR_KIND_STRING:
+        case XR_KIND_NULL:
+        case XR_KIND_UNIT:
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_ENUM:
+            return true;
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+            return cg_class_native_data_for_abi_type(ctx, type) != NULL;
+        case XR_KIND_UNION:
+            if (type->union_type.member_count == 0 || !type->union_type.members)
+                return false;
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                if (!enum_payload_type_predicate_supported(ctx, type->union_type.members[i]))
+                    return false;
+            }
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool emit_enum_payload_type_predicate_nonnull(XiCgenCtx *ctx, FILE *out, const XrType *type,
+                                                     const char *value_expr) {
+    if (!out || !type || !value_expr)
+        return false;
+    switch ((XrTypeKind) type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_POINTER:
+            fprintf(out, "XR_IS_INT(%s)", value_expr);
+            return true;
+        case XR_KIND_FLOAT:
+            fprintf(out, "XR_IS_FLOAT(%s)", value_expr);
+            return true;
+        case XR_KIND_BOOL:
+            fprintf(out, "XR_IS_BOOL(%s)", value_expr);
+            return true;
+        case XR_KIND_CHAR:
+            fprintf(out, "XR_IS_CHAR(%s)", value_expr);
+            return true;
+        case XR_KIND_STRING:
+            fprintf(out, "XR_IS_STR(%s)", value_expr);
+            return true;
+        case XR_KIND_NULL:
+        case XR_KIND_UNIT:
+            fprintf(out, "XR_IS_NULL(%s)", value_expr);
+            return true;
+        case XR_KIND_ARRAY:
+            fprintf(out, "XR_IS_ARRAY(%s)", value_expr);
+            return true;
+        case XR_KIND_MAP:
+            fprintf(out, "XR_IS_MAP(%s)", value_expr);
+            return true;
+        case XR_KIND_SET:
+            fprintf(out, "XR_IS_SET(%s)", value_expr);
+            return true;
+        case XR_KIND_ENUM:
+            fprintf(out, "((%s).tag == XR_TAG_ENUM", value_expr);
+            if (type->enum_type.layout_id != 0) {
+                fprintf(out,
+                        " && (xrt_enum_value_layout_id(%s) == 0 || "
+                        "xrt_enum_value_layout_id(%s) == %u)",
+                        value_expr, value_expr, type->enum_type.layout_id);
+            }
+            fprintf(out, ")");
+            return true;
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE: {
+            const XiClassData *cd = cg_class_native_data_for_abi_type(ctx, type);
+            if (!cd)
+                return false;
+            fprintf(out, "xrt_instance_exact_type(%s, (uint16_t)", value_expr);
+            if (!emit_class_native_type_id_expr(ctx, out, cd))
+                return false;
+            fprintf(out, ")");
+            return true;
+        }
+        case XR_KIND_UNION: {
+            if (type->union_type.member_count == 0 || !type->union_type.members)
+                return false;
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                if (!emit_enum_payload_type_predicate(ctx, out, type->union_type.members[i],
+                                                      value_expr))
+                    return false;
+                if (i + 1 < type->union_type.member_count)
+                    fprintf(out, " || ");
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static bool emit_enum_payload_type_predicate(XiCgenCtx *ctx, FILE *out, const XrType *type,
+                                             const char *value_expr) {
+    if (!out || !type || !value_expr)
+        return false;
+    if (!enum_payload_type_predicate_supported(ctx, type))
+        return false;
+    if (type->is_nullable && type->kind != XR_KIND_NULL) {
+        fprintf(out, "(XR_IS_NULL(%s) || ", value_expr);
+        if (!emit_enum_payload_type_predicate_nonnull(ctx, out, type, value_expr))
+            return false;
+        fprintf(out, ")");
+        return true;
+    }
+    return emit_enum_payload_type_predicate_nonnull(ctx, out, type, value_expr);
+}
+
+static void emit_enum_payload_type_checks(XiCgenCtx *ctx, FILE *out, const XiEnumMemberData *member,
+                                          const char *enum_name) {
+    if (!out || !member || member->payload_count <= 0 || !member->payload_types)
+        return;
+    for (uint16_t pi = 0; pi < (uint16_t) member->payload_count; pi++) {
+        const XrType *payload_type = member->payload_types[pi];
+        char value_expr[64];
+        snprintf(value_expr, sizeof(value_expr), "value.payloads[%u]", (unsigned) pi);
+        fprintf(out, "xrt_enum_aggregate_check_payload_type(value.layout_id, ");
+        if (!enum_payload_type_predicate_supported(ctx, payload_type) ||
+            !emit_enum_payload_type_predicate(ctx, out, payload_type, value_expr)) {
+            fprintf(out, "1");
+        }
+        fprintf(out, ", ");
+        emit_c_string_literal(out, enum_name ? enum_name : "");
+        fprintf(out, "); ");
+    }
+}
+
+static const XiModule *cg_enum_plan_owner_module(XiCgenCtx *ctx, const XaotEnumPlan *plan) {
+    if (!ctx || !ctx->aot_bundle || !plan || plan->module_index >= ctx->aot_bundle->nmodules)
+        return NULL;
+    return ctx->aot_bundle->modules ? ctx->aot_bundle->modules[plan->module_index] : NULL;
+}
+
+static void emit_one_enum_native_typedef(XiCgenCtx *ctx, FILE *out, const XaotEnumPlan *plan) {
+    if (!ctx || !out || !plan || !plan->c_type)
+        return;
+    uint16_t payload_cap = plan->max_payload > 0 ? plan->max_payload : 1;
+    const XiEnumData *ed = plan->enum_data;
+    if (plan->type_arg_count == 0 && ed && ed->type_param_count > 0)
+        return;
+    const XiEnumMemberData *members = plan->members ? plan->members : (ed ? ed->members : NULL);
+    fprintf(out, "typedef struct %s { int64_t tag; union { ", plan->c_type);
+    for (uint32_t mi = 0; ed && mi < ed->member_count; mi++) {
+        const XiEnumMemberData *member = members ? &members[mi] : NULL;
+        uint16_t pc = member && member->payload_count > 0 ? member->payload_count : 0;
+        fprintf(out, "struct { ");
+        if (pc == 0) {
+            fprintf(out, "uint8_t _empty; ");
+        } else {
+            for (uint16_t pi = 0; pi < pc; pi++)
+                fprintf(out, "XrValue f%u; ", (unsigned) pi);
+        }
+        fprintf(out, "} ");
+        emit_enum_variant_c_field_name(out, member, mi);
+        fprintf(out, "; ");
+    }
+    fprintf(out, "XrValue raw[%u]; } payload; } %s;\n", (unsigned) payload_cap, plan->c_type);
+    fprintf(out, "static inline %s %s_from_base(XrAotEnumAggregate value) { %s out = {0}; ",
+            plan->c_type, plan->c_type, plan->c_type);
+    fprintf(out, "xrt_enum_aggregate_check_layout(value.layout_id, %u, ", plan->layout_id);
+    emit_c_string_literal(out, ed && ed->name ? ed->name : "");
+    fprintf(out, "); out.tag = value.tag; switch (value.tag) { ");
+    for (uint32_t mi = 0; ed && mi < ed->member_count; mi++) {
+        const XiEnumMemberData *member = members ? &members[mi] : NULL;
+        uint16_t pc = member && member->payload_count > 0 ? member->payload_count : 0;
+        fprintf(out,
+                "case %u: xrt_enum_aggregate_check_payload_count(value.layout_id, "
+                "value.payload_count, %u, ",
+                (unsigned) mi, (unsigned) pc);
+        emit_c_string_literal(out, ed && ed->name ? ed->name : "");
+        fprintf(out, "); ");
+        emit_enum_payload_type_checks(ctx, out, member, ed && ed->name ? ed->name : "");
+        fprintf(out,
+                "for (uint32_t i = 0; i < value.payload_count && i < %u; i++) "
+                "out.payload.raw[i] = value.payloads[i]; break; ",
+                (unsigned) pc);
+    }
+    fprintf(out, "default: xrt_enum_aggregate_check_known_tag(value.layout_id, ");
+    emit_c_string_literal(out, ed && ed->name ? ed->name : "");
+    fprintf(out, "); break; } return out; }\n");
+    fprintf(out,
+            "static inline XrAotEnumAggregate %s_to_base(%s value) { "
+            "XrAotEnumAggregate out = xrt_enum_aggregate_zero(); ",
+            plan->c_type, plan->c_type);
+    fprintf(out, "out.layout_id = %u; out.enum_name = ", plan->layout_id);
+    emit_c_string_literal(out, ed && ed->name ? ed->name : "");
+    fprintf(out, "; out.tag = value.tag; switch (value.tag) { ");
+    for (uint32_t mi = 0; ed && mi < ed->member_count; mi++) {
+        const XiEnumMemberData *member = members ? &members[mi] : NULL;
+        uint16_t pc = member && member->payload_count > 0 ? member->payload_count : 0;
+        fprintf(out, "case %u: out.member_name = ", (unsigned) mi);
+        emit_c_string_literal(out, member && member->name ? member->name : "");
+        fprintf(out, "; out.payload_count = %u; ", (unsigned) pc);
+        for (uint16_t pi = 0; pi < pc; pi++)
+            fprintf(out, "out.payloads[%u] = value.payload.raw[%u]; ", (unsigned) pi,
+                    (unsigned) pi);
+        fprintf(out, "break; ");
+    }
+    fprintf(out,
+            "default: out.member_name = NULL; out.payload_count = 0; break; } return out; }\n");
+}
+
+static void emit_enum_native_typedefs(XiCgenCtx *ctx, FILE *out, const XiModule *module) {
+    if (!ctx || !ctx->aot_bundle || !out || !module)
+        return;
+    for (uint32_t i = 0; i < ctx->aot_bundle->nenum_plans; i++) {
+        const XaotEnumPlan *plan = &ctx->aot_bundle->enum_plans[i];
+        const XiModule *owner = cg_enum_plan_owner_module(ctx, plan);
+        if (owner != module || !plan->c_type)
+            continue;
+        emit_one_enum_native_typedef(ctx, out, plan);
+    }
+}
+
+static bool cg_enum_plan_index_for_ctype(XiCgenCtx *ctx, const char *c_type, uint32_t *out_idx) {
+    if (!ctx || !ctx->aot_bundle || !c_type)
+        return false;
+    for (uint32_t i = 0; i < ctx->aot_bundle->nenum_plans; i++) {
+        const XaotEnumPlan *plan = &ctx->aot_bundle->enum_plans[i];
+        if (plan->c_type && strcmp(plan->c_type, c_type) == 0) {
+            if (out_idx)
+                *out_idx = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+static uint32_t cg_current_module_index(XiCgenCtx *ctx) {
+    if (!ctx || !ctx->aot_bundle || !ctx->module)
+        return UINT32_MAX;
+    for (uint32_t i = 0; i < ctx->aot_bundle->nmodules; i++) {
+        if (ctx->aot_bundle->modules && ctx->aot_bundle->modules[i] == ctx->module)
+            return i;
+    }
+    return UINT32_MAX;
+}
+
+static void cg_emit_imported_enum_native_typedef_for_rep(XiCgenCtx *ctx, FILE *out,
+                                                         XaotValueRep rep, uint32_t module_index,
+                                                         bool *emitted) {
+    uint32_t enum_index = 0;
+    if (!ctx || !out || !emitted || !cg_value_rep_is_typed_adt_aggregate(rep))
+        return;
+    if (!cg_enum_plan_index_for_ctype(ctx, rep.c_type, &enum_index))
+        return;
+    if (enum_index >= ctx->aot_bundle->nenum_plans || emitted[enum_index])
+        return;
+    const XaotEnumPlan *plan = &ctx->aot_bundle->enum_plans[enum_index];
+    if (plan->module_index == module_index)
+        return;
+    emit_one_enum_native_typedef(ctx, out, plan);
+    emitted[enum_index] = true;
+}
+
+static void cg_emit_imported_enum_native_typedefs_for_func(XiCgenCtx *ctx, FILE *out,
+                                                           const XiFunc *func,
+                                                           uint32_t module_index, bool *emitted) {
+    const XaotFuncPlan *func_plan;
+    if (!ctx || !out || !func || !emitted)
+        return;
+    func_plan = xaot_bundle_find_func_plan(ctx->aot_bundle, func);
+    if (!func_plan)
+        return;
+    cg_emit_imported_enum_native_typedef_for_rep(
+        ctx, out, xaot_abi_slot_value_rep(&func_plan->abi.ret), module_index, emitted);
+    for (uint16_t p = 0; p < func_plan->abi.nparams; p++)
+        cg_emit_imported_enum_native_typedef_for_rep(
+            ctx, out, xaot_abi_slot_value_rep(&func_plan->abi.params[p]), module_index, emitted);
+}
+
+static void emit_imported_enum_native_typedefs(XiCgenCtx *ctx, FILE *out) {
+    if (!ctx || !ctx->aot_bundle || !out || ctx->aot_bundle->nenum_plans == 0)
+        return;
+    uint32_t module_index = cg_current_module_index(ctx);
+    if (module_index == UINT32_MAX)
+        return;
+    bool *emitted = (bool *) xr_calloc(ctx->aot_bundle->nenum_plans, sizeof(bool));
+    if (!emitted) {
+        ctx->error = true;
+        return;
+    }
+
+    for (int i = 0; i < ctx->n_xmod_refs; i++)
+        cg_emit_imported_enum_native_typedefs_for_func(ctx, out, ctx->xmod_ref_funcs[i],
+                                                       module_index, emitted);
+
+    for (uint32_t i = 0; i < ctx->aot_bundle->nvalue_plans; i++) {
+        const XaotValuePlan *value_plan = &ctx->aot_bundle->value_plans[i];
+        const XaotFuncPlan *func_plan =
+            value_plan->func ? xaot_bundle_find_func_plan(ctx->aot_bundle, value_plan->func) : NULL;
+        if (!func_plan || func_plan->module_index != module_index)
+            continue;
+        cg_emit_imported_enum_native_typedef_for_rep(ctx, out, value_plan->rep, module_index,
+                                                     emitted);
+    }
+    xr_free(emitted);
+}
+
 static int cg_enum_member_index(const XiEnumData *ed, const char *member_name) {
     if (!ed || !member_name)
         return -1;
@@ -460,17 +819,23 @@ static int cg_enum_member_index(const XiEnumData *ed, const char *member_name) {
     return -1;
 }
 
-static const XiEnumData *cg_enum_for_shared_value_in_func(const XiCgenCtx *ctx, const XiFunc *f,
-                                                          const XiValue *v) {
-    v = cg_unwrap_identity_value(v);
-    if (!ctx || !v || v->op != XI_GET_SHARED)
+static const XiEnumData *cg_enum_for_shared_slot_in_func(const XiCgenCtx *ctx, const XiFunc *f,
+                                                         int slot) {
+    if (!ctx)
         return NULL;
-    int slot = (int) v->aux_int;
     if (f && f->module && f->module->slot_enums && slot >= 0 && slot < (int) f->module->nslots)
         return f->module->slot_enums[slot];
     if (slot < 0 || slot >= ctx->shared_cap)
         return NULL;
     return ctx->shared_enum[slot];
+}
+
+static const XiEnumData *cg_enum_for_shared_value_in_func(const XiCgenCtx *ctx, const XiFunc *f,
+                                                          const XiValue *v) {
+    v = cg_unwrap_identity_value(v);
+    if (!ctx || !v || v->op != XI_GET_SHARED)
+        return NULL;
+    return cg_enum_for_shared_slot_in_func(ctx, f, (int) v->aux_int);
 }
 
 static const XiEnumData *cg_enum_for_runtime_type(const XiCgenCtx *ctx, const void *runtime_type) {
@@ -484,6 +849,21 @@ static const XiEnumData *cg_enum_for_runtime_type(const XiCgenCtx *ctx, const vo
     return NULL;
 }
 
+static void emit_adt_enum_payload_array_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                             uint16_t payload_count) {
+    if (payload_count == 0 || !v || v->nargs <= 1) {
+        fprintf(out, "NULL");
+        return;
+    }
+    fprintf(out, "(const XrValue[%u]){", (unsigned) payload_count);
+    for (uint16_t a = 1; a < v->nargs; a++) {
+        if (a > 1)
+            fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_TAGGED);
+    }
+    fprintf(out, "}");
+}
+
 static void emit_adt_enum_construct_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed,
                                          int member_idx, const XiValue *v) {
     uint16_t payload_count = v->nargs > 0 ? (uint16_t) (v->nargs - 1) : 0;
@@ -494,43 +874,29 @@ static void emit_adt_enum_construct_expr(XiCgenCtx *ctx, FILE *out, const XiEnum
             ? ed->members[member_idx].name
             : "";
     if (cg_value_plan_is_aggregate(ctx, v)) {
-        fprintf(out, "xrt_enum_aggregate_make(%d, %u, ", member_idx, (unsigned) payload_count);
-        emit_c_string_literal(out, enum_name);
-        fprintf(out, ", ");
-        emit_c_string_literal(out, member_name);
-        fprintf(out, ", ");
-        if (payload_count > 0 && v->nargs > 1)
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        else
-            fprintf(out, "XR_NULL_VAL");
-        fprintf(out, ")");
-        return;
-    }
-    if (payload_count <= 1) {
-        fprintf(out, "xrt_enum_aggregate_box(xrt_enum_aggregate_make(%d, %u, ", member_idx,
+        const XaotValuePlan *plan = cg_value_plan(ctx, v);
+        if (plan)
+            emit_adt_base_to_value_rep_prefix(out, plan->rep);
+        fprintf(out, "xrt_enum_aggregate_make(%u, %d, %u, ", ed ? ed->layout_id : 0u, member_idx,
                 (unsigned) payload_count);
         emit_c_string_literal(out, enum_name);
         fprintf(out, ", ");
         emit_c_string_literal(out, member_name);
         fprintf(out, ", ");
-        if (payload_count > 0 && v->nargs > 1)
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        else
-            fprintf(out, "XR_NULL_VAL");
-        fprintf(out, "))");
+        emit_adt_enum_payload_array_expr(ctx, out, v, payload_count);
+        fprintf(out, ")");
+        if (plan)
+            emit_adt_base_to_value_rep_suffix(out, plan->rep);
         return;
     }
-    fprintf(out, "({ XrValue _enum_payloads[%u]; ", (unsigned) payload_count);
-    for (uint16_t a = 1; a < v->nargs; a++) {
-        fprintf(out, "_enum_payloads[%u] = ", (unsigned) (a - 1));
-        emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_TAGGED);
-        fprintf(out, "; ");
-    }
-    fprintf(out, "xrt_enum_value_new_payloads(");
+    fprintf(out, "xrt_enum_aggregate_box(xrt_enum_aggregate_make(%u, %d, %u, ",
+            ed ? ed->layout_id : 0u, member_idx, (unsigned) payload_count);
     emit_c_string_literal(out, enum_name);
     fprintf(out, ", ");
     emit_c_string_literal(out, member_name);
-    fprintf(out, ", %d, %u, _enum_payloads); })", member_idx, (unsigned) payload_count);
+    fprintf(out, ", ");
+    emit_adt_enum_payload_array_expr(ctx, out, v, payload_count);
+    fprintf(out, "))");
 }
 
 static void emit_call_hidden_closure(FILE *out, const XiFunc *current, const XiFunc *target,

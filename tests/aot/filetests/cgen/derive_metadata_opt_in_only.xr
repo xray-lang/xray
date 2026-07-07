@@ -1,0 +1,12 @@
+class PlainPoint {
+    x: int
+    y: int
+
+    constructor(x: int, y: int) {
+        this.x = x
+        this.y = y
+    }
+}
+
+var p = PlainPoint(1, 2)
+print(p)

@@ -22,8 +22,23 @@
 #include <limits.h>
 #include <float.h>
 #include <stdatomic.h>
+#include <string.h>
+
+#ifdef memcpy
+#undef memcpy
+#endif
+#ifdef memmove
+#undef memmove
+#endif
+#ifdef memset
+#undef memset
+#endif
+#ifdef memcmp
+#undef memcmp
+#endif
 
 #include "../shared/xr_obj_header.h"
+#include "../shared/xr_elem_type.h"
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_int_arith.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
@@ -100,7 +115,7 @@ typedef struct XrValue {
 #define XR_TAG_I64 3
 #define XR_TAG_F64 4
 #define XR_TAG_PTR 5
-#define XR_TAG_STRUCT_REF 6
+#define XR_TAG_AGG_REF 6
 #define XR_TAG_NOTFOUND 7
 #define XR_TAG_STR 14
 #define XR_TAG_ARRAY 15
@@ -166,7 +181,7 @@ typedef struct XrValue {
 #define XR_IS_ARRAY(v) ((v).tag == XR_TAG_PTR && (v).heap_type == XR_TARRAY)
 #define XR_IS_MAP(v) ((v).tag == XR_TAG_PTR && (v).heap_type == XR_TMAP)
 #define XR_IS_SET(v) ((v).tag == XR_TAG_PTR && (v).heap_type == XR_TSET)
-#define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_STRUCT_REF && (v).ext != 0)
+#define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_AGG_REF && (v).ext != 0)
 #define XR_ARRAY_REF_ELEM_TYPE(v) ((uint8_t) ((v).ext & 0xFF))
 #define XR_ARRAY_REF_ELEM_COUNT(v) ((uint16_t) ((v).ext >> 8))
 
@@ -240,9 +255,9 @@ static inline XrValue xr_mkptr(void *p, uint8_t tag) {
     return r;
 }
 
-static inline XrValue xr_struct_ref(void *p, uint16_t storage_size) {
+static inline XrValue xr_aggregate_ref(void *p, uint16_t storage_size) {
     XrValue r = {0};
-    r.tag = XR_TAG_STRUCT_REF;
+    r.tag = XR_TAG_AGG_REF;
     r.heap_type = storage_size;
     r.ptr = p;
     return r;
@@ -250,49 +265,60 @@ static inline XrValue xr_struct_ref(void *p, uint16_t storage_size) {
 
 static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint16_t elem_count) {
     XrValue r = {0};
-    r.tag = XR_TAG_STRUCT_REF;
+    r.tag = XR_TAG_AGG_REF;
     r.ext = ((uint32_t) elem_count << 8) | elem_native_type;
     r.ptr = ptr;
     return r;
 }
 
-typedef struct XrAotEnumValueView {
+typedef struct XrAotEnumBox {
     uint64_t gc_words[2];
     void *klass;
     const char *enum_name;
     const char *member_name;
     uint32_t member_index;
     uint32_t payload_count;
-    XrValue payload0;
-    XrValue *payloads;
-} XrAotEnumValueView;
+    uint32_t layout_id;
+    XrValue payloads[];
+} XrAotEnumBox;
+
+static inline uint32_t xrt_enum_value_layout_id(XrValue v) {
+    if (v.tag != XR_TAG_ENUM || !v.ptr)
+        return 0;
+    return ((const XrAotEnumBox *) v.ptr)->layout_id;
+}
+
+#define XR_AOT_ENUM_AGG_PAYLOAD_CAP 16u
 
 typedef struct XrAotEnumAggregate {
     const char *enum_name;
     const char *member_name;
     int64_t tag;
     uint32_t payload_count;
-    XrValue payload0;
-    XrValue *payloads;
+    uint32_t layout_id;
+    XrValue payloads[XR_AOT_ENUM_AGG_PAYLOAD_CAP];
 } XrAotEnumAggregate;
 
 static inline XrAotEnumAggregate xrt_enum_aggregate_zero(void) {
     XrAotEnumAggregate out = {0};
-    out.payload0 = XR_NULL_VAL;
-    out.payloads = NULL;
+    for (uint32_t i = 0; i < XR_AOT_ENUM_AGG_PAYLOAD_CAP; i++)
+        out.payloads[i] = XR_NULL_VAL;
     return out;
 }
 
-static inline XrAotEnumAggregate xrt_enum_aggregate_make(int64_t tag, uint32_t payload_count,
-                                               const char *enum_name, const char *member_name,
-                                               XrValue payload0) {
-    XrAotEnumAggregate out;
+static inline XrAotEnumAggregate
+xrt_enum_aggregate_make(uint32_t layout_id, int64_t tag, uint32_t payload_count,
+                        const char *enum_name, const char *member_name, const XrValue *payloads) {
+    XrAotEnumAggregate out = xrt_enum_aggregate_zero();
     out.enum_name = enum_name;
     out.member_name = member_name;
     out.tag = tag;
     out.payload_count = payload_count;
-    out.payload0 = payload_count > 0 ? payload0 : XR_NULL_VAL;
-    out.payloads = NULL;
+    out.layout_id = layout_id;
+    uint32_t limit =
+        payload_count < XR_AOT_ENUM_AGG_PAYLOAD_CAP ? payload_count : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
+    for (uint32_t i = 0; i < limit; i++)
+        out.payloads[i] = payloads ? payloads[i] : XR_NULL_VAL;
     return out;
 }
 
@@ -376,6 +402,55 @@ static inline XRT_COLD XRT_NORETURN void xrt_freestanding_trap(const char *messa
 #endif
 }
 
+#ifndef XR_ERR_CMP_CONST_ASSIGN
+#define XR_ERR_CMP_CONST_ASSIGN 303
+#endif
+#ifndef XR_ERR_TYPE_MISMATCH
+#define XR_ERR_TYPE_MISMATCH 404
+#endif
+#ifndef XR_ERR_INDEX_OUT_OF_BOUNDS
+#define XR_ERR_INDEX_OUT_OF_BOUNDS 430
+#endif
+#ifndef XR_ERR_OUT_OF_MEMORY
+#define XR_ERR_OUT_OF_MEMORY 441
+#endif
+
+static inline XRT_COLD XRT_NORETURN void xrt_throw_error(int code, const char *message) {
+    (void) code;
+    xrt_freestanding_trap(message && message[0] ? message : "freestanding runtime error");
+}
+
+static inline XRT_COLD XRT_NORETURN void xrt_enum_aggregate_shape_fail(const char *what,
+                                                                       const char *enum_name) {
+    (void) enum_name;
+    xrt_freestanding_trap(what && what[0] ? what : "AOT enum aggregate shape mismatch");
+}
+
+static inline void xrt_enum_aggregate_check_layout(uint32_t actual_layout_id,
+                                                   uint32_t expected_layout_id,
+                                                   const char *enum_name) {
+    if (actual_layout_id != 0 && expected_layout_id != 0 && actual_layout_id != expected_layout_id)
+        xrt_enum_aggregate_shape_fail("enum layout id mismatch", enum_name);
+}
+
+static inline void xrt_enum_aggregate_check_payload_count(uint32_t layout_id, uint32_t actual,
+                                                          uint32_t expected,
+                                                          const char *enum_name) {
+    if (layout_id != 0 && actual != expected)
+        xrt_enum_aggregate_shape_fail("enum payload count mismatch", enum_name);
+}
+
+static inline void xrt_enum_aggregate_check_payload_type(uint32_t layout_id, int ok,
+                                                         const char *enum_name) {
+    if (layout_id != 0 && !ok)
+        xrt_enum_aggregate_shape_fail("enum payload type mismatch", enum_name);
+}
+
+static inline void xrt_enum_aggregate_check_known_tag(uint32_t layout_id, const char *enum_name) {
+    if (layout_id != 0)
+        xrt_enum_aggregate_shape_fail("enum tag mismatch", enum_name);
+}
+
 static inline XRT_COLD XRT_NORETURN void xrt_index_oob(int64_t idx, int64_t length) {
     (void) idx;
     (void) length;
@@ -406,6 +481,493 @@ static inline size_t xrt_value_native_type_size(uint8_t native_type) {
         default:
             return 8;
     }
+}
+
+enum {
+    XRT_SPAN_FLAG_READONLY = 1u << 0,
+};
+
+typedef struct {
+    void *data;
+    int64_t length;
+    void *guard;
+    uint8_t elem_type;
+    uint8_t elem_size;
+    uint8_t elem_tid;
+    uint8_t contains_refs;
+    uint32_t flags;
+} xr_span_t;
+
+static inline xr_span_t xrt_span_empty(void) {
+    return (xr_span_t) {NULL, 0, NULL, XR_ELEM_ANY, (uint8_t) sizeof(XrValue), 0, 0, 0};
+}
+
+static inline void xrt_array_normalize_slice(int64_t len, int64_t *start, int64_t *end) {
+    if (*start < 0)
+        *start += len;
+    if (*end < 0)
+        *end += len;
+    if (*start < 0)
+        *start = 0;
+    if (*end < 0)
+        *end = 0;
+    if (*start > len)
+        *start = len;
+    if (*end > len)
+        *end = len;
+    if (*start > *end)
+        *start = *end;
+}
+
+static inline xr_span_t xrt_span_from_array_slice(XrValue arr, int64_t start, int64_t end) {
+    if (!XR_IS_ARRAY_REF(arr))
+        xrt_freestanding_trap("freestanding span slice supports only fixed arrays");
+    uint8_t native_type = XR_ARRAY_REF_ELEM_TYPE(arr);
+    int64_t len = XR_ARRAY_REF_ELEM_COUNT(arr);
+    xrt_array_normalize_slice(len, &start, &end);
+    int64_t count = end - start;
+    if (count < 0)
+        count = 0;
+    uint8_t elem_size = (uint8_t) xrt_value_native_type_size(native_type);
+    xr_span_t out = {0};
+    out.data = (count > 0 && arr.ptr)
+                   ? (void *) ((uint8_t *) arr.ptr + (size_t) start * (size_t) elem_size)
+                   : arr.ptr;
+    out.length = count;
+    out.guard = NULL;
+    out.elem_type = xr_native_type_to_elem_type(native_type);
+    out.elem_size = elem_size ? elem_size : (uint8_t) sizeof(XrValue);
+    out.elem_tid = 0;
+    out.contains_refs = out.elem_type == XR_ELEM_ANY;
+    out.flags = 0;
+    return out;
+}
+
+static inline xr_span_t xrt_span_from_span_slice(xr_span_t src, int64_t start, int64_t end) {
+    xrt_array_normalize_slice(src.length, &start, &end);
+    int64_t count = end - start;
+    if (count < 0)
+        count = 0;
+    xr_span_t out = src;
+    out.data = (count > 0 && src.data)
+                   ? (void *) ((uint8_t *) src.data + (size_t) start * (size_t) src.elem_size)
+                   : src.data;
+    out.length = count;
+    return out;
+}
+
+static inline bool xrt_span_is_readonly(xr_span_t span) {
+    return (span.flags & XRT_SPAN_FLAG_READONLY) != 0;
+}
+
+typedef struct XrArrayCoreRange {
+    int64_t start;
+    int64_t end;
+    int64_t count;
+} XrArrayCoreRange;
+
+static inline XrArrayCoreRange xr_array_core_slice_range(int64_t length, int64_t start,
+                                                         int64_t end) {
+    if (length < 0)
+        length = 0;
+    if (start < 0)
+        start += length;
+    if (end < 0)
+        end += length;
+    if (start < 0)
+        start = 0;
+    if (start > length)
+        start = length;
+    if (end < 0)
+        end = 0;
+    if (end > length)
+        end = length;
+    if (start > end)
+        start = end;
+    return (XrArrayCoreRange) {start, end, end - start};
+}
+
+static inline int xr_array_core_common_prefix_diff_byte64(uint64_t diff) {
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    return __builtin_clzll(diff) >> 3;
+#else
+    return __builtin_ctzll(diff) >> 3;
+#endif
+#else
+    int n = 0;
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    while (((diff >> ((7 - n) * 8)) & UINT64_C(0xff)) == 0)
+        n++;
+#else
+    while (((diff >> (n * 8)) & UINT64_C(0xff)) == 0)
+        n++;
+#endif
+    return n;
+#endif
+}
+
+static inline int64_t xr_array_core_bytes_common_prefix_raw(const void *left_data,
+                                                            int64_t left_length,
+                                                            const void *right_data,
+                                                            int64_t right_length) {
+    int64_t n = left_length < right_length ? left_length : right_length;
+    if (n <= 0)
+        return 0;
+    const uint8_t *left = (const uint8_t *) left_data;
+    const uint8_t *right = (const uint8_t *) right_data;
+    int64_t i = 0;
+    while (i + 8 <= n) {
+        uint64_t lv = 0;
+        uint64_t rv = 0;
+        memcpy(&lv, left + i, sizeof(lv));
+        memcpy(&rv, right + i, sizeof(rv));
+        uint64_t diff = lv ^ rv;
+        if (diff)
+            return i + xr_array_core_common_prefix_diff_byte64(diff);
+        i += 8;
+    }
+    while (i < n && left[i] == right[i])
+        i++;
+    return i;
+}
+
+static inline bool xr_array_core_memory_ranges_overlap(const void *a, int64_t a_len, const void *b,
+                                                       int64_t b_len) {
+    if (!a || !b || a_len <= 0 || b_len <= 0)
+        return false;
+    uintptr_t a_begin = (uintptr_t) a;
+    uintptr_t b_begin = (uintptr_t) b;
+    uintptr_t a_end = a_begin + (uintptr_t) a_len;
+    uintptr_t b_end = b_begin + (uintptr_t) b_len;
+    if (a_end < a_begin || b_end < b_begin)
+        return true;
+    return a_begin < b_end && b_begin < a_end;
+}
+
+static inline void xr_array_core_copy_nonoverlap_bytes(void *dst, const void *src, int64_t count) {
+    if (count <= 0)
+        return;
+    if (count <= 16) {
+        uint8_t *dp = (uint8_t *) dst;
+        const uint8_t *sp = (const uint8_t *) src;
+        if (count >= 8) {
+            uint64_t first = 0;
+            memcpy(&first, sp, sizeof(first));
+            memcpy(dp, &first, sizeof(first));
+            if (count > 8) {
+                uint64_t last = 0;
+                memcpy(&last, sp + count - 8, sizeof(last));
+                memcpy(dp + count - 8, &last, sizeof(last));
+            }
+            return;
+        }
+        if (count >= 4) {
+            uint32_t first = 0;
+            memcpy(&first, sp, sizeof(first));
+            memcpy(dp, &first, sizeof(first));
+            if (count > 4) {
+                uint32_t last = 0;
+                memcpy(&last, sp + count - 4, sizeof(last));
+                memcpy(dp + count - 4, &last, sizeof(last));
+            }
+            return;
+        }
+        if (count >= 2) {
+            uint16_t first = 0;
+            memcpy(&first, sp, sizeof(first));
+            memcpy(dp, &first, sizeof(first));
+            if (count > 2)
+                dp[2] = sp[2];
+            return;
+        }
+        dp[0] = sp[0];
+        return;
+    }
+    memcpy(dst, src, (size_t) count);
+}
+
+static inline void xr_array_core_copy_or_move_bytes(void *dst, const void *src, int64_t count) {
+    if (count <= 0)
+        return;
+    if (xr_array_core_memory_ranges_overlap(dst, count, src, count))
+        memmove(dst, src, (size_t) count);
+    else
+        xr_array_core_copy_nonoverlap_bytes(dst, src, count);
+}
+
+static inline uint64_t xr_array_core_repeat_pattern64(const uint8_t *sp, int64_t distance) {
+    uint8_t pattern[8];
+    switch (distance) {
+        case 2:
+            pattern[0] = sp[0];
+            pattern[1] = sp[1];
+            pattern[2] = sp[0];
+            pattern[3] = sp[1];
+            pattern[4] = sp[0];
+            pattern[5] = sp[1];
+            pattern[6] = sp[0];
+            pattern[7] = sp[1];
+            break;
+        case 4:
+            pattern[0] = sp[0];
+            pattern[1] = sp[1];
+            pattern[2] = sp[2];
+            pattern[3] = sp[3];
+            pattern[4] = sp[0];
+            pattern[5] = sp[1];
+            pattern[6] = sp[2];
+            pattern[7] = sp[3];
+            break;
+        default:
+            memcpy(pattern, sp, sizeof(pattern));
+            break;
+    }
+    uint64_t value = 0;
+    memcpy(&value, pattern, sizeof(value));
+    return value;
+}
+
+static inline void xr_array_core_bytes_repeat_copy(void *data, int64_t dst_offset, int64_t distance,
+                                                   int64_t count) {
+    if (count <= 0)
+        return;
+    uint8_t *dp = (uint8_t *) data + dst_offset;
+    const uint8_t *sp = dp - distance;
+    if (distance == 1) {
+        memset(dp, sp[0], (size_t) count);
+        return;
+    }
+    if (count <= distance) {
+        xr_array_core_copy_nonoverlap_bytes(dp, sp, count);
+        return;
+    }
+    if (distance == 2 || distance == 4 || distance == 8) {
+        uint64_t pattern = xr_array_core_repeat_pattern64(sp, distance);
+        int64_t copied = 0;
+        for (; copied + 8 <= count; copied += 8)
+            memcpy(dp + copied, &pattern, sizeof(pattern));
+        if (copied < count)
+            memcpy(dp + copied, &pattern, (size_t) (count - copied));
+        return;
+    }
+    if (distance < 8) {
+        xr_array_core_copy_nonoverlap_bytes(dp, sp, distance);
+        int64_t copied = distance;
+        while (copied < count) {
+            int64_t chunk = copied;
+            int64_t remaining = count - copied;
+            if (chunk > remaining)
+                chunk = remaining;
+            xr_array_core_copy_nonoverlap_bytes(dp + copied, dp, chunk);
+            copied += chunk;
+        }
+        return;
+    }
+    if (count <= 16) {
+        xr_array_core_copy_nonoverlap_bytes(dp, sp, count);
+        return;
+    }
+    xr_array_core_copy_nonoverlap_bytes(dp, sp, distance);
+    int64_t copied = distance;
+    while (copied < count) {
+        int64_t chunk = copied;
+        int64_t remaining = count - copied;
+        if (chunk > remaining)
+            chunk = remaining;
+        xr_array_core_copy_nonoverlap_bytes(dp + copied, dp, chunk);
+        copied += chunk;
+    }
+}
+
+enum {
+    XR_ENDIAN_NATIVE = 0,
+    XR_ENDIAN_LE = 1,
+    XR_ENDIAN_BE = 2,
+};
+
+static inline bool xrt_freestanding_host_is_little_endian(void) {
+    const uint16_t one = 1;
+    return *((const uint8_t *) &one) == 1;
+}
+
+static inline bool xrt_freestanding_endian_matches_host(int64_t endian) {
+    if (endian == XR_ENDIAN_NATIVE)
+        return true;
+    return (endian == XR_ENDIAN_LE) == xrt_freestanding_host_is_little_endian();
+}
+
+static inline bool xrt_freestanding_bytes_range_ok(int64_t length, uint8_t elem_type,
+                                                   int64_t offset, int64_t width) {
+    return elem_type == XR_ELEM_U8 && length >= 0 && offset >= 0 && width >= 0 &&
+           offset <= length && width <= length - offset;
+}
+
+static inline uint16_t xrt_freestanding_bswap16(uint16_t value) {
+    return (uint16_t) ((value >> 8) | (value << 8));
+}
+
+static inline uint32_t xrt_freestanding_bswap32(uint32_t value) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_bswap32(value);
+#else
+    return ((value & UINT32_C(0x000000ff)) << 24) | ((value & UINT32_C(0x0000ff00)) << 8) |
+           ((value & UINT32_C(0x00ff0000)) >> 8) | ((value & UINT32_C(0xff000000)) >> 24);
+#endif
+}
+
+static inline uint64_t xrt_freestanding_bswap64(uint64_t value) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_bswap64(value);
+#else
+    return ((value & UINT64_C(0x00000000000000ff)) << 56) |
+           ((value & UINT64_C(0x000000000000ff00)) << 40) |
+           ((value & UINT64_C(0x0000000000ff0000)) << 24) |
+           ((value & UINT64_C(0x00000000ff000000)) << 8) |
+           ((value & UINT64_C(0x000000ff00000000)) >> 8) |
+           ((value & UINT64_C(0x0000ff0000000000)) >> 24) |
+           ((value & UINT64_C(0x00ff000000000000)) >> 40) |
+           ((value & UINT64_C(0xff00000000000000)) >> 56);
+#endif
+}
+
+static inline uint16_t xr_array_core_bytes_load_u16(const void *data, int64_t length,
+                                                    uint8_t elem_type, int64_t offset,
+                                                    int64_t endian, bool *ok) {
+    bool valid = data && xrt_freestanding_bytes_range_ok(length, elem_type, offset, 2);
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return 0;
+    uint16_t value = 0;
+    memcpy(&value, (const uint8_t *) data + offset, sizeof(value));
+    return xrt_freestanding_endian_matches_host(endian) ? value : xrt_freestanding_bswap16(value);
+}
+
+static inline uint32_t xr_array_core_bytes_load_u32(const void *data, int64_t length,
+                                                    uint8_t elem_type, int64_t offset,
+                                                    int64_t endian, bool *ok) {
+    bool valid = data && xrt_freestanding_bytes_range_ok(length, elem_type, offset, 4);
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return 0;
+    uint32_t value = 0;
+    memcpy(&value, (const uint8_t *) data + offset, sizeof(value));
+    return xrt_freestanding_endian_matches_host(endian) ? value : xrt_freestanding_bswap32(value);
+}
+
+static inline uint64_t xr_array_core_bytes_load_u64(const void *data, int64_t length,
+                                                    uint8_t elem_type, int64_t offset,
+                                                    int64_t endian, bool *ok) {
+    bool valid = data && xrt_freestanding_bytes_range_ok(length, elem_type, offset, 8);
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return 0;
+    uint64_t value = 0;
+    memcpy(&value, (const uint8_t *) data + offset, sizeof(value));
+    return xrt_freestanding_endian_matches_host(endian) ? value : xrt_freestanding_bswap64(value);
+}
+
+static inline float xr_array_core_bytes_load_f32(const void *data, int64_t length,
+                                                 uint8_t elem_type, int64_t offset, int64_t endian,
+                                                 bool *ok) {
+    uint32_t bits = xr_array_core_bytes_load_u32(data, length, elem_type, offset, endian, ok);
+    float value = 0.0f;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+static inline double xr_array_core_bytes_load_f64(const void *data, int64_t length,
+                                                  uint8_t elem_type, int64_t offset, int64_t endian,
+                                                  bool *ok) {
+    uint64_t bits = xr_array_core_bytes_load_u64(data, length, elem_type, offset, endian, ok);
+    double value = 0.0;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+static inline uint16_t xr_array_core_bytes_load_u16_le(const void *data, int64_t length,
+                                                       uint8_t elem_type, int64_t offset,
+                                                       bool *ok) {
+    return xr_array_core_bytes_load_u16(data, length, elem_type, offset, XR_ENDIAN_LE, ok);
+}
+
+static inline uint32_t xr_array_core_bytes_load_u32_le(const void *data, int64_t length,
+                                                       uint8_t elem_type, int64_t offset,
+                                                       bool *ok) {
+    return xr_array_core_bytes_load_u32(data, length, elem_type, offset, XR_ENDIAN_LE, ok);
+}
+
+static inline uint64_t xr_array_core_bytes_load_u64_le(const void *data, int64_t length,
+                                                       uint8_t elem_type, int64_t offset,
+                                                       bool *ok) {
+    return xr_array_core_bytes_load_u64(data, length, elem_type, offset, XR_ENDIAN_LE, ok);
+}
+
+static inline bool xr_array_core_bytes_store_u16(void *data, int64_t length, uint8_t elem_type,
+                                                 int64_t offset, uint16_t value, int64_t endian) {
+    if (!data || !xrt_freestanding_bytes_range_ok(length, elem_type, offset, 2))
+        return false;
+    if (!xrt_freestanding_endian_matches_host(endian))
+        value = xrt_freestanding_bswap16(value);
+    memcpy((uint8_t *) data + offset, &value, sizeof(value));
+    return true;
+}
+
+static inline bool xr_array_core_bytes_store_u32(void *data, int64_t length, uint8_t elem_type,
+                                                 int64_t offset, uint32_t value, int64_t endian) {
+    if (!data || !xrt_freestanding_bytes_range_ok(length, elem_type, offset, 4))
+        return false;
+    if (!xrt_freestanding_endian_matches_host(endian))
+        value = xrt_freestanding_bswap32(value);
+    memcpy((uint8_t *) data + offset, &value, sizeof(value));
+    return true;
+}
+
+static inline bool xr_array_core_bytes_store_u64(void *data, int64_t length, uint8_t elem_type,
+                                                 int64_t offset, uint64_t value, int64_t endian) {
+    if (!data || !xrt_freestanding_bytes_range_ok(length, elem_type, offset, 8))
+        return false;
+    if (!xrt_freestanding_endian_matches_host(endian))
+        value = xrt_freestanding_bswap64(value);
+    memcpy((uint8_t *) data + offset, &value, sizeof(value));
+    return true;
+}
+
+static inline bool xr_array_core_bytes_store_f32(void *data, int64_t length, uint8_t elem_type,
+                                                 int64_t offset, float value, int64_t endian) {
+    uint32_t bits = 0;
+    memcpy(&bits, &value, sizeof(bits));
+    return xr_array_core_bytes_store_u32(data, length, elem_type, offset, bits, endian);
+}
+
+static inline bool xr_array_core_bytes_store_f64(void *data, int64_t length, uint8_t elem_type,
+                                                 int64_t offset, double value, int64_t endian) {
+    uint64_t bits = 0;
+    memcpy(&bits, &value, sizeof(bits));
+    return xr_array_core_bytes_store_u64(data, length, elem_type, offset, bits, endian);
+}
+
+static inline int64_t xrt_span_bytes_load_u16_le_unchecked_raw(xr_span_t span, int64_t off) {
+    bool ok = false;
+    return (int64_t) xr_array_core_bytes_load_u16_le(span.data, span.length, span.elem_type, off,
+                                                     &ok);
+}
+
+static inline int64_t xrt_span_bytes_load_u32_le_unchecked_raw(xr_span_t span, int64_t off) {
+    bool ok = false;
+    return (int64_t) xr_array_core_bytes_load_u32_le(span.data, span.length, span.elem_type, off,
+                                                     &ok);
+}
+
+static inline int64_t xrt_span_bytes_load_u64_le_unchecked_raw(xr_span_t span, int64_t off) {
+    bool ok = false;
+    return (int64_t) xr_array_core_bytes_load_u64_le(span.data, span.length, span.elem_type, off,
+                                                     &ok);
 }
 
 static inline int64_t xr_value_to_int64_coerce(XrValue v) {
@@ -506,15 +1068,13 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         xrt_fixed_index_oob(idx, count);
     }
     if (obj.tag == XR_TAG_ENUM && XR_IS_INT(key)) {
-        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) obj.ptr;
+        const XrAotEnumBox *ev = (const XrAotEnumBox *) obj.ptr;
         if (!ev)
             return XR_NULL_VAL;
         if (key.i == 0)
             return XR_FROM_INT(ev->member_index);
-        if (key.i > 0 && ev->payloads && (uint32_t) key.i <= ev->payload_count)
+        if (key.i > 0 && (uint32_t) key.i <= ev->payload_count)
             return ev->payloads[key.i - 1];
-        if (key.i == 1 && ev->payload_count > 0)
-            return ev->payload0;
     }
     xrt_freestanding_trap("freestanding index get supports only fixed arrays");
     return XR_NULL_VAL;
@@ -523,13 +1083,11 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
 static inline XrValue xrt_enum_field_get(XrValue boxed, int64_t index) {
     if (boxed.tag != XR_TAG_ENUM || !boxed.ptr)
         return XR_NULL_VAL;
-    const XrAotEnumValueView *ev = (const XrAotEnumValueView *) boxed.ptr;
+    const XrAotEnumBox *ev = (const XrAotEnumBox *) boxed.ptr;
     if (index == 0)
         return XR_FROM_INT(ev->member_index);
-    if (index > 0 && ev->payloads && (uint32_t) index <= ev->payload_count)
+    if (index > 0 && (uint32_t) index <= ev->payload_count)
         return ev->payloads[index - 1];
-    if (index == 1 && ev->payload_count > 0)
-        return ev->payload0;
     return XR_NULL_VAL;
 }
 
@@ -715,6 +1273,20 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
         return a.f == b.f;
     if (ta == XR_TAG_NULL)
         return 1;
+    if (ta == XR_TAG_ENUM) {
+        const XrAotEnumBox *ea = (const XrAotEnumBox *) a.ptr;
+        const XrAotEnumBox *eb = (const XrAotEnumBox *) b.ptr;
+        if (!ea || !eb)
+            return ea == eb;
+        if (ea->layout_id != eb->layout_id || ea->member_index != eb->member_index ||
+            ea->payload_count != eb->payload_count)
+            return 0;
+        for (uint32_t i = 0; i < ea->payload_count; i++) {
+            if (!xrt_eq(ea->payloads[i], eb->payloads[i]))
+                return 0;
+        }
+        return 1;
+    }
     return a.ptr == b.ptr && a.ext == b.ext;
 }
 
@@ -774,11 +1346,6 @@ static inline void xrt_arc_init(void) {
 
 static inline void xrt_bump_destroy(void) {
 }
-
-extern void *memcpy(void *XRT_RESTRICT dst, const void *XRT_RESTRICT src, size_t n);
-extern void *memmove(void *dst, const void *src, size_t n);
-extern void *memset(void *dst, int byte, size_t n);
-extern int memcmp(const void *a, const void *b, size_t n);
 
 static inline int64_t xrt_mem_int_arg(XrValue v) {
     return XR_IS_INT(v) ? XR_TO_INT(v) : 0;

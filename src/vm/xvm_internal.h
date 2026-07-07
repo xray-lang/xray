@@ -47,22 +47,23 @@
 #include <stdint.h>
 #include "../base/xdefs.h"
 
-XR_FUNC XrStructLayout *xr_vm_struct_ref_layout(XrVMRuntime *isolate, XrValue ref);
+XR_FUNC XrAggregateLayout *xr_vm_struct_ref_layout(XrVMRuntime *isolate, XrValue ref);
 XR_FUNC uint8_t *xr_vm_struct_ref_payload(XrVMRuntime *isolate, XrValue ref,
-                                          XrStructLayout **layout_out);
-XR_FUNC int xr_vm_struct_layout_field_index(XrVMRuntime *isolate, const XrStructLayout *layout,
+                                          XrAggregateLayout **layout_out);
+XR_FUNC int xr_vm_struct_layout_field_index(XrVMRuntime *isolate, const XrAggregateLayout *layout,
                                             int prop_symbol);
 XR_FUNC uint8_t *xr_vm_instance_struct_field_ptr(XrVMRuntime *isolate, XrInstance *inst,
                                                  int field_index,
-                                                 XrStructFieldLayout **field_out);
+                                                 XrAggregateFieldLayout **field_out);
 XR_FUNC bool xr_vm_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
-                                           XrStructFieldLayout *field, XrValue *out);
+                                           XrAggregateFieldLayout *field, XrValue *out);
 XR_FUNC bool xr_vm_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
-                                            const XrStructFieldLayout *field, XrValue src);
+                                            const XrAggregateFieldLayout *field, XrValue src);
 XR_FUNC bool xr_vm_instance_struct_get_field(XrVMRuntime *isolate, XrInstance *inst,
                                              int field_index, XrValue *out);
 XR_FUNC bool xr_vm_instance_struct_set_field(XrVMRuntime *isolate, XrInstance *inst,
                                              int field_index, XrValue value);
+XR_FUNC XrValue xr_vm_send_result_value(XrVMRuntime *isolate, uint32_t member_index);
 
 /* ========== Inline Helper Functions ========== */
 

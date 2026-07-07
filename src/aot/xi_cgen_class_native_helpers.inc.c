@@ -8,7 +8,7 @@
  * xi_cgen_class_native_helpers.inc.c - AOT native class receiver emission
  */
 
-static int cg_class_native_field_index(const XrStructLayout *layout, const char *field) {
+static int cg_class_native_field_index(const XrAggregateLayout *layout, const char *field) {
     return cg_class_layout_field_index(layout, field);
 }
 
@@ -74,16 +74,16 @@ static const char *cg_class_native_ref_field_tag_name(uint8_t native_type) {
     return xaot_layout_ref_tag_name_for_native_type(native_type);
 }
 
-static bool cg_class_native_field_is_ref(const XrStructFieldLayout *field) {
+static bool cg_class_native_field_is_ref(const XrAggregateFieldLayout *field) {
     return field && (field->native_type == XR_NATIVE_STRING ||
                      cg_class_native_ref_field_tag_name(field->native_type) != NULL);
 }
 
-static bool cg_class_native_field_is_arc_managed_ref(const XrStructFieldLayout *field) {
+static bool cg_class_native_field_is_arc_managed_ref(const XrAggregateFieldLayout *field) {
     return cg_class_native_field_is_ref(field);
 }
 
-static bool cg_class_native_layout_has_ref_fields(const XrStructLayout *layout) {
+static bool cg_class_native_layout_has_ref_fields(const XrAggregateLayout *layout) {
     if (!layout)
         return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {
@@ -93,7 +93,7 @@ static bool cg_class_native_layout_has_ref_fields(const XrStructLayout *layout) 
     return false;
 }
 
-static bool cg_class_native_layout_has_arc_ref_fields(const XrStructLayout *layout) {
+static bool cg_class_native_layout_has_arc_ref_fields(const XrAggregateLayout *layout) {
     if (!layout)
         return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {
@@ -109,9 +109,9 @@ static void emit_class_native_dtor_name(FILE *out, const char *prefix, const XiC
 }
 
 static void emit_class_native_ref_field_value(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
-                                              const XrStructLayout *layout, uint16_t idx,
+                                              const XrAggregateLayout *layout, uint16_t idx,
                                               const char *object_expr) {
-    const XrStructFieldLayout *field = cg_struct_field(layout, idx);
+    const XrAggregateFieldLayout *field = cg_struct_field(layout, idx);
     if (!field) {
         fprintf(out, "XR_NULL_VAL");
         return;
@@ -132,9 +132,9 @@ static void emit_class_native_ref_field_value(XiCgenCtx *ctx, FILE *out, const X
 
 static void emit_class_native_receiver_ref_field_value(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                        const XiClassData *cd,
-                                                       const XrStructLayout *layout, uint16_t idx,
-                                                       const XiValue *recv) {
-    const XrStructFieldLayout *field = cg_struct_field(layout, idx);
+                                                       const XrAggregateLayout *layout,
+                                                       uint16_t idx, const XiValue *recv) {
+    const XrAggregateFieldLayout *field = cg_struct_field(layout, idx);
     if (!field) {
         fprintf(out, "XR_NULL_VAL");
         return;
@@ -154,9 +154,9 @@ static void emit_class_native_receiver_ref_field_value(XiCgenCtx *ctx, FILE *out
 }
 
 static bool emit_class_native_ref_field_store_expr(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
-                                                   const XrStructLayout *layout, uint16_t idx,
+                                                   const XrAggregateLayout *layout, uint16_t idx,
                                                    const char *object_expr, const XiValue *value) {
-    const XrStructFieldLayout *field = cg_struct_field(layout, idx);
+    const XrAggregateFieldLayout *field = cg_struct_field(layout, idx);
     if (!cg_class_native_field_is_ref(field))
         return false;
     const char *tag_name = cg_class_native_ref_field_tag_name(field->native_type);
@@ -181,10 +181,10 @@ static bool emit_class_native_ref_field_store_expr(XiCgenCtx *ctx, FILE *out, co
 
 static bool emit_class_native_receiver_ref_field_store_expr(XiCgenCtx *ctx, FILE *out,
                                                             const XiFunc *f, const XiClassData *cd,
-                                                            const XrStructLayout *layout,
+                                                            const XrAggregateLayout *layout,
                                                             uint16_t idx, const XiValue *recv,
                                                             const XiValue *value) {
-    const XrStructFieldLayout *field = cg_struct_field(layout, idx);
+    const XrAggregateFieldLayout *field = cg_struct_field(layout, idx);
     if (!cg_class_native_field_is_ref(field))
         return false;
     const char *tag_name = cg_class_native_ref_field_tag_name(field->native_type);
@@ -217,7 +217,8 @@ static void emit_class_native_type_register_expr(XiCgenCtx *ctx, FILE *out, cons
                                                  const char *prefix) {
     const char *name = cd && cd->class_name ? cd->class_name : "?";
     bool native_layout = cg_class_native_type_registers_native_layout(ctx, cd);
-    fprintf(out, "xrt_type_register(\"%s\", 0, NULL, 0, ", name);
+    (void) name;
+    fprintf(out, "xrt_type_register_hot(0, NULL, 0, ");
     if (native_layout && cg_class_native_layout_has_arc_ref_fields(cd->instance_layout)) {
         emit_class_native_dtor_name(out, prefix, cd);
     } else {
@@ -232,6 +233,32 @@ static void emit_class_native_type_register_expr(XiCgenCtx *ctx, FILE *out, cons
         fprintf(out, "0");
     }
     fprintf(out, ")");
+}
+
+static bool cg_class_native_has_inspect_sidecar(const XiClassData *cd) {
+    return cd && cd->instance_layout &&
+           (cd->derive_flags & (XR_DERIVE_INSPECT | XR_DERIVE_JSON)) != 0;
+}
+
+static void emit_class_native_inspect_fields_name(FILE *out, const char *prefix,
+                                                  const XiClassData *cd) {
+    emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
+    fprintf(out, "_inspect_fields");
+}
+
+static void emit_class_native_type_derive_init(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                               const char *prefix, const char *type_id_expr) {
+    (void) ctx;
+    if (!cd || cd->derive_flags == 0)
+        return;
+    fprintf(out, "xrt_type_set_derive(%s, %uu, ", type_id_expr, (unsigned) cd->derive_flags);
+    if (cg_class_native_has_inspect_sidecar(cd) && cd->instance_layout->field_count > 0) {
+        emit_class_native_inspect_fields_name(out, prefix, cd);
+        fprintf(out, ", %u", (unsigned) cd->instance_layout->field_count);
+    } else {
+        fprintf(out, "NULL, 0");
+    }
+    fprintf(out, "); ");
 }
 
 static const XiValue *cg_class_native_receiver_value(const XiCgenCtx *ctx, const XiFunc *f,
@@ -256,7 +283,7 @@ static bool cg_class_native_receiver_ref_field(XiCgenCtx *ctx, const XiFunc *f, 
         !cg_class_native_receiver_value(ctx, f, v->args[0]))
         return false;
     int idx = cg_class_native_field_index(info.layout, (const char *) v->aux);
-    const XrStructFieldLayout *field = cg_struct_field(info.layout, idx);
+    const XrAggregateFieldLayout *field = cg_struct_field(info.layout, idx);
     if (!field || field->native_type != expected_native)
         return false;
     if (out_info)
@@ -1570,7 +1597,7 @@ static bool emit_class_native_receiver_field_load_expr(XiCgenCtx *ctx, FILE *out
     int idx = cg_class_native_field_index(info.layout, (const char *) v->aux);
     if (idx < 0)
         return false;
-    const XrStructFieldLayout *field = cg_struct_field(info.layout, idx);
+    const XrAggregateFieldLayout *field = cg_struct_field(info.layout, idx);
     const char *tag_name = field ? cg_class_native_ref_field_tag_name(field->native_type) : NULL;
     XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
     if (tag_name) {
@@ -1601,7 +1628,7 @@ static bool emit_class_native_receiver_field_store_expr(XiCgenCtx *ctx, FILE *ou
     int idx = cg_class_native_field_index(info.layout, (const char *) v->aux);
     if (idx < 0)
         return false;
-    const XrStructFieldLayout *field = cg_struct_field(info.layout, idx);
+    const XrAggregateFieldLayout *field = cg_struct_field(info.layout, idx);
     if (emit_class_native_receiver_ref_field_store_expr(ctx, out, f, info.class_data, info.layout,
                                                         (uint16_t) idx, v->args[0], v->args[1]))
         return true;
@@ -1630,7 +1657,7 @@ static bool emit_class_native_instance_field_load_expr(XiCgenCtx *ctx, FILE *out
     int idx = cg_class_native_field_index(cd->instance_layout, (const char *) v->aux);
     if (idx < 0)
         return false;
-    const XrStructFieldLayout *field = cg_struct_field(cd->instance_layout, (uint16_t) idx);
+    const XrAggregateFieldLayout *field = cg_struct_field(cd->instance_layout, (uint16_t) idx);
     XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
     XrRep field_rep = field && cg_class_native_ref_field_tag_name(field->native_type)
                           ? XR_REP_PTR
@@ -1672,7 +1699,7 @@ static bool emit_class_native_instance_field_store_expr(XiCgenCtx *ctx, FILE *ou
     int idx = cg_class_native_field_index(cd->instance_layout, (const char *) v->aux);
     if (idx < 0)
         return false;
-    const XrStructFieldLayout *field = cg_struct_field(cd->instance_layout, (uint16_t) idx);
+    const XrAggregateFieldLayout *field = cg_struct_field(cd->instance_layout, (uint16_t) idx);
     if (!field)
         return false;
     const char *field_ctype = cg_struct_field_c_type(cd->instance_layout, (uint16_t) idx);
@@ -3350,6 +3377,21 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
     fprintf(out, "} ");
     emit_class_native_type_name(out, prefix, cd->class_name);
     fprintf(out, ";\n");
+    if (cg_class_native_has_inspect_sidecar(cd)) {
+        fprintf(out, "static const XrtInspectField ");
+        emit_class_native_inspect_fields_name(out, prefix, cd);
+        fprintf(out, "[] = {");
+        for (uint16_t fi = 0; fi < cd->instance_layout->field_count; fi++) {
+            const XrAggregateFieldLayout *field = cg_struct_field(cd->instance_layout, fi);
+            const char *field_name =
+                cd->instance_layout->field_names ? cd->instance_layout->field_names[fi] : NULL;
+            fprintf(out, "%s{", fi > 0 ? ", " : "");
+            emit_c_string_literal(out, field_name ? field_name : "?");
+            fprintf(out, ", %uu, %u}", field ? (unsigned) field->offset : 0u,
+                    field ? (unsigned) field->native_type : (unsigned) XR_NATIVE_VALUE);
+        }
+        fprintf(out, "};\n");
+    }
     if (!cg_class_native_layout_has_arc_ref_fields(cd->instance_layout))
         return;
     fprintf(out, "static void ");

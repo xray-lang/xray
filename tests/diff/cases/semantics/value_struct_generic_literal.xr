@@ -1,4 +1,4 @@
-// Generic value struct literals must lower to XI_STRUCT_NEW after monomorphization.
+// Generic value struct literals must lower to XI_AGG_NEW after monomorphization.
 // The VM and AOT both rely on the concrete struct layout, not a constructor fallback.
 struct Box<T> {
     value: T

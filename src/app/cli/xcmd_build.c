@@ -85,6 +85,37 @@ static bool build_profile_parse(const char *name, XrCliBuildProfile *out, char *
     return false;
 }
 
+static bool build_type_name_profile_parse(const char *name, XrCliBuildProfile build_profile,
+                                          XiCgenTypeNameProfile *out, char *err, size_t err_size) {
+    if (!out) {
+        if (err && err_size > 0)
+            snprintf(err, err_size, "internal error: missing type-name profile output");
+        return false;
+    }
+    if (!name || name[0] == '\0') {
+        *out = build_profile == XR_CLI_BUILD_PROFILE_FREESTANDING ? XI_CGEN_TYPE_NAMES_NONE
+                                                                  : XI_CGEN_TYPE_NAMES_ALL;
+        return true;
+    }
+    if (strcmp(name, "none") == 0) {
+        *out = XI_CGEN_TYPE_NAMES_NONE;
+        return true;
+    }
+    if (strcmp(name, "public") == 0) {
+        *out = XI_CGEN_TYPE_NAMES_PUBLIC;
+        return true;
+    }
+    if (strcmp(name, "all") == 0) {
+        *out = XI_CGEN_TYPE_NAMES_ALL;
+        return true;
+    }
+    if (err && err_size > 0) {
+        snprintf(err, err_size,
+                 "unknown type-name profile '%s' (expected 'none', 'public', or 'all')", name);
+    }
+    return false;
+}
+
 /* ========== Shared Helpers ========== */
 
 // Invoke C compiler to link generated C source (+ optional .o) into executable
@@ -967,11 +998,11 @@ static int cmd_build_bytecode(const char *input, const char *output, const char 
 static int cmd_build_native(const char *input, const char *output, const char *cc,
                             const char *opt_flag, const char *cpu, bool c_only, bool strip,
                             bool debug_symbols, bool shared_library, XrCliBuildProfile profile,
-                            const char *sysroot, const char *linker_script, bool verbose,
-                            bool dump_xaot_plan, bool dump_link_manifest, bool dump_link_command,
-                            bool dry_run_link, const char *c_header, bool keep_c,
-                            const char *cache_dir_arg, bool rebuild, bool lto,
-                            const XrCliBuildTarget *target,
+                            XiCgenTypeNameProfile type_name_profile, const char *sysroot,
+                            const char *linker_script, bool verbose, bool dump_xaot_plan,
+                            bool dump_link_manifest, bool dump_link_command, bool dry_run_link,
+                            const char *c_header, bool keep_c, const char *cache_dir_arg,
+                            bool rebuild, bool lto, const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan);
 
 /* ========== CLI Entry Point ========== */
@@ -990,6 +1021,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     const char *zig_path = xr_cli_opt_string(&inv->options, "zig", NULL);
     const char *cpu = xr_cli_opt_string(&inv->options, "cpu", NULL);
     const char *profile_arg = xr_cli_opt_string(&inv->options, "profile", "hosted");
+    const char *type_names_arg = xr_cli_opt_string(&inv->options, "type-names", NULL);
     const char *linker_script = xr_cli_opt_string(&inv->options, "linker-script", NULL);
     bool c_only = xr_cli_opt_bool(&inv->options, "c-only");
     bool strip_symbols = xr_cli_opt_bool(&inv->options, "strip");
@@ -1009,6 +1041,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     bool opt_fast = build_opt_level_is_fast(opt_level);
     XrCliBuildTarget target;
     XrCliBuildProfile profile;
+    XiCgenTypeNameProfile type_name_profile;
     XrCliToolchainKind toolchain_kind;
     XrCliToolchainPlan toolchain_plan;
     char parse_err[512];
@@ -1021,6 +1054,11 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: %s\n", parse_err);
         return 2;
     }
+    if (!build_type_name_profile_parse(type_names_arg, profile, &type_name_profile, parse_err,
+                                       sizeof(parse_err))) {
+        fprintf(stderr, "Error: %s\n", parse_err);
+        return 2;
+    }
     if (!xr_cli_toolchain_kind_parse(toolchain_arg, &toolchain_kind, parse_err,
                                      sizeof(parse_err))) {
         fprintf(stderr, "Error: %s\n", parse_err);
@@ -1028,6 +1066,10 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     }
     if (profile != XR_CLI_BUILD_PROFILE_HOSTED && !native_mode) {
         fprintf(stderr, "Error: --profile %s requires --native\n", build_profile_name(profile));
+        return 2;
+    }
+    if (xr_cli_opt_present(&inv->options, "type-names") && !native_mode) {
+        fprintf(stderr, "Error: --type-names requires --native\n");
         return 2;
     }
 
@@ -1141,11 +1183,11 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     }
 
     if (native_mode) {
-        return cmd_build_native(input_file, output_file, cc, opt_flag, effective_cpu, c_only,
-                                strip_symbols, debug_symbols, shared_library, profile, sysroot,
-                                linker_script, verbose, dump_xaot_plan, dump_link_manifest,
-                                dump_link_command, dry_run_link, c_header, keep_c, cache_dir_arg,
-                                rebuild, effective_lto, &target, &toolchain_plan);
+        return cmd_build_native(
+            input_file, output_file, cc, opt_flag, effective_cpu, c_only, strip_symbols,
+            debug_symbols, shared_library, profile, type_name_profile, sysroot, linker_script,
+            verbose, dump_xaot_plan, dump_link_manifest, dump_link_command, dry_run_link, c_header,
+            keep_c, cache_dir_arg, rebuild, effective_lto, &target, &toolchain_plan);
     }
     return cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
                               debug_symbols, sysroot);
@@ -1815,17 +1857,18 @@ static bool xaot_cli_fast_test_direct_link_allowed(const XaotLinkManifest *manif
 static int cmd_build_native(const char *input, const char *output, const char *cc,
                             const char *opt_flag, const char *cpu, bool c_only, bool strip,
                             bool debug_symbols, bool shared_library, XrCliBuildProfile profile,
-                            const char *sysroot, const char *linker_script, bool verbose,
-                            bool dump_xaot_plan, bool dump_link_manifest, bool dump_link_command,
-                            bool dry_run_link, const char *c_header, bool keep_c,
-                            const char *cache_dir_arg, bool rebuild, bool lto,
-                            const XrCliBuildTarget *target,
+                            XiCgenTypeNameProfile type_name_profile, const char *sysroot,
+                            const char *linker_script, bool verbose, bool dump_xaot_plan,
+                            bool dump_link_manifest, bool dump_link_command, bool dry_run_link,
+                            const char *c_header, bool keep_c, const char *cache_dir_arg,
+                            bool rebuild, bool lto, const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan) {
     XaotBuildResult aot_result;
     XaotBuildProfile aot_profile = profile == XR_CLI_BUILD_PROFILE_FREESTANDING
                                        ? XAOT_BUILD_PROFILE_FREESTANDING
                                        : XAOT_BUILD_PROFILE_HOSTED;
-    int rc = xaot_build_ex(input, dump_xaot_plan, !shared_library, aot_profile, &aot_result);
+    int rc = xaot_build_ex(input, dump_xaot_plan, !shared_library, aot_profile, type_name_profile,
+                           &aot_result);
     if (rc != 0)
         return rc;
     if (target && target->name) {

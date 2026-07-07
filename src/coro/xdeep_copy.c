@@ -24,6 +24,7 @@
 #include "../runtime/object/xset.h"
 #include "../runtime/object/xjson.h"
 #include "../runtime/class/xinstance.h"
+#include "../runtime/class/xenum.h"
 #include "../runtime/closure/xclosure.h"
 #include "xcoroutine.h"
 #include "../runtime/xisolate_api.h"
@@ -663,6 +664,26 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
         return cached;
 
     XrClass *cls = inst->klass;
+    if (cls && cls->builtin_kind == XR_BK_ADT_ENUM) {
+        XrEnumAggregateValue *src = (XrEnumAggregateValue *) obj;
+        XrEnumAggregateValue *dst = (XrEnumAggregateValue *) copy_ctx_alloc(
+            ctx, xr_enum_aggregate_size(src->payload_count), XR_TINSTANCE);
+        if (!dst)
+            return XR_NULL_VAL;
+        xr_obj_header_init_type(&dst->hdr, XR_TINSTANCE);
+        xr_enum_aggregate_init_inplace(dst, src->enum_type, src->member_index, NULL,
+                                       src->payload_count);
+        if (src->payload_count > 0) {
+            XR_OBJ_SET_FLAG(&dst->hdr, XR_OBJ_CYCLE_CANDIDATE);
+            dst->hdr._rsv = XR_CYCLE_NOT_IN_ROOTS;
+        }
+        XrValue result = XR_FROM_PTR(dst);
+        xr_copy_context_record(ctx, src, result);
+        ctx->objects_copied++;
+        for (uint32_t i = 0; i < src->payload_count; i++)
+            dst->payloads[i] = xr_deep_copy_with_ctx(ctx, src->payloads[i]);
+        return result;
+    }
     uint32_t field_count = xr_class_instance_field_count(cls);
 
     XrInstance *new_inst = (XrInstance *) copy_ctx_alloc(ctx, xr_instance_size(cls), XR_TINSTANCE);
@@ -773,7 +794,7 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     /* Immortal fixed-heap singletons (enum value & type descriptors, classes —
      * allocated by xr_fixed_heap_alloc with MANAGED + sticky RC) are referenced by
      * every coroutine. Their identity and native C-struct members (e.g.
-     * XrEnumValue.enum_name, which lives OUTSIDE the instance field array) make
+     * XrEnumCtor.enum_name, which lives OUTSIDE the instance field array) make
      * a structural field-copy both wrong and corrupting. Share by pointer; the
      * sticky RC makes any cross-coroutine retain/drop a no-op. */
     if (XR_OBJ_GET_FLAG(obj, XR_OBJ_MANAGED) &&
@@ -1237,6 +1258,25 @@ XrValue xr_to_shared_instance(struct XrVMRuntime *X, XrObjHeader *obj) {
     if (!inst || !xr_isolate_get_sys_heap(X))
         return XR_NULL_VAL;
     XrClass *cls = inst->klass;
+    if (cls && cls->builtin_kind == XR_BK_ADT_ENUM) {
+        XrEnumAggregateValue *src = (XrEnumAggregateValue *) obj;
+        XrEnumAggregateValue *dst = (XrEnumAggregateValue *) xr_sysheap_alloc_shared(
+            xr_isolate_get_sys_heap(X), xr_enum_aggregate_size(src->payload_count), XR_TINSTANCE);
+        if (!dst)
+            return XR_NULL_VAL;
+        xr_obj_header_init_type(&dst->hdr, XR_TINSTANCE);
+        xr_enum_aggregate_init_inplace(dst, src->enum_type, src->member_index, NULL,
+                                       src->payload_count);
+        XR_OBJ_SET_STORAGE(&dst->hdr, XR_OBJ_STORAGE_SHARED);
+        xr_shared_set_refc(&dst->hdr, 1);
+        if (src->payload_count > 0) {
+            XR_OBJ_SET_FLAG(&dst->hdr, XR_OBJ_CYCLE_CANDIDATE);
+            dst->hdr._rsv = XR_CYCLE_NOT_IN_ROOTS;
+        }
+        for (uint32_t i = 0; i < src->payload_count; i++)
+            dst->payloads[i] = xr_to_shared(X, src->payloads[i]);
+        return XR_FROM_PTR(dst);
+    }
     XrInstance *new_inst = (XrInstance *) xr_sysheap_alloc_shared(
         xr_isolate_get_sys_heap(X), xr_instance_size(cls), XR_TINSTANCE);
     if (!new_inst)

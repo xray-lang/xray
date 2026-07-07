@@ -350,11 +350,11 @@
     _(TFIELD_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A].i = R[B]:compact_fields[C]")                     \
     _(TFIELD_SET, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A]:compact_fields[B] = R[C].i")                 \
     _(LOOP_BACK, FMT_ABC, KOP_SPECIAL, "tail recursion: R[0..B-1]=R[A+1..A+B]; PC=entry")          \
-    _(NEW_STRUCT, FMT_ABC, KOP_ABC_BIN_LIT,                                                        \
-      "R[A] = alloc struct in struct_area (B=class reg, C=slot offset)")                           \
-    _(STRUCT_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = struct(R[B]).field[C]")                        \
-    _(STRUCT_SET, FMT_ABC, KOP_ABC_INPLACE_LIT, "struct(R[A]).field[B] = R[C]")                    \
-    _(STRUCT_COPY, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = memcpy struct R[B] into struct_area slot C")  \
+    _(AGG_NEW, FMT_ABC, KOP_ABC_BIN_LIT,                                                           \
+      "R[A] = alloc aggregate in struct_area (B=class reg, C=slot offset)")                        \
+    _(AGG_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = aggregate(R[B]).field[C]")                        \
+    _(AGG_SET, FMT_ABC, KOP_ABC_INPLACE_LIT, "aggregate(R[A]).field[B] = R[C]")                    \
+    _(AGG_COPY, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = memcpy aggregate R[B] into struct_area slot C")  \
     _(FIXED_ARRAY_NEW, FMT_ABC, KOP_ABC_OUT_LIT_K,                                                 \
       "R[A] = fixed array ref in struct_area slot B, metadata K[C]")                               \
     _(PTR_LOAD, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = *(T*)R[B], C = XrFFIType width of T")            \

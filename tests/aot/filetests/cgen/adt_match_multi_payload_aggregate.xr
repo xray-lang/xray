@@ -1,0 +1,22 @@
+enum PairResult {
+    Pair(int, int),
+    Empty
+}
+
+fn make_pair() -> PairResult {
+    return PairResult.Pair(10, 32)
+}
+
+fn score() -> int {
+    var result = make_pair()
+    match (result) {
+        PairResult.Pair(left, right) -> {
+            return left + right
+        }
+        PairResult.Empty -> {
+            return 0
+        }
+    }
+}
+
+print(score())

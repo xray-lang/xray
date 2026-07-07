@@ -1,1 +1,1 @@
-attributes can only annotate declaration items
+attributes can only annotate declaration items; use 'fn name(...)' for function item attributes

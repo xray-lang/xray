@@ -1,0 +1,25 @@
+@derive(Inspect)
+class InspectOnly {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+@derive(Json)
+class JsonOnly {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+var inspect_only = InspectOnly(7)
+print(inspect_only)
+
+var json_only = JsonOnly(9)
+var encoded = Json.encode(json_only)
+print(encoded.value)
+print(json_only)

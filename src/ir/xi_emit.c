@@ -46,7 +46,7 @@ XR_FUNC void emit_inst(EmitCtx *ctx, XrInstruction inst) {
     xr_vm_proto_write(ctx->proto, inst, ctx->current_line);
 }
 
-XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const XrStructLayout *layout,
+XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const XrAggregateLayout *layout,
                                             uint16_t *slot_out) {
     if (!ctx || !layout || !slot_out) {
         if (ctx)
@@ -54,7 +54,7 @@ XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const XrStructLayout *
         return false;
     }
 
-    uint32_t bytes_needed = xr_struct_layout_storage_size(layout);
+    uint32_t bytes_needed = xr_aggregate_layout_storage_size(layout);
     return xi_emit_alloc_struct_area_bytes(ctx, bytes_needed, slot_out);
 }
 
@@ -517,7 +517,7 @@ static void emit_param(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     /* Params already in registers; no-op. */
 }
 
-static XrStructLayout *emit_value_struct_layout(const XrType *type) {
+static XrAggregateLayout *emit_value_struct_layout(const XrType *type) {
     if (!type)
         return NULL;
     if (type->kind != XR_KIND_INSTANCE && type->kind != XR_KIND_CLASS)
@@ -544,13 +544,13 @@ static void emit_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     XrType *src_type = v->type ? v->type : v->args[0]->type;
-    XrStructLayout *layout = emit_value_struct_layout(src_type);
+    XrAggregateLayout *layout = emit_value_struct_layout(src_type);
     XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
-    if (layout && origin && origin->op == XI_STRUCT_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin)) {
+    if (layout && origin && origin->op == XI_AGG_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin)) {
         uint16_t slot = 0;
         if (!xi_emit_alloc_struct_area_slot(ctx, layout, &slot))
             return;
-        emit_inst(ctx, CREATE_ABC(OP_STRUCT_COPY, dst, src, slot));
+        emit_inst(ctx, CREATE_ABC(OP_AGG_COPY, dst, src, slot));
         return;
     }
     emit_inst(ctx, CREATE_ABC(OP_COPY, dst, src, 0));

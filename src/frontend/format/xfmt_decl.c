@@ -17,6 +17,7 @@
 #include "xfmt_internal.h"
 #include "xfmt_literal.h"
 #include "../../runtime/value/xtype_names.h"
+#include "../../shared/xr_derive_flags.h"
 #include <string.h>
 
 static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
@@ -68,6 +69,21 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
                              attr->str_arg ? (int) strlen(attr->str_arg) : 0);
             xfmt_write_char(ctx, ')');
             break;
+        case ATTR_DERIVE: {
+            bool first = true;
+            xfmt_write_str(ctx, "@derive(");
+            if (attr->derive_flags & XR_DERIVE_INSPECT) {
+                xfmt_write_str(ctx, "Inspect");
+                first = false;
+            }
+            if (attr->derive_flags & XR_DERIVE_JSON) {
+                if (!first)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_write_str(ctx, "Json");
+            }
+            xfmt_write_char(ctx, ')');
+            break;
+        }
         default:
             break;
     }
@@ -82,8 +98,9 @@ static void xfmt_emit_attributes(XrFmtContext *ctx, XrAttribute **attrs, int cou
 }
 
 void xfmt_emit_var_decl(XrFmtContext *ctx, AstNode *node) {
-    xfmt_write_indent(ctx);
     VarDeclNode *decl = &node->as.var_decl;
+    xfmt_emit_attributes(ctx, decl->attributes, decl->attr_count);
+    xfmt_write_indent(ctx);
 
     if (node->type == AST_SHARED_DECL) {
         xfmt_write_str(ctx, "shared ");
@@ -153,7 +170,7 @@ void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
 void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     bool is_struct = node && node->type == AST_STRUCT_DECL;
     bool is_union = node && node->type == AST_UNION_DECL;
-    ClassDeclNode *cls = is_union ? &node->as.union_decl
+    ClassDeclNode *cls = is_union    ? &node->as.union_decl
                          : is_struct ? &node->as.struct_decl
                                      : &node->as.class_decl;
     xfmt_emit_attributes(ctx, cls->attributes, cls->attr_count);
@@ -539,8 +556,9 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
 }
 
 void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
-    xfmt_write_indent(ctx);
     EnumDeclNode *en = &node->as.enum_decl;
+    xfmt_emit_attributes(ctx, en->attributes, en->attr_count);
+    xfmt_write_indent(ctx);
 
     xfmt_write_str(ctx, "enum ");
     xfmt_write_str(ctx, en->name);
@@ -554,6 +572,20 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
 
         xfmt_write_indent(ctx);
         xfmt_write_str(ctx, m->name);
+        if (m->payload_count > 0) {
+            xfmt_write_char(ctx, '(');
+            for (int pi = 0; pi < m->payload_count; pi++) {
+                if (pi > 0)
+                    xfmt_write_str(ctx, ", ");
+                if (m->payload_names && m->payload_names[pi]) {
+                    xfmt_write_str(ctx, m->payload_names[pi]);
+                    xfmt_write_str(ctx, ": ");
+                }
+                if (m->payload_types && m->payload_types[pi])
+                    xfmt_emit_type(ctx, m->payload_types[pi]);
+            }
+            xfmt_write_char(ctx, ')');
+        }
         if (i < en->member_count - 1) {
             xfmt_write_char(ctx, ',');
         }

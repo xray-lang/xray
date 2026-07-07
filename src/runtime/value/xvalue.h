@@ -63,14 +63,14 @@ typedef double xr_Number;
 #endif  // !XR_64BIT
 
 typedef enum {
-    XR_TAG_NULL = 0,        // null singleton
-    XR_TAG_BOOL = 1,        // bool: payload 0=false, 1=true
-    XR_TAG_CHAR = 2,        // char: Unicode scalar value in .i (0..0x10FFFF, no surrogates)
-    XR_TAG_I64 = 3,         // integer (stored in .i as int64)
-    XR_TAG_F64 = 4,         // float (stored in .f as double)
-    XR_TAG_PTR = 5,         // GC heap object pointer (stored in .ptr)
-    XR_TAG_STRUCT_REF = 6,  // stack-allocated struct ref (stored in .ptr)
-    XR_TAG_NOTFOUND = 7,    // sentinel: map lookup miss
+    XR_TAG_NULL = 0,      // null singleton
+    XR_TAG_BOOL = 1,      // bool: payload 0=false, 1=true
+    XR_TAG_CHAR = 2,      // char: Unicode scalar value in .i (0..0x10FFFF, no surrogates)
+    XR_TAG_I64 = 3,       // integer (stored in .i as int64)
+    XR_TAG_F64 = 4,       // float (stored in .f as double)
+    XR_TAG_PTR = 5,       // GC heap object pointer (stored in .ptr)
+    XR_TAG_AGG_REF = 6,   // frame-local aggregate ref (stored in .ptr)
+    XR_TAG_NOTFOUND = 7,  // sentinel: map lookup miss
 } XrValueTag;
 
 /* ========== Tagged Union Value (16 bytes, struct-of-union) ========== */
@@ -158,11 +158,11 @@ static inline XrValue xr_make_ptr_val(void *p) {
 #define XR_IS_CLASS(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCLASS)
 #define XR_IS_INSTANCE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TINSTANCE)
 #define XR_IS_BOUND_METHOD(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TBOUND_METHOD)
-// Enum checks use builtin_kind; implemented in xvalue.c.
+// Enum type/constructor metadata use dedicated object tags, not wrapper classes.
 XR_FUNC bool xr_value_is_enum_type(XrValue v);
-XR_FUNC bool xr_value_is_enum_value(XrValue v);
+XR_FUNC bool xr_value_is_enum_ctor(XrValue v);
 #define XR_IS_ENUM_TYPE(v) xr_value_is_enum_type(v)
-#define XR_IS_ENUM_VALUE(v) xr_value_is_enum_value(v)
+#define XR_IS_ENUM_CTOR(v) xr_value_is_enum_ctor(v)
 #define XR_IS_COROUTINE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCOROUTINE)
 #define XR_IS_TASK(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TTASK)
 #define XR_IS_CHANNEL(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCHANNEL)
@@ -186,7 +186,7 @@ XR_FUNC bool xr_value_is_bigint(XrValue v);
 #define XR_IS_BIGINT(v) xr_value_is_bigint(v)
 /* Json is no longer a dedicated GC type; use xr_value_is_json(v)
  * from xjson.h which checks builtin_kind on the instance's class. */
-#define XR_IS_STRUCT_REF(v) ((v).tag == XR_TAG_STRUCT_REF)
+#define XR_IS_AGG_REF(v) ((v).tag == XR_TAG_AGG_REF)
 /* DateTime is no longer a dedicated GC type; use xr_value_is_datetime(iso, v)
  * from datetime.h which walks the class super-chain. */
 /* Exception is no longer a dedicated GC type; use xr_value_is_panic_info(iso, v)
@@ -200,11 +200,11 @@ XR_FUNC bool xr_value_is_bigint(XrValue v);
 
 /* ========== Struct Ref / Frame-Local Span Ref ========== */
 
-/* Reserved STRUCT_REF layout id for frame-local Span values.
- * Real value-struct layout ids are allocated by the VM layout registry. Span is
- * not a user struct: it reuses the STRUCT_REF tag only to point at frame-owned
+/* Reserved aggregate layout id for frame-local Span values.
+ * Real aggregate layout ids are allocated by the VM layout registry. Span is
+ * not a user aggregate: it reuses the aggregate-ref tag only to point at frame-owned
  * bytes without adding another XrValue tag. */
-#define XR_STRUCT_REF_SPAN_LAYOUT_ID UINT16_MAX
+#define XR_AGG_REF_SPAN_LAYOUT_ID UINT16_MAX
 
 typedef struct XrSpanView {
     void *data;
@@ -220,13 +220,13 @@ typedef struct XrSpanView {
 #define XR_SPAN_VIEW_READONLY (1u << 0)
 
 static inline bool xr_value_is_span_ref(XrValue v) {
-    return v.tag == XR_TAG_STRUCT_REF && v.ext == 0 && v.heap_type == XR_STRUCT_REF_SPAN_LAYOUT_ID;
+    return v.tag == XR_TAG_AGG_REF && v.ext == 0 && v.heap_type == XR_AGG_REF_SPAN_LAYOUT_ID;
 }
 
 static inline XrValue xr_span_ref(XrSpanView *span) {
     XrValue v = {0};
-    v.tag = XR_TAG_STRUCT_REF;
-    v.heap_type = XR_STRUCT_REF_SPAN_LAYOUT_ID;
+    v.tag = XR_TAG_AGG_REF;
+    v.heap_type = XR_AGG_REF_SPAN_LAYOUT_ID;
     v.ptr = span;
     return v;
 }
@@ -234,11 +234,11 @@ static inline XrValue xr_span_ref(XrSpanView *span) {
 #define XR_IS_SPAN_REF(v) xr_value_is_span_ref(v)
 #define XR_TO_SPAN_REF(v) ((XrSpanView *) ((v).ptr))
 
-/* Construct a struct ref: ptr points into frame struct_area,
+/* Construct an aggregate ref: ptr points into frame struct_area,
  * heap_type is repurposed as layout_id. */
-static inline XrValue xr_struct_ref(void *ptr, uint16_t layout_id) {
+static inline XrValue xr_aggregate_ref(void *ptr, uint16_t layout_id) {
     XrValue v = {0};
-    v.tag = XR_TAG_STRUCT_REF;
+    v.tag = XR_TAG_AGG_REF;
     v.heap_type = layout_id;
     v.ptr = ptr;
     return v;
@@ -246,22 +246,22 @@ static inline XrValue xr_struct_ref(void *ptr, uint16_t layout_id) {
 static inline void *xr_to_struct_ptr(XrValue v) {
     return v.ptr;
 }
-/* Construct an array ref within a struct: ptr points to array data start,
+/* Construct an array ref within an aggregate: ptr points to array data start,
  * ext encodes (elem_count << 8) | elem_native_type.
- * Uses XR_TAG_STRUCT_REF with ext != 0 to distinguish from nested struct refs. */
+ * Uses XR_TAG_AGG_REF with ext != 0 to distinguish from nested aggregate refs. */
 static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint16_t elem_count) {
     XrValue v = {0};
-    v.tag = XR_TAG_STRUCT_REF;
+    v.tag = XR_TAG_AGG_REF;
     v.heap_type = 0;
     v.ext = ((uint32_t) elem_count << 8) | elem_native_type;
     v.ptr = ptr;
     return v;
 }
-#define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_STRUCT_REF && (v).ext != 0)
+#define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_AGG_REF && (v).ext != 0)
 #define XR_ARRAY_REF_ELEM_TYPE(v) ((uint8_t) ((v).ext & 0xFF))
 #define XR_ARRAY_REF_ELEM_COUNT(v) ((uint16_t) ((v).ext >> 8))
 
-static inline uint16_t xr_struct_layout_id(XrValue v) {
+static inline uint16_t xr_aggregate_layout_id(XrValue v) {
     return v.heap_type;
 }
 

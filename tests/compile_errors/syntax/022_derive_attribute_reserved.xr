@@ -1,0 +1,4 @@
+@derive(Inspect)
+fn bad() {
+    print(1)
+}

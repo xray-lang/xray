@@ -205,33 +205,34 @@ static void register_prelude_enum_full(XaAnalyzer *analyzer, const char *name,
     links->type = xr_type_new_enum(analyzer->isolate, name);
     links->declared_type = links->type;
     links->is_definitely_assigned = true;
-    links->is_adt_enum = is_adt;
     if (type_param_count > 0 && type_param_names) {
         xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL, type_param_count);
     }
 
     if (member_count > 0) {
-        links->enum_member_names =
-            (const char **) xr_malloc(sizeof(const char *) * (size_t) member_count);
-        for (int i = 0; i < member_count; i++)
-            links->enum_member_names[i] = member_names[i];
-        links->enum_member_count = member_count;
-
-        if (is_adt) {
-            links->enum_payload_counts = (int *) xr_calloc((size_t) member_count, sizeof(int));
-            links->enum_payload_types =
-                (XrType ***) xr_calloc((size_t) member_count, sizeof(XrType **));
+        XaEnumInfo *info = xa_enum_info_new(name, (uint32_t) member_count);
+        if (info) {
             for (int i = 0; i < member_count; i++) {
-                links->enum_payload_counts[i] = payload_counts ? payload_counts[i] : 0;
-                int pc = links->enum_payload_counts[i];
+                info->variants[i].name = member_names[i];
+                info->variants[i].payload_count =
+                    (uint16_t) (is_adt && payload_counts ? payload_counts[i] : 0);
+                int pc = info->variants[i].payload_count;
                 if (pc > 0 && payload_types && payload_types[i]) {
-                    links->enum_payload_types[i] =
+                    info->variants[i].payload_types =
                         (XrType **) xr_calloc((size_t) pc, sizeof(XrType *));
-                    if (links->enum_payload_types[i]) {
+                    if (info->variants[i].payload_types) {
                         for (int p = 0; p < pc; p++)
-                            links->enum_payload_types[i][p] = payload_types[i][p];
+                            info->variants[i].payload_types[p] = payload_types[i][p];
                     }
                 }
+            }
+            if (xa_enum_info_finalize_layout(info)) {
+                links->enum_info = info;
+                links->type->enum_type.layout = info->layout;
+                links->type->enum_type.layout_id = info->layout ? info->layout->layout_id : 0;
+                links->declared_type = links->type;
+            } else {
+                xa_enum_info_free(info);
             }
         }
     }
@@ -1386,20 +1387,15 @@ struct XrType *xa_analyzer_resolve_adt_payload_type(XaAnalyzer *analyzer,
 
     XaSymbol *enum_sym = adt_lookup_enum_symbol(analyzer, enum_name);
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, enum_sym);
-    if (!links || !links->enum_payload_counts || !links->enum_payload_types)
+    XaEnumInfo *info = links ? links->enum_info : NULL;
+    if (!info || !info->variants)
         return NULL;
 
-    int member_index = -1;
-    for (int i = 0; i < links->enum_member_count; i++) {
-        if (links->enum_member_names[i] && strcmp(links->enum_member_names[i], member_name) == 0) {
-            member_index = i;
-            break;
-        }
-    }
-    if (member_index < 0 || payload_index >= links->enum_payload_counts[member_index])
+    int member_index = xa_enum_info_find_variant(info, member_name);
+    if (member_index < 0 || payload_index >= (int) info->variants[member_index].payload_count)
         return NULL;
 
-    XrType **payload_types = links->enum_payload_types[member_index];
+    XrType **payload_types = info->variants[member_index].payload_types;
     XrType *payload_type = payload_types ? payload_types[payload_index] : NULL;
     if (!payload_type)
         return NULL;

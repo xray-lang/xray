@@ -129,25 +129,8 @@ static XrEnumType *make_prelude_enum(XrVMRuntime *X, const char *name, const cha
 
     XrEnumType *et = xr_enum_type_new(X, name, names, count);
 
-    if (et && is_adt) {
-        et->is_adt = true;
-        et->payload_counts = (int *) xr_calloc((size_t) count, sizeof(int));
-        int max_pc = 0;
-        if (et->payload_counts) {
-            for (int i = 0; i < count; i++) {
-                int pc = payload_counts ? payload_counts[i] : 0;
-                et->payload_counts[i] = pc;
-                if (pc > max_pc)
-                    max_pc = pc;
-            }
-        }
-        et->max_payload = max_pc;
-        if (et->enum_class && max_pc > 0) {
-            et->enum_class->field_count = (uint16_t) (1 + max_pc);
-            et->enum_class->own_field_count = (uint16_t) (1 + max_pc);
-            et->enum_class->builtin_kind = XR_BK_ADT_ENUM;
-        }
-    }
+    if (et && is_adt && payload_counts)
+        (void) xr_enum_type_set_adt_payloads(et, payload_counts, count);
 
     for (int i = 0; i < count; i++)
         xr_free(names[i]);
@@ -187,17 +170,15 @@ static void xr_prelude_register_builtin_enums(XrVMRuntime *X) {
     static const char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout",
                                                 "Pending"};
     static const int task_result_payload_counts[] = {1, 1, 0, 0, 0};
-    XrEnumType *task_result_et =
-        make_prelude_enum(X, "TaskResult", task_result_members, 5, task_result_payload_counts,
-                          true);
+    XrEnumType *task_result_et = make_prelude_enum(X, "TaskResult", task_result_members, 5,
+                                                   task_result_payload_counts, true);
     if (task_result_et)
         bind_builtin_value(X, XR_GLOBAL_VAR_TASK_RESULT, XR_FROM_PTR(task_result_et));
 
     static const char *task_outcome_members[] = {"Success", "Failed", "Cancelled"};
     static const int task_outcome_payload_counts[] = {1, 1, 0};
-    XrEnumType *task_outcome_et =
-        make_prelude_enum(X, "TaskOutcome", task_outcome_members, 3, task_outcome_payload_counts,
-                          true);
+    XrEnumType *task_outcome_et = make_prelude_enum(X, "TaskOutcome", task_outcome_members, 3,
+                                                    task_outcome_payload_counts, true);
     if (task_outcome_et)
         bind_builtin_value(X, XR_GLOBAL_VAR_TASK_OUTCOME, XR_FROM_PTR(task_outcome_et));
 

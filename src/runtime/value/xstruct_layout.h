@@ -5,13 +5,13 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xstruct_layout.h - Compile-time struct layout descriptor
+ * xstruct_layout.h - Compile-time aggregate layout descriptor
  *
  * KEY CONCEPT:
- *   Each struct type has a fixed layout computed at compile time.
+ *   Each fixed-layout aggregate has a layout computed at compile time.
  *   Fields are stored in native format (double/int64_t/bool) without
  *   XrValue boxing. The layout drives stack-frame struct_area allocation
- *   and OP_STRUCT_GET/SET field access.
+ *   and OP_AGG_GET/SET field access.
  *
  * MEMORY LAYOUT (example Vec3{x:float, y:float, z:float}):
  *
@@ -24,10 +24,10 @@
  *   total_size = 24, alignment = 8
  *
  * WHY THIS DESIGN:
- *   - Zero GC overhead: structs live on the stack frame
+ *   - Zero GC overhead: non-escaping aggregates live on the stack frame
  *   - Native field access: base_ptr + compile-time offset
  *   - Minimal copy cost: memcpy(total_size) for value semantics
- *   - AOT-friendly: direct C struct mapping
+ *   - AOT-friendly: direct C struct/union mapping
  */
 
 #ifndef XSTRUCT_LAYOUT_H
@@ -38,58 +38,58 @@
 #include "../../base/xdefs.h"
 #include "../../shared/xr_native_type_core.h"
 
-struct XrStructLayout;
+struct XrAggregateLayout;
 typedef struct XrType XrType;
 
 typedef enum {
-    XR_STRUCT_LAYOUT_STRUCT = 0,
-    XR_STRUCT_LAYOUT_PACKED = 1,
-    XR_STRUCT_LAYOUT_UNION = 2,
-} XrStructLayoutKind;
+    XR_AGG_LAYOUT_STRUCT = 0,
+    XR_AGG_LAYOUT_PACKED_STRUCT = 1,
+    XR_AGG_LAYOUT_UNION = 2,
+} XrAggregateLayoutKind;
 
-// Per-field descriptor within a struct layout
+// Per-field descriptor within an aggregate layout.
 typedef struct {
-    uint16_t offset;                    // byte offset within struct
-    uint8_t native_type;                // XrNativeType
-    uint16_t size;                      // field size in bytes
-    uint16_t sub_layout_id;             // layout_id for nested struct (XR_NATIVE_STRUCT only)
-    struct XrStructLayout *sub_layout;  // nested struct layout (XR_NATIVE_STRUCT only)
-    uint8_t elem_native_type;           // element type for XR_NATIVE_ARRAY
-    uint16_t elem_count;                // element count for XR_NATIVE_ARRAY
-} XrStructFieldLayout;
+    uint16_t offset;                       // byte offset within struct
+    uint8_t native_type;                   // XrNativeType
+    uint16_t size;                         // field size in bytes
+    uint16_t sub_layout_id;                // layout_id for nested struct (XR_NATIVE_STRUCT only)
+    struct XrAggregateLayout *sub_layout;  // nested struct layout (XR_NATIVE_STRUCT only)
+    uint8_t elem_native_type;              // element type for XR_NATIVE_ARRAY
+    uint16_t elem_count;                   // element count for XR_NATIVE_ARRAY
+} XrAggregateFieldLayout;
 
-#define XR_MAX_STRUCT_FIELDS 64
+#define XR_MAX_AGG_FIELDS 64
 
 /*
- * XrStructLayout - Fixed layout for a struct type
+ * XrAggregateLayout - Fixed layout for a struct, packed struct, or union type.
  *
  * Allocated once at compile time, shared by all instances of the type.
- * Referenced by XrClass.struct_layout for VALUE_TYPE classes.
+ * Referenced by nominal value types that carry fixed aggregate storage.
  */
-typedef struct XrStructLayout {
-    uint16_t total_size;       // total struct size in bytes (aligned)
+typedef struct XrAggregateLayout {
+    uint16_t total_size;       // total aggregate size in bytes (aligned)
     uint32_t alignment;        // alignment requirement
     uint16_t field_count;      // number of fields
     uint16_t layout_id;        // global layout registry index
-    uint8_t kind;              // XrStructLayoutKind
+    uint8_t kind;              // XrAggregateLayoutKind
     uint32_t explicit_align;   // align(N), 0 = natural
     const char **field_names;  // [field_count] parallel to fields[], NULL-able
-    XrStructFieldLayout fields[XR_MAX_STRUCT_FIELDS];
-} XrStructLayout;
+    XrAggregateFieldLayout fields[XR_MAX_AGG_FIELDS];
+} XrAggregateLayout;
 
-static inline bool xr_struct_layout_is_headerless(const XrStructLayout *layout) {
+static inline bool xr_aggregate_layout_is_headerless(const XrAggregateLayout *layout) {
     return layout != NULL;
 }
 
-static inline uint16_t xr_struct_layout_header_size(const XrStructLayout *layout) {
+static inline uint16_t xr_aggregate_layout_header_size(const XrAggregateLayout *layout) {
     (void) layout;
     return 0;
 }
 
-static inline uint32_t xr_struct_layout_storage_size(const XrStructLayout *layout) {
+static inline uint32_t xr_aggregate_layout_storage_size(const XrAggregateLayout *layout) {
     if (!layout)
         return 0;
-    return (uint32_t) xr_struct_layout_header_size(layout) + (uint32_t) layout->total_size;
+    return (uint32_t) xr_aggregate_layout_header_size(layout) + (uint32_t) layout->total_size;
 }
 
 /* ========== Layout Computation ========== */
@@ -98,7 +98,7 @@ static inline uint32_t xr_struct_layout_storage_size(const XrStructLayout *layou
  * Caller must have set fields[i].native_type and fields[i].size for
  * nested structs before calling. For non-STRUCT fields, size is
  * auto-computed from native_type. */
-XR_FUNC void xr_struct_layout_compute(XrStructLayout *layout);
+XR_FUNC void xr_aggregate_layout_compute(XrAggregateLayout *layout);
 
 /*
  * Static layout query for C-porting surfaces.
@@ -109,9 +109,9 @@ XR_FUNC void xr_struct_layout_compute(XrStructLayout *layout);
  * intentionally rejected for C ABI contracts even when they have a known
  * storage lane inside Xray aggregates.
  */
-XR_FUNC bool xr_type_static_layout(const XrType *type, uint32_t *out_size, uint32_t *out_align);
-XR_FUNC bool xr_type_static_field_offset(const XrType *type, const char *field_name,
-                                         uint32_t *out_offset);
+XR_FUNC bool xr_type_has_static_layout(const XrType *type, uint32_t *out_size, uint32_t *out_align);
+XR_FUNC bool xr_type_has_static_field_offset(const XrType *type, const char *field_name,
+                                             uint32_t *out_offset);
 
 /*
  * Convert XrTypeKind + native_width to XrNativeType for value struct fields.

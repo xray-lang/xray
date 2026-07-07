@@ -111,6 +111,7 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
         xr_log_warning("class", "from_descriptor: failed to create builder");
         return NULL;
     }
+    xr_class_builder_set_flags(builder, desc->flags);
 
     /* Monomorphized generics: set origin, display name, and concrete type names */
     if (desc->is_monomorphized) {

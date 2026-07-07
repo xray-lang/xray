@@ -280,7 +280,7 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrVMRuntime *isolate, XrVMContext 
 
     XrValue ch_val = base[b];
     if (!xr_value_is_channel(ch_val)) {
-        base[a] = xr_bool(false);
+        base[a] = xr_vm_send_result_value(isolate, 3);
         return XR_DISP_NEXT;
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
@@ -302,6 +302,12 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrVMRuntime *isolate, XrVMContext 
         XrCoroBlockResult resumed = xr_coro_chan_send_resume(current, result_slot);
         if (resumed.kind == XR_CORO_BLOCK_READY || resumed.kind == XR_CORO_BLOCK_TIMEOUT ||
             resumed.kind == XR_CORO_BLOCK_CLOSED) {
+            if (resumed.kind == XR_CORO_BLOCK_READY)
+                base[a] = xr_vm_send_result_value(isolate, 0);
+            else if (resumed.kind == XR_CORO_BLOCK_TIMEOUT)
+                base[a] = xr_vm_send_result_value(isolate, 2);
+            else
+                base[a] = xr_vm_send_result_value(isolate, 3);
             return XR_DISP_NEXT;
         }
         vm_suspend_replay_current(frame, pc);
@@ -310,28 +316,34 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrVMRuntime *isolate, XrVMContext 
         if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_TIMEOUT ||
             result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             vm_suspend_continue_from_next(frame, pc);
-            if (result.kind == XR_CORO_BLOCK_READY)
+            if (result.kind == XR_CORO_BLOCK_READY) {
+                base[a] = xr_vm_send_result_value(isolate, 0);
                 return vm_chan_ready_next_or_yield(isolate, current, frame, pc);
+            }
+            if (result.kind == XR_CORO_BLOCK_TIMEOUT)
+                base[a] = xr_vm_send_result_value(isolate, 2);
+            else
+                base[a] = xr_vm_send_result_value(isolate, 3);
             return XR_DISP_NEXT;
         }
         if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             return XR_DISP_BLOCKED;
         }
         vm_suspend_continue_from_next(frame, pc);
-        base[a] = xr_bool(false);
+        base[a] = xr_vm_send_result_value(isolate, 1);
         return XR_DISP_NEXT;
     }
 
     // Main thread: synchronous polling
     value = xr_chan_prepare_send_transfer(isolate, value, transfer_mode);
     if (xr_channel_try_send(ch, value)) {
-        base[a] = xr_bool(true);
+        base[a] = xr_vm_send_result_value(isolate, 0);
         xr_runtime_wake_channel(ch->scheduler, ch, false);
         return XR_DISP_NEXT;
     }
     if (xr_channel_is_closed(ch) || timeout_ms <= 0) {
         xr_chan_abandon_send_core(xr_isolate_get_runtime_core(isolate), value);
-        base[a] = xr_bool(false);
+        base[a] = xr_vm_send_result_value(isolate, xr_channel_is_closed(ch) ? 3 : 2);
         return XR_DISP_NEXT;
     }
 
@@ -340,17 +352,17 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrVMRuntime *isolate, XrVMContext 
         int64_t elapsed_ms = (int64_t) ((xr_time_monotonic_ns() - start_ns) / 1000000ULL);
         if (elapsed_ms >= timeout_ms) {
             xr_chan_abandon_send_core(xr_isolate_get_runtime_core(isolate), value);
-            base[a] = xr_bool(false);
+            base[a] = xr_vm_send_result_value(isolate, 2);
             break;
         }
         if (xr_channel_try_send(ch, value)) {
-            base[a] = xr_bool(true);
+            base[a] = xr_vm_send_result_value(isolate, 0);
             xr_runtime_wake_channel(ch->scheduler, ch, false);
             break;
         }
         if (xr_channel_is_closed(ch)) {
             xr_chan_abandon_send_core(xr_isolate_get_runtime_core(isolate), value);
-            base[a] = xr_bool(false);
+            base[a] = xr_vm_send_result_value(isolate, 3);
             break;
         }
         xr_thread_yield();

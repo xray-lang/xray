@@ -52,6 +52,18 @@ static const char *xr_attr_string_arg(Parser *parser) {
     return s;
 }
 
+static bool xr_derive_target_bit(Token token, uint32_t *bit_out) {
+    if (token.length == 7 && memcmp(token.start, "Inspect", 7) == 0) {
+        *bit_out = XR_DERIVE_INSPECT;
+        return true;
+    }
+    if (token.length == 4 && memcmp(token.start, "Json", 4) == 0) {
+        *bit_out = XR_DERIVE_JSON;
+        return true;
+    }
+    return false;
+}
+
 // Parse single attribute: @test, @test(skip), @test(timeout: 30), etc.
 static XrAttribute *xr_parse_single_attribute(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_single_attribute: NULL parser");
@@ -64,6 +76,7 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
     attr->kind = ATTR_NONE;
     attr->timeout = 0;
     attr->str_arg = NULL;
+    attr->derive_flags = 0;
     if (name_token.length == 4 && memcmp(name_token.start, "test", 4) == 0) {
         attr->kind = ATTR_TEST;
 
@@ -147,9 +160,10 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
         }
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @c_export");
     } else if (name_token.length == 7 && memcmp(name_token.start, "section", 7) == 0) {
-        // @section("name") — place a module-level AOT function/C export into a
-        // named linker section. The section name is open text, so it uses a
-        // string arg just like @c_export.
+        // @section("name") — place a module-level AOT function/C export or
+        // freestanding const data object into a named linker section. The
+        // section name is open text, so it uses a string arg just like
+        // @c_export.
         attr->kind = ATTR_SECTION;
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after @section");
         if (xr_parser_check(parser, TK_LITERAL_STRING)) {
@@ -164,6 +178,38 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
         attr->kind = ATTR_WEAK;
     } else if (name_token.length == 4 && memcmp(name_token.start, "used", 4) == 0) {
         attr->kind = ATTR_USED;
+    } else if (name_token.length == 6 && memcmp(name_token.start, "derive", 6) == 0) {
+        attr->kind = ATTR_DERIVE;
+        xr_parser_consume(parser, TK_LPAREN, "expected '(' after @derive");
+        if (xr_parser_check(parser, TK_RPAREN)) {
+            xr_parser_error(parser, "@derive requires at least one target: Inspect or Json");
+        } else {
+            uint32_t seen_flags = 0;
+            do {
+                xr_parser_consume(parser, TK_NAME, "expected derive target name");
+                Token target = parser->previous;
+                uint32_t bit = 0;
+                char name_buf[64];
+                int n = target.length < (int) sizeof(name_buf) - 1 ? target.length
+                                                                   : (int) sizeof(name_buf) - 1;
+                memcpy(name_buf, target.start, (size_t) n);
+                name_buf[n] = '\0';
+                if (!xr_derive_target_bit(target, &bit)) {
+                    char msg[160];
+                    snprintf(msg, sizeof(msg),
+                             "unknown derive target '%s'; expected Inspect or Json", name_buf);
+                    xr_parser_error(parser, msg);
+                } else if ((seen_flags & bit) != 0) {
+                    char msg[160];
+                    snprintf(msg, sizeof(msg), "duplicate derive target '%s'", name_buf);
+                    xr_parser_error(parser, msg);
+                } else {
+                    seen_flags |= bit;
+                    attr->derive_flags |= bit;
+                }
+            } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
+        }
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @derive");
     } else {
         xr_parser_error(parser, "unknown attribute name");
         return NULL;
@@ -179,6 +225,15 @@ static bool attrs_has(XrAttribute **attrs, int count, AttributeKind kind) {
             return true;
     }
     return false;
+}
+
+static uint32_t attrs_derive_flags(XrAttribute **attrs, int count) {
+    uint32_t flags = 0;
+    for (int i = 0; i < count; i++) {
+        if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
+            flags |= attrs[i]->derive_flags;
+    }
+    return flags;
 }
 
 static bool attrs_has_symbol_layout_attr(XrAttribute **attrs, int count) {
@@ -197,6 +252,23 @@ static bool attrs_has_symbol_layout_attr(XrAttribute **attrs, int count) {
     return false;
 }
 
+static bool attrs_are_const_data_attrs(XrAttribute **attrs, int count) {
+    if (count <= 0)
+        return false;
+    for (int i = 0; i < count; i++) {
+        if (!attrs[i])
+            continue;
+        switch (attrs[i]->kind) {
+            case ATTR_SECTION:
+            case ATTR_USED:
+                break;
+            default:
+                return false;
+        }
+    }
+    return true;
+}
+
 // Parse attributed declaration: @test fn ..., @native class ..., etc.
 static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     XrAttribute **attributes = NULL;
@@ -213,12 +285,15 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     bool is_native = attrs_has(attributes, attr_count, ATTR_NATIVE);
     bool is_c_export = attrs_has(attributes, attr_count, ATTR_C_EXPORT);
     bool has_symbol_layout_attr = attrs_has_symbol_layout_attr(attributes, attr_count);
+    uint32_t derive_flags = attrs_derive_flags(attributes, attr_count);
     if (is_c_export && parser->scope_depth > 0) {
         xr_parser_error(parser, "@c_export can only annotate a module-level function");
         return NULL;
     }
     if (has_symbol_layout_attr && parser->scope_depth > 0) {
-        xr_parser_error(parser, "@section/@weak/@used can only annotate a module-level function");
+        xr_parser_error(parser,
+                        "@section/@weak/@used can only annotate a module-level function or const "
+                        "data declaration");
         return NULL;
     }
 
@@ -282,6 +357,10 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     }
 
     if (xr_parser_match(parser, TK_UNION)) {
+        if (derive_flags != 0) {
+            xr_parser_error(parser, "@derive can only annotate class, struct, or enum");
+            return NULL;
+        }
         if (is_c_export) {
             xr_parser_error(parser, "@c_export can only annotate a module-level function");
             return NULL;
@@ -299,8 +378,60 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         return un;
     }
 
+    if (xr_parser_match(parser, TK_ENUM)) {
+        if (is_native) {
+            xr_parser_error(parser, "@native can only annotate class, struct, union, or function");
+            return NULL;
+        }
+        if (is_c_export) {
+            xr_parser_error(parser, "@c_export can only annotate a module-level function");
+            return NULL;
+        }
+        if (has_symbol_layout_attr) {
+            xr_parser_error(parser, "@section/@weak/@used can only annotate a function");
+            return NULL;
+        }
+        AstNode *en = xr_parse_enum_declaration(parser);
+        if (!en)
+            return NULL;
+        en->as.enum_decl.attributes = attributes;
+        en->as.enum_decl.attr_count = attr_count;
+        return en;
+    }
+
+    if (xr_parser_match(parser, TK_CONST)) {
+        if (!attrs_are_const_data_attrs(attributes, attr_count)) {
+            xr_parser_error(
+                parser,
+                "attributes can only annotate declaration items; use 'fn name(...)' for function "
+                "item attributes");
+            return NULL;
+        }
+        if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE) ||
+            xr_parser_check(parser, TK_LPAREN)) {
+            xr_parser_error(parser, "@section/@used require a single named const binding");
+            return NULL;
+        }
+        AstNode *decl = xr_parse_single_var_declaration(parser, 1);
+        if (!decl)
+            return NULL;
+        decl->as.var_decl.attributes = attributes;
+        decl->as.var_decl.attr_count = attr_count;
+        return decl;
+    }
+
+    if (xr_parser_check(parser, TK_VAR) || xr_parser_check(parser, TK_SHARED)) {
+        xr_parser_error(parser, "attributes cannot annotate mutable module storage; use a const "
+                                "data declaration for static sections");
+        return NULL;
+    }
+
     // @test fn ..., @native fn ..., @extern("C") fn ..., @c_export("sym") fn ...
     if (xr_parser_match(parser, TK_FN)) {
+        if (derive_flags != 0) {
+            xr_parser_error(parser, "@derive can only annotate class, struct, or enum");
+            return NULL;
+        }
         bool is_extern = attrs_has(attributes, attr_count, ATTR_EXTERN);
         parser->parsing_extern_fn = is_extern;
         AstNode *func = xr_parse_function_declaration(parser);

@@ -1,0 +1,14 @@
+class Box<T> {
+    value: T
+
+    constructor(value: T) {
+        this.value = value
+    }
+
+    get() -> T {
+        return this.value
+    }
+}
+
+var box = Box<int>(7)
+print(box.get())

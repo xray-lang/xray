@@ -1041,8 +1041,7 @@ static bool xa_node_is_typeof_call(AstNode *node) {
     if (!node || node->type != AST_CALL_EXPR)
         return false;
     CallExprNode *call = &node->as.call_expr;
-    return call->callee && call->callee->type == AST_VARIABLE &&
-           call->callee->as.variable.name &&
+    return call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
            strcmp(call->callee->as.variable.name, "typeof") == 0;
 }
 
@@ -1211,16 +1210,15 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
 
     MemberAccessNode *ma = &node->as.member_access;
 
-    if (ma->object && ma->object->type == AST_VARIABLE &&
-        ma->object->as.variable.name &&
+    if (ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
         strcmp(ma->object->as.variable.name, "Type") == 0) {
         if (xr_type_from_name(ma->name) >= 0)
             return xr_type_new_int(ctx->analyzer->isolate);
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[256];
         snprintf(msg, sizeof(msg), "Unknown TypeId constant 'Type.%s'", ma->name);
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                   XR_ERR_ANALYZE_UNDEFINED_VAR, msg, &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNDEFINED_VAR,
+                                   msg, &loc);
         return xr_type_new_unknown(NULL);
     }
 
@@ -1350,11 +1348,32 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 bool is_namespace =
                     member_object_is_enum_namespace(ctx, ma->object, obj_type->enum_type.enum_name);
                 if (is_namespace) {
-                    for (int i = 0; i < el->enum_member_count; i++) {
-                        if (el->enum_member_names[i] &&
-                            strcmp(el->enum_member_names[i], ma->name) == 0) {
+                    XaEnumInfo *enum_info = el->enum_info;
+                    for (uint32_t i = 0; enum_info && i < enum_info->variant_count; i++) {
+                        if (enum_info->variants[i].name &&
+                            strcmp(enum_info->variants[i].name, ma->name) == 0) {
+                            if (enum_info->variants[i].payload_count > 0 &&
+                                !ctx->allow_payload_enum_ctor_value) {
+                                XrLocation loc = {
+                                    .file = ctx->file_path,
+                                    .line = node->line,
+                                    .column = node->column,
+                                };
+                                char msg[192];
+                                snprintf(msg, sizeof(msg),
+                                         "payload enum variant '%s.%s' is a constructor; call it "
+                                         "as '%s.%s(...)' instead of using it as a value",
+                                         obj_type->enum_type.enum_name, ma->name,
+                                         obj_type->enum_type.enum_name, ma->name);
+                                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                           XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+                                return xr_type_new_unknown(NULL);
+                            }
                             XrType *enum_type = xr_type_new_enum(ctx->analyzer->isolate,
                                                                  obj_type->enum_type.enum_name);
+                            enum_type->enum_type.layout = enum_info->layout;
+                            enum_type->enum_type.layout_id =
+                                enum_info->layout ? enum_info->layout->layout_id : 0;
                             record_selection(ctx, node, XA_SEL_ENUM_MEMBER, obj_type, enum_sym, i,
                                              enum_type, false);
                             return enum_type;
@@ -1624,10 +1643,9 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Built-in non-method properties (e.g. Channel.closed). The signature for properties is just `: T` with
-    // no parameter list. Skip the method substitution machinery above
-    // because there are no type-parameter container fields exposed as
-    // property kind today.
+    // Built-in non-method properties (e.g. Channel.closed). The signature for properties is just `:
+    // T` with no parameter list. Skip the method substitution machinery above because there are no
+    // type-parameter container fields exposed as property kind today.
     {
         const char *sig = xa_builtin_get_member_signature(obj_type, ma->name);
         if (sig && sig[0] == ':') {
@@ -1691,7 +1709,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     XaSelectionKind sk =
                         (member->kind == XA_SYM_METHOD) ? XA_SEL_METHOD : XA_SEL_FIELD;
                     if (sk == XA_SEL_FIELD && class_info && class_info->struct_layout &&
-                        class_info->struct_layout->kind == XR_STRUCT_LAYOUT_UNION &&
+                        class_info->struct_layout->kind == XR_AGG_LAYOUT_UNION &&
                         ctx->unsafe_depth == 0) {
                         XrLocation loc = {
                             .file = ctx->file_path, .line = node->line, .column = node->column};
@@ -1818,6 +1836,13 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
         return container->map.value_type;
     }
     if (XR_TYPE_IS_STRING(container)) {
+        if (xa_freestanding_profile_enabled(ctx->analyzer)) {
+            xa_freestanding_report_unavailable(
+                ctx, node, "string index access",
+                "string literals may be passed or printed, but string indexing needs hosted "
+                "helpers");
+            return xr_type_new_unknown(NULL);
+        }
         if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
             add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
         return xr_type_new_char(NULL);  // string[i] => char

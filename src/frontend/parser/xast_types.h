@@ -160,10 +160,10 @@ typedef enum {
     AST_MEMBER_SET,          // obj.field = value
 
     // Enum nodes
-    AST_ENUM_DECL,     // enum Status { Success }
-    AST_ENUM_MEMBER,   // Success
-    AST_ENUM_ACCESS,   // Status.Success
-    AST_ENUM_INDEX,    // enum_type.members[idx] (compiler-generated for for-in)
+    AST_ENUM_DECL,    // enum Status { Success }
+    AST_ENUM_MEMBER,  // Success
+    AST_ENUM_ACCESS,  // Status.Success
+    AST_ENUM_INDEX,   // enum_type.members[idx] (compiler-generated for for-in)
 
     // Exception handling
     AST_TRY_CATCH,   // try-catch-finally
@@ -245,9 +245,10 @@ typedef enum {
     ATTR_EXTERN,        // @extern("C") — foreign function (FFI), calling convention in str_arg
     ATTR_DYLIB,         // @dylib("name") — resolve symbol from a named dynamic library
     ATTR_C_EXPORT,      // @c_export("name") — expose an AOT C ABI wrapper symbol
-    ATTR_SECTION,       // @section("name") — place AOT function/C export in section
+    ATTR_SECTION,       // @section("name") — place AOT function/C export or const data in section
     ATTR_WEAK,          // @weak — emit weak AOT C export symbol
-    ATTR_USED,          // @used — force AOT function/C export emission
+    ATTR_USED,          // @used — force AOT function/C export or const data emission
+    ATTR_DERIVE,        // @derive(Inspect, Json) — compile-time generated metadata
 } AttributeKind;
 
 // Destructuring pattern types (flat only, no nesting)

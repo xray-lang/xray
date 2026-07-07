@@ -1,8 +1,21 @@
+contains=enum 0 name=FastResult
+contains=layout_id=
+contains=c_type=xrt_enum_adt_match_static_tag_payload_FastResult_
 c_contains=FastResult
-c_contains=XrAotEnumAggregate
+c_contains=typedef struct xrt_enum_adt_match_static_tag_payload_FastResult_
+c_contains=union { struct { XrValue f0; } v0_Ok; struct { XrValue f0; } v1_Err; XrValue raw[1]; }
+c_contains=static xrt_enum_adt_match_static_tag_payload_FastResult_
+c_contains=xrt_enum_aggregate_check_layout(value.layout_id
+c_contains=xrt_enum_aggregate_check_payload_count(value.layout_id, value.payload_count, 1
+c_contains=xrt_enum_aggregate_check_payload_type(value.layout_id, XR_IS_INT(value.payloads[0]), "FastResult")
+c_contains=xrt_enum_aggregate_check_known_tag(value.layout_id
 c_contains=xrt_enum_aggregate_make(
-c_contains=.payload0
+c_contains=out.layout_id =
+c_contains=.payload.raw[0]
 c_contains=.tag
 c_not_contains=xrt_array_with_capacity(
+c_not_contains=const char *enum_name; const char *member_name;
+c_not_contains=uint32_t payload_count; XrValue payloads[1];
+c_not_contains=.payload0
 c_not_contains=xrt_getprop_name(
 c_not_contains=xrt_index_get(

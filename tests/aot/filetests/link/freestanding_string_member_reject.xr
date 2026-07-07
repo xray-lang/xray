@@ -10,3 +10,17 @@ fn xray_string_length_reject() -> int {
     var s = "abc"
     return s.byteLength
 }
+
+@c_export("xray_string_index_reject")
+fn xray_string_index_reject() -> int {
+    var s = "abc"
+    return s[0] as int
+}
+
+@c_export("xray_string_slice_reject")
+fn xray_string_slice_reject() -> int {
+    var s = "abc"
+    var part = s[0:1]
+    print(part)
+    return 0
+}

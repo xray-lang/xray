@@ -17,7 +17,7 @@
  * Owns:
  *   - OP_TARRAY_GET / GETC / SET / PUSH  — typed compact array R/W
  *   - OP_TFIELD_GET / SET                — typed json field R/W
- *   - OP_NEW_STRUCT / STRUCT_GET / SET / COPY  — stack struct lifecycle
+ *   - OP_AGG_NEW / AGG_GET / SET / COPY  — stack struct lifecycle
  *
  * Placeholder OP_NOP is kept inline in xvm.c next to the
  * computed-goto fallback / loop close.
@@ -104,26 +104,26 @@ vmcase(OP_TFIELD_SET) {
 
 /* === Struct Native Storage === */
 
-vmcase(OP_NEW_STRUCT) {
+vmcase(OP_AGG_NEW) {
     /* A = dest reg, B = class reg, C = struct_area slot offset
-     * Allocate struct in per-frame struct_area (zero heap allocation). */
+     * Allocate an aggregate in per-frame struct_area (zero heap allocation). */
     TRACE_EXECUTION();
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     XrValue class_val = R(b);
     XrClass *cls = xr_value_to_class(class_val);
-    XrStructLayout *layout = cls->struct_layout;
-    XR_DCHECK(layout != NULL, "OP_NEW_STRUCT requires struct_layout");
+    XrAggregateLayout *layout = cls->struct_layout;
+    XR_DCHECK(layout != NULL, "OP_AGG_NEW requires struct_layout");
     uint16_t layout_id = xr_vm_struct_layout_register(&isolate->vm, layout);
-    if (XR_UNLIKELY(layout_id == 0 && xr_struct_layout_is_headerless(layout))) {
-        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to register fixed-layout struct layout");
+    if (XR_UNLIKELY(layout_id == 0 && xr_aggregate_layout_is_headerless(layout))) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to register fixed-layout aggregate");
     }
     XR_DCHECK(vm_ctx->struct_areas && vm_ctx->struct_areas[VM_FRAME_COUNT - 1],
-              "OP_NEW_STRUCT requires allocated struct_area");
+              "OP_AGG_NEW requires allocated struct_area");
 
     uint8_t *struct_ptr = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + c * 16;
-    uint16_t header_size = xr_struct_layout_header_size(layout);
+    uint16_t header_size = xr_aggregate_layout_header_size(layout);
     if (header_size)
         *(XrClass **) struct_ptr = cls;
     uint8_t *payload = struct_ptr + header_size;
@@ -136,17 +136,17 @@ vmcase(OP_NEW_STRUCT) {
             XrValue dv = cls->field_default_values[fi];
             if (dv.tag == XR_TAG_NULL)
                 continue;
-            XrStructFieldLayout *fl = &layout->fields[fi];
+            XrAggregateFieldLayout *fl = &layout->fields[fi];
             uint8_t *fp = payload + fl->offset;
             (void) xr_vm_struct_write_field_value(isolate, fp, fl, dv);
         }
     }
 
-    R(a) = xr_struct_ref(struct_ptr, layout_id);
+    R(a) = xr_aggregate_ref(struct_ptr, layout_id);
     vmbreak;
 }
 
-vmcase(OP_STRUCT_GET) {
+vmcase(OP_AGG_GET) {
     /* R[A] = struct(R[B]).field[C]
      * Read native field from stack-allocated struct, box to XrValue */
     TRACE_EXECUTION();
@@ -154,12 +154,12 @@ vmcase(OP_STRUCT_GET) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
 
-    XrStructLayout *layout = NULL;
+    XrAggregateLayout *layout = NULL;
     uint8_t *payload = xr_vm_struct_ref_payload(isolate, R(b), &layout);
     if (XR_UNLIKELY(!payload || !layout || c < 0 || c >= layout->field_count)) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
     }
-    XrStructFieldLayout *field = &layout->fields[c];
+    XrAggregateFieldLayout *field = &layout->fields[c];
     uint8_t *fp = payload + field->offset;
     if (!xr_vm_struct_read_field_value(isolate, fp, field, &R(a))) {
         R(a) = xr_null();
@@ -167,7 +167,7 @@ vmcase(OP_STRUCT_GET) {
     vmbreak;
 }
 
-vmcase(OP_STRUCT_SET) {
+vmcase(OP_AGG_SET) {
     /* struct(R[A]).field[B] = R[C]
      * Unbox XrValue and write native field to stack-allocated struct */
     TRACE_EXECUTION();
@@ -175,12 +175,12 @@ vmcase(OP_STRUCT_SET) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
 
-    XrStructLayout *layout = NULL;
+    XrAggregateLayout *layout = NULL;
     uint8_t *payload = xr_vm_struct_ref_payload(isolate, R(a), &layout);
     if (XR_UNLIKELY(!payload || !layout || b < 0 || b >= layout->field_count)) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field write");
     }
-    XrStructFieldLayout *field = &layout->fields[b];
+    XrAggregateFieldLayout *field = &layout->fields[b];
     uint8_t *fp = payload + field->offset;
     XrValue src = R(c);
     if (!xr_vm_struct_write_field_value(isolate, fp, field, src)) {
@@ -189,8 +189,8 @@ vmcase(OP_STRUCT_SET) {
     vmbreak;
 }
 
-vmcase(OP_STRUCT_COPY) {
-    /* R[A] = deep copy of struct R[B], placed at struct_area slot C
+vmcase(OP_AGG_COPY) {
+    /* R[A] = deep copy of aggregate R[B], placed at struct_area slot C
      * memcpy entire struct (class ptr + field data) */
     TRACE_EXECUTION();
     int a = GETARG_A(i);
@@ -199,18 +199,18 @@ vmcase(OP_STRUCT_COPY) {
 
     XrValue src = R(b);
     uint8_t *src_ptr = (uint8_t *) xr_to_struct_ptr(src);
-    XrStructLayout *layout = xr_vm_struct_ref_layout(isolate, src);
+    XrAggregateLayout *layout = xr_vm_struct_ref_layout(isolate, src);
     if (XR_UNLIKELY(!src_ptr || !layout)) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct copy");
     }
-    uint16_t layout_id = xr_struct_layout_id(src);
+    uint16_t layout_id = xr_aggregate_layout_id(src);
     if (layout_id == 0)
         layout_id = xr_vm_struct_layout_register(&isolate->vm, layout);
 
     uint8_t *dst_ptr = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + c * 16;
 
-    memcpy(dst_ptr, src_ptr, xr_struct_layout_storage_size(layout));
-    R(a) = xr_struct_ref(dst_ptr, layout_id);
+    memcpy(dst_ptr, src_ptr, xr_aggregate_layout_storage_size(layout));
+    R(a) = xr_aggregate_ref(dst_ptr, layout_id);
     vmbreak;
 }
 

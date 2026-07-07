@@ -45,6 +45,15 @@ static bool class_has_complex_instance_initializer(ClassDeclNode *cd) {
     return false;
 }
 
+static uint32_t class_decl_derive_flags(XrAttribute **attrs, int count) {
+    uint32_t flags = 0;
+    for (int i = 0; i < count; i++) {
+        if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
+            flags |= attrs[i]->derive_flags;
+    }
+    return flags;
+}
+
 static XiClassData *class_find_native_super(XiLower *l, const ClassDeclNode *cd) {
     if (!l || !cd || !cd->super_name || cd->super_module)
         return NULL;
@@ -57,8 +66,8 @@ static XiClassData *class_find_native_super(XiLower *l, const ClassDeclNode *cd)
     return NULL;
 }
 
-static XrStructLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNode *cd,
-                                                         uint16_t *out_inherited) {
+static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNode *cd,
+                                                            uint16_t *out_inherited) {
     if (!l || !l->func || !l->isolate || !cd)
         return NULL;
 
@@ -78,11 +87,11 @@ static XrStructLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNo
             instance_fields++;
     }
     int total_fields = (int) inherited + instance_fields;
-    if (total_fields < 0 || total_fields > XR_MAX_STRUCT_FIELDS)
+    if (total_fields < 0 || total_fields > XR_MAX_AGG_FIELDS)
         return NULL;
 
-    XrStructLayout *layout =
-        (XrStructLayout *) xi_func_arena_alloc(l->func, sizeof(XrStructLayout));
+    XrAggregateLayout *layout =
+        (XrAggregateLayout *) xi_func_arena_alloc(l->func, sizeof(XrAggregateLayout));
     if (!layout)
         return NULL;
     layout->field_count = (uint16_t) total_fields;
@@ -96,7 +105,7 @@ static XrStructLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNo
 
     uint16_t out_idx = 0;
     if (super_data && super_data->instance_layout) {
-        XrStructLayout *parent = super_data->instance_layout;
+        XrAggregateLayout *parent = super_data->instance_layout;
         for (uint16_t i = 0; i < parent->field_count; i++) {
             layout->field_names[out_idx] = parent->field_names ? parent->field_names[i] : NULL;
             layout->fields[out_idx] = parent->fields[i];
@@ -129,7 +138,7 @@ static XrStructLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNo
         out_idx++;
     }
 
-    xr_struct_layout_compute(layout);
+    xr_aggregate_layout_compute(layout);
     return layout;
 }
 
@@ -439,6 +448,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->ninst = inst_n;
     data->nstat = stat_n;
     data->clinit_child_idx = clinit_idx;
+    data->derive_flags = class_decl_derive_flags(cd->attributes, cd->attr_count);
 
     /* Propagate struct_layout from analyzer for VALUE_TYPE classes.
      * The layout is owned by XrClassInfo and outlives the IR arena. */

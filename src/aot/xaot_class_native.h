@@ -17,7 +17,7 @@
 typedef struct XaotClassNativeFunc {
     const XiClassData *class_data;
     const XiFunc *func;
-    const XrStructLayout *layout;
+    const XrAggregateLayout *layout;
     const char *class_name;
     bool is_constructor;
 } XaotClassNativeFunc;

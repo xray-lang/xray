@@ -489,14 +489,15 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         return;
     }
 
-    if (main_func->nshared > 0)
-        fprintf(body, "static XrValue xrt_shared[%u];\n", main_func->nshared);
-
-    fprintf(body, "\n");
     emit_class_native_typedefs(ctx, body, module, prefix);
     emit_class_shared_native_storage_decls(ctx, body, prefix);
     emit_struct_native_typedefs(body, main_func, prefix);
+    emit_enum_native_typedefs(ctx, body, module);
 
+    cg_emit_freestanding_static_scalar_const_defs(ctx, body, module);
+    cg_emit_freestanding_static_fixed_array_defs(ctx, body, module);
+    cg_emit_freestanding_static_tuple_defs(ctx, body, module);
+    cg_emit_freestanding_static_struct_defs(ctx, body, module, prefix);
     emit_forward_decls(ctx, body, main_func, prefix);
     fprintf(body, "\n");
 
@@ -551,6 +552,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         return;
     }
     xi_cgen_emit_str_literal_defs(ctx, out);
+    if (main_func->nshared > 0 && bodybuf && strstr(bodybuf, "xrt_shared"))
+        fprintf(out, "static XrValue xrt_shared[%u];\n\n", main_func->nshared);
     fwrite(bodybuf, 1, bodysz, out);
     xr_free(bodybuf);
 }
@@ -618,6 +621,10 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
 
     ctx->n_xmod_refs = 0;
     ctx->collect_xmod_refs = true;
+    cg_emit_freestanding_static_scalar_const_defs(ctx, body, module);
+    cg_emit_freestanding_static_fixed_array_defs(ctx, body, module);
+    cg_emit_freestanding_static_tuple_defs(ctx, body, module);
+    cg_emit_freestanding_static_struct_defs(ctx, body, module, prefix);
     xi_cgen_func(ctx, body, module->init, prefix);
 
     if (is_entry) {
@@ -665,6 +672,8 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     emit_class_shared_native_storage_decls(ctx, out, prefix);
     emit_imported_class_shared_native_storage_decls(ctx, out);
     emit_struct_native_typedefs(out, module->init, prefix);
+    emit_imported_enum_native_typedefs(ctx, out);
+    emit_enum_native_typedefs(ctx, out, module);
     fprintf(out, "\n");
 
     /* Forward declarations: this module's own functions in full, plus only the

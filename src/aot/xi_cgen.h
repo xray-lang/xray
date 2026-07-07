@@ -51,12 +51,19 @@ typedef struct XiCgenStats {
     uint32_t xi_unbox_ops;
 } XiCgenStats;
 
+typedef enum XiCgenTypeNameProfile {
+    XI_CGEN_TYPE_NAMES_NONE = 0,
+    XI_CGEN_TYPE_NAMES_PUBLIC,
+    XI_CGEN_TYPE_NAMES_ALL,
+} XiCgenTypeNameProfile;
+
 /* Lifecycle */
 XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
 XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle);
 XR_FUNC void xi_cgen_ctx_set_emit_main(XiCgenCtx *ctx, bool emit_main);
 XR_FUNC void xi_cgen_ctx_set_freestanding_profile(XiCgenCtx *ctx, bool freestanding);
+XR_FUNC void xi_cgen_ctx_set_type_name_profile(XiCgenCtx *ctx, XiCgenTypeNameProfile profile);
 XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx);
 XR_FUNC XiCgenCoroFrameStats xi_cgen_coro_frame_stats(const XiCgenCtx *ctx);
 XR_FUNC XiCgenStats xi_cgen_stats(const XiCgenCtx *ctx);

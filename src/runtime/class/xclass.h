@@ -23,6 +23,7 @@
 #include "../value/xtype.h"
 #include "../../base/xhash.h"
 #include "../../base/xhashmap.h"
+#include "../../shared/xr_derive_flags.h"
 #include "../mem/xobj_header.h"
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -117,8 +118,6 @@ typedef enum {
     XR_BK_JSON,
     XR_BK_RECORD,
     XR_BK_STRINGBUILDER,
-    XR_BK_ENUM_VALUE,
-    XR_BK_ENUM_TYPE,
     XR_BK_ITERATOR,
     XR_BK_REGEX,
     XR_BK_REGEX_MATCH,
@@ -244,7 +243,7 @@ struct XrClass {
     uint16_t in_object_capacity;                      // Max inline field slots (default 8)
 
     /* === Struct Layout (VALUE_TYPE only) === */
-    struct XrStructLayout *struct_layout;  // NULL for class, set for struct
+    struct XrAggregateLayout *struct_layout;  // NULL for class, set for struct
 
     /* === Operator Overload Flags === */
     uint32_t operator_flags;
@@ -278,6 +277,17 @@ struct XrClass {
 #define XR_CLASS_HAS_NATIVE_BODY (1 << 11)  // Has XrNativeBodyDesc (Array, Map, etc.)
 #define XR_CLASS_DYNAMIC_SEALED (1 << 12)   // Dynamic-layout class rejects new field transitions
 #define XR_CLASS_CYCLE_CANDIDATE (1 << 13)  // Type graph analysis determined this class may cycle
+#define XR_CLASS_DERIVE_INSPECT (1 << 14)   // @derive(Inspect): opt-in structural formatting
+#define XR_CLASS_DERIVE_JSON (1 << 15)      // @derive(Json): opt-in class/struct JSON serde
+
+static inline uint32_t xr_class_flags_from_derive(uint32_t derive_flags) {
+    uint32_t flags = 0;
+    if (derive_flags & XR_DERIVE_INSPECT)
+        flags |= XR_CLASS_DERIVE_INSPECT;
+    if (derive_flags & XR_DERIVE_JSON)
+        flags |= XR_CLASS_DERIVE_JSON;
+    return flags;
+}
 
 /* ========== Operator Overload Flags ========== */
 

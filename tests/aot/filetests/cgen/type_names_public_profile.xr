@@ -1,0 +1,19 @@
+export class PublicBox {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+class PrivateBox {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+var a = PublicBox(1)
+var b = PrivateBox(2)
+print(a.value + b.value)

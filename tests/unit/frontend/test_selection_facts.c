@@ -261,10 +261,7 @@ TEST(method_call_has_selection) {
 }
 
 TEST(enum_member_has_selection) {
-    AnalysisResult r = analyze("enum Color : string {\n"
-                               "    Red = \"red\",\n"
-                               "    Blue = \"blue\"\n"
-                               "}\n"
+    AnalysisResult r = analyze("enum Color { Red, Blue }\n"
                                "var c = Color.Red\n"
                                "print(c)\n");
     if (!r.program)

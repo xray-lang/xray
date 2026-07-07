@@ -1,6 +1,8 @@
 const ALWAYS = comptime (1 < 2)
 const GREETING = comptime "hi"
 const LETTER = comptime 'x'
+const TYPE_INT_ID = comptime Type.int
+const TYPE_BOOL_ID = comptime Type.bool
 
 @test
 fn test_comptime_bool_string_char_expr() {
@@ -8,4 +10,12 @@ fn test_comptime_bool_string_char_expr() {
     assert_eq(flag, true)
     assert_eq(GREETING, "hi")
     assert_eq(LETTER, 'x')
+}
+
+@test
+fn test_comptime_typeid_constants() {
+    var ids: [int; TYPE_BOOL_ID] = [TYPE_INT_ID; TYPE_BOOL_ID]
+    assert_eq(ids.length, 1)
+    assert_eq(ids[0], TYPE_INT_ID)
+    assert_eq(TYPE_INT_ID == TYPE_BOOL_ID, false)
 }

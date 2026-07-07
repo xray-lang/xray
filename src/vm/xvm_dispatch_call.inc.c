@@ -63,20 +63,20 @@ op_call_entry:;
     if (XR_IS_PTR(func_val)) {
         XrObjHeader *gc = (XrObjHeader *) XR_TO_PTR(func_val);
 
-        // ADT enum variant construction: Result.Ok(42)
-        // XrEnumValue with ADT parent → construct instance with tag + payload
-        if (XR_IS_ENUM_VALUE(func_val)) {
-            XrEnumValue *eval = (XrEnumValue *) gc;
+        // Payload enum variant construction: Result.Ok(42). XrEnumCtor is
+        // constructor metadata here, not the user-visible enum value.
+        if (XR_IS_ENUM_CTOR(func_val)) {
+            XrEnumCtor *eval = (XrEnumCtor *) gc;
             XrEnumType *etype = eval->parent_type;
-            if (etype && etype->is_adt && etype->payload_counts &&
-                etype->payload_counts[eval->member_index] > 0) {
-                XrInstance *inst =
+            if (etype && xr_enum_type_has_payloads(etype) &&
+                xr_enum_type_payload_count(etype, eval->member_index) > 0) {
+                XrEnumAggregateValue *value =
                     xr_enum_adt_construct(isolate, etype, eval->member_index, &R(a + 1), nargs);
-                if (!inst) {
+                if (!value) {
                     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "failed to construct ADT variant '%s.%s'",
                                      etype->name, eval->member_name);
                 }
-                R(a) = XR_FROM_PTR(inst);
+                R(a) = XR_FROM_PTR(value);
                 vmbreak;
             }
         }
@@ -863,16 +863,16 @@ vmcase(OP_RETURN1) {
         if (!vm_rescue_array_ref_to_ret_arena(vm_ctx, return_slot)) {
             VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to rescue fixed array return value");
         }
-    } else if (return_slot && XR_IS_STRUCT_REF(ret_val) && !XR_IS_SPAN_REF(ret_val)) {
+    } else if (return_slot && XR_IS_AGG_REF(ret_val) && !XR_IS_SPAN_REF(ret_val)) {
         int sa_idx = VM_FRAME_COUNT - 1;
         if (vm_ctx->struct_areas && sa_idx < vm_ctx->struct_areas_cap) {
             uint8_t *sa = vm_ctx->struct_areas[sa_idx];
             uint8_t *sptr = (uint8_t *) ret_val.ptr;
             uint16_t sa_cap = vm_ctx->struct_area_caps[sa_idx];
             if (sa && sptr >= sa && sptr < sa + sa_cap) {
-                XrStructLayout *layout = xr_vm_struct_ref_layout(isolate, ret_val);
+                XrAggregateLayout *layout = xr_vm_struct_ref_layout(isolate, ret_val);
                 if (layout) {
-                    uint32_t total = xr_struct_layout_storage_size(layout);
+                    uint32_t total = xr_aggregate_layout_storage_size(layout);
                     // Align to 16 bytes
                     total = (total + 15) & ~15u;
                     uint32_t need = vm_ctx->struct_ret_arena_used + total;
@@ -895,7 +895,7 @@ vmcase(OP_RETURN1) {
                         vm_ctx->struct_ret_arena_cap = new_cap;
                     }
                     uint8_t *dst = vm_ctx->struct_ret_arena + vm_ctx->struct_ret_arena_used;
-                    memcpy(dst, sptr, xr_struct_layout_storage_size(layout));
+                    memcpy(dst, sptr, xr_aggregate_layout_storage_size(layout));
                     vm_ctx->struct_ret_arena_used = need;
                     return_slot->ptr = dst;
                 }

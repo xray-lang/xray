@@ -205,16 +205,13 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
             return xrt_value_to_owned(xr_typed_get(a->data, (int32_t) idx, a->elem_type));
         xrt_index_oob(idx, a->length);
     } else if (obj.tag == XR_TAG_ENUM && key.tag == XR_TAG_I64) {
-        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) obj.ptr;
-        if (!ev)
-            return XR_NULL_VAL;
-        if (key.i == 0)
-            return XR_FROM_INT(ev->member_index);
-        if (key.i > 0 && ev->payloads && (uint32_t) key.i <= ev->payload_count)
+        uint32_t member_index = 0;
+        if (key.i == 0 && xrt_enum_key_parts(obj, NULL, NULL, &member_index, NULL))
+            return XR_FROM_INT(member_index);
+        const XrAotEnumBox *ev = xrt_enum_box_view(obj);
+        if (ev && key.i > 0 && (uint32_t) key.i <= ev->payload_count)
             return ev->payloads[key.i - 1];
-        if (key.i == 1 && ev->payload_count > 0)
-            return ev->payload0;
-        xrt_index_oob(key.i, (int64_t) ev->payload_count + 1);
+        xrt_index_oob(key.i, ev ? (int64_t) ev->payload_count + 1 : 1);
     } else if (XR_IS_STR(obj) && key.tag == XR_TAG_I64) {
         return xrt_string_index_get(obj, key.i);
     } else if (obj.tag == XR_TAG_RANGE && key.tag == XR_TAG_I64) {

@@ -75,12 +75,7 @@ static int find_enum_case_index(XaSymbol *enum_sym, const char *case_name) {
     if (!enum_sym || !case_name)
         return -1;
     XaSymbolLinks *links = &enum_sym->links;
-    for (int i = 0; i < links->enum_member_count; i++) {
-        if (links->enum_member_names[i] && strcmp(links->enum_member_names[i], case_name) == 0) {
-            return i;
-        }
-    }
-    return -1;
+    return xa_enum_info_find_variant(links->enum_info, case_name);
 }
 
 /* ========== Expression Walking ========== */

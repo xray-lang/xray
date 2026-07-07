@@ -1,4 +1,5 @@
 contains=function 1 name=compare_words module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
 regex=span-access [0-9]+ func=compare_words value=v[0-9]+ kind=span_compare evidence=recv_agg\+pod\+elem_match drop=type\+pod\+helper
 c_contains=memcmp(_left.data, _right.data
+c_contains=Span.compare(other) byte length overflow
 c_not_contains=xrt_span_compare_checked_raw(

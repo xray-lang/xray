@@ -2,5 +2,7 @@ args=--profile freestanding
 status=fail
 contains=freestanding profile rejects string.toBytes
 contains=freestanding profile rejects string.byteLength
+contains=freestanding profile rejects string index access
+contains=freestanding profile rejects string slice expression
 not_contains=CRASH
 not_contains=unsupported AOT

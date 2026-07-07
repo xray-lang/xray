@@ -25,13 +25,14 @@ XrValue xr_enum_get_name(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (!XR_IS_PTR(self))
         return xr_null();
 
-    if (!XR_IS_ENUM_VALUE(self))
+    if (!XR_IS_ENUM_CTOR(self))
         return xr_null();
 
-    XrEnumValue *enum_val = (XrEnumValue *) XR_TO_PTR(self);
+    XrEnumCtor *enum_val = (XrEnumCtor *) XR_TO_PTR(self);
 
-    size_t len = strlen(enum_val->member_name);
-    XrString *str = xr_string_intern(isolate, enum_val->member_name, len, 0);
+    const char *name = xr_enum_ctor_name(enum_val);
+    size_t len = strlen(name);
+    XrString *str = xr_string_intern(isolate, name, len, 0);
     return xr_string_value(str);
 }
 
@@ -44,10 +45,10 @@ XrValue xr_enum_get_ordinal(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (!XR_IS_PTR(self))
         return xr_null();
 
-    if (!XR_IS_ENUM_VALUE(self))
+    if (!XR_IS_ENUM_CTOR(self))
         return xr_null();
 
-    XrEnumValue *enum_val = (XrEnumValue *) XR_TO_PTR(self);
+    XrEnumCtor *enum_val = (XrEnumCtor *) XR_TO_PTR(self);
 
     return xr_int(enum_val->member_index);
 }
@@ -61,14 +62,14 @@ XrValue xr_enum_toString(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (!XR_IS_PTR(self))
         return xr_null();
 
-    if (!XR_IS_ENUM_VALUE(self))
+    if (!XR_IS_ENUM_CTOR(self))
         return xr_null();
 
-    XrEnumValue *enum_val = (XrEnumValue *) XR_TO_PTR(self);
+    XrEnumCtor *enum_val = (XrEnumCtor *) XR_TO_PTR(self);
 
     // Format: EnumName.MemberName
     char buffer[512];
-    snprintf(buffer, sizeof(buffer), "%s.%s", enum_val->enum_name, enum_val->member_name);
+    snprintf(buffer, sizeof(buffer), "%s.%s", enum_val->enum_name, xr_enum_ctor_name(enum_val));
 
     size_t len = strlen(buffer);
     XrString *str = xr_string_intern(isolate, buffer, len, 0);

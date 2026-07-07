@@ -41,6 +41,7 @@
 #include "xcoro_heap.h"
 #include "xobj_header.h"
 #include "../class/xinstance.h"
+#include "../class/xenum.h"
 #include "../class/xclass.h"
 #include "../closure/xcell.h"
 #include "../closure/xclosure.h"
@@ -98,6 +99,18 @@ static void visit_children(XrObjHeader *obj, ChildVisitor visitor, void *ctx) {
             XrClass *klass = inst->klass;
             if (!klass)
                 break;
+            if (klass->builtin_kind == XR_BK_ADT_ENUM) {
+                XrEnumAggregateValue *agg = (XrEnumAggregateValue *) obj;
+                for (uint32_t i = 0; i < agg->payload_count; i++) {
+                    XrValue v = agg->payloads[i];
+                    if (XR_IS_PTR(v)) {
+                        XrObjHeader *child = XR_VALUE_GCPTR(v);
+                        if (child)
+                            visitor(child, ctx);
+                    }
+                }
+                break;
+            }
             uint32_t fc = xr_class_instance_field_count(klass);
             for (uint32_t i = 0; i < fc; i++) {
                 XrValue v = inst->fields[i];

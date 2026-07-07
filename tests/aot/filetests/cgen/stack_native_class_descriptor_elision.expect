@@ -3,7 +3,7 @@ regex=function [0-9]+ name=run module=0 depth=1 abi=native boundary=none params=
 c_contains=typedef struct xrt_native_stack_native_class_descriptor_elision_Shape { int64_t f0; }
 c_contains=typedef struct xrt_native_stack_native_class_descriptor_elision_Rect { xrt_native_stack_native_class_descriptor_elision_Shape base; int64_t f1; int64_t f2; }
 c_contains=&((p0)->base)
-c_not_contains=xrt_type_register("Shape"
-c_not_contains=xrt_type_register("Rect"
+c_not_contains=xrt_type_register_hot(
+c_not_contains=xrt_type_set_name(
 c_not_contains=xrt_process_new
 c_not_contains=xrt_closure_new

@@ -104,12 +104,11 @@ static bool xa_c_export_native_scalar_supported(uint8_t native_type) {
     }
 }
 
-static bool xa_c_export_struct_layout_supported_depth(const XrStructLayout *layout, int depth) {
-    if (!layout || depth > 8 || layout->field_count == 0 ||
-        layout->field_count > XR_MAX_STRUCT_FIELDS)
+static bool xa_c_export_struct_layout_supported_depth(const XrAggregateLayout *layout, int depth) {
+    if (!layout || depth > 8 || layout->field_count == 0 || layout->field_count > XR_MAX_AGG_FIELDS)
         return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {
-        const XrStructFieldLayout *field = &layout->fields[i];
+        const XrAggregateFieldLayout *field = &layout->fields[i];
         if (xa_c_export_native_scalar_supported(field->native_type))
             continue;
         if (field->native_type == XR_NATIVE_ARRAY && field->elem_count > 0 &&
@@ -135,12 +134,12 @@ static bool xa_native_lane_bitwise_reinterpretable(uint8_t native_type) {
     return xa_c_export_native_scalar_supported(native_type);
 }
 
-static bool xa_struct_layout_bitwise_reinterpretable_depth(const XrStructLayout *layout,
+static bool xa_struct_layout_bitwise_reinterpretable_depth(const XrAggregateLayout *layout,
                                                            int depth) {
     if (!layout || depth > 8)
         return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {
-        const XrStructFieldLayout *field = &layout->fields[i];
+        const XrAggregateFieldLayout *field = &layout->fields[i];
         if (field->native_type == XR_NATIVE_STRUCT) {
             if (!xa_struct_layout_bitwise_reinterpretable_depth(field->sub_layout, depth + 1))
                 return false;
@@ -157,7 +156,7 @@ static bool xa_struct_layout_bitwise_reinterpretable_depth(const XrStructLayout 
     return true;
 }
 
-static bool xa_struct_field_bitwise_reinterpretable(const XrStructFieldLayout *field) {
+static bool xa_struct_field_bitwise_reinterpretable(const XrAggregateFieldLayout *field) {
     if (!field)
         return false;
     if (field->native_type == XR_NATIVE_STRUCT)
@@ -2540,7 +2539,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     const char *decl_label = is_union_decl ? "union" : is_struct_decl ? "struct" : "class";
     const char *diag_label = is_union_decl ? "Union" : is_struct_decl ? "Struct" : "Class";
     ClassDeclNode *cls = (node->type == AST_CLASS_DECL) ? &node->as.class_decl
-                        : is_struct_decl                ? &node->as.struct_decl
+                         : is_struct_decl               ? &node->as.struct_decl
                                                         : &node->as.union_decl;
 
     // @native class is reserved for builtin type declarations embedded at
@@ -2788,21 +2787,20 @@ skip_interfaces:
     }
 
     // Compute fixed-layout aggregate layout (VALUE_TYPE only, skip generic struct templates)
-    int struct_type_param_count =
-        is_struct_decl ? node->as.struct_decl.type_param_count : 0;
+    int struct_type_param_count = is_struct_decl ? node->as.struct_decl.type_param_count : 0;
     if (is_aggregate_decl && info->field_count > 0 && struct_type_param_count == 0 &&
         struct_field_types_valid) {
-        XrStructLayout *layout = xr_calloc(1, sizeof(XrStructLayout));
+        XrAggregateLayout *layout = xr_calloc(1, sizeof(XrAggregateLayout));
         if (!layout)
             goto skip_layout;
         layout->field_count = (uint16_t) info->field_count;
         ClassDeclNode *st = is_union_decl ? &node->as.union_decl : &node->as.struct_decl;
         if (is_union_decl) {
-            layout->kind = XR_STRUCT_LAYOUT_UNION;
+            layout->kind = XR_AGG_LAYOUT_UNION;
         } else if (st->is_packed) {
-            layout->kind = XR_STRUCT_LAYOUT_PACKED;
+            layout->kind = XR_AGG_LAYOUT_PACKED_STRUCT;
         } else {
-            layout->kind = XR_STRUCT_LAYOUT_STRUCT;
+            layout->kind = XR_AGG_LAYOUT_STRUCT;
         }
         layout->explicit_align = st->explicit_align;
         bool layout_valid = true;
@@ -2823,7 +2821,7 @@ skip_interfaces:
                 layout->field_names[i] = info->fields[i] ? info->fields[i]->name : NULL;
         }
 
-        for (int i = 0; i < info->field_count && i < XR_MAX_STRUCT_FIELDS; i++) {
+        for (int i = 0; i < info->field_count && i < XR_MAX_AGG_FIELDS; i++) {
             if (!layout_valid)
                 break;
             XaSymbol *fs = info->fields[i];
@@ -2859,7 +2857,8 @@ skip_interfaces:
                         char msg[256];
                         snprintf(msg, sizeof(msg),
                                  "%s '%s' field '%s': fixed array length must be positive",
-                                 diag_label, cls->name ? cls->name : "?", fs->name ? fs->name : "?");
+                                 diag_label, cls->name ? cls->name : "?",
+                                 fs->name ? fs->name : "?");
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                         layout_valid = false;
@@ -2905,7 +2904,7 @@ skip_interfaces:
                     ft->instance.class_name) {
                     field_class_name = ft->instance.class_name;
                 }
-                XrStructLayout *sub_layout = NULL;
+                XrAggregateLayout *sub_layout = NULL;
                 if (field_class_name) {
                     XaSymbol *sub_sym = xa_analyzer_lookup(ctx->analyzer, field_class_name);
                     if (sub_sym) {
@@ -2918,7 +2917,8 @@ skip_interfaces:
                 }
                 if (sub_layout) {
                     layout->fields[i].native_type = XR_NATIVE_STRUCT;
-                    layout->fields[i].size = (uint16_t) xr_struct_layout_storage_size(sub_layout);
+                    layout->fields[i].size =
+                        (uint16_t) xr_aggregate_layout_storage_size(sub_layout);
                     layout->fields[i].sub_layout_id = sub_layout->layout_id;
                     layout->fields[i].sub_layout = sub_layout;
                     if (is_union_decl &&
@@ -2953,8 +2953,7 @@ skip_interfaces:
             if (is_union_decl && !xa_struct_field_bitwise_reinterpretable(&layout->fields[i])) {
                 XrLocation loc = {.file = ctx->file_path, .line = fs->location.line};
                 char msg[256];
-                snprintf(msg, sizeof(msg),
-                         "Union '%s' field '%s' must be bitwise-reinterpretable",
+                snprintf(msg, sizeof(msg), "Union '%s' field '%s' must be bitwise-reinterpretable",
                          cls->name ? cls->name : "?", fs->name ? fs->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
@@ -2963,8 +2962,8 @@ skip_interfaces:
             }
         }
 
-        if (layout_valid && info->field_count <= XR_MAX_STRUCT_FIELDS) {
-            xr_struct_layout_compute(layout);
+        if (layout_valid && info->field_count <= XR_MAX_AGG_FIELDS) {
+            xr_aggregate_layout_compute(layout);
             if (layout->total_size > UINT16_MAX) {
                 XrLocation loc = {.file = ctx->file_path, .line = node->line};
                 char msg[256];

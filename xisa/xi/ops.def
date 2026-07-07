@@ -752,7 +752,7 @@
   :observable (raw-memory-copy)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.struct.new
+(define-xi-op xi.agg.new
   :class allocation
   :arity 1
   :effects (side-effect memory-write allocates)
@@ -760,7 +760,7 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.struct.get
+(define-xi-op xi.agg.get
   :class memory-read
   :arity 1
   :result-ownership borrowed
@@ -772,7 +772,7 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.struct.set
+(define-xi-op xi.agg.set
   :class memory-write
   :arity 2
   :result-kind void
@@ -1269,7 +1269,9 @@
   :result-ownership none
   :tbaa-group chan
   :escape-use global
-  ;; arg0 = channel (borrowed receiver), arg1 = value (consumed). See xi.chan.send.
+  ;; Internal select send predicate: arg0 = channel (borrowed receiver),
+  ;; arg1 = value (consumed on success/abandoned on failure), result = bool.
+  ;; User-facing Channel.trySend remains XI_CALL_METHOD/OP_INVOKE and returns SendResult.
   :own-use stored-value
   :effects (side-effect memory-write)
   :requires ()

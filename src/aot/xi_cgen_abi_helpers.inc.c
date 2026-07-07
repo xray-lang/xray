@@ -58,6 +58,11 @@ static bool cg_value_rep_is_adt_aggregate(XaotValueRep rep) {
     return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_ENUM) != 0;
 }
 
+static bool cg_value_rep_is_typed_adt_aggregate(XaotValueRep rep) {
+    return cg_value_rep_is_adt_aggregate(rep) && rep.c_type &&
+           strcmp(rep.c_type, "XrAotEnumAggregate") != 0;
+}
+
 static bool cg_value_rep_is_struct_aggregate(XaotValueRep rep) {
     return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_STRUCT) != 0;
 }
@@ -122,7 +127,11 @@ static void emit_aggregate_zero_expr(FILE *out, XaotValueRep rep) {
         fprintf(out, "((%s){0})", rep.c_type ? rep.c_type : "XrValue");
         return;
     }
+    if (cg_value_rep_is_typed_adt_aggregate(rep))
+        fprintf(out, "%s_from_base(", rep.c_type);
     fprintf(out, "xrt_enum_aggregate_zero()");
+    if (cg_value_rep_is_typed_adt_aggregate(rep))
+        fprintf(out, ")");
 }
 
 static void emit_value_plan_zero_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
@@ -132,6 +141,25 @@ static void emit_value_plan_zero_expr(XiCgenCtx *ctx, FILE *out, const XiValue *
         return;
     }
     fprintf(out, "XR_NULL_VAL");
+}
+
+static void emit_adt_aggregate_as_base_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    if (plan && cg_value_rep_is_typed_adt_aggregate(plan->rep))
+        fprintf(out, "%s_to_base(", plan->rep.c_type);
+    emit_vref(out, v);
+    if (plan && cg_value_rep_is_typed_adt_aggregate(plan->rep))
+        fprintf(out, ")");
+}
+
+static void emit_adt_base_to_value_rep_prefix(FILE *out, XaotValueRep rep) {
+    if (cg_value_rep_is_typed_adt_aggregate(rep))
+        fprintf(out, "%s_from_base(", rep.c_type);
+}
+
+static void emit_adt_base_to_value_rep_suffix(FILE *out, XaotValueRep rep) {
+    if (cg_value_rep_is_typed_adt_aggregate(rep))
+        fprintf(out, ")");
 }
 
 static XrRep cg_type_aot_storage_rep(const XrType *type) {
@@ -593,7 +621,7 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
     if (plan && plan->rep.kind == XAOT_VALUE_AGGREGATE) {
         if (target_rep == XR_REP_TAGGED && cg_value_rep_is_adt_aggregate(plan->rep)) {
             fprintf(out, "xrt_enum_aggregate_box(");
-            emit_vref(out, v);
+            emit_adt_aggregate_as_base_expr(ctx, out, v);
             fprintf(out, ")");
             return;
         }
@@ -683,6 +711,10 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
             xaot_value_storage_rep(call_plan->rep) == XR_REP_TAGGED &&
             cg_value_rep_is_adt_aggregate(target_rep)) {
             fprintf(out, "xrt_enum_aggregate_box(");
+            if (cg_value_rep_is_typed_adt_aggregate(target_rep)) {
+                fprintf(out, "%s_to_base(", target_rep.c_type);
+                return "))";
+            }
             return ")";
         }
         if (!xaot_value_reps_equal(target_rep, call_plan->rep)) {
@@ -757,7 +789,7 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
         if (xaot_value_storage_rep(slot_rep) == XR_REP_TAGGED &&
             cg_value_rep_is_adt_aggregate(arg_plan->rep)) {
             fprintf(out, "xrt_enum_aggregate_box(");
-            emit_vref(out, arg);
+            emit_adt_aggregate_as_base_expr(ctx, out, arg);
             fprintf(out, ")");
             return;
         }

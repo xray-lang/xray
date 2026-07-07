@@ -264,7 +264,7 @@ static XiValue *lower_defer_scope_ensure_mark(XiLower *l, int line) {
 }
 
 static bool stmt_value_is_fresh_value_struct(XiValue *v) {
-    return v && v->op == XI_STRUCT_NEW && !xi_var_id_is_valid(v->var_id);
+    return v && v->op == XI_AGG_NEW && !xi_var_id_is_valid(v->var_id);
 }
 
 static void stmt_mark_value_clone_copy(XiValue *v) {
@@ -397,13 +397,10 @@ static int stmt_adt_member_index(XiLower *l, struct XrType *subject_type, const 
 
     XaSymbol *enum_sym = stmt_lookup_enum_symbol(l, enum_name);
     XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, enum_sym);
-    if (!links || !links->enum_member_names)
+    XaEnumInfo *info = links ? links->enum_info : NULL;
+    if (!info)
         return -1;
-    for (int i = 0; i < links->enum_member_count; i++) {
-        if (links->enum_member_names[i] && strcmp(links->enum_member_names[i], member_name) == 0)
-            return i;
-    }
-    return -1;
+    return xa_enum_info_find_variant(info, member_name);
 }
 
 static XaSymbolLinks *stmt_adt_subject_links(XiLower *l, struct XrType *subject_type) {
@@ -414,7 +411,7 @@ static XaSymbolLinks *stmt_adt_subject_links(XiLower *l, struct XrType *subject_
     return xa_analyzer_get_links(l->analyzer, enum_sym);
 }
 
-static XrStructLayout *stmt_lookup_struct_layout(XiLower *l, const char *name) {
+static XrAggregateLayout *stmt_lookup_struct_layout(XiLower *l, const char *name) {
     XaSymbol *sym = stmt_lookup_class_symbol(l, name);
     if (!sym)
         return NULL;
@@ -422,8 +419,8 @@ static XrStructLayout *stmt_lookup_struct_layout(XiLower *l, const char *name) {
     return (links && links->class_info) ? links->class_info->struct_layout : NULL;
 }
 
-static XrStructLayout *stmt_type_struct_layout(XiLower *l, struct XrType *type) {
-    XrStructLayout *layout = xi_lower_struct_layout_of(type);
+static XrAggregateLayout *stmt_type_struct_layout(XiLower *l, struct XrType *type) {
+    XrAggregateLayout *layout = xi_lower_struct_layout_of(type);
     if (layout)
         return layout;
     const char *class_name = xr_type_get_class_name(type);
@@ -492,7 +489,7 @@ static XiValue *stmt_default_struct_value_depth(XiLower *l, struct XrType *type,
     if (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE)
         return NULL;
 
-    XrStructLayout *layout = xi_lower_struct_layout_of(type);
+    XrAggregateLayout *layout = xi_lower_struct_layout_of(type);
     const char *class_name = type->instance.class_name;
     if (!layout && class_name)
         layout = stmt_lookup_struct_layout(l, class_name);
@@ -503,7 +500,7 @@ static XiValue *stmt_default_struct_value_depth(XiLower *l, struct XrType *type,
     if (!cls)
         return NULL;
 
-    XiValue *inst = xi_value_new(l->func, l->cur_block, XI_STRUCT_NEW, type, 1);
+    XiValue *inst = xi_value_new(l->func, l->cur_block, XI_AGG_NEW, type, 1);
     if (!inst)
         return NULL;
     inst->args[0] = cls;
@@ -524,7 +521,7 @@ static XiValue *stmt_default_struct_value_depth(XiLower *l, struct XrType *type,
             XiValue *nested = stmt_default_struct_value_depth(l, field_type, line, depth + 1);
             if (!nested)
                 continue;
-            XiValue *set = xi_value_new(l->func, l->cur_block, XI_STRUCT_SET, l->type_unit, 2);
+            XiValue *set = xi_value_new(l->func, l->cur_block, XI_AGG_SET, l->type_unit, 2);
             if (!set)
                 continue;
             set->args[0] = inst;
@@ -992,8 +989,8 @@ static bool lower_match_is_exhaustive_adt(XiLower *l, struct XrType *subject_typ
     if (!l || !m)
         return false;
     XaSymbolLinks *links = stmt_adt_subject_links(l, subject_type);
-    if (!links || !links->is_adt_enum || !links->enum_member_names ||
-        links->enum_member_count <= 0 || links->enum_member_count > 256)
+    XaEnumInfo *info = links ? links->enum_info : NULL;
+    if (!info || !info->is_payload_enum || info->variant_count == 0 || info->variant_count > 256)
         return false;
 
     bool stack_covered[256];
@@ -1009,8 +1006,8 @@ static bool lower_match_is_exhaustive_adt(XiLower *l, struct XrType *subject_typ
         if (pattern_is_irrefutable_binding(arm->pattern))
             return true;
         lower_match_mark_exhaustive_adt_pattern(l, subject_type, arm->pattern, stack_covered,
-                                                links->enum_member_count, &covered_count);
-        if (covered_count == links->enum_member_count)
+                                                (int) info->variant_count, &covered_count);
+        if (covered_count == (int) info->variant_count)
             return true;
     }
     return false;
@@ -1078,12 +1075,10 @@ static struct XrType *tuple_elem_type(XiLower *l, struct XrType *subject_type, i
     return l->type_any;
 }
 
-/* Variant-ordinal test for an ADT-enum value: read field[0] (the variant tag)
- * and compare it against the pattern variant's static ordinal. ADT-enum values
- * are tagged instances (field[0] = ordinal, field[1..] = payload) in every
- * backend, so both payload patterns (`Recv.Value(v)`) and bare-variant patterns
- * (`Recv.Empty`) must discriminate on the ordinal — an identity compare against
- * the variant singleton never matches the instance representation. */
+/* Variant-ordinal test for an ADT-enum value: read logical ADT field 0 (the
+ * tag) and compare it against the pattern variant's static ordinal. Logical
+ * ADT fields are lowered through enum aggregate helpers in the VM/AOT backend,
+ * so this numbering is an IR convention, not a runtime XrInstance layout. */
 static XiValue *lower_adt_variant_tag_test(XiLower *l, XiValue *subject, AstNode *variant) {
     int member_index = stmt_adt_member_index(l, subject->type, variant);
     struct XrType *tag_type = member_index >= 0 ? l->type_int : l->type_any;
@@ -1091,7 +1086,7 @@ static XiValue *lower_adt_variant_tag_test(XiLower *l, XiValue *subject, AstNode
     if (!tag)
         return NULL;
     tag->args[0] = subject;
-    tag->aux_int = 0; /* field[0] = variant tag */
+    tag->aux_int = 0; /* logical ADT field 0 = variant tag */
     tag->aux_kind = XI_AUX_KIND_ADT_FIELD;
 
     if (member_index >= 0) {
@@ -1117,7 +1112,7 @@ static bool lower_literal_is_adt_variant(XiLower *l, XiValue *subject, AstNode *
     if (value->type != AST_ENUM_ACCESS && value->type != AST_MEMBER_ACCESS)
         return false;
     XaSymbolLinks *links = stmt_adt_subject_links(l, subject->type);
-    if (!links || !links->is_adt_enum)
+    if (!links || !links->enum_info || !links->enum_info->is_payload_enum)
         return false;
     return stmt_adt_member_index(l, subject->type, value) >= 0;
 }
@@ -1300,8 +1295,8 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
         }
     }
 
-    /* ADT variant destructure: bind payload fields.
-     * Payload slots are at fields[1], fields[2], ... */
+    /* ADT variant destructure: bind logical payload fields.
+     * Logical field 0 is the tag; payloads start at logical field 1. */
     if (pattern->type == AST_PATTERN_ADT) {
         PatternAdtNode *ap = &pattern->as.pattern_adt;
         for (int i = 0; i < ap->count; i++) {
@@ -1315,7 +1310,7 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
             if (!field)
                 continue;
             field->args[0] = subject;
-            field->aux_int = 1 + i; /* payload starts at field[1] */
+            field->aux_int = 1 + i; /* logical ADT payload field */
             field->aux_kind = XI_AUX_KIND_ADT_FIELD;
             lower_pattern_bindings(l, field, sub);
         }
@@ -2951,12 +2946,30 @@ static void stmt_record_shared_function_value(XiLower *l, int slot, XiValue *val
         l->func->shared_slot_funcs[slot] = target;
 }
 
+static bool stmt_freestanding_top_const_aggregate_is_erased(XiLower *l, AstNode *node, int var_id) {
+    if (!l || !l->is_program || !l->analyzer || !xa_analyzer_is_freestanding(l->analyzer) ||
+        !node || node->type != AST_CONST_DECL || var_id < 0 || !l->shared_map)
+        return false;
+    int slot = l->shared_map[var_id];
+    if (slot < 0 || !l->func || !l->func->shared_const_literals ||
+        slot >= (int) l->func->shared_const_literal_count)
+        return false;
+    return l->func->shared_const_literals[slot].kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE;
+}
+
 static void lower_var_decl(XiLower *l, AstNode *node) {
     const char *name = node->as.var_decl.name;
     uint32_t sid = node->as.var_decl.symbol_id;
     struct XrType *type = xi_lower_node_type(l, node);
 
     int var_id = xi_lower_var_create(l, sid, name, type);
+    if (stmt_freestanding_top_const_aggregate_is_erased(l, node, var_id)) {
+        XiValue *placeholder = xi_const_null(l->func, l->cur_block, l->type_null);
+        if (placeholder)
+            xi_lower_braun_write(l, var_id, l->cur_block, placeholder);
+        return;
+    }
+
     XiBlock *init_block = l->cur_block;
     uint32_t init_begin = init_block ? init_block->nvalues : 0;
 

@@ -59,11 +59,6 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     abort();
 }
 
-static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj) {
-    (void) type_id;
-    (void) obj;
-}
-
 #define ASSERT_BOOL(value, expected, msg)                                                          \
     do {                                                                                           \
         XrValue _actual = (value);                                                                 \
@@ -105,6 +100,29 @@ static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj) {
         XrValue _actual = (value);                                                                 \
         if (_actual.tag != XR_TAG_NULL) {                                                          \
             fprintf(stderr, "FAIL: %s (got tag %d)\n", msg, _actual.tag);                          \
+            g_failed++;                                                                            \
+            return;                                                                                \
+        }                                                                                          \
+        g_passed++;                                                                                \
+    } while (0)
+
+#define ASSERT_TRUE_MSG(cond, msg)                                                                 \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "FAIL: %s\n", msg);                                                    \
+            g_failed++;                                                                            \
+            return;                                                                                \
+        }                                                                                          \
+        g_passed++;                                                                                \
+    } while (0)
+
+#define ASSERT_CSTR(actual, expected, msg)                                                         \
+    do {                                                                                           \
+        const char *_actual = (actual);                                                            \
+        const char *_expected = (expected);                                                        \
+        if (!_actual || strcmp(_actual, _expected) != 0) {                                         \
+            fprintf(stderr, "FAIL: %s (got %s, expected %s)\n", msg, _actual ? _actual : "<null>", \
+                    _expected);                                                                    \
             g_failed++;                                                                            \
             return;                                                                                \
         }                                                                                          \
@@ -158,18 +176,55 @@ static void test_xrt_to_bool_reuses_truthy_core_for_sized_containers(void) {
 
 static void test_xrt_weak_predicate_accepts_aot_object_tags(void) {
     char dummy = 0;
-    XrAotEnumValueView enum_view = {0};
+    XrAotEnumBox enum_box = {0};
 
     ASSERT_WEAK_ACCEPTS(XR_NULL_VAL, false, "null is not a weak key object");
     ASSERT_WEAK_ACCEPTS(XR_FROM_INT(1), false, "int is not a weak key object");
     ASSERT_WEAK_ACCEPTS(XR_TRUE_VAL, false, "bool is not a weak key object");
     ASSERT_WEAK_ACCEPTS(xrt_range_from_i64(1, 4, false), true, "Range is an object-like weak key");
-    ASSERT_WEAK_ACCEPTS(xr_mkptr(&enum_view, XR_TAG_ENUM), true,
-                        "Enum value view is an object-like weak key");
+    ASSERT_WEAK_ACCEPTS(xr_mkptr(&enum_box, XR_TAG_ENUM), true,
+                        "Enum box is an object-like weak key");
     ASSERT_WEAK_ACCEPTS(xr_mkptr(&dummy, XR_TAG_ITERATOR), true,
                         "Iterator is an object-like weak key");
-    ASSERT_WEAK_ACCEPTS(xr_struct_ref(&dummy, 1), true,
+    ASSERT_WEAK_ACCEPTS(xr_aggregate_ref(&dummy, 1), true,
                         "native struct reference is an object-like weak key");
+}
+
+static void test_xrt_type_metadata_uses_hot_name_and_derive_tables(void) {
+    uint16_t tid = xrt_type_register_hot(0, NULL, 0, NULL, 16);
+    const XrtTypeInfo *hot = xrt_type_info(tid);
+    const XrtTypeNameInfo *name = xrt_type_name_info(tid);
+    const XrtTypeDeriveInfo *derive = xrt_type_derive_info(tid);
+    ASSERT_TRUE_MSG(hot != NULL, "type hot row is registered");
+    ASSERT_TRUE_MSG(name != NULL, "type name row is registered");
+    ASSERT_TRUE_MSG(derive != NULL, "type derive row is registered");
+    ASSERT_TRUE_MSG(hot->type_id == tid && hot->instance_size == 16,
+                    "hot row carries identity and instance size");
+    ASSERT_TRUE_MSG(xrt_type_display_name(tid) == NULL,
+                    "hot registration starts without name metadata");
+    xrt_type_set_name(tid, "Box$i64", NULL);
+    ASSERT_CSTR(name->name, "Box$i64", "name row carries internal name");
+    ASSERT_CSTR(xrt_type_display_name(tid), "Box$i64", "display falls back to internal name");
+    ASSERT_TRUE_MSG(derive->derive_flags == 0 && derive->inspect_field_count == 0,
+                    "derive row starts empty");
+
+    static const char *args[] = {"int"};
+    xrt_type_set_generic_origin(tid, tid);
+    xrt_type_set_generic_name(tid, "Box<int>", args, 1);
+    ASSERT_TRUE_MSG(hot->generic_origin == tid, "generic origin stays in hot row");
+    ASSERT_CSTR(xrt_type_display_name(tid), "Box<int>", "display name comes from name row");
+    ASSERT_TRUE_MSG(name->mono_type_argc == 1 && name->mono_type_arg_names == args,
+                    "generic type args stay in name row");
+
+    static const XrtInspectField fields[] = {{"value", 0, XR_NATIVE_I64}};
+    xrt_type_set_derive(tid, XR_DERIVE_JSON | XR_DERIVE_INSPECT, fields, 1);
+    ASSERT_TRUE_MSG((derive->derive_flags & XR_DERIVE_JSON) != 0, "derive row carries Json flag");
+    ASSERT_TRUE_MSG((derive->derive_flags & XR_DERIVE_INSPECT) != 0,
+                    "derive row carries Inspect flag");
+    ASSERT_TRUE_MSG(derive->inspect_fields == fields && derive->inspect_field_count == 1,
+                    "derive row carries inspect sidecar");
+    ASSERT_TRUE_MSG(xrt_type_internal_name_eq(tid, "Box$i64"),
+                    "internal-name lookup reads name row");
 }
 
 static void test_xrt_thread_handle_methods(void) {
@@ -189,6 +244,7 @@ int main(void) {
     test_xrt_to_bool_reuses_truthy_core_for_scalars_and_strings();
     test_xrt_to_bool_reuses_truthy_core_for_sized_containers();
     test_xrt_weak_predicate_accepts_aot_object_tags();
+    test_xrt_type_metadata_uses_hot_name_and_derive_tables();
     test_xrt_thread_handle_methods();
 
     if (g_failed == 0) {

@@ -41,5 +41,5 @@ _Static_assert(XR_TAG_BOOL == 1, "XR_TAG_BOOL drift");
 _Static_assert(XR_TAG_I64 == 3, "XR_TAG_I64 drift");
 _Static_assert(XR_TAG_F64 == 4, "XR_TAG_F64 drift");
 _Static_assert(XR_TAG_PTR == 5, "XR_TAG_PTR drift");
-_Static_assert(XR_TAG_STRUCT_REF == 6, "XR_TAG_STRUCT_REF drift");
+_Static_assert(XR_TAG_AGG_REF == 6, "XR_TAG_AGG_REF drift");
 _Static_assert(XR_TAG_NOTFOUND == 7, "XR_TAG_NOTFOUND drift");

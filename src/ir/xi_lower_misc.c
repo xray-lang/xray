@@ -22,6 +22,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/object/xstring.h"
@@ -166,6 +167,15 @@ XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, AstNode *node) {
 
 /* ========== Enum Declaration ========== */
 
+static uint32_t xi_lower_decl_derive_flags(XrAttribute **attrs, int count) {
+    uint32_t flags = 0;
+    for (int i = 0; i < count; i++) {
+        if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
+            flags |= attrs[i]->derive_flags;
+    }
+    return flags;
+}
+
 /* Lower AST_ENUM_DECL: create XrEnumType at compile time, store as
  * shared variable so enum member access can find it.
  * Handles both zero-payload enums and payload enums. The temporary runtime
@@ -204,6 +214,18 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
             enum_data->member_count = (uint32_t) n;
             enum_data->is_adt = is_adt;
             enum_data->members = enum_members;
+            if (ed->type_param_count > 0 && ed->type_params) {
+                const char **type_param_names = (const char **) xi_func_arena_alloc(
+                    l->func, (uint32_t) ((size_t) ed->type_param_count * sizeof(const char *)));
+                if (type_param_names) {
+                    for (int tp = 0; tp < ed->type_param_count; tp++) {
+                        type_param_names[tp] = arena_strdup(
+                            l->func, ed->type_params[tp] ? ed->type_params[tp]->name : NULL);
+                    }
+                    enum_data->type_param_names = type_param_names;
+                    enum_data->type_param_count = (uint8_t) ed->type_param_count;
+                }
+            }
         } else {
             enum_data = NULL;
         }
@@ -215,43 +237,47 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
             enum_members[i].name = arena_strdup(l->func, m->name);
             enum_members[i].ordinal = (uint32_t) i;
             enum_members[i].payload_count = m->payload_count;
+            if (m->payload_count > 0 && m->payload_types) {
+                XrType **payload_types = (XrType **) xi_func_arena_alloc(
+                    l->func, (uint32_t) ((size_t) m->payload_count * sizeof(XrType *)));
+                if (payload_types) {
+                    memset(payload_types, 0, (size_t) m->payload_count * sizeof(XrType *));
+                    for (int p = 0; p < m->payload_count; p++) {
+                        payload_types[p] =
+                            xr_tref_resolve_in_analyzer(l->analyzer, m->payload_types[p]);
+                    }
+                    enum_members[i].payload_types = payload_types;
+                }
+            }
         }
     }
 
     XrEnumType *et = xr_enum_type_new(l->isolate, ed->name, names, n);
+    if (et)
+        et->derive_flags = xi_lower_decl_derive_flags(ed->attributes, ed->attr_count);
     for (int i = 0; i < n; i++)
         xr_free(names[i]);
     xr_free(names);
 
-    /* Set ADT metadata on the created enum type */
+    /* Set tagged aggregate layout metadata on the created enum type. */
     if (et && is_adt) {
-        et->is_adt = true;
-        et->payload_counts = (int *) xr_calloc((size_t) n, sizeof(int));
+        int *payload_counts = (int *) xr_calloc((size_t) n, sizeof(int));
         int max_pc = 0;
-        if (et->payload_counts) {
+        if (payload_counts) {
             for (int i = 0; i < n; i++) {
                 int pc = ed->members[i]->as.enum_member.payload_count;
-                et->payload_counts[i] = pc;
+                payload_counts[i] = pc;
                 if (pc > max_pc)
                     max_pc = pc;
             }
+            (void) xr_enum_type_set_adt_payloads(et, payload_counts, n);
+            xr_free(payload_counts);
         }
-        et->max_payload = max_pc;
         if (enum_data)
             enum_data->max_payload = max_pc;
-
-        /* Set field_count on the enum class so xr_instance_new allocates
-         * space for variant tag (field[0]) + payload (field[1..max_payload]).
-         * Set builtin_kind = XR_BK_ADT_ENUM so the formatter can detect it. */
-        if (et->enum_class && max_pc > 0) {
-            et->enum_class->field_count = (uint16_t) (1 + max_pc);
-            et->enum_class->own_field_count = (uint16_t) (1 + max_pc);
-            // ADT enum identity is now tracked via builtin_kind
-            et->enum_class->builtin_kind = XR_BK_ADT_ENUM;
-            et->enum_class->builtin_data = et;
-        }
     }
     if (enum_data) {
+        enum_data->layout_id = et && et->layout ? et->layout->layout_id : 0;
         enum_data->runtime_type = et;
     }
 

@@ -3455,7 +3455,7 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
     assert(!had_error && "escaping struct heap-native path should generate");
     assert(contains(code, "typedef struct xrt_struct_test_") &&
            "escaping primitive struct must emit a native heap layout");
-    assert(contains(code, "XR_TAG_STRUCT_REF") &&
+    assert(contains(code, "XR_TAG_AGG_REF") &&
            "escaping primitive struct must allocate as an AOT struct reference");
     assert(contains(code, "->x") && contains(code, "->y") && contains(code, "->ok") &&
            contains(code, "->byte") && "escaping primitive struct fields must use direct access");
@@ -3526,7 +3526,7 @@ TEST(cgen_escaping_struct_string_field_uses_heap_native_storage) {
            "mixed scalar/string struct must emit a native heap layout");
     assert(contains(code, "XrValue name") &&
            "string struct field must be stored as a tagged immutable reference field");
-    assert(contains(code, "XR_TAG_STRUCT_REF") &&
+    assert(contains(code, "XR_TAG_AGG_REF") &&
            "mixed scalar/string struct must allocate as an AOT struct reference");
     assert(contains(code, "->count") && contains(code, "->name") &&
            "mixed scalar/string struct fields must use direct access");
@@ -3568,7 +3568,7 @@ TEST(cgen_fixed_layout_struct_omits_native_header) {
            "fixed-layout int32 field must be placed at payload offset 0");
     assert(count_between(typedef_start, typedef_end, "uint8_t b") == 1 &&
            "fixed-layout uint8 field must be emitted as raw C storage");
-    assert(contains(code, "xr_struct_ref(_s, (uint16_t)sizeof(") &&
+    assert(contains(code, "xr_aggregate_ref(_s, (uint16_t)sizeof(") &&
            "fixed-layout struct refs must carry storage size outside the payload");
 
     printf("  Generated fixed-layout struct path %zu bytes of C code\n", strlen(code));
@@ -3748,7 +3748,7 @@ TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
     assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
            "run function body should be bounded");
 
-    assert(contains(code, "XR_TAG_STRUCT_REF") &&
+    assert(contains(code, "XR_TAG_AGG_REF") &&
            "shared primitive struct must use native heap storage");
     assert(count_between(fn_body, fn_end, "xrt_value_clone_for_coro(") > 0 &&
            "mutable local struct copy should clone the shared slot value before mutation");
@@ -4065,9 +4065,11 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
            "AOT collection ref fields are RC-managed and need a destructor");
     assert(contains(code, "xrt_release(xr_mkptr((self)->f0, XR_TAG_ARRAY));") &&
            "collection ref field destructors should release stored containers");
-    assert(contains(code, "xrt_type_register(\"Bag\", 0, NULL, 0, xrt_native_test_Bag_dtor, "
+    assert(contains(code, "xrt_type_register_hot(0, NULL, 0, xrt_native_test_Bag_dtor, "
                           "(uint32_t)sizeof(xrt_native_test_Bag))") &&
-           "class type registration should wire the collection ref-field destructor");
+           "class hot type registration should wire the collection ref-field destructor");
+    assert(contains(code, "xrt_type_set_name(_tid, \"Bag\", NULL)") &&
+           "default hosted AOT should install class name metadata");
 
     const char *replace = strstr(code, "static int64_t test_replace_");
     assert(replace != NULL && "replace method should use typed ABI");
@@ -4603,7 +4605,7 @@ TEST(cgen_typename_as_and_slice_use_direct_drivers) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "typename/as/slice direct drivers should generate");
 
-    assert(contains(code, "xrt_typeof_str(") && "typename() must use the direct AOT typename helper");
+    assert(contains(code, "xrt_typename(") && "typename() must use the direct AOT typename helper");
     assert(contains(code, "xrt_to_string(") &&
            "unsafe as string must use the direct AOT conversion helper");
     assert(contains(code, "xrt_slice(") && "slice expression must use the direct AOT slice helper");
@@ -4634,7 +4636,7 @@ TEST(cgen_range_uses_direct_aot_driver) {
            "range expression must use the direct AOT range helper");
     assert(contains(code, ", false)") && "half-open range must pass inclusive=false");
     assert(contains(code, ", true)") && "inclusive range must pass inclusive=true");
-    assert(contains(code, "xrt_typeof_str(") && "typename(range) must use direct typename helper");
+    assert(contains(code, "xrt_typename(") && "typename(range) must use direct typename helper");
     assert(!contains(code, "xrt_range(XR_FROM_INT") &&
            "range creation must not box start/end before the AOT helper");
 

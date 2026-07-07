@@ -435,14 +435,20 @@ static bool deep_compare(CompareContext *ctx, XrValue a, XrValue b) {
         XrInstance *ib = xr_value_to_instance(b);
         if (ia->klass != ib->klass)
             return false;
-        // Enum value/type instances are singletons keyed by identity:
-        // they share one class with zero fields, so field-by-field
-        // comparison would incorrectly conflate distinct members.
-        if (ia->klass && (ia->klass->builtin_kind == XR_BK_ENUM_VALUE ||
-                          ia->klass->builtin_kind == XR_BK_ENUM_TYPE))
-            return ia == ib;
+        if (ia->klass && ia->klass->builtin_kind == XR_BK_ADT_ENUM) {
+            XrEnumAggregateValue *ea = xr_value_to_enum_aggregate(a);
+            XrEnumAggregateValue *eb = xr_value_to_enum_aggregate(b);
+            if (!ea || !eb || ea->enum_type != eb->enum_type ||
+                ea->member_index != eb->member_index || ea->payload_count != eb->payload_count)
+                return false;
+            for (uint32_t i = 0; i < ea->payload_count; i++) {
+                if (!deep_compare(ctx, ea->payloads[i], eb->payloads[i]))
+                    return false;
+            }
+            return true;
+        }
         if (ia->klass && ia->klass->struct_layout) {
-            XrStructLayout *layout = ia->klass->struct_layout;
+            XrAggregateLayout *layout = ia->klass->struct_layout;
             for (uint16_t i = 0; i < layout->field_count; i++) {
                 XrValue va = xr_null();
                 XrValue vb = xr_null();
@@ -504,9 +510,9 @@ bool vm_values_equal_deep(XrVMRuntime *isolate, XrValue a, XrValue b) {
     }
 
     // Struct ref: field-by-field comparison via native layout
-    if (XR_IS_STRUCT_REF(a) && XR_IS_STRUCT_REF(b)) {
-        XrStructLayout *la = NULL;
-        XrStructLayout *lb = NULL;
+    if (XR_IS_AGG_REF(a) && XR_IS_AGG_REF(b)) {
+        XrAggregateLayout *la = NULL;
+        XrAggregateLayout *lb = NULL;
         uint8_t *pa = xr_vm_struct_ref_payload(isolate, a, &la);
         uint8_t *pb = xr_vm_struct_ref_payload(isolate, b, &lb);
         if (!pa || !pb || la != lb)
@@ -569,6 +575,19 @@ bool vm_values_equal(XrValue a, XrValue b) {
     }
     if (XR_IS_INT(a) && XR_IS_BIGINT(b)) {
         return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(b), XR_TO_INT(a)) == 0;
+    }
+
+    XrEnumAggregateValue *ea = xr_value_to_enum_aggregate(a);
+    XrEnumAggregateValue *eb = xr_value_to_enum_aggregate(b);
+    if (ea || eb) {
+        if (!ea || !eb || ea->enum_type != eb->enum_type || ea->member_index != eb->member_index ||
+            ea->payload_count != eb->payload_count)
+            return false;
+        for (uint32_t i = 0; i < ea->payload_count; i++) {
+            if (!vm_values_equal(ea->payloads[i], eb->payloads[i]))
+                return false;
+        }
+        return true;
     }
 
     if (XR_IS_PTR(a) && XR_IS_PTR(b))

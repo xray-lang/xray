@@ -522,20 +522,26 @@ TEST(aot_runtime_registers_prelude_enums_without_isolate) {
     ASSERT_TRUE(XR_IS_PTR(recv_type_value));
     XrEnumType *recv_type = XR_TO_ENUM_TYPE(recv_type_value);
     ASSERT_STR_EQ(recv_type->name, "Recv");
-    ASSERT_TRUE(recv_type->is_adt);
-    ASSERT_EQ_INT(recv_type->payload_counts[0], 1);
+    ASSERT_TRUE(xr_enum_type_has_payloads(recv_type));
+    ASSERT_NOT_NULL(recv_type->layout);
+    ASSERT_EQ_INT(recv_type->layout->variant_count, 4);
+    ASSERT_EQ_INT(recv_type->layout->tag_size, 1);
+    ASSERT_EQ_INT(xr_enum_type_payload_count(recv_type, 0), 1);
+    ASSERT_EQ_INT(xr_enum_type_max_payload(recv_type), 1);
 
     XrValue recv_value = xr_aot_load_builtin_field(&ctx, XR_GLOBAL_VAR_RECV, "Value");
     const char *enum_name = NULL;
     const char *member_name = NULL;
     uint32_t member_index = 99;
+    uint32_t layout_id = 0;
     bool is_adt = false;
     int payload_count = -1;
-    ASSERT_TRUE(xr_aot_runtime_enum_value_info(recv_value, &enum_name, &member_name, &member_index,
-                                               &is_adt, &payload_count));
+    ASSERT_TRUE(xr_aot_runtime_enum_ctor_info(recv_value, &enum_name, &member_name, &member_index,
+                                              &layout_id, &is_adt, &payload_count));
     ASSERT_STR_EQ(enum_name, "Recv");
     ASSERT_STR_EQ(member_name, "Value");
     ASSERT_EQ_INT((int) member_index, 0);
+    ASSERT_TRUE(layout_id != 0);
     ASSERT_TRUE(is_adt);
     ASSERT_EQ_INT(payload_count, 1);
 

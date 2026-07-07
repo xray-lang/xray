@@ -49,7 +49,7 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
         case XR_TAG_CELL:
         case XR_TAG_TUPLE:
         case XR_TAG_SET:
-        case XR_TAG_STRUCT_REF:
+        case XR_TAG_AGG_REF:
         case XR_TAG_REGEX:
         case XR_TAG_SYS_MUTEX:
         case XR_TAG_SYS_RWLOCK:

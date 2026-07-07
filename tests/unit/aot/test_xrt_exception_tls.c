@@ -51,11 +51,6 @@ static void test_free_aligned(void *ptr) {
 #pragma clang diagnostic pop
 #endif
 
-static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj) {
-    (void) type_id;
-    (void) obj;
-}
-
 #define ASSERT_TRUE(cond, msg)                                                                     \
     do {                                                                                           \
         if (!(cond)) {                                                                             \

@@ -36,7 +36,7 @@
 typedef struct XaSymbol XaSymbol;
 typedef struct XaScope XaScope;
 struct XrHashMap;
-struct XrStructLayout;
+struct XrAggregateLayout;
 
 // Virtual method slot for static (compile-time) devirtualization.
 // Populated by the analyzer (Pass 1.5); consumed by the xi_opt_devirt pass.
@@ -82,7 +82,7 @@ struct XrClassInfo {
     bool has_subclass;     // true if any class extends this one
 
     // Struct layout (VALUE_TYPE only, computed by analyzer)
-    struct XrStructLayout *struct_layout;  // NULL for class, set for struct
+    struct XrAggregateLayout *struct_layout;  // NULL for class, set for struct
 
     // Implemented interfaces (populated from 'implements' clause).
     // Each entry is a fully resolved XrType*: built-in interfaces become

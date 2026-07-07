@@ -108,8 +108,8 @@ static XrAtomicOrdering parse_ordering(XrValue *args, int nargs, int ord_idx) {
     XrValue v = args[ord_idx];
 
     /* Ordering enum value: declaration-order ordinal mirrors XrAtomicOrdering. */
-    if (XR_IS_ENUM_VALUE(v)) {
-        XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(v);
+    if (xr_value_is_enum_aggregate(v)) {
+        XrEnumAggregateValue *ev = xr_value_to_enum_aggregate(v);
         int64_t ival = ev ? (int64_t) ev->member_index : -1;
         if (ival >= XR_ORDERING_RELAXED && ival <= XR_ORDERING_SEQ_CST)
             return (XrAtomicOrdering) ival;

@@ -312,6 +312,12 @@ char *xr_value_to_debug_string(XrVMRuntime *isolate, XrValue val) {
             case XR_TCFUNCTION:
                 snprintf(buf, sizeof(buf), "<native function>");
                 break;
+            case XR_TENUM_TYPE:
+                snprintf(buf, sizeof(buf), "<enum type> @%p", (void *) hdr);
+                break;
+            case XR_TENUM_CTOR:
+                snprintf(buf, sizeof(buf), "<enum ctor> @%p", (void *) hdr);
+                break;
             case XR_TINSTANCE: {
                 XrInstance *inst = (XrInstance *) hdr;
                 if (inst->klass && inst->klass->builtin_kind == XR_BK_STRINGBUILDER) {
@@ -328,10 +334,6 @@ char *xr_value_to_debug_string(XrVMRuntime *isolate, XrValue val) {
                     } else {
                         snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
                     }
-                } else if (inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_TYPE) {
-                    snprintf(buf, sizeof(buf), "<enum type> @%p", (void *) hdr);
-                } else if (inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_VALUE) {
-                    snprintf(buf, sizeof(buf), "<enum value> @%p", (void *) hdr);
                 } else if (inst->klass && inst->klass->builtin_kind == XR_BK_ITERATOR) {
                     snprintf(buf, sizeof(buf), "<iterator> @%p", (void *) hdr);
                 } else {

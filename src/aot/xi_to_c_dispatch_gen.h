@@ -97,9 +97,9 @@
     X(JSON_SET_F, "xi.json.set.f", xicgen_json_set_f) \
     X(JSON_MERGE, "xi.json.merge", xicgen_json_merge) \
     X(JSON_DECODE, "xi.json.decode", xicgen_reject_unsupported) \
-    X(STRUCT_NEW, "xi.struct.new", xicgen_struct_new) \
-    X(STRUCT_GET, "xi.struct.get", xicgen_struct_get) \
-    X(STRUCT_SET, "xi.struct.set", xicgen_struct_set) \
+    X(AGG_NEW, "xi.agg.new", xicgen_struct_new) \
+    X(AGG_GET, "xi.agg.get", xicgen_struct_get) \
+    X(AGG_SET, "xi.agg.set", xicgen_struct_set) \
     X(FIXED_ARRAY_NEW, "xi.fixed.array.new", xicgen_fixed_array_new) \
     X(TUPLE_NEW, "xi.tuple.new", xicgen_tuple_new) \
     X(TUPLE_GET, "xi.tuple.get", xicgen_tuple_get) \

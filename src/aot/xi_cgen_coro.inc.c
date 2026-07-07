@@ -78,7 +78,7 @@ static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
         return false;
     if (cg_is_void_like(v))
         return false;
-    if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v))
+    if (v->op == XI_AGG_NEW && cg_struct_can_inline(f, v))
         return false;
     if (v->op == XI_COPY && v->nargs >= 1) {
         const XiValue *origin = cg_trace_struct_new(v);
@@ -4307,7 +4307,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
-    if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v)) {
+    if (v->op == XI_AGG_NEW && cg_struct_can_inline(f, v)) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: inlined struct inside AOT coroutine is unsupported\n");
         emit_codegen_abort_aot_result(out);

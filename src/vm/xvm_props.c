@@ -72,9 +72,9 @@ static XrValue vm_task_status_property_value(XrVMRuntime *isolate, uint8_t tstat
             member_index = 4;  // Cancelled
             break;
     }
-    if (member_index >= type->member_count || !type->members[member_index].instance)
+    if (member_index >= type->member_count || !type->members[member_index].ctor)
         return xr_null();
-    return XR_FROM_PTR(type->members[member_index].instance);
+    return XR_FROM_PTR(type->members[member_index].ctor);
 }
 #include <stdatomic.h>
 
@@ -171,21 +171,20 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
     }
 
     // Struct ref: stored field write or setter method
-    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
+    if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
         uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
-        XrStructLayout *slayout = NULL;
+        XrAggregateLayout *slayout = NULL;
         uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
         XrClass *scls =
-            (slayout && !xr_struct_layout_is_headerless(slayout)) ? *(XrClass **) sptr : NULL;
+            (slayout && !xr_aggregate_layout_is_headerless(slayout)) ? *(XrClass **) sptr : NULL;
 
         // Try stored field first
         int fidx = xr_vm_struct_layout_field_index(isolate, slayout, prop_symbol);
         if (payload && fidx >= 0 && fidx < slayout->field_count) {
-            XrStructFieldLayout *sf = &slayout->fields[fidx];
+            XrAggregateFieldLayout *sf = &slayout->fields[fidx];
             uint8_t *fp = payload + sf->offset;
             if (!xr_vm_struct_write_field_value(isolate, fp, sf, value)) {
-                VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
-                         "invalid value for struct field write");
+                VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
             }
             return XR_DISP_NEXT;
         }
@@ -460,34 +459,33 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
     if (XR_IS_PTR(obj)) {
         XrObjHeader *gc = (XrObjHeader *) XR_TO_PTR(obj);
 
-        if (XR_IS_ENUM_VALUE(obj)) {
-            XrEnumValue *enum_val = (XrEnumValue *) gc;
+        if (xr_value_is_enum_aggregate(obj)) {
+            XrEnumAggregateValue *agg = (XrEnumAggregateValue *) gc;
             if (prop_symbol == SYMBOL_NAME) {
-                size_t len = strlen(enum_val->member_name);
-                XrString *str = xr_string_intern(isolate, enum_val->member_name, len, 0);
+                const char *member_name = xr_enum_aggregate_member_name(agg);
+                if (!member_name)
+                    member_name = "";
+                XrString *str = xr_string_intern(isolate, member_name, strlen(member_name), 0);
                 base[a] = xr_string_value(str);
                 return XR_DISP_NEXT;
             } else if (prop_symbol == SYMBOL_ORDINAL) {
-                base[a] = xr_int(enum_val->member_index);
+                base[a] = xr_int((int64_t) agg->member_index);
                 return XR_DISP_NEXT;
             }
-            // Other enum properties: fall through to instance path
+            base[a] = xr_null();
+            return XR_DISP_NEXT;
         }
 
         if (XR_IS_ENUM_TYPE(obj)) {
             XrEnumType *enum_type = (XrEnumType *) gc;
-            XrEnumValue *found = xr_enum_get_member_by_symbol(enum_type, prop_symbol);
-            if (found) {
-                /* A bare non-payload variant of an ADT enum is a tagged instance
-                 * (field[0] = ordinal), matching payload variants and the
-                 * pattern matcher; a singleton here would break ordinal reads. */
-                if (enum_type->is_adt && enum_type->payload_counts &&
-                    enum_type->payload_counts[found->member_index] == 0) {
-                    XrInstance *inst =
-                        xr_enum_adt_construct(isolate, enum_type, found->member_index, NULL, 0);
-                    base[a] = inst ? XR_FROM_PTR(inst) : xr_null();
+            int member_index = xr_enum_type_find_member_index_by_symbol(enum_type, prop_symbol);
+            if (member_index >= 0) {
+                if (xr_enum_type_payload_count(enum_type, (uint32_t) member_index) == 0) {
+                    XrEnumAggregateValue *value =
+                        xr_enum_zero_payload_value(isolate, enum_type, (uint32_t) member_index);
+                    base[a] = value ? XR_FROM_PTR(value) : xr_null();
                 } else {
-                    base[a] = XR_FROM_PTR(found);
+                    base[a] = XR_FROM_PTR(enum_type->members[member_index].ctor);
                 }
                 return XR_DISP_NEXT;
             }
@@ -894,11 +892,11 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
     }
 
     // Struct ref: getter/method lookup when field not found in layout
-    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
+    if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
         uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
-        XrStructLayout *slayout = xr_vm_struct_ref_layout(isolate, obj);
+        XrAggregateLayout *slayout = xr_vm_struct_ref_layout(isolate, obj);
         XrClass *scls =
-            (slayout && !xr_struct_layout_is_headerless(slayout)) ? *(XrClass **) sptr : NULL;
+            (slayout && !xr_aggregate_layout_is_headerless(slayout)) ? *(XrClass **) sptr : NULL;
         XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         if (prop_name && scls) {

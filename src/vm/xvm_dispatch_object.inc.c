@@ -181,6 +181,11 @@ vmcase(OP_GETFIELD) {
     int field_idx = GETARG_C(i);
 
     XrValue inst_val = R(b);
+    XrEnumAggregateValue *enum_agg = xr_value_to_enum_aggregate(inst_val);
+    if (enum_agg) {
+        R(a) = xr_enum_aggregate_field_get(enum_agg, field_idx);
+        vmbreak;
+    }
     XrInstance *inst_obj = xr_value_to_instance(inst_val);
     if (inst_obj->klass && inst_obj->klass->struct_layout) {
         if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
@@ -512,12 +517,12 @@ vmcase(OP_GETPROP) {
     }
 
     // Stack-allocated struct field access
-    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
-        XrStructLayout *slayout = NULL;
+    if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
+        XrAggregateLayout *slayout = NULL;
         uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
         int fidx = xr_vm_struct_layout_field_index(isolate, slayout, prop_symbol);
         if (fidx >= 0 && fidx < slayout->field_count) {
-            XrStructFieldLayout *sf = &slayout->fields[fidx];
+            XrAggregateFieldLayout *sf = &slayout->fields[fidx];
             uint8_t *fp = payload + sf->offset;
             switch (sf->native_type) {
                 case XR_NATIVE_I64:
@@ -576,8 +581,9 @@ vmcase(OP_GETPROP) {
     }
 
     // Fast path: Instance is the most common target, skip if-else chain.
-    // Enum types/values use the type dispatch for member resolution.
-    if (xr_value_is_instance(obj) && !XR_IS_ENUM_TYPE(obj) && !XR_IS_ENUM_VALUE(obj))
+    // Enum types/values/aggregates use type dispatch for member resolution.
+    if (xr_value_is_instance(obj) && !XR_IS_ENUM_TYPE(obj) && !XR_IS_ENUM_CTOR(obj) &&
+        !xr_value_is_enum_aggregate(obj))
         goto getprop_instance;
 
     // Json values are dynamic-layout instances (builtin_kind == XR_BK_JSON);

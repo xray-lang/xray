@@ -9,6 +9,8 @@ regex=span-access-unproven [0-9]+ func=bump_word value=v[0-9]+ kind=index_set ev
 regex=array-storage [0-9]+ func=bump_word value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U32/u32/uint32_t
 c_contains=xr_span_t p0
 c_contains=((uint32_t*)_s.data)[_idx]
+c_contains=xrt_span_is_readonly(_s)
+c_contains=xrt_index_oob(_idx, _s.length)
 c_not_contains=xrt_index_get(
 c_not_contains=xrt_index_set(
 c_not_contains=XR_FROM_INT(

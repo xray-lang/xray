@@ -186,8 +186,8 @@ static bool verify_array_class_field_alloc_plan(const XaotBundle *bundle,
                                                 char *errbuf, size_t errbuf_len) {
     const XaotArrayStoragePlan *storage_plan;
     const XaotArrayCachePlan *cache_plan;
-    const XrStructLayout *layout;
-    const XrStructFieldLayout *field;
+    const XrAggregateLayout *layout;
+    const XrAggregateFieldLayout *field;
 
     if (!bundle || !plan)
         return set_error(errbuf, errbuf_len, "AOT array class-field alloc plan is NULL");
@@ -332,10 +332,8 @@ static bool verify_span_access_plan(const XaotBundle *bundle, const XaotSpanAcce
         return set_error(errbuf, errbuf_len, "AOT Span access plan lacks func or value");
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
         return set_error(errbuf, errbuf_len, "AOT Span access plan func has no func plan");
-    if ((plan->eliminated_checks == 0) ==
-        (plan->unproven_reason == XAOT_SPAN_UNPROVEN_NONE))
-        return set_error(errbuf, errbuf_len,
-                         "AOT Span access plan drop/reason are inconsistent");
+    if ((plan->eliminated_checks == 0) == (plan->unproven_reason == XAOT_SPAN_UNPROVEN_NONE))
+        return set_error(errbuf, errbuf_len, "AOT Span access plan drop/reason are inconsistent");
     if (!xaot_prepare_span_access_plan_for_value(bundle, plan->func, plan->value, &derived))
         return set_error(errbuf, errbuf_len, "AOT Span access plan value no longer re-derives");
     if (plan->kind != derived.kind)

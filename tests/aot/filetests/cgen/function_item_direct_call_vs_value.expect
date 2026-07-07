@@ -1,0 +1,8 @@
+c_contains=function_item_direct_call_vs_value_inc_item_
+c_contains=function_item_direct_call_vs_value_xray_item_call_
+c_contains=(uint64_t)(v0) + (uint64_t)(v5)
+c_contains=function_item_direct_call_vs_value_xray_value_call_
+c_contains=xrt_closure_new((void*)function_item_direct_call_vs_value___anonymous__
+c_contains=((XrValue (*)(xrt_closure_t *, XrValue))
+c_not_contains=xrt_method_call
+c_not_contains=unsupported AOT indirect call

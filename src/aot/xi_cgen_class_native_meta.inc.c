@@ -11,7 +11,7 @@
 typedef struct {
     const XiClassData *class_data;
     const XiFunc *func;
-    const XrStructLayout *layout;
+    const XrAggregateLayout *layout;
     const char *class_name;
     bool is_constructor;
 } CgClassNativeFunc;

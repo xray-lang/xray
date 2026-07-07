@@ -9,6 +9,7 @@
  */
 
 #include "xinstance.h"
+#include "xenum.h"
 
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
@@ -21,6 +22,13 @@ void xr_obj_destroy_instance(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     XrClass *klass = inst->klass;
     if (!klass)
         return;
+
+    if (klass->builtin_kind == XR_BK_ADT_ENUM) {
+        XrEnumAggregateValue *agg = (XrEnumAggregateValue *) obj;
+        for (uint32_t i = 0; i < agg->payload_count; i++)
+            xr_rc_release_value(owner_heap, agg->payloads[i]);
+        return;
+    }
 
     if (klass->flags & XR_CLASS_DYNAMIC_LAYOUT) {
         uint16_t cap = klass->in_object_capacity;

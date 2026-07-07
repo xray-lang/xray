@@ -1,0 +1,79 @@
+// anchor: sys-thread-os-primitives-cross-thread
+// Real OS-thread pressure for sys.Os* primitives. The output observes only
+// deterministic final values, so VM and AOT may schedule threads differently.
+
+import sys
+
+shared m = sys.OsMutex()
+shared guarded = Atomic<int>(0)
+
+fn bumpMany(n: int) -> int {
+    for (var i = 0; i < n; i++) {
+        m.lock()
+        var cur = guarded.load(Ordering.Relaxed)
+        guarded.store(cur + 1, Ordering.Relaxed)
+        m.unlock()
+    }
+    return n
+}
+
+var t1 = sys.Thread.spawn(bumpMany(200))
+var t2 = sys.Thread.spawn(bumpMany(200))
+var t3 = sys.Thread.spawn(bumpMany(200))
+var t4 = sys.Thread.spawn(bumpMany(200))
+print(t1.join() + t2.join() + t3.join() + t4.join())
+print(guarded.load(Ordering.Relaxed))
+
+shared cm = sys.OsMutex()
+shared cv = sys.OsCondvar()
+shared state = Atomic<int>(0)
+
+cm.lock()
+var producer = sys.Thread.spawn(fn() -> int {
+    cm.lock()
+    state.store(7, Ordering.Release)
+    cv.signal()
+    cm.unlock()
+    return 9
+})
+while (state.load(Ordering.Acquire) == 0) {
+    cv.wait(cm)
+}
+print(state.load(Ordering.Acquire))
+cm.unlock()
+print(producer.join())
+
+shared barrier = sys.OsBarrier(3)
+shared arrived = Atomic<int>(0)
+
+var b1 = sys.Thread.spawn(fn() -> int {
+    arrived.fetchAdd(1, Ordering.AcquireRelease)
+    barrier.wait()
+    return arrived.load(Ordering.Acquire)
+})
+var b2 = sys.Thread.spawn(fn() -> int {
+    arrived.fetchAdd(1, Ordering.AcquireRelease)
+    barrier.wait()
+    return arrived.load(Ordering.Acquire)
+})
+arrived.fetchAdd(1, Ordering.AcquireRelease)
+print(barrier.wait())
+print(b1.join() + b2.join() + arrived.load(Ordering.Acquire))
+
+shared once = sys.OsOnce()
+shared onceCount = Atomic<int>(0)
+
+fn runOnce() -> int {
+    once.call(fn() {
+        onceCount.fetchAdd(1, Ordering.AcquireRelease)
+    })
+    return onceCount.load(Ordering.Acquire)
+}
+
+var o1 = sys.Thread.spawn(runOnce())
+var o2 = sys.Thread.spawn(runOnce())
+var o3 = sys.Thread.spawn(runOnce())
+print(o1.join() >= 1)
+print(o2.join() >= 1)
+print(o3.join() >= 1)
+print(onceCount.load(Ordering.Acquire))

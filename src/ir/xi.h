@@ -46,6 +46,7 @@
 
 /* Forward declarations for types defined in other modules */
 struct XrType;
+struct XrCtValue;
 struct AstNode;
 struct XaAnalyzer;
 struct XiCoroPlan;
@@ -320,11 +321,11 @@ typedef enum {
 
     /* Struct native storage: typed field access with compile-time layout.
      * args[0]=class_val for NEW; args[0]=struct for GET/SET.
-     * aux=XrStructLayout*; aux_int=field_index for GET/SET. */
-    XI_STRUCT_NEW,      /* allocate struct: args[0]=class, aux=XrStructLayout* */
-    XI_STRUCT_GET,      /* read field: args[0]=struct, aux_int=field_idx, aux=XrStructLayout* */
-    XI_STRUCT_SET,      /* write field: args[0]=struct, args[1]=val, aux_int=field_idx,
-                           aux=XrStructLayout* */
+     * aux=XrAggregateLayout*; aux_int=field_index for GET/SET. */
+    XI_AGG_NEW,         /* allocate struct: args[0]=class, aux=XrAggregateLayout* */
+    XI_AGG_GET,         /* read field: args[0]=struct, aux_int=field_idx, aux=XrAggregateLayout* */
+    XI_AGG_SET,         /* write field: args[0]=struct, args[1]=val, aux_int=field_idx,
+                              aux=XrAggregateLayout* */
     XI_FIXED_ARRAY_NEW, /* allocate fixed array in frame storage: type=[T; N], aux_int=native */
 
     /* Json / Allocation */
@@ -399,7 +400,7 @@ typedef enum {
     XI_CHAN_SEND,          /* ch.send(v): args[0]=chan, args[1]=val */
     XI_CHAN_RECV,          /* raw recv payload: args[0]=chan; status in adjacent VM slot */
     XI_CHAN_RECV_STATUS,   /* bool status for XI_CHAN_RECV / XI_CHAN_TRY_RECV */
-    XI_CHAN_TRY_SEND,      /* ch.trySend(v): args[0]=chan, args[1]=val — non-blocking */
+    XI_CHAN_TRY_SEND,      /* internal try-send-ready bool: args[0]=chan, args[1]=val */
     XI_CHAN_TRY_RECV,      /* raw tryRecv payload: args[0]=chan; status in adjacent VM slot */
     XI_CHAN_IS_CLOSED,     /* ch.isClosed: args[0]=chan */
     XI_TIME_AFTER,         /* time.after(ms): args[0]=timeout_ms, returns timer channel */
@@ -578,13 +579,14 @@ typedef struct XiClassData {
     uint16_t ninst;           /* instance method count */
     uint16_t nstat;           /* static method count */
     int clinit_child_idx;     /* children index for static constructor (-1 if none) */
+    uint32_t derive_flags;    /* XR_DERIVE_* flags copied from declaration attributes */
     bool is_monomorphized;    /* true for mono-generated classes */
     bool is_cycle_candidate;  /* type graph forms a reference cycle (enables RC cycle collector) */
-    const char **mono_type_arg_names;     /* concrete type display names (e.g. ["int","string"]) */
-    int mono_type_arg_count;              /* element count */
-    struct XrStructLayout *struct_layout; /* non-NULL for VALUE_TYPE (struct) classes */
-    struct XrStructLayout *instance_layout; /* non-NULL when class fields have native layout */
-    uint16_t inherited_field_count;         /* native class fields inherited from the parent */
+    const char **mono_type_arg_names; /* concrete type display names (e.g. ["int","string"]) */
+    int mono_type_arg_count;          /* element count */
+    struct XrAggregateLayout *struct_layout;   /* non-NULL for VALUE_TYPE (struct) classes */
+    struct XrAggregateLayout *instance_layout; /* non-NULL when class fields have native layout */
+    uint16_t inherited_field_count;            /* native class fields inherited from the parent */
 } XiClassData;
 
 /* ========== Block Kinds ========== */
@@ -912,6 +914,7 @@ typedef enum XiConstLiteralKind {
     XI_CONST_LITERAL_BOOL,
     XI_CONST_LITERAL_CHAR,
     XI_CONST_LITERAL_STRING,
+    XI_CONST_LITERAL_COMPTIME_AGGREGATE,
 } XiConstLiteralKind;
 
 typedef struct XiConstLiteral {
@@ -921,6 +924,9 @@ typedef struct XiConstLiteral {
     double float_value;
     bool bool_value;
     const char *string_value;
+    const struct XrCtValue *ct_value;
+    const char *data_section;
+    bool data_used;
 } XiConstLiteral;
 
 typedef struct XiParallelForData {

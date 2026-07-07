@@ -8,8 +8,8 @@
  * xenum_builtins.h - Enum builtin methods
  *
  * KEY CONCEPT:
- *   Make enum a true builtin class.
- *   Supports cold enum value metadata: name, ordinal, toString.
+ *   User enum values are tag+payload aggregates. These helpers only serve the
+ *   cold constructor metadata path used before payload construction.
  */
 
 #ifndef XENUM_BUILTINS_H
@@ -17,7 +17,7 @@
 
 #include "../value/xvalue.h"
 
-/* ========== Enum Instance Methods ========== */
+/* ========== Enum Constructor Metadata Helpers ========== */
 
 // Status.Success.name -> "Success"
 XR_FUNC XrValue xr_enum_get_name(XrVMRuntime *isolate, XrValue *args, int nargs);

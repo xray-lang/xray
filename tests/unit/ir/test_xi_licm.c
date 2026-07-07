@@ -386,7 +386,7 @@ TEST(hoist_disjoint_load) {
     header->control = cond;
 
     /* Load from STRUCT group */
-    XiValue *load = xi_value_new(f, body, XI_STRUCT_GET, &stub_int, 1);
+    XiValue *load = xi_value_new(f, body, XI_AGG_GET, &stub_int, 1);
     load->args[0] = obj;
     load->mem_group = XI_MEM_STRUCT;
     load->flags = XI_FLAG_READS_MEM;
@@ -491,7 +491,7 @@ TEST(no_hoist_aliasing_load) {
 
 TEST(no_hoist_inner_operand) {
     /*
-     * body has: x = ADD(a, b) where a is loop-inner;  load = STRUCT_GET(x)
+     * body has: x = ADD(a, b) where a is loop-inner;  load = AGG_GET(x)
      * x depends on a loop-internal value → load cannot be hoisted.
      */
     XiFunc *f = make_func();
@@ -526,7 +526,7 @@ TEST(no_hoist_inner_operand) {
     inner_val->args[1] = outer;
 
     /* load depends on inner_val (loop-internal operand) */
-    XiValue *load = xi_value_new(f, body, XI_STRUCT_GET, &stub_int, 1);
+    XiValue *load = xi_value_new(f, body, XI_AGG_GET, &stub_int, 1);
     load->args[0] = inner_val;
     load->mem_group = XI_MEM_STRUCT;
     load->flags = XI_FLAG_READS_MEM;
@@ -547,7 +547,7 @@ TEST(no_hoist_inner_operand) {
 
 TEST(no_hoist_load_with_store_dep) {
     /*
-     * body has: store = STORE_FIELD(obj, val); load = STRUCT_GET(store_result)
+     * body has: store = STORE_FIELD(obj, val); load = AGG_GET(store_result)
      * store stays in loop (side-effectful), load depends on it → cannot hoist.
      */
     XiFunc *f = make_func();
@@ -584,7 +584,7 @@ TEST(no_hoist_load_with_store_dep) {
     store->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
 
     /* Load depends on store (loop-internal, non-hoistable operand) */
-    XiValue *load = xi_value_new(f, body, XI_STRUCT_GET, &stub_int, 1);
+    XiValue *load = xi_value_new(f, body, XI_AGG_GET, &stub_int, 1);
     load->args[0] = store;
     load->mem_group = XI_MEM_STRUCT;
     load->flags = XI_FLAG_READS_MEM;

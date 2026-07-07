@@ -26,6 +26,7 @@
 
 #include "xast_types.h"
 #include "../lexer/xlex.h"
+#include "../../shared/xr_derive_flags.h"
 
 typedef struct AstNode AstNode;
 typedef struct XrType XrType;
@@ -75,6 +76,8 @@ typedef struct XrAttribute {
     // @section("name") (AOT linker section).
     // Arena-allocated, NUL-terminated; NULL when absent.
     const char *str_arg;
+    // Bitmask of XR_DERIVE_* for ATTR_DERIVE; 0 for other attributes.
+    uint32_t derive_flags;
 } XrAttribute;
 
 // Destructuring pattern structure (flat only, no nesting)

@@ -196,6 +196,65 @@ static bool prepare_container_type(XaotBundle *bundle, const XrType *type) {
     return true;
 }
 
+static bool prepare_type_plans_for_type(XaotBundle *bundle, const XrType *type, int depth) {
+    if (!bundle || !type || depth > 8)
+        return true;
+    if (!prepare_container_type(bundle, type))
+        return false;
+    if (!xaot_bundle_prepare_enum_plan_for_type(bundle, type))
+        return false;
+    switch ((XrTypeKind) type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+        case XR_KIND_SPAN:
+        case XR_KIND_VIEW:
+        case XR_KIND_POINTER:
+            return prepare_type_plans_for_type(bundle, type->container.element_type, depth + 1);
+        case XR_KIND_MAP:
+            return prepare_type_plans_for_type(bundle, type->map.key_type, depth + 1) &&
+                   prepare_type_plans_for_type(bundle, type->map.value_type, depth + 1);
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+        case XR_KIND_INTERFACE:
+            for (int i = 0; i < type->instance.type_arg_count; i++) {
+                if (!prepare_type_plans_for_type(
+                        bundle, type->instance.type_args ? type->instance.type_args[i] : NULL,
+                        depth + 1))
+                    return false;
+            }
+            return true;
+        case XR_KIND_UNION:
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                if (!prepare_type_plans_for_type(
+                        bundle, type->union_type.members ? type->union_type.members[i] : NULL,
+                        depth + 1))
+                    return false;
+            }
+            return true;
+        case XR_KIND_TUPLE:
+            for (int i = 0; i < type->tuple.element_count; i++) {
+                if (!prepare_type_plans_for_type(
+                        bundle, type->tuple.element_types ? type->tuple.element_types[i] : NULL,
+                        depth + 1))
+                    return false;
+            }
+            return true;
+        case XR_KIND_FIXED_ARRAY:
+            return prepare_type_plans_for_type(bundle, type->fixed_array.element_type, depth + 1);
+        case XR_KIND_FUNCTION:
+            for (int i = 0; i < type->function.param_count; i++) {
+                if (!prepare_type_plans_for_type(
+                        bundle, type->function.param_types ? type->function.param_types[i] : NULL,
+                        depth + 1))
+                    return false;
+            }
+            return prepare_type_plans_for_type(bundle, type->function.return_type, depth + 1);
+        default:
+            return true;
+    }
+}
+
 static bool array_elem_plan_for_value(const XaotBundle *bundle, const XiValue *value,
                                       XaotContainerElemPlan *out) {
     const XaotContainerTypePlan *container;
@@ -1641,6 +1700,22 @@ static bool prepare_span_access_kind_for_value(const XiValue *value, uint8_t *ou
         case XI_SPAN_REINTERPRET:
             *out_kind = XAOT_SPAN_ACCESS_REINTERPRET;
             return true;
+        case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT: {
+            const char *method = value->aux ? (const char *) value->aux : NULL;
+            if (!method || value->nargs != 2 || !value->args[0] || !value->args[0]->type ||
+                value->args[0]->type->kind != XR_KIND_SPAN)
+                return false;
+            if (strcmp(method, "copyFrom") == 0) {
+                *out_kind = XAOT_SPAN_ACCESS_BYTE_COPY;
+                return true;
+            }
+            if (strcmp(method, "commonPrefix") == 0) {
+                *out_kind = XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX;
+                return true;
+            }
+            return false;
+        }
         default:
             return false;
     }
@@ -1794,6 +1869,13 @@ static bool prepare_span_access_is_byte(uint8_t kind) {
            kind == XAOT_SPAN_ACCESS_BYTE_REPEAT || kind == XAOT_SPAN_ACCESS_REINTERPRET;
 }
 
+static bool prepare_span_access_is_write(uint8_t kind) {
+    return kind == XAOT_SPAN_ACCESS_INDEX_SET || kind == XAOT_SPAN_ACCESS_BYTE_STORE ||
+           kind == XAOT_SPAN_ACCESS_BYTE_FILL || kind == XAOT_SPAN_ACCESS_BYTE_COPY ||
+           kind == XAOT_SPAN_ACCESS_BYTE_REPEAT || kind == XAOT_SPAN_ACCESS_SPAN_FILL ||
+           kind == XAOT_SPAN_ACCESS_SPAN_COPY;
+}
+
 XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, const XiFunc *func,
                                                      const XiValue *value,
                                                      XaotSpanAccessPlan *out) {
@@ -1829,6 +1911,11 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
         evidence |= XAOT_SPAN_EV_RECV_BYTE_SPAN;
     if (prepare_span_elem_is_pod(&recv_elem))
         evidence |= XAOT_SPAN_EV_RECV_POD;
+    if (prepare_span_access_is_write(kind) &&
+        prepare_span_value_writable_proven(bundle, value->args[0], 0)) {
+        evidence |= XAOT_SPAN_EV_WRITABLE;
+        drop |= XAOT_SPAN_DROP_READONLY;
+    }
 
     if (prepare_span_access_is_index(kind)) {
         uint8_t bounds_reason = XAOT_BOUNDS_UNPROVEN_NONE;
@@ -1839,11 +1926,6 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
             drop |= XAOT_SPAN_DROP_BOUNDS;
         } else {
             reason = XAOT_SPAN_UNPROVEN_RANGE;
-        }
-        if (kind == XAOT_SPAN_ACCESS_INDEX_SET &&
-            prepare_span_value_writable_proven(bundle, value->args[0], 0)) {
-            evidence |= XAOT_SPAN_EV_WRITABLE;
-            drop |= XAOT_SPAN_DROP_READONLY;
         }
         goto done;
     }
@@ -1859,18 +1941,18 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
                 (void) endian;
                 evidence |= XAOT_SPAN_EV_ENDIAN_CONST;
             }
-            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
+            drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
             break;
         case XAOT_SPAN_ACCESS_BYTE_STORE:
             if (prepare_value_is_const_endian(value->nargs >= 4 ? value->args[3] : NULL, &endian)) {
                 (void) endian;
                 evidence |= XAOT_SPAN_EV_ENDIAN_CONST;
             }
-            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
+            drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
             break;
         case XAOT_SPAN_ACCESS_BYTE_FILL:
         case XAOT_SPAN_ACCESS_BYTE_REPEAT:
-            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
+            drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
             break;
         case XAOT_SPAN_ACCESS_BYTE_COPY:
         case XAOT_SPAN_ACCESS_BYTE_COMPARE:
@@ -1882,7 +1964,7 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
                 break;
             }
             evidence |= XAOT_SPAN_EV_ELEM_MATCH;
-            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
+            drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_HELPER;
             break;
         case XAOT_SPAN_ACCESS_SPAN_AS_BYTES:
         case XAOT_SPAN_ACCESS_SPAN_FILL:
@@ -1890,7 +1972,7 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
                 reason = XAOT_SPAN_UNPROVEN_NOT_POD;
                 break;
             }
-            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
+            drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
             break;
         case XAOT_SPAN_ACCESS_SPAN_COPY:
         case XAOT_SPAN_ACCESS_SPAN_COMPARE:
@@ -1909,10 +1991,10 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
                 break;
             }
             evidence |= XAOT_SPAN_EV_ELEM_MATCH;
-            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
+            drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
             break;
         case XAOT_SPAN_ACCESS_REINTERPRET:
-            drop = XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
+            drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
             break;
         default:
             reason = XAOT_SPAN_UNPROVEN_DYNAMIC_BOUNDARY;
@@ -2389,11 +2471,11 @@ static bool prepare_func_type_plans(XaotBundle *bundle, XiFunc *func) {
 
     if (!bundle || !func)
         return false;
-    if (!prepare_container_type(bundle, func->return_type))
+    if (!prepare_type_plans_for_type(bundle, func->return_type, 0))
         return false;
     for (i = 0; i < func->nparams; i++) {
         const XiValue *param = func->params ? func->params[i] : NULL;
-        if (param && !prepare_container_type(bundle, param->type))
+        if (param && !prepare_type_plans_for_type(bundle, param->type, 0))
             return false;
     }
     return true;
@@ -2436,7 +2518,7 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             }
             apply_native_class_ptr_value_plan(bundle, vp);
             record_value_stats(&bundle->stats, vp->rep.kind);
-            if (!prepare_container_type(bundle, phi->value.type))
+            if (!prepare_type_plans_for_type(bundle, phi->value.type, 0))
                 return false;
         }
         for (vi = 0; vi < blk->nvalues; vi++) {
@@ -2449,7 +2531,7 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                 return false;
             apply_native_class_ptr_value_plan(bundle, vp);
             record_value_stats(&bundle->stats, vp->rep.kind);
-            if (!prepare_container_type(bundle, blk->values[vi]->type))
+            if (!prepare_type_plans_for_type(bundle, blk->values[vi]->type, 0))
                 return false;
         }
     }
@@ -2481,6 +2563,11 @@ static bool prepare_apply_return_abi_value_plans(XaotBundle *bundle,
 
 static bool value_rep_is_struct_aggregate(XaotValueRep rep) {
     return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_STRUCT) != 0;
+}
+
+static bool value_rep_is_propagating_aggregate(XaotValueRep rep) {
+    return rep.kind == XAOT_VALUE_AGGREGATE &&
+           (rep.flags & (XAOT_VALUE_FLAG_STRUCT | XAOT_VALUE_FLAG_ENUM)) != 0;
 }
 
 static bool prepare_parallel_reduce_aggregate_rep(XaotBundle *bundle, const XiValue *value,
@@ -2520,7 +2607,7 @@ static bool prepare_identity_aggregate_rep(XaotBundle *bundle, const XiValue *va
             return false;
     }
     const XaotValuePlan *arg_plan = xaot_bundle_find_value_plan(bundle, value->args[0]);
-    if (!arg_plan || !value_rep_is_struct_aggregate(arg_plan->rep))
+    if (!arg_plan || !value_rep_is_propagating_aggregate(arg_plan->rep))
         return false;
     *out_rep = arg_plan->rep;
     return true;
@@ -2604,7 +2691,7 @@ static bool prepare_apply_aggregate_value_plans_once(XaotBundle *bundle, XiFunc 
         for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
             XiValue *value = &phi->value;
             XaotValuePlan *vp = xaot_bundle_find_value_plan_mut(bundle, value);
-            if (vp && value_rep_is_struct_aggregate(vp->rep))
+            if (vp && value_rep_is_propagating_aggregate(vp->rep))
                 prepare_mark_aggregate_value_rep(bundle, value, vp->rep, changed, 0);
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
@@ -2614,7 +2701,7 @@ static bool prepare_apply_aggregate_value_plans_once(XaotBundle *bundle, XiFunc 
             memset(&rep, 0, sizeof(rep));
             if (!value || !vp)
                 continue;
-            if (value_rep_is_struct_aggregate(vp->rep)) {
+            if (value_rep_is_propagating_aggregate(vp->rep)) {
                 prepare_mark_aggregate_value_rep(bundle, value, vp->rep, changed, 0);
                 continue;
             }
@@ -2906,6 +2993,8 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
         bundle->error_msg = "failed to allocate AOT function plan";
         return false;
     }
+    if (!prepare_func_type_plans(bundle, func))
+        return false;
     if (!xaot_abi_build_func(&plan->abi, bundle, func, is_module_init)) {
         bundle->error_msg = "failed to build AOT function ABI";
         return false;
@@ -2918,8 +3007,6 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
         bundle->stats.functions_coro_abi++;
     else
         bundle->stats.functions_tagged_abi++;
-    if (!prepare_func_type_plans(bundle, func))
-        return false;
     if (!prepare_func_values(bundle, func))
         return false;
     if (!prepare_apply_return_abi_value_plans(bundle, plan))

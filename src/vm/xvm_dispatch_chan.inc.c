@@ -206,8 +206,9 @@ vmcase(OP_CHAN_RECV) {
 }
 
 vmcase(OP_CHAN_TRY_SEND) {
-    /* R[A] = R[B].trySend(R[C]) — non-blocking send.
-     * Canonical logic in xr_chan_try_send (xchannel_ops.h). */
+    /* R[A] = try-send-ready(R[B], R[C]) — internal non-blocking send predicate.
+     * User-facing Channel.trySend still returns SendResult through OP_INVOKE;
+     * this opcode backs select send cases and must produce a bool for TEST. */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
@@ -219,6 +220,10 @@ vmcase(OP_CHAN_TRY_SEND) {
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
     uint8_t transfer_mode = vm_channel_transfer_mode_before(frame, pc);
+    if (xr_channel_is_closed(ch)) {
+        R(a) = xr_bool(false);
+        vmbreak;
+    }
     R(a) = xr_bool(xr_chan_try_send_transfer(isolate, ch, R(c), transfer_mode));
     vmbreak;
 }
