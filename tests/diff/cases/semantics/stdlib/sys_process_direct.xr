@@ -4,6 +4,12 @@
 import sys
 import { ProcessOptions } from sys
 
+var noArgs = sys.Process.spawn("true")
+print(noArgs != null)
+if (noArgs != null) {
+    print(noArgs!.wait())
+}
+
 var p = sys.Process.spawn("sh", ["-c", "exit 7"])
 print(p != null)
 if (p != null) {
