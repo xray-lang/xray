@@ -45,7 +45,8 @@ static bool verify_link_dependency_name_shape(const XgLinkDependencySummary *dep
             return true;
         case XG_LINK_DEP_STDLIB_SYMBOL:
             dot = strchr(dep->name, '.');
-            if (!dot || dot == dep->name || dot[1] == '\0' || strchr(dot + 1, '.'))
+            if (!dot || dot == dep->name || dot[1] == '\0' || strchr(dot + 1, '.') ||
+                strchr(dot + 1, '/') || strchr(dot + 1, '\\'))
                 return set_error(errbuf, errbuf_len,
                                  "AOT stdlib symbol link dependency has invalid name");
             module_len = (size_t) (dot - dep->name);
