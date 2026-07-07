@@ -1976,8 +1976,8 @@ static const XiValue *cg_class_native_trace_ctor_origin(XiCgenCtx *ctx, const Xi
                                                         const XiValue *v, int depth) {
     if (!v || depth > 8)
         return NULL;
-    while (v && ((xi_copy_is_identity_alias(v) || v->op == XI_MOVE ||
-                  cg_class_native_shared_copy_wrapper(v)) &&
+    while (v && ((xi_copy_is_identity_alias(v) || v->op == XI_MOVE || v->op == XI_BOX ||
+                  v->op == XI_UNBOX || cg_class_native_shared_copy_wrapper(v)) &&
                  v->nargs >= 1)) {
         if (++depth > 8)
             return NULL;
@@ -2603,6 +2603,11 @@ static bool emit_class_native_getter_field_expr(XiCgenCtx *ctx, FILE *out, const
 
     const char *method_prefix = NULL;
     const XiFunc *mfunc = cg_lookup_method(ctx, getter_name, source->class_name, &method_prefix);
+    if (!mfunc) {
+        mfunc = cg_lookup_method(ctx, (const char *) v->aux, source->class_name, &method_prefix);
+        if (!mfunc || !mfunc->name || strcmp(mfunc->name, getter_name) != 0)
+            return false;
+    }
     if (!mfunc || cg_func_needs_aot_coro(mfunc) || !cg_class_func_uses_native_receiver(ctx, mfunc))
         return false;
 

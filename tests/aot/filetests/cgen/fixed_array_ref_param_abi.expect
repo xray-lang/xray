@@ -1,6 +1,7 @@
 contains=xaot-plan v0
 c_contains=uint32_t * p0
-c_contains=uint32_t v11 = (int64_t)((uint32_t*)v0)[INT64_C(0)]
+c_regex=uint32_t v[0-9]+ = \(\(uint32_t\*\)v0\)\[INT64_C\(0\)\]
+c_not_contains=(int64_t)((uint32_t*)
 c_not_contains=((uint32_t*)(p0).ptr)
 c_not_contains=xr_mkptr(p0
 c_not_contains=XR_TO_INT

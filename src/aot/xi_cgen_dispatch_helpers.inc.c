@@ -5135,7 +5135,8 @@ static void xicgen_cast_i64_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     emit_value_as_rep_ctx(ctx, out, arg, XR_REP_I64);
 }
 
-static bool xicgen_unsigned_narrow_lowbits_binop(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+static bool xicgen_unsigned_narrow_lowbits_binop(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                 const XiValue *v) {
     if (!ctx || !out || !v)
         return false;
 
@@ -5155,9 +5156,9 @@ static bool xicgen_unsigned_narrow_lowbits_binop(XiCgenCtx *ctx, FILE *out, cons
         return false;
 
     fprintf(out, "(%s)((%s)(", cast_ctype, op_ctype);
-    emit_value_as_rep_ctx(ctx, out, arg->args[0], XR_REP_I64);
+    cg_emit_narrow_arith_operand(ctx, f, out, arg->args[0]);
     fprintf(out, ") %s (%s)(", op, op_ctype);
-    emit_value_as_rep_ctx(ctx, out, arg->args[1], XR_REP_I64);
+    cg_emit_narrow_arith_operand(ctx, f, out, arg->args[1]);
     fprintf(out, "))");
     return true;
 }
@@ -5172,7 +5173,7 @@ static void xicgen_template_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     (void) prefix;
     switch (xi_to_c_template_width_kind(v->op)) {
         case AOT_WIDTH_TEMPLATE_CAST_I64:
-            if (xicgen_unsigned_narrow_lowbits_binop(ctx, out, v))
+            if (xicgen_unsigned_narrow_lowbits_binop(ctx, out, f, v))
                 return;
             xicgen_cast_i64_arg(ctx, out, f, v, xi_to_c_template_width_cast_type(v->op));
             return;
@@ -5599,6 +5600,8 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_typed_array_length_expr(ctx, out, f, prefix, v))
         return;
     if (field && cg_emit_aot_stdlib_generated_constant_field(ctx, out, f, v))
+        return;
+    if (field && emit_class_native_getter_field_expr(ctx, out, f, prefix, v))
         return;
     int sym = cg_method_sym(field);
     const XiValue *receiver = xicgen_getprop_receiver_value(ctx, v->args[0]);
