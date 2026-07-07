@@ -72,8 +72,7 @@ static bool current_is_removed_public_modifier(Parser *parser) {
     Token peek = xr_scanner_scan(&saved);
     return peek.type == TK_NAME || peek.type == TK_STATIC || peek.type == TK_PRIVATE ||
            peek.type == TK_PROTECTED || peek.type == TK_CONST || peek.type == TK_CONSTRUCTOR ||
-           peek.type == TK_OPERATOR || peek.type == TK_ABSTRACT || peek.type == TK_OVERRIDE ||
-           peek.type == TK_FINAL;
+           peek.type == TK_OPERATOR || peek.type == TK_FINAL;
 }
 
 static bool current_is_removed_oop_modifier(Parser *parser, const char **out_name) {
@@ -273,7 +272,6 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
         if (!xr_parser_check(parser, TK_NAME) && !xr_parser_check(parser, TK_PRIVATE) &&
             !xr_parser_check(parser, TK_PROTECTED) && !xr_parser_check(parser, TK_CONST) &&
             !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_CONSTRUCTOR) &&
-            !xr_parser_check(parser, TK_ABSTRACT) && !xr_parser_check(parser, TK_OVERRIDE) &&
             !xr_parser_check(parser, TK_FINAL) && !xr_parser_check(parser, TK_OPERATOR)) {
             xr_parser_error_expected_name(parser, "expected field or method name");
             xr_parser_advance(parser);
@@ -445,12 +443,12 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
         }
 
         // Reject invalid modifiers for structs
-        if (xr_parser_check(parser, TK_ABSTRACT)) {
+        if (xr_parser_check_name(parser, "abstract")) {
             xr_parser_error_at_current(parser, "'abstract' is not allowed in struct declarations");
             xr_parser_advance(parser);
             continue;
         }
-        if (xr_parser_check(parser, TK_OVERRIDE)) {
+        if (xr_parser_check_name(parser, "override")) {
             xr_parser_error_at_current(parser, "'override' is not allowed in struct declarations");
             xr_parser_advance(parser);
             continue;
@@ -676,13 +674,16 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
     for (;;) {
         const char *removed_name = NULL;
-        if (xr_parser_match(parser, TK_OVERRIDE)) {
-            xr_parser_error(
+        if (xr_parser_check_name(parser, "override")) {
+            xr_parser_error_at_current(
                 parser, "'override' was removed; overrides are inferred by exact method signature");
+            xr_parser_advance(parser);
             continue;
         }
-        if (xr_parser_match(parser, TK_ABSTRACT)) {
-            xr_parser_error(parser, "'abstract' was removed; use an interface for contracts");
+        if (xr_parser_check_name(parser, "abstract")) {
+            xr_parser_error_at_current(parser,
+                                       "'abstract' was removed; use an interface for contracts");
+            xr_parser_advance(parser);
             continue;
         }
         if (xr_parser_match(parser, TK_FINAL)) {

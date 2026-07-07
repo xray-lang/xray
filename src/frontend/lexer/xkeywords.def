@@ -33,7 +33,6 @@
  */
 
 /*           spelling       length  token             */
-XR_KW(       "abstract",    8,      TK_ABSTRACT      )
 XR_KW(       "as",          2,      TK_AS            )
 XR_KW(       "await",       5,      TK_AWAIT         )
 XR_KW(       "bool",        4,      TK_BOOL          )
@@ -73,7 +72,6 @@ XR_KW(       "match",       5,      TK_MATCH         )
 XR_KW(       "new",         3,      TK_NEW           )
 XR_KW(       "null",        4,      TK_NULL          )
 XR_KW(       "operator",    8,      TK_OPERATOR      )
-XR_KW(       "override",    8,      TK_OVERRIDE      )
 XR_KW(       "packed",      6,      TK_PACKED        )
 XR_KW(       "parallel",    8,      TK_PARALLEL      )
 XR_KW(       "private",     7,      TK_PRIVATE       )

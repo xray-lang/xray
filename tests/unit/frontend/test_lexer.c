@@ -259,6 +259,12 @@ TEST(lexer_identifiers) {
 
     t = scan_single("var123");
     assert_token(t, TK_NAME, "var123");
+
+    t = scan_single("abstract");
+    assert_token(t, TK_NAME, "abstract");
+
+    t = scan_single("override");
+    assert_token(t, TK_NAME, "override");
 }
 
 /* ========== Special Token Tests ========== */
@@ -485,7 +491,6 @@ TEST(lexer_keyword_table_completeness) {
         XrTokenType expected;
     } cases[] = {
         // Lowercase keywords
-        {"abstract", TK_ABSTRACT},
         {"as", TK_AS},
         {"await", TK_AWAIT},
         {"bool", TK_BOOL},
@@ -523,7 +528,6 @@ TEST(lexer_keyword_table_completeness) {
         {"new", TK_NEW},
         {"null", TK_NULL},
         {"operator", TK_OPERATOR},
-        {"override", TK_OVERRIDE},
         {"private", TK_PRIVATE},
         {"return", TK_RETURN},
         {"scope", TK_SCOPE},

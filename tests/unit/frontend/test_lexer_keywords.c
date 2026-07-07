@@ -80,7 +80,6 @@ static const KwExpect kKnownKeywords[] = {
      * more: Array / BigInt / Bytes / Channel / DateTime / Json / Map /
      * Range / Regex / Set / StringBuilder all resolve through the
      * prelude registry as plain identifiers. */
-    {"abstract", TK_ABSTRACT},
     {"as", TK_AS},
     {"await", TK_AWAIT},
     {"bool", TK_BOOL},
@@ -120,7 +119,6 @@ static const KwExpect kKnownKeywords[] = {
     {"new", TK_NEW},
     {"null", TK_NULL},
     {"operator", TK_OPERATOR},
-    {"override", TK_OVERRIDE},
     {"private", TK_PRIVATE},
     {"return", TK_RETURN},
     {"scope", TK_SCOPE},
@@ -153,6 +151,16 @@ TEST(every_keyword_recognised) {
         Token t = scan_one(kKnownKeywords[i].spelling);
         ASSERT_EQ_INT(t.type, kKnownKeywords[i].type);
         ASSERT_TRUE(token_text_eq(t, kKnownKeywords[i].spelling));
+    }
+}
+
+TEST(removed_oop_modifiers_are_identifiers) {
+    static const char *removed[] = {"abstract", "override"};
+    int n = (int) (sizeof(removed) / sizeof(removed[0]));
+    for (int i = 0; i < n; i++) {
+        Token t = scan_one(removed[i]);
+        ASSERT_EQ_INT(t.type, TK_NAME);
+        ASSERT_TRUE(token_text_eq(t, removed[i]));
     }
 }
 
@@ -342,6 +350,7 @@ TEST(keyword_then_punctuation) {
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("L-01 / L-08 keyword recognition");
 RUN_TEST(every_keyword_recognised);
+RUN_TEST(removed_oop_modifiers_are_identifiers);
 RUN_TEST(keyword_prefix_identifiers_are_TK_NAME);
 RUN_TEST(keywords_are_case_sensitive);
 RUN_TEST(keyword_with_underscore_suffix_is_identifier);
