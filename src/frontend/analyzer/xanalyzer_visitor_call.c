@@ -1691,6 +1691,70 @@ static XaSymbolLinks *xa_module_member_fn_links(XaInferContext *ctx, AstNode *ca
     return xa_analyzer_get_links(ctx->analyzer, member_sym);
 }
 
+static XaSymbol *xa_module_member_class_symbol(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node || node->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &node->as.member_access;
+    if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE ||
+        !ma->object->as.variable.name)
+        return NULL;
+    XaSymbol *mod_sym = xa_scope_lookup(ctx->analyzer->current_scope, ma->object->as.variable.name);
+    if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
+        return NULL;
+    XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
+    const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
+                                                                 : ma->object->as.variable.name;
+    bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+    if (!exports)
+        return NULL;
+    XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+    return member_sym && member_sym->kind == XA_SYM_CLASS ? member_sym : NULL;
+}
+
+static XaSymbol *xa_static_method_class_symbol(XaInferContext *ctx, AstNode *class_expr) {
+    if (!ctx || !class_expr)
+        return NULL;
+    if (class_expr->type == AST_VARIABLE)
+        return xa_lookup_visible_class_symbol(ctx, class_expr->as.variable.name);
+    return xa_module_member_class_symbol(ctx, class_expr);
+}
+
+static XaSymbolLinks *xa_static_method_fn_links(XaInferContext *ctx, AstNode *callee) {
+    if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object)
+        return NULL;
+    XaSymbol *class_sym = xa_static_method_class_symbol(ctx, ma->object);
+    XaSymbolLinks *class_links = class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+    XaSymbol *method_sym =
+        (class_links && class_links->class_info)
+            ? xa_class_info_lookup_static_member(class_links->class_info, ma->name)
+            : NULL;
+    return (method_sym && method_sym->kind == XA_SYM_METHOD && method_sym->is_static)
+               ? xa_analyzer_get_links(ctx->analyzer, method_sym)
+               : NULL;
+}
+
+static XaSymbolLinks *xa_static_method_fn_links_from_type(XaInferContext *ctx, XrType *class_type,
+                                                          const char *method_name) {
+    if (!ctx || !ctx->analyzer || !class_type || class_type->kind != XR_KIND_CLASS || !method_name)
+        return NULL;
+    XrClassInfo *class_info = class_type->instance.class_ref;
+    if (!class_info && class_type->instance.class_name) {
+        XaSymbol *class_sym = xa_lookup_visible_class_symbol(ctx, class_type->instance.class_name);
+        XaSymbolLinks *class_links =
+            class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+        class_info = class_links ? class_links->class_info : NULL;
+    }
+    XaSymbol *method_sym =
+        class_info ? xa_class_info_lookup_static_member(class_info, method_name) : NULL;
+    return (method_sym && method_sym->kind == XA_SYM_METHOD && method_sym->is_static)
+               ? xa_analyzer_get_links(ctx->analyzer, method_sym)
+               : NULL;
+}
+
 static void xa_check_channel_send_transfer_arg(XaInferContext *ctx, AstNode *call_node,
                                                XrType *receiver_type, const char *method_name,
                                                AstNode *arg_node, XrType *arg_type, int slot) {
@@ -1861,8 +1925,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // Module member call (namespace.fn): resolve the exported function's
         // links so caller-side default-argument filling below applies just as
         // for a bare-name call. Non-module member calls (instance methods)
-        // resolve to NULL here and are unaffected.
+        // resolve to NULL here and are unaffected. Static methods use the same
+        // caller-side default model, including module-exported classes.
         fn_links = xa_module_member_fn_links(ctx, call->callee);
+        if (!fn_links)
+            fn_links = xa_static_method_fn_links(ctx, call->callee);
     }
 
     const char *mem_layout_member = xa_mem_layout_call_member(ctx, call);
@@ -2036,6 +2103,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         callee_obj_type = xa_call_raw_pointer_type_namespace(ctx, ma->object);
         if (!callee_obj_type)
             callee_obj_type = xa_visit_infer_expr(ctx, ma->object);
+        if (!fn_links)
+            fn_links = xa_static_method_fn_links_from_type(ctx, callee_obj_type, method_name);
 
         if (xa_method_call_creates_span_borrow(callee_obj_type, method_name)) {
             xa_check_span_borrow_source_stable(ctx, call->callee, ma->object, method_name);
@@ -2334,6 +2403,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     bool is_variadic = callee_type->function.is_variadic;
     int rest_param_index = (is_variadic && param_count > 0) ? param_count - 1 : -1;
     int fixed_param_count = rest_param_index >= 0 ? rest_param_index : param_count;
+    if (!fn_links && call->callee && call->callee->type == AST_MEMBER_ACCESS)
+        fn_links = xa_static_method_fn_links(ctx, call->callee);
 
     // Caller-side default argument filling (C1): for a direct call to a named
     // function with default parameters, complete omitted trailing arguments by

@@ -1,0 +1,13 @@
+// anchor: module-static-default-params
+// Module-exported class static methods use caller-side default argument
+// filling, including namespace calls such as `mod.Class.method(...)`.
+import { StaticDefaults } from "./_static_defaults"
+import "./_static_defaults" as defs
+
+print(StaticDefaults.join("named"))
+print(StaticDefaults.join("named", "full"))
+print(StaticDefaults.score(5))
+print(defs.StaticDefaults.join("ns"))
+print(defs.StaticDefaults.score(1, 2))
+print(defs.StaticDefaults.isMissing())
+print(defs.StaticDefaults.isMissing(3))
