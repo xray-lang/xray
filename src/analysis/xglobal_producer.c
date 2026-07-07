@@ -37,6 +37,7 @@ typedef struct XgClassNameRow {
 typedef struct XgFuncNameRow {
     const char *name;
     XgFuncId func_id;
+    uint32_t decl_flags;
 } XgFuncNameRow;
 
 typedef struct XgInterfaceNameRow {
@@ -259,25 +260,27 @@ static XgFuncId producer_next_func_id(XgProducer *p) {
     return id;
 }
 
-static bool producer_register_func(XgProducer *p, const char *name, XgFuncId func_id) {
+static bool producer_register_func(XgProducer *p, const char *name, XgFuncId func_id,
+                                   uint32_t decl_flags) {
     if (!name || func_id == XG_NO_ID)
         return true;
     if (!producer_reserve_funcs(p, p->nfuncs + 1))
         return false;
     p->funcs[p->nfuncs].name = name;
     p->funcs[p->nfuncs].func_id = func_id;
+    p->funcs[p->nfuncs].decl_flags = decl_flags;
     p->nfuncs++;
     return true;
 }
 
-static XgFuncId producer_lookup_func(const XgProducer *p, const char *name) {
+static XgFuncNameRow *producer_lookup_func_row(const XgProducer *p, const char *name) {
     if (!p || !name)
-        return XG_NO_ID;
+        return NULL;
     for (uint32_t i = 0; i < p->nfuncs; i++) {
         if (p->funcs[i].name && strcmp(p->funcs[i].name, name) == 0)
-            return p->funcs[i].func_id;
+            return &p->funcs[i];
     }
-    return XG_NO_ID;
+    return NULL;
 }
 
 static bool producer_reserve_interfaces(XgProducer *p, uint32_t needed) {
@@ -790,15 +793,25 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     callee = call->as.call_expr.callee;
     if (callee && callee->type == AST_VARIABLE) {
         const char *callee_name = callee->as.variable.name;
-        XgFuncId target = producer_lookup_func(bc->producer, callee->as.variable.name);
+        XgFuncNameRow *target = producer_lookup_func_row(bc->producer, callee_name);
+        uint32_t callee_name_id = hash_name32(callee_name);
         if (producer_lookup_class(bc->producer, callee->as.variable.name) != XG_NO_ID)
             bc->capability_bits |= XG_CAP_OBJECTS;
         bc->capability_bits |= body_capabilities_for_builtin_constructor(callee_name);
         if (callee_name && strcmp(callee_name, "typename") == 0)
             bc->metadata_use_bits |= XG_METADATA_TYPENAME;
-        row.kind = XG_CALL_DIRECT_FUNC;
-        row.static_target_func_id =
-            target != XG_NO_ID ? target : (XgFuncId) hash_name32(callee->as.variable.name);
+        if (target && (target->decl_flags & XG_DECL_EXTERN)) {
+            row.kind = XG_CALL_EXTERN;
+            row.method_id = (XgMethodId) callee_name_id;
+            row.method_name_id = callee_name_id;
+        } else if (target && (target->decl_flags & XG_DECL_NATIVE)) {
+            row.kind = XG_CALL_NATIVE;
+            row.method_id = (XgMethodId) callee_name_id;
+            row.method_name_id = callee_name_id;
+        } else if (target) {
+            row.kind = XG_CALL_DIRECT_FUNC;
+            row.static_target_func_id = target->func_id;
+        }
     } else if (callee && callee->type == AST_MEMBER_ACCESS) {
         XgInterfaceId receiver_interface =
             body_resolve_expr_interface(bc, callee->as.member_access.object);
@@ -1362,7 +1375,7 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
         if (!xg_global_evidence_add_link_dependency(p->evidence, &dep))
             return false;
     }
-    if (!producer_register_func(p, fn->name, func_id))
+    if (!producer_register_func(p, fn->name, func_id, decl.flags))
         return false;
     return producer_enqueue_body(p, func_id, module_id, decl_id, XG_NO_ID, XG_NO_ID,
                                  hash_name32(fn->name), decl.signature_key, (uint32_t) node->line,

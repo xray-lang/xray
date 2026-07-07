@@ -106,6 +106,17 @@ static void assert_body_callsite_ordinals(const XgGlobalEvidence *ev) {
     }
 }
 
+static const XgBodySummary *evidence_find_body_by_func(const XgGlobalEvidence *ev,
+                                                       XgFuncId func_id) {
+    if (!ev || func_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        if (ev->bodies[i].func_id == func_id)
+            return &ev->bodies[i];
+    }
+    return NULL;
+}
+
 TEST(global_evidence_adds_rows_and_grows) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x10,
@@ -1470,6 +1481,12 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
                           .name_id = 7,
                           .signature_key = 901,
                           .source_span_id = 3};
+    XgDeclSummary target_decl = {.module_id = 1,
+                                 .decl_id = 2,
+                                 .kind = XG_DECL_FUNC,
+                                 .name_id = 8,
+                                 .signature_key = 902,
+                                 .source_span_id = 6};
     XgBodySummary body = {.func_id = 1,
                           .module_id = 1,
                           .owner_decl_id = 1,
@@ -1482,12 +1499,22 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
                           .body_hash = 0x4242,
                           .callsite_start = 1,
                           .callsite_count = 1};
+    XgBodySummary target_body = {.func_id = 2,
+                                 .module_id = 1,
+                                 .owner_decl_id = 2,
+                                 .owner_class_id = XG_NO_ID,
+                                 .owner_method_id = XG_NO_ID,
+                                 .name_id = 8,
+                                 .signature_key = 902,
+                                 .source_span_id = 6,
+                                 .kind = XG_BODY_FUNCTION,
+                                 .body_hash = 0x4343};
     XgCallsiteSummary call = {.callsite_id = 1,
                               .owner_func_id = 1,
                               .source_span_id = 4,
                               .body_ordinal = 0,
                               .kind = XG_CALL_DIRECT_FUNC,
-                              .static_target_func_id = 1};
+                              .static_target_func_id = 2};
     XiFunc init_func;
     XiModule module;
     XiModule *modules[1];
@@ -1503,7 +1530,9 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
 
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &target_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &target_body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
 
     XaotBundle good;
@@ -1530,7 +1559,7 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
     ev.bodies[0].kind = XG_BODY_FUNCTION;
 
     XaotBundle stale_decl;
-    ev.bodies[0].owner_decl_id = 2;
+    ev.bodies[0].owner_decl_id = 999;
     memset(&stale_decl, 0, sizeof(stale_decl));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_decl, &ev, XG_BUILD_NATIVE_RELEASE));
     stale_decl.modules = modules;
@@ -1780,6 +1809,35 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence direct callsite has no target"));
     xaot_bundle_free(&direct_no_target_bundle);
     xg_global_evidence_free(&direct_no_target_ev);
+
+    XgGlobalEvidence direct_missing_body_ev;
+    XgBuildKey direct_missing_body_key = key;
+    XgBodySummary direct_missing_body_body = body;
+    XgCallsiteSummary direct_missing_body_call = call;
+    direct_missing_body_key.source_hash = 0x81;
+    direct_missing_body_body.callsite_start = 1;
+    direct_missing_body_body.callsite_count = 1;
+    direct_missing_body_call.static_target_func_id = 999;
+    xg_global_evidence_init(&direct_missing_body_ev, direct_missing_body_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&direct_missing_body_ev, &decl));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_body(&direct_missing_body_ev, &direct_missing_body_body));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_callsite(&direct_missing_body_ev, &direct_missing_body_call));
+
+    XaotBundle direct_missing_body_bundle;
+    memset(&direct_missing_body_bundle, 0, sizeof(direct_missing_body_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&direct_missing_body_bundle,
+                                                &direct_missing_body_ev, XG_BUILD_NATIVE_RELEASE));
+    direct_missing_body_bundle.modules = modules;
+    direct_missing_body_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&direct_missing_body_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&direct_missing_body_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence direct callsite target body is missing"));
+    xaot_bundle_free(&direct_missing_body_bundle);
+    xg_global_evidence_free(&direct_missing_body_ev);
 
     XgGlobalEvidence method_stale_ev;
     XgBuildKey method_stale_key = key;
@@ -2455,6 +2513,111 @@ TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
     ASSERT_TRUE((solo->flags & XG_CLASS_INFERRED_FINAL) != 0);
     ASSERT_EQ_UINT(ev.methods[0].override_of, ev.methods[1].method_id);
     ASSERT_TRUE((ev.methods[1].flags & XG_METHOD_OVERRIDDEN) != 0);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
+    setup_parser_session();
+    const char *source = "fn callee(x: int) -> int { return x + 1 }\n"
+                         "fn caller() -> int { return callee(41) }\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.ndecls, 2);
+    ASSERT_EQ_UINT(ev.nbodies, 2);
+    ASSERT_EQ_UINT(ev.ncallsites, 1);
+    const XgCallsiteSummary *call = &ev.callsites[0];
+    ASSERT_EQ_UINT(call->kind, XG_CALL_DIRECT_FUNC);
+    ASSERT_TRUE(call->static_target_func_id != XG_NO_ID);
+    ASSERT_NE(call->static_target_func_id, call->owner_func_id);
+
+    const XgBodySummary *owner_body = evidence_find_body_by_func(&ev, call->owner_func_id);
+    const XgBodySummary *target_body = evidence_find_body_by_func(&ev, call->static_target_func_id);
+    ASSERT_NOT_NULL(owner_body);
+    ASSERT_NOT_NULL(target_body);
+    ASSERT_EQ_UINT(owner_body->kind, XG_BODY_FUNCTION);
+    ASSERT_EQ_UINT(target_body->kind, XG_BODY_FUNCTION);
+    ASSERT_EQ_UINT(owner_body->callsite_count, 1);
+    ASSERT_EQ_UINT(target_body->callsite_count, 0);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
+    setup_parser_session();
+    const char *source = "fn caller() -> int { return unknown(41) }\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.ndecls, 1);
+    ASSERT_EQ_UINT(ev.nbodies, 1);
+    ASSERT_EQ_UINT(ev.ncallsites, 1);
+    ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_CLOSURE);
+    ASSERT_EQ_UINT(ev.callsites[0].static_target_func_id, XG_NO_ID);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls) {
+    setup_parser_session();
+    const char *source = "@extern(\"C\") @dylib(\"m\") fn cos(x: float64) -> float64\n"
+                         "fn useCos() -> float64 { return cos(0.0) }\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.ndecls, 2);
+    ASSERT_EQ_UINT(ev.nbodies, 1);
+    ASSERT_EQ_UINT(ev.ncallsites, 1);
+    ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_EXTERN);
+    ASSERT_EQ_UINT(ev.callsites[0].static_target_func_id, XG_NO_ID);
+    ASSERT_TRUE(ev.callsites[0].method_id != XG_NO_ID);
+    ASSERT_TRUE(ev.callsites[0].method_name_id != 0);
 
     xg_global_evidence_free(&ev);
     teardown_parser_session();
@@ -3147,6 +3310,9 @@ RUN_TEST(global_evidence_verifier_rederives_method_body_signature);
 RUN_TEST(global_evidence_verifier_rejects_stale_body_identity_rows);
 RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
+RUN_TEST(global_evidence_producer_resolves_direct_function_callsite_targets);
+RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
+RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
 RUN_TEST(global_evidence_producer_marks_native_methods_bodyless);
