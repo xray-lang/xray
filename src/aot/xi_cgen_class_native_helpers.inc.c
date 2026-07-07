@@ -1397,6 +1397,26 @@ static const XiClassData *cg_class_native_static_call_result_data(XiCgenCtx *ctx
     return cg_class_native_data_for_abi_type(ctx, call.func->return_type);
 }
 
+static const XiClassData *cg_class_native_method_result_data(XiCgenCtx *ctx, const XiFunc *f,
+                                                             const XiValue *v) {
+    if (!ctx || !v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1)
+        return NULL;
+    if (v->op == XI_CALL_METHOD && (v->aux_int & 1) != 0)
+        return NULL;
+    const char *recv_class = cg_class_native_receiver_class_name(ctx, f, v->args[0]);
+    if (!recv_class)
+        return NULL;
+    const char *method_prefix = NULL;
+    const XiFunc *mfunc =
+        v->op == XI_CALL_METHOD_DIRECT
+            ? cg_lookup_method_by_index(ctx, recv_class, (int) v->aux_int, &method_prefix)
+            : cg_lookup_method(ctx, (const char *) v->aux, recv_class, &method_prefix);
+    (void) method_prefix;
+    if (!mfunc)
+        return NULL;
+    return cg_class_native_data_for_abi_type(ctx, mfunc->return_type);
+}
+
 static const XiClassData *cg_class_native_call_result_data(XiCgenCtx *ctx, const XiFunc *f,
                                                            const XiValue *v) {
     if (!ctx || !v)
@@ -1410,8 +1430,11 @@ static const XiClassData *cg_class_native_call_result_data(XiCgenCtx *ctx, const
     }
     if (v->op == XI_CALL_METHOD && v->aux) {
         CgStaticFunctionCall call = cg_resolve_module_member_call(ctx, f, v, (const char *) v->aux);
-        return cg_class_native_static_call_result_data(ctx, call);
+        const XiClassData *cd = cg_class_native_static_call_result_data(ctx, call);
+        return cd ? cd : cg_class_native_method_result_data(ctx, f, v);
     }
+    if (v->op == XI_CALL_METHOD_DIRECT)
+        return cg_class_native_method_result_data(ctx, f, v);
     return NULL;
 }
 
@@ -1572,12 +1595,15 @@ static void cg_class_native_scan_slot_class_init(XiCgenCtx *ctx, const XiFunc *f
         cg_class_native_scan_slot_class_init(ctx, f->children[ci], slot, out);
 }
 
-static const XiClassData *cg_class_native_shared_slot_init_data(XiCgenCtx *ctx, int slot) {
-    if (!ctx || !ctx->module || !ctx->module->init || slot < 0 || slot >= ctx->nshared)
+static const XiClassData *cg_class_native_shared_slot_init_data(XiCgenCtx *ctx, const XiFunc *f,
+                                                                int slot) {
+    const XiModule *module = f && f->module ? f->module : (ctx ? ctx->module : NULL);
+    int nshared = module && module->init ? (int) module->init->nshared : 0;
+    if (!ctx || !module || !module->init || slot < 0 || slot >= nshared)
         return NULL;
     CgSharedSlotClassInit init;
     memset(&init, 0, sizeof(init));
-    cg_class_native_scan_slot_class_init(ctx, ctx->module->init, slot, &init);
+    cg_class_native_scan_slot_class_init(ctx, module->init, slot, &init);
     return !init.invalid && init.set_count == 1 ? init.class_data : NULL;
 }
 
@@ -2457,7 +2483,8 @@ static const XiClassData *cg_class_native_instance_data(XiCgenCtx *ctx, const Xi
         return ctx->shared_native_instances[slot].class_data;
     v = cg_unwrap_identity_value(v);
     if (v && v->op == XI_GET_SHARED) {
-        const XiClassData *slot_init = cg_class_native_shared_slot_init_data(ctx, (int) v->aux_int);
+        const XiClassData *slot_init =
+            cg_class_native_shared_slot_init_data(ctx, f, (int) v->aux_int);
         if (slot_init)
             return slot_init;
     }
