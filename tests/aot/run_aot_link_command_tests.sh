@@ -354,6 +354,51 @@ else
     sed 's/^/      /' "$FREESTANDING_LINKER_SCRIPT_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_TARGET_CONFIG_DIR="$WORK/freestanding_target_config"
+mkdir -p "$FREESTANDING_TARGET_CONFIG_DIR/src"
+cp "$FREESTANDING_EXPORT_SRC" "$FREESTANDING_TARGET_CONFIG_DIR/src/main.xr"
+FREESTANDING_TARGET_CONFIG_SCRIPT="$FREESTANDING_TARGET_CONFIG_DIR/kernel.ld"
+printf '%s\n' 'SECTIONS { . = 0x100000; .text : { *(.text*) } }' \
+    >"$FREESTANDING_TARGET_CONFIG_SCRIPT"
+FREESTANDING_TARGET_CONFIG_SCRIPT_REAL="$(
+    cd "$(dirname "$FREESTANDING_TARGET_CONFIG_SCRIPT")" && pwd -P
+)/$(basename "$FREESTANDING_TARGET_CONFIG_SCRIPT")"
+cat >"$FREESTANDING_TARGET_CONFIG_DIR/xray.toml" <<EOF
+[project]
+name = "freestanding-target-config"
+main = "src/main.xr"
+
+[target.x86_64-linux-musl]
+profile = "freestanding"
+toolchain = "zig"
+linker_script = "kernel.ld"
+cc_flags = ["-DXRAY_TARGET_CONFIG_TEST=1"]
+ld_flags = ["-Wl,-z,max-page-size=4096"]
+EOF
+FREESTANDING_TARGET_CONFIG_BIN="$WORK/freestanding_target_config"
+FREESTANDING_TARGET_CONFIG_LOG="$WORK/freestanding_target_config.log"
+if "$XRAY" build --native --target x86_64-linux-musl --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_TARGET_CONFIG_BIN" \
+        "$FREESTANDING_TARGET_CONFIG_DIR/src/main.xr" >"$FREESTANDING_TARGET_CONFIG_LOG" 2>&1; then
+    expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" \
+        "Link command: zig cc -target x86_64-linux-musl" \
+        "freestanding-profile/target-config: uses configured toolchain"
+    expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" "-DXRAY_PROFILE_FREESTANDING=1" \
+        "freestanding-profile/target-config: uses configured profile"
+    expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" "-nostdlib" \
+        "freestanding-profile/target-config: keeps freestanding link flags"
+    expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" \
+        "-Wl,-T,$FREESTANDING_TARGET_CONFIG_SCRIPT_REAL" \
+        "freestanding-profile/target-config: resolves linker script from project root"
+    expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" "-DXRAY_TARGET_CONFIG_TEST=1" \
+        "freestanding-profile/target-config: applies configured cc flags"
+    expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" "-Wl,-z,max-page-size=4096" \
+        "freestanding-profile/target-config: applies configured ld flags"
+else
+    record_fail "freestanding-profile/target-config: build failed"
+    sed 's/^/      /' "$FREESTANDING_TARGET_CONFIG_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_EXPORT_OBJ="$WORK/freestanding_export.o"
 FREESTANDING_EXPORT_REAL_LOG="$WORK/freestanding_export_real.log"
 if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
