@@ -211,6 +211,13 @@ TEST(global_evidence_dump_lists_core_rows) {
                                    .source_span_id = 77,
                                    .flags = 0};
     XgBodySummary body = {.func_id = 4,
+                          .module_id = 1,
+                          .owner_decl_id = 2,
+                          .owner_class_id = XG_NO_ID,
+                          .owner_method_id = XG_NO_ID,
+                          .name_id = 88,
+                          .source_span_id = 77,
+                          .kind = XG_BODY_FUNCTION,
                           .body_hash = 0x1234,
                           .effect_bits = 1,
                           .escape_bits = 2,
@@ -254,7 +261,8 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "class 0 id=2 module=1 decl=2 name=44 parent=0"));
     ASSERT_NOT_NULL(strstr(dump, "method 0 id=3 owner=2"));
     ASSERT_NOT_NULL(strstr(dump, "interface-impl 0 class=2 interface=123"));
-    ASSERT_NOT_NULL(strstr(dump, "body 0 func=4"));
+    ASSERT_NOT_NULL(strstr(dump, "body 0 func=4 module=1 decl=2"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=function"));
     ASSERT_NOT_NULL(strstr(dump, "callsite 0 id=5 owner=4 span=0 kind=method ordinal=2"));
     ASSERT_NOT_NULL(strstr(dump, "link-dep 0 id=6 module=1 decl=2 span=77 kind=extern_dylib"));
 
@@ -1484,6 +1492,8 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     uint32_t direct_dispatch_plans = 0;
     uint32_t vtable_dispatch_plans = 0;
     uint32_t object_capability_bodies = 0;
+    uint32_t method_bodies = 0;
+    uint32_t function_bodies = 0;
 
     for (uint32_t i = 0; i < ev.ncallsites; i++) {
         const XgCallsiteSummary *call = &ev.callsites[i];
@@ -1504,9 +1514,27 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     ASSERT_EQ_UINT(unresolved_method_calls, 0);
     ASSERT_EQ_UINT(method_calls_with_source, 3);
     for (uint32_t i = 0; i < ev.nbodies; i++) {
-        if ((ev.bodies[i].capability_bits & XG_CAP_OBJECTS) != 0)
+        const XgBodySummary *body = &ev.bodies[i];
+        ASSERT_EQ_UINT(body->module_id, 1);
+        ASSERT_TRUE(body->name_id != 0);
+        if (body->kind == XG_BODY_METHOD) {
+            method_bodies++;
+            ASSERT_TRUE(body->owner_decl_id != XG_NO_ID);
+            ASSERT_TRUE(body->owner_class_id != XG_NO_ID);
+            ASSERT_TRUE(body->owner_method_id != XG_NO_ID);
+            ASSERT_TRUE(body->source_span_id != 0);
+        } else if (body->kind == XG_BODY_FUNCTION) {
+            function_bodies++;
+            ASSERT_TRUE(body->owner_decl_id != XG_NO_ID);
+            ASSERT_EQ_UINT(body->owner_class_id, XG_NO_ID);
+            ASSERT_EQ_UINT(body->owner_method_id, XG_NO_ID);
+            ASSERT_TRUE(body->source_span_id != 0);
+        }
+        if ((body->capability_bits & XG_CAP_OBJECTS) != 0)
             object_capability_bodies++;
     }
+    ASSERT_EQ_UINT(method_bodies, 3);
+    ASSERT_EQ_UINT(function_bodies, 2);
     ASSERT_EQ_UINT(object_capability_bodies, 1);
 
     XaotBundle bundle;
@@ -1946,6 +1974,26 @@ TEST(global_evidence_producer_marks_module_init_body) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(ev.nbodies, 2);
+    uint32_t module_init_bodies = 0;
+    uint32_t function_bodies = 0;
+    for (uint32_t i = 0; i < ev.nbodies; i++) {
+        const XgBodySummary *body = &ev.bodies[i];
+        ASSERT_EQ_UINT(body->module_id, 1);
+        ASSERT_TRUE(body->name_id != 0);
+        if (body->kind == XG_BODY_MODULE_INIT) {
+            module_init_bodies++;
+            ASSERT_EQ_UINT(body->owner_decl_id, XG_NO_ID);
+            ASSERT_EQ_UINT(body->owner_class_id, XG_NO_ID);
+            ASSERT_EQ_UINT(body->owner_method_id, XG_NO_ID);
+            ASSERT_EQ_UINT(body->source_span_id, 0);
+        } else if (body->kind == XG_BODY_FUNCTION) {
+            function_bodies++;
+            ASSERT_TRUE(body->owner_decl_id != XG_NO_ID);
+            ASSERT_TRUE(body->source_span_id != 0);
+        }
+    }
+    ASSERT_EQ_UINT(module_init_bodies, 1);
+    ASSERT_EQ_UINT(function_bodies, 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_CHANNEL), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_TASK), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_NETPOLL), 1);

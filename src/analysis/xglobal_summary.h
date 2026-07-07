@@ -83,6 +83,12 @@ typedef enum XgCallsiteKind {
     XG_CALL_EXTERN,
 } XgCallsiteKind;
 
+typedef enum XgBodyKind {
+    XG_BODY_MODULE_INIT = 1,
+    XG_BODY_FUNCTION,
+    XG_BODY_METHOD,
+} XgBodyKind;
+
 typedef enum XgLinkDependencyKind {
     XG_LINK_DEP_EXTERN_DYLIB = 1,
     XG_LINK_DEP_STDLIB_SYMBOL,
@@ -190,6 +196,13 @@ typedef struct XgInterfaceImplSummary {
 
 typedef struct XgBodySummary {
     XgFuncId func_id;
+    XgModuleId module_id;
+    XgDeclId owner_decl_id;
+    XgClassId owner_class_id;
+    XgMethodId owner_method_id;
+    uint32_t name_id;
+    uint32_t source_span_id;
+    uint8_t kind;
     uint64_t body_hash;
     uint32_t effect_bits;
     uint32_t escape_bits;
