@@ -66,7 +66,6 @@ struct XrVMRuntime;
  * depend on runtime infrastructure only available after core init. */
 extern void xr_iterator_register_class(XrVMRuntime *isolate);
 extern void xr_register_range_class(XrVMRuntime *isolate);
-extern void xr_register_logger_class(XrVMRuntime *isolate);
 extern void xr_register_datetime_class(XrVMRuntime *isolate);
 extern void xr_regex_register_class(XrVMRuntime *isolate);
 extern void xr_sys_mutex_register_class(XrVMRuntime *isolate);
@@ -202,7 +201,6 @@ void xr_prelude_register_all_native_types(XrVMRuntime *isolate) {
     xr_iterator_register_class(isolate);
     xr_register_range_class(isolate);
     xr_register_datetime_class(isolate);
-    xr_register_logger_class(isolate);
     xr_regex_register_class(isolate);
     xr_sys_mutex_register_class(isolate);
     xr_sys_rwlock_register_class(isolate);

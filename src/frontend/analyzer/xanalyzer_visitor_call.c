@@ -2331,6 +2331,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     // Infer argument types
     int param_count = callee_type->function.param_count;
     bool is_variadic = callee_type->function.is_variadic;
+    int rest_param_index = (is_variadic && param_count > 0) ? param_count - 1 : -1;
+    int fixed_param_count = rest_param_index >= 0 ? rest_param_index : param_count;
 
     // Caller-side default argument filling (C1): for a direct call to a named
     // function with default parameters, complete omitted trailing arguments by
@@ -2407,10 +2409,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     // Check argument count (use min_params for functions with default parameters)
     int min_params = callee_type->function.min_params;
-    if (arg_count < min_params && !is_variadic) {
+    if (arg_count < min_params) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
-        if (min_params == param_count) {
+        if (is_variadic) {
+            snprintf(msg, sizeof(msg), "Expected at least %d argument(s), but got %d", min_params,
+                     arg_count);
+        } else if (min_params == param_count) {
             snprintf(msg, sizeof(msg), "Expected %d argument(s), but got %d", param_count,
                      arg_count);
         } else {
@@ -2503,15 +2508,18 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 continue;
             for (int j = 0; j < src->tuple.element_count; j++, slot++) {
                 XrType *arg_type = src->tuple.element_types[j];
+                int param_slot = slot;
+                if (is_variadic && rest_param_index >= 0 && slot >= fixed_param_count)
+                    param_slot = rest_param_index;
                 if (effective_arg_types && slot < arg_count)
                     effective_arg_types[slot] = arg_type;
                 if (effective_arg_modes && slot < arg_count)
-                    effective_arg_modes[slot] = xa_call_param_mode(callee_type, slot);
+                    effective_arg_modes[slot] = xa_call_param_mode(callee_type, param_slot);
                 xa_check_channel_send_transfer_arg(ctx, node, callee_obj_type, method_name,
                                                    arg_node, arg_type, slot);
-                if (slot >= param_count)
+                if (param_slot < 0 || param_slot >= param_count)
                     continue;
-                XrType *param_type = param_types ? param_types[slot] : NULL;
+                XrType *param_type = param_types ? param_types[param_slot] : NULL;
                 if (!param_type || XR_TYPE_IS_UNKNOWN(param_type))
                     continue;
                 if (xa_type_is_c_callback(param_type)) {
@@ -2536,17 +2544,21 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             continue;
         }
 
-        if (slot >= param_count) {
+        int param_slot = slot;
+        if (is_variadic && rest_param_index >= 0 && slot >= fixed_param_count)
+            param_slot = rest_param_index;
+
+        if (param_slot < 0 || param_slot >= param_count) {
             XrType *arg_type = xa_visit_infer_expr(ctx, arg_node);
             if (effective_arg_types && slot < arg_count)
                 effective_arg_types[slot] = arg_type;
             if (effective_arg_modes && slot < arg_count)
-                effective_arg_modes[slot] = xa_call_param_mode(callee_type, slot);
+                effective_arg_modes[slot] = xa_call_param_mode(callee_type, param_slot);
             slot++;
             continue;
         }
 
-        XrType *param_type = param_types ? param_types[slot] : NULL;
+        XrType *param_type = param_types ? param_types[param_slot] : NULL;
         XrType *saved_expected = ctx->expected_type;
         bool saved_copy_view = ctx->allow_view_expr_for_copy;
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
@@ -2561,7 +2573,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             effective_arg_types[slot] = arg_type;
         xa_check_channel_send_transfer_arg(ctx, node, callee_obj_type, method_name, arg_node,
                                            arg_type, slot);
-        uint8_t param_mode = xa_call_param_mode(callee_type, slot);
+        uint8_t param_mode = xa_call_param_mode(callee_type, param_slot);
         if (effective_arg_modes && slot < arg_count)
             effective_arg_modes[slot] = param_mode;
         xa_check_ref_argument_not_readonly(ctx, node, arg_node, slot, param_mode);

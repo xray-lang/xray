@@ -1572,6 +1572,7 @@ typedef struct xrt_map_t {
     uint8_t value_type;
     uint8_t key_size;
     uint8_t value_size;
+    const char *class_name;
 } xrt_map_t;
 
 static inline uint8_t xrt_value_type_tag(XrValue v) {
@@ -1616,6 +1617,7 @@ static inline void xrt_map_init_header(xrt_map_t *m) {
     m->value_type = XR_ELEM_ANY;
     m->key_size = (uint8_t) sizeof(XrValue);
     m->value_size = (uint8_t) sizeof(XrValue);
+    m->class_name = NULL;
 }
 
 /* Candidate comparators for the shared Swiss probe (xr_{map,set}_lookup_slot):
@@ -1740,6 +1742,12 @@ static inline XrValue xrt_map_new_flags(int64_t cap, uint8_t flags) {
 
 static inline XrValue xrt_map_new(int64_t cap) {
     return xrt_map_new_flags(cap, 0);
+}
+
+static inline XrValue xrt_map_set_class_name(XrValue map_value, const char *class_name) {
+    if (XR_IS_MAP(map_value))
+        ((xrt_map_t *) map_value.ptr)->class_name = class_name;
+    return map_value;
 }
 
 /* Untyped-storage map that still records its declared value element type
@@ -3065,8 +3073,8 @@ static inline void xrt_json_sb_char(xrt_strbuf_t *sb, char c) {
 }
 
 static inline void xrt_json_stringify_abort(const char *msg, XrValue val) {
-    fprintf(stderr, "Json.stringify: %s (tag=%u, heap_type=%u)\n",
-            msg ? msg : "unsupported value", (unsigned) val.tag, (unsigned) val.heap_type);
+    fprintf(stderr, "Json.stringify: %s (tag=%u, heap_type=%u)\n", msg ? msg : "unsupported value",
+            (unsigned) val.tag, (unsigned) val.heap_type);
     abort();
 }
 
@@ -3542,6 +3550,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
                                ? xrt_map_new_typed(src->len, src->key_type, src->value_type)
                                : xrt_map_new(xrt_map_len(src));
             xrt_map_t *dst = (xrt_map_t *) dstv.ptr;
+            dst->class_name = src->class_name;
             if (xrt_map_is_typed(src) && dst->cap == src->cap) {
                 /* Same geometry: clone the slot arrays and control bytes. */
                 dst->len = src->len;

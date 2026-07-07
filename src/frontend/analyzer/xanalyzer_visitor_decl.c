@@ -3023,7 +3023,9 @@ skip_layout:
                     param_names[j] = md->parameters ? md->parameters[j] : NULL;
 
                     // Warn: method parameter missing type annotation (skip constructor)
-                    if (!(md->param_types && md->param_types[j]) && !md->is_constructor) {
+                    bool is_rest_param = md->is_variadic && j == md->param_count - 1;
+                    if (!(md->param_types && md->param_types[j]) && !md->is_constructor &&
+                        !is_rest_param) {
                         char msg[256];
                         snprintf(msg, sizeof(msg),
                                  "Parameter '%s' of method '%s' is missing type annotation",
@@ -3073,7 +3075,9 @@ skip_layout:
             }
 
             XrType *method_type = xr_type_new_function(ctx->analyzer->isolate, param_types,
-                                                       md->param_count, ret_type, false);
+                                                       md->param_count, ret_type, md->is_variadic);
+            if (method_type)
+                method_type->function.min_params = md->required_count;
 
             // Propagate in/ref passing modes to the method type
             if (method_type && md->param_passing_modes) {
@@ -3203,9 +3207,13 @@ skip_layout:
 
             XaSymbolLinks *plinks = xa_analyzer_get_links(ctx->analyzer, param);
             if (plinks) {
-                plinks->type = (mlinks && mlinks->param_types && j < mlinks->param_count)
-                                   ? mlinks->param_types[j]
-                                   : xr_type_new_unknown(NULL);
+                XrType *param_type = (mlinks && mlinks->param_types && j < mlinks->param_count)
+                                         ? mlinks->param_types[j]
+                                         : xr_type_new_unknown(NULL);
+                if (md->is_variadic && j == md->param_count - 1) {
+                    param_type = xr_type_new_array(ctx->analyzer->isolate, param_type);
+                }
+                plinks->type = param_type;
                 plinks->is_definitely_assigned = true;
             }
         }

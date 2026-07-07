@@ -1885,8 +1885,9 @@ static bool xicgen_slice_value_only_used_by_stack_slice_direct_call(XiCgenCtx *c
  * typed lane reads match); reference elements use a tagged array. The fixed
  * arguments must already have been emitted by the caller. Mirrors the VM's
  * callee-side packing (OP_CALL / vm_invoke_module). */
-static void emit_vararg_rest_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                 const XiFunc *target) {
+static void emit_vararg_rest_arg_from(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      const XiFunc *target, uint16_t arg_start) {
+    (void) f;
     uint16_t fixed = target->nparams;
     const XrType *rest_type =
         (target->params && target->params[fixed]) ? target->params[fixed]->type : NULL;
@@ -1895,13 +1896,13 @@ static void emit_vararg_rest_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     bool rest_typed = cg_array_elem_info_from_type_ctx(ctx, rest_type, &rest_elem) &&
                       rest_elem.rep != XR_REP_TAGGED && rest_elem.ctype;
     if (rest_typed) {
-        int64_t rest_count = (int64_t) v->nargs - 1 - (int64_t) fixed;
+        int64_t rest_count = (int64_t) v->nargs - (int64_t) arg_start - (int64_t) fixed;
         if (rest_count < 0)
             rest_count = 0;
         fprintf(out, ", ({ xrt_array_t *_va%u = xrt_array_new_typed_ptr(%" PRId64 ", %s); ", v->id,
                 rest_count, rest_elem.elem_name);
         int64_t idx = 0;
-        for (uint16_t a = (uint16_t) (fixed + 1); a < v->nargs; a++, idx++) {
+        for (uint16_t a = (uint16_t) (arg_start + fixed); a < v->nargs; a++, idx++) {
             fprintf(out, "((%s*)_va%u->data)[%" PRId64 "] = (%s)", rest_elem.ctype, v->id, idx,
                     rest_elem.ctype);
             emit_value_as_rep(out, v->args[a], rest_elem.rep);
@@ -1913,7 +1914,7 @@ static void emit_vararg_rest_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "; })");
     } else {
         fprintf(out, ", ({ XrValue _va%u = xrt_array_new(0); ", v->id);
-        for (uint16_t a = (uint16_t) (fixed + 1); a < v->nargs; a++) {
+        for (uint16_t a = (uint16_t) (arg_start + fixed); a < v->nargs; a++) {
             fprintf(out, "xrt_array_push(_va%u, ", v->id);
             emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
             fprintf(out, "); ");
@@ -1923,6 +1924,16 @@ static void emit_vararg_rest_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_conversion_suffix(out, rest_suffix);
         fprintf(out, "; })");
     }
+}
+
+static void emit_vararg_rest_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                 const XiFunc *target) {
+    emit_vararg_rest_arg_from(ctx, out, f, v, target, 1);
+}
+
+static void emit_vararg_method_rest_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                        const XiValue *v, const XiFunc *target) {
+    emit_vararg_rest_arg_from(ctx, out, f, v, target, 0);
 }
 
 /* Emits the argument list of a direct call (leading ", " before each), starting
@@ -1946,6 +1957,8 @@ static void emit_direct_call_arg_list(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         }
     }
 }
+
+static void xicgen_emit_map_instance_alloc(FILE *out, const char *class_name);
 
 static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
@@ -2071,7 +2084,13 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     if (target && is_class_call) {
         if (emit_class_native_constructor_expr(ctx, out, f, prefix, v, target, call_prefix))
             return;
-        fprintf(out, "({ XrValue _inst = xrt_map_new(4); ");
+        const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
+        if (!class_name && static_call.class_data)
+            class_name = static_call.class_data->class_name;
+        if (!class_name && shared_class_data)
+            class_name = shared_class_data->class_name;
+        fprintf(out, "({ ");
+        xicgen_emit_map_instance_alloc(out, class_name);
         emit_fname(ctx, out, call_prefix ? call_prefix : prefix, target);
         fprintf(out, "(NULL, _inst");
         for (uint16_t a = 1; a < v->nargs; a++) {
@@ -3411,9 +3430,18 @@ static bool xicgen_emit_direct_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     }
     emit_fname(ctx, out, method_prefix ? method_prefix : prefix, mfunc);
     fprintf(out, "(NULL");
-    for (uint16_t a = 0; a < v->nargs; a++) {
-        fprintf(out, ", ");
-        emit_value_as_direct_call_arg(ctx, out, f, v, mfunc, a, v->args[a]);
+    if (mfunc->is_vararg) {
+        uint16_t fixed = mfunc->nparams;
+        for (uint16_t a = 0; a < fixed && a < v->nargs; a++) {
+            fprintf(out, ", ");
+            emit_value_as_direct_call_arg(ctx, out, f, v, mfunc, a, v->args[a]);
+        }
+        emit_vararg_method_rest_arg(ctx, out, f, v, mfunc);
+    } else {
+        for (uint16_t a = 0; a < v->nargs; a++) {
+            fprintf(out, ", ");
+            emit_value_as_direct_call_arg(ctx, out, f, v, mfunc, a, v->args[a]);
+        }
     }
     fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
@@ -4684,6 +4712,12 @@ static const XiFunc *cg_lookup_class_ctor_global(XiCgenCtx *ctx, const char *cla
  * cannot recover the class. Resolve the constructor from the call's result type
  * (always the constructed instance type) and emit it exactly like a bare class
  * call `X(args)`, keeping AOT consistent with the VM for the `new` form. */
+static void xicgen_emit_map_instance_alloc(FILE *out, const char *class_name) {
+    fprintf(out, "XrValue _inst = xrt_map_new(4); xrt_map_set_class_name(_inst, ");
+    xicgen_emit_c_string_literal(out, class_name ? class_name : "?");
+    fprintf(out, "); ");
+}
+
 static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                          const XiValue *v, const char *prefix) {
     const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
@@ -4695,7 +4729,8 @@ static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc
         return false;
     if (emit_class_native_constructor_expr(ctx, out, f, prefix, v, ctor, call_prefix))
         return true;
-    fprintf(out, "({ XrValue _inst = xrt_map_new(4); ");
+    fprintf(out, "({ ");
+    xicgen_emit_map_instance_alloc(out, class_name);
     emit_fname(ctx, out, call_prefix ? call_prefix : prefix, ctor);
     fprintf(out, "(NULL, _inst");
     for (uint16_t a = 1; a < v->nargs; a++) {
@@ -4830,7 +4865,11 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
             emit_codegen_abort_expr(out);
             return true;
         }
-        fprintf(out, "({ XrValue _inst = xrt_map_new(4); ");
+        const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
+        if (!class_name && call.class_data)
+            class_name = call.class_data->class_name;
+        fprintf(out, "({ ");
+        xicgen_emit_map_instance_alloc(out, class_name);
         emit_fname(ctx, out, call.prefix ? call.prefix : prefix, target);
         fprintf(out, "(NULL, _inst");
         for (uint16_t a = 1; a < v->nargs; a++) {
@@ -5419,6 +5458,15 @@ static bool emit_fixed_array_ref_length_expr(XiCgenCtx *ctx, FILE *out, const Xi
     return true;
 }
 
+static bool xicgen_load_field_receiver_is_map_backed_class(XiCgenCtx *ctx, const XiValue *recv) {
+    const XrType *type = recv ? recv->type : NULL;
+    const char *class_name = type ? xr_type_get_class_name((XrType *) (uintptr_t) type) : NULL;
+    if (!class_name || cg_type_is_json(type))
+        return false;
+    const XiClassData *cd = cg_class_native_data_by_name(ctx, class_name);
+    return cd && !cg_class_native_value_type_data(ctx, recv);
+}
+
 static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_load_field: need object");
@@ -5692,9 +5740,11 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     if (field && emit_class_native_getter_field_expr(ctx, out, f, prefix, v))
         return;
+    bool map_backed_class_field =
+        field && xicgen_load_field_receiver_is_map_backed_class(ctx, v->args[0]);
     int sym = cg_method_sym(field);
     const XiValue *receiver = xicgen_getprop_receiver_value(ctx, v->args[0]);
-    if (sym >= 0) {
+    if (sym >= 0 && !map_backed_class_field) {
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "xrt_getprop(");
@@ -5739,7 +5789,7 @@ static void xicgen_store_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, ", ");
         xicgen_emit_c_string_literal(out, field ? field : "?");
         fprintf(out, ", ");
-        emit_boxed_value_ref(out, v->args[1]);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
     } else {
         fprintf(out, "xrt_setprop_name(");
@@ -5747,7 +5797,7 @@ static void xicgen_store_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, ", ");
         xicgen_emit_c_string_literal(out, field ? field : "?");
         fprintf(out, ", ");
-        emit_boxed_value_ref(out, v->args[1]);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
     }
 }

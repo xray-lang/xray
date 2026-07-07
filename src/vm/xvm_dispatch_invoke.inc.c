@@ -331,8 +331,31 @@ invoke_dispatch:;
         if (method && method->type == XMETHOD_CLOSURE && method->as.closure) {
             XrClosure *closure = method->as.closure;
             XrProto *proto = closure->proto;
+            int frame_argc = nargs + 1;  // includes receiver
 
-            if (nargs + 1 != proto->numparams) {
+            if (proto->is_vararg) {
+                if (XR_UNLIKELY(frame_argc < proto->min_params)) {
+                    XrSymbolTable *_st = (XrSymbolTable *) isolate->core_rt->symbol_table;
+                    const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
+                    VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT,
+                                     "method '%s' expects at least %d arguments but got %d",
+                                     _mn ? _mn : "?", proto->min_params - 1, nargs);
+                }
+                VM_STACK_CHECK(a + 1 + proto->maxstacksize);
+                for (int j = frame_argc; j < proto->numparams; j++) {
+                    R(a + 1 + j) = xr_null();
+                }
+                int extra_args = frame_argc > proto->numparams ? frame_argc - proto->numparams : 0;
+                XrArray *rest_array = xr_array_new(VM_CURRENT_CORO);
+                if (extra_args > 0) {
+                    XrValue *arg_base = &R(a + 1 + proto->numparams);
+                    for (int j = 0; j < extra_args; j++) {
+                        xr_array_push(rest_array, arg_base[j]);
+                    }
+                }
+                R(a + 1 + proto->numparams) = xr_value_from_array(rest_array);
+                frame_argc = proto->numparams + 1;
+            } else if (frame_argc != proto->numparams) {
                 XrSymbolTable *_st = (XrSymbolTable *) isolate->core_rt->symbol_table;
                 const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
                 VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT,
@@ -346,7 +369,7 @@ invoke_dispatch:;
                  * the stack covers ci->base_offset + maxstacksize so
                  * register writes don't bleed into frames[]. */
                 VM_STACK_CHECK(proto->maxstacksize);
-                memmove(base, &R(a + 1), sizeof(XrValue) * (nargs + 1));
+                memmove(base, &R(a + 1), sizeof(XrValue) * (size_t) frame_argc);
                 ci->closure = closure;
                 ci->pc = PROTO_CODE_BASE(proto);
                 VM_SET_STACK_TOP(base + proto->maxstacksize);
@@ -506,14 +529,39 @@ vmcase(OP_INVOKE_DIRECT) {
     if (XR_UNLIKELY(closure == NULL || closure->proto == NULL)) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "direct invoke target is not a closure");
     }
+    XrProto *direct_proto = closure->proto;
+    int frame_argc = nargs + 1;  // includes receiver
+
+    if (direct_proto->is_vararg) {
+        if (XR_UNLIKELY(frame_argc < direct_proto->min_params)) {
+            VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT,
+                             "direct method expects at least %d arguments but got %d",
+                             direct_proto->min_params - 1, nargs);
+        }
+        VM_STACK_CHECK(a + 1 + direct_proto->maxstacksize);
+        for (int j = frame_argc; j < direct_proto->numparams; j++) {
+            R(a + 1 + j) = xr_null();
+        }
+        int extra_args =
+            frame_argc > direct_proto->numparams ? frame_argc - direct_proto->numparams : 0;
+        XrArray *rest_array = xr_array_new(VM_CURRENT_CORO);
+        if (extra_args > 0) {
+            XrValue *arg_base = &R(a + 1 + direct_proto->numparams);
+            for (int j = 0; j < extra_args; j++) {
+                xr_array_push(rest_array, arg_base[j]);
+            }
+        }
+        R(a + 1 + direct_proto->numparams) = xr_value_from_array(rest_array);
+        frame_argc = direct_proto->numparams + 1;
+    }
 
     if (is_tail_direct) {
         // Tail call: reuse current stack frame; callee maxstack may be larger.
-        VM_STACK_CHECK(closure->proto->maxstacksize);
-        memmove(base, &R(a + 1), sizeof(XrValue) * (nargs + 1));
+        VM_STACK_CHECK(direct_proto->maxstacksize);
+        memmove(base, &R(a + 1), sizeof(XrValue) * (size_t) frame_argc);
         ci->closure = closure;
-        ci->pc = PROTO_CODE_BASE(closure->proto);
-        VM_SET_STACK_TOP(base + closure->proto->maxstacksize);
+        ci->pc = PROTO_CODE_BASE(direct_proto);
+        VM_SET_STACK_TOP(base + direct_proto->maxstacksize);
         goto startfunc;
     }
 

@@ -876,6 +876,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             MethodDeclNode *dst = &n->as.method_decl;
             dst->name = clone_str(src->name);
             dst->param_count = src->param_count;
+            dst->required_count = src->required_count;
+            dst->is_variadic = src->is_variadic;
             dst->parameters = clone_str_array(src->parameters, src->param_count);
             dst->param_types = clone_tref_array(src->param_types, src->param_count, map, mc);
             dst->return_type = sub_tref(src->return_type, map, mc);

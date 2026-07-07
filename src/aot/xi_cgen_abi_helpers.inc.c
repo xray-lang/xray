@@ -864,8 +864,11 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     const char *conv_suffix;
 
     if (!target_plan || arg_index >= target_plan->abi.nparams || !target_plan->abi.params) {
-        fprintf(stderr, "[xi_cgen] ERROR: AOT direct-call argument ABI mismatch at v%u\n",
-                call ? call->id : 0);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: AOT direct-call argument ABI mismatch at v%u "
+                "target=%s arg=%u abi_nparams=%u\n",
+                call ? call->id : 0, target && target->name ? target->name : "?",
+                (unsigned) arg_index, target_plan ? (unsigned) target_plan->abi.nparams : 0u);
         ctx->error = true;
         emit_codegen_abort_expr(out);
         return;

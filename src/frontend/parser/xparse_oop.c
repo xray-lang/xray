@@ -897,6 +897,9 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     AstNode **default_values = NULL;
     int param_count = 0;
     int param_capacity = 0;
+    int required_count = 0;
+    bool seen_default = false;
+    bool is_variadic = false;
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
@@ -937,6 +940,26 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                 for (int i = old_capacity; i < param_capacity; i++)
                     _new_defaults[i] = NULL;
                 default_values = _new_defaults;
+            }
+
+            if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
+                xr_parser_consume(parser, TK_NAME, "expected parameter name after ...");
+                parameters[param_count] = token_to_string(parser, &parser->previous);
+                param_passing_modes[param_count] = XR_PARAM_VALUE;
+                param_types[param_count] = NULL;
+                default_values[param_count] = NULL;
+                is_variadic = true;
+
+                if (xr_parser_match(parser, TK_COLON)) {
+                    param_types[param_count] = xr_parse_type_annotation(parser);
+                }
+
+                param_count++;
+                if (xr_parser_check(parser, TK_COMMA)) {
+                    xr_parser_error(parser, "rest parameter must be last");
+                    break;
+                }
+                break;
             }
 
             // Parse parameter name
@@ -984,6 +1007,14 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                 }
             }
 
+            if (default_values[param_count]) {
+                seen_default = true;
+            } else if (seen_default) {
+                xr_parser_error(parser, "required parameter cannot follow optional parameter");
+            } else {
+                required_count++;
+            }
+
             param_count++;
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
@@ -1029,6 +1060,8 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
 
     method_node->as.method_decl.param_passing_modes = param_passing_modes;
     method_node->as.method_decl.default_values = default_values;
+    method_node->as.method_decl.is_variadic = is_variadic;
+    method_node->as.method_decl.required_count = required_count;
 
     // Set generic type parameters
     method_node->as.method_decl.type_param_names = type_param_names;
