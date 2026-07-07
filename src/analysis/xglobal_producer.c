@@ -70,6 +70,7 @@ typedef struct XgPendingBody {
     XgClassId current_class_id;
     XgMethodId owner_method_id;
     uint32_t name_id;
+    uint32_t signature_key;
     uint32_t source_span_id;
     uint8_t kind;
     const AstNode *body;
@@ -399,8 +400,9 @@ static bool producer_reserve_bodies(XgProducer *p, uint32_t needed) {
 static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgModuleId module_id,
                                   XgDeclId owner_decl_id, XgClassId current_class_id,
                                   XgMethodId owner_method_id, uint32_t name_id,
-                                  uint32_t source_span_id, uint8_t kind, const AstNode *body,
-                                  const MethodDeclNode *method, const FunctionDeclNode *function) {
+                                  uint32_t signature_key, uint32_t source_span_id, uint8_t kind,
+                                  const AstNode *body, const MethodDeclNode *method,
+                                  const FunctionDeclNode *function) {
     XgPendingBody *row;
     if (!body)
         return true;
@@ -414,6 +416,7 @@ static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgModuleId mo
     row->current_class_id = current_class_id;
     row->owner_method_id = owner_method_id;
     row->name_id = name_id;
+    row->signature_key = signature_key;
     row->source_span_id = source_span_id;
     row->kind = kind;
     row->body = body;
@@ -1282,6 +1285,7 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     row.owner_class_id = pending->current_class_id;
     row.owner_method_id = pending->owner_method_id;
     row.name_id = pending->name_id;
+    row.signature_key = pending->signature_key;
     row.source_span_id = pending->source_span_id;
     row.kind = pending->kind;
     row.body_hash = hash_ast_shape(pending->body, XR_FNV64_OFFSET_BASIS);
@@ -1349,8 +1353,8 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     if (!producer_register_func(p, fn->name, func_id))
         return false;
     return producer_enqueue_body(p, func_id, module_id, decl_id, XG_NO_ID, XG_NO_ID,
-                                 hash_name32(fn->name), (uint32_t) node->line, XG_BODY_FUNCTION,
-                                 fn->body, NULL, fn);
+                                 hash_name32(fn->name), decl.signature_key, (uint32_t) node->line,
+                                 XG_BODY_FUNCTION, fn->body, NULL, fn);
 }
 
 static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNode *node,
@@ -1401,7 +1405,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             return false;
         method_count++;
         if (!producer_enqueue_body(p, method_func_id, module_id, decl_id, class_id,
-                                   method.method_id, hash_name32(m->name),
+                                   method.method_id, hash_name32(m->name), method.signature_key,
                                    (uint32_t) method_node->line, XG_BODY_METHOD, m->body, m, NULL))
             return false;
     }
@@ -1535,8 +1539,8 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
     if (has_module_body) {
         XgFuncId module_func_id = producer_next_func_id(p);
         if (!producer_enqueue_body(p, module_func_id, module_id, XG_NO_ID, XG_NO_ID, XG_NO_ID,
-                                   hash_name32("<module-init>"), 0, XG_BODY_MODULE_INIT, ast, NULL,
-                                   NULL))
+                                   hash_name32("<module-init>"), 0, 0, XG_BODY_MODULE_INIT, ast,
+                                   NULL, NULL))
             return false;
     }
     return true;

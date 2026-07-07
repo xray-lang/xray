@@ -201,6 +201,7 @@ typedef struct XgBodySummary {
     XgClassId owner_class_id;
     XgMethodId owner_method_id;
     uint32_t name_id;
+    uint32_t signature_key;
     uint32_t source_span_id;
     uint8_t kind;
     uint64_t body_hash;
