@@ -23,6 +23,7 @@
 
 static XrVMRuntime *g_iso = NULL;
 static XrCompilerSession *g_session = NULL;
+static XrType stub_int_type = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 
 static void setup_parser_session(void) {
     if (g_iso)
@@ -542,6 +543,147 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     xaot_bundle_free(&missing);
 
     xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_attaches_callsite_ids_to_xi_calls) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x31,
+                      .compiler_semver_hash = 0x32,
+                      .profile_hash = 0x33,
+                      .imported_summary_hash = 0x34,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    uint32_t shape_name_id = xg_name_id("Shape");
+    uint32_t draw_name_id = xg_name_id("draw");
+    XgClassSummary cls = {.class_id = 1,
+                          .module_id = 1,
+                          .decl_id = 1,
+                          .name_id = shape_name_id,
+                          .parent_class_id = XG_NO_ID,
+                          .flags = XG_CLASS_INFERRED_FINAL,
+                          .method_start = 1,
+                          .method_count = 1,
+                          .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary method = {.method_id = 1,
+                              .owner_class_id = 1,
+                              .name_id = draw_name_id,
+                              .signature_key = 701,
+                              .override_of = XG_NO_ID,
+                              .default_arg_contract_id = XG_NO_ID};
+    XgCallsiteSummary call = {.callsite_id = 7,
+                              .owner_func_id = 9,
+                              .source_span_id = 42,
+                              .kind = XG_CALL_METHOD,
+                              .receiver_static_class_id = 1,
+                              .method_id = 1,
+                              .method_name_id = draw_name_id,
+                              .arg_count = 1};
+
+    XiFunc *init = xi_func_new("init", &stub_int_type);
+    ASSERT_NOT_NULL(init);
+    XiBlock *entry = xi_block_new(init);
+    ASSERT_NOT_NULL(entry);
+    XiValue *xi_call = xi_value_new(init, entry, XI_CALL_METHOD, &stub_int_type, 2);
+    ASSERT_NOT_NULL(xi_call);
+    xi_call->aux = (void *) "draw";
+    xi_call->line = 42;
+
+    XiModule module;
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = init;
+    XiModule *modules[1] = {&module};
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(xi_call->xg_callsite_id, call.callsite_id);
+    ASSERT_EQ_PTR(xaot_bundle_find_method_dispatch_plan_for_xi_call(&bundle, xi_call),
+                  &bundle.method_dispatch_plans[0]);
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    xi_func_free(init);
+}
+
+TEST(global_evidence_leaves_ambiguous_xi_callsite_unbound) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x41,
+                      .compiler_semver_hash = 0x42,
+                      .profile_hash = 0x43,
+                      .imported_summary_hash = 0x44,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    uint32_t shape_name_id = xg_name_id("Shape");
+    uint32_t draw_name_id = xg_name_id("draw");
+    XgClassSummary cls = {.class_id = 1,
+                          .module_id = 1,
+                          .decl_id = 1,
+                          .name_id = shape_name_id,
+                          .parent_class_id = XG_NO_ID,
+                          .flags = XG_CLASS_INFERRED_FINAL,
+                          .method_start = 1,
+                          .method_count = 1,
+                          .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary method = {.method_id = 1,
+                              .owner_class_id = 1,
+                              .name_id = draw_name_id,
+                              .signature_key = 701,
+                              .override_of = XG_NO_ID,
+                              .default_arg_contract_id = XG_NO_ID};
+    XgCallsiteSummary call1 = {.callsite_id = 1,
+                               .owner_func_id = 9,
+                               .source_span_id = 42,
+                               .kind = XG_CALL_METHOD,
+                               .receiver_static_class_id = 1,
+                               .method_id = 1,
+                               .method_name_id = draw_name_id,
+                               .arg_count = 1};
+    XgCallsiteSummary call2 = call1;
+    call2.callsite_id = 2;
+    call2.owner_func_id = 10;
+
+    XiFunc *init = xi_func_new("init", &stub_int_type);
+    ASSERT_NOT_NULL(init);
+    XiBlock *entry = xi_block_new(init);
+    ASSERT_NOT_NULL(entry);
+    XiValue *xi_call = xi_value_new(init, entry, XI_CALL_METHOD, &stub_int_type, 2);
+    ASSERT_NOT_NULL(xi_call);
+    xi_call->aux = (void *) "draw";
+    xi_call->line = 42;
+
+    XiModule module;
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = init;
+    XiModule *modules[1] = {&module};
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call1));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call2));
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(xi_call->xg_callsite_id, XG_NO_ID);
+    ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&bundle, xi_call));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    xi_func_free(init);
 }
 
 TEST(global_evidence_lowers_interface_call_to_type_switch) {
@@ -1566,6 +1708,8 @@ RUN_TEST(global_evidence_hash_is_content_stable);
 RUN_TEST(global_evidence_dump_lists_core_rows);
 RUN_TEST(global_evidence_lowers_to_aot_class_plans);
 RUN_TEST(global_evidence_verifier_rederives_dispatch_plans);
+RUN_TEST(global_evidence_attaches_callsite_ids_to_xi_calls);
+RUN_TEST(global_evidence_leaves_ambiguous_xi_callsite_unbound);
 RUN_TEST(global_evidence_lowers_interface_call_to_type_switch);
 RUN_TEST(global_evidence_verifier_rederives_class_graph_flags);
 RUN_TEST(global_evidence_verifier_rederives_method_override_graph);

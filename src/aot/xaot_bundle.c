@@ -809,6 +809,42 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     return true;
 }
 
+static void xaot_bundle_bind_callsite_ids_in_func(XaotBundle *bundle, XiFunc *func) {
+    if (!bundle || !func)
+        return;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *blk = func->blocks ? func->blocks[bi] : NULL;
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *value = blk->values ? blk->values[vi] : NULL;
+            const XaotMethodDispatchPlan *plan;
+            if (!value || (value->op != XI_CALL_METHOD && value->op != XI_CALL_METHOD_DIRECT) ||
+                value->xg_callsite_id != XG_NO_ID)
+                continue;
+            plan = xaot_bundle_find_method_dispatch_plan_for_xi_call(bundle, value);
+            if (plan)
+                value->xg_callsite_id = plan->callsite_id;
+        }
+    }
+    for (uint16_t ci = 0; ci < func->nchildren; ci++)
+        xaot_bundle_bind_callsite_ids_in_func(bundle, func->children ? func->children[ci] : NULL);
+}
+
+static void xaot_bundle_bind_xi_callsite_ids(XaotBundle *bundle) {
+    if (!bundle || !bundle->modules)
+        return;
+    for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+        XiModule *module = bundle->modules[mi];
+        if (!module)
+            continue;
+        xaot_bundle_bind_callsite_ids_in_func(bundle, module->init);
+        for (uint16_t fi = 0; fi < module->nfuncs; fi++)
+            xaot_bundle_bind_callsite_ids_in_func(bundle,
+                                                  module->functions ? module->functions[fi] : NULL);
+    }
+}
+
 XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     uint32_t i;
     if (!bundle)
@@ -853,7 +889,10 @@ XR_FUNC bool xaot_bundle_set_global_evidence(XaotBundle *bundle, const XgGlobalE
     bundle->global_evidence_plan.evidence = evidence;
     bundle->global_evidence_plan.evidence_hash = xg_global_evidence_hash(evidence);
     bundle->global_evidence_plan.profile = profile;
-    return xaot_bundle_populate_global_lowered_plans(bundle, evidence);
+    if (!xaot_bundle_populate_global_lowered_plans(bundle, evidence))
+        return false;
+    xaot_bundle_bind_xi_callsite_ids(bundle);
+    return true;
 }
 
 XR_FUNC const XaotClassHierarchyPlan *
