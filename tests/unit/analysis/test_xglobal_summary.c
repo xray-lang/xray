@@ -2026,6 +2026,38 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence extern callsite identity is stale"));
     xaot_bundle_free(&extern_stale_bundle);
     xg_global_evidence_free(&extern_stale_ev);
+
+    XgGlobalEvidence extern_missing_decl_ev;
+    XgBuildKey extern_missing_decl_key = key;
+    XgBodySummary extern_missing_decl_body = body;
+    XgCallsiteSummary extern_missing_decl_call = call;
+    extern_missing_decl_key.source_hash = 0x82;
+    extern_missing_decl_body.callsite_start = 1;
+    extern_missing_decl_body.callsite_count = 1;
+    extern_missing_decl_call.kind = XG_CALL_EXTERN;
+    extern_missing_decl_call.static_target_func_id = XG_NO_ID;
+    extern_missing_decl_call.method_id = 444;
+    extern_missing_decl_call.method_name_id = 444;
+    xg_global_evidence_init(&extern_missing_decl_ev, extern_missing_decl_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&extern_missing_decl_ev, &decl));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_body(&extern_missing_decl_ev, &extern_missing_decl_body));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_callsite(&extern_missing_decl_ev, &extern_missing_decl_call));
+
+    XaotBundle extern_missing_decl_bundle;
+    memset(&extern_missing_decl_bundle, 0, sizeof(extern_missing_decl_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&extern_missing_decl_bundle,
+                                                &extern_missing_decl_ev, XG_BUILD_NATIVE_RELEASE));
+    extern_missing_decl_bundle.modules = modules;
+    extern_missing_decl_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&extern_missing_decl_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&extern_missing_decl_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence extern callsite declaration is missing"));
+    xaot_bundle_free(&extern_missing_decl_bundle);
+    xg_global_evidence_free(&extern_missing_decl_ev);
 }
 
 TEST(global_evidence_verifier_rederives_method_body_signature) {
@@ -2618,6 +2650,26 @@ TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls
     ASSERT_EQ_UINT(ev.callsites[0].static_target_func_id, XG_NO_ID);
     ASSERT_TRUE(ev.callsites[0].method_id != XG_NO_ID);
     ASSERT_TRUE(ev.callsites[0].method_name_id != 0);
+
+    XiFunc init_func;
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    XiModule module;
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    XiModule *modules[1] = {&module};
+    XaotBundle bundle;
+    char err[256];
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
     teardown_parser_session();
