@@ -107,7 +107,6 @@ void xr_core_init(XrVMRuntime *X) {
     X->core->cfunctionClass = xr_class_new(X, TYPE_NAME_CFUNCTION, X->core->functionClass);
 
     X->core->enumClass = xr_class_new(X, CLASS_NAME_ENUM, X->core->objectClass);
-    xr_class_mark_abstract(X->core->enumClass);
 
     xr_stringbuilder_register_class(X);
 

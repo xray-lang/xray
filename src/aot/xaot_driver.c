@@ -41,6 +41,7 @@
 #include "xaot_link.h"
 #include "xaot_prepare.h"
 #include "xaot_verify.h"
+#include "../analysis/xglobal_producer.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_mono.h"
 #include "../toolchain/xcompiler_session.h"
@@ -794,12 +795,12 @@ static int report_analyzer_diagnostics(XaAnalyzer *analyzer, const char *fallbac
 
 XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildResult *result) {
     return xaot_build_ex(input_path, emit_plan_dump, true, XAOT_BUILD_PROFILE_HOSTED,
-                         XI_CGEN_TYPE_NAMES_ALL, result);
+                         XI_CGEN_TYPE_NAMES_ALL, false, result);
 }
 
 XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit_program_main,
                           XaotBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
-                          XaotBuildResult *result) {
+                          bool emit_global_evidence_dump, XaotBuildResult *result) {
     XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
     XR_DCHECK(result != NULL, "xaot_build: NULL result");
     memset(result, 0, sizeof(*result));
@@ -945,12 +946,16 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     XiModule **modules = (XiModule **) xr_calloc(nmodules, sizeof(XiModule *));
     XaotBundle aot_bundle;
     bool aot_bundle_initialized = false;
+    XgGlobalEvidence global_evidence;
+    bool global_evidence_initialized = false;
     XaotPrepareStats prepare_stats;
     char *plan_dump = NULL;
+    char *global_evidence_dump = NULL;
     char *c_export_header = NULL;
     XaotLinkManifest link_manifest;
     bool link_manifest_initialized = false;
     memset(&aot_bundle, 0, sizeof(aot_bundle));
+    memset(&global_evidence, 0, sizeof(global_evidence));
     memset(&prepare_stats, 0, sizeof(prepare_stats));
     memset(&link_manifest, 0, sizeof(link_manifest));
     if (!pres_arr || !ir_funcs || !modules) {
@@ -1009,11 +1014,31 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     }
 
     /* --- AOT target prepare: build sidecar rep/ABI plan before C emission --- */
+    if (!xg_global_evidence_build_from_module_graph(&global_evidence, graph,
+                                                    profile == XAOT_BUILD_PROFILE_FREESTANDING
+                                                        ? XG_BUILD_FREESTANDING
+                                                        : XG_BUILD_NATIVE_RELEASE)) {
+        fprintf(stderr, "Error: failed to build global evidence\n");
+        goto fail_free_ir;
+    }
+    global_evidence_initialized = true;
+    if (emit_global_evidence_dump) {
+        global_evidence_dump = xg_global_evidence_dump(&global_evidence);
+        if (!global_evidence_dump) {
+            fprintf(stderr, "Error: failed to dump global evidence\n");
+            goto fail_free_ir;
+        }
+    }
     if (!xaot_bundle_init(&aot_bundle, modules, (uint32_t) nmodules, (uint32_t) entry_index)) {
         fprintf(stderr, "Error: failed to initialize AOT bundle plan\n");
         goto fail_free_ir;
     }
     aot_bundle_initialized = true;
+    if (!xaot_bundle_set_global_evidence(&aot_bundle, &global_evidence,
+                                         global_evidence.key.profile)) {
+        fprintf(stderr, "Error: failed to attach global evidence plan\n");
+        goto fail_free_ir;
+    }
     if (!xaot_prepare_bundle(&aot_bundle, &prepare_stats)) {
         fprintf(stderr, "Error: AOT prepare failed: %s\n",
                 aot_bundle.error_msg ? aot_bundle.error_msg : "?");
@@ -1153,6 +1178,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
 
     xaot_bundle_free(&aot_bundle);
     aot_bundle_initialized = false;
+    xg_global_evidence_free(&global_evidence);
+    global_evidence_initialized = false;
 
     /* Free IR and module metadata (no longer needed after C generation) */
     for (int m = 0; m < nmodules; m++) {
@@ -1172,6 +1199,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     result->n_sources = n_sources;
     result->plan_dump = plan_dump;
     plan_dump = NULL;
+    result->global_evidence_dump = global_evidence_dump;
+    global_evidence_dump = NULL;
     result->c_export_header = c_export_header;
     c_export_header = NULL;
     result->link_manifest = link_manifest;
@@ -1196,11 +1225,14 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
 
 fail_free_ir:
     xr_free(plan_dump);
+    xr_free(global_evidence_dump);
     xr_free(c_export_header);
     if (link_manifest_initialized)
         xaot_link_manifest_free(&link_manifest);
     if (aot_bundle_initialized)
         xaot_bundle_free(&aot_bundle);
+    if (global_evidence_initialized)
+        xg_global_evidence_free(&global_evidence);
     for (int m = 0; m < nmodules; m++) {
         if (modules)
             xi_module_free(modules[m]);
@@ -1246,6 +1278,7 @@ XR_FUNC void xaot_build_result_free(XaotBuildResult *result) {
         xr_free(result->sources);
     }
     xr_free(result->plan_dump);
+    xr_free(result->global_evidence_dump);
     xr_free(result->c_export_header);
     xaot_link_manifest_free(&result->link_manifest);
     memset(result, 0, sizeof(*result));

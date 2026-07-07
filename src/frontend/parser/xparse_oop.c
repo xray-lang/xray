@@ -76,6 +76,26 @@ static bool current_is_removed_public_modifier(Parser *parser) {
            peek.type == TK_FINAL;
 }
 
+static bool current_is_removed_oop_modifier(Parser *parser, const char **out_name) {
+    const char *name = NULL;
+    if (xr_parser_check_name(parser, "open")) {
+        name = "open";
+    } else if (xr_parser_check_name(parser, "virtual")) {
+        name = "virtual";
+    } else {
+        return false;
+    }
+
+    Scanner saved = parser->scanner;
+    Token peek = xr_scanner_scan(&saved);
+    if (peek.type != TK_NAME && peek.type != TK_STATIC && peek.type != TK_PRIVATE &&
+        peek.type != TK_PROTECTED && peek.type != TK_CONSTRUCTOR && peek.type != TK_OPERATOR)
+        return false;
+    if (out_name)
+        *out_name = name;
+    return true;
+}
+
 /* ========== Local Cleanup Helpers ========== */
 
 // All parser allocations now go through the parse arena; individual frees
@@ -97,8 +117,6 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     int line = parser->previous.line;
 
     // 'class' keyword already consumed
-
-    bool is_abstract = false;
 
     // Parse class name
     xr_parser_consume(parser, TK_NAME, "expected class name");
@@ -307,7 +325,6 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     class_node->as.class_decl.super_module = super_module;
     class_node->as.class_decl.interfaces = interfaces;
     class_node->as.class_decl.interface_count = interface_count;
-    class_node->as.class_decl.is_abstract = is_abstract;
 
     // Set generic type parameters
     class_node->as.class_decl.type_params = type_params;
@@ -602,8 +619,7 @@ AstNode *xr_parse_union_declaration(Parser *parser) {
 
         AstNode *initializer = NULL;
         if (xr_parser_match(parser, TK_ASSIGN)) {
-            xr_parser_error_at_previous(parser,
-                                        "union fields cannot have default initializers");
+            xr_parser_error_at_previous(parser, "union fields cannot have default initializers");
             initializer = xr_parse_expression(parser);
             parser->panic_mode = 0;
         }
@@ -622,8 +638,8 @@ AstNode *xr_parse_union_declaration(Parser *parser) {
     int union_end_line = parser->previous.line;
     int union_end_column = parser->previous.column + 1;
 
-    AstNode *union_node = xr_ast_union_decl(parser->compiler_session, union_name, fields,
-                                            field_count, line);
+    AstNode *union_node =
+        xr_ast_union_decl(parser->compiler_session, union_name, fields, field_count, line);
     union_node->column = name_column;
     union_node->end_line = union_end_line;
     union_node->end_column = union_end_column;
@@ -650,9 +666,6 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     (void) is_getter;
     bool is_setter = false;
     (void) is_setter;
-    bool is_abstract = false;
-    bool is_override = false;
-    bool is_final = false;
     bool is_const = false;
 
     if (current_is_removed_public_modifier(parser)) {
@@ -661,12 +674,30 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         xr_parser_advance(parser);
     }
 
-    if (xr_parser_match(parser, TK_OVERRIDE)) {
-        is_override = true;
-    }
-
-    if (xr_parser_match(parser, TK_ABSTRACT)) {
-        is_abstract = true;
+    for (;;) {
+        const char *removed_name = NULL;
+        if (xr_parser_match(parser, TK_OVERRIDE)) {
+            xr_parser_error(
+                parser, "'override' was removed; overrides are inferred by exact method signature");
+            continue;
+        }
+        if (xr_parser_match(parser, TK_ABSTRACT)) {
+            xr_parser_error(parser, "'abstract' was removed; use an interface for contracts");
+            continue;
+        }
+        if (xr_parser_match(parser, TK_FINAL)) {
+            xr_parser_error(parser, "'final' applies only to class declarations");
+            continue;
+        }
+        if (current_is_removed_oop_modifier(parser, &removed_name)) {
+            char msg[128];
+            snprintf(msg, sizeof(msg), "'%s' was removed; class dispatch strategy is inferred",
+                     removed_name);
+            xr_parser_error_at_current(parser, msg);
+            xr_parser_advance(parser);
+            continue;
+        }
+        break;
     }
 
     if (xr_parser_match(parser, TK_PRIVATE)) {
@@ -683,14 +714,12 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
             *is_method_out = true;
             xr_parser_advance(parser);  // consume 'constructor'
             AstNode *method = xr_parse_static_constructor(parser, is_private);
-            if (method)
-                method->as.method_decl.is_override = is_override;
             return method;
         }
     }
 
     if (xr_parser_match(parser, TK_FINAL)) {
-        is_final = true;
+        xr_parser_error(parser, "'final' applies only to class declarations");
     }
 
     // `const` marks an immutable field (assignable only in the constructor).
@@ -702,7 +731,6 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         *is_method_out = true;
         AstNode *method = xr_parse_operator_method(parser, is_private, is_static);
         if (method) {
-            method->as.method_decl.is_override = is_override;
             method->as.method_decl.is_protected = is_protected;
         }
         return method;
@@ -733,36 +761,22 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         name_length = parser->previous.length;
     }
 
-    // Distinguish field and method: check for '(' or '<' (generic) or override modifier
-    if (xr_parser_check(parser, TK_LPAREN) || xr_parser_check(parser, TK_LT) || is_constructor ||
-        is_override) {
-        // Method: has parameter list or generic type params or override modifier
+    // Distinguish field and method: methods have a parameter list, generic params, or constructor.
+    if (xr_parser_check(parser, TK_LPAREN) || xr_parser_check(parser, TK_LT) || is_constructor) {
+        // Method: has parameter list or generic type params.
         *is_method_out = true;
         if (is_const) {
             xr_parser_error_at_current(parser, "'const' applies to fields, not methods; remove it");
         }
         AstNode *method = xr_parse_method_declaration(parser, name, name_line, name_column,
-                                                      is_private, is_static, is_abstract);
+                                                      is_private, is_static);
         if (method) {
-            method->as.method_decl.is_override = is_override;
-            method->as.method_decl.is_final = is_final;
             method->as.method_decl.is_protected = is_protected;
         }
         return method;
     } else {
         // Field: has type annotation or initializer
         *is_method_out = false;
-
-        // 'override' can only be used for methods
-        if (is_override) {
-            xr_parser_error_at_current(parser, "'override' modifier can only be used for methods");
-        }
-
-        // 'final' marks classes/methods as sealed; immutable fields use 'const'.
-        if (is_final) {
-            xr_parser_error_at_current(
-                parser, "'final' applies to classes/methods; use 'const' for an immutable field");
-        }
 
         // Parse type annotation (optional)
         XrTypeRef *field_type = NULL;
@@ -790,7 +804,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         AstNode *field = xr_ast_field_decl(parser->compiler_session, name, field_type, is_private,
                                            is_static, initializer, name_line);
         if (field) {
-            field->as.field_decl.is_final = is_final;
+            field->as.field_decl.is_final = false;
             field->as.field_decl.is_protected = is_protected;
             field->as.field_decl.is_const = is_const;
             field->column = name_column;
@@ -819,8 +833,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 // @param is_private whether private
 // @param is_static whether static
 AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_line,
-                                     int name_column, bool is_private, bool is_static,
-                                     bool is_abstract) {
+                                     int name_column, bool is_private, bool is_static) {
     XR_DCHECK(parser != NULL, "parse_method_declaration: NULL parser");
     int line = name_line;
 
@@ -858,6 +871,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     char **parameters = NULL;
     XrTypeRef **param_types = NULL;
     uint8_t *param_passing_modes = NULL;
+    AstNode **default_values = NULL;
     int param_count = 0;
     int param_capacity = 0;
 
@@ -890,6 +904,16 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                            sizeof(uint8_t) * (size_t) old_capacity);
                 }
                 param_passing_modes = _new_modes;
+
+                AstNode **_new_defaults = (AstNode **) ast_alloc_array(
+                    parser->compiler_session, sizeof(AstNode *), (size_t) param_capacity);
+                if (old_capacity > 0 && default_values) {
+                    memcpy(_new_defaults, default_values,
+                           sizeof(AstNode *) * (size_t) old_capacity);
+                }
+                for (int i = old_capacity; i < param_capacity; i++)
+                    _new_defaults[i] = NULL;
+                default_values = _new_defaults;
             }
 
             // Parse parameter name
@@ -907,6 +931,34 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                 param_types[param_count] = xr_parse_type_annotation(parser);
             } else {
                 param_types[param_count] = NULL;
+            }
+
+            if (xr_parser_match(parser, TK_ASSIGN)) {
+                default_values[param_count] = xr_parse_expression(parser);
+                if (param_types[param_count] == NULL && default_values[param_count] != NULL) {
+                    AstNode *dv = default_values[param_count];
+                    switch (dv->type) {
+                        case AST_LITERAL_INT:
+                            param_types[param_count] = xr_tref_int(parser->compiler_session);
+                            break;
+                        case AST_LITERAL_FLOAT:
+                            param_types[param_count] = xr_tref_float(parser->compiler_session);
+                            break;
+                        case AST_LITERAL_STRING:
+                        case AST_TEMPLATE_STRING:
+                            param_types[param_count] = xr_tref_string(parser->compiler_session);
+                            break;
+                        case AST_LITERAL_TRUE:
+                        case AST_LITERAL_FALSE:
+                            param_types[param_count] = xr_tref_bool(parser->compiler_session);
+                            break;
+                        case AST_LITERAL_NULL:
+                            param_types[param_count] = xr_tref_null(parser->compiler_session);
+                            break;
+                        default:
+                            break;
+                    }
+                }
             }
 
             param_count++;
@@ -927,8 +979,8 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     }
 
     AstNode *body = NULL;
-    if (is_abstract || parser->parsing_native_class) {
-        // Abstract or @native method has no body, semicolon optional
+    if (parser->parsing_native_class) {
+        // @native method has no Xray body, semicolon optional.
         xr_parser_match(parser, TK_SEMICOLON);
     } else {
         // Normal method has body
@@ -947,35 +999,19 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
         method_node->end_line = body->end_line;
         method_node->end_column = body->end_column;
     } else {
-        // Abstract method: no body — span is the identifier token.
+        // Native method: no body — span is the identifier token.
         method_node->end_line = name_line;
         method_node->end_column = name_column + (int) strlen(name);
     }
 
-    // Set whether this is an abstract method
-    method_node->as.method_decl.is_abstract = is_abstract;
     method_node->as.method_decl.param_passing_modes = param_passing_modes;
+    method_node->as.method_decl.default_values = default_values;
 
     // Set generic type parameters
     method_node->as.method_decl.type_param_names = type_param_names;
     method_node->as.method_decl.type_param_count = type_param_count;
 
     return method_node;
-
-fail:
-    // Release the heap state we still own locally. XrType pointers come
-    // from the type pool and are not freed here. `name` was heap-allocated
-    // by our caller (xr_parse_field_declaration) but ownership is only
-    // transferred on success; on failure we consume it here.
-    if (type_param_names) {
-        for (int i = 0; i < type_param_count; i++) {
-        }
-    }
-    if (parameters) {
-        for (int i = 0; i < param_count; i++) {
-        }
-    }
-    return NULL;
 }
 
 /* ========== New Expression Parsing ========== */
@@ -1820,15 +1856,6 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     // takes ownership of member_name, parameters[] and param_types[].
     return xr_ast_interface_method(parser->compiler_session, member_name, parameters, param_types,
                                    param_count, return_type, member_line);
-
-fail:
-    // On OOM we still own member_name and any accumulated parameter names.
-    // XrType pointers are shared via the type pool and are not freed here.
-    if (parameters) {
-        for (int i = 0; i < param_count; i++) {
-        }
-    }
-    return NULL;
 }
 
 /* ========== Enum Declaration Parsing ========== */
@@ -1941,9 +1968,7 @@ static AstNode *parse_enum_method(Parser *parser, bool is_static) {
     int name_col = parser->previous.column;
 
     return xr_parse_method_declaration(parser, name, name_line, name_col,
-                                       /* is_private */ false,
-                                       /* is_static */ is_static,
-                                       /* is_abstract */ false);
+                                       /* is_private */ false, /* is_static */ is_static);
 }
 
 // Parse enum declaration (safe tagged aggregate)
@@ -2075,9 +2100,8 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
             (void) xr_parse_expression(parser);
         }
 
-        AstNode *member =
-            xr_ast_enum_member(parser->compiler_session, member_name, payload_names, payload_types,
-                               payload_count, member_line);
+        AstNode *member = xr_ast_enum_member(parser->compiler_session, member_name, payload_names,
+                                             payload_types, payload_count, member_line);
         member->column = member_col;
         member->end_line = member_line;
         member->end_column = member_col + member_name_len;

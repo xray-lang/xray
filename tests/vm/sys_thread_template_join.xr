@@ -1,0 +1,6 @@
+import sys
+
+var t = sys.Thread.spawn(fn() -> int {
+    return 41 + 1
+})
+print("joined ${t.join()}")

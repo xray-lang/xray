@@ -174,7 +174,7 @@ struct XaSymbol {
     bool is_static;            // static member
     bool is_private;           // private member (class-only visibility)
     bool is_protected;         // protected member (class + subclass visibility)
-    bool is_override;          // explicit override modifier on a method
+    bool is_override;          // analyzer-inferred exact-signature method override
     bool is_shared;            // shared variable
     bool is_imported;          // selective import binding; kind remains the exported semantic kind
     bool is_builtin;           // built-in type member (Array.push, etc.)

@@ -39,7 +39,9 @@ static int tests_failed = 0;
 
 typedef struct TestAotPlan {
     XaotBundle bundle;
+    XgGlobalEvidence evidence;
     bool initialized;
+    bool evidence_initialized;
 } TestAotPlan;
 
 #define TEST_REQUIRE(cond, msg)                                                                    \
@@ -84,6 +86,17 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
     TEST_REQUIRE(xaot_bundle_init(&plan->bundle, modules, nmodules, entry_module),
                  "AOT bundle init failed");
     plan->initialized = true;
+    XgBuildKey key = {.source_hash = 0,
+                      .compiler_semver_hash = 0x171,
+                      .profile_hash = 0,
+                      .imported_summary_hash = 0,
+                      .module_id = entry_module + 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    xg_global_evidence_init(&plan->evidence, key);
+    plan->evidence_initialized = true;
+    TEST_REQUIRE(
+        xaot_bundle_set_global_evidence(&plan->bundle, &plan->evidence, XG_BUILD_NATIVE_RELEASE),
+        "AOT global evidence attach failed");
     TEST_REQUIRE(xaot_prepare_bundle(&plan->bundle, NULL), "AOT prepare failed");
     if (!xaot_verify_bundle(&plan->bundle, XAOT_VERIFY_AOT_READY, verify_err, sizeof(verify_err))) {
         fprintf(stderr, "  AOT verify error: %s\n", verify_err);
@@ -94,6 +107,8 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
 static void test_aot_plan_free(TestAotPlan *plan) {
     if (plan && plan->initialized)
         xaot_bundle_free(&plan->bundle);
+    if (plan && plan->evidence_initialized)
+        xg_global_evidence_free(&plan->evidence);
 }
 
 /* Compile source to Xi IR (without emitting bytecode). */

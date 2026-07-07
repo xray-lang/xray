@@ -1,5 +1,5 @@
 // 0890_final.xr
-// Test: final keyword for classes and methods
+// Test: final keyword for classes only
 
 // ===== Final class basic usage =====
 
@@ -25,10 +25,10 @@ fn test_final_class_basic() {
     assert_eq(cfg.getName(), "host")
 }
 
-// ===== Final method =====
+// ===== Inherited method and automatic override =====
 
 class Base {
-    final greet() -> string {
+    greet() -> string {
         return "hello from Base"
     }
 
@@ -86,10 +86,10 @@ fn test_final_class_with_parent() {
     assert_eq(cat.name, "Kitty")
 }
 
-// ===== Final method with static =====
+// ===== Static method =====
 
 class MathUtil {
-    static final pi() -> float {
+    static pi() -> float {
         return 3.14159
     }
 
@@ -104,7 +104,7 @@ fn test_final_static_method() {
     assert_eq(MathUtil.compute(5.0), 10.0)
 }
 
-// ===== Final field =====
+// ===== Const field =====
 
 class Settings {
     const maxRetries: int = 3
@@ -126,7 +126,7 @@ fn test_final_field() {
 class Service {
     private const secret: string = "key123"
     
-    final getSecret() -> string {
+    getSecret() -> string {
         return this.secret
     }
 

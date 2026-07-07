@@ -1,0 +1,5 @@
+class Shape {
+    abstract area() -> float {
+        return 0.0
+    }
+}

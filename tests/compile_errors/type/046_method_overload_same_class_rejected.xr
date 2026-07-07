@@ -1,0 +1,9 @@
+class Service {
+    run(x: int) -> int {
+        return x
+    }
+
+    run(x: string) -> string {
+        return x
+    }
+}

@@ -801,11 +801,6 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrVMRuntime *isolate, XrVMContext *vm_c
     const char *method_name_chars = xr_symbol_get_name_in_table(_st, method_symbol);
 
     if (strcmp(method_name_chars, XR_KEYWORD_CONSTRUCTOR) == 0) {
-        if (!xr_class_can_instantiate(cls)) {
-            VM_THROW(frame, pc, XR_ERR_TYPE_NO_CALL, "cannot instantiate abstract class '%s'",
-                     cls->name);
-        }
-
         XrInstance *inst = xr_instance_new(isolate, cls);
         XrValue inst_val = xr_value_from_instance(inst);
 

@@ -126,7 +126,6 @@ static bool finalize_static_fields(const XrClassBuilder *b, XrClass *cls);
 static void finalize_static_methods(const XrClassBuilder *b, XrClass *cls, int flat_instance_count,
                                     int total_method_count);
 static bool finalize_interfaces(const XrClassBuilder *b, XrClass *cls);
-static bool finalize_abstract_methods(const XrClassBuilder *b, XrClass *cls);
 static bool finalize_method_symbol_map(XrClass *cls);
 static void finalize_type_identity(XrClassBuilder *b, XrClass *cls);
 static void write_method_slot(XrMethod *method, XrMethodBuildItem *item, bool is_static);
@@ -214,8 +213,7 @@ XrClass *xr_class_builder_finalize(XrClassBuilder *builder) {
         return NULL;
     }
     finalize_static_methods(builder, cls, flat_instance_count, total_method_count);
-    if (!finalize_interfaces(builder, cls) || !finalize_abstract_methods(builder, cls) ||
-        !finalize_method_symbol_map(cls)) {
+    if (!finalize_interfaces(builder, cls) || !finalize_method_symbol_map(cls)) {
         xr_class_free(cls);
         return NULL;
     }
@@ -446,9 +444,9 @@ static void write_method_slot(XrMethod *method, XrMethodBuildItem *item, bool is
     }
 
     uint32_t flag_mask =
-        is_static ? (XMETHOD_FLAG_PRIVATE | XMETHOD_FLAG_ABSTRACT | XMETHOD_FLAG_FINAL)
+        is_static ? (XMETHOD_FLAG_PRIVATE | XMETHOD_FLAG_PROTECTED | XMETHOD_FLAG_NATIVE)
                   : (XMETHOD_FLAG_PRIVATE | XMETHOD_FLAG_STATIC | XMETHOD_FLAG_CONSTRUCTOR |
-                     XMETHOD_FLAG_ABSTRACT | XMETHOD_FLAG_FINAL);
+                     XMETHOD_FLAG_PROTECTED | XMETHOD_FLAG_NATIVE);
     method->flags = item->flags & flag_mask;
     if (is_static)
         method->flags |= XMETHOD_FLAG_STATIC;
@@ -544,21 +542,6 @@ static bool finalize_interfaces(const XrClassBuilder *b, XrClass *cls) {
         return false;
     memcpy(cls->interfaces, b->interfaces, b->interface_count * sizeof(XrClass *));
     cls->interface_count = b->interface_count;
-    return true;
-}
-
-// Abstract method symbol list. Returns false on alloc failure: dropping
-// the list would make an abstract class instantiable
-// (xr_class_can_instantiate treats count == 0 as "no abstract methods").
-static bool finalize_abstract_methods(const XrClassBuilder *b, XrClass *cls) {
-    if (b->abstract_method_count == 0)
-        return true;
-
-    cls->abstract_methods = (int *) xr_malloc(b->abstract_method_count * sizeof(int));
-    if (cls->abstract_methods == NULL)
-        return false;
-    memcpy(cls->abstract_methods, b->abstract_methods, b->abstract_method_count * sizeof(int));
-    cls->abstract_method_count = b->abstract_method_count;
     return true;
 }
 

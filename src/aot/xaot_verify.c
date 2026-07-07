@@ -372,6 +372,149 @@ static bool verify_alias_plan(const XaotBundle *bundle, const XaotAliasPlan *pla
     return true;
 }
 
+static bool xg_verify_class_is_runtime_class(const XgClassSummary *cls) {
+    return cls && (cls->decl_kind == 0 || cls->decl_kind == XG_DECL_CLASS);
+}
+
+static const XgCallsiteSummary *verify_find_evidence_callsite(const XgGlobalEvidence *ev,
+                                                              XgCallsiteId callsite_id) {
+    if (!ev || callsite_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ncallsites; i++) {
+        if (ev->callsites[i].callsite_id == callsite_id)
+            return &ev->callsites[i];
+    }
+    return NULL;
+}
+
+static bool verify_has_interface_impl(const XgGlobalEvidence *ev, XgInterfaceId interface_id,
+                                      XgClassId implementor_class_id) {
+    if (!ev || interface_id == XG_NO_ID || implementor_class_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
+        if (impl->interface_id == interface_id &&
+            impl->implementor_class_id == implementor_class_id)
+            return true;
+    }
+    return false;
+}
+
+static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
+    static const uint32_t capabilities[] = {
+        XG_CAP_COROUTINE, XG_CAP_CHANNEL,   XG_CAP_EXCEPTION,  XG_CAP_NATIVE,     XG_CAP_EXTERN,
+        XG_CAP_OBJECTS,   XG_CAP_DEEP_COPY, XG_CAP_INSTANCEOF, XG_CAP_SYS_THREAD,
+    };
+    const XgGlobalEvidence *ev;
+    uint32_t runtime_class_count = 0;
+    uint32_t expected_capability_plans = 0;
+
+    if (!bundle)
+        return set_error(errbuf, errbuf_len, "AOT global evidence verifier has no bundle");
+    ev = bundle->global_evidence_plan.evidence;
+    if (!ev)
+        return set_error(errbuf, errbuf_len, "AOT bundle has no global evidence plan");
+    if (bundle->global_evidence_plan.evidence_hash != xg_global_evidence_hash(ev))
+        return set_error(errbuf, errbuf_len, "AOT global evidence hash is stale");
+
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        const XgClassSummary *cls = &ev->classes[i];
+        const XaotClassHierarchyPlan *hier;
+        const XaotClassLayoutPlan *layout;
+        if (!xg_verify_class_is_runtime_class(cls))
+            continue;
+        runtime_class_count++;
+        if ((cls->flags & XG_CLASS_EXPLICIT_FINAL) != 0 &&
+            (cls->flags & XG_CLASS_HAS_SUBCLASS) != 0)
+            return set_error(errbuf, errbuf_len, "AOT global evidence final class has subclass");
+        if ((cls->flags & XG_CLASS_HAS_SUBCLASS) != 0 &&
+            (cls->flags & XG_CLASS_INFERRED_FINAL) != 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence class is both subclassed and inferred-final");
+        hier = xaot_bundle_find_class_hierarchy_plan(bundle, cls->class_id);
+        if (!hier)
+            return set_error(errbuf, errbuf_len, "AOT class has no hierarchy plan");
+        if (hier->parent_class_id != cls->parent_class_id || hier->flags != cls->flags)
+            return set_error(errbuf, errbuf_len, "AOT class hierarchy plan mismatches evidence");
+        if (hier->evidence == 0 || hier->unproven_reason != XAOT_CLASS_UNPROVEN_NONE)
+            return set_error(errbuf, errbuf_len, "AOT class hierarchy plan lacks evidence");
+        layout = xaot_bundle_find_class_layout_plan(bundle, cls->class_id);
+        if (!layout)
+            return set_error(errbuf, errbuf_len, "AOT class has no layout plan");
+        if (!layout->c_type_name)
+            return set_error(errbuf, errbuf_len, "AOT class layout plan has no C type name");
+        if (layout->field_start != cls->field_start || layout->field_count != cls->field_count)
+            return set_error(errbuf, errbuf_len, "AOT class layout plan mismatches fields");
+        if (((layout->flags & XAOT_CLASS_LAYOUT_PREFIX_PARENT) != 0) !=
+            (cls->parent_class_id != XG_NO_ID))
+            return set_error(errbuf, errbuf_len, "AOT class layout prefix flag mismatches graph");
+    }
+    if (bundle->nclass_hierarchy_plans != runtime_class_count ||
+        bundle->nclass_layout_plans != runtime_class_count)
+        return set_error(errbuf, errbuf_len, "AOT class plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < bundle->nmethod_dispatch_plans; i++) {
+        const XaotMethodDispatchPlan *plan = &bundle->method_dispatch_plans[i];
+        const XgCallsiteSummary *call = verify_find_evidence_callsite(ev, plan->callsite_id);
+        if (!call)
+            return set_error(errbuf, errbuf_len,
+                             "AOT method dispatch plan has no evidence callsite");
+        if (call->kind != XG_CALL_METHOD && call->kind != XG_CALL_INTERFACE)
+            return set_error(errbuf, errbuf_len,
+                             "AOT method dispatch plan references non-method callsite");
+        if (plan->kind == XAOT_DISPATCH_RUNTIME_FALLBACK) {
+            if (plan->evidence != 0 || plan->unproven_reason == XAOT_DISPATCH_UNPROVEN_NONE)
+                return set_error(errbuf, errbuf_len, "AOT dispatch fallback lacks unproven reason");
+        } else if (plan->evidence == 0) {
+            return set_error(errbuf, errbuf_len, "AOT dispatch plan lacks evidence");
+        }
+        if (plan->kind == XAOT_DISPATCH_DIRECT && plan->target_count != 1)
+            return set_error(errbuf, errbuf_len, "AOT direct dispatch has no single target");
+    }
+
+    for (uint32_t i = 0; i < bundle->ninterface_use_plans; i++) {
+        const XaotInterfaceUsePlan *plan = &bundle->interface_use_plans[i];
+        if (plan->reason == 0)
+            return set_error(errbuf, errbuf_len, "AOT interface-use plan has no reason");
+        if (plan->use_site_id == XG_NO_ID &&
+            !verify_has_interface_impl(ev, plan->interface_id, plan->implementor_class_id))
+            return set_error(errbuf, errbuf_len,
+                             "AOT interface-use plan has no implements evidence");
+        if (plan->use_site_id != XG_NO_ID && !verify_find_evidence_callsite(ev, plan->use_site_id))
+            return set_error(errbuf, errbuf_len, "AOT interface-use plan has unknown use-site");
+    }
+
+    for (uint32_t ci = 0; ci < sizeof(capabilities) / sizeof(capabilities[0]); ci++) {
+        uint32_t cap = capabilities[ci];
+        uint32_t body_count = 0;
+        const XaotCapabilityPlan *plan;
+        for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
+            if ((ev->bodies[bi].capability_bits & cap) != 0)
+                body_count++;
+        }
+        plan = xaot_bundle_find_capability_plan(bundle, cap);
+        if (body_count == 0) {
+            if (plan)
+                return set_error(errbuf, errbuf_len, "AOT capability plan has no body evidence");
+            continue;
+        }
+        expected_capability_plans++;
+        if (!plan)
+            return set_error(errbuf, errbuf_len, "AOT capability has no plan");
+        if (plan->body_count != body_count)
+            return set_error(errbuf, errbuf_len, "AOT capability body count mismatches evidence");
+        if (plan->evidence != XAOT_CAPABILITY_EV_GLOBAL_BODY ||
+            plan->unproven_reason != XAOT_CAPABILITY_UNPROVEN_NONE)
+            return set_error(errbuf, errbuf_len, "AOT capability plan lacks evidence");
+        if (plan->profile_action == 0)
+            return set_error(errbuf, errbuf_len, "AOT capability plan has no profile action");
+    }
+    if (bundle->ncapability_plans != expected_capability_plans)
+        return set_error(errbuf, errbuf_len, "AOT capability plan count mismatches evidence");
+
+    return true;
+}
+
 static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
                                                     char *errbuf, size_t errbuf_len) {
     uint32_t bi;
@@ -643,6 +786,8 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
         return set_error(errbuf, errbuf_len, "AOT bundle entry module is out of range");
     if (bundle->nfunc_plans == 0)
         return set_error(errbuf, errbuf_len, "AOT bundle has no function plans");
+    if (!verify_global_evidence_plan(bundle, errbuf, errbuf_len))
+        return false;
 
     for (mi = 0; mi < bundle->nmodules; mi++) {
         const XiModule *mod = bundle->modules[mi];

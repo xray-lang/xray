@@ -197,7 +197,8 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 | `constructor` | constructor |
 | `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
 | `const` | immutable field/binding modifier |
-| `abstract` `final` `override` | class/method modifiers (`override` is **optional** — overriding a parent method does not require an explicit annotation; `final` only seals classes/methods) |
+| `final` | `final class` cannot be inherited |
+| `abstract` `override` | removed—kept as keywords only for diagnostics; interfaces and automatic overrides replace these annotations |
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |
 
@@ -2207,7 +2208,7 @@ Rules:
 ### 5.3 `class` declaration
 
 ```ebnf
-ClassDecl ::= Modifier* 'class' Identifier TypeParams?
+ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' Identifier TypeArgs?)?
               ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
               '{' ClassMember* '}'
@@ -2216,15 +2217,15 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // parameter types may be omitted
-Modifier ::= 'private' | 'protected' | 'static' | 'final' | 'const' | 'abstract' | 'override'
+Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
-> **About default public visibility and `override`**:
+> **About default public visibility and automatic overrides**:
 >
 > - Public is the **default visibility**—every field/method without `private` / `protected` is public; the language has no `public` modifier.
 > - Visibility is **compile-time enforced**: accessing a `private` / `protected` member from outside the class, or a `protected` member from a non-subclass, reports `E0377`.
-> - `override` is **optional**—an override happens automatically when the derived class declares a method with the same signature; an explicit `override` annotation is not required.
-> - Once written, `override` is checked: the analyzer must find a same-name, same-signature instance method in the parent chain, or report compile error `E0374`.
+> - Overrides are inferred by the compiler: a subclass instance method overrides a non-private parent-chain instance method when name and signature match exactly.
+> - User-written `override`, `abstract`, and `final method` modifiers are removed; same-name different-signature methods, field/method hiding, and static method hiding are compile errors.
 >
 > The standard library and the regression tests consistently use the "omit the default modifier" style.
 
@@ -2261,7 +2262,7 @@ class Dog extends Animal {
         super(name)                    // **must** be the first statement (derived classes only)
     }
 
-    override speak() -> string {         // override is optional but recommended
+    speak() -> string {                  // same name and signature: automatic override
         return "woof"
     }
 }
@@ -2270,10 +2271,9 @@ class Dog extends Animal {
 **Constraints**:
 - A derived class constructor's **first statement** must be `super(...)` (unless no constructor is declared); otherwise it is a compile error.
 - `this` must not be accessed before `super(...)`.
-- **Overriding requires no keyword**—any subclass method with the same name and signature automatically overrides the parent (the `override` modifier is **optional**, but when present it must pass parent-chain signature checking).
+- **Overriding requires no keyword**—any subclass instance method with the same name and signature automatically overrides the parent.
+- Same-name different-signature methods are not overloads or hiding; rename the method or use default arguments / named factories.
 - A `final class` cannot be inherited.
-- A `final` method cannot be overridden.
-- An `abstract` method **must** be implemented by subclasses (unless the subclass is also `abstract`).
 - `super.method()` invokes the shadowed parent method from inside an override.
 
 #### 5.3.3 Modifiers
@@ -2285,13 +2285,11 @@ class Dog extends Animal {
 | `protected` | field/method | Accessible inside the declaring class and its subclasses; external access reports `E0377` |
 | `static` | field/method | Class-level, not part of an instance; called as `ClassName.method()` |
 | `const` | field | Immutable field—assignable once via `this` in the declaring class's constructor; later writes report `E0378` |
-| `final` | class/method | Class: cannot be inherited. Method: cannot be overridden. **No longer applies to fields** (use `const` for immutable fields) |
-| `abstract` | class/method | Cannot be instantiated / must be implemented by subclasses |
-| `override` | method | **Optional but checked**—overrides do not require explicit annotation; when present, it must match a same-name, same-signature instance method in the parent chain |
+| `final` | class declaration prefix | `final class C` cannot be inherited; `final` is not used on fields or methods |
 
-**Modifiers may combine**: `private const secret: string = "key123"`, `static final pi() -> float`, `protected static counter: int = 0`.
+**Modifiers may combine**: `private const secret: string = "key123"`, `protected static counter: int = 0`.
 
-> `const` = immutable field/binding, `final` = sealing a class/method (inheritance dimension). Their roles are separate: immutable fields use `const` only; writing `final` on a field is an error that suggests `const`.
+> `const` = immutable field/binding, `final class` = cannot be inherited. Immutable fields use `const` only; writing `final` on a field or method is an error.
 
 #### 5.3.4 Constructors
 
@@ -5562,14 +5560,14 @@ ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const' | 'final' | 'abstract' | 'override'
-              // public visibility is the default; override is optional
+Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const'
+              // public visibility is the default; final is only a class prefix
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
-ClassDecl ::= Modifier* 'class' Identifier TypeParams?
+ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
@@ -5628,7 +5626,7 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 
 | Keyword | Section |
 |--|--|
-| `abstract` | §5.3 |
+| `abstract` | removed; §5.3 |
 | `as` | §3.8 |
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
@@ -5662,7 +5660,7 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `override` | §5.3 |
+| `override` | removed; §5.3 |
 | `parallel` | §10 |
 | `private` | §5.3 |
 | `protected` | §5.3 |

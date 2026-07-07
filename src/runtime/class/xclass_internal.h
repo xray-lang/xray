@@ -16,10 +16,7 @@
  *        xr_class_compute_operator_flags, xr_symbol_to_op_flag --
  *        that the builder calls during finalize and that nothing
  *        outside the class module has any business invoking.
- *     3. Abstract-class internals (add/inherit/is-abstract-method
- *        plus the free hook) that used to sit in xclass.h with no
- *        external caller. Lifting them out keeps the public header
- *        focused on the "class as a value" contract.
+ *     3. The free hook used by builder rollback paths.
  *
  * WHY THIS DESIGN:
  *   Public consumers (vm/, frontend/, api/) only need
@@ -71,18 +68,6 @@ XR_FUNC uint32_t xr_symbol_to_op_flag(int symbol);
 // restored to NULL in that case so the class stays in a well-defined
 // "no itable" state rather than half-built).
 XR_FUNC int xr_class_build_itable(XrClass *cls);
-
-/* ========== Abstract Class Internals ========== */
-
-// Mark `symbol` as an abstract method on cls (de-duplicated).
-XR_FUNC void xr_class_add_abstract_method(XrClass *cls, int method_symbol);
-
-// Copy parent's abstract method list into child, filtering out any
-// symbol child already implements concretely.
-XR_FUNC void xr_class_inherit_abstract_methods(XrClass *child, XrClass *parent);
-
-// Return true iff `method_symbol` is one of cls's abstract methods.
-XR_FUNC bool xr_class_is_abstract_method(XrClass *cls, int method_symbol);
 
 /* ========== Cleanup ========== */
 

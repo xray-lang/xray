@@ -67,8 +67,6 @@ XR_FUNC int xr_class_builder_add_static_method_closure(XrClassBuilder *builder, 
 
 XR_FUNC int xr_class_builder_add_interface(XrClassBuilder *builder, XrClass *interface);
 
-XR_FUNC int xr_class_builder_add_abstract_method(XrClassBuilder *builder, int method_symbol);
-
 XR_FUNC void xr_class_builder_set_flags(XrClassBuilder *builder, uint32_t flags);
 
 /* Monomorphized generics: set before finalize to populate the

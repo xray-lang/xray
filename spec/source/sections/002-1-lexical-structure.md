@@ -92,7 +92,8 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `constructor` | 构造器 |
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
 | `const` | 不可变字段/绑定修饰符 |
-| `abstract` `final` `override` | 类/方法修饰符（`override` 是**可选**——重写父类方法不要求显式标注；`final` 仅用于封类/封方法） |
+| `final` | `final class` 禁止继承 |
+| `abstract` `override` | 已移除——保留为关键字仅用于报错；接口与自动覆写替代这些标注 |
 | `operator` | 运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
 
@@ -478,7 +479,8 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 | `constructor` | constructor |
 | `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
 | `const` | immutable field/binding modifier |
-| `abstract` `final` `override` | class/method modifiers (`override` is **optional** — overriding a parent method does not require an explicit annotation; `final` only seals classes/methods) |
+| `final` | `final class` cannot be inherited |
+| `abstract` `override` | removed—kept as keywords only for diagnostics; interfaces and automatic overrides replace these annotations |
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |
 

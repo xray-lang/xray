@@ -99,11 +99,6 @@ struct XrClassBuilder {
     int interface_count;
     int interface_capacity;
 
-    // Abstract methods (dynamic array)
-    int *abstract_methods;
-    int abstract_method_count;
-    int abstract_method_capacity;
-
     // Flags
     uint32_t flags;
     bool finalized;

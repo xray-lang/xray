@@ -509,79 +509,6 @@ fail:
     return result;
 }
 
-/* ========== Abstract Class Support ========== */
-
-void xr_class_mark_abstract(XrClass *cls) {
-    if (!cls)
-        return;
-    cls->flags |= XR_CLASS_ABSTRACT;
-}
-
-void xr_class_add_abstract_method(XrClass *cls, int method_symbol) {
-    if (!cls || method_symbol < 0)
-        return;
-
-    int new_count = cls->abstract_method_count + 1;
-    int *new_methods = (int *) xr_realloc(cls->abstract_methods, sizeof(int) * new_count);
-    if (!new_methods)
-        return;
-    cls->abstract_methods = new_methods;
-    cls->abstract_method_count = new_count;
-    cls->abstract_methods[new_count - 1] = method_symbol;
-}
-
-// Check if class can be instantiated (not abstract and all abstract methods implemented)
-bool xr_class_can_instantiate(XrClass *cls) {
-    if (!cls)
-        return false;
-
-    if (cls->flags & XR_CLASS_ABSTRACT)
-        return false;
-
-    for (int i = 0; i < cls->abstract_method_count; i++) {
-        int symbol = cls->abstract_methods[i];
-        XrMethod *method = xr_class_lookup_method(cls, symbol);
-
-        if (!method || method->type == XMETHOD_NONE || xr_method_is_abstract(method)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-// Inherit abstract methods from parent
-void xr_class_inherit_abstract_methods(XrClass *child, XrClass *parent) {
-    if (!child || !parent)
-        return;
-
-    if (parent->abstract_method_count == 0)
-        return;
-
-    for (int i = 0; i < parent->abstract_method_count; i++) {
-        int symbol = parent->abstract_methods[i];
-        XrMethod *child_method = xr_class_lookup_method(child, symbol);
-
-        if (!child_method || child_method->type == XMETHOD_NONE ||
-            xr_method_is_abstract(child_method)) {
-            xr_class_add_abstract_method(child, symbol);
-        }
-    }
-}
-
-bool xr_class_is_abstract_method(XrClass *cls, int method_symbol) {
-    if (!cls || method_symbol < 0)
-        return false;
-
-    for (int i = 0; i < cls->abstract_method_count; i++) {
-        if (cls->abstract_methods[i] == method_symbol) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 // instanceof operator implementation (O(1) with primary_supers)
 bool xr_instance_of(void *obj, const XrClass *target) {
     if (obj == NULL || target == NULL) {
@@ -680,12 +607,6 @@ void xr_class_free(XrClass *cls) {
         }
         xr_free(cls->itable);
         cls->itable = NULL;
-    }
-
-    // Free abstract method indices
-    if (cls->abstract_methods) {
-        xr_free(cls->abstract_methods);
-        cls->abstract_methods = NULL;
     }
 
     // Free secondary supers hash (only allocated when depth >= 8).

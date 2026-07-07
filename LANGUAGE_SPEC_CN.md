@@ -198,7 +198,8 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `constructor` | 构造器 |
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
 | `const` | 不可变字段/绑定修饰符 |
-| `abstract` `final` `override` | 类/方法修饰符（`override` 是**可选**——重写父类方法不要求显式标注；`final` 仅用于封类/封方法） |
+| `final` | `final class` 禁止继承 |
+| `abstract` `override` | 已移除——保留为关键字仅用于报错；接口与自动覆写替代这些标注 |
 | `operator` | 运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
 
@@ -2200,7 +2201,7 @@ print(add(19, 23))        // xray 内部仍是普通函数调用
 ### 5.3 `class` 声明
 
 ```ebnf
-ClassDecl ::= Modifier* 'class' Identifier TypeParams?
+ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' Identifier TypeArgs?)?
               ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
               '{' ClassMember* '}'
@@ -2209,15 +2210,15 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // 参数类型可省
-Modifier ::= 'private' | 'protected' | 'static' | 'final' | 'const' | 'abstract' | 'override'
+Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
-> **关于默认公开可见性和 `override`**：
+> **关于默认公开可见性和自动覆写**：
 >
 > - 公开是**默认可见性**——所有未带 `private` / `protected` 的字段/方法都是公开的；语言没有 `public` 修饰符。
 > - 可见性受**编译期强制**：从类外访问 `private` / `protected` 成员、或从非子类访问 `protected` 成员，均报 `E0377`。
-> - `override` 是**可选**——重写父类方法只要同名同参就自动覆盖，不要求显式 `override` 标注。
-> - 但一旦写出 `override`，分析器必须验证父类链存在同名同签实例方法；否则编译错误 `E0374`。
+> - 覆写由编译器自动推导：子类实例方法与父类链中非私有实例方法同名同签时即为覆写。
+> - 用户不可写 `override` / `abstract` / `final method`；同名不同签、字段/方法隐藏、静态方法隐藏均为编译错误。
 >
 > 标准库和回归测试一致采用"省略默认修饰符"风格。
 
@@ -2254,7 +2255,7 @@ class Dog extends Animal {
         super(name)                    // **必须**首语句（仅限派生类）
     }
 
-    override speak() -> string {         // override 可选，但推荐写出
+    speak() -> string {                  // 同名同签：自动覆写
         return "woof"
     }
 }
@@ -2263,10 +2264,9 @@ class Dog extends Animal {
 **约束**：
 - 派生类构造器**第一行**必须是 `super(...)`（除非未声明构造器）；否则编译错误。
 - 不能在 `super(...)` 之前访问 `this`。
-- **重写父类方法不需要任何关键字**——只要子类出现同名同参的方法即自动重写（`override` 修饰符存在但**可选**，写出时必须通过父链同签校验）。
+- **重写父类方法不需要任何关键字**——只要子类出现同名同签实例方法即自动重写。
+- 同名不同签不是重载，也不是隐藏；必须改名或使用默认参数 / 命名工厂。
 - 父类标 `final class` 则不可继承。
-- 父类方法标 `final` 则不可重写。
-- 父类方法标 `abstract` 则子类**必须**实现（除非子类也是 `abstract`）。
 - `super.method()` 可在重写的方法体内调用被屏蔽的父类方法。
 
 #### 5.3.3 修饰符
@@ -2278,13 +2278,11 @@ class Dog extends Animal {
 | `protected` | 字段/方法 | 声明类及其子类内部可访问；外部访问报 `E0377` |
 | `static` | 字段/方法 | 类级别，不属于实例；调用为 `ClassName.method()` |
 | `const` | 字段 | 不可变字段——只能在声明类的构造器中经 `this` 赋值一次，之后重写报 `E0378` |
-| `final` | 类/方法 | 类：禁止继承；方法：禁止重写。**不再用于字段**（字段不可变用 `const`） |
-| `abstract` | 类/方法 | 不可实例化 / 必须由子类实现 |
-| `override` | 方法 | **可选但受检**——重写不要求显式标注；写了必须覆盖父类链中同名同签实例方法 |
+| `final` | 类声明前缀 | `final class C` 禁止继承；`final` 不用于字段或方法 |
 
-**修饰符可组合**：`private const secret: string = "key123"`、`static final pi() -> float`、`protected static counter: int = 0`。
+**修饰符可组合**：`private const secret: string = "key123"`、`protected static counter: int = 0`。
 
-> `const` = 不可变字段/绑定，`final` = 封类/封方法（继承维度）。两者职责分离：字段不可变只用 `const`，对字段写 `final` 报错并提示改用 `const`。
+> `const` = 不可变字段/绑定，`final class` = 禁止继承。字段不可变只用 `const`；对字段或方法写 `final` 会报错。
 
 #### 5.3.4 构造器
 
@@ -5549,14 +5547,14 @@ ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const' | 'final' | 'abstract' | 'override'
-              // 公开可见性是默认语义；override 可选
+Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const'
+              // 公开可见性是默认语义；final 只作为 class 前缀
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // 约束用 ':' ，多约束用 '&'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
-ClassDecl ::= Modifier* 'class' Identifier TypeParams?
+ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
@@ -5615,7 +5613,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 | 关键字 | 节 |
 |--|--|
-| `abstract` | §5.3 |
+| `abstract` | 已移除；§5.3 |
 | `as` | §3.8 |
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
@@ -5649,7 +5647,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `override` | §5.3 |
+| `override` | 已移除；§5.3 |
 | `parallel` | §10 |
 | `private` | §5.3 |
 | `protected` | §5.3 |

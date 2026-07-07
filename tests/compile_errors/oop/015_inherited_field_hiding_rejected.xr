@@ -1,0 +1,7 @@
+class Base {
+    value: int = 1
+}
+
+class Child extends Base {
+    value: int = 2
+}

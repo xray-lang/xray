@@ -5,8 +5,7 @@ class Base {
 }
 
 class Child extends Base {
-    override run(value: string) -> int {
+    run(value: string) -> int {
         return value.length
     }
 }
-

@@ -505,6 +505,7 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/toolchain
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vm
     ${CMAKE_CURRENT_SOURCE_DIR}/src/module
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/analysis
     ${CMAKE_CURRENT_SOURCE_DIR}/src/aot
     ${CMAKE_CURRENT_SOURCE_DIR}/src/api
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli
@@ -582,6 +583,7 @@ file(GLOB TOOLCHAIN_SRC "src/toolchain/*.c")
 file(GLOB VM_SRC "src/vm/*.c")
 file(GLOB IR_SRC "src/ir/*.c")
 file(GLOB MODULE_SRC "src/module/*.c")
+file(GLOB ANALYSIS_SRC "src/analysis/*.c")
 file(GLOB AOT_SRC "src/aot/*.c")
 list(REMOVE_ITEM AOT_SRC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/aot/xrt_gen_iter.c"
@@ -710,7 +712,7 @@ foreach(XRAY_SRC_LIST
         RUNTIME_CLOSURE_SRC RUNTIME_SYMBOL_SRC CORO_SRC IO_SRC
         FRONTEND_LEXER_SRC FRONTEND_PARSER_SRC FRONTEND_CODEGEN_SRC
         FRONTEND_ANALYZER_SRC FRONTEND_CANONICAL_SRC FRONTEND_FORMAT_SRC TOOLCHAIN_SRC
-        VM_SRC IR_SRC MODULE_SRC AOT_SRC API_SRC NEW_CLI_SRC
+        VM_SRC IR_SRC MODULE_SRC ANALYSIS_SRC AOT_SRC API_SRC NEW_CLI_SRC
         STDLIB_CORE_SRC STDLIB_SRC)
     xray_exclude_include_fragments(${XRAY_SRC_LIST})
 endforeach()
@@ -742,6 +744,7 @@ set(CORE_ALL_SOURCES
     ${VM_SRC}
     ${IR_SRC}
     ${MODULE_SRC}
+    ${ANALYSIS_SRC}
     ${AOT_SRC}
     ${API_SRC}
     ${STDLIB_SRC}
