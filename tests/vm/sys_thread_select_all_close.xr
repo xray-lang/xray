@@ -1,0 +1,21 @@
+import sys
+
+shared ch = Channel<int>(1)
+ch.trySend(1)
+
+fn closeInSelect() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    select {
+        msg from ch -> {
+            print(t.join())
+        }
+        _ -> {
+            t.detach()
+        }
+    }
+}
+
+closeInSelect()
+ch.close()
