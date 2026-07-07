@@ -141,6 +141,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"h2Push", XLSP_SYM_FUNCTION, "fn(path: string, contentType: string, data: string): bool", "Push HTTP/2 response data", NULL, 0},
     {"parseSetCookie", XLSP_SYM_FUNCTION, "fn(header: string, requestDomain?: string, requestPath?: string, nowSeconds?: int): Cookie?", "", NULL, 0},
     {"cookieJar", XLSP_SYM_FUNCTION, "fn(maxCookies?: int): CookieJar", "", NULL, 0},
+    {"router", XLSP_SYM_FUNCTION, "fn(): Router", "", NULL, 0},
     {"urlEncode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-encode using the HTTP module's historical URL helper", NULL, 0},
     {"urlDecode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-decode and treat + as a space, matching the former HTTP", NULL, 0},
     {"response", XLSP_SYM_FUNCTION, "fn(status: int, body?: unknown): string", "Format a complete HTTP/1.1 response string.", NULL, 0},
@@ -150,10 +151,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"DownloadResult", XLSP_SYM_CLASS, "type DownloadResult", "Native handle type", NULL, 0},
     {"Cookie", XLSP_SYM_CLASS, "type Cookie", "Class type", NULL, 0},
     {"CookieJar", XLSP_SYM_CLASS, "type CookieJar", "Class type", NULL, 0},
+    {"Router", XLSP_SYM_CLASS, "type Router", "Class type", NULL, 0},
+    {"RouteMatch", XLSP_SYM_CLASS, "type RouteMatch", "Class type", NULL, 0},
     {"MultipartBody", XLSP_SYM_CLASS, "type MultipartBody", "Built multipart/form-data payload and matching Content-Type.", NULL, 0},
     {"FormData", XLSP_SYM_CLASS, "type FormData", "Explicit multipart/form-data builder.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 39
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 42
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {

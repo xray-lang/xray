@@ -898,6 +898,46 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "RouteMatch",
+        .signature = "RouteMatch",
+        .summary = "",
+    },
+    {
+        .name = "RouteMatch.constructor",
+        .signature = "(value: unknown, params: Json): ()",
+        .summary = "",
+    },
+    {
+        .name = "RouteMatch.params",
+        .signature = ": Json",
+        .summary = "",
+    },
+    {
+        .name = "RouteMatch.value",
+        .signature = ": unknown",
+        .summary = "",
+    },
+    {
+        .name = "Router",
+        .signature = "Router",
+        .summary = "",
+    },
+    {
+        .name = "Router.add",
+        .signature = "(method: string, path: string, value: unknown): bool",
+        .summary = "",
+    },
+    {
+        .name = "Router.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "Router.find",
+        .signature = "(method: string, path: string): RouteMatch?",
+        .summary = "",
+    },
+    {
         .name = "closeStream",
         .signature = "(resp: Json): ()",
         .summary = "Close a streaming HTTP response",
@@ -1016,6 +1056,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "route",
         .signature = "(method: string, path: string, handler: fn | string | Json): ()",
         .summary = "Register a route handler or static response",
+    },
+    {
+        .name = "router",
+        .signature = "(): Router",
+        .summary = "",
     },
     {
         .name = "sendResponse",
@@ -2735,7 +2780,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Process.spawn",
-        .signature = "(program: string, args: Array<string>, options: ProcessOptions?): Process?",
+        .signature = "(program: string, args: Array<string> = [], options: ProcessOptions? = null): Process?",
         .summary = "",
     },
     {
@@ -4927,6 +4972,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `MultipartBody.body` | `: string` |  |\n"
             "| `MultipartBody.constructor` | `(body: string, contentType: string): ()` |  |\n"
             "| `MultipartBody.contentType` | `: string` |  |\n"
+            "| `RouteMatch` | `RouteMatch` |  |\n"
+            "| `RouteMatch.constructor` | `(value: unknown, params: Json): ()` |  |\n"
+            "| `RouteMatch.params` | `: Json` |  |\n"
+            "| `RouteMatch.value` | `: unknown` |  |\n"
+            "| `Router` | `Router` |  |\n"
+            "| `Router.add` | `(method: string, path: string, value: unknown): bool` |  |\n"
+            "| `Router.constructor` | `(): ()` |  |\n"
+            "| `Router.find` | `(method: string, path: string): RouteMatch?` |  |\n"
             "| `http.closeStream` | `(resp: Json): ()` | Close a streaming HTTP response |\n"
             "| `http.config` | `(opts: Json): ()` | Configure HTTP server limits and timeouts |\n"
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
@@ -4951,6 +5004,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.request` | `(options: Json): HttpResponse` | Generic HTTP request |\n"
             "| `http.response` | `(status: int, body: unknown = null): string` |  |\n"
             "| `http.route` | `(method: string, path: string, handler: fn \\| string \\| Json): ()` | Register a route handler or static response |\n"
+            "| `http.router` | `(): Router` |  |\n"
             "| `http.sendResponse` | `(fd: int, body: string, status?: int): bool` | Send HTTP response on fd |\n"
             "| `http.serverStats` | `(): Json` | Return HTTP server counters |\n"
             "| `http.setConnHandler` | `(handler: fn(fd: int): ()): ()` | Set low-level HTTP connection handler |\n"
@@ -5545,7 +5599,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Process.constructor` | `(id: int): ()` |  |\n"
             "| `Process.id` | `: int { fn() { return this._id } }` |  |\n"
             "| `Process.kill` | `(signal: Signal = Signal.TERM): bool` |  |\n"
-            "| `Process.spawn` | `(program: string, args: Array<string>, options: ProcessOptions?): Process?` |  |\n"
+            "| `Process.spawn` | `(program: string, args: Array<string> = [], options: ProcessOptions? = null): Process?` |  |\n"
             "| `Process.tryWait` | `(): int?` |  |\n"
             "| `Process.wait` | `(): int` |  |\n"
             "| `sys.cpuCount` | `(): int` | Return the number of CPUs available to OS-thread work |\n"

@@ -1,0 +1,44 @@
+// Pure-Xray HTTP router algorithm surface.
+import http
+import { Router, router } from http
+
+var r = router()
+print(r.add("GET", "/users/:id", "user"))
+print(r.add("GET", "/users/me", "me"))
+print(r.add("POST", "/users/:id", "post-user"))
+print(r.add("GET", "/files/{*path}", "file"))
+print(r.add("GET", "/", "root"))
+
+var user = r.find("get", "/users/42?debug=1")!
+print(user.value)
+print(user.params["id"])
+
+var exact = r.find("GET", "/users/me")!
+print(exact.value)
+print(exact.params["id"] == null)
+
+var post = r.find("POST", "/users/42")!
+print(post.value)
+print(post.params["id"])
+
+var file = r.find("GET", "/files/a/b/c.txt")!
+print(file.value)
+print(file.params["path"])
+
+var root = r.find("GET", "/")!
+print(root.value)
+
+print(r.find("DELETE", "/users/42") == null)
+print(r.add("", "/bad", "x"))
+print(r.add("GET", "bad", "x"))
+print(r.add("GET", "/bad/*tail/more", "x"))
+
+print(r.add("GET", "/users/:id", "replacement"))
+var replaced = r.find("GET", "/users/7")!
+print(replaced.value)
+
+var r2 = Router()
+print(r2.add("GET", "/x/*tail", 1))
+var tail = r2.find("GET", "/x/a/b")!
+print(tail.value)
+print(tail.params["tail"])
