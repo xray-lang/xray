@@ -263,30 +263,6 @@ static const XaBuiltinMember g_gen_io_functions[] = {
 };
 #define GEN_IO_FUNCTION_COUNT 30
 
-// log module functions
-static const XaBuiltinMember g_gen_log_functions[] = {
-    {"debug", "(...args: unknown): ()", "Log debug message", true, false, false},
-    {"info", "(...args: unknown): ()", "Log info message", true, false, false},
-    {"warn", "(...args: unknown): ()", "Log warning message", true, false, false},
-    {"error", "(...args: unknown): ()", "Log error message", true, false, false},
-    {"fatal", "(...args: unknown): ()", "Log fatal message", true, false, false},
-    {"setLevel", "(level: int): ()", "Set log level", true, false, false},
-    {"setFormat", "(format: string): ()", "Set log format", true, false, false},
-    {"setOutput", "(path: string): ()", "Set log output file", true, false, false},
-    {"isEnabled", "(level: int): bool", "Check if log level enabled", true, false, false},
-    {"enableSource", "(enabled: bool): ()", "Enable source location in logs", true, false, false},
-    {"enableAsync", "(enabled: bool): ()", "Enable async logging", true, false, false},
-    {"flush", "(): ()", "Flush log buffer", true, false, false},
-    {"child", "(...fields: unknown): Logger", "Create child logger", true, false, false},
-    // Module constants (is_method=false)
-    {"DEBUG", ": int", "Debug log level", false, false, false},
-    {"INFO", ": int", "Info log level", false, false, false},
-    {"WARN", ": int", "Warning log level", false, false, false},
-    {"ERROR", ": int", "Error log level", false, false, false},
-    {"FATAL", ": int", "Fatal log level", false, false, false},
-};
-#define GEN_LOG_FUNCTION_COUNT 18
-
 // math module functions
 static const XaBuiltinMember g_gen_math_functions[] = {
     {"abs", "(x: float): float", "Absolute value (preserves int)", true, false, false},
@@ -578,7 +554,6 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0},
     {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, g_gen_http_handles, GEN_HTTP_HANDLE_COUNT},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT},
-    {"log", g_gen_log_functions, GEN_LOG_FUNCTION_COUNT, NULL, 0},
     {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0},
     {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0},
     {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT},
@@ -589,7 +564,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0},
     {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT},
 };
-#define GEN_BUILTIN_MODULE_COUNT 15
+#define GEN_BUILTIN_MODULE_COUNT 14
 
 /* clang-format on */
 

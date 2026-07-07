@@ -1165,6 +1165,8 @@ AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, char *
     node->as.method_decl.is_getter = is_getter;
     node->as.method_decl.is_setter = is_setter;
     node->as.method_decl.is_static_constructor = false;  // Not a static constructor by default
+    node->as.method_decl.is_variadic = false;
+    node->as.method_decl.required_count = param_count;
 
     // Initialize base() call fields
     node->as.method_decl.base_args = NULL;

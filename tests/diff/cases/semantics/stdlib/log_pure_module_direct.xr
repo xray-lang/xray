@@ -1,0 +1,37 @@
+import io
+import log
+
+var path = "/tmp/xray_log_pure_module_direct.txt"
+io.writeFile(path, "")
+
+print(log.DEBUG)
+print(log.INFO)
+print(log.WARN)
+print(log.ERROR)
+print(log.FATAL)
+
+log.setOutput(path)
+log.setLevel(log.DEBUG)
+log.info("server started", "port", 8080, "host", "localhost")
+
+var child = log.child("module", "http")
+print(typename(child))
+child.warn("slow response", "ms", 42)
+
+log.setFormat("json")
+child = child.child("route", "/api")
+child.error("request failed", "code", 500)
+
+log.enableAsync(true)
+log.debug("queued", "ok", true)
+log.flush()
+log.enableAsync(false)
+
+var content = io.readFile(path) ?? ""
+print(content.indexOf("INFO server started") >= 0)
+print(content.indexOf("module=http") >= 0)
+print(content.indexOf("\"level\":\"ERROR\"") >= 0)
+print(content.indexOf("\"route\":\"/api\"") >= 0)
+print(content.indexOf("DEBUG queued") >= 0)
+
+io.remove(path)

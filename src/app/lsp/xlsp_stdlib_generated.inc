@@ -193,26 +193,27 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
 
 // log module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_log_symbols[] = {
-    {"debug", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "Log debug message", NULL, 0},
-    {"info", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "Log info message", NULL, 0},
-    {"warn", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "Log warning message", NULL, 0},
-    {"error", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "Log error message", NULL, 0},
-    {"fatal", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "Log fatal message", NULL, 0},
-    {"setLevel", XLSP_SYM_FUNCTION, "fn(level: int): ()", "Set log level", NULL, 0},
-    {"setFormat", XLSP_SYM_FUNCTION, "fn(format: string): ()", "Set log format", NULL, 0},
-    {"setOutput", XLSP_SYM_FUNCTION, "fn(path: string): ()", "Set log output file", NULL, 0},
-    {"isEnabled", XLSP_SYM_FUNCTION, "fn(level: int): bool", "Check if log level enabled", NULL, 0},
-    {"enableSource", XLSP_SYM_FUNCTION, "fn(enabled: bool): ()", "Enable source location in logs", NULL, 0},
-    {"enableAsync", XLSP_SYM_FUNCTION, "fn(enabled: bool): ()", "Enable async logging", NULL, 0},
-    {"flush", XLSP_SYM_FUNCTION, "fn(): ()", "Flush log buffer", NULL, 0},
-    {"child", XLSP_SYM_FUNCTION, "fn(...fields: unknown): Logger", "Create child logger", NULL, 0},
-    {"DEBUG", XLSP_SYM_CONSTANT, "int", "Debug log level", NULL, 0},
-    {"INFO", XLSP_SYM_CONSTANT, "int", "Info log level", NULL, 0},
-    {"WARN", XLSP_SYM_CONSTANT, "int", "Warning log level", NULL, 0},
-    {"ERROR", XLSP_SYM_CONSTANT, "int", "Error log level", NULL, 0},
-    {"FATAL", XLSP_SYM_CONSTANT, "int", "Fatal log level", NULL, 0},
+    {"debug", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "", NULL, 0},
+    {"info", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "", NULL, 0},
+    {"warn", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "", NULL, 0},
+    {"error", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "", NULL, 0},
+    {"fatal", XLSP_SYM_FUNCTION, "fn(...args: unknown): ()", "", NULL, 0},
+    {"setLevel", XLSP_SYM_FUNCTION, "fn(level: unknown): ()", "", NULL, 0},
+    {"setFormat", XLSP_SYM_FUNCTION, "fn(format: string): ()", "", NULL, 0},
+    {"setOutput", XLSP_SYM_FUNCTION, "fn(path: string): ()", "", NULL, 0},
+    {"isEnabled", XLSP_SYM_FUNCTION, "fn(level: int): bool", "", NULL, 0},
+    {"enableSource", XLSP_SYM_FUNCTION, "fn(enabled?: bool): ()", "", NULL, 0},
+    {"enableAsync", XLSP_SYM_FUNCTION, "fn(enabled?: bool): ()", "", NULL, 0},
+    {"flush", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
+    {"child", XLSP_SYM_FUNCTION, "fn(...fields: unknown): Logger", "", NULL, 0},
+    {"DEBUG", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
+    {"INFO", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
+    {"WARN", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
+    {"ERROR", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
+    {"FATAL", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
+    {"Logger", XLSP_SYM_CLASS, "type Logger", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_LOG_SYMBOL_COUNT 18
+#define GEN_XLSP_STDLIB_LOG_SYMBOL_COUNT 19
 
 // math module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_math_symbols[] = {

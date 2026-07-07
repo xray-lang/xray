@@ -473,8 +473,12 @@ static inline XrValue xrt_typename(XrValue v) {
             return xr_str_lit(&xs_array);
         case XR_TAG_SET:
             return xr_str_lit(&xs_set);
-        case XR_TAG_MAP:
+        case XR_TAG_MAP: {
+            const xrt_map_t *m = (const xrt_map_t *) v.ptr;
+            if (m && m->class_name)
+                return xr_box_str(m->class_name);
             return xr_str_lit(&xs_map);
+        }
         case XR_TAG_CLOSURE:
             return xr_str_lit(&xs_function);
         case XR_TAG_STRBUF:

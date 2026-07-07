@@ -172,8 +172,15 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
     entry->sealed = true;
     ml.cur_block = entry;
 
-    int np = m->param_count + (is_inst ? 1 : 0);
-    ml.func->nparams = (uint16_t) np;
+    bool has_rest = m->is_variadic;
+    int base = is_inst ? 1 : 0;
+    int np = m->param_count + base;
+    ml.func->is_vararg = has_rest;
+    ml.func->min_params = (uint16_t) (base + m->required_count);
+    ml.func->nparams = (uint16_t) (has_rest ? (np - 1) : np);
+    int fixed_params = (int) ml.func->nparams;
+    ml.func->entry_type =
+        (m->required_count < (has_rest ? m->param_count - 1 : m->param_count)) ? 1 : 0;
     if (np > 0) {
         ml.func->params = (XiValue **) xr_calloc(np, sizeof(XiValue *));
         if (!ml.func->params) {
@@ -191,12 +198,10 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
     }
 
     /* Instance methods: 'this' is param 0 */
-    int base = 0;
     if (is_inst) {
         XiValue *th = xi_param(ml.func, entry, 0, this_type);
         ml.func->params[0] = th;
         xi_lower_braun_write(&ml, xi_lower_var_create(&ml, 0, "this", this_type), entry, th);
-        base = 1;
     }
 
     /* User-declared parameters. m->param_types is XrTypeRef** (AST
@@ -213,7 +218,7 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         ml.func->params[base + i] = p;
         uint8_t mode = (m->param_passing_modes && i < m->param_count) ? m->param_passing_modes[i]
                                                                       : XR_PARAM_VALUE;
-        if (mode != XR_PARAM_VALUE &&
+        if ((base + i) < fixed_params && mode != XR_PARAM_VALUE &&
             !xi_func_set_param_passing_mode(ml.func, (uint16_t) (base + i), mode)) {
             xi_func_free(ml.func);
             xi_lower_cleanup(&ml);

@@ -151,6 +151,8 @@ typedef struct MethodDeclNode {
     bool is_getter;
     bool is_setter;
     bool is_static_constructor;
+    bool is_variadic;
+    int required_count;
     AstNode **base_args;
     int base_arg_count;
     AstNode **default_values;

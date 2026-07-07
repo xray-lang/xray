@@ -877,7 +877,22 @@ bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type, XrType **ar
 
     // Check argument count
     int expected = func_type->function.param_count;
-    if (arg_count < expected && !func_type->function.is_variadic) {
+    int min_params = func_type->function.min_params;
+    bool is_variadic = func_type->function.is_variadic;
+    if (arg_count < min_params) {
+        char message[128];
+        if (is_variadic) {
+            snprintf(message, sizeof(message), "Expected at least %d arguments, but got %d",
+                     min_params, arg_count);
+        } else {
+            snprintf(message, sizeof(message), "Expected %d arguments, but got %d", min_params,
+                     arg_count);
+        }
+        xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   message, loc);
+        return false;
+    }
+    if (arg_count > expected && !is_variadic) {
         char message[128];
         snprintf(message, sizeof(message), "Expected %d arguments, but got %d", expected,
                  arg_count);
@@ -888,14 +903,21 @@ bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type, XrType **ar
 
     // Check argument types
     bool ok = true;
-    for (int i = 0; i < arg_count && i < expected; i++) {
-        if (!xa_typecheck_assignable(func_type->function.param_types[i], arg_types[i])) {
+    int rest_param_index = (is_variadic && expected > 0) ? expected - 1 : -1;
+    int fixed_param_count = rest_param_index >= 0 ? rest_param_index : expected;
+    for (int i = 0; i < arg_count; i++) {
+        int param_slot = i;
+        if (is_variadic && rest_param_index >= 0 && i >= fixed_param_count)
+            param_slot = rest_param_index;
+        if (param_slot < 0 || param_slot >= expected)
+            continue;
+        if (!xa_typecheck_assignable(func_type->function.param_types[param_slot], arg_types[i])) {
             ok = false;
             char message[256];
             snprintf(message, sizeof(message),
                      "Argument %d: Type '%s' is not assignable to parameter type '%s'", i + 1,
                      xr_type_to_string(arg_types[i]),
-                     xr_type_to_string(func_type->function.param_types[i]));
+                     xr_type_to_string(func_type->function.param_types[param_slot]));
             xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                        message, loc);
         }

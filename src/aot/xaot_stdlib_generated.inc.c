@@ -256,16 +256,6 @@ static bool xaot_stdlib_generated_symbol_is_constant(const char *symbol) {
         return true;
     if (strcmp(symbol, "os.eol") == 0)
         return true;
-    if (strcmp(symbol, "log.DEBUG") == 0)
-        return true;
-    if (strcmp(symbol, "log.INFO") == 0)
-        return true;
-    if (strcmp(symbol, "log.WARN") == 0)
-        return true;
-    if (strcmp(symbol, "log.ERROR") == 0)
-        return true;
-    if (strcmp(symbol, "log.FATAL") == 0)
-        return true;
     if (strcmp(symbol, "mem.PROT_NONE") == 0)
         return true;
     if (strcmp(symbol, "mem.PROT_READ") == 0)
@@ -308,16 +298,6 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
     if (strcmp(symbol, "math.INF") == 0)
         return true;
     if (strcmp(symbol, "math.NAN") == 0)
-        return true;
-    if (strcmp(symbol, "log.DEBUG") == 0)
-        return true;
-    if (strcmp(symbol, "log.INFO") == 0)
-        return true;
-    if (strcmp(symbol, "log.WARN") == 0)
-        return true;
-    if (strcmp(symbol, "log.ERROR") == 0)
-        return true;
-    if (strcmp(symbol, "log.FATAL") == 0)
         return true;
     if (strcmp(symbol, "mem.PROT_NONE") == 0)
         return true;

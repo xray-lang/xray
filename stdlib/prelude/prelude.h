@@ -97,7 +97,7 @@ XR_FUNC const XrPreludeTypeEntry *xr_prelude_lookup_type(const XrPreludeSymbols 
 
 /*
  * Eagerly register every native XrClass that prelude entries refer to:
- * Logger (log), Regex (regex), NetConn / NetListener (net). Called from inside
+ * Regex (regex), NetConn / NetListener (net). Called from inside
  * xr_load_module_prelude during isolate init, so user code can use remaining
  * runtime-owned prelude native types without importing each owner module.
  *
