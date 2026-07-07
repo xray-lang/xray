@@ -19,11 +19,6 @@
 #include "../../src/vm/xvm.h"
 #include "../../src/vm/xvm_closure.h"
 
-#ifndef XR_OS_WINDOWS
-#include <signal.h>
-#include <unistd.h>
-#endif
-
 typedef struct XrSysMutexBody {
     xr_mutex_t mutex;
     bool initialized;
@@ -654,11 +649,7 @@ static XrValue sys_process_kill(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
         return xr_bool(false);
 
-#ifdef XR_OS_WINDOWS
-    return xr_bool(false);
-#else
-    return xr_bool(kill((pid_t) XR_TO_INT(args[0]), (int) XR_TO_INT(args[1])) == 0);
-#endif
+    return xr_bool(xr_proc_kill((XrProcId) XR_TO_INT(args[0]), (int) XR_TO_INT(args[1])) == 0);
 }
 
 #define XR_STDLIB_VM_BIND_CLASS_OS_CONDVAR 1
