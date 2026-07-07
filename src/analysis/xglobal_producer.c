@@ -384,17 +384,34 @@ static uint32_t producer_find_interface_method_signature(XgProducer *p, XgInterf
     return producer_find_interface_method_signature_depth(p, interface_id, name_id, 0);
 }
 
-static const XgInterfaceMethodSummary *
-producer_find_interface_method_summary(const XgProducer *p, XgInterfaceId interface_id,
-                                       uint32_t name_id) {
+static const XgInterfaceMethodSummary *producer_find_interface_method_summary_depth(
+    const XgProducer *p, XgInterfaceId interface_id, uint32_t name_id, uint32_t depth) {
     if (!p || !p->evidence || interface_id == XG_NO_ID || name_id == 0)
+        return NULL;
+    if (depth > 64)
         return NULL;
     for (uint32_t i = 0; i < p->evidence->ninterface_methods; i++) {
         const XgInterfaceMethodSummary *method = &p->evidence->interface_methods[i];
         if (method->owner_interface_id == interface_id && method->name_id == name_id)
             return method;
     }
+    for (uint32_t i = 0; i < p->evidence->ninterface_extends; i++) {
+        const XgInterfaceExtendsSummary *edge = &p->evidence->interface_extends[i];
+        const XgInterfaceMethodSummary *method;
+        if (edge->child_interface_id != interface_id)
+            continue;
+        method = producer_find_interface_method_summary_depth(p, edge->parent_interface_id,
+                                                              name_id, depth + 1);
+        if (method)
+            return method;
+    }
     return NULL;
+}
+
+static const XgInterfaceMethodSummary *
+producer_find_interface_method_summary(const XgProducer *p, XgInterfaceId interface_id,
+                                       uint32_t name_id) {
+    return producer_find_interface_method_summary_depth(p, interface_id, name_id, 0);
 }
 
 static bool producer_reserve_bodies(XgProducer *p, uint32_t needed) {
@@ -1506,6 +1523,19 @@ static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNod
     decl.source_span_id = (uint32_t) node->line;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
+    for (int i = 0; i < iface->extends_count; i++) {
+        const XrTypeRef *parent = iface->extends ? iface->extends[i] : NULL;
+        const char *parent_name = xr_tref_head_name(parent);
+        XgInterfaceExtendsSummary edge;
+        memset(&edge, 0, sizeof(edge));
+        edge.child_interface_id = interface_id;
+        edge.parent_interface_id = (XgInterfaceId) hash_name32(parent_name);
+        edge.name_id = edge.parent_interface_id;
+        edge.type_key = hash_tref32(parent);
+        edge.source_span_id = (uint32_t) node->line;
+        if (!xg_global_evidence_add_interface_extends(p->evidence, &edge))
+            return false;
+    }
     for (int i = 0; i < iface->method_count; i++) {
         const AstNode *method_node = iface->methods ? iface->methods[i] : NULL;
         const InterfaceMethodNode *method;
@@ -1656,7 +1686,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
         return false;
     memset(&key, 0, sizeof(key));
     key.source_hash = source_hash_for_graph(graph);
-    key.compiler_semver_hash = UINT64_C(0x0000017100000002);
+    key.compiler_semver_hash = UINT64_C(0x0000017100000003);
     key.profile_hash = fold_u64(XR_FNV64_OFFSET_BASIS, profile);
     key.imported_summary_hash = import_hash_for_graph(graph);
     key.module_id = (XgModuleId) (graph->entry_index >= 0 ? graph->entry_index + 1 : 0);

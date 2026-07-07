@@ -128,6 +128,18 @@ static uint64_t hash_interface_impl_summary(uint64_t hash, const XgInterfaceImpl
     return hash_u32(hash, row->flags);
 }
 
+static uint64_t hash_interface_extends_summary(uint64_t hash,
+                                               const XgInterfaceExtendsSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->child_interface_id);
+    hash = hash_u32(hash, row->parent_interface_id);
+    hash = hash_u32(hash, row->name_id);
+    hash = hash_u32(hash, row->type_key);
+    hash = hash_u32(hash, row->source_span_id);
+    return hash_u32(hash, row->flags);
+}
+
 static uint64_t hash_interface_method_summary(uint64_t hash, const XgInterfaceMethodSummary *row) {
     if (!row)
         return hash_u32(hash, 0);
@@ -421,6 +433,7 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->classes);
     xr_free(evidence->methods);
     xr_free(evidence->interface_impls);
+    xr_free(evidence->interface_extends);
     xr_free(evidence->interface_methods);
     xr_free(evidence->bodies);
     xr_free(evidence->callsites);
@@ -448,6 +461,13 @@ XR_FUNC bool xg_global_evidence_reserve_interface_impls(XgGlobalEvidence *eviden
     return evidence &&
            reserve_array((void **) &evidence->interface_impls, &evidence->interface_impl_cap,
                          capacity, sizeof(XgInterfaceImplSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_interface_extends(XgGlobalEvidence *evidence,
+                                                          uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->interface_extends, &evidence->interface_extend_cap,
+                         capacity, sizeof(XgInterfaceExtendsSummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_interface_methods(XgGlobalEvidence *evidence,
@@ -512,6 +532,19 @@ xg_global_evidence_add_interface_impl(XgGlobalEvidence *evidence,
         !xg_global_evidence_reserve_interface_impls(evidence, evidence->ninterface_impls + 1))
         return NULL;
     row = &evidence->interface_impls[evidence->ninterface_impls++];
+    *row = *summary;
+    return row;
+}
+
+XR_FUNC XgInterfaceExtendsSummary *
+xg_global_evidence_add_interface_extends(XgGlobalEvidence *evidence,
+                                         const XgInterfaceExtendsSummary *summary) {
+    XgInterfaceExtendsSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_interface_extends(evidence,
+                                                      evidence->ninterface_extends + 1))
+        return NULL;
+    row = &evidence->interface_extends[evidence->ninterface_extends++];
     *row = *summary;
     return row;
 }
@@ -583,6 +616,7 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_mix(hash, &evidence->nclasses, sizeof(evidence->nclasses));
     hash = hash_mix(hash, &evidence->nmethods, sizeof(evidence->nmethods));
     hash = hash_mix(hash, &evidence->ninterface_impls, sizeof(evidence->ninterface_impls));
+    hash = hash_mix(hash, &evidence->ninterface_extends, sizeof(evidence->ninterface_extends));
     hash = hash_mix(hash, &evidence->ninterface_methods, sizeof(evidence->ninterface_methods));
     hash = hash_mix(hash, &evidence->nbodies, sizeof(evidence->nbodies));
     hash = hash_mix(hash, &evidence->ncallsites, sizeof(evidence->ncallsites));
@@ -595,6 +629,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_method_summary(hash, &evidence->methods[i]);
     for (uint32_t i = 0; i < evidence->ninterface_impls; i++)
         hash = hash_interface_impl_summary(hash, &evidence->interface_impls[i]);
+    for (uint32_t i = 0; i < evidence->ninterface_extends; i++)
+        hash = hash_interface_extends_summary(hash, &evidence->interface_extends[i]);
     for (uint32_t i = 0; i < evidence->ninterface_methods; i++)
         hash = hash_interface_method_summary(hash, &evidence->interface_methods[i]);
     for (uint32_t i = 0; i < evidence->nbodies; i++)
@@ -626,11 +662,11 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             evidence->key.module_id, evidence->key.source_hash, evidence->key.compiler_semver_hash,
             evidence->key.profile_hash, evidence->key.imported_summary_hash);
     fprintf(out,
-            "counts decls=%u classes=%u methods=%u interface_impls=%u interface_methods=%u "
-            "bodies=%u callsites=%u link_deps=%u\n",
+            "counts decls=%u classes=%u methods=%u interface_impls=%u interface_extends=%u "
+            "interface_methods=%u bodies=%u callsites=%u link_deps=%u\n",
             evidence->ndecls, evidence->nclasses, evidence->nmethods, evidence->ninterface_impls,
-            evidence->ninterface_methods, evidence->nbodies, evidence->ncallsites,
-            evidence->nlink_deps);
+            evidence->ninterface_extends, evidence->ninterface_methods, evidence->nbodies,
+            evidence->ncallsites, evidence->nlink_deps);
 
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
@@ -660,6 +696,13 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         fprintf(out, "interface-impl %u class=%u interface=%u name=%u type=%u span=%u flags=0x%x\n",
                 i, impl->implementor_class_id, impl->interface_id, impl->name_id, impl->type_key,
                 impl->source_span_id, impl->flags);
+    }
+    for (uint32_t i = 0; i < evidence->ninterface_extends; i++) {
+        const XgInterfaceExtendsSummary *edge = &evidence->interface_extends[i];
+        fprintf(out,
+                "interface-extends %u child=%u parent=%u name=%u type=%u span=%u flags=0x%x\n",
+                i, edge->child_interface_id, edge->parent_interface_id, edge->name_id,
+                edge->type_key, edge->source_span_id, edge->flags);
     }
     for (uint32_t i = 0; i < evidence->ninterface_methods; i++) {
         const XgInterfaceMethodSummary *m = &evidence->interface_methods[i];
