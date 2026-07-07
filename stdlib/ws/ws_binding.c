@@ -5,16 +5,13 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * ws_binding.c - WebSocket xray module binding (pure C)
+ * ws_binding.c - WebSocket native runtime helpers
  *
  * KEY CONCEPT:
- *   Pure C WebSocket module: client and server both implemented entirely
- *   in C with stackful coroutine support. No script layer (ws.xr) needed.
- *
- * WHY THIS DESIGN:
- *   - Consistent with http module (pure C, stackful coroutine server)
- *   - Eliminates mixed script/C maintenance overhead
- *   - Server uses coroutine-per-connection model via xr_coro_create_stackful
+ *   Connection I/O, HTTP integration, and permessage-deflate remain native
+ *   runtime boundaries for now. stdlib/ws/ws.xr extends the module with pure
+ *   protocol helpers (accept-key, frame assembly, masking) that are safe to
+ *   compile in AOT.
  */
 
 #include "ws.h"
@@ -1968,7 +1965,6 @@ XrValue xr_ws_upgrade_and_wrap(XrVMRuntime *X, int fd, const char *request_heade
 #undef XR_STDLIB_VM_BIND_MODULE_WS
 
 XR_FUNC XrModule *xr_load_module_ws(XrVMRuntime *isolate) {
-    // 1. Create Native module
     XrModule *mod = xr_module_create_native(isolate, "ws");
     if (!mod)
         return NULL;
@@ -1981,6 +1977,6 @@ XR_FUNC XrModule *xr_load_module_ws(XrVMRuntime *isolate) {
 #endif
 
     xr_stdlib_vm_bind_ws_generated(isolate, mod);
-
+    mod->requires_script = true;
     return mod;
 }

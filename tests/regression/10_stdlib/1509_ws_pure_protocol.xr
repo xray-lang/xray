@@ -1,0 +1,56 @@
+// Pure-Xray WebSocket protocol helpers.
+
+import ws
+
+@test
+fn test_accept_key_and_upgrade_response() {
+    var key = "dGhlIHNhbXBsZSBub25jZQ=="
+    assert_eq(ws.acceptKey(key), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+
+    var response = ws.upgradeResponse(key)
+    assert(response.includes("HTTP/1.1 101 Switching Protocols\r\n"))
+    assert(response.includes("Upgrade: websocket\r\n"))
+    assert(response.includes("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"))
+    assert(response.endsWith("\r\n\r\n"))
+}
+
+@test
+fn test_upgrade_request_and_protocol_pick() {
+    var headers = "GET /chat HTTP/1.1\r\n" +
+        "Host: example.com\r\n" +
+        "Upgrade: websocket\r\n" +
+        "Connection: keep-alive, Upgrade\r\n" +
+        "Sec-WebSocket-Key: key\r\n" +
+        "Sec-WebSocket-Version: 13\r\n" +
+        "Sec-WebSocket-Protocol: superchat, chat\r\n\r\n"
+
+    assert(ws.isUpgradeRequest(headers))
+    assert_eq(ws.pickSubprotocol(headers, ["chat", "superchat"])!, "chat")
+    assert_eq(ws.pickSubprotocol(headers, ["missing", "superchat"])!, "superchat")
+}
+
+@test
+fn test_mask_payload_and_unmasked_frame() {
+    var masked = ws.maskPayload(Bytes([1, 2, 3, 4, 5]), Bytes([1, 1, 1, 1]))
+    assert_eq(masked[0], 0)
+    assert_eq(masked[1], 3)
+    assert_eq(masked[2], 2)
+    assert_eq(masked[3], 5)
+    assert_eq(masked[4], 4)
+
+    var f = ws.frame("Hi".toBytes(), 1, false)
+    assert_eq(f.length, 4)
+    assert_eq(f[0], 129)
+    assert_eq(f[1], 2)
+    assert_eq(f[2], 72)
+    assert_eq(f[3], 105)
+
+    var payload = Bytes(126)
+    var ext = ws.frame(payload, 2, false)
+    assert_eq(ext[0], 130)
+    assert_eq(ext[1], 126)
+    assert_eq(ext[2], 0)
+    assert_eq(ext[3], 126)
+}
+
+print("All pure websocket protocol tests passed")

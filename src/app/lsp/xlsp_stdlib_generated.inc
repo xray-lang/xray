@@ -498,10 +498,23 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"echoServe", XLSP_SYM_FUNCTION, "fn(port: int): bool", "Pure C echo server with zero VM allocation overhead per message", NULL, 0},
     {"stopServer", XLSP_SYM_FUNCTION, "fn(): ()", "Stop the WebSocket server", NULL, 0},
     {"isServerRunning", XLSP_SYM_FUNCTION, "fn(): bool", "Check if the WebSocket server is running", NULL, 0},
+    {"acceptKey", XLSP_SYM_FUNCTION, "fn(secKey: string): string", "", NULL, 0},
+    {"randomKey", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
+    {"isUpgradeRequest", XLSP_SYM_FUNCTION, "fn(headers: string): bool", "", NULL, 0},
+    {"pickSubprotocol", XLSP_SYM_FUNCTION, "fn(headers: string, serverProtocols: Array<string>): string?", "", NULL, 0},
+    {"upgradeResponse", XLSP_SYM_FUNCTION, "fn(secKey: string, protocol?: string?, deflate?: bool): string", "", NULL, 0},
+    {"clientRequest", XLSP_SYM_FUNCTION, "fn(path: string, host: string, secKey: string): string", "", NULL, 0},
+    {"maskPayload", XLSP_SYM_FUNCTION, "fn(payload: Array<uint8>, key: Array<uint8>): Array<uint8>", "", NULL, 0},
+    {"frame", XLSP_SYM_FUNCTION, "fn(payload: Array<uint8>, opcode?: int, mask?: bool): Array<uint8>", "", NULL, 0},
+    {"textFrame", XLSP_SYM_FUNCTION, "fn(data: string, mask?: bool): Array<uint8>", "", NULL, 0},
+    {"binaryFrame", XLSP_SYM_FUNCTION, "fn(data: Array<uint8>, mask?: bool): Array<uint8>", "", NULL, 0},
+    {"closeFrame", XLSP_SYM_FUNCTION, "fn(code?: int, reason?: string, mask?: bool): Array<uint8>", "", NULL, 0},
+    {"pingFrame", XLSP_SYM_FUNCTION, "fn(data?: Array<uint8>?, mask?: bool): Array<uint8>", "", NULL, 0},
+    {"pongFrame", XLSP_SYM_FUNCTION, "fn(data?: Array<uint8>?, mask?: bool): Array<uint8>", "", NULL, 0},
     {"WsConn", XLSP_SYM_CLASS, "type WsConn", "Native handle type", NULL, 0},
     {"WsMessage", XLSP_SYM_CLASS, "type WsMessage", "Native handle type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 15
+#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 28
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {

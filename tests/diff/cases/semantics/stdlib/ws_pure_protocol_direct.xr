@@ -1,0 +1,39 @@
+// Pure-Xray WebSocket protocol helpers.
+
+import ws
+import { acceptKey, maskPayload, frame } from ws
+
+var key = "dGhlIHNhbXBsZSBub25jZQ=="
+print(acceptKey(key))
+print(ws.upgradeResponse(key).includes("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"))
+
+var headers = "GET /chat HTTP/1.1\r\n" +
+    "Host: example.com\r\n" +
+    "Upgrade: websocket\r\n" +
+    "Connection: keep-alive, Upgrade\r\n" +
+    "Sec-WebSocket-Key: key\r\n" +
+    "Sec-WebSocket-Version: 13\r\n" +
+    "Sec-WebSocket-Protocol: superchat, chat\r\n\r\n"
+print(ws.isUpgradeRequest(headers))
+print(ws.pickSubprotocol(headers, ["chat", "superchat"])!)
+
+var masked = maskPayload(Bytes([1, 2, 3, 4, 5]), Bytes([1, 1, 1, 1]))
+print(masked[0])
+print(masked[1])
+print(masked[2])
+print(masked[3])
+print(masked[4])
+
+var f = frame("Hi".toBytes(), 1, false)
+print(f.length)
+print(f[0])
+print(f[1])
+print(f[2])
+print(f[3])
+
+var payload = Bytes(126)
+var ext = ws.frame(payload, 2, false)
+print(ext[0])
+print(ext[1])
+print(ext[2])
+print(ext[3])
