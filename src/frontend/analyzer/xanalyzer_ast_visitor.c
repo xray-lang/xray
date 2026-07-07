@@ -59,6 +59,10 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             visit_node(node->as.var_decl.initializer, v);
             break;
 
+        case AST_DESTRUCTURE_DECL:
+            visit_node(node->as.destructure_decl.initializer, v);
+            break;
+
         case AST_CLASS_DECL:
             for (int i = 0; i < node->as.class_decl.field_count; i++) {
                 visit_node(node->as.class_decl.fields[i], v);
@@ -155,6 +159,15 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             visit_node(node->as.assignment.value, v);
             break;
 
+        case AST_COMPOUND_ASSIGNMENT:
+            visit_node(node->as.compound_assignment.object, v);
+            visit_node(node->as.compound_assignment.value, v);
+            break;
+
+        case AST_DESTRUCTURE_ASSIGN:
+            visit_node(node->as.destructure_assign.value, v);
+            break;
+
         case AST_CALL_EXPR:
             visit_node(node->as.call_expr.callee, v);
             for (int i = 0; i < node->as.call_expr.arg_count; i++) {
@@ -164,6 +177,11 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
 
         case AST_MEMBER_ACCESS:
             visit_node(node->as.member_access.object, v);
+            break;
+
+        case AST_MEMBER_SET:
+            visit_node(node->as.member_set.object, v);
+            visit_node(node->as.member_set.value, v);
             break;
 
         case AST_INDEX_GET:
@@ -194,10 +212,34 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             }
             break;
 
+        case AST_SPREAD_EXPR:
+            visit_node(node->as.spread_expr.expr, v);
+            break;
+
+        case AST_STRUCT_LITERAL:
+            for (int i = 0; i < node->as.struct_literal.field_count; i++) {
+                visit_node(node->as.struct_literal.field_values[i], v);
+            }
+            break;
+
+        case AST_OBJECT_LITERAL:
+            for (int i = 0; i < node->as.object_literal.count; i++) {
+                if (node->as.object_literal.computed && node->as.object_literal.computed[i])
+                    visit_node(node->as.object_literal.keys[i], v);
+                visit_node(node->as.object_literal.values[i], v);
+            }
+            break;
+
         case AST_MAP_LITERAL:
             for (int i = 0; i < node->as.map_literal.count; i++) {
                 visit_node(node->as.map_literal.keys[i], v);
                 visit_node(node->as.map_literal.values[i], v);
+            }
+            break;
+
+        case AST_SET_LITERAL:
+            for (int i = 0; i < node->as.set_literal.count; i++) {
+                visit_node(node->as.set_literal.elements[i], v);
             }
             break;
 
@@ -219,6 +261,7 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
         case AST_BINARY_BXOR:
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT:
+        case AST_NULLISH_COALESCE:
             visit_node(node->as.binary.left, v);
             visit_node(node->as.binary.right, v);
             break;
@@ -226,13 +269,36 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
+        case AST_FORCE_UNWRAP:
             visit_node(node->as.unary.operand, v);
+            break;
+
+        case AST_GROUPING:
+            visit_node(node->as.grouping, v);
             break;
 
         case AST_TERNARY:
             visit_node(node->as.ternary.condition, v);
             visit_node(node->as.ternary.true_expr, v);
             visit_node(node->as.ternary.false_expr, v);
+            break;
+
+        case AST_OPTIONAL_CHAIN:
+            visit_node(node->as.optional_chain.object, v);
+            visit_node(node->as.optional_chain.index, v);
+            break;
+
+        case AST_RANGE:
+            visit_node(node->as.range.start, v);
+            visit_node(node->as.range.end, v);
+            break;
+
+        case AST_IS_EXPR:
+            visit_node(node->as.is_expr.expr, v);
+            break;
+
+        case AST_AS_EXPR:
+            visit_node(node->as.as_expr.expr, v);
             break;
 
         case AST_TRY_CATCH:
@@ -252,12 +318,51 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             visit_node(node->as.go_expr.expr, v);
             break;
 
+        case AST_CHANNEL_NEW:
+            visit_node(node->as.channel_new.buffer_size, v);
+            break;
+
         case AST_UNSAFE_EXPR:
             visit_node(node->as.unsafe_expr.operand, v);
             break;
         case AST_AWAIT_EXPR:
             visit_node(node->as.await_expr.expr, v);
+            visit_node(node->as.await_expr.timeout, v);
             visit_node(node->as.await_expr.into, v);
+            break;
+
+        case AST_YIELD_STMT:
+            visit_node(node->as.yield_stmt.value, v);
+            break;
+
+        case AST_DEFER_STMT:
+            visit_node(node->as.defer_stmt.expr, v);
+            break;
+
+        case AST_SCOPE_BLOCK:
+            visit_node(node->as.scope_block.body, v);
+            break;
+
+        case AST_MOVE_EXPR:
+            visit_node(node->as.move_expr.expr, v);
+            break;
+
+        case AST_SLICE_EXPR:
+            visit_node(node->as.slice_expr.source, v);
+            visit_node(node->as.slice_expr.start, v);
+            visit_node(node->as.slice_expr.end, v);
+            break;
+
+        case AST_NEW_EXPR:
+            for (int i = 0; i < node->as.new_expr.arg_count; i++) {
+                visit_node(node->as.new_expr.arguments[i], v);
+            }
+            break;
+
+        case AST_SUPER_CALL:
+            for (int i = 0; i < node->as.super_call.arg_count; i++) {
+                visit_node(node->as.super_call.arguments[i], v);
+            }
             break;
 
         case AST_SELECT_STMT:
@@ -266,11 +371,78 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             }
             break;
 
+        case AST_SELECT_CASE:
+            visit_node(node->as.select_case.channel, v);
+            visit_node(node->as.select_case.value, v);
+            visit_node(node->as.select_case.body, v);
+            break;
+
         case AST_MATCH_EXPR:
             visit_node(node->as.match_expr.expr, v);
             for (int i = 0; i < node->as.match_expr.arm_count; i++) {
                 visit_node(node->as.match_expr.arms[i], v);
             }
+            break;
+
+        case AST_MATCH_ARM:
+            visit_node(node->as.match_arm.pattern, v);
+            visit_node(node->as.match_arm.guard, v);
+            visit_node(node->as.match_arm.body, v);
+            break;
+
+        case AST_PATTERN_LITERAL:
+            visit_node(node->as.pattern_literal.value, v);
+            break;
+
+        case AST_PATTERN_RANGE:
+            visit_node(node->as.pattern_range.start, v);
+            visit_node(node->as.pattern_range.end, v);
+            break;
+
+        case AST_PATTERN_MULTI:
+            for (int i = 0; i < node->as.pattern_multi.count; i++) {
+                visit_node(node->as.pattern_multi.patterns[i], v);
+            }
+            break;
+
+        case AST_PATTERN_TUPLE:
+            for (int i = 0; i < node->as.pattern_tuple.count; i++) {
+                visit_node(node->as.pattern_tuple.patterns[i], v);
+            }
+            break;
+
+        case AST_PATTERN_OBJECT:
+            for (int i = 0; i < node->as.pattern_object.count; i++) {
+                visit_node(node->as.pattern_object.patterns[i], v);
+            }
+            break;
+
+        case AST_PATTERN_ARRAY:
+            for (int i = 0; i < node->as.pattern_array.count; i++) {
+                visit_node(node->as.pattern_array.patterns[i], v);
+            }
+            break;
+
+        case AST_PATTERN_ADT:
+            visit_node(node->as.pattern_adt.variant, v);
+            for (int i = 0; i < node->as.pattern_adt.count; i++) {
+                visit_node(node->as.pattern_adt.patterns[i], v);
+            }
+            break;
+
+        case AST_TEMPLATE_STRING:
+            for (int i = 0; i < node->as.template_str.part_count; i++) {
+                visit_node(node->as.template_str.parts[i], v);
+            }
+            break;
+
+        case AST_ENUM_INDEX:
+            visit_node(node->as.enum_index.collection, v);
+            visit_node(node->as.enum_index.index_expr, v);
+            break;
+
+        case AST_EXPORT_STMT:
+            visit_node(node->as.export_stmt.declaration, v);
             break;
 
         default:
