@@ -3607,6 +3607,145 @@ static bool xicgen_emit_planned_type_switch_method(XiCgenCtx *ctx, FILE *out, co
     return true;
 }
 
+static bool xicgen_emit_vtable_target_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                             const XiValue *v, const char *prefix,
+                                             const XiFunc *target_func, const char *target_prefix) {
+    if (cg_func_needs_aot_coro(target_func)) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: unsupported AOT sync vtable method call to suspendable function "
+                "'%s'\n",
+                target_func->name ? target_func->name : "?");
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    if (cg_class_func_uses_native_receiver(ctx, target_func)) {
+        CgClassNativeFunc target_info = cg_class_native_func(ctx, target_func);
+        const char *conv_suffix =
+            emit_direct_call_return_conversion_prefix(ctx, out, f, v, target_func);
+        if (!target_info.class_data) {
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        if (ctx->error) {
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        emit_fname(ctx, out, target_prefix ? target_prefix : prefix, target_func);
+        fprintf(out, "(NULL, (");
+        emit_class_native_type_name(
+            out,
+            cg_class_native_prefix_for_data(ctx, target_info.class_data,
+                                            target_prefix ? target_prefix : prefix),
+            target_info.class_data->class_name);
+        fprintf(out, "*)_xr_vt_recv_%u.ptr", v->id);
+        for (uint16_t a = 1; a < v->nargs; a++) {
+            fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, target_func, a));
+        }
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    return xicgen_emit_direct_method(ctx, out, f, v, prefix, target_func, target_prefix);
+}
+
+static bool xicgen_emit_planned_vtable_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                              const XiValue *v, const char *prefix,
+                                              const XaotMethodDispatchPlan *dispatch_plan) {
+    const XaotBundle *bundle;
+    bool void_like;
+    if (!dispatch_plan || dispatch_plan->kind != XAOT_DISPATCH_VTABLE)
+        return false;
+    if (dispatch_plan->receiver_static_class_id == XG_NO_ID)
+        return false;
+    bundle = cg_ctx_aot_bundle(ctx);
+    if (!bundle || dispatch_plan->target_count == 0 || dispatch_plan->target_start == 0 ||
+        dispatch_plan->target_start - 1 + dispatch_plan->target_count >
+            bundle->ndispatch_target_cases) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: verified AOT vtable dispatch plan at line %u has no target "
+                "cases\n",
+                (unsigned) v->line);
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+
+    void_like = cg_is_void_like(v);
+    fprintf(out, "({ XrValue _xr_vt_recv_%u = ", v->id);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, "; bool _xr_vt_matched_%u = false; ", v->id);
+    if (!void_like) {
+        fprintf(out,
+                "%s _xr_vt_result_%u; memset(&_xr_vt_result_%u, 0, sizeof(_xr_vt_result_%u)); ",
+                local_ctype_str_ctx(ctx, f, v), v->id, v->id, v->id);
+    }
+
+    for (uint16_t i = 0; i < dispatch_plan->target_count; i++) {
+        const XaotDispatchTargetCase *target =
+            &bundle->dispatch_target_cases[dispatch_plan->target_start - 1 + i];
+        const XiClassData *target_class =
+            xicgen_find_dispatch_class_data(ctx, bundle, target->receiver_class_id);
+        const char *target_prefix = NULL;
+        const XiFunc *target_func =
+            xaot_bundle_find_dispatch_target_func(bundle, target, &target_prefix);
+        if (!target_class || !target_func) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: verified AOT vtable target %u/%u for method '%s' at line %u "
+                    "has no Xi class/function\n",
+                    (unsigned) target->receiver_class_id, (unsigned) target->method_id,
+                    v->aux ? (const char *) v->aux : "?", (unsigned) v->line);
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        fprintf(out, "%s (xrt_instance_exact_type(_xr_vt_recv_%u, (uint16_t)",
+                i == 0 ? "if" : "else if", v->id);
+        if (!emit_class_native_type_id_expr(ctx, out, target_class)) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: verified AOT vtable class %u for method '%s' at line %u has "
+                    "no native type id\n",
+                    (unsigned) target->receiver_class_id, v->aux ? (const char *) v->aux : "?",
+                    (unsigned) v->line);
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        fprintf(out, ")) { ");
+        if (void_like) {
+            fprintf(out, "(void)(");
+            if (!xicgen_emit_vtable_target_method(ctx, out, f, v, prefix, target_func,
+                                                  target_prefix)) {
+                ctx->error = true;
+                emit_codegen_abort_expr(out);
+                return true;
+            }
+            fprintf(out, "); ");
+        } else {
+            fprintf(out, "_xr_vt_result_%u = ", v->id);
+            if (!xicgen_emit_vtable_target_method(ctx, out, f, v, prefix, target_func,
+                                                  target_prefix)) {
+                ctx->error = true;
+                emit_codegen_abort_expr(out);
+                return true;
+            }
+            fprintf(out, "; ");
+        }
+        fprintf(out, "_xr_vt_matched_%u = true; } ", v->id);
+    }
+    fprintf(out,
+            "if (!_xr_vt_matched_%u) { fprintf(stderr, \"xray AOT: verified class vtable dispatch "
+            "missed\\n\"); abort(); } ",
+            v->id);
+    if (void_like)
+        fprintf(out, "XR_NULL_VAL; })");
+    else
+        fprintf(out, "_xr_vt_result_%u; })", v->id);
+    return true;
+}
+
 static bool xicgen_emit_planned_direct_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                               const XiValue *v, const char *prefix,
                                               const XaotMethodDispatchPlan *dispatch_plan) {
@@ -4712,8 +4851,39 @@ static void xicgen_bytes_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
 static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                             const XiValue *v, const char *prefix);
 
+static bool xicgen_runtime_method_plan_allows_helper(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                     const char *method, uint16_t nargs,
+                                                     const XaotMethodDispatchPlan *dispatch_plan) {
+    if (!dispatch_plan)
+        return true;
+    if (dispatch_plan->kind != XAOT_DISPATCH_RUNTIME_FALLBACK) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: verified AOT dispatch plan kind %u for method '%s' at line %u "
+                "cannot use runtime method helper\n",
+                (unsigned) dispatch_plan->kind, method ? method : "?", v ? (unsigned) v->line : 0);
+        emit_codegen_abort_expr(out);
+        return false;
+    }
+    if (dispatch_plan->method_name_id == 0 || dispatch_plan->method_name_id != xg_name_id(method) ||
+        dispatch_plan->arg_count != nargs ||
+        (v && v->line != 0 && dispatch_plan->source_span_id != 0 &&
+         dispatch_plan->source_span_id != v->line)) {
+        ctx->error = true;
+        fprintf(
+            stderr,
+            "[xi_cgen] ERROR: runtime method helper for '%s' at line %u does not match verified "
+            "AOT dispatch plan\n",
+            method ? method : "?", v ? (unsigned) v->line : 0);
+        emit_codegen_abort_expr(out);
+        return false;
+    }
+    return true;
+}
+
 static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                       const char *method, uint16_t nargs) {
+                                       const char *method, uint16_t nargs,
+                                       const XaotMethodDispatchPlan *dispatch_plan) {
     if (xicgen_emit_int_numeric_method(ctx, out, v, method, nargs))
         return;
     if (xicgen_emit_json_static_method(ctx, out, v, method, nargs))
@@ -4781,6 +4951,8 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     if (emit_local_typed_map_method_call_expr(ctx, out, f, v))
         return;
     if (emit_local_typed_set_method_call_expr(ctx, out, f, v))
+        return;
+    if (!xicgen_runtime_method_plan_allows_helper(ctx, out, v, method, nargs, dispatch_plan))
         return;
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
     if (nargs == 0) {
@@ -5091,13 +5263,16 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     if (xicgen_emit_planned_direct_method(ctx, out, f, v, prefix, dispatch_plan))
         return;
+    if (xicgen_emit_planned_vtable_method(ctx, out, f, v, prefix, dispatch_plan))
+        return;
     if (xicgen_emit_planned_type_switch_method(ctx, out, f, v, prefix, dispatch_plan))
         return;
-    if (xicgen_emit_direct_method(ctx, out, f, v, prefix, mfunc, method_prefix))
+    if (!dispatch_plan && xicgen_emit_direct_method(ctx, out, f, v, prefix, mfunc, method_prefix))
         return;
-    if (!is_super && xicgen_emit_static_method(ctx, out, f, v, prefix))
+    if (!is_super && !dispatch_plan && xicgen_emit_static_method(ctx, out, f, v, prefix))
         return;
     if (dispatch_plan && (dispatch_plan->kind == XAOT_DISPATCH_DIRECT ||
+                          dispatch_plan->kind == XAOT_DISPATCH_VTABLE ||
                           dispatch_plan->kind == XAOT_DISPATCH_TYPE_SWITCH)) {
         ctx->error = true;
         fprintf(stderr,
@@ -5107,7 +5282,7 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         emit_codegen_abort_expr(out);
         return;
     }
-    xicgen_emit_runtime_method(ctx, out, f, v, method, nargs);
+    xicgen_emit_runtime_method(ctx, out, f, v, method, nargs, dispatch_plan);
 }
 
 static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

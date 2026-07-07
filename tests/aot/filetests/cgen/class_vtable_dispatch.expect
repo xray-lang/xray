@@ -1,0 +1,9 @@
+contains=xaot-plan v0
+regex=method-dispatch [0-9]+ callsite=[0-9]+ span=[0-9]+ kind=vtable .*recv_class=[1-9][0-9]* recv_iface=0 slot=- targets=[0-9]+\+2 evidence=0x81 reason=polymorphic
+regex=dispatch-target [0-9]+ callsite=[0-9]+ recv_class=[1-9][0-9]* method=[1-9][0-9]* evidence=0x81
+c_contains=xrt_instance_exact_type(
+c_regex=if \(xrt_instance_exact_type\(_xr_vt_recv_[0-9]+, \(uint16_t\).+\)\)
+c_regex=else if \(xrt_instance_exact_type\(_xr_vt_recv_[0-9]+, \(uint16_t\).+\)\)
+c_contains=xray AOT: verified class vtable dispatch missed
+c_not_contains=xrt_method_
+not_contains=verified AOT dispatch plan kind
