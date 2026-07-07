@@ -539,10 +539,12 @@ static const XgDeclSummary *verify_find_evidence_decl_by_kind_name(const XgGloba
     return NULL;
 }
 
-static const XgInterfaceMethodSummary *
-verify_find_evidence_interface_method(const XgGlobalEvidence *ev, XgInterfaceId interface_id,
-                                      uint32_t name_id, uint32_t signature_key) {
+static const XgInterfaceMethodSummary *verify_find_evidence_interface_method_depth(
+    const XgGlobalEvidence *ev, XgInterfaceId interface_id, uint32_t name_id,
+    uint32_t signature_key, uint32_t depth) {
     if (!ev || interface_id == XG_NO_ID || name_id == 0 || signature_key == 0)
+        return NULL;
+    if (depth > 64)
         return NULL;
     for (uint32_t i = 0; i < ev->ninterface_methods; i++) {
         const XgInterfaceMethodSummary *method = &ev->interface_methods[i];
@@ -550,7 +552,23 @@ verify_find_evidence_interface_method(const XgGlobalEvidence *ev, XgInterfaceId 
             method->signature_key == signature_key)
             return method;
     }
+    for (uint32_t i = 0; i < ev->ninterface_extends; i++) {
+        const XgInterfaceExtendsSummary *edge = &ev->interface_extends[i];
+        const XgInterfaceMethodSummary *method;
+        if (edge->child_interface_id != interface_id)
+            continue;
+        method = verify_find_evidence_interface_method_depth(
+            ev, edge->parent_interface_id, name_id, signature_key, depth + 1);
+        if (method)
+            return method;
+    }
     return NULL;
+}
+
+static const XgInterfaceMethodSummary *
+verify_find_evidence_interface_method(const XgGlobalEvidence *ev, XgInterfaceId interface_id,
+                                      uint32_t name_id, uint32_t signature_key) {
+    return verify_find_evidence_interface_method_depth(ev, interface_id, name_id, signature_key, 0);
 }
 
 static const XgClassSummary *verify_find_evidence_class(const XgGlobalEvidence *ev,
@@ -819,6 +837,59 @@ static bool verify_interface_implementor_set(const XgGlobalEvidence *ev, const X
 
     if (bundle->ninterface_use_plans != ev->ninterface_impls)
         return set_error(errbuf, errbuf_len, "AOT interface-use plan count mismatches evidence");
+    return true;
+}
+
+static bool verify_interface_extends_reaches(const XgGlobalEvidence *ev, XgInterfaceId from,
+                                             XgInterfaceId target, uint32_t depth) {
+    if (!ev || from == XG_NO_ID || target == XG_NO_ID || depth > 64)
+        return false;
+    if (from == target)
+        return true;
+    for (uint32_t i = 0; i < ev->ninterface_extends; i++) {
+        const XgInterfaceExtendsSummary *edge = &ev->interface_extends[i];
+        if (edge->child_interface_id != from)
+            continue;
+        if (verify_interface_extends_reaches(ev, edge->parent_interface_id, target, depth + 1))
+            return true;
+    }
+    return false;
+}
+
+static bool verify_interface_extends_rows(const XgGlobalEvidence *ev, char *errbuf,
+                                          size_t errbuf_len) {
+    if (!ev)
+        return set_error(errbuf, errbuf_len,
+                         "AOT global evidence interface extends verifier has no evidence");
+    for (uint32_t i = 0; i < ev->ninterface_extends; i++) {
+        const XgInterfaceExtendsSummary *edge = &ev->interface_extends[i];
+        if (edge->child_interface_id == XG_NO_ID || edge->parent_interface_id == XG_NO_ID ||
+            edge->name_id == 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface extends identity is stale");
+        if (edge->name_id != edge->parent_interface_id)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface extends parent does not re-derive");
+        if (!verify_find_evidence_decl_by_kind_name(ev, XG_DECL_INTERFACE,
+                                                    edge->child_interface_id))
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface extends child is missing");
+        if (!verify_find_evidence_decl_by_kind_name(ev, XG_DECL_INTERFACE,
+                                                    edge->parent_interface_id))
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface extends parent is missing");
+        for (uint32_t j = i + 1; j < ev->ninterface_extends; j++) {
+            const XgInterfaceExtendsSummary *other = &ev->interface_extends[j];
+            if (other->child_interface_id == edge->child_interface_id &&
+                other->parent_interface_id == edge->parent_interface_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence interface extends edge is duplicated");
+        }
+        if (verify_interface_extends_reaches(ev, edge->parent_interface_id,
+                                             edge->child_interface_id, 0))
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface extends graph has a cycle");
+    }
     return true;
 }
 
@@ -1439,9 +1510,11 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     if (bundle->global_evidence_plan.evidence_hash != xg_global_evidence_hash(ev))
         return set_error(errbuf, errbuf_len, "AOT global evidence hash is stale");
 
-    if (!verify_body_summary_ranges(ev, errbuf, errbuf_len))
+    if (!verify_interface_extends_rows(ev, errbuf, errbuf_len))
         return false;
     if (!verify_interface_method_rows(ev, errbuf, errbuf_len))
+        return false;
+    if (!verify_body_summary_ranges(ev, errbuf, errbuf_len))
         return false;
 
     for (uint32_t i = 0; i < ev->nclasses; i++) {

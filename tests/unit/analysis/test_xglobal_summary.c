@@ -278,6 +278,12 @@ TEST(global_evidence_dump_lists_core_rows) {
                                    .type_key = 456,
                                    .source_span_id = 77,
                                    .flags = 0};
+    XgInterfaceExtendsSummary interface_extends = {.child_interface_id = 123,
+                                                   .parent_interface_id = 124,
+                                                   .name_id = 124,
+                                                   .type_key = 457,
+                                                   .source_span_id = 78,
+                                                   .flags = 0};
     XgInterfaceMethodSummary interface_method = {.interface_method_id = 7,
                                                  .owner_interface_id = 123,
                                                  .name_id = 700,
@@ -326,6 +332,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
     ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_extends(&ev, &interface_extends));
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_method(&ev, &interface_method));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
@@ -338,6 +345,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "class 0 id=2 module=1 decl=2 name=44 parent=0"));
     ASSERT_NOT_NULL(strstr(dump, "method 0 id=3 owner=2"));
     ASSERT_NOT_NULL(strstr(dump, "interface-impl 0 class=2 interface=123"));
+    ASSERT_NOT_NULL(strstr(dump, "interface-extends 0 child=123 parent=124"));
     ASSERT_NOT_NULL(strstr(dump, "interface-method 0 id=7 owner=123 name=700"));
     ASSERT_NOT_NULL(strstr(dump, "body 0 func=4 module=1 decl=2"));
     ASSERT_NOT_NULL(strstr(dump, "name=88 sig=66"));
@@ -2224,7 +2232,7 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
                                     .decl_id = 2,
                                     .kind = XG_DECL_INTERFACE,
                                     .name_id = 444,
-                                    .signature_key = 1,
+                                    .signature_key = 0,
                                     .source_span_id = 8};
     XgBodySummary interface_missing_method_body = body;
     XgCallsiteSummary interface_missing_method_call = call;
@@ -2349,6 +2357,116 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence extern callsite declaration is missing"));
     xaot_bundle_free(&extern_missing_decl_bundle);
     xg_global_evidence_free(&extern_missing_decl_ev);
+}
+
+TEST(global_evidence_verifier_rejects_stale_interface_extends_rows) {
+    XgBuildKey key = {.source_hash = 0x91,
+                      .compiler_semver_hash = 0x92,
+                      .profile_hash = 0x93,
+                      .imported_summary_hash = 0x94,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary func_decl = {.module_id = 1,
+                               .decl_id = 1,
+                               .kind = XG_DECL_FUNC,
+                               .name_id = 11,
+                               .signature_key = 22,
+                               .source_span_id = 3};
+    XgDeclSummary child_decl = {.module_id = 1,
+                                .decl_id = 2,
+                                .kind = XG_DECL_INTERFACE,
+                                .name_id = 101,
+                                .signature_key = 0,
+                                .source_span_id = 4};
+    XgDeclSummary parent_decl = {.module_id = 1,
+                                 .decl_id = 3,
+                                 .kind = XG_DECL_INTERFACE,
+                                 .name_id = 102,
+                                 .signature_key = 0,
+                                 .source_span_id = 5};
+    XgBodySummary body = {.func_id = 1,
+                          .module_id = 1,
+                          .owner_decl_id = 1,
+                          .name_id = 11,
+                          .signature_key = 22,
+                          .source_span_id = 3,
+                          .kind = XG_BODY_FUNCTION,
+                          .body_hash = 0x9192};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    char err[256];
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    XgGlobalEvidence missing_parent_ev;
+    XgInterfaceExtendsSummary missing_parent_edge = {.child_interface_id = 101,
+                                                     .parent_interface_id = 999,
+                                                     .name_id = 999,
+                                                     .type_key = 777,
+                                                     .source_span_id = 4};
+    xg_global_evidence_init(&missing_parent_ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&missing_parent_ev, &func_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&missing_parent_ev, &child_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_extends(&missing_parent_ev,
+                                                            &missing_parent_edge));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&missing_parent_ev, &body));
+
+    XaotBundle missing_parent_bundle;
+    memset(&missing_parent_bundle, 0, sizeof(missing_parent_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&missing_parent_bundle, &missing_parent_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    missing_parent_bundle.modules = modules;
+    missing_parent_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&missing_parent_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&missing_parent_bundle, XAOT_VERIFY_AOT_READY, err,
+                                    sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence interface extends parent is missing"));
+    xaot_bundle_free(&missing_parent_bundle);
+    xg_global_evidence_free(&missing_parent_ev);
+
+    XgGlobalEvidence cycle_ev;
+    XgBuildKey cycle_key = key;
+    XgInterfaceExtendsSummary cycle_edges[] = {
+        {.child_interface_id = 101,
+         .parent_interface_id = 102,
+         .name_id = 102,
+         .type_key = 1,
+         .source_span_id = 4},
+        {.child_interface_id = 102,
+         .parent_interface_id = 101,
+         .name_id = 101,
+         .type_key = 2,
+         .source_span_id = 5},
+    };
+    cycle_key.source_hash = 0x95;
+    xg_global_evidence_init(&cycle_ev, cycle_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&cycle_ev, &func_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&cycle_ev, &child_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&cycle_ev, &parent_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_extends(&cycle_ev, &cycle_edges[0]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_extends(&cycle_ev, &cycle_edges[1]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&cycle_ev, &body));
+
+    XaotBundle cycle_bundle;
+    memset(&cycle_bundle, 0, sizeof(cycle_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&cycle_bundle, &cycle_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    cycle_bundle.modules = modules;
+    cycle_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&cycle_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&cycle_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence interface extends graph has a cycle"));
+    xaot_bundle_free(&cycle_bundle);
+    xg_global_evidence_free(&cycle_ev);
 }
 
 TEST(global_evidence_verifier_rederives_method_body_signature) {
@@ -3289,6 +3407,89 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
+    setup_parser_session();
+    const char *source = "interface Shape {\n"
+                         "    area() -> float\n"
+                         "}\n"
+                         "interface Drawable extends Shape {\n"
+                         "}\n"
+                         "class Circle implements Drawable {\n"
+                         "    area() -> float { return 1.0 }\n"
+                         "}\n"
+                         "fn describe(shape: Drawable) -> float {\n"
+                         "    return shape.area()\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.ninterface_extends, 1);
+    ASSERT_EQ_UINT(ev.ninterface_methods, 1);
+    ASSERT_EQ_UINT(ev.ninterface_impls, 1);
+    XgInterfaceId shape_id = ev.interface_extends[0].parent_interface_id;
+    XgInterfaceId drawable_id = ev.interface_extends[0].child_interface_id;
+    ASSERT_EQ_UINT(ev.interface_methods[0].owner_interface_id, shape_id);
+
+    uint32_t inherited_interface_calls = 0;
+    for (uint32_t i = 0; i < ev.ncallsites; i++) {
+        const XgCallsiteSummary *call = &ev.callsites[i];
+        if (call->kind != XG_CALL_INTERFACE)
+            continue;
+        inherited_interface_calls++;
+        ASSERT_EQ_UINT(call->receiver_static_interface_id, drawable_id);
+        ASSERT_EQ_UINT(call->method_id, ev.interface_methods[0].interface_method_id);
+        ASSERT_EQ_UINT(call->method_name_id, ev.interface_methods[0].name_id);
+        ASSERT_EQ_UINT(call->method_signature_key, ev.interface_methods[0].signature_key);
+    }
+    ASSERT_EQ_UINT(inherited_interface_calls, 1);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    ASSERT_EQ_UINT(bundle.nmethod_dispatch_plans, 1);
+    ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].kind, XAOT_DISPATCH_DIRECT);
+    ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].receiver_static_interface_id, drawable_id);
+    ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].method_id,
+                   ev.interface_methods[0].interface_method_id);
+    ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 1);
+
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_metadata_reachability) {
     setup_parser_session();
     const char *source = "@derive(Inspect)\n"
@@ -3655,6 +3856,7 @@ RUN_TEST(global_evidence_verifier_rederives_interface_implementor_set);
 RUN_TEST(global_evidence_verifier_rederives_profile_actions);
 RUN_TEST(global_evidence_verifier_rederives_body_callsite_ranges);
 RUN_TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows);
+RUN_TEST(global_evidence_verifier_rejects_stale_interface_extends_rows);
 RUN_TEST(global_evidence_verifier_rederives_method_body_signature);
 RUN_TEST(global_evidence_verifier_rejects_stale_body_identity_rows);
 RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
@@ -3666,6 +3868,7 @@ RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
 RUN_TEST(global_evidence_producer_marks_native_methods_bodyless);
 RUN_TEST(global_evidence_producer_resolves_interface_callsite_receivers);
+RUN_TEST(global_evidence_producer_resolves_interface_extends_callsite_methods);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);

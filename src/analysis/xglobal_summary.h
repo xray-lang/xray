@@ -196,6 +196,15 @@ typedef struct XgInterfaceImplSummary {
     uint32_t flags;
 } XgInterfaceImplSummary;
 
+typedef struct XgInterfaceExtendsSummary {
+    XgInterfaceId child_interface_id;
+    XgInterfaceId parent_interface_id;
+    uint32_t name_id;
+    uint32_t type_key;
+    uint32_t source_span_id;
+    uint32_t flags;
+} XgInterfaceExtendsSummary;
+
 typedef struct XgInterfaceMethodSummary {
     XgInterfaceMethodId interface_method_id;
     XgInterfaceId owner_interface_id;
@@ -261,6 +270,7 @@ typedef struct XgGlobalEvidence {
     XgClassSummary *classes;
     XgMethodSummary *methods;
     XgInterfaceImplSummary *interface_impls;
+    XgInterfaceExtendsSummary *interface_extends;
     XgInterfaceMethodSummary *interface_methods;
     XgBodySummary *bodies;
     XgCallsiteSummary *callsites;
@@ -270,6 +280,7 @@ typedef struct XgGlobalEvidence {
     uint32_t nclasses;
     uint32_t nmethods;
     uint32_t ninterface_impls;
+    uint32_t ninterface_extends;
     uint32_t ninterface_methods;
     uint32_t nbodies;
     uint32_t ncallsites;
@@ -279,6 +290,7 @@ typedef struct XgGlobalEvidence {
     uint32_t class_cap;
     uint32_t method_cap;
     uint32_t interface_impl_cap;
+    uint32_t interface_extend_cap;
     uint32_t interface_method_cap;
     uint32_t body_cap;
     uint32_t callsite_cap;
@@ -305,6 +317,8 @@ XR_FUNC bool xg_global_evidence_reserve_classes(XgGlobalEvidence *evidence, uint
 XR_FUNC bool xg_global_evidence_reserve_methods(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_interface_impls(XgGlobalEvidence *evidence,
                                                         uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_interface_extends(XgGlobalEvidence *evidence,
+                                                          uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_interface_methods(XgGlobalEvidence *evidence,
                                                           uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_bodies(XgGlobalEvidence *evidence, uint32_t capacity);
@@ -320,6 +334,9 @@ XR_FUNC XgMethodSummary *xg_global_evidence_add_method(XgGlobalEvidence *evidenc
 XR_FUNC XgInterfaceImplSummary *
 xg_global_evidence_add_interface_impl(XgGlobalEvidence *evidence,
                                       const XgInterfaceImplSummary *summary);
+XR_FUNC XgInterfaceExtendsSummary *
+xg_global_evidence_add_interface_extends(XgGlobalEvidence *evidence,
+                                         const XgInterfaceExtendsSummary *summary);
 XR_FUNC XgInterfaceMethodSummary *
 xg_global_evidence_add_interface_method(XgGlobalEvidence *evidence,
                                         const XgInterfaceMethodSummary *summary);
