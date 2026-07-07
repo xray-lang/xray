@@ -345,8 +345,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http", "sendResponse", "(fd: int, body: string, status?: int): bool", "Send HTTP response on fd", "http_send_response_fast", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
     {"http", "download", "(url: string, path: string): DownloadResult", "Download file from URL", "http_download", "slow", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"http", "getContentLength", "(url: string): int", "Get content length of URL", "http_get_content_length", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
-    {"http", "setProxy", "(url: string): ()", "Set HTTP proxy", "http_set_proxy", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
-    {"http", "clearProxy", "(): ()", "Clear HTTP proxy", "http_clear_proxy", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
     {"http", "h2Get", "(url: string, options?: Json): Json", "HTTP/2 GET request", "h2_get", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"http", "h2Post", "(url: string, body: string, contentType?: string): Json", "HTTP/2 POST request", "h2_post", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
     {"http", "h2Request", "(options: Json): Json", "Generic HTTP/2 request", "h2_request", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},

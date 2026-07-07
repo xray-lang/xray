@@ -24,7 +24,6 @@
 #include "http_server.h"
 #include "../../src/base/xplatform.h"
 #include "http_stream.h"
-#include "http_proxy.h"
 #include "../common.h"
 #include "../../src/runtime/object/xjson_serde.h"
 // NOTE: WebSocket moved to separate 'ws' module
@@ -628,21 +627,6 @@ void xr_http_module_context_free(XrHttpContext *ctx) {
         ctx->cookie_jar = NULL;
     }
 
-    // Free proxy config
-    if (ctx->proxy) {
-        xr_proxy_config_free(ctx->proxy);
-        xr_free(ctx->proxy);
-        ctx->proxy = NULL;
-    }
-
-    // Free no_proxy list
-    for (int i = 0; i < ctx->no_proxy_count; i++) {
-        xr_free(ctx->no_proxy[i]);
-    }
-    xr_free(ctx->no_proxy);
-    ctx->no_proxy = NULL;
-    ctx->no_proxy_count = 0;
-
     // Free HTTP/2 server
     if (ctx->h2_server) {
         xr_h2_server_free(ctx->h2_server);
@@ -1111,34 +1095,6 @@ static XrValue http_get_content_length(XrVMRuntime *X, XrValue *args, int argc) 
     URL_COPY_END();
 
     return xr_int(size);
-}
-
-/* ========== Proxy Settings API ========== */
-
-// http.setProxy(url) -> void (format: http://[user:pass@]host:port)
-static XrValue http_set_proxy(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-
-    size_t url_len;
-    const char *url = xrs_string_arg(args[0], &url_len);
-    if (!url)
-        return xr_null();
-
-    // URL copy (stack allocation optimization)
-    URL_COPY_BEGIN(url, url_len)
-    xr_set_proxy(X, url_copy);
-    URL_COPY_END();
-
-    return xr_null();
-}
-
-// http.clearProxy() -> void
-static XrValue http_clear_proxy(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    xr_clear_proxy(X);
-    return xr_null();
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_HTTP 1

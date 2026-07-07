@@ -190,8 +190,6 @@ static const XaBuiltinMember g_gen_http_functions[] = {
     {"sendResponse", "(fd: int, body: string, status?: int): bool", "Send HTTP response on fd", true, false, false},
     {"download", "(url: string, path: string): DownloadResult", "Download file from URL", true, false, false},
     {"getContentLength", "(url: string): int", "Get content length of URL", true, false, false},
-    {"setProxy", "(url: string): ()", "Set HTTP proxy", true, false, false},
-    {"clearProxy", "(): ()", "Clear HTTP proxy", true, false, false},
     {"h2Get", "(url: string, options?: Json): Json", "HTTP/2 GET request", true, false, false},
     {"h2Post", "(url: string, body: string, contentType?: string): Json", "HTTP/2 POST request", true, false, false},
     {"h2Request", "(options: Json): Json", "Generic HTTP/2 request", true, false, false},
@@ -200,7 +198,7 @@ static const XaBuiltinMember g_gen_http_functions[] = {
     {"h2Stop", "(): ()", "Stop HTTP/2 server", true, false, false},
     {"h2Push", "(path: string, contentType: string, data: string): bool", "Push HTTP/2 response data", true, false, false},
 };
-#define GEN_HTTP_FUNCTION_COUNT 29
+#define GEN_HTTP_FUNCTION_COUNT 27
 
 // io.FileStat handle fields
 static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {
