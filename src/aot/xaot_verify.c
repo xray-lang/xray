@@ -858,6 +858,12 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                         "AOT global evidence interface callsite declaration is missing");
                 break;
             case XG_CALL_CLOSURE:
+                if (call->static_target_func_id != XG_NO_ID ||
+                    call->receiver_static_class_id != XG_NO_ID ||
+                    call->receiver_static_interface_id != XG_NO_ID || call->method_id != XG_NO_ID ||
+                    call->method_name_id != 0 || call->method_signature_key != 0)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT global evidence closure callsite identity is stale");
                 break;
             case XG_CALL_NATIVE:
                 if (call->method_id == XG_NO_ID || call->method_name_id == 0)
