@@ -22,6 +22,10 @@
 #include <stdatomic.h>
 #include <stdio.h>
 #if defined(XR_OS_WINDOWS)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
 #include <process.h>
 #define XRT_SYS_PROCESS_KILLED_EXIT_CODE ((unsigned int) 0xE0000001u)
 #else
@@ -216,6 +220,53 @@ static inline char **xrt_sys_process_argv_from_array(const char *program_data, i
     argv[extra + 1u] = NULL;
     return argv;
 }
+
+#if defined(XR_OS_WINDOWS)
+static inline void xrt_sys_process_append_escaped_arg(char *buf, size_t *pos, const char *arg) {
+    size_t backslashes = 0;
+    for (const char *p = arg; *p; p++) {
+        if (*p == '\\') {
+            backslashes++;
+            buf[(*pos)++] = '\\';
+        } else if (*p == '"') {
+            for (size_t k = 0; k < backslashes; k++)
+                buf[(*pos)++] = '\\';
+            buf[(*pos)++] = '\\';
+            buf[(*pos)++] = '"';
+            backslashes = 0;
+        } else {
+            backslashes = 0;
+            buf[(*pos)++] = *p;
+        }
+    }
+    for (size_t k = 0; k < backslashes; k++)
+        buf[(*pos)++] = '\\';
+}
+
+static inline char *xrt_sys_process_build_command_line(const char *prog, char *const argv[]) {
+    size_t cap = strlen(prog) * 2u + 3u;
+    for (size_t i = 0; argv[i] != NULL; i++)
+        cap += strlen(argv[i]) * 2u + 3u;
+    char *buf = (char *) XRT_MALLOC(cap + 1u);
+    if (!buf)
+        return NULL;
+    size_t pos = 0;
+    if (argv[0] == NULL || strcmp(argv[0], prog) != 0) {
+        buf[pos++] = '"';
+        xrt_sys_process_append_escaped_arg(buf, &pos, prog);
+        buf[pos++] = '"';
+    }
+    for (size_t i = 0; argv[i] != NULL; i++) {
+        if (pos > 0)
+            buf[pos++] = ' ';
+        buf[pos++] = '"';
+        xrt_sys_process_append_escaped_arg(buf, &pos, argv[i]);
+        buf[pos++] = '"';
+    }
+    buf[pos] = '\0';
+    return buf;
+}
+#endif
 
 #if defined(XR_OS_WINDOWS)
 static BOOL CALLBACK xrt_sys_once_win_thunk(PINIT_ONCE once, PVOID param, PVOID *ctx) {
@@ -579,26 +630,58 @@ static inline XrValue xrt_sys_pin_to_cpu(XrValue cpu_value) {
 }
 
 static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t program_len,
-                                            XrValue args_value) {
+                                            XrValue args_value, XrValue cwd_value) {
     char **argv = xrt_sys_process_argv_from_array(program_data, program_len, args_value);
     if (!argv)
         return XR_FROM_INT(-1);
+    char *cwd = NULL;
+    if (XR_IS_STR(cwd_value)) {
+        cwd = xrt_sys_cstr_dup_arg(xr_str_data(cwd_value), xr_str_len(cwd_value));
+        if (!cwd) {
+            xrt_sys_process_argv_free(argv);
+            return XR_FROM_INT(-1);
+        }
+    } else if (!XR_IS_NULL(cwd_value)) {
+        xrt_sys_process_argv_free(argv);
+        return XR_FROM_INT(-1);
+    }
 
 #if defined(XR_OS_WINDOWS)
-    intptr_t h = _spawnvp(_P_NOWAIT, argv[0], (const char *const *) argv);
+    char *cmdline = xrt_sys_process_build_command_line(argv[0], argv);
+    if (!cmdline) {
+        xrt_sys_process_argv_free(argv);
+        XRT_FREE(cwd);
+        return XR_FROM_INT(-1);
+    }
+    STARTUPINFOA si;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&pi, sizeof(pi));
+    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL,
+                             (cwd && cwd[0] != '\0') ? cwd : NULL, &si, &pi);
+    XRT_FREE(cmdline);
     xrt_sys_process_argv_free(argv);
-    return XR_FROM_INT(h == -1 ? -1 : (int64_t) h);
+    XRT_FREE(cwd);
+    if (!ok)
+        return XR_FROM_INT(-1);
+    CloseHandle(pi.hThread);
+    return XR_FROM_INT((int64_t) (intptr_t) pi.hProcess);
 #else
     pid_t pid = fork();
     if (pid < 0) {
         xrt_sys_process_argv_free(argv);
+        XRT_FREE(cwd);
         return XR_FROM_INT(-1);
     }
     if (pid == 0) {
+        if (cwd && cwd[0] != '\0' && chdir(cwd) != 0)
+            _exit(127);
         execvp(argv[0], argv);
         _exit(127);
     }
     xrt_sys_process_argv_free(argv);
+    XRT_FREE(cwd);
     return XR_FROM_INT((int64_t) pid);
 #endif
 }

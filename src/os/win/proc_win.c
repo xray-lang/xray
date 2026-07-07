@@ -116,7 +116,8 @@ static char *build_command_line(const char *prog, const char *const argv[]) {
     return buf;
 }
 
-XrProcId xr_proc_spawn(const char *prog, const char *const argv[]) {
+XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
+                          const XrProcSpawnOptions *options) {
     if (prog == NULL || argv == NULL) {
         return XR_PROC_INVALID;
     }
@@ -129,7 +130,8 @@ XrProcId xr_proc_spawn(const char *prog, const char *const argv[]) {
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
-    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
+    const char *cwd = (options && options->cwd && options->cwd[0] != '\0') ? options->cwd : NULL;
+    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, cwd, &si, &pi);
     free(cmdline);  // xr:allow-raw-alloc
     if (!ok) {
         return XR_PROC_INVALID;
@@ -137,6 +139,10 @@ XrProcId xr_proc_spawn(const char *prog, const char *const argv[]) {
     CloseHandle(pi.hThread);
     live_record(pi.dwProcessId, pi.hProcess);
     return (XrProcId) pi.dwProcessId;
+}
+
+XrProcId xr_proc_spawn(const char *prog, const char *const argv[]) {
+    return xr_proc_spawn_ex(prog, argv, NULL);
 }
 
 int xr_proc_wait(XrProcId pid, int *exit_code) {
