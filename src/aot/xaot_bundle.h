@@ -403,6 +403,7 @@ enum {
 typedef struct XaotMethodDispatchPlan {
     XgCallsiteId callsite_id;
     uint32_t source_span_id;
+    uint32_t body_ordinal;
     XgMethodId method_id;
     XgClassId receiver_static_class_id;
     uint8_t kind;

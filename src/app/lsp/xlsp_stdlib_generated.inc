@@ -83,11 +83,17 @@ static const XlspSymbolInfo g_xlsp_stdlib_csv_symbols[] = {
 
 // datetime module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_datetime_symbols[] = {
-    {"_nowMilliseconds", XLSP_SYM_FUNCTION, "fn(): int", "Internal: current time in milliseconds since Unix epoch", NULL, 0},
-    {"_offset", XLSP_SYM_FUNCTION, "fn(): int", "Internal: current UTC offset in minutes", NULL, 0},
-    {"_offsetAt", XLSP_SYM_FUNCTION, "fn(timestamp: int): int", "Internal: UTC offset in minutes at Unix timestamp", NULL, 0},
+    {"now", XLSP_SYM_FUNCTION, "fn(): DateTime", "", NULL, 0},
+    {"utc", XLSP_SYM_FUNCTION, "fn(): DateTime", "", NULL, 0},
+    {"create", XLSP_SYM_FUNCTION, "fn(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "", NULL, 0},
+    {"createUTC", XLSP_SYM_FUNCTION, "fn(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "", NULL, 0},
+    {"fromTimestamp", XLSP_SYM_FUNCTION, "fn(ts: int): DateTime", "", NULL, 0},
+    {"fromTimestampMs", XLSP_SYM_FUNCTION, "fn(ts: int): DateTime", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(s: string, format?: string): DateTime?", "", NULL, 0},
+    {"offset", XLSP_SYM_FUNCTION, "fn(): int", "", NULL, 0},
+    {"DateTime", XLSP_SYM_CLASS, "type DateTime", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_DATETIME_SYMBOL_COUNT 3
+#define GEN_XLSP_STDLIB_DATETIME_SYMBOL_COUNT 9
 
 // encoding module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
@@ -444,9 +450,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {
     {"monotonic", XLSP_SYM_FUNCTION, "fn(): int", "Monotonic time in milliseconds", NULL, 0},
     {"nanos", XLSP_SYM_FUNCTION, "fn(): int", "Monotonic time in nanoseconds", NULL, 0},
     {"micros", XLSP_SYM_FUNCTION, "fn(): int", "Monotonic time in microseconds", NULL, 0},
+    {"localOffset", XLSP_SYM_FUNCTION, "fn(): int", "Local UTC offset in minutes for the current wall time", NULL, 0},
+    {"localOffsetAt", XLSP_SYM_FUNCTION, "fn(timestamp: int): int", "Local UTC offset in minutes at a Unix timestamp", NULL, 0},
     {"sleep", XLSP_SYM_FUNCTION, "fn(ms: int): ()", "Sleep for milliseconds", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_TIME_SYMBOL_COUNT 6
+#define GEN_XLSP_STDLIB_TIME_SYMBOL_COUNT 8
 
 // toml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_toml_symbols[] = {

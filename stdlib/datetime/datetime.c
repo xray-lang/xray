@@ -40,11 +40,6 @@ static int64_t dt_int_arg_or(XrValue *args, int nargs, int index, int64_t fallba
     return xr_datetime_core_int_arg_or(has_int, has_int ? XR_TO_INT(args[index]) : 0, fallback);
 }
 
-static bool dt_required_int_arg(XrValue *args, int nargs, int index, int64_t *out) {
-    bool has_int = index < nargs && XR_IS_INT(args[index]);
-    return xr_datetime_core_required_int_arg(has_int, has_int ? XR_TO_INT(args[index]) : 0, out);
-}
-
 /* Cached body offset for DateTime class instances (set in
  * xr_register_datetime_class). Since the class has 0 fields and a
  * fixed body alignment, this is a constant after registration and lets
@@ -376,94 +371,7 @@ XrDateTime *xr_datetime_to_local(XrVMRuntime *isolate, XrDateTime *dt) {
     return result;
 }
 
-/* ========== Module Binding Functions ========== */
-
-// Module-level functions use XrCFunctionPtr (iso, args, argc) for XRS_EXPORT.
-// Instance methods use XrPrimitiveMethodFn (iso, self, args, argc) for native type table.
-
-static XrValue dt_now(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) args;
-    (void) nargs;
-    return xr_datetime_value(xr_datetime_now(isolate));
-}
-
-static XrValue dt_utc(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) args;
-    (void) nargs;
-    return xr_datetime_value(xr_datetime_utc(isolate));
-}
-
-static XrValue dt_create(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    int year = (int) dt_int_arg_or(args, nargs, 0, 1970);
-    int month = (int) dt_int_arg_or(args, nargs, 1, 1);
-    int day = (int) dt_int_arg_or(args, nargs, 2, 1);
-    int hour = (int) dt_int_arg_or(args, nargs, 3, 0);
-    int minute = (int) dt_int_arg_or(args, nargs, 4, 0);
-    int second = (int) dt_int_arg_or(args, nargs, 5, 0);
-    return xr_datetime_value(
-        xr_datetime_create(isolate, year, month, day, hour, minute, second, 0));
-}
-
-static XrValue dt_create_utc(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    int year = (int) dt_int_arg_or(args, nargs, 0, 1970);
-    int month = (int) dt_int_arg_or(args, nargs, 1, 1);
-    int day = (int) dt_int_arg_or(args, nargs, 2, 1);
-    int hour = (int) dt_int_arg_or(args, nargs, 3, 0);
-    int minute = (int) dt_int_arg_or(args, nargs, 4, 0);
-    int second = (int) dt_int_arg_or(args, nargs, 5, 0);
-    return xr_datetime_value(
-        xr_datetime_create(isolate, year, month, day, hour, minute, second, 1));
-}
-
-static XrValue dt_from_timestamp(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    int64_t ts = 0;
-    if (!dt_required_int_arg(args, nargs, 0, &ts))
-        return XR_NULL_VAL;
-    return xr_datetime_value(xr_datetime_from_timestamp(isolate, ts));
-}
-
-static XrValue dt_from_timestamp_ms(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    int64_t ts = 0;
-    if (!dt_required_int_arg(args, nargs, 0, &ts))
-        return XR_NULL_VAL;
-    return xr_datetime_value(xr_datetime_from_timestamp_ms(isolate, ts));
-}
-
-static XrValue dt_parse(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    if (nargs < 1 || !XR_IS_STRING(args[0]))
-        return XR_NULL_VAL;
-    XrString *str = XR_TO_STRING(args[0]);
-    const char *format = NULL;
-    if (nargs > 1 && XR_IS_STRING(args[1])) {
-        format = XR_STRING_CHARS(XR_TO_STRING(args[1]));
-    }
-    XrDateTime *dt = xr_datetime_parse(isolate, XR_STRING_CHARS(str), format);
-    return dt ? xr_datetime_value(dt) : XR_NULL_VAL;
-}
-
-static XrValue dt_offset(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    (void) args;
-    (void) nargs;
-    return XR_INT(xr_datetime_local_offset());
-}
-
-static XrValue dt_now_milliseconds(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    (void) args;
-    (void) nargs;
-    return XR_INT(get_current_millis());
-}
-
-static XrValue dt_offset_at(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    int64_t ts = 0;
-    if (!dt_required_int_arg(args, nargs, 0, &ts))
-        return XR_INT(0);
-    return XR_INT(xr_datetime_core_local_offset_at((time_t) ts));
-}
-
-// Method binding: self = DateTime instance
+/* ========== Native DateTime Method Bindings ========== */
 
 static XrValue dt_to_string(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
@@ -741,13 +649,11 @@ void xr_register_datetime_class(XrVMRuntime *isolate) {
 XrModule *xr_load_module_datetime(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_datetime: NULL isolate");
 
-    // Create module — only factory functions exported (the DateTime
-    // XrClass itself is registered up front by the prelude module).
+    // The DateTime XrClass is registered up front by the prelude module; the
+    // pure-Xray script layer exports the public factory functions.
     XrModule *mod = xr_module_create_native(isolate, "datetime");
     if (!mod)
         return NULL;
-
-    xr_stdlib_vm_bind_datetime_generated(isolate, mod);
 
     mod->requires_script = true;
     mod->loaded = true;

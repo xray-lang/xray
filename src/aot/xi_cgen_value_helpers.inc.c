@@ -415,6 +415,26 @@ static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
     return NULL;
 }
 
+static int cg_prelude_enum_member_index(const CgPreludeEnumData *ed, const char *name) {
+    if (!ed || !name)
+        return -1;
+    for (uint32_t i = 0; i < ed->member_count; i++) {
+        if (ed->members[i].name && strcmp(ed->members[i].name, name) == 0)
+            return (int) i;
+    }
+    return -1;
+}
+
+static bool cg_prelude_enum_has_payload_member(const CgPreludeEnumData *ed) {
+    if (!ed)
+        return false;
+    for (uint32_t i = 0; i < ed->member_count; i++) {
+        if (ed->members[i].has_payload)
+            return true;
+    }
+    return false;
+}
+
 static void emit_prelude_enum_member_value_expr(FILE *out, const CgPreludeEnumData *ed,
                                                 uint32_t member_index) {
     const CgPreludeEnumMember *member =
@@ -447,6 +467,21 @@ static bool emit_prelude_enum_type_expr(FILE *out, int builtin_index) {
         fprintf(out, "); ");
     }
     fprintf(out, "_e; })");
+    return true;
+}
+
+static bool emit_static_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                       int builtin_index, const char *member_name) {
+    const CgPreludeEnumData *ed = cg_prelude_enum_data(builtin_index);
+    int member_index = cg_prelude_enum_member_index(ed, member_name);
+    if (!ed || member_index < 0 || (uint32_t) member_index >= ed->member_count)
+        return false;
+    if (ed->members[member_index].has_payload || cg_prelude_enum_has_payload_member(ed))
+        return false;
+    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_TAGGED,
+                                                     cg_value_plan_storage_rep(ctx, v));
+    emit_prelude_enum_member_value_expr(out, ed, (uint32_t) member_index);
+    emit_conversion_suffix(out, conv_suffix);
     return true;
 }
 
