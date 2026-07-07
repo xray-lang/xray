@@ -21,6 +21,7 @@
 #include <stdio.h>
 #if defined(XR_OS_WINDOWS)
 #include <process.h>
+#define XRT_SYS_PROCESS_KILLED_EXIT_CODE ((unsigned int) 0xE0000001u)
 #else
 #include <errno.h>
 #include <sched.h>
@@ -555,6 +556,8 @@ static inline XrValue xrt_sys_process_wait(XrValue id_value) {
     int status = -1;
     if (_cwait(&status, (intptr_t) id, _WAIT_CHILD) == -1)
         return XR_FROM_INT(-1);
+    if ((unsigned int) status == XRT_SYS_PROCESS_KILLED_EXIT_CODE)
+        return XR_FROM_INT(-1);
     return XR_FROM_INT((int64_t) status);
 #else
     int status = 0;
@@ -577,7 +580,9 @@ static inline XrValue xrt_sys_process_kill(XrValue id_value, XrValue signal_valu
         return XR_FROM_BOOL(false);
 
 #if defined(XR_OS_WINDOWS)
-    return XR_FROM_BOOL(TerminateProcess((HANDLE) (intptr_t) id, (UINT) sig) != 0);
+    (void) sig;
+    return XR_FROM_BOOL(
+        TerminateProcess((HANDLE) (intptr_t) id, XRT_SYS_PROCESS_KILLED_EXIT_CODE) != 0);
 #else
     return XR_FROM_BOOL(kill((pid_t) id, (int) sig) == 0);
 #endif
