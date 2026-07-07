@@ -1,0 +1,2 @@
+contains=xaot-plan v0
+contains=static-data 0 name=comptime_value bodies=1 action=materialize evidence=0x1 reason=none
