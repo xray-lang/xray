@@ -940,6 +940,7 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
     for (uint32_t mi = 0; mi < ev->nmethods; mi++) {
         const XgMethodSummary *method = &ev->methods[mi];
         uint32_t body_count = 0;
+        bool native_method = (method->flags & XG_METHOD_NATIVE) != 0;
         for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
             const XgBodySummary *body = &ev->bodies[bi];
             if (body->kind == XG_BODY_METHOD && body->owner_method_id == method->method_id)
@@ -947,6 +948,10 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
         }
         if (body_count > 1)
             return set_error(errbuf, errbuf_len, "AOT global evidence method body is duplicated");
+        if (native_method && body_count != 0)
+            return set_error(errbuf, errbuf_len, "AOT global evidence native method has a body");
+        if (!native_method && body_count == 0)
+            return set_error(errbuf, errbuf_len, "AOT global evidence method has no body");
     }
     for (uint32_t ci = 0; ci < ev->ncallsites; ci++) {
         const XgCallsiteSummary *call = &ev->callsites[ci];

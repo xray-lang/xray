@@ -1084,7 +1084,6 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_THROW_STMT:
             bc->effect_bits |= XG_BODY_MAY_THROW;
-            bc->capability_bits |= XG_CAP_EXCEPTION;
             walk_body_for_calls(bc, node->as.throw_stmt.expression);
             break;
         case AST_AWAIT_EXPR:
@@ -1227,7 +1226,14 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         }
         case AST_TRY_CATCH:
             bc->effect_bits |= XG_BODY_MAY_THROW;
-            bc->capability_bits |= XG_CAP_EXCEPTION;
+            for (int i = 0; i < node->as.try_catch.catch_count; i++) {
+                XrCatchClause *cc =
+                    node->as.try_catch.catch_clauses ? node->as.try_catch.catch_clauses[i] : NULL;
+                if (cc && cc->is_panic) {
+                    bc->capability_bits |= XG_CAP_EXCEPTION;
+                    break;
+                }
+            }
             walk_body_for_calls(bc, node->as.try_catch.try_body);
             for (int i = 0; i < node->as.try_catch.catch_count; i++)
                 walk_body_for_calls(bc, node->as.try_catch.catch_clauses
@@ -1407,6 +1413,8 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             method.flags |= XG_METHOD_STATIC;
         if (m->is_constructor)
             method.flags |= XG_METHOD_CONSTRUCTOR;
+        if (cls->is_native || !m->body)
+            method.flags |= XG_METHOD_NATIVE;
         if (!xg_global_evidence_add_method(p->evidence, &method))
             return false;
         method_count++;
