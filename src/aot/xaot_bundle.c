@@ -441,6 +441,19 @@ static uint32_t xaot_capability_profile_action(uint32_t profile, uint32_t capabi
             case XG_CAP_CHANNEL:
             case XG_CAP_EXCEPTION:
             case XG_CAP_SYS_THREAD:
+            case XG_CAP_SCOPE:
+            case XG_CAP_TIMER:
+            case XG_CAP_NETPOLL:
+            case XG_CAP_TASK:
+            case XG_CAP_ATOMIC:
+            case XG_CAP_WORK_QUEUE:
+            case XG_CAP_RESULT_GROUP:
+            case XG_CAP_COUNTDOWN_LATCH:
+            case XG_CAP_SEMAPHORE:
+            case XG_CAP_EVENT_COUNT:
+            case XG_CAP_GENERATOR:
+            case XG_CAP_STACKTRACE:
+            case XG_CAP_DEEP_COPY:
                 return XAOT_CAPABILITY_ACTION_REJECT;
             default:
                 return XAOT_CAPABILITY_ACTION_LINK;
@@ -469,11 +482,9 @@ static bool xaot_bundle_add_capability_plan(XaotBundle *bundle, uint32_t capabil
 }
 
 static bool xaot_bundle_add_capability_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
-    static const uint32_t capabilities[] = {
-        XG_CAP_COROUTINE, XG_CAP_CHANNEL,   XG_CAP_EXCEPTION,  XG_CAP_NATIVE,     XG_CAP_EXTERN,
-        XG_CAP_OBJECTS,   XG_CAP_DEEP_COPY, XG_CAP_INSTANCEOF, XG_CAP_SYS_THREAD,
-    };
-    for (uint32_t ci = 0; ci < sizeof(capabilities) / sizeof(capabilities[0]); ci++) {
+    uint32_t capability_count = 0;
+    const uint32_t *capabilities = xg_capability_catalog(&capability_count);
+    for (uint32_t ci = 0; ci < capability_count; ci++) {
         uint32_t cap = capabilities[ci];
         uint32_t body_count = 0;
         for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {

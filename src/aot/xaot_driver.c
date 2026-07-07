@@ -233,6 +233,95 @@ static bool features_add_generated_builtin_stdlib_symbol(XaotFeatureSet *fs, con
     return true;
 }
 
+static void features_apply_capability_plan(XaotFeatureSet *fs, uint32_t capability) {
+    if (!fs || capability == 0)
+        return;
+    switch (capability) {
+        case XG_CAP_COROUTINE:
+            fs->need_coro = true;
+            break;
+        case XG_CAP_CHANNEL:
+            fs->need_channel = true;
+            break;
+        case XG_CAP_EXCEPTION:
+            fs->need_exception = true;
+            break;
+        case XG_CAP_OBJECTS:
+            fs->need_objects = true;
+            break;
+        case XG_CAP_DEEP_COPY:
+            fs->need_deep_copy = true;
+            break;
+        case XG_CAP_INSTANCEOF:
+            fs->need_instanceof = true;
+            break;
+        case XG_CAP_SYS_THREAD:
+            fs->need_sys_thread = true;
+            break;
+        case XG_CAP_SCOPE:
+            fs->need_scope = true;
+            break;
+        case XG_CAP_TIMER:
+            fs->need_timer = true;
+            break;
+        case XG_CAP_NETPOLL:
+            fs->need_netpoll = true;
+            break;
+        case XG_CAP_TASK:
+            fs->need_task = true;
+            break;
+        case XG_CAP_ATOMIC:
+            fs->need_atomic = true;
+            break;
+        case XG_CAP_WORK_QUEUE:
+            fs->need_work_queue = true;
+            break;
+        case XG_CAP_RESULT_GROUP:
+            fs->need_result_group = true;
+            break;
+        case XG_CAP_COUNTDOWN_LATCH:
+            fs->need_countdown_latch = true;
+            break;
+        case XG_CAP_SEMAPHORE:
+            fs->need_semaphore = true;
+            break;
+        case XG_CAP_EVENT_COUNT:
+            fs->need_event_count = true;
+            break;
+        case XG_CAP_GENERATOR:
+            fs->need_generator = true;
+            fs->need_coro = true;
+            break;
+        case XG_CAP_STACKTRACE:
+            fs->need_stacktrace = true;
+            break;
+        default:
+            break;
+    }
+}
+
+static void features_apply_capability_plans(XaotFeatureSet *fs, const XaotBundle *bundle) {
+    if (!fs || !bundle)
+        return;
+    for (uint32_t i = 0; i < bundle->ncapability_plans; i++)
+        features_apply_capability_plan(fs, bundle->capability_plans[i].capability);
+}
+
+static bool reject_profile_capability_plans(const XaotBundle *bundle) {
+    if (!bundle)
+        return false;
+    for (uint32_t i = 0; i < bundle->ncapability_plans; i++) {
+        const XaotCapabilityPlan *plan = &bundle->capability_plans[i];
+        if (plan->profile_action != XAOT_CAPABILITY_ACTION_REJECT)
+            continue;
+        fprintf(stderr, "Error: %s profile rejects runtime capability '%s'\n",
+                xg_build_profile_name(bundle->global_evidence_plan.profile),
+                xg_capability_name(plan->capability));
+        return false;
+    }
+    return true;
+}
+
 /* Unwrap value-identity ops (box/unbox/copy/move) to the underlying value,
  * mirroring cg_unwrap_identity_value so feature inference sees the same module
  * identity the emitter resolves at the call site. */
@@ -307,9 +396,12 @@ static const char *stdlib_symbol_module_of_value(const XiFunc *f, const XiFunc *
     return ref->module_path;
 }
 
-/* Scan a single XiFunc (non-recursive) for feature-indicating ops */
-static void scan_func_features(XiFunc *f, const XiFunc *module_init, XaotFeatureSet *fs) {
-    XR_DCHECK(f != NULL, "scan_func_features: NULL func");
+/* Scan a single XiFunc (non-recursive) for link-symbol closure only.
+ * Runtime subsystem facts come from global evidence capability plans; this
+ * Xi walk remains only for stdlib symbol/object closure and extern dylibs
+ * until those get their own summary rows. */
+static void scan_func_link_symbols(XiFunc *f, const XiFunc *module_init, XaotFeatureSet *fs) {
+    XR_DCHECK(f != NULL, "scan_func_link_symbols: NULL func");
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk)
@@ -319,89 +411,6 @@ static void scan_func_features(XiFunc *f, const XiFunc *module_init, XaotFeature
             if (!v)
                 continue;
             switch (v->op) {
-                case XI_YIELD:
-                    fs->need_coro = true;
-                    break;
-                case XI_GEN_YIELD:
-                case XI_GEN_CALL:
-                    fs->need_generator = true;
-                    fs->need_coro = true;
-                    break;
-                case XI_GO:
-                case XI_THREAD_SPAWN:
-                    fs->need_coro = true;
-                    fs->need_task = true;
-                    fs->need_netpoll = true;
-                    if (v->op == XI_THREAD_SPAWN)
-                        fs->need_sys_thread = true;
-                    break;
-                case XI_ARRAY_NEW:
-                case XI_MAP_NEW:
-                case XI_SET_NEW:
-                case XI_CLASS_CREATE:
-                case XI_CLOSURE_NEW:
-                    fs->need_objects = true;
-                    break;
-                case XI_CHAN_NEW:
-                case XI_CHAN_SEND:
-                case XI_CHAN_RECV:
-                case XI_CHAN_TRY_SEND:
-                case XI_CHAN_TRY_RECV:
-                case XI_CHAN_IS_CLOSED:
-                case XI_TIME_AFTER:
-                case XI_CHAN_TIMER_DISPOSE:
-                case XI_SELECT_BLOCK:
-                    fs->need_channel = true;
-                    fs->need_coro = true;
-                    fs->need_objects = true;
-                    if (v->op == XI_TIME_AFTER || v->op == XI_CHAN_TIMER_DISPOSE)
-                        fs->need_timer = true;
-                    break;
-                case XI_SCOPE_ENTER:
-                case XI_SCOPE_EXIT:
-                    fs->need_scope = true;
-                    fs->need_coro = true;
-                    fs->need_objects = true;
-                    break;
-                case XI_AWAIT:
-                    fs->need_coro = true;
-                    break;
-                case XI_PAR_FOR:
-                case XI_PAR_COLLECT:
-                case XI_PAR_REDUCE:
-                    fs->need_coro = true;
-                    break;
-                case XI_GET_BUILTIN:
-                    /* WorkQueue lowers through a generic builtin constructor call
-                     * rather than a dedicated XI op (unlike channels), so it must
-                     * be detected here. Any WorkQueue use pulls in the isolate /
-                     * scheduler runtime that the full VM constructor
-                     * (emitted for WorkQueue-bearing entries) depends on. */
-                    if (v->aux_int == XR_GLOBAL_VAR_ATOMIC) {
-                        fs->need_atomic = true;
-                        fs->need_objects = true;
-                    } else if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE) {
-                        fs->need_work_queue = true;
-                        fs->need_coro = true;
-                        fs->need_objects = true;
-                    } else if (v->aux_int == XR_GLOBAL_VAR_RESULTGROUP) {
-                        fs->need_result_group = true;
-                        fs->need_coro = true;
-                        fs->need_objects = true;
-                    } else if (v->aux_int == XR_GLOBAL_VAR_COUNTDOWNLATCH) {
-                        fs->need_countdown_latch = true;
-                        fs->need_coro = true;
-                        fs->need_objects = true;
-                    } else if (v->aux_int == XR_GLOBAL_VAR_SEMAPHORE) {
-                        fs->need_semaphore = true;
-                        fs->need_coro = true;
-                        fs->need_objects = true;
-                    } else if (v->aux_int == XR_GLOBAL_VAR_EVENTCOUNT) {
-                        fs->need_event_count = true;
-                        fs->need_coro = true;
-                        fs->need_objects = true;
-                    }
-                    break;
                 case XI_CALL_METHOD:
                 case XI_CALL_METHOD_DIRECT:
                     /* Module-form call (e.g. `time.now()`): the receiver is an
@@ -438,10 +447,6 @@ static void scan_func_features(XiFunc *f, const XiFunc *module_init, XaotFeature
                      * transfer paths declare runtime deep-copy needs through
                      * their own feature ops or generated stdlib caps. */
                     break;
-                case XI_TRY:
-                case XI_THROW:
-                    fs->need_exception = true;
-                    break;
                 case XI_IS:
                     /* AOT `is` checks lower to header-only tag comparisons or
                      * xrt_instanceof() over the generated type table. They do
@@ -475,22 +480,21 @@ static void scan_func_features(XiFunc *f, const XiFunc *module_init, XaotFeature
     }
 }
 
-/* Recursively infer features from an Xi IR function tree */
-static void infer_features_recursive(XiFunc *f, const XiFunc *module_init, XaotFeatureSet *fs) {
+/* Recursively collect link symbols from an Xi IR function tree. */
+static void collect_link_symbols_recursive(XiFunc *f, const XiFunc *module_init,
+                                           XaotFeatureSet *fs) {
     if (!f)
         return;
     if (f->is_extern && f->extern_dylib && f->extern_dylib[0])
         features_add_extern_dylib(fs, f->extern_dylib);
-    scan_func_features(f, module_init ? module_init : f, fs);
+    scan_func_link_symbols(f, module_init ? module_init : f, fs);
     for (uint16_t c = 0; c < f->nchildren; c++)
-        infer_features_recursive(f->children[c], module_init ? module_init : f, fs);
+        collect_link_symbols_recursive(f->children[c], module_init ? module_init : f, fs);
 }
 
-/* Infer XaotFeatureSet for the entire compiled bundle */
-static void infer_features(XiFunc **ir_funcs, int nmodules, XaotFeatureSet *fs) {
-    memset(fs, 0, sizeof(*fs));
+static void collect_link_symbol_features(XiFunc **ir_funcs, int nmodules, XaotFeatureSet *fs) {
     for (int m = 0; m < nmodules; m++)
-        infer_features_recursive(ir_funcs[m], ir_funcs[m], fs);
+        collect_link_symbols_recursive(ir_funcs[m], ir_funcs[m], fs);
 }
 
 static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSet stdlib) {
@@ -1052,6 +1056,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
             goto fail_free_ir;
         }
     }
+    if (!reject_profile_capability_plans(&aot_bundle))
+        goto fail_free_ir;
     /* The plan dump is O(functions x values) diagnostics; only build it when
      * the caller actually wants it (--dump-xaot-plan). */
     if (emit_plan_dump) {
@@ -1166,9 +1172,13 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     }
     xi_cgen_ctx_free(cg_ctx);
 
-    /* Infer runtime features before freeing IR */
+    /* Build link features before freeing IR. Runtime capabilities come from
+     * verified global evidence plans; the remaining Xi walk only supplies
+     * stdlib symbol closure and extern dylibs until they have summary rows. */
     XaotFeatureSet features;
-    infer_features(ir_funcs, nmodules, &features);
+    memset(&features, 0, sizeof(features));
+    features_apply_capability_plans(&features, &aot_bundle);
+    collect_link_symbol_features(ir_funcs, nmodules, &features);
     if (!build_link_manifest(&features, &link_manifest,
                              profile == XAOT_BUILD_PROFILE_FREESTANDING)) {
         fprintf(stderr, "Error: failed to build AOT link manifest\n");

@@ -401,11 +401,9 @@ static bool verify_has_interface_impl(const XgGlobalEvidence *ev, XgInterfaceId 
 }
 
 static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
-    static const uint32_t capabilities[] = {
-        XG_CAP_COROUTINE, XG_CAP_CHANNEL,   XG_CAP_EXCEPTION,  XG_CAP_NATIVE,     XG_CAP_EXTERN,
-        XG_CAP_OBJECTS,   XG_CAP_DEEP_COPY, XG_CAP_INSTANCEOF, XG_CAP_SYS_THREAD,
-    };
     const XgGlobalEvidence *ev;
+    uint32_t capability_count = 0;
+    const uint32_t *capabilities = xg_capability_catalog(&capability_count);
     uint32_t runtime_class_count = 0;
     uint32_t expected_capability_plans = 0;
 
@@ -484,7 +482,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
             return set_error(errbuf, errbuf_len, "AOT interface-use plan has unknown use-site");
     }
 
-    for (uint32_t ci = 0; ci < sizeof(capabilities) / sizeof(capabilities[0]); ci++) {
+    for (uint32_t ci = 0; ci < capability_count; ci++) {
         uint32_t cap = capabilities[ci];
         uint32_t body_count = 0;
         const XaotCapabilityPlan *plan;

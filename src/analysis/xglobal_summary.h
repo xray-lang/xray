@@ -96,6 +96,18 @@ enum {
     XG_CAP_DEEP_COPY = 1u << 6,
     XG_CAP_INSTANCEOF = 1u << 7,
     XG_CAP_SYS_THREAD = 1u << 8,
+    XG_CAP_SCOPE = 1u << 9,
+    XG_CAP_TIMER = 1u << 10,
+    XG_CAP_NETPOLL = 1u << 11,
+    XG_CAP_TASK = 1u << 12,
+    XG_CAP_ATOMIC = 1u << 13,
+    XG_CAP_WORK_QUEUE = 1u << 14,
+    XG_CAP_RESULT_GROUP = 1u << 15,
+    XG_CAP_COUNTDOWN_LATCH = 1u << 16,
+    XG_CAP_SEMAPHORE = 1u << 17,
+    XG_CAP_EVENT_COUNT = 1u << 18,
+    XG_CAP_GENERATOR = 1u << 19,
+    XG_CAP_STACKTRACE = 1u << 20,
 };
 
 typedef struct XgBuildKey {
@@ -203,6 +215,7 @@ XR_FUNC const char *xg_build_profile_name(uint32_t profile);
 XR_FUNC const char *xg_decl_kind_name(uint8_t kind);
 XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
 XR_FUNC const char *xg_capability_name(uint32_t capability);
+XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count);
 
 XR_FUNC void xg_global_evidence_init(XgGlobalEvidence *evidence, XgBuildKey key);
 XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence);

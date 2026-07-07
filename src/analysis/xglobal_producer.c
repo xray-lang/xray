@@ -529,6 +529,42 @@ static XgClassId body_resolve_expr_class(XgBodyCollect *bc, const AstNode *expr)
     }
 }
 
+static uint32_t body_capabilities_for_builtin_constructor(const char *name) {
+    if (!name || !name[0])
+        return 0;
+    if (strcmp(name, "Channel") == 0)
+        return XG_CAP_CHANNEL | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    if (strcmp(name, "Atomic") == 0)
+        return XG_CAP_ATOMIC | XG_CAP_OBJECTS;
+    if (strcmp(name, "WorkQueue") == 0)
+        return XG_CAP_WORK_QUEUE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    if (strcmp(name, "ResultGroup") == 0)
+        return XG_CAP_RESULT_GROUP | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    if (strcmp(name, "CountdownLatch") == 0)
+        return XG_CAP_COUNTDOWN_LATCH | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    if (strcmp(name, "Semaphore") == 0)
+        return XG_CAP_SEMAPHORE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    if (strcmp(name, "EventCount") == 0)
+        return XG_CAP_EVENT_COUNT | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
+    return 0;
+}
+
+static uint32_t body_capabilities_for_type_ref(const XrTypeRef *type) {
+    return body_capabilities_for_builtin_constructor(xr_tref_head_name(type));
+}
+
+static bool body_member_receiver_is_module(const MemberAccessNode *member, const char *name) {
+    if (!member || !member->object || member->object->type != AST_VARIABLE || !name)
+        return false;
+    return strcmp(member->object->as.variable.name, name) == 0;
+}
+
+static uint32_t body_capabilities_for_builtin_member_constructor(const MemberAccessNode *member) {
+    if (!body_member_receiver_is_module(member, "sync"))
+        return 0;
+    return body_capabilities_for_builtin_constructor(member->name);
+}
+
 static XgClassId body_parent_class_id(XgBodyCollect *bc) {
     XgClassNameRow *row;
     if (!bc || bc->current_class_id == XG_NO_ID)
@@ -551,9 +587,11 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                                                               : UINT16_MAX);
     callee = call->as.call_expr.callee;
     if (callee && callee->type == AST_VARIABLE) {
+        const char *callee_name = callee->as.variable.name;
         XgFuncId target = producer_lookup_func(bc->producer, callee->as.variable.name);
         if (producer_lookup_class(bc->producer, callee->as.variable.name) != XG_NO_ID)
             bc->capability_bits |= XG_CAP_OBJECTS;
+        bc->capability_bits |= body_capabilities_for_builtin_constructor(callee_name);
         row.kind = XG_CALL_DIRECT_FUNC;
         row.static_target_func_id =
             target != XG_NO_ID ? target : (XgFuncId) hash_name32(callee->as.variable.name);
@@ -562,6 +600,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         uint32_t method_name_id = hash_name32(callee->as.member_access.name);
         XgMethodSummary *method =
             producer_find_method_by_name_in_hierarchy(bc->producer, receiver_class, method_name_id);
+        bc->capability_bits |=
+            body_capabilities_for_builtin_member_constructor(&callee->as.member_access);
         row.kind = XG_CALL_METHOD;
         row.receiver_static_class_id = receiver_class;
         row.method_id = method ? method->method_id : (XgMethodId) method_name_id;
@@ -601,11 +641,38 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
     if (!bc || !node)
         return;
     switch (node->type) {
+        case AST_PROGRAM:
+            for (int i = 0; i < node->as.program.count; i++) {
+                const AstNode *stmt = node->as.program.statements[i];
+                if (!stmt)
+                    continue;
+                switch (stmt->type) {
+                    case AST_FUNCTION_DECL:
+                    case AST_CLASS_DECL:
+                    case AST_STRUCT_DECL:
+                    case AST_UNION_DECL:
+                    case AST_INTERFACE_DECL:
+                    case AST_ENUM_DECL:
+                    case AST_IMPORT_STMT:
+                    case AST_EXPORT_STMT:
+                    case AST_TYPE_ALIAS:
+                        break;
+                    default:
+                        walk_body_for_calls(bc, stmt);
+                        break;
+                }
+            }
+            break;
         case AST_CALL_EXPR:
             collect_callsite(bc, node);
             walk_body_for_calls(bc, node->as.call_expr.callee);
             for (int i = 0; i < node->as.call_expr.arg_count; i++)
                 walk_body_for_calls(bc, node->as.call_expr.arguments[i]);
+            break;
+        case AST_FUNCTION_EXPR:
+            if (node->as.function_expr.is_generator)
+                bc->capability_bits |= XG_CAP_GENERATOR | XG_CAP_COROUTINE;
+            walk_body_for_calls(bc, node->as.function_expr.body);
             break;
         case AST_SUPER_CALL:
             collect_super_callsite(bc, node);
@@ -632,6 +699,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             XgClassId class_id =
                 producer_lookup_class_from_tref(bc->producer, node->as.var_decl.type_annotation);
             bool inferred = false;
+            bc->capability_bits |=
+                body_capabilities_for_type_ref(node->as.var_decl.type_annotation);
             walk_body_for_calls(bc, node->as.var_decl.initializer);
             if (class_id == XG_NO_ID) {
                 class_id = body_resolve_expr_class(bc, node->as.var_decl.initializer);
@@ -773,6 +842,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_NEW_EXPR:
             bc->effect_bits |= XG_BODY_MAY_ALLOC;
             bc->capability_bits |= XG_CAP_OBJECTS;
+            bc->capability_bits |=
+                body_capabilities_for_builtin_constructor(node->as.new_expr.class_name);
             for (int i = 0; i < node->as.new_expr.arg_count; i++)
                 walk_body_for_calls(bc, node->as.new_expr.arguments[i]);
             break;
@@ -784,34 +855,39 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_AWAIT_EXPR:
             bc->effect_bits |= XG_BODY_MAY_SUSPEND;
             bc->capability_bits |= XG_CAP_COROUTINE;
+            if (node->as.await_expr.timeout)
+                bc->capability_bits |= XG_CAP_TIMER | XG_CAP_CHANNEL | XG_CAP_OBJECTS;
             walk_body_for_calls(bc, node->as.await_expr.expr);
             walk_body_for_calls(bc, node->as.await_expr.timeout);
             walk_body_for_calls(bc, node->as.await_expr.into);
             break;
         case AST_YIELD_STMT:
             bc->effect_bits |= XG_BODY_MAY_SUSPEND;
-            bc->capability_bits |= XG_CAP_COROUTINE;
+            bc->capability_bits |= XG_CAP_GENERATOR | XG_CAP_COROUTINE;
             walk_body_for_calls(bc, node->as.yield_stmt.value);
             break;
         case AST_GO_EXPR:
             bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC;
-            bc->capability_bits |= node->as.go_expr.spawn_kind == XR_SPAWN_THREAD
-                                       ? XG_CAP_SYS_THREAD
-                                       : XG_CAP_COROUTINE;
+            bc->capability_bits |= XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_NETPOLL;
+            if (node->as.go_expr.spawn_kind == XR_SPAWN_THREAD)
+                bc->capability_bits |= XG_CAP_SYS_THREAD;
             walk_body_for_calls(bc, node->as.go_expr.expr);
             break;
         case AST_CHANNEL_NEW:
             bc->effect_bits |= XG_BODY_MAY_ALLOC;
-            bc->capability_bits |= XG_CAP_CHANNEL;
+            bc->capability_bits |= XG_CAP_CHANNEL | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
             walk_body_for_calls(bc, node->as.channel_new.buffer_size);
             break;
         case AST_SELECT_STMT:
             bc->effect_bits |= XG_BODY_MAY_SUSPEND;
-            bc->capability_bits |= XG_CAP_CHANNEL | XG_CAP_COROUTINE;
+            bc->capability_bits |= XG_CAP_CHANNEL | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
             for (int i = 0; i < node->as.select_stmt.case_count; i++)
                 walk_body_for_calls(bc, node->as.select_stmt.cases[i]);
             break;
         case AST_SELECT_CASE:
+            if (node->as.select_case.is_timeout)
+                bc->capability_bits |=
+                    XG_CAP_TIMER | XG_CAP_CHANNEL | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
             walk_body_for_calls(bc, node->as.select_case.channel);
             walk_body_for_calls(bc, node->as.select_case.value);
             walk_body_for_calls(bc, node->as.select_case.body);
@@ -820,15 +896,59 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.defer_stmt.expr);
             break;
         case AST_SCOPE_BLOCK:
-            bc->capability_bits |= XG_CAP_COROUTINE;
+            bc->capability_bits |= XG_CAP_SCOPE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
             walk_body_for_calls(bc, node->as.scope_block.body);
             break;
         case AST_CANCELLED_EXPR:
             bc->capability_bits |= XG_CAP_COROUTINE;
             break;
+        case AST_MOVE_EXPR:
+            walk_body_for_calls(bc, node->as.move_expr.expr);
+            break;
         case AST_UNSAFE_EXPR:
             walk_body_for_calls(bc, node->as.unsafe_expr.operand);
             break;
+        case AST_PARALLEL_FOR_STMT: {
+            uint32_t base_locals = bc->nlocals;
+            bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_THROW | XG_BODY_MAY_MUTATE;
+            bc->capability_bits |= XG_CAP_COROUTINE;
+            for (int i = 0; i < node->as.parallel_for_stmt.local_count; i++)
+                walk_body_for_calls(bc, node->as.parallel_for_stmt.locals[i].source);
+            walk_body_for_calls(bc, node->as.parallel_for_stmt.range);
+            walk_body_for_calls(bc, node->as.parallel_for_stmt.worker_count);
+            walk_body_for_calls(bc, node->as.parallel_for_stmt.final_body);
+            walk_body_for_calls(bc, node->as.parallel_for_stmt.body);
+            bc->nlocals = base_locals;
+            break;
+        }
+        case AST_PARALLEL_REDUCE_EXPR: {
+            uint32_t base_locals = bc->nlocals;
+            bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_THROW | XG_BODY_MAY_MUTATE;
+            bc->capability_bits |= XG_CAP_COROUTINE;
+            for (int i = 0; i < node->as.parallel_reduce_expr.local_count; i++)
+                walk_body_for_calls(bc, node->as.parallel_reduce_expr.locals[i].source);
+            walk_body_for_calls(bc, node->as.parallel_reduce_expr.range);
+            walk_body_for_calls(bc, node->as.parallel_reduce_expr.worker_count);
+            walk_body_for_calls(bc, node->as.parallel_reduce_expr.initial);
+            walk_body_for_calls(bc, node->as.parallel_reduce_expr.combine);
+            walk_body_for_calls(bc, node->as.parallel_reduce_expr.body);
+            bc->nlocals = base_locals;
+            break;
+        }
+        case AST_PARALLEL_COLLECT_EXPR: {
+            uint32_t base_locals = bc->nlocals;
+            bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_THROW | XG_BODY_MAY_MUTATE;
+            bc->capability_bits |= XG_CAP_COROUTINE;
+            for (int i = 0; i < node->as.parallel_collect_expr.local_count; i++)
+                walk_body_for_calls(bc, node->as.parallel_collect_expr.locals[i].source);
+            walk_body_for_calls(bc, node->as.parallel_collect_expr.range);
+            walk_body_for_calls(bc, node->as.parallel_collect_expr.worker_count);
+            walk_body_for_calls(bc, node->as.parallel_collect_expr.into);
+            walk_body_for_calls(bc, node->as.parallel_collect_expr.final_body);
+            walk_body_for_calls(bc, node->as.parallel_collect_expr.body);
+            bc->nlocals = base_locals;
+            break;
+        }
         case AST_COMPOUND_ASSIGNMENT:
             walk_body_for_calls(bc, node->as.compound_assignment.object);
             walk_body_for_calls(bc, node->as.compound_assignment.value);
@@ -860,6 +980,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             uint32_t base_locals = bc->nlocals;
             XgClassId item_class =
                 producer_lookup_class_from_tref(bc->producer, node->as.for_in_stmt.item_type);
+            bc->capability_bits |= body_capabilities_for_type_ref(node->as.for_in_stmt.item_type);
             walk_body_for_calls(bc, node->as.for_in_stmt.collection);
             (void) body_push_local(bc, node->as.for_in_stmt.item_name, item_class, false);
             walk_body_for_calls(bc, node->as.for_in_stmt.body);
@@ -886,6 +1007,8 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
     for (int i = 0; i < method->param_count; i++) {
         XgClassId class_id = producer_lookup_class_from_tref(
             bc->producer, method->param_types ? method->param_types[i] : NULL);
+        bc->capability_bits |=
+            body_capabilities_for_type_ref(method->param_types ? method->param_types[i] : NULL);
         (void) body_push_local(bc, method->parameters ? method->parameters[i] : NULL, class_id,
                                false);
     }
@@ -898,6 +1021,7 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
         XrParamNode *param = function->params ? function->params[i] : NULL;
         XgClassId class_id =
             producer_lookup_class_from_tref(bc->producer, param ? param->type : NULL);
+        bc->capability_bits |= body_capabilities_for_type_ref(param ? param->type : NULL);
         (void) body_push_local(bc, param ? param->name : NULL, class_id, false);
     }
 }
@@ -914,6 +1038,8 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     bc.current_class_id = pending->current_class_id;
     body_add_method_params(&bc, pending->method);
     body_add_function_params(&bc, pending->function);
+    if (pending->function && pending->function->is_generator)
+        bc.capability_bits |= XG_CAP_GENERATOR | XG_CAP_COROUTINE;
     walk_body_for_calls(&bc, pending->body);
 
     memset(&row, 0, sizeof(row));
@@ -1066,7 +1192,27 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     return xg_global_evidence_add_decl(p->evidence, &decl) != NULL;
 }
 
+static bool module_stmt_has_runtime_body(const AstNode *stmt) {
+    if (!stmt)
+        return false;
+    switch (stmt->type) {
+        case AST_FUNCTION_DECL:
+        case AST_CLASS_DECL:
+        case AST_STRUCT_DECL:
+        case AST_UNION_DECL:
+        case AST_INTERFACE_DECL:
+        case AST_ENUM_DECL:
+        case AST_IMPORT_STMT:
+        case AST_EXPORT_STMT:
+        case AST_TYPE_ALIAS:
+            return false;
+        default:
+            return true;
+    }
+}
+
 static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *ast) {
+    bool has_module_body = false;
     if (!ast || ast->type != AST_PROGRAM)
         return true;
     for (int i = 0; i < ast->as.program.count; i++) {
@@ -1099,8 +1245,15 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
                     return false;
                 break;
             default:
+                if (module_stmt_has_runtime_body(stmt))
+                    has_module_body = true;
                 break;
         }
+    }
+    if (has_module_body) {
+        XgFuncId module_func_id = producer_next_func_id(p);
+        if (!producer_enqueue_body(p, module_func_id, XG_NO_ID, ast, NULL, NULL))
+            return false;
     }
     return true;
 }
