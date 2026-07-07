@@ -705,28 +705,45 @@ typedef struct XiClosureMeta {
  * Size: ~72 bytes. Values are arena-allocated within XiFunc.
  */
 typedef struct XiValue {
-    uint32_t id;           /* dense SSA value ID (unique within function) */
-    uint16_t op;           /* XiOp */
-    XiVarId var_id;        /* source variable ID for coalescing (XI_NO_VAR_ID = none) */
-    uint8_t flags;         /* XI_FLAG_* */
-    uint8_t rep;           /* XrRep: machine representation (set by select_rep,
-                            * default XR_REP_TAGGED until STAGE_REPPED) */
-    uint8_t transfer_mode; /* XrTransferMode for single-value coroutine boundaries.
-                            * Default 0 = SHARE. GO uses its per-arg aux table. */
-    uint8_t aux_kind;      /* XiAuxKind: disambiguates aux/aux_int layouts */
-    uint8_t escape;        /* XiEscapeLevel (2-bit): escape analysis result
-                            * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
-    uint8_t mem_group;     /* XiMemGroup (TBAA): memory group for alias analysis
-                            * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
-    struct XrType *type;   /* authoritative compile-time type (never NULL) */
-    int64_t aux_int;       /* auxiliary integer: const value, symbol ID, etc. */
-    void *aux;             /* auxiliary pointer: proto, string literal, etc. */
-    struct XiValue **args; /* operand values (SSA uses) */
-    uint16_t nargs;        /* number of args */
-    int16_t uses;          /* use count (for DCE; -1 = not computed) */
-    uint32_t line;         /* source line number (0 = unknown) */
-    struct XiBlock *block; /* containing block */
+    uint32_t id;             /* dense SSA value ID (unique within function) */
+    uint16_t op;             /* XiOp */
+    XiVarId var_id;          /* source variable ID for coalescing (XI_NO_VAR_ID = none) */
+    uint8_t flags;           /* XI_FLAG_* */
+    uint8_t rep;             /* XrRep: machine representation (set by select_rep,
+                              * default XR_REP_TAGGED until STAGE_REPPED) */
+    uint8_t transfer_mode;   /* XrTransferMode for single-value coroutine boundaries.
+                              * Default 0 = SHARE. GO uses its per-arg aux table. */
+    uint8_t aux_kind;        /* XiAuxKind: disambiguates aux/aux_int layouts */
+    uint8_t escape;          /* XiEscapeLevel (2-bit): escape analysis result
+                              * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
+    uint8_t mem_group;       /* XiMemGroup (TBAA): memory group for alias analysis
+                              * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
+    struct XrType *type;     /* authoritative compile-time type (never NULL) */
+    int64_t aux_int;         /* auxiliary integer: const value, symbol ID, etc. */
+    void *aux;               /* auxiliary pointer: proto, string literal, etc. */
+    struct XiValue **args;   /* operand values (SSA uses) */
+    uint16_t nargs;          /* number of args */
+    int16_t uses;            /* use count (for DCE; -1 = not computed) */
+    uint32_t line;           /* source line number (0 = unknown) */
+    uint32_t xg_callsite_id; /* stable XgCallsiteId for evidence-backed calls (0 = none) */
+    struct XiBlock *block;   /* containing block */
 } XiValue;
+
+static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
+    if (!dst || !src)
+        return;
+    dst->flags = src->flags;
+    dst->var_id = src->var_id;
+    dst->rep = src->rep;
+    dst->transfer_mode = src->transfer_mode;
+    dst->aux_kind = src->aux_kind;
+    dst->escape = src->escape;
+    dst->mem_group = src->mem_group;
+    dst->aux_int = src->aux_int;
+    dst->aux = src->aux;
+    dst->line = src->line;
+    dst->xg_callsite_id = src->xg_callsite_id;
+}
 
 static inline bool xi_load_field_is_adt(const XiValue *v) {
     return v && v->op == XI_LOAD_FIELD && v->aux_kind == XI_AUX_KIND_ADT_FIELD;

@@ -272,16 +272,7 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
     if (!cloned)
         return NULL;
 
-    cloned->flags = src->flags;
-    cloned->var_id = src->var_id;
-    cloned->rep = src->rep;
-    cloned->transfer_mode = src->transfer_mode;
-    cloned->aux_kind = src->aux_kind;
-    cloned->escape = src->escape;
-    cloned->mem_group = src->mem_group;
-    cloned->aux_int = src->aux_int;
-    cloned->aux = src->aux;
-    cloned->line = src->line;
+    xi_value_copy_metadata(cloned, src);
     if (caller->invariant_mask & XI_INV_TBAA_ANNOTATED)
         xi_tbaa_annotate_value(cloned);
 

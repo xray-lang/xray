@@ -208,16 +208,7 @@ static XiValue *map_guard_arg(const XiLoop *loop, const RotateMap *start_map,
 }
 
 static void copy_clone_metadata(XiValue *dst, const XiValue *src) {
-    dst->flags = src->flags;
-    dst->var_id = src->var_id;
-    dst->rep = src->rep;
-    dst->transfer_mode = src->transfer_mode;
-    dst->aux_kind = src->aux_kind;
-    dst->escape = src->escape;
-    dst->mem_group = src->mem_group;
-    dst->aux_int = src->aux_int;
-    dst->aux = src->aux;
-    dst->line = src->line;
+    xi_value_copy_metadata(dst, src);
 }
 
 static bool clone_header_values(XiFunc *f, const XiLoop *loop, XiBlock *guard,

@@ -897,7 +897,7 @@ xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, cons
     uint32_t method_name_id;
     uint16_t arg_count;
     if (!bundle || !call || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
-        call->line == 0 || call->nargs == 0)
+        call->nargs == 0)
         return NULL;
     evidence = bundle->global_evidence_plan.evidence;
     if (!evidence)
@@ -907,6 +907,25 @@ xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, cons
     if (method_name_id == 0)
         return NULL;
     arg_count = (uint16_t) (call->nargs - 1);
+    if (call->xg_callsite_id != XG_NO_ID) {
+        const XaotMethodDispatchPlan *plan =
+            xaot_bundle_find_method_dispatch_plan(bundle, call->xg_callsite_id);
+        const XgCallsiteSummary *summary =
+            xg_global_evidence_find_callsite(evidence, call->xg_callsite_id);
+        if (!plan || !summary)
+            return NULL;
+        if (plan->callsite_id != call->xg_callsite_id)
+            return NULL;
+        if (call->line != 0 && plan->source_span_id != call->line)
+            return NULL;
+        if (summary->arg_count != arg_count)
+            return NULL;
+        if (summary->method_name_id == 0 || summary->method_name_id != method_name_id)
+            return NULL;
+        return plan;
+    }
+    if (call->line == 0)
+        return NULL;
     for (uint32_t i = 0; i < bundle->nmethod_dispatch_plans; i++) {
         const XaotMethodDispatchPlan *plan = &bundle->method_dispatch_plans[i];
         const XgCallsiteSummary *summary;

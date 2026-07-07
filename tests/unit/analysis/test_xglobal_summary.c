@@ -460,6 +460,20 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     xi_call.line = 42;
     ASSERT_EQ_PTR(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call),
                   &good.method_dispatch_plans[0]);
+    xi_call.xg_callsite_id = call.callsite_id;
+    xi_call.line = 0;
+    ASSERT_EQ_PTR(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call),
+                  &good.method_dispatch_plans[0]);
+    xi_call.line = 99;
+    ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
+    xi_call.line = 0;
+    xi_call.aux = (void *) "other";
+    ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
+    xi_call.aux = (void *) "draw";
+    xi_call.nargs = 3;
+    ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
+    xi_call.nargs = 2;
+    xi_call.xg_callsite_id = XG_NO_ID;
     xi_call.line = 99;
     ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
     xi_call.line = 42;

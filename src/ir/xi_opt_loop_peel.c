@@ -143,16 +143,7 @@ static bool loop_eligible_for_peel(const XiLoop *loop) {
 /* ========== Cloning ========== */
 
 static void clone_metadata(XiValue *dst, const XiValue *src) {
-    dst->flags = src->flags;
-    dst->var_id = src->var_id;
-    dst->rep = src->rep;
-    dst->transfer_mode = src->transfer_mode;
-    dst->aux_kind = src->aux_kind;
-    dst->escape = src->escape;
-    dst->mem_group = src->mem_group;
-    dst->aux_int = src->aux_int;
-    dst->aux = src->aux;
-    dst->line = src->line;
+    xi_value_copy_metadata(dst, src);
 }
 
 /* Resolve an operand in the peeled copy: if it was defined inside the

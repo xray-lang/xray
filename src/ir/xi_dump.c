@@ -150,6 +150,8 @@ static void dump_value(FILE *out, const XiValue *v) {
                v->op == XI_CALL_BUILTIN || v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL ||
                v->op == XI_GET_SHARED || v->op == XI_SET_SHARED) {
         fprintf(out, " [aux=%" PRId64 "]", v->aux_int);
+        if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->xg_callsite_id != 0)
+            fprintf(out, " [callsite=%u]", v->xg_callsite_id);
     } else if (v->op == XI_GET_GLOBAL || v->op == XI_SET_GLOBAL) {
         const char *nm = (const char *) v->aux;
         fprintf(out, " [name=%s]", nm ? nm : "?");
