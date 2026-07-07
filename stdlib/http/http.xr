@@ -487,6 +487,171 @@ fn _headerParam(s: string) -> string {
     return out.toString()
 }
 
+fn _routeMethodKey(method: string) -> string {
+    return method.trim().toLowerCase()
+}
+
+fn _routePathOnly(path: string) -> string {
+    var q = path.indexOf("?")
+    if (q >= 0) { return path.slice(0, q) }
+    return path
+}
+
+fn _routeValidPath(path: string) -> bool {
+    return path.length > 0 && path.charAt(0) == "/"
+}
+
+fn _routeSegments(path: string) -> Array<string> {
+    var clean = _routePathOnly(path)
+    if (clean == "/" || clean.length == 0) { return [] }
+    if (clean.charAt(0) == "/") { clean = clean.slice(1) }
+    return clean.split("/")
+}
+
+fn _routeWildcardName(seg: string) -> string? {
+    if (seg.length > 1 && seg.charAt(0) == "*") { return seg.slice(1) }
+    if (seg.length > 3 && seg.startsWith("{*") && seg.endsWith("}")) {
+        return seg.slice(2, seg.length - 1)
+    }
+    return null
+}
+
+fn _routeParamName(seg: string) -> string? {
+    if (seg.length > 1 && seg.charAt(0) == ":") { return seg.slice(1) }
+    return null
+}
+
+fn _routePatternValid(pattern: string) -> bool {
+    if (!_routeValidPath(pattern) || pattern.indexOf("?") >= 0) { return false }
+    var segs = _routeSegments(pattern)
+    for (var i = 0; i < segs.length; i++) {
+        var wildcard = _routeWildcardName(segs[i])
+        if (wildcard != null) {
+            return wildcard!.length > 0 && i == segs.length - 1
+        }
+        var param = _routeParamName(segs[i])
+        if (param != null && param!.length == 0) { return false }
+    }
+    return true
+}
+
+fn _routePatternIsStatic(pattern: string) -> bool {
+    var segs = _routeSegments(pattern)
+    for (var i = 0; i < segs.length; i++) {
+        if (_routeWildcardName(segs[i]) != null || _routeParamName(segs[i]) != null) {
+            return false
+        }
+    }
+    return true
+}
+
+fn _joinRouteTail(segs: Array<string>, start: int) -> string {
+    var out = StringBuilder()
+    for (var i = start; i < segs.length; i++) {
+        if (i > start) { out.append("/") }
+        out.append(segs[i])
+    }
+    return out.toString()
+}
+
+fn _matchRoutePath(pattern: string, path: string) -> Json {
+    var pSegs = _routeSegments(pattern)
+    var vSegs = _routeSegments(path)
+    var params: Json = {}
+    var i = 0
+    var j = 0
+
+    while (i < pSegs.length) {
+        var p = pSegs[i]
+        var wildcard = _routeWildcardName(p)
+        if (wildcard != null) {
+            params[wildcard!] = _joinRouteTail(vSegs, j)
+            return params
+        }
+
+        if (j >= vSegs.length) { return null }
+
+        var param = _routeParamName(p)
+        if (param != null) {
+            if (vSegs[j].length == 0) { return null }
+            params[param!] = vSegs[j]
+        } else if (p != vSegs[j]) {
+            return null
+        }
+        i = i + 1
+        j = j + 1
+    }
+
+    if (j != vSegs.length) { return null }
+    return params
+}
+
+class RouteMatch {
+    value: unknown
+    params: Json
+
+    constructor(value: unknown, params: Json) {
+        this.value = value
+        this.params = params
+    }
+}
+
+class _RouteEntry {
+    method: string
+    path: string
+    value: unknown
+
+    constructor(method: string, path: string, value: unknown) {
+        this.method = method
+        this.path = path
+        this.value = value
+    }
+}
+
+class Router {
+    private routes: Array<_RouteEntry>
+
+    constructor() {
+        this.routes = []
+    }
+
+    add(method: string, path: string, value: unknown) -> bool {
+        var m = _routeMethodKey(method)
+        if (m.length == 0 || !_routePatternValid(path)) { return false }
+        for (var i = 0; i < this.routes.length; i++) {
+            var entry = this.routes[i]
+            if (entry.method == m && entry.path == path) {
+                this.routes[i] = _RouteEntry(m, path, value)
+                return true
+            }
+        }
+        this.routes.push(_RouteEntry(m, path, value))
+        return true
+    }
+
+    find(method: string, path: string) -> RouteMatch? {
+        var m = _routeMethodKey(method)
+        if (m.length == 0 || !_routeValidPath(path)) { return null }
+
+        var dynamicMatch: RouteMatch? = null
+        for (var i = 0; i < this.routes.length; i++) {
+            var entry = this.routes[i]
+            if (entry.method != m) { continue }
+            var params = _matchRoutePath(entry.path, path)
+            if (params != null) {
+                var found = RouteMatch(entry.value, params)
+                if (_routePatternIsStatic(entry.path)) { return found }
+                if (dynamicMatch == null) { dynamicMatch = found }
+            }
+        }
+        return dynamicMatch
+    }
+}
+
+fn router() -> Router {
+    return Router()
+}
+
 // MultipartBody - Built multipart/form-data payload and matching Content-Type.
 class MultipartBody {
     body: string
@@ -650,6 +815,9 @@ export {
     CookieJar,
     parseSetCookie,
     cookieJar,
+    Router,
+    RouteMatch,
+    router,
     urlEncode,
     urlDecode,
     response,
