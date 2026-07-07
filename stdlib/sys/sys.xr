@@ -53,7 +53,7 @@ class Process {
         return __processKill(this._id, sig)
     }
 
-    static spawn(program: string, args: Array<string>, options: ProcessOptions?) -> Process? {
+    static spawn(program: string, args: Array<string> = [], options: ProcessOptions? = null) -> Process? {
         var cwd: string? = null
         if (options != null) {
             cwd = options!.cwd
