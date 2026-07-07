@@ -816,11 +816,17 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             XgClassId receiver_class = body_resolve_expr_class(bc, callee->as.member_access.object);
             XgMethodSummary *method = producer_find_method_by_name_in_hierarchy(
                 bc->producer, receiver_class, method_name_id);
-            row.kind = XG_CALL_METHOD;
-            row.receiver_static_class_id = receiver_class;
-            row.method_id = method ? method->method_id : (XgMethodId) method_name_id;
-            row.method_name_id = method ? method->name_id : method_name_id;
-            row.method_signature_key = method ? method->signature_key : 0;
+            if (receiver_class != XG_NO_ID) {
+                row.kind = XG_CALL_METHOD;
+                row.receiver_static_class_id = receiver_class;
+                row.method_id = method ? method->method_id : (XgMethodId) method_name_id;
+                row.method_name_id = method ? method->name_id : method_name_id;
+                row.method_signature_key = method ? method->signature_key : 0;
+            } else {
+                row.kind = XG_CALL_NATIVE;
+                row.method_id = (XgMethodId) method_name_id;
+                row.method_name_id = method_name_id;
+            }
         }
     }
     if (bc->callsite_count == 0)
