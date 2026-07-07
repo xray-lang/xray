@@ -4731,6 +4731,9 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     bool is_super = v->op == XI_CALL_METHOD && (v->aux_int & 1) != 0;
     const XiFunc *mfunc = NULL;
     const char *method_prefix = NULL;
+    const XaotMethodDispatchPlan *dispatch_plan =
+        is_super ? NULL
+                 : xaot_bundle_find_method_dispatch_plan_for_xi_call(cg_ctx_aot_bundle(ctx), v);
 
     if (xicgen_emit_time_method(ctx, out, f, v))
         return;
@@ -4760,6 +4763,16 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     if (!is_super && xicgen_emit_static_method(ctx, out, f, v, prefix))
         return;
+    if (dispatch_plan && (dispatch_plan->kind == XAOT_DISPATCH_DIRECT ||
+                          dispatch_plan->kind == XAOT_DISPATCH_TYPE_SWITCH)) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: verified AOT dispatch plan kind %u for method '%s' at line %u "
+                "was not emitted\n",
+                (unsigned) dispatch_plan->kind, method ? method : "?", (unsigned) v->line);
+        emit_codegen_abort_expr(out);
+        return;
+    }
     xicgen_emit_runtime_method(ctx, out, f, v, method, nargs);
 }
 

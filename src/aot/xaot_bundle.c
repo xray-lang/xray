@@ -878,6 +878,43 @@ xaot_bundle_find_method_dispatch_plan(const XaotBundle *bundle, XgCallsiteId cal
     return NULL;
 }
 
+XR_FUNC const XaotMethodDispatchPlan *
+xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, const XiValue *call) {
+    const XgGlobalEvidence *evidence;
+    const XaotMethodDispatchPlan *match = NULL;
+    const char *method_name;
+    uint32_t method_name_id;
+    uint16_t arg_count;
+    if (!bundle || !call || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
+        call->line == 0 || call->nargs == 0)
+        return NULL;
+    evidence = bundle->global_evidence_plan.evidence;
+    if (!evidence)
+        return NULL;
+    method_name = call->aux ? (const char *) call->aux : NULL;
+    method_name_id = xg_name_id(method_name);
+    if (method_name_id == 0)
+        return NULL;
+    arg_count = (uint16_t) (call->nargs - 1);
+    for (uint32_t i = 0; i < bundle->nmethod_dispatch_plans; i++) {
+        const XaotMethodDispatchPlan *plan = &bundle->method_dispatch_plans[i];
+        const XgCallsiteSummary *summary;
+        if (plan->source_span_id != call->line)
+            continue;
+        summary = xg_global_evidence_find_callsite(evidence, plan->callsite_id);
+        if (!summary)
+            continue;
+        if (summary->arg_count != arg_count)
+            continue;
+        if (summary->method_name_id == 0 || summary->method_name_id != method_name_id)
+            continue;
+        if (match)
+            return NULL;
+        match = plan;
+    }
+    return match;
+}
+
 XR_FUNC const XaotInterfaceUsePlan *
 xaot_bundle_find_interface_use_plan(const XaotBundle *bundle, XgInterfaceId interface_id,
                                     XgClassId implementor_class_id, XgCallsiteId use_site_id) {

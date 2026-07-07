@@ -230,6 +230,7 @@ typedef struct XgGlobalEvidence {
     uint32_t callsite_cap;
 } XgGlobalEvidence;
 
+XR_FUNC uint32_t xg_name_id(const char *name);
 XR_FUNC const char *xg_build_profile_name(uint32_t profile);
 XR_FUNC const char *xg_decl_kind_name(uint8_t kind);
 XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
@@ -264,6 +265,8 @@ XR_FUNC XgBodySummary *xg_global_evidence_add_body(XgGlobalEvidence *evidence,
                                                    const XgBodySummary *summary);
 XR_FUNC XgCallsiteSummary *xg_global_evidence_add_callsite(XgGlobalEvidence *evidence,
                                                            const XgCallsiteSummary *summary);
+XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobalEvidence *evidence,
+                                                                  XgCallsiteId callsite_id);
 
 XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence);
 XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence);

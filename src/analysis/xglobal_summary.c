@@ -16,6 +16,13 @@
 #include <stdio.h>
 #include <string.h>
 
+XR_FUNC uint32_t xg_name_id(const char *name) {
+    if (!name || !name[0])
+        return 0;
+    uint32_t h = xr_hash_bytes(name, strlen(name));
+    return h ? h : 1;
+}
+
 static bool reserve_array(void **items, uint32_t *cap, uint32_t needed, size_t elem_size) {
     uint32_t new_cap;
     void *new_items;
@@ -442,6 +449,17 @@ XR_FUNC XgCallsiteSummary *xg_global_evidence_add_callsite(XgGlobalEvidence *evi
     row = &evidence->callsites[evidence->ncallsites++];
     *row = *summary;
     return row;
+}
+
+XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobalEvidence *evidence,
+                                                                  XgCallsiteId callsite_id) {
+    if (!evidence || callsite_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->ncallsites; i++) {
+        if (evidence->callsites[i].callsite_id == callsite_id)
+            return &evidence->callsites[i];
+    }
+    return NULL;
 }
 
 XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
