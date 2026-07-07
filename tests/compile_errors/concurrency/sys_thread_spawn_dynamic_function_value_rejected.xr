@@ -1,0 +1,9 @@
+import sys
+
+var t = sys.Thread.spawn(fn() -> int {
+    var f = fn() -> int {
+        return 1
+    }
+    return f()
+})
+print(t.join())

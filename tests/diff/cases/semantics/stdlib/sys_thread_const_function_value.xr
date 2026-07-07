@@ -1,0 +1,16 @@
+// anchor: sys-thread-const-function-value
+// A proven const function value inside a sys.Thread body is allowed; dynamic
+// or suspendable function values are covered by compile-error tests.
+
+import sys
+
+fn base() -> int {
+    return 21
+}
+
+var t = sys.Thread.spawn(fn() -> int {
+    const f = base
+    return f() * 2
+})
+
+print(t.join())
