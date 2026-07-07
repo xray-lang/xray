@@ -159,36 +159,6 @@ static bool cg_coro_builtin_field_needs_xrt_bridge(const XiValue *builtin, const
     }
 }
 
-static void emit_boxed_vref(FILE *out, const XiValue *v) {
-    XrRep rep = cg_rep(v);
-    if (rep == XR_REP_I64) {
-        if (cg_value_type_is_bool(v))
-            fprintf(out, "XR_FROM_BOOL(");
-        else
-            fprintf(out, "XR_FROM_INT(");
-        emit_vref(out, v);
-        fprintf(out, ")");
-    } else if (rep == XR_REP_F64) {
-        fprintf(out, "XR_FROM_FLOAT(");
-        emit_vref(out, v);
-        fprintf(out, ")");
-    } else if (rep == XR_REP_PTR && v && v->type && v->type->kind == XR_KIND_STRING) {
-        fprintf(out, "xr_str_value_from_ptr(");
-        emit_vref(out, v);
-        fprintf(out, ")");
-    } else if (rep == XR_REP_RAWPTR) {
-        fprintf(out, "XR_FROM_INT((int64_t)(uintptr_t)(");
-        emit_vref(out, v);
-        fprintf(out, "))");
-    } else if (rep == XR_REP_PTR) {
-        fprintf(out, "xr_mkptr(");
-        emit_vref(out, v);
-        fprintf(out, "%s", cg_ptr_box_suffix_for_type(v ? v->type : NULL));
-    } else {
-        emit_vref(out, v);
-    }
-}
-
 static bool cg_transfer_plan_site_is_spawn_arg(const XiValue *site) {
     return site && (site->op == XI_GO || site->op == XI_THREAD_SPAWN);
 }
@@ -2159,7 +2129,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
         fprintf(out, "    return xr_aot_gen_yielded(");
-        emit_boxed_vref(out, v->args[0]);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "S%d:;\n", sid);
@@ -2173,7 +2143,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
          * release. The scope lives in the frame so it survives suspensions. */
         if (v->nargs >= 1) {
             fprintf(out, "    xrt_defer_push(&f->_xrt_ds, ");
-            emit_boxed_vref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ");\n");
         }
         return;
@@ -2207,14 +2177,14 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         if (cg_func_has_defer_stmt(f)) {
             fprintf(out, "    XrValue _xrt_err_%u = ", v->id);
-            emit_boxed_vref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ";\n");
             fprintf(out, "    xrt_defer_run(&f->_xrt_ds);\n");
             fprintf(out, "    return xr_aot_error(_xrt_err_%u, %s);\n", v->id,
                     v->op == XI_ERR_RETURN ? "true" : "false");
         } else {
             fprintf(out, "    return xr_aot_error(");
-            emit_boxed_vref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ", %s);\n", v->op == XI_ERR_RETURN ? "true" : "false");
         }
         return;
@@ -2864,7 +2834,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         // Non-suspending: release the select-owned timer channel synchronously.
         fprintf(out, "    xr_aot_chan_timer_dispose(ctx, ");
-        emit_boxed_vref(out, v->args[0]);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ");\n");
         return;
     }
@@ -2881,7 +2851,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _select_channels_%u[%u];\n", v->id, (unsigned) v->nargs);
         for (uint16_t i = 0; i < v->nargs; i++) {
             fprintf(out, "    _select_channels_%u[%u] = ", v->id, (unsigned) i);
-            emit_boxed_vref(out, v->args[i]);
+            emit_value_as_rep_ctx(ctx, out, v->args[i], XR_REP_TAGGED);
             fprintf(out, ";\n");
         }
         fprintf(out, "    f->state = %d;\n", sid);

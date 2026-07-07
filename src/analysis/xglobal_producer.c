@@ -1585,6 +1585,8 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
 static bool module_stmt_has_runtime_body(const AstNode *stmt) {
     if (!stmt)
         return false;
+    if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration)
+        return module_stmt_has_runtime_body(stmt->as.export_stmt.declaration);
     switch (stmt->type) {
         case AST_FUNCTION_DECL:
         case AST_CLASS_DECL:
@@ -1601,6 +1603,34 @@ static bool module_stmt_has_runtime_body(const AstNode *stmt) {
     }
 }
 
+static bool add_module_decl_stmt(XgProducer *p, XgModuleId module_id, const AstNode *stmt,
+                                 bool *handled) {
+    if (handled)
+        *handled = true;
+    if (!stmt)
+        return true;
+    if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration)
+        return add_module_decl_stmt(p, module_id, stmt->as.export_stmt.declaration, handled);
+    switch (stmt->type) {
+        case AST_FUNCTION_DECL:
+            return add_function_decl(p, module_id, stmt);
+        case AST_CLASS_DECL:
+            return add_class_like_decl(p, module_id, stmt, XG_DECL_CLASS);
+        case AST_STRUCT_DECL:
+            return add_class_like_decl(p, module_id, stmt, XG_DECL_STRUCT);
+        case AST_UNION_DECL:
+            return add_class_like_decl(p, module_id, stmt, XG_DECL_UNION);
+        case AST_INTERFACE_DECL:
+            return add_interface_decl(p, module_id, stmt);
+        case AST_ENUM_DECL:
+            return add_enum_decl(p, module_id, stmt);
+        default:
+            if (handled)
+                *handled = false;
+            return true;
+    }
+}
+
 static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *ast) {
     bool has_module_body = false;
     if (!ast || ast->type != AST_PROGRAM)
@@ -1609,36 +1639,11 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
         const AstNode *stmt = ast->as.program.statements[i];
         if (!stmt)
             continue;
-        switch (stmt->type) {
-            case AST_FUNCTION_DECL:
-                if (!add_function_decl(p, module_id, stmt))
-                    return false;
-                break;
-            case AST_CLASS_DECL:
-                if (!add_class_like_decl(p, module_id, stmt, XG_DECL_CLASS))
-                    return false;
-                break;
-            case AST_STRUCT_DECL:
-                if (!add_class_like_decl(p, module_id, stmt, XG_DECL_STRUCT))
-                    return false;
-                break;
-            case AST_UNION_DECL:
-                if (!add_class_like_decl(p, module_id, stmt, XG_DECL_UNION))
-                    return false;
-                break;
-            case AST_INTERFACE_DECL:
-                if (!add_interface_decl(p, module_id, stmt))
-                    return false;
-                break;
-            case AST_ENUM_DECL:
-                if (!add_enum_decl(p, module_id, stmt))
-                    return false;
-                break;
-            default:
-                if (module_stmt_has_runtime_body(stmt))
-                    has_module_body = true;
-                break;
-        }
+        bool handled = false;
+        if (!add_module_decl_stmt(p, module_id, stmt, &handled))
+            return false;
+        if (!handled && module_stmt_has_runtime_body(stmt))
+            has_module_body = true;
     }
     if (has_module_body) {
         XgFuncId module_func_id = producer_next_func_id(p);
