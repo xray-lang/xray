@@ -1,0 +1,16 @@
+import sys
+
+fn closeBranchAlias(flag: bool) {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    if (flag) {
+        var u = t
+        print(u.join())
+    } else {
+        var v = t
+        v.detach()
+    }
+}
+
+closeBranchAlias(true)

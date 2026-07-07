@@ -261,6 +261,7 @@ static bool xa_block_node_statements(AstNode *node, AstNode ***out_statements, i
 
 typedef struct XaThreadHandleLintAlias {
     XaSymbol *sym;
+    uint32_t symbol_id;
     struct XaThreadHandleLintAlias *next;
 } XaThreadHandleLintAlias;
 
@@ -295,14 +296,31 @@ static void xa_thread_lint_free_states(XaThreadHandleLintState *states) {
 static void xa_thread_lint_add_alias(XaThreadHandleLintState *state, XaSymbol *sym) {
     if (!state || !sym || sym->id == 0)
         return;
+    uint32_t symbol_id = sym->id;
     for (XaThreadHandleLintAlias *a = state->aliases; a; a = a->next) {
-        if (a->sym == sym || (a->sym && a->sym->id == sym->id))
+        if (a->sym == sym || a->symbol_id == symbol_id || (a->sym && a->sym->id == symbol_id))
             return;
     }
     XaThreadHandleLintAlias *alias = xr_calloc(1, sizeof(XaThreadHandleLintAlias));
     if (!alias)
         return;
     alias->sym = sym;
+    alias->symbol_id = symbol_id;
+    alias->next = state->aliases;
+    state->aliases = alias;
+}
+
+static void xa_thread_lint_add_alias_id(XaThreadHandleLintState *state, uint32_t symbol_id) {
+    if (!state || symbol_id == 0)
+        return;
+    for (XaThreadHandleLintAlias *a = state->aliases; a; a = a->next) {
+        if (a->symbol_id == symbol_id || (a->sym && a->sym->id == symbol_id))
+            return;
+    }
+    XaThreadHandleLintAlias *alias = xr_calloc(1, sizeof(XaThreadHandleLintAlias));
+    if (!alias)
+        return;
+    alias->symbol_id = symbol_id;
     alias->next = state->aliases;
     state->aliases = alias;
 }
@@ -313,7 +331,7 @@ static XaThreadHandleLintState *xa_thread_lint_find_by_symbol_id(XaThreadHandleL
         return NULL;
     for (XaThreadHandleLintState *s = states; s; s = s->next) {
         for (XaThreadHandleLintAlias *a = s->aliases; a; a = a->next) {
-            if (a->sym && a->sym->id == symbol_id)
+            if (a->symbol_id == symbol_id || (a->sym && a->sym->id == symbol_id))
                 return s;
         }
     }
@@ -383,6 +401,15 @@ static void xa_thread_lint_scan_expr_array(XaThreadHandleLintState *states, AstN
         return;
     for (int i = 0; i < count; i++)
         xa_thread_lint_scan_expr(states, nodes[i], return_value, can_escape);
+}
+
+static void xa_thread_lint_note_var_alias(XaThreadHandleLintState *states, VarDeclNode *var) {
+    if (!states || !var || var->symbol_id == 0 || !var->initializer)
+        return;
+    uint32_t src_id = xa_thread_lint_expr_symbol_id(var->initializer);
+    XaThreadHandleLintState *state = xa_thread_lint_find_by_symbol_id(states, src_id);
+    if (state)
+        xa_thread_lint_add_alias_id(state, var->symbol_id);
 }
 
 static void xa_thread_lint_scan_parallel_locals(XaThreadHandleLintState *states,
@@ -998,6 +1025,7 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
+            xa_thread_lint_note_var_alias(states, &stmt->as.var_decl);
             xa_thread_lint_scan_expr(states, stmt->as.var_decl.initializer, false, can_escape);
             return;
         case AST_DESTRUCTURE_DECL:
