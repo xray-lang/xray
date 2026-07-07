@@ -1,0 +1,22 @@
+import sys
+
+enum ThreadLintErr {
+    Msg(s: string)
+}
+
+fn closeInTryOrCatch(throwNow: bool) {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    try {
+        if (throwNow) {
+            throw ThreadLintErr.Msg("boom")
+        }
+        print(t.join())
+    } catch (e) {
+        t.detach()
+        print("catch-close")
+    }
+}
+
+closeInTryOrCatch(false)

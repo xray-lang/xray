@@ -1,0 +1,19 @@
+import sys
+
+enum ThreadLintErr {
+    Msg(s: string)
+}
+
+fn closeOnlyInTry() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    try {
+        print(t.join())
+    } catch (e) {
+        print("catch-open")
+    }
+    print("try-catch-open")
+}
+
+closeOnlyInTry()
