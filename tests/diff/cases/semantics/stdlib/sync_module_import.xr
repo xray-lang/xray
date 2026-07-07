@@ -17,6 +17,12 @@ import { Mutex, RwLock, Once, Barrier, Condvar } from sync
 // --- Single-coroutine surface of every primitive -----------------------------
 var m = Mutex<int>(10)
 print(m.lock((v) -> v * 2))       // 20
+print(m.tryLock((v) -> v + 1) ?? -1) // 11
+print(m.lock((v) -> {
+    var nested: int? = m.tryLock((w) -> w)
+    if (nested == null) { return -7 }
+    return nested!
+}))                               // -7
 print(m.replace((v) -> v + 5))    // 15
 
 var rw = RwLock<string>("a")
