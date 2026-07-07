@@ -1269,6 +1269,56 @@ else
     sed 's/^/      /' "$FREESTANDING_ENUM_ERR_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_ENUM_PAYLOAD_VALUE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_payload_value.xr"
+FREESTANDING_ENUM_PAYLOAD_VALUE_OBJ="$WORK/freestanding_enum_payload_value.o"
+FREESTANDING_ENUM_PAYLOAD_VALUE_LOG="$WORK/freestanding_enum_payload_value.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_ENUM_PAYLOAD_VALUE_OBJ" \
+        "$FREESTANDING_ENUM_PAYLOAD_VALUE_SRC" >"$FREESTANDING_ENUM_PAYLOAD_VALUE_LOG" 2>&1; then
+    FREESTANDING_ENUM_PAYLOAD_VALUE_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_ENUM_PAYLOAD_VALUE_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_ENUM_PAYLOAD_VALUE_C" ]; then
+        expect_log_contains "$FREESTANDING_ENUM_PAYLOAD_VALUE_C" "typedef struct xrt_enum_" \
+            "freestanding-profile/enum-payload: emits typed enum aggregate"
+        expect_log_contains "$FREESTANDING_ENUM_PAYLOAD_VALUE_C" "xrt_enum_aggregate_make(" \
+            "freestanding-profile/enum-payload: constructs payload value without heap"
+        expect_log_contains "$FREESTANDING_ENUM_PAYLOAD_VALUE_C" \
+            "xrt_enum_aggregate_check_payload_type(" \
+            "freestanding-profile/enum-payload: keeps payload type checks local"
+        expect_log_not_contains "$FREESTANDING_ENUM_PAYLOAD_VALUE_C" "xrt_enum_aggregate_box" \
+            "freestanding-profile/enum-payload: avoids tagged payload boxing"
+        expect_log_not_contains "$FREESTANDING_ENUM_PAYLOAD_VALUE_C" "xrt_array_with_capacity" \
+            "freestanding-profile/enum-payload: avoids payload array allocation"
+        expect_log_not_contains "$FREESTANDING_ENUM_PAYLOAD_VALUE_C" "xrt_map_new" \
+            "freestanding-profile/enum-payload: avoids enum namespace map allocation"
+        expect_log_not_contains "$FREESTANDING_ENUM_PAYLOAD_VALUE_C" "xrt_shared[" \
+            "freestanding-profile/enum-payload: avoids shared-slot enum namespace state"
+        expect_log_not_contains "$FREESTANDING_ENUM_PAYLOAD_VALUE_C" "xrt_enum_box_new" \
+            "freestanding-profile/enum-payload: avoids heap enum box construction"
+        expect_log_not_contains "$FREESTANDING_ENUM_PAYLOAD_VALUE_C" "xrt_throw_exc" \
+            "freestanding-profile/enum-payload: avoids hosted throw helper"
+    else
+        record_fail "freestanding-profile/enum-payload: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_ENUM_PAYLOAD_VALUE_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_ENUM_PAYLOAD_VALUE_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_ENUM_PAYLOAD_VALUE_OBJ")"
+    FREESTANDING_ENUM_PAYLOAD_VALUE_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_ENUM_PAYLOAD_VALUE_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic|xr_hook_write)$' || true)"
+    if [ -z "$FREESTANDING_ENUM_PAYLOAD_VALUE_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/enum-payload: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/enum-payload: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_ENUM_PAYLOAD_VALUE_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/enum-payload: object build failed"
+    sed 's/^/      /' "$FREESTANDING_ENUM_PAYLOAD_VALUE_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_ENUM_PAYLOAD_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_payload_reject.xr"
 FREESTANDING_ENUM_PAYLOAD_LOG="$WORK/freestanding_enum_payload_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
@@ -1278,11 +1328,11 @@ if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-comm
     sed 's/^/      /' "$FREESTANDING_ENUM_PAYLOAD_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_ENUM_PAYLOAD_LOG" \
-        "freestanding profile rejects payload enum variant FsErr.Bad" \
-        "freestanding-profile: rejects payload enum variant constructors"
+        "freestanding profile rejects payload enum error FsErr" \
+        "freestanding-profile: rejects payload enum error channel"
     expect_log_not_contains "$FREESTANDING_ENUM_PAYLOAD_LOG" \
         "xrt_enum_aggregate_box" \
-        "freestanding-profile: rejects payload enum before C codegen"
+        "freestanding-profile: rejects payload enum error before C codegen"
 fi
 
 FREESTANDING_FORCE_UNWRAP_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_force_unwrap_reject.xr"

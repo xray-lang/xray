@@ -1,0 +1,24 @@
+enum FastResult {
+    Ok(int),
+    Err(int)
+}
+
+fn pick(n: int) -> FastResult {
+    if (n != 0) {
+        return FastResult.Ok(41)
+    }
+    return FastResult.Err(9)
+}
+
+@c_export("xray_enum_payload_value")
+fn xray_enum_payload_value(n: int) -> int {
+    var result = pick(n)
+    match (result) {
+        FastResult.Ok(value) -> {
+            return value + 1
+        }
+        FastResult.Err(code) -> {
+            return 0 - code
+        }
+    }
+}
