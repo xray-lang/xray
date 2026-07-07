@@ -821,6 +821,11 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 if (call->static_target_func_id == XG_NO_ID)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence direct callsite has no target");
+                if (call->receiver_static_class_id != XG_NO_ID ||
+                    call->receiver_static_interface_id != XG_NO_ID || call->method_id != XG_NO_ID ||
+                    call->method_name_id != 0 || call->method_signature_key != 0)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT global evidence direct callsite identity is stale");
                 {
                     const XgBodySummary *target_body =
                         verify_find_evidence_body_by_func(ev, call->static_target_func_id);
@@ -831,7 +836,9 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 }
                 break;
             case XG_CALL_METHOD:
-                if (call->receiver_static_class_id == XG_NO_ID || call->method_id == XG_NO_ID ||
+                if (call->static_target_func_id != XG_NO_ID ||
+                    call->receiver_static_interface_id != XG_NO_ID ||
+                    call->receiver_static_class_id == XG_NO_ID || call->method_id == XG_NO_ID ||
                     call->method_name_id == 0 || call->method_signature_key == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence method callsite identity is stale");
@@ -847,7 +854,9 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 }
                 break;
             case XG_CALL_INTERFACE:
-                if (call->receiver_static_interface_id == XG_NO_ID || call->method_name_id == 0 ||
+                if (call->static_target_func_id != XG_NO_ID ||
+                    call->receiver_static_class_id != XG_NO_ID ||
+                    call->receiver_static_interface_id == XG_NO_ID || call->method_name_id == 0 ||
                     call->method_signature_key == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence interface callsite identity is stale");
@@ -866,12 +875,18 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                                      "AOT global evidence closure callsite identity is stale");
                 break;
             case XG_CALL_NATIVE:
-                if (call->method_id == XG_NO_ID || call->method_name_id == 0)
+                if (call->static_target_func_id != XG_NO_ID ||
+                    call->receiver_static_class_id != XG_NO_ID ||
+                    call->receiver_static_interface_id != XG_NO_ID || call->method_id == XG_NO_ID ||
+                    call->method_name_id == 0 || call->method_signature_key != 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence native callsite identity is stale");
                 break;
             case XG_CALL_EXTERN:
-                if (call->method_id == XG_NO_ID || call->method_name_id == 0)
+                if (call->static_target_func_id != XG_NO_ID ||
+                    call->receiver_static_class_id != XG_NO_ID ||
+                    call->receiver_static_interface_id != XG_NO_ID || call->method_id == XG_NO_ID ||
+                    call->method_name_id == 0 || call->method_signature_key != 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence extern callsite identity is stale");
                 if (!verify_find_evidence_func_decl_by_name_flags(ev, call->method_name_id,
