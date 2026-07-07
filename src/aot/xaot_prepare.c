@@ -2218,6 +2218,74 @@ static bool prepare_func_alias_plans(XaotBundle *bundle, const XiFunc *func) {
     return true;
 }
 
+XR_FUNC bool xaot_prepare_closure_plan_for_value(const XiFunc *func, const XiValue *value,
+                                                 XaotClosurePlan *out) {
+    bool stack_closure = false;
+    const XiFunc *target;
+
+    if (!func || !value || !out)
+        return false;
+    if (!value->block || value->block->func != func)
+        return false;
+    if (value->op == XI_CLOSURE_NEW) {
+        stack_closure = false;
+    } else if (value->op == XI_STACK_ALLOC && value->aux_int == XI_CLOSURE_NEW) {
+        stack_closure = true;
+    } else {
+        return false;
+    }
+
+    memset(out, 0, sizeof(*out));
+    out->func = func;
+    out->value = value;
+    out->representation = stack_closure ? XAOT_CLOSURE_STACK : XAOT_CLOSURE_RUNTIME;
+    out->evidence = XAOT_CLOSURE_EV_XI_VALUE;
+    if (stack_closure)
+        out->evidence |= XAOT_CLOSURE_EV_NOESCAPE_STACK;
+
+    target = value->aux ? (const XiFunc *) value->aux : NULL;
+    if (!target) {
+        out->capture_count = value->nargs;
+        out->unproven_reason = XAOT_CLOSURE_UNPROVEN_NO_TARGET;
+        return true;
+    }
+
+    out->target_func = target;
+    out->capture_count = target->ncaptures;
+    out->evidence |= XAOT_CLOSURE_EV_TARGET_FUNC;
+    if (value->nargs != target->ncaptures) {
+        out->unproven_reason = XAOT_CLOSURE_UNPROVEN_CAPTURE_ARITY;
+        return true;
+    }
+
+    out->evidence |= XAOT_CLOSURE_EV_CAPTURE_ARITY;
+    out->unproven_reason = XAOT_CLOSURE_UNPROVEN_NONE;
+    return true;
+}
+
+static bool prepare_func_closure_plans(XaotBundle *bundle, const XiFunc *func) {
+    if (!bundle || !func)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *blk = func->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XaotClosurePlan derived;
+            const XiValue *value = blk->values[vi];
+            if (!xaot_prepare_closure_plan_for_value(func, value, &derived))
+                continue;
+            if (!xaot_bundle_add_closure_plan(bundle, func, value, derived.target_func,
+                                              derived.capture_count, derived.representation,
+                                              derived.evidence, derived.unproven_reason)) {
+                bundle->error_msg = "failed to allocate AOT closure plan";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 static bool prepare_array_native_local_data_cacheable(const XaotBundle *bundle, const XiFunc *func,
                                                       const XiValue *value) {
     const XiValue *target = unwrap_identity_value(value);
@@ -3024,6 +3092,8 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     /* After bounds plans: the uniqueness proof requires every index access
      * to be raw (bounds-proven), which it reads from the bounds plans. */
     if (!prepare_func_alias_plans(bundle, func))
+        return false;
+    if (!prepare_func_closure_plans(bundle, func))
         return false;
     /* Module inits are procedural entry points (called once, ordering-
      * sensitive); attribute plans only apply to ordinary functions. */

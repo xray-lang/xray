@@ -256,6 +256,34 @@ typedef struct XaotAliasPlan {
     uint32_t evidence;    /* XAOT_ALIAS_EV_* */
 } XaotAliasPlan;
 
+typedef enum XaotClosureRepresentation {
+    XAOT_CLOSURE_RUNTIME = 1,
+    XAOT_CLOSURE_STACK = 2,
+} XaotClosureRepresentation;
+
+enum {
+    XAOT_CLOSURE_EV_XI_VALUE = 1u << 0,
+    XAOT_CLOSURE_EV_TARGET_FUNC = 1u << 1,
+    XAOT_CLOSURE_EV_CAPTURE_ARITY = 1u << 2,
+    XAOT_CLOSURE_EV_NOESCAPE_STACK = 1u << 3,
+};
+
+enum {
+    XAOT_CLOSURE_UNPROVEN_NONE = 0,
+    XAOT_CLOSURE_UNPROVEN_NO_TARGET = 1,
+    XAOT_CLOSURE_UNPROVEN_CAPTURE_ARITY = 2,
+};
+
+typedef struct XaotClosurePlan {
+    const XiFunc *func;
+    const XiValue *value;
+    const XiFunc *target_func;
+    uint16_t capture_count;
+    uint8_t representation;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotClosurePlan;
+
 typedef struct XaotGlobalEvidencePlan {
     const XgGlobalEvidence *evidence;
     uint64_t evidence_hash;
@@ -488,6 +516,9 @@ typedef struct XaotBundle {
     XaotAliasPlan *alias_plans;
     uint32_t nalias_plans;
     uint32_t alias_plan_cap;
+    XaotClosurePlan *closure_plans;
+    uint32_t nclosure_plans;
+    uint32_t closure_plan_cap;
     XaotGlobalEvidencePlan global_evidence_plan;
     XaotClassHierarchyPlan *class_hierarchy_plans;
     uint32_t nclass_hierarchy_plans;
@@ -522,6 +553,7 @@ typedef struct XaotBundle {
     XaotPtrIndex bounds_index;            /* XiValue* (access) -> bounds_plans row */
     XaotPtrIndex span_access_index;       /* XiValue* (access op) -> span_access_plans row */
     XaotPtrIndex alias_index;             /* XiValue* (value) -> alias_plans row */
+    XaotPtrIndex closure_index;           /* XiValue* (closure alloc) -> closure_plans row */
     XaotPrepareStats stats;
     const char *error_msg;
 } XaotBundle;
@@ -611,6 +643,12 @@ XR_FUNC XaotAliasPlan *xaot_bundle_add_alias_plan(XaotBundle *bundle, const XiFu
                                                   uint32_t evidence);
 XR_FUNC const XaotAliasPlan *xaot_bundle_find_alias_plan(const XaotBundle *bundle,
                                                          const XiValue *value);
+XR_FUNC XaotClosurePlan *
+xaot_bundle_add_closure_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,
+                             const XiFunc *target_func, uint16_t capture_count,
+                             uint8_t representation, uint32_t evidence, uint8_t unproven_reason);
+XR_FUNC const XaotClosurePlan *xaot_bundle_find_closure_plan(const XaotBundle *bundle,
+                                                             const XiValue *value);
 XR_FUNC XaotBoundaryStep *xaot_bundle_add_boundary_step(XaotBundle *bundle,
                                                         XaotBoundaryStepKind kind,
                                                         const XiFunc *func, const XiValue *value,

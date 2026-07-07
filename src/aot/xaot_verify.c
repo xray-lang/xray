@@ -372,6 +372,35 @@ static bool verify_alias_plan(const XaotBundle *bundle, const XaotAliasPlan *pla
     return true;
 }
 
+static bool verify_closure_plan(const XaotBundle *bundle, const XaotClosurePlan *plan, char *errbuf,
+                                size_t errbuf_len) {
+    XaotClosurePlan derived;
+
+    if (!bundle || !plan)
+        return set_error(errbuf, errbuf_len, "AOT closure plan is NULL");
+    if (!plan->func || !plan->value)
+        return set_error(errbuf, errbuf_len, "AOT closure plan lacks func or value");
+    if (!xaot_bundle_find_func_plan(bundle, plan->func))
+        return set_error(errbuf, errbuf_len, "AOT closure plan func has no func plan");
+    if (!xaot_bundle_find_value_plan(bundle, plan->value))
+        return set_error(errbuf, errbuf_len, "AOT closure plan value has no value plan");
+    if (xaot_bundle_find_closure_plan(bundle, plan->value) != plan)
+        return set_error(errbuf, errbuf_len, "AOT closure plan index mismatch");
+    if (!xaot_prepare_closure_plan_for_value(plan->func, plan->value, &derived))
+        return set_error(errbuf, errbuf_len, "AOT closure plan value no longer re-derives");
+    if (plan->target_func != derived.target_func)
+        return set_error(errbuf, errbuf_len, "AOT closure plan target does not re-derive");
+    if (plan->capture_count != derived.capture_count)
+        return set_error(errbuf, errbuf_len, "AOT closure plan capture count does not re-derive");
+    if (plan->representation != derived.representation)
+        return set_error(errbuf, errbuf_len, "AOT closure plan representation does not re-derive");
+    if (plan->evidence != derived.evidence)
+        return set_error(errbuf, errbuf_len, "AOT closure plan evidence does not re-derive");
+    if (plan->unproven_reason != derived.unproven_reason)
+        return set_error(errbuf, errbuf_len, "AOT closure plan reason does not re-derive");
+    return true;
+}
+
 static bool xg_verify_class_is_runtime_class(const XgClassSummary *cls) {
     return cls && (cls->decl_kind == 0 || cls->decl_kind == XG_DECL_CLASS);
 }
@@ -1010,10 +1039,45 @@ static bool verify_func_boundaries_recursive(const XaotBundle *bundle, const XiF
     return true;
 }
 
+static bool verify_func_closure_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
+                                                uint32_t *out_count, char *errbuf,
+                                                size_t errbuf_len) {
+    uint32_t bi;
+    uint16_t ci;
+
+    if (!func)
+        return set_error(errbuf, errbuf_len, "NULL Xi function in AOT closure verifier");
+
+    for (bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *blk = func->blocks[bi];
+        uint32_t vi;
+        if (!blk)
+            continue;
+        for (vi = 0; vi < blk->nvalues; vi++) {
+            XaotClosurePlan derived;
+            const XiValue *value = blk->values[vi];
+            if (!xaot_prepare_closure_plan_for_value(func, value, &derived))
+                continue;
+            if (out_count)
+                (*out_count)++;
+            if (!xaot_bundle_find_closure_plan(bundle, value))
+                return set_error(errbuf, errbuf_len, "AOT closure allocation has no plan");
+        }
+    }
+
+    for (ci = 0; ci < func->nchildren; ci++) {
+        if (!verify_func_closure_plans_recursive(bundle, func->children[ci], out_count, errbuf,
+                                                 errbuf_len))
+            return false;
+    }
+    return true;
+}
+
 XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, char *errbuf,
                                 size_t errbuf_len) {
     uint32_t mi;
     uint32_t fi;
+    uint32_t closure_count = 0;
 
     (void) mode;
     if (!bundle)
@@ -1037,7 +1101,12 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
             return false;
         if (!verify_func_boundaries_recursive(bundle, mod->init, errbuf, errbuf_len))
             return false;
+        if (!verify_func_closure_plans_recursive(bundle, mod->init, &closure_count, errbuf,
+                                                 errbuf_len))
+            return false;
     }
+    if (closure_count != bundle->nclosure_plans)
+        return set_error(errbuf, errbuf_len, "AOT closure plan count does not match IR");
 
     for (fi = 0; fi < bundle->nfunc_plans; fi++) {
         if (!verify_abi_plan(&bundle->func_plans[fi], errbuf, errbuf_len))
@@ -1079,6 +1148,10 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
     }
     for (fi = 0; fi < bundle->nalias_plans; fi++) {
         if (!verify_alias_plan(bundle, &bundle->alias_plans[fi], errbuf, errbuf_len))
+            return false;
+    }
+    for (fi = 0; fi < bundle->nclosure_plans; fi++) {
+        if (!verify_closure_plan(bundle, &bundle->closure_plans[fi], errbuf, errbuf_len))
             return false;
     }
     for (fi = 0; fi < bundle->nboundary_steps; fi++) {
