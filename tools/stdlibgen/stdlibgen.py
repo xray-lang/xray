@@ -62,11 +62,16 @@ class StdlibEntry:
     link_object: str
     define: str
     layer: str
+    visibility: str
     caps: tuple[str, ...]
 
     @property
     def symbol(self) -> str:
         return f"{self.module}.{self.name}"
+
+    @property
+    def is_internal(self) -> bool:
+        return self.visibility == "internal"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -330,6 +335,12 @@ def parse_def_metadata(
                     f"{path}:{line_no}: unsupported vm_ifdef for "
                     f"{current_module}.{current_name}: {vm_ifdef}"
                 )
+            visibility = str(props.get("visibility", "public"))
+            if visibility not in {"public", "internal"}:
+                raise SystemExit(
+                    f"{path}:{line_no}: unsupported visibility for "
+                    f"{current_module}.{current_name}: {visibility}"
+                )
 
             entries.append(
                 StdlibEntry(
@@ -349,6 +360,7 @@ def parse_def_metadata(
                     link_object=link_object,
                     define=str(props.get("define", "")),
                     layer=str(props.get("layer", "")),
+                    visibility=visibility,
                     caps=caps,
                 )
             )

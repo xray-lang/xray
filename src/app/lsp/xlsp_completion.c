@@ -503,6 +503,8 @@ static XrJsonValue *complete_runtime_module(const char *prefix) {
     XrJsonValue *items = xjson_new_array();
     for (int i = 0; i < rt_mod->function_count; i++) {
         const XaBuiltinMember *fn = &rt_mod->functions[i];
+        if (fn->is_internal)
+            continue;
         XrJsonValue *item = xjson_new_object();
         xjson_object_set(item, "label", xjson_new_string(fn->name));
         int kind = fn->is_method ? XLSP_KIND_METHOD : XLSP_KIND_PROPERTY;

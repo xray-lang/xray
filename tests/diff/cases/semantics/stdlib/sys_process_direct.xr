@@ -1,0 +1,16 @@
+// Typed sys.Process lifecycle handle. This keeps process management separate
+// from os.exec/os.spawn convenience capture helpers and does not introduce
+// pipe/env/cwd options in the first slice.
+import sys
+
+var p = sys.Process.spawn("sh", ["-c", "exit 7"])
+print(p != null)
+if (p != null) {
+    print(p!.id > 0)
+    print(p!.wait())
+    print(p!.wait())
+}
+
+var missing = sys.Process.spawn("", [])
+print(missing == null)
+print(sys.Signal.TERM != sys.Signal.KILL)

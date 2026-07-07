@@ -440,8 +440,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"threadYield", XLSP_SYM_FUNCTION, "fn(): ()", "Yield the current OS thread to another runnable OS thread", NULL, 0},
     {"sleepMs", XLSP_SYM_FUNCTION, "fn(ms: int): ()", "Block the current OS thread for at least ms milliseconds", NULL, 0},
     {"pinToCpu", XLSP_SYM_FUNCTION, "fn(cpu: int): bool", "Best-effort pin of the current OS thread to a CPU index", NULL, 0},
+    {"Process", XLSP_SYM_CLASS, "type Process", "Class type", NULL, 0},
+    {"Signal", XLSP_SYM_CLASS, "type Signal", "Enum type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 9
+#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 11
 
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {

@@ -106,8 +106,30 @@ vmcase(OP_SET_EXPORT) {
         vmbreak;
     }
 
-    /* Ensure export arrays are large enough for this slot */
-    uint16_t needed = (uint16_t) (slot + 1);
+    SymbolId sym = -1;
+    XrValue name_val = K(name_idx);
+    if (XR_IS_STRING(name_val)) {
+        XrString *name_str = XR_TO_STRING(name_val);
+        XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
+        sym = xr_symbol_register_in_table(sym_table, name_str->data);
+    }
+
+    int target_slot = slot;
+    if (sym >= 0) {
+        for (uint16_t j = 0; j < cur->export_count; j++) {
+            if (cur->export_symbols[j] == sym) {
+                target_slot = (int) j;
+                break;
+            }
+        }
+    }
+    if (target_slot == slot && slot < cur->export_count && cur->export_symbols[slot] >= 0 &&
+        cur->export_symbols[slot] != sym) {
+        target_slot = cur->export_count;
+    }
+
+    /* Ensure export arrays are large enough for the selected slot */
+    uint16_t needed = (uint16_t) (target_slot + 1);
     if (needed > cur->export_capacity) {
         uint16_t new_cap = needed < 8 ? 8 : (uint16_t) (needed * 2);
         XR_REALLOC_OR_ABORT(cur->export_values, (size_t) new_cap * sizeof(XrValue),
@@ -123,18 +145,16 @@ vmcase(OP_SET_EXPORT) {
         }
         cur->export_capacity = new_cap;
     }
+    for (uint16_t j = cur->export_count; j < needed; j++) {
+        cur->export_values[j] = xr_null();
+        cur->export_symbols[j] = -1;
+        cur->export_flags[j] = 0;
+    }
     if (needed > cur->export_count)
         cur->export_count = needed;
 
-    cur->export_values[slot] = R(src_reg);
-
-    /* Register the export symbol name so xr_module_get_sym works */
-    XrValue name_val = K(name_idx);
-    if (XR_IS_STRING(name_val)) {
-        XrString *name_str = XR_TO_STRING(name_val);
-        XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
-        SymbolId sym = xr_symbol_register_in_table(sym_table, name_str->data);
-        cur->export_symbols[slot] = sym;
-    }
+    cur->export_values[target_slot] = R(src_reg);
+    if (sym >= 0)
+        cur->export_symbols[target_slot] = sym;
     vmbreak;
 }

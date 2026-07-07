@@ -124,6 +124,10 @@ PURE_CLASS_PATTERN = re.compile(
     r'^class\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\{',
     re.M,
 )
+PURE_ENUM_PATTERN = re.compile(
+    r'^enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{',
+    re.M,
+)
 PURE_CLASS_FIELD_PATTERN = re.compile(
     r'^\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^=\n]+)$',
     re.M,
@@ -317,6 +321,17 @@ def scan_pure_xray_module(filepath, module_name):
             'doc': docs.get(name, 'Class type'),
         }
 
+    enums = {}
+    for match in PURE_ENUM_PATTERN.finditer(content):
+        name = match.group(1)
+        if name not in exported:
+            continue
+        enums[name] = {
+            'name': name,
+            'fields': [],
+            'doc': docs.get(name, 'Enum type'),
+        }
+
     ordered = {
         'module': module_name,
         'handles': [],
@@ -327,6 +342,8 @@ def scan_pure_xray_module(filepath, module_name):
     for name in exports:
         if name in classes:
             ordered['handles'].append(classes[name])
+        elif name in enums:
+            ordered['handles'].append(enums[name])
         elif name in functions:
             ordered['methods'].append(functions[name])
         elif name in constants:
@@ -498,6 +515,7 @@ def load_def_module_methods():
             'name': entry.name,
             'signature': entry.signature,
             'doc': entry.doc,
+            'is_internal': entry.is_internal,
         })
     return modules
 
@@ -756,7 +774,7 @@ def generate_header(type_results, module_results):
                 is_method = "true" if '(' in m['signature'] else "false"
                 lines.append(
                     f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
-                    f'"{c_string(m["doc"])}", {is_method}, false}},')
+                    f'"{c_string(m["doc"])}", {is_method}, false, false}},')
             lines.append("};")
             lines.append(f"#define GEN_{type_name.upper()}_MEMBER_COUNT {len(methods)}")
             lines.append("")
@@ -810,13 +828,14 @@ def generate_header(type_results, module_results):
                     is_method = "true" if '(' in m['signature'] else "false"
                     lines.append(
                         f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
-                        f'"{c_string(m["doc"])}", {is_method}, false}},')
+                        f'"{c_string(m["doc"])}", {is_method}, false, '
+                        f'{"true" if m.get("is_internal") else "false"}}},')
                 if constant_entries:
                     lines.append(f"    // Module constants (is_method=false)")
                     for c in constant_entries:
                         lines.append(
                             f'    {{"{c_string(c["name"])}", "{c_string(c["signature"])}", '
-                            f'"{c_string(c["doc"])}", false, false}},')
+                            f'"{c_string(c["doc"])}", false, false, false}},')
                 lines.append("};")
                 lines.append(f"#define GEN_{mod_name.upper()}_FUNCTION_COUNT {total}")
                 lines.append("")
@@ -867,6 +886,8 @@ def generate_lsp_include(module_results):
     for mod_name, mod_data in sorted(module_results.items()):
         symbols = []
         for m in mod_data.get('methods', []):
+            if m.get('is_internal'):
+                continue
             entry = dict(m)
             entry['is_method'] = True
             symbols.append(entry)
@@ -1049,7 +1070,7 @@ def main():
     print(f"\nTotal: {total_methods} type methods across {total_types} types, "
           f"{total_functions} module functions and {total_constants} constants "
           f"across {total_modules} modules", file=sys.stderr)
-    print(f"Def module methods: {added} public functions loaded "
+    print(f"Def module methods: {added} functions loaded "
           f"({replaced} overload rows folded) from stdlib/defs/*.def", file=sys.stderr)
     print(f"Def constants: {const_added} constants loaded "
           f"({const_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)

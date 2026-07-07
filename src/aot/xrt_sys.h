@@ -14,12 +14,19 @@
 #include "xrt_arc.h"
 #include "xrt_method_symbols.h"
 #include "xrt_value.h"
+#include "../shared/xr_array_abi.h"
+#include "../shared/xr_typed_ops.h"
 #include "../os/os_thread.h"
 #include <stdatomic.h>
 #include <stdio.h>
-#if !defined(XR_OS_WINDOWS)
+#if defined(XR_OS_WINDOWS)
+#include <process.h>
+#else
 #include <errno.h>
 #include <sched.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 #endif
@@ -78,12 +85,79 @@ extern XR_THREAD_LOCAL XrValue xrt_pending_error;
 
 static XR_THREAD_LOCAL XrValue xrt_sys_once_callback = {.tag = XR_TAG_NULL};
 
+typedef struct xrt_sys_array_view {
+    XrObjHeader hdr;
+    XR_ARRAY_ABI_FIELDS;
+} xrt_sys_array_view_t;
+
 static inline void xrt_sys_once_trampoline(void) {
     (void) xrt_closure_call0(xrt_sys_once_callback);
 }
 
 static inline int64_t xrt_sys_int_arg(XrValue v) {
     return v.tag == XR_TAG_I64 ? v.i : 0;
+}
+
+static inline char *xrt_sys_cstr_dup_arg(const char *data, int64_t len) {
+    if (!data || len < 0)
+        return NULL;
+    uint64_t n64 = (uint64_t) len;
+    if (n64 > (uint64_t) SIZE_MAX - 1u)
+        return NULL;
+    size_t n = (size_t) n64;
+    char *out = (char *) XRT_MALLOC(n + 1u);
+    if (!out)
+        return NULL;
+    memcpy(out, data, n);
+    out[n] = '\0';
+    return out;
+}
+
+static inline void xrt_sys_process_argv_free(char **argv) {
+    if (!argv)
+        return;
+    for (size_t i = 0; argv[i] != NULL; i++)
+        XRT_FREE(argv[i]);
+    XRT_FREE(argv);
+}
+
+static inline char **xrt_sys_process_argv_from_array(const char *program_data, int64_t program_len,
+                                                     XrValue args_value) {
+    if (!program_data || program_len <= 0 || !XR_IS_ARRAY(args_value) || !args_value.ptr)
+        return NULL;
+
+    xrt_sys_array_view_t *args = (xrt_sys_array_view_t *) args_value.ptr;
+    if (args->length < 0 || args->length > INT32_MAX - 1 || (args->length > 0 && !args->data))
+        return NULL;
+
+    size_t extra = (size_t) args->length;
+    if (extra > (SIZE_MAX / sizeof(char *)) - 2u)
+        return NULL;
+
+    char **argv = (char **) XRT_CALLOC(extra + 2u, sizeof(char *));
+    if (!argv)
+        return NULL;
+
+    argv[0] = xrt_sys_cstr_dup_arg(program_data, program_len);
+    if (!argv[0]) {
+        XRT_FREE(argv);
+        return NULL;
+    }
+
+    for (size_t i = 0; i < extra; i++) {
+        XrValue elem = xr_typed_get(args->data, (int32_t) i, args->elem_type);
+        if (!XR_IS_STR(elem)) {
+            xrt_sys_process_argv_free(argv);
+            return NULL;
+        }
+        argv[i + 1u] = xrt_sys_cstr_dup_arg(xr_str_data(elem), xr_str_len(elem));
+        if (!argv[i + 1u]) {
+            xrt_sys_process_argv_free(argv);
+            return NULL;
+        }
+    }
+    argv[extra + 1u] = NULL;
+    return argv;
 }
 
 #if defined(XR_OS_WINDOWS)
@@ -444,6 +518,68 @@ static inline XrValue xrt_sys_pin_to_cpu(XrValue cpu_value) {
 #else
     (void) cpu;
     return XR_FROM_BOOL(false);
+#endif
+}
+
+static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t program_len,
+                                            XrValue args_value) {
+    char **argv = xrt_sys_process_argv_from_array(program_data, program_len, args_value);
+    if (!argv)
+        return XR_FROM_INT(-1);
+
+#if defined(XR_OS_WINDOWS)
+    intptr_t h = _spawnvp(_P_NOWAIT, argv[0], (const char *const *) argv);
+    xrt_sys_process_argv_free(argv);
+    return XR_FROM_INT(h == -1 ? -1 : (int64_t) h);
+#else
+    pid_t pid = fork();
+    if (pid < 0) {
+        xrt_sys_process_argv_free(argv);
+        return XR_FROM_INT(-1);
+    }
+    if (pid == 0) {
+        execvp(argv[0], argv);
+        _exit(127);
+    }
+    xrt_sys_process_argv_free(argv);
+    return XR_FROM_INT((int64_t) pid);
+#endif
+}
+
+static inline XrValue xrt_sys_process_wait(XrValue id_value) {
+    int64_t id = xrt_sys_int_arg(id_value);
+    if (id <= 0)
+        return XR_FROM_INT(-1);
+
+#if defined(XR_OS_WINDOWS)
+    int status = -1;
+    if (_cwait(&status, (intptr_t) id, _WAIT_CHILD) == -1)
+        return XR_FROM_INT(-1);
+    return XR_FROM_INT((int64_t) status);
+#else
+    int status = 0;
+    pid_t r;
+    do {
+        r = waitpid((pid_t) id, &status, 0);
+    } while (r < 0 && errno == EINTR);
+    if (r < 0)
+        return XR_FROM_INT(-1);
+    if (WIFEXITED(status))
+        return XR_FROM_INT((int64_t) WEXITSTATUS(status));
+    return XR_FROM_INT(-1);
+#endif
+}
+
+static inline XrValue xrt_sys_process_kill(XrValue id_value, XrValue signal_value) {
+    int64_t id = xrt_sys_int_arg(id_value);
+    int64_t sig = xrt_sys_int_arg(signal_value);
+    if (id <= 0 || sig <= 0)
+        return XR_FROM_BOOL(false);
+
+#if defined(XR_OS_WINDOWS)
+    return XR_FROM_BOOL(TerminateProcess((HANDLE) (intptr_t) id, (UINT) sig) != 0);
+#else
+    return XR_FROM_BOOL(kill((pid_t) id, (int) sig) == 0);
 #endif
 }
 

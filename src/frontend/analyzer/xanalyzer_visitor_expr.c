@@ -1252,6 +1252,21 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             XaSymbolLinks *sym_links = xa_analyzer_get_links(ctx->analyzer, sym);
             const char *mod_name =
                 (sym_links && sym_links->module_name) ? sym_links->module_name : var_name;
+            bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
+            XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+            if (exports) {
+                XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+                if (member_sym) {
+                    XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
+                    XrType *member_type = member_links ? member_links->type : NULL;
+                    if (member_type) {
+                        record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
+                                         member_type, false);
+                        return member_type;
+                    }
+                }
+            }
+
             const XaBuiltinModule *mod = xa_builtin_get_module_info(mod_name);
             if (mod) {
                 // Look up member (function or constant) in module type table
@@ -1286,20 +1301,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 return xr_type_new_unknown(NULL);
             }
 
-            /* User module namespace: resolve member from graph exports.
-             * Relative paths (starting with ".") indicate a user module. */
-            bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
-            XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
-            if (exports) {
-                XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
-                XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
-                XrType *member_type = member_links ? member_links->type : NULL;
-                if (member_type) {
-                    record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
-                                     member_type, false);
-                    return member_type;
-                }
-            }
+            /* User module namespaces are resolved above from graph exports. */
         }
     }
 
@@ -1595,6 +1597,51 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
         return xr_type_new_unknown(NULL);
+    }
+
+    if (XR_TYPE_IS_INSTANCE(obj_type) && obj_type->instance.class_ref) {
+        XrClassInfo *class_info = obj_type->instance.class_ref;
+        struct XrClassInfo *member_owner = NULL;
+        XaSymbol *member =
+            xa_class_info_lookup_instance_member_owner(class_info, ma->name, &member_owner);
+        if (member) {
+            xa_check_member_visibility(ctx, node, member, member_owner);
+            XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member);
+            if (member_links && member_links->type) {
+                XrType *member_type = member_links->type;
+                XaSymbol *class_sym =
+                    xa_scope_lookup(ctx->analyzer->current_scope, obj_type->instance.class_name);
+                XaSymbolLinks *class_links =
+                    class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+                int type_param_count =
+                    class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
+                if (type_param_count > 0 && obj_type->instance.type_arg_count > 0) {
+                    const char **param_names = xr_malloc(sizeof(const char *) * type_param_count);
+                    for (int i = 0; i < type_param_count; i++)
+                        param_names[i] = xa_symbol_links_get_type_param_name(class_links, i);
+                    member_type = xr_type_substitute(ctx->analyzer->isolate, member_type,
+                                                     param_names, obj_type->instance.type_args,
+                                                     obj_type->instance.type_arg_count);
+                    xr_free(param_names);
+                }
+                XaSelectionKind sk = (member->kind == XA_SYM_METHOD) ? XA_SEL_METHOD : XA_SEL_FIELD;
+                if (sk == XA_SEL_FIELD && class_info && class_info->struct_layout &&
+                    class_info->struct_layout->kind == XR_AGG_LAYOUT_UNION &&
+                    ctx->unsafe_depth == 0) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    char msg[192];
+                    snprintf(msg, sizeof(msg),
+                             "union field read '%s.%s' must be inside an `unsafe { }` block",
+                             class_info->name ? class_info->name : "union",
+                             ma->name ? ma->name : "?");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+                }
+                record_selection(ctx, node, sk, obj_type, member, -1, member_type, false);
+                return member_type;
+            }
+        }
     }
 
     // Handle built-in methods (return function type for method access)

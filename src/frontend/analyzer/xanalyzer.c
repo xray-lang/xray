@@ -1014,13 +1014,47 @@ static void remove_file_symbols(XaScope *scope, const char *file, XaAnalyzer *an
     }
 }
 
-static bool xa_path_is_sync_stdlib_module(const char *file) {
-    if (!file)
+static bool xa_path_is_stdlib_module(const char *file, const char *module_name) {
+    if (!file || !module_name)
         return false;
-    const char *suffix = "stdlib/sync/sync.xr";
+    char suffix[128];
+    int n = snprintf(suffix, sizeof(suffix), "stdlib/%s/%s.xr", module_name, module_name);
+    if (n < 0 || (size_t) n >= sizeof(suffix))
+        return false;
     size_t flen = strlen(file);
     size_t slen = strlen(suffix);
     return flen >= slen && strcmp(file + flen - slen, suffix) == 0;
+}
+
+static bool xa_path_is_sync_stdlib_module(const char *file) {
+    return xa_path_is_stdlib_module(file, "sync");
+}
+
+static bool xa_stdlib_module_name_from_path(const char *file, char *out, size_t out_cap) {
+    if (!file || !out || out_cap == 0)
+        return false;
+
+    const char *marker = "stdlib/";
+    const char *base = strstr(file, marker);
+    if (!base)
+        return false;
+    base += strlen(marker);
+
+    const char *slash = strchr(base, '/');
+    if (!slash || slash == base)
+        return false;
+
+    size_t name_len = (size_t) (slash - base);
+    if (name_len + 1 > out_cap)
+        return false;
+
+    const char *leaf = slash + 1;
+    if (strncmp(leaf, base, name_len) != 0 || strcmp(leaf + name_len, ".xr") != 0)
+        return false;
+
+    memcpy(out, base, name_len);
+    out[name_len] = '\0';
+    return true;
 }
 
 static void xa_register_native_class_symbol(XaAnalyzer *analyzer, XaScope *scope, const char *file,
@@ -1062,6 +1096,44 @@ static void xa_register_sync_native_class_symbols(XaAnalyzer *analyzer, const ch
         xa_register_native_class_symbol(analyzer, scope, file, names[i]);
 }
 
+static void xa_register_stdlib_native_module_functions(XaAnalyzer *analyzer, const char *file,
+                                                       XaScope *scope) {
+    char module_name[64];
+    if (!analyzer || !scope ||
+        !xa_stdlib_module_name_from_path(file, module_name, sizeof(module_name)))
+        return;
+
+    const XaBuiltinModule *mod = xa_builtin_get_module_info(module_name);
+    if (!mod || !mod->functions)
+        return;
+
+    for (int i = 0; i < mod->function_count; i++) {
+        const XaBuiltinMember *member = &mod->functions[i];
+        if (!member->is_internal || !member->name || xa_scope_lookup_local(scope, member->name))
+            continue;
+
+        XaSymbol *sym = xa_symbol_new(member->name, XA_SYM_FUNCTION);
+        if (!sym)
+            continue;
+        sym->location.line = 0;
+        sym->is_builtin = true;
+        sym->is_const = true;
+        xa_scope_add_symbol(scope, sym);
+
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+        if (!links)
+            continue;
+        links->type = xa_builtin_parse_full_signature(analyzer->isolate, member->signature);
+        if (!links->type)
+            links->type = xr_type_new_unknown(analyzer->isolate);
+        links->declared_type = links->type;
+        links->is_definitely_assigned = true;
+        links->file_path = file;
+        links->module_name = mod->name;
+        links->import_member_name = member->name;
+    }
+}
+
 void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast) {
     if (!analyzer || !ast)
         return;
@@ -1084,6 +1156,7 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     analyzer->current_file = file;
     analyzer->current_scope = file_scope;
     xa_register_sync_native_class_symbols(analyzer, file, file_scope);
+    xa_register_stdlib_native_module_functions(analyzer, file, file_scope);
 
     // Use the visitor-based analysis
     xa_analyze_ast(analyzer, ast);

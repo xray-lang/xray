@@ -54,6 +54,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_CHANNEL;
     if (xr_type_is_named_class(type, "Regex"))
         return XR_TID_REGEX;
+    if (xr_type_is_named_class(type, "DateTime"))
+        return XR_TID_DATETIME;
     if (xr_type_is_named_class(type, "PanicInfo"))
         return XR_TID_PANIC_INFO;
     if (xr_type_is_named_class(type, "Task"))
@@ -641,30 +643,33 @@ static const int builtin_module_count = GEN_BUILTIN_MODULE_COUNT;
 // These use special opcodes (OP_CORO_CTRL etc.), not module XRS_EXPORT.
 
 static const XaBuiltinMember g_rt_coro_functions[] = {
-    {"yield", "(): ()", "Cooperative CPU yield (Gosched)", true, true},
-    {"stats", "(): Json", "Get coroutine statistics", true, true},
-    {"list", "(limit?: int, state?: string): Array<Json>", "List coroutines", true, true},
-    {"deadlocks", "(): Array<Json>", "Detect deadlocked coroutines", true, true},
-    {"top", "(n: int, metric?: string): Array<Json>", "Top N coroutines by metric", true, true},
-    {"groupBy", "(field: string): Json", "Group coroutines by field", true, true},
-    {"setLocal", "(key: string, value: Json): ()", "Set coroutine-local storage", true, true},
-    {"getLocal", "(key: string): Json", "Get coroutine-local storage", true, true},
-    {"lockThread", "(): ()", "Lock current thread", true, true},
-    {"unlockThread", "(): ()", "Unlock current thread", true, true},
-    {"dump", "(limit?: int): ()", "Dump coroutine state", true, true},
-    {"stalled", "(timeout_ms?: int): Array<Json>", "Detect stalled coroutines", true, true},
-    {"whereis", "(name: string): bool", "Check if named coroutine exists", true, true},
-    {"monitor", "(name: string): Channel", "Monitor named coroutine, returns Channel", true, true},
-    {"demonitor", "(ch: Channel): ()", "Cancel coroutine monitor", true, true},
-    {"self", "(): string?", "Get current coroutine name", true, true},
-    {"kill", "(name: string, reason?: string): bool", "Kill named coroutine", true, true},
+    {"yield", "(): ()", "Cooperative CPU yield (Gosched)", true, true, false},
+    {"stats", "(): Json", "Get coroutine statistics", true, true, false},
+    {"list", "(limit?: int, state?: string): Array<Json>", "List coroutines", true, true, false},
+    {"deadlocks", "(): Array<Json>", "Detect deadlocked coroutines", true, true, false},
+    {"top", "(n: int, metric?: string): Array<Json>", "Top N coroutines by metric", true, true,
+     false},
+    {"groupBy", "(field: string): Json", "Group coroutines by field", true, true, false},
+    {"setLocal", "(key: string, value: Json): ()", "Set coroutine-local storage", true, true,
+     false},
+    {"getLocal", "(key: string): Json", "Get coroutine-local storage", true, true, false},
+    {"lockThread", "(): ()", "Lock current thread", true, true, false},
+    {"unlockThread", "(): ()", "Unlock current thread", true, true, false},
+    {"dump", "(limit?: int): ()", "Dump coroutine state", true, true, false},
+    {"stalled", "(timeout_ms?: int): Array<Json>", "Detect stalled coroutines", true, true, false},
+    {"whereis", "(name: string): bool", "Check if named coroutine exists", true, true, false},
+    {"monitor", "(name: string): Channel", "Monitor named coroutine, returns Channel", true, true,
+     false},
+    {"demonitor", "(ch: Channel): ()", "Cancel coroutine monitor", true, true, false},
+    {"self", "(): string?", "Get current coroutine name", true, true, false},
+    {"kill", "(name: string, reason?: string): bool", "Kill named coroutine", true, true, false},
 };
 #define RT_CORO_FUNCTION_COUNT                                                                     \
     ((int) (sizeof(g_rt_coro_functions) / sizeof(g_rt_coro_functions[0])))
 
 static const XaBuiltinMember g_rt_coropool_functions[] = {
-    {"submit", "(fn: function): Json", "Submit task to pool", true, false},
-    {"close", "(): ()", "Close the pool", true, false},
+    {"submit", "(fn: function): Json", "Submit task to pool", true, false, false},
+    {"close", "(): ()", "Close the pool", true, false, false},
 };
 #define RT_COROPOOL_FUNCTION_COUNT                                                                 \
     ((int) (sizeof(g_rt_coropool_functions) / sizeof(g_rt_coropool_functions[0])))
@@ -719,12 +724,17 @@ const XaBuiltinModule *xa_builtin_get_module_info(const char *module_name) {
     return xa_xrd_find_module(module_name, g_script_dir);
 }
 
+static bool xa_builtin_member_public(const XaBuiltinMember *member) {
+    return member && !member->is_internal;
+}
+
 const char *xa_builtin_get_module_func_signature(const char *module_name, const char *func_name) {
     const XaBuiltinModule *mod = xa_builtin_get_module_info(module_name);
     if (!mod || !func_name)
         return NULL;
     for (int i = 0; i < mod->function_count; i++) {
-        if (strcmp(mod->functions[i].name, func_name) == 0) {
+        if (xa_builtin_member_public(&mod->functions[i]) &&
+            strcmp(mod->functions[i].name, func_name) == 0) {
             return mod->functions[i].signature;
         }
     }
@@ -736,7 +746,8 @@ const char *xa_builtin_get_module_func_doc(const char *module_name, const char *
     if (!mod || !func_name)
         return NULL;
     for (int i = 0; i < mod->function_count; i++) {
-        if (strcmp(mod->functions[i].name, func_name) == 0) {
+        if (xa_builtin_member_public(&mod->functions[i]) &&
+            strcmp(mod->functions[i].name, func_name) == 0) {
             return mod->functions[i].doc;
         }
     }

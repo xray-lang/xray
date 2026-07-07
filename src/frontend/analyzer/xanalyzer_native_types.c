@@ -226,6 +226,7 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         members[count].doc = "";
         members[count].is_method = is_method;
         members[count].is_static = is_static;
+        members[count].is_internal = false;
         count++;
 
         p = next_line(p);
@@ -266,6 +267,7 @@ static const NativeTypeMapping type_mappings[] = {
     {"StringBuilder", XR_TID_STRINGBUILDER, TYPE_NAME_STRINGBUILDER},
     {"Channel", XR_TID_CHANNEL, TYPE_NAME_CHANNEL},
     {"Regex", XR_TID_REGEX, TYPE_NAME_REGEX},
+    {"DateTime", XR_TID_DATETIME, TYPE_NAME_DATETIME},
     {"PanicInfo", XR_TID_PANIC_INFO, TYPE_NAME_PANIC_INFO},
     {"Task", XR_TID_COROUTINE, TYPE_NAME_TASK},
     {"Atomic", XR_TID_ATOMIC, TYPE_NAME_ATOMIC},
@@ -389,6 +391,12 @@ static void xa_native_types_init_once(void) {
     native_builtin_types[XR_TID_BUFFER].name = TYPE_NAME_BUFFER;
     native_builtin_types[XR_TID_BUFFER].members = g_gen_buffer_members;
     native_builtin_types[XR_TID_BUFFER].member_count = GEN_BUFFER_MEMBER_COUNT;
+#endif
+
+#ifdef GEN_DATETIME_MEMBER_COUNT
+    native_builtin_types[XR_TID_DATETIME].name = TYPE_NAME_DATETIME;
+    native_builtin_types[XR_TID_DATETIME].members = g_gen_datetime_members;
+    native_builtin_types[XR_TID_DATETIME].member_count = GEN_DATETIME_MEMBER_COUNT;
 #endif
 
     native_types_initialized = true;

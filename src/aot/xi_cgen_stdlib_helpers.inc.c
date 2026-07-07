@@ -73,6 +73,18 @@ static bool cg_module_has_aot_direct_calls(const char *module) {
     return false;
 }
 
+static bool cg_aot_stdlib_has_direct_member(const char *module, const char *member) {
+    if (!module || !member)
+        return false;
+    for (int i = 0; i < cg_aot_stdlib_method_count(); i++) {
+        const CgAotStdlibMethod *m = cg_aot_stdlib_method_at(i);
+        if (m && m->module && m->method && strcmp(module, m->module) == 0 &&
+            strcmp(member, m->method) == 0)
+            return true;
+    }
+    return false;
+}
+
 static bool cg_module_has_aot_generated_constants(const char *module) {
     return cg_aot_stdlib_generated_module_has_constants(module);
 }
@@ -168,10 +180,11 @@ static const char *cg_aot_stdlib_module_of_receiver(const XiCgenCtx *ctx, const 
  * references have no side effects, so emitting one twice (data + length) is
  * safe. */
 static void cg_emit_aot_stdlib_args(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                    const CgAotStdlibMethod *m, uint16_t call_argc) {
+                                    const CgAotStdlibMethod *m, uint16_t call_argc,
+                                    uint16_t arg_base) {
     (void) f;
     for (uint16_t a = 0; a < call_argc; a++) {
-        const XiValue *arg = v->args[1 + a];
+        const XiValue *arg = v->args[arg_base + a];
         char spec = m->arg_spec[a];
         if (a > 0)
             fprintf(out, ", ");
@@ -189,6 +202,76 @@ static void cg_emit_aot_stdlib_args(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
 
 static bool cg_aot_stdlib_method_is_variadic_strings(const CgAotStdlibMethod *m) {
     return m && m->argc == CG_AOT_STDLIB_VARIADIC && m->arg_spec && strcmp(m->arg_spec, "*") == 0;
+}
+
+static bool cg_emit_aot_stdlib_direct_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *v, const CgAotStdlibMethod *m,
+                                           uint16_t call_argc, uint16_t arg_base) {
+    if (!ctx || !out || !v || !m)
+        return false;
+
+    /* Wrap in a statement-expression so the shim's forward declaration is
+     * self-contained at the call site, then convert the result to the value's
+     * required storage representation. */
+    XrRep target_rep = xicgen_value_c_storage_rep(ctx, f, v);
+    fprintf(out, "({ ");
+    if (m->extern_decl && m->extern_decl[0])
+        fprintf(out, "%s ", m->extern_decl);
+
+    if (m->ret_kind == CG_AOT_RET_STR_BORROWED) {
+        /* The shim returns a borrowed (data, *out_len) slice; copy it into a
+         * fresh AOT string. Temps are id-suffixed to nest safely. */
+        unsigned id = v->id;
+        fprintf(out, "int64_t _arl%u = 0; const char *_ard%u = %s(", id, id, m->shim);
+        cg_emit_aot_stdlib_args(ctx, out, f, v, m, call_argc, arg_base);
+        fprintf(out, ", &_arl%u); XrValue _ars%u = xrt_str_alloc((size_t) _arl%u); ", id, id, id);
+        fprintf(out, "if (_arl%u) memcpy(xr_str_buf(_ars%u), _ard%u, (size_t) _arl%u); ", id, id,
+                id, id);
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
+        fprintf(out, "_ars%u", id);
+        emit_conversion_suffix(out, suffix);
+        fprintf(out, "; })");
+        return true;
+    }
+
+    if (cg_aot_stdlib_method_is_variadic_strings(m)) {
+        unsigned id = v->id;
+        if (call_argc > 0) {
+            fprintf(out, "const char *_asd%u[%u] = {", id, (unsigned) call_argc);
+            for (uint16_t a = 0; a < call_argc; a++) {
+                if (a > 0)
+                    fprintf(out, ", ");
+                fprintf(out, "xr_str_data(");
+                emit_value_as_rep_ctx(ctx, out, v->args[arg_base + a], XR_REP_TAGGED);
+                fprintf(out, ")");
+            }
+            fprintf(out, "}; size_t _asl%u[%u] = {", id, (unsigned) call_argc);
+            for (uint16_t a = 0; a < call_argc; a++) {
+                if (a > 0)
+                    fprintf(out, ", ");
+                fprintf(out, "(size_t) xr_str_len(");
+                emit_value_as_rep_ctx(ctx, out, v->args[arg_base + a], XR_REP_TAGGED);
+                fprintf(out, ")");
+            }
+            fprintf(out, "}; ");
+            fprintf(out, "XrValue _arv%u = %s((int64_t) %u, _asd%u, _asl%u); ", id, m->shim,
+                    (unsigned) call_argc, id, id);
+        } else {
+            fprintf(out, "XrValue _arv%u = %s(0, NULL, NULL); ", id, m->shim);
+        }
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
+        fprintf(out, "_arv%u", id);
+        emit_conversion_suffix(out, suffix);
+    } else {
+        /* CG_AOT_RET_VALUE: shim returns a tagged XrValue. */
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
+        fprintf(out, "%s(", m->shim);
+        cg_emit_aot_stdlib_args(ctx, out, f, v, m, call_argc, arg_base);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, suffix);
+    }
+    fprintf(out, "; })");
+    return true;
 }
 
 /* Emit a direct AOT call for a stdlib module method.
@@ -215,66 +298,35 @@ static bool xicgen_emit_stdlib_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         return true;
     }
 
-    /* Wrap in a statement-expression so the shim's forward declaration is
-     * self-contained at the call site, then convert the result to the value's
-     * required storage representation. */
-    XrRep target_rep = xicgen_value_c_storage_rep(ctx, f, v);
-    fprintf(out, "({ ");
-    if (m->extern_decl && m->extern_decl[0])
-        fprintf(out, "%s ", m->extern_decl);
+    return cg_emit_aot_stdlib_direct_call(ctx, out, f, v, m, call_argc, 1);
+}
 
-    if (m->ret_kind == CG_AOT_RET_STR_BORROWED) {
-        /* The shim returns a borrowed (data, *out_len) slice; copy it into a
-         * fresh AOT string. Temps are id-suffixed to nest safely. */
-        unsigned id = v->id;
-        fprintf(out, "int64_t _arl%u = 0; const char *_ard%u = %s(", id, id, m->shim);
-        cg_emit_aot_stdlib_args(ctx, out, f, v, m, call_argc);
-        fprintf(out, ", &_arl%u); XrValue _ars%u = xrt_str_alloc((size_t) _arl%u); ", id, id, id);
-        fprintf(out, "if (_arl%u) memcpy(xr_str_buf(_ars%u), _ard%u, (size_t) _arl%u); ", id, id,
-                id, id);
-        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
-        fprintf(out, "_ars%u", id);
-        emit_conversion_suffix(out, suffix);
-        fprintf(out, "; })");
+/* Emit a direct AOT call for a selected stdlib member imported as a function
+ * value, e.g. a helper exposed to stdlib/<module>/<module>.xr. */
+static bool xicgen_emit_stdlib_import_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *v) {
+    if (!v || v->op != XI_CALL || v->nargs < 1)
+        return false;
+
+    const XiValue *callee = cg_unwrap_identity_value(v->args[0]);
+    const XiImportRef *ref = (callee && callee->op == XI_IMPORT_REF && callee->aux)
+                                 ? (const XiImportRef *) callee->aux
+                                 : NULL;
+    if (!ref || !ref->module_path || !ref->member_name)
+        return false;
+
+    uint16_t call_argc = (uint16_t) (v->nargs - 1);
+    const CgAotStdlibMethod *m =
+        cg_find_aot_stdlib_method(ref->module_path, ref->member_name, call_argc);
+    if (!m) {
+        if (!cg_aot_stdlib_has_direct_member(ref->module_path, ref->member_name))
+            return false;
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT stdlib call '%s.%s' with %u args\n",
+                ref->module_path, ref->member_name, (unsigned) call_argc);
+        emit_codegen_abort_expr(out);
         return true;
     }
 
-    if (cg_aot_stdlib_method_is_variadic_strings(m)) {
-        unsigned id = v->id;
-        if (call_argc > 0) {
-            fprintf(out, "const char *_asd%u[%u] = {", id, (unsigned) call_argc);
-            for (uint16_t a = 0; a < call_argc; a++) {
-                if (a > 0)
-                    fprintf(out, ", ");
-                fprintf(out, "xr_str_data(");
-                emit_value_as_rep_ctx(ctx, out, v->args[1 + a], XR_REP_TAGGED);
-                fprintf(out, ")");
-            }
-            fprintf(out, "}; size_t _asl%u[%u] = {", id, (unsigned) call_argc);
-            for (uint16_t a = 0; a < call_argc; a++) {
-                if (a > 0)
-                    fprintf(out, ", ");
-                fprintf(out, "(size_t) xr_str_len(");
-                emit_value_as_rep_ctx(ctx, out, v->args[1 + a], XR_REP_TAGGED);
-                fprintf(out, ")");
-            }
-            fprintf(out, "}; ");
-            fprintf(out, "XrValue _arv%u = %s((int64_t) %u, _asd%u, _asl%u); ", id, m->shim,
-                    (unsigned) call_argc, id, id);
-        } else {
-            fprintf(out, "XrValue _arv%u = %s(0, NULL, NULL); ", id, m->shim);
-        }
-        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
-        fprintf(out, "_arv%u", id);
-        emit_conversion_suffix(out, suffix);
-    } else {
-        /* CG_AOT_RET_VALUE: shim returns a tagged XrValue. */
-        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
-        fprintf(out, "%s(", m->shim);
-        cg_emit_aot_stdlib_args(ctx, out, f, v, m, call_argc);
-        fprintf(out, ")");
-        emit_conversion_suffix(out, suffix);
-    }
-    fprintf(out, "; })");
-    return true;
+    return cg_emit_aot_stdlib_direct_call(ctx, out, f, v, m, call_argc, 1);
 }

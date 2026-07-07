@@ -1,0 +1,52 @@
+// sys process handles.
+//
+// The C layer exposes only private double-underscore helpers. This script
+// layer keeps the public surface typed and small: a Process lifecycle handle
+// plus portable signal names. Pipes, cwd/env overrides, and stdio capture stay
+// out until a general process-options design lands.
+
+enum Signal {
+    TERM,
+    KILL,
+    INT
+}
+
+fn signalNumber(sig: Signal) -> int {
+    return match (sig) {
+        Signal.TERM -> 15
+        Signal.KILL -> 9
+        Signal.INT -> 2
+    }
+}
+
+class Process {
+    _id: int
+    _open: bool
+
+    constructor(id: int) {
+        this._id = id
+        this._open = id > 0
+    }
+
+    id: int { fn() { return this._id } }
+
+    wait() -> int {
+        if (!this._open) { return -1 }
+        var code = __processWait(this._id)
+        this._open = false
+        return code
+    }
+
+    kill(signal: Signal = Signal.TERM) -> bool {
+        if (!this._open) { return false }
+        return __processKill(this._id, signalNumber(signal))
+    }
+
+    static spawn(program: string, args: Array<string> = []) -> Process? {
+        var id = __processSpawn(program, args)
+        if (id <= 0) { return null }
+        return Process(id)
+    }
+}
+
+export { Process, Signal }
