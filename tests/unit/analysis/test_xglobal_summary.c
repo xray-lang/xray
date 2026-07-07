@@ -330,6 +330,13 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
                                    .source_span_id = 1,
                                    .flags = 0};
     XgBodySummary cap_body = {.func_id = 123,
+                              .module_id = 1,
+                              .owner_decl_id = 42,
+                              .owner_class_id = XG_NO_ID,
+                              .owner_method_id = XG_NO_ID,
+                              .name_id = 123,
+                              .source_span_id = 5,
+                              .kind = XG_BODY_FUNCTION,
                               .body_hash = 0x999,
                               .effect_bits = 0,
                               .escape_bits = 0,
@@ -1279,6 +1286,13 @@ TEST(global_evidence_verifier_rederives_profile_actions) {
                       .module_id = 1,
                       .profile = XG_BUILD_FREESTANDING};
     XgBodySummary body = {.func_id = 1,
+                          .module_id = 1,
+                          .owner_decl_id = 1,
+                          .owner_class_id = XG_NO_ID,
+                          .owner_method_id = XG_NO_ID,
+                          .name_id = 7,
+                          .source_span_id = 3,
+                          .kind = XG_BODY_FUNCTION,
                           .body_hash = 0x42,
                           .effect_bits = 0,
                           .escape_bits = 0,
@@ -1341,6 +1355,112 @@ TEST(global_evidence_verifier_rederives_profile_actions) {
     ASSERT_TRUE(!xaot_verify_bundle(&static_bad, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT static-data action does not re-derive"));
     xaot_bundle_free(&static_bad);
+
+    xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x41,
+                      .compiler_semver_hash = 0x42,
+                      .profile_hash = 0x43,
+                      .imported_summary_hash = 0x44,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgBodySummary body = {.func_id = 1,
+                          .module_id = 1,
+                          .owner_decl_id = 1,
+                          .owner_class_id = XG_NO_ID,
+                          .owner_method_id = XG_NO_ID,
+                          .name_id = 7,
+                          .source_span_id = 3,
+                          .kind = XG_BODY_FUNCTION,
+                          .body_hash = 0x4242,
+                          .callsite_start = 1,
+                          .callsite_count = 1};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 1,
+                              .source_span_id = 4,
+                              .body_ordinal = 0,
+                              .kind = XG_CALL_DIRECT_FUNC,
+                              .static_target_func_id = 1};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    char err[256];
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+
+    XaotBundle good;
+    memset(&good, 0, sizeof(good));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&good, &ev, XG_BUILD_NATIVE_RELEASE));
+    good.modules = modules;
+    good.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    xaot_bundle_free(&good);
+
+    XaotBundle stale_kind;
+    ev.bodies[0].kind = 0;
+    memset(&stale_kind, 0, sizeof(stale_kind));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_kind, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_kind.modules = modules;
+    stale_kind.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_kind, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_kind, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence body kind is invalid"));
+    xaot_bundle_free(&stale_kind);
+    ev.bodies[0].kind = XG_BODY_FUNCTION;
+
+    XaotBundle stale_range;
+    ev.bodies[0].callsite_start = 2;
+    memset(&stale_range, 0, sizeof(stale_range));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_range, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_range.modules = modules;
+    stale_range.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_range, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_range, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence body callsite range is stale"));
+    xaot_bundle_free(&stale_range);
+    ev.bodies[0].callsite_start = 1;
+
+    XaotBundle stale_owner;
+    ev.callsites[0].owner_func_id = 2;
+    memset(&stale_owner, 0, sizeof(stale_owner));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_owner, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_owner.modules = modules;
+    stale_owner.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_owner, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_owner, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence body callsite owner does not re-derive"));
+    xaot_bundle_free(&stale_owner);
+    ev.callsites[0].owner_func_id = 1;
+
+    XaotBundle stale_ordinal;
+    ev.callsites[0].body_ordinal = 1;
+    memset(&stale_ordinal, 0, sizeof(stale_ordinal));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_ordinal, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_ordinal.modules = modules;
+    stale_ordinal.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_ordinal, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_ordinal, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence body callsite ordinal does not re-derive"));
+    xaot_bundle_free(&stale_ordinal);
 
     xg_global_evidence_free(&ev);
 }
@@ -2024,6 +2144,7 @@ RUN_TEST(global_evidence_verifier_rederives_class_graph_flags);
 RUN_TEST(global_evidence_verifier_rederives_method_override_graph);
 RUN_TEST(global_evidence_verifier_rederives_interface_implementor_set);
 RUN_TEST(global_evidence_verifier_rederives_profile_actions);
+RUN_TEST(global_evidence_verifier_rederives_body_callsite_ranges);
 RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
