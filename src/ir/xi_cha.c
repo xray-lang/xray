@@ -11,18 +11,27 @@
 #include "xi_cha.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
-#include <string.h>
 
 XR_FUNC const XrClassInfo *xi_cha_snapshot_info(const XaClassHierarchy *cha,
                                                 const XrClassInfo *info) {
-    if (!cha || !info || !info->name)
+    if (!cha || !info)
         return info;
     for (uint32_t i = 0; i < cha->nnodes; i++) {
-        XrClassInfo *node_info = cha->nodes[i].info;
-        if (node_info && node_info->name && strcmp(node_info->name, info->name) == 0)
-            return node_info;
+        if (cha->nodes[i].origin_info == info || cha->nodes[i].info == info)
+            return cha->nodes[i].info;
     }
     return info;
+}
+
+XR_FUNC const XrClassInfo *xi_cha_origin_info(const XaClassHierarchy *cha,
+                                              const XrClassInfo *snapshot_info) {
+    if (!cha || !snapshot_info)
+        return snapshot_info;
+    for (uint32_t i = 0; i < cha->nnodes; i++) {
+        if (cha->nodes[i].info == snapshot_info)
+            return cha->nodes[i].origin_info ? cha->nodes[i].origin_info : snapshot_info;
+    }
+    return snapshot_info;
 }
 
 typedef struct XiChaCollector {
@@ -103,16 +112,6 @@ static bool cha_collect_func(const XiFunc *f, XiChaCollector *col) {
     return true;
 }
 
-static XrClassInfo *cha_find_copy_by_name(XrClassInfo *copies, uint32_t n, const char *name) {
-    if (!name)
-        return NULL;
-    for (uint32_t i = 0; i < n; i++) {
-        if (copies[i].name && strcmp(copies[i].name, name) == 0)
-            return &copies[i];
-    }
-    return NULL;
-}
-
 static bool cha_build_snapshot(const XiChaCollector *col, XaClassHierarchy *out,
                                XrClassInfo **out_copies) {
     if (!col || !out || !out_copies)
@@ -140,10 +139,13 @@ static bool cha_build_snapshot(const XiChaCollector *col, XaClassHierarchy *out,
 
     for (uint32_t i = 0; i < col->ninfos; i++) {
         const XrClassInfo *src = col->infos[i];
-        if (src->base_name) {
-            copies[i].base = cha_find_copy_by_name(copies, col->ninfos, src->base_name);
-        } else if (src->base && src->base->name) {
-            copies[i].base = cha_find_copy_by_name(copies, col->ninfos, src->base->name);
+        if (src->base) {
+            for (uint32_t j = 0; j < col->ninfos; j++) {
+                if (col->infos[j] == src->base) {
+                    copies[i].base = &copies[j];
+                    break;
+                }
+            }
         }
     }
 
@@ -154,6 +156,8 @@ static bool cha_build_snapshot(const XiChaCollector *col, XaClassHierarchy *out,
     }
 
     xr_free(ptrs);
+    for (uint32_t i = 0; i < out->nnodes && i < col->ninfos; i++)
+        out->nodes[i].origin_info = col->infos[i];
     *out_copies = copies;
     return true;
 }

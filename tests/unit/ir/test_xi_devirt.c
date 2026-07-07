@@ -10,8 +10,18 @@
 #include <stdio.h>
 #include <string.h>
 
-static XiClassData *make_class_data_named(XiFunc *f, const char *class_name,
-                                          const char *super_name) {
+enum {
+    SYM_SKIP = 11,
+    SYM_RUN = 12,
+    SYM_BARK = 13,
+};
+
+static int64_t call_sym(int32_t symbol_id) {
+    return (int64_t) symbol_id << 1;
+}
+
+static XiClassData *make_class_data_named(XiFunc *f, XrClassInfo *class_info,
+                                          const char *class_name, const char *super_name) {
     XiClassData *data = (XiClassData *) xi_func_arena_alloc(f, sizeof(XiClassData));
     XiClassMethod *methods = (XiClassMethod *) xi_func_arena_alloc(f, 2 * sizeof(XiClassMethod));
     uint16_t *child_idx = (uint16_t *) xi_func_arena_alloc(f, 2 * sizeof(uint16_t));
@@ -21,6 +31,7 @@ static XiClassData *make_class_data_named(XiFunc *f, const char *class_name,
     memset(data, 0, sizeof(*data));
     memset(methods, 0, 2 * sizeof(*methods));
 
+    data->class_info = class_info;
     data->class_name = class_name;
     data->super_name = super_name;
     data->methods = methods;
@@ -28,19 +39,21 @@ static XiClassData *make_class_data_named(XiFunc *f, const char *class_name,
     data->nmethod = 2;
     data->ninst = 2;
     methods[0].name = "skip";
+    methods[0].symbol_id = SYM_SKIP;
     methods[1].name = "run";
+    methods[1].symbol_id = SYM_RUN;
     child_idx[0] = 0;
     child_idx[1] = 1;
     return data;
 }
 
-static XiClassData *make_class_data(XiFunc *f, const char *super_name) {
-    return make_class_data_named(f, "Greeter", super_name);
+static XiClassData *make_class_data(XiFunc *f, XrClassInfo *class_info, const char *super_name) {
+    return make_class_data_named(f, class_info, "Greeter", super_name);
 }
 
 static XiValue *make_method_call_on_class(XiFunc *f, XrType *ret_type, XrType *recv_type,
-                                          int64_t aux_int, const char *class_name,
-                                          const char *super_name) {
+                                          int64_t aux_int, XrClassInfo *class_info,
+                                          const char *class_name, const char *super_name) {
     XiBlock *entry = f->entry;
     XiValue *cls = xi_value_new(f, entry, XI_CLASS_CREATE, ret_type, 0);
     XiValue *recv = xi_param(f, entry, 0, recv_type);
@@ -49,7 +62,7 @@ static XiValue *make_method_call_on_class(XiFunc *f, XrType *ret_type, XrType *r
     assert(recv != NULL);
     assert(call != NULL);
 
-    cls->aux = make_class_data_named(f, class_name, super_name);
+    cls->aux = make_class_data_named(f, class_info, class_name, super_name);
     call->args[0] = recv;
     call->aux = (void *) "run";
     call->aux_int = aux_int;
@@ -57,7 +70,8 @@ static XiValue *make_method_call_on_class(XiFunc *f, XrType *ret_type, XrType *r
 }
 
 static XiValue *make_method_call_with_super(XiFunc *f, XrType *ret_type, XrType *recv_type,
-                                            int64_t aux_int, const char *super_name) {
+                                            int64_t aux_int, XrClassInfo *class_info,
+                                            const char *super_name) {
     XiBlock *entry = f->entry;
     XiValue *cls = xi_value_new(f, entry, XI_CLASS_CREATE, ret_type, 0);
     XiValue *recv = xi_param(f, entry, 0, recv_type);
@@ -66,15 +80,16 @@ static XiValue *make_method_call_with_super(XiFunc *f, XrType *ret_type, XrType 
     assert(recv != NULL);
     assert(call != NULL);
 
-    cls->aux = make_class_data(f, super_name);
+    cls->aux = make_class_data(f, class_info, super_name);
     call->args[0] = recv;
     call->aux = (void *) "run";
     call->aux_int = aux_int;
     return call;
 }
 
-static XiValue *make_method_call(XiFunc *f, XrType *ret_type, XrType *recv_type, int64_t aux_int) {
-    return make_method_call_with_super(f, ret_type, recv_type, aux_int, NULL);
+static XiValue *make_method_call(XiFunc *f, XrType *ret_type, XrType *recv_type, int64_t aux_int,
+                                 XrClassInfo *class_info) {
+    return make_method_call_with_super(f, ret_type, recv_type, aux_int, class_info, NULL);
 }
 
 static XiFunc *make_func(XrType *ret_type) {
@@ -103,7 +118,7 @@ static void test_direct_call(void) {
                         .frozen = true,
                         .instance = {.class_name = "Greeter", .class_ref = &info}};
     XiFunc *f = make_func(&ret_type);
-    XiValue *call = make_method_call(f, &ret_type, &recv_type, 0);
+    XiValue *call = make_method_call(f, &ret_type, &recv_type, call_sym(SYM_RUN), &info);
 
     XiPassChange chg = xi_opt_devirt(f);
     assert(chg.values_changed);
@@ -123,12 +138,12 @@ static void test_subclass_rejected(void) {
                         .frozen = true,
                         .instance = {.class_name = "Greeter", .class_ref = &info}};
     XiFunc *f = make_func(&ret_type);
-    XiValue *call = make_method_call(f, &ret_type, &recv_type, 0);
+    XiValue *call = make_method_call(f, &ret_type, &recv_type, call_sym(SYM_RUN), &info);
 
     XiPassChange chg = xi_opt_devirt(f);
     assert(!chg.values_changed);
     assert(call->op == XI_CALL_METHOD);
-    assert(call->aux_int == 0);
+    assert(call->aux_int == call_sym(SYM_RUN));
     xi_func_free(f);
 }
 
@@ -140,12 +155,12 @@ static void test_super_call_rejected(void) {
                         .frozen = true,
                         .instance = {.class_name = "Greeter", .class_ref = &info}};
     XiFunc *f = make_func(&ret_type);
-    XiValue *call = make_method_call(f, &ret_type, &recv_type, 1);
+    XiValue *call = make_method_call(f, &ret_type, &recv_type, call_sym(SYM_RUN) | 1, &info);
 
     XiPassChange chg = xi_opt_devirt(f);
     assert(!chg.values_changed);
     assert(call->op == XI_CALL_METHOD);
-    assert(call->aux_int == 1);
+    assert(call->aux_int == (call_sym(SYM_RUN) | 1));
     xi_func_free(f);
 }
 
@@ -162,7 +177,8 @@ static void test_base_class_rejected(void) {
                         .frozen = true,
                         .instance = {.class_name = "Greeter", .class_ref = &info}};
     XiFunc *f = make_func(&ret_type);
-    XiValue *call = make_method_call_with_super(f, &ret_type, &recv_type, 0, "Base");
+    XiValue *call =
+        make_method_call_with_super(f, &ret_type, &recv_type, call_sym(SYM_RUN), &info, "Base");
 
     XiPassChange chg = xi_opt_devirt(f);
     assert(chg.values_changed);
@@ -184,7 +200,8 @@ static void test_base_with_subclass_rejected(void) {
                         .frozen = true,
                         .instance = {.class_name = "Greeter", .class_ref = &info}};
     XiFunc *f = make_func(&ret_type);
-    XiValue *call = make_method_call_with_super(f, &ret_type, &recv_type, 0, "Base");
+    XiValue *call =
+        make_method_call_with_super(f, &ret_type, &recv_type, call_sym(SYM_RUN), &info, "Base");
 
     XiPassChange chg = xi_opt_devirt(f);
     assert(!chg.values_changed);
@@ -196,8 +213,10 @@ static void test_cha_final_method_devirt(void) {
     XaMethodSlot vtable[2];
     memset(vtable, 0, sizeof(vtable));
     vtable[0].name = "skip";
+    vtable[0].symbol_id = SYM_SKIP;
     vtable[0].is_final = false;
     vtable[1].name = "run";
+    vtable[1].symbol_id = SYM_RUN;
     vtable[1].is_final = true;
 
     XrClassInfo info = {
@@ -213,7 +232,7 @@ static void test_cha_final_method_devirt(void) {
                         .frozen = true,
                         .instance = {.class_name = "Greeter", .class_ref = &info}};
     XiFunc *f = make_func(&ret_type);
-    XiValue *call = make_method_call(f, &ret_type, &recv_type, 0);
+    XiValue *call = make_method_call(f, &ret_type, &recv_type, call_sym(SYM_RUN), &info);
 
     XiPassChange chg = xi_opt_devirt(f);
     assert(chg.values_changed);
@@ -226,8 +245,10 @@ static void test_cha_nonfinal_method_rejected(void) {
     XaMethodSlot vtable[2];
     memset(vtable, 0, sizeof(vtable));
     vtable[0].name = "skip";
+    vtable[0].symbol_id = SYM_SKIP;
     vtable[0].is_final = true;
     vtable[1].name = "run";
+    vtable[1].symbol_id = SYM_RUN;
     vtable[1].is_final = false;
 
     XrClassInfo info = {
@@ -243,7 +264,7 @@ static void test_cha_nonfinal_method_rejected(void) {
                         .frozen = true,
                         .instance = {.class_name = "Greeter", .class_ref = &info}};
     XiFunc *f = make_func(&ret_type);
-    XiValue *call = make_method_call(f, &ret_type, &recv_type, 0);
+    XiValue *call = make_method_call(f, &ret_type, &recv_type, call_sym(SYM_RUN), &info);
 
     XiPassChange chg = xi_opt_devirt(f);
     assert(!chg.values_changed);
@@ -260,6 +281,7 @@ static void test_cha_single_implementor_devirt(void) {
     XaMethodSlot child_vtable[1];
     memset(child_vtable, 0, sizeof(child_vtable));
     child_vtable[0].name = "run";
+    child_vtable[0].symbol_id = SYM_RUN;
     child_vtable[0].is_final = false;
 
     XrClassInfo child_info = {
@@ -282,7 +304,8 @@ static void test_cha_single_implementor_devirt(void) {
                           .instance = {.class_name = "Worker", .class_ref = &child_info}};
     XiFunc *f = make_func(&ret_type);
     (void) xi_param(f, f->entry, 1, &worker_type);
-    XiValue *call = make_method_call_on_class(f, &ret_type, &recv_type, 0, "Worker", NULL);
+    XiValue *call = make_method_call_on_class(f, &ret_type, &recv_type, call_sym(SYM_RUN),
+                                              &child_info, "Worker", "Base");
 
     XiPassChange chg = xi_opt_devirt(f);
     assert(chg.values_changed);
@@ -305,7 +328,7 @@ static void test_cha_no_vtable_rejected(void) {
                         .frozen = true,
                         .instance = {.class_name = "Greeter", .class_ref = &info}};
     XiFunc *f = make_func(&ret_type);
-    XiValue *call = make_method_call(f, &ret_type, &recv_type, 0);
+    XiValue *call = make_method_call(f, &ret_type, &recv_type, call_sym(SYM_RUN), &info);
 
     XiPassChange chg = xi_opt_devirt(f);
     assert(!chg.values_changed);
@@ -332,19 +355,20 @@ static void test_inherited_method_devirt(void) {
     /* Dog class data: no "run" method — only parent Animal has it. */
     XiBlock *entry = f->entry;
     XiValue *cls_dog = xi_value_new(f, entry, XI_CLASS_CREATE, &ret_type, 0);
-    XiClassData *dog_data = make_class_data_named(f, "Dog", "Animal");
+    XiClassData *dog_data = make_class_data_named(f, &info, "Dog", "Animal");
     dog_data->methods[1].name = "bark"; /* Dog defines "bark", not "run" */
+    dog_data->methods[1].symbol_id = SYM_BARK;
     cls_dog->aux = dog_data;
 
     /* Animal class data: defines "run" */
     XiValue *cls_animal = xi_value_new(f, entry, XI_CLASS_CREATE, &ret_type, 0);
-    cls_animal->aux = make_class_data_named(f, "Animal", NULL);
+    cls_animal->aux = make_class_data_named(f, &base_info, "Animal", NULL);
 
     XiValue *recv = xi_param(f, entry, 0, &recv_type);
     XiValue *call = xi_value_new(f, entry, XI_CALL_METHOD, &ret_type, 1);
     call->args[0] = recv;
     call->aux = (void *) "run";
-    call->aux_int = 0;
+    call->aux_int = call_sym(SYM_RUN);
 
     XiPassChange chg = xi_opt_devirt(f);
     /* Should devirt: Dog inherits "run" from Animal (no subclass, no override). */

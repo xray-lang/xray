@@ -14,12 +14,12 @@
 
 /* ========== Internal Helpers ========== */
 
-static XaChaNode *find_node_by_name(const XaClassHierarchy *cha, const char *name) {
-    if (!cha || !name)
+static XaChaNode *find_node_by_info(const XaClassHierarchy *cha, const XrClassInfo *info) {
+    if (!cha || !info)
         return NULL;
     for (uint32_t i = 0; i < cha->nnodes; i++) {
         XaChaNode *node = &cha->nodes[i];
-        if (node->info && node->info->name && strcmp(node->info->name, name) == 0)
+        if (node->info == info || node->origin_info == info)
             return node;
     }
     return NULL;
@@ -56,14 +56,13 @@ static uint32_t count_subclasses_recursive(const XaChaNode *node) {
     return count;
 }
 
-/* Check if a class directly defines (not inherits) a method with the
- * given name.  Uses the XrClassInfo vtable if available. */
-static bool class_defines_method(const XrClassInfo *info, const char *method_name) {
-    if (!info || !method_name)
+/* Check if a class defines a method with the given runtime symbol. */
+static bool class_defines_method(const XrClassInfo *info, int32_t method_symbol) {
+    if (!info || method_symbol <= 0)
         return false;
     if (info->vtable) {
         for (int i = 0; i < info->vtable_size; i++) {
-            if (info->vtable[i].name && strcmp(info->vtable[i].name, method_name) == 0)
+            if (info->vtable[i].symbol_id == method_symbol)
                 return true;
         }
     }
@@ -71,18 +70,19 @@ static bool class_defines_method(const XrClassInfo *info, const char *method_nam
 }
 
 /* Collect all implementors of a method among a node and its descendants. */
-static uint32_t collect_implementors(const XaChaNode *node, const char *method_name,
+static uint32_t collect_implementors(const XaChaNode *node, int32_t method_symbol,
                                      const XrClassInfo **out, uint32_t max_out) {
     if (!node || max_out == 0)
         return 0;
     uint32_t count = 0;
-    if (class_defines_method(node->info, method_name)) {
+    if (class_defines_method(node->info, method_symbol)) {
         out[count++] = node->info;
         if (count >= max_out)
             return count;
     }
     for (uint32_t i = 0; i < node->nchildren; i++) {
-        count += collect_implementors(node->children[i], method_name, out + count, max_out - count);
+        count +=
+            collect_implementors(node->children[i], method_symbol, out + count, max_out - count);
         if (count >= max_out)
             return count;
     }
@@ -108,6 +108,7 @@ XR_FUNC bool xa_cha_build(XaClassHierarchy *cha, XrClassInfo **infos, uint32_t n
             continue;
         XaChaNode *node = &cha->nodes[cha->nnodes++];
         node->info = infos[i];
+        node->origin_info = infos[i];
         node->parent = NULL;
         node->children = NULL;
         node->nchildren = 0;
@@ -115,18 +116,16 @@ XR_FUNC bool xa_cha_build(XaClassHierarchy *cha, XrClassInfo **infos, uint32_t n
         node->is_leaf = true;
     }
 
-    /* Link parent-child relationships based on base_name. */
+    /* Link parent-child relationships from resolved class identities. */
     for (uint32_t i = 0; i < cha->nnodes; i++) {
         XaChaNode *node = &cha->nodes[i];
-        if (!node->info->base_name)
+        if (!node->info->base)
             continue;
-        XaChaNode *parent = find_node_by_name(cha, node->info->base_name);
+        XaChaNode *parent = find_node_by_info(cha, node->info->base);
         if (!parent)
             continue;
         node->parent = parent;
         add_child(parent, node);
-        if (node->info->base == NULL)
-            node->info->base = parent->info;
         parent->info->has_subclass = true;
     }
 
@@ -153,15 +152,15 @@ XR_FUNC bool xa_cha_is_leaf(const XaClassHierarchy *cha, const XrClassInfo *info
 
 XR_FUNC const XrClassInfo *xa_cha_single_implementor(const XaClassHierarchy *cha,
                                                      const XrClassInfo *info,
-                                                     const char *method_name) {
-    if (!cha || !info || !method_name)
+                                                     int32_t method_symbol) {
+    if (!cha || !info || method_symbol <= 0)
         return NULL;
     XaChaNode *node = xa_cha_find_node(cha, info);
     if (!node)
         return NULL;
 
     const XrClassInfo *results[2] = {NULL, NULL};
-    uint32_t count = collect_implementors(node, method_name, results, 2);
+    uint32_t count = collect_implementors(node, method_symbol, results, 2);
     if (count == 1)
         return results[0];
     return NULL;
@@ -184,9 +183,5 @@ XR_FUNC void xa_cha_invalidate(XaClassHierarchy *cha) {
 XR_FUNC XaChaNode *xa_cha_find_node(const XaClassHierarchy *cha, const XrClassInfo *info) {
     if (!cha || !info)
         return NULL;
-    for (uint32_t i = 0; i < cha->nnodes; i++) {
-        if (cha->nodes[i].info == info)
-            return &cha->nodes[i];
-    }
-    return NULL;
+    return find_node_by_info(cha, info);
 }
