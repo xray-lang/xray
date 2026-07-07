@@ -93,6 +93,7 @@ typedef enum XgBodyKind {
 
 typedef enum XgLinkDependencyKind {
     XG_LINK_DEP_EXTERN_DYLIB = 1,
+    XG_LINK_DEP_STDLIB_MODULE,
     XG_LINK_DEP_STDLIB_SYMBOL,
 } XgLinkDependencyKind;
 

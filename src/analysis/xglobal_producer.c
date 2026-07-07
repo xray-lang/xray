@@ -16,7 +16,9 @@
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../module/xmodule_graph.h"
+#include "../stdlib/xstdlib_defs_generated.h"
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 enum {
@@ -46,6 +48,13 @@ typedef struct XgInterfaceNameRow {
     const InterfaceDeclNode *decl;
 } XgInterfaceNameRow;
 
+typedef struct XgStdlibImportRow {
+    XgModuleId module_id;
+    const char *local_name;
+    const char *module_name;
+    const char *member_name;
+} XgStdlibImportRow;
+
 typedef struct XgProducer {
     XgGlobalEvidence *evidence;
     XgClassNameRow *classes;
@@ -57,6 +66,9 @@ typedef struct XgProducer {
     XgFuncNameRow *funcs;
     uint32_t nfuncs;
     uint32_t func_cap;
+    XgStdlibImportRow *stdlib_imports;
+    uint32_t nstdlib_imports;
+    uint32_t stdlib_import_cap;
     struct XgPendingBody *bodies;
     uint32_t nbodies;
     uint32_t body_cap;
@@ -90,6 +102,7 @@ typedef struct XgBodyCollect {
     XgProducer *producer;
     XgGlobalEvidence *evidence;
     XgFuncId owner_func_id;
+    XgModuleId module_id;
     XgClassId current_class_id;
     XgLocalType *locals;
     uint32_t nlocals;
@@ -114,6 +127,73 @@ static uint64_t fold_u64(uint64_t h, uint64_t value) {
 
 static uint32_t hash_name32(const char *name) {
     return xg_name_id(name);
+}
+
+static bool producer_stdlib_module_known(const char *name) {
+    if (!name || !name[0] || name[0] == '.')
+        return false;
+    static const char *modules[] = {
+        "regex", "math", "time",   "datetime", "path",     "io",  "os",
+        "net",   "http", "crypto", "base64",   "encoding", "url", "csv",
+        "toml",  "yaml", "xml",    "compress", "log",
+    };
+    for (uint32_t i = 0; i < (uint32_t) (sizeof(modules) / sizeof(modules[0])); i++) {
+        if (strcmp(name, modules[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool producer_stdlib_member_is_constant(const char *module, const char *member) {
+    if (!module || !member)
+        return false;
+    for (uint32_t i = 0; i < XR_STDLIB_CONST_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibConstDefEntry *entry = &xr_stdlib_const_def_entries[i];
+        if (entry->module && entry->name && strcmp(entry->module, module) == 0 &&
+            strcmp(entry->name, member) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool producer_add_link_dependency(XgProducer *p, XgModuleId module_id, XgDeclId decl_id,
+                                         uint32_t source_span_id, uint8_t kind, const char *name) {
+    XgLinkDependencySummary dep;
+    size_t len;
+    if (!p || !p->evidence || !name || !name[0])
+        return true;
+    for (uint32_t i = 0; i < p->evidence->nlink_deps; i++) {
+        const XgLinkDependencySummary *existing = &p->evidence->link_deps[i];
+        if (existing->kind == kind && strcmp(existing->name, name) == 0)
+            return true;
+    }
+    len = strlen(name);
+    if (len >= XG_LINK_DEP_NAME_MAX)
+        len = XG_LINK_DEP_NAME_MAX - 1;
+    memset(&dep, 0, sizeof(dep));
+    dep.link_id = (XgLinkId) (p->evidence->nlink_deps + 1);
+    dep.module_id = module_id;
+    dep.decl_id = decl_id;
+    dep.source_span_id = source_span_id;
+    dep.kind = kind;
+    dep.name_id = hash_name32(name);
+    memcpy(dep.name, name, len);
+    dep.name[len] = '\0';
+    return xg_global_evidence_add_link_dependency(p->evidence, &dep) != NULL;
+}
+
+static bool producer_add_stdlib_symbol_dependency(XgProducer *p, XgModuleId module_id,
+                                                  uint32_t source_span_id, const char *module,
+                                                  const char *member) {
+    char symbol[XG_LINK_DEP_NAME_MAX];
+    int n;
+    if (!module || !module[0] || !member || !member[0])
+        return true;
+    n = snprintf(symbol, sizeof(symbol), "%s.%s", module, member);
+    if (n <= 0 || n >= (int) sizeof(symbol))
+        return true;
+    return producer_add_link_dependency(p, module_id, XG_NO_ID, source_span_id,
+                                        XG_LINK_DEP_STDLIB_SYMBOL, symbol);
 }
 
 static uint64_t hash_tref(uint64_t h, const XrTypeRef *t) {
@@ -279,6 +359,51 @@ static XgFuncNameRow *producer_lookup_func_row(const XgProducer *p, const char *
     for (uint32_t i = 0; i < p->nfuncs; i++) {
         if (p->funcs[i].name && strcmp(p->funcs[i].name, name) == 0)
             return &p->funcs[i];
+    }
+    return NULL;
+}
+
+static bool producer_reserve_stdlib_imports(XgProducer *p, uint32_t needed) {
+    uint32_t new_cap;
+    XgStdlibImportRow *rows;
+    if (p->stdlib_import_cap >= needed)
+        return true;
+    new_cap = p->stdlib_import_cap < 8 ? 8 : p->stdlib_import_cap;
+    while (new_cap < needed)
+        new_cap *= 2;
+    rows = (XgStdlibImportRow *) xr_realloc(p->stdlib_imports, (size_t) new_cap * sizeof(*rows));
+    if (!rows)
+        return false;
+    p->stdlib_imports = rows;
+    p->stdlib_import_cap = new_cap;
+    return true;
+}
+
+static bool producer_register_stdlib_import(XgProducer *p, XgModuleId module_id,
+                                            const char *local_name, const char *module_name,
+                                            const char *member_name) {
+    XgStdlibImportRow *row;
+    if (!local_name || !local_name[0] || !module_name || !module_name[0])
+        return true;
+    if (!producer_reserve_stdlib_imports(p, p->nstdlib_imports + 1))
+        return false;
+    row = &p->stdlib_imports[p->nstdlib_imports++];
+    row->module_id = module_id;
+    row->local_name = local_name;
+    row->module_name = module_name;
+    row->member_name = member_name;
+    return true;
+}
+
+static const XgStdlibImportRow *
+producer_lookup_stdlib_import(const XgProducer *p, XgModuleId module_id, const char *local_name) {
+    if (!p || !local_name)
+        return NULL;
+    for (uint32_t i = p->nstdlib_imports; i > 0; i--) {
+        const XgStdlibImportRow *row = &p->stdlib_imports[i - 1];
+        if (row->module_id == module_id && row->local_name &&
+            strcmp(row->local_name, local_name) == 0)
+            return row;
     }
     return NULL;
 }
@@ -778,6 +903,24 @@ static bool body_member_receiver_is_module(const MemberAccessNode *member, const
     return strcmp(member->object->as.variable.name, name) == 0;
 }
 
+static const XgStdlibImportRow *body_stdlib_import_for_expr(XgBodyCollect *bc,
+                                                            const AstNode *expr) {
+    if (!bc || !expr)
+        return NULL;
+    if (expr->type == AST_GROUPING)
+        return body_stdlib_import_for_expr(bc, expr->as.grouping);
+    if (expr->type != AST_VARIABLE)
+        return NULL;
+    return producer_lookup_stdlib_import(bc->producer, bc->module_id, expr->as.variable.name);
+}
+
+static const char *body_stdlib_module_for_expr(XgBodyCollect *bc, const AstNode *expr) {
+    const XgStdlibImportRow *row = body_stdlib_import_for_expr(bc, expr);
+    if (!row || row->member_name)
+        return NULL;
+    return row->module_name;
+}
+
 static bool body_call_is_sys_thread_spawn(const CallExprNode *call) {
     if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return false;
@@ -848,9 +991,15 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             row.static_target_func_id = target->func_id;
         }
     } else if (callee && callee->type == AST_MEMBER_ACCESS) {
+        const char *stdlib_module =
+            body_stdlib_module_for_expr(bc, callee->as.member_access.object);
         XgInterfaceId receiver_interface =
             body_resolve_expr_interface(bc, callee->as.member_access.object);
         uint32_t method_name_id = hash_name32(callee->as.member_access.name);
+        if (stdlib_module)
+            (void) producer_add_stdlib_symbol_dependency(bc->producer, bc->module_id,
+                                                         (uint32_t) call->line, stdlib_module,
+                                                         callee->as.member_access.name);
         bc->capability_bits |=
             body_capabilities_for_builtin_member_constructor(&callee->as.member_access);
         if (receiver_interface != XG_NO_ID) {
@@ -1008,9 +1157,18 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             bc->effect_bits |= XG_BODY_MAY_MUTATE;
             break;
         }
-        case AST_MEMBER_ACCESS:
+        case AST_MEMBER_ACCESS: {
+            const char *stdlib_module =
+                body_stdlib_module_for_expr(bc, node->as.member_access.object);
+            if (stdlib_module &&
+                producer_stdlib_member_is_constant(stdlib_module, node->as.member_access.name)) {
+                (void) producer_add_stdlib_symbol_dependency(bc->producer, bc->module_id,
+                                                             (uint32_t) node->line, stdlib_module,
+                                                             node->as.member_access.name);
+            }
             walk_body_for_calls(bc, node->as.member_access.object);
             break;
+        }
         case AST_MEMBER_SET:
             walk_body_for_calls(bc, node->as.member_set.object);
             walk_body_for_calls(bc, node->as.member_set.value);
@@ -1342,6 +1500,7 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     bc.producer = producer;
     bc.evidence = producer->evidence;
     bc.owner_func_id = pending->func_id;
+    bc.module_id = pending->module_id;
     bc.current_class_id = pending->current_class_id;
     body_add_method_params(&bc, pending->method);
     body_add_function_params(&bc, pending->function);
@@ -1582,6 +1741,33 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     return xg_global_evidence_add_decl(p->evidence, &decl) != NULL;
 }
 
+static bool add_import_link_dependencies(XgProducer *p, XgModuleId module_id, const AstNode *node) {
+    const ImportStmtNode *import;
+    if (!p || !node || node->type != AST_IMPORT_STMT)
+        return true;
+    import = &node->as.import_stmt;
+    if (!producer_stdlib_module_known(import->module_name))
+        return true;
+    if (!producer_add_link_dependency(p, module_id, XG_NO_ID, (uint32_t) node->line,
+                                      XG_LINK_DEP_STDLIB_MODULE, import->module_name))
+        return false;
+    if (import->member_count == 0) {
+        return producer_register_stdlib_import(p, module_id, import->alias, import->module_name,
+                                               NULL);
+    }
+    for (int i = 0; i < import->member_count; i++) {
+        const ImportMember *member = &import->members[i];
+        const char *local_name = member->alias ? member->alias : member->name;
+        if (!producer_add_stdlib_symbol_dependency(p, module_id, (uint32_t) node->line,
+                                                   import->module_name, member->name))
+            return false;
+        if (!producer_register_stdlib_import(p, module_id, local_name, import->module_name,
+                                             member->name))
+            return false;
+    }
+    return true;
+}
+
 static bool module_stmt_has_runtime_body(const AstNode *stmt) {
     if (!stmt)
         return false;
@@ -1624,6 +1810,8 @@ static bool add_module_decl_stmt(XgProducer *p, XgModuleId module_id, const AstN
             return add_interface_decl(p, module_id, stmt);
         case AST_ENUM_DECL:
             return add_enum_decl(p, module_id, stmt);
+        case AST_IMPORT_STMT:
+            return add_import_link_dependencies(p, module_id, stmt);
         default:
             if (handled)
                 *handled = false;
@@ -1719,6 +1907,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
             xr_free(producer.classes);
             xr_free(producer.interfaces);
             xr_free(producer.funcs);
+            xr_free(producer.stdlib_imports);
             xr_free(producer.bodies);
             xg_global_evidence_free(evidence);
             return false;
@@ -1730,6 +1919,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
         xr_free(producer.classes);
         xr_free(producer.interfaces);
         xr_free(producer.funcs);
+        xr_free(producer.stdlib_imports);
         xr_free(producer.bodies);
         xg_global_evidence_free(evidence);
         return false;
@@ -1737,6 +1927,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
     xr_free(producer.classes);
     xr_free(producer.interfaces);
     xr_free(producer.funcs);
+    xr_free(producer.stdlib_imports);
     xr_free(producer.bodies);
     return true;
 }

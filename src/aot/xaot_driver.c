@@ -170,6 +170,33 @@ static void features_add_stdlib_symbol(XaotFeatureSet *fs, const char *symbol) {
     fs->n_stdlib_symbols++;
 }
 
+static void features_add_stdlib_module(XaotFeatureSet *fs, const char *module) {
+    XaotStdlibSet flag;
+    if (!fs || !module || !module[0])
+        return;
+    flag = stdlib_flag_for_import(module);
+    if (flag)
+        fs->stdlib |= flag;
+}
+
+static void features_apply_stdlib_symbol(XaotFeatureSet *fs, const char *symbol) {
+    const char *dot;
+    char module[XAOT_STDLIB_SYMBOL_NAME_MAX];
+    size_t module_len;
+    if (!fs || !symbol || !symbol[0])
+        return;
+    dot = strchr(symbol, '.');
+    if (dot && dot != symbol) {
+        module_len = (size_t) (dot - symbol);
+        if (module_len < sizeof(module)) {
+            memcpy(module, symbol, module_len);
+            module[module_len] = '\0';
+            features_add_stdlib_module(fs, module);
+        }
+    }
+    features_add_stdlib_symbol(fs, symbol);
+}
+
 static void features_add_extern_dylib(XaotFeatureSet *fs, const char *dylib) {
     if (!fs || !dylib || !dylib[0] || strlen(dylib) >= XAOT_EXTERN_DYLIB_NAME_MAX)
         return;
@@ -181,56 +208,6 @@ static void features_add_extern_dylib(XaotFeatureSet *fs, const char *dylib) {
         return;
     memcpy(fs->extern_dylibs[fs->n_extern_dylibs], dylib, strlen(dylib) + 1);
     fs->n_extern_dylibs++;
-}
-
-/* Record "module.member" into the referenced stdlib-symbol closure. */
-static void features_add_stdlib_member(XaotFeatureSet *fs, const char *module, const char *member) {
-    if (!fs || !module || !module[0] || !member || !member[0])
-        return;
-    char symbol[XAOT_STDLIB_SYMBOL_NAME_MAX];
-    int n = snprintf(symbol, sizeof(symbol), "%s.%s", module, member);
-    if (n <= 0 || n >= (int) sizeof(symbol))
-        return;
-    features_add_stdlib_symbol(fs, symbol);
-}
-
-static bool stdlib_member_is_generated_builtin_direct(const char *module, const char *member) {
-    if (!module || !module[0] || !member || !member[0])
-        return false;
-    char symbol[XAOT_STDLIB_SYMBOL_NAME_MAX];
-    int n = snprintf(symbol, sizeof(symbol), "%s.%s", module, member);
-    if (n <= 0 || n >= (int) sizeof(symbol))
-        return false;
-    return xaot_stdlib_generated_symbol_is_builtin_direct(symbol);
-}
-
-static bool stdlib_member_is_generated_constant(const char *module, const char *member) {
-    if (!module || !module[0] || !member || !member[0])
-        return false;
-    char symbol[XAOT_STDLIB_SYMBOL_NAME_MAX];
-    int n = snprintf(symbol, sizeof(symbol), "%s.%s", module, member);
-    if (n <= 0 || n >= (int) sizeof(symbol))
-        return false;
-    return xaot_stdlib_generated_symbol_is_constant(symbol);
-}
-
-static bool features_add_generated_builtin_stdlib_symbol(XaotFeatureSet *fs, const char *symbol) {
-    if (!fs || !symbol || !xaot_stdlib_generated_symbol_is_builtin_direct(symbol))
-        return false;
-    const char *dot = strchr(symbol, '.');
-    if (!dot || dot == symbol)
-        return false;
-    char module[XAOT_STDLIB_SYMBOL_NAME_MAX];
-    size_t module_len = (size_t) (dot - symbol);
-    if (module_len >= sizeof(module))
-        return false;
-    memcpy(module, symbol, module_len);
-    module[module_len] = '\0';
-    XaotStdlibSet flag = stdlib_flag_for_import(module);
-    if (flag)
-        fs->stdlib |= flag;
-    features_add_stdlib_symbol(fs, symbol);
-    return true;
 }
 
 static void features_apply_capability_plan(XaotFeatureSet *fs, uint32_t capability) {
@@ -315,6 +292,10 @@ static void features_apply_link_dependency_plans(XaotFeatureSet *fs, const XaotB
         const XaotLinkDependencyPlan *plan = &bundle->link_dependency_plans[i];
         if (plan->kind == XG_LINK_DEP_EXTERN_DYLIB)
             features_add_extern_dylib(fs, plan->name);
+        else if (plan->kind == XG_LINK_DEP_STDLIB_MODULE)
+            features_add_stdlib_module(fs, plan->name);
+        else if (plan->kind == XG_LINK_DEP_STDLIB_SYMBOL)
+            features_apply_stdlib_symbol(fs, plan->name);
     }
 }
 
@@ -346,175 +327,6 @@ static bool reject_profile_metadata_plans(const XaotBundle *bundle) {
         return false;
     }
     return true;
-}
-
-/* Unwrap value-identity ops (box/unbox/copy/move) to the underlying value,
- * mirroring cg_unwrap_identity_value so feature inference sees the same module
- * identity the emitter resolves at the call site. */
-static const XiValue *stdlib_unwrap_value(const XiValue *v) {
-    while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
-            v->op == XI_MOVE) &&
-           v->nargs >= 1)
-        v = v->args[0];
-    return v;
-}
-
-/* Extract the import-ref carried by a value, if it is an XI_IMPORT_REF. */
-static const XiImportRef *stdlib_value_import_ref(const XiValue *v) {
-    v = stdlib_unwrap_value(v);
-    if (!v || v->op != XI_IMPORT_REF || !v->aux)
-        return NULL;
-    return (const XiImportRef *) v->aux;
-}
-
-/* Find the import-ref stored into a shared slot within f (SET_SHARED scan),
- * mirroring cg_shared_slot_import_ref. */
-static const XiImportRef *stdlib_shared_slot_import_ref(const XiFunc *f, int slot) {
-    if (!f || slot < 0)
-        return NULL;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            if (!v || v->op != XI_SET_SHARED || (int) v->aux_int != slot || v->nargs < 1)
-                continue;
-            const XiImportRef *ref = stdlib_value_import_ref(v->args[0]);
-            if (ref)
-                return ref;
-        }
-    }
-    return NULL;
-}
-
-/* Resolve the module import-ref a value refers to, following shared-slot
- * indirection (e.g. `import time` stored into a shared slot then read back at
- * the `time.now()` call site). Mirrors cg_value_is_module_import resolution. */
-static const XiImportRef *stdlib_module_ref_of_value(const XiFunc *f, const XiFunc *module_init,
-                                                     const XiValue *v) {
-    v = stdlib_unwrap_value(v);
-    const XiImportRef *ref = stdlib_value_import_ref(v);
-    if (ref)
-        return ref;
-    if (v && v->op == XI_GET_SHARED) {
-        ref = stdlib_shared_slot_import_ref(f, (int) v->aux_int);
-        if (!ref && module_init && module_init != f)
-            ref = stdlib_shared_slot_import_ref(module_init, (int) v->aux_int);
-        if (!ref && f && f->module && f->module->init != f)
-            ref = stdlib_shared_slot_import_ref(f->module->init, (int) v->aux_int);
-    }
-    return ref;
-}
-
-/* If v refers to a stdlib module with symbol-level tracking (bare module
- * identifier in the stdlib table), return that module name; else NULL. Used
- * to record the referenced-symbol closure for method-form stdlib calls. */
-static const char *stdlib_symbol_module_of_value(const XiFunc *f, const XiFunc *module_init,
-                                                 const XiValue *v) {
-    const XiImportRef *ref = stdlib_module_ref_of_value(f, module_init, v);
-    if (!ref || !ref->module_path || ref->member_name)
-        return NULL;
-    XaotStdlibSet flag = stdlib_flag_for_import(ref->module_path);
-    if (flag == 0)
-        return NULL;
-    return ref->module_path;
-}
-
-/* Scan a single XiFunc (non-recursive) for stdlib link-symbol closure only.
- * Runtime subsystem facts come from global evidence capability plans, and
- * declaration-level external dylibs come from link dependency plans. */
-static void scan_func_link_symbols(XiFunc *f, const XiFunc *module_init, XaotFeatureSet *fs) {
-    XR_DCHECK(f != NULL, "scan_func_link_symbols: NULL func");
-    for (uint32_t b = 0; b < f->nblocks; b++) {
-        XiBlock *blk = f->blocks[b];
-        if (!blk)
-            continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            XiValue *v = blk->values[i];
-            if (!v)
-                continue;
-            switch (v->op) {
-                case XI_CALL_METHOD:
-                case XI_CALL_METHOD_DIRECT:
-                    /* Module-form call (e.g. `time.now()`): the receiver is an
-                     * import-ref naming the stdlib module, the method name is in
-                     * aux. Record the precise referenced symbol. */
-                    if (v->aux && v->nargs >= 1) {
-                        const char *mod = stdlib_symbol_module_of_value(f, module_init, v->args[0]);
-                        const char *method = (const char *) v->aux;
-                        if (mod) {
-                            features_add_stdlib_member(fs, mod, method);
-                        }
-                    }
-                    break;
-                case XI_LOAD_FIELD:
-                    /* Generated module constants (e.g. `path.sep`) lower as
-                     * field loads from the whole-module import. Track only
-                     * declarative constants in the symbol-level closure. */
-                    if (v->aux && v->nargs >= 1) {
-                        const char *mod = stdlib_symbol_module_of_value(f, module_init, v->args[0]);
-                        const char *member = (const char *) v->aux;
-                        if (mod && stdlib_member_is_generated_constant(mod, member))
-                            features_add_stdlib_member(fs, mod, member);
-                    }
-                    break;
-                case XI_CALL_BUILTIN: {
-                    const char *name = (const char *) v->aux;
-                    if (name)
-                        features_add_generated_builtin_stdlib_symbol(fs, name);
-                    break;
-                }
-                case XI_COPY:
-                    /* AOT-local value clones lower to header-only
-                     * xrt_value_clone_for_coro(). Coroutine/channel/scope
-                     * transfer paths declare runtime deep-copy needs through
-                     * their own feature ops or generated stdlib caps. */
-                    break;
-                case XI_IS:
-                    /* AOT `is` checks lower to header-only tag comparisons or
-                     * xrt_instanceof() over the generated type table. They do
-                     * not require the coroutine/runtime archive. */
-                    break;
-                case XI_IMPORT_REF: {
-                    XiImportRef *ref = (XiImportRef *) v->aux;
-                    if (ref && ref->module_path) {
-                        XaotStdlibSet flag = stdlib_flag_for_import(ref->module_path);
-                        if (flag)
-                            fs->stdlib |= flag;
-                        /* Member-import form (e.g. `import { now } from "time"`):
-                         * the import-ref carries the member name directly, then
-                         * generated metadata adds any runtime caps for that
-                         * concrete member. Builtin-direct fast paths are tracked
-                         * through the XI_CALL_BUILTIN that consumes the import. */
-                        if (flag && ref->member_name &&
-                            !stdlib_member_is_generated_builtin_direct(ref->module_path,
-                                                                       ref->member_name))
-                            features_add_stdlib_member(fs, ref->module_path, ref->member_name);
-                    }
-                    break;
-                }
-                default:
-                    break;
-            }
-        }
-    }
-}
-
-/* Recursively collect stdlib link symbols from an Xi IR function tree. */
-static void collect_link_symbols_recursive(XiFunc *f, const XiFunc *module_init,
-                                           XaotFeatureSet *fs) {
-    if (!f)
-        return;
-    scan_func_link_symbols(f, module_init ? module_init : f, fs);
-    for (uint16_t c = 0; c < f->nchildren; c++)
-        collect_link_symbols_recursive(f->children[c], module_init ? module_init : f, fs);
-}
-
-static void collect_link_symbol_features(XiFunc **ir_funcs, int nmodules, XaotFeatureSet *fs) {
-    for (int m = 0; m < nmodules; m++)
-        collect_link_symbols_recursive(ir_funcs[m], ir_funcs[m], fs);
 }
 
 static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSet stdlib) {
@@ -1182,15 +994,13 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     }
     xi_cgen_ctx_free(cg_ctx);
 
-    /* Build link features before freeing IR. Runtime capabilities and
-     * declaration-level external dylibs come from verified global evidence
-     * plans; the remaining Xi walk only supplies stdlib symbol closure until
-     * generated stdlib member references get summary rows too. */
+    /* Build link features before freeing IR. Runtime capabilities, external
+     * dylibs, and stdlib module/symbol closure all come from verified global
+     * evidence plans. */
     XaotFeatureSet features;
     memset(&features, 0, sizeof(features));
     features_apply_capability_plans(&features, &aot_bundle);
     features_apply_link_dependency_plans(&features, &aot_bundle);
-    collect_link_symbol_features(ir_funcs, nmodules, &features);
     if (!build_link_manifest(&features, &link_manifest,
                              profile == XAOT_BUILD_PROFILE_FREESTANDING)) {
         fprintf(stderr, "Error: failed to build AOT link manifest\n");
