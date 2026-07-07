@@ -1,18 +1,18 @@
 // 0841_operator_overload_compat.xr
 // 作者：xingleixu@gmail.com
-// 测试：运算符重载优化向后兼容性
+// 测试：运算符重载回归覆盖
 //
-// **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+// **Feature: operator-overload-optimization, Property 5: 有运算符重载**
 // **Validates: Requirements 5.1, 5.3**
 //
-// **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
+// **Feature: operator-overload-optimization, Property 6: 无运算符重载**
 // **Validates: Requirements 5.2**
 //
 // 验证：
 // 1. 有运算符重载的类执行算术运算产生正确结果
 // 2. 无运算符重载的类执行算术运算产生正确结果
 // 3. 继承运算符重载的类正确工作
-// 4. 通过 builder API 动态添加运算符方法后正确工作
+// 4. 继承到的运算符方法正确工作；子类同名隐藏由 compile-error 测试覆盖
 
 // ===== Property 5: 有运算符重载的类 =====
 
@@ -49,7 +49,7 @@ class Vector2D {
 
 @test
 fn test_property5_add_operator() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var a = Vector2D(1.0, 2.0)
     var b = Vector2D(3.0, 4.0)
@@ -60,7 +60,7 @@ fn test_property5_add_operator() {
 
 @test
 fn test_property5_sub_operator() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var a = Vector2D(5.0, 7.0)
     var b = Vector2D(2.0, 3.0)
@@ -71,7 +71,7 @@ fn test_property5_sub_operator() {
 
 @test
 fn test_property5_mul_operator() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var v = Vector2D(2.0, 3.0)
     var scaled = v * 2.0
@@ -81,7 +81,7 @@ fn test_property5_mul_operator() {
 
 @test
 fn test_property5_div_operator() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var v = Vector2D(10.0, 20.0)
     var halved = v / 2.0
@@ -91,7 +91,7 @@ fn test_property5_div_operator() {
 
 @test
 fn test_property5_eq_operator() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var a = Vector2D(1.0, 2.0)
     var b = Vector2D(1.0, 2.0)
@@ -102,7 +102,7 @@ fn test_property5_eq_operator() {
 
 @test
 fn test_property5_chained_operations() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var a = Vector2D(1.0, 1.0)
     var b = Vector2D(2.0, 2.0)
@@ -140,7 +140,7 @@ class Money {
 
 @test
 fn test_property5_comparison_operators() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var a = Money(100)
     var b = Money(200)
@@ -178,7 +178,7 @@ class BitSet {
 
 @test
 fn test_property5_bitwise_and() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var bs1 = BitSet(12)  // 0b1100
     var bs2 = BitSet(10)  // 0b1010
@@ -188,7 +188,7 @@ fn test_property5_bitwise_and() {
 
 @test
 fn test_property5_bitwise_or() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var bs1 = BitSet(12)  // 0b1100
     var bs2 = BitSet(10)  // 0b1010
@@ -198,7 +198,7 @@ fn test_property5_bitwise_or() {
 
 @test
 fn test_property5_bitwise_xor() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var bs1 = BitSet(12)  // 0b1100
     var bs2 = BitSet(10)  // 0b1010
@@ -226,7 +226,7 @@ class Matrix {
 
 @test
 fn test_property5_subscript_get() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var m = Matrix()
     m.data[0] = 10
@@ -237,7 +237,7 @@ fn test_property5_subscript_get() {
 
 @test
 fn test_property5_subscript_set() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var m = Matrix()
     m[0] = 100
@@ -256,22 +256,18 @@ class Vector3D extends Vector2D {
         this.z = z
     }
     
-    // 重写加法运算符
-    operator+(other: Vector3D) -> Vector3D {
-        return Vector3D(this.x + other.x, this.y + other.y, this.z + other.z)
-    }
+    // 不重新声明 operator+：Xray 禁止子类隐藏/重载继承方法。
 }
 
 @test
 fn test_property5_inherited_operator() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var a = Vector3D(1.0, 2.0, 3.0)
     var b = Vector3D(4.0, 5.0, 6.0)
     var c = a + b
     assert_eq(c.x, 5.0)
     assert_eq(c.y, 7.0)
-    assert_eq(c.z, 9.0)
 }
 
 // ===== Property 6: 无运算符重载的类 =====
@@ -293,7 +289,7 @@ class Point {
 
 @test
 fn test_property6_no_operator_overload() {
-    // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
+    // **Feature: operator-overload-optimization, Property 6: 无运算符重载**
     // **Validates: Requirements 5.2**
     var p1 = Point(1, 2)
     var p2 = Point(3, 4)
@@ -306,7 +302,7 @@ fn test_property6_no_operator_overload() {
 
 @test
 fn test_property6_primitive_arithmetic() {
-    // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
+    // **Feature: operator-overload-optimization, Property 6: 无运算符重载**
     // **Validates: Requirements 5.2**
     // 验证原始类型的算术运算不受影响
     var a = 10
@@ -321,7 +317,7 @@ fn test_property6_primitive_arithmetic() {
 
 @test
 fn test_property6_primitive_comparison() {
-    // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
+    // **Feature: operator-overload-optimization, Property 6: 无运算符重载**
     // **Validates: Requirements 5.2**
     // 验证原始类型的比较运算不受影响
     var a = 10
@@ -337,7 +333,7 @@ fn test_property6_primitive_comparison() {
 
 @test
 fn test_property6_primitive_bitwise() {
-    // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
+    // **Feature: operator-overload-optimization, Property 6: 无运算符重载**
     // **Validates: Requirements 5.2**
     // 验证原始类型的位运算不受影响
     var a = 12  // 0b1100
@@ -350,7 +346,7 @@ fn test_property6_primitive_bitwise() {
 
 @test
 fn test_property6_float_arithmetic() {
-    // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
+    // **Feature: operator-overload-optimization, Property 6: 无运算符重载**
     // **Validates: Requirements 5.2**
     // 验证浮点数算术运算不受影响
     var a = 10.5
@@ -364,7 +360,7 @@ fn test_property6_float_arithmetic() {
 
 @test
 fn test_property6_string_concat() {
-    // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
+    // **Feature: operator-overload-optimization, Property 6: 无运算符重载**
     // **Validates: Requirements 5.2**
     // 验证字符串拼接不受影响
     var s1 = "Hello"
@@ -416,7 +412,7 @@ class ModVector {
 
 @test
 fn test_property5_mod_operator() {
-    // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
+    // **Feature: operator-overload-optimization, Property 5: 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     var a = ModVector(17, 23)
     var b = ModVector(5, 7)
@@ -424,4 +420,3 @@ fn test_property5_mod_operator() {
     assert_eq(c.x, 2)  // 17 % 5 = 2
     assert_eq(c.y, 2)  // 23 % 7 = 2
 }
-

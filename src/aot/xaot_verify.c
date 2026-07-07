@@ -918,6 +918,9 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
         return set_error(errbuf, errbuf_len, "AOT dispatch plan method does not re-derive");
     if (plan->receiver_static_class_id != call->receiver_static_class_id)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan receiver class does not re-derive");
+    if (plan->receiver_static_interface_id != call->receiver_static_interface_id)
+        return set_error(errbuf, errbuf_len,
+                         "AOT dispatch plan receiver interface does not re-derive");
     if (plan->kind != expected_kind)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan kind does not re-derive");
     if (plan->dispatch_slot != UINT32_MAX)

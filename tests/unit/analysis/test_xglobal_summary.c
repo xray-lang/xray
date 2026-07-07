@@ -832,6 +832,7 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     plan = xaot_bundle_find_method_dispatch_plan(&bundle, 1);
     ASSERT_NOT_NULL(plan);
     ASSERT_EQ_UINT(plan->kind, XAOT_DISPATCH_TYPE_SWITCH);
+    ASSERT_EQ_UINT(plan->receiver_static_interface_id, 77);
     ASSERT_EQ_UINT(plan->target_count, 2);
     ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 2);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].receiver_class_id, 1);
@@ -840,6 +841,12 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[1].method_id, 2);
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+
+    bundle.method_dispatch_plans[0].receiver_static_interface_id = 78;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan receiver interface does not re-derive"));
+    bundle.method_dispatch_plans[0].receiver_static_interface_id = 77;
 
     bundle.dispatch_target_cases[1].method_id = 1;
     memset(err, 0, sizeof(err));
