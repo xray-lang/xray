@@ -350,6 +350,23 @@ static XrProcId spawn_sleep_child(void) {
 #endif
 }
 
+typedef struct ThreadLocalKeyCtx {
+    xr_thread_local_key_t key;
+    void *initial;
+    void *after_set;
+} ThreadLocalKeyCtx;
+
+static int g_thread_local_main_value;
+static int g_thread_local_child_value;
+
+static void *thread_local_key_worker(void *arg) {
+    ThreadLocalKeyCtx *ctx = (ThreadLocalKeyCtx *) arg;
+    ctx->initial = xr_thread_local_get(ctx->key);
+    xr_thread_local_set(ctx->key, &g_thread_local_child_value);
+    ctx->after_set = xr_thread_local_get(ctx->key);
+    return NULL;
+}
+
 TEST(os_proc_try_wait_reports_running_then_killed) {
     XrProcId pid = spawn_sleep_child();
     ASSERT_NE(pid, XR_PROC_INVALID);
@@ -378,6 +395,25 @@ TEST(os_proc_try_wait_reaps_finished_child) {
 
     ASSERT_EQ_INT(result, XR_PROC_WAIT_EXITED);
     ASSERT_EQ_INT(code, 7);
+}
+
+TEST(os_thread_local_key_is_per_thread) {
+    xr_thread_local_key_t key;
+    ASSERT_TRUE(xr_thread_local_key_create(&key));
+    ASSERT_EQ_PTR(xr_thread_local_get(key), NULL);
+    ASSERT_TRUE(xr_thread_local_set(key, &g_thread_local_main_value));
+    ASSERT_EQ_PTR(xr_thread_local_get(key), &g_thread_local_main_value);
+
+    ThreadLocalKeyCtx ctx = {key, NULL, NULL};
+    xr_thread_t thread;
+    ASSERT_TRUE(xr_thread_create(&thread, thread_local_key_worker, &ctx));
+    ASSERT_EQ_INT(xr_thread_join(thread, NULL), 0);
+
+    ASSERT_EQ_PTR(ctx.initial, NULL);
+    ASSERT_EQ_PTR(ctx.after_set, &g_thread_local_child_value);
+    ASSERT_EQ_PTR(xr_thread_local_get(key), &g_thread_local_main_value);
+
+    xr_thread_local_key_delete(key);
 }
 
 TEST(os_pipe_round_trips_bytes) {
@@ -440,6 +476,9 @@ RUN_TEST(os_core_exec_windows_exit_code_decodes_low_byte);
 RUN_TEST_SUITE("OS Proc");
 RUN_TEST(os_proc_try_wait_reports_running_then_killed);
 RUN_TEST(os_proc_try_wait_reaps_finished_child);
+
+RUN_TEST_SUITE("OS Thread Local");
+RUN_TEST(os_thread_local_key_is_per_thread);
 
 RUN_TEST_SUITE("OS Pipe");
 RUN_TEST(os_pipe_round_trips_bytes);

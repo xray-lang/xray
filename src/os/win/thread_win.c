@@ -135,6 +135,30 @@ int xr_thread_pin_to_cpu(unsigned int cpu_index) {
     return prev != 0 ? 0 : -1;
 }
 
+// === Thread-local key/value storage ===
+
+bool xr_thread_local_key_create(xr_thread_local_key_t *key) {
+    if (!key)
+        return false;
+    DWORD slot = FlsAlloc(NULL);
+    if (slot == FLS_OUT_OF_INDEXES)
+        return false;
+    *key = slot;
+    return true;
+}
+
+void xr_thread_local_key_delete(xr_thread_local_key_t key) {
+    FlsFree(key);
+}
+
+void *xr_thread_local_get(xr_thread_local_key_t key) {
+    return FlsGetValue(key);
+}
+
+bool xr_thread_local_set(xr_thread_local_key_t key, void *value) {
+    return FlsSetValue(key, value) != 0;
+}
+
 // === Mutex ===
 
 void xr_mutex_init(xr_mutex_t *m) {

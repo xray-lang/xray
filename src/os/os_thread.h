@@ -5,7 +5,8 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xthread.h - Cross-platform threads, mutexes, condvars, rwlocks, once.
+ * xthread.h - Cross-platform threads, TLS keys, mutexes, condvars,
+ * rwlocks, once.
  *
  * KEY CONCEPT:
  *   Single threading API for the runtime. Implementations are split:
@@ -85,6 +86,7 @@ typedef struct {
     HANDLE handle;
     xr_thread_ctx *ctx;
 } xr_thread_t;
+typedef DWORD xr_thread_local_key_t;
 
 #else  // POSIX
 
@@ -95,6 +97,7 @@ typedef pthread_mutex_t xr_mutex_t;
 typedef pthread_cond_t xr_cond_t;
 typedef pthread_rwlock_t xr_rwlock_t;
 typedef pthread_once_t xr_once_t;
+typedef pthread_key_t xr_thread_local_key_t;
 
 #define XR_MUTEX_INITIALIZER PTHREAD_MUTEX_INITIALIZER
 #define XR_RWLOCK_INITIALIZER PTHREAD_RWLOCK_INITIALIZER
@@ -177,6 +180,16 @@ XR_FUNC unsigned int xr_os_cpu_count(void);
 // equivalent). Callers must treat affinity as a hint, never a
 // correctness primitive.
 XR_FUNC int xr_thread_pin_to_cpu(unsigned int cpu_index);
+
+// === Thread-local key/value storage ===
+//
+// Dynamic per-OS-thread storage used as the substrate for sys.ThreadLocal.
+// Values are raw pointers; higher layers own allocation and destruction.
+
+XR_FUNC bool xr_thread_local_key_create(xr_thread_local_key_t *key);
+XR_FUNC void xr_thread_local_key_delete(xr_thread_local_key_t key);
+XR_FUNC void *xr_thread_local_get(xr_thread_local_key_t key);
+XR_FUNC bool xr_thread_local_set(xr_thread_local_key_t key, void *value);
 
 // === Mutex ===
 
