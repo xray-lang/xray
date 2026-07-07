@@ -898,6 +898,13 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
         case AST_SHARED_DECL:
             xa_thread_lint_scan_expr(states, stmt->as.var_decl.initializer, false, can_escape);
             return;
+        case AST_DESTRUCTURE_DECL:
+            xa_thread_lint_scan_expr(states, stmt->as.destructure_decl.initializer, false,
+                                     can_escape);
+            return;
+        case AST_DESTRUCTURE_ASSIGN:
+            xa_thread_lint_scan_expr(states, stmt->as.destructure_assign.value, false, can_escape);
+            return;
         case AST_ASSIGNMENT:
         case AST_COMPOUND_ASSIGNMENT:
         case AST_INC:
