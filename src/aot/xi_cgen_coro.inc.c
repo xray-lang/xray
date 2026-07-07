@@ -189,6 +189,107 @@ static void emit_boxed_vref(FILE *out, const XiValue *v) {
     }
 }
 
+static bool cg_transfer_plan_site_is_spawn_arg(const XiValue *site) {
+    return site && (site->op == XI_GO || site->op == XI_THREAD_SPAWN);
+}
+
+static bool cg_transfer_plan_has_boundary_clone(const XaotTransferPlan *plan) {
+    return plan && (plan->evidence & XAOT_TRANSFER_EV_BOUNDARY_CLONE) != 0;
+}
+
+static const XaotTransferPlan *cg_required_transfer_plan(XiCgenCtx *ctx, const XiValue *site,
+                                                         uint16_t transfer_index,
+                                                         const XiValue *expected_value,
+                                                         const char *context) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XaotTransferPlan *plan = xaot_bundle_find_transfer_plan(bundle, site, transfer_index);
+    const char *op = site ? xi_op_name(site->op) : "?";
+    const char *label = context ? context : "transfer";
+    if (!bundle || !plan) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: missing AOT transfer plan for %s site=v%u/%s index=%u\n",
+                label, site ? site->id : 0, op, (unsigned) transfer_index);
+        return NULL;
+    }
+    if (expected_value && plan->value != expected_value) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: AOT transfer plan value mismatch for %s site=v%u/%s "
+                "index=%u expected=v%u actual=v%u\n",
+                label, site ? site->id : 0, op, (unsigned) transfer_index, expected_value->id,
+                plan->value ? plan->value->id : 0);
+        return NULL;
+    }
+    if (plan->action == XAOT_TRANSFER_ACTION_REJECT) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: rejected AOT transfer plan for %s site=v%u/%s index=%u "
+                "reason=%u\n",
+                label, site ? site->id : 0, op, (unsigned) transfer_index,
+                (unsigned) plan->unproven_reason);
+        return NULL;
+    }
+    return plan;
+}
+
+static void emit_coro_transfer_plan_xrvalue(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                            const XaotTransferPlan *plan) {
+    if (!plan) {
+        emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
+        return;
+    }
+    if (plan->action == XAOT_TRANSFER_ACTION_DEEP_COPY) {
+        fprintf(out, "%s(",
+                xi_coro_value_has_json_type(v) ? "xrt_json_clone_for_coro"
+                                               : "xrt_value_clone_for_coro");
+        emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
+        fprintf(out, ")");
+        return;
+    }
+    if (plan->action == XAOT_TRANSFER_ACTION_SHARE && cg_transfer_plan_has_boundary_clone(plan)) {
+        fprintf(out, "((void)xrt_retain(");
+        emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
+        fprintf(out, "), ");
+        emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
+        fprintf(out, ")");
+        return;
+    }
+    emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
+}
+
+static void emit_coro_transfer_plan_as_rep(XiCgenCtx *ctx, FILE *out, const XiValue *v, XrRep rep,
+                                           const XaotTransferPlan *plan) {
+    if (rep == XR_REP_TAGGED) {
+        emit_coro_transfer_plan_xrvalue(ctx, out, v, plan);
+        return;
+    }
+    if (!plan) {
+        emit_value_as_rep_ctx(ctx, out, v, rep);
+        return;
+    }
+    if (plan->action == XAOT_TRANSFER_ACTION_DEEP_COPY) {
+        fprintf(out, "(");
+        fprintf(out, "%s(",
+                xi_coro_value_has_json_type(v) ? "xrt_json_clone_for_coro"
+                                               : "xrt_value_clone_for_coro");
+        emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
+        fprintf(out, ")).ptr");
+        return;
+    }
+    if (plan->action == XAOT_TRANSFER_ACTION_SHARE && cg_transfer_plan_has_boundary_clone(plan)) {
+        fprintf(out, "((void)xrt_retain(");
+        emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
+        fprintf(out, "), ");
+        emit_value_as_rep_ctx(ctx, out, v, rep);
+        fprintf(out, ")");
+        return;
+    }
+    emit_value_as_rep_ctx(ctx, out, v, rep);
+}
+
 static void emit_coro_transfer_xrvalue(XiCgenCtx *ctx, FILE *out, const XiValue *v, uint8_t mode) {
     if (mode == XR_TRANSFER_COPY && xi_coro_value_needs_boundary_clone(v)) {
         fprintf(out, "%s(",
@@ -289,9 +390,11 @@ static void emit_coro_send_value(XiCgenCtx *ctx, FILE *out, const XiValue *send_
 
 static void emit_coro_runtime_channel_bridge_temp(XiCgenCtx *ctx, FILE *out,
                                                   const XiValue *send_value, uint32_t id,
-                                                  const char *name_prefix, uint8_t transfer_mode,
+                                                  const char *name_prefix,
+                                                  const XaotTransferPlan *transfer_plan,
                                                   char *value_name, size_t value_name_size,
                                                   char *mode_name, size_t mode_name_size) {
+    uint8_t transfer_mode = transfer_plan ? transfer_plan->mode : XR_TRANSFER_SHARE;
     snprintf(value_name, value_name_size, "_%s_send_value_%u", name_prefix, id);
     snprintf(mode_name, mode_name_size, "_%s_transfer_mode_%u", name_prefix, id);
 
@@ -1090,15 +1193,22 @@ static void emit_aot_frame_new_call_args(XiCgenCtx *ctx, FILE *out, const XiFunc
         emit_aot_frame_new_cl_arg(out, current, callee, target);
         need_comma = true;
     }
+    bool transfer_owner_has_plans = cg_transfer_plan_site_is_spawn_arg(transfer_owner);
     for (uint16_t a = arg_start; a < nargs; a++) {
         uint16_t transfer_slot = (uint16_t) (a - arg_start);
-        uint8_t transfer_mode = transfer_owner
-                                    ? xi_go_arg_transfer_mode(transfer_owner, transfer_slot)
-                                    : XR_TRANSFER_COPY;
+        const XaotTransferPlan *transfer_plan = NULL;
+        uint8_t transfer_mode = transfer_owner ? XR_TRANSFER_SHARE : XR_TRANSFER_COPY;
+        if (transfer_owner_has_plans) {
+            transfer_plan = cg_required_transfer_plan(ctx, transfer_owner, transfer_slot, args[a],
+                                                      "frame argument");
+        }
         if (need_comma)
             fprintf(out, ", ");
         if (!typed_params || a - arg_start >= target->nparams) {
-            emit_coro_transfer_xrvalue(ctx, out, args[a], transfer_mode);
+            if (transfer_owner_has_plans)
+                emit_coro_transfer_plan_xrvalue(ctx, out, args[a], transfer_plan);
+            else
+                emit_coro_transfer_xrvalue(ctx, out, args[a], transfer_mode);
         } else {
             XrRep param_rep = cg_rep(target->params[a - arg_start]);
             if (param_rep == XR_REP_I64) {
@@ -1115,9 +1225,15 @@ static void emit_aot_frame_new_call_args(XiCgenCtx *ctx, FILE *out, const XiFunc
                     fprintf(out, ")");
                 }
             } else if (param_rep == XR_REP_PTR || param_rep == XR_REP_RAWPTR) {
-                emit_coro_transfer_as_rep(ctx, out, args[a], param_rep, transfer_mode);
+                if (transfer_owner_has_plans)
+                    emit_coro_transfer_plan_as_rep(ctx, out, args[a], param_rep, transfer_plan);
+                else
+                    emit_coro_transfer_as_rep(ctx, out, args[a], param_rep, transfer_mode);
             } else {
-                emit_coro_transfer_xrvalue(ctx, out, args[a], transfer_mode);
+                if (transfer_owner_has_plans)
+                    emit_coro_transfer_plan_xrvalue(ctx, out, args[a], transfer_plan);
+                else
+                    emit_coro_transfer_xrvalue(ctx, out, args[a], transfer_mode);
             }
         }
         need_comma = true;
@@ -2831,9 +2947,11 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         char bridge_value[64] = {0};
         char bridge_mode[64] = {0};
         if (transfer_helper) {
-            emit_coro_runtime_channel_bridge_temp(
-                ctx, out, v->args[1], v->id, "chan_try", xi_chan_send_transfer_mode(v),
-                bridge_value, sizeof(bridge_value), bridge_mode, sizeof(bridge_mode));
+            const XaotTransferPlan *transfer_plan =
+                cg_required_transfer_plan(ctx, v, 0, v->args[1], "channel trySend");
+            emit_coro_runtime_channel_bridge_temp(ctx, out, v->args[1], v->id, "chan_try",
+                                                  transfer_plan, bridge_value, sizeof(bridge_value),
+                                                  bridge_mode, sizeof(bridge_mode));
         }
         emit_value_source_line(ctx, out, v);
         fprintf(out, "    XrValue _chan_try_%u = %s(ctx, ", v->id, helper);
@@ -3878,9 +3996,11 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         char bridge_value[64] = {0};
         char bridge_mode[64] = {0};
         if (transfer_helper) {
-            emit_coro_runtime_channel_bridge_temp(
-                ctx, out, v->args[1], v->id, "chan_send_timeout", xi_chan_send_transfer_mode(v),
-                bridge_value, sizeof(bridge_value), bridge_mode, sizeof(bridge_mode));
+            const XaotTransferPlan *transfer_plan =
+                cg_required_transfer_plan(ctx, v, 0, v->args[1], "channel sendTimeout");
+            emit_coro_runtime_channel_bridge_temp(ctx, out, v->args[1], v->id, "chan_send_timeout",
+                                                  transfer_plan, bridge_value, sizeof(bridge_value),
+                                                  bridge_mode, sizeof(bridge_mode));
         }
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
@@ -3981,9 +4101,11 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         char bridge_value[64] = {0};
         char bridge_mode[64] = {0};
         if (transfer_helper) {
-            emit_coro_runtime_channel_bridge_temp(
-                ctx, out, send_value, v->id, "chan_send", xi_chan_send_transfer_mode(v),
-                bridge_value, sizeof(bridge_value), bridge_mode, sizeof(bridge_mode));
+            const XaotTransferPlan *transfer_plan =
+                cg_required_transfer_plan(ctx, v, 0, send_value, "channel send");
+            emit_coro_runtime_channel_bridge_temp(ctx, out, send_value, v->id, "chan_send",
+                                                  transfer_plan, bridge_value, sizeof(bridge_value),
+                                                  bridge_mode, sizeof(bridge_mode));
         }
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
@@ -4201,9 +4323,11 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             char bridge_value[64] = {0};
             char bridge_mode[64] = {0};
             if (transfer_helper) {
+                const XaotTransferPlan *transfer_plan =
+                    cg_required_transfer_plan(ctx, v, 0, v->args[1], "channel method");
                 emit_coro_runtime_channel_bridge_temp(
-                    ctx, out, v->args[1], v->id, "chan_method", xi_chan_send_transfer_mode(v),
-                    bridge_value, sizeof(bridge_value), bridge_mode, sizeof(bridge_mode));
+                    ctx, out, v->args[1], v->id, "chan_method", transfer_plan, bridge_value,
+                    sizeof(bridge_value), bridge_mode, sizeof(bridge_mode));
             }
             emit_value_source_line(ctx, out, v);
             fprintf(out, "    XrValue _chan_method_%u = %s(ctx, ", v->id, helper);
