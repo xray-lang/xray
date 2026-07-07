@@ -154,47 +154,29 @@ static bool abi_type_can_use_typed_boundary(const XaotBundle *bundle, const XrTy
            type_is_class_instance_ptr_boundary(bundle, type);
 }
 
-static const XiEnumData *adt_enum_data_for_type(const XaotBundle *bundle, const XrType *type) {
-    const char *name;
-    uint32_t mi;
+enum {
+    XAOT_ENUM_AGG_PAYLOAD_CAP = 16
+};
 
-    if (!bundle || !type)
-        return NULL;
-    if (type->kind == XR_KIND_ENUM) {
-        name = type->enum_type.enum_name;
-    } else if ((type->kind == XR_KIND_INSTANCE || type->kind == XR_KIND_CLASS) &&
-               type->instance.class_name) {
-        name = type->instance.class_name;
-    } else {
-        return NULL;
-    }
-    if (!name)
-        return NULL;
-    for (mi = 0; mi < bundle->nmodules; mi++) {
-        const XiModule *mod = bundle->modules ? bundle->modules[mi] : NULL;
-        if (!mod || !mod->slot_enums)
-            continue;
-        for (uint16_t si = 0; si < mod->nslots; si++) {
-            const XiEnumData *ed = mod->slot_enums[si];
-            if (ed && ed->is_adt && ed->name && strcmp(ed->name, name) == 0)
-                return ed;
-        }
-    }
-    return NULL;
-}
-
-static bool adt_enum_can_use_compact_return(const XiEnumData *ed) {
-    if (!ed || !ed->is_adt || ed->max_payload > 1)
+static bool adt_enum_plan_can_use_compact_return(const XaotEnumPlan *plan) {
+    const XiEnumData *ed = plan ? plan->enum_data : NULL;
+    if (!plan || !ed || !ed->is_adt || plan->max_payload > XAOT_ENUM_AGG_PAYLOAD_CAP)
         return false;
-    for (uint32_t i = 0; i < ed->member_count; i++) {
-        if (ed->members && ed->members[i].payload_count > 1)
+    for (uint32_t i = 0; i < plan->member_count; i++) {
+        const XiEnumMemberData *member = plan->members ? &plan->members[i] : NULL;
+        if (member && member->payload_count > XAOT_ENUM_AGG_PAYLOAD_CAP)
             return false;
     }
     return true;
 }
 
+static const XaotEnumPlan *adt_enum_plan_for_type(const XaotBundle *bundle, const XrType *type) {
+    const XaotEnumPlan *plan = xaot_bundle_find_enum_plan_for_type(bundle, type);
+    return (plan && adt_enum_plan_can_use_compact_return(plan)) ? plan : NULL;
+}
+
 static bool type_can_use_compact_adt_return(const XaotBundle *bundle, const XrType *type) {
-    return adt_enum_can_use_compact_return(adt_enum_data_for_type(bundle, type));
+    return adt_enum_plan_for_type(bundle, type) != NULL;
 }
 
 static bool func_tree_contains(const XiFunc *root, const XiFunc *target) {
@@ -224,7 +206,8 @@ static const char *func_module_prefix(const XaotBundle *bundle, const XiFunc *fu
     return "mod";
 }
 
-static const XrStructLayout *struct_layout_for_type(const XaotBundle *bundle, const XrType *type) {
+static const XrAggregateLayout *struct_layout_for_type(const XaotBundle *bundle,
+                                                       const XrType *type) {
     const char *name;
     if (!type || type->is_nullable ||
         (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE))
@@ -257,13 +240,13 @@ static const XiValue *unwrap_identity_value(const XiValue *v) {
     return v;
 }
 
-static const XrStructLayout *struct_layout_for_value_uses(const XiFunc *func,
-                                                          const XiValue *value) {
+static const XrAggregateLayout *struct_layout_for_value_uses(const XiFunc *func,
+                                                             const XiValue *value) {
     value = unwrap_identity_value(value);
     if (!func || !value)
         return NULL;
-    if (value->op == XI_STRUCT_NEW && value->aux)
-        return (const XrStructLayout *) value->aux;
+    if (value->op == XI_AGG_NEW && value->aux)
+        return (const XrAggregateLayout *) value->aux;
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks ? func->blocks[bi] : NULL;
         if (!blk)
@@ -272,32 +255,32 @@ static const XrStructLayout *struct_layout_for_value_uses(const XiFunc *func,
             const XiValue *v = blk->values ? blk->values[vi] : NULL;
             if (!v || !v->aux || v->nargs < 1)
                 continue;
-            if ((v->op == XI_STRUCT_GET || v->op == XI_STRUCT_SET) &&
+            if ((v->op == XI_AGG_GET || v->op == XI_AGG_SET) &&
                 unwrap_identity_value(v->args[0]) == value)
-                return (const XrStructLayout *) v->aux;
+                return (const XrAggregateLayout *) v->aux;
         }
     }
     return NULL;
 }
 
-static const XrStructLayout *struct_layout_for_return_value(const XiFunc *func) {
+static const XrAggregateLayout *struct_layout_for_return_value(const XiFunc *func) {
     if (!func)
         return NULL;
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks ? func->blocks[bi] : NULL;
         if (!blk || blk->kind != XI_BLOCK_RETURN || !blk->control)
             continue;
-        const XrStructLayout *sl = struct_layout_for_value_uses(func, blk->control);
+        const XrAggregateLayout *sl = struct_layout_for_value_uses(func, blk->control);
         if (sl)
             return sl;
     }
     return NULL;
 }
 
-static const XrStructLayout *struct_layout_for_slot(const XaotBundle *bundle, const XiFunc *func,
-                                                    const XrType *type, const XiValue *value,
-                                                    bool is_return) {
-    const XrStructLayout *sl = struct_layout_for_type(bundle, type);
+static const XrAggregateLayout *struct_layout_for_slot(const XaotBundle *bundle, const XiFunc *func,
+                                                       const XrType *type, const XiValue *value,
+                                                       bool is_return) {
+    const XrAggregateLayout *sl = struct_layout_for_type(bundle, type);
     if (sl)
         return sl;
     if (is_return)
@@ -305,11 +288,11 @@ static const XrStructLayout *struct_layout_for_slot(const XaotBundle *bundle, co
     return struct_layout_for_value_uses(func, value);
 }
 
-static bool struct_layout_can_use_value_abi_depth(const XrStructLayout *sl, int depth) {
-    if (!sl || sl->field_count == 0 || sl->field_count > XR_MAX_STRUCT_FIELDS || depth > 8)
+static bool struct_layout_can_use_value_abi_depth(const XrAggregateLayout *sl, int depth) {
+    if (!sl || sl->field_count == 0 || sl->field_count > XR_MAX_AGG_FIELDS || depth > 8)
         return false;
     for (uint16_t i = 0; i < sl->field_count; i++) {
-        const XrStructFieldLayout *field = &sl->fields[i];
+        const XrAggregateFieldLayout *field = &sl->fields[i];
         const XaotLayoutInfo *info = xaot_layout_for_native_type(field->native_type);
         if (!info)
             return false;
@@ -332,7 +315,7 @@ static bool struct_layout_can_use_value_abi_depth(const XrStructLayout *sl, int 
 }
 
 static char *struct_c_type_for_func(const XaotBundle *bundle, const XiFunc *func,
-                                    const XrStructLayout *sl) {
+                                    const XrAggregateLayout *sl) {
     char buf[128];
     xaot_struct_c_type_name(buf, sizeof(buf), func_module_prefix(bundle, func), sl);
     return xr_strdup(buf);
@@ -342,7 +325,7 @@ static XaotValueRep struct_value_rep_for_slot(const XaotBundle *bundle, const Xi
                                               const XrType *type, const XiValue *value,
                                               bool is_return) {
     XaotValueRep rep;
-    const XrStructLayout *sl = struct_layout_for_slot(bundle, func, type, value, is_return);
+    const XrAggregateLayout *sl = struct_layout_for_slot(bundle, func, type, value, is_return);
 
     memset(&rep, 0, sizeof(rep));
     if (!struct_layout_can_use_value_abi_depth(sl, 0))
@@ -355,24 +338,25 @@ static XaotValueRep struct_value_rep_for_slot(const XaotBundle *bundle, const Xi
     return rep;
 }
 
-static XaotValueRep compact_adt_value_rep_for_type(const XrType *type) {
+static XaotValueRep compact_adt_value_rep_for_type(const XaotBundle *bundle, const XrType *type) {
     XaotValueRep rep;
+    const XaotEnumPlan *plan = adt_enum_plan_for_type(bundle, type);
 
     memset(&rep, 0, sizeof(rep));
     rep.kind = XAOT_VALUE_AGGREGATE;
     rep.rep = XAOT_REP_TAGGED;
     rep.type = type;
-    rep.c_type = "XrAotEnumAggregate";
+    rep.c_type = plan && plan->c_type ? plan->c_type : "XrAotEnumAggregate";
     rep.flags = XAOT_VALUE_FLAG_ENUM | XAOT_VALUE_FLAG_ENUM_AGGREGATE;
     return rep;
 }
 
-static XaotAbiSlot compact_adt_return_slot(const XrType *type) {
+static XaotAbiSlot compact_adt_return_slot(const XaotBundle *bundle, const XrType *type) {
     XaotAbiSlot slot;
 
     memset(&slot, 0, sizeof(slot));
     slot.cls = XAOT_ARG_AGG_BY_VALUE;
-    slot.rep = compact_adt_value_rep_for_type(type);
+    slot.rep = compact_adt_value_rep_for_type(bundle, type);
     slot.c_type = slot.rep.c_type;
     return slot;
 }
@@ -472,7 +456,7 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
     abi->kind = XAOT_ABI_NATIVE;
     abi->boundary_reason = XAOT_BOUNDARY_NONE;
     if (type_can_use_compact_adt_return(bundle, func->return_type))
-        abi->ret = compact_adt_return_slot(func->return_type);
+        abi->ret = compact_adt_return_slot(bundle, func->return_type);
     else
         abi->ret = native_slot_for_type(bundle, func, func->return_type, NULL, true);
     for (i = 0; i < abi_nparams; i++) {

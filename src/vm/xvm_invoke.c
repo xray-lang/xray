@@ -53,7 +53,7 @@ static XrEnumType *vm_builtin_enum_type(XrVMRuntime *isolate, int builtin_index)
     if (!isolate || builtin_index < 0 || builtin_index >= XR_USER_GLOBALS_START)
         return NULL;
     XrValue value = isolate->vm.builtins[builtin_index];
-    if (!XR_IS_PTR(value))
+    if (!XR_IS_ENUM_TYPE(value))
         return NULL;
     return (XrEnumType *) XR_TO_PTR(value);
 }
@@ -61,18 +61,24 @@ static XrEnumType *vm_builtin_enum_type(XrVMRuntime *isolate, int builtin_index)
 static XrValue vm_builtin_enum_member(XrVMRuntime *isolate, int builtin_index,
                                       uint32_t member_index) {
     XrEnumType *type = vm_builtin_enum_type(isolate, builtin_index);
-    if (!type || member_index >= type->member_count || !type->members[member_index].instance)
+    if (!type || member_index >= type->member_count || !type->members[member_index].ctor)
         return xr_null();
-    return XR_FROM_PTR(type->members[member_index].instance);
+    if (xr_enum_type_payload_count(type, member_index) == 0) {
+        XrEnumAggregateValue *value = xr_enum_zero_payload_value(isolate, type, member_index);
+        return value ? XR_FROM_PTR(value) : xr_null();
+    }
+    return XR_FROM_PTR(type->members[member_index].ctor);
 }
 
 static XrValue vm_builtin_adt_value(XrVMRuntime *isolate, int builtin_index, uint32_t member_index,
                                     XrValue *args, int nargs) {
     XrEnumType *type = vm_builtin_enum_type(isolate, builtin_index);
-    if (!type || !type->is_adt)
+    if (!type || member_index >= type->member_count)
         return xr_null();
-    XrInstance *inst = xr_enum_adt_construct(isolate, type, member_index, args, nargs);
-    return inst ? XR_FROM_PTR(inst) : xr_null();
+    if (xr_enum_type_payload_count(type, member_index) == 0)
+        return vm_builtin_enum_member(isolate, builtin_index, member_index);
+    XrEnumAggregateValue *value = xr_enum_adt_construct(isolate, type, member_index, args, nargs);
+    return value ? XR_FROM_PTR(value) : xr_null();
 }
 
 static XrValue vm_recv_value(XrVMRuntime *isolate, XrValue value) {
@@ -80,10 +86,9 @@ static XrValue vm_recv_value(XrVMRuntime *isolate, XrValue value) {
     return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_RECV, 0, args, 1);
 }
 
-/* Recv is an ADT enum (Value carries a payload). Every variant must use the
- * tagged-instance representation (field[0] = ordinal) so pattern matching can
- * discriminate on the ordinal uniformly; a plain enum singleton would not carry
- * field[0] and would never match a `Recv.Empty` arm. */
+/* Recv is an ADT enum (Value carries a payload). Every variant uses the same
+ * enum aggregate representation so pattern matching can discriminate on the
+ * logical tag uniformly. */
 static XrValue vm_recv_empty(XrVMRuntime *isolate) {
     return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_RECV, 1, NULL, 0);
 }
@@ -96,7 +101,7 @@ static XrValue vm_recv_closed(XrVMRuntime *isolate) {
     return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_RECV, 3, NULL, 0);
 }
 
-static XrValue vm_send_result(XrVMRuntime *isolate, uint32_t member_index) {
+XR_FUNC XrValue xr_vm_send_result_value(XrVMRuntime *isolate, uint32_t member_index) {
     return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_SEND_RESULT, member_index);
 }
 
@@ -273,10 +278,10 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
     // ch.trySend(value) — unified helper
     if (nargs == 1 && method_symbol == SYMBOL_TRYSEND) {
         if (xr_channel_is_closed(ch)) {
-            base[a] = vm_send_result(isolate, 3);
+            base[a] = xr_vm_send_result_value(isolate, 3);
             return XR_DISP_NEXT;
         }
-        base[a] = vm_send_result(
+        base[a] = xr_vm_send_result_value(
             isolate, xr_chan_try_send_transfer(isolate, ch, base[a + 2], transfer_mode) ? 0 : 1);
         return XR_DISP_NEXT;
     }
@@ -407,15 +412,15 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
 
         XrCoroBlockResult resumed = xr_coro_chan_send_resume(current, result_slot);
         if (resumed.kind == XR_CORO_BLOCK_READY) {
-            base[a] = vm_send_result(isolate, 0);
+            base[a] = xr_vm_send_result_value(isolate, 0);
             return XR_DISP_NEXT;
         }
         if (resumed.kind == XR_CORO_BLOCK_TIMEOUT) {
-            base[a] = vm_send_result(isolate, 2);
+            base[a] = xr_vm_send_result_value(isolate, 2);
             return XR_DISP_NEXT;
         }
         if (resumed.kind == XR_CORO_BLOCK_CLOSED) {
-            base[a] = vm_send_result(isolate, 3);
+            base[a] = xr_vm_send_result_value(isolate, 3);
             return XR_DISP_NEXT;
         }
 
@@ -424,21 +429,21 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
                                                               timeout_ms, transfer_mode);
         if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_continue_from_next(frame, pc);
-            base[a] = vm_send_result(isolate, 0);
+            base[a] = xr_vm_send_result_value(isolate, 0);
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_TIMEOUT) {
             vm_suspend_continue_from_next(frame, pc);
-            base[a] = vm_send_result(isolate, 2);
+            base[a] = xr_vm_send_result_value(isolate, 2);
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             vm_suspend_continue_from_next(frame, pc);
-            base[a] = vm_send_result(isolate, 3);
+            base[a] = xr_vm_send_result_value(isolate, 3);
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             return XR_DISP_BLOCKED;
         }
         vm_suspend_continue_from_next(frame, pc);
-        base[a] = vm_send_result(isolate, 3);
+        base[a] = xr_vm_send_result_value(isolate, 3);
         return XR_DISP_NEXT;
     }
 
@@ -696,57 +701,33 @@ XR_FUNC XrDispatchAction vm_invoke_enum(XrVMRuntime *isolate, XrValue receiver, 
     if (!XR_IS_PTR(receiver))
         return XR_DISP_FALLTHROUGH;
 
-    if (XR_IS_ENUM_VALUE(receiver)) {
-        XrEnumValue *enum_val = (XrEnumValue *) XR_TO_PTR(receiver);
-
-        if (nargs == 0 && method_symbol == SYMBOL_NAME) {
-            size_t len = strlen(enum_val->member_name);
-            XrString *str = xr_string_intern(isolate, enum_val->member_name, len, 0);
-            base[a] = xr_string_value(str);
-            return XR_DISP_NEXT;
-        }
-        if (nargs == 0 && method_symbol == SYMBOL_ORDINAL) {
-            base[a] = xr_int(enum_val->member_index);
-            return XR_DISP_NEXT;
-        }
-        if (nargs == 0 && method_symbol == SYMBOL_TOSTRING) {
-            size_t enum_name_len = strlen(enum_val->enum_name);
-            size_t member_name_len = strlen(enum_val->member_name);
-            if (enum_name_len + member_name_len + 2 > XR_TOSTRING_BUFFER_SIZE) {
-                VM_THROW(frame, pc, XR_ERR_OVERFLOW, "enum name too long");
-            }
-            char buffer[XR_TOSTRING_BUFFER_SIZE];
-            snprintf(buffer, sizeof(buffer), "%s.%s", enum_val->enum_name, enum_val->member_name);
-            size_t len = strlen(buffer);
-            XrString *str = xr_string_intern(isolate, buffer, len, 0);
-            base[a] = xr_string_value(str);
-            return XR_DISP_NEXT;
-        }
-        // If no match, fall through to class/instance path
-        return XR_DISP_FALLTHROUGH;
-    }
-
     if (XR_IS_ENUM_TYPE(receiver)) {
         XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(receiver);
 
-        /* ADT variant construction via OP_INVOKE: Shape.Circle(5.0)
-         * Every variant of an ADT enum is a tagged instance (field[0] = ordinal,
-         * field[1..] = payload), including zero-payload variants, so pattern
-         * matching can read the ordinal uniformly. */
-        if (enum_type->is_adt) {
-            XrEnumValue *eval = xr_enum_get_member_by_symbol(enum_type, method_symbol);
-            if (eval) {
-                int midx = (int) eval->member_index;
-                int expected_pc = enum_type->payload_counts[midx];
-                XrInstance *inst = xr_enum_adt_construct(isolate, enum_type, eval->member_index,
-                                                         expected_pc > 0 ? &base[a + 2] : NULL,
-                                                         expected_pc > 0 ? nargs : 0);
-                if (!inst) {
+        int midx = xr_enum_type_find_member_index_by_symbol(enum_type, method_symbol);
+        if (midx >= 0) {
+            const char *member_name = xr_enum_type_member_name(enum_type, (uint32_t) midx);
+            int expected_pc = xr_enum_type_payload_count(enum_type, (uint32_t) midx);
+            if (expected_pc == 0) {
+                XrEnumAggregateValue *value =
+                    xr_enum_zero_payload_value(isolate, enum_type, (uint32_t) midx);
+                if (!value) {
+                    VM_THROW(frame, pc, XR_ERR_TYPE_NO_CALL,
+                             "failed to construct enum variant '%s.%s'", enum_type->name,
+                             member_name ? member_name : "?");
+                }
+                base[a] = XR_FROM_PTR(value);
+                return XR_DISP_NEXT;
+            }
+            if (expected_pc > 0) {
+                XrEnumAggregateValue *value =
+                    xr_enum_adt_construct(isolate, enum_type, (uint32_t) midx, &base[a + 2], nargs);
+                if (!value) {
                     VM_THROW(frame, pc, XR_ERR_TYPE_NO_CALL,
                              "failed to construct ADT variant '%s.%s'", enum_type->name,
-                             eval->member_name);
+                             member_name ? member_name : "?");
                 }
-                base[a] = XR_FROM_PTR(inst);
+                base[a] = XR_FROM_PTR(value);
                 return XR_DISP_NEXT;
             }
         }
@@ -758,10 +739,7 @@ XR_FUNC XrDispatchAction vm_invoke_enum(XrVMRuntime *isolate, XrValue receiver, 
 /* ========== Dispatch: OP_INVOKE ADT Instance Methods ========== */
 
 /*
- * Handles method calls on ADT enum instances.
- * ADT instances have builtin_kind == XR_BK_ADT_ENUM with layout:
- *   fields[0] = int tag (variant member_index)
- *   fields[1] = payload (single-payload variants)
+ * Handles method calls on ADT enum aggregate values.
  *
  * General ADT methods: name, toString.
  */
@@ -769,33 +747,30 @@ XR_FUNC XrDispatchAction vm_invoke_adt_instance(XrVMRuntime *isolate, XrValue re
                                                 int method_symbol, int nargs, XrValue *base, int a,
                                                 XrBcCallFrame *frame, XrInstruction *pc) {
     XR_DCHECK(isolate != NULL, "vm_invoke_adt_instance: NULL isolate");
+    (void) frame;
+    (void) pc;
     if (!XR_IS_PTR(receiver))
         return XR_DISP_FALLTHROUGH;
 
-    XrInstance *inst = xr_value_to_instance(receiver);
-    if (!inst || !inst->klass)
+    XrEnumAggregateValue *agg = xr_value_to_enum_aggregate(receiver);
+    if (!agg)
         return XR_DISP_FALLTHROUGH;
 
-    XrEnumType *enum_type = inst->klass ? (XrEnumType *) inst->klass->builtin_data : NULL;
+    XrEnumType *enum_type = xr_enum_aggregate_type(agg);
     if (!enum_type || !enum_type->members)
         return XR_DISP_FALLTHROUGH;
 
-    /* Extract variant tag from fields[0] */
-    XrValue tag_val = inst->fields[0];
-    if (!XR_IS_INT(tag_val))
+    if (agg->member_index >= enum_type->member_count)
         return XR_DISP_FALLTHROUGH;
-    int64_t tag_index_i64 = XR_TO_INT(tag_val);
-    if (tag_index_i64 < 0 || (uint64_t) tag_index_i64 >= enum_type->member_count)
-        return XR_DISP_FALLTHROUGH;
-    uint32_t tag_index = (uint32_t) tag_index_i64;
-    XrEnumValue *variant = enum_type->members[tag_index].instance;
-    if (!variant)
+    uint32_t tag_index = agg->member_index;
+    const char *variant_name = xr_enum_type_member_name(enum_type, tag_index);
+    if (!variant_name)
         return XR_DISP_FALLTHROUGH;
 
     /* General ADT methods */
     if (nargs == 0 && method_symbol == SYMBOL_NAME) {
-        size_t len = strlen(variant->member_name);
-        XrString *str = xr_string_intern(isolate, variant->member_name, len, 0);
+        size_t len = strlen(variant_name);
+        XrString *str = xr_string_intern(isolate, variant_name, len, 0);
         base[a] = xr_string_value(str);
         return XR_DISP_NEXT;
     }

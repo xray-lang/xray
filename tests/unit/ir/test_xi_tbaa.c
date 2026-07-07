@@ -48,7 +48,7 @@ static XiFunc *make_func(const char *name) {
 TEST(is_memory_load) {
     assert(xi_is_memory_load(XI_LOAD_FIELD));
     assert(xi_is_memory_load(XI_INDEX_GET));
-    assert(xi_is_memory_load(XI_STRUCT_GET));
+    assert(xi_is_memory_load(XI_AGG_GET));
     assert(xi_is_memory_load(XI_JSON_GET_F));
     assert(xi_is_memory_load(XI_TUPLE_GET));
     assert(xi_is_memory_load(XI_LOAD_UPVAL));
@@ -70,7 +70,7 @@ TEST(is_memory_load) {
 TEST(is_memory_store) {
     assert(xi_is_memory_store(XI_STORE_FIELD));
     assert(xi_is_memory_store(XI_INDEX_SET));
-    assert(xi_is_memory_store(XI_STRUCT_SET));
+    assert(xi_is_memory_store(XI_AGG_SET));
     assert(xi_is_memory_store(XI_JSON_SET_F));
     assert(xi_is_memory_store(XI_JSON_INIT_F));
     assert(xi_is_memory_store(XI_STORE_UPVAL));
@@ -602,7 +602,7 @@ static XiValue *make_mem_op(XiFunc *f, XiBlock *blk, uint16_t op, XiValue *obj, 
             case XI_INDEX_SET:
                 nargs = 3;
                 break;
-            case XI_STRUCT_SET:
+            case XI_AGG_SET:
                 nargs = 2;
                 break;
             case XI_JSON_SET_F:
@@ -632,7 +632,7 @@ static XiValue *make_mem_op(XiFunc *f, XiBlock *blk, uint16_t op, XiValue *obj, 
             case XI_INDEX_GET:
                 nargs = 2;
                 break;
-            case XI_STRUCT_GET:
+            case XI_AGG_GET:
                 nargs = 1;
                 break;
             case XI_JSON_GET_F:
@@ -678,7 +678,7 @@ static uint16_t load_op_for_group(XiMemGroup g) {
         case XI_MEM_ARRAY:
             return XI_INDEX_GET;
         case XI_MEM_STRUCT:
-            return XI_STRUCT_GET;
+            return XI_AGG_GET;
         case XI_MEM_JSON:
             return XI_JSON_GET_F;
         case XI_MEM_TUPLE:
@@ -986,7 +986,7 @@ TEST(field_id_vs_struct_no_alias) {
     fld->args[0] = obj;
     fld->aux_int = 4;
 
-    XiValue *sget = xi_value_new(f, blk, XI_STRUCT_GET, &stub_int, 1);
+    XiValue *sget = xi_value_new(f, blk, XI_AGG_GET, &stub_int, 1);
     sget->args[0] = obj;
     sget->aux_int = 0;
 
@@ -1000,8 +1000,8 @@ TEST(field_id_vs_struct_no_alias) {
 /* ========== Load/Store Classification Edge Cases ========== */
 
 TEST(struct_set_is_store) {
-    assert(xi_is_memory_store(XI_STRUCT_SET));
-    assert(!xi_is_memory_load(XI_STRUCT_SET));
+    assert(xi_is_memory_store(XI_AGG_SET));
+    assert(!xi_is_memory_load(XI_AGG_SET));
 }
 
 TEST(json_get_is_load) {
@@ -1094,7 +1094,7 @@ TEST(annotate_struct_get_sets_struct) {
     XiBlock *blk = f->entry;
     XiValue *obj = xi_param(f, blk, 0, &stub_any);
 
-    XiValue *load = xi_value_new(f, blk, XI_STRUCT_GET, &stub_int, 1);
+    XiValue *load = xi_value_new(f, blk, XI_AGG_GET, &stub_int, 1);
     load->args[0] = obj;
     load->aux_int = 0;
 
@@ -1610,7 +1610,7 @@ TEST(memssa_multiple_groups_same_block) {
     arr_store->args[1] = idx;
     arr_store->args[2] = val;
 
-    XiValue *sget = xi_value_new(f, blk, XI_STRUCT_GET, &stub_int, 1);
+    XiValue *sget = xi_value_new(f, blk, XI_AGG_GET, &stub_int, 1);
     sget->args[0] = obj;
     sget->aux_int = 0;
 

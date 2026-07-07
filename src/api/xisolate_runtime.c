@@ -47,23 +47,7 @@ static XrEnumType *runtime_register_prelude_enum(XrVMRuntime *isolate, const cha
     if (!type || !payload_counts)
         return type;
 
-    type->is_adt = true;
-    type->payload_counts = (int *) xr_calloc((size_t) member_count, sizeof(int));
-    int max_payload = 0;
-    if (type->payload_counts) {
-        for (int i = 0; i < member_count; i++) {
-            type->payload_counts[i] = payload_counts[i];
-            if (payload_counts[i] > max_payload)
-                max_payload = payload_counts[i];
-        }
-    }
-    type->max_payload = max_payload;
-    if (type->enum_class && max_payload > 0) {
-        type->enum_class->field_count = (uint16_t) (1 + max_payload);
-        type->enum_class->own_field_count = (uint16_t) (1 + max_payload);
-        type->enum_class->builtin_kind = XR_BK_ADT_ENUM;
-        type->enum_class->builtin_data = type;
-    }
+    (void) xr_enum_type_set_adt_payloads(type, payload_counts, member_count);
     return type;
 }
 

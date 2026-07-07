@@ -1,0 +1,12 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="system_libs": []
+contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=INT64_C(42)
+c_not_contains=xrt_shared
+c_not_contains=xrt_array_ref_to_owned
+not_contains=xray_rt_coro
+not_contains=xray_core

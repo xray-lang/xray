@@ -176,6 +176,35 @@ static void format_json(XrVMRuntime *isolate, XrStrBuf *sb, XrJson *json, int de
     xr_strbuf_append_cstr(sb, "}", 1);
 }
 
+static void format_inspect_instance(XrVMRuntime *isolate, XrStrBuf *sb, XrInstance *inst,
+                                    XrClass *cls, int depth) {
+    const char *class_name = xr_class_display_name(cls);
+    xr_strbuf_append_cstr(sb, class_name, strlen(class_name));
+    xr_strbuf_append_cstr(sb, "{", 1);
+
+    int emitted = 0;
+    for (uint16_t i = 0; cls && i < cls->field_count && emitted < XR_FORMAT_MAX_ELEMENTS; i++) {
+        if (cls->fields[i].flags & XR_FIELD_STATIC)
+            continue;
+        if (emitted > 0)
+            xr_strbuf_append_cstr(sb, ", ", 2);
+        const char *name = cls->fields[i].name;
+        if (name)
+            xr_strbuf_append_cstr(sb, name, strlen(name));
+        else {
+            char buf[16];
+            int n = snprintf(buf, sizeof(buf), "field%u", (unsigned) i);
+            xr_strbuf_append_cstr(sb, buf, (size_t) n);
+        }
+        xr_strbuf_append_cstr(sb, ": ", 2);
+        xr_value_to_strbuf(isolate, sb, xr_instance_get_field_fast(inst, i), depth + 1);
+        emitted++;
+    }
+    if (cls && cls->field_count > XR_FORMAT_MAX_ELEMENTS)
+        xr_strbuf_append_cstr(sb, ", ...", 5);
+    xr_strbuf_append_cstr(sb, "}", 1);
+}
+
 /* ========== Public API ========== */
 
 void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int depth) {
@@ -249,6 +278,24 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
         case XR_TSET:
             format_set(isolate, sb, (XrSet *) gc, depth);
             break;
+        case XR_TENUM_CTOR: {
+            XrEnumCtor *ev = (XrEnumCtor *) gc;
+            if (ev->enum_name && ev->member_name) {
+                xr_strbuf_append_cstr(sb, ev->enum_name, strlen(ev->enum_name));
+                xr_strbuf_append_cstr(sb, ".", 1);
+                xr_strbuf_append_cstr(sb, ev->member_name, strlen(ev->member_name));
+            } else {
+                xr_strbuf_append_cstr(sb, "<enum>", 6);
+            }
+            break;
+        }
+        case XR_TENUM_TYPE: {
+            XrEnumType *et = (XrEnumType *) gc;
+            xr_strbuf_append_cstr(sb, "enum ", 5);
+            if (et->name)
+                xr_strbuf_append_cstr(sb, et->name, strlen(et->name));
+            break;
+        }
         case XR_TINSTANCE: {
             XrInstance *inst = xr_value_to_instance(val);
             XrClass *cls = xr_instance_get_class(inst);
@@ -261,26 +308,6 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
                 } else {
                     xr_strbuf_append_cstr(sb, "<BigInt>", 8);
                 }
-                break;
-            }
-            /* EnumValue: "EnumName.MemberName" */
-            if (cls && cls->builtin_kind == XR_BK_ENUM_VALUE) {
-                XrEnumValue *ev = (XrEnumValue *) gc;
-                if (ev->enum_name && ev->member_name) {
-                    xr_strbuf_append_cstr(sb, ev->enum_name, strlen(ev->enum_name));
-                    xr_strbuf_append_cstr(sb, ".", 1);
-                    xr_strbuf_append_cstr(sb, ev->member_name, strlen(ev->member_name));
-                } else {
-                    xr_strbuf_append_cstr(sb, "<enum>", 6);
-                }
-                break;
-            }
-            /* EnumType: "enum Name" */
-            if (cls && cls->builtin_kind == XR_BK_ENUM_TYPE) {
-                XrEnumType *et = (XrEnumType *) gc;
-                xr_strbuf_append_cstr(sb, "enum ", 5);
-                if (et->name)
-                    xr_strbuf_append_cstr(sb, et->name, strlen(et->name));
                 break;
             }
             /* Json/Record: recursive key-value format. */
@@ -353,33 +380,30 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
                     xr_strbuf_append_cstr(sb, "StringBuilder()", 14);
                 }
             } else if (cls && cls->builtin_kind == XR_BK_ADT_ENUM) {
-                /* ADT enum instance: fields[0]=int tag, fields[1..N]=payload.
-                 * Format as "EnumName.Variant(p1, p2, ...)" */
-                XrValue tag_val = inst->fields[0];
-                XrEnumType *etype = (XrEnumType *) cls->builtin_data;
-                if (XR_IS_INT(tag_val) && etype && etype->members) {
-                    int64_t tag_index = XR_TO_INT(tag_val);
-                    XrEnumValue *ev = (tag_index >= 0 && (uint64_t) tag_index < etype->member_count)
-                                          ? etype->members[tag_index].instance
-                                          : NULL;
-                    if (!ev) {
+                /* ADT enum aggregate: format as "EnumName.Variant(p1, p2, ...)". */
+                XrEnumAggregateValue *agg = xr_value_to_enum_aggregate(val);
+                XrEnumType *etype = xr_enum_aggregate_type(agg);
+                if (agg && etype) {
+                    uint32_t tag_index = agg->member_index;
+                    const char *member_name = xr_enum_type_member_name(etype, tag_index);
+                    if (!member_name) {
                         xr_strbuf_append_cstr(sb, cls->name ? cls->name : "<adt>",
                                               cls->name ? strlen(cls->name) : 5);
                         xr_strbuf_append_cstr(sb, "{...}", 5);
                     } else {
-                        if (ev->enum_name)
-                            xr_strbuf_append_cstr(sb, ev->enum_name, strlen(ev->enum_name));
+                        const char *enum_name = etype->name;
+                        if (enum_name)
+                            xr_strbuf_append_cstr(sb, enum_name, strlen(enum_name));
                         xr_strbuf_append_cstr(sb, ".", 1);
-                        if (ev->member_name)
-                            xr_strbuf_append_cstr(sb, ev->member_name, strlen(ev->member_name));
-                        int pc =
-                            (etype && etype->payload_counts) ? etype->payload_counts[tag_index] : 0;
+                        if (member_name)
+                            xr_strbuf_append_cstr(sb, member_name, strlen(member_name));
+                        uint32_t pc = agg->payload_count;
                         if (pc > 0) {
                             xr_strbuf_append_cstr(sb, "(", 1);
-                            for (int fi = 0; fi < pc; fi++) {
+                            for (uint32_t fi = 0; fi < pc; fi++) {
                                 if (fi > 0)
                                     xr_strbuf_append_cstr(sb, ", ", 2);
-                                xr_value_to_strbuf(isolate, sb, inst->fields[1 + fi], depth + 1);
+                                xr_value_to_strbuf(isolate, sb, agg->payloads[fi], depth + 1);
                             }
                             xr_strbuf_append_cstr(sb, ")", 1);
                         }
@@ -389,6 +413,8 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
                                           cls->name ? strlen(cls->name) : 5);
                     xr_strbuf_append_cstr(sb, "{...}", 5);
                 }
+            } else if (cls && (cls->flags & XR_CLASS_DERIVE_INSPECT)) {
+                format_inspect_instance(isolate, sb, inst, cls, depth);
             } else if (cls && cls->name) {
                 xr_strbuf_append_cstr(sb, cls->name, strlen(cls->name));
                 xr_strbuf_append_cstr(sb, "{...}", 5);

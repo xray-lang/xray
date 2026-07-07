@@ -1,0 +1,38 @@
+struct CtBlockPoint {
+    x: int
+    y: int
+}
+
+struct CtBlockBox {
+    p: CtBlockPoint
+    tag: int
+}
+
+const BASE = comptime {
+    var total = comptime 0
+    for (var i = 0; i < 4; i += 1) {
+        total += i
+    }
+    return total
+}
+
+const BASE_POINT = comptime {
+    return CtBlockPoint{x: BASE, y: BASE + 1}
+}
+
+var point = comptime {
+    var y = comptime 7
+    return CtBlockPoint{x: BASE, y: y}
+}
+
+var nested = comptime {
+    const inner = comptime CtBlockPoint{x: BASE_POINT.x + 1, y: BASE_POINT.y + 2}
+    return CtBlockBox{p: inner, tag: BASE + 10}
+}
+
+print(point.x)
+print(point.y)
+print(nested.p.x)
+print(nested.p.y)
+print(nested.tag)
+print(nested.p.x + nested.p.y + nested.tag)

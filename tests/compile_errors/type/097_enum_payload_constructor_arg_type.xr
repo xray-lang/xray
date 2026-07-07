@@ -1,0 +1,7 @@
+enum Result {
+    Ok(int),
+    Err(string)
+}
+
+var value = Result.Ok("bad")
+print(value)

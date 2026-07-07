@@ -488,39 +488,36 @@ TEST(match_single_arm_no_padding) {
 /* Enum member alignment (opt-in)                                          */
 /* ====================================================================== */
 
-TEST(enum_values_aligned_when_enabled) {
+TEST(enum_members_ignore_removed_value_alignment) {
     setup();
     const char *src = "enum Color {\n"
-                      "    Red = 1,\n"
-                      "    Green = 2,\n"
-                      "    Blue = 3,\n"
-                      "    Transparent = 4\n"
+                      "    Red,\n"
+                      "    Green,\n"
+                      "    Blue,\n"
+                      "    Transparent\n"
                       "}\n";
     XrFmtConfig cfg = xfmt_default_config;
     cfg.align_enum_values = 1;
     char *out = format_with_config(src, &cfg);
     ASSERT_NOT_NULL(out);
-    /* Widest name is `Transparent` (11 chars). All other members are padded. */
-    ASSERT_TRUE(contains(out, "Red         = 1"));
-    ASSERT_TRUE(contains(out, "Green       = 2"));
-    ASSERT_TRUE(contains(out, "Blue        = 3"));
-    ASSERT_TRUE(contains(out, "Transparent = 4"));
+    ASSERT_TRUE(contains(out, "Red"));
+    ASSERT_TRUE(contains(out, "Transparent"));
+    ASSERT_FALSE(contains(out, "="));
     free(out);
     teardown();
 }
 
-TEST(enum_values_default_single_space) {
+TEST(enum_payload_members_roundtrip) {
     setup();
     const char *src = "enum E {\n"
-                      "    A = 1,\n"
-                      "    Bbb = 2\n"
+                      "    A,\n"
+                      "    Bbb(x: int, string)\n"
                       "}\n";
     char *out = format_with_config(src, NULL);
     ASSERT_NOT_NULL(out);
-    /* Default: no alignment — single space. */
-    ASSERT_TRUE(contains(out, "A = 1"));
-    ASSERT_TRUE(contains(out, "Bbb = 2"));
-    ASSERT_FALSE(contains(out, "A   ="));
+    ASSERT_TRUE(contains(out, "A"));
+    ASSERT_TRUE(contains(out, "Bbb(x: int, string)"));
+    ASSERT_FALSE(contains(out, "="));
     free(out);
     teardown();
 }
@@ -745,8 +742,8 @@ RUN_TEST(branch_arrows_aligned_idempotent);
 RUN_TEST(select_branch_arrows_default_aligned);
 RUN_TEST(match_single_arm_no_padding);
 
-RUN_TEST(enum_values_aligned_when_enabled);
-RUN_TEST(enum_values_default_single_space);
+RUN_TEST(enum_members_ignore_removed_value_alignment);
+RUN_TEST(enum_payload_members_roundtrip);
 
 RUN_TEST(class_fields_aligned_when_enabled);
 RUN_TEST(class_fields_default_single_space);

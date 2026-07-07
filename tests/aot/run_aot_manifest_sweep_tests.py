@@ -50,6 +50,7 @@ ALLOWED_RUNTIME_CASES = {
     "tests/diff/cases/semantics/stdlib/sync_cache_padded.xr",
     "tests/diff/cases/semantics/stdlib/sync_module_import.xr",
     "tests/diff/cases/semantics/stdlib/sync_namespace_import.xr",
+    "tests/diff/cases/semantics/stdlib/sys_thread_os_primitives_cross_thread.xr",
     "tests/diff/cases/semantics/modules/xmod_coro.xr",
     "tests/diff/cases/semantics/ownership/in_go_copy_argument_allowed.xr",
     "tests/diff/cases/semantics/ownership/move_into_go.xr",

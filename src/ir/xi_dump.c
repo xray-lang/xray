@@ -137,14 +137,14 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " [adt-field=%" PRId64 "]", v->aux_int);
     } else if ((v->op == XI_LOAD_FIELD || v->op == XI_STORE_FIELD) && v->aux) {
         fprintf(out, " .%s", (const char *) v->aux);
-    } else if (v->op == XI_STRUCT_GET || v->op == XI_STRUCT_SET) {
-        XrStructLayout *sl = (XrStructLayout *) v->aux;
+    } else if (v->op == XI_AGG_GET || v->op == XI_AGG_SET) {
+        XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         const char *fname = (sl && sl->field_names && v->aux_int < sl->field_count)
                                 ? sl->field_names[v->aux_int]
                                 : "?";
         fprintf(out, " .%s [field=%" PRId64 "]", fname, v->aux_int);
-    } else if (v->op == XI_STRUCT_NEW && v->aux) {
-        XrStructLayout *sl = (XrStructLayout *) v->aux;
+    } else if (v->op == XI_AGG_NEW && v->aux) {
+        XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         fprintf(out, " [size=%u fields=%u]", sl->total_size, sl->field_count);
     } else if (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
                v->op == XI_CALL_BUILTIN || v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL ||

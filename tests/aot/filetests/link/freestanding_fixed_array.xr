@@ -4,3 +4,91 @@ fn xray_fixed_array_sum() -> int {
     xs[1] = 5
     return xs[0] + xs[1] + xs[2]
 }
+
+@c_export("xray_fixed_array_span")
+fn xray_fixed_array_span(i: int) -> int {
+    var xs: [int; 3] = [10, 20, 30]
+    var view: Span<int> = xs[:]
+    view[i] = 7
+    return view[i]
+}
+
+@c_export("xray_fixed_array_bytespan")
+fn xray_fixed_array_bytespan(i: int) -> int {
+    var xs: [uint8; 3] = [10, 20, 30]
+    var view: ByteSpan = xs[:]
+    view[i] = 9
+    return xs[i] as int
+}
+
+@c_export("xray_fixed_array_bytespan_load_store")
+fn xray_fixed_array_bytespan_load_store(pos: int) -> int {
+    var xs: [uint8; 8] = [0, 0, 0, 0, 0, 0, 0, 0]
+    var view: ByteSpan = xs[:]
+    view.store<uint16>(pos, 0x1234, Endian.LE)
+    return int(view.load<uint16>(pos, Endian.LE))
+}
+
+@c_export("xray_fixed_array_bytespan_wide_ints")
+fn xray_fixed_array_bytespan_wide_ints(pos: int) -> int {
+    var xs: [uint8; 32] = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+    ]
+    var view: ByteSpan = xs[:]
+    view.store<uint32>(pos, 0x01020304, Endian.BE)
+    view.store<uint64>(8, 42, Endian.LE)
+    view.store<int16>(16, -2, Endian.LE)
+    view.store<int32>(18, -1234, Endian.LE)
+    view.store<int64>(24, -5, Endian.LE)
+    var a: uint32 = view.load<uint32>(pos, Endian.BE)
+    var b: uint64 = view.load<uint64>(8, Endian.LE)
+    var c: int16 = view.load<int16>(16, Endian.LE)
+    var d: int32 = view.load<int32>(18, Endian.LE)
+    var e: int64 = view.load<int64>(24, Endian.LE)
+    return int(a) + int(b) + int(c) + int(d) + int(e)
+}
+
+@c_export("xray_fixed_array_bytespan_wide_floats")
+fn xray_fixed_array_bytespan_wide_floats(pos: int) -> float64 {
+    var xs: [uint8; 16] = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+    ]
+    var view: ByteSpan = xs[:]
+    view.store<float32>(pos, 1.5, Endian.LE)
+    view.store<float64>(8, -2.25, Endian.BE)
+    var a: float32 = view.load<float32>(pos, Endian.LE)
+    var b: float64 = view.load<float64>(8, Endian.BE)
+    return (a as float64) + b
+}
+
+@c_export("xray_fixed_array_bytespan_bulk")
+fn xray_fixed_array_bytespan_bulk() -> int {
+    var dstBytes: [uint8; 8] = [0, 0, 0, 0, 0, 0, 0, 0]
+    var srcBytes: [uint8; 4] = [7, 7, 7, 7]
+    var dst: ByteSpan = dstBytes[:]
+    var src: ByteSpan = srcBytes[:]
+    dst.fill(1)
+    var window: ByteSpan = dst[2:6]
+    window.copyFrom(src)
+    dst.repeatFrom(6, 4, 2)
+    var check: ByteSpan = dst[2:6]
+    return check.compare(src) + check.commonPrefix(src)
+}
+
+@c_export("xray_fixed_array_span_bulk")
+fn xray_fixed_array_span_bulk() -> int {
+    var dstWords: [uint32; 4] = [0, 0, 0, 0]
+    var srcWords: [uint32; 2] = [11, 22]
+    var dst: Span<uint32> = dstWords[:]
+    var src: Span<uint32> = srcWords[:]
+    dst.fill(3)
+    var window: Span<uint32> = dst[1:3]
+    window.copyFrom(src)
+    var asBytes: ByteSpan = dst.asBytes()
+    var pairs: Span<uint16> = asBytes.reinterpret<uint16>()
+    return window.compare(src) + int(pairs[2])
+}

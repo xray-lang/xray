@@ -1,0 +1,6 @@
+c_contains=static const XrtInspectField xrt_native_derive_flags_independent_InspectOnly_inspect_fields[]
+c_contains=static const XrtInspectField xrt_native_derive_flags_independent_JsonOnly_inspect_fields[]
+c_contains=xrt_type_set_derive(_tid, 1u, xrt_native_derive_flags_independent_InspectOnly_inspect_fields, 1);
+c_contains=xrt_type_set_derive(_tid, 2u, xrt_native_derive_flags_independent_JsonOnly_inspect_fields, 1);
+c_not_contains=Reflect
+c_not_contains=need_reflection

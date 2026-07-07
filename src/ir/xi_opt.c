@@ -204,6 +204,17 @@ static bool record_shared_const_literal(XiFunc *f, int64_t slot, const XiValue *
 static bool rewrite_to_const_literal(XiValue *v, const XiConstLiteral *lit) {
     if (!v || !lit || lit->kind == XI_CONST_LITERAL_NONE)
         return false;
+    switch (lit->kind) {
+        case XI_CONST_LITERAL_NULL:
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_CHAR:
+        case XI_CONST_LITERAL_FLOAT:
+        case XI_CONST_LITERAL_BOOL:
+        case XI_CONST_LITERAL_STRING:
+            break;
+        default:
+            return false;
+    }
     v->op = XI_CONST;
     v->type = lit->type ? lit->type : v->type;
     v->nargs = 0;
@@ -1842,9 +1853,9 @@ static bool sr_value_has_static_typed_array_storage(const XiValue *value) {
 
 static bool sr_value_is_fixed_array_field_ref(const XiValue *value) {
     const XiValue *v = sr_unwrap_identity_value(value);
-    if (!v || v->op != XI_STRUCT_GET || v->nargs < 1)
+    if (!v || v->op != XI_AGG_GET || v->nargs < 1)
         return false;
-    const XrStructLayout *sl = (const XrStructLayout *) v->aux;
+    const XrAggregateLayout *sl = (const XrAggregateLayout *) v->aux;
     if (!sl || v->aux_int < 0 || v->aux_int >= sl->field_count)
         return false;
     return sl->fields[v->aux_int].native_type == XR_NATIVE_ARRAY;
@@ -1852,9 +1863,9 @@ static bool sr_value_is_fixed_array_field_ref(const XiValue *value) {
 
 static bool sr_value_is_typed_array_field_ref(const XiValue *value) {
     const XiValue *v = sr_unwrap_identity_value(value);
-    if (!v || v->op != XI_STRUCT_GET || v->nargs < 1)
+    if (!v || v->op != XI_AGG_GET || v->nargs < 1)
         return false;
-    const XrStructLayout *sl = (const XrStructLayout *) v->aux;
+    const XrAggregateLayout *sl = (const XrAggregateLayout *) v->aux;
     if (!sl || v->aux_int < 0 || v->aux_int >= sl->field_count)
         return false;
     return sl->fields[v->aux_int].native_type == XR_NATIVE_ARRAY_REF &&
@@ -2018,7 +2029,7 @@ static bool sr_same_value_shape(const XiValue *a, const XiValue *b, uint8_t dept
             }
             return a->nargs >= 1 && b->nargs >= 1 &&
                    sr_same_value_shape(a->args[0], b->args[0], (uint8_t) (depth + 1));
-        case XI_STRUCT_GET:
+        case XI_AGG_GET:
         case XI_TUPLE_GET:
             return a->aux == b->aux && a->aux_int == b->aux_int && a->nargs >= 1 && b->nargs >= 1 &&
                    sr_same_value_shape(a->args[0], b->args[0], (uint8_t) (depth + 1));
@@ -2387,7 +2398,7 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
                 sr_field_receiver_uses_native_rep(v->args[0]))
                 return sr_type_scalar_rep(v->type);
             return XR_REP_TAGGED;
-        case XI_STRUCT_GET:
+        case XI_AGG_GET:
             return sr_type_scalar_rep(v->type);
         case XI_PHI:
             if (policy && !policy->force_phi_tagged)
@@ -2570,7 +2581,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
         case XI_PTR_COPY_NONOVERLAP:
             *out = arg_idx <= 1 ? XR_REP_RAWPTR : (arg_idx == 2 ? XR_REP_I64 : XR_REP_TAGGED);
             return true;
-        case XI_STRUCT_SET:
+        case XI_AGG_SET:
             if (arg_idx == 1 && user->nargs >= 2 && user->args[1]) {
                 *out = sr_type_scalar_rep(user->args[1]->type);
                 return true;

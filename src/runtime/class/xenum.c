@@ -15,6 +15,8 @@
 #include "../../base/xmalloc.h"
 #include "../object/xstring.h"
 #include "../symbol/xsymbol_table.h"
+#include "../mem/xalloc_unified.h"
+#include "../mem/xcoro_heap.h"
 #include "../mem/xfixed_heap.h"
 #include "xclass.h"
 #include "xinstance.h"
@@ -23,72 +25,84 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stddef.h>
 
 /* ========== Enum Creation ========== */
 
-XrEnumValue *xr_enum_value_new(XrVMRuntime *X, const char *enum_name, const char *member_name,
-                               uint32_t index) {
-    XR_DCHECK(X != NULL, "enum_value_new: NULL isolate");
-    XR_DCHECK(enum_name != NULL, "enum_value_new: NULL enum_name");
-    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XrEnumValue *enum_val = (XrEnumValue *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X),
-                                                                sizeof(XrEnumValue), XR_TINSTANCE);
+XrEnumCtor *xr_enum_ctor_new(XrVMRuntime *X, const char *enum_name, const char *member_name,
+                             uint32_t index) {
+    XR_DCHECK(X != NULL, "enum_ctor_new: NULL isolate");
+    XR_DCHECK(enum_name != NULL, "enum_ctor_new: NULL enum_name");
+    XrEnumCtor *enum_val = (XrEnumCtor *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X),
+                                                              sizeof(XrEnumCtor), XR_TENUM_CTOR);
     if (!enum_val)
         return NULL;
-    enum_val->klass = (core && core->enumValueClass) ? core->enumValueClass : NULL;
 
     // Names are interned via the isolate's symbol table, so the pointer
     // is stable for the life of the isolate and must not be freed.
     enum_val->enum_name = xr_symbol_intern(X, enum_name);
     enum_val->member_name = xr_symbol_intern(X, member_name);
     enum_val->member_index = index;
+    enum_val->layout_id = 0;
     enum_val->parent_type = NULL;  // Set by xr_enum_type_new after member creation
 
     return enum_val;
 }
 
-XrEnumValue *xr_enum_value_new_core(XrRuntimeCore *core, const char *enum_name,
-                                    const char *member_name, uint32_t index) {
-    XR_DCHECK(core != NULL, "enum_value_new_core: NULL core");
-    XR_DCHECK(enum_name != NULL, "enum_value_new_core: NULL enum_name");
-    XR_DCHECK(member_name != NULL, "enum_value_new_core: NULL member_name");
+XrEnumCtor *xr_enum_ctor_new_core(XrRuntimeCore *core, const char *enum_name,
+                                  const char *member_name, uint32_t index) {
+    XR_DCHECK(core != NULL, "enum_ctor_new_core: NULL core");
+    XR_DCHECK(enum_name != NULL, "enum_ctor_new_core: NULL enum_name");
+    XR_DCHECK(member_name != NULL, "enum_ctor_new_core: NULL member_name");
 
-    XrEnumValue *enum_val =
-        (XrEnumValue *) xr_fixed_heap_alloc(&core->fixed_heap, sizeof(XrEnumValue), XR_TINSTANCE);
+    XrEnumCtor *enum_val =
+        (XrEnumCtor *) xr_fixed_heap_alloc(&core->fixed_heap, sizeof(XrEnumCtor), XR_TENUM_CTOR);
     if (!enum_val)
         return NULL;
-    enum_val->klass = NULL;
     enum_val->enum_name = enum_name;
     enum_val->member_name = member_name;
     enum_val->member_index = index;
+    enum_val->layout_id = 0;
     enum_val->parent_type = NULL;
     return enum_val;
 }
 
-static XrClass *xr_enum_minimal_adt_class_new(const char *name, uint16_t field_count) {
+static XrClass *xr_enum_minimal_adt_class_new(const char *name) {
     XrClass *cls = (XrClass *) xr_calloc(1, sizeof(XrClass));
     if (!cls)
         return NULL;
     cls->name = name;
     cls->display_name = name;
-    cls->field_count = field_count;
-    cls->own_field_count = field_count;
+    cls->field_count = 0;
+    cls->own_field_count = 0;
     cls->builtin_kind = XR_BK_ADT_ENUM;
     cls->flags = XR_CLASS_BUILTIN | XR_CLASS_FINAL | XR_CLASS_INITIALIZED;
     return cls;
 }
 
+static XrEnumLayout *xr_enum_layout_from_members(const char *name,
+                                                 const struct XrEnumMember *members, int count) {
+    if (!name || !members || count <= 0)
+        return NULL;
+
+    const char **names = (const char **) xr_malloc(sizeof(*names) * (size_t) count);
+    if (!names)
+        return NULL;
+    for (int i = 0; i < count; i++)
+        names[i] = members[i].name;
+
+    XrEnumLayout *layout = xr_enum_layout_new(name, names, (uint32_t) count);
+    xr_free(names);
+    return layout;
+}
+
 XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, char **member_names, int count) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XrEnumType *enum_type = (XrEnumType *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X),
-                                                               sizeof(XrEnumType), XR_TINSTANCE);
+                                                               sizeof(XrEnumType), XR_TENUM_TYPE);
     if (!enum_type)
         return NULL;
-    enum_type->klass = (core && core->enumTypeClass) ? core->enumTypeClass : NULL;
     XrClass *enum_base = core ? core->enumClass : NULL;
-    // xr_class_new -> builder finalize registers the class with the
-    // type registry automatically, so the enum is visible
-    // through Type.getTypeByName without any follow-up call here.
     XrClass *enum_class = xr_class_new(X, name, enum_base);
     enum_type->enum_class = enum_class;
 
@@ -97,23 +111,34 @@ XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, char **member_nam
 
     enum_type->symbol_to_index = NULL;
     enum_type->symbol_map_capacity = 0;
-    enum_type->is_adt = false;
-    enum_type->max_payload = 0;
-    enum_type->payload_counts = NULL;
+    enum_type->layout = NULL;
+    enum_type->derive_flags = 0;
     enum_type->owns_enum_class = false;
 
     enum_type->members = (struct XrEnumMember *) xr_malloc(sizeof(*enum_type->members) * count);
     if (!enum_type->members) {
-        xr_free(enum_type);
         return NULL;
     }
 
     for (int i = 0; i < count; i++) {
         enum_type->members[i].name = xr_symbol_intern(X, member_names[i]);
         enum_type->members[i].symbol = -1;
-        enum_type->members[i].instance = xr_enum_value_new(X, name, member_names[i], i);
-        if (enum_type->members[i].instance)
-            enum_type->members[i].instance->parent_type = enum_type;
+        enum_type->members[i].ctor = xr_enum_ctor_new(X, name, member_names[i], i);
+        enum_type->members[i].value = NULL;
+        if (enum_type->members[i].ctor)
+            enum_type->members[i].ctor->parent_type = enum_type;
+    }
+
+    enum_type->layout = xr_enum_layout_from_members(enum_type->name, enum_type->members,
+                                                    (int) enum_type->member_count);
+    if (!enum_type->layout) {
+        xr_free(enum_type->members);
+        enum_type->members = NULL;
+        return NULL;
+    }
+    for (uint32_t i = 0; i < enum_type->member_count; i++) {
+        if (enum_type->members[i].ctor)
+            enum_type->members[i].ctor->layout_id = enum_type->layout->layout_id;
     }
 
     // Initialize symbol mapping for O(1) lookup
@@ -128,18 +153,16 @@ XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *name, char **
         return NULL;
 
     XrEnumType *enum_type =
-        (XrEnumType *) xr_fixed_heap_alloc(&core->fixed_heap, sizeof(XrEnumType), XR_TINSTANCE);
+        (XrEnumType *) xr_fixed_heap_alloc(&core->fixed_heap, sizeof(XrEnumType), XR_TENUM_TYPE);
     if (!enum_type)
         return NULL;
-    enum_type->klass = NULL;
     enum_type->enum_class = NULL;
     enum_type->name = name;
     enum_type->member_count = (uint32_t) count;
     enum_type->symbol_to_index = NULL;
     enum_type->symbol_map_capacity = 0;
-    enum_type->is_adt = false;
-    enum_type->max_payload = 0;
-    enum_type->payload_counts = NULL;
+    enum_type->layout = NULL;
+    enum_type->derive_flags = 0;
     enum_type->owns_enum_class = false;
 
     enum_type->members = (struct XrEnumMember *) xr_malloc(sizeof(*enum_type->members) * count);
@@ -149,10 +172,23 @@ XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *name, char **
     for (int i = 0; i < count; i++) {
         enum_type->members[i].name = member_names[i];
         enum_type->members[i].symbol = -1;
-        enum_type->members[i].instance =
-            xr_enum_value_new_core(core, name, member_names[i], (uint32_t) i);
-        if (enum_type->members[i].instance)
-            enum_type->members[i].instance->parent_type = enum_type;
+        enum_type->members[i].ctor =
+            xr_enum_ctor_new_core(core, name, member_names[i], (uint32_t) i);
+        enum_type->members[i].value = NULL;
+        if (enum_type->members[i].ctor)
+            enum_type->members[i].ctor->parent_type = enum_type;
+    }
+
+    enum_type->layout = xr_enum_layout_from_members(enum_type->name, enum_type->members,
+                                                    (int) enum_type->member_count);
+    if (!enum_type->layout) {
+        xr_free(enum_type->members);
+        enum_type->members = NULL;
+        return NULL;
+    }
+    for (uint32_t i = 0; i < enum_type->member_count; i++) {
+        if (enum_type->members[i].ctor)
+            enum_type->members[i].ctor->layout_id = enum_type->layout->layout_id;
     }
 
     return enum_type;
@@ -161,16 +197,14 @@ XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *name, char **
 bool xr_enum_type_ensure_adt_class(XrEnumType *enum_type) {
     if (!enum_type)
         return false;
-    uint16_t field_count =
-        (uint16_t) (1 + (enum_type->max_payload > 0 ? enum_type->max_payload : 0));
     if (enum_type->enum_class) {
-        enum_type->enum_class->field_count = field_count;
-        enum_type->enum_class->own_field_count = field_count;
+        enum_type->enum_class->field_count = 0;
+        enum_type->enum_class->own_field_count = 0;
         enum_type->enum_class->builtin_kind = XR_BK_ADT_ENUM;
         enum_type->enum_class->builtin_data = enum_type;
         return true;
     }
-    enum_type->enum_class = xr_enum_minimal_adt_class_new(enum_type->name, field_count);
+    enum_type->enum_class = xr_enum_minimal_adt_class_new(enum_type->name);
     if (enum_type->enum_class)
         enum_type->enum_class->builtin_data = enum_type;
     enum_type->owns_enum_class = enum_type->enum_class != NULL;
@@ -181,25 +215,36 @@ bool xr_enum_type_set_adt_payloads(XrEnumType *enum_type, const int *payload_cou
     if (!enum_type || !payload_counts || count <= 0 || (uint32_t) count != enum_type->member_count)
         return false;
 
-    int *payload_copy = (int *) xr_calloc((size_t) count, sizeof(int));
-    if (!payload_copy)
+    if (!xr_enum_layout_set_payload_counts(enum_type->layout, payload_counts, (uint32_t) count))
         return false;
 
-    int max_payload = 0;
-    for (int i = 0; i < count; i++) {
-        payload_copy[i] = payload_counts[i];
-        if (payload_counts[i] > max_payload)
-            max_payload = payload_counts[i];
-    }
-
-    if (enum_type->payload_counts)
-        xr_free(enum_type->payload_counts);
-    enum_type->payload_counts = payload_copy;
-    enum_type->is_adt = true;
-    enum_type->max_payload = max_payload;
-    if (max_payload > 0)
+    if (xr_enum_type_has_payloads(enum_type))
         return xr_enum_type_ensure_adt_class(enum_type);
     return true;
+}
+
+bool xr_enum_type_has_payloads(const XrEnumType *enum_type) {
+    return enum_type && enum_type->layout && !enum_type->layout->is_zero_payload;
+}
+
+int xr_enum_type_payload_count(const XrEnumType *enum_type, uint32_t member_index) {
+    if (!enum_type)
+        return 0;
+    return xr_enum_layout_payload_count(enum_type->layout, member_index);
+}
+
+uint16_t xr_enum_type_max_payload(const XrEnumType *enum_type) {
+    return enum_type ? xr_enum_layout_max_payload(enum_type->layout) : 0;
+}
+
+const char *xr_enum_type_member_name(const XrEnumType *enum_type, uint32_t member_index) {
+    const XrEnumVariantLayout *variant =
+        enum_type ? xr_enum_layout_variant(enum_type->layout, member_index) : NULL;
+    if (variant && variant->name)
+        return variant->name;
+    if (enum_type && member_index < enum_type->member_count && enum_type->members)
+        return enum_type->members[member_index].name;
+    return NULL;
 }
 
 /* ========== Enum Access ========== */
@@ -219,6 +264,7 @@ void xr_enum_type_init_symbols(XrEnumType *enum_type, void *isolate) {
     for (uint32_t i = 0; i < enum_type->member_count; i++) {
         SymbolId sid = xr_symbol_register_in_table(sym_table, enum_type->members[i].name);
         enum_type->members[i].symbol = sid;
+        xr_enum_layout_set_variant_symbol(enum_type->layout, i, sid);
         if (sid > max_symbol)
             max_symbol = sid;
     }
@@ -248,20 +294,29 @@ void xr_enum_type_init_symbols(XrEnumType *enum_type, void *isolate) {
 // as well, but it had no call sites outside its own header declaration
 // -- every real lookup goes through xr_symbol_lookup_in_table first,
 // yielding a SymbolId that this function consumes directly.
-XrEnumValue *xr_enum_get_member_by_symbol(XrEnumType *enum_type, int symbol) {
+XrEnumCtor *xr_enum_get_member_by_symbol(XrEnumType *enum_type, int symbol) {
     XR_DCHECK(enum_type != NULL, "enum_get_member_by_symbol: NULL enum_type");
-    if (symbol >= 0 && symbol < enum_type->symbol_map_capacity &&
-        enum_type->symbol_to_index != NULL) {
-        int idx = enum_type->symbol_to_index[symbol];
-        if (idx >= 0) {
-            return enum_type->members[idx].instance;
-        }
-    }
+    int idx = xr_enum_type_find_member_index_by_symbol(enum_type, symbol);
+    if (idx >= 0)
+        return enum_type->members[idx].ctor;
     return NULL;
 }
 
-const char *xr_enum_value_name(XrEnumValue *enum_val) {
+int xr_enum_type_find_member_index_by_symbol(XrEnumType *enum_type, int symbol) {
+    if (!enum_type || symbol < 0 || symbol >= enum_type->symbol_map_capacity ||
+        !enum_type->symbol_to_index)
+        return -1;
+    int idx = enum_type->symbol_to_index[symbol];
+    return (idx >= 0 && (uint32_t) idx < enum_type->member_count) ? idx : -1;
+}
+
+const char *xr_enum_ctor_name(XrEnumCtor *enum_val) {
     XR_DCHECK(enum_val != NULL, "enum_value_name: NULL enum_val");
+    if (enum_val->parent_type) {
+        const char *name = xr_enum_type_member_name(enum_val->parent_type, enum_val->member_index);
+        if (name)
+            return name;
+    }
     return enum_val->member_name;
 }
 
@@ -269,64 +324,151 @@ const char *xr_enum_value_name(XrEnumValue *enum_val) {
 
 /* ========== ADT Variant Construction ========== */
 
-XR_FUNC XrInstance *xr_enum_adt_construct_core(XrRuntimeCore *core, struct XrCoroutine *coro,
-                                               XrEnumType *enum_type, uint32_t member_index,
-                                               XrValue *args, int nargs) {
+size_t xr_enum_aggregate_size(uint32_t payload_count) {
+    return sizeof(XrEnumAggregateValue) + (size_t) payload_count * sizeof(XrValue);
+}
+
+void xr_enum_aggregate_init_inplace(XrEnumAggregateValue *value, XrEnumType *enum_type,
+                                    uint32_t member_index, const XrValue *payloads,
+                                    uint32_t payload_count) {
+    if (!value)
+        return;
+    value->klass = enum_type ? enum_type->enum_class : NULL;
+    value->enum_type = enum_type;
+    value->member_index = member_index;
+    value->payload_count = payload_count;
+    for (uint32_t i = 0; i < payload_count; i++)
+        value->payloads[i] = payloads ? payloads[i] : XR_NULL_VAL;
+}
+
+XR_FUNC XrEnumAggregateValue *
+xr_enum_adt_construct_core(XrRuntimeCore *core, struct XrCoroutine *coro, XrEnumType *enum_type,
+                           uint32_t member_index, XrValue *args, int nargs) {
     XR_DCHECK(core != NULL || coro != NULL, "adt_construct_core: NULL owner");
     XR_DCHECK(enum_type != NULL, "adt_construct: NULL enum_type");
-    XR_DCHECK(enum_type->is_adt, "adt_construct: enum is not ADT");
     XR_DCHECK(member_index < enum_type->member_count, "adt_construct: member_index out of bounds");
     if (!xr_enum_type_ensure_adt_class(enum_type))
         return NULL;
 
-    int expected_payload = enum_type->payload_counts[member_index];
+    int expected_payload = xr_enum_type_payload_count(enum_type, member_index);
     int actual_payload = nargs < expected_payload ? nargs : expected_payload;
 
-    /* Instance layout: field[0] = tag (int), field[1..N] = payload.
-     * Total fields = 1 + max_payload (uniform across all variants for
-     * consistent field_count on the shared class). */
-    XrClass *klass = enum_type->enum_class;
-    XR_DCHECK(klass != NULL, "adt_construct: NULL enum_class");
+    XrValue *payloads = NULL;
+    XrValue local_payloads[8];
+    if (expected_payload > 0) {
+        payloads = expected_payload <= (int) (sizeof(local_payloads) / sizeof(local_payloads[0]))
+                       ? local_payloads
+                       : (XrValue *) xr_malloc((size_t) expected_payload * sizeof(XrValue));
+        if (!payloads)
+            return NULL;
+        for (int i = 0; i < actual_payload; i++)
+            payloads[i] = args ? args[i] : XR_NULL_VAL;
+        for (int i = actual_payload; i < expected_payload; i++)
+            payloads[i] = XR_NULL_VAL;
+    }
 
-    XrInstance *inst = xr_instance_new_core(core, coro, klass);
-    if (!inst)
+    size_t size = xr_enum_aggregate_size((uint32_t) expected_payload);
+    XrEnumAggregateValue *value = NULL;
+    if (coro) {
+        value = (XrEnumAggregateValue *) xr_alloc(coro, size, XR_TINSTANCE);
+    } else if (core) {
+        value = (XrEnumAggregateValue *) xr_fixed_heap_alloc(&core->fixed_heap, size, XR_TINSTANCE);
+    }
+    if (!value) {
+        if (payloads && payloads != local_payloads)
+            xr_free(payloads);
         return NULL;
-
-    /* field[0] = int tag. Metadata such as names stays on enum_type. */
-    inst->fields[0] = xr_int((int64_t) member_index);
-
-    /* field[1..payload_count] = args */
-    for (int i = 0; i < actual_payload; i++) {
-        inst->fields[1 + i] = args[i];
-    }
-    /* Zero remaining payload slots (when variant has fewer than max_payload) */
-    for (int i = actual_payload; i < enum_type->max_payload; i++) {
-        inst->fields[1 + i] = xr_null();
     }
 
-    return inst;
+    xr_obj_header_init_type(&value->hdr, XR_TINSTANCE);
+    xr_enum_aggregate_init_inplace(value, enum_type, member_index, payloads,
+                                   (uint32_t) expected_payload);
+    if (expected_payload > 0) {
+        XR_OBJ_SET_FLAG(&value->hdr, XR_OBJ_CYCLE_CANDIDATE);
+        value->hdr._rsv = XR_CYCLE_NOT_IN_ROOTS;
+    }
+    if (payloads && payloads != local_payloads)
+        xr_free(payloads);
+
+    return value;
 }
 
-XR_FUNC XrInstance *xr_enum_adt_construct(XrVMRuntime *X, XrEnumType *enum_type,
-                                          uint32_t member_index, XrValue *args, int nargs) {
+XrEnumAggregateValue *xr_enum_zero_payload_value(XrVMRuntime *X, XrEnumType *enum_type,
+                                                 uint32_t member_index) {
+    if (!X || !enum_type || member_index >= enum_type->member_count)
+        return NULL;
+    if (xr_enum_type_payload_count(enum_type, member_index) != 0)
+        return NULL;
+    XrEnumAggregateValue *value = enum_type->members[member_index].value;
+    if (value)
+        return value;
+    value = xr_enum_adt_construct_core(xr_isolate_get_runtime_core(X), NULL, enum_type,
+                                       member_index, NULL, 0);
+    enum_type->members[member_index].value = value;
+    return value;
+}
+
+XR_FUNC XrEnumAggregateValue *xr_enum_adt_construct(XrVMRuntime *X, XrEnumType *enum_type,
+                                                    uint32_t member_index, XrValue *args,
+                                                    int nargs) {
     return xr_enum_adt_construct_core(xr_isolate_get_runtime_core(X), xr_current_coro(X), enum_type,
                                       member_index, args, nargs);
 }
 
-/* Release malloc-backed side resources owned by the enum value.
+bool xr_value_is_enum_aggregate(XrValue value) {
+    if (!XR_IS_PTR(value) || !value.ptr || value.heap_type != XR_TINSTANCE)
+        return false;
+    XrEnumAggregateValue *agg = (XrEnumAggregateValue *) value.ptr;
+    return agg->klass && agg->klass->builtin_kind == XR_BK_ADT_ENUM;
+}
+
+XrEnumAggregateValue *xr_value_to_enum_aggregate(XrValue value) {
+    return xr_value_is_enum_aggregate(value) ? (XrEnumAggregateValue *) value.ptr : NULL;
+}
+
+XrEnumType *xr_enum_aggregate_type(const XrEnumAggregateValue *value) {
+    if (!value)
+        return NULL;
+    if (value->enum_type)
+        return value->enum_type;
+    return value->klass ? (XrEnumType *) value->klass->builtin_data : NULL;
+}
+
+const char *xr_enum_aggregate_member_name(const XrEnumAggregateValue *value) {
+    XrEnumType *type = xr_enum_aggregate_type(value);
+    return type ? xr_enum_type_member_name(type, value->member_index) : NULL;
+}
+
+XrValue xr_enum_aggregate_field_get(const XrEnumAggregateValue *value, int64_t index) {
+    if (!value)
+        return XR_NULL_VAL;
+    if (index == 0)
+        return xr_int((int64_t) value->member_index);
+    if (index > 0 && (uint32_t) index <= value->payload_count)
+        return value->payloads[index - 1];
+    return XR_NULL_VAL;
+}
+
+XrValue xr_enum_aggregate_payload_get(const XrEnumAggregateValue *value, uint32_t index) {
+    if (!value || index >= value->payload_count)
+        return XR_NULL_VAL;
+    return value->payloads[index];
+}
+
+/* Release malloc-backed side resources owned by the enum constructor metadata.
  * The body itself lives on the isolate fixed_heap list and is freed by
  * xr_fixed_heap_cleanup; this hook must NOT call xr_free(obj). */
-void xr_obj_destroy_enum_value(XrObjHeader *obj, XrCoroHeap *owner_heap) {
+void xr_obj_destroy_enum_ctor(XrObjHeader *obj, XrCoroHeap *owner_heap) {
     (void) owner_heap;
     if (!obj)
         return;
     // enum_name / member_name are interned (symbol table owns them).
-    // XrEnumValue currently has no malloc-backed side tables, so this
+    // XrEnumCtor currently has no malloc-backed side tables, so this
     // is a no-op — kept registered to make the owner contract explicit.
 }
 
 /* Release malloc-backed side resources owned by the enum type. The
- * member instances are individually owned by the fixed_heap list, so this
+ * member constructors are individually owned by the fixed_heap list, so this
  * hook only frees the type's own side arrays and the members[] table. */
 void xr_obj_destroy_enum_type(XrObjHeader *obj, XrCoroHeap *owner_heap) {
     (void) owner_heap;
@@ -334,7 +476,7 @@ void xr_obj_destroy_enum_type(XrObjHeader *obj, XrCoroHeap *owner_heap) {
         return;
     XrEnumType *enum_type = (XrEnumType *) obj;
     if (enum_type->members) {
-        // members[].instance bodies are freed by fixed_heap cleanup; this
+        // members[].ctor bodies are freed by fixed_heap cleanup; this
         // table only stores pointers, so freeing the table is enough.
         xr_free(enum_type->members);
         enum_type->members = NULL;
@@ -343,9 +485,9 @@ void xr_obj_destroy_enum_type(XrObjHeader *obj, XrCoroHeap *owner_heap) {
         xr_free(enum_type->symbol_to_index);
         enum_type->symbol_to_index = NULL;
     }
-    if (enum_type->payload_counts) {
-        xr_free(enum_type->payload_counts);
-        enum_type->payload_counts = NULL;
+    if (enum_type->layout) {
+        xr_enum_layout_free(enum_type->layout);
+        enum_type->layout = NULL;
     }
     if (enum_type->owns_enum_class && enum_type->enum_class) {
         xr_free(enum_type->enum_class);
@@ -353,54 +495,4 @@ void xr_obj_destroy_enum_type(XrObjHeader *obj, XrCoroHeap *owner_heap) {
         enum_type->owns_enum_class = false;
     }
     // enum_type->name is interned; not owned.
-}
-
-/* ========== Native Body Descriptors ========== */
-
-// EnumValue body: everything after klass pointer.
-// body_size = sizeof(XrEnumValue) - sizeof(XrObjHeader) - sizeof(XrClass*)
-
-static void enum_value_body_destroy(void *body) {
-    (void) body;
-    // No-op: interned names are not owned.
-}
-
-static XrNativeBodyDesc enum_value_body_desc = {
-    .body_size = sizeof(XrEnumValue) - sizeof(XrObjHeader) - sizeof(XrClass *),
-    .body_align = _Alignof(const char *),
-    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
-    .destroy = enum_value_body_destroy,
-    .deep_copy = NULL,
-    .to_shared = NULL,
-};
-
-static void enum_type_body_destroy(void *body) {
-    // body points to 'name' field (native body start = offsetof(XrEnumType, name)).
-    // Recover the enclosing struct pointer.
-    XrEnumType *et = (XrEnumType *) ((uint8_t *) body - offsetof(XrEnumType, name));
-    if (et->members) {
-        xr_free(et->members);
-        et->members = NULL;
-    }
-    if (et->symbol_to_index) {
-        xr_free(et->symbol_to_index);
-        et->symbol_to_index = NULL;
-    }
-}
-
-static XrNativeBodyDesc enum_type_body_desc = {
-    .body_size = sizeof(XrEnumType) - sizeof(XrObjHeader) - sizeof(XrClass *),
-    .body_align = _Alignof(const char *),
-    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
-    .destroy = enum_type_body_destroy,
-    .deep_copy = NULL,
-    .to_shared = NULL,
-};
-
-XrNativeBodyDesc *xr_enum_value_native_body_desc(void) {
-    return &enum_value_body_desc;
-}
-
-XrNativeBodyDesc *xr_enum_type_native_body_desc(void) {
-    return &enum_type_body_desc;
 }

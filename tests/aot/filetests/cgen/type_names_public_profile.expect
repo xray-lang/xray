@@ -1,0 +1,6 @@
+args=--type-names=public
+contains=xaot-plan v0
+c_contains=xrt_type_register_hot(0, NULL, 0, NULL
+c_contains=xrt_type_set_name(_tid, "PublicBox", NULL)
+c_not_contains=xrt_type_set_name(_tid, "PrivateBox", NULL)
+c_not_contains="PrivateBox"

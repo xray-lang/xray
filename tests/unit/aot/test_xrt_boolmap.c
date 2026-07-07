@@ -57,11 +57,6 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     abort();
 }
 
-static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj) {
-    (void) type_id;
-    (void) obj;
-}
-
 #define ASSERT_TRUE(cond, msg)                                                                     \
     do {                                                                                           \
         if (!(cond)) {                                                                             \

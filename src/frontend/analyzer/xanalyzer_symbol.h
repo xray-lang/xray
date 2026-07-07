@@ -22,6 +22,7 @@
 
 #include "xconsteval.h"
 #include "../../runtime/value/xtype.h"
+#include "../../runtime/value/xenum_layout.h"
 #include "../../runtime/value/xerror_set.h"
 #include "../../runtime/class/xclass_info.h"
 #include "../../base/xdefs.h"
@@ -54,7 +55,25 @@ typedef enum XaMoveState {
 typedef struct XaSymbol XaSymbol;
 typedef struct XaScope XaScope;
 typedef struct XaSymbolLinks XaSymbolLinks;
+typedef struct XaEnumInfo XaEnumInfo;
 struct AstNode;
+
+typedef struct XaEnumVariantInfo {
+    const char *name;
+    int symbol;
+    uint32_t tag;
+    const char **payload_names;
+    XrType **payload_types;
+    uint16_t payload_count;
+} XaEnumVariantInfo;
+
+struct XaEnumInfo {
+    const char *name;
+    uint32_t variant_count;
+    XaEnumVariantInfo *variants;
+    bool is_payload_enum;
+    XrEnumLayout *layout;
+};
 
 // Reference location (for Find References)
 typedef struct XaRefLocation {
@@ -118,11 +137,7 @@ struct XaSymbolLinks {
     struct XrClassInfo *class_info;
 
     // For enum symbols (XA_SYM_ENUM)
-    const char **enum_member_names;  // Enum member names (for exhaustiveness checking)
-    int enum_member_count;
-    bool is_adt_enum;              // true if any variant has payload
-    int *enum_payload_counts;      // Per-variant payload field count (0 = no payload)
-    XrType ***enum_payload_types;  // Per-variant payload type arrays (NULL = no payload)
+    XaEnumInfo *enum_info;
 
     // For module symbols and selective imports.
     const char *module_name;  // Actual module name (may differ from variable name due to alias)
@@ -259,6 +274,13 @@ XR_FUNC XaSymbol *xa_class_info_lookup_member_owner(XrClassInfo *info, const cha
                                                     XrClassInfo **owner_out);
 XR_FUNC XaSymbol *xa_class_info_lookup_instance_member_owner(XrClassInfo *info, const char *name,
                                                              XrClassInfo **owner_out);
+
+// API: Enum metadata
+XR_FUNC XaEnumInfo *xa_enum_info_new(const char *name, uint32_t variant_count);
+XR_FUNC bool xa_enum_info_finalize_layout(XaEnumInfo *info);
+XR_FUNC XaEnumInfo *xa_enum_info_clone(const XaEnumInfo *src);
+XR_FUNC void xa_enum_info_free(XaEnumInfo *info);
+XR_FUNC int xa_enum_info_find_variant(const XaEnumInfo *info, const char *name);
 XR_FUNC XaSymbol *xa_class_info_lookup_static_member_owner(XrClassInfo *info, const char *name,
                                                            XrClassInfo **owner_out);
 

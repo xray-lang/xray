@@ -2,6 +2,16 @@ fn runtimeOnlyInt() -> int {
     return 99
 }
 
+struct BlockPoint {
+    x: int
+    y: int
+}
+
+struct BlockBox {
+    p: BlockPoint
+    tag: int
+}
+
 const BLOCK_SUM = comptime {
     var total = comptime 0
     for (var i = 0; i < 5; i += 1) {
@@ -34,6 +44,11 @@ const BLOCK_TABLE: [int; 3] = comptime {
     var base = comptime 5
     const values: [int; 3] = comptime [base, base + 1, base + 2]
     return values
+}
+
+const BLOCK_POINT = comptime {
+    var y = comptime 4
+    return BlockPoint{x: 3, y: y}
 }
 
 @test
@@ -79,4 +94,22 @@ fn test_comptime_block_returns_fixed_array_value() {
 
     var picked = comptime (BLOCK_TABLE[0] + BLOCK_TABLE[2])
     assert_eq(picked, 12)
+}
+
+@test
+fn test_comptime_block_returns_struct_value() {
+    var point = comptime {
+        var x = comptime 7
+        return BlockPoint{x: x, y: BLOCK_SUM}
+    }
+    assert_eq(point.x, 7)
+    assert_eq(point.y, 10)
+
+    var nested = comptime {
+        const inner = comptime BlockPoint{x: BLOCK_POINT.x, y: BLOCK_POINT.y + 1}
+        return BlockBox{p: inner, tag: BLOCK_SUM + 1}
+    }
+    assert_eq(nested.p.x, 3)
+    assert_eq(nested.p.y, 5)
+    assert_eq(nested.tag, 11)
 }

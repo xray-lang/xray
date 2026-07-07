@@ -162,7 +162,7 @@ XR_FUNC const XiValue *xaot_class_native_receiver_value(const XaotBundle *bundle
     return xaot_class_native_receiver_value_depth(bundle, func, value, 0);
 }
 
-static int xaot_class_native_field_index(const XrStructLayout *layout, const char *field) {
+static int xaot_class_native_field_index(const XrAggregateLayout *layout, const char *field) {
     if (!layout || !field || !layout->field_names)
         return -1;
     for (uint16_t i = 0; i < layout->field_count; i++) {
@@ -179,7 +179,7 @@ static bool xaot_class_native_receiver_field(const XaotBundle *bundle, const XiF
                                              uint16_t *out_idx) {
     XaotClassNativeFunc info = xaot_class_native_func(bundle, func);
     int idx;
-    const XrStructFieldLayout *field;
+    const XrAggregateFieldLayout *field;
 
     if (out_info)
         memset(out_info, 0, sizeof(*out_info));

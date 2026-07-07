@@ -14,6 +14,7 @@ XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void) {
         return NULL;
     ctx->shared_name = "xrt_shared";
     ctx->emit_main = true;
+    ctx->type_name_profile = XI_CGEN_TYPE_NAMES_ALL;
     /* Allocate the grow-on-demand shared-slot / method / import tables at
      * their initial capacity (cg_reserve_* grow them for large modules). */
     ctx->shared_funcs = (const XiFunc **) xr_calloc(CG_INIT_SHARED, sizeof(const XiFunc *));
@@ -78,6 +79,11 @@ XR_FUNC void xi_cgen_ctx_set_emit_main(XiCgenCtx *ctx, bool emit_main) {
 XR_FUNC void xi_cgen_ctx_set_freestanding_profile(XiCgenCtx *ctx, bool freestanding) {
     if (ctx)
         ctx->freestanding_profile = freestanding;
+}
+
+XR_FUNC void xi_cgen_ctx_set_type_name_profile(XiCgenCtx *ctx, XiCgenTypeNameProfile profile) {
+    if (ctx)
+        ctx->type_name_profile = profile;
 }
 
 XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx) {

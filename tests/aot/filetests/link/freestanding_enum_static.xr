@@ -1,0 +1,28 @@
+enum FsMode {
+    Boot,
+    Run,
+    Halt
+}
+
+fn code(m: FsMode) -> int {
+    return match (m) {
+        FsMode.Boot -> 11
+        FsMode.Run -> 22
+        FsMode.Halt -> 33
+    }
+}
+
+@c_export("xray_enum_static")
+fn xray_enum_static(n: int) -> int {
+    var m = FsMode.Boot
+    if (n == 1) {
+        m = FsMode.Run
+    }
+    if (n == 2) {
+        m = FsMode.Halt
+    }
+    if (m == FsMode.Run) {
+        return code(m) + 100
+    }
+    return code(m)
+}

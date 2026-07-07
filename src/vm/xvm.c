@@ -512,7 +512,7 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
         XrClass *_cls = NULL;                                                                      \
         if (xr_value_is_instance(left_val)) {                                                      \
             _cls = xr_instance_get_class(xr_value_to_instance(left_val));                          \
-        } else if (XR_IS_STRUCT_REF(left_val)) {                                                   \
+        } else if (XR_IS_AGG_REF(left_val)) {                                                      \
             _cls = *(XrClass **) xr_to_struct_ptr(left_val);                                       \
         }                                                                                          \
         if (_cls && XCLASS_HAS_OP(_cls, op_flag)) {                                                \

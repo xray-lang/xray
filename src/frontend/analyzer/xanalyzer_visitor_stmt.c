@@ -22,6 +22,213 @@ static bool xa_is_module_level_scope(const XaAnalyzer *analyzer) {
     return analyzer && analyzer->current_scope && analyzer->current_scope->kind == XA_SCOPE_GLOBAL;
 }
 
+static XrAttribute *xa_var_attr(const VarDeclNode *var, AttributeKind kind) {
+    if (!var || !var->attributes)
+        return NULL;
+    for (int i = 0; i < var->attr_count; i++) {
+        if (var->attributes[i] && var->attributes[i]->kind == kind)
+            return var->attributes[i];
+    }
+    return NULL;
+}
+
+static bool xa_var_has_static_data_attr(const VarDeclNode *var) {
+    return xa_var_attr(var, ATTR_SECTION) || xa_var_attr(var, ATTR_USED);
+}
+
+static bool xa_type_has_fixed_layout_data_object(const XrType *type) {
+    return type && (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+           type->instance.class_ref && type->instance.class_ref->struct_layout;
+}
+
+static bool xa_type_supports_const_static_data_object(const XrType *type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_CHAR:
+        case XR_KIND_STRING:
+        case XR_KIND_NULL:
+        case XR_KIND_FIXED_ARRAY:
+        case XR_KIND_TUPLE:
+            return true;
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+            return xa_type_has_fixed_layout_data_object(type);
+        default:
+            return false;
+    }
+}
+
+static void xa_validate_const_static_data_attrs(XaInferContext *ctx, AstNode *node,
+                                                VarDeclNode *var, XaSymbolLinks *links,
+                                                XrType *var_type) {
+    if (!ctx || !node || !var || !xa_var_has_static_data_attr(var))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    if (!xa_freestanding_profile_enabled(ctx->analyzer)) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+            "@section/@used const data is currently only supported in freestanding profile", &loc);
+        return;
+    }
+    XrAttribute *section = xa_var_attr(var, ATTR_SECTION);
+    if (section && (!section->str_arg || section->str_arg[0] == '\0')) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+                                   "@section requires a non-empty section name", &loc);
+        return;
+    }
+    if (!xa_is_module_level_scope(ctx->analyzer) || node->type != AST_CONST_DECL) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+            "@section/@used can only annotate a module-level const data declaration", &loc);
+        return;
+    }
+    if (!links || !links->has_ct_value) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+                                   "@section/@used const data requires a compile-time initializer",
+                                   &loc);
+        return;
+    }
+    if (!xa_type_supports_const_static_data_object(var_type)) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+            "@section/@used const data currently requires a scalar, string, fixed-array, tuple, "
+            "struct, or union static object",
+            &loc);
+    }
+}
+
+static bool xa_freestanding_top_const_aggregate_value_allowed(const XrCtValue *value,
+                                                              bool allow_string_array_elements);
+
+static bool xa_freestanding_top_const_tuple_element_allowed(const XrCtValue *value) {
+    if (!value)
+        return false;
+    switch (value->kind) {
+        case XR_CT_INT:
+        case XR_CT_FLOAT:
+        case XR_CT_BOOL:
+        case XR_CT_CHAR:
+        case XR_CT_STRING:
+            return true;
+        case XR_CT_TUPLE:
+            return xa_freestanding_top_const_aggregate_value_allowed(value, false);
+        default:
+            return false;
+    }
+}
+
+static bool xa_freestanding_top_const_aggregate_scalar_allowed(const XrCtValue *value) {
+    if (!value)
+        return false;
+    switch (value->kind) {
+        case XR_CT_INT:
+        case XR_CT_FLOAT:
+        case XR_CT_BOOL:
+        case XR_CT_CHAR:
+            return true;
+        case XR_CT_FIXED_ARRAY:
+        case XR_CT_STRUCT_VALUE:
+            return xa_freestanding_top_const_aggregate_value_allowed(value, false);
+        default:
+            return false;
+    }
+}
+
+static bool xa_freestanding_top_const_fixed_array_element_allowed(const XrCtValue *value,
+                                                                  bool allow_strings) {
+    if (allow_strings && value && value->kind == XR_CT_STRING)
+        return true;
+    return xa_freestanding_top_const_aggregate_scalar_allowed(value);
+}
+
+static bool xa_freestanding_top_const_struct_field_allowed(const XrCtValue *value) {
+    if (!value)
+        return false;
+    if (value->kind == XR_CT_STRING)
+        return true;
+    if (value->kind == XR_CT_FIXED_ARRAY)
+        return xa_freestanding_top_const_aggregate_value_allowed(value, true);
+    return xa_freestanding_top_const_aggregate_scalar_allowed(value);
+}
+
+static bool xa_freestanding_top_const_aggregate_value_allowed(const XrCtValue *value,
+                                                              bool allow_string_array_elements) {
+    if (!value)
+        return false;
+    switch (value->kind) {
+        case XR_CT_FIXED_ARRAY: {
+            const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
+            if (array->count <= 0 || !array->elements)
+                return false;
+            for (int i = 0; i < array->count; i++) {
+                if (!xa_freestanding_top_const_fixed_array_element_allowed(
+                        &array->elements[i], allow_string_array_elements))
+                    return false;
+            }
+            return true;
+        }
+        case XR_CT_TUPLE: {
+            const XrCtTupleValue *tuple = &value->as.tuple_val;
+            if (tuple->count <= 0 || !tuple->elements)
+                return false;
+            for (int i = 0; i < tuple->count; i++) {
+                if (!xa_freestanding_top_const_tuple_element_allowed(&tuple->elements[i]))
+                    return false;
+            }
+            return true;
+        }
+        case XR_CT_STRUCT_VALUE: {
+            const XrCtStructValue *st = &value->as.struct_val;
+            if (st->field_count <= 0 || !st->field_values)
+                return false;
+            for (int i = 0; i < st->field_count; i++) {
+                if (!xa_freestanding_top_const_struct_field_allowed(&st->field_values[i]))
+                    return false;
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static bool xa_freestanding_top_const_ct_value_allowed(const XrCtValue *value) {
+    if (!value)
+        return false;
+    switch (value->kind) {
+        case XR_CT_INT:
+        case XR_CT_FLOAT:
+        case XR_CT_BOOL:
+        case XR_CT_CHAR:
+        case XR_CT_STRING:
+        case XR_CT_NULL:
+            return true;
+        case XR_CT_FIXED_ARRAY:
+            return xa_freestanding_top_const_aggregate_value_allowed(value, true);
+        case XR_CT_TUPLE:
+        case XR_CT_STRUCT_VALUE:
+            return xa_freestanding_top_const_aggregate_value_allowed(value, false);
+        default:
+            return false;
+    }
+}
+
+static bool xa_freestanding_top_const_allowed(XaInferContext *ctx, VarDeclNode *var) {
+    if (!ctx || !ctx->analyzer || !var || !var->initializer)
+        return false;
+    XrCtValue value = {0};
+    const char *err = NULL;
+    (void) err;
+    if (!xa_consteval_expr(ctx->analyzer, var->initializer, &value, &err))
+        return false;
+    return xa_freestanding_top_const_ct_value_allowed(&value);
+}
+
 XR_FUNC void xa_loop_scope_push(XaInferContext *ctx, XaLoopScope *scope, const char *label,
                                 AstNode *node) {
     if (!ctx || !scope)
@@ -1304,16 +1511,22 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     if (xa_freestanding_profile_enabled(ctx->analyzer) && node->type == AST_SHARED_DECL) {
         xa_freestanding_report_unavailable(
             ctx, node, "shared declaration",
-            "shared storage still requires module initialization; static data sections are a "
-            "future freestanding M3 step");
+            "shared storage still requires module initialization; only explicit const data "
+            "static objects are supported in the current freestanding slice");
     } else if (xa_freestanding_profile_enabled(ctx->analyzer) &&
-               xa_is_module_level_scope(ctx->analyzer)) {
+               xa_is_module_level_scope(ctx->analyzer) &&
+               !(node->type == AST_CONST_DECL && xa_freestanding_top_const_allowed(ctx, var))) {
         xa_freestanding_report_unavailable(
             ctx, node,
             node->type == AST_CONST_DECL ? "top-level const declaration"
                                          : "top-level var declaration",
-            "module storage still requires constructor initialization; move constants inside "
-            "functions until static data sections land in freestanding M3");
+            node->type == AST_CONST_DECL
+                ? "only int/float/bool/char/string/null consteval scalars and recursively scalar "
+                  "fixed-array/tuple/struct initializers are allowed as erased or static data "
+                  "objects in the current freestanding slice"
+                : "module storage still requires constructor initialization; move mutable state "
+                  "inside functions until freestanding global storage has explicit static "
+                  "object lowering");
     }
 
     // Variable declarations must have a type annotation or initializer.
@@ -1453,6 +1666,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                                    "comptime block local binding requires an initializer", &loc);
     }
+    xa_validate_const_static_data_attrs(ctx, node, var, links, var_type);
     links->assign_count = var->initializer ? 1 : 0;
 
     // Detect loop variable context

@@ -319,6 +319,8 @@ AstNode *xr_ast_var_decl(XrCompilerSession *session, const char *name, AstNode *
     node->as.var_decl.is_const = is_const;
     node->as.var_decl.storage_mode = XR_STORAGE_NORMAL;
     node->as.var_decl.type_annotation = NULL;
+    node->as.var_decl.attributes = NULL;
+    node->as.var_decl.attr_count = 0;
     return node;
 }
 
@@ -336,6 +338,8 @@ AstNode *xr_ast_var_decl_with_mode(XrCompilerSession *session, const char *name,
     node->as.var_decl.is_const = type == AST_CONST_DECL;
     node->as.var_decl.storage_mode = storage_mode;
     node->as.var_decl.type_annotation = NULL;
+    node->as.var_decl.attributes = NULL;
+    node->as.var_decl.attr_count = 0;
     return node;
 }
 
@@ -1270,6 +1274,8 @@ AstNode *xr_ast_enum_decl(XrCompilerSession *session, const char *name, AstNode 
         node->as.enum_decl.methods = NULL;
     }
     node->as.enum_decl.method_count = method_count;
+    node->as.enum_decl.attributes = NULL;
+    node->as.enum_decl.attr_count = 0;
 
     // Copy type params
     if (type_param_count > 0 && type_params) {

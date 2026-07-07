@@ -54,7 +54,7 @@ typedef struct XrCtorCallEntry {
     int frame_count;  // frame depth at constructor entry
 } XrCtorCallEntry;
 
-struct XrStructLayout;
+struct XrAggregateLayout;
 
 /* ========== Dynamic Shared Array ========== */
 
@@ -181,13 +181,13 @@ typedef struct XrVMState {
 
     // Isolate-wide value-struct layout registry. STRUCT_REF.heap_type stores
     // this 16-bit id when the payload has no XrClass* header.
-    struct XrStructLayout **struct_layouts;
+    struct XrAggregateLayout **struct_layouts;
     uint16_t struct_layout_count;
     uint16_t struct_layout_capacity;
 
 } XrVMState;
 
-XR_FUNC uint16_t xr_vm_struct_layout_register(XrVMState *vm, struct XrStructLayout *layout);
-XR_FUNC struct XrStructLayout *xr_vm_struct_layout_lookup(XrVMState *vm, uint16_t layout_id);
+XR_FUNC uint16_t xr_vm_struct_layout_register(XrVMState *vm, struct XrAggregateLayout *layout);
+XR_FUNC struct XrAggregateLayout *xr_vm_struct_layout_lookup(XrVMState *vm, uint16_t layout_id);
 
 #endif  // XEXEC_STATE_H

@@ -500,6 +500,8 @@ XrType *xr_type_new_enum(XrVMRuntime *X, const char *enum_name) {
     XrType *type = type_alloc(X, XR_KIND_ENUM);
     if (type && enum_name) {
         type->enum_type.enum_name = enum_name;
+        type->enum_type.layout_id = 0;
+        type->enum_type.layout = NULL;
     }
     return type;
 }
@@ -978,6 +980,8 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
         case XR_KIND_ENUM:
             copy->enum_type.enum_name =
                 type->enum_type.enum_name ? xr_pool_strdup(pool, type->enum_type.enum_name) : NULL;
+            copy->enum_type.layout_id = type->enum_type.layout_id;
+            copy->enum_type.layout = type->enum_type.layout;
             break;
         case XR_KIND_INSTANCE:
         case XR_KIND_CLASS:

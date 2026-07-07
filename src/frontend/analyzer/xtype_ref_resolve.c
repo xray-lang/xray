@@ -336,6 +336,16 @@ static bool ct_eval_struct_literal(XaAnalyzer *analyzer, const AstNode *expr, Xr
 static bool ct_eval_member_access(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
                                   const char **err, uint32_t *stack, int depth) {
     const MemberAccessNode *ma = &expr->as.member_access;
+    if (ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
+        strcmp(ma->object->as.variable.name, "Type") == 0) {
+        int tid = xr_type_from_name(ma->name);
+        if (tid < 0)
+            return ct_fail(err, "unknown TypeId constant");
+        out->kind = XR_CT_INT;
+        out->as.int_val = tid;
+        return true;
+    }
+
     XrCtValue object = {0};
     if (!ct_eval_impl(analyzer, ma->object, &object, err, stack, depth + 1))
         return false;

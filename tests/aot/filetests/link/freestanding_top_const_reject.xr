@@ -1,4 +1,8 @@
-const MAGIC: int = 41
+fn runtimeOnly() -> int {
+    return 41
+}
+
+const MAGIC: int = runtimeOnly()
 
 @c_export("xray_magic")
 fn xray_magic() -> int {

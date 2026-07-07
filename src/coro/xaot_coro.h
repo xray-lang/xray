@@ -238,12 +238,12 @@ XR_FUNC void xr_aot_release_frame_value(struct XrCoroHeap *heap, XrValue value);
 XR_FUNC XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index);
 XR_FUNC XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index,
                                           const char *field);
-XR_FUNC bool xr_aot_runtime_enum_value_info(XrValue value, const char **enum_name,
-                                            const char **member_name, uint32_t *member_index,
-                                            bool *is_adt, int *payload_count);
+XR_FUNC bool xr_aot_runtime_enum_ctor_info(XrValue value, const char **enum_name,
+                                           const char **member_name, uint32_t *member_index,
+                                           uint32_t *layout_id, bool *is_adt, int *payload_count);
 XR_FUNC bool xr_aot_runtime_adt_value_info(XrValue value, const char **enum_name,
                                            const char **member_name, uint32_t *member_index,
-                                           int *payload_count);
+                                           uint32_t *layout_id, int *payload_count);
 XR_FUNC XrValue xr_aot_runtime_adt_payload(XrValue value, int index);
 XR_FUNC XrValue xr_aot_time_now(void);
 XR_FUNC XrValue xr_aot_time_monotonic(void);

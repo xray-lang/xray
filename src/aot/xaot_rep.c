@@ -134,8 +134,8 @@ static bool rep_from_xr_storage(const XrType *type, XrRep storage, XaotRep *out)
     }
 }
 
-static bool struct_layout_has_heap_field_views_depth(const XrStructLayout *sl, int depth) {
-    if (!sl || sl->field_count == 0 || sl->field_count > XR_MAX_STRUCT_FIELDS || depth > 8)
+static bool struct_layout_has_heap_field_views_depth(const XrAggregateLayout *sl, int depth) {
+    if (!sl || sl->field_count == 0 || sl->field_count > XR_MAX_AGG_FIELDS || depth > 8)
         return false;
     for (uint16_t i = 0; i < sl->field_count; i++) {
         uint8_t native_type = sl->fields[i].native_type;
@@ -158,7 +158,7 @@ static bool struct_layout_has_heap_field_views_depth(const XrStructLayout *sl, i
     return true;
 }
 
-static bool struct_layout_has_heap_field_views(const XrStructLayout *sl) {
+static bool struct_layout_has_heap_field_views(const XrAggregateLayout *sl) {
     return struct_layout_has_heap_field_views_depth(sl, 0);
 }
 
@@ -175,12 +175,12 @@ static const XiValue *unwrap_identity_value(const XiValue *v) {
 static const XiValue *trace_fixed_array_field_ref(const XiValue *v) {
     while (v && (xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && v->nargs >= 1)
         v = v->args[0];
-    if (!v || v->op != XI_STRUCT_GET || v->nargs < 1)
+    if (!v || v->op != XI_AGG_GET || v->nargs < 1)
         return NULL;
-    const XrStructLayout *sl = (const XrStructLayout *) v->aux;
+    const XrAggregateLayout *sl = (const XrAggregateLayout *) v->aux;
     if (!sl || v->aux_int < 0 || v->aux_int >= sl->field_count)
         return NULL;
-    const XrStructFieldLayout *field = &sl->fields[v->aux_int];
+    const XrAggregateFieldLayout *field = &sl->fields[v->aux_int];
     return field->native_type == XR_NATIVE_ARRAY && struct_layout_has_heap_field_views(sl) ? v
                                                                                            : NULL;
 }
@@ -188,8 +188,8 @@ static const XiValue *trace_fixed_array_field_ref(const XiValue *v) {
 static bool fixed_array_elem_rep_for_value(const XiValue *value, XaotRep *out) {
     const XiValue *ref;
     const XiValue *container;
-    const XrStructLayout *sl;
-    const XrStructFieldLayout *field;
+    const XrAggregateLayout *sl;
+    const XrAggregateFieldLayout *field;
 
     if (!value)
         return false;
@@ -209,7 +209,7 @@ static bool fixed_array_elem_rep_for_value(const XiValue *value, XaotRep *out) {
     ref = trace_fixed_array_field_ref(value->args[0]);
     if (!ref)
         return false;
-    sl = (const XrStructLayout *) ref->aux;
+    sl = (const XrAggregateLayout *) ref->aux;
     field = &sl->fields[ref->aux_int];
     return xaot_rep_from_native_type(field->elem_native_type, out);
 }

@@ -95,6 +95,8 @@ static const XrCliOptionSpec build_options[] = {
     {"native", 'N', XR_CLI_VALUE_NONE, false, false, NULL, "Use AOT native backend"},
     {"profile", 0, XR_CLI_VALUE_STRING, false, false, "NAME",
      "Build profile: hosted or freestanding"},
+    {"type-names", 0, XR_CLI_VALUE_STRING, false, false, "MODE",
+     "AOT type-name profile: none, public, or all"},
     {"shared", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Build a native shared library for @c_export symbols"},
     {"target", 0, XR_CLI_VALUE_STRING, false, false, "TRIPLE", "AOT target triple"},

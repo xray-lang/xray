@@ -151,10 +151,9 @@ vmcase(OP_TYPENAME) {
         val = R(b);
     }
     const char *type_name = NULL;
-    // For enum values, return enum name (checked before instance
-    // because enum values are also instances with base class "EnumValue")
-    if (XR_IS_ENUM_VALUE(val)) {
-        XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(val);
+    // For payload variant constructors, return the parent enum name.
+    if (XR_IS_ENUM_CTOR(val)) {
+        XrEnumCtor *ev = (XrEnumCtor *) XR_TO_PTR(val);
         if (ev->enum_name)
             type_name = ev->enum_name;
     }
@@ -169,7 +168,7 @@ vmcase(OP_TYPENAME) {
     if (type_name == NULL && XR_IS_SPAN_REF(val)) {
         type_name = "Span";
     }
-    if (type_name == NULL && val.tag == XR_TAG_STRUCT_REF && val.ptr) {
+    if (type_name == NULL && val.tag == XR_TAG_AGG_REF && val.ptr) {
         XrClass *cls = *(XrClass **) val.ptr;
         if (cls && cls->name)
             type_name = cls->name;

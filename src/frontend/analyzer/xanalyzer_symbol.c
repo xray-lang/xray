@@ -22,6 +22,122 @@ static XR_THREAD_LOCAL uint32_t *g_symbol_id_ptr = NULL;
 // Thread-local symbol registry for O(1) ID lookup (set by analyzer)
 static XR_THREAD_LOCAL XrIntMap *g_symbol_registry = NULL;
 
+XaEnumInfo *xa_enum_info_new(const char *name, uint32_t variant_count) {
+    if (!name || variant_count == 0)
+        return NULL;
+    XaEnumInfo *info = (XaEnumInfo *) xr_calloc(1, sizeof(*info));
+    if (!info)
+        return NULL;
+    info->variants =
+        (XaEnumVariantInfo *) xr_calloc((size_t) variant_count, sizeof(*info->variants));
+    if (!info->variants) {
+        xr_free(info);
+        return NULL;
+    }
+    info->name = name;
+    info->variant_count = variant_count;
+    for (uint32_t i = 0; i < variant_count; i++) {
+        info->variants[i].symbol = -1;
+        info->variants[i].tag = i;
+    }
+    return info;
+}
+
+bool xa_enum_info_finalize_layout(XaEnumInfo *info) {
+    if (!info || !info->variants || info->variant_count == 0)
+        return false;
+
+    const char **names = (const char **) xr_malloc(sizeof(*names) * (size_t) info->variant_count);
+    int *payload_counts = (int *) xr_calloc((size_t) info->variant_count, sizeof(int));
+    if (!names || !payload_counts) {
+        if (names)
+            xr_free(names);
+        if (payload_counts)
+            xr_free(payload_counts);
+        return false;
+    }
+
+    bool has_payloads = false;
+    for (uint32_t i = 0; i < info->variant_count; i++) {
+        names[i] = info->variants[i].name;
+        payload_counts[i] = info->variants[i].payload_count;
+        if (info->variants[i].payload_count > 0)
+            has_payloads = true;
+    }
+
+    XrEnumLayout *layout = xr_enum_layout_new(info->name, names, info->variant_count);
+    if (layout && has_payloads &&
+        !xr_enum_layout_set_payload_counts(layout, payload_counts, info->variant_count)) {
+        xr_enum_layout_free(layout);
+        layout = NULL;
+    }
+    xr_free(names);
+    xr_free(payload_counts);
+
+    if (!layout)
+        return false;
+    if (info->layout)
+        xr_enum_layout_free(info->layout);
+    info->layout = layout;
+    info->is_payload_enum = !layout->is_zero_payload;
+    return true;
+}
+
+XaEnumInfo *xa_enum_info_clone(const XaEnumInfo *src) {
+    if (!src)
+        return NULL;
+    XaEnumInfo *dst = xa_enum_info_new(src->name, src->variant_count);
+    if (!dst)
+        return NULL;
+    for (uint32_t i = 0; i < src->variant_count; i++) {
+        const XaEnumVariantInfo *sv = &src->variants[i];
+        XaEnumVariantInfo *dv = &dst->variants[i];
+        dv->name = sv->name;
+        dv->symbol = sv->symbol;
+        dv->tag = sv->tag;
+        dv->payload_names = sv->payload_names;
+        dv->payload_count = sv->payload_count;
+        if (sv->payload_count > 0 && sv->payload_types) {
+            dv->payload_types =
+                (XrType **) xr_malloc((size_t) sv->payload_count * sizeof(XrType *));
+            if (dv->payload_types)
+                memcpy(dv->payload_types, sv->payload_types,
+                       (size_t) sv->payload_count * sizeof(XrType *));
+        }
+    }
+    if (!xa_enum_info_finalize_layout(dst)) {
+        xa_enum_info_free(dst);
+        return NULL;
+    }
+    return dst;
+}
+
+void xa_enum_info_free(XaEnumInfo *info) {
+    if (!info)
+        return;
+    if (info->variants) {
+        for (uint32_t i = 0; i < info->variant_count; i++) {
+            if (info->variants[i].payload_types)
+                xr_free(info->variants[i].payload_types);
+        }
+        xr_free(info->variants);
+    }
+    if (info->layout)
+        xr_enum_layout_free(info->layout);
+    xr_free(info);
+}
+
+int xa_enum_info_find_variant(const XaEnumInfo *info, const char *name) {
+    if (!info || !name)
+        return -1;
+    for (uint32_t i = 0; i < info->variant_count; i++) {
+        const char *variant_name = info->variants[i].name;
+        if (variant_name && strcmp(variant_name, name) == 0)
+            return (int) i;
+    }
+    return -1;
+}
+
 // Set current symbol ID counter (called by XaAnalyzer before analysis)
 void xa_symbol_set_id_counter(uint32_t *counter) {
     g_symbol_id_ptr = counter;
@@ -87,16 +203,10 @@ static void links_release_dynamic(XaSymbolLinks *links) {
     }
     if (links->type_param_constraint_counts)
         xr_free(links->type_param_constraint_counts);
-    // ADT enum payload metadata
-    if (links->enum_payload_types) {
-        for (int i = 0; i < links->enum_member_count; i++) {
-            if (links->enum_payload_types[i])
-                xr_free(links->enum_payload_types[i]);
-        }
-        xr_free(links->enum_payload_types);
+    if (links->enum_info) {
+        xa_enum_info_free(links->enum_info);
+        links->enum_info = NULL;
     }
-    if (links->enum_payload_counts)
-        xr_free(links->enum_payload_counts);
     XaRefLocation *ref = links->references;
     while (ref) {
         XaRefLocation *next = ref->next;
@@ -656,31 +766,7 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     }
 
     dst->class_info = src->class_info;
-    dst->enum_member_names = src->enum_member_names;
-    dst->enum_member_count = src->enum_member_count;
-    dst->is_adt_enum = src->is_adt_enum;
-    if (src->enum_member_count > 0 && src->enum_payload_counts) {
-        dst->enum_payload_counts = xr_malloc((size_t) src->enum_member_count * sizeof(int));
-        if (dst->enum_payload_counts) {
-            memcpy(dst->enum_payload_counts, src->enum_payload_counts,
-                   (size_t) src->enum_member_count * sizeof(int));
-        }
-    }
-    if (src->enum_member_count > 0 && src->enum_payload_types) {
-        dst->enum_payload_types = xr_calloc((size_t) src->enum_member_count, sizeof(XrType **));
-        if (dst->enum_payload_types) {
-            for (int i = 0; i < src->enum_member_count; i++) {
-                int pc = src->enum_payload_counts ? src->enum_payload_counts[i] : 0;
-                if (pc <= 0 || !src->enum_payload_types[i])
-                    continue;
-                XrType **copy = xr_malloc((size_t) pc * sizeof(XrType *));
-                if (!copy)
-                    continue;
-                memcpy(copy, src->enum_payload_types[i], (size_t) pc * sizeof(XrType *));
-                dst->enum_payload_types[i] = copy;
-            }
-        }
-    }
+    dst->enum_info = xa_enum_info_clone(src->enum_info);
 
     dst->module_name = src->module_name;
     dst->import_member_name = src->import_member_name;

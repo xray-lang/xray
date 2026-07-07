@@ -17,6 +17,7 @@
 #include "xrt_coll.h"  // forward-declares xrt_throw_exc (div/mod by zero); the
                        // definition is provided by xrt_exception.h in the full
                        // xrt.h build and by the host TU in standalone unit tests
+#include "xrt_class.h"
 #include "../shared/xr_int_arith.h"
 
 /* =========================================================================
@@ -210,25 +211,22 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
             xrt_fmt_cstr(sb, "null");
             return;
         case XR_TAG_ENUM: {
-            const XrAotEnumValueView *ev = xrt_enum_value_view(v);
-            if (!ev) {
+            const char *enum_name = NULL;
+            const char *member_name = NULL;
+            if (!xrt_enum_key_parts(v, &enum_name, &member_name, NULL, NULL)) {
                 xrt_fmt_cstr(sb, "<enum>");
                 return;
             }
-            if (ev->enum_name)
-                xrt_fmt_cstr(sb, ev->enum_name);
-            else
-                xrt_fmt_cstr(sb, "<enum>");
+            xrt_fmt_cstr(sb, enum_name ? enum_name : "<enum>");
             xrt_fmt_char(sb, '.');
-            xrt_fmt_cstr(sb, ev->member_name ? ev->member_name : "?");
-            if (ev->payload_count > 0) {
+            xrt_fmt_cstr(sb, member_name ? member_name : "?");
+            const XrAotEnumBox *ev = xrt_enum_box_view(v);
+            if (ev && ev->payload_count > 0) {
                 xrt_fmt_char(sb, '(');
                 for (uint32_t i = 0; i < ev->payload_count; i++) {
                     if (i > 0)
                         xrt_fmt_cstr(sb, ", ");
-                    XrValue payload =
-                        ev->payloads ? ev->payloads[i] : (i == 0 ? ev->payload0 : XR_NULL_VAL);
-                    xrt_format_value(payload, sb, depth + 1);
+                    xrt_format_value(ev->payloads[i], sb, depth + 1);
                 }
                 xrt_fmt_char(sb, ')');
             }
@@ -338,6 +336,31 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
             xrt_fmt_char(sb, ']');
             return;
         }
+        case XR_TAG_PTR: {
+            if (v.heap_type != XR_TINSTANCE || !v.ptr)
+                break;
+            XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
+            const XrtTypeInfo *ti = xrt_type_info(hdr ? hdr->type : 0);
+            const char *type_name = ti ? xrt_type_display_name(ti->type_id) : "<object>";
+            const XrtTypeDeriveInfo *di = ti ? xrt_type_derive_info(ti->type_id) : NULL;
+            xrt_fmt_cstr(sb, type_name ? type_name : "<object>");
+            if (!di || (di->derive_flags & XR_DERIVE_INSPECT) == 0 ||
+                (di->inspect_field_count > 0 && !di->inspect_fields)) {
+                xrt_fmt_cstr(sb, "{...}");
+                return;
+            }
+            xrt_fmt_char(sb, '{');
+            for (uint16_t i = 0; i < di->inspect_field_count; i++) {
+                const XrtInspectField *field = &di->inspect_fields[i];
+                if (i > 0)
+                    xrt_fmt_cstr(sb, ", ");
+                xrt_fmt_cstr(sb, field->name ? field->name : "?");
+                xrt_fmt_cstr(sb, ": ");
+                xrt_format_value(xrt_inspect_field_value(v.ptr, field), sb, depth + 1);
+            }
+            xrt_fmt_char(sb, '}');
+            return;
+        }
         default: {
             char buf[32];
             int n = snprintf(buf, sizeof(buf), "<object@%p>", v.ptr);
@@ -414,8 +437,8 @@ static inline int64_t xrt_typeof_id(XrValue v) {
     }
 }
 
-/* typename(x) — return type name as a static literal string value */
-static inline XrValue xrt_typeof_str(XrValue v) {
+/* typename(x) — return the debug/logging type name as a string value. */
+static inline XrValue xrt_typename(XrValue v) {
     XRT_STR_LIT_DEF(xs_int, "int");
     XRT_STR_LIT_DEF(xs_float, "float");
     XRT_STR_LIT_DEF(xs_bool, "bool");
@@ -461,14 +484,21 @@ static inline XrValue xrt_typeof_str(XrValue v) {
         case XR_TAG_RANGE:
             return xr_str_lit(&xs_range);
         case XR_TAG_ENUM: {
-            const XrAotEnumValueView *ev = xrt_enum_value_view(v);
-            return ev && ev->enum_name ? xr_box_str(ev->enum_name) : xr_str_lit(&xs_object);
+            const char *enum_name = NULL;
+            return xrt_enum_key_parts(v, &enum_name, NULL, NULL, NULL) && enum_name
+                       ? xr_box_str(enum_name)
+                       : xr_str_lit(&xs_object);
         }
         case XR_TAG_PTR:
             if (v.ptr && v.heap_type == 0) {
                 const xrt_json_t *obj = (const xrt_json_t *) v.ptr;
                 return obj->object_kind == XRT_OBJECT_RECORD ? xr_str_lit(&xs_record)
                                                              : xr_str_lit(&xs_json);
+            }
+            if (v.ptr && v.heap_type == XR_TINSTANCE) {
+                XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
+                const char *name = hdr ? xrt_type_display_name(hdr->type) : NULL;
+                return name ? xr_box_str(name) : xr_str_lit(&xs_object);
             }
             return xr_str_lit(&xs_object);
         default:

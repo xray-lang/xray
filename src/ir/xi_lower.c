@@ -921,6 +921,28 @@ static bool prescan_is_user_owned_decl(AstNode *s) {
     return s && s->line > 0;
 }
 
+static XrAttribute *prescan_var_attr(const VarDeclNode *var, AttributeKind kind) {
+    if (!var || !var->attributes)
+        return NULL;
+    for (int i = 0; i < var->attr_count; i++) {
+        if (var->attributes[i] && var->attributes[i]->kind == kind)
+            return var->attributes[i];
+    }
+    return NULL;
+}
+
+static void prescan_apply_const_data_attrs(XiLower *l, const VarDeclNode *var,
+                                           XiConstLiteral *lit) {
+    if (!l || !var || !lit)
+        return;
+    XrAttribute *section = prescan_var_attr(var, ATTR_SECTION);
+    XrAttribute *used = prescan_var_attr(var, ATTR_USED);
+    if (section && section->str_arg && section->str_arg[0])
+        lit->data_section = arena_strdup(l->func, section->str_arg);
+    if (used)
+        lit->data_used = true;
+}
+
 typedef struct PrescanSlotMeta {
     const char **export_names;
     const char **owned_names;
@@ -1014,6 +1036,152 @@ static bool const_literal_from_ast(XiLower *l, AstNode *expr, struct XrType *typ
         case AST_LITERAL_NULL:
             out->kind = XI_CONST_LITERAL_NULL;
             out->type = type ? type : l->type_null;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static XrCtValue *copy_ct_value_to_func(XiFunc *func, const XrCtValue *src) {
+    if (!func || !src)
+        return NULL;
+    XrCtValue *dst = (XrCtValue *) xi_func_arena_alloc(func, (uint32_t) sizeof(XrCtValue));
+    if (!dst)
+        return NULL;
+    *dst = *src;
+    switch (src->kind) {
+        case XR_CT_STRING:
+            dst->as.string_val = arena_strdup(func, src->as.string_val);
+            if (src->as.string_val && !dst->as.string_val)
+                return NULL;
+            break;
+        case XR_CT_FIXED_ARRAY: {
+            int count = src->as.fixed_array_val.count;
+            dst->as.fixed_array_val.elements = NULL;
+            if (count > 0) {
+                XrCtValue *elements = (XrCtValue *) xi_func_arena_alloc(
+                    func, (uint32_t) ((size_t) count * sizeof(XrCtValue)));
+                if (!elements)
+                    return NULL;
+                dst->as.fixed_array_val.elements = elements;
+                for (int i = 0; i < count; i++) {
+                    XrCtValue *copy =
+                        copy_ct_value_to_func(func, &src->as.fixed_array_val.elements[i]);
+                    if (!copy)
+                        return NULL;
+                    elements[i] = *copy;
+                }
+            }
+            break;
+        }
+        case XR_CT_TUPLE: {
+            int count = src->as.tuple_val.count;
+            dst->as.tuple_val.elements = NULL;
+            if (count > 0) {
+                XrCtValue *elements = (XrCtValue *) xi_func_arena_alloc(
+                    func, (uint32_t) ((size_t) count * sizeof(XrCtValue)));
+                if (!elements)
+                    return NULL;
+                dst->as.tuple_val.elements = elements;
+                for (int i = 0; i < count; i++) {
+                    XrCtValue *copy = copy_ct_value_to_func(func, &src->as.tuple_val.elements[i]);
+                    if (!copy)
+                        return NULL;
+                    elements[i] = *copy;
+                }
+            }
+            break;
+        }
+        case XR_CT_STRUCT_VALUE: {
+            int count = src->as.struct_val.field_count;
+            dst->as.struct_val.struct_name = arena_strdup(func, src->as.struct_val.struct_name);
+            dst->as.struct_val.field_names = NULL;
+            dst->as.struct_val.field_values = NULL;
+            if (src->as.struct_val.struct_name && !dst->as.struct_val.struct_name)
+                return NULL;
+            if (count > 0) {
+                const char **names = (const char **) xi_func_arena_alloc(
+                    func, (uint32_t) ((size_t) count * sizeof(const char *)));
+                XrCtValue *values = (XrCtValue *) xi_func_arena_alloc(
+                    func, (uint32_t) ((size_t) count * sizeof(XrCtValue)));
+                if (!names || !values)
+                    return NULL;
+                dst->as.struct_val.field_names = names;
+                dst->as.struct_val.field_values = values;
+                for (int i = 0; i < count; i++) {
+                    names[i] = arena_strdup(func, src->as.struct_val.field_names
+                                                      ? src->as.struct_val.field_names[i]
+                                                      : NULL);
+                    if (src->as.struct_val.field_names && src->as.struct_val.field_names[i] &&
+                        !names[i])
+                        return NULL;
+                    XrCtValue *copy =
+                        copy_ct_value_to_func(func, &src->as.struct_val.field_values[i]);
+                    if (!copy)
+                        return NULL;
+                    values[i] = *copy;
+                }
+            }
+            break;
+        }
+        case XR_CT_NONE:
+            return NULL;
+        case XR_CT_INT:
+        case XR_CT_FLOAT:
+        case XR_CT_BOOL:
+        case XR_CT_CHAR:
+        case XR_CT_NULL:
+            break;
+    }
+    return dst;
+}
+
+static bool const_literal_from_ct_value(XiLower *l, const XrCtValue *value, struct XrType *type,
+                                        XiConstLiteral *out) {
+    if (!l || !value || !out)
+        return false;
+    memset(out, 0, sizeof(*out));
+    out->type = type;
+    switch (value->kind) {
+        case XR_CT_INT:
+            out->kind = XI_CONST_LITERAL_INT;
+            out->type = type ? type : l->type_int;
+            out->int_value = value->as.int_val;
+            return true;
+        case XR_CT_FLOAT:
+            out->kind = XI_CONST_LITERAL_FLOAT;
+            out->type = type ? type : l->type_float;
+            out->float_value = value->as.float_val;
+            return true;
+        case XR_CT_BOOL:
+            out->kind = XI_CONST_LITERAL_BOOL;
+            out->type = type ? type : l->type_bool;
+            out->bool_value = value->as.bool_val;
+            return true;
+        case XR_CT_CHAR:
+            out->kind = XI_CONST_LITERAL_CHAR;
+            out->type = type ? type : l->type_char;
+            out->int_value = (int64_t) value->as.char_val;
+            return true;
+        case XR_CT_STRING:
+            if (!value->as.string_val)
+                return false;
+            out->kind = XI_CONST_LITERAL_STRING;
+            out->type = type ? type : l->type_string;
+            out->string_value = arena_strdup(l->func, value->as.string_val);
+            return out->string_value != NULL;
+        case XR_CT_NULL:
+            out->kind = XI_CONST_LITERAL_NULL;
+            out->type = type ? type : l->type_null;
+            return true;
+        case XR_CT_FIXED_ARRAY:
+        case XR_CT_TUPLE:
+        case XR_CT_STRUCT_VALUE:
+            out->ct_value = copy_ct_value_to_func(l->func, value);
+            if (!out->ct_value)
+                return false;
+            out->kind = XI_CONST_LITERAL_COMPTIME_AGGREGATE;
+            out->type = type;
             return true;
         default:
             return false;
@@ -1163,8 +1331,18 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
         }
         if (is_const && s && s->type == AST_CONST_DECL && s->as.var_decl.initializer) {
             XiConstLiteral lit;
-            if (const_literal_from_ast(l, s->as.var_decl.initializer, type, &lit))
+            XaSymbol *sym = (l->analyzer && sid != 0)
+                                ? xa_scope_lookup_by_id(l->analyzer->global_scope, sid)
+                                : NULL;
+            XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
+            if (const_literal_from_ast(l, s->as.var_decl.initializer, type, &lit)) {
+                prescan_apply_const_data_attrs(l, &s->as.var_decl, &lit);
                 slot_meta.const_literals[next_shared] = lit;
+            } else if (links && links->has_ct_value &&
+                       const_literal_from_ct_value(l, &links->ct_value, type, &lit)) {
+                prescan_apply_const_data_attrs(l, &s->as.var_decl, &lit);
+                slot_meta.const_literals[next_shared] = lit;
+            }
         }
         if (is_exported)
             slot_meta.export_names[next_shared] = name;

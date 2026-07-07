@@ -12,15 +12,16 @@
 #include "xtype.h"
 #include "xtype_names.h"
 #include "../../base/xchecks.h"
+#include "../class/xenum.h"
 #include "../class/xinstance.h"
 
 static const XrTypeId tag_to_typeid[8] = {
-    [XR_TAG_NULL] = XR_TID_NULL,       [XR_TAG_BOOL] = XR_TID_BOOL,     [XR_TAG_CHAR] = XR_TID_CHAR,
-    [XR_TAG_I64] = XR_TID_INT,         [XR_TAG_F64] = XR_TID_FLOAT,     [XR_TAG_PTR] = XR_TID_NULL,
-    [XR_TAG_STRUCT_REF] = XR_TID_NULL, [XR_TAG_NOTFOUND] = XR_TID_NULL,
+    [XR_TAG_NULL] = XR_TID_NULL,    [XR_TAG_BOOL] = XR_TID_BOOL,     [XR_TAG_CHAR] = XR_TID_CHAR,
+    [XR_TAG_I64] = XR_TID_INT,      [XR_TAG_F64] = XR_TID_FLOAT,     [XR_TAG_PTR] = XR_TID_NULL,
+    [XR_TAG_AGG_REF] = XR_TID_NULL, [XR_TAG_NOTFOUND] = XR_TID_NULL,
 };
 
-static const XrTypeId gctype_to_typeid[XR_TTHREAD + 1] = {
+static const XrTypeId gctype_to_typeid[XR_TENUM_CTOR + 1] = {
     [XR_TNULL] = XR_TID_NULL,
     [XR_TBOOL] = XR_TID_BOOL,
     [XR_TINT] = XR_TID_INT,
@@ -48,6 +49,8 @@ static const XrTypeId gctype_to_typeid[XR_TTHREAD + 1] = {
     [XR_TSEMAPHORE] = XR_TID_SEMAPHORE,
     [XR_TEVENTCOUNT] = XR_TID_EVENTCOUNT,
     [XR_TTHREAD] = XR_TID_THREAD,
+    [XR_TENUM_TYPE] = XR_TID_ENUM_TYPE,
+    [XR_TENUM_CTOR] = XR_TID_FUNCTION,
 };
 
 XrTypeId xr_value_typeid(XrValue v) {
@@ -68,10 +71,8 @@ XrTypeId xr_value_typeid(XrValue v) {
                             return XR_TID_RECORD;
                         case XR_BK_STRINGBUILDER:
                             return XR_TID_STRINGBUILDER;
-                        case XR_BK_ENUM_VALUE:
+                        case XR_BK_ADT_ENUM:
                             return XR_TID_ENUM_VALUE;
-                        case XR_BK_ENUM_TYPE:
-                            return XR_TID_ENUM_TYPE;
                         case XR_BK_ITERATOR:
                             return XR_TID_ITERATOR;
                         case XR_BK_REGEX:

@@ -1,0 +1,10 @@
+args=--type-names=none
+contains=xaot-plan v0
+c_contains=xrt_type_register_hot(0, NULL, 0, NULL
+c_contains=xrt_type_set_generic_origin(_tid,
+c_not_contains=xrt_type_set_name(
+c_not_contains=xrt_type_set_generic_name(
+c_not_contains=static const char *_ta_
+c_not_contains="Box"
+c_not_contains="int"
+c_not_contains=xrt_type_internal_name_eq(

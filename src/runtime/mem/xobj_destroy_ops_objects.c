@@ -17,6 +17,8 @@ void xr_runtime_core_enable_object_destroy_ops(struct XrRuntimeCore *core) {
     xr_runtime_core_set_destroy_op(core, XR_TMAP, xr_obj_destroy_map);
     xr_runtime_core_set_destroy_op(core, XR_TSET, xr_obj_destroy_set);
     xr_runtime_core_set_destroy_op(core, XR_TINSTANCE, xr_obj_destroy_instance);
+    xr_runtime_core_set_destroy_op(core, XR_TENUM_TYPE, xr_obj_destroy_enum_type);
+    xr_runtime_core_set_destroy_op(core, XR_TENUM_CTOR, xr_obj_destroy_enum_ctor);
     xr_runtime_core_set_destroy_op(core, XR_TFUNCTION, xr_obj_destroy_closure);
     xr_runtime_core_set_destroy_op(core, XR_TCELL, xr_obj_destroy_cell);
 }

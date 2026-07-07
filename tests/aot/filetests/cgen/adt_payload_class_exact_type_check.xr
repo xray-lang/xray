@@ -1,0 +1,30 @@
+class Box {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+enum Payload<T> {
+    Item(T),
+    Empty
+}
+
+fn make() -> Payload<Box> {
+    return Payload.Item(Box(7))
+}
+
+fn score() -> int {
+    var payload = make()
+    match (payload) {
+        Payload.Item(box) -> {
+            return box.value
+        }
+        Payload.Empty -> {
+            return 0
+        }
+    }
+}
+
+print(score())

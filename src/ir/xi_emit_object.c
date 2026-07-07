@@ -131,9 +131,9 @@ static bool struct_uses_safe_depth(EmitCtx *ctx, XiValue *target, XiValue *origi
                 if (v->args[a] != target)
                     continue;
                 switch ((XiOp) v->op) {
-                    case XI_STRUCT_GET:
+                    case XI_AGG_GET:
                         break;
-                    case XI_STRUCT_SET:
+                    case XI_AGG_SET:
                         /* Safe only as args[0] (the container receiving the write).
                          * As args[1] (the stored value), this struct escapes into
                          * another struct's field — must be heap-allocated. */
@@ -166,14 +166,14 @@ static bool struct_uses_safe_depth(EmitCtx *ctx, XiValue *target, XiValue *origi
 }
 
 /* Returns true if the struct never escapes local value operations and is safe
- * for stack allocation via OP_NEW_STRUCT. */
+ * for stack allocation via OP_AGG_NEW. */
 static bool struct_can_stack_alloc(EmitCtx *ctx, XiValue *target) {
     XiValue *origin = xi_emit_trace_struct_origin(target);
     return origin == target && struct_uses_safe_depth(ctx, target, origin, 0);
 }
 
 /* Struct new: decide stack vs heap at emit time.
- * Stack path: OP_NEW_STRUCT (frame struct_area, zero heap allocation).
+ * Stack path: OP_AGG_NEW (frame struct_area, zero heap allocation).
  * Heap path:  OP_INVOKE(constructor) (normal object allocation). */
 XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
@@ -181,11 +181,11 @@ XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
     }
 
-    XrStructLayout *layout = (XrStructLayout *) v->aux;
-    XR_DCHECK(layout != NULL, "XI_STRUCT_NEW: missing struct layout");
+    XrAggregateLayout *layout = (XrAggregateLayout *) v->aux;
+    XR_DCHECK(layout != NULL, "XI_AGG_NEW: missing struct layout");
 
     if (struct_can_stack_alloc(ctx, v)) {
-        /* Stack path: OP_NEW_STRUCT */
+        /* Stack path: OP_AGG_NEW */
         XiEmitReg cls_reg = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
@@ -194,7 +194,7 @@ XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         if (!xi_emit_alloc_struct_area_slot(ctx, layout, &slot))
             return;
 
-        emit_inst(ctx, CREATE_ABC(OP_NEW_STRUCT, dst, cls_reg, slot));
+        emit_inst(ctx, CREATE_ABC(OP_AGG_NEW, dst, cls_reg, slot));
         v->aux_int |= XI_EMIT_STRUCT_PROMOTED_BIT;
     } else {
         /* Heap path: emit OP_INVOKE(constructor, 0 args).
@@ -233,7 +233,7 @@ XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 }
 
 /* Struct get: read field.
- * Stack-promoted → OP_STRUCT_GET (direct native field read).
+ * Stack-promoted → OP_AGG_GET (direct native field read).
  * Heap fallback  → OP_GETPROP   (property lookup by name). */
 XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
@@ -242,26 +242,26 @@ XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
-    bool promoted = (origin && origin->op == XI_STRUCT_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin));
+    bool promoted = (origin && origin->op == XI_AGG_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin));
 
     XiEmitReg obj = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
 
     if (promoted) {
-        XR_DCHECK(v->aux_int >= 0 && v->aux_int < XR_MAX_STRUCT_FIELDS,
-                  "XI_STRUCT_GET: field_idx out of range");
+        XR_DCHECK(v->aux_int >= 0 && v->aux_int < XR_MAX_AGG_FIELDS,
+                  "XI_AGG_GET: field_idx out of range");
         uint16_t field_arg = 0;
         if (!xi_emit_index_to_arg(ctx, v->aux_int, XI_EMIT_ERR_INTERNAL, &field_arg))
             return;
-        emit_inst(ctx, CREATE_ABC(OP_STRUCT_GET, dst, obj, field_arg));
+        emit_inst(ctx, CREATE_ABC(OP_AGG_GET, dst, obj, field_arg));
     } else {
         /* Heap path: OP_GETPROP with field name from layout */
-        XrStructLayout *sl = (XrStructLayout *) v->aux;
+        XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         const char *fname = (sl && sl->field_names && v->aux_int < sl->field_count)
                                 ? sl->field_names[v->aux_int]
                                 : NULL;
-        XR_DCHECK(fname != NULL, "XI_STRUCT_GET: missing field name");
+        XR_DCHECK(fname != NULL, "XI_AGG_GET: missing field name");
         int sym = add_symbol(ctx, fname);
         if (ctx->status != XI_EMIT_OK)
             return;
@@ -273,7 +273,7 @@ XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 }
 
 /* Struct set: write field.
- * Stack-promoted → OP_STRUCT_SET (direct native field write).
+ * Stack-promoted → OP_AGG_SET (direct native field write).
  * Heap fallback  → OP_SETPROP   (property store by name). */
 XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
@@ -283,7 +283,7 @@ XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
-    bool promoted = (origin && origin->op == XI_STRUCT_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin));
+    bool promoted = (origin && origin->op == XI_AGG_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin));
 
     XiEmitReg obj = reg_of(ctx, v->args[0]);
     XiEmitReg val = reg_of(ctx, v->args[1]);
@@ -291,19 +291,19 @@ XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
 
     if (promoted) {
-        XR_DCHECK(v->aux_int >= 0 && v->aux_int < XR_MAX_STRUCT_FIELDS,
-                  "XI_STRUCT_SET: field_idx out of range");
+        XR_DCHECK(v->aux_int >= 0 && v->aux_int < XR_MAX_AGG_FIELDS,
+                  "XI_AGG_SET: field_idx out of range");
         uint16_t field_arg = 0;
         if (!xi_emit_index_to_arg(ctx, v->aux_int, XI_EMIT_ERR_INTERNAL, &field_arg))
             return;
-        emit_inst(ctx, CREATE_ABC(OP_STRUCT_SET, obj, field_arg, val));
+        emit_inst(ctx, CREATE_ABC(OP_AGG_SET, obj, field_arg, val));
     } else {
         /* Heap path: OP_SETPROP with field name */
-        XrStructLayout *sl = (XrStructLayout *) v->aux;
+        XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         const char *fname = (sl && sl->field_names && v->aux_int < sl->field_count)
                                 ? sl->field_names[v->aux_int]
                                 : NULL;
-        XR_DCHECK(fname != NULL, "XI_STRUCT_SET: missing field name");
+        XR_DCHECK(fname != NULL, "XI_AGG_SET: missing field name");
         int sym = add_symbol(ctx, fname);
         if (ctx->status != XI_EMIT_OK)
             return;
@@ -1156,6 +1156,15 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
     return xr_vm_proto_add_proto(ctx->proto, child_proto);
 }
 
+static uint32_t emit_decl_derive_flags(XrAttribute **attrs, int count) {
+    uint32_t flags = 0;
+    for (int i = 0; i < count; i++) {
+        if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
+            flags |= attrs[i]->derive_flags;
+    }
+    return flags;
+}
+
 /* Build XrClassDescriptor from AST, emit child method protos,
  * and generate OP_CLASS_CREATE_FROM_DESCRIPTOR. */
 static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata, XiEmitReg dst) {
@@ -1194,6 +1203,8 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
         desc->flags |= XR_CLASS_ABSTRACT;
     if (cd->is_final)
         desc->flags |= XR_CLASS_FINAL;
+    desc->flags |=
+        xr_class_flags_from_derive(emit_decl_derive_flags(cd->attributes, cd->attr_count));
     if (cdata->is_monomorphized)
         desc->flags |= XR_CLASS_MONOMORPHIZED;
     if (cdata->is_cycle_candidate)

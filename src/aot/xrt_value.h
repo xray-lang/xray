@@ -54,6 +54,7 @@
 #define XR_LIKELY(x) __builtin_expect(!!(x), 1)
 #define XR_UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define XRT_COLD __attribute__((cold))
+#define XRT_NORETURN __attribute__((noreturn))
 /* Alignment promise for the optimizer. Only assert alignments that the
  * allocation contract actually guarantees: array element buffers are
  * XRT_DATA_ALIGN (32B) aligned by xrt_coll.h's inline/stack rounding and by
@@ -75,6 +76,11 @@
 #define XR_LIKELY(x) (x)
 #define XR_UNLIKELY(x) (x)
 #define XRT_COLD
+#if defined(_MSC_VER)
+#define XRT_NORETURN __declspec(noreturn)
+#else
+#define XRT_NORETURN
+#endif
 #define XR_ASSUME_ALIGNED(p, n) (p)
 #define XRT_FN_CONST
 #define XRT_FN_PURE
@@ -123,14 +129,14 @@ typedef struct XrValue {
  * Extended tags (>= 8) are AOT-specific: encode object type without object header.
  * ========================================================================= */
 
-#define XR_TAG_NULL 0       /* null singleton */
-#define XR_TAG_BOOL 1       /* bool: payload 0=false, 1=true */
-#define XR_TAG_CHAR 2       /* char: Unicode scalar value in .i */
-#define XR_TAG_I64 3        /* integer (stored in .i as int64) */
-#define XR_TAG_F64 4        /* float (stored in .f as double) */
-#define XR_TAG_PTR 5        /* generic heap object pointer */
-#define XR_TAG_STRUCT_REF 6 /* AOT native struct reference */
-#define XR_TAG_NOTFOUND 7   /* sentinel: map lookup miss */
+#define XR_TAG_NULL 0     /* null singleton */
+#define XR_TAG_BOOL 1     /* bool: payload 0=false, 1=true */
+#define XR_TAG_CHAR 2     /* char: Unicode scalar value in .i */
+#define XR_TAG_I64 3      /* integer (stored in .i as int64) */
+#define XR_TAG_F64 4      /* float (stored in .f as double) */
+#define XR_TAG_PTR 5      /* generic heap object pointer */
+#define XR_TAG_AGG_REF 6  /* AOT native struct reference */
+#define XR_TAG_NOTFOUND 7 /* sentinel: map lookup miss */
 
 /* AOT extensions — object type encoded in tag (no object header available) */
 #define XR_TAG_STR 14         /* static / literal string (const char*) */
@@ -155,30 +161,78 @@ typedef struct XrValue {
 #define XR_TAG_THREAD 33      /* AOT Thread<T> OS-thread handle */
 #define XR_TAG_BUFFER 34      /* AOT mem.Buffer managed byte allocation */
 
-typedef struct XrAotEnumValueView {
+typedef struct XrAotEnumBox {
     uint64_t gc_words[2];
     void *klass;
     const char *enum_name;
     const char *member_name;
     uint32_t member_index;
     uint32_t payload_count;
-    XrValue payload0;
-    XrValue *payloads;
-} XrAotEnumValueView;
+    uint32_t layout_id;
+    XrValue payloads[];
+} XrAotEnumBox;
+
+typedef struct XrAotRuntimeEnumCtorView {
+    XrObjHeader hdr;
+    const char *enum_name;
+    const char *member_name;
+    uint32_t member_index;
+    uint32_t layout_id;
+} XrAotRuntimeEnumCtorView;
+
+#define XR_AOT_ENUM_AGG_PAYLOAD_CAP 16u
 
 typedef struct XrAotEnumAggregate {
     const char *enum_name;
     const char *member_name;
     int64_t tag;
     uint32_t payload_count;
-    XrValue payload0;
-    XrValue *payloads;
+    uint32_t layout_id;
+    XrValue payloads[XR_AOT_ENUM_AGG_PAYLOAD_CAP];
 } XrAotEnumAggregate;
 
+static inline int xrt_enum_key_parts(XrValue v, const char **enum_name, const char **member_name,
+                                     uint32_t *member_index, uint32_t *layout_id) {
+    if (v.tag != XR_TAG_ENUM || !v.ptr)
+        return 0;
+
+    const XrObjHeader *hdr = (const XrObjHeader *) v.ptr;
+    if (hdr->type == XR_TENUM_CTOR) {
+        const XrAotRuntimeEnumCtorView *ctor = (const XrAotRuntimeEnumCtorView *) v.ptr;
+        if (enum_name)
+            *enum_name = ctor->enum_name;
+        if (member_name)
+            *member_name = ctor->member_name;
+        if (member_index)
+            *member_index = ctor->member_index;
+        if (layout_id)
+            *layout_id = ctor->layout_id;
+        return 1;
+    }
+
+    const XrAotEnumBox *ev = (const XrAotEnumBox *) v.ptr;
+    if (enum_name)
+        *enum_name = ev->enum_name;
+    if (member_name)
+        *member_name = ev->member_name;
+    if (member_index)
+        *member_index = ev->member_index;
+    if (layout_id)
+        *layout_id = ev->layout_id;
+    return 1;
+}
+
+static inline uint32_t xrt_enum_value_layout_id(XrValue v) {
+    uint32_t layout_id = 0;
+    (void) xrt_enum_key_parts(v, NULL, NULL, NULL, &layout_id);
+    return layout_id;
+}
+
 static inline const char *xrt_enum_to_cstr(XrValue v, char *buf, size_t bufsz) {
-    const XrAotEnumValueView *ev = (const XrAotEnumValueView *) v.ptr;
-    if (ev && ev->enum_name && ev->member_name) {
-        snprintf(buf, bufsz, "%s.%s", ev->enum_name, ev->member_name);
+    const char *enum_name = NULL;
+    const char *member_name = NULL;
+    if (xrt_enum_key_parts(v, &enum_name, &member_name, NULL, NULL) && enum_name && member_name) {
+        snprintf(buf, bufsz, "%s.%s", enum_name, member_name);
         return buf;
     }
     snprintf(buf, bufsz, "<enum@%p>", v.ptr);
@@ -198,10 +252,22 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
         return 1;
     if (a.ext != b.ext || !a.ptr || !b.ptr)
         return 0;
-    const XrAotEnumValueView *ea = (const XrAotEnumValueView *) a.ptr;
-    const XrAotEnumValueView *eb = (const XrAotEnumValueView *) b.ptr;
-    return xrt_cstr_eq(ea->enum_name, eb->enum_name) &&
-           xrt_cstr_eq(ea->member_name, eb->member_name);
+    const char *enum_a = NULL;
+    const char *member_a = NULL;
+    const char *enum_b = NULL;
+    const char *member_b = NULL;
+    uint32_t index_a = 0;
+    uint32_t index_b = 0;
+    uint32_t layout_a = 0;
+    uint32_t layout_b = 0;
+    if (!xrt_enum_key_parts(a, &enum_a, &member_a, &index_a, &layout_a) ||
+        !xrt_enum_key_parts(b, &enum_b, &member_b, &index_b, &layout_b))
+        return 0;
+    if (index_a != index_b)
+        return 0;
+    if (layout_a != 0 && layout_b != 0)
+        return layout_a == layout_b;
+    return xrt_cstr_eq(enum_a, enum_b) && xrt_cstr_eq(member_a, member_b);
 }
 
 /* Native field tags mirror XrNativeType for standalone generated C. */
@@ -350,9 +416,9 @@ static inline XrValue xr_mkptr(void *p, uint8_t tag) {
     return r;
 }
 
-static inline XrValue xr_struct_ref(void *p, uint16_t storage_size) {
+static inline XrValue xr_aggregate_ref(void *p, uint16_t storage_size) {
     XrValue r = {0};
-    r.tag = XR_TAG_STRUCT_REF;
+    r.tag = XR_TAG_AGG_REF;
     r.heap_type = storage_size;
     r.ptr = p;
     return r;
@@ -381,7 +447,7 @@ static inline uint8_t xrt_value_kind(XrValue v) {
 
 static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint16_t elem_count) {
     XrValue r = {0};
-    r.tag = XR_TAG_STRUCT_REF;
+    r.tag = XR_TAG_AGG_REF;
     r.ext = ((uint32_t) elem_count << 8) | elem_native_type;
     r.ptr = ptr;
     return r;
@@ -393,7 +459,7 @@ static inline XrValue xr_array_ref_owned(void *ptr, uint8_t elem_native_type, ui
     return r;
 }
 
-#define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_STRUCT_REF && (v).ext != 0)
+#define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_AGG_REF && (v).ext != 0)
 #define XR_ARRAY_REF_ELEM_TYPE(v) ((uint8_t) ((v).ext & 0xFF))
 #define XR_ARRAY_REF_ELEM_COUNT(v) ((uint16_t) ((v).ext >> 8))
 
@@ -422,22 +488,59 @@ static inline XrValue xr_mkf64(double v, uint8_t tag) {
 
 static inline XrAotEnumAggregate xrt_enum_aggregate_zero(void) {
     XrAotEnumAggregate out = {0};
-    out.payload0 = XR_NULL_VAL;
-    out.payloads = NULL;
+    for (uint32_t i = 0; i < XR_AOT_ENUM_AGG_PAYLOAD_CAP; i++)
+        out.payloads[i] = XR_NULL_VAL;
     return out;
 }
 
-static inline XrAotEnumAggregate xrt_enum_aggregate_make(int64_t tag, uint32_t payload_count,
-                                               const char *enum_name, const char *member_name,
-                                               XrValue payload0) {
-    XrAotEnumAggregate out;
+static inline XrAotEnumAggregate
+xrt_enum_aggregate_make(uint32_t layout_id, int64_t tag, uint32_t payload_count,
+                        const char *enum_name, const char *member_name, const XrValue *payloads) {
+    XrAotEnumAggregate out = xrt_enum_aggregate_zero();
     out.enum_name = enum_name;
     out.member_name = member_name;
     out.tag = tag;
     out.payload_count = payload_count;
-    out.payload0 = payload_count > 0 ? payload0 : XR_NULL_VAL;
-    out.payloads = NULL;
+    out.layout_id = layout_id;
+    uint32_t limit =
+        payload_count < XR_AOT_ENUM_AGG_PAYLOAD_CAP ? payload_count : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
+    for (uint32_t i = 0; i < limit; i++)
+        out.payloads[i] = payloads ? payloads[i] : XR_NULL_VAL;
     return out;
+}
+
+static inline XRT_COLD _Noreturn void xrt_enum_aggregate_shape_fail(const char *what,
+                                                                    const char *enum_name) {
+    fprintf(stderr, "AOT enum aggregate shape mismatch: %s", what ? what : "unknown");
+    if (enum_name && enum_name[0])
+        fprintf(stderr, " for %s", enum_name);
+    fprintf(stderr, "\n");
+    abort();
+}
+
+static inline void xrt_enum_aggregate_check_layout(uint32_t actual_layout_id,
+                                                   uint32_t expected_layout_id,
+                                                   const char *enum_name) {
+    if (actual_layout_id != 0 && expected_layout_id != 0 && actual_layout_id != expected_layout_id)
+        xrt_enum_aggregate_shape_fail("layout id", enum_name);
+}
+
+static inline void xrt_enum_aggregate_check_payload_count(uint32_t layout_id, uint32_t actual,
+                                                          uint32_t expected,
+                                                          const char *enum_name) {
+    if (layout_id != 0 && actual != expected)
+        xrt_enum_aggregate_shape_fail("payload count", enum_name);
+}
+
+static inline void xrt_enum_aggregate_check_payload_type(uint32_t layout_id, int ok,
+                                                         const char *enum_name) {
+    if (layout_id != 0 && !ok)
+        xrt_enum_aggregate_shape_fail("payload type", enum_name);
+}
+
+static inline void xrt_enum_aggregate_check_known_tag(uint32_t layout_id, const char *enum_name) {
+    if (layout_id != 0)
+        xrt_enum_aggregate_shape_fail("tag", enum_name);
 }
 
 static inline const char *xr_unbox_str(XrValue v) {
@@ -495,7 +598,7 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
             return 0;
         return memcmp(sa->data, sb->data, (size_t) sa->len) == 0;
     }
-    if (ta == XR_TAG_STRUCT_REF) {
+    if (ta == XR_TAG_AGG_REF) {
         if (a.ptr == b.ptr)
             return 1;
         if (!a.ptr || !b.ptr || a.ext != b.ext)

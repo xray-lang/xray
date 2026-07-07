@@ -131,26 +131,27 @@ invoke_dispatch:;
      * Handles Result.Ok(42) when lowered as OP_INVOKE with receiver=EnumType. */
     if (XR_IS_ENUM_TYPE(receiver)) {
         XrEnumType *etype = XR_TO_ENUM_TYPE(receiver);
-        XrEnumValue *eval = xr_enum_get_member_by_symbol(etype, method_symbol);
-        if (eval) {
-            int payload_ct = (etype->is_adt && etype->payload_counts)
-                                 ? etype->payload_counts[eval->member_index]
-                                 : -1;
-            if (payload_ct >= 0) {
-                /* Every variant of an ADT enum is a tagged instance (field[0] =
-                 * ordinal), including zero-payload variants, so pattern matching
-                 * reads the ordinal uniformly. */
-                XrInstance *inst = xr_enum_adt_construct(isolate, etype, eval->member_index,
-                                                         payload_ct > 0 ? &R(a + 2) : NULL,
-                                                         payload_ct > 0 ? nargs : 0);
-                if (!inst) {
-                    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "failed to construct ADT variant '%s.%s'",
-                                     etype->name, eval->member_name);
+        int member_index = xr_enum_type_find_member_index_by_symbol(etype, method_symbol);
+        if (member_index >= 0) {
+            const char *member_name = xr_enum_type_member_name(etype, (uint32_t) member_index);
+            int payload_ct = xr_enum_type_payload_count(etype, (uint32_t) member_index);
+            if (payload_ct == 0) {
+                XrEnumAggregateValue *value =
+                    xr_enum_zero_payload_value(isolate, etype, (uint32_t) member_index);
+                if (!value) {
+                    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL,
+                                     "failed to construct enum variant '%s.%s'", etype->name,
+                                     member_name ? member_name : "?");
                 }
-                R(a) = XR_FROM_PTR(inst);
-            } else {
-                /* Simple (non-ADT) enum member: singleton value. */
-                R(a) = XR_FROM_PTR(eval);
+                R(a) = XR_FROM_PTR(value);
+            } else if (payload_ct > 0) {
+                XrEnumAggregateValue *value = xr_enum_adt_construct(
+                    isolate, etype, (uint32_t) member_index, &R(a + 2), nargs);
+                if (!value) {
+                    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "failed to construct ADT variant '%s.%s'",
+                                     etype->name, member_name ? member_name : "?");
+                }
+                R(a) = XR_FROM_PTR(value);
             }
             vmbreak;
         }
@@ -243,9 +244,8 @@ invoke_dispatch:;
                              _mn ? _mn : "?");
         }
 
-        /* Enum special routing (enum values/types use hardcoded methods
-         * that access native body fields directly) */
-        if (klass->builtin_kind == XR_BK_ENUM_VALUE || klass->builtin_kind == XR_BK_ENUM_TYPE) {
+        /* Enum special routing (enum constructors/types use hardcoded metadata methods). */
+        if (XR_IS_ENUM_CTOR(receiver) || XR_IS_ENUM_TYPE(receiver)) {
             XrDispatchAction _cr =
                 vm_invoke_enum(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
             if (_cr == XR_DISP_NEXT) {
@@ -440,7 +440,7 @@ vmcase(OP_INVOKE_DIRECT) {
 
     XrValue receiver = R(a + 1);
     XrClass *cls = NULL;
-    if (XR_IS_STRUCT_REF(receiver)) {
+    if (XR_IS_AGG_REF(receiver)) {
         // Stack-allocated struct: class ptr at head
         cls = *(XrClass **) xr_to_struct_ptr(receiver);
     } else {

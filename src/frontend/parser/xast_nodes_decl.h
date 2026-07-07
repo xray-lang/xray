@@ -220,6 +220,8 @@ typedef struct EnumDeclNode {
     int member_count;
     AstNode **methods; /* AST_METHOD_DECL nodes inside enum body */
     int method_count;
+    XrAttribute **attributes; /* Declaration attributes */
+    int attr_count;
     XrGenericParam **type_params; /* <T, E> generic type parameters */
     int type_param_count;
     XrTypeRef **interfaces; /* implements Foo, Bar */

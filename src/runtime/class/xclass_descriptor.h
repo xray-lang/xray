@@ -94,7 +94,7 @@ typedef struct XrClassDescriptor {
     int32_t clinit_proto_index;
 
     /* ========== Struct Native Storage ========== */
-    struct XrStructLayout *struct_layout;  // NULL for class, set for struct
+    struct XrAggregateLayout *struct_layout;  // NULL for class, set for struct
 
     /* ========== Metadata ========== */
     uint32_t descriptor_version;

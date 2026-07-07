@@ -1,0 +1,3 @@
+@derive(Json, Json)
+class DuplicateDerive {
+}

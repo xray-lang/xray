@@ -2368,25 +2368,26 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                         is_adt = true;
                     }
                 }
-                links->is_adt_enum = is_adt;
+                if (links->enum_info) {
+                    xa_enum_info_free(links->enum_info);
+                    links->enum_info = NULL;
+                }
 
                 // Store enum member names and payload metadata for exhaustiveness checking.
                 if (edecl->member_count > 0) {
-                    links->enum_member_names =
-                        xr_malloc(sizeof(const char *) * (size_t) edecl->member_count);
-                    links->enum_member_count = 0;
-                    links->enum_payload_counts =
-                        xr_calloc((size_t) edecl->member_count, sizeof(int));
-                    links->enum_payload_types =
-                        xr_calloc((size_t) edecl->member_count, sizeof(XrType **));
+                    XaEnumInfo *enum_meta =
+                        xa_enum_info_new(edecl->name, (uint32_t) edecl->member_count);
+                    uint32_t enum_index = 0;
                     for (int m = 0; m < edecl->member_count; m++) {
                         AstNode *mem = edecl->members[m];
                         if (!mem || mem->type != AST_ENUM_MEMBER || !mem->as.enum_member.name)
                             continue;
-                        int idx = links->enum_member_count;
-                        links->enum_member_names[idx] = mem->as.enum_member.name;
+                        if (!enum_meta || enum_index >= enum_meta->variant_count)
+                            continue;
+                        XaEnumVariantInfo *variant = &enum_meta->variants[enum_index];
+                        variant->name = mem->as.enum_member.name;
                         int pc = mem->as.enum_member.payload_count;
-                        links->enum_payload_counts[idx] = pc;
+                        variant->payload_count = (uint16_t) pc;
                         if (pc > 0 && mem->as.enum_member.payload_types) {
                             XrType **ptypes = xr_calloc((size_t) pc, sizeof(XrType *));
                             for (int p = 0; p < pc; p++) {
@@ -2421,9 +2422,25 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                                 }
                                 ptypes[p] = ptype;
                             }
-                            links->enum_payload_types[idx] = ptypes;
+                            variant->payload_types = ptypes;
                         }
-                        links->enum_member_count++;
+                        enum_index++;
+                    }
+                    if (enum_meta && enum_index == enum_meta->variant_count &&
+                        xa_enum_info_finalize_layout(enum_meta)) {
+                        links->enum_info = enum_meta;
+                        if (links->type && links->type->kind == XR_KIND_ENUM) {
+                            links->type->enum_type.layout = enum_meta->layout;
+                            links->type->enum_type.layout_id =
+                                enum_meta->layout ? enum_meta->layout->layout_id : 0;
+                        }
+                        if (links->declared_type && links->declared_type->kind == XR_KIND_ENUM) {
+                            links->declared_type->enum_type.layout = enum_meta->layout;
+                            links->declared_type->enum_type.layout_id =
+                                enum_meta->layout ? enum_meta->layout->layout_id : 0;
+                        }
+                    } else if (enum_meta) {
+                        xa_enum_info_free(enum_meta);
                     }
                 }
 
@@ -2921,15 +2938,17 @@ static XrType *xa_visit_comptime_expr(XaInferContext *ctx, AstNode *node) {
         return xa_visit_comptime_block_expr(ctx, node);
 
     XrType *inner_type = xa_visit_infer_expr(ctx, inner);
-    XrCtValue ignored = {0};
+    XrCtValue value = {0};
     const char *err = NULL;
-    if (!xa_consteval_expr(ctx->analyzer, inner, &ignored, &err)) {
+    if (!xa_consteval_expr(ctx->analyzer, inner, &value, &err)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[256];
         snprintf(msg, sizeof(msg), "comptime expression must be evaluable at compile time%s%s",
                  err ? ": " : "", err ? err : "");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                                    msg, &loc);
+    } else {
+        xa_analyzer_set_node_ct_value(ctx->analyzer, node, &value);
     }
     return inner_type ? inner_type : xr_type_new_unknown(NULL);
 }
@@ -3716,6 +3735,7 @@ static bool xa_ct_value_is_comptime_block_runtime_value(const XrCtValue *value) 
         case XR_CT_NULL:
         case XR_CT_FIXED_ARRAY:
         case XR_CT_TUPLE:
+        case XR_CT_STRUCT_VALUE:
             return true;
         default:
             return false;
@@ -3756,8 +3776,8 @@ static XaComptimeBlockFlow xa_visit_comptime_block_return_stmt(XaInferContext *c
     if (!xa_ct_value_is_comptime_block_runtime_value(&value)) {
         xa_report_comptime_block_error(
             ctx, value_expr,
-            "comptime block expression return value must be a scalar, fixed-array, or tuple "
-            "compile-time value in this phase");
+            "comptime block expression return value must be a scalar, fixed-array, tuple, or "
+            "struct compile-time value in this phase");
         return xa_comptime_block_flow_normal();
     }
 
@@ -4237,6 +4257,14 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                     result = xr_type_new_unknown(NULL);
                 }
             } else if (src && XR_TYPE_IS_STRING(src)) {
+                if (xa_freestanding_profile_enabled(ctx->analyzer)) {
+                    xa_freestanding_report_unavailable(
+                        ctx, node, "string slice expression",
+                        "string literals may be passed or printed, but string slicing needs "
+                        "hosted helpers");
+                    result = xr_type_new_unknown(NULL);
+                    break;
+                }
                 result = xr_type_new_string(NULL);
             } else {
                 result = xr_type_new_unknown(NULL);
@@ -5667,10 +5695,12 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_ENUM_DECL: {
             EnumDeclNode *ed = &node->as.enum_decl;
-            xa_freestanding_report_unavailable(
-                ctx, node, "enum declaration",
-                "AOT enum values still lower through tagged enum maps; freestanding will "
-                "enable enums after ordinal/static-data lowering lands");
+            if (xa_freestanding_profile_enabled(ctx->analyzer) && ed->method_count > 0) {
+                xa_freestanding_report_unavailable(
+                    ctx, node, "enum methods",
+                    "freestanding enums support static variants only; enum methods need hosted "
+                    "namespace/function initialization until method lowering is static");
+            }
             XaSymbol *enum_sym =
                 ed->name ? xa_scope_lookup(ctx->analyzer->current_scope, ed->name) : NULL;
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);

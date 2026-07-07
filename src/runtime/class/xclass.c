@@ -275,27 +275,25 @@ XrClass *xr_value_get_class(XrVMRuntime *X, XrValue value) {
     else
         return NULL;
 
+    if (type == XR_TENUM_CTOR) {
+        XrEnumCtor *ev = (XrEnumCtor *) XR_TO_PTR(value);
+        if (ev->enum_name) {
+            XrClass *cls = xr_class_lookup_by_name(X, ev->enum_name);
+            if (cls)
+                return cls;
+        }
+        XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+        return core ? core->enumClass : NULL;
+    }
+
+    if (type == XR_TENUM_TYPE) {
+        XrEnumType *et = (XrEnumType *) XR_TO_PTR(value);
+        return et->enum_class;
+    }
+
     /* Instance: class pointer stored in the object header. */
     if (type == XR_TINSTANCE) {
         XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
-        if (inst->klass) {
-            /* Enum value: resolve by name to get the per-enum class. */
-            if (inst->klass->builtin_kind == XR_BK_ENUM_VALUE) {
-                XrEnumValue *ev = (XrEnumValue *) inst;
-                if (ev->enum_name) {
-                    XrClass *cls = xr_class_lookup_by_name(X, ev->enum_name);
-                    if (cls)
-                        return cls;
-                }
-                XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-                return core ? core->enumClass : NULL;
-            }
-            /* Enum type: each enum type carries its own class. */
-            if (inst->klass->builtin_kind == XR_BK_ENUM_TYPE) {
-                XrEnumType *et = (XrEnumType *) inst;
-                return et->enum_class;
-            }
-        }
         return inst->klass;
     }
 

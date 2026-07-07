@@ -272,7 +272,7 @@ static inline int64_t xrt_endian_arg(XrValue value) {
     if (XR_IS_INT(value)) {
         endian = XR_TO_INT(value);
     } else if (value.tag == XR_TAG_ENUM) {
-        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) value.ptr;
+        const XrAotEnumBox *ev = (const XrAotEnumBox *) value.ptr;
         if (ev)
             endian = (int64_t) ev->member_index;
     }
@@ -486,7 +486,7 @@ static inline xr_span_t xrt_byte_span_from_value(XrValue recv, const char *messa
             xrt_throw_error(XR_ERR_TYPE_MISMATCH, message);
         return xrt_span_from_array_slice(recv, 0, arr->length);
     }
-    if (recv.tag == XR_TAG_STRUCT_REF && recv.ptr && !XR_IS_ARRAY_REF(recv)) {
+    if (recv.tag == XR_TAG_AGG_REF && recv.ptr && !XR_IS_ARRAY_REF(recv)) {
         xr_span_t span = *(const xr_span_t *) recv.ptr;
         if (span.elem_type != XR_ELEM_U8)
             xrt_throw_error(XR_ERR_TYPE_MISMATCH, message);

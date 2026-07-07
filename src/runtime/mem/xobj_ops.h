@@ -56,6 +56,8 @@ XR_FUNC void xr_obj_destroy_closure(XrObjHeader *obj, struct XrCoroHeap *owner_h
 XR_FUNC void xr_obj_destroy_cell(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 XR_FUNC void xr_obj_destroy_coroutine(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 XR_FUNC void xr_obj_destroy_instance(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_enum_type(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_enum_ctor(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 XR_FUNC void xr_obj_destroy_task(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 XR_FUNC void xr_obj_destroy_work_queue(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 XR_FUNC void xr_obj_destroy_result_group(XrObjHeader *obj, struct XrCoroHeap *owner_heap);

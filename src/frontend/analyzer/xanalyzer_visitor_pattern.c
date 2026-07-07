@@ -527,7 +527,8 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
             if (enum_sym && enum_sym->kind == XA_SYM_ENUM) {
                 XaSymbolLinks *enum_links = xa_analyzer_get_links(ctx->analyzer, enum_sym);
 
-                if (enum_links && enum_links->enum_member_count > 0) {
+                XaEnumInfo *enum_info = enum_links ? enum_links->enum_info : NULL;
+                if (enum_info && enum_info->variant_count > 0) {
                     // Collect matched members from all arms
                     const char **matched = NULL;
                     int matched_count = 0, matched_cap = 0;
@@ -541,8 +542,8 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
                     }
 
                     // Check which enum members are missing
-                    for (int i = 0; i < enum_links->enum_member_count; i++) {
-                        const char *member_name = enum_links->enum_member_names[i];
+                    for (uint32_t i = 0; i < enum_info->variant_count; i++) {
+                        const char *member_name = enum_info->variants[i].name;
                         if (!member_name)
                             continue;
 

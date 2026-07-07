@@ -24,7 +24,7 @@ static int cg_class_field_cache_find(const CgClassFieldCache *cache, const char 
     return -1;
 }
 
-static int cg_class_layout_field_index(const XrStructLayout *layout, const char *name) {
+static int cg_class_layout_field_index(const XrAggregateLayout *layout, const char *name) {
     if (!layout || !layout->field_names || !name)
         return -1;
     for (uint16_t i = 0; i < layout->field_count; i++) {

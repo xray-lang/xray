@@ -486,8 +486,92 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "#include \"xrt_core_freestanding.h\"" \
             "freestanding-profile/fixed-array: generated C uses freestanding prelude"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "xr_span_t" \
+            "freestanding-profile/fixed-array: generated C uses freestanding span value"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "xrt_span_from_array_slice" \
+            "freestanding-profile/fixed-array: generated C slices fixed array into span"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xr_array_core_bytes_store_u16" \
+            "freestanding-profile/fixed-array: ByteSpan.store<uint16> uses freestanding bytes helper"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xrt_span_bytes_load_u16_le_unchecked_raw" \
+            "freestanding-profile/fixed-array: ByteSpan.load<uint16> uses freestanding span bytes helper"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xrt_span_bytes_load_u64_le_unchecked_raw" \
+            "freestanding-profile/fixed-array: ByteSpan.load<uint64> uses freestanding span bytes helper"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xr_array_core_bytes_store_f32" \
+            "freestanding-profile/fixed-array: ByteSpan.store<float32> uses freestanding bytes helper"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xr_array_core_bytes_load_f64" \
+            "freestanding-profile/fixed-array: ByteSpan.load<float64> uses freestanding bytes helper"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xr_array_core_copy_or_move_bytes" \
+            "freestanding-profile/fixed-array: ByteSpan.copyFrom uses freestanding bytes copy helper"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xr_array_core_bytes_common_prefix_raw" \
+            "freestanding-profile/fixed-array: ByteSpan.commonPrefix uses freestanding bytes helper"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xr_array_core_bytes_repeat_copy" \
+            "freestanding-profile/fixed-array: ByteSpan.repeatFrom uses freestanding bytes helper"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "Span.fill(value) byte length overflow" \
+            "freestanding-profile/fixed-array: Span.fill uses freestanding POD path"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "for (int64_t _i = 0; _i < _s.length; _i++)" \
+            "freestanding-profile/fixed-array: Span.fill lowers to local POD loop"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "memmove(_dst.data, _src.data" \
+            "freestanding-profile/fixed-array: Span.copyFrom lowers to no-libc memmove"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "Span.asBytes() byte length overflow" \
+            "freestanding-profile/fixed-array: Span.asBytes uses local metadata rewrite"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "ByteSpan.reinterpret<T>() length is not divisible by target size" \
+            "freestanding-profile/fixed-array: ByteSpan.reinterpret uses local metadata rewrite"
+        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "Span.compare(other) byte length overflow" \
+            "freestanding-profile/fixed-array: Span.compare uses freestanding POD path"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "#include \"xrt.h\"" \
             "freestanding-profile/fixed-array: generated C avoids hosted umbrella"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "xrt_throw_exc" \
+            "freestanding-profile/fixed-array: generated C avoids hosted exception throw"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "xrt_exception" \
+            "freestanding-profile/fixed-array: generated C avoids hosted exception objects"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xrt_span_bytes_store_u64_checked_raw" \
+            "freestanding-profile/fixed-array: generated C avoids hosted checked ByteSpan.store"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xrt_span_bytes_load_f64_value" \
+            "freestanding-profile/fixed-array: generated C avoids hosted boxed ByteSpan.load"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xrt_span_bytes_copy_checked_raw" \
+            "freestanding-profile/fixed-array: generated C avoids hosted checked ByteSpan.copyFrom"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xrt_span_bytes_common_prefix_checked_raw" \
+            "freestanding-profile/fixed-array: generated C avoids hosted checked ByteSpan.commonPrefix"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xrt_span_bytes_repeat_from_checked_raw" \
+            "freestanding-profile/fixed-array: generated C avoids hosted checked ByteSpan.repeatFrom"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xrt_span_fill_checked_raw" \
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Span.fill"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xrt_span_copy_checked_raw" \
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Span.copyFrom"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xrt_span_compare_checked_raw" \
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Span.compare"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xrt_span_as_bytes_checked_raw" \
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Span.asBytes"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "xrt_span_reinterpret_checked_raw" \
+            "freestanding-profile/fixed-array: generated C avoids hosted checked ByteSpan.reinterpret"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "__memcpy_chk" \
+            "freestanding-profile/fixed-array: generated C avoids checked memcpy builtin"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "___memcpy_chk" \
+            "freestanding-profile/fixed-array: generated C avoids Darwin checked memcpy symbol"
     else
         record_fail "freestanding-profile/fixed-array: kept C source missing"
         sed 's/^/      /' "$FREESTANDING_FIXED_ARRAY_LOG" | sed -n '1,120p'
@@ -608,6 +692,184 @@ else
         "freestanding-profile: rejects shared declarations"
 fi
 
+FREESTANDING_TOP_CONST_SCALAR_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_const_scalar.xr"
+FREESTANDING_TOP_CONST_SCALAR_OBJ="$WORK/freestanding_top_const_scalar.o"
+FREESTANDING_TOP_CONST_SCALAR_LOG="$WORK/freestanding_top_const_scalar.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_TOP_CONST_SCALAR_OBJ" \
+        "$FREESTANDING_TOP_CONST_SCALAR_SRC" >"$FREESTANDING_TOP_CONST_SCALAR_LOG" 2>&1; then
+    FREESTANDING_TOP_CONST_SCALAR_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_TOP_CONST_SCALAR_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_TOP_CONST_SCALAR_C" ]; then
+        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "static const int64_t _xctscalar_" \
+            "freestanding-profile/top-const-scalar: materializes attributed integer/bool/char const as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "static const double _xctscalar_" \
+            "freestanding-profile/top-const-scalar: materializes attributed float const as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "static const xrt_str_t _xctstr_" \
+            "freestanding-profile/top-const-scalar: materializes attributed string const as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "static const XrValue _xctvalue_" \
+            "freestanding-profile/top-const-scalar: materializes attributed null const as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "XRT_ATTR_SECTION(\"__DATA,.xray_magic\") XRT_ATTR_USED" \
+            "freestanding-profile/top-const-scalar: emits section/used attrs on scalar const"
+        expect_log_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "XRT_ATTR_SECTION(\"__DATA,.xray_label\") XRT_ATTR_USED" \
+            "freestanding-profile/top-const-scalar: emits section/used attrs on string const"
+        expect_log_not_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "(xrt_shared[0] =" \
+            "freestanding-profile/top-const-scalar: elides const slot initialization"
+        expect_log_not_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "xrt_shared[" \
+            "freestanding-profile/top-const-scalar: avoids shared-slot storage"
+        expect_log_not_contains "$FREESTANDING_TOP_CONST_SCALAR_C" "xrt_array_ref_to_owned" \
+            "freestanding-profile/top-const-scalar: avoids hosted shared-slot ownership path"
+    else
+        record_fail "freestanding-profile/top-const-scalar: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_CONST_SCALAR_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_TOP_CONST_SCALAR_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_TOP_CONST_SCALAR_OBJ")"
+    FREESTANDING_TOP_CONST_SCALAR_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_TOP_CONST_SCALAR_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic|xr_hook_write)$' || true)"
+    if [ -z "$FREESTANDING_TOP_CONST_SCALAR_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/top-const-scalar: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/top-const-scalar: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_TOP_CONST_SCALAR_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/top-const-scalar: object build failed"
+    sed 's/^/      /' "$FREESTANDING_TOP_CONST_SCALAR_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_TOP_CONST_AGG_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_const_aggregate.xr"
+FREESTANDING_TOP_CONST_AGG_OBJ="$WORK/freestanding_top_const_aggregate.o"
+FREESTANDING_TOP_CONST_AGG_LOG="$WORK/freestanding_top_const_aggregate.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_TOP_CONST_AGG_OBJ" \
+        "$FREESTANDING_TOP_CONST_AGG_SRC" >"$FREESTANDING_TOP_CONST_AGG_LOG" 2>&1; then
+    FREESTANDING_TOP_CONST_AGG_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_TOP_CONST_AGG_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_TOP_CONST_AGG_C" ]; then
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "INT64_C(14)" \
+            "freestanding-profile/top-const-aggregate: folds aggregate uses into export"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const int64_t _xctarr_" \
+            "freestanding-profile/top-const-aggregate: materializes scalar table as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XRT_ATTR_SECTION(\"__DATA,.xray_table\") XRT_ATTR_USED" \
+            "freestanding-profile/top-const-aggregate: emits section/used attrs on static table"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const uint8_t _xctarr_" \
+            "freestanding-profile/top-const-aggregate: materializes byte table as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const double _xctarr_" \
+            "freestanding-profile/top-const-aggregate: materializes float table as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const struct" \
+            "freestanding-profile/top-const-aggregate: materializes scalar struct as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "_xctstruct_" \
+            "freestanding-profile/top-const-aggregate: names scalar struct static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XRT_ATTR_SECTION(\"__DATA,.xray_header\")" \
+            "freestanding-profile/top-const-aggregate: emits section attr on static struct"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "__attribute__((packed" \
+            "freestanding-profile/top-const-aggregate: preserves packed static struct layout"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "aligned(16)" \
+            "freestanding-profile/top-const-aggregate: preserves aligned static struct layout"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const union" \
+            "freestanding-profile/top-const-aggregate: materializes union as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".i = (int32_t)INT64_C(-1)" \
+            "freestanding-profile/top-const-aggregate: initializes active union integer field"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".u = (uint32_t)INT64_C(16909060)" \
+            "freestanding-profile/top-const-aggregate: initializes active union word field"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".magic" \
+            "freestanding-profile/top-const-aggregate: reads static struct magic field"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".flags" \
+            "freestanding-profile/top-const-aggregate: reads static struct flags field"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".tag" \
+            "freestanding-profile/top-const-aggregate: reads packed static struct tag field"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".value" \
+            "freestanding-profile/top-const-aggregate: reads packed/aligned static struct value field"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".u" \
+            "freestanding-profile/top-const-aggregate: reads static union integer lane directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".b[" \
+            "freestanding-profile/top-const-aggregate: reads static union fixed-array lane directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".bytes" \
+            "freestanding-profile/top-const-aggregate: reads static struct fixed-array field"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".inner" \
+            "freestanding-profile/top-const-aggregate: materializes nested static struct field"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".inner.code" \
+            "freestanding-profile/top-const-aggregate: reads nested static struct scalar field"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XrValue label" \
+            "freestanding-profile/top-const-aggregate: materializes string struct field as XrValue"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".label = (XrValue){.tag = XR_TAG_STR" \
+            "freestanding-profile/top-const-aggregate: initializes string struct field statically"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XrValue labels[2]" \
+            "freestanding-profile/top-const-aggregate: materializes string fixed-array struct field as XrValue lanes"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".labels = {(XrValue){.tag = XR_TAG_STR" \
+            "freestanding-profile/top-const-aggregate: initializes string fixed-array struct field statically"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".labels[" \
+            "freestanding-profile/top-const-aggregate: reads static string fixed-array struct field directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "_xcttuple_" \
+            "freestanding-profile/top-const-aggregate: names scalar tuple static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XRT_ATTR_SECTION(\"__DATA,.xray_pair\") XRT_ATTR_USED" \
+            "freestanding-profile/top-const-aggregate: emits section/used attrs on static tuple"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0" \
+            "freestanding-profile/top-const-aggregate: reads static tuple first field"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f2" \
+            "freestanding-profile/top-const-aggregate: reads static tuple float field"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const xrt_str_t _xstr_" \
+            "freestanding-profile/top-const-aggregate: materializes string const as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const XrValue _xctarr_" \
+            "freestanding-profile/top-const-aggregate: materializes string fixed-array as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "xr_str_lit(&_xstr_" \
+            "freestanding-profile/top-const-aggregate: reads string const through literal header"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XrValue f0" \
+            "freestanding-profile/top-const-aggregate: materializes string tuple lane as XrValue"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0 = (XrValue){.tag = XR_TAG_STR" \
+            "freestanding-profile/top-const-aggregate: initializes string tuple lane statically"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "struct { int64_t f0; XrValue f1; } f0" \
+            "freestanding-profile/top-const-aggregate: materializes nested tuple first lane as static struct"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "struct { double f0; int64_t f1; } f1" \
+            "freestanding-profile/top-const-aggregate: materializes nested tuple second lane as static struct"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0.f0" \
+            "freestanding-profile/top-const-aggregate: reads nested tuple integer lane directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f1.f0" \
+            "freestanding-profile/top-const-aggregate: reads nested tuple float lane directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0.f1" \
+            "freestanding-profile/top-const-aggregate: reads nested tuple string lane directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "xrt_println(" \
+            "freestanding-profile/top-const-aggregate: prints string const through write hook"
+        expect_log_not_contains "$FREESTANDING_TOP_CONST_AGG_C" "xrt_shared[" \
+            "freestanding-profile/top-const-aggregate: avoids shared-slot storage"
+        expect_log_not_contains "$FREESTANDING_TOP_CONST_AGG_C" "xrt_arc_alloc" \
+            "freestanding-profile/top-const-aggregate: avoids hosted aggregate allocation"
+        expect_log_not_contains "$FREESTANDING_TOP_CONST_AGG_C" "xr_array_ref" \
+            "freestanding-profile/top-const-aggregate: avoids runtime fixed-array materialization"
+        expect_log_not_contains "$FREESTANDING_TOP_CONST_AGG_C" "xr_aggregate_ref" \
+            "freestanding-profile/top-const-aggregate: avoids runtime nested-struct materialization"
+        expect_log_not_contains "$FREESTANDING_TOP_CONST_AGG_C" "xrt_tuple_get" \
+            "freestanding-profile/top-const-aggregate: avoids runtime tuple materialization"
+        expect_log_not_contains "$FREESTANDING_TOP_CONST_AGG_C" "xrt_tuple_make" \
+            "freestanding-profile/top-const-aggregate: avoids runtime tuple construction"
+        expect_log_not_contains "$FREESTANDING_TOP_CONST_AGG_C" "xrt_tuple_new" \
+            "freestanding-profile/top-const-aggregate: avoids empty tuple runtime construction"
+    else
+        record_fail "freestanding-profile/top-const-aggregate: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_TOP_CONST_AGG_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_TOP_CONST_AGG_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_TOP_CONST_AGG_OBJ")"
+    FREESTANDING_TOP_CONST_AGG_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_TOP_CONST_AGG_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic|xr_hook_write)$' || true)"
+    if [ -z "$FREESTANDING_TOP_CONST_AGG_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/top-const-aggregate: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/top-const-aggregate: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_TOP_CONST_AGG_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/top-const-aggregate: object build failed"
+    sed 's/^/      /' "$FREESTANDING_TOP_CONST_AGG_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_TOP_CONST_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_const_reject.xr"
 FREESTANDING_TOP_CONST_LOG="$WORK/freestanding_top_const_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
@@ -648,6 +910,12 @@ else
     expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
         "freestanding profile rejects string.byteLength" \
         "freestanding-profile: rejects hosted string property helper"
+    expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
+        "freestanding profile rejects string index access" \
+        "freestanding-profile: rejects hosted string index helper"
+    expect_log_contains "$FREESTANDING_STRING_MEMBER_LOG" \
+        "freestanding profile rejects string slice expression" \
+        "freestanding-profile: rejects hosted string slice helper"
 fi
 
 FREESTANDING_BYTES_STATIC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_bytes_static_reject.xr"
@@ -694,6 +962,51 @@ else
         "freestanding-profile: rejects builtin dump"
 fi
 
+FREESTANDING_ENUM_STATIC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_static.xr"
+FREESTANDING_ENUM_STATIC_OBJ="$WORK/freestanding_enum_static.o"
+FREESTANDING_ENUM_STATIC_LOG="$WORK/freestanding_enum_static.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_ENUM_STATIC_OBJ" \
+        "$FREESTANDING_ENUM_STATIC_SRC" >"$FREESTANDING_ENUM_STATIC_LOG" 2>&1; then
+    FREESTANDING_ENUM_STATIC_C="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_ENUM_STATIC_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_ENUM_STATIC_C" ]; then
+        expect_log_contains "$FREESTANDING_ENUM_STATIC_C" "_xenum_" \
+            "freestanding-profile/enum-static: emits static enum member values"
+        expect_log_contains "$FREESTANDING_ENUM_STATIC_C" "xrt_eq(" \
+            "freestanding-profile/enum-static: enum equality uses freestanding value compare"
+        expect_log_not_contains "$FREESTANDING_ENUM_STATIC_C" "xrt_map_new" \
+            "freestanding-profile/enum-static: avoids enum namespace map allocation"
+        expect_log_not_contains "$FREESTANDING_ENUM_STATIC_C" "xrt_map_set" \
+            "freestanding-profile/enum-static: avoids enum namespace map initialization"
+        expect_log_not_contains "$FREESTANDING_ENUM_STATIC_C" "xrt_map_get_owned" \
+            "freestanding-profile/enum-static: avoids enum namespace map lookup"
+        expect_log_not_contains "$FREESTANDING_ENUM_STATIC_C" "xrt_shared[" \
+            "freestanding-profile/enum-static: avoids shared-slot enum namespace state"
+        expect_log_not_contains "$FREESTANDING_ENUM_STATIC_C" "xrt_enum_box_new" \
+            "freestanding-profile/enum-static: avoids heap enum box construction"
+    else
+        record_fail "freestanding-profile/enum-static: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_ENUM_STATIC_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_ENUM_STATIC_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_ENUM_STATIC_OBJ")"
+    FREESTANDING_ENUM_STATIC_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_ENUM_STATIC_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic|xr_hook_write)$' || true)"
+    if [ -z "$FREESTANDING_ENUM_STATIC_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/enum-static: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/enum-static: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_ENUM_STATIC_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/enum-static: object build failed"
+    sed 's/^/      /' "$FREESTANDING_ENUM_STATIC_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_ENUM_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_reject.xr"
 FREESTANDING_ENUM_LOG="$WORK/freestanding_enum_reject.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
@@ -703,8 +1016,11 @@ if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-comm
     sed 's/^/      /' "$FREESTANDING_ENUM_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_ENUM_LOG" \
+        "freestanding profile rejects throw statement" \
+        "freestanding-profile: rejects throw value-error channel"
+    expect_log_not_contains "$FREESTANDING_ENUM_LOG" \
         "freestanding profile rejects enum declaration" \
-        "freestanding-profile: rejects enum value channel"
+        "freestanding-profile: enum declaration is allowed after static namespace lowering"
 fi
 
 FREESTANDING_FORCE_UNWRAP_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_force_unwrap_reject.xr"

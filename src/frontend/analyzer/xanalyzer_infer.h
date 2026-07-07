@@ -72,6 +72,10 @@ typedef struct XaInferContext {
     // typed as a Span without an explicit Span target; the copy result is owned.
     bool allow_view_expr_for_copy;
 
+    // Payload enum variants are constructors, not first-class values. The call
+    // visitor sets this while typing the callee of `Enum.Variant(...)`.
+    bool allow_payload_enum_ctor_value;
+
     // The variable being declared is not visible inside its own initializer.
     // This lets `var copy = copy(x)` call the outer/builtin `copy` while still
     // reporting `var x = x` as an unresolved self-reference when no outer x exists.

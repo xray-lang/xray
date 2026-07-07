@@ -1,0 +1,37 @@
+@section("__DATA,.xray_magic")
+@used
+const MAGIC: int = 40 + 1
+
+@section("__DATA,.xray_enabled")
+const ENABLED: bool = true
+
+@used
+const CODE: char = 'A'
+
+@section("__DATA,.xray_scale")
+const SCALE: float = 0.5
+
+@section("__DATA,.xray_none")
+@used
+const NOTHING = null
+
+@section("__DATA,.xray_label")
+@used
+const LABEL = comptime "scalar"
+
+@c_export("xray_magic")
+fn xray_magic() -> int {
+    if (ENABLED && CODE == 'A' && SCALE < 1.0) {
+        return MAGIC + 1
+    }
+    return 0
+}
+
+@c_export("xray_scalar_string_print")
+fn xray_scalar_string_print() -> int {
+    print(LABEL)
+    if (NOTHING == null) {
+        return MAGIC
+    }
+    return 0
+}

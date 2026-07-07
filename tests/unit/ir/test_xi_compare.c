@@ -1737,8 +1737,8 @@ TEST(cmp_enum_basic) {
                   "}\n"
                   "var c = Color.Red\n"
                   "print(c.name)\n"
-                  "print(c.value)",
-        .label = "enum basic: access name and value",
+                  "print(c.ordinal)",
+        .label = "enum basic: access name and ordinal",
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,

@@ -729,12 +729,13 @@ TEST(class_basic) {
 }
 
 TEST(enum_basic) {
-    return assert_all_typed("enum Color : string {\n"
-                            "    Red = \"red\",\n"
-                            "    Blue = \"blue\"\n"
+    return assert_all_typed("enum Color {\n"
+                            "    Red,\n"
+                            "    Blue\n"
                             "}\n"
                             "var c = Color.Red\n"
-                            "print(c)\n",
+                            "print(c.name)\n"
+                            "print(c.ordinal)\n",
                             "enum_basic");
 }
 

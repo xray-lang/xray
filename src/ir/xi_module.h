@@ -42,6 +42,7 @@ typedef struct XiEnumMemberData {
     const char *name;
     uint32_t ordinal;
     int payload_count;
+    struct XrType **payload_types;
 } XiEnumMemberData;
 
 typedef struct XiEnumData {
@@ -49,6 +50,9 @@ typedef struct XiEnumData {
     uint32_t member_count;
     bool is_adt;
     int max_payload;
+    uint32_t layout_id;
+    const char **type_param_names;
+    uint8_t type_param_count;
     void *runtime_type;
     XiEnumMemberData *members;
 } XiEnumData;
@@ -72,7 +76,7 @@ typedef struct XiModule {
     XiClassData **slot_classes;          /* [nslots] shared slot -> XiClassData* */
     XiEnumData **slot_enums;             /* [nslots] shared slot -> XiEnumData* */
     XiImportRef **slot_imports;          /* [nslots] shared slot -> XiImportRef* */
-    XiConstLiteral *slot_const_literals; /* [nslots] shared slot -> scalar const literal */
+    XiConstLiteral *slot_const_literals; /* [nslots] shared slot -> const literal/static data */
     uint16_t nslots;                     /* = init->nshared */
     /* Closure metadata for all closures in this module */
     XiClosureMeta **closure_metas; /* [nclosure_metas] */

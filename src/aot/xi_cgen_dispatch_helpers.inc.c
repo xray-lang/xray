@@ -54,10 +54,118 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     else if (v->type->kind == XR_KIND_STRING) {
         cg_emit_str_value(ctx, out, (const char *) v->aux);
     } else if (v->type->kind == XR_KIND_UNKNOWN && v->aux) {
-        emit_enum_type_expr(ctx, out, cg_enum_for_runtime_type(ctx, v->aux));
+        const XiEnumData *ed = cg_enum_for_runtime_type(ctx, v->aux);
+        if (ctx && ctx->freestanding_profile && ed)
+            fprintf(out, "XR_NULL_VAL");
+        else
+            emit_enum_type_expr(ctx, out, ed);
     } else {
         fprintf(out, "XR_NULL_VAL /* unknown const kind */");
     }
+}
+
+static bool xicgen_const_literal_is_freestanding_scalar(const XiConstLiteral *lit) {
+    if (!lit)
+        return false;
+    switch (lit->kind) {
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_FLOAT:
+        case XI_CONST_LITERAL_BOOL:
+        case XI_CONST_LITERAL_CHAR:
+        case XI_CONST_LITERAL_STRING:
+        case XI_CONST_LITERAL_NULL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool xicgen_const_literal_is_freestanding_erased_slot(const XiConstLiteral *lit) {
+    return xicgen_const_literal_is_freestanding_scalar(lit) ||
+           (lit && lit->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE);
+}
+
+static const XiConstLiteral *xicgen_freestanding_const_slot_literal(XiCgenCtx *ctx, int64_t slot) {
+    if (!ctx || !ctx->freestanding_profile || !ctx->module || !ctx->module->slot_const_literals ||
+        slot < 0 || slot >= ctx->module->nslots)
+        return NULL;
+    const XiConstLiteral *lit = &ctx->module->slot_const_literals[slot];
+    return xicgen_const_literal_is_freestanding_scalar(lit) &&
+                   !cg_const_literal_is_static_scalar_object(lit)
+               ? lit
+               : NULL;
+}
+
+static const XiConstLiteral *xicgen_freestanding_erased_const_slot(XiCgenCtx *ctx, int64_t slot) {
+    if (!ctx || !ctx->freestanding_profile || !ctx->module || !ctx->module->slot_const_literals ||
+        slot < 0 || slot >= ctx->module->nslots)
+        return NULL;
+    const XiConstLiteral *lit = &ctx->module->slot_const_literals[slot];
+    return xicgen_const_literal_is_freestanding_erased_slot(lit) ? lit : NULL;
+}
+
+static XrRep xicgen_const_literal_source_rep(const XiConstLiteral *lit) {
+    if (!lit)
+        return XR_REP_TAGGED;
+    switch (lit->kind) {
+        case XI_CONST_LITERAL_FLOAT:
+            return XR_REP_F64;
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_BOOL:
+        case XI_CONST_LITERAL_CHAR:
+            return XR_REP_I64;
+        case XI_CONST_LITERAL_NULL:
+        default:
+            return XR_REP_TAGGED;
+    }
+}
+
+static void xicgen_emit_i64_literal(FILE *out, int64_t value) {
+    if (value == INT64_MIN)
+        fprintf(out, "INT64_MIN");
+    else
+        fprintf(out, "INT64_C(%" PRId64 ")", value);
+}
+
+static void xicgen_emit_const_literal_raw(FILE *out, const XiConstLiteral *lit) {
+    switch (lit ? lit->kind : XI_CONST_LITERAL_NONE) {
+        case XI_CONST_LITERAL_INT:
+            xicgen_emit_i64_literal(out, lit->int_value);
+            return;
+        case XI_CONST_LITERAL_FLOAT:
+            emit_c_float_literal(out, lit->float_value);
+            return;
+        case XI_CONST_LITERAL_BOOL:
+            fprintf(out, "INT64_C(%d)", lit->bool_value ? 1 : 0);
+            return;
+        case XI_CONST_LITERAL_CHAR:
+            fprintf(out, "INT64_C(%" PRId64 ")", lit->int_value);
+            return;
+        case XI_CONST_LITERAL_NULL:
+            fprintf(out, "XR_NULL_VAL");
+            return;
+        default:
+            fprintf(out, "XR_NULL_VAL");
+            return;
+    }
+}
+
+static void xicgen_emit_const_slot_literal_as_value(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                    const XiConstLiteral *lit) {
+    if (lit && lit->kind == XI_CONST_LITERAL_STRING) {
+        XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
+        const XrType *type = lit->type ? lit->type : (v ? v->type : NULL);
+        const char *suffix = emit_conversion_prefix(out, type, XR_REP_TAGGED, to_rep);
+        cg_emit_str_value(ctx, out, lit->string_value ? lit->string_value : "");
+        emit_conversion_suffix(out, suffix);
+        return;
+    }
+    XrRep from_rep = xicgen_const_literal_source_rep(lit);
+    XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
+    const XrType *type = lit && lit->type ? lit->type : (v ? v->type : NULL);
+    const char *suffix = emit_conversion_prefix(out, type, from_rep, to_rep);
+    xicgen_emit_const_literal_raw(out, lit);
+    emit_conversion_suffix(out, suffix);
 }
 
 static bool xicgen_same_rep_identity_alias(XiCgenCtx *ctx, const XiValue *v, const XiValue *arg) {
@@ -128,6 +236,8 @@ static bool xicgen_emit_adt_field_load(XiCgenCtx *ctx, FILE *out, const XiValue 
         return false;
 
     if (cg_value_plan_is_aggregate(ctx, v->args[0])) {
+        const XaotValuePlan *recv_plan = cg_value_plan(ctx, v->args[0]);
+        bool typed_enum = recv_plan && cg_value_rep_is_typed_adt_aggregate(recv_plan->rep);
         XrRep from_rep = v->aux_int == 0 ? XR_REP_I64 : XR_REP_TAGGED;
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, from_rep, cg_value_plan_storage_rep(ctx, v));
@@ -135,10 +245,13 @@ static bool xicgen_emit_adt_field_load(XiCgenCtx *ctx, FILE *out, const XiValue 
             fprintf(out, "(");
             emit_vref(out, v->args[0]);
             fprintf(out, ").tag");
-        } else if (v->aux_int == 1) {
+        } else if (v->aux_int > 0 && (uint64_t) v->aux_int <= 16u) {
             fprintf(out, "(");
             emit_vref(out, v->args[0]);
-            fprintf(out, ").payload0");
+            if (typed_enum)
+                fprintf(out, ").payload.raw[%" PRId64 "]", v->aux_int - 1);
+            else
+                fprintf(out, ").payloads[%" PRId64 "]", v->aux_int - 1);
         } else {
             fprintf(out, "XR_NULL_VAL");
         }
@@ -540,6 +653,31 @@ static bool xicgen_value_belongs_to_func(const XiFunc *f, const XiValue *value) 
 static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) prefix;
+    const XiConstLiteral *lit = xicgen_freestanding_const_slot_literal(ctx, v ? v->aux_int : -1);
+    if (lit) {
+        xicgen_emit_const_slot_literal_as_value(ctx, out, v, lit);
+        return;
+    }
+    const XiConstLiteral *static_lit = NULL;
+    if (cg_freestanding_static_scalar_const_literal(ctx, v ? v->aux_int : -1, &static_lit) &&
+        cg_emit_freestanding_static_scalar_const_ref(ctx, out, v, static_lit)) {
+        return;
+    }
+    const XiConstLiteral *erased = xicgen_freestanding_erased_const_slot(ctx, v ? v->aux_int : -1);
+    if (erased && erased->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: freestanding top-level aggregate const slot %d must be "
+                "consumed through comptime before static data sections land\n",
+                (int) v->aux_int);
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (ctx && ctx->freestanding_profile &&
+        cg_enum_for_shared_slot_in_func(ctx, f, (int) v->aux_int)) {
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
     if (cg_value_type_is_span(v)) {
         bool ambiguous = false;
         const XiValue *source =
@@ -579,6 +717,15 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     const XiValue *value = (v && v->nargs >= 1) ? v->args[0] : NULL;
+    if (xicgen_freestanding_erased_const_slot(ctx, v ? v->aux_int : -1)) {
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
+    if (ctx && ctx->freestanding_profile &&
+        cg_enum_for_shared_slot_in_func(ctx, f, (int) v->aux_int)) {
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
     if (cg_value_plan_is_span_aggregate(ctx, value)) {
         bool ambiguous = false;
         const XiValue *source =
@@ -623,9 +770,8 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     } else {
         emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
     }
-    fprintf(out,
-            "; (XR_IS_ARRAY_REF(_xsv) && (_xsv.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) == 0) "
-            "? xrt_array_ref_to_owned(_xsv) : _xsv; }))");
+    fprintf(out, "; (XR_IS_ARRAY_REF(_xsv) && (_xsv.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) == 0) "
+                 "? xrt_array_ref_to_owned(_xsv) : _xsv; }))");
 }
 
 static bool xicgen_import_ref_is_core_math_member(const XiImportRef *ref) {
@@ -861,7 +1007,7 @@ static void xicgen_typename(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_typename: need arg");
-    fprintf(out, "xrt_typeof_str(");
+    fprintf(out, "xrt_typename(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ")");
 }
@@ -1074,19 +1220,6 @@ static void xicgen_emit_endian_arg_i64(XiCgenCtx *ctx, FILE *out, const XiValue 
     fprintf(out, ")");
 }
 
-static const XaotSpanAccessPlan *xicgen_span_access_plan(XiCgenCtx *ctx, const XiValue *v,
-                                                         uint8_t kind) {
-    const XaotSpanAccessPlan *plan =
-        xaot_bundle_find_span_access_plan(cg_ctx_aot_bundle(ctx), v);
-    return plan && plan->kind == kind ? plan : NULL;
-}
-
-static bool xicgen_span_plan_drops(XiCgenCtx *ctx, const XiValue *v, uint8_t kind,
-                                   uint32_t drops) {
-    const XaotSpanAccessPlan *plan = xicgen_span_access_plan(ctx, v, kind);
-    return plan && (plan->eliminated_checks & drops) == drops;
-}
-
 static bool xicgen_value_is_ordering_member(const XiValue *value, int64_t *out_index) {
     const XiValue *origin = cg_unwrap_identity_value(value);
     if (!origin || origin->op != XI_LOAD_FIELD || origin->nargs < 1 || !origin->aux)
@@ -1220,11 +1353,6 @@ static const XiValue *xicgen_stack_slice_source_value(const XiValue *arg) {
 static bool xicgen_slice_can_inline_bytes_common_prefix(XiCgenCtx *ctx, const XiValue *arg) {
     const XiValue *slice = xicgen_stack_slice_source_value(arg);
     return slice && cg_span_value_u8_info(ctx, slice->args[0], NULL);
-}
-
-static bool xicgen_value_is_u8_span_or_inline_slice(XiCgenCtx *ctx, const XiValue *arg) {
-    return cg_span_value_u8_info(ctx, arg, NULL) ||
-           xicgen_slice_can_inline_bytes_common_prefix(ctx, arg);
 }
 
 static bool xicgen_direct_call_param_noescape(XiCgenCtx *ctx, const XiFunc *current,
@@ -3137,7 +3265,19 @@ static bool xicgen_emit_enum_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
     if (recv_enum->is_adt && recv_enum->members &&
         recv_enum->members[enum_member].payload_count > 0) {
         emit_adt_enum_construct_expr(ctx, out, recv_enum, enum_member, v);
+    } else if (recv_enum->is_adt && cg_value_plan_is_aggregate(ctx, v)) {
+        emit_adt_enum_construct_expr(ctx, out, recv_enum, enum_member, v);
+    } else if (emit_static_enum_member_value_expr(ctx, out, v, recv_enum, (uint32_t) enum_member)) {
+        /* Static enum variants do not need the namespace map. */
     } else {
+        if (ctx && ctx->freestanding_profile) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: freestanding enum member '%s.%s' needs static lowering\n",
+                    recv_enum->name ? recv_enum->name : "?", method ? method : "?");
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+            return true;
+        }
         fprintf(out, "xrt_map_get_owned((xrt_map_t*)");
         emit_vref(out, v->args[0]);
         fprintf(out, ".ptr, ");
@@ -3393,20 +3533,19 @@ static bool xicgen_span_slice_is_nothrow(XiCgenCtx *ctx, const XiValue *value) {
     return v && v->op == XI_SLICE && v->nargs >= 3 && cg_value_plan_is_span_aggregate(ctx, v);
 }
 
-static bool xicgen_byte_span_common_prefix_method_is_direct(XiCgenCtx *ctx, const XiValue *call) {
+static bool xicgen_byte_span_common_prefix_method_drops_helper(XiCgenCtx *ctx,
+                                                               const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
     if (!xicgen_call_method_is_common_prefix(v))
         return false;
-    return xicgen_value_is_u8_span_or_inline_slice(ctx, v->args[0]) &&
-           xicgen_value_is_u8_span_or_inline_slice(ctx, v->args[1]);
+    return cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX, XAOT_SPAN_DROP_HELPER);
 }
 
-static bool xicgen_byte_span_copy_method_is_direct(XiCgenCtx *ctx, const XiValue *call) {
+static bool xicgen_byte_span_copy_method_drops_helper(XiCgenCtx *ctx, const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
     if (!xicgen_call_method_is_copy_from(v))
         return false;
-    return xicgen_value_is_u8_span_or_inline_slice(ctx, v->args[0]) &&
-           xicgen_value_is_u8_span_or_inline_slice(ctx, v->args[1]);
+    return cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COPY, XAOT_SPAN_DROP_HELPER);
 }
 
 static bool xicgen_runtime_method_call_is_direct_nothrow(const XiValue *call) {
@@ -3493,7 +3632,7 @@ static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current
         return true;
     if (cg_span_common_prefix_trusted_nothrow(ctx, v))
         return true;
-    if (xicgen_byte_span_common_prefix_method_is_direct(ctx, v))
+    if (xicgen_byte_span_common_prefix_method_drops_helper(ctx, v))
         return true;
     return xicgen_call_is_nothrow_direct_depth(ctx, current, v, depth);
 }
@@ -4300,11 +4439,11 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
-    if (xicgen_byte_span_copy_method_is_direct(ctx, v)) {
+    if (xicgen_byte_span_copy_method_drops_helper(ctx, v)) {
         xicgen_bytes_span_copy(ctx, out, f, v, NULL);
         return;
     }
-    if (xicgen_byte_span_common_prefix_method_is_direct(ctx, v)) {
+    if (xicgen_byte_span_common_prefix_method_drops_helper(ctx, v)) {
         xicgen_bytes_span_common_prefix(ctx, out, f, v, NULL);
         return;
     }
@@ -4633,8 +4772,14 @@ static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         return;
     }
     const char *name = cd->class_name ? cd->class_name : "?";
-    if (cd->is_monomorphized && cd->display_name) {
-        fprintf(out, "({ ");
+    bool emit_type_names = cg_emit_type_name_for_class(ctx, cd);
+    bool is_mono = cd->is_monomorphized && cd->display_name;
+    int origin_slot = -1;
+    if (is_mono)
+        origin_slot = cg_find_class_slot(ctx, cd->generic_origin_name ? cd->generic_origin_name
+                                                                      : cd->display_name);
+    fprintf(out, "({ ");
+    if (emit_type_names && is_mono) {
         if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
             fprintf(out, "static const char *_ta_%s[] = {", name);
             for (int ti = 0; ti < cd->mono_type_arg_count; ti++) {
@@ -4643,27 +4788,32 @@ static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
             }
             fprintf(out, "}; ");
         }
-        fprintf(out, "uint16_t _tid = ");
-        emit_class_native_type_register_expr(ctx, out, cd, prefix);
-        fprintf(out, "; ");
-        fprintf(out,
-                "uint16_t _orig = 0; "
-                "for (uint16_t _i = 1; _i < xrt_type_count; _i++) "
-                "{ if (xrt_type_table[_i].name && strcmp(xrt_type_table[_i].name, \"%s\") == 0) "
-                "{ _orig = _i; break; } } ",
-                cd->display_name);
-        fprintf(out, "xrt_type_set_generic(_tid, _orig, \"%s\", ", cd->display_name);
-        if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
-            fprintf(out, "_ta_%s, %d", name, cd->mono_type_arg_count);
-        } else {
-            fprintf(out, "NULL, 0");
-        }
-        fprintf(out, "); XR_FROM_INT(_tid); })");
-    } else {
-        fprintf(out, "XR_FROM_INT(");
-        emit_class_native_type_register_expr(ctx, out, cd, prefix);
-        fprintf(out, ")");
     }
+    fprintf(out, "uint16_t _tid = ");
+    emit_class_native_type_register_expr(ctx, out, cd, prefix);
+    fprintf(out, "; ");
+    if (emit_type_names) {
+        fprintf(out, "xrt_type_set_name(_tid, \"%s\", NULL); ", name);
+    }
+    if (is_mono) {
+        if (origin_slot >= 0) {
+            fprintf(out, "xrt_type_set_generic_origin(_tid, (uint16_t)%s[%d].i); ",
+                    ctx && ctx->shared_name ? ctx->shared_name : "xrt_shared", origin_slot);
+        } else {
+            fprintf(out, "xrt_type_set_generic_origin(_tid, 0); ");
+        }
+        if (emit_type_names) {
+            fprintf(out, "xrt_type_set_generic_name(_tid, \"%s\", ", cd->display_name);
+            if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
+                fprintf(out, "_ta_%s, %d", name, cd->mono_type_arg_count);
+            } else {
+                fprintf(out, "NULL, 0");
+            }
+            fprintf(out, "); ");
+        }
+    }
+    emit_class_native_type_derive_init(ctx, out, cd, prefix, "_tid");
+    fprintf(out, "XR_FROM_INT(_tid); })");
 }
 
 static void xicgen_throw(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -4750,16 +4900,18 @@ static void xicgen_struct_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         /* Inlined struct initialization is emitted by the statement path. */
         fprintf(out, "XR_NULL_VAL");
     } else {
-        emit_struct_fallback_new_expr(out, (XrStructLayout *) v->aux, prefix);
+        emit_struct_fallback_new_expr(out, (XrAggregateLayout *) v->aux, prefix);
     }
 }
 
 static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_struct_get: need struct arg");
+    if (emit_static_struct_field_get_expr(ctx, out, v))
+        return;
     if (cg_value_plan_is_struct_aggregate(ctx, v->args[0])) {
         char fname[128];
-        XrStructLayout *sl = (XrStructLayout *) v->aux;
+        XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         cg_struct_field_c_name(sl, v->aux_int, fname, sizeof(fname));
         emit_vref(out, v->args[0]);
         fprintf(out, ".%s", fname);
@@ -4767,10 +4919,10 @@ static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     const XiValue *origin = cg_trace_struct_new(v->args[0]);
     if (origin && cg_struct_can_inline(f, origin)) {
-        emit_struct_inline_field_get_expr(out, (XrStructLayout *) origin->aux, origin, v->aux_int,
-                                          cg_value_plan_storage_rep(ctx, v));
+        emit_struct_inline_field_get_expr(out, (XrAggregateLayout *) origin->aux, origin,
+                                          v->aux_int, cg_value_plan_storage_rep(ctx, v));
     } else {
-        XrStructLayout *sl = (XrStructLayout *) v->aux;
+        XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         emit_struct_fallback_field_get(ctx, out, f, sl, v->aux_int, v->args[0], v->type,
                                        cg_value_plan_storage_rep(ctx, v), prefix);
     }
@@ -4780,7 +4932,7 @@ static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_struct_set: need struct + value");
     if (cg_value_plan_is_struct_aggregate(ctx, v->args[0])) {
-        XrStructLayout *sl = (XrStructLayout *) v->aux;
+        XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         if (emit_struct_heap_field_set_expr(ctx, out, f, sl, v->aux_int, v->args[0], v->args[1],
                                             prefix))
             return;
@@ -4794,10 +4946,10 @@ static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     const XiValue *origin = cg_trace_struct_new(v->args[0]);
     if (origin && cg_struct_can_inline(f, origin)) {
-        emit_struct_inline_field_set_expr(ctx, out, (XrStructLayout *) origin->aux, origin,
+        emit_struct_inline_field_set_expr(ctx, out, (XrAggregateLayout *) origin->aux, origin,
                                           v->aux_int, v->args[1]);
     } else {
-        XrStructLayout *sl = (XrStructLayout *) v->aux;
+        XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         emit_struct_fallback_field_set(ctx, out, f, sl, v->aux_int, v->args[0], v->args[1], prefix);
     }
 }
@@ -4940,21 +5092,9 @@ static bool xicgen_unsigned_narrow_lowbits_binop(XiCgenCtx *ctx, FILE *out, cons
     if (!arg)
         return false;
 
-    const char *op = NULL;
-    switch ((XiOp) arg->op) {
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-            op = xi_to_c_template_arith_native_op(arg->op);
-            break;
-        case XI_BAND:
-        case XI_BOR:
-        case XI_BXOR:
-            op = xi_to_c_template_bitwise_binary_op(arg->op);
-            break;
-        default:
-            return false;
-    }
+    const char *op = xi_to_c_template_arith_native_op(arg->op);
+    if (!op || !*op)
+        op = xi_to_c_template_bitwise_binary_op(arg->op);
     if (!op || !*op)
         return false;
 
@@ -5140,9 +5280,9 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     if (field && v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_ENUM) {
         const char *helper = NULL;
         if (strcmp(field, "name") == 0)
-            helper = "xrt_enum_value_name";
+            helper = "xrt_enum_box_name";
         else if (strcmp(field, "ordinal") == 0)
-            helper = "xrt_enum_value_ordinal";
+            helper = "xrt_enum_box_ordinal";
         if (helper) {
             const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
                                                              cg_value_plan_storage_rep(ctx, v));
@@ -5153,11 +5293,10 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             return;
         }
     }
-    /* Bare ADT-enum variant access (e.g. `Recv.Empty`) builds a tagged instance,
-     * not the enum singleton. ADT-enum values are always tagged instances
-     * (field[0] = ordinal), so a bare non-payload variant must match that
-     * representation; otherwise the array-based pattern-match tag read would
-     * dereference an enum singleton and crash. */
+    /* Bare ADT-enum variant access (e.g. `Recv.Empty`) builds an ADT aggregate,
+     * not the enum singleton. Non-payload variants must still use the aggregate
+     * representation so pattern matching can read the same logical tag as
+     * payload variants. */
     if (field) {
         const XiEnumData *adt = xicgen_adt_enum_for_type(ctx, v->type);
         if (adt && adt->members) {
@@ -5168,6 +5307,15 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                 return;
             }
         }
+    }
+    if (field) {
+        const XiEnumData *recv_enum = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);
+        if (!recv_enum)
+            recv_enum = cg_resolve_imported_enum_value(ctx, f, v->args[0]);
+        int midx = cg_enum_member_index(recv_enum, field);
+        if (recv_enum && midx >= 0 &&
+            emit_static_enum_member_value_expr(ctx, out, v, recv_enum, (uint32_t) midx))
+            return;
     }
     if (emit_class_cached_field_load_expr(ctx, out, v))
         return;
@@ -5552,10 +5700,11 @@ static void xicgen_tuple_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
 
 static void xicgen_tuple_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_tuple_get: need tuple");
+    if (emit_static_tuple_get_expr(ctx, out, v))
+        return;
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
     fprintf(out, "xrt_tuple_get(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
@@ -5656,7 +5805,7 @@ static bool xicgen_emit_span_bytes_load(XiCgenCtx *ctx, FILE *out, const XiValue
     CgArrayElemInfo info;
     if (!v || v->nargs != 3 || !cg_span_value_u8_info(ctx, v->args[0], &info))
         return false;
-    if (!xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_LOAD, XAOT_SPAN_DROP_HELPER))
+    if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_LOAD, XAOT_SPAN_DROP_HELPER))
         return false;
     (void) info;
     const char *conv_suffix =
@@ -5698,7 +5847,7 @@ static bool xicgen_emit_span_bytes_float_load(XiCgenCtx *ctx, FILE *out, const X
     CgArrayElemInfo info;
     if (!v || v->nargs != 3 || !cg_span_value_u8_info(ctx, v->args[0], &info))
         return false;
-    if (!xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_LOAD, XAOT_SPAN_DROP_HELPER))
+    if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_LOAD, XAOT_SPAN_DROP_HELPER))
         return false;
     (void) info;
     const char *conv_suffix =
@@ -5725,21 +5874,22 @@ static bool xicgen_emit_span_bytes_store(XiCgenCtx *ctx, FILE *out, const XiValu
     if (!v || v->nargs != 4 || !cg_span_value_u8_info(ctx, v->args[0], &info))
         return false;
     (void) info;
-    if (xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_STORE, XAOT_SPAN_DROP_HELPER)) {
+    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_STORE, XAOT_SPAN_DROP_HELPER)) {
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; int64_t _off = ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out,
-                "; if (XR_UNLIKELY(xrt_span_is_readonly(_s))) xrt_throw_error("
-                "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); if "
-                "(XR_UNLIKELY(!%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)",
-                core_helper, value_ctype);
+        fprintf(out, "; ");
+        if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_STORE, XAOT_SPAN_DROP_READONLY)) {
+            fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) xrt_throw_error("
+                         "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+        }
+        fprintf(out, "if (XR_UNLIKELY(!%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)", core_helper,
+                value_ctype);
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
         fprintf(out, ", ");
         xicgen_emit_endian_arg_i64(ctx, out, v->args[3]);
-        fprintf(out,
-                "))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, \"%s\"); XR_NULL_VAL; })",
+        fprintf(out, "))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, \"%s\"); XR_NULL_VAL; })",
                 bounds_message);
         return true;
     }
@@ -5756,28 +5906,29 @@ static bool xicgen_emit_span_bytes_store(XiCgenCtx *ctx, FILE *out, const XiValu
 }
 
 static bool xicgen_emit_span_bytes_float_store(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                               const char *checked_helper,
-                                               const char *core_helper, const char *value_ctype,
+                                               const char *checked_helper, const char *core_helper,
+                                               const char *value_ctype,
                                                const char *bounds_message) {
     CgArrayElemInfo info;
     if (!v || v->nargs != 4 || !cg_span_value_u8_info(ctx, v->args[0], &info))
         return false;
     (void) info;
-    if (xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_STORE, XAOT_SPAN_DROP_HELPER)) {
+    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_STORE, XAOT_SPAN_DROP_HELPER)) {
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; int64_t _off = ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out,
-                "; if (XR_UNLIKELY(xrt_span_is_readonly(_s))) xrt_throw_error("
-                "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); if "
-                "(XR_UNLIKELY(!%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)",
-                core_helper, value_ctype);
+        fprintf(out, "; ");
+        if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_STORE, XAOT_SPAN_DROP_READONLY)) {
+            fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) xrt_throw_error("
+                         "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+        }
+        fprintf(out, "if (XR_UNLIKELY(!%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)", core_helper,
+                value_ctype);
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_F64);
         fprintf(out, ", ");
         xicgen_emit_endian_arg_i64(ctx, out, v->args[3]);
-        fprintf(out,
-                "))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, \"%s\"); XR_NULL_VAL; })",
+        fprintf(out, "))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, \"%s\"); XR_NULL_VAL; })",
                 bounds_message);
         return true;
     }
@@ -5990,16 +6141,18 @@ static void xicgen_bytes_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                                    const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_FILL, XAOT_SPAN_DROP_HELPER)) {
+    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_FILL, XAOT_SPAN_DROP_HELPER)) {
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
-        fprintf(out,
-                "; if (XR_UNLIKELY(xrt_span_is_readonly(_s))) xrt_throw_error("
-                "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); if "
-                "(XR_UNLIKELY(_s.length < 0 || (_s.length > 0 && !_s.data))) "
-                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                "\"ByteSpan.fill(value) range out of bounds\"); if (_s.length > 0) "
-                "memset(_s.data, (uint8_t)");
+        fprintf(out, "; ");
+        if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_FILL, XAOT_SPAN_DROP_READONLY)) {
+            fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) xrt_throw_error("
+                         "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+        }
+        fprintf(out, "if (XR_UNLIKELY(_s.length < 0 || (_s.length > 0 && !_s.data))) "
+                     "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                     "\"ByteSpan.fill(value) range out of bounds\"); if (_s.length > 0) "
+                     "memset(_s.data, (uint8_t)");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
         fprintf(out, ", (size_t)_s.length); _s; })");
         return;
@@ -6045,7 +6198,7 @@ static void xicgen_bytes_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                                    const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COPY, XAOT_SPAN_DROP_HELPER)) {
+    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COPY, XAOT_SPAN_DROP_HELPER)) {
         fprintf(out, "({ xr_span_t _dst = ");
         if (!xicgen_emit_byte_span_expr(ctx, out, v->args[0])) {
             ctx->error = true;
@@ -6056,13 +6209,17 @@ static void xicgen_bytes_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
             ctx->error = true;
             emit_codegen_abort_expr(out);
         }
+        fprintf(out, "; ");
+        if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COPY, XAOT_SPAN_DROP_READONLY)) {
+            fprintf(out, "if (xrt_span_is_readonly(_dst)) xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
+                         "\"cannot write through readonly Span\"); ");
+        }
         fprintf(out,
-                "; if (xrt_span_is_readonly(_dst)) xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
-                "\"cannot write through readonly Span\"); if (XR_UNLIKELY(_src.length < 0 || "
-                "_dst.length < 0 || _src.length > _dst.length || (_src.length > 0 && "
-                "(!_dst.data || !_src.data)))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                "\"ByteSpan.copyFrom(src) range out of bounds\"); "
-                "xr_array_core_copy_or_move_bytes(_dst.data, _src.data, _src.length); _dst; })");
+                "if (XR_UNLIKELY(_src.length < 0 || _dst.length < 0 || _src.length > "
+                "_dst.length || (_src.length > 0 && (!_dst.data || !_src.data)))) "
+                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, \"ByteSpan.copyFrom(src) range out "
+                "of bounds\"); xr_array_core_copy_or_move_bytes(_dst.data, _src.data, "
+                "_src.length); _dst; })");
         return;
     }
     fprintf(out, "xrt_span_bytes_copy_checked_raw(");
@@ -6079,7 +6236,7 @@ static void xicgen_bytes_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     (void) prefix;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-    if (xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COMPARE, XAOT_SPAN_DROP_HELPER)) {
+    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COMPARE, XAOT_SPAN_DROP_HELPER)) {
         fprintf(out, "({ xr_span_t _left = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; xr_span_t _right = ");
@@ -6139,8 +6296,7 @@ static void xicgen_bytes_span_common_prefix(XiCgenCtx *ctx, FILE *out, const XiF
     (void) prefix;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-    if (xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX,
-                               XAOT_SPAN_DROP_HELPER)) {
+    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX, XAOT_SPAN_DROP_HELPER)) {
         fprintf(out, "({ ");
         if (!xicgen_emit_byte_span_data_len_expr(ctx, out, v->args[0], "left") ||
             !xicgen_emit_byte_span_data_len_expr(ctx, out, v->args[1], "right")) {
@@ -6172,7 +6328,7 @@ static void xicgen_bytes_span_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                      const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_REPEAT, XAOT_SPAN_DROP_HELPER)) {
+    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_REPEAT, XAOT_SPAN_DROP_HELPER)) {
         fprintf(out, "({ xr_span_t _span = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; int64_t _dst_offset = ");
@@ -6181,14 +6337,18 @@ static void xicgen_bytes_span_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
         fprintf(out, "; int64_t _count = ");
         emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_I64);
-        fprintf(out, "; if (xrt_span_is_readonly(_span)) xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
-                     "\"cannot write through readonly Span\"); if (XR_UNLIKELY(_span.length < 0 "
-                     "|| _dst_offset < 0 || _distance <= 0 || _count < 0 || _distance > "
-                     "_dst_offset || _dst_offset > _span.length || _count > _span.length - "
-                     "_dst_offset || (_count > 0 && !_span.data))) xrt_throw_error("
-                     "XR_ERR_INDEX_OUT_OF_BOUNDS, \"ByteSpan.repeatFrom(dstOffset, distance, "
-                     "count) range out of bounds\"); xr_array_core_bytes_repeat_copy("
-                     "_span.data, _dst_offset, _distance, _count); _span; })");
+        fprintf(out, "; ");
+        if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_REPEAT, XAOT_SPAN_DROP_READONLY)) {
+            fprintf(out, "if (xrt_span_is_readonly(_span)) xrt_throw_error("
+                         "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+        }
+        fprintf(out, "if (XR_UNLIKELY(_span.length < 0 || _dst_offset < 0 || _distance <= 0 || "
+                     "_count < 0 || _distance > _dst_offset || _dst_offset > _span.length || "
+                     "_count > _span.length - _dst_offset || (_count > 0 && !_span.data))) "
+                     "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                     "\"ByteSpan.repeatFrom(dstOffset, distance, count) range out of bounds\"); "
+                     "xr_array_core_bytes_repeat_copy(_span.data, _dst_offset, _distance, "
+                     "_count); _span; })");
         return;
     }
     fprintf(out, "xrt_span_bytes_repeat_from_checked_raw(");
@@ -6206,17 +6366,16 @@ static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                                  const char *prefix) {
     (void) f;
     (void) prefix;
-    if (xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_SPAN_AS_BYTES, XAOT_SPAN_DROP_HELPER)) {
+    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_SPAN_AS_BYTES, XAOT_SPAN_DROP_HELPER)) {
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
-        fprintf(out,
-                "; if (XR_UNLIKELY(_s.length < 0 || (_s.elem_size > 0 && _s.length > "
-                "INT64_MAX / (int64_t)_s.elem_size))) xrt_throw_error("
-                "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Span.asBytes() byte length overflow\"); "
-                "xr_span_t _out = _s; _out.length = _s.length * (int64_t)_s.elem_size; "
-                "_out.elem_type = XR_ELEM_U8; _out.elem_size = 1; _out.elem_tid = 0; "
-                "_out.contains_refs = 0; _out.flags = _s.flags & XRT_SPAN_FLAG_READONLY; "
-                "_out; })");
+        fprintf(out, "; if (XR_UNLIKELY(_s.length < 0 || (_s.elem_size > 0 && _s.length > "
+                     "INT64_MAX / (int64_t)_s.elem_size))) xrt_throw_error("
+                     "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Span.asBytes() byte length overflow\"); "
+                     "xr_span_t _out = _s; _out.length = _s.length * (int64_t)_s.elem_size; "
+                     "_out.elem_type = XR_ELEM_U8; _out.elem_size = 1; _out.elem_tid = 0; "
+                     "_out.contains_refs = 0; _out.flags = _s.flags & XRT_SPAN_FLAG_READONLY; "
+                     "_out; })");
         return;
     }
     fprintf(out, "xrt_span_as_bytes_checked_raw(");
@@ -6236,11 +6395,15 @@ static void xicgen_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     }
     fprintf(out, "({ xr_span_t _s = ");
     emit_span_ref_expr(out, v->args[0]);
-    fprintf(out,
-            "; if (XR_UNLIKELY(xrt_span_is_readonly(_s))) "
+    fprintf(out, "; ");
+    if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_SPAN_FILL, XAOT_SPAN_DROP_READONLY)) {
+        fprintf(
+            out,
+            "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) "
             "xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
-    if (!xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_SPAN_FILL,
-                                XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD)) {
+    }
+    if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_SPAN_FILL,
+                            XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD)) {
         fprintf(out,
                 "if (XR_UNLIKELY(_s.elem_type != %s || _s.elem_size != "
                 "(uint8_t)sizeof(%s))) xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
@@ -6273,16 +6436,19 @@ static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     (void) f;
     (void) prefix;
     CgArrayElemInfo info;
-    if (xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_SPAN_COPY, XAOT_SPAN_DROP_HELPER) &&
+    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_SPAN_COPY, XAOT_SPAN_DROP_HELPER) &&
         cg_span_elem_info_from_value(ctx, v->args[0], &info) && info.rep != XR_REP_TAGGED) {
         fprintf(out, "({ xr_span_t _dst = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; xr_span_t _src = ");
         emit_span_ref_expr(out, v->args[1]);
+        fprintf(out, "; ");
+        if (!cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_SPAN_COPY, XAOT_SPAN_DROP_READONLY)) {
+            fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_dst))) xrt_throw_error("
+                         "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+        }
         fprintf(out,
-                "; if (XR_UNLIKELY(xrt_span_is_readonly(_dst))) xrt_throw_error("
-                "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); if "
-                "(XR_UNLIKELY(_dst.length < 0 || _src.length < 0 || _dst.length > "
+                "if (XR_UNLIKELY(_dst.length < 0 || _src.length < 0 || _dst.length > "
                 "INT64_MAX / (int64_t)sizeof(%s) || _src.length > INT64_MAX / "
                 "(int64_t)sizeof(%s))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
                 "\"Span.copyFrom(src) byte length overflow\"); int64_t _dst_bytes = "
@@ -6309,7 +6475,7 @@ static void xicgen_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
     CgArrayElemInfo info;
-    if (xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_SPAN_COMPARE, XAOT_SPAN_DROP_HELPER) &&
+    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_SPAN_COMPARE, XAOT_SPAN_DROP_HELPER) &&
         cg_span_elem_info_from_value(ctx, v->args[0], &info) && info.rep != XR_REP_TAGGED) {
         fprintf(out, "({ xr_span_t _left = ");
         emit_span_ref_expr(out, v->args[0]);
@@ -6347,7 +6513,7 @@ static void xicgen_span_reinterpret(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
     uint8_t elem_type = (uint8_t) (v->aux_int & 0xff);
     uint8_t elem_size = (uint8_t) ((v->aux_int >> 8) & 0xff);
     uint8_t elem_tid = (uint8_t) ((v->aux_int >> 16) & 0xff);
-    if (xicgen_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_REINTERPRET, XAOT_SPAN_DROP_HELPER)) {
+    if (cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_REINTERPRET, XAOT_SPAN_DROP_HELPER)) {
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out,
@@ -7343,7 +7509,7 @@ static const XiValue *xicgen_find_par_for_unsupported_call_value(XiCgenCtx *ctx,
         return NULL;
     if (cg_array_builtin_call_is_trusted_nothrow(ctx, current, call))
         return NULL;
-    if (xicgen_byte_span_common_prefix_method_is_direct(ctx, call))
+    if (xicgen_byte_span_common_prefix_method_drops_helper(ctx, call))
         return NULL;
     if (xicgen_enum_method_call_is_aggregate_adt_construct(ctx, current, call))
         return NULL;

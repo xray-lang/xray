@@ -1,9 +1,13 @@
 contains=function 1 name=bulk module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
 regex=array-storage [0-9]+ func=bulk value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_U8/u8/uint8_t
 regex=span-access [0-9]+ func=bulk value=v[0-9]+ kind=byte_fill evidence=recv_agg\+byte_span\+pod drop=type\+helper
+regex=span-access [0-9]+ func=bulk value=v[0-9]+ kind=byte_copy evidence=recv_agg\+byte_span\+pod\+elem_match drop=type\+helper
 regex=span-access [0-9]+ func=bulk value=v[0-9]+ kind=byte_compare evidence=recv_agg\+byte_span\+pod\+elem_match drop=type\+helper
+regex=span-access [0-9]+ func=bulk value=v[0-9]+ kind=byte_common_prefix evidence=recv_agg\+byte_span\+pod\+elem_match drop=type\+helper
 c_contains=memset(_s.data, (uint8_t)
+c_contains=xrt_span_is_readonly(_s)
 c_contains=xr_array_core_copy_or_move_bytes(
+c_contains=xrt_span_is_readonly(_dst)
 c_contains=memcmp(_left.data, _right.data,
 c_not_contains=xrt_span_bytes_fill_checked_raw(
 c_not_contains=xrt_span_bytes_copy_checked_raw(
@@ -11,4 +15,5 @@ c_not_contains=xrt_span_bytes_compare_checked_raw(
 c_contains=xr_array_core_bytes_common_prefix_raw(
 c_not_contains=xrt_span_bytes_common_prefix_checked_raw(
 c_contains=xr_array_core_bytes_repeat_copy(
+c_contains=xrt_span_is_readonly(_span)
 c_not_contains=xrt_span_bytes_repeat_from_checked_raw(

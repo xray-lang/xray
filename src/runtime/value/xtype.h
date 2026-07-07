@@ -22,6 +22,7 @@
 #include "xvalue.h"
 #include "xslot_type.h"
 #include "xstruct_layout.h"
+#include "xenum_layout.h"
 #include "../../base/xdefs.h"
 
 typedef struct XrErrorSet XrErrorSet;
@@ -200,6 +201,8 @@ struct XrType {
         // For enum value type
         struct {
             const char *enum_name;
+            uint32_t layout_id;
+            const XrEnumLayout *layout;
         } enum_type;
 
         // For union type (int | string) - compile-time only

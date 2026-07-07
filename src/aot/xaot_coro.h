@@ -75,10 +75,11 @@ static inline XrValue xr_aot_bridge_enum_key_to_xrt(XrValue value, uint32_t memb
 
 static inline XrValue xr_aot_bridge_runtime_enum_to_xrt(XrValue value) {
     uint32_t member_index = 0;
+    uint32_t layout_id = 0;
     bool is_adt = false;
     int payload_count = 0;
-    if (!xr_aot_runtime_enum_value_info(value, NULL, NULL, &member_index, &is_adt,
-                                        &payload_count)) {
+    if (!xr_aot_runtime_enum_ctor_info(value, NULL, NULL, &member_index, &layout_id, &is_adt,
+                                       &payload_count)) {
         return value;
     }
     if (is_adt && payload_count > 0)
@@ -90,14 +91,15 @@ static inline XrValue xr_aot_bridge_runtime_adt_to_xrt(XrValue value) {
     const char *enum_name = NULL;
     const char *member_name = NULL;
     uint32_t member_index = 0;
+    uint32_t layout_id = 0;
     int payload_count = 0;
-    if (!xr_aot_runtime_adt_value_info(value, &enum_name, &member_name, &member_index,
+    if (!xr_aot_runtime_adt_value_info(value, &enum_name, &member_name, &member_index, &layout_id,
                                        &payload_count)) {
         return value;
     }
 
     if (payload_count <= 0)
-        return xrt_enum_value_new_payloads(enum_name, member_name, member_index, 0, NULL);
+        return xrt_enum_box_new_payloads(layout_id, enum_name, member_name, member_index, 0, NULL);
 
     XrValue *payloads = (XrValue *) XRT_CALLOC((size_t) payload_count, sizeof(XrValue));
     if (!payloads)
@@ -106,8 +108,8 @@ static inline XrValue xr_aot_bridge_runtime_adt_to_xrt(XrValue value) {
         XrValue payload = xr_aot_runtime_adt_payload(value, i);
         payloads[i] = xr_aot_bridge_value_to_xrt(payload);
     }
-    XrValue out = xrt_enum_value_new_payloads(enum_name, member_name, member_index,
-                                              (uint32_t) payload_count, payloads);
+    XrValue out = xrt_enum_box_new_payloads(layout_id, enum_name, member_name, member_index,
+                                            (uint32_t) payload_count, payloads);
     XRT_FREE(payloads);
     return out;
 }

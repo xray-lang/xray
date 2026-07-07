@@ -84,7 +84,7 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
      * Scoped to INDEX_SET (arrays/maps) on purpose: only collection allocations
      * (ARRAY_NEW/MAP_NEW/...) are heap-alloc ops eligible for stack allocation,
      * so this is exactly where dropping the container to NO_ESCAPE pays off.
-     * STORE_FIELD/STRUCT_SET targets (instances/value structs) are not
+     * STORE_FIELD/AGG_SET targets (instances/value structs) are not
      * heap-alloc ops, so refining their escape would change reported levels
      * without enabling any stack allocation; left conservative. */
     if (user->op == XI_INDEX_SET && arg_idx == 0)

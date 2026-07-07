@@ -1,0 +1,10 @@
+enum PairResult {
+    Pair(int, int),
+    Empty
+}
+
+fn make_pair() -> PairResult {
+    return PairResult.Pair(10, 32)
+}
+
+print(make_pair())

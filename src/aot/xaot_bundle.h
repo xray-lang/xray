@@ -49,6 +49,20 @@ typedef struct XaotContainerTypePlan {
     XaotContainerPlan plan;
 } XaotContainerTypePlan;
 
+typedef struct XaotEnumPlan {
+    const XiEnumData *enum_data;
+    const XiEnumMemberData *members;
+    const XrType *concrete_type;
+    XrType **type_args;
+    uint32_t module_index;
+    uint32_t member_count;
+    uint32_t layout_id;
+    uint16_t max_payload;
+    uint8_t type_arg_count;
+    bool owns_members;
+    const char *c_type;
+} XaotEnumPlan;
+
 enum {
     XAOT_ARRAY_STORAGE_READ = 1u << 0,
     XAOT_ARRAY_STORAGE_MUTABLE = 1u << 1,
@@ -201,10 +215,10 @@ enum {
 typedef struct XaotSpanAccessPlan {
     const XiFunc *func;
     const XiValue *value;
-    uint8_t kind;              /* XaotSpanAccessKind */
-    uint32_t evidence;         /* XAOT_SPAN_EV_* */
+    uint8_t kind;               /* XaotSpanAccessKind */
+    uint32_t evidence;          /* XAOT_SPAN_EV_* */
     uint32_t eliminated_checks; /* XAOT_SPAN_DROP_*; 0 = stays on checked/fallback path */
-    uint8_t unproven_reason;   /* XAOT_SPAN_UNPROVEN_*; 0 = eliminated_checks != 0 */
+    uint8_t unproven_reason;    /* XAOT_SPAN_UNPROVEN_*; 0 = eliminated_checks != 0 */
 } XaotSpanAccessPlan;
 
 /* Alias plan: prepare proves a pointer unique over its storage so Cgen can
@@ -280,6 +294,9 @@ typedef struct XaotBundle {
     XaotContainerTypePlan *container_plans;
     uint32_t ncontainer_plans;
     uint32_t container_plan_cap;
+    XaotEnumPlan *enum_plans;
+    uint32_t nenum_plans;
+    uint32_t enum_plan_cap;
     XaotArrayStoragePlan *array_storage_plans;
     uint32_t narray_storage_plans;
     uint32_t array_storage_plan_cap;
@@ -333,6 +350,13 @@ XR_FUNC XaotContainerTypePlan *xaot_bundle_add_container_plan(XaotBundle *bundle
                                                               const XrType *type);
 XR_FUNC const XaotContainerTypePlan *xaot_bundle_find_container_plan(const XaotBundle *bundle,
                                                                      const XrType *type);
+XR_FUNC XaotEnumPlan *xaot_bundle_add_enum_plan(XaotBundle *bundle, const XiEnumData *enum_data,
+                                                uint32_t module_index);
+XR_FUNC const XaotEnumPlan *xaot_bundle_find_enum_plan(const XaotBundle *bundle,
+                                                       const XiEnumData *enum_data);
+XR_FUNC const XaotEnumPlan *xaot_bundle_find_enum_plan_for_type(const XaotBundle *bundle,
+                                                                const XrType *type);
+XR_FUNC bool xaot_bundle_prepare_enum_plan_for_type(XaotBundle *bundle, const XrType *type);
 XR_FUNC XaotArrayStoragePlan *
 xaot_bundle_add_array_storage_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,
                                    const XiValue *origin, uint32_t flags,
@@ -366,12 +390,13 @@ XR_FUNC XaotBoundsPlan *xaot_bundle_add_bounds_plan(XaotBundle *bundle, const Xi
                                                     uint8_t unproven_reason);
 XR_FUNC const XaotBoundsPlan *xaot_bundle_find_bounds_plan(const XaotBundle *bundle,
                                                            const XiValue *access);
-XR_FUNC XaotSpanAccessPlan *
-xaot_bundle_add_span_access_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,
-                                 uint8_t kind, uint32_t evidence,
-                                 uint32_t eliminated_checks, uint8_t unproven_reason);
-XR_FUNC const XaotSpanAccessPlan *
-xaot_bundle_find_span_access_plan(const XaotBundle *bundle, const XiValue *value);
+XR_FUNC XaotSpanAccessPlan *xaot_bundle_add_span_access_plan(XaotBundle *bundle, const XiFunc *func,
+                                                             const XiValue *value, uint8_t kind,
+                                                             uint32_t evidence,
+                                                             uint32_t eliminated_checks,
+                                                             uint8_t unproven_reason);
+XR_FUNC const XaotSpanAccessPlan *xaot_bundle_find_span_access_plan(const XaotBundle *bundle,
+                                                                    const XiValue *value);
 XR_FUNC XaotAliasPlan *xaot_bundle_add_alias_plan(XaotBundle *bundle, const XiFunc *func,
                                                   const XiValue *value, uint8_t kind,
                                                   uint32_t evidence);

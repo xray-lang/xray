@@ -30,6 +30,8 @@ typedef struct VarDeclNode {
     bool is_const;
     uint8_t storage_mode;  // 0 = normal, 1 = shared
     XrTypeRef *type_annotation;
+    XrAttribute **attributes;
+    int attr_count;
     uint32_t symbol_id; /* unique ID from analyzer; 0 = unresolved */
 } VarDeclNode;
 

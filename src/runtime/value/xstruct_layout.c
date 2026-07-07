@@ -36,7 +36,7 @@ int xr_type_kind_to_native(int kind, uint8_t native_width) {
     }
 }
 
-void xr_struct_layout_compute(XrStructLayout *layout) {
+void xr_aggregate_layout_compute(XrAggregateLayout *layout) {
     if (!layout || layout->field_count == 0) {
         if (layout) {
             layout->total_size = 0;
@@ -50,7 +50,7 @@ void xr_struct_layout_compute(XrStructLayout *layout) {
     uint32_t max_size = 0;
 
     for (int i = 0; i < layout->field_count; i++) {
-        XrStructFieldLayout *f = &layout->fields[i];
+        XrAggregateFieldLayout *f = &layout->fields[i];
 
         // Auto-compute size from native_type (except nested struct and array)
         if (f->native_type == XR_NATIVE_ARRAY) {
@@ -62,7 +62,7 @@ void xr_struct_layout_compute(XrStructLayout *layout) {
         }
 
         uint32_t field_align;
-        if (layout->kind == XR_STRUCT_LAYOUT_PACKED) {
+        if (layout->kind == XR_AGG_LAYOUT_PACKED_STRUCT) {
             field_align = 1;
         } else if (f->native_type == XR_NATIVE_STRUCT) {
             field_align = f->sub_layout ? f->sub_layout->alignment : 8;
@@ -72,7 +72,7 @@ void xr_struct_layout_compute(XrStructLayout *layout) {
             field_align = xr_native_type_align(f->native_type);
         }
 
-        if (layout->kind == XR_STRUCT_LAYOUT_UNION) {
+        if (layout->kind == XR_AGG_LAYOUT_UNION) {
             f->offset = 0;
             if (f->size > max_size)
                 max_size = f->size;
@@ -97,12 +97,12 @@ void xr_struct_layout_compute(XrStructLayout *layout) {
     }
 
     // Pad total size to alignment
-    uint32_t raw_size = (layout->kind == XR_STRUCT_LAYOUT_UNION) ? max_size : offset;
+    uint32_t raw_size = (layout->kind == XR_AGG_LAYOUT_UNION) ? max_size : offset;
     layout->total_size = (uint16_t) ((raw_size + max_align - 1) & ~(max_align - 1));
     layout->alignment = max_align;
 }
 
-static const XrStructLayout *static_layout_struct_from_type(const XrType *type) {
+static const XrAggregateLayout *static_layout_struct_from_type(const XrType *type) {
     if (!type || type->is_nullable)
         return NULL;
     if (type->kind != XR_KIND_INSTANCE && type->kind != XR_KIND_CLASS)
@@ -110,11 +110,11 @@ static const XrStructLayout *static_layout_struct_from_type(const XrType *type) 
     XrClassInfo *info = type->instance.class_ref;
     if (!info || !info->struct_layout)
         return NULL;
-    const XrStructLayout *layout = info->struct_layout;
+    const XrAggregateLayout *layout = info->struct_layout;
     return layout;
 }
 
-bool xr_type_static_layout(const XrType *type, uint32_t *out_size, uint32_t *out_align) {
+bool xr_type_has_static_layout(const XrType *type, uint32_t *out_size, uint32_t *out_align) {
     if (out_size)
         *out_size = 0;
     if (out_align)
@@ -147,7 +147,7 @@ bool xr_type_static_layout(const XrType *type, uint32_t *out_size, uint32_t *out
         type->fixed_array.element_type) {
         uint32_t elem_size = 0;
         uint32_t elem_align = 0;
-        if (!xr_type_static_layout(type->fixed_array.element_type, &elem_size, &elem_align))
+        if (!xr_type_has_static_layout(type->fixed_array.element_type, &elem_size, &elem_align))
             return false;
         uint64_t total = (uint64_t) elem_size * (uint64_t) type->fixed_array.length;
         if (total > UINT32_MAX)
@@ -159,7 +159,7 @@ bool xr_type_static_layout(const XrType *type, uint32_t *out_size, uint32_t *out
         return true;
     }
 
-    const XrStructLayout *layout = static_layout_struct_from_type(type);
+    const XrAggregateLayout *layout = static_layout_struct_from_type(type);
     if (layout) {
         if (out_size)
             *out_size = layout->total_size;
@@ -171,13 +171,14 @@ bool xr_type_static_layout(const XrType *type, uint32_t *out_size, uint32_t *out
     return false;
 }
 
-bool xr_type_static_field_offset(const XrType *type, const char *field_name, uint32_t *out_offset) {
+bool xr_type_has_static_field_offset(const XrType *type, const char *field_name,
+                                     uint32_t *out_offset) {
     if (out_offset)
         *out_offset = 0;
     if (!field_name)
         return false;
 
-    const XrStructLayout *layout = static_layout_struct_from_type(type);
+    const XrAggregateLayout *layout = static_layout_struct_from_type(type);
     if (!layout || !layout->field_names)
         return false;
 

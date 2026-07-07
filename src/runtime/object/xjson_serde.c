@@ -395,14 +395,22 @@ static void stringify_json(JsonWriter *w, XrJson *json) {
 
 // Stringify Instance (Struct/Class instance)
 static void stringify_instance(JsonWriter *w, XrInstance *inst) {
-    writer_char(w, '{');
-
     XrClass *cls = xr_instance_get_class(inst);
     if (!cls) {
-        writer_char(w, '}');
+        writer_str(w, "null");
+        return;
+    }
+    if ((cls->flags & XR_CLASS_DERIVE_JSON) == 0) {
+        if (!w->has_error) {
+            w->has_error = true;
+            snprintf(w->error_msg, sizeof(w->error_msg), "type '%s' does not derive Json",
+                     xr_class_display_name(cls));
+        }
+        writer_str(w, "null");
         return;
     }
 
+    writer_char(w, '{');
     w->depth++;
     size_t output_count = 0;
 
@@ -520,8 +528,8 @@ static void stringify_value(JsonWriter *w, XrValue val) {
             stringify_array(w, arr);
             stringify_leave(w);
         }
-    } else if (xr_value_is_json(val)) {
-        XrJson *json = xr_value_to_json(val);
+    } else if (xr_value_is_json(val) || xr_value_is_record(val)) {
+        XrJson *json = (XrJson *) XR_TO_PTR(val);
         if (stringify_enter(w, json)) {
             stringify_json(w, json);
             stringify_leave(w);
@@ -532,11 +540,10 @@ static void stringify_value(JsonWriter *w, XrValue val) {
             stringify_map(w, map);
             stringify_leave(w);
         }
-    } else if (XR_IS_ENUM_VALUE(val)) {
-        // Enum value: serialize as member name string
-        XrEnumValue *ev = XR_TO_ENUM_VALUE(val);
-        const char *name = ev->member_name ? ev->member_name : "null";
-        if (ev->member_name)
+    } else if (xr_value_is_enum_aggregate(val)) {
+        XrEnumAggregateValue *agg = xr_value_to_enum_aggregate(val);
+        const char *name = xr_enum_aggregate_member_name(agg);
+        if (name)
             stringify_string(w, name, strlen(name));
         else
             writer_str(w, "null");
@@ -721,9 +728,11 @@ static void encode_value(JsonEncoder *e, XrValue val, XrValue *out) {
         encode_map(e, XR_TO_MAP(val), out);
     } else if (XR_IS_SET(val)) {
         encode_set(e, XR_TO_SET(val), out);
-    } else if (XR_IS_ENUM_VALUE(val)) {
-        XrEnumValue *ev = XR_TO_ENUM_VALUE(val);
-        const char *name = ev->member_name ? ev->member_name : "";
+    } else if (xr_value_is_enum_aggregate(val)) {
+        XrEnumAggregateValue *agg = xr_value_to_enum_aggregate(val);
+        const char *name = xr_enum_aggregate_member_name(agg);
+        if (!name)
+            name = "";
         *out = xr_string_value(xr_string_intern(e->isolate, name, strlen(name), 0));
     } else if (xr_value_is_datetime(e->isolate, val)) {
         XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
@@ -732,7 +741,17 @@ static void encode_value(JsonEncoder *e, XrValue val, XrValue *out) {
         int n = xr_datetime_to_iso_string(dt, buf, sizeof(buf));
         *out = n > 0 ? xr_string_value(xr_string_new(e->isolate, buf, (size_t) n)) : xr_null();
     } else if (xr_value_is_instance(val)) {
-        encode_object_fields(e, (XrInstance *) XR_TO_PTR(val), false, out);
+        XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
+        XrClass *cls = xr_instance_get_class(inst);
+        if (!cls || (cls->flags & XR_CLASS_DERIVE_JSON) == 0) {
+            char msg[160];
+            snprintf(msg, sizeof(msg), "type '%s' does not derive Json",
+                     cls ? xr_class_display_name(cls) : "<instance>");
+            encode_error(e, msg);
+            *out = xr_null();
+        } else {
+            encode_object_fields(e, inst, false, out);
+        }
     } else {
         encode_type_error(e, val);
         *out = xr_null();

@@ -58,13 +58,13 @@ enum {
     XR_AOT_VALUE_TAG_ENUM = 24,
 };
 
-typedef struct XrAotEnumValueViewCompat {
+typedef struct XrAotEnumBoxCompat {
     uint64_t gc_words[2];
     void *klass;
     const char *enum_name;
     const char *member_name;
     uint32_t member_index;
-} XrAotEnumValueViewCompat;
+} XrAotEnumBoxCompat;
 
 enum {
     XR_AOT_PAR_FOR_MAX_WORKERS = 256,
@@ -676,8 +676,6 @@ static const char *aot_script_dir_bounds(const char *file, size_t *out_len) {
     return file;
 }
 
-static bool aot_value_is_runtime_instance(XrValue value);
-
 static bool aot_builtin_index_is_prelude_enum(int32_t index) {
     return index == XR_GLOBAL_VAR_ORDERING || index == XR_GLOBAL_VAR_RECV ||
            index == XR_GLOBAL_VAR_ENDIAN || index == XR_GLOBAL_VAR_SEND_RESULT ||
@@ -805,25 +803,19 @@ XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const 
         return XR_NULL_VAL;
     }
 
-    if (aot_value_is_runtime_instance(builtin)) {
+    if (XR_IS_PTR(builtin) && builtin.ptr) {
         XrObjHeader *gc = (XrObjHeader *) builtin.ptr;
-        if (XR_OBJ_GET_TYPE(gc) == XR_TINSTANCE) {
-            XrInstance *inst = xr_value_to_instance(builtin);
-            XrEnumType *enum_type = (XrEnumType *) inst;
-            bool is_enum_type =
-                inst && ((inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_TYPE) ||
-                         (aot_builtin_index_is_prelude_enum(index) && enum_type->members &&
-                          enum_type->member_count > 0));
-            if (is_enum_type) {
+        if (XR_OBJ_GET_TYPE(gc) == XR_TENUM_TYPE) {
+            XrEnumType *enum_type = (XrEnumType *) builtin.ptr;
+            if (enum_type->members && enum_type->member_count > 0) {
                 for (uint32_t i = 0; i < enum_type->member_count; i++) {
                     if (enum_type->members[i].name &&
                         strcmp(enum_type->members[i].name, field) == 0 &&
-                        enum_type->members[i].instance) {
-                        XrValue value = XR_FROM_PTR(enum_type->members[i].instance);
-                        int payload_count = 0;
-                        if (enum_type->is_adt && enum_type->payload_counts)
-                            payload_count = enum_type->payload_counts[i];
-                        if (!enum_type->is_adt || payload_count == 0) {
+                        enum_type->members[i].ctor) {
+                        XrValue value = XR_FROM_PTR(enum_type->members[i].ctor);
+                        bool has_payloads = xr_enum_type_has_payloads(enum_type);
+                        int payload_count = xr_enum_type_payload_count(enum_type, i);
+                        if (!has_payloads || payload_count == 0) {
                             value.tag = XR_AOT_VALUE_TAG_ENUM;
                             value.ext = i;
                         }
@@ -852,25 +844,28 @@ XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const 
     return xr_instance_get_field_by_index((XrInstance *) process.ptr, field_index);
 }
 
-static bool aot_value_is_runtime_instance(XrValue value) {
-    if (!XR_IS_PTR(value) || !value.ptr)
-        return false;
-    XrObjHeader *gc = (XrObjHeader *) value.ptr;
-    return XR_OBJ_GET_TYPE(gc) == XR_TINSTANCE;
+static XrEnumCtor *aot_enum_ctor_from_value(XrValue value) {
+    if (!value.ptr)
+        return NULL;
+    if (XR_IS_ENUM_CTOR(value))
+        return (XrEnumCtor *) value.ptr;
+    if (value.tag == XR_AOT_VALUE_TAG_ENUM &&
+        XR_OBJ_GET_TYPE((XrObjHeader *) value.ptr) == XR_TENUM_CTOR) {
+        return (XrEnumCtor *) value.ptr;
+    }
+    return NULL;
 }
 
-bool xr_aot_runtime_enum_value_info(XrValue value, const char **enum_name, const char **member_name,
-                                    uint32_t *member_index, bool *is_adt, int *payload_count) {
-    if (!aot_value_is_runtime_instance(value))
-        return false;
-    XrInstance *inst = xr_value_to_instance(value);
-    if (!inst || (inst->klass && inst->klass->builtin_kind != XR_BK_ENUM_VALUE))
+bool xr_aot_runtime_enum_ctor_info(XrValue value, const char **enum_name, const char **member_name,
+                                   uint32_t *member_index, uint32_t *layout_id, bool *is_adt,
+                                   int *payload_count) {
+    XrEnumCtor *enum_value = aot_enum_ctor_from_value(value);
+    if (!enum_value)
         return false;
 
-    XrEnumValue *enum_value = (XrEnumValue *) inst;
     XrEnumType *parent = enum_value->parent_type;
     if (!parent || enum_value->member_index >= parent->member_count ||
-        parent->members[enum_value->member_index].instance != enum_value) {
+        parent->members[enum_value->member_index].ctor != enum_value) {
         return false;
     }
     if (enum_name)
@@ -879,64 +874,61 @@ bool xr_aot_runtime_enum_value_info(XrValue value, const char **enum_name, const
         *member_name = enum_value->member_name ? enum_value->member_name : "";
     if (member_index)
         *member_index = enum_value->member_index;
+    if (layout_id)
+        *layout_id = parent->layout ? parent->layout->layout_id : enum_value->layout_id;
     if (is_adt)
-        *is_adt = parent && parent->is_adt;
+        *is_adt = xr_enum_type_has_payloads(parent);
     if (payload_count) {
         int count = 0;
-        if (parent && parent->is_adt && parent->payload_counts &&
-            enum_value->member_index < parent->member_count) {
-            count = parent->payload_counts[enum_value->member_index];
-        }
+        if (parent && xr_enum_type_has_payloads(parent) &&
+            enum_value->member_index < parent->member_count)
+            count = xr_enum_type_payload_count(parent, enum_value->member_index);
         *payload_count = count;
     }
     return true;
 }
 
 bool xr_aot_runtime_adt_value_info(XrValue value, const char **enum_name, const char **member_name,
-                                   uint32_t *member_index, int *payload_count) {
-    if (!aot_value_is_runtime_instance(value))
+                                   uint32_t *member_index, uint32_t *layout_id,
+                                   int *payload_count) {
+    XrEnumAggregateValue *agg = xr_value_to_enum_aggregate(value);
+    if (!agg)
         return false;
-    XrInstance *inst = xr_value_to_instance(value);
-    if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_ADT_ENUM)
+    XrEnumType *etype = xr_enum_aggregate_type(agg);
+    if (!etype || !etype->members)
         return false;
-
-    // ADT-enum instance layout: fields[0] = int variant tag, fields[1..N] =
-    // payload. Variant/name metadata lives on the enum type, which the runtime
-    // stores on the class as builtin_data (see xr_enum_adt_construct_core and
-    // the ADT branch of xr_value_to_strbuf). Reading fields[0] as an enum-value
-    // instance is wrong for this layout — it is a plain int.
-    XrValue tag_val = inst->fields[0];
-    XrEnumType *etype = (XrEnumType *) inst->klass->builtin_data;
-    if (!XR_IS_INT(tag_val) || !etype || !etype->members)
-        return false;
-    int64_t idx = XR_TO_INT(tag_val);
-    if (idx < 0 || (uint64_t) idx >= etype->member_count)
+    uint32_t idx = agg->member_index;
+    if (idx >= etype->member_count)
         return false;
 
     if (enum_name)
         *enum_name = etype->name ? etype->name : "";
-    if (member_name)
-        *member_name = etype->members[idx].name ? etype->members[idx].name : "";
+    if (member_name) {
+        const char *name = xr_enum_type_member_name(etype, (uint32_t) idx);
+        *member_name = name ? name : "";
+    }
     if (member_index)
-        *member_index = (uint32_t) idx;
+        *member_index = idx;
+    if (layout_id)
+        *layout_id = etype->layout ? etype->layout->layout_id : 0;
     if (payload_count)
-        *payload_count = etype->payload_counts ? etype->payload_counts[idx] : 0;
+        *payload_count = (int) agg->payload_count;
     return true;
 }
 
 XrValue xr_aot_runtime_adt_payload(XrValue value, int index) {
-    if (index < 0 || !aot_value_is_runtime_instance(value))
+    if (index < 0)
         return XR_NULL_VAL;
-    XrInstance *inst = xr_value_to_instance(value);
-    if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_ADT_ENUM)
+    XrEnumAggregateValue *agg = xr_value_to_enum_aggregate(value);
+    if (!agg)
         return XR_NULL_VAL;
 
     int payload_count = 0;
-    if (!xr_aot_runtime_adt_value_info(value, NULL, NULL, NULL, &payload_count) ||
+    if (!xr_aot_runtime_adt_value_info(value, NULL, NULL, NULL, NULL, &payload_count) ||
         index >= payload_count) {
         return XR_NULL_VAL;
     }
-    return inst->fields[1 + index];
+    return xr_enum_aggregate_payload_get(agg, (uint32_t) index);
 }
 
 XrValue xr_aot_time_now(void) {
@@ -1806,7 +1798,7 @@ static XrRuntime *aot_context_scheduler(const XrAotContext *ctx);
 
 static XrEnumType *aot_builtin_enum_type(const XrAotContext *ctx, int builtin_index) {
     XrValue value = xr_aot_get_builtin(ctx, builtin_index);
-    if (!XR_IS_PTR(value))
+    if (!XR_IS_ENUM_TYPE(value))
         return NULL;
     return (XrEnumType *) XR_TO_PTR(value);
 }
@@ -1814,23 +1806,23 @@ static XrEnumType *aot_builtin_enum_type(const XrAotContext *ctx, int builtin_in
 static XrValue aot_builtin_enum_member(const XrAotContext *ctx, int builtin_index,
                                        uint32_t member_index) {
     XrEnumType *type = aot_builtin_enum_type(ctx, builtin_index);
-    if (!type || member_index >= type->member_count || !type->members[member_index].instance)
+    if (!type || member_index >= type->member_count || !type->members[member_index].ctor)
         return xr_null();
     XrValue value = xr_null();
     value.tag = XR_AOT_VALUE_TAG_ENUM;
     value.ext = member_index;
-    value.ptr = type->members[member_index].instance;
+    value.ptr = type->members[member_index].ctor;
     return value;
 }
 
 static XrValue aot_builtin_adt_value(const XrAotContext *ctx, int builtin_index,
                                      uint32_t member_index, XrValue *args, int nargs) {
     XrEnumType *type = aot_builtin_enum_type(ctx, builtin_index);
-    if (!type || !type->is_adt)
+    if (!type || !xr_enum_type_has_payloads(type))
         return xr_null();
-    XrInstance *inst = xr_enum_adt_construct_core(
+    XrEnumAggregateValue *value = xr_enum_adt_construct_core(
         aot_context_runtime_core(ctx), ctx ? ctx->coro : NULL, type, member_index, args, nargs);
-    return inst ? XR_FROM_PTR(inst) : xr_null();
+    return value ? XR_FROM_PTR(value) : xr_null();
 }
 
 static XrValue aot_recv_value(const XrAotContext *ctx, XrValue value) {
@@ -1842,7 +1834,7 @@ static XrValue aot_recv_value(const XrAotContext *ctx, XrValue value) {
  * every Recv result by reading an ADT array tag (field[0]). The non-payload
  * variants must therefore use the same ADT-instance representation as Value —
  * returning a plain enum singleton here makes the native match read an
- * XrEnumValue as an array and crash. */
+ * XrEnumCtor as an array and crash. */
 static XrValue aot_recv_empty(const XrAotContext *ctx) {
     return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_RECV, 1, NULL, 0);
 }
@@ -1933,7 +1925,7 @@ static XrValue aot_task_result_failed(const XrAotContext *ctx, XrTask *task) {
  * whenever the match binds a payload arm. The non-payload variants
  * (Cancelled/Timeout/Pending) must therefore use the same ADT-instance
  * representation — returning a plain enum singleton here makes the native match
- * read an XrEnumValue as an array and crash. */
+ * read an XrEnumCtor as an array and crash. */
 static XrValue aot_task_result_member(const XrAotContext *ctx, uint32_t member_index) {
     return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, member_index, NULL, 0);
 }
@@ -3164,36 +3156,29 @@ void xr_aot_sync_backedge_heartbeat(void) {
 }
 
 bool xr_aot_send_is_sent(XrValue send_value) {
-    if (!XR_IS_INSTANCE(send_value))
-        return false;
-    XrInstance *inst = xr_value_to_instance(send_value);
-    if (!inst || !inst->klass)
-        return false;
-    if (inst->klass->builtin_kind == XR_BK_ENUM_VALUE) {
-        XrEnumValue *variant = (XrEnumValue *) inst;
+    XrEnumCtor *variant = aot_enum_ctor_from_value(send_value);
+    if (variant) {
         return variant->parent_type && variant->parent_type->name &&
                strcmp(variant->parent_type->name, "SendResult") == 0 && variant->member_index == 0;
     }
-    if (inst->klass->builtin_kind != XR_BK_ADT_ENUM)
+    if (send_value.tag == XR_AOT_VALUE_TAG_ENUM && send_value.ptr) {
+        const XrAotEnumBoxCompat *ev = (const XrAotEnumBoxCompat *) send_value.ptr;
+        if (ev->enum_name && strcmp(ev->enum_name, "SendResult") == 0)
+            return ev->member_index == 0;
+    }
+    const char *enum_name = NULL;
+    uint32_t member_index = 0;
+    if (!xr_aot_runtime_adt_value_info(send_value, &enum_name, NULL, &member_index, NULL, NULL))
         return false;
-    XrValue tag = inst->fields[0];
-    if (!XR_IS_INSTANCE(tag))
-        return false;
-    XrEnumValue *variant = (XrEnumValue *) XR_TO_INSTANCE(tag);
-    return variant->parent_type && variant->parent_type->name &&
-           strcmp(variant->parent_type->name, "SendResult") == 0 && variant->member_index == 0;
+    return enum_name && strcmp(enum_name, "SendResult") == 0 && member_index == 0;
 }
 
 bool xr_aot_recv_is_value(XrValue recv_value) {
-    // Recv::Value(T) is an ADT-enum instance whose inner tag variant is a
-    // runtime enum value. Inspect it through the tag-agnostic ADT helper
-    // (which validates via the GC object type, not the XrValue tag) rather
-    // than hand-poking fields[0] with XR_IS_INSTANCE: the constructed tag
-    // variant is ENUM-tagged, so an XR_IS_INSTANCE gate spuriously fails and
-    // makes a real receive look empty — deadlocking AOT select loops.
+    // Recv::Value(T) is an ADT enum aggregate. Inspect it through the
+    // tag-agnostic helper rather than assuming a specific boxed representation.
     const char *enum_name = NULL;
     uint32_t member_index = 0;
-    if (!xr_aot_runtime_adt_value_info(recv_value, &enum_name, NULL, &member_index, NULL))
+    if (!xr_aot_runtime_adt_value_info(recv_value, &enum_name, NULL, &member_index, NULL, NULL))
         return false;
     return enum_name && strcmp(enum_name, "Recv") == 0 && member_index == 0;
 }
@@ -3258,8 +3243,8 @@ int64_t xr_aot_atomic_ordering_from_value(XrValue value) {
                    ? raw
                    : XR_AOT_ORDERING_SEQ_CST;
     }
-    if (XR_IS_ENUM_VALUE(value)) {
-        XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(value);
+    if (XR_IS_ENUM_CTOR(value)) {
+        XrEnumCtor *ev = (XrEnumCtor *) XR_TO_PTR(value);
         if (ev) {
             int64_t raw = (int64_t) ev->member_index;
             return (raw >= XR_AOT_ORDERING_RELAXED && raw <= XR_AOT_ORDERING_SEQ_CST)
@@ -3267,8 +3252,16 @@ int64_t xr_aot_atomic_ordering_from_value(XrValue value) {
                        : XR_AOT_ORDERING_SEQ_CST;
         }
     }
+    if (value.tag == XR_AOT_VALUE_TAG_ENUM && value.ptr &&
+        XR_OBJ_GET_TYPE((XrObjHeader *) value.ptr) == XR_TENUM_CTOR) {
+        XrEnumCtor *ev = (XrEnumCtor *) value.ptr;
+        int64_t raw = (int64_t) ev->member_index;
+        return (raw >= XR_AOT_ORDERING_RELAXED && raw <= XR_AOT_ORDERING_SEQ_CST)
+                   ? raw
+                   : XR_AOT_ORDERING_SEQ_CST;
+    }
     if (value.tag == XR_AOT_VALUE_TAG_ENUM && value.ptr) {
-        const XrAotEnumValueViewCompat *ev = (const XrAotEnumValueViewCompat *) value.ptr;
+        const XrAotEnumBoxCompat *ev = (const XrAotEnumBoxCompat *) value.ptr;
         if (ev->enum_name && strcmp(ev->enum_name, "Ordering") == 0) {
             return ev->member_index <= XR_AOT_ORDERING_SEQ_CST ? (int64_t) ev->member_index
                                                                : XR_AOT_ORDERING_SEQ_CST;

@@ -18,6 +18,7 @@
 #include "xrt_value.h"
 #include "xrt_arc.h"  // xrt_str_alloc used by xrt_strbuf_finish
 #include "xrt_range.h"
+#include "xrt_class.h"
 #include "xrt_sys.h"
 #include "../runtime/xerror_codes.h"
 #include "../shared/xr_array_abi.h"
@@ -477,28 +478,22 @@ static inline XrValue xrt_array_clear_value(XrValue arr) {
     return XR_NULL_VAL;
 }
 
-static inline XrValue xrt_enum_value_new_payloads(const char *enum_name, const char *member_name,
-                                                  uint32_t member_index, uint32_t payload_count,
-                                                  const XrValue *payloads) {
-    XrAotEnumValueView *ev = (XrAotEnumValueView *) XRT_CALLOC(1, sizeof(*ev));
+static inline XrValue xrt_enum_box_new_payloads(uint32_t layout_id, const char *enum_name,
+                                                const char *member_name, uint32_t member_index,
+                                                uint32_t payload_count, const XrValue *payloads) {
+    size_t alloc_size = sizeof(XrAotEnumBox) + (size_t) payload_count * sizeof(XrValue);
+    XrAotEnumBox *ev = (XrAotEnumBox *) XRT_CALLOC(1, alloc_size);
     if (XR_UNLIKELY(!ev)) {
-        fprintf(stderr, "xrt_enum_value_new_payloads: out of memory\n");
+        fprintf(stderr, "xrt_enum_box_new_payloads: out of memory\n");
         abort();
     }
     ev->enum_name = enum_name;
     ev->member_name = member_name;
     ev->member_index = member_index;
     ev->payload_count = payload_count;
-    ev->payload0 = payload_count > 0 && payloads ? payloads[0] : XR_NULL_VAL;
-    if (payload_count > 1 && payloads) {
-        ev->payloads = (XrValue *) XRT_CALLOC(payload_count, sizeof(XrValue));
-        if (XR_UNLIKELY(!ev->payloads)) {
-            fprintf(stderr, "xrt_enum_value_new_payloads: out of memory\n");
-            abort();
-        }
-        for (uint32_t i = 0; i < payload_count; i++)
-            ev->payloads[i] = payloads[i];
-    }
+    ev->layout_id = layout_id;
+    for (uint32_t i = 0; i < payload_count; i++)
+        ev->payloads[i] = payloads ? payloads[i] : XR_NULL_VAL;
 
     XrValue out = {0};
     out.tag = XR_TAG_ENUM;
@@ -508,52 +503,46 @@ static inline XrValue xrt_enum_value_new_payloads(const char *enum_name, const c
 }
 
 static inline XrValue xrt_enum_aggregate_box(XrAotEnumAggregate value) {
-    XrValue payloads_stack[1];
-    const XrValue *payloads = NULL;
-    if (value.payload_count > 1 && value.payloads) {
-        payloads = value.payloads;
-    } else if (value.payload_count > 0) {
-        payloads_stack[0] = value.payload0;
-        payloads = payloads_stack;
-    }
-    return xrt_enum_value_new_payloads(value.enum_name, value.member_name, (uint32_t) value.tag,
-                                       value.payload_count, payloads);
+    return xrt_enum_box_new_payloads(value.layout_id, value.enum_name, value.member_name,
+                                     (uint32_t) value.tag, value.payload_count, value.payloads);
 }
 
 static inline XrAotEnumAggregate xrt_enum_aggregate_from_boxed(XrValue boxed) {
     if (boxed.tag != XR_TAG_ENUM || !boxed.ptr)
         return xrt_enum_aggregate_zero();
-    const XrAotEnumValueView *ev = (const XrAotEnumValueView *) boxed.ptr;
+    const XrAotEnumBox *ev = (const XrAotEnumBox *) boxed.ptr;
     XrAotEnumAggregate out = xrt_enum_aggregate_zero();
     out.enum_name = ev->enum_name;
     out.member_name = ev->member_name;
     out.tag = ev->member_index;
     out.payload_count = ev->payload_count;
-    out.payload0 = ev->payload_count > 0 ? ev->payload0 : XR_NULL_VAL;
-    out.payloads = ev->payloads;
+    out.layout_id = ev->layout_id;
+    uint32_t limit = ev->payload_count < XR_AOT_ENUM_AGG_PAYLOAD_CAP ? ev->payload_count
+                                                                     : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
+    for (uint32_t i = 0; i < limit; i++)
+        out.payloads[i] = ev->payloads[i];
     return out;
 }
 
 static inline XrValue xrt_enum_aggregate_field(XrAotEnumAggregate value, int64_t index) {
     if (index == 0)
         return XR_FROM_INT(value.tag);
-    if (index > 0 && value.payloads && (uint32_t) index <= value.payload_count)
+    if (index > 0 && (uint32_t) index <= value.payload_count &&
+        (uint32_t) index <= XR_AOT_ENUM_AGG_PAYLOAD_CAP)
         return value.payloads[index - 1];
-    if (index == 1 && value.payload_count > 0)
-        return value.payload0;
     return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_enum_field_get(XrValue boxed, int64_t index) {
     if (boxed.tag != XR_TAG_ENUM || !boxed.ptr)
         return XR_NULL_VAL;
-    const XrAotEnumValueView *ev = (const XrAotEnumValueView *) boxed.ptr;
-    if (index == 0)
-        return XR_FROM_INT(ev->member_index);
-    if (index > 0 && ev->payloads && (uint32_t) index <= ev->payload_count)
+    uint32_t member_index = 0;
+    if (index == 0 && xrt_enum_key_parts(boxed, NULL, NULL, &member_index, NULL))
+        return XR_FROM_INT(member_index);
+    const XrObjHeader *hdr = (const XrObjHeader *) boxed.ptr;
+    const XrAotEnumBox *ev = hdr->type == XR_TENUM_CTOR ? NULL : (const XrAotEnumBox *) boxed.ptr;
+    if (ev && index > 0 && (uint32_t) index <= ev->payload_count)
         return ev->payloads[index - 1];
-    if (index == 1 && ev->payload_count > 0)
-        return ev->payload0;
     return XR_NULL_VAL;
 }
 
@@ -1300,12 +1289,14 @@ static inline void xrt_strpart_init(xrt_strpart_t *part, XrValue val) {
         part->a = "null";
         part->alen = 4u;
     } else if (val.tag == XR_TAG_ENUM) {
-        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) val.ptr;
-        if (ev && ev->enum_name && ev->member_name) {
-            part->a = ev->enum_name;
-            part->b = ev->member_name;
-            part->alen = strlen(ev->enum_name);
-            part->blen = strlen(ev->member_name);
+        const char *enum_name = NULL;
+        const char *member_name = NULL;
+        if (xrt_enum_key_parts(val, &enum_name, &member_name, NULL, NULL) && enum_name &&
+            member_name) {
+            part->a = enum_name;
+            part->b = member_name;
+            part->alen = strlen(enum_name);
+            part->blen = strlen(member_name);
             part->kind = XRT_STRPART_ENUM;
         } else {
             int n = snprintf(part->scratch, sizeof(part->scratch), "<enum@%p>", val.ptr);
@@ -1352,39 +1343,29 @@ static inline XrValue xrt_str_concat_parts(size_t count, xrt_strpart_t *parts) {
     return out;
 }
 
-static inline XrValue xrt_enum_value_new(const char *enum_name, const char *member_name,
-                                         uint32_t member_index) {
-    XrAotEnumValueView *ev = (XrAotEnumValueView *) XRT_CALLOC(1, sizeof(*ev));
-    if (XR_UNLIKELY(!ev)) {
-        fprintf(stderr, "xrt_enum_value_new: out of memory\n");
-        abort();
-    }
-    ev->enum_name = enum_name;
-    ev->member_name = member_name;
-    ev->member_index = member_index;
-    ev->payload_count = 0;
-    ev->payload0 = XR_NULL_VAL;
-    ev->payloads = NULL;
-
-    XrValue v = {0};
-    v.tag = XR_TAG_ENUM;
-    v.ext = member_index;
-    v.ptr = ev;
-    return v;
+static inline XrValue xrt_enum_box_new(uint32_t layout_id, const char *enum_name,
+                                       const char *member_name, uint32_t member_index) {
+    return xrt_enum_box_new_payloads(layout_id, enum_name, member_name, member_index, 0, NULL);
 }
 
-static inline const XrAotEnumValueView *xrt_enum_value_view(XrValue obj) {
-    return obj.tag == XR_TAG_ENUM ? (const XrAotEnumValueView *) obj.ptr : NULL;
+static inline const XrAotEnumBox *xrt_enum_box_view(XrValue obj) {
+    if (obj.tag != XR_TAG_ENUM || !obj.ptr)
+        return NULL;
+    const XrObjHeader *hdr = (const XrObjHeader *) obj.ptr;
+    return hdr->type == XR_TENUM_CTOR ? NULL : (const XrAotEnumBox *) obj.ptr;
 }
 
-static inline XrValue xrt_enum_value_name(XrValue obj) {
-    const XrAotEnumValueView *ev = xrt_enum_value_view(obj);
-    return (ev && ev->member_name) ? xr_box_str(ev->member_name) : XR_NULL_VAL;
+static inline XrValue xrt_enum_box_name(XrValue obj) {
+    const char *member_name = NULL;
+    return xrt_enum_key_parts(obj, NULL, &member_name, NULL, NULL) && member_name
+               ? xr_box_str(member_name)
+               : XR_NULL_VAL;
 }
 
-static inline XrValue xrt_enum_value_ordinal(XrValue obj) {
-    const XrAotEnumValueView *ev = xrt_enum_value_view(obj);
-    return ev ? XR_FROM_INT(ev->member_index) : XR_NULL_VAL;
+static inline XrValue xrt_enum_box_ordinal(XrValue obj) {
+    uint32_t member_index = 0;
+    return xrt_enum_key_parts(obj, NULL, NULL, &member_index, NULL) ? XR_FROM_INT(member_index)
+                                                                    : XR_NULL_VAL;
 }
 
 /* =========================================================================
@@ -1460,7 +1441,7 @@ static inline uint64_t xrt_hash_value(XrValue v) {
             return xr_hash_core_mix_u64(xrt_str_hash(v));
         case XR_TAG_NULL:
             return xr_hash_core_mix_u64(0x9e3779b97f4a7c15ull);
-        case XR_TAG_STRUCT_REF:
+        case XR_TAG_AGG_REF:
             if (XR_IS_ARRAY_REF(v)) {
                 if (!v.ptr)
                     return xr_hash_core_mix_u64((uint64_t) v.ext);
@@ -2960,6 +2941,27 @@ static inline XrValue xrt_json_encode_set_value(xrt_set_t *src, int depth) {
     return dst;
 }
 
+static inline XrValue xrt_json_encode_instance_value(XrValue val, int depth) {
+    if (val.tag != XR_TAG_PTR || val.heap_type != XR_TINSTANCE || !val.ptr)
+        xrt_json_encode_abort("cannot encode value to JSON", val);
+    XrObjHeader *hdr = XRT_ARC_HDR(val.ptr);
+    const XrtTypeInfo *ti = xrt_type_info(hdr ? hdr->type : 0);
+    const XrtTypeDeriveInfo *di = ti ? xrt_type_derive_info(ti->type_id) : NULL;
+    if (!di || (di->derive_flags & XR_DERIVE_JSON) == 0)
+        xrt_json_encode_abort("type does not derive Json", val);
+    if (di->inspect_field_count > 0 && !di->inspect_fields)
+        xrt_json_encode_abort("derive Json metadata is missing", val);
+
+    XrValue dst = xrt_json_new(0);
+    for (uint16_t i = 0; i < di->inspect_field_count; i++) {
+        const XrtInspectField *field = &di->inspect_fields[i];
+        XrValue key = xr_box_str(field->name ? field->name : "");
+        XrValue item = xrt_inspect_field_value(val.ptr, field);
+        xrt_json_put_string_key(dst, key, xrt_json_encode_value(item, depth + 1));
+    }
+    return dst;
+}
+
 static inline XrValue xrt_json_encode_value(XrValue val, int depth) {
     if (depth > XRT_JSON_ENCODE_MAX_DEPTH)
         xrt_json_encode_abort("value is too deeply nested", val);
@@ -2982,7 +2984,7 @@ static inline XrValue xrt_json_encode_value(XrValue val, int depth) {
             return out;
         }
         case XR_TAG_ENUM:
-            return xrt_enum_value_name(val);
+            return xrt_enum_box_name(val);
         case XR_TAG_ARRAY:
             return xrt_json_encode_array_value((xrt_array_t *) val.ptr, depth);
         case XR_TAG_MAP:
@@ -2990,6 +2992,8 @@ static inline XrValue xrt_json_encode_value(XrValue val, int depth) {
         case XR_TAG_SET:
             return xrt_json_encode_set_value((xrt_set_t *) val.ptr, depth);
         case XR_TAG_PTR:
+            if (val.ptr && val.heap_type == XR_TINSTANCE)
+                return xrt_json_encode_instance_value(val, depth);
             if (val.ptr && val.heap_type == 0)
                 return xrt_json_encode_object_value((xrt_json_t *) val.ptr, depth);
             break;
@@ -3009,9 +3013,9 @@ static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
         if (!name)
             return XR_NULL_VAL;
         if (strcmp(name, "name") == 0)
-            return xrt_enum_value_name(obj);
+            return xrt_enum_box_name(obj);
         if (strcmp(name, "ordinal") == 0)
-            return xrt_enum_value_ordinal(obj);
+            return xrt_enum_box_ordinal(obj);
     }
     if (XR_IS_MAP(obj)) {
         return xrt_map_get_owned((xrt_map_t *) obj.ptr, xr_box_str(name));
@@ -3353,7 +3357,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             dst->len = src->len;
             return dstv;
         }
-        case XR_TAG_STRUCT_REF: {
+        case XR_TAG_AGG_REF: {
             if (!val.ptr)
                 return val;
             if (XR_IS_ARRAY_REF(val))
@@ -3364,8 +3368,8 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
                 return val;
             void *dst = xrt_arc_alloc(size);
             memcpy(dst, val.ptr, size);
-            return storage_size ? xr_struct_ref(dst, storage_size)
-                                : xr_mkptr(dst, XR_TAG_STRUCT_REF);
+            return storage_size ? xr_aggregate_ref(dst, storage_size)
+                                : xr_mkptr(dst, XR_TAG_AGG_REF);
         }
         case XR_TAG_REGEX:
             xrt_retain(val);

@@ -994,14 +994,14 @@ TEST(struct_literal) {
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
-            if (blk->values[i]->op == XI_STRUCT_NEW)
+            if (blk->values[i]->op == XI_AGG_NEW)
                 found_new = 1;
-            if (blk->values[i]->op == XI_STRUCT_SET)
+            if (blk->values[i]->op == XI_AGG_SET)
                 found_set = 1;
         }
     }
-    assert(found_new && "struct literal should emit STRUCT_NEW");
-    assert(found_set && "struct literal should set fields via STRUCT_SET");
+    assert(found_new && "struct literal should emit AGG_NEW");
+    assert(found_set && "struct literal should set fields via AGG_SET");
     xi_func_free(f);
 }
 
@@ -1016,12 +1016,11 @@ TEST(struct_literal_inside_function) {
                              "}\n"
                              "print(run())\n");
     assert(f != NULL);
-    assert(func_tree_has_op(f, XI_STRUCT_NEW) &&
-           "function-local struct literal should emit STRUCT_NEW");
-    assert(func_tree_has_op(f, XI_STRUCT_SET) &&
-           "function-local struct literal should set fields via STRUCT_SET");
-    assert(func_tree_has_op(f, XI_STRUCT_GET) &&
-           "function-local struct field access should emit STRUCT_GET");
+    assert(func_tree_has_op(f, XI_AGG_NEW) && "function-local struct literal should emit AGG_NEW");
+    assert(func_tree_has_op(f, XI_AGG_SET) &&
+           "function-local struct literal should set fields via AGG_SET");
+    assert(func_tree_has_op(f, XI_AGG_GET) &&
+           "function-local struct field access should emit AGG_GET");
     xi_func_free(f);
 }
 
@@ -1042,7 +1041,7 @@ TEST(struct_field_store_narrows_native_width) {
     assert(narrow && narrow->type && narrow->type->kind == XR_KIND_INT &&
            narrow->type->native_width == XR_NATIVE_U8 &&
            "NARROW_U8 result type should carry the target native width");
-    assert(func_tree_has_op(f, XI_STRUCT_SET) && "struct field writes should use STRUCT_SET");
+    assert(func_tree_has_op(f, XI_AGG_SET) && "struct field writes should use AGG_SET");
     xi_func_free(f);
 }
 
