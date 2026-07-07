@@ -1739,8 +1739,9 @@ static bool emit_class_native_instance_field_store_expr(XiCgenCtx *ctx, FILE *ou
 
 static bool emit_class_native_return_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                           const XiBlock *blk) {
-    if (!cg_class_func_is_native_constructor(ctx, f) || !blk || !blk->control ||
-        !cg_class_native_receiver_value(ctx, f, blk->control))
+    if (!cg_class_func_is_native_constructor(ctx, f) || !blk)
+        return false;
+    if (blk->control && !cg_class_native_receiver_value(ctx, f, blk->control))
         return false;
     fprintf(out, "    return p0;\n");
     return true;
@@ -2584,6 +2585,28 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
         emit_conversion_suffix(out, conv_suffix);
     }
     return true;
+}
+
+static bool emit_class_native_getter_field_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                const char *prefix, const XiValue *v) {
+    if (!ctx || !out || !f || !v || v->nargs < 1 || !v->aux)
+        return false;
+
+    const XiClassData *source = cg_class_native_instance_data(ctx, f, v->args[0]);
+    if (!source || !source->class_name)
+        return false;
+
+    char getter_name[256];
+    int n = snprintf(getter_name, sizeof(getter_name), "get:%s", (const char *) v->aux);
+    if (n < 0 || (size_t) n >= sizeof(getter_name))
+        return false;
+
+    const char *method_prefix = NULL;
+    const XiFunc *mfunc = cg_lookup_method(ctx, getter_name, source->class_name, &method_prefix);
+    if (!mfunc || cg_func_needs_aot_coro(mfunc) || !cg_class_func_uses_native_receiver(ctx, mfunc))
+        return false;
+
+    return emit_class_native_method_call_expr(ctx, out, f, prefix, v, mfunc, method_prefix);
 }
 
 static const XiValue *cg_class_native_prev_block_value(const XiValue *site) {

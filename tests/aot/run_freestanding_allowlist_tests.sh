@@ -39,7 +39,7 @@ nm_undefined_normalized() {
 
 undefined_allowed() {
     case "$1" in
-        xr_hook_panic|xr_hook_write|xr_hook_alloc|xr_hook_free) return 0 ;;
+        xr_hook_panic|xr_hook_write) return 0 ;;
         memcpy|memmove|memset|memcmp) return 0 ;;
         *) return 1 ;;
     esac
