@@ -257,6 +257,459 @@ static bool xa_symbol_is_local_thread_handle(XaSymbol *sym, XaScope *current_sco
     return links->type && xr_type_is_named_class(links->type, "Thread");
 }
 
+static bool xa_block_node_statements(AstNode *node, AstNode ***out_statements, int *out_count);
+
+typedef struct XaThreadHandleLintAlias {
+    XaSymbol *sym;
+    struct XaThreadHandleLintAlias *next;
+} XaThreadHandleLintAlias;
+
+typedef struct XaThreadHandleLintState {
+    XaSymbol *root;
+    AstNode *decl_stmt;
+    XaThreadHandleLintAlias *aliases;
+    bool finalized;
+    bool transferred;
+    struct XaThreadHandleLintState *next;
+} XaThreadHandleLintState;
+
+static void xa_thread_lint_free_states(XaThreadHandleLintState *states) {
+    while (states) {
+        XaThreadHandleLintState *next = states->next;
+        XaThreadHandleLintAlias *alias = states->aliases;
+        while (alias) {
+            XaThreadHandleLintAlias *alias_next = alias->next;
+            xr_free(alias);
+            alias = alias_next;
+        }
+        xr_free(states);
+        states = next;
+    }
+}
+
+static void xa_thread_lint_add_alias(XaThreadHandleLintState *state, XaSymbol *sym) {
+    if (!state || !sym || sym->id == 0)
+        return;
+    for (XaThreadHandleLintAlias *a = state->aliases; a; a = a->next) {
+        if (a->sym == sym || (a->sym && a->sym->id == sym->id))
+            return;
+    }
+    XaThreadHandleLintAlias *alias = xr_calloc(1, sizeof(XaThreadHandleLintAlias));
+    if (!alias)
+        return;
+    alias->sym = sym;
+    alias->next = state->aliases;
+    state->aliases = alias;
+}
+
+static XaThreadHandleLintState *xa_thread_lint_find_by_symbol_id(XaThreadHandleLintState *states,
+                                                                 uint32_t symbol_id) {
+    if (symbol_id == 0)
+        return NULL;
+    for (XaThreadHandleLintState *s = states; s; s = s->next) {
+        for (XaThreadHandleLintAlias *a = s->aliases; a; a = a->next) {
+            if (a->sym && a->sym->id == symbol_id)
+                return s;
+        }
+    }
+    return NULL;
+}
+
+static AstNode *xa_thread_lint_unwrap_expr(AstNode *expr) {
+    while (expr && (expr->type == AST_GROUPING || expr->type == AST_FORCE_UNWRAP))
+        expr = expr->type == AST_GROUPING ? expr->as.grouping : expr->as.unary.operand;
+    return expr;
+}
+
+static uint32_t xa_thread_lint_expr_symbol_id(AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!expr || expr->type != AST_VARIABLE)
+        return 0;
+    return expr->as.variable.symbol_id;
+}
+
+static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *expr,
+                                     bool return_value);
+static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *stmt);
+
+static void xa_thread_lint_scan_expr_array(XaThreadHandleLintState *states, AstNode **nodes,
+                                           int count, bool return_value) {
+    if (!nodes || count <= 0)
+        return;
+    for (int i = 0; i < count; i++)
+        xa_thread_lint_scan_expr(states, nodes[i], return_value);
+}
+
+static bool xa_thread_lint_scan_join_or_detach_call(XaThreadHandleLintState *states,
+                                                    AstNode *expr) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!expr || expr->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &expr->as.call_expr;
+    AstNode *callee = xa_thread_lint_unwrap_expr(call->callee);
+    if (!callee || callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || (strcmp(ma->name, "join") != 0 && strcmp(ma->name, "detach") != 0))
+        return false;
+    uint32_t receiver_id = xa_thread_lint_expr_symbol_id(ma->object);
+    XaThreadHandleLintState *state = xa_thread_lint_find_by_symbol_id(states, receiver_id);
+    if (!state)
+        return false;
+    state->finalized = true;
+    return true;
+}
+
+static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *expr,
+                                     bool return_value) {
+    expr = xa_thread_lint_unwrap_expr(expr);
+    if (!expr)
+        return;
+
+    if (return_value) {
+        uint32_t sym_id = xa_thread_lint_expr_symbol_id(expr);
+        XaThreadHandleLintState *state = xa_thread_lint_find_by_symbol_id(states, sym_id);
+        if (state) {
+            state->transferred = true;
+            return;
+        }
+    }
+
+    switch (expr->type) {
+        case AST_VARIABLE:
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_BIGINT:
+        case AST_LITERAL_STRING:
+        case AST_LITERAL_CHAR:
+        case AST_LITERAL_REGEX:
+        case AST_LITERAL_NULL:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+            return;
+
+        case AST_CALL_EXPR: {
+            if (xa_thread_lint_scan_join_or_detach_call(states, expr))
+                return;
+            CallExprNode *call = &expr->as.call_expr;
+            xa_thread_lint_scan_expr(states, call->callee, false);
+            xa_thread_lint_scan_expr_array(states, call->arguments, call->arg_count, false);
+            return;
+        }
+
+        case AST_MEMBER_ACCESS:
+            xa_thread_lint_scan_expr(states, expr->as.member_access.object, false);
+            return;
+        case AST_MEMBER_SET:
+            xa_thread_lint_scan_expr(states, expr->as.member_set.object, false);
+            xa_thread_lint_scan_expr(states, expr->as.member_set.value, false);
+            return;
+        case AST_INDEX_GET:
+            xa_thread_lint_scan_expr(states, expr->as.index_get.array, false);
+            xa_thread_lint_scan_expr(states, expr->as.index_get.index, false);
+            return;
+        case AST_INDEX_SET:
+            xa_thread_lint_scan_expr(states, expr->as.index_set.array, false);
+            xa_thread_lint_scan_expr(states, expr->as.index_set.index, false);
+            xa_thread_lint_scan_expr(states, expr->as.index_set.value, false);
+            return;
+
+        case AST_ASSIGNMENT:
+            xa_thread_lint_scan_expr(states, expr->as.assignment.value, false);
+            return;
+        case AST_COMPOUND_ASSIGNMENT:
+            xa_thread_lint_scan_expr(states, expr->as.compound_assignment.object, false);
+            xa_thread_lint_scan_expr(states, expr->as.compound_assignment.value, false);
+            return;
+        case AST_INC:
+        case AST_DEC:
+            return;
+
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_NULLISH_COALESCE:
+            xa_thread_lint_scan_expr(states, expr->as.binary.left, false);
+            xa_thread_lint_scan_expr(states, expr->as.binary.right, false);
+            return;
+
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+        case AST_FORCE_UNWRAP:
+            xa_thread_lint_scan_expr(states, expr->as.unary.operand, false);
+            return;
+        case AST_GROUPING:
+            xa_thread_lint_scan_expr(states, expr->as.grouping, false);
+            return;
+
+        case AST_ARRAY_LITERAL:
+            if (expr->as.array_literal.is_repeat) {
+                xa_thread_lint_scan_expr(states, expr->as.array_literal.repeat_value, false);
+                xa_thread_lint_scan_expr(states, expr->as.array_literal.repeat_count, false);
+            } else {
+                xa_thread_lint_scan_expr_array(states, expr->as.array_literal.elements,
+                                               expr->as.array_literal.count, false);
+            }
+            return;
+        case AST_TUPLE_LITERAL:
+            xa_thread_lint_scan_expr_array(states, expr->as.tuple_literal.elements,
+                                           expr->as.tuple_literal.count, false);
+            return;
+        case AST_SPREAD_EXPR:
+            xa_thread_lint_scan_expr(states, expr->as.spread_expr.expr, false);
+            return;
+        case AST_OBJECT_LITERAL:
+            xa_thread_lint_scan_expr_array(states, expr->as.object_literal.keys,
+                                           expr->as.object_literal.count, false);
+            xa_thread_lint_scan_expr_array(states, expr->as.object_literal.values,
+                                           expr->as.object_literal.count, false);
+            return;
+        case AST_MAP_LITERAL:
+            xa_thread_lint_scan_expr_array(states, expr->as.map_literal.keys,
+                                           expr->as.map_literal.count, false);
+            xa_thread_lint_scan_expr_array(states, expr->as.map_literal.values,
+                                           expr->as.map_literal.count, false);
+            return;
+        case AST_SET_LITERAL:
+            xa_thread_lint_scan_expr_array(states, expr->as.set_literal.elements,
+                                           expr->as.set_literal.count, false);
+            return;
+        case AST_STRUCT_LITERAL:
+            xa_thread_lint_scan_expr_array(states, expr->as.struct_literal.field_values,
+                                           expr->as.struct_literal.field_count, false);
+            return;
+
+        case AST_TERNARY:
+            xa_thread_lint_scan_expr(states, expr->as.ternary.condition, false);
+            xa_thread_lint_scan_expr(states, expr->as.ternary.true_expr, false);
+            xa_thread_lint_scan_expr(states, expr->as.ternary.false_expr, false);
+            return;
+        case AST_OPTIONAL_CHAIN:
+            xa_thread_lint_scan_expr(states, expr->as.optional_chain.object, false);
+            xa_thread_lint_scan_expr(states, expr->as.optional_chain.index, false);
+            return;
+        case AST_RANGE:
+            xa_thread_lint_scan_expr(states, expr->as.range.start, false);
+            xa_thread_lint_scan_expr(states, expr->as.range.end, false);
+            return;
+        case AST_IS_EXPR:
+            xa_thread_lint_scan_expr(states, expr->as.is_expr.expr, false);
+            return;
+        case AST_AS_EXPR:
+            xa_thread_lint_scan_expr(states, expr->as.as_expr.expr, false);
+            return;
+        case AST_COMPTIME_EXPR:
+            xa_thread_lint_scan_expr(states, expr->as.comptime_expr.expr, false);
+            return;
+        case AST_UNSAFE_EXPR:
+            xa_thread_lint_scan_expr(states, expr->as.unsafe_expr.operand, false);
+            return;
+        case AST_MOVE_EXPR: {
+            uint32_t sym_id = xa_thread_lint_expr_symbol_id(expr->as.move_expr.expr);
+            XaThreadHandleLintState *state = xa_thread_lint_find_by_symbol_id(states, sym_id);
+            if (state)
+                state->transferred = true;
+            xa_thread_lint_scan_expr(states, expr->as.move_expr.expr, false);
+            return;
+        }
+
+        case AST_GO_EXPR:
+            xa_thread_lint_scan_expr(states, expr->as.go_expr.expr, false);
+            return;
+        case AST_AWAIT_EXPR:
+            xa_thread_lint_scan_expr(states, expr->as.await_expr.expr, false);
+            xa_thread_lint_scan_expr(states, expr->as.await_expr.timeout, false);
+            xa_thread_lint_scan_expr(states, expr->as.await_expr.into, false);
+            return;
+        case AST_PARALLEL_REDUCE_EXPR:
+            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.range, false);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.worker_count, false);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.initial, false);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.combine, false);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.body, false);
+            return;
+        case AST_PARALLEL_COLLECT_EXPR:
+            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.range, false);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.worker_count, false);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.into, false);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.body, false);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.final_body, false);
+            return;
+
+        case AST_FUNCTION_DECL:
+        case AST_FUNCTION_EXPR:
+        case AST_CLASS_DECL:
+        case AST_STRUCT_DECL:
+        case AST_UNION_DECL:
+        case AST_METHOD_DECL:
+        case AST_FIELD_DECL:
+        case AST_ENUM_DECL:
+        case AST_ENUM_MEMBER:
+        case AST_IMPORT_STMT:
+            return;
+
+        default:
+            return;
+    }
+}
+
+static void xa_thread_lint_scan_block(XaThreadHandleLintState *states, AstNode *block) {
+    AstNode **statements = NULL;
+    int count = 0;
+    if (!xa_block_node_statements(block, &statements, &count))
+        return;
+    for (int i = 0; i < count; i++)
+        xa_thread_lint_scan_stmt(states, statements[i]);
+}
+
+static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *stmt) {
+    if (!stmt)
+        return;
+    switch (stmt->type) {
+        case AST_EXPR_STMT:
+            xa_thread_lint_scan_expr(states, stmt->as.expr_stmt, false);
+            return;
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL:
+            xa_thread_lint_scan_expr(states, stmt->as.var_decl.initializer, false);
+            return;
+        case AST_ASSIGNMENT:
+        case AST_COMPOUND_ASSIGNMENT:
+        case AST_INC:
+        case AST_DEC:
+        case AST_MEMBER_SET:
+        case AST_INDEX_SET:
+            xa_thread_lint_scan_expr(states, stmt, false);
+            return;
+        case AST_PRINT_STMT:
+            xa_thread_lint_scan_expr_array(states, stmt->as.print_stmt.exprs,
+                                           stmt->as.print_stmt.expr_count, false);
+            return;
+        case AST_RETURN_STMT:
+            xa_thread_lint_scan_expr_array(states, stmt->as.return_stmt.values,
+                                           stmt->as.return_stmt.value_count, true);
+            return;
+        case AST_IF_STMT:
+            xa_thread_lint_scan_expr(states, stmt->as.if_stmt.condition, false);
+            xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.then_branch);
+            xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.else_branch);
+            return;
+        case AST_WHILE_STMT:
+            xa_thread_lint_scan_expr(states, stmt->as.while_stmt.condition, false);
+            xa_thread_lint_scan_stmt(states, stmt->as.while_stmt.body);
+            return;
+        case AST_FOR_STMT:
+            xa_thread_lint_scan_stmt(states, stmt->as.for_stmt.initializer);
+            xa_thread_lint_scan_expr(states, stmt->as.for_stmt.condition, false);
+            xa_thread_lint_scan_expr(states, stmt->as.for_stmt.increment, false);
+            xa_thread_lint_scan_stmt(states, stmt->as.for_stmt.body);
+            return;
+        case AST_FOR_IN_STMT:
+            xa_thread_lint_scan_expr(states, stmt->as.for_in_stmt.collection, false);
+            xa_thread_lint_scan_stmt(states, stmt->as.for_in_stmt.body);
+            return;
+        case AST_PARALLEL_FOR_STMT:
+            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.range, false);
+            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.worker_count, false);
+            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.body, false);
+            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.final_body, false);
+            return;
+        case AST_BLOCK:
+        case AST_PROGRAM:
+            xa_thread_lint_scan_block(states, stmt);
+            return;
+        case AST_TRY_CATCH:
+            xa_thread_lint_scan_stmt(states, stmt->as.try_catch.try_body);
+            for (int i = 0; i < stmt->as.try_catch.catch_count; i++) {
+                if (stmt->as.try_catch.catch_clauses[i])
+                    xa_thread_lint_scan_stmt(states, stmt->as.try_catch.catch_clauses[i]->body);
+            }
+            return;
+        case AST_THROW_STMT:
+            xa_thread_lint_scan_expr(states, stmt->as.throw_stmt.expression, false);
+            return;
+        case AST_DEFER_STMT:
+            xa_thread_lint_scan_expr(states, stmt->as.defer_stmt.expr, false);
+            return;
+        case AST_SCOPE_BLOCK:
+            xa_thread_lint_scan_stmt(states, stmt->as.scope_block.body);
+            return;
+        case AST_EXPORT_STMT:
+            xa_thread_lint_scan_stmt(states, stmt->as.export_stmt.declaration);
+            return;
+        default:
+            xa_thread_lint_scan_expr(states, stmt, false);
+            return;
+    }
+}
+
+static XaThreadHandleLintState *
+xa_thread_lint_collect_spawn_states(XaInferContext *ctx, AstNode **statements, int count) {
+    if (!ctx || !statements || count <= 0)
+        return NULL;
+    XaThreadHandleLintState *states = NULL;
+    XaThreadHandleLintState **tail = &states;
+    for (int i = 0; i < count; i++) {
+        AstNode *stmt = statements[i];
+        if (!stmt || (stmt->type != AST_VAR_DECL && stmt->type != AST_CONST_DECL))
+            continue;
+        VarDeclNode *var = &stmt->as.var_decl;
+        if (!var->name || !var->initializer || !xa_expr_is_sys_thread_spawn_call(var->initializer))
+            continue;
+        XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, var->name);
+        if (!xa_symbol_is_local_thread_handle(sym, ctx->analyzer->current_scope))
+            continue;
+        XaThreadHandleLintState *state = xr_calloc(1, sizeof(XaThreadHandleLintState));
+        if (!state)
+            continue;
+        state->root = sym;
+        state->decl_stmt = stmt;
+        xa_thread_lint_add_alias(state, sym);
+        *tail = state;
+        tail = &state->next;
+    }
+    return states;
+}
+
+static void xa_thread_lint_collect_sequence_aliases(XaInferContext *ctx,
+                                                    XaThreadHandleLintState *states,
+                                                    AstNode **statements, int count) {
+    if (!ctx || !states || !statements || count <= 0)
+        return;
+    for (int i = 0; i < count; i++) {
+        AstNode *stmt = statements[i];
+        if (!stmt || (stmt->type != AST_VAR_DECL && stmt->type != AST_CONST_DECL))
+            continue;
+        VarDeclNode *var = &stmt->as.var_decl;
+        if (!var->name || !var->initializer)
+            continue;
+        uint32_t src_id = xa_thread_lint_expr_symbol_id(var->initializer);
+        XaThreadHandleLintState *state = xa_thread_lint_find_by_symbol_id(states, src_id);
+        if (!state)
+            continue;
+        XaSymbol *alias = xa_scope_lookup(ctx->analyzer->current_scope, var->name);
+        if (xa_symbol_is_local_thread_handle(alias, ctx->analyzer->current_scope))
+            xa_thread_lint_add_alias(state, alias);
+    }
+}
+
 static void xa_warn_unused_sys_thread_spawn_decl(XaInferContext *ctx, AstNode *stmt) {
     if (!ctx || !ctx->analyzer || !stmt ||
         (stmt->type != AST_VAR_DECL && stmt->type != AST_CONST_DECL))
@@ -284,14 +737,41 @@ static void xa_warn_unused_sys_thread_spawn_decl(XaInferContext *ctx, AstNode *s
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, msg, &loc);
 }
 
-static void xa_warn_unused_sys_thread_spawns_in_sequence(XaInferContext *ctx, AstNode **statements,
-                                                         int count, int error_count_before) {
+static void xa_warn_sys_thread_lifecycle_in_sequence(XaInferContext *ctx, AstNode **statements,
+                                                     int count, int error_count_before) {
     if (!ctx || !statements || count <= 0)
         return;
     if (xa_analyzer_error_diagnostic_count(ctx->analyzer) != error_count_before)
         return;
+
     for (int i = 0; i < count; i++)
         xa_warn_unused_sys_thread_spawn_decl(ctx, statements[i]);
+
+    XaThreadHandleLintState *states = xa_thread_lint_collect_spawn_states(ctx, statements, count);
+    if (!states)
+        return;
+    xa_thread_lint_collect_sequence_aliases(ctx, states, statements, count);
+    for (int i = 0; i < count; i++)
+        xa_thread_lint_scan_stmt(states, statements[i]);
+    for (XaThreadHandleLintState *state = states; state; state = state->next) {
+        if (!state->root || !state->decl_stmt || state->finalized || state->transferred)
+            continue;
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, state->root);
+        if (!links || links->ref_count == 0)
+            continue;
+        char msg[224];
+        snprintf(msg, sizeof(msg),
+                 "Thread handle '%s' from sys.Thread.spawn is not joined or detached before "
+                 "leaving scope",
+                 state->root->name ? state->root->name : "?");
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = state->decl_stmt->line,
+                          .column = state->decl_stmt->column};
+        if (!xa_warning_already_reported(ctx->analyzer, &loc, msg))
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, msg,
+                                       &loc);
+    }
+    xa_thread_lint_free_states(states);
 }
 
 static bool xa_freestanding_top_const_allowed(XaInferContext *ctx, VarDeclNode *var) {
@@ -1181,7 +1661,7 @@ XR_FUNC void xa_visit_inline_statement_sequence_with_cursor(XaInferContext *ctx,
             ctx->block_cursor_indices[cursor_slot] = i;
         xa_visit_infer_stmt(ctx, statements[i]);
     }
-    xa_warn_unused_sys_thread_spawns_in_sequence(ctx, statements, count, error_count_before);
+    xa_warn_sys_thread_lifecycle_in_sequence(ctx, statements, count, error_count_before);
     ctx->block_cursor_depth = saved_depth;
     ctx->current_block_node = saved_block;
     ctx->current_block_stmt_index = saved_index;

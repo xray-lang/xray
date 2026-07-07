@@ -1,0 +1,11 @@
+import sys
+
+fn makeThread() -> Thread<int> {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    return t
+}
+
+var t = makeThread()
+print(t.join())
