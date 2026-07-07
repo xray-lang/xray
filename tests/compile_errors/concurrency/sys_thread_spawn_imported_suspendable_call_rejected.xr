@@ -1,0 +1,7 @@
+import sys
+import { importedSuspends } from "../../fixtures/thread_spawn_suspendable_lib"
+
+var t = sys.Thread.spawn(fn() -> int {
+    return importedSuspends()
+})
+print(t.join())

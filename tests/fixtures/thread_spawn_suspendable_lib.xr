@@ -1,0 +1,8 @@
+fn worker() -> int {
+    return 1
+}
+
+export fn importedSuspends() -> int {
+    var y = await go worker()
+    return y
+}

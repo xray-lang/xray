@@ -468,6 +468,47 @@ static AstNode *xa_symbol_function_body(XaInferContext *ctx, XaSymbol *sym) {
     return NULL;
 }
 
+static XaSymbol *xa_thread_spawn_import_target_symbol(XaInferContext *ctx, XaSymbol *sym) {
+    if (!ctx || !sym || !sym->is_imported)
+        return sym;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links || !links->module_name)
+        return sym;
+
+    bool is_quoted = links->module_name[0] == '.' || links->module_name[0] == '/';
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, links->module_name, is_quoted);
+    if (!exports)
+        return sym;
+    const char *member_name = links->import_member_name ? links->import_member_name : sym->name;
+    XaSymbol *target = member_name ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
+    return target ? target : sym;
+}
+
+static XaSymbol *xa_thread_spawn_module_member_function_symbol(XaInferContext *ctx,
+                                                               AstNode *callee) {
+    if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE ||
+        !ma->object->as.variable.name)
+        return NULL;
+
+    XaSymbol *mod_sym = xa_scope_lookup(ctx->analyzer->current_scope, ma->object->as.variable.name);
+    if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
+        return NULL;
+
+    XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
+    const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
+                                                                 : ma->object->as.variable.name;
+    bool is_quoted = mod_name[0] == '.' || mod_name[0] == '/';
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+    if (!exports)
+        return NULL;
+
+    XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+    return member_sym && member_sym->kind == XA_SYM_FUNCTION ? member_sym : NULL;
+}
+
 static bool xa_thread_spawn_call_is_coro_yield(CallExprNode *call) {
     if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return false;
@@ -652,6 +693,7 @@ static bool xa_thread_spawn_body_may_suspend(XaInferContext *ctx, AstNode *body,
 
 static bool xa_thread_spawn_symbol_may_suspend(XaInferContext *ctx, XaSymbol *sym,
                                                XaSymbol **call_stack, int call_depth) {
+    sym = xa_thread_spawn_import_target_symbol(ctx, sym);
     if (!ctx || !sym || sym->kind != XA_SYM_FUNCTION || sym->is_builtin)
         return false;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -700,6 +742,13 @@ static bool xa_thread_spawn_inline_call_may_suspend(XaInferContext *ctx, CallExp
             if (out_feature) {
                 *out_feature = NULL;
             }
+            return true;
+        }
+    } else if (callee && callee->type == AST_MEMBER_ACCESS) {
+        XaSymbol *sym = xa_thread_spawn_module_member_function_symbol(ctx, callee);
+        if (sym && xa_thread_spawn_symbol_may_suspend(ctx, sym, call_stack, call_depth)) {
+            if (out_feature)
+                *out_feature = NULL;
             return true;
         }
     }
@@ -751,6 +800,15 @@ static void xa_thread_spawn_sync_scan_pre(AstNode *node, void *ud) {
                          "call to suspendable function '%s'",
                          call->callee->as.variable.name ? call->callee->as.variable.name : "?");
                 feature = scan->feature_buf;
+            } else if (!feature && call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+                MemberAccessNode *ma = &call->callee->as.member_access;
+                if (ma->name && ma->object && ma->object->type == AST_VARIABLE &&
+                    ma->object->as.variable.name) {
+                    snprintf(scan->feature_buf, sizeof(scan->feature_buf),
+                             "call to suspendable function '%s.%s'", ma->object->as.variable.name,
+                             ma->name);
+                    feature = scan->feature_buf;
+                }
             }
         }
     }
