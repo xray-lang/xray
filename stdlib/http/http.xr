@@ -203,6 +203,7 @@ class Cookie {
     secure: bool
     httpOnly: bool
     sameSite: string
+    hostOnly: bool
 
     constructor(
         name: string,
@@ -212,7 +213,8 @@ class Cookie {
         expires: int = 0,
         secure: bool = false,
         httpOnly: bool = false,
-        sameSite: string = ""
+        sameSite: string = "",
+        hostOnly: bool = false
     ) {
         this.name = name
         this.value = value
@@ -222,15 +224,20 @@ class Cookie {
         this.secure = secure
         this.httpOnly = httpOnly
         this.sameSite = sameSite
+        this.hostOnly = hostOnly
     }
 
     isExpired(nowSeconds: int = 0) -> bool {
-        return this.expires > 0 && this.expires < _cookieNow(nowSeconds)
+        return this.expires > 0 && this.expires <= _cookieNow(nowSeconds)
     }
 
     matches(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0) -> bool {
         if (this.isExpired(nowSeconds)) { return false }
-        if (!_domainMatches(this.domain, domain)) { return false }
+        if (this.hostOnly) {
+            if (this.domain.toLowerCase() != domain.toLowerCase()) { return false }
+        } else if (!_domainMatches(this.domain, domain)) {
+            return false
+        }
         if (!_pathMatches(this.path, path)) { return false }
         if (this.secure && !isSecure) { return false }
         return true
@@ -342,6 +349,7 @@ fn parseSetCookie(header: string, requestDomain: string = "", requestPath: strin
     var secure = false
     var httpOnly = false
     var sameSite = ""
+    var hostOnly = true
 
     for (var i = 1; i < parts.length; i++) {
         var attr = parts[i].trim()
@@ -357,6 +365,8 @@ fn parseSetCookie(header: string, requestDomain: string = "", requestPath: strin
         if (key == "domain" && attrValue.length > 0) {
             domain = attrValue
             if (domain.startsWith(".")) { domain = domain.slice(1) }
+            if (!_domainMatches(domain, requestDomain)) { return null }
+            hostOnly = false
         } else if (key == "path" && attrValue.length > 0) {
             path = attrValue
         } else if (key == "expires" && attrValue.length > 0) {
@@ -381,7 +391,7 @@ fn parseSetCookie(header: string, requestDomain: string = "", requestPath: strin
     }
 
     if (sameSite == "None" && !secure) { return null }
-    return Cookie(name, value, domain, path, expires, secure, httpOnly, sameSite)
+    return Cookie(name, value, domain, path, expires, secure, httpOnly, sameSite, hostOnly)
 }
 
 fn cookieJar(maxCookies: int = 300) -> CookieJar {
