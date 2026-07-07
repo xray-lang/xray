@@ -802,6 +802,7 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                                      "AOT global evidence function body owner decl is missing");
                 if (owner_decl->kind != XG_DECL_FUNC || owner_decl->module_id != body->module_id ||
                     owner_decl->name_id != body->name_id ||
+                    owner_decl->signature_key != body->signature_key ||
                     owner_decl->source_span_id != body->source_span_id)
                     return set_error(
                         errbuf, errbuf_len,
@@ -837,7 +838,8 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                         return set_error(errbuf, errbuf_len,
                                          "AOT global evidence method body owner method is missing");
                     if (owner_method->owner_class_id != body->owner_class_id ||
-                        owner_method->name_id != body->name_id)
+                        owner_method->name_id != body->name_id ||
+                        owner_method->signature_key != body->signature_key)
                         return set_error(
                             errbuf, errbuf_len,
                             "AOT global evidence method body owner method does not re-derive");

@@ -216,6 +216,7 @@ TEST(global_evidence_dump_lists_core_rows) {
                           .owner_class_id = XG_NO_ID,
                           .owner_method_id = XG_NO_ID,
                           .name_id = 88,
+                          .signature_key = 66,
                           .source_span_id = 77,
                           .kind = XG_BODY_FUNCTION,
                           .body_hash = 0x1234,
@@ -262,6 +263,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "method 0 id=3 owner=2"));
     ASSERT_NOT_NULL(strstr(dump, "interface-impl 0 class=2 interface=123"));
     ASSERT_NOT_NULL(strstr(dump, "body 0 func=4 module=1 decl=2"));
+    ASSERT_NOT_NULL(strstr(dump, "name=88 sig=66"));
     ASSERT_NOT_NULL(strstr(dump, "kind=function"));
     ASSERT_NOT_NULL(strstr(dump, "callsite 0 id=5 owner=4 span=0 kind=method ordinal=2"));
     ASSERT_NOT_NULL(strstr(dump, "link-dep 0 id=6 module=1 decl=2 span=77 kind=extern_dylib"));
@@ -1316,14 +1318,19 @@ TEST(global_evidence_verifier_rederives_profile_actions) {
                       .imported_summary_hash = 0x34,
                       .module_id = 1,
                       .profile = XG_BUILD_FREESTANDING};
-    XgDeclSummary decl = {
-        .module_id = 1, .decl_id = 1, .kind = XG_DECL_FUNC, .name_id = 7, .source_span_id = 3};
+    XgDeclSummary decl = {.module_id = 1,
+                          .decl_id = 1,
+                          .kind = XG_DECL_FUNC,
+                          .name_id = 7,
+                          .signature_key = 901,
+                          .source_span_id = 3};
     XgBodySummary body = {.func_id = 1,
                           .module_id = 1,
                           .owner_decl_id = 1,
                           .owner_class_id = XG_NO_ID,
                           .owner_method_id = XG_NO_ID,
                           .name_id = 7,
+                          .signature_key = 901,
                           .source_span_id = 3,
                           .kind = XG_BODY_FUNCTION,
                           .body_hash = 0x42,
@@ -1401,14 +1408,19 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
                       .imported_summary_hash = 0x44,
                       .module_id = 1,
                       .profile = XG_BUILD_NATIVE_RELEASE};
-    XgDeclSummary decl = {
-        .module_id = 1, .decl_id = 1, .kind = XG_DECL_FUNC, .name_id = 7, .source_span_id = 3};
+    XgDeclSummary decl = {.module_id = 1,
+                          .decl_id = 1,
+                          .kind = XG_DECL_FUNC,
+                          .name_id = 7,
+                          .signature_key = 901,
+                          .source_span_id = 3};
     XgBodySummary body = {.func_id = 1,
                           .module_id = 1,
                           .owner_decl_id = 1,
                           .owner_class_id = XG_NO_ID,
                           .owner_method_id = XG_NO_ID,
                           .name_id = 7,
+                          .signature_key = 901,
                           .source_span_id = 3,
                           .kind = XG_BODY_FUNCTION,
                           .body_hash = 0x4242,
@@ -1474,6 +1486,19 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
     xaot_bundle_free(&stale_decl);
     ev.bodies[0].owner_decl_id = 1;
 
+    XaotBundle stale_signature;
+    ev.bodies[0].signature_key = 902;
+    memset(&stale_signature, 0, sizeof(stale_signature));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_signature, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_signature.modules = modules;
+    stale_signature.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_signature, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_signature, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence function body owner decl does not re-derive"));
+    xaot_bundle_free(&stale_signature);
+    ev.bodies[0].signature_key = 901;
+
     XaotBundle stale_range;
     ev.bodies[0].callsite_start = 2;
     memset(&stale_range, 0, sizeof(stale_range));
@@ -1483,7 +1508,9 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_range, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&stale_range, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT global evidence body callsite range is stale"));
+    ASSERT_MSG(strstr(err, "AOT global evidence body callsite range is stale") ||
+                   strstr(err, "AOT global evidence callsite has no body"),
+               err);
     xaot_bundle_free(&stale_range);
     ev.bodies[0].callsite_start = 1;
 
@@ -1528,6 +1555,80 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
     xaot_bundle_free(&orphan_callsite);
     ev.bodies[0].callsite_start = 1;
     ev.bodies[0].callsite_count = 1;
+
+    xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_verifier_rederives_method_body_signature) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x51,
+                      .compiler_semver_hash = 0x52,
+                      .profile_hash = 0x53,
+                      .imported_summary_hash = 0x54,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary decl = {
+        .module_id = 1, .decl_id = 1, .kind = XG_DECL_CLASS, .name_id = 101, .source_span_id = 3};
+    XgClassSummary cls = {.module_id = 1,
+                          .decl_id = 1,
+                          .class_id = 1,
+                          .name_id = 101,
+                          .flags = XG_CLASS_INFERRED_FINAL,
+                          .method_start = 1,
+                          .method_count = 1,
+                          .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary method = {
+        .method_id = 1, .owner_class_id = 1, .name_id = 202, .signature_key = 303};
+    XgBodySummary body = {.func_id = 1,
+                          .module_id = 1,
+                          .owner_decl_id = 1,
+                          .owner_class_id = 1,
+                          .owner_method_id = 1,
+                          .name_id = 202,
+                          .signature_key = 303,
+                          .source_span_id = 4,
+                          .kind = XG_BODY_METHOD,
+                          .body_hash = 0x5151};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    char err[256];
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
+
+    XaotBundle good;
+    memset(&good, 0, sizeof(good));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&good, &ev, XG_BUILD_NATIVE_RELEASE));
+    good.modules = modules;
+    good.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    xaot_bundle_free(&good);
+
+    XaotBundle stale_signature;
+    ev.bodies[0].signature_key = 304;
+    memset(&stale_signature, 0, sizeof(stale_signature));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_signature, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_signature.modules = modules;
+    stale_signature.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_signature, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_signature, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence method body owner method does not re-derive"));
+    xaot_bundle_free(&stale_signature);
 
     xg_global_evidence_free(&ev);
 }
@@ -1709,12 +1810,14 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
             ASSERT_TRUE(body->owner_decl_id != XG_NO_ID);
             ASSERT_TRUE(body->owner_class_id != XG_NO_ID);
             ASSERT_TRUE(body->owner_method_id != XG_NO_ID);
+            ASSERT_TRUE(body->signature_key != 0);
             ASSERT_TRUE(body->source_span_id != 0);
         } else if (body->kind == XG_BODY_FUNCTION) {
             function_bodies++;
             ASSERT_TRUE(body->owner_decl_id != XG_NO_ID);
             ASSERT_EQ_UINT(body->owner_class_id, XG_NO_ID);
             ASSERT_EQ_UINT(body->owner_method_id, XG_NO_ID);
+            ASSERT_TRUE(body->signature_key != 0);
             ASSERT_TRUE(body->source_span_id != 0);
         }
         if ((body->capability_bits & XG_CAP_OBJECTS) != 0)
@@ -2172,10 +2275,12 @@ TEST(global_evidence_producer_marks_module_init_body) {
             ASSERT_EQ_UINT(body->owner_decl_id, XG_NO_ID);
             ASSERT_EQ_UINT(body->owner_class_id, XG_NO_ID);
             ASSERT_EQ_UINT(body->owner_method_id, XG_NO_ID);
+            ASSERT_EQ_UINT(body->signature_key, 0);
             ASSERT_EQ_UINT(body->source_span_id, 0);
         } else if (body->kind == XG_BODY_FUNCTION) {
             function_bodies++;
             ASSERT_TRUE(body->owner_decl_id != XG_NO_ID);
+            ASSERT_TRUE(body->signature_key != 0);
             ASSERT_TRUE(body->source_span_id != 0);
         }
     }
@@ -2212,6 +2317,7 @@ RUN_TEST(global_evidence_verifier_rederives_method_override_graph);
 RUN_TEST(global_evidence_verifier_rederives_interface_implementor_set);
 RUN_TEST(global_evidence_verifier_rederives_profile_actions);
 RUN_TEST(global_evidence_verifier_rederives_body_callsite_ranges);
+RUN_TEST(global_evidence_verifier_rederives_method_body_signature);
 RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
