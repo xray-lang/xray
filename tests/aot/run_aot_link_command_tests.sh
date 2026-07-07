@@ -592,6 +592,75 @@ else
     record_skip "freestanding-profile/kernel-shape: cross target real object (requires zig and llvm-readelf)"
 fi
 
+if command -v zig >/dev/null 2>&1 && command -v llvm-readelf >/dev/null 2>&1; then
+    FREESTANDING_KERNEL_ELF_SCRIPT="$WORK/freestanding_kernel_shape_x86_64.ld"
+    printf '%s\n' \
+        'EXTERN(xray_kernel_entry)' \
+        'ENTRY(_start)' \
+        'SECTIONS {' \
+        '  . = 0x100000;' \
+        '  _start = xray_kernel_entry;' \
+        '  .xray_multiboot ALIGN(4) : { KEEP(*("__DATA,.xray_multiboot")) }' \
+        '  .text ALIGN(16) : { KEEP(*("__TEXT,.xray_boot")) *(.text*) }' \
+        '  .rodata ALIGN(16) : { *(.rodata*) }' \
+        '  .eh_frame_hdr ALIGN(4) : { *(.eh_frame_hdr) }' \
+        '  .eh_frame ALIGN(8) : { *(.eh_frame) }' \
+        '  .data ALIGN(16) : { *(.data*) }' \
+        '  .bss ALIGN(16) : { *(.bss*) *(COMMON) }' \
+        '}' >"$FREESTANDING_KERNEL_ELF_SCRIPT"
+    FREESTANDING_KERNEL_ELF="$WORK/freestanding_kernel_shape_x86_64.elf"
+    FREESTANDING_KERNEL_ELF_LOG="$WORK/freestanding_kernel_shape_x86_64_elf.log"
+    FREESTANDING_KERNEL_ELF_HEADER="$WORK/freestanding_kernel_shape_x86_64_elf.header"
+    FREESTANDING_KERNEL_ELF_SECTIONS="$WORK/freestanding_kernel_shape_x86_64_elf.sections"
+    FREESTANDING_KERNEL_ELF_SYMBOLS="$WORK/freestanding_kernel_shape_x86_64_elf.symbols"
+    if ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}" \
+            ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}" \
+            "$XRAY" build --native --profile freestanding --target x86_64-linux-musl \
+            --toolchain zig --linker-script "$FREESTANDING_KERNEL_ELF_SCRIPT" \
+            --keep-c --rebuild --dump-link-command --cache-dir "$BUILD_CACHE" \
+            -o "$FREESTANDING_KERNEL_ELF" "$FREESTANDING_KERNEL_SRC" \
+            >"$FREESTANDING_KERNEL_ELF_LOG" 2>&1; then
+        expect_log_contains "$FREESTANDING_KERNEL_ELF_LOG" \
+            "-Wl,-T,$FREESTANDING_KERNEL_ELF_SCRIPT" \
+            "freestanding-profile/kernel-shape: final ELF uses linker script"
+        expect_log_not_contains "$FREESTANDING_KERNEL_ELF_LOG" "cannot find entry symbol" \
+            "freestanding-profile/kernel-shape: final ELF resolves entry symbol"
+        llvm-readelf -h "$FREESTANDING_KERNEL_ELF" >"$FREESTANDING_KERNEL_ELF_HEADER" 2>&1
+        llvm-readelf -S "$FREESTANDING_KERNEL_ELF" >"$FREESTANDING_KERNEL_ELF_SECTIONS" 2>&1
+        llvm-readelf -s "$FREESTANDING_KERNEL_ELF" >"$FREESTANDING_KERNEL_ELF_SYMBOLS" 2>&1
+        expect_log_contains "$FREESTANDING_KERNEL_ELF_HEADER" \
+            "Type:                              EXEC (Executable file)" \
+            "freestanding-profile/kernel-shape: final ELF is executable"
+        expect_log_contains "$FREESTANDING_KERNEL_ELF_HEADER" \
+            "Machine:                           Advanced Micro Devices X86-64" \
+            "freestanding-profile/kernel-shape: final ELF targets x86-64"
+        expect_log_not_contains "$FREESTANDING_KERNEL_ELF_HEADER" \
+            "Entry point address:               0x0" \
+            "freestanding-profile/kernel-shape: final ELF has nonzero entry"
+        expect_log_contains "$FREESTANDING_KERNEL_ELF_SECTIONS" ".xray_multiboot" \
+            "freestanding-profile/kernel-shape: final ELF keeps multiboot section"
+        expect_log_contains "$FREESTANDING_KERNEL_ELF_SECTIONS" ".text" \
+            "freestanding-profile/kernel-shape: final ELF keeps text section"
+        expect_log_contains "$FREESTANDING_KERNEL_ELF_SYMBOLS" "xray_kernel_entry" \
+            "freestanding-profile/kernel-shape: final ELF exports boot symbol"
+        expect_log_contains "$FREESTANDING_KERNEL_ELF_SYMBOLS" "_start" \
+            "freestanding-profile/kernel-shape: final ELF defines start alias"
+        FREESTANDING_KERNEL_ELF_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_KERNEL_ELF")"
+        if [ -z "$FREESTANDING_KERNEL_ELF_UNDEFINED" ]; then
+            record_pass "freestanding-profile/kernel-shape: final ELF has no undefined symbols"
+        else
+            record_fail "freestanding-profile/kernel-shape: final ELF has unexpected undefined symbols"
+            nm -u "$FREESTANDING_KERNEL_ELF" 2>&1 |
+                sed '/^[[:space:]]*$/d' | sed 's/^/      /'
+        fi
+    else
+        record_fail "freestanding-profile/kernel-shape: final ELF link failed"
+        sed 's/^/      /' "$FREESTANDING_KERNEL_ELF_LOG" | sed -n '1,120p'
+    fi
+else
+    record_skip "freestanding-profile/kernel-shape: final ELF link (requires zig and llvm-readelf)"
+fi
+
 FREESTANDING_RAWPTR_NULL_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_null.xr"
 FREESTANDING_RAWPTR_NULL_OBJ="$WORK/freestanding_rawptr_null.o"
 FREESTANDING_RAWPTR_NULL_LOG="$WORK/freestanding_rawptr_null.log"
