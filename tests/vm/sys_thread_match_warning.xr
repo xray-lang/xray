@@ -1,0 +1,18 @@
+import sys
+
+fn closeOnlyInOneMatchArm(tag: int) {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    match (tag) {
+        0 -> {
+            print(t.join())
+        }
+        _ -> {
+            print("match-open")
+        }
+    }
+    print("after-match")
+}
+
+closeOnlyInOneMatchArm(1)

@@ -1,0 +1,17 @@
+import sys
+
+fn closeInMatch(tag: int) {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    match (tag) {
+        0 -> {
+            t.detach()
+        }
+        _ -> {
+            print(t.join())
+        }
+    }
+}
+
+closeInMatch(1)
