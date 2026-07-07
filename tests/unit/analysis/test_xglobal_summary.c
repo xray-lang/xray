@@ -92,6 +92,17 @@ static uint32_t evidence_decl_count_with_flags(const XgGlobalEvidence *ev, uint3
     return count;
 }
 
+static bool evidence_has_link_dep(const XgGlobalEvidence *ev, uint8_t kind, const char *name) {
+    if (!ev || !name)
+        return false;
+    for (uint32_t i = 0; i < ev->nlink_deps; i++) {
+        const XgLinkDependencySummary *dep = &ev->link_deps[i];
+        if (dep->kind == kind && strcmp(dep->name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
 static void assert_body_callsite_ordinals(const XgGlobalEvidence *ev) {
     ASSERT_NOT_NULL(ev);
     for (uint32_t i = 0; i < ev->nbodies; i++) {
@@ -325,7 +336,23 @@ TEST(global_evidence_dump_lists_core_rows) {
                                         .name_id = 101,
                                         .kind = XG_LINK_DEP_EXTERN_DYLIB,
                                         .flags = 0};
+    XgLinkDependencySummary stdlib_module = {.link_id = 7,
+                                             .module_id = 1,
+                                             .decl_id = 0,
+                                             .source_span_id = 78,
+                                             .name_id = 102,
+                                             .kind = XG_LINK_DEP_STDLIB_MODULE,
+                                             .flags = 0};
+    XgLinkDependencySummary stdlib_symbol = {.link_id = 8,
+                                             .module_id = 1,
+                                             .decl_id = 0,
+                                             .source_span_id = 79,
+                                             .name_id = 103,
+                                             .kind = XG_LINK_DEP_STDLIB_SYMBOL,
+                                             .flags = 0};
     memcpy(link_dep.name, "m", 2);
+    memcpy(stdlib_module.name, "path", 5);
+    memcpy(stdlib_symbol.name, "path.join", 10);
 
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
@@ -337,6 +364,8 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
     ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&ev, &link_dep));
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&ev, &stdlib_module));
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&ev, &stdlib_symbol));
 
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
@@ -352,6 +381,8 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "kind=function"));
     ASSERT_NOT_NULL(strstr(dump, "callsite 0 id=5 owner=4 span=0 kind=method ordinal=2"));
     ASSERT_NOT_NULL(strstr(dump, "link-dep 0 id=6 module=1 decl=2 span=77 kind=extern_dylib"));
+    ASSERT_NOT_NULL(strstr(dump, "link-dep 1 id=7 module=1 decl=0 span=78 kind=stdlib_module"));
+    ASSERT_NOT_NULL(strstr(dump, "link-dep 2 id=8 module=1 decl=0 span=79 kind=stdlib_symbol"));
 
     xr_free(dump);
     xg_global_evidence_free(&ev);
@@ -4009,6 +4040,49 @@ TEST(global_evidence_producer_marks_extern_dylib_link_dependency) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_marks_stdlib_link_dependencies) {
+    setup_parser_session();
+    const char *source = "import path\n"
+                         "import { sep as directSep, join } from \"path\"\n"
+                         "import os\n"
+                         "print(path.join(\"a\", \"b\"))\n"
+                         "print(os.sep)\n"
+                         "print(directSep)\n"
+                         "print(join(\"c\", \"d\"))\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nlink_deps, 5);
+    ASSERT_TRUE(evidence_has_link_dep(&ev, XG_LINK_DEP_STDLIB_MODULE, "path"));
+    ASSERT_TRUE(evidence_has_link_dep(&ev, XG_LINK_DEP_STDLIB_MODULE, "os"));
+    ASSERT_TRUE(evidence_has_link_dep(&ev, XG_LINK_DEP_STDLIB_SYMBOL, "path.sep"));
+    ASSERT_TRUE(evidence_has_link_dep(&ev, XG_LINK_DEP_STDLIB_SYMBOL, "path.join"));
+    ASSERT_TRUE(evidence_has_link_dep(&ev, XG_LINK_DEP_STDLIB_SYMBOL, "os.sep"));
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nlink_dependency_plans, ev.nlink_deps);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities) {
     setup_parser_session();
     const char *source = "class Fake {\n"
@@ -4148,6 +4222,7 @@ RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
 RUN_TEST(global_evidence_producer_marks_sys_thread_spawn_capability);
 RUN_TEST(global_evidence_producer_marks_extern_dylib_link_dependency);
+RUN_TEST(global_evidence_producer_marks_stdlib_link_dependencies);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
 TEST_MAIN_END()
