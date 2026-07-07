@@ -502,6 +502,17 @@ static const XgClassSummary *verify_find_evidence_class(const XgGlobalEvidence *
     return NULL;
 }
 
+static const XgMethodSummary *verify_find_evidence_method_by_id(const XgGlobalEvidence *ev,
+                                                                XgMethodId method_id) {
+    if (!ev || method_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nmethods; i++) {
+        if (ev->methods[i].method_id == method_id)
+            return &ev->methods[i];
+    }
+    return NULL;
+}
+
 static bool verify_class_method_range_contains(const XgGlobalEvidence *ev,
                                                const XgClassSummary *cls,
                                                const XgMethodSummary *method) {
@@ -733,6 +744,48 @@ static bool verify_interface_implementor_set(const XgGlobalEvidence *ev, const X
     return true;
 }
 
+static bool verify_dispatch_target_anchor_rederives(const XgGlobalEvidence *ev,
+                                                    const XaotMethodDispatchPlan *plan,
+                                                    uint8_t expected_kind,
+                                                    XgMethodId expected_anchor_method_id,
+                                                    char *errbuf, size_t errbuf_len) {
+    if (!ev || !plan)
+        return set_error(errbuf, errbuf_len, "AOT dispatch target verifier has incomplete input");
+
+    switch ((XaotMethodDispatchKind) expected_kind) {
+        case XAOT_DISPATCH_DIRECT:
+            if (plan->target_count != 1 || plan->target_start != expected_anchor_method_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT dispatch direct target does not re-derive");
+            if (!verify_find_evidence_method_by_id(ev, plan->target_start))
+                return set_error(errbuf, errbuf_len, "AOT dispatch direct target is missing");
+            return true;
+        case XAOT_DISPATCH_VTABLE:
+            if (plan->target_count != 0 || plan->target_start != expected_anchor_method_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT dispatch vtable anchor does not re-derive");
+            if (expected_anchor_method_id != XG_NO_ID &&
+                !verify_find_evidence_method_by_id(ev, expected_anchor_method_id))
+                return set_error(errbuf, errbuf_len, "AOT dispatch vtable anchor is missing");
+            return true;
+        case XAOT_DISPATCH_ITABLE:
+            if (plan->target_count != 0 || plan->target_start != 0)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT dispatch itable target set does not re-derive");
+            return true;
+        case XAOT_DISPATCH_TYPE_SWITCH:
+            return set_error(errbuf, errbuf_len,
+                             "AOT dispatch type-switch targets are not evidence-derived yet");
+        case XAOT_DISPATCH_RUNTIME_FALLBACK:
+            if (plan->target_count != 0 || plan->target_start != 0)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT dispatch fallback target set does not re-derive");
+            return true;
+        default:
+            return set_error(errbuf, errbuf_len, "AOT dispatch plan has unknown kind");
+    }
+}
+
 static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
                                                   const XaotMethodDispatchPlan *plan,
                                                   const XgCallsiteSummary *call, char *errbuf,
@@ -743,8 +796,7 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
     uint32_t expected_evidence = XAOT_DISPATCH_EV_GLOBAL_CALLSITE;
     uint8_t expected_reason = XAOT_DISPATCH_UNPROVEN_NONE;
     XgMethodId expected_method_id;
-    uint32_t expected_target_start;
-    uint16_t expected_target_count;
+    XgMethodId expected_anchor_method_id;
 
     if (!ev || !plan || !call)
         return set_error(errbuf, errbuf_len, "AOT dispatch verifier has incomplete input");
@@ -777,8 +829,7 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
     }
 
     expected_method_id = method ? method->method_id : call->method_id;
-    expected_target_start = method ? method->method_id : 0;
-    expected_target_count = (uint16_t) (method && expected_kind == XAOT_DISPATCH_DIRECT ? 1 : 0);
+    expected_anchor_method_id = method ? method->method_id : XG_NO_ID;
     if (expected_kind == XAOT_DISPATCH_RUNTIME_FALLBACK)
         expected_evidence = 0;
 
@@ -792,8 +843,9 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
         return set_error(errbuf, errbuf_len, "AOT dispatch plan kind does not re-derive");
     if (plan->dispatch_slot != UINT32_MAX)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan slot is not evidence-derived yet");
-    if (plan->target_start != expected_target_start || plan->target_count != expected_target_count)
-        return set_error(errbuf, errbuf_len, "AOT dispatch plan target does not re-derive");
+    if (!verify_dispatch_target_anchor_rederives(ev, plan, expected_kind, expected_anchor_method_id,
+                                                 errbuf, errbuf_len))
+        return false;
     if (plan->evidence != expected_evidence)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan evidence does not re-derive");
     if (plan->unproven_reason != expected_reason)
