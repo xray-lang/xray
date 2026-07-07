@@ -3200,7 +3200,10 @@ static bool xicgen_emit_time_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
         fprintf(out, "XR_TO_INT(");
     else if (cg_rep(v) == XR_REP_F64)
         fprintf(out, "XR_TO_FLOAT(");
-    fprintf(out, "%s()", time_helper);
+    fprintf(out, "%s(", time_helper);
+    if (cg_time_module_helper_has_tagged_arg(time_helper))
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ")");
     if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)
         fprintf(out, ")");
     return true;

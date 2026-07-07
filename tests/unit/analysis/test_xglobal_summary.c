@@ -536,6 +536,18 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan kind does not re-derive"));
     xaot_bundle_free(&good);
 
+    XaotBundle stale_owner;
+    memset(&stale_owner, 0, sizeof(stale_owner));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_owner, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_owner.modules = modules;
+    stale_owner.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_owner, &init_func, 0, 0));
+    stale_owner.method_dispatch_plans[0].owner_func_id = 99;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_owner, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan owner function does not re-derive"));
+    xaot_bundle_free(&stale_owner);
+
     XaotBundle stale_source;
     memset(&stale_source, 0, sizeof(stale_source));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_source, &ev, XG_BUILD_NATIVE_RELEASE));

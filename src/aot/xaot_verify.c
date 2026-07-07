@@ -908,6 +908,8 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
 
     if (plan->callsite_id != call->callsite_id)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan callsite does not re-derive");
+    if (plan->owner_func_id != call->owner_func_id)
+        return set_error(errbuf, errbuf_len, "AOT dispatch plan owner function does not re-derive");
     if (plan->source_span_id != call->source_span_id)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan source span does not re-derive");
     if (plan->body_ordinal != call->body_ordinal)
