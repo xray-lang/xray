@@ -1179,10 +1179,22 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
     FREESTANDING_ENUM_STATIC_C="$(sed -n 's/^Kept C source: //p' \
         "$FREESTANDING_ENUM_STATIC_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_ENUM_STATIC_C" ]; then
-        expect_log_contains "$FREESTANDING_ENUM_STATIC_C" "_xenum_" \
-            "freestanding-profile/enum-static: emits static enum member values"
-        expect_log_contains "$FREESTANDING_ENUM_STATIC_C" "xrt_eq(" \
-            "freestanding-profile/enum-static: enum equality uses freestanding value compare"
+        expect_log_contains "$FREESTANDING_ENUM_STATIC_C" "int64_t v3 = INT64_C(0)" \
+            "freestanding-profile/enum-static: lowers Boot to ordinal"
+        expect_log_contains "$FREESTANDING_ENUM_STATIC_C" "uint8_t v4 = v0 == v3" \
+            "freestanding-profile/enum-static: match uses ordinal compare"
+        expect_log_contains "$FREESTANDING_ENUM_STATIC_C" "int64_t v7 = INT64_C(1)" \
+            "freestanding-profile/enum-static: lowers Run to ordinal"
+        expect_log_contains "$FREESTANDING_ENUM_STATIC_C" "int64_t v11 = INT64_C(2)" \
+            "freestanding-profile/enum-static: lowers Halt to ordinal"
+        expect_log_not_contains "$FREESTANDING_ENUM_STATIC_C" "_xenum_" \
+            "freestanding-profile/enum-static: avoids static enum boxes"
+        expect_log_not_contains "$FREESTANDING_ENUM_STATIC_C" "XR_TAG_ENUM" \
+            "freestanding-profile/enum-static: avoids tagged enum values"
+        expect_log_not_contains "$FREESTANDING_ENUM_STATIC_C" "xrt_enum_box_ordinal" \
+            "freestanding-profile/enum-static: avoids boxed enum ordinal helper"
+        expect_log_not_contains "$FREESTANDING_ENUM_STATIC_C" "xrt_eq(" \
+            "freestanding-profile/enum-static: equality uses ordinal compare"
         expect_log_not_contains "$FREESTANDING_ENUM_STATIC_C" "xrt_map_new" \
             "freestanding-profile/enum-static: avoids enum namespace map allocation"
         expect_log_not_contains "$FREESTANDING_ENUM_STATIC_C" "xrt_map_set" \
@@ -1230,10 +1242,16 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/enum-error: checks pending enum value"
         expect_log_contains "$FREESTANDING_ENUM_ERR_C" "xrt_pending_error = XR_NULL_VAL" \
             "freestanding-profile/enum-error: catch clears pending enum value"
-        expect_log_contains "$FREESTANDING_ENUM_ERR_C" "_xenum_" \
-            "freestanding-profile/enum-error: emits static enum member values"
-        expect_log_contains "$FREESTANDING_ENUM_ERR_C" "xrt_eq(" \
-            "freestanding-profile/enum-error: catch can compare enum values"
+        expect_log_contains "$FREESTANDING_ENUM_ERR_C" "xrt_pending_error = XR_FROM_INT(" \
+            "freestanding-profile/enum-error: stores ordinal in tagged pending slot"
+        expect_log_contains "$FREESTANDING_ENUM_ERR_C" "uint8_t v10 = xrt_eq(v7, XR_FROM_INT(v9))" \
+            "freestanding-profile/enum-error: untyped catch compares pending ordinal"
+        expect_log_not_contains "$FREESTANDING_ENUM_ERR_C" "_xenum_" \
+            "freestanding-profile/enum-error: avoids static enum boxes"
+        expect_log_not_contains "$FREESTANDING_ENUM_ERR_C" "XR_TAG_ENUM" \
+            "freestanding-profile/enum-error: avoids tagged enum boxes"
+        expect_log_not_contains "$FREESTANDING_ENUM_ERR_C" "xrt_enum_box_ordinal" \
+            "freestanding-profile/enum-error: avoids boxed enum ordinal helper"
         expect_log_not_contains "$FREESTANDING_ENUM_ERR_C" "xrt_throw_exc" \
             "freestanding-profile/enum-error: avoids hosted throw helper"
         expect_log_not_contains "$FREESTANDING_ENUM_ERR_C" "setjmp" \

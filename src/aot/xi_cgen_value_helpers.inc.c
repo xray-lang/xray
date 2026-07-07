@@ -478,9 +478,16 @@ static bool emit_static_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out
         return false;
     if (ed->members[member_index].has_payload || cg_prelude_enum_has_payload_member(ed))
         return false;
-    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_TAGGED,
+    XrRep source_rep =
+        (ctx && ctx->freestanding_profile && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
+            ? XR_REP_I64
+            : XR_REP_TAGGED;
+    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, source_rep,
                                                      cg_value_plan_storage_rep(ctx, v));
-    emit_prelude_enum_member_value_expr(out, ed, (uint32_t) member_index);
+    if (source_rep == XR_REP_I64)
+        fprintf(out, "INT64_C(%d)", member_index);
+    else
+        emit_prelude_enum_member_value_expr(out, ed, (uint32_t) member_index);
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }
@@ -492,18 +499,26 @@ static bool emit_static_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const 
     const XiEnumMemberData *member = &ed->members[member_index];
     if (member->payload_count != 0)
         return false;
-    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_TAGGED,
+    XrRep source_rep =
+        (ctx && ctx->freestanding_profile && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
+            ? XR_REP_I64
+            : XR_REP_TAGGED;
+    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, source_rep,
                                                      cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "({ static const XrAotEnumBox _xenum_%u_%u = {{0, 0}, NULL, ",
-            (unsigned) ed->layout_id, (unsigned) member_index);
-    emit_c_string_literal(out, ed->name ? ed->name : "");
-    fprintf(out, ", ");
-    emit_c_string_literal(out, member->name ? member->name : "");
-    fprintf(out,
-            ", %u, 0, %u}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
-            "_v.ptr = (void *)&_xenum_%u_%u; _v; })",
-            (unsigned) member_index, (unsigned) ed->layout_id, (unsigned) member_index,
-            (unsigned) ed->layout_id, (unsigned) member_index);
+    if (source_rep == XR_REP_I64) {
+        fprintf(out, "INT64_C(%u)", (unsigned) member_index);
+    } else {
+        fprintf(out, "({ static const XrAotEnumBox _xenum_%u_%u = {{0, 0}, NULL, ",
+                (unsigned) ed->layout_id, (unsigned) member_index);
+        emit_c_string_literal(out, ed->name ? ed->name : "");
+        fprintf(out, ", ");
+        emit_c_string_literal(out, member->name ? member->name : "");
+        fprintf(out,
+                ", %u, 0, %u}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
+                "_v.ptr = (void *)&_xenum_%u_%u; _v; })",
+                (unsigned) member_index, (unsigned) ed->layout_id, (unsigned) member_index,
+                (unsigned) ed->layout_id, (unsigned) member_index);
+    }
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }
