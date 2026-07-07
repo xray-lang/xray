@@ -5520,6 +5520,41 @@ static bool cg_native_receiver_method_call_needs_boxed_adapter(XiCgenCtx *ctx, c
              cg_class_native_can_pass_instance_as(ctx, source_info, target_class));
 }
 
+static bool cg_native_receiver_dispatch_plan_needs_boxed_adapter(XiCgenCtx *ctx,
+                                                                 const XiFunc *owner,
+                                                                 const XiValue *call,
+                                                                 const XiFunc *target) {
+    const XaotBundle *bundle;
+    const XaotMethodDispatchPlan *plan;
+    const XiClassData *target_class;
+    const XiClassData *source_info;
+
+    if (!ctx || !owner || !call || !target ||
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) || call->nargs < 1)
+        return false;
+    bundle = cg_ctx_aot_bundle(ctx);
+    plan = xaot_bundle_find_method_dispatch_plan_for_xi_call(bundle, call);
+    if (!bundle || !plan ||
+        (plan->kind != XAOT_DISPATCH_DIRECT && plan->kind != XAOT_DISPATCH_TYPE_SWITCH) ||
+        plan->target_count == 0 || plan->target_start == 0 ||
+        plan->target_start - 1 + plan->target_count > bundle->ndispatch_target_cases)
+        return false;
+
+    for (uint16_t i = 0; i < plan->target_count; i++) {
+        const XaotDispatchTargetCase *target_case =
+            &bundle->dispatch_target_cases[plan->target_start - 1 + i];
+        const XiFunc *target_func =
+            xaot_bundle_find_dispatch_target_func(bundle, target_case, NULL);
+        if (target_func == target) {
+            target_class = cg_native_receiver_target_class_data(ctx, target);
+            source_info = cg_class_native_instance_data(ctx, owner, call->args[0]);
+            return !(cg_class_native_instance_origin(ctx, owner, call->args[0]) &&
+                     cg_class_native_can_pass_instance_as(ctx, source_info, target_class));
+        }
+    }
+    return false;
+}
+
 static bool cg_native_receiver_getter_field_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *owner,
                                                                 const XiValue *load,
                                                                 const XiFunc *target) {
@@ -5573,7 +5608,8 @@ static bool cg_func_has_native_receiver_boxed_use(XiCgenCtx *ctx, const XiFunc *
                  !cg_shared_static_function_closure_is_elided(ctx, owner, v)) &&
                 !cg_array_closure_value_only_used_by_inline_map(ctx, owner, prefix, v))
                 return true;
-            if (cg_native_receiver_method_call_needs_boxed_adapter(ctx, owner, v, target) ||
+            if (cg_native_receiver_dispatch_plan_needs_boxed_adapter(ctx, owner, v, target) ||
+                cg_native_receiver_method_call_needs_boxed_adapter(ctx, owner, v, target) ||
                 cg_native_receiver_getter_field_needs_boxed_adapter(ctx, owner, v, target) ||
                 cg_native_receiver_ctor_call_needs_boxed_adapter(ctx, owner, v, target))
                 return true;
