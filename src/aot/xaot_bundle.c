@@ -409,6 +409,10 @@ static bool xg_evidence_effective_interface_implementor_seen(
     return false;
 }
 
+static bool xaot_bundle_add_interface_call_use_plan(XaotBundle *bundle,
+                                                    const XgCallsiteSummary *call,
+                                                    XgClassId implementor_class_id, uint8_t kind);
+
 static bool xaot_bundle_add_dispatch_target_case(XaotBundle *bundle, XgCallsiteId callsite_id,
                                                  XgClassId receiver_class_id, XgMethodId method_id,
                                                  uint32_t evidence) {
@@ -478,6 +482,10 @@ static bool xaot_bundle_add_class_layout_plan(XaotBundle *bundle, const XgClassS
     plan->flags = flags;
     return true;
 }
+
+static bool xaot_bundle_add_interface_call_use_plan(XaotBundle *bundle,
+                                                    const XgCallsiteSummary *call,
+                                                    XgClassId implementor_class_id, uint8_t kind);
 
 static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCallsiteSummary *call,
                                                  const XgGlobalEvidence *ev) {
@@ -582,9 +590,12 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
                 continue;
             target_method = xg_evidence_find_method_by_signature_in_hierarchy(
                 ev, impl->implementor_class_id, call->method_name_id, call->method_signature_key);
-            if (!target_method || !xaot_bundle_add_dispatch_target_case(
-                                      bundle, call->callsite_id, impl->implementor_class_id,
-                                      target_method->method_id, evidence))
+            if (!target_method ||
+                !xaot_bundle_add_dispatch_target_case(bundle, call->callsite_id,
+                                                      impl->implementor_class_id,
+                                                      target_method->method_id, evidence) ||
+                !xaot_bundle_add_interface_call_use_plan(bundle, call, impl->implementor_class_id,
+                                                         kind))
                 return false;
             target_count++;
         }
@@ -612,22 +623,55 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
     return true;
 }
 
-static bool xaot_bundle_add_interface_use_plan(XaotBundle *bundle,
-                                               const XgInterfaceImplSummary *impl) {
+static bool xaot_bundle_add_interface_use_plan_row(XaotBundle *bundle, XgInterfaceId interface_id,
+                                                   XgClassId implementor_class_id,
+                                                   XgCallsiteId use_site_id, uint32_t reason,
+                                                   uint32_t flags) {
     XaotInterfaceUsePlan *plan;
-    if (!bundle || !impl)
+    if (!bundle || interface_id == XG_NO_ID || implementor_class_id == XG_NO_ID || reason == 0)
         return false;
+    for (uint32_t i = 0; i < bundle->ninterface_use_plans; i++) {
+        plan = &bundle->interface_use_plans[i];
+        if (plan->interface_id == interface_id && plan->implementor_class_id == implementor_class_id &&
+            plan->use_site_id == use_site_id) {
+            plan->reason |= reason;
+            plan->flags |= flags;
+            return true;
+        }
+    }
     if (!reserve_plan_array((void **) &bundle->interface_use_plans, &bundle->interface_use_plan_cap,
                             bundle->ninterface_use_plans + 1, sizeof(XaotInterfaceUsePlan), 8))
         return false;
     plan = &bundle->interface_use_plans[bundle->ninterface_use_plans++];
     memset(plan, 0, sizeof(*plan));
-    plan->interface_id = impl->interface_id;
-    plan->implementor_class_id = impl->implementor_class_id;
-    plan->use_site_id = XG_NO_ID;
-    plan->reason = XAOT_INTERFACE_USE_REASON_IMPLEMENTS;
-    plan->flags = 0;
+    plan->interface_id = interface_id;
+    plan->implementor_class_id = implementor_class_id;
+    plan->use_site_id = use_site_id;
+    plan->reason = reason;
+    plan->flags = flags;
     return true;
+}
+
+static bool xaot_bundle_add_interface_use_plan(XaotBundle *bundle,
+                                               const XgInterfaceImplSummary *impl) {
+    if (!bundle || !impl)
+        return false;
+    return xaot_bundle_add_interface_use_plan_row(bundle, impl->interface_id,
+                                                 impl->implementor_class_id, XG_NO_ID,
+                                                 XAOT_INTERFACE_USE_REASON_IMPLEMENTS, 0);
+}
+
+static bool xaot_bundle_add_interface_call_use_plan(XaotBundle *bundle,
+                                                   const XgCallsiteSummary *call,
+                                                   XgClassId implementor_class_id, uint8_t kind) {
+    uint32_t flags = XAOT_INTERFACE_USE_NEEDS_IFACE_OBJECT;
+    if (kind == XAOT_DISPATCH_TYPE_SWITCH)
+        flags |= XAOT_INTERFACE_USE_TYPE_SWITCHABLE;
+    if (!bundle || !call || call->kind != XG_CALL_INTERFACE)
+        return false;
+    return xaot_bundle_add_interface_use_plan_row(bundle, call->receiver_static_interface_id,
+                                                 implementor_class_id, call->callsite_id,
+                                                 XAOT_INTERFACE_USE_REASON_VALUE, flags);
 }
 
 static uint32_t xaot_metadata_profile_action(uint32_t profile, uint32_t metadata) {
