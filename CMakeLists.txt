@@ -1212,6 +1212,19 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME eval_stdlib_overlay
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_eval_stdlib_overlay_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(eval_stdlib_overlay PROPERTIES
+        LABELS "vm;stdlib;eval;regression"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME stdlib_metadata_sync
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}

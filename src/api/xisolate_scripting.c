@@ -24,6 +24,10 @@
 #include "../runtime/class/xinstance.h"
 #include "../runtime/class/xclass_system.h"
 #include "../base/xglobal_indices.h"
+#include "../frontend/analyzer/xanalyzer.h"
+#include "../module/xmodule.h"
+#include "../module/xmodule_graph.h"
+#include "../module/xmodule_resolver.h"
 #include "../runtime/value/xvalue.h"
 #include "../vm/xic_method.h"
 #include "../vm/xvm_internal.h"
@@ -39,9 +43,158 @@
 #include "../base/xsource_cache.h"
 #include "../toolchain/xcompiler_session.h"
 
+typedef struct DostringGraphState {
+    XrModuleGraph *graph;
+    XaAnalyzer *analyzer;
+    XrModuleRegistry *registry;
+    XrModule **previous_module_table;
+    int previous_module_table_count;
+    XrModule **owned_module_table;
+} DostringGraphState;
+
 static XrSourceCache *ensure_script_source_cache(XrVMRuntime *isolate) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     return xr_compiler_session_ensure_source_cache(session);
+}
+
+static void dostring_graph_cleanup(XrCompilerSession *session, DostringGraphState *state) {
+    if (!state)
+        return;
+    if (session)
+        xr_compiler_session_set_module_graph(session, NULL);
+    if (state->registry && state->registry->module_table == state->owned_module_table) {
+        state->registry->module_table = state->previous_module_table;
+        state->registry->module_table_count = state->previous_module_table_count;
+    }
+    xr_free(state->owned_module_table);
+    if (state->analyzer) {
+        xa_analyzer_set_graph(state->analyzer, NULL);
+        xa_analyzer_free(state->analyzer);
+    }
+    if (state->graph)
+        xr_module_graph_free(state->graph);
+    memset(state, 0, sizeof(*state));
+}
+
+static bool analyze_graph_exports_for_dostring(XrCompilerSession *session, XrModuleGraph *graph,
+                                               XaAnalyzer **out_analyzer) {
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
+    if (!analyzer) {
+        fprintf(stderr, "Error: cannot create analyzer for eval module graph\n");
+        return false;
+    }
+
+    xa_analyzer_set_graph(analyzer, graph);
+    int graph_errors = 0;
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        int idx = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[idx];
+        if (idx == graph->entry_index || !spec->ast)
+            continue;
+
+        xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
+        spec->export_symbols =
+            xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
+
+        int diag_count = 0;
+        XaDiagnostic *diags = xa_analyzer_get_diagnostics(analyzer, &diag_count);
+        for (XaDiagnostic *d = diags; d; d = d->next) {
+            if (d->severity == XR_DIAG_SEV_ERROR) {
+                graph_errors++;
+                fprintf(stderr, "%s:%d:%d: error: %s\n",
+                        spec->source_path ? spec->source_path : "<eval>", d->location.line,
+                        d->location.column, d->message);
+            }
+        }
+        xa_analyzer_clear_diagnostics(analyzer);
+    }
+
+    if (graph_errors > 0) {
+        xa_analyzer_set_graph(analyzer, NULL);
+        xa_analyzer_free(analyzer);
+        return false;
+    }
+
+    *out_analyzer = analyzer;
+    return true;
+}
+
+static void preload_graph_modules_for_dostring(XrVMRuntime *isolate, XrModuleGraph *graph,
+                                               DostringGraphState *state) {
+    XrModuleRegistry *registry = state->registry;
+    int nmod = graph->topo_count;
+    if (!registry || nmod <= 1)
+        return;
+
+    XrModule **mod_table = (XrModule **) xr_calloc((size_t) nmod, sizeof(XrModule *));
+    if (!mod_table)
+        return;
+
+    state->previous_module_table = registry->module_table;
+    state->previous_module_table_count = registry->module_table_count;
+    state->owned_module_table = mod_table;
+    registry->module_table = mod_table;
+    registry->module_table_count = nmod;
+
+    for (int ti = 0; ti < nmod; ti++) {
+        int idx = graph->topo_order[ti];
+        if (idx == graph->entry_index)
+            continue;
+        XrModuleSpec *spec = &graph->specs[idx];
+        if (!spec->source_path)
+            continue;
+        const char *import_name =
+            (spec->kind == XR_MOD_STDLIB && spec->canonical) ? spec->canonical : spec->source_path;
+        XrValue val = xr_module_import(isolate, import_name);
+        if (!XR_IS_NULL(val))
+            mod_table[ti] = xr_value_to_module(val);
+    }
+}
+
+static bool prepare_graph_for_dostring(XrVMRuntime *isolate, XrCompilerSession *session,
+                                       const char *source, DostringGraphState *state) {
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
+    XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
+    if (!registry || !resolver)
+        return true;
+
+    XrModuleGraph *graph = xr_module_graph_new(session, resolver);
+    if (!graph)
+        return true;
+
+    char *err = NULL;
+    if (xr_module_graph_build_source(graph, "<eval>", source, &err) != 0) {
+        fprintf(stderr, "Error: %s\n", err ? err : "failed to build eval module graph");
+        xr_free(err);
+        xr_module_graph_free(graph);
+        return false;
+    }
+    xr_free(err);
+
+    xr_module_graph_topological_sort(graph);
+    if (graph->has_cycle) {
+        fprintf(stderr, "Error: %s\n",
+                graph->cycle_desc ? graph->cycle_desc : "circular dependency detected");
+        xr_module_graph_free(graph);
+        return false;
+    }
+
+    if (graph->topo_count <= 1) {
+        xr_module_graph_free(graph);
+        return true;
+    }
+
+    memset(state, 0, sizeof(*state));
+    state->graph = graph;
+    state->registry = registry;
+    if (!analyze_graph_exports_for_dostring(session, graph, &state->analyzer)) {
+        dostring_graph_cleanup(session, state);
+        return false;
+    }
+
+    xr_compiler_session_set_module_graph(session, graph);
+    preload_graph_modules_for_dostring(isolate, graph, state);
+    return true;
 }
 
 /* ========== IC Feedback Dump ========== */
@@ -145,8 +298,13 @@ int xray_vm_dostring(XrVMRuntime *isolate, const char *source) {
         fprintf(stderr, "Compiler unavailable: source execution requires a compiler session\n");
         return -1;
     }
+    DostringGraphState graph_state = {0};
+    if (!prepare_graph_for_dostring(isolate, session, source, &graph_state))
+        return -1;
+
     XrProto *code = xr_compile_source_with_path(session, source, NULL);
     if (code == NULL) {
+        dostring_graph_cleanup(session, &graph_state);
         fprintf(stderr, "Compilation error\n");
         return -1;
     }
@@ -154,6 +312,7 @@ int xray_vm_dostring(XrVMRuntime *isolate, const char *source) {
     int result = execute_and_dump(isolate, code, "<eval>");
 
     xr_free_code(isolate, code);
+    dostring_graph_cleanup(session, &graph_state);
 
     return result;
 }

@@ -113,6 +113,13 @@ XR_FUNC void xr_module_graph_free(XrModuleGraph *g);
  * On error, *out_err is set to a descriptive message (caller frees). */
 XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path, char **out_err);
 
+/* Build the graph from an in-memory entry source.
+ * The synthetic entry has no filesystem source_path; relative imports are
+ * resolved from cwd by the resolver, while bare stdlib imports work exactly
+ * like file-backed entries. */
+XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g, const char *entry_id,
+                                         const char *entry_source, char **out_err);
+
 /* Run topological sort (Tarjan SCC).
  * After success, g->topo_order is filled and g->has_cycle indicates cycles.
  * Returns 0 on success (no cycle), -1 if cycles detected (g->cycle_desc set). */

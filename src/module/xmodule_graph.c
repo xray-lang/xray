@@ -218,11 +218,75 @@ static void collect_and_resolve_imports(XrModuleGraph *g, int spec_idx, struct A
     from_spec->status = XR_MODSPEC_RESOLVED;
 }
 
-XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path, char **out_err) {
+static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
+                                  const char *entry_source_path, const char *entry_source,
+                                  char **out_err) {
     XR_DCHECK(g != NULL, "xr_module_graph_build: NULL graph");
-    if (!g || !entry_path) {
+    if (!g || !entry_canonical) {
         if (out_err)
-            *out_err = xr_strdup("NULL graph or entry_path");
+            *out_err = xr_strdup("NULL graph or entry");
+        return -1;
+    }
+
+    /* Add entry spec */
+    int entry_idx = graph_add_spec(g, entry_canonical, entry_source_path, XR_MOD_FILE);
+    if (entry_idx < 0) {
+        if (out_err)
+            *out_err = xr_strdup("failed to add entry module");
+        return -1;
+    }
+    g->entry_index = entry_idx;
+
+    /* BFS: process each spec in queue order.
+     * spec_count grows as new modules are discovered. */
+    for (int qi = 0; qi < g->spec_count; qi++) {
+        XrModuleSpec *spec = &g->specs[qi];
+
+        /* Skip stdlib native (no source to parse).  The in-memory entry is
+         * the only source-less spec that still has source text. */
+        bool is_memory_entry = (qi == g->entry_index && entry_source != NULL);
+        if (!spec->source_path && !is_memory_entry)
+            continue;
+
+        /* Skip already processed */
+        if (spec->status >= XR_MODSPEC_RESOLVED)
+            continue;
+
+        /* Parse source */
+        char *owned_source = NULL;
+        const char *source = entry_source;
+        if (!is_memory_entry) {
+            owned_source = xr_file_read_all(spec->source_path, "r", NULL);
+            source = owned_source;
+            if (!source) {
+                xr_log_warning("module_graph", "cannot read: %s", spec->source_path);
+                continue;
+            }
+        }
+
+        struct AstNode *ast = xr_parse_with_source(g->compiler_session, source, spec->source_path);
+        xr_free(owned_source);
+
+        if (!ast) {
+            xr_log_warning("module_graph", "parse failed: %s",
+                           spec->source_path ? spec->source_path : entry_canonical);
+            continue;
+        }
+
+        spec->ast = ast;
+        spec->status = XR_MODSPEC_PARSED;
+
+        /* Resolve imports and discover new modules */
+        collect_and_resolve_imports(g, qi, ast);
+    }
+
+    return 0;
+}
+
+XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path, char **out_err) {
+    if (!entry_path) {
+        if (out_err)
+            *out_err = xr_strdup("NULL entry_path");
         return -1;
     }
 
@@ -240,53 +304,19 @@ XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path, char
         abs_path = xr_strdup(entry_path);
     }
 
-    /* Add entry spec */
-    int entry_idx = graph_add_spec(g, abs_path, abs_path, XR_MOD_FILE);
-    if (entry_idx < 0) {
-        xr_free(abs_path);
+    int rc = graph_build_from_entry(g, abs_path, abs_path, NULL, out_err);
+    xr_free(abs_path);
+    return rc;
+}
+
+XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g, const char *entry_id,
+                                         const char *entry_source, char **out_err) {
+    if (!entry_source) {
         if (out_err)
-            *out_err = xr_strdup("failed to add entry module");
+            *out_err = xr_strdup("NULL entry_source");
         return -1;
     }
-    g->entry_index = entry_idx;
-    xr_free(abs_path);
-
-    /* BFS: process each spec in queue order.
-     * spec_count grows as new modules are discovered. */
-    for (int qi = 0; qi < g->spec_count; qi++) {
-        XrModuleSpec *spec = &g->specs[qi];
-
-        /* Skip stdlib native (no source to parse) */
-        if (!spec->source_path)
-            continue;
-
-        /* Skip already processed */
-        if (spec->status >= XR_MODSPEC_RESOLVED)
-            continue;
-
-        /* Parse source */
-        char *source = xr_file_read_all(spec->source_path, "r", NULL);
-        if (!source) {
-            xr_log_warning("module_graph", "cannot read: %s", spec->source_path);
-            continue;
-        }
-
-        struct AstNode *ast = xr_parse_with_source(g->compiler_session, source, spec->source_path);
-        xr_free(source);
-
-        if (!ast) {
-            xr_log_warning("module_graph", "parse failed: %s", spec->source_path);
-            continue;
-        }
-
-        spec->ast = ast;
-        spec->status = XR_MODSPEC_PARSED;
-
-        /* Resolve imports and discover new modules */
-        collect_and_resolve_imports(g, qi, ast);
-    }
-
-    return 0;
+    return graph_build_from_entry(g, entry_id ? entry_id : "<eval>", NULL, entry_source, out_err);
 }
 
 /* ========== Topological Sort (Tarjan SCC) ========== */
