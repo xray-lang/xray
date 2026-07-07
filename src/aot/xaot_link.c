@@ -205,11 +205,13 @@ static bool xaot_json_write_string_array(FILE *out, const char *name, char **ite
 }
 
 static bool xaot_json_write_target(FILE *out, const XaotTarget *target) {
+    char bits[16];
     bool ok;
 
     if (!target)
         return false;
 
+    snprintf(bits, sizeof(bits), "%u", (unsigned) target->pointer_bits);
     ok = true;
     ok = ok && xaot_json_write_raw(out, "  \"target\": {\n");
     ok = ok && xaot_json_write_raw(out, "    \"name\": ");
@@ -229,19 +231,28 @@ static bool xaot_json_write_target(FILE *out, const XaotTarget *target) {
     ok = ok && xaot_json_write_raw(out, ",\n");
     ok = ok && xaot_json_write_raw(out, "    \"triple\": ");
     ok = ok && xaot_json_write_string(out, target->triple);
+    ok = ok && xaot_json_write_raw(out, ",\n");
+    ok = ok && xaot_json_write_raw(out, "    \"pointer_bits\": ");
+    ok = ok && xaot_json_write_raw(out, bits);
+    ok = ok && xaot_json_write_raw(out, ",\n");
+    ok = ok && xaot_json_write_raw(out, "    \"endian\": ");
+    ok = ok && xaot_json_write_string(out, target->endian);
     ok = ok && xaot_json_write_raw(out, "\n");
     ok = ok && xaot_json_write_raw(out, "  },\n");
     return ok;
 }
 
 static bool xaot_target_profile(const char *name, const char **arch, const char **os,
-                                const char **abi, const char **object_format, const char **triple) {
+                                const char **abi, const char **object_format, const char **triple,
+                                uint16_t *pointer_bits, const char **endian) {
     if (!name || strcmp(name, "native") == 0 || strcmp(name, "native-c90") == 0) {
         *arch = "native";
         *os = "native";
         *abi = "host";
         *object_format = "native";
         *triple = "native";
+        *pointer_bits = 0;
+        *endian = "native";
         return true;
     }
     if (strcmp(name, "x86_64-linux-musl") == 0) {
@@ -250,6 +261,8 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *abi = "musl";
         *object_format = "elf";
         *triple = "x86_64-linux-musl";
+        *pointer_bits = 64;
+        *endian = "little";
         return true;
     }
     if (strcmp(name, "x86_64-unknown-none") == 0) {
@@ -258,6 +271,8 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *abi = "none";
         *object_format = "elf";
         *triple = "x86_64-unknown-none";
+        *pointer_bits = 64;
+        *endian = "little";
         return true;
     }
     if (strcmp(name, "aarch64-linux-musl") == 0) {
@@ -266,6 +281,8 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *abi = "musl";
         *object_format = "elf";
         *triple = "aarch64-linux-musl";
+        *pointer_bits = 64;
+        *endian = "little";
         return true;
     }
     if (strcmp(name, "x86_64-windows-gnu") == 0) {
@@ -274,6 +291,8 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *abi = "gnu";
         *object_format = "coff";
         *triple = "x86_64-windows-gnu";
+        *pointer_bits = 64;
+        *endian = "little";
         return true;
     }
     if (strcmp(name, "aarch64-windows-gnu") == 0) {
@@ -282,6 +301,8 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *abi = "gnu";
         *object_format = "coff";
         *triple = "aarch64-windows-gnu";
+        *pointer_bits = 64;
+        *endian = "little";
         return true;
     }
     return false;
@@ -294,24 +315,30 @@ XR_FUNC bool xaot_target_init(XaotTarget *target, const char *name) {
     const char *abi;
     const char *object_format;
     const char *triple;
+    uint16_t pointer_bits;
+    const char *endian;
 
     if (!target)
         return false;
 
     resolved_name = name ? name : "native-c90";
-    if (!xaot_target_profile(resolved_name, &arch, &os, &abi, &object_format, &triple)) {
+    if (!xaot_target_profile(resolved_name, &arch, &os, &abi, &object_format, &triple,
+                             &pointer_bits, &endian)) {
         arch = "unknown";
         os = "unknown";
         abi = "unknown";
         object_format = "unknown";
         triple = resolved_name;
+        pointer_bits = 0;
+        endian = "unknown";
     }
-    return xaot_target_init_ex(target, resolved_name, arch, os, abi, object_format, triple);
+    return xaot_target_init_ex(target, resolved_name, arch, os, abi, object_format, triple,
+                               pointer_bits, endian);
 }
 
 XR_FUNC bool xaot_target_init_ex(XaotTarget *target, const char *name, const char *arch,
                                  const char *os, const char *abi, const char *object_format,
-                                 const char *triple) {
+                                 const char *triple, uint16_t pointer_bits, const char *endian) {
     if (!target)
         return false;
 
@@ -322,8 +349,10 @@ XR_FUNC bool xaot_target_init_ex(XaotTarget *target, const char *name, const cha
     target->abi = xr_strdup(abi ? abi : "unknown");
     target->object_format = xr_strdup(object_format ? object_format : "unknown");
     target->triple = xr_strdup(triple ? triple : (name ? name : "native"));
+    target->pointer_bits = pointer_bits;
+    target->endian = xr_strdup(endian ? endian : "unknown");
     if (!target->name || !target->arch || !target->os || !target->abi || !target->object_format ||
-        !target->triple) {
+        !target->triple || !target->endian) {
         xaot_target_free(target);
         return false;
     }
@@ -340,6 +369,7 @@ XR_FUNC void xaot_target_free(XaotTarget *target) {
     xr_free(target->abi);
     xr_free(target->object_format);
     xr_free(target->triple);
+    xr_free(target->endian);
     memset(target, 0, sizeof(*target));
 }
 
@@ -347,7 +377,8 @@ static bool xaot_target_copy_init(XaotTarget *out, const XaotTarget *target) {
     if (!target)
         return xaot_target_init(out, NULL);
     return xaot_target_init_ex(out, target->name, target->arch, target->os, target->abi,
-                               target->object_format, target->triple);
+                               target->object_format, target->triple, target->pointer_bits,
+                               target->endian);
 }
 
 XR_FUNC bool xaot_link_manifest_init(XaotLinkManifest *manifest, const XaotTarget *target) {

@@ -20,6 +20,8 @@ typedef struct XaotTarget {
     char *abi;
     char *object_format;
     char *triple;
+    uint16_t pointer_bits;
+    char *endian;
 } XaotTarget;
 
 typedef enum XaotLinkEntryKind {
@@ -68,7 +70,7 @@ typedef struct XaotLinkManifest {
 XR_FUNC bool xaot_target_init(XaotTarget *target, const char *name);
 XR_FUNC bool xaot_target_init_ex(XaotTarget *target, const char *name, const char *arch,
                                  const char *os, const char *abi, const char *object_format,
-                                 const char *triple);
+                                 const char *triple, uint16_t pointer_bits, const char *endian);
 XR_FUNC void xaot_target_free(XaotTarget *target);
 
 XR_FUNC bool xaot_link_manifest_init(XaotLinkManifest *manifest, const XaotTarget *target);

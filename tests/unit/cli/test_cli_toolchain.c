@@ -37,6 +37,8 @@ TEST(parse_native_target) {
     ASSERT_TRUE(target.is_native);
     ASSERT_STR_EQ(target.name, "native");
     ASSERT_NULL(target.zig_triple);
+    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_NATIVE);
+    ASSERT_TRUE(target.pointer_bits == 32 || target.pointer_bits == 64);
     ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.out");
 }
 
@@ -63,6 +65,8 @@ TEST(parse_x86_64_none_target) {
     ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_X86_64);
     ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_NONE);
     ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_NONE);
+    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
+    ASSERT_EQ_INT(target.pointer_bits, 64);
     ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.out");
 }
 
@@ -77,6 +81,8 @@ TEST(parse_linux_musl_target) {
     ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_X86_64);
     ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_LINUX);
     ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_MUSL);
+    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
+    ASSERT_EQ_INT(target.pointer_bits, 64);
     ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.out");
 }
 
@@ -91,6 +97,8 @@ TEST(parse_windows_gnu_target) {
     ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_AARCH64);
     ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_WINDOWS);
     ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_GNU);
+    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
+    ASSERT_EQ_INT(target.pointer_bits, 64);
     ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.exe");
 }
 

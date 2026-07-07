@@ -35,6 +35,12 @@ typedef enum XrCliTargetAbi {
     XR_CLI_TARGET_ABI_GNU
 } XrCliTargetAbi;
 
+typedef enum XrCliTargetEndian {
+    XR_CLI_TARGET_ENDIAN_NATIVE,
+    XR_CLI_TARGET_ENDIAN_LITTLE,
+    XR_CLI_TARGET_ENDIAN_BIG
+} XrCliTargetEndian;
+
 typedef struct XrCliBuildTarget {
     const char *name;
     const char *zig_triple;
@@ -42,6 +48,8 @@ typedef struct XrCliBuildTarget {
     XrCliTargetArch arch;
     XrCliTargetOs os;
     XrCliTargetAbi abi;
+    XrCliTargetEndian endian;
+    int pointer_bits;
     bool is_native;
 } XrCliBuildTarget;
 
