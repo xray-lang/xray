@@ -11,6 +11,26 @@ if (p != null) {
     print(p!.wait())
 }
 
+var poll = sys.Process.spawn("sh", ["-c", "sleep 1; exit 5"])
+print(poll != null)
+if (poll != null) {
+    print(poll!.tryWait() == null)
+    print(poll!.wait())
+}
+
+var done = sys.Process.spawn("sh", ["-c", "exit 3"])
+print(done != null)
+if (done != null) {
+    var code: int? = null
+    var spins = 0
+    while (code == null && spins < 100) {
+        code = done!.tryWait()
+        spins = spins + 1
+    }
+    print(code)
+    print(done!.wait())
+}
+
 var q = sys.Process.spawn("sh", ["-c", "sleep 5"])
 print(q != null)
 if (q != null) {

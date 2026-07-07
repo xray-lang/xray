@@ -511,9 +511,10 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"pinToCpu", "(cpu: int): bool", "Best-effort pin of the current OS thread to a CPU index", true, false, false},
     {"__processSpawn", "(program: string, args: Array<string>): int", "Spawn a process and return an opaque process handle token, or -1 on failure", true, false, true},
     {"__processWait", "(id: int): int", "Wait for a process handle token and return its exit code, or -1 on failure", true, false, true},
+    {"__processTryWait", "(id: int): int?", "Poll a process handle token; return null while running, exit code when finished, or -1 on failure", true, false, true},
     {"__processKill", "(id: int, signal: int): bool", "Send a portable process signal to a process handle token", true, false, true},
 };
-#define GEN_SYS_FUNCTION_COUNT 12
+#define GEN_SYS_FUNCTION_COUNT 13
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {

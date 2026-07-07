@@ -573,6 +573,43 @@ static inline XrValue xrt_sys_process_wait(XrValue id_value) {
 #endif
 }
 
+static inline XrValue xrt_sys_process_try_wait(XrValue id_value) {
+    int64_t id = xrt_sys_int_arg(id_value);
+    if (id <= 0)
+        return XR_FROM_INT(-1);
+
+#if defined(XR_OS_WINDOWS)
+    HANDLE h = (HANDLE) (intptr_t) id;
+    DWORD wait_result = WaitForSingleObject(h, 0);
+    if (wait_result == WAIT_TIMEOUT)
+        return XR_NULL_VAL;
+    if (wait_result != WAIT_OBJECT_0)
+        return XR_FROM_INT(-1);
+
+    DWORD code = 0;
+    BOOL ok = GetExitCodeProcess(h, &code);
+    CloseHandle(h);
+    if (!ok)
+        return XR_FROM_INT(-1);
+    if ((unsigned int) code == XRT_SYS_PROCESS_KILLED_EXIT_CODE)
+        return XR_FROM_INT(-1);
+    return XR_FROM_INT((int64_t) code);
+#else
+    int status = 0;
+    pid_t r;
+    do {
+        r = waitpid((pid_t) id, &status, WNOHANG);
+    } while (r < 0 && errno == EINTR);
+    if (r == 0)
+        return XR_NULL_VAL;
+    if (r < 0)
+        return XR_FROM_INT(-1);
+    if (WIFEXITED(status))
+        return XR_FROM_INT((int64_t) WEXITSTATUS(status));
+    return XR_FROM_INT(-1);
+#endif
+}
+
 static inline XrValue xrt_sys_process_kill(XrValue id_value, XrValue signal_value) {
     int64_t id = xrt_sys_int_arg(id_value);
     int64_t sig = xrt_sys_int_arg(signal_value);

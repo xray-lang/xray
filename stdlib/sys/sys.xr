@@ -29,6 +29,15 @@ class Process {
         return code
     }
 
+    tryWait() -> int? {
+        if (!this._open) { return -1 }
+        var code = __processTryWait(this._id)
+        if (code != null) {
+            this._open = false
+        }
+        return code
+    }
+
     kill(signal: Signal = Signal.TERM) -> bool {
         if (!this._open) { return false }
         var sig = match (signal) {

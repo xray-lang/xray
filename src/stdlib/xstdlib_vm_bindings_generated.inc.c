@@ -363,6 +363,7 @@ static void xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "pinToCpu", sys_pin_to_cpu);
     XRS_EXPORT(module, isolate, "__processSpawn", sys_process_spawn);
     XRS_EXPORT(module, isolate, "__processWait", sys_process_wait);
+    XRS_EXPORT(module, isolate, "__processTryWait", sys_process_try_wait);
     XRS_EXPORT(module, isolate, "__processKill", sys_process_kill);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_SYS */
