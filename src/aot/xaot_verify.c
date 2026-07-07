@@ -498,6 +498,55 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
     return true;
 }
 
+static uint32_t verify_metadata_profile_action(uint32_t profile, uint32_t metadata) {
+    if (profile == XG_BUILD_FREESTANDING) {
+        switch (metadata) {
+            case XG_METADATA_TYPENAME:
+            case XG_METADATA_DERIVE:
+            case XG_METADATA_DEBUG:
+            case XG_METADATA_TOOLING:
+                return XAOT_CAPABILITY_ACTION_REJECT;
+            default:
+                return XAOT_CAPABILITY_ACTION_LINK;
+        }
+    }
+    if (metadata == XG_METADATA_DEBUG || metadata == XG_METADATA_TOOLING)
+        return XAOT_CAPABILITY_ACTION_DEBUG_ONLY;
+    return XAOT_CAPABILITY_ACTION_LINK;
+}
+
+static uint32_t verify_capability_profile_action(uint32_t profile, uint32_t capability) {
+    if (capability == XG_CAP_INSTANCEOF)
+        return XAOT_CAPABILITY_ACTION_ALLOW;
+    if (profile == XG_BUILD_FREESTANDING) {
+        switch (capability) {
+            case XG_CAP_NATIVE:
+            case XG_CAP_EXTERN:
+            case XG_CAP_COROUTINE:
+            case XG_CAP_CHANNEL:
+            case XG_CAP_EXCEPTION:
+            case XG_CAP_SYS_THREAD:
+            case XG_CAP_SCOPE:
+            case XG_CAP_TIMER:
+            case XG_CAP_NETPOLL:
+            case XG_CAP_TASK:
+            case XG_CAP_ATOMIC:
+            case XG_CAP_WORK_QUEUE:
+            case XG_CAP_RESULT_GROUP:
+            case XG_CAP_COUNTDOWN_LATCH:
+            case XG_CAP_SEMAPHORE:
+            case XG_CAP_EVENT_COUNT:
+            case XG_CAP_GENERATOR:
+            case XG_CAP_STACKTRACE:
+            case XG_CAP_DEEP_COPY:
+                return XAOT_CAPABILITY_ACTION_REJECT;
+            default:
+                return XAOT_CAPABILITY_ACTION_LINK;
+        }
+    }
+    return XAOT_CAPABILITY_ACTION_LINK;
+}
+
 static bool verify_has_interface_impl(const XgGlobalEvidence *ev, XgInterfaceId interface_id,
                                       XgClassId implementor_class_id) {
     if (!ev || interface_id == XG_NO_ID || implementor_class_id == XG_NO_ID)
@@ -625,8 +674,9 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         if (plan->evidence != expected_evidence ||
             plan->unproven_reason != XAOT_METADATA_UNPROVEN_NONE)
             return set_error(errbuf, errbuf_len, "AOT metadata plan lacks evidence");
-        if (plan->profile_action == 0)
-            return set_error(errbuf, errbuf_len, "AOT metadata plan has no profile action");
+        if (plan->profile_action !=
+            verify_metadata_profile_action(bundle->global_evidence_plan.profile, bit))
+            return set_error(errbuf, errbuf_len, "AOT metadata profile action does not re-derive");
     }
     if (bundle->nmetadata_plans != expected_metadata_plans)
         return set_error(errbuf, errbuf_len, "AOT metadata plan count mismatches evidence");
@@ -653,8 +703,10 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         if (plan->evidence != XAOT_CAPABILITY_EV_GLOBAL_BODY ||
             plan->unproven_reason != XAOT_CAPABILITY_UNPROVEN_NONE)
             return set_error(errbuf, errbuf_len, "AOT capability plan lacks evidence");
-        if (plan->profile_action == 0)
-            return set_error(errbuf, errbuf_len, "AOT capability plan has no profile action");
+        if (plan->profile_action !=
+            verify_capability_profile_action(bundle->global_evidence_plan.profile, cap))
+            return set_error(errbuf, errbuf_len,
+                             "AOT capability profile action does not re-derive");
     }
     if (bundle->ncapability_plans != expected_capability_plans)
         return set_error(errbuf, errbuf_len, "AOT capability plan count mismatches evidence");
