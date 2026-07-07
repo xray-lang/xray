@@ -37,6 +37,16 @@ static inline void free_param_nodes(XrCompilerSession *X, XrParamNode **params, 
     (void) count;
 }
 
+static bool current_can_start_top_level_after_recovery(Parser *parser) {
+    return xr_parser_check(parser, TK_AT) || xr_parser_check(parser, TK_CLASS) ||
+           xr_parser_check(parser, TK_STRUCT) || xr_parser_check(parser, TK_UNION) ||
+           xr_parser_check(parser, TK_PACKED) || xr_parser_check(parser, TK_INTERFACE) ||
+           xr_parser_check(parser, TK_ENUM) || xr_parser_check(parser, TK_FN) ||
+           xr_parser_check(parser, TK_VAR) || xr_parser_check(parser, TK_CONST) ||
+           xr_parser_check(parser, TK_COMPTIME) || xr_parser_check(parser, TK_TYPE_ALIAS) ||
+           xr_parser_check(parser, TK_IMPORT) || xr_parser_check(parser, TK_EXPORT);
+}
+
 /* ========== Function Parsing ========== */
 
 // Extract the content of the just-consumed string-literal token (quotes
@@ -1520,23 +1530,25 @@ AstNode *xr_parse_declaration(Parser *parser) {
     }
 
     if (xr_parser_check_name(parser, "abstract")) {
+        int modifier_line = parser->current.line;
         xr_parser_error_at_current(parser,
                                    "'abstract' was removed; use an interface for contracts");
         xr_parser_advance(parser);
-        if (xr_parser_match(parser, TK_CLASS))
-            return xr_parse_class_declaration(parser);
+        xr_parser_skip_invalid_construct(parser, modifier_line,
+                                         current_can_start_top_level_after_recovery, false);
         return NULL;
     }
 
     if (xr_parser_check_name(parser, "open") || xr_parser_check_name(parser, "virtual")) {
+        int modifier_line = parser->current.line;
         const char *modifier = xr_parser_check_name(parser, "open") ? "open" : "virtual";
         char msg[128];
         snprintf(msg, sizeof(msg), "'%s' was removed; class dispatch strategy is inferred",
                  modifier);
         xr_parser_error_at_current(parser, msg);
         xr_parser_advance(parser);
-        if (xr_parser_match(parser, TK_CLASS))
-            return xr_parse_class_declaration(parser);
+        xr_parser_skip_invalid_construct(parser, modifier_line,
+                                         current_can_start_top_level_after_recovery, false);
         return NULL;
     }
 

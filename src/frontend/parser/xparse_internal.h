@@ -105,6 +105,10 @@ XR_FUNC void xr_parser_error_at_previous(Parser *parser, const char *message);
 XR_FUNC void xr_parser_emit_removed_syntax(Parser *parser, Token *token, int code,
                                            const char *title, const char *note);
 XR_FUNC void xr_parser_synchronize(Parser *parser);
+typedef bool (*XrParserRecoveryBoundaryFn)(Parser *parser);
+XR_FUNC void xr_parser_skip_invalid_construct(Parser *parser, int start_line,
+                                              XrParserRecoveryBoundaryFn is_recovery_boundary,
+                                              bool stop_at_rbrace);
 XR_FUNC void xr_parser_error_expected_name(Parser *parser, const char *context);
 XR_FUNC bool xr_parser_check_asi_hint(Parser *parser);
 

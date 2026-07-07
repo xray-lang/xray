@@ -442,6 +442,64 @@ TEST(deep_expression_reports_error_instead_of_crashing) {
     teardown();
 }
 
+TEST(removed_oop_member_modifier_drops_invalid_member) {
+    setup();
+    Parser parser;
+    DiagSink sink;
+    XrArena *arena = NULL;
+    AstNode *ast = parse_recoverable("class Shape {\n"
+                                     "    override bad() { return 1; }\n"
+                                     "    abstract gone() { return 2; }\n"
+                                     "    virtual nope() { return 3; }\n"
+                                     "    ok() -> int { return 4; }\n"
+                                     "}\n",
+                                     &parser, &sink, 0, &arena);
+
+    ASSERT_NOT_NULL(ast);
+    ASSERT_EQ_INT(ast->type, AST_PROGRAM);
+    ASSERT_TRUE(parser.had_error != 0);
+    ASSERT_TRUE(sink.count >= 3);
+    ASSERT_EQ_INT(program_decl_count(ast), 1);
+
+    AstNode *decl = ast->as.program.statements[0];
+    ASSERT_NOT_NULL(decl);
+    ASSERT_EQ_INT(decl->type, AST_CLASS_DECL);
+    ASSERT_EQ_INT(decl->as.class_decl.method_count, 1);
+    ASSERT_STR_EQ(decl->as.class_decl.methods[0]->as.method_decl.name, "ok");
+
+    release_arena(arena);
+    teardown();
+}
+
+TEST(removed_top_level_oop_modifier_drops_invalid_class) {
+    setup();
+    Parser parser;
+    DiagSink sink;
+    XrArena *arena = NULL;
+    AstNode *ast = parse_recoverable("abstract class Bad {\n"
+                                     "    ghost() { return 1; }\n"
+                                     "}\n"
+                                     "class Good {\n"
+                                     "    ok() -> int { return 2; }\n"
+                                     "}\n",
+                                     &parser, &sink, 0, &arena);
+
+    ASSERT_NOT_NULL(ast);
+    ASSERT_EQ_INT(ast->type, AST_PROGRAM);
+    ASSERT_TRUE(parser.had_error != 0);
+    ASSERT_TRUE(sink.count >= 1);
+    ASSERT_EQ_INT(program_decl_count(ast), 1);
+
+    AstNode *decl = ast->as.program.statements[0];
+    ASSERT_NOT_NULL(decl);
+    ASSERT_EQ_INT(decl->type, AST_CLASS_DECL);
+    ASSERT_STR_EQ(decl->as.class_decl.name, "Good");
+    ASSERT_EQ_INT(decl->as.class_decl.method_count, 1);
+
+    release_arena(arena);
+    teardown();
+}
+
 TEST(null_parser_returns_null_safely) {
     // NULL-safety: xr_parse_recoverable with NULL parser must NOT
     // crash. Callers (e.g. fuzz harness) rely on this for early-
@@ -465,5 +523,7 @@ RUN_TEST(broken_function_body_does_not_eat_following_decls);
 RUN_TEST(empty_and_whitespace_source_no_error);
 RUN_TEST(error_coordinates_in_source_bounds);
 RUN_TEST(deep_expression_reports_error_instead_of_crashing);
+RUN_TEST(removed_oop_member_modifier_drops_invalid_member);
+RUN_TEST(removed_top_level_oop_modifier_drops_invalid_class);
 RUN_TEST(null_parser_returns_null_safely);
 TEST_MAIN_END()
