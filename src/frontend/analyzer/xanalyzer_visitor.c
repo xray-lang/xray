@@ -288,9 +288,8 @@ XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
         return xa_freestanding_math_member_allowed(member_name);
     if (strcmp(module_name, "mem") != 0)
         return true;
-    return strcmp(member_name, "alloc") != 0 && strcmp(member_name, "allocZeroed") != 0 &&
-           strcmp(member_name, "allocAligned") != 0 && strcmp(member_name, "pageAlloc") != 0 &&
-           strcmp(member_name, "pageProtect") != 0 && strcmp(member_name, "pageFree") != 0;
+    return strcmp(member_name, "pageAlloc") != 0 && strcmp(member_name, "pageProtect") != 0 &&
+           strcmp(member_name, "pageFree") != 0;
 }
 
 XR_FUNC const char *xa_freestanding_stdlib_member_reject_suggestion(const char *module_name) {
@@ -299,7 +298,8 @@ XR_FUNC const char *xa_freestanding_stdlib_member_reject_suggestion(const char *
                "no-libc subset yet";
     }
     if (module_name && strcmp(module_name, "mem") == 0)
-        return "allocator hooks are not part of the freestanding mem allowlist yet";
+        return "page allocation and protection need an OS/page-map contract outside the Buffer "
+               "RAII hook-backed subset";
     return "this stdlib member is not part of the freestanding allowlist yet";
 }
 

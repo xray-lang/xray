@@ -1,7 +1,0 @@
-import mem
-
-@c_export("xray_bad_alloc")
-fn xray_bad_alloc(n: int) -> int {
-    var b = mem.alloc(n)
-    return b.length
-}

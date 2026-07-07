@@ -1493,41 +1493,67 @@ else
 fi
 
 FREESTANDING_MEM_ALLOC_HOOK_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_alloc_hook.xr"
+FREESTANDING_MEM_ALLOC_HOOK_OBJ="$WORK/freestanding_mem_alloc_hook.o"
 FREESTANDING_MEM_ALLOC_HOOK_REAL_LOG="$WORK/freestanding_mem_alloc_hook.log"
-if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
-        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_mem_alloc_hook" \
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_MEM_ALLOC_HOOK_OBJ" \
         "$FREESTANDING_MEM_ALLOC_HOOK_SRC" >"$FREESTANDING_MEM_ALLOC_HOOK_REAL_LOG" 2>&1; then
-    record_fail "freestanding-profile/mem: rejects RAII allocator path"
+    FREESTANDING_MEM_ALLOC_HOOK_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_MEM_ALLOC_HOOK_REAL_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_MEM_ALLOC_HOOK_C" ]; then
+        expect_log_contains "$FREESTANDING_MEM_ALLOC_HOOK_C" "xrt_mem_alloc(" \
+            "freestanding-profile/mem: Buffer alloc lowers through hook-backed helper"
+        expect_log_contains "$FREESTANDING_MEM_ALLOC_HOOK_C" "xrt_mem_alloc_zeroed(" \
+            "freestanding-profile/mem: Buffer zeroed alloc lowers through hook-backed helper"
+        expect_log_contains "$FREESTANDING_MEM_ALLOC_HOOK_C" "xrt_mem_alloc_aligned(" \
+            "freestanding-profile/mem: Buffer aligned alloc lowers through hook-backed helper"
+        expect_log_contains "$FREESTANDING_MEM_ALLOC_HOOK_C" "xrt_release(" \
+            "freestanding-profile/mem: generated code releases Buffer values"
+        expect_log_not_contains "$FREESTANDING_MEM_ALLOC_HOOK_C" "xrt_arc_alloc" \
+            "freestanding-profile/mem: Buffer alloc avoids hosted ARC allocator"
+        expect_log_not_contains "$FREESTANDING_MEM_ALLOC_HOOK_C" "xrt_array_with_capacity" \
+            "freestanding-profile/mem: Buffer alloc avoids hosted array allocation"
+    else
+        record_fail "freestanding-profile/mem: Buffer alloc kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_HOOK_REAL_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_MEM_ALLOC_HOOK_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_MEM_ALLOC_HOOK_OBJ")"
+    FREESTANDING_MEM_ALLOC_HOOK_UNEXPECTED="$(printf '%s\n' "$FREESTANDING_MEM_ALLOC_HOOK_UNDEFINED" |
+        sed '/^[[:space:]]*$/d' |
+        grep -Ev '^(xr_hook_alloc|xr_hook_free|xr_hook_panic|memcpy|memmove|memset|memcmp)$' || true)"
+    if [ -z "$FREESTANDING_MEM_ALLOC_HOOK_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/mem: Buffer alloc undefined symbols stay hook/memcpy-only"
+    else
+        record_fail "freestanding-profile/mem: Buffer alloc unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_MEM_ALLOC_HOOK_UNEXPECTED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/mem: Buffer allocator object build failed"
     sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_HOOK_REAL_LOG" | sed -n '1,120p'
-else
-    expect_log_contains "$FREESTANDING_MEM_ALLOC_HOOK_REAL_LOG" \
-        "freestanding profile rejects mem.allocZeroed" \
-        "freestanding-profile/mem: rejects RAII allocator path"
 fi
 
-FREESTANDING_MEM_ALLOC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_alloc_reject.xr"
-FREESTANDING_MEM_ALLOC_LOG="$WORK/freestanding_mem_alloc_reject.log"
-if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
-        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_mem_alloc_reject" \
-        "$FREESTANDING_MEM_ALLOC_SRC" >"$FREESTANDING_MEM_ALLOC_LOG" 2>&1; then
-    record_fail "freestanding-profile/mem: rejects managed alloc member"
-    sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_LOG" | sed -n '1,120p'
-else
-    expect_log_contains "$FREESTANDING_MEM_ALLOC_LOG" "freestanding profile rejects mem.alloc" \
-        "freestanding-profile/mem: rejects managed alloc member"
-fi
-
-FREESTANDING_MEM_ALLOC_SELECTIVE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_alloc_selective_reject.xr"
-FREESTANDING_MEM_ALLOC_SELECTIVE_LOG="$WORK/freestanding_mem_alloc_selective_reject.log"
-if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
-        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_mem_alloc_selective_reject" \
+FREESTANDING_MEM_ALLOC_SELECTIVE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_alloc_selective.xr"
+FREESTANDING_MEM_ALLOC_SELECTIVE_OBJ="$WORK/freestanding_mem_alloc_selective.o"
+FREESTANDING_MEM_ALLOC_SELECTIVE_LOG="$WORK/freestanding_mem_alloc_selective.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_MEM_ALLOC_SELECTIVE_OBJ" \
         "$FREESTANDING_MEM_ALLOC_SELECTIVE_SRC" >"$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" 2>&1; then
-    record_fail "freestanding-profile/mem: rejects selective managed alloc import"
-    sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" | sed -n '1,120p'
+    FREESTANDING_MEM_ALLOC_SELECTIVE_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_MEM_ALLOC_SELECTIVE_C" ]; then
+        expect_log_contains "$FREESTANDING_MEM_ALLOC_SELECTIVE_C" "xrt_mem_alloc_zeroed(" \
+            "freestanding-profile/mem: selective Buffer alloc import lowers"
+        expect_log_contains "$FREESTANDING_MEM_ALLOC_SELECTIVE_C" "xrt_release(" \
+            "freestanding-profile/mem: selective Buffer alloc releases"
+        expect_log_not_contains "$FREESTANDING_MEM_ALLOC_SELECTIVE_C" "xrt_arc_alloc" \
+            "freestanding-profile/mem: selective Buffer alloc avoids hosted ARC allocator"
+    else
+        record_fail "freestanding-profile/mem: selective Buffer alloc kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" | sed -n '1,120p'
+    fi
 else
-    expect_log_contains "$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" \
-        "freestanding profile rejects mem.allocZeroed" \
-        "freestanding-profile/mem: rejects selective managed alloc import"
+    record_fail "freestanding-profile/mem: selective Buffer allocator object build failed"
+    sed 's/^/      /' "$FREESTANDING_MEM_ALLOC_SELECTIVE_LOG" | sed -n '1,120p'
 fi
 
 FREESTANDING_MEM_PAGE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_page_reject.xr"

@@ -41,3 +41,23 @@ if (q != null) {
 var missing = sys.Process.spawn("", [])
 print(missing == null)
 print(sys.Signal.TERM != sys.Signal.KILL)
+
+var pipe = sys.Pipe.open()
+print(pipe != null)
+if (pipe != null) {
+    var payload = "pipe-ok".toBytes()
+    print(pipe!.write(payload))
+    var chunk = pipe!.read(32)
+    print(chunk != null)
+    if (chunk != null) {
+        print(chunk!.length)
+        print(chunk!.toString())
+    }
+    print(pipe!.closeWrite())
+    var eof = pipe!.read(32)
+    print(eof != null)
+    if (eof != null) {
+        print(eof!.length)
+    }
+    print(pipe!.close())
+}

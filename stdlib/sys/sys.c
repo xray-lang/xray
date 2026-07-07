@@ -2,7 +2,9 @@
 
 #include "../common.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/coro/xcoroutine.h"
 #include "../../src/module/xmodule.h"
+#include "../../src/os/os_pipe.h"
 #include "../../src/os/os_proc.h"
 #include "../../src/os/os_thread.h"
 #include "../../src/runtime/class/xclass.h"
@@ -664,6 +666,65 @@ static XrValue sys_process_kill(XrVMRuntime *isolate, XrValue *args, int argc) {
         return xr_bool(false);
 
     return xr_bool(xr_proc_kill((XrProcId) XR_TO_INT(args[0]), (int) XR_TO_INT(args[1])) == 0);
+}
+
+static XrValue sys_pipe_open(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+
+    XrPipe pipe;
+    if (xr_pipe_create(&pipe, NULL) != 0)
+        return xr_null();
+
+    XrArray *ends = xr_array_with_capacity_typed(xr_current_coro(isolate), 2, XR_ELEM_I64);
+    if (!ends) {
+        xr_pipe_close(pipe.read);
+        xr_pipe_close(pipe.write);
+        return xr_null();
+    }
+    xr_array_push(ends, xr_int((int64_t) pipe.read));
+    xr_array_push(ends, xr_int((int64_t) pipe.write));
+    return xr_value_from_array(ends);
+}
+
+static XrValue sys_pipe_read(XrVMRuntime *isolate, XrValue *args, int argc) {
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+        return xr_null();
+
+    int64_t max_bytes = XR_TO_INT(args[1]);
+    if (max_bytes < 0 || max_bytes > INT32_MAX)
+        return xr_null();
+
+    XrArray *bytes = xr_array_bytes_new(xr_current_coro(isolate), (int32_t) max_bytes);
+    if (!bytes)
+        return xr_null();
+
+    int64_t n = xr_pipe_read((XrPipeHandle) XR_TO_INT(args[0]), bytes->data, (size_t) max_bytes);
+    if (n < 0)
+        return xr_null();
+    bytes->length = (int32_t) n;
+    return xr_value_from_array(bytes);
+}
+
+static XrValue sys_pipe_write(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2 || !XR_IS_INT(args[0]) || !xr_value_is_array(args[1]))
+        return xr_int(-1);
+
+    XrArray *bytes = xr_value_to_array(args[1]);
+    if (!bytes || bytes->elem_type != XR_ELEM_U8)
+        return xr_int(-1);
+
+    int64_t n =
+        xr_pipe_write((XrPipeHandle) XR_TO_INT(args[0]), bytes->data, (size_t) bytes->length);
+    return xr_int(n);
+}
+
+static XrValue sys_pipe_close(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    return xr_bool(xr_pipe_close((XrPipeHandle) XR_TO_INT(args[0])) == 0);
 }
 
 #define XR_STDLIB_VM_BIND_CLASS_OS_CONDVAR 1

@@ -43,6 +43,7 @@
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_int_arith.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
 #include "../shared/xr_sync_core.h"
+#include "xrt_method_symbols.h"
 
 #ifndef XR_FUNC
 #define XR_FUNC extern
@@ -373,18 +374,128 @@ static inline int xrt_has_pending_error(void) {
     return !XR_IS_NULL(xrt_pending_error);
 }
 
-static inline void xrt_retain(XrValue v) {
-    (void) v;
-}
-
-static inline void xrt_release(XrValue v) {
-    (void) v;
-}
-
 XRT_COLD XRT_NORETURN void xr_hook_panic(const char *message, size_t len);
 void xr_hook_write(const char *bytes, size_t len);
 void *xr_hook_alloc(size_t size, size_t align);
 void xr_hook_free(void *ptr);
+
+typedef struct xrt_buffer_object {
+    void *data;
+    int64_t length;
+    size_t align;
+} xrt_buffer_object_t;
+
+#define XRT_FREESTANDING_OBJECT_ALIGN 16u
+#define XRT_FREESTANDING_DEFAULT_ALLOC_ALIGN ((size_t) sizeof(void *))
+#define XRT_ARC_KIND_BUFFER 10u
+#define XRT_ARC_HDR(p) ((XrObjHeader *) ((char *) (p) - sizeof(XrObjHeader)))
+
+static inline bool xrt_freestanding_is_power_of_two(size_t value) {
+    return value != 0 && (value & (value - 1u)) == 0;
+}
+
+static inline size_t xrt_freestanding_align_up(size_t value, size_t align) {
+    if (align == 0)
+        return value;
+    return (value + align - 1u) & ~(align - 1u);
+}
+
+static inline void *xrt_freestanding_alloc_bytes(size_t size, size_t align) {
+    if (size == 0)
+        return NULL;
+    if (align == 0)
+        align = XRT_FREESTANDING_DEFAULT_ALLOC_ALIGN;
+    if (!xrt_freestanding_is_power_of_two(align))
+        return NULL;
+    return xr_hook_alloc(size, align);
+}
+
+static inline XrValue xrt_buffer_box(xrt_buffer_object_t *buf) {
+    return buf ? xr_mkptr(buf, XR_TAG_BUFFER) : XR_NULL_VAL;
+}
+
+static inline int xrt_buffer_is(XrValue value) {
+    return value.tag == XR_TAG_BUFFER && value.ptr != NULL;
+}
+
+static inline xrt_buffer_object_t *xrt_buffer_ptr(XrValue value) {
+    return xrt_buffer_is(value) ? (xrt_buffer_object_t *) value.ptr : NULL;
+}
+
+static inline void xrt_buffer_free_data(void *data) {
+    if (data)
+        xr_hook_free(data);
+}
+
+static inline void xrt_buffer_destroy_builtin(void *obj) {
+    xrt_buffer_object_t *buf = (xrt_buffer_object_t *) obj;
+    if (!buf)
+        return;
+    xrt_buffer_free_data(buf->data);
+    buf->data = NULL;
+    buf->length = 0;
+    buf->align = 0;
+}
+
+static inline void *xrt_freestanding_arc_alloc(size_t obj_size) {
+    size_t rounded = xrt_freestanding_align_up(obj_size, XRT_FREESTANDING_OBJECT_ALIGN);
+    size_t total = sizeof(XrObjHeader) + rounded;
+    XrObjHeader *hdr =
+        (XrObjHeader *) xrt_freestanding_alloc_bytes(total, XRT_FREESTANDING_OBJECT_ALIGN);
+    if (!hdr)
+        return NULL;
+    memset(hdr, 0, total);
+    hdr->extra = XR_OBJ_HAS_DTOR;
+    atomic_store_explicit(&hdr->refcount, XR_RC_INIT, memory_order_relaxed);
+    hdr->objsize = total > UINT32_MAX ? UINT32_MAX : (uint32_t) total;
+    hdr->_rsv = XRT_ARC_KIND_BUFFER;
+    return (char *) hdr + sizeof(XrObjHeader);
+}
+
+static inline void xrt_retain(XrValue v) {
+    if (!xrt_buffer_is(v))
+        return;
+    XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
+    int32_t rc = atomic_load_explicit(&hdr->refcount, memory_order_relaxed);
+    if (rc == XR_RC_STICKY)
+        return;
+    atomic_fetch_add_explicit(&hdr->refcount, 1, memory_order_relaxed);
+}
+
+static inline bool xrt_rc_claim_release_last(XrObjHeader *hdr) {
+    if (!hdr)
+        return false;
+    for (;;) {
+        int32_t rc = atomic_load_explicit(&hdr->refcount, memory_order_acquire);
+        if (rc == XR_RC_STICKY)
+            return false;
+        if (rc > 0) {
+            int32_t next = rc - 1;
+            if (atomic_compare_exchange_weak_explicit(&hdr->refcount, &rc, next,
+                                                      memory_order_acq_rel, memory_order_acquire))
+                return false;
+            continue;
+        }
+        if (rc == 0) {
+            int32_t next = XR_RC_STICKY;
+            if (atomic_compare_exchange_weak_explicit(&hdr->refcount, &rc, next,
+                                                      memory_order_acq_rel, memory_order_acquire))
+                return true;
+            continue;
+        }
+        return false;
+    }
+}
+
+static inline void xrt_release(XrValue v) {
+    if (!xrt_buffer_is(v))
+        return;
+    XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
+    if (!xrt_rc_claim_release_last(hdr))
+        return;
+    xrt_buffer_destroy_builtin(v.ptr);
+    xr_hook_free(hdr);
+}
 
 static inline size_t xrt_freestanding_strlen(const char *s) {
     size_t len = 0;
@@ -1395,20 +1506,125 @@ static inline XrValue xrt_mem_cache_line_size(void) {
     return XR_FROM_INT(64);
 }
 
+static inline XrValue xrt_buffer_new(int64_t length, int zeroed, size_t align) {
+    if (length < 0)
+        length = 0;
+    if (align == 0)
+        align = XRT_FREESTANDING_DEFAULT_ALLOC_ALIGN;
+    if (!xrt_freestanding_is_power_of_two(align) || align < sizeof(void *))
+        xrt_freestanding_trap("mem.allocAligned: align must be a power of two >= sizeof(void*)");
+
+    xrt_buffer_object_t *buf =
+        (xrt_buffer_object_t *) xrt_freestanding_arc_alloc(sizeof(xrt_buffer_object_t));
+    if (!buf)
+        xrt_freestanding_trap("mem.alloc: out of memory");
+    buf->data = NULL;
+    buf->length = length;
+    buf->align = align;
+
+    if (length > 0) {
+        size_t size = (size_t) length;
+        buf->data = xrt_freestanding_alloc_bytes(size, align);
+        if (!buf->data) {
+            xr_hook_free(XRT_ARC_HDR(buf));
+            xrt_freestanding_trap("mem.alloc: out of memory");
+        }
+        if (zeroed)
+            memset(buf->data, 0, size);
+    }
+    return xrt_buffer_box(buf);
+}
+
+static inline xr_span_t xrt_buffer_as_span(XrValue value) {
+    xrt_buffer_object_t *buf = xrt_buffer_ptr(value);
+    if (!buf)
+        return xrt_span_empty();
+    xr_span_t out = {0};
+    out.data = buf->data;
+    out.length = buf->length;
+    out.guard = buf;
+    out.elem_type = XR_ELEM_U8;
+    out.elem_size = 1;
+    out.elem_tid = 0;
+    out.contains_refs = 0;
+    out.flags = 0;
+    return out;
+}
+
+static inline XrValue xrt_buffer_ptr_unchecked(XrValue value) {
+    xrt_buffer_object_t *buf = xrt_buffer_ptr(value);
+    return xr_mkptr(buf ? buf->data : NULL, XR_TAG_PTR);
+}
+
+static inline XrValue xrt_buffer_resize(XrValue value, XrValue size_value) {
+    xrt_buffer_object_t *buf = xrt_buffer_ptr(value);
+    int64_t new_len = xrt_mem_int_arg(size_value);
+    if (!buf || new_len < 0)
+        return XR_FALSE_VAL;
+    if (new_len == 0) {
+        xrt_buffer_free_data(buf->data);
+        buf->data = NULL;
+        buf->length = 0;
+        return XR_TRUE_VAL;
+    }
+
+    void *new_data = xrt_freestanding_alloc_bytes((size_t) new_len, buf->align);
+    if (!new_data)
+        return XR_FALSE_VAL;
+    size_t copy = (size_t) ((buf->length < new_len) ? buf->length : new_len);
+    if (copy > 0 && buf->data)
+        memcpy(new_data, buf->data, copy);
+    xrt_buffer_free_data(buf->data);
+    buf->data = new_data;
+    buf->length = new_len;
+    return XR_TRUE_VAL;
+}
+
+static inline XrValue xrt_buffer_method_0(XrValue recv, int sym) {
+    xrt_buffer_object_t *buf = xrt_buffer_ptr(recv);
+    if (!buf)
+        return XR_NULL_VAL;
+    if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
+        return XR_FROM_INT(buf->length);
+    if (sym == XRT_SYM_PTR_UNCHECKED)
+        return xrt_buffer_ptr_unchecked(recv);
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_buffer_method_1(XrValue recv, int sym, XrValue arg0) {
+    if (sym == XRT_SYM_RESIZE)
+        return xrt_buffer_resize(recv, arg0);
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_method_0(XrValue recv, int sym) {
+    if (recv.tag == XR_TAG_BUFFER)
+        return xrt_buffer_method_0(recv, sym);
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
+    if (recv.tag == XR_TAG_BUFFER)
+        return xrt_buffer_method_1(recv, sym, arg0);
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
+    if (obj.tag == XR_TAG_BUFFER)
+        return xrt_buffer_method_0(obj, (int) symbol_id);
+    return XR_NULL_VAL;
+}
+
 static inline XrValue xrt_mem_alloc(XrValue n) {
-    (void) n;
-    xrt_freestanding_trap("freestanding profile rejects mem.alloc managed Buffer");
+    return xrt_buffer_new(xrt_mem_int_arg(n), 0, 0);
 }
 
 static inline XrValue xrt_mem_alloc_zeroed(XrValue n) {
-    (void) n;
-    xrt_freestanding_trap("freestanding profile rejects mem.allocZeroed managed Buffer");
+    return xrt_buffer_new(xrt_mem_int_arg(n), 1, 0);
 }
 
 static inline XrValue xrt_mem_alloc_aligned(XrValue n, XrValue align) {
-    (void) n;
-    (void) align;
-    xrt_freestanding_trap("freestanding profile rejects mem.allocAligned managed Buffer");
+    return xrt_buffer_new(xrt_mem_int_arg(n), 0, (size_t) xrt_mem_int_arg(align));
 }
 
 static inline XrValue xrt_mem_from_address(XrValue addr) {
