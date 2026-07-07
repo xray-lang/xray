@@ -245,11 +245,10 @@ add_xray_unit_test(test_url_encoding encoding/test_url_encoding.c)
 add_xray_unit_test(test_unicode encoding/test_unicode.c)
 
 # ============================================================================
-# http/ — HTTP parser, cookies, multipart
+# http/ — HTTP parser and HTTP/2 helpers
 # ============================================================================
 
 add_xray_unit_test(test_http_parser http/test_http_parser.c)
-add_xray_unit_test(test_http_cookie http/test_http_cookie.c)
 add_xray_unit_test(test_http2_huffman http/test_http2_huffman.c)
 
 # ============================================================================

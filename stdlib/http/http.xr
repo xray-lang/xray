@@ -7,6 +7,386 @@
 import { encode, decodeForm } from url
 import crypto
 import io
+import time
+
+const COOKIE_MAX_INPUT_LEN = 8192
+const COOKIE_SECONDS_PER_DAY = 86400
+
+fn _floorDiv(a: int, b: int) -> int {
+    var q = a / b
+    var r = a % b
+    if (r < 0) { q = q - 1 }
+    return q
+}
+
+fn _daysFromCivil(year: int, month: int, day: int) -> int {
+    var y = year
+    if (month <= 2) { y = y - 1 }
+    var era = _floorDiv(y, 400)
+    var yoe = y - era * 400
+    var mp = month + 9
+    if (month > 2) { mp = month - 3 }
+    var doy = (153 * mp + 2) / 5 + day - 1
+    var doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146097 + doe - 719468
+}
+
+fn _timeFromCivil(year: int, month: int, day: int, hour: int, minute: int, second: int) -> int {
+    return _daysFromCivil(year, month, day) * COOKIE_SECONDS_PER_DAY + hour * 3600 +
+           minute * 60 + second
+}
+
+fn _parseIntStrict(s: string) -> int? {
+    var t = s.trim()
+    if (t.length == 0) { return null }
+    var sign = 1
+    var i = 0
+    if (t.charAt(0) == "-") {
+        sign = -1
+        i = 1
+    } else if (t.charAt(0) == "+") {
+        i = 1
+    }
+    if (i >= t.length) { return null }
+    var out = 0
+    while (i < t.length) {
+        var c = t.charAt(i).ord()!
+        if (c < 48 || c > 57) { return null }
+        out = out * 10 + (c - 48)
+        i = i + 1
+    }
+    return sign * out
+}
+
+fn _splitWs(s: string) -> Array<string> {
+    var out: Array<string> = []
+    var i = 0
+    while (i < s.length) {
+        while (i < s.length && (s.charAt(i) == " " || s.charAt(i) == "\t")) {
+            i = i + 1
+        }
+        var start = i
+        while (i < s.length && s.charAt(i) != " " && s.charAt(i) != "\t") {
+            i = i + 1
+        }
+        if (i > start) { out.push(s.slice(start, i)) }
+    }
+    return out
+}
+
+fn _monthNumber(raw: string) -> int {
+    var m = raw.toLowerCase()
+    if (m == "jan") { return 1 }
+    if (m == "feb") { return 2 }
+    if (m == "mar") { return 3 }
+    if (m == "apr") { return 4 }
+    if (m == "may") { return 5 }
+    if (m == "jun") { return 6 }
+    if (m == "jul") { return 7 }
+    if (m == "aug") { return 8 }
+    if (m == "sep") { return 9 }
+    if (m == "oct") { return 10 }
+    if (m == "nov") { return 11 }
+    if (m == "dec") { return 12 }
+    return 0
+}
+
+fn _parseHms(raw: string) -> Array<int>? {
+    var parts = raw.split(":")
+    if (parts.length < 2 || parts.length > 3) { return null }
+    var h = _parseIntStrict(parts[0])
+    var m = _parseIntStrict(parts[1])
+    var s = 0
+    if (parts.length == 3) {
+        var ss = _parseIntStrict(parts[2])
+        if (ss == null) { return null }
+        s = ss!
+    }
+    if (h == null || m == null) { return null }
+    if (h! < 0 || h! > 23 || m! < 0 || m! > 59 || s < 0 || s > 60) { return null }
+    return [h!, m!, s]
+}
+
+fn _dateTimestamp(year: int, month: int, day: int, hmsRaw: string) -> int? {
+    var hms = _parseHms(hmsRaw)
+    if (hms == null) { return null }
+    if (year < 1601 || month < 1 || month > 12 || day < 1 || day > 31) { return null }
+    return _timeFromCivil(year, month, day, hms![0], hms![1], hms![2])
+}
+
+fn _twoDigitCookieYear(y: int) -> int {
+    if (y >= 0 && y <= 68) { return 2000 + y }
+    if (y >= 69 && y <= 99) { return 1900 + y }
+    return y
+}
+
+fn _parseCookieDate(raw: string) -> int {
+    var tokens = _splitWs(raw.trim())
+    if (tokens.length >= 5 && tokens[0].endsWith(",")) {
+        var day = _parseIntStrict(tokens[1])
+        var month = _monthNumber(tokens[2])
+        var year = _parseIntStrict(tokens[3])
+        if (day != null && year != null && month > 0) {
+            var ts = _dateTimestamp(year!, month, day!, tokens[4])
+            if (ts != null) { return ts! }
+        }
+    }
+
+    if (tokens.length >= 3 && tokens[0].endsWith(",")) {
+        var dateParts = tokens[1].split("-")
+        if (dateParts.length == 3) {
+            var day2 = _parseIntStrict(dateParts[0])
+            var month2 = _monthNumber(dateParts[1])
+            var year2 = _parseIntStrict(dateParts[2])
+            if (day2 != null && year2 != null && month2 > 0) {
+                var ts2 = _dateTimestamp(_twoDigitCookieYear(year2!), month2, day2!, tokens[2])
+                if (ts2 != null) { return ts2! }
+            }
+        }
+    }
+
+    if (tokens.length >= 5) {
+        var month3 = _monthNumber(tokens[1])
+        var day3 = _parseIntStrict(tokens[2])
+        var year3 = _parseIntStrict(tokens[4])
+        if (day3 != null && year3 != null && month3 > 0) {
+            var ts3 = _dateTimestamp(year3!, month3, day3!, tokens[3])
+            if (ts3 != null) { return ts3! }
+        }
+    }
+
+    return 0
+}
+
+fn _defaultCookiePath(requestPath: string) -> string {
+    if (requestPath.length == 0 || requestPath.charAt(0) != "/") { return "/" }
+    var last = requestPath.lastIndexOf("/")
+    if (last <= 0) { return "/" }
+    return requestPath.slice(0, last)
+}
+
+fn _domainMatches(cookieDomain: string, requestDomain: string) -> bool {
+    if (cookieDomain.length == 0 || requestDomain.length == 0) { return false }
+    var cd = cookieDomain.toLowerCase()
+    if (cd.startsWith(".")) { cd = cd.slice(1) }
+    var rd = requestDomain.toLowerCase()
+    if (cd == rd) { return true }
+    return rd.length > cd.length + 1 &&
+           rd.endsWith("." + cd)
+}
+
+fn _pathMatches(cookiePath: string, requestPath: string) -> bool {
+    if (cookiePath.length == 0 || requestPath.length == 0) { return true }
+    if (!requestPath.startsWith(cookiePath)) { return false }
+    if (requestPath.length == cookiePath.length) { return true }
+    if (cookiePath.endsWith("/")) { return true }
+    return requestPath.charAt(cookiePath.length) == "/"
+}
+
+fn _sameCookie(a: Cookie, b: Cookie) -> bool {
+    return a.name == b.name &&
+           a.domain.toLowerCase() == b.domain.toLowerCase() &&
+           a.path == b.path
+}
+
+fn _cookieNow(nowSeconds: int) -> int {
+    if (nowSeconds > 0) { return nowSeconds }
+    return time.now() / 1000
+}
+
+class Cookie {
+    name: string
+    value: string
+    domain: string
+    path: string
+    expires: int
+    secure: bool
+    httpOnly: bool
+    sameSite: string
+
+    constructor(
+        name: string,
+        value: string,
+        domain: string,
+        path: string,
+        expires: int = 0,
+        secure: bool = false,
+        httpOnly: bool = false,
+        sameSite: string = ""
+    ) {
+        this.name = name
+        this.value = value
+        this.domain = domain
+        this.path = path
+        this.expires = expires
+        this.secure = secure
+        this.httpOnly = httpOnly
+        this.sameSite = sameSite
+    }
+
+    isExpired(nowSeconds: int = 0) -> bool {
+        return this.expires > 0 && this.expires < _cookieNow(nowSeconds)
+    }
+
+    matches(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0) -> bool {
+        if (this.isExpired(nowSeconds)) { return false }
+        if (!_domainMatches(this.domain, domain)) { return false }
+        if (!_pathMatches(this.path, path)) { return false }
+        if (this.secure && !isSecure) { return false }
+        return true
+    }
+
+    serialize() -> string {
+        return this.name + "=" + this.value
+    }
+}
+
+class CookieJar {
+    cookies: Array<Cookie>
+    maxCookies: int
+
+    constructor(maxCookies: int = 300) {
+        this.cookies = []
+        this.maxCookies = maxCookies
+    }
+
+    count: int { fn() { return this.cookies.length } }
+
+    add(cookie: Cookie, nowSeconds: int = 0) {
+        var now = _cookieNow(nowSeconds)
+        var next: Array<Cookie> = []
+        var replaced = false
+        for (var i = 0; i < this.cookies.length; i++) {
+            var existing = this.cookies[i]
+            if (_sameCookie(existing, cookie)) {
+                replaced = true
+            } else if (!existing.isExpired(now)) {
+                next.push(existing)
+            }
+        }
+        if (!cookie.isExpired(now)) {
+            next.push(cookie)
+        } else if (!replaced) {
+            // Expired Set-Cookie with no matching entry is simply ignored.
+        }
+        while (this.maxCookies > 0 && next.length > this.maxCookies) {
+            next.shift()
+        }
+        this.cookies = next
+    }
+
+    addFromResponse(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: int = 0) {
+        var now = _cookieNow(nowSeconds)
+        for (var i = 0; i < setCookieHeaders.length; i++) {
+            var cookie = parseSetCookie(setCookieHeaders[i], requestDomain, requestPath, now)
+            if (cookie != null) { this.add(cookie!, now) }
+        }
+    }
+
+    getHeader(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0) -> string? {
+        var now = _cookieNow(nowSeconds)
+        var out = StringBuilder()
+        var first = true
+        for (var i = 0; i < this.cookies.length; i++) {
+            var c = this.cookies[i]
+            if (!c.matches(domain, path, isSecure, now)) { continue }
+            if (!first) { out.append("; ") }
+            out.append(c.serialize())
+            first = false
+        }
+        if (first) { return null }
+        return out.toString()
+    }
+
+    cleanup(nowSeconds: int = 0) {
+        var now = _cookieNow(nowSeconds)
+        var next: Array<Cookie> = []
+        for (var i = 0; i < this.cookies.length; i++) {
+            var c = this.cookies[i]
+            if (!c.isExpired(now)) { next.push(c) }
+        }
+        this.cookies = next
+    }
+
+    clearDomain(domain: string) {
+        var target = domain.toLowerCase()
+        var next: Array<Cookie> = []
+        for (var i = 0; i < this.cookies.length; i++) {
+            var c = this.cookies[i]
+            if (c.domain.toLowerCase() != target) { next.push(c) }
+        }
+        this.cookies = next
+    }
+
+    clear() {
+        this.cookies = []
+    }
+}
+
+fn parseSetCookie(header: string, requestDomain: string = "", requestPath: string = "/",
+                  nowSeconds: int = 0) -> Cookie? {
+    var now = _cookieNow(nowSeconds)
+    if (header.length == 0 || header.byteLength > COOKIE_MAX_INPUT_LEN) { return null }
+    var parts = header.split(";")
+    if (parts.length == 0) { return null }
+    var first = parts[0]
+    var eq = first.indexOf("=")
+    if (eq < 0) { return null }
+    var name = first.slice(0, eq).trim()
+    var value = first.slice(eq + 1).trim()
+    if (name.length == 0) { return null }
+
+    var domain = requestDomain
+    var path = _defaultCookiePath(requestPath)
+    var expires = 0
+    var secure = false
+    var httpOnly = false
+    var sameSite = ""
+
+    for (var i = 1; i < parts.length; i++) {
+        var attr = parts[i].trim()
+        if (attr.length == 0) { continue }
+        var attrEq = attr.indexOf("=")
+        var attrName = attr
+        var attrValue = ""
+        if (attrEq >= 0) {
+            attrName = attr.slice(0, attrEq).trim()
+            attrValue = attr.slice(attrEq + 1).trim()
+        }
+        var key = attrName.toLowerCase()
+        if (key == "domain" && attrValue.length > 0) {
+            domain = attrValue
+            if (domain.startsWith(".")) { domain = domain.slice(1) }
+        } else if (key == "path" && attrValue.length > 0) {
+            path = attrValue
+        } else if (key == "expires" && attrValue.length > 0) {
+            expires = _parseCookieDate(attrValue)
+        } else if (key == "max-age" && attrValue.length > 0) {
+            var delta = _parseIntStrict(attrValue)
+            if (delta != null) { expires = now + delta! }
+        } else if (key == "secure") {
+            secure = true
+        } else if (key == "httponly") {
+            httpOnly = true
+        } else if (key == "samesite" && attrValue.length > 0) {
+            var ss = attrValue.toLowerCase()
+            if (ss == "strict") {
+                sameSite = "Strict"
+            } else if (ss == "lax") {
+                sameSite = "Lax"
+            } else if (ss == "none") {
+                sameSite = "None"
+            }
+        }
+    }
+
+    if (sameSite == "None" && !secure) { return null }
+    return Cookie(name, value, domain, path, expires, secure, httpOnly, sameSite)
+}
+
+fn cookieJar(maxCookies: int = 300) -> CookieJar {
+    return CookieJar(maxCookies)
+}
 
 class _FormField {
     kind: string
@@ -256,6 +636,10 @@ fn response(status: int, body: unknown = null) -> string {
 }
 
 export {
+    Cookie,
+    CookieJar,
+    parseSetCookie,
+    cookieJar,
     urlEncode,
     urlDecode,
     response,

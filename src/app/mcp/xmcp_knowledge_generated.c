@@ -598,6 +598,121 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
+        .name = "Cookie",
+        .signature = "Cookie",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.domain",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.expires",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.httpOnly",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.isExpired",
+        .signature = "(nowSeconds: int = 0): bool",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.matches",
+        .signature = "(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0): bool",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.name",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.path",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.sameSite",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.secure",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.serialize",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.value",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "CookieJar",
+        .signature = "CookieJar",
+        .summary = "",
+    },
+    {
+        .name = "CookieJar.add",
+        .signature = "(cookie: Cookie, nowSeconds: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "CookieJar.addFromResponse",
+        .signature = "(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "CookieJar.cleanup",
+        .signature = "(nowSeconds: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "CookieJar.clear",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "CookieJar.clearDomain",
+        .signature = "(domain: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "CookieJar.constructor",
+        .signature = "(maxCookies: int = 300): ()",
+        .summary = "",
+    },
+    {
+        .name = "CookieJar.cookies",
+        .signature = ": Array<Cookie>",
+        .summary = "",
+    },
+    {
+        .name = "CookieJar.count",
+        .signature = ": int { fn() { return this.cookies.length } }",
+        .summary = "",
+    },
+    {
+        .name = "CookieJar.getHeader",
+        .signature = "(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0): string?",
+        .summary = "",
+    },
+    {
+        .name = "CookieJar.maxCookies",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
         .name = "DownloadResult",
         .signature = "DownloadResult",
         .summary = "Handle type",
@@ -788,6 +903,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Configure HTTP server limits and timeouts",
     },
     {
+        .name = "cookieJar",
+        .signature = "(maxCookies: int = 300): CookieJar",
+        .summary = "",
+    },
+    {
         .name = "delete",
         .signature = "(url: string): HttpResponse",
         .summary = "HTTP DELETE request",
@@ -856,6 +976,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "parseRequest",
         .signature = "(fd: int): Array<unknown>?",
         .summary = "Parse raw HTTP request data",
+    },
+    {
+        .name = "parseSetCookie",
+        .signature = "(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?",
+        .summary = "",
     },
     {
         .name = "post",
@@ -4742,6 +4867,29 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `Cookie` | `Cookie` |  |\n"
+            "| `Cookie.domain` | `: string` |  |\n"
+            "| `Cookie.expires` | `: int` |  |\n"
+            "| `Cookie.httpOnly` | `: bool` |  |\n"
+            "| `Cookie.isExpired` | `(nowSeconds: int = 0): bool` |  |\n"
+            "| `Cookie.matches` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0): bool` |  |\n"
+            "| `Cookie.name` | `: string` |  |\n"
+            "| `Cookie.path` | `: string` |  |\n"
+            "| `Cookie.sameSite` | `: string` |  |\n"
+            "| `Cookie.secure` | `: bool` |  |\n"
+            "| `Cookie.serialize` | `(): string` |  |\n"
+            "| `Cookie.value` | `: string` |  |\n"
+            "| `CookieJar` | `CookieJar` |  |\n"
+            "| `CookieJar.add` | `(cookie: Cookie, nowSeconds: int = 0): ()` |  |\n"
+            "| `CookieJar.addFromResponse` | `(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: int = 0): ()` |  |\n"
+            "| `CookieJar.cleanup` | `(nowSeconds: int = 0): ()` |  |\n"
+            "| `CookieJar.clear` | `(): ()` |  |\n"
+            "| `CookieJar.clearDomain` | `(domain: string): ()` |  |\n"
+            "| `CookieJar.constructor` | `(maxCookies: int = 300): ()` |  |\n"
+            "| `CookieJar.cookies` | `: Array<Cookie>` |  |\n"
+            "| `CookieJar.count` | `: int { fn() { return this.cookies.length } }` |  |\n"
+            "| `CookieJar.getHeader` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0): string?` |  |\n"
+            "| `CookieJar.maxCookies` | `: int` |  |\n"
             "| `http.DownloadResult` | `DownloadResult` | Handle type |\n"
             "| `http.DownloadResult.completed` | `const bool` | Handle field |\n"
             "| `http.DownloadResult.downloaded` | `const int` | Handle field |\n"
@@ -4780,6 +4928,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `MultipartBody.contentType` | `: string` |  |\n"
             "| `http.closeStream` | `(resp: Json): ()` | Close a streaming HTTP response |\n"
             "| `http.config` | `(opts: Json): ()` | Configure HTTP server limits and timeouts |\n"
+            "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
             "| `http.delete` | `(url: string): HttpResponse` | HTTP DELETE request |\n"
             "| `http.download` | `(url: string, path: string): DownloadResult` | Download file from URL |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
@@ -4794,6 +4943,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.h2Stop` | `(): ()` | Stop HTTP/2 server |\n"
             "| `http.listen` | `(port: int): bool` | Start HTTP server accept loop |\n"
             "| `http.parseRequest` | `(fd: int): Array<unknown>?` | Parse raw HTTP request data |\n"
+            "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?` |  |\n"
             "| `http.post` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP POST request |\n"
             "| `http.put` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP PUT request |\n"
             "| `http.readChunk` | `(resp: Json, maxBytes?: int): string?` | Read the next chunk from a streaming HTTP response |\n"

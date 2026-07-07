@@ -502,6 +502,12 @@ XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *a
     ProgramNode *prog = &ast->as.program;
     XrHashMap *exports = NULL;
 
+    /* Classes may be exported as namespace values for construction/static
+     * method lookup even when they do not carry an ordinary expression type
+     * in links.type (notably stdlib script overlays on native modules). */
+#define XA_SYMBOL_EXPORTABLE(sym_)                                                                 \
+    ((sym_) && ((sym_)->links.type || ((sym_)->kind == XA_SYM_CLASS && (sym_)->links.class_info)))
+
     for (int i = 0; i < prog->count; i++) {
         AstNode *stmt = prog->statements[i];
         if (!stmt || stmt->type != AST_EXPORT_STMT)
@@ -516,7 +522,7 @@ XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *a
                 XaScope *export_scope =
                     analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
                 XaSymbol *sym = xa_scope_lookup(export_scope, name);
-                if (sym && sym->links.type) {
+                if (XA_SYMBOL_EXPORTABLE(sym)) {
                     if (!exports)
                         exports = xr_hashmap_new();
                     /* OOM: skip the entry. A missing entry means "no semantic
@@ -536,7 +542,7 @@ XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *a
             XaScope *export_scope =
                 analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
             XaSymbol *sym = xa_scope_lookup(export_scope, name);
-            if (sym && sym->links.type) {
+            if (XA_SYMBOL_EXPORTABLE(sym)) {
                 if (!exports)
                     exports = xr_hashmap_new();
                 if (exports)
@@ -544,6 +550,8 @@ XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *a
             }
         }
     }
+
+#undef XA_SYMBOL_EXPORTABLE
 
     return exports;
 }

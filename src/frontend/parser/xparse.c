@@ -713,7 +713,22 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
     }
 
     // Process infix expressions by precedence
-    while (precedence <= xr_get_rule(parser->current.type)->precedence) {
+    for (;;) {
+        if (parser->current.type == TK_LT && !parser->current.has_leading_space &&
+            precedence <= PREC_CALL) {
+            Parser before_generic = *parser;
+            xr_parser_advance(parser);
+            AstNode *generic_call = xr_parse_try_generic_call_after_lt(parser, left);
+            if (generic_call) {
+                left = generic_call;
+                continue;
+            }
+            *parser = before_generic;
+        }
+
+        if (precedence > xr_get_rule(parser->current.type)->precedence)
+            break;
+
         const ParseRule *rule = xr_get_rule(parser->current.type);
 
         if (rule->infix == NULL) {

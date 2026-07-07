@@ -121,7 +121,7 @@ XR_FUNC void xr_http_request_config_init(XrHttpRequestConfig *config);
 /*
  * Execute HTTP request
  *
- * @param X       Isolate instance (for Cookie/proxy context)
+ * @param X       Isolate instance (for per-isolate connection pools)
  * @param config  Request config
  * @return        XrHttpResult (caller must call xr_http_result_free to free)
  */

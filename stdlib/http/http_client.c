@@ -19,7 +19,6 @@
 #include "../../src/base/xplatform.h"
 #include "http.h"
 #include "../net/tls.h"
-#include "http_cookie.h"
 #include "../compress/compress.h"
 #include "../../src/io/xdns.h"
 #include "../net/io.h"
@@ -323,15 +322,16 @@ void xr_http_result_free(XrHttpResult *result) {
 /* ========== Build Request ========== */
 
 // A header is credential-bearing and MUST NOT cross an origin boundary on a
-// redirect (curl CVE-2022-27774 class of leak). Cookies are handled separately
-// by the host-scoped cookie jar, so only these explicit auth headers matter.
+// redirect (curl CVE-2022-27774 class of leak). Cookie handling is explicit in
+// the Xray layer via http.CookieJar; the native client never keeps hidden jar
+// state.
 static bool http_header_is_sensitive(const XrHttpHeader *h) {
     return (h->name_len == 13 && strncasecmp(h->name, "Authorization", 13) == 0) ||
            (h->name_len == 19 && strncasecmp(h->name, "Proxy-Authorization", 19) == 0);
 }
 
-static char *build_request(XrVMRuntime *isolate, const XrHttpRequestConfig *config,
-                           const XrHttpUrl *url, size_t *out_len, bool strip_sensitive) {
+static char *build_request(const XrHttpRequestConfig *config, const XrHttpUrl *url, size_t *out_len,
+                           bool strip_sensitive) {
     // Estimate buffer size
     size_t buf_size = 1024;
     if (config->body_len > 0) {
@@ -461,19 +461,6 @@ static char *build_request(XrVMRuntime *isolate, const XrHttpRequestConfig *conf
     // Content-Length
     if (config->body_len > 0 && !has_content_length) {
         p += sprintf(p, "Content-Length: %zu\r\n", config->body_len);
-    }
-
-    // Cookie (get from Isolate's Cookie Jar)
-    if (isolate && xr_is_cookie_jar_enabled(isolate)) {
-        XrCookieJar *jar = xr_get_cookie_jar(isolate);
-        if (jar) {
-            char *cookie_header =
-                xr_cookie_jar_get_header(jar, url->host, url->path, url->is_https);
-            if (cookie_header) {
-                p += sprintf(p, "Cookie: %s\r\n", cookie_header);
-                xr_free(cookie_header);
-            }
-        }
     }
 
     // Empty line
@@ -655,7 +642,7 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
     // Build request
     {
         size_t request_len;
-        request_buf = build_request(X, config, &url, &request_len, strip_auth);
+        request_buf = build_request(config, &url, &request_len, strip_auth);
         if (!request_buf) {
             result.error = XR_HTTP_ERR_MEMORY;
             result.error_msg = xr_strdup("Memory allocation failed");
@@ -824,30 +811,10 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
         }
     }
 
-    // Copy Headers (compact single-allocation) and extract Set-Cookie
+    // Copy Headers (compact single-allocation). Cookie state is deliberately
+    // explicit in stdlib/http/http.xr rather than hidden in the native client.
     if (resp.header_count > 0) {
         copy_headers_compact(&result, resp.headers, resp.header_count);
-
-        // Collect Set-Cookie headers from the compacted copy
-        const char *set_cookies[64];
-        int set_cookie_count = 0;
-        for (int i = 0; i < result.header_count; i++) {
-            if (result.headers[i].name_len == 10 &&
-                strncasecmp(result.headers[i].name, "Set-Cookie", 10) == 0) {
-                if (set_cookie_count < 64) {
-                    set_cookies[set_cookie_count++] = result.headers[i].value;
-                }
-            }
-        }
-
-        // Add Set-Cookie to Isolate's Cookie Jar
-        if (set_cookie_count > 0 && X && xr_is_cookie_jar_enabled(X)) {
-            XrCookieJar *jar = xr_get_cookie_jar(X);
-            if (jar) {
-                xr_cookie_jar_add_from_response(jar, set_cookies, set_cookie_count, url.host,
-                                                url.path);
-            }
-        }
     }
 
     // Copy Body

@@ -483,9 +483,6 @@ static void scan_func_link_symbols(XiFunc *f, const XiFunc *module_init, XaotFea
                         XaotStdlibSet flag = stdlib_flag_for_import(ref->module_path);
                         if (flag)
                             fs->stdlib |= flag;
-                        /* net/http imply netpoll runtime */
-                        if (flag & (XAOT_STDLIB_NET | XAOT_STDLIB_HTTP))
-                            fs->need_netpoll = true;
                         /* Member-import form (e.g. `import { now } from "time"`):
                          * the import-ref carries the member name directly, then
                          * generated metadata adds any runtime caps for that
@@ -597,14 +594,6 @@ static bool add_stdlib_generated_define_manifest_entries(XaotLinkManifest *manif
     return true;
 }
 
-static bool stdlib_set_needs_runtime_provider(XaotStdlibSet stdlib) {
-    return (stdlib & ~(XAOT_STDLIB_MATH | XAOT_STDLIB_PATH | XAOT_STDLIB_ENCODING |
-                       XAOT_STDLIB_BASE64 | XAOT_STDLIB_URL | XAOT_STDLIB_COMPRESS |
-                       XAOT_STDLIB_CRYPTO | XAOT_STDLIB_REGEX | XAOT_STDLIB_TIME |
-                       XAOT_STDLIB_DATETIME | XAOT_STDLIB_OS | XAOT_STDLIB_LOG | XAOT_STDLIB_IO)) !=
-           0;
-}
-
 static bool add_runtime_cap(XaotLinkManifest *manifest, const char *cap) {
     return xaot_link_manifest_add_unique(manifest, XAOT_LINK_RUNTIME_CAP, cap);
 }
@@ -704,12 +693,6 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
             return false;
         needs_aot_runtime = true;
     }
-    if (stdlib_set_needs_runtime_provider(features->stdlib)) {
-        if (!add_runtime_cap(manifest, "stdlib_runtime"))
-            return false;
-        needs_aot_runtime = true;
-    }
-
     if (features->need_objects && needs_aot_runtime) {
         if (!add_runtime_cap(manifest, "objects"))
             return false;
