@@ -1,0 +1,14 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects Map literal
+contains=freestanding profile rejects Set literal
+contains=freestanding profile rejects object literal
+contains=freestanding profile rejects regex literal
+contains=freestanding profile rejects BigInt literal
+contains=freestanding profile rejects anonymous function/closure
+contains=freestanding profile rejects string concatenation
+contains=freestanding profile rejects class construction
+not_contains=xrt_obj_alloc
+not_contains=xrt_type_register_hot
+not_contains=unsupported AOT
+not_contains=CRASH

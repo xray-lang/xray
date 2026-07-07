@@ -2217,8 +2217,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
      * identity for cross-module method resolution and AOT codegen. */
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         XrType *ns_instance = xa_module_member_class_instance_type(ctx, call);
-        if (ns_instance)
+        if (ns_instance) {
+            xa_freestanding_report_unavailable(
+                ctx, node, "class construction",
+                "use structs or explicit raw-memory APIs in this profile");
+            if (xa_freestanding_profile_enabled(ctx->analyzer))
+                return xr_type_new_unknown(NULL);
             return ns_instance;
+        }
     }
 
     // Unknown callee type preserves error recovery after imprecise analysis.
@@ -2262,6 +2268,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             if (sym && sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links && links->class_info) {
+                    xa_freestanding_report_unavailable(
+                        ctx, node, "class construction",
+                        "use structs or explicit raw-memory APIs in this profile");
+                    if (xa_freestanding_profile_enabled(ctx->analyzer))
+                        return xr_type_new_unknown(NULL);
                     return xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
                 }
                 if (xa_symbol_is_sync_runtime_class(ctx, sym, name))
@@ -2319,6 +2330,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             if (class_sym && class_sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, class_sym);
                 if (links && links->class_info) {
+                    xa_freestanding_report_unavailable(
+                        ctx, node, "class construction",
+                        "use structs or explicit raw-memory APIs in this profile");
+                    if (xa_freestanding_profile_enabled(ctx->analyzer))
+                        return xr_type_new_unknown(NULL);
                     return xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
                 }
                 if (xa_symbol_is_sync_runtime_class(ctx, class_sym, class_name))
