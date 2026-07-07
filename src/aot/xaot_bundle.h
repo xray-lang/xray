@@ -452,6 +452,7 @@ typedef struct XaotMetadataReachabilityPlan {
 
 enum {
     XAOT_CAPABILITY_EV_GLOBAL_BODY = 1u << 0,
+    XAOT_CAPABILITY_EV_TRANSFER_PLAN = 1u << 1,
 };
 
 typedef enum XaotCapabilityProfileAction {
@@ -469,6 +470,7 @@ enum {
 typedef struct XaotCapabilityPlan {
     uint32_t capability;
     uint32_t body_count;
+    uint32_t transfer_count;
     uint32_t evidence;
     uint32_t profile_action;
     uint8_t unproven_reason;
@@ -623,6 +625,7 @@ XR_FUNC const XaotMetadataReachabilityPlan *xaot_bundle_find_metadata_plan(const
                                                                            uint32_t metadata);
 XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,
                                                                    uint32_t capability);
+XR_FUNC bool xaot_bundle_sync_transfer_capability_plans(XaotBundle *bundle);
 XR_FUNC const XaotStaticDataPlan *xaot_bundle_find_static_data_plan(const XaotBundle *bundle,
                                                                     uint32_t static_data);
 XR_FUNC XaotFuncPlan *xaot_bundle_add_func_plan(XaotBundle *bundle, XiFunc *func,

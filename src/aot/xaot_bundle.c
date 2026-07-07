@@ -537,19 +537,39 @@ static uint32_t xaot_capability_profile_action(uint32_t profile, uint32_t capabi
     return XAOT_CAPABILITY_ACTION_LINK;
 }
 
+static XaotCapabilityPlan *xaot_bundle_find_capability_plan_mut(XaotBundle *bundle,
+                                                                uint32_t capability) {
+    if (!bundle || capability == 0)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ncapability_plans; i++) {
+        if (bundle->capability_plans[i].capability == capability)
+            return &bundle->capability_plans[i];
+    }
+    return NULL;
+}
+
 static bool xaot_bundle_add_capability_plan(XaotBundle *bundle, uint32_t capability,
-                                            uint32_t body_count) {
+                                            uint32_t body_count, uint32_t transfer_count) {
     XaotCapabilityPlan *plan;
-    if (!bundle || capability == 0 || body_count == 0)
+    uint32_t evidence = 0;
+    if (!bundle || capability == 0 || (body_count == 0 && transfer_count == 0))
         return true;
-    if (!reserve_plan_array((void **) &bundle->capability_plans, &bundle->capability_plan_cap,
-                            bundle->ncapability_plans + 1, sizeof(XaotCapabilityPlan), 8))
-        return false;
-    plan = &bundle->capability_plans[bundle->ncapability_plans++];
-    memset(plan, 0, sizeof(*plan));
+    plan = xaot_bundle_find_capability_plan_mut(bundle, capability);
+    if (!plan) {
+        if (!reserve_plan_array((void **) &bundle->capability_plans, &bundle->capability_plan_cap,
+                                bundle->ncapability_plans + 1, sizeof(XaotCapabilityPlan), 8))
+            return false;
+        plan = &bundle->capability_plans[bundle->ncapability_plans++];
+        memset(plan, 0, sizeof(*plan));
+    }
+    if (body_count != 0)
+        evidence |= XAOT_CAPABILITY_EV_GLOBAL_BODY;
+    if (transfer_count != 0)
+        evidence |= XAOT_CAPABILITY_EV_TRANSFER_PLAN;
     plan->capability = capability;
     plan->body_count = body_count;
-    plan->evidence = XAOT_CAPABILITY_EV_GLOBAL_BODY;
+    plan->transfer_count = transfer_count;
+    plan->evidence = evidence;
     plan->profile_action =
         xaot_capability_profile_action(bundle->global_evidence_plan.profile, capability);
     plan->unproven_reason = XAOT_CAPABILITY_UNPROVEN_NONE;
@@ -566,7 +586,7 @@ static bool xaot_bundle_add_capability_plans(XaotBundle *bundle, const XgGlobalE
             if ((evidence->bodies[bi].capability_bits & cap) != 0)
                 body_count++;
         }
-        if (!xaot_bundle_add_capability_plan(bundle, cap, body_count))
+        if (!xaot_bundle_add_capability_plan(bundle, cap, body_count, 0))
             return false;
     }
     return true;
@@ -778,6 +798,24 @@ XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBun
             return &bundle->capability_plans[i];
     }
     return NULL;
+}
+
+XR_FUNC bool xaot_bundle_sync_transfer_capability_plans(XaotBundle *bundle) {
+    uint32_t deep_copy_transfer_count = 0;
+    uint32_t body_count = 0;
+    const XaotCapabilityPlan *existing;
+
+    if (!bundle)
+        return false;
+    for (uint32_t i = 0; i < bundle->ntransfer_plans; i++) {
+        if (bundle->transfer_plans[i].action == XAOT_TRANSFER_ACTION_DEEP_COPY)
+            deep_copy_transfer_count++;
+    }
+    existing = xaot_bundle_find_capability_plan(bundle, XG_CAP_DEEP_COPY);
+    if (existing)
+        body_count = existing->body_count;
+    return xaot_bundle_add_capability_plan(bundle, XG_CAP_DEEP_COPY, body_count,
+                                           deep_copy_transfer_count);
 }
 
 XR_FUNC const XaotStaticDataPlan *xaot_bundle_find_static_data_plan(const XaotBundle *bundle,
@@ -2179,9 +2217,11 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
 
     for (uint32_t ci = 0; ci < bundle->ncapability_plans; ci++) {
         const XaotCapabilityPlan *cp = &bundle->capability_plans[ci];
-        fprintf(out, "capability %u name=%s bodies=%u action=%s evidence=0x%x reason=%s\n", ci,
-                xg_capability_name(cp->capability), cp->body_count,
-                capability_action_name(cp->profile_action), cp->evidence,
+        fprintf(out,
+                "capability %u name=%s bodies=%u action=%s transfers=%u evidence=0x%x "
+                "reason=%s\n",
+                ci, xg_capability_name(cp->capability), cp->body_count,
+                capability_action_name(cp->profile_action), cp->transfer_count, cp->evidence,
                 capability_unproven_reason_name(cp->unproven_reason));
     }
 
