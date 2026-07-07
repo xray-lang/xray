@@ -443,6 +443,9 @@ static bool xg_verify_class_is_runtime_class(const XgClassSummary *cls) {
     return cls && (cls->decl_kind == 0 || cls->decl_kind == XG_DECL_CLASS);
 }
 
+static const XgClassSummary *verify_find_evidence_class(const XgGlobalEvidence *ev,
+                                                        XgClassId class_id);
+
 static bool xg_verify_class_has_subclass(const XgGlobalEvidence *ev, XgClassId class_id) {
     if (!ev || class_id == XG_NO_ID)
         return false;
@@ -454,6 +457,27 @@ static bool xg_verify_class_has_subclass(const XgGlobalEvidence *ev, XgClassId c
             return true;
     }
     return false;
+}
+
+static bool xg_verify_class_is_descendant_of(const XgGlobalEvidence *ev, XgClassId class_id,
+                                             XgClassId ancestor_id) {
+    const XgClassSummary *cls;
+    uint32_t depth = 0;
+
+    if (!ev || class_id == XG_NO_ID || ancestor_id == XG_NO_ID || class_id == ancestor_id)
+        return false;
+    cls = verify_find_evidence_class(ev, class_id);
+    while (cls && cls->parent_class_id != XG_NO_ID && depth++ < 64) {
+        if (cls->parent_class_id == ancestor_id)
+            return true;
+        cls = verify_find_evidence_class(ev, cls->parent_class_id);
+    }
+    return false;
+}
+
+static bool xg_verify_method_participates_in_override(const XgMethodSummary *method) {
+    return method && (method->flags & XG_METHOD_STATIC) == 0 &&
+           (method->flags & XG_METHOD_CONSTRUCTOR) == 0;
 }
 
 static const XgCallsiteSummary *verify_find_evidence_callsite(const XgGlobalEvidence *ev,
@@ -478,6 +502,21 @@ static const XgClassSummary *verify_find_evidence_class(const XgGlobalEvidence *
     return NULL;
 }
 
+static bool verify_class_method_range_contains(const XgGlobalEvidence *ev,
+                                               const XgClassSummary *cls,
+                                               const XgMethodSummary *method) {
+    if (!ev || !cls || !method || cls->method_start == 0)
+        return false;
+    for (uint32_t i = 0; i < cls->method_count; i++) {
+        uint32_t idx = cls->method_start - 1 + i;
+        if (idx >= ev->nmethods)
+            return false;
+        if (&ev->methods[idx] == method)
+            return true;
+    }
+    return false;
+}
+
 static const XgMethodSummary *verify_find_evidence_method_in_class(const XgGlobalEvidence *ev,
                                                                    const XgClassSummary *cls,
                                                                    XgMethodId method_or_name_id) {
@@ -488,6 +527,23 @@ static const XgMethodSummary *verify_find_evidence_method_in_class(const XgGloba
         const XgMethodSummary *method = idx < ev->nmethods ? &ev->methods[idx] : NULL;
         if (method && (method->method_id == method_or_name_id ||
                        method->name_id == (uint32_t) method_or_name_id))
+            return method;
+    }
+    return NULL;
+}
+
+static const XgMethodSummary *
+verify_find_evidence_method_by_signature_in_class(const XgGlobalEvidence *ev,
+                                                  const XgClassSummary *cls, uint32_t name_id,
+                                                  uint32_t signature_key) {
+    if (!ev || !cls || cls->method_start == 0 || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < cls->method_count; i++) {
+        uint32_t idx = cls->method_start - 1 + i;
+        const XgMethodSummary *method = idx < ev->nmethods ? &ev->methods[idx] : NULL;
+        if (method && method->owner_class_id == cls->class_id &&
+            xg_verify_method_participates_in_override(method) && method->name_id == name_id &&
+            method->signature_key == signature_key)
             return method;
     }
     return NULL;
@@ -508,6 +564,101 @@ verify_find_evidence_method_in_hierarchy(const XgGlobalEvidence *ev, XgClassId c
         cls = verify_find_evidence_class(ev, cls->parent_class_id);
     }
     return NULL;
+}
+
+static const XgMethodSummary *verify_find_parent_method_by_signature(const XgGlobalEvidence *ev,
+                                                                     const XgClassSummary *cls,
+                                                                     uint32_t name_id,
+                                                                     uint32_t signature_key) {
+    XgClassId parent_id;
+    uint32_t depth = 0;
+
+    if (!ev || !cls)
+        return NULL;
+    parent_id = cls->parent_class_id;
+    while (parent_id != XG_NO_ID && depth++ < 64) {
+        const XgClassSummary *parent = verify_find_evidence_class(ev, parent_id);
+        const XgMethodSummary *method;
+        if (!parent)
+            return NULL;
+        method =
+            verify_find_evidence_method_by_signature_in_class(ev, parent, name_id, signature_key);
+        if (method)
+            return method;
+        parent_id = parent->parent_class_id;
+    }
+    return NULL;
+}
+
+static bool xg_verify_method_is_overridden(const XgGlobalEvidence *ev,
+                                           const XgMethodSummary *method) {
+    const XgClassSummary *owner;
+
+    if (!ev || !xg_verify_method_participates_in_override(method))
+        return false;
+    owner = verify_find_evidence_class(ev, method->owner_class_id);
+    if (!owner)
+        return false;
+    for (uint32_t i = 0; i < ev->nmethods; i++) {
+        const XgMethodSummary *candidate = &ev->methods[i];
+        const XgClassSummary *candidate_owner;
+        const XgMethodSummary *expected_parent;
+        if (candidate == method || !xg_verify_method_participates_in_override(candidate))
+            continue;
+        if (candidate->name_id != method->name_id ||
+            candidate->signature_key != method->signature_key)
+            continue;
+        candidate_owner = verify_find_evidence_class(ev, candidate->owner_class_id);
+        if (!candidate_owner ||
+            !xg_verify_class_is_descendant_of(ev, candidate_owner->class_id, owner->class_id))
+            continue;
+        expected_parent = verify_find_parent_method_by_signature(
+            ev, candidate_owner, candidate->name_id, candidate->signature_key);
+        if (expected_parent && expected_parent->method_id == method->method_id)
+            return true;
+    }
+    return false;
+}
+
+static bool verify_method_override_graph(const XgGlobalEvidence *ev, char *errbuf,
+                                         size_t errbuf_len) {
+    if (!ev)
+        return set_error(errbuf, errbuf_len, "AOT global evidence method verifier has no evidence");
+
+    for (uint32_t i = 0; i < ev->nmethods; i++) {
+        const XgMethodSummary *method = &ev->methods[i];
+        const XgClassSummary *owner;
+        const XgMethodSummary *expected_parent = NULL;
+        XgMethodId expected_override_of = XG_NO_ID;
+        bool expected_overridden = false;
+
+        if (method->method_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT global evidence method has no id");
+        for (uint32_t j = i + 1; j < ev->nmethods; j++) {
+            if (ev->methods[j].method_id == method->method_id)
+                return set_error(errbuf, errbuf_len, "AOT global evidence method id is duplicated");
+        }
+        owner = verify_find_evidence_class(ev, method->owner_class_id);
+        if (!owner)
+            return set_error(errbuf, errbuf_len, "AOT global evidence method owner is missing");
+        if (!verify_class_method_range_contains(ev, owner, method))
+            return set_error(errbuf, errbuf_len, "AOT global evidence method owner range is stale");
+
+        if (xg_verify_method_participates_in_override(method)) {
+            expected_parent = verify_find_parent_method_by_signature(ev, owner, method->name_id,
+                                                                     method->signature_key);
+            expected_override_of = expected_parent ? expected_parent->method_id : XG_NO_ID;
+            expected_overridden = xg_verify_method_is_overridden(ev, method);
+        }
+
+        if (method->override_of != expected_override_of)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence method override_of does not re-derive");
+        if (((method->flags & XG_METHOD_OVERRIDDEN) != 0) != expected_overridden)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence method overridden flag does not re-derive");
+    }
+    return true;
 }
 
 static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
@@ -727,6 +878,9 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     if (bundle->nclass_hierarchy_plans != runtime_class_count ||
         bundle->nclass_layout_plans != runtime_class_count)
         return set_error(errbuf, errbuf_len, "AOT class plan count mismatches evidence");
+
+    if (!verify_method_override_graph(ev, errbuf, errbuf_len))
+        return false;
 
     for (uint32_t i = 0; i < ev->ncallsites; i++) {
         const XgCallsiteSummary *call = &ev->callsites[i];
