@@ -682,6 +682,25 @@ static bool xaot_cli_target_config_has_objcopy(const XrTargetConfig *config) {
             (config->objcopy_output && config->objcopy_output[0]) || config->n_objcopy_flags > 0);
 }
 
+static bool xaot_cli_link_add_target_metadata_flags(XaotCliLinkCommand *cmd,
+                                                    const XrCliBuildTarget *target, char *err,
+                                                    size_t err_size) {
+    char value[32];
+
+    if (!cmd || !target || target->is_native)
+        return true;
+
+    snprintf(value, sizeof(value), "%d", target->pointer_bits);
+    if (!xaot_cli_link_add_prefixed(cmd, "-DXR_AOT_TARGET_PTR_BITS=", value, err, err_size))
+        return false;
+
+    if (target->endian == XR_CLI_TARGET_ENDIAN_LITTLE)
+        return xaot_cli_link_add_arg(cmd, "-DXR_AOT_TARGET_LITTLE_ENDIAN=1", err, err_size);
+    if (target->endian == XR_CLI_TARGET_ENDIAN_BIG)
+        return xaot_cli_link_add_arg(cmd, "-DXR_AOT_TARGET_LITTLE_ENDIAN=0", err, err_size);
+    return true;
+}
+
 static bool xaot_cli_build_objcopy_command(const XrTargetConfig *config, const char *input_file,
                                            const char *output_file, XaotCliLinkCommand *cmd,
                                            char *err, size_t err_size) {
@@ -787,8 +806,11 @@ static bool xaot_cli_build_compile_command(const XrCliToolchainPlan *plan,
         !xaot_cli_link_add_prefixed(cmd, "--sysroot=", sysroot, err, err_size))
         return false;
 
-    if (!target->is_native && !xaot_cli_link_add_arg(cmd, "-DXR_AOT_CROSS_TARGET=1", err, err_size))
-        return false;
+    if (!target->is_native) {
+        if (!xaot_cli_link_add_arg(cmd, "-DXR_AOT_CROSS_TARGET=1", err, err_size) ||
+            !xaot_cli_link_add_target_metadata_flags(cmd, target, err, err_size))
+            return false;
+    }
 
     for (i = 0; i < manifest->n_defines; i++) {
         if (!xaot_cli_link_add_prefixed(cmd, "-D", manifest->defines[i], err, err_size))
@@ -946,8 +968,11 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
         !xaot_cli_link_add_prefixed(cmd, "--sysroot=", sysroot, err, err_size))
         return false;
 
-    if (!target->is_native && !xaot_cli_link_add_arg(cmd, "-DXR_AOT_CROSS_TARGET=1", err, err_size))
-        return false;
+    if (!target->is_native) {
+        if (!xaot_cli_link_add_arg(cmd, "-DXR_AOT_CROSS_TARGET=1", err, err_size) ||
+            !xaot_cli_link_add_target_metadata_flags(cmd, target, err, err_size))
+            return false;
+    }
 
     for (i = 0; i < manifest->n_defines; i++) {
         if (!xaot_cli_link_add_prefixed(cmd, "-D", manifest->defines[i], err, err_size))

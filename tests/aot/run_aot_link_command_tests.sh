@@ -393,6 +393,10 @@ if "$XRAY" build --native --target x86_64-unknown-none --dry-run-link --dump-lin
         "freestanding-profile/target-config: uses configured profile"
     expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" "-nostdlib" \
         "freestanding-profile/target-config: keeps freestanding link flags"
+    expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" "-DXR_AOT_TARGET_PTR_BITS=64" \
+        "freestanding-profile/target-config: defines target pointer width"
+    expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" "-DXR_AOT_TARGET_LITTLE_ENDIAN=1" \
+        "freestanding-profile/target-config: defines target endian"
     expect_log_contains "$FREESTANDING_TARGET_CONFIG_LOG" \
         "-Wl,-T,$FREESTANDING_TARGET_CONFIG_SCRIPT_REAL" \
         "freestanding-profile/target-config: resolves linker script from project root"

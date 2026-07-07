@@ -10,6 +10,7 @@
 
 #include "xcli_toolchain.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,13 +40,16 @@ static void xr_cli_tc_error(char *err, size_t err_size, const char *msg, const c
 
 static void xr_cli_tc_set_target(XrCliBuildTarget *out, const char *name, const char *zig_triple,
                                  const char *exe_suffix, XrCliTargetArch arch, XrCliTargetOs os,
-                                 XrCliTargetAbi abi, bool is_native) {
+                                 XrCliTargetAbi abi, XrCliTargetEndian endian, int pointer_bits,
+                                 bool is_native) {
     out->name = name;
     out->zig_triple = zig_triple;
     out->exe_suffix = exe_suffix;
     out->arch = arch;
     out->os = os;
     out->abi = abi;
+    out->endian = endian;
+    out->pointer_bits = pointer_bits;
     out->is_native = is_native;
 }
 
@@ -61,42 +65,43 @@ XR_FUNC bool xr_cli_build_target_parse(const char *text, XrCliBuildTarget *out, 
     if (!name || name[0] == '\0' || strcmp(name, "native") == 0 ||
         strcmp(name, "native-c90") == 0) {
         xr_cli_tc_set_target(out, "native", NULL, "", XR_CLI_TARGET_ARCH_NATIVE,
-                             XR_CLI_TARGET_OS_NATIVE, XR_CLI_TARGET_ABI_NATIVE, true);
+                             XR_CLI_TARGET_OS_NATIVE, XR_CLI_TARGET_ABI_NATIVE,
+                             XR_CLI_TARGET_ENDIAN_NATIVE, (int) (sizeof(void *) * CHAR_BIT), true);
         return true;
     }
 
     if (strcmp(name, "x86_64-linux-musl") == 0) {
         xr_cli_tc_set_target(out, "x86_64-linux-musl", "x86_64-linux-musl", "",
                              XR_CLI_TARGET_ARCH_X86_64, XR_CLI_TARGET_OS_LINUX,
-                             XR_CLI_TARGET_ABI_MUSL, false);
+                             XR_CLI_TARGET_ABI_MUSL, XR_CLI_TARGET_ENDIAN_LITTLE, 64, false);
         return true;
     }
 
     if (strcmp(name, "x86_64-unknown-none") == 0) {
         xr_cli_tc_set_target(out, "x86_64-unknown-none", "x86_64-freestanding-none", "",
                              XR_CLI_TARGET_ARCH_X86_64, XR_CLI_TARGET_OS_NONE,
-                             XR_CLI_TARGET_ABI_NONE, false);
+                             XR_CLI_TARGET_ABI_NONE, XR_CLI_TARGET_ENDIAN_LITTLE, 64, false);
         return true;
     }
 
     if (strcmp(name, "aarch64-linux-musl") == 0) {
         xr_cli_tc_set_target(out, "aarch64-linux-musl", "aarch64-linux-musl", "",
                              XR_CLI_TARGET_ARCH_AARCH64, XR_CLI_TARGET_OS_LINUX,
-                             XR_CLI_TARGET_ABI_MUSL, false);
+                             XR_CLI_TARGET_ABI_MUSL, XR_CLI_TARGET_ENDIAN_LITTLE, 64, false);
         return true;
     }
 
     if (strcmp(name, "x86_64-windows-gnu") == 0) {
         xr_cli_tc_set_target(out, "x86_64-windows-gnu", "x86_64-windows-gnu", ".exe",
                              XR_CLI_TARGET_ARCH_X86_64, XR_CLI_TARGET_OS_WINDOWS,
-                             XR_CLI_TARGET_ABI_GNU, false);
+                             XR_CLI_TARGET_ABI_GNU, XR_CLI_TARGET_ENDIAN_LITTLE, 64, false);
         return true;
     }
 
     if (strcmp(name, "aarch64-windows-gnu") == 0) {
         xr_cli_tc_set_target(out, "aarch64-windows-gnu", "aarch64-windows-gnu", ".exe",
                              XR_CLI_TARGET_ARCH_AARCH64, XR_CLI_TARGET_OS_WINDOWS,
-                             XR_CLI_TARGET_ABI_GNU, false);
+                             XR_CLI_TARGET_ABI_GNU, XR_CLI_TARGET_ENDIAN_LITTLE, 64, false);
         return true;
     }
 
