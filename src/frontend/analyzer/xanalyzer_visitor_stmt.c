@@ -273,6 +273,11 @@ typedef struct XaThreadHandleLintState {
     struct XaThreadHandleLintState *next;
 } XaThreadHandleLintState;
 
+typedef struct XaThreadHandleLintSnapshot {
+    bool finalized;
+    bool transferred;
+} XaThreadHandleLintSnapshot;
+
 static void xa_thread_lint_free_states(XaThreadHandleLintState *states) {
     while (states) {
         XaThreadHandleLintState *next = states->next;
@@ -313,6 +318,39 @@ static XaThreadHandleLintState *xa_thread_lint_find_by_symbol_id(XaThreadHandleL
         }
     }
     return NULL;
+}
+
+static int xa_thread_lint_state_count(XaThreadHandleLintState *states) {
+    int count = 0;
+    for (XaThreadHandleLintState *s = states; s; s = s->next)
+        count++;
+    return count;
+}
+
+static void xa_thread_lint_snapshot_states(XaThreadHandleLintState *states,
+                                           XaThreadHandleLintSnapshot *snapshots) {
+    if (!snapshots)
+        return;
+    int i = 0;
+    for (XaThreadHandleLintState *s = states; s; s = s->next, i++) {
+        snapshots[i].finalized = s->finalized;
+        snapshots[i].transferred = s->transferred;
+    }
+}
+
+static void xa_thread_lint_restore_states(XaThreadHandleLintState *states,
+                                          XaThreadHandleLintSnapshot *snapshots) {
+    if (!snapshots)
+        return;
+    int i = 0;
+    for (XaThreadHandleLintState *s = states; s; s = s->next, i++) {
+        s->finalized = snapshots[i].finalized;
+        s->transferred = snapshots[i].transferred;
+    }
+}
+
+static bool xa_thread_lint_snapshot_closed(XaThreadHandleLintSnapshot *snapshot) {
+    return snapshot && (snapshot->finalized || snapshot->transferred);
 }
 
 static AstNode *xa_thread_lint_unwrap_expr(AstNode *expr) {
@@ -593,6 +631,56 @@ static void xa_thread_lint_scan_block(XaThreadHandleLintState *states, AstNode *
         xa_thread_lint_scan_stmt(states, statements[i], can_escape);
 }
 
+static void xa_thread_lint_scan_if_stmt(XaThreadHandleLintState *states, AstNode *stmt,
+                                        bool can_escape) {
+    xa_thread_lint_scan_expr(states, stmt->as.if_stmt.condition, false, can_escape);
+    if (!can_escape) {
+        xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.then_branch, false);
+        xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.else_branch, false);
+        return;
+    }
+
+    int state_count = xa_thread_lint_state_count(states);
+    if (state_count <= 0)
+        return;
+
+    size_t snapshot_size = sizeof(XaThreadHandleLintSnapshot) * (size_t) state_count;
+    XaThreadHandleLintSnapshot *before = xr_calloc(1, snapshot_size);
+    XaThreadHandleLintSnapshot *then_after = xr_calloc(1, snapshot_size);
+    XaThreadHandleLintSnapshot *else_after = xr_calloc(1, snapshot_size);
+    if (!before || !then_after || !else_after) {
+        xr_free(before);
+        xr_free(then_after);
+        xr_free(else_after);
+        xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.then_branch, false);
+        xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.else_branch, false);
+        return;
+    }
+
+    xa_thread_lint_snapshot_states(states, before);
+    xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.then_branch, true);
+    xa_thread_lint_snapshot_states(states, then_after);
+
+    xa_thread_lint_restore_states(states, before);
+    if (stmt->as.if_stmt.else_branch)
+        xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.else_branch, true);
+    xa_thread_lint_snapshot_states(states, else_after);
+
+    xa_thread_lint_restore_states(states, before);
+    int i = 0;
+    for (XaThreadHandleLintState *s = states; s; s = s->next, i++) {
+        bool before_closed = xa_thread_lint_snapshot_closed(&before[i]);
+        bool then_closed = xa_thread_lint_snapshot_closed(&then_after[i]);
+        bool else_closed = xa_thread_lint_snapshot_closed(&else_after[i]);
+        if (!before_closed && then_closed && else_closed)
+            s->finalized = true;
+    }
+
+    xr_free(before);
+    xr_free(then_after);
+    xr_free(else_after);
+}
+
 static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *stmt,
                                      bool can_escape) {
     if (!stmt)
@@ -623,9 +711,7 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
                                            stmt->as.return_stmt.value_count, true, can_escape);
             return;
         case AST_IF_STMT:
-            xa_thread_lint_scan_expr(states, stmt->as.if_stmt.condition, false, can_escape);
-            xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.then_branch, false);
-            xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.else_branch, false);
+            xa_thread_lint_scan_if_stmt(states, stmt, can_escape);
             return;
         case AST_WHILE_STMT:
             xa_thread_lint_scan_expr(states, stmt->as.while_stmt.condition, false, can_escape);

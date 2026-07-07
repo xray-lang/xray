@@ -1,0 +1,14 @@
+import sys
+
+fn closeOnBothBranches(flag: bool) {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    if (flag) {
+        print(t.join())
+    } else {
+        t.detach()
+    }
+}
+
+closeOnBothBranches(true)
