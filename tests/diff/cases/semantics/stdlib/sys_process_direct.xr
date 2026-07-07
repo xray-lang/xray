@@ -39,7 +39,12 @@ if (q != null) {
 }
 
 var missing = sys.Process.spawn("", [])
-print(missing == null)
+if (missing != null) {
+    print(false)
+    print(missing!.wait())
+} else {
+    print(true)
+}
 print(sys.Signal.TERM != sys.Signal.KILL)
 
 var pipe = sys.Pipe.open()
