@@ -728,6 +728,7 @@ TEST(global_evidence_attaches_callsite_ids_to_xi_calls) {
                               .receiver_static_class_id = 1,
                               .method_id = 1,
                               .method_name_id = draw_name_id,
+                              .method_signature_key = 701,
                               .arg_count = 1};
 
     XiFunc *init = xi_func_new("init", &stub_int_type);
@@ -797,6 +798,7 @@ TEST(global_evidence_leaves_ambiguous_xi_callsite_unbound) {
                                .receiver_static_class_id = 1,
                                .method_id = 1,
                                .method_name_id = draw_name_id,
+                               .method_signature_key = 701,
                                .arg_count = 1};
     XgCallsiteSummary call2 = call1;
     call2.callsite_id = 2;
@@ -1734,8 +1736,10 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     method_stale_body.callsite_count = 1;
     method_stale_call.kind = XG_CALL_METHOD;
     method_stale_call.static_target_func_id = XG_NO_ID;
+    method_stale_call.receiver_static_class_id = 1;
     method_stale_call.method_id = XG_NO_ID;
     method_stale_call.method_name_id = 333;
+    method_stale_call.method_signature_key = 444;
     xg_global_evidence_init(&method_stale_ev, method_stale_key);
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&method_stale_ev, &decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&method_stale_ev, &method_stale_body));
@@ -1754,11 +1758,79 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     xaot_bundle_free(&method_stale_bundle);
     xg_global_evidence_free(&method_stale_ev);
 
+    XgGlobalEvidence method_no_receiver_ev;
+    XgBuildKey method_no_receiver_key = key;
+    XgBodySummary method_no_receiver_body = body;
+    XgCallsiteSummary method_no_receiver_call = call;
+    method_no_receiver_key.source_hash = 0x7c;
+    method_no_receiver_body.callsite_start = 1;
+    method_no_receiver_body.callsite_count = 1;
+    method_no_receiver_call.kind = XG_CALL_METHOD;
+    method_no_receiver_call.static_target_func_id = XG_NO_ID;
+    method_no_receiver_call.receiver_static_class_id = XG_NO_ID;
+    method_no_receiver_call.method_id = 333;
+    method_no_receiver_call.method_name_id = 333;
+    method_no_receiver_call.method_signature_key = 444;
+    xg_global_evidence_init(&method_no_receiver_ev, method_no_receiver_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&method_no_receiver_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&method_no_receiver_ev, &method_no_receiver_body));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_callsite(&method_no_receiver_ev, &method_no_receiver_call));
+
+    XaotBundle method_no_receiver_bundle;
+    memset(&method_no_receiver_bundle, 0, sizeof(method_no_receiver_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&method_no_receiver_bundle,
+                                                &method_no_receiver_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    method_no_receiver_bundle.modules = modules;
+    method_no_receiver_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&method_no_receiver_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&method_no_receiver_bundle, XAOT_VERIFY_AOT_READY, err,
+                                    sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence method callsite identity is stale"));
+    xaot_bundle_free(&method_no_receiver_bundle);
+    xg_global_evidence_free(&method_no_receiver_ev);
+
+    XgGlobalEvidence method_no_signature_ev;
+    XgBuildKey method_no_signature_key = key;
+    XgBodySummary method_no_signature_body = body;
+    XgCallsiteSummary method_no_signature_call = call;
+    method_no_signature_key.source_hash = 0x7d;
+    method_no_signature_body.callsite_start = 1;
+    method_no_signature_body.callsite_count = 1;
+    method_no_signature_call.kind = XG_CALL_METHOD;
+    method_no_signature_call.static_target_func_id = XG_NO_ID;
+    method_no_signature_call.receiver_static_class_id = 1;
+    method_no_signature_call.method_id = 333;
+    method_no_signature_call.method_name_id = 333;
+    method_no_signature_call.method_signature_key = 0;
+    xg_global_evidence_init(&method_no_signature_ev, method_no_signature_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&method_no_signature_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&method_no_signature_ev, &method_no_signature_body));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_callsite(&method_no_signature_ev, &method_no_signature_call));
+
+    XaotBundle method_no_signature_bundle;
+    memset(&method_no_signature_bundle, 0, sizeof(method_no_signature_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&method_no_signature_bundle,
+                                                &method_no_signature_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    method_no_signature_bundle.modules = modules;
+    method_no_signature_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&method_no_signature_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&method_no_signature_bundle, XAOT_VERIFY_AOT_READY, err,
+                                    sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence method callsite identity is stale"));
+    xaot_bundle_free(&method_no_signature_bundle);
+    xg_global_evidence_free(&method_no_signature_ev);
+
     XgGlobalEvidence interface_stale_ev;
     XgBuildKey interface_stale_key = key;
     XgBodySummary interface_stale_body = body;
     XgCallsiteSummary interface_stale_call = call;
-    interface_stale_key.source_hash = 0x7b;
+    interface_stale_key.source_hash = 0x7e;
     interface_stale_body.callsite_start = 1;
     interface_stale_body.callsite_count = 1;
     interface_stale_call.kind = XG_CALL_INTERFACE;
