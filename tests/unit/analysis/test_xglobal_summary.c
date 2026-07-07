@@ -412,6 +412,67 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_verifier_rederives_profile_actions) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x31,
+                      .compiler_semver_hash = 0x32,
+                      .profile_hash = 0x33,
+                      .imported_summary_hash = 0x34,
+                      .module_id = 1,
+                      .profile = XG_BUILD_FREESTANDING};
+    XgBodySummary body = {.func_id = 1,
+                          .body_hash = 0x42,
+                          .effect_bits = 0,
+                          .escape_bits = 0,
+                          .capability_bits = XG_CAP_COROUTINE,
+                          .metadata_use_bits = XG_METADATA_TYPENAME,
+                          .static_data_use_bits = 0};
+    XiFunc init_func;
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    XiModule module;
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    XiModule *modules[1] = {&module};
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
+
+    XaotBundle metadata_bad;
+    memset(&metadata_bad, 0, sizeof(metadata_bad));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&metadata_bad, &ev, XG_BUILD_FREESTANDING));
+    metadata_bad.modules = modules;
+    metadata_bad.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&metadata_bad, &init_func, 0, 0));
+    ASSERT_EQ_UINT(metadata_bad.nmetadata_plans, 1);
+    ASSERT_EQ_UINT(metadata_bad.metadata_plans[0].profile_action, XAOT_CAPABILITY_ACTION_REJECT);
+    metadata_bad.metadata_plans[0].profile_action = XAOT_CAPABILITY_ACTION_LINK;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&metadata_bad, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT metadata profile action does not re-derive"));
+    xaot_bundle_free(&metadata_bad);
+
+    XaotBundle capability_bad;
+    memset(&capability_bad, 0, sizeof(capability_bad));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&capability_bad, &ev, XG_BUILD_FREESTANDING));
+    capability_bad.modules = modules;
+    capability_bad.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&capability_bad, &init_func, 0, 0));
+    ASSERT_EQ_UINT(capability_bad.ncapability_plans, 1);
+    ASSERT_EQ_UINT(capability_bad.capability_plans[0].profile_action,
+                   XAOT_CAPABILITY_ACTION_REJECT);
+    capability_bad.capability_plans[0].profile_action = XAOT_CAPABILITY_ACTION_LINK;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&capability_bad, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT capability profile action does not re-derive"));
+    xaot_bundle_free(&capability_bad);
+
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
     setup_parser_session();
     const char *source = "class Child extends Base {\n"
@@ -767,6 +828,7 @@ RUN_TEST(global_evidence_hash_is_content_stable);
 RUN_TEST(global_evidence_dump_lists_core_rows);
 RUN_TEST(global_evidence_lowers_to_aot_class_plans);
 RUN_TEST(global_evidence_verifier_rederives_dispatch_plans);
+RUN_TEST(global_evidence_verifier_rederives_profile_actions);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
