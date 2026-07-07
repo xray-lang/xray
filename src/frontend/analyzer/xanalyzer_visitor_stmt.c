@@ -1250,12 +1250,16 @@ typedef struct XaOsResourceLintState {
     XaOsResourceAlias *aliases;
     bool finalized;
     bool transferred;
+    bool pipe_read_closed;
+    bool pipe_write_closed;
     struct XaOsResourceLintState *next;
 } XaOsResourceLintState;
 
 typedef struct XaOsResourceLintSnapshot {
     bool finalized;
     bool transferred;
+    bool pipe_read_closed;
+    bool pipe_write_closed;
 } XaOsResourceLintSnapshot;
 
 typedef struct XaOsResourceNullCheck {
@@ -1400,6 +1404,8 @@ static void xa_os_resource_lint_snapshot_states(XaOsResourceLintState *states,
     for (XaOsResourceLintState *s = states; s; s = s->next, i++) {
         snapshots[i].finalized = s->finalized;
         snapshots[i].transferred = s->transferred;
+        snapshots[i].pipe_read_closed = s->pipe_read_closed;
+        snapshots[i].pipe_write_closed = s->pipe_write_closed;
     }
 }
 
@@ -1411,11 +1417,25 @@ static void xa_os_resource_lint_restore_states(XaOsResourceLintState *states,
     for (XaOsResourceLintState *s = states; s; s = s->next, i++) {
         s->finalized = snapshots[i].finalized;
         s->transferred = snapshots[i].transferred;
+        s->pipe_read_closed = snapshots[i].pipe_read_closed;
+        s->pipe_write_closed = snapshots[i].pipe_write_closed;
     }
 }
 
 static bool xa_os_resource_lint_snapshot_closed(XaOsResourceLintSnapshot *snapshot) {
     return snapshot && (snapshot->finalized || snapshot->transferred);
+}
+
+static void xa_os_resource_lint_mark_pipe_side_closed(XaOsResourceLintState *state,
+                                                      const char *method_name) {
+    if (!state || state->kind != XA_OS_RESOURCE_PIPE || !method_name)
+        return;
+    if (strcmp(method_name, "closeRead") == 0)
+        state->pipe_read_closed = true;
+    else if (strcmp(method_name, "closeWrite") == 0)
+        state->pipe_write_closed = true;
+    if (state->pipe_read_closed && state->pipe_write_closed)
+        state->finalized = true;
 }
 
 static bool xa_os_resource_lint_null_check(AstNode *expr, XaOsResourceNullCheck *out) {
@@ -1472,11 +1492,20 @@ static bool xa_os_resource_lint_scan_finalizer_call(XaOsResourceLintState *state
     MemberAccessNode *ma = &callee->as.member_access;
     uint32_t receiver_id = xa_thread_lint_expr_symbol_id(ma->object);
     XaOsResourceLintState *state = xa_os_resource_lint_find_by_symbol_id(states, receiver_id);
-    if (!state || !ma->name || strcmp(ma->name, xa_os_resource_close_method(state->kind)) != 0)
+    if (!state || !ma->name)
         return false;
-    if (can_escape)
-        state->finalized = true;
-    return true;
+    if (strcmp(ma->name, xa_os_resource_close_method(state->kind)) == 0) {
+        if (can_escape)
+            state->finalized = true;
+        return true;
+    }
+    if (state->kind == XA_OS_RESOURCE_PIPE &&
+        (strcmp(ma->name, "closeRead") == 0 || strcmp(ma->name, "closeWrite") == 0)) {
+        if (can_escape)
+            xa_os_resource_lint_mark_pipe_side_closed(state, ma->name);
+        return true;
+    }
+    return false;
 }
 
 static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode *expr,
