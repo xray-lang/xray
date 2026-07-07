@@ -1,0 +1,537 @@
+// datetime - pure-Xray DateTime calendar algorithms.
+//
+// The platform-dependent shell is deliberately tiny and lives in `time`:
+// `time.now()`, `time.localOffset()`, and `time.localOffsetAt(ts)`.
+// Construction, civil calendar conversion, parsing, formatting, arithmetic,
+// and comparison are ordinary Xray code so VM and AOT share one semantic source.
+
+import time
+
+const SECONDS_PER_DAY = 86400
+
+class DateTimeParts {
+    year: int
+    month: int
+    day: int
+    hour: int
+    minute: int
+    second: int
+    weekday: int
+    yearday: int
+
+    constructor(
+        year: int,
+        month: int,
+        day: int,
+        hour: int,
+        minute: int,
+        second: int,
+        weekday: int,
+        yearday: int
+    ) {
+        this.year = year
+        this.month = month
+        this.day = day
+        this.hour = hour
+        this.minute = minute
+        this.second = second
+        this.weekday = weekday
+        this.yearday = yearday
+    }
+}
+
+class DateTime {
+    timestamp: int
+    millisecond: int
+    tzOffset: int
+    isUtc: bool
+    year: int
+    month: int
+    day: int
+    hour: int
+    minute: int
+    second: int
+    weekday: int
+    yearday: int
+
+    constructor(timestamp: int, millisecond: int = 0, tzOffset: int = 0, isUtc: bool = true) {
+        this.timestamp = timestamp
+        this.millisecond = millisecond
+        this.tzOffset = tzOffset
+        this.isUtc = isUtc
+
+        var p = _partsFromRaw(timestamp, tzOffset, isUtc)
+        this.year = p.year
+        this.month = p.month
+        this.day = p.day
+        this.hour = p.hour
+        this.minute = p.minute
+        this.second = p.second
+        this.weekday = p.weekday
+        this.yearday = p.yearday
+    }
+
+    toString() -> string {
+        return this.format("YYYY-MM-DD HH:mm:ss")
+    }
+
+    format(pattern: string = "YYYY-MM-DD HH:mm:ss") -> string {
+        var out = ""
+        var i = 0
+        while (i < pattern.length) {
+            if (i + 4 <= pattern.length && pattern.slice(i, i + 4) == "YYYY") {
+                out = out + _pad(this.year, 4)
+                i = i + 4
+            } else if (i + 3 <= pattern.length && pattern.slice(i, i + 3) == "SSS") {
+                out = out + _pad(this.millisecond, 3)
+                i = i + 3
+            } else if (i + 2 <= pattern.length && pattern.slice(i, i + 2) == "MM") {
+                out = out + _pad(this.month, 2)
+                i = i + 2
+            } else if (i + 2 <= pattern.length && pattern.slice(i, i + 2) == "DD") {
+                out = out + _pad(this.day, 2)
+                i = i + 2
+            } else if (i + 2 <= pattern.length && pattern.slice(i, i + 2) == "HH") {
+                out = out + _pad(this.hour, 2)
+                i = i + 2
+            } else if (i + 2 <= pattern.length && pattern.slice(i, i + 2) == "mm") {
+                out = out + _pad(this.minute, 2)
+                i = i + 2
+            } else if (i + 2 <= pattern.length && pattern.slice(i, i + 2) == "ss") {
+                out = out + _pad(this.second, 2)
+                i = i + 2
+            } else {
+                out = out + pattern.charAt(i)
+                i = i + 1
+            }
+        }
+        return out
+    }
+
+    toISOString() -> string {
+        var base = _pad(this.year, 4) + "-" + _pad(this.month, 2) + "-" +
+                   _pad(this.day, 2) + "T" + _pad(this.hour, 2) + ":" +
+                   _pad(this.minute, 2) + ":" + _pad(this.second, 2) + "." +
+                   _pad(this.millisecond, 3)
+        if (this.isUtc) {
+            return base + "Z"
+        }
+        var off = this.tzOffset
+        var sign = "+"
+        if (off < 0) {
+            sign = "-"
+            off = -off
+        }
+        return base + sign + _pad(off / 60, 2) + ":" + _pad(off % 60, 2)
+    }
+
+    add(amount: int, unit: string) -> DateTime {
+        if (unit == "millisecond" || unit == "milliseconds") {
+            return _fromTotalMilliseconds(this.timestamp * 1000 + this.millisecond + amount,
+                                          this.tzOffset, this.isUtc)
+        }
+        if (unit == "second" || unit == "seconds") {
+            return DateTime(this.timestamp + amount, this.millisecond, this.tzOffset, this.isUtc)
+        }
+        if (unit == "minute" || unit == "minutes") {
+            return DateTime(this.timestamp + amount * 60, this.millisecond, this.tzOffset,
+                            this.isUtc)
+        }
+        if (unit == "hour" || unit == "hours") {
+            return DateTime(this.timestamp + amount * 3600, this.millisecond, this.tzOffset,
+                            this.isUtc)
+        }
+        if (unit == "day" || unit == "days") {
+            return DateTime(this.timestamp + amount * SECONDS_PER_DAY, this.millisecond,
+                            this.tzOffset, this.isUtc)
+        }
+        if (unit == "week" || unit == "weeks") {
+            return DateTime(this.timestamp + amount * 7 * SECONDS_PER_DAY, this.millisecond,
+                            this.tzOffset, this.isUtc)
+        }
+        if (unit == "month" || unit == "months") {
+            var totalMonths = this.year * 12 + (this.month - 1) + amount
+            var year = _floorDiv(totalMonths, 12)
+            var month0 = _floorMod(totalMonths, 12)
+            var day = this.day
+            var maxDay = _daysInMonth(year, month0 + 1)
+            if (day > maxDay) { day = maxDay }
+            return _createWithZone(year, month0 + 1, day, this.hour, this.minute, this.second,
+                                   this.millisecond, this.tzOffset, this.isUtc)
+        }
+        if (unit == "year" || unit == "years") {
+            var year = this.year + amount
+            var day = this.day
+            var maxDay = _daysInMonth(year, this.month)
+            if (day > maxDay) { day = maxDay }
+            return _createWithZone(year, this.month, day, this.hour, this.minute, this.second,
+                                   this.millisecond, this.tzOffset, this.isUtc)
+        }
+        return DateTime(this.timestamp + amount, this.millisecond, this.tzOffset, this.isUtc)
+    }
+
+    diff(other: DateTime, unit: string = "seconds") -> int {
+        var diffMs = (this.timestamp - other.timestamp) * 1000 +
+                     (this.millisecond - other.millisecond)
+        if (unit == "millisecond" || unit == "milliseconds") { return diffMs }
+        if (unit == "minute" || unit == "minutes") { return diffMs / 60000 }
+        if (unit == "hour" || unit == "hours") { return diffMs / 3600000 }
+        if (unit == "day" || unit == "days") { return diffMs / 86400000 }
+        if (unit == "week" || unit == "weeks") { return diffMs / 604800000 }
+        return diffMs / 1000
+    }
+
+    toUTC() -> DateTime {
+        return DateTime(this.timestamp, this.millisecond, 0, true)
+    }
+
+    toLocal() -> DateTime {
+        return DateTime(this.timestamp, this.millisecond, time.localOffsetAt(this.timestamp), false)
+    }
+
+    isBefore(other: DateTime) -> bool {
+        return this.timestamp < other.timestamp ||
+               (this.timestamp == other.timestamp && this.millisecond < other.millisecond)
+    }
+
+    isAfter(other: DateTime) -> bool {
+        return this.timestamp > other.timestamp ||
+               (this.timestamp == other.timestamp && this.millisecond > other.millisecond)
+    }
+
+    equals(other: DateTime) -> bool {
+        return this.timestamp == other.timestamp && this.millisecond == other.millisecond
+    }
+
+    isLeapYear() -> bool {
+        return _isLeapYear(this.year)
+    }
+
+    daysInMonth() -> int {
+        return _daysInMonth(this.year, this.month)
+    }
+}
+
+fn now() -> DateTime {
+    return fromTimestampMs(time.now()).toLocal()
+}
+
+fn utc() -> DateTime {
+    return fromTimestampMs(time.now())
+}
+
+fn create(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0,
+          second: int = 0) -> DateTime {
+    var wall = _timeFromCivil(year, month, day, hour, minute, second)
+    var off = time.localOffsetAt(wall)
+    return DateTime(wall - off * 60, 0, off, false)
+}
+
+fn createUTC(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0,
+             second: int = 0) -> DateTime {
+    return DateTime(_timeFromCivil(year, month, day, hour, minute, second), 0, 0, true)
+}
+
+fn fromTimestamp(ts: int) -> DateTime {
+    return DateTime(ts, 0, 0, true)
+}
+
+fn fromTimestampMs(ts: int) -> DateTime {
+    return _fromTotalMilliseconds(ts, 0, true)
+}
+
+fn parse(s: string, format: string = "ISO8601") -> DateTime? {
+    var year = 0
+    var month = 1
+    var day = 1
+    var hour = 0
+    var minute = 0
+    var second = 0
+    var ms = 0
+    var timeStart = -1
+
+    if (format == "time") {
+        var tp = _parseTimeAt(s, 0)
+        if (tp == null) { return null }
+        hour = tp!.hour
+        minute = tp!.minute
+        second = tp!.second
+        year = 1970
+        month = 1
+        day = 1
+        timeStart = 0
+    } else {
+        var sep = "-"
+        if (s.includes("/")) { sep = "/" }
+        var d = _parseDateAt(s, 0, sep)
+        if (d == null) { return null }
+        year = d!.year
+        month = d!.month
+        day = d!.day
+
+        if (format != "date") {
+            var tIndex = _findTimeSeparator(s)
+            if (tIndex >= 0) {
+                timeStart = tIndex + 1
+                var tp = _parseTimeAt(s, timeStart)
+                if (tp == null) { return null }
+                hour = tp!.hour
+                minute = tp!.minute
+                second = tp!.second
+                ms = _parseMilliseconds(s, timeStart)
+            }
+        }
+    }
+
+    var isUtc = false
+    var tzOff = 0
+    if (timeStart >= 0) {
+        var z = _findTimezoneStart(s, timeStart)
+        if (z >= 0) {
+            if (s.charAt(z) == "Z") {
+                isUtc = true
+            } else {
+                var parsedOff = _parseTimezoneOffset(s, z)
+                if (parsedOff == null) { return null }
+                tzOff = parsedOff!
+                isUtc = true
+            }
+        }
+    }
+
+    var t = _timeFromCivil(year, month, day, hour, minute, second)
+    if (isUtc) {
+        t = t - tzOff * 60
+        return DateTime(t, ms, 0, true)
+    }
+    var off = time.localOffsetAt(t)
+    return DateTime(t - off * 60, ms, off, false)
+}
+
+fn offset() -> int {
+    return time.localOffset()
+}
+
+fn _isLeapYear(year: int) -> bool {
+    return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+}
+
+fn _daysInMonth(year: int, month: int) -> int {
+    if (month == 1) { return 31 }
+    if (month == 2) {
+        if (_isLeapYear(year)) { return 29 }
+        return 28
+    }
+    if (month == 3) { return 31 }
+    if (month == 4) { return 30 }
+    if (month == 5) { return 31 }
+    if (month == 6) { return 30 }
+    if (month == 7) { return 31 }
+    if (month == 8) { return 31 }
+    if (month == 9) { return 30 }
+    if (month == 10) { return 31 }
+    if (month == 11) { return 30 }
+    if (month == 12) { return 31 }
+    return 30
+}
+
+fn _floorDiv(a: int, b: int) -> int {
+    var q = a / b
+    var r = a % b
+    if (r < 0) { q = q - 1 }
+    return q
+}
+
+fn _floorMod(a: int, b: int) -> int {
+    var r = a % b
+    if (r < 0) { return r + b }
+    return r
+}
+
+fn _daysFromCivil(year: int, month: int, day: int) -> int {
+    var y = year
+    if (month <= 2) { y = y - 1 }
+    var era = _floorDiv(y, 400)
+    var yoe = y - era * 400
+    var mp = month + 9
+    if (month > 2) { mp = month - 3 }
+    var doy = (153 * mp + 2) / 5 + day - 1
+    var doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146097 + doe - 719468
+}
+
+fn _civilFromDays(zRaw: int) -> DateTimeParts {
+    var z = zRaw + 719468
+    var era = _floorDiv(z, 146097)
+    var doe = z - era * 146097
+    var yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    var y = yoe + era * 400
+    var doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    var mp = (5 * doy + 2) / 153
+    var d = doy - (153 * mp + 2) / 5 + 1
+    var m = mp + 3
+    if (mp >= 10) { m = mp - 9 }
+    if (m <= 2) { y = y + 1 }
+
+    var w = _floorMod(zRaw + 4, 7)
+    var jan1 = _daysFromCivil(y, 1, 1)
+    var yd = zRaw - jan1 + 1
+    return DateTimeParts(y, m, d, 0, 0, 0, w, yd)
+}
+
+fn _timeFromCivil(year: int, month: int, day: int, hour: int, minute: int, second: int) -> int {
+    return _daysFromCivil(year, month, day) * SECONDS_PER_DAY + hour * 3600 + minute * 60 +
+           second
+}
+
+fn _partsFromRaw(timestamp: int, tzOffset: int, isUtc: bool) -> DateTimeParts {
+    var t = timestamp
+    if (!isUtc) { t = t + tzOffset * 60 }
+    var days = _floorDiv(t, SECONDS_PER_DAY)
+    var secDay = _floorMod(t, SECONDS_PER_DAY)
+    var p = _civilFromDays(days)
+    p.hour = secDay / 3600
+    p.minute = (secDay % 3600) / 60
+    p.second = secDay % 60
+    return p
+}
+
+fn _createWithZone(year: int, month: int, day: int, hour: int, minute: int, second: int,
+                   millisecond: int, tzOffset: int, isUtc: bool) -> DateTime {
+    var wall = _timeFromCivil(year, month, day, hour, minute, second)
+    if (isUtc) {
+        return DateTime(wall, millisecond, 0, true)
+    }
+    return DateTime(wall - tzOffset * 60, millisecond, tzOffset, false)
+}
+
+fn _fromTotalMilliseconds(totalMs: int, tzOffset: int, isUtc: bool) -> DateTime {
+    var sec = _floorDiv(totalMs, 1000)
+    var ms = _floorMod(totalMs, 1000)
+    return DateTime(sec, ms, tzOffset, isUtc)
+}
+
+fn _pad(value: int, width: int) -> string {
+    var v = value
+    var sign = ""
+    if (v < 0) {
+        sign = "-"
+        v = -v
+    }
+    var s = v.toString()
+    while (s.length < width) {
+        s = "0" + s
+    }
+    return sign + s
+}
+
+fn _parseNDigits(s: string, start: int, count: int) -> int? {
+    if (start < 0 || start + count > s.length) { return null }
+    var out = 0
+    for (var i = 0; i < count; i++) {
+        var c = s.charAt(start + i).ord()!
+        if (c < 48 || c > 57) { return null }
+        out = out * 10 + (c - 48)
+    }
+    return out
+}
+
+fn _parseDateAt(s: string, start: int, sep: string) -> DateTimeParts? {
+    var y = _parseNDigits(s, start, 4)
+    if (y == null) { return null }
+    if (start + 4 >= s.length || s.charAt(start + 4) != sep) { return null }
+    var m = _parseNDigits(s, start + 5, 2)
+    if (m == null) { return null }
+    if (start + 7 >= s.length || s.charAt(start + 7) != sep) { return null }
+    var d = _parseNDigits(s, start + 8, 2)
+    if (d == null) { return null }
+    return DateTimeParts(y!, m!, d!, 0, 0, 0, 0, 0)
+}
+
+fn _parseTimeAt(s: string, start: int) -> DateTimeParts? {
+    var h = _parseNDigits(s, start, 2)
+    if (h == null) { return null }
+    if (start + 2 >= s.length || s.charAt(start + 2) != ":") { return null }
+    var m = _parseNDigits(s, start + 3, 2)
+    if (m == null) { return null }
+    var sec = 0
+    if (start + 5 < s.length && s.charAt(start + 5) == ":") {
+        var s2 = _parseNDigits(s, start + 6, 2)
+        if (s2 == null) { return null }
+        sec = s2!
+    }
+    return DateTimeParts(1970, 1, 1, h!, m!, sec, 0, 0)
+}
+
+fn _parseMilliseconds(s: string, timeStart: int) -> int {
+    var dot = -1
+    var i = timeStart
+    while (i < s.length) {
+        var ch = s.charAt(i)
+        if (ch == ".") {
+            dot = i
+            break
+        }
+        if (ch == "Z" || ch == "+" || ch == "-") { break }
+        i = i + 1
+    }
+    if (dot < 0 || dot + 1 >= s.length) { return 0 }
+    var ms = 0
+    var digits = 0
+    var p = dot + 1
+    while (p < s.length && digits < 3) {
+        var c = s.charAt(p).ord()!
+        if (c < 48 || c > 57) { break }
+        ms = ms * 10 + (c - 48)
+        digits = digits + 1
+        p = p + 1
+    }
+    while (digits < 3) {
+        ms = ms * 10
+        digits = digits + 1
+    }
+    return ms
+}
+
+fn _findTimeSeparator(s: string) -> int {
+    for (var i = 0; i < s.length; i++) {
+        var ch = s.charAt(i)
+        if (ch == "T" || ch == " ") { return i }
+    }
+    return -1
+}
+
+fn _findTimezoneStart(s: string, start: int) -> int {
+    for (var i = start; i < s.length; i++) {
+        var ch = s.charAt(i)
+        if (ch == "Z" || ch == "+" || ch == "-") { return i }
+    }
+    return -1
+}
+
+fn _parseTimezoneOffset(s: string, start: int) -> int? {
+    if (start >= s.length) { return null }
+    var sign = 1
+    if (s.charAt(start) == "-") { sign = -1 }
+    var h = _parseNDigits(s, start + 1, 2)
+    if (h == null) { return null }
+    var m = 0
+    if (start + 3 < s.length && s.charAt(start + 3) == ":") {
+        var mm = _parseNDigits(s, start + 4, 2)
+        if (mm == null) { return null }
+        m = mm!
+    }
+    return sign * (h! * 60 + m)
+}
+
+export {
+    DateTime,
+    now,
+    utc,
+    create,
+    createUTC,
+    fromTimestamp,
+    fromTimestampMs,
+    parse,
+    offset
+}

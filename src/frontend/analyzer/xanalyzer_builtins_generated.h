@@ -153,16 +153,11 @@ static const XaBuiltinMember g_gen_csv_functions[] = {
 
 // datetime module functions
 static const XaBuiltinMember g_gen_datetime_functions[] = {
-    {"now", "(): DateTime", "Get current local datetime", true, false},
-    {"utc", "(): DateTime", "Get current UTC datetime", true, false},
-    {"create", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create local datetime", true, false},
-    {"createUTC", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create UTC datetime", true, false},
-    {"fromTimestamp", "(ts: int): DateTime", "Create datetime from Unix timestamp (seconds)", true, false},
-    {"fromTimestampMs", "(ts: int): DateTime", "Create datetime from Unix timestamp (milliseconds)", true, false},
-    {"parse", "(s: string, format?: string): DateTime?", "Parse datetime string", true, false},
-    {"offset", "(): int", "Get UTC offset in minutes", true, false},
+    {"_nowMilliseconds", "(): int", "Internal: current time in milliseconds since Unix epoch", true, false},
+    {"_offset", "(): int", "Internal: current UTC offset in minutes", true, false},
+    {"_offsetAt", "(timestamp: int): int", "Internal: UTC offset in minutes at Unix timestamp", true, false},
 };
-#define GEN_DATETIME_FUNCTION_COUNT 8
+#define GEN_DATETIME_FUNCTION_COUNT 3
 
 // http.HttpResponse handle fields
 static const XaBuiltinHandleField g_gen_http_httpresponse_fields[] = {
