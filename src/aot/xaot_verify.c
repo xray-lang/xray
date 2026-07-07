@@ -513,6 +513,20 @@ static const XgDeclSummary *verify_find_evidence_decl(const XgGlobalEvidence *ev
     return NULL;
 }
 
+static const XgDeclSummary *verify_find_evidence_func_decl_by_name_flags(const XgGlobalEvidence *ev,
+                                                                         uint32_t name_id,
+                                                                         uint32_t required_flags) {
+    if (!ev || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        const XgDeclSummary *decl = &ev->decls[i];
+        if (decl->kind == XG_DECL_FUNC && decl->name_id == name_id &&
+            (decl->flags & required_flags) == required_flags)
+            return decl;
+    }
+    return NULL;
+}
+
 static const XgClassSummary *verify_find_evidence_class(const XgGlobalEvidence *ev,
                                                         XgClassId class_id) {
     if (!ev || class_id == XG_NO_ID)
@@ -827,6 +841,10 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 if (call->method_id == XG_NO_ID || call->method_name_id == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence extern callsite identity is stale");
+                if (!verify_find_evidence_func_decl_by_name_flags(ev, call->method_name_id,
+                                                                  XG_DECL_EXTERN))
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT global evidence extern callsite declaration is missing");
                 break;
             default:
                 return set_error(errbuf, errbuf_len,
