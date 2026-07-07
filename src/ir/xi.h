@@ -173,6 +173,8 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_CONST         string: char*        int/bool/char/null literal value
  *                   (other: unused)
  *  XI_PARAM         —                    parameter index
+ *  XI_TARGET_SIZEOF —                    XrNativeType whose target C sizeof is needed
+ *  XI_TARGET_ALIGNOF —                   XrNativeType whose target C alignment is needed
  *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
  *  XI_STORE_FIELD   field name or NULL   symbol id or field index
  *  XI_PTR_LOAD      —                    XrFFIType width of pointee | optional ptr-load flags
@@ -213,6 +215,8 @@ typedef enum {
     /* Constants */
     XI_CONST = 0, /* constant value (int/float/bool/char/null/string in aux) */
     XI_PARAM,     /* function parameter (aux_int = param index) */
+    XI_TARGET_SIZEOF,
+    XI_TARGET_ALIGNOF,
 
     /* Arithmetic (polymorphic: type determines int vs float) */
     XI_ADD,

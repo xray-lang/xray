@@ -179,6 +179,10 @@ uint8_t xr_type_to_tid(const XrType *type) {
                     return XR_TID_UINT32;
                 case XR_NATIVE_U64:
                     return XR_TID_UINT64;
+                case XR_NATIVE_ISIZE:
+                    return XR_TID_INT;
+                case XR_NATIVE_USIZE:
+                    return XR_TID_UINT64;
                 default:
                     break;
             }

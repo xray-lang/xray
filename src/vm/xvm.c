@@ -63,6 +63,7 @@
 
 #include <math.h>
 #include <inttypes.h>
+#include <stddef.h>
 #include "../base/xarena.h"
 #include "../os/os_time.h"
 #include "../runtime/object/xstringbuilder.h"

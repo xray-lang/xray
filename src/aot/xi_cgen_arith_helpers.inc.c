@@ -97,6 +97,9 @@ static bool emit_native_unsigned_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, cons
         case XR_NATIVE_U64:
             ctype = "uint64_t";
             break;
+        case XR_NATIVE_USIZE:
+            ctype = "size_t";
+            break;
         default:
             return false;
     }

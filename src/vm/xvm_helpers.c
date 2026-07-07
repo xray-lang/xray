@@ -20,6 +20,8 @@
 #include "../runtime/value/xstruct_layout.h"
 #include "../base/xsource_cache.h"
 
+#include <stddef.h>
+
 /* ========== Struct Layout Registry ========== */
 
 static void xr_vm_struct_layout_register_children(XrVMState *vm, XrAggregateLayout *layout) {
@@ -167,6 +169,12 @@ XR_FUNC bool xr_vm_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
         case XR_NATIVE_U64:
             *out = XR_FROM_INT((int64_t) *(uint64_t *) fp);
             return true;
+        case XR_NATIVE_ISIZE:
+            *out = XR_FROM_INT((int64_t) *(ptrdiff_t *) fp);
+            return true;
+        case XR_NATIVE_USIZE:
+            *out = XR_FROM_INT((int64_t) *(size_t *) fp);
+            return true;
         case XR_NATIVE_F64:
             *out = XR_FROM_FLOAT(*(double *) fp);
             return true;
@@ -232,6 +240,12 @@ XR_FUNC bool xr_vm_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
             return true;
         case XR_NATIVE_U64:
             *(uint64_t *) fp = (uint64_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_ISIZE:
+            *(ptrdiff_t *) fp = (ptrdiff_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_USIZE:
+            *(size_t *) fp = (size_t) XR_TO_INT(src);
             return true;
         case XR_NATIVE_F64:
             *(double *) fp = XR_TO_FLOAT(src);

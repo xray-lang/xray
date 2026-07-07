@@ -319,6 +319,10 @@ static const char *cg_cfn_value_c_type(const XrType *type, bool is_return) {
                     return "uint32_t";
                 case XR_NATIVE_U64:
                     return "uint64_t";
+                case XR_NATIVE_ISIZE:
+                    return "ptrdiff_t";
+                case XR_NATIVE_USIZE:
+                    return "size_t";
                 default:
                     return "int64_t";
             }

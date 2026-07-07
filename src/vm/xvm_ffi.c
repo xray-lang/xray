@@ -17,6 +17,7 @@
 #include "../vm/xvm_closure.h"
 #include "../os/os_dylib.h"
 
+#include <stddef.h>
 #include <string.h>
 
 #define XR_FFI_MAX_ARGS 32
@@ -110,6 +111,10 @@ XrValue xr_ffi_ptr_load(uintptr_t addr, uint8_t ffi_type) {
             return xr_int(*(const int64_t *) addr);
         case XR_FFI_T_U64:
             return xr_int((xr_Integer) * (const uint64_t *) addr);
+        case XR_FFI_T_SIZE:
+            return xr_int((xr_Integer) * (const size_t *) addr);
+        case XR_FFI_T_SSIZE:
+            return xr_int((xr_Integer) * (const ptrdiff_t *) addr);
         case XR_FFI_T_F32:
             return xr_float((double) *(const float *) addr);
         case XR_FFI_T_F64:
@@ -168,6 +173,12 @@ void xr_ffi_ptr_store(uintptr_t addr, uint8_t ffi_type, XrValue val) {
         case XR_FFI_T_U64:
             *(uint64_t *) addr = (uint64_t) iv;
             break;
+        case XR_FFI_T_SIZE:
+            *(size_t *) addr = (size_t) iv;
+            break;
+        case XR_FFI_T_SSIZE:
+            *(ptrdiff_t *) addr = (ptrdiff_t) iv;
+            break;
         case XR_FFI_T_F32:
             *(float *) addr = (float) f;
             break;
@@ -215,6 +226,10 @@ static ffi_type *ffi_type_for_code(uint8_t code) {
             return &ffi_type_sint64;
         case XR_FFI_T_U64:
             return &ffi_type_uint64;
+        case XR_FFI_T_SIZE:
+            return sizeof(size_t) == 4 ? &ffi_type_uint32 : &ffi_type_uint64;
+        case XR_FFI_T_SSIZE:
+            return sizeof(ptrdiff_t) == 4 ? &ffi_type_sint32 : &ffi_type_sint64;
         case XR_FFI_T_F32:
             return &ffi_type_float;
         case XR_FFI_T_F64:
@@ -234,6 +249,8 @@ typedef union XrFFISlot {
     uint32_t u32;
     int64_t i64;
     uint64_t u64;
+    size_t size;
+    ptrdiff_t ssize;
     double f64;
     float f32;
     void *ptr;
@@ -307,6 +324,12 @@ static void *ffi_store_arg_slot(XrFFISlot *slot, uint8_t code, XrValue v) {
         case XR_FFI_T_U64:
             slot->u64 = (uint64_t) iv;
             return &slot->u64;
+        case XR_FFI_T_SIZE:
+            slot->size = (size_t) iv;
+            return &slot->size;
+        case XR_FFI_T_SSIZE:
+            slot->ssize = (ptrdiff_t) iv;
+            return &slot->ssize;
         case XR_FFI_T_F32:
             slot->f32 = (float) ffi_value_as_f64(v);
             return &slot->f32;
@@ -344,6 +367,10 @@ static XrValue ffi_value_from_c_arg(uint8_t code, void *addr) {
             return xr_int(*(const int64_t *) addr);
         case XR_FFI_T_U64:
             return xr_int((xr_Integer) * (const uint64_t *) addr);
+        case XR_FFI_T_SIZE:
+            return xr_int((xr_Integer) * (const size_t *) addr);
+        case XR_FFI_T_SSIZE:
+            return xr_int((xr_Integer) * (const ptrdiff_t *) addr);
         case XR_FFI_T_F32:
             return xr_float((double) *(const float *) addr);
         case XR_FFI_T_F64:
@@ -387,6 +414,12 @@ static void ffi_store_c_return(uint8_t code, XrValue v, void *ret) {
             break;
         case XR_FFI_T_U64:
             *(uint64_t *) ret = (uint64_t) iv;
+            break;
+        case XR_FFI_T_SIZE:
+            *(size_t *) ret = (size_t) iv;
+            break;
+        case XR_FFI_T_SSIZE:
+            *(ptrdiff_t *) ret = (ptrdiff_t) iv;
             break;
         case XR_FFI_T_F32:
             *(float *) ret = (float) ffi_value_as_f64(v);
@@ -597,6 +630,8 @@ XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue 
         ffi_arg a;
         int64_t i64;
         uint64_t u64;
+        size_t size;
+        ptrdiff_t ssize;
         double f64;
         float f32;
         void *ptr;
@@ -620,6 +655,12 @@ XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue 
             break;
         case XR_FFI_T_PTR:
             result = xr_int((int64_t) (intptr_t) ret.ptr);
+            break;
+        case XR_FFI_T_SIZE:
+            result = xr_int((int64_t) ret.size);
+            break;
+        case XR_FFI_T_SSIZE:
+            result = xr_int((int64_t) ret.ssize);
             break;
         default:
             /* Integer-like: ffi_arg holds the (sign/zero-extended) value. */

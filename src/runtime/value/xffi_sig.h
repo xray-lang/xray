@@ -42,7 +42,9 @@ typedef enum XrFFIType {
     XR_FFI_T_U64 = 9,
     XR_FFI_T_F32 = 10,
     XR_FFI_T_F64 = 11,
-    XR_FFI_T_PTR = 12
+    XR_FFI_T_PTR = 12,
+    XR_FFI_T_SIZE = 13,
+    XR_FFI_T_SSIZE = 14
 } XrFFIType;
 
 #define XR_FFI_PTR_AUX_TYPE_MASK 0x7fu

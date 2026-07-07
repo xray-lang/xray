@@ -174,6 +174,7 @@ static bool stmt_type_is_unsigned_int(struct XrType *type) {
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
         case XR_NATIVE_U64:
+        case XR_NATIVE_USIZE:
             return true;
         default:
             return false;

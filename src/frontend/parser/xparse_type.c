@@ -557,13 +557,12 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             return xr_tref_unit(parser->compiler_session);
         }
 
-        /* Platform-width integers (FFI: C size_t / ptrdiff_t). On the supported
-         * 64-bit targets these alias uint64 / int64. Contextual type names (not
-         * lexer keywords) to avoid reserving common identifiers. */
+        /* Platform-width integers (FFI: C size_t / ptrdiff_t). Contextual type
+         * names (not lexer keywords) avoid reserving common identifiers. */
         if (strcmp(temp_name, "uintsize") == 0)
-            return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_U64);
+            return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_USIZE);
         if (strcmp(temp_name, "intsize") == 0)
-            return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_I64);
+            return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_ISIZE);
 
         /* Generic type arguments: Name<T1, T2, ...> */
         if (xr_parser_match(parser, TK_LT)) {

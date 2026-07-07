@@ -159,6 +159,10 @@ uint8_t xr_ffi_type_from_xrtype(const struct XrType *t, bool is_return) {
                     return XR_FFI_T_U32;
                 case XR_NATIVE_U64:
                     return XR_FFI_T_U64;
+                case XR_NATIVE_USIZE:
+                    return XR_FFI_T_SIZE;
+                case XR_NATIVE_ISIZE:
+                    return XR_FFI_T_SSIZE;
                 default:
                     return XR_FFI_T_I64;
             }

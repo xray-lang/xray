@@ -64,6 +64,43 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     }
 }
 
+static const char *xicgen_native_layout_c_type(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_ISIZE:
+            return "ptrdiff_t";
+        case XR_NATIVE_USIZE:
+            return "size_t";
+        default:
+            return xaot_c_type_for_native_type(native_type);
+    }
+}
+
+static void xicgen_target_layout_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *op) {
+    const char *c_type = xicgen_native_layout_c_type((uint8_t) (v ? v->aux_int : 0));
+    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
+    if (!c_type)
+        c_type = "int64_t";
+    if (boxed)
+        fprintf(out, "XR_FROM_INT(");
+    fprintf(out, "(int64_t)%s(%s)", op, c_type);
+    if (boxed)
+        fprintf(out, ")");
+}
+
+static void xicgen_target_sizeof(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                 const char *prefix) {
+    (void) f;
+    (void) prefix;
+    xicgen_target_layout_expr(ctx, out, v, "sizeof");
+}
+
+static void xicgen_target_alignof(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                  const char *prefix) {
+    (void) f;
+    (void) prefix;
+    xicgen_target_layout_expr(ctx, out, v, "_Alignof");
+}
+
 static bool xicgen_const_literal_is_freestanding_scalar(const XiConstLiteral *lit) {
     if (!lit)
         return false;
@@ -2245,6 +2282,7 @@ static bool xicgen_type_is_unsigned_int(const XrType *type) {
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
         case XR_NATIVE_U64:
+        case XR_NATIVE_USIZE:
             return true;
         default:
             return false;

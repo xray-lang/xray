@@ -89,6 +89,28 @@
   :native-type XR_NATIVE_U64
   :storage-rep XR_REP_I64)
 
+(define-aot-rep isize
+  :c-type "ptrdiff_t"
+  :size 8
+  :align 8
+  :signed yes
+  :integer yes
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_ISIZE
+  :storage-rep XR_REP_I64)
+
+(define-aot-rep usize
+  :c-type "size_t"
+  :size 8
+  :align 8
+  :signed no
+  :integer yes
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_USIZE
+  :storage-rep XR_REP_I64)
+
 (define-aot-rep f32
   :c-type "float"
   :size 4

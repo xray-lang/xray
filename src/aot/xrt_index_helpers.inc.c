@@ -36,6 +36,10 @@ static inline XrValue xrt_fixed_array_get(void *base, uint8_t native_type, int64
             return XR_FROM_INT((int64_t) *(uint32_t *) p);
         case XR_NATIVE_U64:
             return XR_FROM_INT((int64_t) *(uint64_t *) p);
+        case XR_NATIVE_ISIZE:
+            return XR_FROM_INT((int64_t) *(ptrdiff_t *) p);
+        case XR_NATIVE_USIZE:
+            return XR_FROM_INT((int64_t) *(size_t *) p);
         default:
             return XR_FROM_INT(*(int64_t *) p);
     }
@@ -77,6 +81,12 @@ static inline void xrt_fixed_array_set(void *base, uint8_t native_type, int64_t 
             break;
         case XR_NATIVE_U64:
             *(uint64_t *) p = (uint64_t) xr_value_to_int64_coerce(value);
+            break;
+        case XR_NATIVE_ISIZE:
+            *(ptrdiff_t *) p = (ptrdiff_t) xr_value_to_int64_coerce(value);
+            break;
+        case XR_NATIVE_USIZE:
+            *(size_t *) p = (size_t) xr_value_to_int64_coerce(value);
             break;
         default:
             *(int64_t *) p = xr_value_to_int64_coerce(value);

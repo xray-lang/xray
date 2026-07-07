@@ -11,6 +11,8 @@
 #define XI_TO_C_LOWERING_DRIVERS(X) \
     X(CONST, "xi.const", xicgen_const) \
     X(PARAM, "xi.param", xicgen_param) \
+    X(TARGET_SIZEOF, "xi.target.sizeof", xicgen_target_sizeof) \
+    X(TARGET_ALIGNOF, "xi.target.alignof", xicgen_target_alignof) \
     X(COPY, "xi.copy", xicgen_copy) \
     X(MOVE, "xi.move", xicgen_move) \
     X(ADD, "xi.add", xicgen_add) \

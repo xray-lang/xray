@@ -34,6 +34,8 @@
 #define TYPE_NAME_UINT32 "uint32"
 #define TYPE_NAME_INT64 "int64"
 #define TYPE_NAME_UINT64 "uint64"
+#define TYPE_NAME_INTSIZE "intsize"
+#define TYPE_NAME_UINTSIZE "uintsize"
 #define TYPE_NAME_FLOAT "float"
 #define TYPE_NAME_FLOAT32 "float32"
 #define TYPE_NAME_FLOAT64 "float64"

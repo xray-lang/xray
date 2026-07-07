@@ -279,13 +279,14 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
 
         case XR_TREF_INT_WIDTH: {
             static const char *names[] = {
-                [XR_TREF_NW_I64] = "int64",  [XR_TREF_NW_I8] = "int8",
-                [XR_TREF_NW_I16] = "int16",  [XR_TREF_NW_I32] = "int32",
-                [XR_TREF_NW_U8] = "uint8",   [XR_TREF_NW_U16] = "uint16",
-                [XR_TREF_NW_U32] = "uint32", [XR_TREF_NW_U64] = "uint64",
+                [XR_TREF_NW_I64] = "int64",     [XR_TREF_NW_I8] = "int8",
+                [XR_TREF_NW_I16] = "int16",     [XR_TREF_NW_I32] = "int32",
+                [XR_TREF_NW_U8] = "uint8",      [XR_TREF_NW_U16] = "uint16",
+                [XR_TREF_NW_U32] = "uint32",    [XR_TREF_NW_U64] = "uint64",
+                [XR_TREF_NW_ISIZE] = "intsize", [XR_TREF_NW_USIZE] = "uintsize",
             };
             uint8_t nw = t->native_width;
-            if (nw <= XR_TREF_NW_U64)
+            if (nw < sizeof(names) / sizeof(names[0]) && names[nw])
                 tref_append(buf, pos, cap, names[nw]);
             else
                 tref_append(buf, pos, cap, "int??");

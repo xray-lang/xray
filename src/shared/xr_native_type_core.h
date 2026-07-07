@@ -11,6 +11,7 @@
 #ifndef XR_NATIVE_TYPE_CORE_H
 #define XR_NATIVE_TYPE_CORE_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 // Native type tags for value struct fields and aggregate runtime layouts.
@@ -33,6 +34,8 @@ typedef enum {
     XR_NATIVE_MAP_REF = 15,    // tagged XrValue-width aggregate ref slot
     XR_NATIVE_SET_REF = 16,    // tagged XrValue-width aggregate ref slot
     XR_NATIVE_VALUE = 17,      // full tagged XrValue lane
+    XR_NATIVE_ISIZE = 18,      // ptrdiff_t (target pointer-width signed int)
+    XR_NATIVE_USIZE = 19,      // size_t (target pointer-width unsigned int)
 } XrNativeType;
 
 static inline uint8_t xr_native_type_size(uint8_t native_type) {
@@ -42,6 +45,10 @@ static inline uint8_t xr_native_type_size(uint8_t native_type) {
         case XR_NATIVE_F64:
         case XR_NATIVE_STRING:
             return 8;
+        case XR_NATIVE_ISIZE:
+            return (uint8_t) sizeof(ptrdiff_t);
+        case XR_NATIVE_USIZE:
+            return (uint8_t) sizeof(size_t);
         case XR_NATIVE_ARRAY_REF:
         case XR_NATIVE_MAP_REF:
         case XR_NATIVE_SET_REF:
@@ -72,6 +79,10 @@ static inline uint8_t xr_native_type_align(uint8_t native_type) {
         case XR_NATIVE_SET_REF:
         case XR_NATIVE_VALUE:
             return 8;
+        case XR_NATIVE_ISIZE:
+            return (uint8_t) _Alignof(ptrdiff_t);
+        case XR_NATIVE_USIZE:
+            return (uint8_t) _Alignof(size_t);
         default:
             return xr_native_type_size(native_type);
     }

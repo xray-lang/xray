@@ -13,6 +13,18 @@
   :vm-bytecode (driver emit_param)
   :aot-c (driver xicgen_param))
 
+(lower xi.target.sizeof
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_target_sizeof)
+  :aot-c (driver xicgen_target_sizeof))
+
+(lower xi.target.alignof
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_target_alignof)
+  :aot-c (driver xicgen_target_alignof))
+
 (lower xi.copy
   :match ()
   :required-targets (vm-bytecode aot-c)

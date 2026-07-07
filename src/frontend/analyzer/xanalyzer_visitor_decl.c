@@ -56,7 +56,8 @@ static int xa_fixed_array_elem_native_lane(XrType *elem) {
     if (native == XR_NATIVE_I64 || native == XR_NATIVE_F64 || native == XR_NATIVE_BOOL ||
         native == XR_NATIVE_I8 || native == XR_NATIVE_I16 || native == XR_NATIVE_I32 ||
         native == XR_NATIVE_U8 || native == XR_NATIVE_U16 || native == XR_NATIVE_U32 ||
-        native == XR_NATIVE_U64 || native == XR_NATIVE_F32)
+        native == XR_NATIVE_U64 || native == XR_NATIVE_ISIZE || native == XR_NATIVE_USIZE ||
+        native == XR_NATIVE_F32)
         return native;
     return XR_NATIVE_VALUE;
 }
@@ -98,6 +99,8 @@ static bool xa_c_export_native_scalar_supported(uint8_t native_type) {
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
         case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
         case XR_NATIVE_F32:
             return true;
         default:

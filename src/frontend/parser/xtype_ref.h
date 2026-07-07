@@ -74,6 +74,8 @@ typedef enum {
 #define XR_TREF_NW_U32 8
 #define XR_TREF_NW_U64 9
 #define XR_TREF_NW_F32 10
+#define XR_TREF_NW_ISIZE 18
+#define XR_TREF_NW_USIZE 19
 
 /* Union member limit (mirrors XR_UNION_MAX_MEMBERS in xtype.h) */
 #define XR_TREF_UNION_MAX 6

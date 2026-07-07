@@ -2473,6 +2473,7 @@ static bool cg_type_is_unsigned_int(const XrType *type) {
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
         case XR_NATIVE_U64:
+        case XR_NATIVE_USIZE:
             return true;
         default:
             return false;
@@ -2499,6 +2500,7 @@ static bool emit_native_unsigned_const_shift_expr(XiCgenCtx *ctx, FILE *out, con
             width = 32;
             break;
         case XR_NATIVE_U64:
+        case XR_NATIVE_USIZE:
             ctype = "uint64_t";
             width = 64;
             break;
@@ -5924,6 +5926,8 @@ static bool cg_c_export_native_scalar_supported(uint8_t native_type) {
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
         case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
         case XR_NATIVE_F32:
             return true;
         default:
