@@ -2663,7 +2663,9 @@ static const XiFunc *cg_class_native_resolve_getter_field_method(XiCgenCtx *ctx,
         if (!mfunc || !mfunc->name || strcmp(mfunc->name, getter_name) != 0)
             return NULL;
     }
-    if (!mfunc || cg_func_needs_aot_coro(mfunc) || !cg_class_func_uses_native_receiver(ctx, mfunc))
+    if (!mfunc || cg_func_needs_aot_coro(mfunc) ||
+        (!cg_class_func_uses_native_receiver(ctx, mfunc) &&
+         !cg_func_param_native_class_data(ctx, mfunc, 0)))
         return NULL;
     if (out_source)
         *out_source = source;

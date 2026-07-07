@@ -5486,11 +5486,235 @@ static bool cg_func_has_unelided_closure_value_use(XiCgenCtx *ctx, const XiFunc 
     return false;
 }
 
+static const XiClassData *cg_native_receiver_target_class_data(XiCgenCtx *ctx,
+                                                               const XiFunc *target) {
+    CgClassNativeFunc info = cg_class_native_func(ctx, target);
+    return info.class_data ? info.class_data : cg_func_param_native_class_data(ctx, target, 0);
+}
+
+static bool cg_native_receiver_method_call_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *owner,
+                                                               const XiValue *call,
+                                                               const XiFunc *target) {
+    if (!ctx || !owner || !call || !target ||
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) || call->nargs < 1)
+        return false;
+
+    const char *method_prefix = NULL;
+    const XiFunc *mfunc = cg_class_native_resolve_method_call(ctx, owner, call, &method_prefix);
+    (void) method_prefix;
+    if (mfunc != target)
+        return false;
+
+    const XiClassData *target_class = cg_native_receiver_target_class_data(ctx, target);
+    const XiClassData *source_info = cg_class_native_instance_data(ctx, owner, call->args[0]);
+    return !(cg_class_native_instance_origin(ctx, owner, call->args[0]) &&
+             cg_class_native_can_pass_instance_as(ctx, source_info, target_class));
+}
+
+static bool cg_native_receiver_getter_field_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *owner,
+                                                                const XiValue *load,
+                                                                const XiFunc *target) {
+    if (!ctx || !owner || !load || !target || load->op != XI_LOAD_FIELD || load->nargs < 1)
+        return false;
+
+    const XiClassData *source_info = NULL;
+    const XiFunc *mfunc =
+        cg_class_native_resolve_getter_field_method(ctx, owner, load, &source_info, NULL);
+    if (mfunc != target)
+        return false;
+
+    const XiClassData *target_class = cg_native_receiver_target_class_data(ctx, target);
+    return !(cg_class_native_instance_origin(ctx, owner, load->args[0]) &&
+             cg_class_native_can_pass_instance_as(ctx, source_info, target_class));
+}
+
+static bool cg_native_receiver_ctor_call_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *owner,
+                                                             const XiValue *call,
+                                                             const XiFunc *target) {
+    if (!ctx || !owner || !call || call->op != XI_CALL || !target)
+        return false;
+
+    const XiFunc *ctor = NULL;
+    const XiClassData *cd = cg_class_native_ctor_call_data(ctx, owner, call, &ctor, NULL);
+    if (!cd || ctor != target)
+        return false;
+
+    int shared_slot = -1;
+    if (cg_class_native_ctor_can_inline(ctx, owner, call) ||
+        cg_class_shared_native_ctor_value_is_elided(ctx, owner, call, &shared_slot))
+        return false;
+    return true;
+}
+
+static bool cg_func_has_native_receiver_boxed_use(XiCgenCtx *ctx, const XiFunc *owner,
+                                                  const XiFunc *target, const char *prefix) {
+    if (!ctx || !owner || !target)
+        return false;
+
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            if (cg_value_allocates_closure_for_func(v, target) &&
+                (cg_func_needs_aot_coro_ctx(ctx, owner) ||
+                 !cg_shared_static_function_closure_is_elided(ctx, owner, v)) &&
+                !cg_array_closure_value_only_used_by_inline_map(ctx, owner, prefix, v))
+                return true;
+            if (cg_native_receiver_method_call_needs_boxed_adapter(ctx, owner, v, target) ||
+                cg_native_receiver_getter_field_needs_boxed_adapter(ctx, owner, v, target) ||
+                cg_native_receiver_ctor_call_needs_boxed_adapter(ctx, owner, v, target))
+                return true;
+        }
+    }
+
+    for (uint16_t i = 0; i < owner->nchildren; i++) {
+        if (cg_func_has_native_receiver_boxed_use(ctx, owner->children[i], target, prefix))
+            return true;
+    }
+    return false;
+}
+
+typedef struct {
+    XiModule *module;
+    int nshared;
+    int nmethod;
+    int shared_cap;
+    int methods_cap;
+    XiFunc **shared_funcs;
+    XiClassData **shared_class;
+    XiEnumData **shared_enum;
+    CgSharedNativeInstance *shared_native_instances;
+    CgMethodEntry *methods;
+} CgModuleScanSnapshot;
+
+/* Boxed-adapter discovery scans other modules' IR, but shared slots and method
+ * tables are interpreted through the current CGen context.  Snapshot the
+ * emitter context while a scanned module is made current. */
+static bool cg_module_scan_snapshot_save(XiCgenCtx *ctx, CgModuleScanSnapshot *snap) {
+    if (!ctx || !snap)
+        return false;
+    memset(snap, 0, sizeof(*snap));
+    snap->module = ctx->module;
+    snap->nshared = ctx->nshared;
+    snap->nmethod = ctx->nmethod;
+    snap->shared_cap = ctx->shared_cap;
+    snap->methods_cap = ctx->methods_cap;
+    if (ctx->shared_cap > 0) {
+        size_t shared_bytes = (size_t) ctx->shared_cap;
+        snap->shared_funcs = (XiFunc **) xr_malloc(shared_bytes * sizeof(*snap->shared_funcs));
+        snap->shared_class = (XiClassData **) xr_malloc(shared_bytes * sizeof(*snap->shared_class));
+        snap->shared_enum = (XiEnumData **) xr_malloc(shared_bytes * sizeof(*snap->shared_enum));
+        snap->shared_native_instances = (CgSharedNativeInstance *) xr_malloc(
+            shared_bytes * sizeof(*snap->shared_native_instances));
+        if (!snap->shared_funcs || !snap->shared_class || !snap->shared_enum ||
+            !snap->shared_native_instances)
+            return false;
+        memcpy(snap->shared_funcs, ctx->shared_funcs, shared_bytes * sizeof(*snap->shared_funcs));
+        memcpy(snap->shared_class, ctx->shared_class, shared_bytes * sizeof(*snap->shared_class));
+        memcpy(snap->shared_enum, ctx->shared_enum, shared_bytes * sizeof(*snap->shared_enum));
+        memcpy(snap->shared_native_instances, ctx->shared_native_instances,
+               shared_bytes * sizeof(*snap->shared_native_instances));
+    }
+    if (ctx->methods_cap > 0) {
+        size_t method_bytes = (size_t) ctx->methods_cap;
+        snap->methods = (CgMethodEntry *) xr_malloc(method_bytes * sizeof(*snap->methods));
+        if (!snap->methods)
+            return false;
+        memcpy(snap->methods, ctx->methods, method_bytes * sizeof(*snap->methods));
+    }
+    return true;
+}
+
+static void cg_module_scan_snapshot_free(CgModuleScanSnapshot *snap) {
+    if (!snap)
+        return;
+    xr_free(snap->shared_funcs);
+    xr_free(snap->shared_class);
+    xr_free(snap->shared_enum);
+    xr_free(snap->shared_native_instances);
+    xr_free(snap->methods);
+    memset(snap, 0, sizeof(*snap));
+}
+
+static void cg_module_scan_snapshot_restore(XiCgenCtx *ctx, CgModuleScanSnapshot *snap) {
+    if (!ctx || !snap)
+        return;
+    ctx->module = snap->module;
+    ctx->nshared = snap->nshared;
+    ctx->nmethod = snap->nmethod;
+    if (ctx->shared_cap > 0) {
+        size_t current_shared = (size_t) ctx->shared_cap;
+        memset(ctx->shared_funcs, 0, current_shared * sizeof(*ctx->shared_funcs));
+        memset(ctx->shared_class, 0, current_shared * sizeof(*ctx->shared_class));
+        memset(ctx->shared_enum, 0, current_shared * sizeof(*ctx->shared_enum));
+        memset(ctx->shared_native_instances, 0,
+               current_shared * sizeof(*ctx->shared_native_instances));
+    }
+    if (snap->shared_cap > 0) {
+        size_t saved_shared = (size_t) snap->shared_cap;
+        memcpy(ctx->shared_funcs, snap->shared_funcs, saved_shared * sizeof(*ctx->shared_funcs));
+        memcpy(ctx->shared_class, snap->shared_class, saved_shared * sizeof(*ctx->shared_class));
+        memcpy(ctx->shared_enum, snap->shared_enum, saved_shared * sizeof(*ctx->shared_enum));
+        memcpy(ctx->shared_native_instances, snap->shared_native_instances,
+               saved_shared * sizeof(*ctx->shared_native_instances));
+    }
+    if (ctx->methods_cap > 0)
+        memset(ctx->methods, 0, (size_t) ctx->methods_cap * sizeof(*ctx->methods));
+    if (snap->methods_cap > 0)
+        memcpy(ctx->methods, snap->methods, (size_t) snap->methods_cap * sizeof(*ctx->methods));
+    cg_module_scan_snapshot_free(snap);
+}
+
+static bool cg_func_has_native_receiver_boxed_use_in_module(XiCgenCtx *ctx, const XiModule *module,
+                                                            const XiFunc *target,
+                                                            const char *prefix) {
+    if (!ctx || !module || !module->init || !target)
+        return false;
+    if (module == ctx->module)
+        return cg_func_has_native_receiver_boxed_use(ctx, module->init, target, prefix);
+
+    CgModuleScanSnapshot snap;
+    if (!cg_module_scan_snapshot_save(ctx, &snap)) {
+        cg_module_scan_snapshot_free(&snap);
+        return false;
+    }
+    cg_init_from_module(ctx, (XiModule *) module);
+    cg_register_imported_classes(ctx);
+    bool found = cg_func_has_native_receiver_boxed_use(ctx, module->init, target, prefix);
+    cg_module_scan_snapshot_restore(ctx, &snap);
+    return found;
+}
+
+static bool cg_func_has_native_receiver_boxed_use_in_bundle(XiCgenCtx *ctx, const XiFunc *target,
+                                                            const char *prefix) {
+    if (!ctx || !target)
+        return false;
+
+    bool scanned_current = false;
+    for (int i = 0; i < ctx->all_nmodules; i++) {
+        const XiModule *mod = ctx->all_modules ? ctx->all_modules[i] : NULL;
+        if (!mod || !mod->init)
+            continue;
+        if (mod == ctx->module)
+            scanned_current = true;
+        if (cg_func_has_native_receiver_boxed_use_in_module(ctx, mod, target, prefix))
+            return true;
+    }
+
+    const XiFunc *root = ctx->module ? ctx->module->init : NULL;
+    return !scanned_current && cg_func_has_native_receiver_boxed_use(ctx, root, target, prefix);
+}
+
 static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const char *prefix,
                                         bool typed_abi, bool native_receiver) {
     if (!typed_abi && !native_receiver)
         return false;
 
+    bool native_class_ptr_param = cg_func_has_native_class_ptr_param(ctx, f);
     const XiFunc *root = ctx && ctx->module ? ctx->module->init : NULL;
     if (cg_func_is_shared_slot_value(ctx, f)) {
         int func_slot = cg_shared_slot_for_func(ctx, f);
@@ -5503,9 +5727,15 @@ static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const c
     }
 
     if (native_receiver)
-        return true;
+        return cg_func_has_native_receiver_boxed_use_in_bundle(ctx, f, prefix);
 
-    if (cg_func_needs_sync_go_wrapper_ctx(ctx, f) && cg_func_has_native_class_ptr_param(ctx, f))
+    if (typed_abi && native_class_ptr_param) {
+        bool needs = cg_func_has_native_receiver_boxed_use_in_bundle(ctx, f, prefix);
+        if (needs)
+            return true;
+    }
+
+    if (cg_func_needs_sync_go_wrapper_ctx(ctx, f) && native_class_ptr_param)
         return true;
 
     return cg_func_has_unelided_closure_value_use(ctx, root, f, prefix);
