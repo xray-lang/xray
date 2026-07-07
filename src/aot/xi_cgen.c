@@ -309,10 +309,12 @@ static bool cg_type_has_no_aot_arc_header(const XrType *type) {
     return type && type->kind == XR_KIND_FIXED_ARRAY;
 }
 
-static bool cg_ownership_op_is_noop(const XiValue *v) {
+static bool cg_ownership_op_is_noop(bool freestanding_profile, const XiValue *v) {
     if (!v || (v->op != XI_RETAIN && v->op != XI_RELEASE) || v->nargs < 1)
         return false;
     const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
+    if (freestanding_profile && arg && arg->type)
+        return !xr_type_is_named_class(arg->type, "Buffer");
     return arg && cg_type_has_no_aot_arc_header(arg->type);
 }
 
@@ -3645,7 +3647,8 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
         cg_value_is_elided_static_struct_const_ref(ctx, f, v) ||
         cg_value_is_elided_layout_struct_type_load(f, v))
         return false;
-    if (cg_ownership_op_is_noop(v) || cg_shared_static_function_ownership_is_noop(ctx, f, v))
+    if (cg_ownership_op_is_noop(ctx && ctx->freestanding_profile, v) ||
+        cg_shared_static_function_ownership_is_noop(ctx, f, v))
         return false;
     if (cg_shared_static_function_value_is_elided(ctx, f, v) ||
         cg_class_descriptor_value_is_elided(ctx, f, v) ||
@@ -4542,7 +4545,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
          cg_value_is_borrowed_array_slot_alias(ctx, f, v->args[0]) ||
          xicgen_slice_value_only_used_by_stack_slice_direct_call(ctx, f, v->args[0])))
         return;
-    if (cg_ownership_op_is_noop(v) || cg_shared_static_function_ownership_is_noop(ctx, f, v))
+    if (cg_ownership_op_is_noop(ctx && ctx->freestanding_profile, v) ||
+        cg_shared_static_function_ownership_is_noop(ctx, f, v))
         return;
     if (cg_shared_static_function_value_is_elided(ctx, f, v) ||
         cg_class_descriptor_value_is_elided(ctx, f, v))
