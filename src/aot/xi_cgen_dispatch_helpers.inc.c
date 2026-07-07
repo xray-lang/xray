@@ -4345,19 +4345,77 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
     if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !method ||
         !xicgen_receiver_is_builtin_global(v->args[0], XR_GLOBAL_VAR_JSON))
         return false;
-    if (strcmp(method, "encode") != 0 || nargs != 1 || v->nargs < 2) {
+
+    if (strcmp(method, "encode") == 0 && nargs == 1 && v->nargs >= 2) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_json_encode(");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    if (strcmp(method, "has") == 0 && nargs == 2 && v->nargs >= 3) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "xrt_json_static_has(");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    if (strcmp(method, "get") == 0 && (nargs == 2 || nargs == 3) && v->nargs >= 3) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_json_static_get(");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        if (nargs == 3 && v->nargs >= 4)
+            emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
+        else
+            fprintf(out, "XR_NULL_VAL");
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    if (strcmp(method, "stringify") == 0 && nargs == 1 && v->nargs >= 2) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_json_stringify(");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    if (strcmp(method, "size") == 0 && nargs == 1 && v->nargs >= 2) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "xrt_json_static_size(");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    if (strcmp(method, "isEmpty") == 0 && nargs == 1 && v->nargs >= 2) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "xrt_json_static_is_empty(");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Json static method '%s'\n",
                 method ? method : "?");
         emit_codegen_abort_expr(out);
         return true;
     }
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-    fprintf(out, "xrt_json_encode(");
-    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-    fprintf(out, ")");
-    emit_conversion_suffix(out, conv_suffix);
-    return true;
 }
 
 /* Direct scalar lowering for int numeric methods (task 153). When the

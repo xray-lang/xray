@@ -6902,7 +6902,9 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
     if (!names_copy)
         return NULL;
     for (int i = 0; i < n; i++) {
-        names_copy[i] = sl->field_names[i];
+        names_copy[i] = arena_strdup(l->func, sl->field_names[i] ? sl->field_names[i] : "?");
+        if (!names_copy[i])
+            return NULL;
     }
 
     XiValue *obj = xi_value_new(l->func, l->cur_block, XI_JSON_NEW, result_type, 0);

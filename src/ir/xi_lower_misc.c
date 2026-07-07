@@ -485,10 +485,14 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
     int si = 0;
     for (int i = 0; i < n; i++) {
         if (!key_vals[i]) {
-            if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING)
-                key_names[si] = obj->keys[i]->as.literal.raw_value.string_val;
-            else
-                key_names[si] = "?";
+            if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING) {
+                const char *name = obj->keys[i]->as.literal.raw_value.string_val;
+                key_names[si] = arena_strdup(l->func, name ? name : "?");
+            } else {
+                key_names[si] = arena_strdup(l->func, "?");
+            }
+            if (!key_names[si])
+                return NULL;
             static_idx_map[i] = si;
             si++;
         } else {

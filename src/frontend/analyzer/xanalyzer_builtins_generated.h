@@ -130,18 +130,6 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
 };
 #define GEN_CRYPTO_FUNCTION_COUNT 10
 
-// csv module functions
-static const XaBuiltinMember g_gen_csv_functions[] = {
-    {"parse", "(data: string, options?: Json): Array<Array<string>> | Array<Json>", "Parse CSV string", true, false, false},
-    {"parseDetailed", "(data: string, options?: Json): Json", "Parse CSV with headers", true, false, false},
-    {"parseTsv", "(data: string): Array<Array<string>>", "Parse TSV string", true, false, false},
-    {"parseAuto", "(data: string): Array<Array<string>>", "Auto-detect delimiter and parse", true, false, false},
-    {"stringify", "(data: Array<Array<string>>, options?: Json): string", "Convert to CSV string", true, false, false},
-    {"parseFile", "(path: string, options?: Json): Array<Array<string>>", "Parse CSV file", true, false, false},
-    {"writeFile", "(path: string, data: Array<Array<string>>, options?: Json): bool", "Write CSV file", true, false, false},
-};
-#define GEN_CSV_FUNCTION_COUNT 7
-
 // http.HttpResponse handle fields
 static const XaBuiltinHandleField g_gen_http_httpresponse_fields[] = {
     {"status", "int", true},
@@ -619,7 +607,6 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0},
     {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0},
-    {"csv", g_gen_csv_functions, GEN_CSV_FUNCTION_COUNT, NULL, 0},
     {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, g_gen_http_handles, GEN_HTTP_HANDLE_COUNT},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT},
     {"log", g_gen_log_functions, GEN_LOG_FUNCTION_COUNT, NULL, 0},
@@ -636,7 +623,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
     {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 19
+#define GEN_BUILTIN_MODULE_COUNT 18
 
 /* clang-format on */
 
