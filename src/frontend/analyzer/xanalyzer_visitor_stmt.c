@@ -370,6 +370,8 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
                                      bool return_value, bool can_escape);
 static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *stmt,
                                      bool can_escape);
+static void xa_thread_lint_scan_ternary_expr(XaThreadHandleLintState *states, AstNode *expr,
+                                             bool return_value, bool can_escape);
 static void xa_thread_lint_scan_match_expr(XaThreadHandleLintState *states, AstNode *expr,
                                            bool can_escape);
 static void xa_thread_lint_scan_select_stmt(XaThreadHandleLintState *states, AstNode *stmt,
@@ -562,9 +564,7 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
             return;
 
         case AST_TERNARY:
-            xa_thread_lint_scan_expr(states, expr->as.ternary.condition, false, can_escape);
-            xa_thread_lint_scan_expr(states, expr->as.ternary.true_expr, false, false);
-            xa_thread_lint_scan_expr(states, expr->as.ternary.false_expr, false, false);
+            xa_thread_lint_scan_ternary_expr(states, expr, return_value, can_escape);
             return;
         case AST_OPTIONAL_CHAIN:
             xa_thread_lint_scan_expr(states, expr->as.optional_chain.object, false, can_escape);
@@ -675,6 +675,59 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
         default:
             return;
     }
+}
+
+static void xa_thread_lint_scan_ternary_expr(XaThreadHandleLintState *states, AstNode *expr,
+                                             bool return_value, bool can_escape) {
+    if (!expr || expr->type != AST_TERNARY)
+        return;
+    TernaryNode *ternary = &expr->as.ternary;
+    xa_thread_lint_scan_expr(states, ternary->condition, false, can_escape);
+
+    if (!can_escape) {
+        xa_thread_lint_scan_expr(states, ternary->true_expr, return_value, false);
+        xa_thread_lint_scan_expr(states, ternary->false_expr, return_value, false);
+        return;
+    }
+
+    int state_count = xa_thread_lint_state_count(states);
+    if (state_count <= 0)
+        return;
+
+    size_t snapshot_size = sizeof(XaThreadHandleLintSnapshot) * (size_t) state_count;
+    XaThreadHandleLintSnapshot *before = xr_calloc(1, snapshot_size);
+    XaThreadHandleLintSnapshot *true_after = xr_calloc(1, snapshot_size);
+    XaThreadHandleLintSnapshot *false_after = xr_calloc(1, snapshot_size);
+    if (!before || !true_after || !false_after) {
+        xr_free(before);
+        xr_free(true_after);
+        xr_free(false_after);
+        xa_thread_lint_scan_expr(states, ternary->true_expr, return_value, false);
+        xa_thread_lint_scan_expr(states, ternary->false_expr, return_value, false);
+        return;
+    }
+
+    xa_thread_lint_snapshot_states(states, before);
+    xa_thread_lint_scan_expr(states, ternary->true_expr, return_value, true);
+    xa_thread_lint_snapshot_states(states, true_after);
+
+    xa_thread_lint_restore_states(states, before);
+    xa_thread_lint_scan_expr(states, ternary->false_expr, return_value, true);
+    xa_thread_lint_snapshot_states(states, false_after);
+
+    xa_thread_lint_restore_states(states, before);
+    int i = 0;
+    for (XaThreadHandleLintState *s = states; s; s = s->next, i++) {
+        bool before_closed = xa_thread_lint_snapshot_closed(&before[i]);
+        bool true_closed = xa_thread_lint_snapshot_closed(&true_after[i]);
+        bool false_closed = xa_thread_lint_snapshot_closed(&false_after[i]);
+        if (!before_closed && true_closed && false_closed)
+            s->finalized = true;
+    }
+
+    xr_free(before);
+    xr_free(true_after);
+    xr_free(false_after);
 }
 
 static void xa_thread_lint_scan_block(XaThreadHandleLintState *states, AstNode *block,
