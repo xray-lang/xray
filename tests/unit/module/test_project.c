@@ -66,8 +66,11 @@ TEST(load_target_config) {
                        "zig = \"/opt/xray/zig\"\n"
                        "sysroot = \"/opt/sysroot\"\n"
                        "linker_script = \"kernel.ld\"\n"
+                       "objcopy = \"llvm-objcopy\"\n"
+                       "objcopy_output = \"kernel.bin\"\n"
                        "cc_flags = [\"-ffunction-sections\", \"-fdata-sections\"]\n"
-                       "ld_flags = [\"-Wl,--gc-sections\", \"-Wl,-Map,kernel.map\"]\n");
+                       "ld_flags = [\"-Wl,--gc-sections\", \"-Wl,-Map,kernel.map\"]\n"
+                       "objcopy_flags = [\"-O\", \"binary\"]\n");
 
     XrProject *project = xr_project_load(NULL, g_tmpdir);
     ASSERT_NOT_NULL(project);
@@ -82,12 +85,17 @@ TEST(load_target_config) {
     ASSERT_STR_EQ(cfg->zig, "/opt/xray/zig");
     ASSERT_STR_EQ(cfg->sysroot, "/opt/sysroot");
     ASSERT_STR_EQ(cfg->linker_script, "kernel.ld");
+    ASSERT_STR_EQ(cfg->objcopy, "llvm-objcopy");
+    ASSERT_STR_EQ(cfg->objcopy_output, "kernel.bin");
     ASSERT_EQ_INT(cfg->n_cc_flags, 2);
     ASSERT_STR_EQ(cfg->cc_flags[0], "-ffunction-sections");
     ASSERT_STR_EQ(cfg->cc_flags[1], "-fdata-sections");
     ASSERT_EQ_INT(cfg->n_ld_flags, 2);
     ASSERT_STR_EQ(cfg->ld_flags[0], "-Wl,--gc-sections");
     ASSERT_STR_EQ(cfg->ld_flags[1], "-Wl,-Map,kernel.map");
+    ASSERT_EQ_INT(cfg->n_objcopy_flags, 2);
+    ASSERT_STR_EQ(cfg->objcopy_flags[0], "-O");
+    ASSERT_STR_EQ(cfg->objcopy_flags[1], "binary");
     ASSERT_NULL(xr_project_find_target_config(project, "aarch64-linux-musl"));
 
     xr_project_free(project);
