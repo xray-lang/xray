@@ -567,17 +567,6 @@ static const XaBuiltinMember g_gen_ws_functions[] = {
 };
 #define GEN_WS_FUNCTION_COUNT 13
 
-// yaml module functions
-static const XaBuiltinMember g_gen_yaml_functions[] = {
-    {"parse", "(data: string): Json", "Parse YAML string", true, false, false},
-    {"parseStrict", "(data: string): Json", "Parse YAML strictly", true, false, false},
-    {"parseAll", "(data: string): Array<Json>", "Parse all YAML documents", true, false, false},
-    {"stringify", "(value: Json): string", "Convert to YAML string", true, false, false},
-    {"parseFile", "(path: string): Json", "Parse YAML file", true, false, false},
-    {"writeFile", "(path: string, value: Json): bool", "Write YAML file", true, false, false},
-};
-#define GEN_YAML_FUNCTION_COUNT 6
-
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0},
@@ -595,9 +584,8 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0},
     {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT},
-    {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 16
+#define GEN_BUILTIN_MODULE_COUNT 15
 
 /* clang-format on */
 

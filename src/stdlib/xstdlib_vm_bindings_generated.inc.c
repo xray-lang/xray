@@ -399,15 +399,4 @@ static void xr_stdlib_vm_bind_ws_generated(XrVMRuntime *isolate, XrModule *modul
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_WS */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_YAML
-static void xr_stdlib_vm_bind_yaml_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "parse", yaml_parse);
-    XRS_EXPORT(module, isolate, "parseStrict", yaml_parse_strict);
-    XRS_EXPORT(module, isolate, "parseAll", yaml_parse_all);
-    XRS_EXPORT(module, isolate, "stringify", yaml_stringify);
-    XRS_EXPORT(module, isolate, "parseFile", yaml_parse_file);
-    XRS_EXPORT(module, isolate, "writeFile", yaml_write_file);
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_YAML */
-
 /* clang-format on */
