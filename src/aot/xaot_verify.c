@@ -661,6 +661,78 @@ static bool verify_method_override_graph(const XgGlobalEvidence *ev, char *errbu
     return true;
 }
 
+static bool verify_class_interface_range_contains(const XgGlobalEvidence *ev,
+                                                  const XgClassSummary *cls,
+                                                  const XgInterfaceImplSummary *impl) {
+    if (!ev || !cls || !impl || cls->interface_start == 0)
+        return false;
+    for (uint32_t i = 0; i < cls->interface_count; i++) {
+        uint32_t idx = cls->interface_start - 1 + i;
+        if (idx >= ev->ninterface_impls)
+            return false;
+        if (&ev->interface_impls[idx] == impl)
+            return true;
+    }
+    return false;
+}
+
+static bool verify_interface_implementor_set(const XgGlobalEvidence *ev, const XaotBundle *bundle,
+                                             char *errbuf, size_t errbuf_len) {
+    if (!ev || !bundle)
+        return set_error(errbuf, errbuf_len,
+                         "AOT global evidence interface verifier has incomplete input");
+
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        const XgClassSummary *cls = &ev->classes[i];
+        if (cls->interface_count == 0) {
+            if (cls->interface_start != 0)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence class interface range is stale");
+            continue;
+        }
+        if (cls->interface_start == 0 ||
+            cls->interface_start - 1 + cls->interface_count > ev->ninterface_impls)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence class interface range is stale");
+        for (uint32_t j = 0; j < cls->interface_count; j++) {
+            uint32_t idx = cls->interface_start - 1 + j;
+            const XgInterfaceImplSummary *impl = &ev->interface_impls[idx];
+            if (impl->implementor_class_id != cls->class_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence class interface range does not re-derive");
+            if (impl->interface_id == XG_NO_ID || impl->name_id == 0)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence interface impl has no interface");
+            for (uint32_t k = j + 1; k < cls->interface_count; k++) {
+                const XgInterfaceImplSummary *other =
+                    &ev->interface_impls[cls->interface_start - 1 + k];
+                if (other->interface_id == impl->interface_id)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT global evidence interface impl is duplicated");
+            }
+        }
+    }
+
+    for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
+        const XgClassSummary *implementor =
+            verify_find_evidence_class(ev, impl->implementor_class_id);
+        if (!implementor)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface implementor is missing");
+        if (!verify_class_interface_range_contains(ev, implementor, impl))
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence interface impl is outside implementor range");
+        if (!xaot_bundle_find_interface_use_plan(bundle, impl->interface_id,
+                                                 impl->implementor_class_id, XG_NO_ID))
+            return set_error(errbuf, errbuf_len, "AOT interface impl has no use plan");
+    }
+
+    if (bundle->ninterface_use_plans != ev->ninterface_impls)
+        return set_error(errbuf, errbuf_len, "AOT interface-use plan count mismatches evidence");
+    return true;
+}
+
 static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
                                                   const XaotMethodDispatchPlan *plan,
                                                   const XgCallsiteSummary *call, char *errbuf,
@@ -880,6 +952,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         return set_error(errbuf, errbuf_len, "AOT class plan count mismatches evidence");
 
     if (!verify_method_override_graph(ev, errbuf, errbuf_len))
+        return false;
+    if (!verify_interface_implementor_set(ev, bundle, errbuf, errbuf_len))
         return false;
 
     for (uint32_t i = 0; i < ev->ncallsites; i++) {
