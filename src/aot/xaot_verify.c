@@ -786,7 +786,9 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                                      "AOT global evidence direct callsite has no target");
                 break;
             case XG_CALL_METHOD:
-                if (call->method_id == XG_NO_ID || call->method_name_id == 0)
+                if (call->receiver_static_class_id == XG_NO_ID ||
+                    call->method_id == XG_NO_ID || call->method_name_id == 0 ||
+                    call->method_signature_key == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence method callsite identity is stale");
                 break;
