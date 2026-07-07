@@ -1,0 +1,11 @@
+import sys
+
+fn closeOnlyInOneTernaryBranch(flag: bool) {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    print(flag ? t.join() : 0)
+    print("after-ternary")
+}
+
+closeOnlyInOneTernaryBranch(false)

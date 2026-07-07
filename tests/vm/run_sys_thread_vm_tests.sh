@@ -85,6 +85,8 @@ MATCH_ALL_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_thread_match_all_close.xr"
 MATCH_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_match_warning.xr"
 SELECT_ALL_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_thread_select_all_close.xr"
 SELECT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_select_warning.xr"
+TERNARY_BOTH_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_thread_ternary_both_close.xr"
+TERNARY_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_ternary_warning.xr"
 DESTRUCTURE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_destructure_join.xr"
 TEMPLATE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_template_join.xr"
 SLICE_BOUND_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_slice_bound_join.xr"
@@ -102,6 +104,7 @@ expect_output "branch_both_close" "$BRANCH_BOTH_CLOSE_SRC" "42"
 expect_output "try_catch_both_close" "$TRY_CATCH_BOTH_CLOSE_SRC" "42"
 expect_output "match_all_close" "$MATCH_ALL_CLOSE_SRC" "42"
 expect_output "select_all_close" "$SELECT_ALL_CLOSE_SRC" "42"
+expect_output "ternary_both_close" "$TERNARY_BOTH_CLOSE_SRC" "42"
 expect_output "destructure_join" "$DESTRUCTURE_JOIN_SRC" "42"
 expect_output "template_join" "$TEMPLATE_JOIN_SRC" "joined 42"
 expect_output "slice_bound_join" "$SLICE_BOUND_JOIN_SRC" $'2\n20'
@@ -120,6 +123,8 @@ expect_warning "try_catch_warning" "$TRY_CATCH_WARNING_SRC" $'42\ntry-catch-open
 expect_warning "match_warning" "$MATCH_WARNING_SRC" $'match-open\nafter-match' \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 expect_warning "select_warning" "$SELECT_WARNING_SRC" $'select-open\nafter-select' \
+    "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
+expect_warning "ternary_warning" "$TERNARY_WARNING_SRC" $'0\nafter-ternary' \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 
 "$XRAY" run --dump-bytecode "$JOIN_SRC" >"$WORK/join.dump" 2>"$WORK/join.dump.err"

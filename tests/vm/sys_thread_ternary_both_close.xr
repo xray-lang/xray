@@ -1,0 +1,10 @@
+import sys
+
+fn closeInTernary(flag: bool) {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    print(flag ? t.join() : t.join())
+}
+
+closeInTernary(true)
