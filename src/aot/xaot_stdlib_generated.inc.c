@@ -313,6 +313,46 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
         return true;
     if (strcmp(symbol, "math.clamp") == 0)
         return true;
+    if (strcmp(symbol, "mem.fence") == 0)
+        return true;
+    if (strcmp(symbol, "mem.prefetch") == 0)
+        return true;
+    if (strcmp(symbol, "mem.cacheFlush") == 0)
+        return true;
+    if (strcmp(symbol, "mem.cacheInvalidate") == 0)
+        return true;
+    if (strcmp(symbol, "mem.nontemporalStore") == 0)
+        return true;
+    if (strcmp(symbol, "mem.cacheLineSize") == 0)
+        return true;
+    if (strcmp(symbol, "mem.sizeOf") == 0)
+        return true;
+    if (strcmp(symbol, "mem.alignOf") == 0)
+        return true;
+    if (strcmp(symbol, "mem.offsetOf") == 0)
+        return true;
+    if (strcmp(symbol, "mem.alloc") == 0)
+        return true;
+    if (strcmp(symbol, "mem.allocZeroed") == 0)
+        return true;
+    if (strcmp(symbol, "mem.allocAligned") == 0)
+        return true;
+    if (strcmp(symbol, "mem.fromAddress") == 0)
+        return true;
+    if (strcmp(symbol, "mem.addressOf") == 0)
+        return true;
+    if (strcmp(symbol, "mem.copy") == 0)
+        return true;
+    if (strcmp(symbol, "mem.move") == 0)
+        return true;
+    if (strcmp(symbol, "mem.set") == 0)
+        return true;
+    if (strcmp(symbol, "mem.compare") == 0)
+        return true;
+    if (strcmp(symbol, "mem.volatileLoad") == 0)
+        return true;
+    if (strcmp(symbol, "mem.volatileStore") == 0)
+        return true;
     return false;
 }
 
