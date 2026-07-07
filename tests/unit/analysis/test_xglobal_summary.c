@@ -1696,6 +1696,50 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_marks_sys_thread_spawn_capability) {
+    setup_parser_session();
+    const char *source = "import sys\n"
+                         "fn launch() {\n"
+                         "    var t = sys.Thread.spawn(fn() -> int {\n"
+                         "        return 42\n"
+                         "    })\n"
+                         "    t.detach()\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_SYS_THREAD), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_COROUTINE), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_TASK), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_OBJECTS), 1);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_SYS_THREAD));
+    ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_COROUTINE));
+    ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_TASK));
+    ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_OBJECTS));
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_extern_dylib_link_dependency) {
     setup_parser_session();
     const char *source = "@extern(\"C\") @dylib(\"m\") fn cos(x: float64) -> float64\n";
@@ -1833,6 +1877,7 @@ RUN_TEST(global_evidence_producer_resolves_interface_callsite_receivers);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
+RUN_TEST(global_evidence_producer_marks_sys_thread_spawn_capability);
 RUN_TEST(global_evidence_producer_marks_extern_dylib_link_dependency);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
