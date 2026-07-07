@@ -3304,17 +3304,6 @@ module http {
     layer: "runtime"
   }
 
-  fn static {
-    signature: "(method: string, path: string, content: string): ()"
-    doc: "Register a prebuilt static route response"
-    vm: "http_static"
-    argc: 3
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn setConnHandler {
     signature: "(handler: fn(fd: int): ()): ()"
     doc: "Set low-level HTTP connection handler"

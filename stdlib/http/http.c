@@ -743,66 +743,6 @@ static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_null();
 }
 
-// http.static(method, path, content) - Register static route (pre-built response)
-static XrValue http_static(XrVMRuntime *X, XrValue *args, int argc) {
-    XrHttpContext *ctx = xr_http_get_context(X);
-    if (argc < 3 || !ctx) {
-        return xr_null();
-    }
-
-    // Auto-create global server instance
-    if (!ctx->server) {
-        ctx->server = xr_http_server_new(X);
-        if (!ctx->server) {
-            fprintf(stderr, "http.static: failed to create server\n");
-            return xr_null();
-        }
-    }
-
-    // Get method
-    size_t method_len;
-    const char *method_str = xrs_string_arg(args[0], &method_len);
-    if (!method_str)
-        return xr_null();
-
-    XrHttpMethod method = xr_http_method_from_string(method_str, method_len);
-
-    // Get path
-    size_t path_len;
-    const char *path = xrs_string_arg(args[1], &path_len);
-    if (!path)
-        return xr_null();
-
-    // Copy path (needs persistence)
-    char *path_copy = (char *) xr_malloc(path_len + 1);
-    if (!path_copy)
-        return xr_null();
-    memcpy(path_copy, path, path_len);
-    path_copy[path_len] = '\0';
-
-    // Get response content
-    size_t response_len;
-    const char *response = xrs_string_arg(args[2], &response_len);
-    if (!response) {
-        xr_free(path_copy);
-        return xr_null();
-    }
-
-    // Copy response content
-    char *response_copy = (char *) xr_malloc(response_len + 1);
-    if (!response_copy) {
-        xr_free(path_copy);
-        return xr_null();
-    }
-    memcpy(response_copy, response, response_len);
-    response_copy[response_len] = '\0';
-
-    // Register static route (pre-built response)
-    xr_router_add_static(ctx->server->router, method, path_copy, response_copy, response_len);
-
-    return xr_null();
-}
-
 // http.ws(path, handler) - Register WebSocket upgrade route on HTTP server
 // When a GET request with Upgrade:websocket hits this path, the connection
 // is upgraded in-place and handler(wsConn) is called.
