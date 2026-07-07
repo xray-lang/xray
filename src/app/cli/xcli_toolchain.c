@@ -23,6 +23,7 @@
 static const char *const xr_cli_tc_supported_targets[] = {
     "native",
     "x86_64-unknown-none",
+    "riscv32imac-unknown-none-elf",
     "x86_64-linux-musl",
     "aarch64-linux-musl",
     "x86_64-windows-gnu",
@@ -84,6 +85,13 @@ XR_FUNC bool xr_cli_build_target_parse(const char *text, XrCliBuildTarget *out, 
         return true;
     }
 
+    if (strcmp(name, "riscv32imac-unknown-none-elf") == 0) {
+        xr_cli_tc_set_target(out, "riscv32imac-unknown-none-elf", "riscv32-freestanding-none", "",
+                             XR_CLI_TARGET_ARCH_RISCV32, XR_CLI_TARGET_OS_NONE,
+                             XR_CLI_TARGET_ABI_NONE, XR_CLI_TARGET_ENDIAN_LITTLE, 32, false);
+        return true;
+    }
+
     if (strcmp(name, "aarch64-linux-musl") == 0) {
         xr_cli_tc_set_target(out, "aarch64-linux-musl", "aarch64-linux-musl", "",
                              XR_CLI_TARGET_ARCH_AARCH64, XR_CLI_TARGET_OS_LINUX,
@@ -107,7 +115,7 @@ XR_FUNC bool xr_cli_build_target_parse(const char *text, XrCliBuildTarget *out, 
 
     xr_cli_tc_error(err, err_size,
                     "unsupported AOT target '%s' (supported: native, x86_64-unknown-none, "
-                    "x86_64-linux-musl, "
+                    "riscv32imac-unknown-none-elf, x86_64-linux-musl, "
                     "aarch64-linux-musl, x86_64-windows-gnu, aarch64-windows-gnu)",
                     name);
     return false;

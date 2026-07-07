@@ -412,6 +412,33 @@ else
     sed 's/^/      /' "$FREESTANDING_TARGET_CONFIG_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_RISCV32_TARGET_OBJ="$WORK/freestanding_kernel_shape_riscv32.o"
+FREESTANDING_RISCV32_TARGET_LOG="$WORK/freestanding_kernel_shape_riscv32.log"
+if "$XRAY" build --native --profile freestanding --shared \
+        --target riscv32imac-unknown-none-elf --toolchain zig \
+        --dry-run-link --dump-link-command --dump-link-manifest \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_RISCV32_TARGET_OBJ" \
+        "$FREESTANDING_EXPORT_SRC" >"$FREESTANDING_RISCV32_TARGET_LOG" 2>&1; then
+    expect_log_contains "$FREESTANDING_RISCV32_TARGET_LOG" \
+        "Link command: zig cc -target riscv32-freestanding-none" \
+        "freestanding-profile/riscv32-target: maps through zig freestanding target"
+    expect_log_contains "$FREESTANDING_RISCV32_TARGET_LOG" "-DXR_AOT_TARGET_PTR_BITS=32" \
+        "freestanding-profile/riscv32-target: defines 32-bit pointer width"
+    expect_log_contains "$FREESTANDING_RISCV32_TARGET_LOG" "-DXR_AOT_TARGET_LITTLE_ENDIAN=1" \
+        "freestanding-profile/riscv32-target: defines little-endian target"
+    expect_log_contains "$FREESTANDING_RISCV32_TARGET_LOG" '"arch": "riscv32"' \
+        "freestanding-profile/riscv32-target: manifest records arch"
+    expect_log_contains "$FREESTANDING_RISCV32_TARGET_LOG" '"object_format": "elf"' \
+        "freestanding-profile/riscv32-target: manifest records object format"
+    expect_log_contains "$FREESTANDING_RISCV32_TARGET_LOG" '"pointer_bits": 32' \
+        "freestanding-profile/riscv32-target: manifest records pointer width"
+    expect_log_contains "$FREESTANDING_RISCV32_TARGET_LOG" '"endian": "little"' \
+        "freestanding-profile/riscv32-target: manifest records endian"
+else
+    record_fail "freestanding-profile/riscv32-target: dry-run build failed"
+    sed 's/^/      /' "$FREESTANDING_RISCV32_TARGET_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_EXPORT_OBJ="$WORK/freestanding_export.o"
 FREESTANDING_EXPORT_REAL_LOG="$WORK/freestanding_export_real.log"
 if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
