@@ -2798,6 +2798,39 @@ static bool value_rep_is_propagating_aggregate(XaotValueRep rep) {
            (rep.flags & (XAOT_VALUE_FLAG_STRUCT | XAOT_VALUE_FLAG_ENUM)) != 0;
 }
 
+enum {
+    XAOT_PREPARE_ENUM_AGG_PAYLOAD_CAP = 16
+};
+
+static bool prepare_adt_enum_plan_can_use_compact_value(const XaotEnumPlan *plan) {
+    const XiEnumData *ed = plan ? plan->enum_data : NULL;
+    if (!plan || !ed || !ed->is_adt || plan->max_payload > XAOT_PREPARE_ENUM_AGG_PAYLOAD_CAP)
+        return false;
+    for (uint32_t i = 0; i < plan->member_count; i++) {
+        const XiEnumMemberData *member = plan->members ? &plan->members[i] : NULL;
+        if (member && member->payload_count > XAOT_PREPARE_ENUM_AGG_PAYLOAD_CAP)
+            return false;
+    }
+    return true;
+}
+
+static bool prepare_compact_adt_value_rep_for_type(const XaotBundle *bundle, const XrType *type,
+                                                   XaotValueRep *out_rep) {
+    const XaotEnumPlan *plan;
+    if (!bundle || !type || !out_rep)
+        return false;
+    plan = xaot_bundle_find_enum_plan_for_type(bundle, type);
+    if (!prepare_adt_enum_plan_can_use_compact_value(plan))
+        return false;
+    memset(out_rep, 0, sizeof(*out_rep));
+    out_rep->kind = XAOT_VALUE_AGGREGATE;
+    out_rep->rep = XAOT_REP_TAGGED;
+    out_rep->type = type;
+    out_rep->c_type = plan && plan->c_type ? plan->c_type : "XrAotEnumAggregate";
+    out_rep->flags = XAOT_VALUE_FLAG_ENUM | XAOT_VALUE_FLAG_ENUM_AGGREGATE;
+    return true;
+}
+
 static bool prepare_parallel_reduce_aggregate_rep(XaotBundle *bundle, const XiValue *value,
                                                   XaotValueRep *out_rep) {
     if (!bundle || !value || value->op != XI_PAR_REDUCE ||
@@ -2908,6 +2941,36 @@ static void prepare_mark_aggregate_value_rep(XaotBundle *bundle, XiValue *value,
     }
 }
 
+static bool prepare_apply_error_channel_aggregate_rep(XaotBundle *bundle, XiValue *value,
+                                                      bool *changed) {
+    XaotValuePlan *vp;
+    XaotValueRep rep;
+
+    if (!bundle || !value || !changed)
+        return false;
+
+    if (value->op == XI_ERR_CATCH) {
+        vp = xaot_bundle_find_value_plan_mut(bundle, value);
+        if (!vp || !prepare_compact_adt_value_rep_for_type(bundle, value->type, &rep))
+            return false;
+        if (!value_reps_equal(vp->rep, rep)) {
+            vp->rep = rep;
+            *changed = true;
+        }
+        prepare_mark_aggregate_value_rep(bundle, value, rep, changed, 0);
+        return true;
+    }
+
+    if ((value->op == XI_ERR_SET || value->op == XI_ERR_RETURN) && value->nargs >= 1 &&
+        value->args[0] &&
+        prepare_compact_adt_value_rep_for_type(bundle, value->args[0]->type, &rep)) {
+        prepare_mark_aggregate_value_rep(bundle, value->args[0], rep, changed, 0);
+        return true;
+    }
+
+    return false;
+}
+
 static bool prepare_apply_aggregate_value_plans_once(XaotBundle *bundle, XiFunc *func,
                                                      bool *changed) {
     if (!bundle || !func || !changed)
@@ -2933,6 +2996,8 @@ static bool prepare_apply_aggregate_value_plans_once(XaotBundle *bundle, XiFunc 
                 prepare_mark_aggregate_value_rep(bundle, value, vp->rep, changed, 0);
                 continue;
             }
+            if (prepare_apply_error_channel_aggregate_rep(bundle, value, changed))
+                continue;
             if (!prepare_parallel_reduce_aggregate_rep(bundle, value, &rep) &&
                 !prepare_identity_aggregate_rep(bundle, value, &rep))
                 continue;

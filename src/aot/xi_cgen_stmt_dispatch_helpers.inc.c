@@ -108,24 +108,46 @@ static bool xicgen_stmt_defer_run_to(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     return true;
 }
 
+static bool xicgen_value_is_freestanding_enum_aggregate_error(XiCgenCtx *ctx, const XiValue *v) {
+    return ctx && ctx->freestanding_profile && cg_value_plan_is_adt_aggregate(ctx, v);
+}
+
+static void xicgen_emit_clear_freestanding_enum_error(XiCgenCtx *ctx, FILE *out) {
+    if (!ctx || !ctx->freestanding_profile)
+        return;
+    fprintf(out, "    xrt_pending_enum_error = xrt_enum_aggregate_zero();\n");
+    fprintf(out, "    xrt_pending_enum_error_active = 0;\n");
+}
+
+static void xicgen_emit_set_pending_error(XiCgenCtx *ctx, FILE *out, const XiValue *error) {
+    if (xicgen_value_is_freestanding_enum_aggregate_error(ctx, error)) {
+        fprintf(out, "    xrt_pending_enum_error = ");
+        emit_adt_aggregate_as_base_expr(ctx, out, error);
+        fprintf(out, ";\n");
+        fprintf(out, "    xrt_pending_enum_error_active = 1;\n");
+        fprintf(out, "    xrt_pending_error = XR_NULL_VAL;\n");
+        return;
+    }
+
+    fprintf(out, "    xrt_pending_error = ");
+    emit_vref(out, error);
+    fprintf(out, ";\n");
+    xicgen_emit_clear_freestanding_enum_error(ctx, out);
+}
+
 static bool xicgen_stmt_err_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                 const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_stmt_err_set: missing error value");
-    fprintf(out, "    xrt_pending_error = ");
-    emit_vref(out, v->args[0]);
-    fprintf(out, ";\n");
+    xicgen_emit_set_pending_error(ctx, out, v->args[0]);
     return true;
 }
 
 static bool xicgen_stmt_err_return(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                    const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_stmt_err_return: missing error value");
-    fprintf(out, "    xrt_pending_error = ");
-    emit_vref(out, v->args[0]);
-    fprintf(out, ";\n");
+    xicgen_emit_set_pending_error(ctx, out, v->args[0]);
     emit_class_field_cache_flush(ctx, out);
     emit_deferred_calls(ctx, out, f, prefix);
     emit_cell_var_releases(ctx, out);
@@ -181,19 +203,31 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
 
 static bool xicgen_stmt_err_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
-    (void) f;
     (void) prefix;
+    bool aggregate_error = xicgen_value_is_freestanding_enum_aggregate_error(ctx, v);
     fprintf(out, "    ");
     if (!ctx->pre_decl_all) {
-        fprintf(out, "%s ", ctype_str(cg_rep(v)));
+        fprintf(out, "%s ",
+                aggregate_error ? local_ctype_str_ctx(ctx, f, v) : ctype_str(cg_rep(v)));
         emit_vref(out, v);
         fprintf(out, " = ");
     } else {
         emit_vref(out, v);
         fprintf(out, " = ");
     }
-    fprintf(out, "xrt_pending_error;\n");
+    if (aggregate_error) {
+        const XaotValuePlan *plan = cg_value_plan(ctx, v);
+        if (plan && cg_value_rep_is_typed_adt_aggregate(plan->rep))
+            fprintf(out, "%s_from_base(", plan->rep.c_type);
+        fprintf(out, "xrt_pending_enum_error");
+        if (plan && cg_value_rep_is_typed_adt_aggregate(plan->rep))
+            fprintf(out, ")");
+        fprintf(out, ";\n");
+    } else {
+        fprintf(out, "xrt_pending_error;\n");
+    }
     fprintf(out, "    xrt_pending_error = XR_NULL_VAL;\n");
+    xicgen_emit_clear_freestanding_enum_error(ctx, out);
     return true;
 }
 

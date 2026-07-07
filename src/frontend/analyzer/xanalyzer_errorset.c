@@ -51,7 +51,16 @@ static XaSymbol *resolve_func_symbol(XaAnalyzer *analyzer, AstNode *node) {
     if (!node)
         return NULL;
     if (node->type == AST_FUNCTION_DECL) {
-        const char *name = node->as.function_decl.name;
+        FunctionDeclNode *fn = &node->as.function_decl;
+        XaScope *scope = xa_scope_find_by_node(analyzer->global_scope, node);
+        if (scope && scope->function_symbol && scope->function_symbol->kind == XA_SYM_FUNCTION)
+            return scope->function_symbol;
+        if (fn->symbol_id != 0) {
+            XaSymbol *sym = xa_scope_lookup_by_id(analyzer->global_scope, fn->symbol_id);
+            if (sym && sym->kind == XA_SYM_FUNCTION)
+                return sym;
+        }
+        const char *name = fn->name;
         if (name)
             return xa_scope_lookup(analyzer->global_scope, name);
     }

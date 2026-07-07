@@ -4,14 +4,13 @@ enum FsErr {
 
 fn mayFail(n: int) -> int {
     if (n == 0) {
-        var err = FsErr.Bad(7)
-        throw err
+        throw FsErr.Bad(7)
     }
     return n
 }
 
-@c_export("xray_enum_payload_reject")
-fn xray_enum_payload_reject(n: int) -> int {
+@c_export("xray_enum_payload_untyped_catch_reject")
+fn xray_enum_payload_untyped_catch_reject(n: int) -> int {
     var out = 0
     try {
         out = mayFail(n)

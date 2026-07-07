@@ -301,9 +301,28 @@ typedef struct XrAotEnumAggregate {
 } XrAotEnumAggregate;
 
 static inline XrAotEnumAggregate xrt_enum_aggregate_zero(void) {
-    XrAotEnumAggregate out = {0};
-    for (uint32_t i = 0; i < XR_AOT_ENUM_AGG_PAYLOAD_CAP; i++)
-        out.payloads[i] = XR_NULL_VAL;
+    XrAotEnumAggregate out;
+    out.enum_name = NULL;
+    out.member_name = NULL;
+    out.tag = 0;
+    out.payload_count = 0;
+    out.layout_id = 0;
+    out.payloads[0] = XR_NULL_VAL;
+    out.payloads[1] = XR_NULL_VAL;
+    out.payloads[2] = XR_NULL_VAL;
+    out.payloads[3] = XR_NULL_VAL;
+    out.payloads[4] = XR_NULL_VAL;
+    out.payloads[5] = XR_NULL_VAL;
+    out.payloads[6] = XR_NULL_VAL;
+    out.payloads[7] = XR_NULL_VAL;
+    out.payloads[8] = XR_NULL_VAL;
+    out.payloads[9] = XR_NULL_VAL;
+    out.payloads[10] = XR_NULL_VAL;
+    out.payloads[11] = XR_NULL_VAL;
+    out.payloads[12] = XR_NULL_VAL;
+    out.payloads[13] = XR_NULL_VAL;
+    out.payloads[14] = XR_NULL_VAL;
+    out.payloads[15] = XR_NULL_VAL;
     return out;
 }
 
@@ -366,12 +385,16 @@ typedef struct XrAotContext {
 
 #ifdef XRT_IMPL
 XrValue xrt_pending_error = {.tag = XR_TAG_NULL};
+XrAotEnumAggregate xrt_pending_enum_error = {0};
+int xrt_pending_enum_error_active = 0;
 #else
 extern XrValue xrt_pending_error;
+extern XrAotEnumAggregate xrt_pending_enum_error;
+extern int xrt_pending_enum_error_active;
 #endif
 
 static inline int xrt_has_pending_error(void) {
-    return !XR_IS_NULL(xrt_pending_error);
+    return !XR_IS_NULL(xrt_pending_error) || xrt_pending_enum_error_active;
 }
 
 XRT_COLD XRT_NORETURN void xr_hook_panic(const char *message, size_t len);
