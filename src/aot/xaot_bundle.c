@@ -107,6 +107,31 @@ static const char *safe_str(const char *s) {
     return s ? s : "?";
 }
 
+static bool reserve_plan_array(void **items, uint32_t *cap, uint32_t needed, size_t elem_size,
+                               uint32_t initial_cap) {
+    uint32_t new_cap;
+    void *new_items;
+
+    if (!items || !cap || elem_size == 0)
+        return false;
+    if (*cap >= needed)
+        return true;
+    new_cap = *cap < initial_cap ? initial_cap : *cap;
+    while (new_cap < needed) {
+        if (new_cap > UINT32_MAX / 2)
+            return false;
+        new_cap *= 2;
+    }
+    if ((size_t) new_cap > SIZE_MAX / elem_size)
+        return false;
+    new_items = xr_realloc(*items, (size_t) new_cap * elem_size);
+    if (!new_items)
+        return false;
+    *items = new_items;
+    *cap = new_cap;
+    return true;
+}
+
 static void xaot_enum_plan_free(XaotEnumPlan *plan) {
     if (!plan)
         return;
@@ -119,6 +144,45 @@ static void xaot_enum_plan_free(XaotEnumPlan *plan) {
     xr_free(plan->type_args);
     xr_free((void *) plan->c_type);
     memset(plan, 0, sizeof(*plan));
+}
+
+static void xaot_class_layout_plan_free(XaotClassLayoutPlan *plan) {
+    if (!plan)
+        return;
+    xr_free(plan->c_type_name);
+    memset(plan, 0, sizeof(*plan));
+}
+
+static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
+    uint32_t i;
+    if (!bundle)
+        return;
+    xr_free(bundle->class_hierarchy_plans);
+    bundle->class_hierarchy_plans = NULL;
+    bundle->nclass_hierarchy_plans = 0;
+    bundle->class_hierarchy_plan_cap = 0;
+
+    for (i = 0; i < bundle->nclass_layout_plans; i++)
+        xaot_class_layout_plan_free(&bundle->class_layout_plans[i]);
+    xr_free(bundle->class_layout_plans);
+    bundle->class_layout_plans = NULL;
+    bundle->nclass_layout_plans = 0;
+    bundle->class_layout_plan_cap = 0;
+
+    xr_free(bundle->method_dispatch_plans);
+    bundle->method_dispatch_plans = NULL;
+    bundle->nmethod_dispatch_plans = 0;
+    bundle->method_dispatch_plan_cap = 0;
+
+    xr_free(bundle->interface_use_plans);
+    bundle->interface_use_plans = NULL;
+    bundle->ninterface_use_plans = 0;
+    bundle->interface_use_plan_cap = 0;
+
+    xr_free(bundle->capability_plans);
+    bundle->capability_plans = NULL;
+    bundle->ncapability_plans = 0;
+    bundle->capability_plan_cap = 0;
 }
 
 static const char *arg_class_name(XaotArgClass cls) {
@@ -198,6 +262,271 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
     return true;
 }
 
+static bool xg_class_summary_is_runtime_class(const XgClassSummary *cls) {
+    return cls && (cls->decl_kind == 0 || cls->decl_kind == XG_DECL_CLASS);
+}
+
+static const XgClassSummary *xg_evidence_find_class(const XgGlobalEvidence *ev,
+                                                    XgClassId class_id) {
+    if (!ev || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        if (ev->classes[i].class_id == class_id)
+            return &ev->classes[i];
+    }
+    return NULL;
+}
+
+static const XgMethodSummary *xg_evidence_find_method_in_class(const XgGlobalEvidence *ev,
+                                                               const XgClassSummary *cls,
+                                                               XgMethodId method_or_name_id) {
+    if (!ev || !cls || cls->method_start == 0 || method_or_name_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < cls->method_count; i++) {
+        uint32_t idx = cls->method_start - 1 + i;
+        const XgMethodSummary *method = idx < ev->nmethods ? &ev->methods[idx] : NULL;
+        if (method && (method->method_id == method_or_name_id ||
+                       method->name_id == (uint32_t) method_or_name_id))
+            return method;
+    }
+    return NULL;
+}
+
+static const XgMethodSummary *xg_evidence_find_method_in_hierarchy(const XgGlobalEvidence *ev,
+                                                                   XgClassId class_id,
+                                                                   XgMethodId method_or_name_id) {
+    const XgClassSummary *cls = xg_evidence_find_class(ev, class_id);
+    while (cls) {
+        const XgMethodSummary *method =
+            xg_evidence_find_method_in_class(ev, cls, method_or_name_id);
+        if (method)
+            return method;
+        if (cls->parent_class_id == XG_NO_ID)
+            break;
+        cls = xg_evidence_find_class(ev, cls->parent_class_id);
+    }
+    return NULL;
+}
+
+static bool xaot_bundle_add_class_hierarchy_plan(XaotBundle *bundle,
+                                                 const XgClassSummary *summary) {
+    XaotClassHierarchyPlan *plan;
+    if (!bundle || !summary)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->class_hierarchy_plans,
+                            &bundle->class_hierarchy_plan_cap, bundle->nclass_hierarchy_plans + 1,
+                            sizeof(XaotClassHierarchyPlan), 8))
+        return false;
+    plan = &bundle->class_hierarchy_plans[bundle->nclass_hierarchy_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->class_id = summary->class_id;
+    plan->parent_class_id = summary->parent_class_id;
+    plan->flags =
+        summary->flags & (XG_CLASS_EXPLICIT_FINAL | XG_CLASS_HAS_SUBCLASS |
+                          XG_CLASS_INFERRED_FINAL | XG_CLASS_NATIVE | XG_CLASS_RUNTIME_ONLY);
+    plan->evidence = XAOT_CLASS_HIER_EV_GLOBAL_SUMMARY | XAOT_CLASS_HIER_EV_FINALITY_DERIVED;
+    if (summary->parent_class_id != XG_NO_ID)
+        plan->evidence |= XAOT_CLASS_HIER_EV_PARENT_RESOLVED;
+    return true;
+}
+
+static bool xaot_bundle_add_class_layout_plan(XaotBundle *bundle, const XgClassSummary *summary) {
+    XaotClassLayoutPlan *plan;
+    char ctype[64];
+    uint32_t flags = XAOT_CLASS_LAYOUT_HEADER | XAOT_CLASS_LAYOUT_TYPED_PAYLOAD;
+    if (!bundle || !summary)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->class_layout_plans, &bundle->class_layout_plan_cap,
+                            bundle->nclass_layout_plans + 1, sizeof(XaotClassLayoutPlan), 8))
+        return false;
+    if (summary->parent_class_id != XG_NO_ID)
+        flags |= XAOT_CLASS_LAYOUT_PREFIX_PARENT | XAOT_CLASS_LAYOUT_TYPE_ID;
+    if ((summary->flags & XG_CLASS_HAS_SUBCLASS) != 0)
+        flags |= XAOT_CLASS_LAYOUT_TYPE_ID;
+    plan = &bundle->class_layout_plans[bundle->nclass_layout_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->class_id = summary->class_id;
+    snprintf(ctype, sizeof(ctype), "XrC_%u", summary->class_id);
+    plan->c_type_name = xr_strdup(ctype);
+    if (!plan->c_type_name) {
+        bundle->nclass_layout_plans--;
+        return false;
+    }
+    plan->field_start = summary->field_start;
+    plan->field_count = summary->field_count;
+    plan->flags = flags;
+    return true;
+}
+
+static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCallsiteSummary *call,
+                                                 const XgGlobalEvidence *ev) {
+    XaotMethodDispatchPlan *plan;
+    const XgClassSummary *receiver_cls = NULL;
+    const XgMethodSummary *method = NULL;
+    uint8_t kind = XAOT_DISPATCH_RUNTIME_FALLBACK;
+    uint32_t evidence = XAOT_DISPATCH_EV_GLOBAL_CALLSITE;
+    uint8_t reason = XAOT_DISPATCH_UNPROVEN_NONE;
+
+    if (!bundle || !call || !ev)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->method_dispatch_plans,
+                            &bundle->method_dispatch_plan_cap, bundle->nmethod_dispatch_plans + 1,
+                            sizeof(XaotMethodDispatchPlan), 8))
+        return false;
+
+    if (call->kind == XG_CALL_INTERFACE) {
+        kind = XAOT_DISPATCH_ITABLE;
+        evidence |= XAOT_DISPATCH_EV_INTERFACE_OBJECT;
+    } else if (call->method_id == XG_NO_ID) {
+        reason = XAOT_DISPATCH_UNPROVEN_NO_METHOD_ID;
+    } else if (call->receiver_static_class_id == XG_NO_ID) {
+        reason = XAOT_DISPATCH_UNPROVEN_NO_RECEIVER_TYPE;
+    } else {
+        receiver_cls = xg_evidence_find_class(ev, call->receiver_static_class_id);
+        method = xg_evidence_find_method_in_hierarchy(ev, call->receiver_static_class_id,
+                                                      call->method_id);
+        if (!method) {
+            reason = XAOT_DISPATCH_UNPROVEN_NO_METHOD_ID;
+        } else if (receiver_cls && (receiver_cls->flags &
+                                    (XG_CLASS_EXPLICIT_FINAL | XG_CLASS_INFERRED_FINAL)) != 0) {
+            kind = XAOT_DISPATCH_DIRECT;
+            evidence |= XAOT_DISPATCH_EV_RECEIVER_CONCRETE | XAOT_DISPATCH_EV_INFERRED_FINAL;
+        } else if ((method->flags & XG_METHOD_OVERRIDDEN) == 0) {
+            kind = XAOT_DISPATCH_DIRECT;
+            evidence |= XAOT_DISPATCH_EV_METHOD_NOT_OVERRIDDEN;
+        } else {
+            kind = XAOT_DISPATCH_VTABLE;
+            reason = XAOT_DISPATCH_UNPROVEN_POLYMORPHIC;
+        }
+    }
+
+    plan = &bundle->method_dispatch_plans[bundle->nmethod_dispatch_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->callsite_id = call->callsite_id;
+    plan->method_id = method ? method->method_id : call->method_id;
+    plan->receiver_static_class_id = call->receiver_static_class_id;
+    plan->kind = kind;
+    plan->dispatch_slot = UINT32_MAX;
+    plan->target_start = method ? method->method_id : 0;
+    plan->target_count = method && kind == XAOT_DISPATCH_DIRECT ? 1 : 0;
+    plan->evidence = kind == XAOT_DISPATCH_RUNTIME_FALLBACK ? 0 : evidence;
+    plan->unproven_reason = reason;
+    return true;
+}
+
+static bool xaot_bundle_add_interface_use_plan(XaotBundle *bundle,
+                                               const XgInterfaceImplSummary *impl) {
+    XaotInterfaceUsePlan *plan;
+    if (!bundle || !impl)
+        return false;
+    if (!reserve_plan_array((void **) &bundle->interface_use_plans, &bundle->interface_use_plan_cap,
+                            bundle->ninterface_use_plans + 1, sizeof(XaotInterfaceUsePlan), 8))
+        return false;
+    plan = &bundle->interface_use_plans[bundle->ninterface_use_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->interface_id = impl->interface_id;
+    plan->implementor_class_id = impl->implementor_class_id;
+    plan->use_site_id = XG_NO_ID;
+    plan->reason = XAOT_INTERFACE_USE_REASON_IMPLEMENTS;
+    plan->flags = 0;
+    return true;
+}
+
+static uint32_t xaot_capability_profile_action(uint32_t profile, uint32_t capability) {
+    if (profile == XG_BUILD_FREESTANDING) {
+        switch (capability) {
+            case XG_CAP_NATIVE:
+            case XG_CAP_EXTERN:
+            case XG_CAP_COROUTINE:
+            case XG_CAP_CHANNEL:
+            case XG_CAP_EXCEPTION:
+            case XG_CAP_SYS_THREAD:
+                return XAOT_CAPABILITY_ACTION_REJECT;
+            default:
+                return XAOT_CAPABILITY_ACTION_LINK;
+        }
+    }
+    return XAOT_CAPABILITY_ACTION_LINK;
+}
+
+static bool xaot_bundle_add_capability_plan(XaotBundle *bundle, uint32_t capability,
+                                            uint32_t body_count) {
+    XaotCapabilityPlan *plan;
+    if (!bundle || capability == 0 || body_count == 0)
+        return true;
+    if (!reserve_plan_array((void **) &bundle->capability_plans, &bundle->capability_plan_cap,
+                            bundle->ncapability_plans + 1, sizeof(XaotCapabilityPlan), 8))
+        return false;
+    plan = &bundle->capability_plans[bundle->ncapability_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->capability = capability;
+    plan->body_count = body_count;
+    plan->evidence = XAOT_CAPABILITY_EV_GLOBAL_BODY;
+    plan->profile_action =
+        xaot_capability_profile_action(bundle->global_evidence_plan.profile, capability);
+    plan->unproven_reason = XAOT_CAPABILITY_UNPROVEN_NONE;
+    return true;
+}
+
+static bool xaot_bundle_add_capability_plans(XaotBundle *bundle, const XgGlobalEvidence *evidence) {
+    static const uint32_t capabilities[] = {
+        XG_CAP_COROUTINE, XG_CAP_CHANNEL,   XG_CAP_EXCEPTION,  XG_CAP_NATIVE,     XG_CAP_EXTERN,
+        XG_CAP_OBJECTS,   XG_CAP_DEEP_COPY, XG_CAP_INSTANCEOF, XG_CAP_SYS_THREAD,
+    };
+    for (uint32_t ci = 0; ci < sizeof(capabilities) / sizeof(capabilities[0]); ci++) {
+        uint32_t cap = capabilities[ci];
+        uint32_t body_count = 0;
+        for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+            if ((evidence->bodies[bi].capability_bits & cap) != 0)
+                body_count++;
+        }
+        if (!xaot_bundle_add_capability_plan(bundle, cap, body_count))
+            return false;
+    }
+    return true;
+}
+
+static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
+                                                      const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->nclasses; i++) {
+        const XgClassSummary *summary = &evidence->classes[i];
+        if (!xg_class_summary_is_runtime_class(summary))
+            continue;
+        if ((summary->flags & XG_CLASS_EXPLICIT_FINAL) != 0 &&
+            (summary->flags & XG_CLASS_HAS_SUBCLASS) != 0) {
+            bundle->error_msg = "global class evidence marks a final class as subclassed";
+            return false;
+        }
+        if (!xaot_bundle_add_class_hierarchy_plan(bundle, summary) ||
+            !xaot_bundle_add_class_layout_plan(bundle, summary)) {
+            bundle->error_msg = "failed to allocate AOT class plan";
+            return false;
+        }
+    }
+    for (uint32_t i = 0; i < evidence->ncallsites; i++) {
+        const XgCallsiteSummary *call = &evidence->callsites[i];
+        if (call->kind != XG_CALL_METHOD && call->kind != XG_CALL_INTERFACE)
+            continue;
+        if (!xaot_bundle_add_method_dispatch_plan(bundle, call, evidence)) {
+            bundle->error_msg = "failed to allocate AOT method dispatch plan";
+            return false;
+        }
+    }
+    for (uint32_t i = 0; i < evidence->ninterface_impls; i++) {
+        if (!xaot_bundle_add_interface_use_plan(bundle, &evidence->interface_impls[i])) {
+            bundle->error_msg = "failed to allocate AOT interface use plan";
+            return false;
+        }
+    }
+    if (!xaot_bundle_add_capability_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT capability plan";
+        return false;
+    }
+    return true;
+}
+
 XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     uint32_t i;
     if (!bundle)
@@ -217,6 +546,7 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xr_free(bundle->bounds_plans);
     xr_free(bundle->span_access_plans);
     xr_free(bundle->alias_plans);
+    xaot_bundle_clear_global_lowered_plans(bundle);
     xr_free(bundle->boundary_steps);
     xaot_ptr_index_free(&bundle->value_index);
     xaot_ptr_index_free(&bundle->func_index);
@@ -228,6 +558,75 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xaot_ptr_index_free(&bundle->span_access_index);
     xaot_ptr_index_free(&bundle->alias_index);
     memset(bundle, 0, sizeof(*bundle));
+}
+
+XR_FUNC bool xaot_bundle_set_global_evidence(XaotBundle *bundle, const XgGlobalEvidence *evidence,
+                                             uint32_t profile) {
+    if (!bundle || !evidence)
+        return false;
+    xaot_bundle_clear_global_lowered_plans(bundle);
+    bundle->global_evidence_plan.evidence = evidence;
+    bundle->global_evidence_plan.evidence_hash = xg_global_evidence_hash(evidence);
+    bundle->global_evidence_plan.profile = profile;
+    return xaot_bundle_populate_global_lowered_plans(bundle, evidence);
+}
+
+XR_FUNC const XaotClassHierarchyPlan *
+xaot_bundle_find_class_hierarchy_plan(const XaotBundle *bundle, XgClassId class_id) {
+    if (!bundle || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nclass_hierarchy_plans; i++) {
+        if (bundle->class_hierarchy_plans[i].class_id == class_id)
+            return &bundle->class_hierarchy_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotClassLayoutPlan *xaot_bundle_find_class_layout_plan(const XaotBundle *bundle,
+                                                                      XgClassId class_id) {
+    if (!bundle || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nclass_layout_plans; i++) {
+        if (bundle->class_layout_plans[i].class_id == class_id)
+            return &bundle->class_layout_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotMethodDispatchPlan *
+xaot_bundle_find_method_dispatch_plan(const XaotBundle *bundle, XgCallsiteId callsite_id) {
+    if (!bundle || callsite_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nmethod_dispatch_plans; i++) {
+        if (bundle->method_dispatch_plans[i].callsite_id == callsite_id)
+            return &bundle->method_dispatch_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotInterfaceUsePlan *
+xaot_bundle_find_interface_use_plan(const XaotBundle *bundle, XgInterfaceId interface_id,
+                                    XgClassId implementor_class_id, XgCallsiteId use_site_id) {
+    if (!bundle || interface_id == XG_NO_ID || implementor_class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ninterface_use_plans; i++) {
+        const XaotInterfaceUsePlan *plan = &bundle->interface_use_plans[i];
+        if (plan->interface_id == interface_id &&
+            plan->implementor_class_id == implementor_class_id && plan->use_site_id == use_site_id)
+            return plan;
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,
+                                                                   uint32_t capability) {
+    if (!bundle || capability == 0)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ncapability_plans; i++) {
+        if (bundle->capability_plans[i].capability == capability)
+            return &bundle->capability_plans[i];
+    }
+    return NULL;
 }
 
 XR_FUNC XaotFuncPlan *xaot_bundle_add_func_plan(XaotBundle *bundle, XiFunc *func,
@@ -1047,6 +1446,134 @@ static void value_ref(char *buf, size_t bufsz, const XiValue *value) {
     snprintf(buf, bufsz, "%s%u", value->op == XI_PHI ? "phi" : "v", value->id);
 }
 
+static const char *class_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_CLASS_UNPROVEN_NONE:
+            return "none";
+        case XAOT_CLASS_UNPROVEN_NO_GLOBAL_EVIDENCE:
+            return "no_global_evidence";
+        case XAOT_CLASS_UNPROVEN_INCONSISTENT_GRAPH:
+            return "inconsistent_graph";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *dispatch_kind_name(uint8_t kind) {
+    switch ((XaotMethodDispatchKind) kind) {
+        case XAOT_DISPATCH_DIRECT:
+            return "direct";
+        case XAOT_DISPATCH_VTABLE:
+            return "vtable";
+        case XAOT_DISPATCH_ITABLE:
+            return "itable";
+        case XAOT_DISPATCH_TYPE_SWITCH:
+            return "type_switch";
+        case XAOT_DISPATCH_RUNTIME_FALLBACK:
+            return "runtime_fallback";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *dispatch_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_DISPATCH_UNPROVEN_NONE:
+            return "none";
+        case XAOT_DISPATCH_UNPROVEN_NO_RECEIVER_TYPE:
+            return "no_receiver_type";
+        case XAOT_DISPATCH_UNPROVEN_NO_METHOD_ID:
+            return "no_method_id";
+        case XAOT_DISPATCH_UNPROVEN_POLYMORPHIC:
+            return "polymorphic";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *capability_action_name(uint32_t action) {
+    switch ((XaotCapabilityProfileAction) action) {
+        case XAOT_CAPABILITY_ACTION_ALLOW:
+            return "allow";
+        case XAOT_CAPABILITY_ACTION_LINK:
+            return "link";
+        case XAOT_CAPABILITY_ACTION_REJECT:
+            return "reject";
+        case XAOT_CAPABILITY_ACTION_DEBUG_ONLY:
+            return "debug_only";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *capability_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_CAPABILITY_UNPROVEN_NONE:
+            return "none";
+        case XAOT_CAPABILITY_UNPROVEN_NO_BODY:
+            return "no_body";
+        default:
+            return "unknown";
+    }
+}
+
+static void print_class_layout_flags(FILE *out, uint32_t flags) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((flags & (mask)) != 0) {                                                               \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_CLASS_LAYOUT_TYPED_PAYLOAD, "typed");
+    PRINT_BIT(XAOT_CLASS_LAYOUT_PREFIX_PARENT, "prefix");
+    PRINT_BIT(XAOT_CLASS_LAYOUT_TYPE_ID, "type_id");
+    PRINT_BIT(XAOT_CLASS_LAYOUT_VTABLE, "vtable");
+    PRINT_BIT(XAOT_CLASS_LAYOUT_HEADER, "header");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
+static void print_interface_reason_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_INTERFACE_USE_REASON_IMPLEMENTS, "implements");
+    PRINT_BIT(XAOT_INTERFACE_USE_REASON_VALUE, "value");
+    PRINT_BIT(XAOT_INTERFACE_USE_REASON_ARRAY, "array");
+    PRINT_BIT(XAOT_INTERFACE_USE_REASON_FIELD, "field");
+    PRINT_BIT(XAOT_INTERFACE_USE_REASON_RETURN, "return");
+    PRINT_BIT(XAOT_INTERFACE_USE_REASON_CAPTURE, "capture");
+    PRINT_BIT(XAOT_INTERFACE_USE_REASON_PARAM, "param");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
+static void print_interface_flag_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_INTERFACE_USE_NEEDS_IFACE_OBJECT, "iface_object");
+    PRINT_BIT(XAOT_INTERFACE_USE_NEEDS_ITABLE, "itable");
+    PRINT_BIT(XAOT_INTERFACE_USE_TYPE_SWITCHABLE, "type_switchable");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
 static const char *span_access_kind_name(uint8_t kind) {
     switch ((XaotSpanAccessKind) kind) {
         case XAOT_SPAN_ACCESS_INDEX_GET:
@@ -1166,6 +1693,18 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
 
     fprintf(out, "xaot-plan v0\n");
     fprintf(out, "modules %u entry %u\n", bundle->nmodules, bundle->entry_module);
+    if (bundle->global_evidence_plan.evidence) {
+        const XgGlobalEvidence *ev = bundle->global_evidence_plan.evidence;
+        fprintf(out,
+                "global-evidence profile=%s hash=%016" PRIx64
+                " decls=%u classes=%u methods=%u interface_impls=%u bodies=%u callsites=%u\n",
+                xg_build_profile_name(bundle->global_evidence_plan.profile),
+                bundle->global_evidence_plan.evidence_hash, ev->ndecls, ev->nclasses, ev->nmethods,
+                ev->ninterface_impls, ev->nbodies, ev->ncallsites);
+    } else {
+        fprintf(out, "global-evidence profile=none hash=0000000000000000 decls=0 classes=0 "
+                     "methods=0 interface_impls=0 bodies=0 callsites=0\n");
+    }
     for (mi = 0; mi < bundle->nmodules; mi++) {
         const XiModule *mod = bundle->modules ? bundle->modules[mi] : NULL;
         const XiFunc *init = mod ? mod->init : NULL;
@@ -1173,6 +1712,64 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 safe_str(mod ? mod->name : NULL), safe_str(mod ? mod->path : NULL),
                 mi == bundle->entry_module ? 1u : 0u,
                 init ? (unsigned) (1u + init->nchildren) : 0u);
+    }
+
+    for (uint32_t ci = 0; ci < bundle->nclass_hierarchy_plans; ci++) {
+        const XaotClassHierarchyPlan *cp = &bundle->class_hierarchy_plans[ci];
+        fprintf(out,
+                "class-hierarchy %u id=%u parent=%u explicit_final=%u has_subclass=%u "
+                "inferred_final=%u evidence=0x%x reason=%s\n",
+                ci, cp->class_id, cp->parent_class_id, (cp->flags & XG_CLASS_EXPLICIT_FINAL) != 0,
+                (cp->flags & XG_CLASS_HAS_SUBCLASS) != 0,
+                (cp->flags & XG_CLASS_INFERRED_FINAL) != 0, cp->evidence,
+                class_unproven_reason_name(cp->unproven_reason));
+    }
+
+    for (uint32_t ci = 0; ci < bundle->nclass_layout_plans; ci++) {
+        const XaotClassLayoutPlan *cp = &bundle->class_layout_plans[ci];
+        fprintf(out, "class-layout %u id=%u ctype=%s size=%u align=%u fields=%u+%u flags=", ci,
+                cp->class_id, safe_str(cp->c_type_name), cp->instance_size, cp->instance_align,
+                cp->field_start, cp->field_count);
+        print_class_layout_flags(out, cp->flags);
+        fprintf(out, "\n");
+    }
+
+    for (uint32_t di = 0; di < bundle->nmethod_dispatch_plans; di++) {
+        const XaotMethodDispatchPlan *dp = &bundle->method_dispatch_plans[di];
+        if (dp->dispatch_slot == UINT32_MAX) {
+            fprintf(out,
+                    "method-dispatch %u callsite=%u kind=%s method=%u recv_class=%u slot=- "
+                    "targets=%u+%u evidence=0x%x reason=%s\n",
+                    di, dp->callsite_id, dispatch_kind_name(dp->kind), dp->method_id,
+                    dp->receiver_static_class_id, dp->target_start, (unsigned) dp->target_count,
+                    dp->evidence, dispatch_unproven_reason_name(dp->unproven_reason));
+        } else {
+            fprintf(out,
+                    "method-dispatch %u callsite=%u kind=%s method=%u recv_class=%u slot=%u "
+                    "targets=%u+%u evidence=0x%x reason=%s\n",
+                    di, dp->callsite_id, dispatch_kind_name(dp->kind), dp->method_id,
+                    dp->receiver_static_class_id, dp->dispatch_slot, dp->target_start,
+                    (unsigned) dp->target_count, dp->evidence,
+                    dispatch_unproven_reason_name(dp->unproven_reason));
+        }
+    }
+
+    for (uint32_t ii = 0; ii < bundle->ninterface_use_plans; ii++) {
+        const XaotInterfaceUsePlan *ip = &bundle->interface_use_plans[ii];
+        fprintf(out, "interface-use %u interface=%u implementor=%u use_site=%u reason=", ii,
+                ip->interface_id, ip->implementor_class_id, ip->use_site_id);
+        print_interface_reason_bits(out, ip->reason);
+        fprintf(out, " flags=");
+        print_interface_flag_bits(out, ip->flags);
+        fprintf(out, "\n");
+    }
+
+    for (uint32_t ci = 0; ci < bundle->ncapability_plans; ci++) {
+        const XaotCapabilityPlan *cp = &bundle->capability_plans[ci];
+        fprintf(out, "capability %u name=%s bodies=%u action=%s evidence=0x%x reason=%s\n", ci,
+                xg_capability_name(cp->capability), cp->body_count,
+                capability_action_name(cp->profile_action), cp->evidence,
+                capability_unproven_reason_name(cp->unproven_reason));
     }
 
     for (fi = 0; fi < bundle->nfunc_plans; fi++) {

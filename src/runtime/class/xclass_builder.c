@@ -57,7 +57,6 @@ static inline const char *xr_builder_intern_class_name(XrClassBuilder *builder, 
 #define INITIAL_STATIC_FIELD_CAPACITY 4
 #define INITIAL_STATIC_METHOD_CAPACITY 8
 #define INITIAL_INTERFACE_CAPACITY 4
-#define INITIAL_ABSTRACT_METHOD_CAPACITY 4
 
 #define ENSURE_NOT_FINALIZED(builder)                                                              \
     if ((builder)->finalized) {                                                                    \
@@ -122,11 +121,8 @@ XrClassBuilder *xr_class_builder_new(XrVMRuntime *isolate, const char *name, XrC
     builder->interface_capacity = INITIAL_INTERFACE_CAPACITY;
     builder->interfaces = (XrClass **) xr_calloc(builder->interface_capacity, sizeof(XrClass *));
 
-    builder->abstract_method_capacity = INITIAL_ABSTRACT_METHOD_CAPACITY;
-    builder->abstract_methods = (int *) xr_calloc(builder->abstract_method_capacity, sizeof(int));
-
     if (!builder->fields || !builder->methods || !builder->static_fields ||
-        !builder->static_methods || !builder->interfaces || !builder->abstract_methods) {
+        !builder->static_methods || !builder->interfaces) {
         xr_class_builder_destroy(builder);
         return NULL;
     }
@@ -417,26 +413,6 @@ int xr_class_builder_add_interface(XrClassBuilder *builder, XrClass *interface) 
     return 0;
 }
 
-/* ========== Abstract Method Operations ========== */
-
-int xr_class_builder_add_abstract_method(XrClassBuilder *builder, int method_symbol) {
-    XR_DCHECK(builder != NULL, "add_abstract_method: NULL builder");
-    ENSURE_NOT_FINALIZED(builder);
-
-    if (builder->abstract_method_count >= builder->abstract_method_capacity) {
-        builder->abstract_methods = (int *) resize_array(
-            builder->abstract_methods, &builder->abstract_method_capacity, sizeof(int));
-        if (builder->abstract_methods == NULL)
-            return -1;
-    }
-
-    builder->abstract_methods[builder->abstract_method_count] = method_symbol;
-    builder->abstract_method_count++;
-    builder->flags |= XR_CLASS_ABSTRACT;
-
-    return 0;
-}
-
 /* ========== Flags ========== */
 
 void xr_class_builder_set_flags(XrClassBuilder *builder, uint32_t flags) {
@@ -515,7 +491,6 @@ void xr_class_builder_destroy(XrClassBuilder *builder) {
     xr_free(builder->static_fields);
     xr_free(builder->static_methods);
     xr_free(builder->interfaces);
-    xr_free(builder->abstract_methods);
     if (builder->mono_type_arg_names) {
         for (uint8_t i = 0; i < builder->mono_type_argc; i++)
             xr_free((void *) builder->mono_type_arg_names[i]);

@@ -13,6 +13,7 @@
 
 #include "xaot_abi.h"
 #include "xaot_container.h"
+#include "../analysis/xglobal_summary.h"
 #include "../ir/xi_module.h"
 #include "../base/xdefs.h"
 #include <stdint.h>
@@ -255,6 +256,133 @@ typedef struct XaotAliasPlan {
     uint32_t evidence;    /* XAOT_ALIAS_EV_* */
 } XaotAliasPlan;
 
+typedef struct XaotGlobalEvidencePlan {
+    const XgGlobalEvidence *evidence;
+    uint64_t evidence_hash;
+    uint32_t profile;
+} XaotGlobalEvidencePlan;
+
+enum {
+    XAOT_CLASS_HIER_EV_GLOBAL_SUMMARY = 1u << 0,
+    XAOT_CLASS_HIER_EV_PARENT_RESOLVED = 1u << 1,
+    XAOT_CLASS_HIER_EV_FINALITY_DERIVED = 1u << 2,
+};
+
+enum {
+    XAOT_CLASS_UNPROVEN_NONE = 0,
+    XAOT_CLASS_UNPROVEN_NO_GLOBAL_EVIDENCE = 1,
+    XAOT_CLASS_UNPROVEN_INCONSISTENT_GRAPH = 2,
+};
+
+typedef struct XaotClassHierarchyPlan {
+    XgClassId class_id;
+    XgClassId parent_class_id;
+    uint32_t flags;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotClassHierarchyPlan;
+
+enum {
+    XAOT_CLASS_LAYOUT_TYPED_PAYLOAD = 1u << 0,
+    XAOT_CLASS_LAYOUT_PREFIX_PARENT = 1u << 1,
+    XAOT_CLASS_LAYOUT_TYPE_ID = 1u << 2,
+    XAOT_CLASS_LAYOUT_VTABLE = 1u << 3,
+    XAOT_CLASS_LAYOUT_HEADER = 1u << 4,
+};
+
+typedef struct XaotClassLayoutPlan {
+    XgClassId class_id;
+    char *c_type_name;
+    uint32_t instance_size;
+    uint32_t instance_align;
+    uint32_t field_start;
+    uint32_t field_count;
+    uint32_t flags;
+} XaotClassLayoutPlan;
+
+typedef enum XaotMethodDispatchKind {
+    XAOT_DISPATCH_DIRECT = 1,
+    XAOT_DISPATCH_VTABLE,
+    XAOT_DISPATCH_ITABLE,
+    XAOT_DISPATCH_TYPE_SWITCH,
+    XAOT_DISPATCH_RUNTIME_FALLBACK,
+} XaotMethodDispatchKind;
+
+enum {
+    XAOT_DISPATCH_EV_GLOBAL_CALLSITE = 1u << 0,
+    XAOT_DISPATCH_EV_RECEIVER_CONCRETE = 1u << 1,
+    XAOT_DISPATCH_EV_INFERRED_FINAL = 1u << 2,
+    XAOT_DISPATCH_EV_METHOD_NOT_OVERRIDDEN = 1u << 3,
+    XAOT_DISPATCH_EV_INTERFACE_OBJECT = 1u << 4,
+};
+
+enum {
+    XAOT_DISPATCH_UNPROVEN_NONE = 0,
+    XAOT_DISPATCH_UNPROVEN_NO_RECEIVER_TYPE = 1,
+    XAOT_DISPATCH_UNPROVEN_NO_METHOD_ID = 2,
+    XAOT_DISPATCH_UNPROVEN_POLYMORPHIC = 3,
+};
+
+typedef struct XaotMethodDispatchPlan {
+    XgCallsiteId callsite_id;
+    XgMethodId method_id;
+    XgClassId receiver_static_class_id;
+    uint8_t kind;
+    uint32_t dispatch_slot;
+    uint32_t target_start;
+    uint16_t target_count;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotMethodDispatchPlan;
+
+enum {
+    XAOT_INTERFACE_USE_REASON_IMPLEMENTS = 1u << 0,
+    XAOT_INTERFACE_USE_REASON_VALUE = 1u << 1,
+    XAOT_INTERFACE_USE_REASON_ARRAY = 1u << 2,
+    XAOT_INTERFACE_USE_REASON_FIELD = 1u << 3,
+    XAOT_INTERFACE_USE_REASON_RETURN = 1u << 4,
+    XAOT_INTERFACE_USE_REASON_CAPTURE = 1u << 5,
+    XAOT_INTERFACE_USE_REASON_PARAM = 1u << 6,
+};
+
+enum {
+    XAOT_INTERFACE_USE_NEEDS_IFACE_OBJECT = 1u << 0,
+    XAOT_INTERFACE_USE_NEEDS_ITABLE = 1u << 1,
+    XAOT_INTERFACE_USE_TYPE_SWITCHABLE = 1u << 2,
+};
+
+typedef struct XaotInterfaceUsePlan {
+    XgInterfaceId interface_id;
+    XgClassId implementor_class_id;
+    XgCallsiteId use_site_id;
+    uint32_t reason;
+    uint32_t flags;
+} XaotInterfaceUsePlan;
+
+enum {
+    XAOT_CAPABILITY_EV_GLOBAL_BODY = 1u << 0,
+};
+
+typedef enum XaotCapabilityProfileAction {
+    XAOT_CAPABILITY_ACTION_ALLOW = 1,
+    XAOT_CAPABILITY_ACTION_LINK,
+    XAOT_CAPABILITY_ACTION_REJECT,
+    XAOT_CAPABILITY_ACTION_DEBUG_ONLY,
+} XaotCapabilityProfileAction;
+
+enum {
+    XAOT_CAPABILITY_UNPROVEN_NONE = 0,
+    XAOT_CAPABILITY_UNPROVEN_NO_BODY = 1,
+};
+
+typedef struct XaotCapabilityPlan {
+    uint32_t capability;
+    uint32_t body_count;
+    uint32_t evidence;
+    uint32_t profile_action;
+    uint8_t unproven_reason;
+} XaotCapabilityPlan;
+
 typedef struct XaotPrepareStats {
     uint32_t functions_total;
     uint32_t functions_native_abi;
@@ -318,6 +446,22 @@ typedef struct XaotBundle {
     XaotAliasPlan *alias_plans;
     uint32_t nalias_plans;
     uint32_t alias_plan_cap;
+    XaotGlobalEvidencePlan global_evidence_plan;
+    XaotClassHierarchyPlan *class_hierarchy_plans;
+    uint32_t nclass_hierarchy_plans;
+    uint32_t class_hierarchy_plan_cap;
+    XaotClassLayoutPlan *class_layout_plans;
+    uint32_t nclass_layout_plans;
+    uint32_t class_layout_plan_cap;
+    XaotMethodDispatchPlan *method_dispatch_plans;
+    uint32_t nmethod_dispatch_plans;
+    uint32_t method_dispatch_plan_cap;
+    XaotInterfaceUsePlan *interface_use_plans;
+    uint32_t ninterface_use_plans;
+    uint32_t interface_use_plan_cap;
+    XaotCapabilityPlan *capability_plans;
+    uint32_t ncapability_plans;
+    uint32_t capability_plan_cap;
     XaotBoundaryStep *boundary_steps;
     uint32_t nboundary_steps;
     uint32_t boundary_step_cap;
@@ -337,6 +481,19 @@ typedef struct XaotBundle {
 XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t nmodules,
                               uint32_t entry_module);
 XR_FUNC void xaot_bundle_free(XaotBundle *bundle);
+XR_FUNC bool xaot_bundle_set_global_evidence(XaotBundle *bundle, const XgGlobalEvidence *evidence,
+                                             uint32_t profile);
+XR_FUNC const XaotClassHierarchyPlan *
+xaot_bundle_find_class_hierarchy_plan(const XaotBundle *bundle, XgClassId class_id);
+XR_FUNC const XaotClassLayoutPlan *xaot_bundle_find_class_layout_plan(const XaotBundle *bundle,
+                                                                      XgClassId class_id);
+XR_FUNC const XaotMethodDispatchPlan *
+xaot_bundle_find_method_dispatch_plan(const XaotBundle *bundle, XgCallsiteId callsite_id);
+XR_FUNC const XaotInterfaceUsePlan *
+xaot_bundle_find_interface_use_plan(const XaotBundle *bundle, XgInterfaceId interface_id,
+                                    XgClassId implementor_class_id, XgCallsiteId use_site_id);
+XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,
+                                                                   uint32_t capability);
 XR_FUNC XaotFuncPlan *xaot_bundle_add_func_plan(XaotBundle *bundle, XiFunc *func,
                                                 uint32_t module_index, uint16_t depth);
 XR_FUNC const XaotFuncPlan *xaot_bundle_find_func_plan(const XaotBundle *bundle,

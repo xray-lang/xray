@@ -2786,7 +2786,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "class",
         .title = "Class",
-        .aliases_csv = "classes,oop,inheritance,extends,override,constructor",
+        .aliases_csv = "classes,oop,inheritance,extends,final class,constructor",
         .body =
             "[Language reference](#53-class-\xe5\xa3\xb0\xe6\x98\x8e)\n"
             "\n"
@@ -2823,7 +2823,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "        super(name)                    // **must** be the first statement (derived classes only)\n"
             "    }\n"
             "\n"
-            "    override speak() -> string {         // override is optional but recommended\n"
+            "    speak() -> string {                  // same name and signature: automatic override\n"
             "        return \"woof\"\n"
             "    }\n"
             "}\n"
@@ -2832,7 +2832,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Features\n"
             "- `constructor()` is called through `ClassName(...)`\n"
             "- `extends` enables single inheritance\n"
-            "- `override` is optional but checked when present: it must match a parent-chain method signature\n"
+            "- overrides are inferred automatically when a subclass method has the same name and signature\n"
+            "- `final class` prevents inheritance\n"
+            "- method overloads and member hiding are compile errors\n"
             "- `static` declares class-level methods or fields\n"
             "- `private` restricts access to the declaring class\n"
             "- `this` is the current instance; `super` refers to the parent class\n"
@@ -5210,7 +5212,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "        super(name)                    // **must** be the first statement (derived classes only)\n"
     "    }\n"
     "\n"
-    "    override speak() -> string {         // override is optional but recommended\n"
+    "    speak() -> string {                  // same name and signature: automatic override\n"
     "        return \"woof\"\n"
     "    }\n"
     "}\n"

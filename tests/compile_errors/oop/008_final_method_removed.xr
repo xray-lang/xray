@@ -1,0 +1,5 @@
+class Config {
+    final value() -> int {
+        return 1
+    }
+}

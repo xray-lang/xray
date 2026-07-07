@@ -1199,8 +1199,6 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
     desc->super_global_index = -1;
     desc->descriptor_version = XR_CLASS_DESCRIPTOR_VERSION;
     desc->clinit_proto_index = -1;
-    if (cd->is_abstract)
-        desc->flags |= XR_CLASS_ABSTRACT;
     if (cd->is_final)
         desc->flags |= XR_CLASS_FINAL;
     desc->flags |=
@@ -1244,10 +1242,6 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
                 desc->instance_methods[mi].flags |= XMETHOD_FLAG_CONSTRUCTOR;
             if (m->is_private)
                 desc->instance_methods[mi].flags |= XMETHOD_FLAG_PRIVATE;
-            if (m->is_abstract)
-                desc->instance_methods[mi].flags |= XMETHOD_FLAG_ABSTRACT;
-            if (m->is_final)
-                desc->instance_methods[mi].flags |= XMETHOD_FLAG_FINAL;
             if (m->is_operator) {
                 desc->instance_methods[mi].is_operator = true;
                 desc->instance_methods[mi].op_type = m->op_type;

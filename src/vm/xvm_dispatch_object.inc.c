@@ -20,7 +20,6 @@
  *   Class / instance setup:
  *     - OP_CLASS_CREATE_FROM_DESCRIPTOR
  *     - OP_CLINIT_CALL
- *     - OP_ABSTRACT_ERROR
  *     - OP_SET_STORAGE_CTX / OP_TO_SHARED
  *     - OP_MAP_SETKS  (descriptor literal helper)
  *
@@ -116,16 +115,6 @@ vmcase(OP_CLINIT_CALL) {
     new_frame->pc = PROTO_CODE_BASE(clinit_proto);
     new_frame->base_offset = (int) ((base + a + 1) - VM_STACK);
     goto startfunc;
-}
-
-// Abstract method support
-vmcase(OP_ABSTRACT_ERROR) {
-    // OP_ABSTRACT_ERROR: abstract method call error
-    int a = GETARG_A(i);
-    XrValue method_name_val = k[a];
-    const char *method_name =
-        XR_IS_STRING(method_name_val) ? XR_TO_STRING(method_name_val)->data : "<unknown>";
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "cannot call abstract method '%s'", method_name);
 }
 
 vmcase(OP_SET_STORAGE_CTX) {

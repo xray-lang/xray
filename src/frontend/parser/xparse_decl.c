@@ -1519,6 +1519,25 @@ AstNode *xr_parse_declaration(Parser *parser) {
         return xr_parse_export_declaration(parser);
     }
 
+    if (xr_parser_match(parser, TK_ABSTRACT)) {
+        xr_parser_error(parser, "'abstract' was removed; use an interface for contracts");
+        if (xr_parser_match(parser, TK_CLASS))
+            return xr_parse_class_declaration(parser);
+        return NULL;
+    }
+
+    if (xr_parser_check_name(parser, "open") || xr_parser_check_name(parser, "virtual")) {
+        const char *modifier = xr_parser_check_name(parser, "open") ? "open" : "virtual";
+        char msg[128];
+        snprintf(msg, sizeof(msg), "'%s' was removed; class dispatch strategy is inferred",
+                 modifier);
+        xr_parser_error_at_current(parser, msg);
+        xr_parser_advance(parser);
+        if (xr_parser_match(parser, TK_CLASS))
+            return xr_parse_class_declaration(parser);
+        return NULL;
+    }
+
     // Class declaration (with optional 'final' prefix)
     if (xr_parser_match(parser, TK_FINAL)) {
         if (!xr_parser_match(parser, TK_CLASS)) {

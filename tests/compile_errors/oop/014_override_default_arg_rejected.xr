@@ -1,0 +1,11 @@
+class Base {
+    greet(name: string = "base") -> string {
+        return name
+    }
+}
+
+class Child extends Base {
+    greet(name: string = "child") -> string {
+        return name
+    }
+}

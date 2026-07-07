@@ -1,6 +1,6 @@
 // Cross-module class inheritance through AOT separate compilation: a locally
 // defined class extends a base class imported from a sibling module, calling
-// the base constructor via super, overriding one method, and inheriting another
+// the base constructor via super, auto-overriding one method, and inheriting another
 // method and the base fields.  VM and AOT must agree byte-for-byte.
 import { Animal } from "./_animals"
 
@@ -8,7 +8,7 @@ class Dog extends Animal {
     constructor(n: string) {
         super(n, 4)
     }
-    override describe() -> string {
+    describe() -> string {
         return "dog:" + this.name
     }
 }

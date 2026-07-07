@@ -1,4 +1,4 @@
-// anchor: oop-override-checked-valid
+// anchor: oop-auto-override-valid
 class Animal {
     speak(sound: string) -> string {
         return "animal:" + sound
@@ -6,9 +6,9 @@ class Animal {
 }
 
 class Dog extends Animal {
-    override speak(sound: string) -> string {
+    speak(sound: string) -> string {
         return "dog:" + sound
     }
 }
 
-print("override-ok")
+print("auto-override-ok")

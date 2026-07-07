@@ -229,7 +229,6 @@
     _(INVOKE_TAIL, FMT_ABC, KOP_INVOKE_SYM, "tail: R[A+1]:method(...) reuse frame")                \
     _(SUPERINVOKE, FMT_ABC, KOP_INVOKE_K, "super.K[B](...)")                                       \
     _(INVOKE_DIRECT, FMT_ABC, KOP_INVOKE_DIRECT, "R[A] = R[B]:methods[C](...)")                    \
-    _(ABSTRACT_ERROR, FMT_NONE, KOP_NONE, "runtime: called abstract method")                       \
     _(SET_STORAGE_CTX, FMT_A, KOP_A_LIT, "set storage mode context A=mode")                        \
     _(TO_SHARED, FMT_AB, KOP_AB_UNARY, "R[A] = to_shared(R[B])")                                   \
     _(MAP_SETKS, FMT_AB, KOP_AB_BASE_LIT, "R[A].fields[0..B-1] = R[A+1]..R[A+B]")                  \

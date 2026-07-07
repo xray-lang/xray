@@ -12,7 +12,7 @@ order: 021
 
 | 关键字 | 节 |
 |--|--|
-| `abstract` | §5.3 |
+| `abstract` | 已移除；§5.3 |
 | `as` | §3.8 |
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
@@ -46,7 +46,7 @@ order: 021
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `override` | §5.3 |
+| `override` | 已移除；§5.3 |
 | `parallel` | §10 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
@@ -79,7 +79,7 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 
 | Keyword | Section |
 |--|--|
-| `abstract` | §5.3 |
+| `abstract` | removed; §5.3 |
 | `as` | §3.8 |
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
@@ -113,7 +113,7 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `override` | §5.3 |
+| `override` | removed; §5.3 |
 | `parallel` | §10 |
 | `private` | §5.3 |
 | `protected` | §5.3 |

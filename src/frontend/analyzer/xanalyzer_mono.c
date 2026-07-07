@@ -844,12 +844,12 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         case AST_UNION_DECL:
         case AST_STRUCT_DECL:
         case AST_CLASS_DECL: {
-            ClassDeclNode *src = (node->type == AST_CLASS_DECL) ? &node->as.class_decl
-                                : (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl
-                                                                  : &node->as.union_decl;
-            ClassDeclNode *dst = (n->type == AST_CLASS_DECL) ? &n->as.class_decl
-                                : (n->type == AST_STRUCT_DECL) ? &n->as.struct_decl
-                                                               : &n->as.union_decl;
+            ClassDeclNode *src = (node->type == AST_CLASS_DECL)    ? &node->as.class_decl
+                                 : (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl
+                                                                   : &node->as.union_decl;
+            ClassDeclNode *dst = (n->type == AST_CLASS_DECL)    ? &n->as.class_decl
+                                 : (n->type == AST_STRUCT_DECL) ? &n->as.struct_decl
+                                                                : &n->as.union_decl;
             dst->name = clone_str(src->name);
             dst->super_name = clone_str(src->super_name);
             dst->super_module = clone_str(src->super_module);
@@ -859,7 +859,6 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->fields = clone_node_array(src->fields, src->field_count, map, mc, clone_ctx);
             dst->method_count = src->method_count;
             dst->methods = clone_node_array(src->methods, src->method_count, map, mc, clone_ctx);
-            dst->is_abstract = src->is_abstract;
             dst->is_final = src->is_final;
             dst->is_native = src->is_native;
             dst->is_packed = src->is_packed;
@@ -887,9 +886,6 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->is_protected = src->is_protected;
             dst->is_getter = src->is_getter;
             dst->is_setter = src->is_setter;
-            dst->is_abstract = src->is_abstract;
-            dst->is_override = src->is_override;
-            dst->is_final = src->is_final;
             dst->is_static_constructor = src->is_static_constructor;
             dst->is_operator = src->is_operator;
             dst->op_type = src->op_type;

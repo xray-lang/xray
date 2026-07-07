@@ -75,7 +75,6 @@ typedef struct ClassDeclNode {
     int field_count;
     AstNode **methods;
     int method_count;
-    bool is_abstract;
     bool is_final;
     bool is_native;            // @native: C runtime provides implementation
     bool is_packed;            // struct-only: `packed struct`
@@ -151,9 +150,6 @@ typedef struct MethodDeclNode {
     bool is_protected;
     bool is_getter;
     bool is_setter;
-    bool is_abstract;
-    bool is_override;
-    bool is_final;
     bool is_static_constructor;
     AstNode **base_args;
     int base_arg_count;

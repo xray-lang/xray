@@ -383,6 +383,15 @@ static void xa_thread_lint_scan_expr_array(XaThreadHandleLintState *states, AstN
         xa_thread_lint_scan_expr(states, nodes[i], return_value, can_escape);
 }
 
+static void xa_thread_lint_scan_parallel_locals(XaThreadHandleLintState *states,
+                                                XrParallelLocalBinding *locals, int count,
+                                                bool can_escape) {
+    if (!locals || count <= 0)
+        return;
+    for (int i = 0; i < count; i++)
+        xa_thread_lint_scan_expr(states, locals[i].source, false, can_escape);
+}
+
 static bool xa_thread_lint_scan_join_or_detach_call(XaThreadHandleLintState *states, AstNode *expr,
                                                     bool can_escape) {
     expr = xa_thread_lint_unwrap_expr(expr);
@@ -458,6 +467,11 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
             xa_thread_lint_scan_expr(states, expr->as.index_set.index, false, can_escape);
             xa_thread_lint_scan_expr(states, expr->as.index_set.value, false, can_escape);
             return;
+        case AST_SLICE_EXPR:
+            xa_thread_lint_scan_expr(states, expr->as.slice_expr.source, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.slice_expr.start, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.slice_expr.end, false, can_escape);
+            return;
 
         case AST_ASSIGNMENT:
             xa_thread_lint_scan_expr(states, expr->as.assignment.value, false, can_escape);
@@ -518,6 +532,10 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
         case AST_TUPLE_LITERAL:
             xa_thread_lint_scan_expr_array(states, expr->as.tuple_literal.elements,
                                            expr->as.tuple_literal.count, false, can_escape);
+            return;
+        case AST_TEMPLATE_STRING:
+            xa_thread_lint_scan_expr_array(states, expr->as.template_str.parts,
+                                           expr->as.template_str.part_count, false, can_escape);
             return;
         case AST_SPREAD_EXPR:
             xa_thread_lint_scan_expr(states, expr->as.spread_expr.expr, false, can_escape);
@@ -585,7 +603,13 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
             xa_thread_lint_scan_expr(states, expr->as.await_expr.timeout, false, can_escape);
             xa_thread_lint_scan_expr(states, expr->as.await_expr.into, false, can_escape);
             return;
+        case AST_CHANNEL_NEW:
+            xa_thread_lint_scan_expr(states, expr->as.channel_new.buffer_size, false, can_escape);
+            return;
         case AST_PARALLEL_REDUCE_EXPR:
+            xa_thread_lint_scan_parallel_locals(states, expr->as.parallel_reduce_expr.locals,
+                                                expr->as.parallel_reduce_expr.local_count,
+                                                can_escape);
             xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.range, false,
                                      can_escape);
             xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.worker_count, false,
@@ -597,6 +621,9 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
             xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.body, false, false);
             return;
         case AST_PARALLEL_COLLECT_EXPR:
+            xa_thread_lint_scan_parallel_locals(states, expr->as.parallel_collect_expr.locals,
+                                                expr->as.parallel_collect_expr.local_count,
+                                                can_escape);
             xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.range, false,
                                      can_escape);
             xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.worker_count, false,
@@ -610,6 +637,21 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
         case AST_MATCH_EXPR:
             xa_thread_lint_scan_match_expr(states, expr, can_escape);
             return;
+        case AST_NEW_EXPR:
+            xa_thread_lint_scan_expr_array(states, expr->as.new_expr.arguments,
+                                           expr->as.new_expr.arg_count, false, can_escape);
+            return;
+        case AST_SUPER_CALL:
+            xa_thread_lint_scan_expr_array(states, expr->as.super_call.arguments,
+                                           expr->as.super_call.arg_count, false, can_escape);
+            return;
+        case AST_ENUM_INDEX:
+            xa_thread_lint_scan_expr(states, expr->as.enum_index.collection, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.enum_index.index_expr, false, can_escape);
+            return;
+        case AST_YIELD_STMT:
+            xa_thread_lint_scan_expr(states, expr->as.yield_stmt.value, false, can_escape);
+            return;
 
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
@@ -620,7 +662,14 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
         case AST_FIELD_DECL:
         case AST_ENUM_DECL:
         case AST_ENUM_MEMBER:
+        case AST_ENUM_ACCESS:
         case AST_IMPORT_STMT:
+        case AST_INTERFACE_DECL:
+        case AST_INTERFACE_METHOD:
+        case AST_INTERFACE_PROPERTY:
+        case AST_TYPE_ALIAS:
+        case AST_THIS_EXPR:
+        case AST_CANCELLED_EXPR:
             return;
 
         default:

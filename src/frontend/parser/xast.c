@@ -1030,7 +1030,6 @@ AstNode *xr_ast_class_decl(XrCompilerSession *session, const char *name, const c
     node->as.class_decl.field_count = field_count;
     node->as.class_decl.methods = methods;
     node->as.class_decl.method_count = method_count;
-    node->as.class_decl.is_abstract = false;
     node->as.class_decl.is_packed = false;
     node->as.class_decl.explicit_align = 0;
     node->as.class_decl.attributes = NULL;
@@ -1051,7 +1050,6 @@ AstNode *xr_ast_struct_decl(XrCompilerSession *session, const char *name, AstNod
     node->as.struct_decl.field_count = field_count;
     node->as.struct_decl.methods = methods;
     node->as.struct_decl.method_count = method_count;
-    node->as.struct_decl.is_abstract = false;
     node->as.struct_decl.is_final = true;  // structs are implicitly final
     node->as.struct_decl.is_packed = false;
     node->as.struct_decl.explicit_align = 0;
@@ -1075,7 +1073,6 @@ AstNode *xr_ast_union_decl(XrCompilerSession *session, const char *name, AstNode
     node->as.union_decl.field_count = field_count;
     node->as.union_decl.methods = NULL;
     node->as.union_decl.method_count = 0;
-    node->as.union_decl.is_abstract = false;
     node->as.union_decl.is_final = true;
     node->as.union_decl.is_packed = false;
     node->as.union_decl.explicit_align = 0;
@@ -1167,7 +1164,6 @@ AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, char *
     node->as.method_decl.is_private = is_private;
     node->as.method_decl.is_getter = is_getter;
     node->as.method_decl.is_setter = is_setter;
-    node->as.method_decl.is_abstract = false;
     node->as.method_decl.is_static_constructor = false;  // Not a static constructor by default
 
     // Initialize base() call fields

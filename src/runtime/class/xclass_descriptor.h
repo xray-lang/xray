@@ -86,10 +86,6 @@ typedef struct XrClassDescriptor {
     XrInterfaceDescriptorEntry *interfaces;
     uint8_t interface_count;
 
-    /* ========== Abstract Methods ========== */
-    const char **abstract_method_names;
-    uint8_t abstract_method_count;
-
     /* ========== Static Constructor ========== */
     int32_t clinit_proto_index;
 

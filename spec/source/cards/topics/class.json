@@ -7,7 +7,7 @@
     "oop",
     "inheritance",
     "extends",
-    "override",
+    "final class",
     "constructor"
   ],
   "sections": [
@@ -28,7 +28,9 @@
       "bullets": [
         "`constructor()` is called through `ClassName(...)`",
         "`extends` enables single inheritance",
-        "`override` is optional but checked when present: it must match a parent-chain method signature",
+        "overrides are inferred automatically when a subclass method has the same name and signature",
+        "`final class` prevents inheritance",
+        "method overloads and member hiding are compile errors",
         "`static` declares class-level methods or fields",
         "`private` restricts access to the declaring class",
         "`this` is the current instance; `super` refers to the parent class"

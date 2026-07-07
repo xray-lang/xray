@@ -86,6 +86,9 @@ MATCH_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_match_warning.xr"
 SELECT_ALL_CLOSE_SRC="$PROJECT_DIR/tests/vm/sys_thread_select_all_close.xr"
 SELECT_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_select_warning.xr"
 DESTRUCTURE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_destructure_join.xr"
+TEMPLATE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_template_join.xr"
+SLICE_BOUND_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_slice_bound_join.xr"
+CHANNEL_CAPACITY_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_channel_capacity_join.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -100,6 +103,9 @@ expect_output "try_catch_both_close" "$TRY_CATCH_BOTH_CLOSE_SRC" "42"
 expect_output "match_all_close" "$MATCH_ALL_CLOSE_SRC" "42"
 expect_output "select_all_close" "$SELECT_ALL_CLOSE_SRC" "42"
 expect_output "destructure_join" "$DESTRUCTURE_JOIN_SRC" "42"
+expect_output "template_join" "$TEMPLATE_JOIN_SRC" "joined 42"
+expect_output "slice_bound_join" "$SLICE_BOUND_JOIN_SRC" $'2\n20'
+expect_output "channel_capacity_join" "$CHANNEL_CAPACITY_JOIN_SRC" "channel"
 expect_warning "orphan" "$ORPHAN_SRC" "orphan" \
     "sys.Thread.spawn returns a Thread handle; call join() or detach() explicitly"
 expect_warning "unused_local" "$UNUSED_LOCAL_SRC" "unused-local" \

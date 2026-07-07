@@ -192,8 +192,7 @@ XR_FUNC AstNode *xr_parse_interface_declaration(Parser *parser);
 XR_FUNC AstNode *xr_parse_interface_member(Parser *parser);
 XR_FUNC AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out);
 XR_FUNC AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_line,
-                                             int name_column, bool is_private, bool is_static,
-                                             bool is_abstract);
+                                             int name_column, bool is_private, bool is_static);
 XR_FUNC AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_static);
 XR_FUNC AstNode *xr_parse_static_constructor(Parser *parser, bool is_private);
 

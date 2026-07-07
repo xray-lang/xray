@@ -69,14 +69,6 @@ bool xr_class_descriptor_validate(const XrClassDescriptor *descriptor) {
         return false;
     }
 
-    // Check abstract methods
-    if (descriptor->abstract_method_count > 0 && !descriptor->abstract_method_names) {
-        xr_log_warning(
-            "class",
-            "descriptor validation: abstract_method_count > 0 but abstract_method_names is NULL");
-        return false;
-    }
-
     return true;
 }
 
@@ -100,9 +92,6 @@ size_t xr_class_descriptor_estimate_size(const XrClassDescriptor *descriptor) {
 
     // Interface array
     total += descriptor->interface_count * sizeof(XrInterfaceDescriptorEntry);
-
-    // Abstract method array
-    total += descriptor->abstract_method_count * sizeof(char *);
 
     // Symbol map (estimate: count * 1.5 * sizeof(int))
     uint32_t total_fields = descriptor->instance_field_count + descriptor->static_field_count;
@@ -175,15 +164,6 @@ void xr_class_descriptor_print(const XrClassDescriptor *descriptor, bool verbose
                    descriptor->interfaces[i].interface_name
                        ? descriptor->interfaces[i].interface_name
                        : "(null)");
-        }
-    }
-
-    printf("Abstract Methods: %u\n", descriptor->abstract_method_count);
-    if (verbose && descriptor->abstract_method_names) {
-        for (uint8_t i = 0; i < descriptor->abstract_method_count; i++) {
-            printf("  [%u] %s\n", i,
-                   descriptor->abstract_method_names[i] ? descriptor->abstract_method_names[i]
-                                                        : "(null)");
         }
     }
 

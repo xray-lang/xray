@@ -79,6 +79,7 @@ struct XrClassInfo {
     // Virtual method table (built in Pass 1.5 for static devirtualization)
     XaMethodSlot *vtable;  // Virtual method slots (NULL if not built)
     int vtable_size;       // Number of vtable entries
+    bool is_final;         // explicit final class: cannot be extended
     bool has_subclass;     // true if any class extends this one
 
     // Struct layout (VALUE_TYPE only, computed by analyzer)

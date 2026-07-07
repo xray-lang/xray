@@ -176,8 +176,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_emit_attributes(ctx, cls->attributes, cls->attr_count);
     xfmt_write_indent(ctx);
 
-    if (!is_struct && !is_union && cls->is_abstract)
-        xfmt_write_str(ctx, "abstract ");
+    if (!is_struct && !is_union && cls->is_final)
+        xfmt_write_str(ctx, "final ");
     if (is_struct && cls->is_packed)
         xfmt_write_str(ctx, "packed ");
     xfmt_write_str(ctx, is_union ? "union " : is_struct ? "struct " : "class ");
@@ -405,9 +405,6 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "protected ");
         if (m->is_static)
             xfmt_write_str(ctx, "static ");
-        if (m->is_abstract)
-            xfmt_write_str(ctx, "abstract ");
-
         if (m->is_constructor) {
             xfmt_write_str(ctx, XR_KEYWORD_CONSTRUCTOR);
         } else if (m->is_operator) {
@@ -444,9 +441,7 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_type(ctx, m->return_type);
         }
 
-        if (m->is_abstract) {
-            xfmt_write_newline(ctx);
-        } else if (m->body) {
+        if (m->body) {
             xfmt_write_space(ctx);
             xfmt_emit_block(ctx, m->body);
             xfmt_write_newline(ctx);

@@ -108,10 +108,11 @@ typedef struct {
 
 /* Result of xaot_build().  Caller must free owned strings via xr_free(). */
 typedef struct {
-    XaotModuleSource *sources; /* per-module generated C (malloc'd array) */
-    int n_sources;             /* number of generated C translation units */
-    char *plan_dump;           /* stable AOT prepare plan dump (malloc'd) */
-    char *c_export_header;     /* public @c_export C declarations (malloc'd) */
+    XaotModuleSource *sources;  /* per-module generated C (malloc'd array) */
+    int n_sources;              /* number of generated C translation units */
+    char *plan_dump;            /* stable AOT prepare plan dump (malloc'd) */
+    char *global_evidence_dump; /* global evidence dump (malloc'd) */
+    char *c_export_header;      /* public @c_export C declarations (malloc'd) */
     XaotLinkManifest link_manifest;
     int total_compiled;      /* number of functions successfully transpiled */
     int total_aot;           /* total AOT-eligible functions found */
@@ -140,7 +141,7 @@ typedef enum XaotBuildProfile {
 XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildResult *result);
 XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit_program_main,
                           XaotBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
-                          XaotBuildResult *result);
+                          bool emit_global_evidence_dump, XaotBuildResult *result);
 XR_FUNC void xaot_build_result_free(XaotBuildResult *result);
 
 #endif  // XAOT_DRIVER_H

@@ -72,10 +72,8 @@ typedef enum {
 #define XMETHOD_FLAG_PRIVATE 0x01
 #define XMETHOD_FLAG_STATIC 0x02
 #define XMETHOD_FLAG_CONSTRUCTOR 0x04
-#define XMETHOD_FLAG_ABSTRACT 0x08
-#define XMETHOD_FLAG_FINAL 0x10
-#define XMETHOD_FLAG_PROTECTED 0x20
-#define XMETHOD_FLAG_NATIVE 0x40
+#define XMETHOD_FLAG_PROTECTED 0x08
+#define XMETHOD_FLAG_NATIVE 0x10
 
 /*
  * Value-type method descriptor.
@@ -113,10 +111,6 @@ static inline bool xr_method_is_static(const XrMethod *method) {
 
 static inline bool xr_method_is_constructor(const XrMethod *method) {
     return (method->flags & XMETHOD_FLAG_CONSTRUCTOR) != 0;
-}
-
-static inline bool xr_method_is_abstract(const XrMethod *method) {
-    return (method->flags & XMETHOD_FLAG_ABSTRACT) != 0;
 }
 
 /* ========== Debug ========== */

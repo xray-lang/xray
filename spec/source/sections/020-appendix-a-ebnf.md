@@ -251,14 +251,14 @@ ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const' | 'final' | 'abstract' | 'override'
-              // 公开可见性是默认语义；override 可选
+Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const'
+              // 公开可见性是默认语义；final 只作为 class 前缀
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // 约束用 ':' ，多约束用 '&'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
-ClassDecl ::= Modifier* 'class' Identifier TypeParams?
+ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
@@ -558,14 +558,14 @@ ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const' | 'final' | 'abstract' | 'override'
-              // public visibility is the default; override is optional
+Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const'
+              // public visibility is the default; final is only a class prefix
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
-ClassDecl ::= Modifier* 'class' Identifier TypeParams?
+ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
