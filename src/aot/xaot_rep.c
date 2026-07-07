@@ -16,6 +16,12 @@
 #include "../runtime/value/xstruct_layout.h"
 #include <string.h>
 
+XR_FUNC const char *xaot_raw_pointer_c_type(const XrType *type) {
+    if (!type || type->kind != XR_KIND_POINTER)
+        return NULL;
+    return type->ptr_is_mut ? "void *" : "const void *";
+}
+
 static XaotValueRep value_rep_make(const XrType *type, XaotRep rep) {
     XaotValueRep out;
     const XaotRepInfo *info;
@@ -25,6 +31,11 @@ static XaotValueRep value_rep_make(const XrType *type, XaotRep rep) {
     info = xaot_rep_info(rep);
     out.rep = rep;
     out.c_type = info ? info->c_type : "XrValue";
+    if (rep == XAOT_REP_RAWPTR) {
+        const char *rawptr_c_type = xaot_raw_pointer_c_type(type);
+        if (rawptr_c_type)
+            out.c_type = rawptr_c_type;
+    }
 
     if (!info || rep == XAOT_REP_TAGGED) {
         out.kind = XAOT_VALUE_TAGGED;

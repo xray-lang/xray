@@ -1,0 +1,9 @@
+contains=function 1 name=raw_const module=0 depth=1 abi=native boundary=none params=1 ret=const void */ptr/rawptr
+contains=  param 0 class=ptr kind=ptr rep=rawptr c_type=const void *
+contains=function 2 name=raw_mut module=0 depth=1 abi=native boundary=none params=1 ret=void */ptr/rawptr
+contains=  param 0 class=ptr kind=ptr rep=rawptr c_type=void *
+contains=function 3 name=raw_const_from_mut module=0 depth=1 abi=native boundary=none params=1 ret=const void */ptr/rawptr
+contains=  param 0 class=ptr kind=ptr rep=rawptr c_type=void *
+c_regex=static XRT_FN_CONST const void \* rawptr_const_abi_raw_const_[0-9]+\(xrt_closure_t \*_cl, const void \* p0\)
+c_regex=static XRT_FN_CONST void \* rawptr_const_abi_raw_mut_[0-9]+\(xrt_closure_t \*_cl, void \* p0\)
+c_regex=static XRT_FN_CONST const void \* rawptr_const_abi_raw_const_from_mut_[0-9]+\(xrt_closure_t \*_cl, void \* p0\)

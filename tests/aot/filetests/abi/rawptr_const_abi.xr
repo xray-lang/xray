@@ -1,0 +1,18 @@
+fn raw_const(p: RawPtr<uint8>) -> RawPtr<uint8> {
+    return p
+}
+
+fn raw_mut(p: RawMut<uint8>) -> RawMut<uint8> {
+    return p
+}
+
+fn raw_const_from_mut(p: RawMut<uint8>) -> RawPtr<uint8> {
+    return p
+}
+
+var rp = RawPtr<uint8>.null()
+var mp = RawMut<uint8>.null()
+
+print(raw_const(rp).isNull())
+print(raw_mut(mp).isNull())
+print(raw_const_from_mut(mp).isNull())
