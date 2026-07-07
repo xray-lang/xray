@@ -3289,6 +3289,10 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
         if (!prepare_func_recursive(bundle, mod->init, mi, 0, true))
             return false;
     }
+    if (!xaot_bundle_sync_transfer_capability_plans(bundle)) {
+        bundle->error_msg = "failed to sync AOT transfer capability plan";
+        return false;
+    }
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
         if (!prepare_func_boundary_steps(bundle, &bundle->func_plans[mi]))
             return false;

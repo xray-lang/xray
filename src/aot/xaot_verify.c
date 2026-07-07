@@ -614,6 +614,18 @@ static uint32_t verify_capability_profile_action(uint32_t profile, uint32_t capa
     return XAOT_CAPABILITY_ACTION_LINK;
 }
 
+static uint32_t verify_capability_transfer_count(const XaotBundle *bundle, uint32_t capability) {
+    uint32_t count = 0;
+
+    if (!bundle || capability != XG_CAP_DEEP_COPY)
+        return 0;
+    for (uint32_t i = 0; i < bundle->ntransfer_plans; i++) {
+        if (bundle->transfer_plans[i].action == XAOT_TRANSFER_ACTION_DEEP_COPY)
+            count++;
+    }
+    return count;
+}
+
 static uint32_t verify_static_data_action(uint32_t profile, uint32_t static_data) {
     if (profile == XG_BUILD_FREESTANDING && static_data == XG_STATIC_DATA_RUNTIME_INIT)
         return XAOT_STATIC_DATA_ACTION_REJECT;
@@ -762,15 +774,18 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     for (uint32_t ci = 0; ci < capability_count; ci++) {
         uint32_t cap = capabilities[ci];
         uint32_t body_count = 0;
+        uint32_t transfer_count;
+        uint32_t expected_evidence = 0;
         const XaotCapabilityPlan *plan;
         for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
             if ((ev->bodies[bi].capability_bits & cap) != 0)
                 body_count++;
         }
+        transfer_count = verify_capability_transfer_count(bundle, cap);
         plan = xaot_bundle_find_capability_plan(bundle, cap);
-        if (body_count == 0) {
+        if (body_count == 0 && transfer_count == 0) {
             if (plan)
-                return set_error(errbuf, errbuf_len, "AOT capability plan has no body evidence");
+                return set_error(errbuf, errbuf_len, "AOT capability plan has no evidence");
             continue;
         }
         expected_capability_plans++;
@@ -778,7 +793,14 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
             return set_error(errbuf, errbuf_len, "AOT capability has no plan");
         if (plan->body_count != body_count)
             return set_error(errbuf, errbuf_len, "AOT capability body count mismatches evidence");
-        if (plan->evidence != XAOT_CAPABILITY_EV_GLOBAL_BODY ||
+        if (plan->transfer_count != transfer_count)
+            return set_error(errbuf, errbuf_len,
+                             "AOT capability transfer count mismatches evidence");
+        if (body_count != 0)
+            expected_evidence |= XAOT_CAPABILITY_EV_GLOBAL_BODY;
+        if (transfer_count != 0)
+            expected_evidence |= XAOT_CAPABILITY_EV_TRANSFER_PLAN;
+        if (plan->evidence != expected_evidence ||
             plan->unproven_reason != XAOT_CAPABILITY_UNPROVEN_NONE)
             return set_error(errbuf, errbuf_len, "AOT capability plan lacks evidence");
         if (plan->profile_action !=

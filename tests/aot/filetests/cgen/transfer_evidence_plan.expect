@@ -1,4 +1,5 @@
 contains=xaot-plan v0
+regex=capability [0-9]+ name=deep_copy bodies=0 action=link transfers=1 evidence=0x2 reason=none
 regex=transfer [0-9]+ func=<main> site=v[0-9]+ kind=go_arg index=0 value=v[0-9]+ mode=share action=share type-key=0000000000000000 evidence=site\+value\+mode\+type reason=none
 regex=transfer [0-9]+ func=<main> site=v[0-9]+ kind=go_arg index=0 value=v[0-9]+ mode=copy action=deep_copy type-key=[0-9a-f]{16} evidence=site\+value\+mode\+type\+boundary_clone reason=none
 regex=transfer [0-9]+ func=<main> site=v[0-9]+ kind=chan_send index=0 value=v[0-9]+ mode=move action=move type-key=[0-9a-f]{16} evidence=site\+value\+mode\+type\+boundary_clone reason=none
