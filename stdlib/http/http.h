@@ -91,9 +91,6 @@ XR_FUNC XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nar
 // http.config(opts) -> void
 XR_FUNC XrValue xr_http_config_impl(XrVMRuntime *X, XrValue *args, int argc);
 
-// http.response(status, body?, headers?) -> string
-XR_FUNC XrValue xr_http_response_impl(XrVMRuntime *X, XrValue *args, int argc);
-
 // http.serverStats() -> Json { currentConns, totalRequests, totalConns }
 XR_FUNC XrValue xr_http_server_stats(XrVMRuntime *X, XrValue *args, int argc);
 

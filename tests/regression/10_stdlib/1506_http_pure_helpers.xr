@@ -1,0 +1,49 @@
+// HTTP pure-Xray helper surface.
+
+import http
+import { urlEncode, urlDecode, response } from http
+
+@test
+fn test_url_encode_namespace() {
+    assert_eq(http.urlEncode("a b+张"), "a%20b%2B%E5%BC%A0")
+}
+
+@test
+fn test_url_decode_named_import() {
+    assert_eq(urlDecode("a+b%2Bc%ZZ%"), "a b+c%ZZ%")
+}
+
+@test
+fn test_response_text() {
+    var resp = response(200, "hello")
+    assert(resp.includes("HTTP/1.1 200 OK\r\n"))
+    assert(resp.includes("Content-Type: text/plain; charset=utf-8\r\n"))
+    assert(resp.includes("Content-Length: 5\r\n"))
+    assert(resp.endsWith("\r\n\r\nhello"))
+}
+
+@test
+fn test_response_json() {
+    var resp = http.response(404, {error: "no"})
+    assert(resp.includes("HTTP/1.1 404 Not Found\r\n"))
+    assert(resp.includes("Content-Type: application/json; charset=utf-8\r\n"))
+    assert(resp.includes("Content-Length: 14\r\n"))
+    assert(resp.endsWith("{\"error\":\"no\"}"))
+}
+
+@test
+fn test_response_unicode_byte_length() {
+    var resp = response(200, "é")
+    assert(resp.includes("Content-Length: 2\r\n"))
+    assert(resp.endsWith("\r\n\r\né"))
+}
+
+@test
+fn test_response_empty_body() {
+    var resp = response(204)
+    assert(resp.includes("HTTP/1.1 204 No Content\r\n"))
+    assert(resp.includes("Content-Length: 0\r\n"))
+    assert(resp.endsWith("\r\n\r\n"))
+}
+
+print("All http pure helper tests passed")
