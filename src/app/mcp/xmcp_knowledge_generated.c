@@ -778,11 +778,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "clearProxy",
-        .signature = "(): ()",
-        .summary = "Clear HTTP proxy",
-    },
-    {
         .name = "closeStream",
         .signature = "(resp: Json): ()",
         .summary = "Close a streaming HTTP response",
@@ -906,11 +901,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "setConnHandler",
         .signature = "(handler: fn(fd: int): ()): ()",
         .summary = "Set low-level HTTP connection handler",
-    },
-    {
-        .name = "setProxy",
-        .signature = "(url: string): ()",
-        .summary = "Set HTTP proxy",
     },
     {
         .name = "static",
@@ -4723,7 +4713,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `MultipartBody.body` | `: string` |  |\n"
             "| `MultipartBody.constructor` | `(body: string, contentType: string): ()` |  |\n"
             "| `MultipartBody.contentType` | `: string` |  |\n"
-            "| `http.clearProxy` | `(): ()` | Clear HTTP proxy |\n"
             "| `http.closeStream` | `(resp: Json): ()` | Close a streaming HTTP response |\n"
             "| `http.config` | `(opts: Json): ()` | Configure HTTP server limits and timeouts |\n"
             "| `http.delete` | `(url: string): HttpResponse` | HTTP DELETE request |\n"
@@ -4749,7 +4738,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.sendResponse` | `(fd: int, body: string, status?: int): bool` | Send HTTP response on fd |\n"
             "| `http.serverStats` | `(): Json` | Return HTTP server counters |\n"
             "| `http.setConnHandler` | `(handler: fn(fd: int): ()): ()` | Set low-level HTTP connection handler |\n"
-            "| `http.setProxy` | `(url: string): ()` | Set HTTP proxy |\n"
             "| `http.static` | `(method: string, path: string, content: string): ()` | Register a prebuilt static route response |\n"
             "| `http.stopServer` | `(): ()` | Stop the HTTP server |\n"
             "| `http.urlDecode` | `(s: string): string` |  |\n"

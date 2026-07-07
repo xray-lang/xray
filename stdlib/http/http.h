@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Provides HTTP client and server functionality with support for
- *   HTTP/1.1, HTTP/2, cookies, and proxy state.
+ *   HTTP/1.1, HTTP/2, and cookies.
  *   Each Isolate has its own XrHttpContext for multi-instance support.
  *
  * NOTE: WebSocket has been moved to separate 'ws' module.
@@ -22,7 +22,6 @@
 #include "../../src/module/xmodule.h"
 #include "http_server.h"
 #include "http_cookie.h"
-#include "http_proxy.h"
 #include "http2_server.h"
 #include "http2_client.h"
 #include "../net/conn_pool.h"
@@ -47,11 +46,6 @@ typedef struct XrHttpContext {
     /* === Cookie === */
     XrCookieJar *cookie_jar;
     bool cookie_jar_enabled;
-
-    /* === Proxy === */
-    XrProxyConfig *proxy;
-    char **no_proxy;
-    int no_proxy_count;
 
     /* === HTTP/2 === */
     XrH2Server *h2_server;

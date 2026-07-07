@@ -3461,28 +3461,6 @@ module http {
     layer: "runtime"
   }
 
-  fn setProxy {
-    signature: "(url: string): ()"
-    doc: "Set HTTP proxy"
-    vm: "http_set_proxy"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn clearProxy {
-    signature: "(): ()"
-    doc: "Clear HTTP proxy"
-    vm: "http_clear_proxy"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn h2Get {
     signature: "(url: string, options?: Json): Json"
     doc: "HTTP/2 GET request"

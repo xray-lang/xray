@@ -11,7 +11,7 @@
  *   The base64 module's user-facing functions (encode/decode/encodeUrl/...) are
  *   pure Xray, defined in stdlib/base64/base64.xr. This file keeps only the
  *   C-level xr_base64_* API (built on xr_base64_core) that other C modules
- *   (ws, http_proxy) link against, plus the loader that registers the pure-Xray
+ *   (ws) links against, plus the loader that registers the pure-Xray
  *   module so `import base64` resolves as stdlib.
  */
 
@@ -57,7 +57,7 @@ static unsigned char *base64_decode_internal(const char *data, size_t len, size_
     return output;
 }
 
-/* ========== C-level API (linked by ws / http_proxy) ========== */
+/* ========== C-level API (linked by ws) ========== */
 
 XR_FUNC char *xr_base64_encode(const unsigned char *data, size_t len, size_t *out_len) {
     return base64_encode_internal(data, len, false, true, out_len);
