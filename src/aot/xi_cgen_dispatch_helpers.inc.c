@@ -650,6 +650,18 @@ static bool xicgen_value_belongs_to_func(const XiFunc *f, const XiValue *value) 
     return false;
 }
 
+static const XiImportRef *xicgen_freestanding_module_import_slot(const XiCgenCtx *ctx,
+                                                                 const XiFunc *f, int slot) {
+    if (!ctx || !ctx->freestanding_profile || slot < 0)
+        return NULL;
+    const XiImportRef *ref = cg_shared_slot_import_ref(f, slot);
+    if (!ref && f && f->module && f->module->init != f)
+        ref = cg_shared_slot_import_ref(f->module->init, slot);
+    if (!ref && ctx->module && ctx->module->init && ctx->module->init != f)
+        ref = cg_shared_slot_import_ref(ctx->module->init, slot);
+    return ref && ref->module_path && !ref->member_name ? ref : NULL;
+}
+
 static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) prefix;
@@ -676,6 +688,12 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     if (ctx && ctx->freestanding_profile &&
         cg_enum_for_shared_slot_in_func(ctx, f, (int) v->aux_int)) {
         fprintf(out, "XR_NULL_VAL");
+        return;
+    }
+    const XiImportRef *module_ref =
+        xicgen_freestanding_module_import_slot(ctx, f, (int) v->aux_int);
+    if (module_ref) {
+        fprintf(out, "XR_NULL_VAL /* module import: %s */", module_ref->module_path);
         return;
     }
     if (cg_value_type_is_span(v)) {
@@ -723,6 +741,10 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     if (ctx && ctx->freestanding_profile &&
         cg_enum_for_shared_slot_in_func(ctx, f, (int) v->aux_int)) {
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
+    if (xicgen_freestanding_module_import_slot(ctx, f, (int) v->aux_int)) {
         fprintf(out, "XR_NULL_VAL");
         return;
     }

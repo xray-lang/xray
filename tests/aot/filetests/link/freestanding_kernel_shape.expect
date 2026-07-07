@@ -16,6 +16,8 @@ c_contains=.flags =
 c_contains=.checksum =
 c_contains=xrt_mem_from_address
 c_contains=xrt_mem_volatile_store
+c_not_contains=xrt_shared[
+c_not_contains=static XrValue xrt_shared
 c_not_contains=xrt_arc_alloc
 c_not_contains=#include "xrt.h"
 not_contains=xray_rt_coro
