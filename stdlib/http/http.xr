@@ -752,6 +752,124 @@ fn formData(
     return FormData(maxTotalSize, maxFileSize)
 }
 
+fn _hasCtlOr(s: string, extra: string) -> bool {
+    for (var i = 0; i < s.length; i++) {
+        var c = s.charAt(i)
+        var o = c.ord()!
+        if (o < 0x20 || o == 0x7F || extra.indexOf(c) >= 0) { return true }
+    }
+    return false
+}
+
+fn _headerNameValid(name: string) -> bool {
+    return name.length > 0 && !_hasCtlOr(name, ":")
+}
+
+fn _headerValueValid(value: string) -> bool {
+    return !_hasCtlOr(value, "\r\n")
+}
+
+fn _requestMethod(method: string) -> string? {
+    var m = method.trim().toUpperCase()
+    if (m.length == 0 || _hasCtlOr(m, " \t\r\n")) { return null }
+    return m
+}
+
+fn _requestPath(path: string) -> string? {
+    var p = path
+    if (p.length == 0) { p = "/" }
+    if (p.charAt(0) != "/" || _hasCtlOr(p, " \r\n")) { return null }
+    return p
+}
+
+fn _hostHeaderValue(host: string) -> string? {
+    var h = host.trim()
+    if (h.length == 0) { return null }
+    if (_hasCtlOr(h, " /\r\n")) { return null }
+    return h
+}
+
+fn _headerKeyEquals(name: string, target: string) -> bool {
+    return name.toLowerCase() == target.toLowerCase()
+}
+
+fn _sensitiveHeader(name: string) -> bool {
+    var n = name.toLowerCase()
+    return n == "authorization" || n == "proxy-authorization"
+}
+
+fn _appendHeader(out: StringBuilder, name: string, value: string) {
+    out.append(name)
+    out.append(": ")
+    out.append(value)
+    out.append("\r\n")
+}
+
+// requestText - Format a complete HTTP/1.1 request string without performing I/O.
+fn requestText(
+    method: string,
+    path: string,
+    headers: Json = null,
+    body: string = "",
+    host: string = "",
+    stripSensitive: bool = false
+) -> string? {
+    var m = _requestMethod(method)
+    var p = _requestPath(path)
+    if (m == null || p == null) { return null }
+
+    var hasHost = false
+    var hasContentLength = false
+    var hasUserAgent = false
+    var hasAccept = false
+    var hasConnection = false
+    var custom: Array<(string, string)> = []
+
+    if (headers != null) {
+        for (key in headers) {
+            var name = string(key)
+            var rawValue = Json.get(headers, name, null)
+            if (rawValue == null) { continue }
+            var value = string(rawValue)
+            if (!_headerNameValid(name) || !_headerValueValid(value)) { return null }
+            if (stripSensitive && _sensitiveHeader(name)) { continue }
+
+            if (_headerKeyEquals(name, "Host")) { hasHost = true }
+            if (_headerKeyEquals(name, "Content-Length")) { hasContentLength = true }
+            if (_headerKeyEquals(name, "User-Agent")) { hasUserAgent = true }
+            if (_headerKeyEquals(name, "Accept")) { hasAccept = true }
+            if (_headerKeyEquals(name, "Connection")) { hasConnection = true }
+            custom.push((name, value))
+        }
+    }
+
+    var out = StringBuilder()
+    out.append(m!)
+    out.append(" ")
+    out.append(p!)
+    out.append(" HTTP/1.1\r\n")
+
+    for (var i = 0; i < custom.length; i++) {
+        _appendHeader(out, custom[i].0, custom[i].1)
+    }
+
+    if (!hasHost) {
+        var h = _hostHeaderValue(host)
+        if (h == null) { return null }
+        _appendHeader(out, "Host", h!)
+    }
+    if (!hasUserAgent) { _appendHeader(out, "User-Agent", "xray-http/1.0") }
+    if (!hasAccept) { _appendHeader(out, "Accept", "*/*") }
+    if (!hasConnection) { _appendHeader(out, "Connection", "keep-alive") }
+    _appendHeader(out, "Accept-Encoding", "gzip, deflate")
+    if (body.byteLength > 0 && !hasContentLength) {
+        _appendHeader(out, "Content-Length", string(body.byteLength))
+    }
+    out.append("\r\n")
+    out.append(body)
+    return out.toString()
+}
+
 fn _statusReason(status: int) -> string {
     if (status == 200) { return "OK" }
     if (status == 201) { return "Created" }
@@ -821,6 +939,7 @@ export {
     urlEncode,
     urlDecode,
     response,
+    requestText,
     formData,
     MultipartBody,
     FormData

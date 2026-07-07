@@ -1,0 +1,49 @@
+// Pure-Xray HTTP/1.1 request text helper.
+import http
+import { requestText } from http
+
+fn line(label: string, value: string?) {
+    print(label)
+    if (value == null) {
+        print("null")
+    } else {
+        print(value!.replaceAll("\r\n", "|"))
+    }
+}
+
+var basic = requestText("get", "/api?q=1", { "X-Test": "ok" }, "", "example.com")
+line("basic", basic)
+
+var body = requestText(
+    "post",
+    "/submit",
+    { "Content-Type": "text/plain" },
+    "hello",
+    "example.com"
+)
+line("body", body)
+
+var customHost = requestText("GET", "/", { "Host": "override.test" })
+line("custom-host", customHost)
+
+var emptyHeaders: Json = {}
+var stripped = requestText(
+    "GET",
+    "/private",
+    {
+        "Authorization": "secret",
+        "Proxy-Authorization": "proxy-secret",
+        "Accept": "application/json"
+    },
+    "",
+    "api.test",
+    true
+)
+print(stripped!.includes("Authorization"))
+print(stripped!.includes("Proxy-Authorization"))
+print(stripped!.includes("Accept: application/json"))
+
+print(requestText("GET", "/bad path", emptyHeaders, "", "example.com") == null)
+print(requestText("GET", "/", { "X-Bad": "a\r\nInjected: y" }, "", "example.com") == null)
+print(requestText("GET", "/", emptyHeaders, "", "bad host") == null)
+print(http.requestText("GET", "/", emptyHeaders, "", "example.com") != null)
