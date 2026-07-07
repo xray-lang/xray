@@ -43,6 +43,29 @@ FREESTANDING_DIRECT_BUILTINS = {
     "math.clamp",
 }
 
+FREESTANDING_HEADER_ONLY_SYMBOLS = {
+    "mem.fence",
+    "mem.prefetch",
+    "mem.cacheFlush",
+    "mem.cacheInvalidate",
+    "mem.nontemporalStore",
+    "mem.cacheLineSize",
+    "mem.sizeOf",
+    "mem.alignOf",
+    "mem.offsetOf",
+    "mem.alloc",
+    "mem.allocZeroed",
+    "mem.allocAligned",
+    "mem.fromAddress",
+    "mem.addressOf",
+    "mem.copy",
+    "mem.move",
+    "mem.set",
+    "mem.compare",
+    "mem.volatileLoad",
+    "mem.volatileStore",
+}
+
 
 @dataclasses.dataclass(frozen=True)
 class StdlibEntry:
@@ -891,6 +914,19 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
             and not e.link_object
         }.values()
     )
+    known_symbols = {e.symbol for e in symbol_entries}
+    unknown_header_only = sorted(FREESTANDING_HEADER_ONLY_SYMBOLS - known_symbols)
+    if unknown_header_only:
+        raise SystemExit(
+            "unknown freestanding header-only symbols: " + ", ".join(unknown_header_only)
+        )
+    freestanding_header_only_symbol_rows = list(
+        {
+            e.symbol: e
+            for e in symbol_entries
+            if e.symbol in FREESTANDING_HEADER_ONLY_SYMBOLS and not e.link_object
+        }.values()
+    )
     lines = generated_header("xaot_stdlib_generated.inc.c - AOT stdlib driver metadata")
     lines.extend(
         [
@@ -966,10 +1002,16 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
     lines.append("    const char *symbol) {")
     lines.append("    if (!symbol)")
     lines.append("        return false;")
-    for c in freestanding_header_only_const_rows:
-        lines.append(f"    if (strcmp(symbol, {c_string(c.symbol)}) == 0)\n        return true;")
-    for e in freestanding_direct_builtin_rows:
-        lines.append(f"    if (strcmp(symbol, {c_string(e.symbol)}) == 0)\n        return true;")
+    freestanding_header_only_rows = {
+        row.symbol: row
+        for row in [
+            *freestanding_header_only_const_rows,
+            *freestanding_direct_builtin_rows,
+            *freestanding_header_only_symbol_rows,
+        ]
+    }
+    for row in freestanding_header_only_rows.values():
+        lines.append(f"    if (strcmp(symbol, {c_string(row.symbol)}) == 0)\n        return true;")
     lines.append("    return false;")
     lines.append("}")
     lines.append("")
