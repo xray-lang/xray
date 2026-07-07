@@ -775,6 +775,16 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                                        size_t errbuf_len) {
     if (!ev)
         return set_error(errbuf, errbuf_len, "AOT global evidence verifier has no evidence");
+    for (uint32_t i = 0; i < ev->ncallsites; i++) {
+        const XgCallsiteSummary *call = &ev->callsites[i];
+        if (call->callsite_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT global evidence callsite has no id");
+        for (uint32_t j = i + 1; j < ev->ncallsites; j++) {
+            if (ev->callsites[j].callsite_id == call->callsite_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence callsite id is duplicated");
+        }
+    }
     for (uint32_t i = 0; i < ev->nbodies; i++) {
         const XgBodySummary *body = &ev->bodies[i];
         const XgDeclSummary *owner_decl = NULL;
