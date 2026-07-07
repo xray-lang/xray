@@ -461,6 +461,8 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                               .method_signature_key = 701,
                               .arg_type_key_start = 25,
                               .arg_count = 1};
+    XgDeclSummary body_decl = {
+        .module_id = 1, .decl_id = 9, .kind = XG_DECL_FUNC, .name_id = 9, .source_span_id = 41};
     XgBodySummary body = {.func_id = 9,
                           .module_id = 1,
                           .owner_decl_id = 9,
@@ -507,6 +509,7 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     char err[256];
 
     xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &body_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
     ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
@@ -880,6 +883,8 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
                               .method_id = 700,
                               .method_name_id = 700,
                               .method_signature_key = 701};
+    XgDeclSummary body_decl = {
+        .module_id = 1, .decl_id = 9, .kind = XG_DECL_FUNC, .name_id = 9, .source_span_id = 1};
     XgBodySummary body = {.func_id = 9,
                           .module_id = 1,
                           .owner_decl_id = 9,
@@ -899,6 +904,7 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     char err[256];
 
     xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &body_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &circle));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &rect));
     ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &circle_draw));
@@ -1310,6 +1316,8 @@ TEST(global_evidence_verifier_rederives_profile_actions) {
                       .imported_summary_hash = 0x34,
                       .module_id = 1,
                       .profile = XG_BUILD_FREESTANDING};
+    XgDeclSummary decl = {
+        .module_id = 1, .decl_id = 1, .kind = XG_DECL_FUNC, .name_id = 7, .source_span_id = 3};
     XgBodySummary body = {.func_id = 1,
                           .module_id = 1,
                           .owner_decl_id = 1,
@@ -1336,6 +1344,7 @@ TEST(global_evidence_verifier_rederives_profile_actions) {
     char err[256];
 
     xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
 
     XaotBundle metadata_bad;
@@ -1392,6 +1401,8 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
                       .imported_summary_hash = 0x44,
                       .module_id = 1,
                       .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary decl = {
+        .module_id = 1, .decl_id = 1, .kind = XG_DECL_FUNC, .name_id = 7, .source_span_id = 3};
     XgBodySummary body = {.func_id = 1,
                           .module_id = 1,
                           .owner_decl_id = 1,
@@ -1423,6 +1434,7 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
     modules[0] = &module;
 
     xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
 
@@ -1448,6 +1460,19 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence body kind is invalid"));
     xaot_bundle_free(&stale_kind);
     ev.bodies[0].kind = XG_BODY_FUNCTION;
+
+    XaotBundle stale_decl;
+    ev.bodies[0].owner_decl_id = 2;
+    memset(&stale_decl, 0, sizeof(stale_decl));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_decl, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_decl.modules = modules;
+    stale_decl.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_decl, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_decl, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence function body owner decl is missing"));
+    xaot_bundle_free(&stale_decl);
+    ev.bodies[0].owner_decl_id = 1;
 
     XaotBundle stale_range;
     ev.bodies[0].callsite_start = 2;
