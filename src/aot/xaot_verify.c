@@ -908,6 +908,8 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
 
     if (plan->callsite_id != call->callsite_id)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan callsite does not re-derive");
+    if (plan->source_span_id != call->source_span_id)
+        return set_error(errbuf, errbuf_len, "AOT dispatch plan source span does not re-derive");
     if (plan->method_id != expected_method_id)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan method does not re-derive");
     if (plan->receiver_static_class_id != call->receiver_static_class_id)
