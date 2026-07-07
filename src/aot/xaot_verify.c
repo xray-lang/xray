@@ -12,6 +12,7 @@
 #include "xaot_prepare.h"
 #include "../ir/xi_effect.h"
 #include "../runtime/value/xstruct_layout.h"
+#include "../stdlib/xstdlib_metadata.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -20,6 +21,46 @@ static bool set_error(char *errbuf, size_t errbuf_len, const char *msg) {
         snprintf(errbuf, errbuf_len, "%s", msg ? msg : "AOT verifier error");
     }
     return false;
+}
+
+static bool verify_stdlib_link_module_known(const char *name) {
+    return xr_stdlib_metadata_link_dependency_module_known(name);
+}
+
+static bool verify_link_dependency_name_shape(const XgLinkDependencySummary *dep, char *errbuf,
+                                              size_t errbuf_len) {
+    const char *dot;
+    char module[XG_LINK_DEP_NAME_MAX];
+    size_t module_len;
+    switch ((XgLinkDependencyKind) dep->kind) {
+        case XG_LINK_DEP_EXTERN_DYLIB:
+            return true;
+        case XG_LINK_DEP_STDLIB_MODULE:
+            if (strchr(dep->name, '.') || strchr(dep->name, '/') || strchr(dep->name, '\\'))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT stdlib module link dependency has invalid name");
+            if (!verify_stdlib_link_module_known(dep->name))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT stdlib module link dependency is unknown");
+            return true;
+        case XG_LINK_DEP_STDLIB_SYMBOL:
+            dot = strchr(dep->name, '.');
+            if (!dot || dot == dep->name || dot[1] == '\0' || strchr(dot + 1, '.'))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT stdlib symbol link dependency has invalid name");
+            module_len = (size_t) (dot - dep->name);
+            if (module_len >= sizeof(module))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT stdlib symbol link dependency has invalid name");
+            memcpy(module, dep->name, module_len);
+            module[module_len] = '\0';
+            if (!verify_stdlib_link_module_known(module))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT stdlib symbol link dependency module is unknown");
+            return true;
+        default:
+            return set_error(errbuf, errbuf_len, "AOT link dependency evidence has invalid kind");
+    }
 }
 
 static bool verify_func_has_plan_recursive(const XaotBundle *bundle, const XiFunc *func,
@@ -1915,6 +1956,15 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         const XaotLinkDependencyPlan *plan;
         if (dep->link_id == XG_NO_ID || dep->kind == 0 || !dep->name[0])
             return set_error(errbuf, errbuf_len, "AOT link dependency evidence is incomplete");
+        for (uint32_t prev_i = 0; prev_i < li; prev_i++) {
+            const XgLinkDependencySummary *prev = &ev->link_deps[prev_i];
+            if (prev->link_id == dep->link_id)
+                return set_error(errbuf, errbuf_len, "AOT link dependency id is duplicated");
+            if (prev->kind == dep->kind && strcmp(prev->name, dep->name) == 0)
+                return set_error(errbuf, errbuf_len, "AOT link dependency evidence is duplicated");
+        }
+        if (!verify_link_dependency_name_shape(dep, errbuf, errbuf_len))
+            return false;
         expected_link_dependency_plans++;
         plan = xaot_bundle_find_link_dependency_plan(bundle, dep->link_id);
         if (!plan)

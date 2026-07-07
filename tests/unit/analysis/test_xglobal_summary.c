@@ -2909,12 +2909,28 @@ TEST(global_evidence_verifier_rederives_link_dependency_plans) {
                                         .name_id = 99,
                                         .kind = XG_LINK_DEP_EXTERN_DYLIB,
                                         .flags = 0};
+    XgLinkDependencySummary stdlib_module = {.link_id = 2,
+                                             .module_id = 1,
+                                             .decl_id = 0,
+                                             .source_span_id = 4,
+                                             .name_id = 100,
+                                             .kind = XG_LINK_DEP_STDLIB_MODULE,
+                                             .flags = 0};
+    XgLinkDependencySummary stdlib_symbol = {.link_id = 3,
+                                             .module_id = 1,
+                                             .decl_id = 0,
+                                             .source_span_id = 5,
+                                             .name_id = 101,
+                                             .kind = XG_LINK_DEP_STDLIB_SYMBOL,
+                                             .flags = 0};
     XiFunc init_func;
     XiModule module;
     XiModule *modules[1];
     XaotBundle bundle;
     char err[256];
     memcpy(link_dep.name, "m", 2);
+    memcpy(stdlib_module.name, "path", 5);
+    memcpy(stdlib_symbol.name, "path.join", 10);
 
     memset(&init_func, 0, sizeof(init_func));
     init_func.name = "init";
@@ -2926,9 +2942,12 @@ TEST(global_evidence_verifier_rederives_link_dependency_plans) {
 
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&ev, &link_dep));
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&ev, &stdlib_module));
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&ev, &stdlib_symbol));
 
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nlink_dependency_plans, 3);
     bundle.modules = modules;
     bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
@@ -2941,6 +2960,60 @@ TEST(global_evidence_verifier_rederives_link_dependency_plans) {
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
+
+    XgGlobalEvidence bad_module_ev;
+    XgLinkDependencySummary bad_module = stdlib_module;
+    bad_module.name_id = 1001;
+    memcpy(bad_module.name, "path.join", 10);
+    key.source_hash = 0x35;
+    xg_global_evidence_init(&bad_module_ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&bad_module_ev, &bad_module));
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &bad_module_ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT stdlib module link dependency has invalid name"));
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&bad_module_ev);
+
+    XgGlobalEvidence bad_symbol_ev;
+    XgLinkDependencySummary bad_symbol = stdlib_symbol;
+    bad_symbol.name_id = 1002;
+    memcpy(bad_symbol.name, "unknown.join", 13);
+    key.source_hash = 0x36;
+    xg_global_evidence_init(&bad_symbol_ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&bad_symbol_ev, &bad_symbol));
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &bad_symbol_ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT stdlib symbol link dependency module is unknown"));
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&bad_symbol_ev);
+
+    XgGlobalEvidence duplicate_ev;
+    XgLinkDependencySummary duplicate = stdlib_symbol;
+    duplicate.link_id = 4;
+    key.source_hash = 0x37;
+    xg_global_evidence_init(&duplicate_ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&duplicate_ev, &stdlib_symbol));
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&duplicate_ev, &duplicate));
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &duplicate_ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT link dependency evidence is duplicated"));
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&duplicate_ev);
 }
 
 TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
