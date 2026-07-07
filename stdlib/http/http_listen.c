@@ -323,17 +323,6 @@ static HttpRawResponse format_response_arena(XrArena *arena, int status, const c
     return resp;
 }
 
-// Heap-backed format_response for module API (http.response)
-static XrValue format_response(XrVMRuntime *X, int status, const char *content_type,
-                               const char *body, size_t body_len) {
-    HttpRawResponse raw = format_response_raw(status, content_type, body, body_len);
-    if (!raw.data)
-        return xr_null();
-    XrString *str = xr_string_new(X, raw.data, raw.len);
-    xr_free(raw.data);
-    return xr_string_value(str);
-}
-
 /*
  * Process handler return value to raw HTTP response buffer (malloc'd).
  * C equivalent of http.xr _processResult().
@@ -1413,7 +1402,7 @@ XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrVa
 }
 
 /* ======================================================================
- * Config and Response helpers (exported as module functions)
+ * Config and server stats helpers (exported as module functions)
  * ====================================================================== */
 
 // http.config(opts) -> void
@@ -1465,34 +1454,4 @@ XrValue xr_http_server_stats(XrVMRuntime *X, XrValue *args, int argc) {
     xr_json_set_by_key(X, j, "totalConns",
                        XR_FROM_INT((int64_t) atomic_load(&ctx->total_conns_accepted)));
     return xr_json_value(j);
-}
-
-// http.response(status, body?, headers?) -> string
-XrValue xr_http_response_impl(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-
-    int status = XR_IS_INT(args[0]) ? (int) XR_TO_INT(args[0]) : 200;
-    const char *body = "";
-    size_t body_len = 0;
-    const char *content_type = NULL;
-
-    if (argc >= 2 && !XR_IS_NULL(args[1])) {
-        if (XR_IS_STRING(args[1])) {
-            XrString *s = XR_TO_STRING(args[1]);
-            body = XR_STRING_CHARS(s);
-            body_len = s->length;
-        } else {
-            // JSON stringify
-            char *json_str = xr_json_stringify_to_cstr(X, args[1], &body_len);
-            if (json_str) {
-                content_type = "application/json; charset=utf-8";
-                XrValue resp = format_response(X, status, content_type, json_str, body_len);
-                xr_free(json_str);
-                return resp;
-            }
-        }
-    }
-
-    return format_response(X, status, content_type, body, body_len);
 }

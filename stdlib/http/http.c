@@ -573,87 +573,6 @@ static XrValue http_close_stream(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_null();
 }
 
-// http.urlEncode(str: string) -> string
-static XrValue http_url_encode(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0])) {
-        return xr_null();
-    }
-
-    XrString *input = XR_TO_STRING(args[0]);
-    const char *src = input->data;
-    size_t src_len = input->length;
-
-    // Estimate output size (worst case: each char becomes %XX)
-    size_t out_cap = src_len * 3 + 1;
-    char *out = (char *) xr_malloc(out_cap);
-    if (!out)
-        return xr_null();
-    char *p = out;
-
-    static const char hex[] = "0123456789ABCDEF";
-
-    for (size_t i = 0; i < src_len; i++) {
-        unsigned char c = src[i];
-        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-            c == '-' || c == '_' || c == '.' || c == '~') {
-            *p++ = c;
-        } else {
-            *p++ = '%';
-            *p++ = hex[c >> 4];
-            *p++ = hex[c & 0x0F];
-        }
-    }
-
-    XrValue result = xrs_string_value_n(X, out, p - out);
-    xr_free(out);
-    return result;
-}
-
-// http.urlDecode(str: string) -> string
-static XrValue http_url_decode(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0])) {
-        return xr_null();
-    }
-
-    XrString *input = XR_TO_STRING(args[0]);
-    const char *src = input->data;
-    size_t src_len = input->length;
-
-    char *out = (char *) xr_malloc(src_len + 1);
-    if (!out)
-        return xr_null();
-    char *p = out;
-
-    for (size_t i = 0; i < src_len; i++) {
-        if (src[i] == '%' && i + 2 < src_len) {
-            // Parse %XX
-            char h = src[i + 1];
-            char l = src[i + 2];
-            int hv = (h >= '0' && h <= '9')   ? h - '0'
-                     : (h >= 'A' && h <= 'F') ? h - 'A' + 10
-                     : (h >= 'a' && h <= 'f') ? h - 'a' + 10
-                                              : -1;
-            int lv = (l >= '0' && l <= '9')   ? l - '0'
-                     : (l >= 'A' && l <= 'F') ? l - 'A' + 10
-                     : (l >= 'a' && l <= 'f') ? l - 'a' + 10
-                                              : -1;
-            if (hv >= 0 && lv >= 0) {
-                *p++ = (char) ((hv << 4) | lv);
-                i += 2;
-                continue;
-            }
-        } else if (src[i] == '+') {
-            *p++ = ' ';
-            continue;
-        }
-        *p++ = src[i];
-    }
-
-    XrValue result = xrs_string_value_n(X, out, p - out);
-    xr_free(out);
-    return result;
-}
-
 /* ========== HTTP Server Implementation ========== */
 
 /* ========== HTTP Context Management ========== */
@@ -1377,6 +1296,7 @@ XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate) {
     xr_stdlib_vm_bind_http_generated(isolate, mod);
 
     // 3. Mark as loaded
+    mod->requires_script = true;
     mod->loaded = true;
     return mod;
 }

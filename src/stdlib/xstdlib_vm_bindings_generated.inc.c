@@ -70,15 +70,12 @@ static void xr_stdlib_vm_bind_http_generated(XrVMRuntime *isolate, XrModule *mod
     XRS_EXPORT_SLOW(module, isolate, "put", http_put);
     XRS_EXPORT_SLOW(module, isolate, "delete", http_delete);
     XRS_EXPORT_SLOW(module, isolate, "request", http_request);
-    XRS_EXPORT(module, isolate, "urlEncode", http_url_encode);
-    XRS_EXPORT(module, isolate, "urlDecode", http_url_decode);
     XRS_EXPORT(module, isolate, "route", http_route);
     XRS_EXPORT(module, isolate, "static", http_static);
     XRS_EXPORT(module, isolate, "setConnHandler", http_set_conn_handler);
     XRS_EXPORT(module, isolate, "__getConnHandler", http_get_conn_handler);
     XRS_EXPORT_YIELDABLE(module, isolate, "listen", xr_http_listen_impl);
     XRS_EXPORT(module, isolate, "config", xr_http_config_impl);
-    XRS_EXPORT(module, isolate, "response", xr_http_response_impl);
     XRS_EXPORT(module, isolate, "serverStats", xr_http_server_stats);
     XRS_EXPORT(module, isolate, "ws", http_ws_route);
     XRS_EXPORT_SLOW(module, isolate, "readChunk", http_read_chunk);

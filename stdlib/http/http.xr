@@ -1,0 +1,70 @@
+// http - pure-Xray helpers layered on top of the native HTTP runtime.
+//
+// Socket I/O, TLS, streaming, server state, and HTTP/2 remain native runtime
+// boundaries. Public formatting and percent-encoding helpers live here.
+
+import { encode, decodeForm } from url
+
+fn _statusReason(status: int) -> string {
+    if (status == 200) { return "OK" }
+    if (status == 201) { return "Created" }
+    if (status == 204) { return "No Content" }
+    if (status == 301) { return "Moved Permanently" }
+    if (status == 302) { return "Found" }
+    if (status == 303) { return "See Other" }
+    if (status == 304) { return "Not Modified" }
+    if (status == 307) { return "Temporary Redirect" }
+    if (status == 308) { return "Permanent Redirect" }
+    if (status == 400) { return "Bad Request" }
+    if (status == 401) { return "Unauthorized" }
+    if (status == 403) { return "Forbidden" }
+    if (status == 404) { return "Not Found" }
+    if (status == 405) { return "Method Not Allowed" }
+    if (status == 409) { return "Conflict" }
+    if (status == 429) { return "Too Many Requests" }
+    if (status == 500) { return "Internal Server Error" }
+    if (status == 502) { return "Bad Gateway" }
+    if (status == 503) { return "Service Unavailable" }
+    if (status == 504) { return "Gateway Timeout" }
+    return "OK"
+}
+
+// urlEncode - Percent-encode using the HTTP module's historical URL helper
+// semantics: unreserved RFC 3986 bytes pass through, every other UTF-8 byte
+// becomes %XX, and spaces become %20 rather than +.
+fn urlEncode(s: string) -> string {
+    return encode(s)
+}
+
+// urlDecode - Percent-decode and treat + as a space, matching the former HTTP
+// helper semantics for form-style query fragments.
+fn urlDecode(s: string) -> string {
+    return decodeForm(s)
+}
+
+// response - Format a complete HTTP/1.1 response string.
+fn response(status: int, body: unknown = null) -> string {
+    var bodyText = ""
+    var contentType = "text/plain; charset=utf-8"
+
+    if (body != null) {
+        if (typename(body) == "string") {
+            bodyText = string(body)
+        } else {
+            bodyText = Json.stringify(body)
+            contentType = "application/json; charset=utf-8"
+        }
+    }
+
+    return "HTTP/1.1 " + string(status) + " " + _statusReason(status) + "\r\n" +
+        "Content-Type: " + contentType + "\r\n" +
+        "Content-Length: " + string(bodyText.byteLength) + "\r\n" +
+        "Connection: keep-alive\r\n\r\n" +
+        bodyText
+}
+
+export {
+    urlEncode,
+    urlDecode,
+    response
+}

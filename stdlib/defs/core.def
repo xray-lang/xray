@@ -3293,28 +3293,6 @@ module http {
     layer: "runtime"
   }
 
-  fn urlEncode {
-    signature: "(s: string): string"
-    doc: "URL-encode a string"
-    vm: "http_url_encode"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn urlDecode {
-    signature: "(s: string): string"
-    doc: "URL-decode a string"
-    vm: "http_url_decode"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn route {
     signature: "(method: string, path: string, handler: fn | string | Json): ()"
     doc: "Register a route handler or static response"
@@ -3376,17 +3354,6 @@ module http {
     doc: "Configure HTTP server limits and timeouts"
     vm: "xr_http_config_impl"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn response {
-    signature: "(status: int, body?: string | Json): string"
-    doc: "Format an HTTP response string"
-    vm: "xr_http_response_impl"
-    argc: 2
     arg_spec: ""
     aot_direct: false
     link_object: false
