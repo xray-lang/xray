@@ -11,6 +11,13 @@ if (p != null) {
     print(p!.wait())
 }
 
+var q = sys.Process.spawn("sh", ["-c", "sleep 5"])
+print(q != null)
+if (q != null) {
+    print(q!.kill(sys.Signal.KILL))
+    print(q!.wait())
+}
+
 var missing = sys.Process.spawn("", [])
 print(missing == null)
 print(sys.Signal.TERM != sys.Signal.KILL)

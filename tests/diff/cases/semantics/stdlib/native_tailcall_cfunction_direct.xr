@@ -1,0 +1,7 @@
+import { isFinite } from math
+
+fn finite_tail(x: float) -> bool {
+    return isFinite(x)
+}
+
+print(finite_tail(1.5))

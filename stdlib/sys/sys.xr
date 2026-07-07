@@ -11,14 +11,6 @@ enum Signal {
     INT
 }
 
-fn signalNumber(sig: Signal) -> int {
-    return match (sig) {
-        Signal.TERM -> 15
-        Signal.KILL -> 9
-        Signal.INT -> 2
-    }
-}
-
 class Process {
     _id: int
     _open: bool
@@ -39,7 +31,12 @@ class Process {
 
     kill(signal: Signal = Signal.TERM) -> bool {
         if (!this._open) { return false }
-        return __processKill(this._id, signalNumber(signal))
+        var sig = match (signal) {
+            Signal.TERM -> 15
+            Signal.KILL -> 9
+            Signal.INT -> 2
+        }
+        return __processKill(this._id, sig)
     }
 
     static spawn(program: string, args: Array<string> = []) -> Process? {
