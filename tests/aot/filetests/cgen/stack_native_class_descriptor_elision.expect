@@ -3,6 +3,9 @@ regex=function [0-9]+ name=run module=0 depth=1 abi=native boundary=none params=
 c_contains=typedef struct xrt_native_stack_native_class_descriptor_elision_Shape { int64_t f0; }
 c_contains=typedef struct xrt_native_stack_native_class_descriptor_elision_Rect { xrt_native_stack_native_class_descriptor_elision_Shape base; int64_t f1; int64_t f2; }
 c_contains=&((p0)->base)
+c_regex=int64_t v[0-9]+ = stack_native_class_descriptor_elision_area_[0-9]+\(NULL,
+c_regex=int64_t v[0-9]+ = stack_native_class_descriptor_elision_kind_plus_[0-9]+\(NULL,
+c_not_contains=xrt_method_
 c_not_contains=xrt_type_register_hot(
 c_not_contains=xrt_type_set_name(
 c_not_contains=xrt_process_new

@@ -3383,6 +3383,41 @@ static bool xicgen_emit_direct_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     return true;
 }
 
+static bool xicgen_emit_planned_direct_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                              const XiValue *v, const char *prefix,
+                                              const XaotMethodDispatchPlan *dispatch_plan) {
+    const XaotBundle *bundle;
+    const XaotDispatchTargetCase *target;
+    const XiFunc *target_func;
+    const char *target_prefix = NULL;
+    if (!dispatch_plan || dispatch_plan->kind != XAOT_DISPATCH_DIRECT ||
+        dispatch_plan->receiver_static_class_id == XG_NO_ID)
+        return false;
+    bundle = cg_ctx_aot_bundle(ctx);
+    if (!bundle || dispatch_plan->target_count != 1 || dispatch_plan->target_start == 0 ||
+        dispatch_plan->target_start - 1 >= bundle->ndispatch_target_cases) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: verified AOT direct dispatch plan at line %u has no target\n",
+                (unsigned) v->line);
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    target = &bundle->dispatch_target_cases[dispatch_plan->target_start - 1];
+    target_func = xaot_bundle_find_dispatch_target_func(bundle, target, &target_prefix);
+    if (!target_func) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: verified AOT direct dispatch target %u for method '%s' at "
+                "line %u has no Xi function\n",
+                (unsigned) target->method_id, v->aux ? (const char *) v->aux : "?",
+                (unsigned) v->line);
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    return xicgen_emit_direct_method(ctx, out, f, v, prefix, target_func, target_prefix);
+}
+
 static bool xicgen_emit_stringbuilder_append(FILE *out, const XiValue *v, const char *method,
                                              uint16_t nargs) {
     const XrType *recv_type = v->nargs > 0 && v->args[0] ? v->args[0]->type : NULL;
@@ -4758,6 +4793,8 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (xicgen_emit_enum_method(ctx, out, f, v, method))
         return;
     if (xicgen_emit_task_method(ctx, out, f, v, method, nargs))
+        return;
+    if (xicgen_emit_planned_direct_method(ctx, out, f, v, prefix, dispatch_plan))
         return;
     if (xicgen_emit_direct_method(ctx, out, f, v, prefix, mfunc, method_prefix))
         return;
