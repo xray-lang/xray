@@ -284,6 +284,50 @@ typedef struct XaotClosurePlan {
     uint8_t unproven_reason;
 } XaotClosurePlan;
 
+typedef enum XaotTransferSiteKind {
+    XAOT_TRANSFER_GO_ARG = 1,
+    XAOT_TRANSFER_THREAD_ARG = 2,
+    XAOT_TRANSFER_CHAN_SEND = 3,
+    XAOT_TRANSFER_CHAN_TRY_SEND = 4,
+    XAOT_TRANSFER_CHAN_SEND_TIMEOUT = 5,
+} XaotTransferSiteKind;
+
+typedef enum XaotTransferAction {
+    XAOT_TRANSFER_ACTION_SHARE = 1,
+    XAOT_TRANSFER_ACTION_COPY = 2,
+    XAOT_TRANSFER_ACTION_MOVE = 3,
+    XAOT_TRANSFER_ACTION_DEEP_COPY = 4,
+    XAOT_TRANSFER_ACTION_REJECT = 5,
+} XaotTransferAction;
+
+enum {
+    XAOT_TRANSFER_EV_SITE = 1u << 0,
+    XAOT_TRANSFER_EV_VALUE = 1u << 1,
+    XAOT_TRANSFER_EV_MODE = 1u << 2,
+    XAOT_TRANSFER_EV_TYPE = 1u << 3,
+    XAOT_TRANSFER_EV_BOUNDARY_CLONE = 1u << 4,
+};
+
+enum {
+    XAOT_TRANSFER_UNPROVEN_NONE = 0,
+    XAOT_TRANSFER_UNPROVEN_NO_VALUE = 1,
+    XAOT_TRANSFER_UNPROVEN_BAD_MODE = 2,
+};
+
+typedef struct XaotTransferPlan {
+    const XiFunc *func;
+    const XiValue *site;
+    const XiValue *value;
+    const XrType *value_type;
+    XaotTypeKey value_type_key;
+    uint16_t transfer_index;
+    uint8_t site_kind;
+    uint8_t mode;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotTransferPlan;
+
 typedef struct XaotGlobalEvidencePlan {
     const XgGlobalEvidence *evidence;
     uint64_t evidence_hash;
@@ -519,6 +563,9 @@ typedef struct XaotBundle {
     XaotClosurePlan *closure_plans;
     uint32_t nclosure_plans;
     uint32_t closure_plan_cap;
+    XaotTransferPlan *transfer_plans;
+    uint32_t ntransfer_plans;
+    uint32_t transfer_plan_cap;
     XaotGlobalEvidencePlan global_evidence_plan;
     XaotClassHierarchyPlan *class_hierarchy_plans;
     uint32_t nclass_hierarchy_plans;
@@ -649,6 +696,13 @@ xaot_bundle_add_closure_plan(XaotBundle *bundle, const XiFunc *func, const XiVal
                              uint8_t representation, uint32_t evidence, uint8_t unproven_reason);
 XR_FUNC const XaotClosurePlan *xaot_bundle_find_closure_plan(const XaotBundle *bundle,
                                                              const XiValue *value);
+XR_FUNC XaotTransferPlan *xaot_bundle_add_transfer_plan(
+    XaotBundle *bundle, const XiFunc *func, const XiValue *site, uint16_t transfer_index,
+    const XiValue *value, const XrType *value_type, const XaotTypeKey *value_type_key,
+    uint8_t site_kind, uint8_t mode, uint8_t action, uint32_t evidence, uint8_t unproven_reason);
+XR_FUNC const XaotTransferPlan *xaot_bundle_find_transfer_plan(const XaotBundle *bundle,
+                                                               const XiValue *site,
+                                                               uint16_t transfer_index);
 XR_FUNC XaotBoundaryStep *xaot_bundle_add_boundary_step(XaotBundle *bundle,
                                                         XaotBoundaryStepKind kind,
                                                         const XiFunc *func, const XiValue *value,

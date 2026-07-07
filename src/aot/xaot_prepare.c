@@ -14,8 +14,10 @@
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../ir/xi_analysis.h"
+#include "../ir/xi_coro_analyze.h"
 #include "../ir/xi_effect.h"
 #include "../ir/xi_range.h"
+#include "../ir/xi_value_query.h"
 #include "../shared/xr_array_core.h"
 #include <stdlib.h>
 #include <string.h>
@@ -2286,6 +2288,164 @@ static bool prepare_func_closure_plans(XaotBundle *bundle, const XiFunc *func) {
     return true;
 }
 
+static uint8_t prepare_transfer_channel_site_kind(const XiValue *site) {
+    const char *method;
+
+    if (!site)
+        return 0;
+    if (site->op == XI_CHAN_SEND)
+        return XAOT_TRANSFER_CHAN_SEND;
+    if (site->op == XI_CHAN_TRY_SEND)
+        return XAOT_TRANSFER_CHAN_TRY_SEND;
+    if (site->op != XI_CALL_METHOD || site->nargs < 2 || !xi_value_type_is_channel(site->args[0]))
+        return 0;
+    method = (const char *) site->aux;
+    if (!method)
+        return 0;
+    if (strcmp(method, "send") == 0)
+        return XAOT_TRANSFER_CHAN_SEND;
+    if (strcmp(method, "trySend") == 0)
+        return XAOT_TRANSFER_CHAN_TRY_SEND;
+    if (strcmp(method, "sendTimeout") == 0)
+        return XAOT_TRANSFER_CHAN_SEND_TIMEOUT;
+    return 0;
+}
+
+static uint8_t prepare_transfer_action(uint8_t mode, bool needs_boundary_clone) {
+    switch ((XrTransferMode) mode) {
+        case XR_TRANSFER_SHARE:
+            return XAOT_TRANSFER_ACTION_SHARE;
+        case XR_TRANSFER_COPY:
+            return needs_boundary_clone ? XAOT_TRANSFER_ACTION_DEEP_COPY
+                                        : XAOT_TRANSFER_ACTION_COPY;
+        case XR_TRANSFER_MOVE:
+            return XAOT_TRANSFER_ACTION_MOVE;
+        default:
+            return XAOT_TRANSFER_ACTION_REJECT;
+    }
+}
+
+static XaotTypeKey prepare_transfer_type_key(const XrType *type) {
+    XaotContainerPlan container_plan;
+    XaotTypeKey key;
+    memset(&key, 0, sizeof(key));
+    if (type && xaot_container_plan_for_type(type, &container_plan))
+        key = container_plan.type_key;
+    return key;
+}
+
+XR_FUNC bool xaot_prepare_transfer_plan_for_site(const XiFunc *func, const XiValue *site,
+                                                 uint16_t transfer_index, XaotTransferPlan *out) {
+    const XiValue *value = NULL;
+    const XrType *value_type = NULL;
+    uint8_t site_kind = 0;
+    uint8_t mode = XR_TRANSFER_SHARE;
+    uint8_t action;
+    uint32_t evidence = XAOT_TRANSFER_EV_SITE;
+    bool needs_boundary_clone = false;
+
+    if (!func || !site || !out)
+        return false;
+    if (!site->block || site->block->func != func)
+        return false;
+
+    if (site->op == XI_GO || site->op == XI_THREAD_SPAWN) {
+        if ((uint32_t) transfer_index + 1u >= site->nargs)
+            return false;
+        site_kind = site->op == XI_GO ? XAOT_TRANSFER_GO_ARG : XAOT_TRANSFER_THREAD_ARG;
+        value = site->args[transfer_index + 1u];
+        mode = xi_go_arg_transfer_mode(site, transfer_index);
+    } else {
+        site_kind = prepare_transfer_channel_site_kind(site);
+        if (site_kind == 0 || transfer_index != 0)
+            return false;
+        value = site->nargs >= 2 ? site->args[1] : NULL;
+        mode = xi_chan_send_transfer_mode(site);
+    }
+
+    memset(out, 0, sizeof(*out));
+    out->func = func;
+    out->site = site;
+    out->value = value;
+    out->transfer_index = transfer_index;
+    out->site_kind = site_kind;
+    out->mode = mode;
+
+    if (!value) {
+        out->action = XAOT_TRANSFER_ACTION_REJECT;
+        out->evidence = evidence;
+        out->unproven_reason = XAOT_TRANSFER_UNPROVEN_NO_VALUE;
+        return true;
+    }
+    evidence |= XAOT_TRANSFER_EV_VALUE;
+
+    if (mode > XR_TRANSFER_MOVE) {
+        out->action = XAOT_TRANSFER_ACTION_REJECT;
+        out->evidence = evidence;
+        out->unproven_reason = XAOT_TRANSFER_UNPROVEN_BAD_MODE;
+        return true;
+    }
+    evidence |= XAOT_TRANSFER_EV_MODE;
+
+    value_type = value->type;
+    if (value_type) {
+        out->value_type = value_type;
+        out->value_type_key = prepare_transfer_type_key(value_type);
+        evidence |= XAOT_TRANSFER_EV_TYPE;
+    }
+
+    needs_boundary_clone = xi_coro_value_needs_boundary_clone(value);
+    if (needs_boundary_clone)
+        evidence |= XAOT_TRANSFER_EV_BOUNDARY_CLONE;
+    action = prepare_transfer_action(mode, needs_boundary_clone);
+    out->action = action;
+    out->evidence = evidence;
+    out->unproven_reason = XAOT_TRANSFER_UNPROVEN_NONE;
+    return true;
+}
+
+static bool prepare_func_transfer_plans(XaotBundle *bundle, const XiFunc *func) {
+    if (!bundle || !func)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *blk = func->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *site = blk->values[vi];
+            if (!site)
+                continue;
+            if (site->op == XI_GO || site->op == XI_THREAD_SPAWN) {
+                for (uint16_t ai = 1; ai < site->nargs; ai++) {
+                    XaotTransferPlan derived;
+                    uint16_t transfer_index = (uint16_t) (ai - 1);
+                    if (!xaot_prepare_transfer_plan_for_site(func, site, transfer_index, &derived))
+                        continue;
+                    if (!xaot_bundle_add_transfer_plan(
+                            bundle, func, site, transfer_index, derived.value, derived.value_type,
+                            &derived.value_type_key, derived.site_kind, derived.mode,
+                            derived.action, derived.evidence, derived.unproven_reason)) {
+                        bundle->error_msg = "failed to allocate AOT transfer plan";
+                        return false;
+                    }
+                }
+            } else if (prepare_transfer_channel_site_kind(site) != 0) {
+                XaotTransferPlan derived;
+                if (!xaot_prepare_transfer_plan_for_site(func, site, 0, &derived))
+                    continue;
+                if (!xaot_bundle_add_transfer_plan(bundle, func, site, 0, derived.value,
+                                                   derived.value_type, &derived.value_type_key,
+                                                   derived.site_kind, derived.mode, derived.action,
+                                                   derived.evidence, derived.unproven_reason)) {
+                    bundle->error_msg = "failed to allocate AOT transfer plan";
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 static bool prepare_array_native_local_data_cacheable(const XaotBundle *bundle, const XiFunc *func,
                                                       const XiValue *value) {
     const XiValue *target = unwrap_identity_value(value);
@@ -3094,6 +3254,8 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     if (!prepare_func_alias_plans(bundle, func))
         return false;
     if (!prepare_func_closure_plans(bundle, func))
+        return false;
+    if (!prepare_func_transfer_plans(bundle, func))
         return false;
     /* Module inits are procedural entry points (called once, ordering-
      * sensitive); attribute plans only apply to ordinary functions. */

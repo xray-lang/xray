@@ -48,4 +48,11 @@ XR_FUNC uint32_t xaot_prepare_array_cache_alias_evidence(const XaotBundle *bundl
 XR_FUNC bool xaot_prepare_closure_plan_for_value(const XiFunc *func, const XiValue *value,
                                                  XaotClosurePlan *out);
 
+/* Coroutine/thread/channel transfer evidence. `transfer_index` is the
+ * boundary payload slot: go/thread args start at 0 after the callee; channel
+ * send has a single slot 0. Returns false for non-transfer sites or an index
+ * outside the site's payload range. */
+XR_FUNC bool xaot_prepare_transfer_plan_for_site(const XiFunc *func, const XiValue *site,
+                                                 uint16_t transfer_index, XaotTransferPlan *out);
+
 #endif  // XAOT_PREPARE_H

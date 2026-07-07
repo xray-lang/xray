@@ -401,6 +401,44 @@ static bool verify_closure_plan(const XaotBundle *bundle, const XaotClosurePlan 
     return true;
 }
 
+static bool verify_transfer_plan(const XaotBundle *bundle, const XaotTransferPlan *plan,
+                                 char *errbuf, size_t errbuf_len) {
+    XaotTransferPlan derived;
+
+    if (!bundle || !plan)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan is NULL");
+    if (!plan->func || !plan->site)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan lacks func or site");
+    if (!xaot_bundle_find_func_plan(bundle, plan->func))
+        return set_error(errbuf, errbuf_len, "AOT transfer plan func has no func plan");
+    if (!xaot_bundle_find_value_plan(bundle, plan->site))
+        return set_error(errbuf, errbuf_len, "AOT transfer plan site has no value plan");
+    if (plan->value && !xaot_bundle_find_value_plan(bundle, plan->value))
+        return set_error(errbuf, errbuf_len, "AOT transfer plan value has no value plan");
+    if (xaot_bundle_find_transfer_plan(bundle, plan->site, plan->transfer_index) != plan)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan index mismatch");
+    if (!xaot_prepare_transfer_plan_for_site(plan->func, plan->site, plan->transfer_index,
+                                             &derived))
+        return set_error(errbuf, errbuf_len, "AOT transfer plan site no longer re-derives");
+    if (plan->value != derived.value)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan value does not re-derive");
+    if (plan->value_type != derived.value_type)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan value type does not re-derive");
+    if (memcmp(&plan->value_type_key, &derived.value_type_key, sizeof(plan->value_type_key)) != 0)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan type key does not re-derive");
+    if (plan->site_kind != derived.site_kind)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan site kind does not re-derive");
+    if (plan->mode != derived.mode)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan mode does not re-derive");
+    if (plan->action != derived.action)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan action does not re-derive");
+    if (plan->evidence != derived.evidence)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan evidence does not re-derive");
+    if (plan->unproven_reason != derived.unproven_reason)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan reason does not re-derive");
+    return true;
+}
+
 static bool xg_verify_class_is_runtime_class(const XgClassSummary *cls) {
     return cls && (cls->decl_kind == 0 || cls->decl_kind == XG_DECL_CLASS);
 }
@@ -1073,11 +1111,61 @@ static bool verify_func_closure_plans_recursive(const XaotBundle *bundle, const 
     return true;
 }
 
+static bool verify_func_transfer_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
+                                                 uint32_t *out_count, char *errbuf,
+                                                 size_t errbuf_len) {
+    uint32_t bi;
+    uint16_t ci;
+
+    if (!func)
+        return set_error(errbuf, errbuf_len, "NULL Xi function in AOT transfer verifier");
+
+    for (bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *blk = func->blocks[bi];
+        uint32_t vi;
+        if (!blk)
+            continue;
+        for (vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *site = blk->values[vi];
+            if (!site)
+                continue;
+            if (site->op == XI_GO || site->op == XI_THREAD_SPAWN) {
+                for (uint16_t ai = 1; ai < site->nargs; ai++) {
+                    XaotTransferPlan derived;
+                    uint16_t transfer_index = (uint16_t) (ai - 1);
+                    if (!xaot_prepare_transfer_plan_for_site(func, site, transfer_index, &derived))
+                        continue;
+                    if (out_count)
+                        (*out_count)++;
+                    if (!xaot_bundle_find_transfer_plan(bundle, site, transfer_index))
+                        return set_error(errbuf, errbuf_len, "AOT transfer boundary has no plan");
+                }
+            } else {
+                XaotTransferPlan derived;
+                if (!xaot_prepare_transfer_plan_for_site(func, site, 0, &derived))
+                    continue;
+                if (out_count)
+                    (*out_count)++;
+                if (!xaot_bundle_find_transfer_plan(bundle, site, 0))
+                    return set_error(errbuf, errbuf_len, "AOT transfer boundary has no plan");
+            }
+        }
+    }
+
+    for (ci = 0; ci < func->nchildren; ci++) {
+        if (!verify_func_transfer_plans_recursive(bundle, func->children[ci], out_count, errbuf,
+                                                  errbuf_len))
+            return false;
+    }
+    return true;
+}
+
 XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, char *errbuf,
                                 size_t errbuf_len) {
     uint32_t mi;
     uint32_t fi;
     uint32_t closure_count = 0;
+    uint32_t transfer_count = 0;
 
     (void) mode;
     if (!bundle)
@@ -1104,9 +1192,14 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
         if (!verify_func_closure_plans_recursive(bundle, mod->init, &closure_count, errbuf,
                                                  errbuf_len))
             return false;
+        if (!verify_func_transfer_plans_recursive(bundle, mod->init, &transfer_count, errbuf,
+                                                  errbuf_len))
+            return false;
     }
     if (closure_count != bundle->nclosure_plans)
         return set_error(errbuf, errbuf_len, "AOT closure plan count does not match IR");
+    if (transfer_count != bundle->ntransfer_plans)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan count does not match IR");
 
     for (fi = 0; fi < bundle->nfunc_plans; fi++) {
         if (!verify_abi_plan(&bundle->func_plans[fi], errbuf, errbuf_len))
@@ -1152,6 +1245,10 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
     }
     for (fi = 0; fi < bundle->nclosure_plans; fi++) {
         if (!verify_closure_plan(bundle, &bundle->closure_plans[fi], errbuf, errbuf_len))
+            return false;
+    }
+    for (fi = 0; fi < bundle->ntransfer_plans; fi++) {
+        if (!verify_transfer_plan(bundle, &bundle->transfer_plans[fi], errbuf, errbuf_len))
             return false;
     }
     for (fi = 0; fi < bundle->nboundary_steps; fi++) {

@@ -684,6 +684,7 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xr_free(bundle->span_access_plans);
     xr_free(bundle->alias_plans);
     xr_free(bundle->closure_plans);
+    xr_free(bundle->transfer_plans);
     xaot_bundle_clear_global_lowered_plans(bundle);
     xr_free(bundle->boundary_steps);
     xaot_ptr_index_free(&bundle->value_index);
@@ -1577,6 +1578,50 @@ XR_FUNC const XaotClosurePlan *xaot_bundle_find_closure_plan(const XaotBundle *b
     return NULL;
 }
 
+XR_FUNC XaotTransferPlan *xaot_bundle_add_transfer_plan(
+    XaotBundle *bundle, const XiFunc *func, const XiValue *site, uint16_t transfer_index,
+    const XiValue *value, const XrType *value_type, const XaotTypeKey *value_type_key,
+    uint8_t site_kind, uint8_t mode, uint8_t action, uint32_t evidence, uint8_t unproven_reason) {
+    XaotTransferPlan *plan;
+
+    if (!bundle || !func || !site || site_kind == 0 || action == 0 || evidence == 0)
+        return NULL;
+    plan = (XaotTransferPlan *) xaot_bundle_find_transfer_plan(bundle, site, transfer_index);
+    if (plan)
+        return plan;
+    if (!reserve_plan_array((void **) &bundle->transfer_plans, &bundle->transfer_plan_cap,
+                            bundle->ntransfer_plans + 1, sizeof(XaotTransferPlan), 16))
+        return NULL;
+    plan = &bundle->transfer_plans[bundle->ntransfer_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->func = func;
+    plan->site = site;
+    plan->value = value;
+    plan->value_type = value_type;
+    if (value_type_key)
+        plan->value_type_key = *value_type_key;
+    plan->transfer_index = transfer_index;
+    plan->site_kind = site_kind;
+    plan->mode = mode;
+    plan->action = action;
+    plan->evidence = evidence;
+    plan->unproven_reason = unproven_reason;
+    return plan;
+}
+
+XR_FUNC const XaotTransferPlan *xaot_bundle_find_transfer_plan(const XaotBundle *bundle,
+                                                               const XiValue *site,
+                                                               uint16_t transfer_index) {
+    if (!bundle || !site)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ntransfer_plans; i++) {
+        const XaotTransferPlan *plan = &bundle->transfer_plans[i];
+        if (plan->site == site && plan->transfer_index == transfer_index)
+            return plan;
+    }
+    return NULL;
+}
+
 XR_FUNC XaotBoundaryStep *xaot_bundle_add_boundary_step(XaotBundle *bundle,
                                                         XaotBoundaryStepKind kind,
                                                         const XiFunc *func, const XiValue *value,
@@ -1958,6 +2003,85 @@ static void print_closure_evidence_bits(FILE *out, uint32_t bits) {
 #undef PRINT_BIT
 }
 
+static const char *transfer_site_kind_name(uint8_t kind) {
+    switch ((XaotTransferSiteKind) kind) {
+        case XAOT_TRANSFER_GO_ARG:
+            return "go_arg";
+        case XAOT_TRANSFER_THREAD_ARG:
+            return "thread_arg";
+        case XAOT_TRANSFER_CHAN_SEND:
+            return "chan_send";
+        case XAOT_TRANSFER_CHAN_TRY_SEND:
+            return "chan_try_send";
+        case XAOT_TRANSFER_CHAN_SEND_TIMEOUT:
+            return "chan_send_timeout";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *transfer_mode_name(uint8_t mode) {
+    switch ((XrTransferMode) mode) {
+        case XR_TRANSFER_SHARE:
+            return "share";
+        case XR_TRANSFER_COPY:
+            return "copy";
+        case XR_TRANSFER_MOVE:
+            return "move";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *transfer_action_name(uint8_t action) {
+    switch ((XaotTransferAction) action) {
+        case XAOT_TRANSFER_ACTION_SHARE:
+            return "share";
+        case XAOT_TRANSFER_ACTION_COPY:
+            return "copy";
+        case XAOT_TRANSFER_ACTION_MOVE:
+            return "move";
+        case XAOT_TRANSFER_ACTION_DEEP_COPY:
+            return "deep_copy";
+        case XAOT_TRANSFER_ACTION_REJECT:
+            return "reject";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *transfer_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_TRANSFER_UNPROVEN_NONE:
+            return "none";
+        case XAOT_TRANSFER_UNPROVEN_NO_VALUE:
+            return "no_value";
+        case XAOT_TRANSFER_UNPROVEN_BAD_MODE:
+            return "bad_mode";
+        default:
+            return "unknown";
+    }
+}
+
+static void print_transfer_evidence_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_TRANSFER_EV_SITE, "site");
+    PRINT_BIT(XAOT_TRANSFER_EV_VALUE, "value");
+    PRINT_BIT(XAOT_TRANSFER_EV_MODE, "mode");
+    PRINT_BIT(XAOT_TRANSFER_EV_TYPE, "type");
+    PRINT_BIT(XAOT_TRANSFER_EV_BOUNDARY_CLONE, "boundary_clone");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
 XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     char *buf = NULL;
     size_t bufsz = 0;
@@ -2239,6 +2363,23 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 (unsigned) cp->capture_count, closure_representation_name(cp->representation));
         print_closure_evidence_bits(out, cp->evidence);
         fprintf(out, " reason=%s\n", closure_unproven_reason_name(cp->unproven_reason));
+    }
+
+    for (uint32_t ti = 0; ti < bundle->ntransfer_plans; ti++) {
+        const XaotTransferPlan *tp = &bundle->transfer_plans[ti];
+        char site_buf[32];
+        char value_buf[32];
+        value_ref(site_buf, sizeof(site_buf), tp->site);
+        value_ref(value_buf, sizeof(value_buf), tp->value);
+        fprintf(out,
+                "transfer %u func=%s site=%s kind=%s index=%u value=%s mode=%s action=%s "
+                "type-key=%016" PRIx64 " evidence=",
+                ti, safe_str(tp->func ? tp->func->name : NULL), site_buf,
+                transfer_site_kind_name(tp->site_kind), (unsigned) tp->transfer_index, value_buf,
+                transfer_mode_name(tp->mode), transfer_action_name(tp->action),
+                tp->value_type_key.fingerprint);
+        print_transfer_evidence_bits(out, tp->evidence);
+        fprintf(out, " reason=%s\n", transfer_unproven_reason_name(tp->unproven_reason));
     }
 
     for (uint32_t bi = 0; bi < bundle->nboundary_steps; bi++) {

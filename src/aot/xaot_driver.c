@@ -308,6 +308,16 @@ static void features_apply_capability_plans(XaotFeatureSet *fs, const XaotBundle
         features_apply_capability_plan(fs, bundle->capability_plans[i].capability);
 }
 
+static void features_apply_transfer_plans(XaotFeatureSet *fs, const XaotBundle *bundle) {
+    if (!fs || !bundle)
+        return;
+    for (uint32_t i = 0; i < bundle->ntransfer_plans; i++) {
+        const XaotTransferPlan *plan = &bundle->transfer_plans[i];
+        if (plan->action == XAOT_TRANSFER_ACTION_DEEP_COPY)
+            fs->need_deep_copy = true;
+    }
+}
+
 static bool reject_profile_capability_plans(const XaotBundle *bundle) {
     if (!bundle)
         return false;
@@ -318,6 +328,22 @@ static bool reject_profile_capability_plans(const XaotBundle *bundle) {
         fprintf(stderr, "Error: %s profile rejects runtime capability '%s'\n",
                 xg_build_profile_name(bundle->global_evidence_plan.profile),
                 xg_capability_name(plan->capability));
+        return false;
+    }
+    return true;
+}
+
+static bool reject_profile_transfer_plans(const XaotBundle *bundle) {
+    if (!bundle)
+        return false;
+    if (bundle->global_evidence_plan.profile != XG_BUILD_FREESTANDING)
+        return true;
+    for (uint32_t i = 0; i < bundle->ntransfer_plans; i++) {
+        const XaotTransferPlan *plan = &bundle->transfer_plans[i];
+        if (plan->action != XAOT_TRANSFER_ACTION_DEEP_COPY)
+            continue;
+        fprintf(stderr, "Error: %s profile rejects transfer deep_copy\n",
+                xg_build_profile_name(bundle->global_evidence_plan.profile));
         return false;
     }
     return true;
@@ -1074,6 +1100,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     }
     if (!reject_profile_capability_plans(&aot_bundle))
         goto fail_free_ir;
+    if (!reject_profile_transfer_plans(&aot_bundle))
+        goto fail_free_ir;
     if (!reject_profile_metadata_plans(&aot_bundle))
         goto fail_free_ir;
     /* The plan dump is O(functions x values) diagnostics; only build it when
@@ -1196,6 +1224,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     XaotFeatureSet features;
     memset(&features, 0, sizeof(features));
     features_apply_capability_plans(&features, &aot_bundle);
+    features_apply_transfer_plans(&features, &aot_bundle);
     collect_link_symbol_features(ir_funcs, nmodules, &features);
     if (!build_link_manifest(&features, &link_manifest,
                              profile == XAOT_BUILD_PROFILE_FREESTANDING)) {
