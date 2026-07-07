@@ -3481,6 +3481,7 @@ TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
     ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].receiver_static_interface_id, drawable_id);
     ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].method_id,
                    ev.interface_methods[0].interface_method_id);
+    ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].dispatch_slot, 0);
     ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 1);
 
     char err[256];
@@ -3624,6 +3625,7 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     ASSERT_EQ_UINT(bundle.nmethod_dispatch_plans, 1);
     ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].kind, XAOT_DISPATCH_TYPE_SWITCH);
     ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].receiver_static_interface_id, shape_id);
+    ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].dispatch_slot, 0);
     ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].target_count, 2);
     ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 2);
     ASSERT_TRUE(bundle.dispatch_target_cases[0].receiver_class_id !=
@@ -3637,6 +3639,11 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     char err[256];
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    bundle.method_dispatch_plans[0].dispatch_slot = 99;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan slot does not re-derive"));
+    bundle.method_dispatch_plans[0].dispatch_slot = 0;
     for (uint32_t i = 0; i < bundle.ninterface_use_plans; i++) {
         XaotInterfaceUsePlan *use_plan = &bundle.interface_use_plans[i];
         XgClassId saved_implementor;
