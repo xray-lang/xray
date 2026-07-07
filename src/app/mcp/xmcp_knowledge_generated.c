@@ -1113,6 +1113,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Generic HTTP request",
     },
     {
+        .name = "requestText",
+        .signature = "(method: string, path: string, headers: Json = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?",
+        .summary = "",
+    },
+    {
         .name = "response",
         .signature = "(status: int, body: unknown = null): string",
         .summary = "",
@@ -5080,6 +5085,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.put` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP PUT request |\n"
             "| `http.readChunk` | `(resp: Json, maxBytes?: int): string?` | Read the next chunk from a streaming HTTP response |\n"
             "| `http.request` | `(options: Json): HttpResponse` | Generic HTTP request |\n"
+            "| `http.requestText` | `(method: string, path: string, headers: Json = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
             "| `http.response` | `(status: int, body: unknown = null): string` |  |\n"
             "| `http.route` | `(method: string, path: string, handler: fn \\| string \\| Json): ()` | Register a route handler or static response |\n"
             "| `http.router` | `(): Router` |  |\n"

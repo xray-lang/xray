@@ -158,6 +158,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"urlEncode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-encode using the HTTP module's historical URL helper", NULL, 0},
     {"urlDecode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-decode and treat + as a space, matching the former HTTP", NULL, 0},
     {"response", XLSP_SYM_FUNCTION, "fn(status: int, body?: unknown): string", "Format a complete HTTP/1.1 response string.", NULL, 0},
+    {"requestText", XLSP_SYM_FUNCTION, "fn(method: string, path: string, headers?: Json, body?: string, host?: string, stripSensitive?: bool): string?", "Format a complete HTTP/1.1 request string without performing I/O.", NULL, 0},
     {"formData", XLSP_SYM_FUNCTION, "fn(maxTotalSize?: int, maxFileSize?: int): FormData", "Create an explicit multipart/form-data builder.", NULL, 0},
     {"HttpResponse", XLSP_SYM_CLASS, "type HttpResponse", "Native handle type", NULL, 0},
     {"HttpRequest", XLSP_SYM_CLASS, "type HttpRequest", "Native handle type", NULL, 0},
@@ -169,7 +170,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"MultipartBody", XLSP_SYM_CLASS, "type MultipartBody", "Built multipart/form-data payload and matching Content-Type.", NULL, 0},
     {"FormData", XLSP_SYM_CLASS, "type FormData", "Explicit multipart/form-data builder.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 42
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 43
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
