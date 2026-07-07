@@ -25,6 +25,7 @@
 #include "../vm/xvm_coro_api.h"
 #include "../vm/xvm_worker_state.h"
 
+#include <stdio.h>
 #include <string.h>
 
 static void thread_throw(XrVMRuntime *isolate, XrErrorCode code, const char *message) {
@@ -247,12 +248,26 @@ void xr_thread_obj_detach(XrThread *thread) {
     }
 }
 
+static void thread_detach_orphan_on_destroy(XrThread *thread) {
+    if (!thread)
+        return;
+    int expected = XR_THREAD_CREATED;
+    if (atomic_compare_exchange_strong_explicit(&thread->state, &expected, XR_THREAD_DETACHED,
+                                                memory_order_acq_rel, memory_order_acquire)) {
+        fputs("xray: warning: Thread handle dropped without join() or detach(); detaching OS "
+              "thread\n",
+              stderr);
+        if (xr_thread_is_valid(thread->handle))
+            xr_thread_detach(thread->handle);
+    }
+}
+
 void xr_obj_destroy_thread(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     (void) owner_heap;
     if (!obj)
         return;
     XrThread *thread = (XrThread *) obj;
-    xr_thread_obj_detach(thread);
+    thread_detach_orphan_on_destroy(thread);
     if (thread->coro) {
         xr_coro_destroy(thread->coro);
         thread->coro = NULL;

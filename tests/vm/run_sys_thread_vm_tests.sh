@@ -40,6 +40,26 @@ expect_output() {
     fi
 }
 
+expect_warning() {
+    local name="$1"
+    local src="$2"
+    local expected="$3"
+    local needle="$4"
+    local needle2="${5:-}"
+    local out="$WORK/$name.out"
+    local err="$WORK/$name.err"
+
+    if "$XRAY" run "$src" >"$out" 2>"$err" && [ "$(cat "$out")" = "$expected" ] &&
+        grep -Fq "$needle" "$err" &&
+        { [ -z "$needle2" ] || grep -Fq "$needle2" "$err"; }; then
+        record_pass "$name warning"
+    else
+        record_fail "$name warning"
+        sed 's/^/      stdout: /' "$out" | sed -n '1,40p'
+        sed 's/^/      stderr: /' "$err" | sed -n '1,80p'
+    fi
+}
+
 printf '=== VM sys.Thread Tests ===\n'
 printf 'Binary: %s\n\n' "$XRAY"
 
@@ -52,6 +72,7 @@ JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_spawn_join.xr"
 DETACH_SRC="$PROJECT_DIR/tests/vm/sys_thread_detach.xr"
 ARRAY_SRC="$PROJECT_DIR/tests/vm/sys_thread_join_array.xr"
 OPTIONS_SRC="$PROJECT_DIR/tests/vm/sys_thread_spawn_options.xr"
+ORPHAN_SRC="$PROJECT_DIR/tests/vm/sys_thread_orphan_warning.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -59,6 +80,8 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
 done
 expect_output "join_array" "$ARRAY_SRC" "42"
 expect_output "spawn_options" "$OPTIONS_SRC" "42"
+expect_warning "orphan" "$ORPHAN_SRC" "orphan" \
+    "sys.Thread.spawn returns a Thread handle; call join() or detach() explicitly"
 
 "$XRAY" run --dump-bytecode "$JOIN_SRC" >"$WORK/join.dump" 2>"$WORK/join.dump.err"
 if grep -Eq '^[0-9]+.*[[:space:]]THREAD_SPAWN[[:space:]]' "$WORK/join.dump"; then
