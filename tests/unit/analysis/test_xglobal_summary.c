@@ -227,7 +227,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "method 0 id=3 owner=2"));
     ASSERT_NOT_NULL(strstr(dump, "interface-impl 0 class=2 interface=123"));
     ASSERT_NOT_NULL(strstr(dump, "body 0 func=4"));
-    ASSERT_NOT_NULL(strstr(dump, "callsite 0 id=5 owner=4 kind=method"));
+    ASSERT_NOT_NULL(strstr(dump, "callsite 0 id=5 owner=4 span=0 kind=method"));
 
     xr_free(dump);
     xg_global_evidence_free(&ev);
@@ -325,6 +325,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     const XaotMethodDispatchPlan *dispatch = xaot_bundle_find_method_dispatch_plan(&bundle, 7);
     ASSERT_NOT_NULL(dispatch);
     ASSERT_EQ_UINT(dispatch->kind, XAOT_DISPATCH_DIRECT);
+    ASSERT_EQ_UINT(dispatch->source_span_id, 0);
     ASSERT_EQ_UINT(dispatch->target_count, 1);
     ASSERT_NOT_NULL(xaot_bundle_find_interface_use_plan(&bundle, 77, 2, XG_NO_ID));
     const XaotCapabilityPlan *cap = xaot_bundle_find_capability_plan(&bundle, XG_CAP_COROUTINE);
@@ -347,7 +348,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "class-hierarchy 0 id=1"));
     ASSERT_NOT_NULL(strstr(dump, "class-layout 1 id=2"));
-    ASSERT_NOT_NULL(strstr(dump, "method-dispatch 0 callsite=7 kind=direct"));
+    ASSERT_NOT_NULL(strstr(dump, "method-dispatch 0 callsite=7 span=0 kind=direct"));
     ASSERT_NOT_NULL(strstr(dump, "interface-use 0 interface=77 implementor=2"));
     ASSERT_NOT_NULL(strstr(dump, "metadata 0 name=typename bodies=1 decls=0 action=link"));
     ASSERT_NOT_NULL(strstr(dump, "capability 0 name=coroutine bodies=1 action=link"));
@@ -383,6 +384,7 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                               .flags = 0};
     XgCallsiteSummary call = {.callsite_id = 1,
                               .owner_func_id = 9,
+                              .source_span_id = 42,
                               .kind = XG_CALL_METHOD,
                               .receiver_static_class_id = 1,
                               .method_id = 1};
@@ -415,6 +417,18 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     ASSERT_TRUE(!xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan kind does not re-derive"));
     xaot_bundle_free(&good);
+
+    XaotBundle stale_source;
+    memset(&stale_source, 0, sizeof(stale_source));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_source, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_source.modules = modules;
+    stale_source.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_source, &init_func, 0, 0));
+    stale_source.method_dispatch_plans[0].source_span_id = 99;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_source, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan source span does not re-derive"));
+    xaot_bundle_free(&stale_source);
 
     XaotBundle stale_target;
     memset(&stale_target, 0, sizeof(stale_target));
@@ -1071,6 +1085,7 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     uint32_t dog_direct_calls = 0;
     uint32_t animal_static_calls = 0;
     uint32_t unresolved_method_calls = 0;
+    uint32_t method_calls_with_source = 0;
     uint32_t direct_dispatch_plans = 0;
     uint32_t vtable_dispatch_plans = 0;
     uint32_t object_capability_bodies = 0;
@@ -1085,11 +1100,14 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
             animal_static_calls++;
         if (call->receiver_static_class_id == XG_NO_ID)
             unresolved_method_calls++;
+        if (call->source_span_id != 0)
+            method_calls_with_source++;
     }
 
     ASSERT_EQ_UINT(dog_direct_calls, 2);
     ASSERT_EQ_UINT(animal_static_calls, 1);
     ASSERT_EQ_UINT(unresolved_method_calls, 0);
+    ASSERT_EQ_UINT(method_calls_with_source, 3);
     for (uint32_t i = 0; i < ev.nbodies; i++) {
         if ((ev.bodies[i].capability_bits & XG_CAP_OBJECTS) != 0)
             object_capability_bodies++;
@@ -1102,6 +1120,7 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     ASSERT_EQ_UINT(bundle.nmethod_dispatch_plans, 3);
     for (uint32_t i = 0; i < bundle.nmethod_dispatch_plans; i++) {
         const XaotMethodDispatchPlan *plan = &bundle.method_dispatch_plans[i];
+        ASSERT_TRUE(plan->source_span_id != 0);
         if (plan->kind == XAOT_DISPATCH_DIRECT)
             direct_dispatch_plans++;
         if (plan->kind == XAOT_DISPATCH_VTABLE)
@@ -1159,6 +1178,7 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     XgInterfaceId shape_id = ev.interface_impls[0].interface_id;
     uint32_t interface_calls = 0;
     uint32_t interface_calls_with_signature = 0;
+    uint32_t interface_calls_with_source = 0;
     uint32_t class_method_calls = 0;
     for (uint32_t i = 0; i < ev.ncallsites; i++) {
         const XgCallsiteSummary *call = &ev.callsites[i];
@@ -1168,12 +1188,15 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
             ASSERT_TRUE(call->method_name_id != 0);
             if (call->method_signature_key != 0)
                 interface_calls_with_signature++;
+            if (call->source_span_id != 0)
+                interface_calls_with_source++;
         }
         if (call->kind == XG_CALL_METHOD)
             class_method_calls++;
     }
     ASSERT_EQ_UINT(interface_calls, 2);
     ASSERT_EQ_UINT(interface_calls_with_signature, 2);
+    ASSERT_EQ_UINT(interface_calls_with_source, 2);
     ASSERT_EQ_UINT(class_method_calls, 0);
 
     XiFunc init_func;
@@ -1197,6 +1220,7 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     for (uint32_t i = 0; i < bundle.nmethod_dispatch_plans; i++) {
         const XaotMethodDispatchPlan *plan = &bundle.method_dispatch_plans[i];
         ASSERT_EQ_UINT(plan->kind, XAOT_DISPATCH_TYPE_SWITCH);
+        ASSERT_TRUE(plan->source_span_id != 0);
         ASSERT_EQ_UINT(plan->target_count, 2);
         ASSERT_TRUE((plan->evidence & XAOT_DISPATCH_EV_INTERFACE_OBJECT) != 0);
         ASSERT_TRUE((plan->evidence & XAOT_DISPATCH_EV_SMALL_IMPLEMENTOR_SET) != 0);

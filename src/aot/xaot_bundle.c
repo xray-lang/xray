@@ -531,6 +531,7 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
     plan = &bundle->method_dispatch_plans[bundle->nmethod_dispatch_plans++];
     memset(plan, 0, sizeof(*plan));
     plan->callsite_id = call->callsite_id;
+    plan->source_span_id = call->source_span_id;
     plan->method_id = method ? method->method_id : call->method_id;
     plan->receiver_static_class_id = call->receiver_static_class_id;
     plan->kind = kind;
@@ -2300,18 +2301,19 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         const XaotMethodDispatchPlan *dp = &bundle->method_dispatch_plans[di];
         if (dp->dispatch_slot == UINT32_MAX) {
             fprintf(out,
-                    "method-dispatch %u callsite=%u kind=%s method=%u recv_class=%u slot=- "
-                    "targets=%u+%u evidence=0x%x reason=%s\n",
-                    di, dp->callsite_id, dispatch_kind_name(dp->kind), dp->method_id,
-                    dp->receiver_static_class_id, dp->target_start, (unsigned) dp->target_count,
-                    dp->evidence, dispatch_unproven_reason_name(dp->unproven_reason));
+                    "method-dispatch %u callsite=%u span=%u kind=%s method=%u recv_class=%u "
+                    "slot=- targets=%u+%u evidence=0x%x reason=%s\n",
+                    di, dp->callsite_id, dp->source_span_id, dispatch_kind_name(dp->kind),
+                    dp->method_id, dp->receiver_static_class_id, dp->target_start,
+                    (unsigned) dp->target_count, dp->evidence,
+                    dispatch_unproven_reason_name(dp->unproven_reason));
         } else {
             fprintf(out,
-                    "method-dispatch %u callsite=%u kind=%s method=%u recv_class=%u slot=%u "
-                    "targets=%u+%u evidence=0x%x reason=%s\n",
-                    di, dp->callsite_id, dispatch_kind_name(dp->kind), dp->method_id,
-                    dp->receiver_static_class_id, dp->dispatch_slot, dp->target_start,
-                    (unsigned) dp->target_count, dp->evidence,
+                    "method-dispatch %u callsite=%u span=%u kind=%s method=%u recv_class=%u "
+                    "slot=%u targets=%u+%u evidence=0x%x reason=%s\n",
+                    di, dp->callsite_id, dp->source_span_id, dispatch_kind_name(dp->kind),
+                    dp->method_id, dp->receiver_static_class_id, dp->dispatch_slot,
+                    dp->target_start, (unsigned) dp->target_count, dp->evidence,
                     dispatch_unproven_reason_name(dp->unproven_reason));
         }
     }
