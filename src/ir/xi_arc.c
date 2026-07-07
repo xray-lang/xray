@@ -937,7 +937,7 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                         }
                     }
                 } else if ((u->op == XI_CALL_METHOD || u->op == XI_CALL_METHOD_DIRECT) &&
-                           xi_own_type_is_rc(u->type) && !call_returns_fresh(u)) {
+                           xi_own_type_is_rc(u->type) && !call_returns_fresh(f, u)) {
                     /* A method whose RC result may alias its receiver — a getter
                      * like Map.get / WeakMap.get hands back a stored reference,
                      * not a fresh +1 — keeps the receiver (arg 0) live until the
@@ -1571,7 +1571,7 @@ static void arc_insert_rec(XiFunc *f) {
         } else if (op_is_call(targets.items[i]->op)) {
             /* Known fresh-returning callees produce an owned reference;
              * everything else stays in the alias-safe CALL_RESULT mode. */
-            mode = call_returns_fresh(targets.items[i]) ? OWN_OWNED : OWN_CALL_RESULT;
+            mode = call_returns_fresh(f, targets.items[i]) ? OWN_OWNED : OWN_CALL_RESULT;
         }
         cfg_changed |= process_value_ex(f, targets.items[i], mode);
     }
@@ -1660,7 +1660,7 @@ static bool arc_elim_can_remove_single_consumer_retain(const XiFunc *f, const Xi
     if (op_produces_borrow(target->op))
         return false;
     if (op_is_call(target->op))
-        return call_returns_fresh(target);
+        return call_returns_fresh(f, target);
     return true;
 }
 
