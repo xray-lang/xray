@@ -876,6 +876,34 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                                  "AOT global evidence body callsite ordinal does not re-derive");
         }
     }
+    for (uint32_t di = 0; di < ev->ndecls; di++) {
+        const XgDeclSummary *decl = &ev->decls[di];
+        uint32_t body_count = 0;
+        bool requires_body;
+        if (decl->kind != XG_DECL_FUNC)
+            continue;
+        for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
+            const XgBodySummary *body = &ev->bodies[bi];
+            if (body->kind == XG_BODY_FUNCTION && body->owner_decl_id == decl->decl_id)
+                body_count++;
+        }
+        if (body_count > 1)
+            return set_error(errbuf, errbuf_len, "AOT global evidence function body is duplicated");
+        requires_body = (decl->flags & (XG_DECL_NATIVE | XG_DECL_EXTERN)) == 0;
+        if (requires_body && body_count == 0)
+            return set_error(errbuf, errbuf_len, "AOT global evidence function decl has no body");
+    }
+    for (uint32_t mi = 0; mi < ev->nmethods; mi++) {
+        const XgMethodSummary *method = &ev->methods[mi];
+        uint32_t body_count = 0;
+        for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
+            const XgBodySummary *body = &ev->bodies[bi];
+            if (body->kind == XG_BODY_METHOD && body->owner_method_id == method->method_id)
+                body_count++;
+        }
+        if (body_count > 1)
+            return set_error(errbuf, errbuf_len, "AOT global evidence method body is duplicated");
+    }
     for (uint32_t ci = 0; ci < ev->ncallsites; ci++) {
         const XgCallsiteSummary *call = &ev->callsites[ci];
         uint32_t owning_bodies = 0;

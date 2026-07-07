@@ -1731,6 +1731,155 @@ TEST(global_evidence_verifier_rejects_stale_body_identity_rows) {
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence module body has stale owner identity"));
     xaot_bundle_free(&stale_module_body);
     xg_global_evidence_free(&module_ev);
+
+    XgGlobalEvidence missing_ev;
+    XgBuildKey missing_key = key;
+    XgDeclSummary missing_decl = {.module_id = 1,
+                                  .decl_id = 1,
+                                  .kind = XG_DECL_FUNC,
+                                  .name_id = 301,
+                                  .signature_key = 401,
+                                  .source_span_id = 5};
+    missing_key.source_hash = 0x66;
+    xg_global_evidence_init(&missing_ev, missing_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&missing_ev, &missing_decl));
+
+    XaotBundle missing_body;
+    memset(&missing_body, 0, sizeof(missing_body));
+    ASSERT_TRUE(
+        xaot_bundle_set_global_evidence(&missing_body, &missing_ev, XG_BUILD_NATIVE_RELEASE));
+    missing_body.modules = modules;
+    missing_body.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&missing_body, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&missing_body, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence function decl has no body"));
+    xaot_bundle_free(&missing_body);
+    xg_global_evidence_free(&missing_ev);
+
+    XgGlobalEvidence native_ev;
+    XgBuildKey native_key = key;
+    XgDeclSummary native_decl = missing_decl;
+    native_key.source_hash = 0x67;
+    native_decl.flags = XG_DECL_NATIVE;
+    xg_global_evidence_init(&native_ev, native_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&native_ev, &native_decl));
+
+    XaotBundle native_missing_body;
+    memset(&native_missing_body, 0, sizeof(native_missing_body));
+    ASSERT_TRUE(
+        xaot_bundle_set_global_evidence(&native_missing_body, &native_ev, XG_BUILD_NATIVE_RELEASE));
+    native_missing_body.modules = modules;
+    native_missing_body.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&native_missing_body, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&native_missing_body, XAOT_VERIFY_AOT_READY, err, sizeof(err)),
+               err);
+    xaot_bundle_free(&native_missing_body);
+    xg_global_evidence_free(&native_ev);
+
+    XgGlobalEvidence duplicate_decl_ev;
+    XgBuildKey duplicate_decl_key = key;
+    XgDeclSummary duplicate_decl = {.module_id = 1,
+                                    .decl_id = 1,
+                                    .kind = XG_DECL_FUNC,
+                                    .name_id = 501,
+                                    .signature_key = 601,
+                                    .source_span_id = 7};
+    XgBodySummary duplicate_decl_bodies[2] = {
+        {.func_id = 1,
+         .module_id = 1,
+         .owner_decl_id = 1,
+         .name_id = 501,
+         .signature_key = 601,
+         .source_span_id = 7,
+         .kind = XG_BODY_FUNCTION,
+         .body_hash = 0x6301},
+        {.func_id = 2,
+         .module_id = 1,
+         .owner_decl_id = 1,
+         .name_id = 501,
+         .signature_key = 601,
+         .source_span_id = 7,
+         .kind = XG_BODY_FUNCTION,
+         .body_hash = 0x6302},
+    };
+    duplicate_decl_key.source_hash = 0x68;
+    xg_global_evidence_init(&duplicate_decl_ev, duplicate_decl_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&duplicate_decl_ev, &duplicate_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&duplicate_decl_ev, &duplicate_decl_bodies[0]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&duplicate_decl_ev, &duplicate_decl_bodies[1]));
+
+    XaotBundle duplicate_decl_body;
+    memset(&duplicate_decl_body, 0, sizeof(duplicate_decl_body));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&duplicate_decl_body, &duplicate_decl_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    duplicate_decl_body.modules = modules;
+    duplicate_decl_body.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&duplicate_decl_body, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&duplicate_decl_body, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence function body is duplicated"));
+    xaot_bundle_free(&duplicate_decl_body);
+    xg_global_evidence_free(&duplicate_decl_ev);
+
+    XgGlobalEvidence duplicate_method_ev;
+    XgBuildKey duplicate_method_key = key;
+    XgDeclSummary method_decl = {
+        .module_id = 1, .decl_id = 1, .kind = XG_DECL_CLASS, .name_id = 701, .source_span_id = 9};
+    XgClassSummary method_class = {.module_id = 1,
+                                   .decl_id = 1,
+                                   .class_id = 1,
+                                   .name_id = 701,
+                                   .flags = XG_CLASS_INFERRED_FINAL,
+                                   .method_start = 1,
+                                   .method_count = 1,
+                                   .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary method_row = {
+        .method_id = 1, .owner_class_id = 1, .name_id = 801, .signature_key = 901};
+    XgBodySummary method_bodies[2] = {
+        {.func_id = 1,
+         .module_id = 1,
+         .owner_decl_id = 1,
+         .owner_class_id = 1,
+         .owner_method_id = 1,
+         .name_id = 801,
+         .signature_key = 901,
+         .source_span_id = 10,
+         .kind = XG_BODY_METHOD,
+         .body_hash = 0x6401},
+        {.func_id = 2,
+         .module_id = 1,
+         .owner_decl_id = 1,
+         .owner_class_id = 1,
+         .owner_method_id = 1,
+         .name_id = 801,
+         .signature_key = 901,
+         .source_span_id = 10,
+         .kind = XG_BODY_METHOD,
+         .body_hash = 0x6402},
+    };
+    duplicate_method_key.source_hash = 0x69;
+    xg_global_evidence_init(&duplicate_method_ev, duplicate_method_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&duplicate_method_ev, &method_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&duplicate_method_ev, &method_class));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&duplicate_method_ev, &method_row));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&duplicate_method_ev, &method_bodies[0]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&duplicate_method_ev, &method_bodies[1]));
+
+    XaotBundle duplicate_method_body;
+    memset(&duplicate_method_body, 0, sizeof(duplicate_method_body));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&duplicate_method_body, &duplicate_method_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    duplicate_method_body.modules = modules;
+    duplicate_method_body.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&duplicate_method_body, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&duplicate_method_body, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence method body is duplicated"));
+    xaot_bundle_free(&duplicate_method_body);
+    xg_global_evidence_free(&duplicate_method_ev);
 }
 
 TEST(global_evidence_verifier_rederives_link_dependency_plans) {
