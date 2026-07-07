@@ -1,0 +1,25 @@
+enum FsErr {
+    Bad
+}
+
+fn mayFail(n: int) -> int {
+    if (n == 0) {
+        throw FsErr.Bad
+    }
+    return n + 10
+}
+
+@c_export("xray_enum_error_channel")
+fn xray_enum_error_channel(n: int) -> int {
+    var out = 0
+    try {
+        out = mayFail(n)
+    } catch (e) {
+        if (e == FsErr.Bad) {
+            out = -1
+        } else {
+            out = -2
+        }
+    }
+    return out
+}
