@@ -1128,6 +1128,16 @@ static bool lower_mem_layout_member_name(const char *name) {
                     strcmp(name, "offsetOf") == 0);
 }
 
+static bool lower_type_is_target_width_int(const XrType *type, uint8_t *out_native) {
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    if (type->native_width != XR_NATIVE_ISIZE && type->native_width != XR_NATIVE_USIZE)
+        return false;
+    if (out_native)
+        *out_native = type->native_width;
+    return true;
+}
+
 static XiValue *lower_mem_layout_call(XiLower *l, AstNode *node, CallExprNode *call,
                                       const char *member) {
     if (!l || !node || !call || !lower_mem_layout_member_name(member) ||
@@ -1145,10 +1155,24 @@ static XiValue *lower_mem_layout_call(XiLower *l, AstNode *node, CallExprNode *c
     if (strcmp(member, "sizeOf") == 0) {
         if (call->arg_count != 0)
             return NULL;
+        uint8_t native = 0;
+        if (lower_type_is_target_width_int(target, &native)) {
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_TARGET_SIZEOF, l->type_int, 0);
+            if (v)
+                v->aux_int = native;
+            return v;
+        }
         value = size;
     } else if (strcmp(member, "alignOf") == 0) {
         if (call->arg_count != 0)
             return NULL;
+        uint8_t native = 0;
+        if (lower_type_is_target_width_int(target, &native)) {
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_TARGET_ALIGNOF, l->type_int, 0);
+            if (v)
+                v->aux_int = native;
+            return v;
+        }
         value = align;
     } else {
         if (call->arg_count != 1 || !call->arguments || !call->arguments[0] ||
@@ -1486,6 +1510,8 @@ static struct XrType *xi_lower_type_for_native_layout(XiLower *l, struct XrType 
         case XR_NATIVE_I64:
             return l->type_int ? l->type_int : fallback;
         case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
         case XR_NATIVE_I8:
         case XR_NATIVE_U8:
         case XR_NATIVE_I16:
@@ -1601,7 +1627,10 @@ static XrArrayElemType xi_pod_span_elem_type(struct XrType *type) {
                 case XR_NATIVE_U32:
                     return XR_ELEM_U32;
                 case XR_NATIVE_U64:
+                case XR_NATIVE_USIZE:
                     return XR_ELEM_U64;
+                case XR_NATIVE_ISIZE:
+                    return XR_ELEM_I64;
                 default:
                     return XR_ELEM_I64;
             }
@@ -1913,7 +1942,8 @@ static int xi_fixed_array_elem_native_type(struct XrType *type) {
     if (native == XR_NATIVE_I64 || native == XR_NATIVE_F64 || native == XR_NATIVE_BOOL ||
         native == XR_NATIVE_I8 || native == XR_NATIVE_I16 || native == XR_NATIVE_I32 ||
         native == XR_NATIVE_U8 || native == XR_NATIVE_U16 || native == XR_NATIVE_U32 ||
-        native == XR_NATIVE_U64 || native == XR_NATIVE_F32)
+        native == XR_NATIVE_U64 || native == XR_NATIVE_ISIZE || native == XR_NATIVE_USIZE ||
+        native == XR_NATIVE_F32)
         return native;
     if (native == XR_NATIVE_STRING || native < 0)
         return XR_NATIVE_VALUE;

@@ -162,6 +162,8 @@ typedef struct XrValue {
 #define XR_NATIVE_MAP_REF 15
 #define XR_NATIVE_SET_REF 16
 #define XR_NATIVE_VALUE 17
+#define XR_NATIVE_ISIZE 18
+#define XR_NATIVE_USIZE 19
 
 #define XR_FROM_INT(x) ((XrValue) {.tag = XR_TAG_I64, .i = (int64_t) (x)})
 #define XR_FROM_FLOAT(x) ((XrValue) {.tag = XR_TAG_F64, .f = (double) (x)})
@@ -620,6 +622,10 @@ static inline size_t xrt_value_native_type_size(uint8_t native_type) {
         case XR_NATIVE_U32:
         case XR_NATIVE_F32:
             return 4;
+        case XR_NATIVE_ISIZE:
+            return sizeof(ptrdiff_t);
+        case XR_NATIVE_USIZE:
+            return sizeof(size_t);
         case XR_NATIVE_VALUE:
             return sizeof(XrValue);
         default:
@@ -1155,6 +1161,10 @@ static inline XrValue xrt_fixed_array_get(void *base, uint8_t native_type, int64
             return XR_FROM_INT((int64_t) *(uint32_t *) p);
         case XR_NATIVE_U64:
             return XR_FROM_INT((int64_t) *(uint64_t *) p);
+        case XR_NATIVE_ISIZE:
+            return XR_FROM_INT((int64_t) *(ptrdiff_t *) p);
+        case XR_NATIVE_USIZE:
+            return XR_FROM_INT((int64_t) *(size_t *) p);
         default:
             return XR_FROM_INT(*(int64_t *) p);
     }
@@ -1196,6 +1206,12 @@ static inline void xrt_fixed_array_set(void *base, uint8_t native_type, int64_t 
             break;
         case XR_NATIVE_U64:
             *(uint64_t *) p = (uint64_t) xr_value_to_int64_coerce(value);
+            break;
+        case XR_NATIVE_ISIZE:
+            *(ptrdiff_t *) p = (ptrdiff_t) xr_value_to_int64_coerce(value);
+            break;
+        case XR_NATIVE_USIZE:
+            *(size_t *) p = (size_t) xr_value_to_int64_coerce(value);
             break;
         default:
             *(int64_t *) p = xr_value_to_int64_coerce(value);

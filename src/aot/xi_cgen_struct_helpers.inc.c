@@ -339,6 +339,8 @@ static bool cg_static_struct_native_scalar_supported(uint8_t native_type) {
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
         case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
         case XR_NATIVE_F32:
             return true;
         default:
@@ -360,10 +362,12 @@ static bool cg_static_struct_ct_scalar_supported(const XrCtValue *value, uint8_t
         case XR_NATIVE_I8:
         case XR_NATIVE_I16:
         case XR_NATIVE_I32:
+        case XR_NATIVE_ISIZE:
         case XR_NATIVE_U8:
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
         case XR_NATIVE_U64:
+        case XR_NATIVE_USIZE:
             return value->kind == XR_CT_INT || value->kind == XR_CT_BOOL ||
                    value->kind == XR_CT_CHAR;
         default:
@@ -1830,6 +1834,8 @@ static void emit_struct_field_boxed_value(FILE *out, const XrAggregateLayout *sl
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
         case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
             fprintf(out, "XR_FROM_INT(");
             emit_value_as_rep(out, value, XR_REP_I64);
             fprintf(out, ")");

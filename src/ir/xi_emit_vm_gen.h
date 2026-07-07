@@ -12,6 +12,8 @@
 #define XI_EMIT_VM_LOWERING_HANDLERS(X) \
     X(CONST, emit_const) \
     X(PARAM, emit_param) \
+    X(TARGET_SIZEOF, xi_emit_target_sizeof) \
+    X(TARGET_ALIGNOF, xi_emit_target_alignof) \
     X(COPY, emit_copy) \
     X(MOVE, xi_emit_move) \
     X(ADD, xi_emit_arith) \

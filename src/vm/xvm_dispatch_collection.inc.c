@@ -434,6 +434,12 @@ vmcase(OP_ARRAY_GET) {
                 case XR_NATIVE_U64:
                     R(a) = XR_FROM_INT((int64_t) *(uint64_t *) ep);
                     break;
+                case XR_NATIVE_ISIZE:
+                    R(a) = XR_FROM_INT((int64_t) *(ptrdiff_t *) ep);
+                    break;
+                case XR_NATIVE_USIZE:
+                    R(a) = XR_FROM_INT((int64_t) *(size_t *) ep);
+                    break;
                 case XR_NATIVE_F64:
                     R(a) = XR_FROM_FLOAT(*(double *) ep);
                     break;
@@ -531,6 +537,12 @@ vmcase(OP_ARRAY_GETC) {
                     break;
                 case XR_NATIVE_U64:
                     R(a) = XR_FROM_INT((int64_t) *(uint64_t *) ep);
+                    break;
+                case XR_NATIVE_ISIZE:
+                    R(a) = XR_FROM_INT((int64_t) *(ptrdiff_t *) ep);
+                    break;
+                case XR_NATIVE_USIZE:
+                    R(a) = XR_FROM_INT((int64_t) *(size_t *) ep);
                     break;
                 case XR_NATIVE_F64:
                     R(a) = XR_FROM_FLOAT(*(double *) ep);
@@ -656,6 +668,12 @@ vmcase(OP_ARRAY_SET) {
                 case XR_NATIVE_U64:
                     *(uint64_t *) ep = (uint64_t) XR_TO_INT(_av);
                     break;
+                case XR_NATIVE_ISIZE:
+                    *(ptrdiff_t *) ep = (ptrdiff_t) XR_TO_INT(_av);
+                    break;
+                case XR_NATIVE_USIZE:
+                    *(size_t *) ep = (size_t) XR_TO_INT(_av);
+                    break;
                 case XR_NATIVE_F64:
                     *(double *) ep = XR_TO_FLOAT(_av);
                     break;
@@ -764,6 +782,12 @@ vmcase(OP_ARRAY_SETC) {
                     break;
                 case XR_NATIVE_U64:
                     *(uint64_t *) ep = (uint64_t) XR_TO_INT(_acv);
+                    break;
+                case XR_NATIVE_ISIZE:
+                    *(ptrdiff_t *) ep = (ptrdiff_t) XR_TO_INT(_acv);
+                    break;
+                case XR_NATIVE_USIZE:
+                    *(size_t *) ep = (size_t) XR_TO_INT(_acv);
                     break;
                 case XR_NATIVE_F64:
                     *(double *) ep = XR_TO_FLOAT(_acv);
@@ -1951,6 +1975,12 @@ vmcase(OP_INDEX_GET) {
                 case XR_NATIVE_U64:
                     R(a) = XR_FROM_INT((int64_t) *(uint64_t *) ep);
                     break;
+                case XR_NATIVE_ISIZE:
+                    R(a) = XR_FROM_INT((int64_t) *(ptrdiff_t *) ep);
+                    break;
+                case XR_NATIVE_USIZE:
+                    R(a) = XR_FROM_INT((int64_t) *(size_t *) ep);
+                    break;
                 case XR_NATIVE_F64:
                     R(a) = XR_FROM_FLOAT(*(double *) ep);
                     break;
@@ -2130,6 +2160,12 @@ vmcase(OP_INDEX_SET) {
                     break;
                 case XR_NATIVE_U64:
                     *(uint64_t *) ep = (uint64_t) XR_TO_INT(val);
+                    break;
+                case XR_NATIVE_ISIZE:
+                    *(ptrdiff_t *) ep = (ptrdiff_t) XR_TO_INT(val);
+                    break;
+                case XR_NATIVE_USIZE:
+                    *(size_t *) ep = (size_t) XR_TO_INT(val);
                     break;
                 case XR_NATIVE_F64:
                     *(double *) ep = XR_TO_FLOAT(val);

@@ -309,6 +309,7 @@ else
 fi
 
 FREESTANDING_EXPORT_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_export.xr"
+FREESTANDING_UINTSIZE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_uintsize_target.xr"
 FREESTANDING_EXPORT_BIN="$WORK/freestanding_export"
 FREESTANDING_EXPORT_LOG="$WORK/freestanding_export.log"
 if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
@@ -478,6 +479,56 @@ if command -v zig >/dev/null 2>&1 && command -v llvm-readelf >/dev/null 2>&1 &&
     else
         record_fail "freestanding-profile/riscv32-target: real object build failed"
         sed 's/^/      /' "$FREESTANDING_RISCV32_REAL_LOG" | sed -n '1,120p'
+    fi
+
+    FREESTANDING_UINTSIZE_RISCV32_OBJ="$WORK/freestanding_uintsize_riscv32.o"
+    FREESTANDING_UINTSIZE_RISCV32_LOG="$WORK/freestanding_uintsize_riscv32.log"
+    FREESTANDING_UINTSIZE_RISCV32_UNDEF="$WORK/freestanding_uintsize_riscv32.undefined"
+    if ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}" \
+            ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}" \
+            "$XRAY" build --native --profile freestanding --shared \
+            --target riscv32imac-unknown-none-elf --toolchain zig --keep-c --rebuild \
+            --dump-link-command --cache-dir "$BUILD_CACHE" \
+            -o "$FREESTANDING_UINTSIZE_RISCV32_OBJ" \
+            "$FREESTANDING_UINTSIZE_SRC" >"$FREESTANDING_UINTSIZE_RISCV32_LOG" 2>&1; then
+        FREESTANDING_UINTSIZE_RISCV32_C="$(sed -n 's/^Kept C source: //p' \
+            "$FREESTANDING_UINTSIZE_RISCV32_LOG" | tail -n 1)"
+        if [ -f "$FREESTANDING_UINTSIZE_RISCV32_C" ]; then
+            expect_log_contains "$FREESTANDING_UINTSIZE_RISCV32_C" \
+                "size_t xray_uintsize_roundtrip(size_t" \
+                "freestanding-profile/riscv32-uintsize: uintsize C ABI uses size_t"
+            expect_log_contains "$FREESTANDING_UINTSIZE_RISCV32_C" \
+                "ptrdiff_t xray_intsize_roundtrip(ptrdiff_t" \
+                "freestanding-profile/riscv32-uintsize: intsize C ABI uses ptrdiff_t"
+            expect_log_contains "$FREESTANDING_UINTSIZE_RISCV32_C" "sizeof(size_t)" \
+                "freestanding-profile/riscv32-uintsize: sizeOf<uintsize> is target C sizeof"
+            expect_log_contains "$FREESTANDING_UINTSIZE_RISCV32_C" "_Alignof(size_t)" \
+                "freestanding-profile/riscv32-uintsize: alignOf<uintsize> is target C alignof"
+            expect_log_contains "$FREESTANDING_UINTSIZE_RISCV32_C" "sizeof(ptrdiff_t)" \
+                "freestanding-profile/riscv32-uintsize: sizeOf<intsize> is target C sizeof"
+            expect_log_contains "$FREESTANDING_UINTSIZE_RISCV32_C" "_Alignof(ptrdiff_t)" \
+                "freestanding-profile/riscv32-uintsize: alignOf<intsize> is target C alignof"
+            expect_log_not_contains "$FREESTANDING_UINTSIZE_RISCV32_C" "INT64_C(32)" \
+                "freestanding-profile/riscv32-uintsize: layout is not host-folded"
+        else
+            record_fail "freestanding-profile/riscv32-uintsize: kept C source missing"
+            sed 's/^/      /' "$FREESTANDING_UINTSIZE_RISCV32_LOG" | sed -n '1,120p'
+        fi
+        if llvm-nm -u "$FREESTANDING_UINTSIZE_RISCV32_OBJ" >"$FREESTANDING_UINTSIZE_RISCV32_UNDEF" \
+                2>&1; then
+            if [ ! -s "$FREESTANDING_UINTSIZE_RISCV32_UNDEF" ]; then
+                record_pass "freestanding-profile/riscv32-uintsize: real object has no undefined symbols"
+            else
+                record_fail "freestanding-profile/riscv32-uintsize: real object has undefined symbols"
+                sed 's/^/      /' "$FREESTANDING_UINTSIZE_RISCV32_UNDEF" | sed -n '1,80p'
+            fi
+        else
+            record_fail "freestanding-profile/riscv32-uintsize: llvm-nm failed"
+            sed 's/^/      /' "$FREESTANDING_UINTSIZE_RISCV32_UNDEF" | sed -n '1,80p'
+        fi
+    else
+        record_fail "freestanding-profile/riscv32-uintsize: real object build failed"
+        sed 's/^/      /' "$FREESTANDING_UINTSIZE_RISCV32_LOG" | sed -n '1,120p'
     fi
 else
     record_skip "freestanding-profile/riscv32-target: real object (requires zig, llvm-readelf and llvm-nm)"

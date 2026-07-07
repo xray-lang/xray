@@ -53,6 +53,10 @@ const char *xr_type_to_string(XrType *type) {
                 return TYPE_NAME_UINT32;
             case XR_NATIVE_U64:
                 return TYPE_NAME_UINT64;
+            case XR_NATIVE_ISIZE:
+                return TYPE_NAME_INTSIZE;
+            case XR_NATIVE_USIZE:
+                return TYPE_NAME_UINTSIZE;
             default:
                 return TYPE_NAME_INT;
         }

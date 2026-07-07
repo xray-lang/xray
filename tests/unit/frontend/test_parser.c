@@ -448,7 +448,7 @@ TEST(parser_member_generic_call_uintsize_type_arg) {
     ASSERT_EQ_INT(expr->as.call_expr.type_arg_count, 1);
     ASSERT_NOT_NULL(expr->as.call_expr.type_args);
     ASSERT_EQ_INT(expr->as.call_expr.type_args[0]->kind, XR_TREF_INT_WIDTH);
-    ASSERT_EQ_INT(expr->as.call_expr.type_args[0]->native_width, XR_TREF_NW_U64);
+    ASSERT_EQ_INT(expr->as.call_expr.type_args[0]->native_width, XR_TREF_NW_USIZE);
     teardown();
 }
 
@@ -462,7 +462,7 @@ TEST(parser_member_generic_call_uintsize_after_binary_op) {
     ASSERT_EQ_INT(expr->as.binary.right->type, AST_CALL_EXPR);
     ASSERT_EQ_INT(expr->as.binary.right->as.call_expr.type_arg_count, 1);
     ASSERT_EQ_INT(expr->as.binary.right->as.call_expr.type_args[0]->kind, XR_TREF_INT_WIDTH);
-    ASSERT_EQ_INT(expr->as.binary.right->as.call_expr.type_args[0]->native_width, XR_TREF_NW_I64);
+    ASSERT_EQ_INT(expr->as.binary.right->as.call_expr.type_args[0]->native_width, XR_TREF_NW_ISIZE);
     teardown();
 }
 

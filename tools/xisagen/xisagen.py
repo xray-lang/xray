@@ -2619,6 +2619,10 @@ def _aot_int_fits_expr(rep: AotRepDef) -> str:
 
 
 def _aot_elem_name(rep: AotRepDef) -> str:
+    if rep.name == 'isize':
+        return 'XR_ELEM_I64'
+    if rep.name == 'usize':
+        return 'XR_ELEM_U64'
     return f'XR_ELEM_{rep.ident}'
 
 

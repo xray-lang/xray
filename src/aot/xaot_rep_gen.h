@@ -17,15 +17,17 @@ typedef enum {
     XAOT_REP_U32 = 5,
     XAOT_REP_I64 = 6,
     XAOT_REP_U64 = 7,
-    XAOT_REP_F32 = 8,
-    XAOT_REP_F64 = 9,
-    XAOT_REP_BOOL = 10,
-    XAOT_REP_CHAR = 11,
-    XAOT_REP_TAGGED = 12,
-    XAOT_REP_PTR = 13,
-    XAOT_REP_RAWPTR = 14,
-    XAOT_REP_SPAN = 15,
-    XAOT_REP_VOID = 16,
+    XAOT_REP_ISIZE = 8,
+    XAOT_REP_USIZE = 9,
+    XAOT_REP_F32 = 10,
+    XAOT_REP_F64 = 11,
+    XAOT_REP_BOOL = 12,
+    XAOT_REP_CHAR = 13,
+    XAOT_REP_TAGGED = 14,
+    XAOT_REP_PTR = 15,
+    XAOT_REP_RAWPTR = 16,
+    XAOT_REP_SPAN = 17,
+    XAOT_REP_VOID = 18,
     XAOT_REP_COUNT
 } XaotRep;
 
@@ -61,6 +63,8 @@ typedef struct {
     X(U32, "u32", "uint32_t", 4, 4, false, true, false, XAOT_DYNAMIC_SCALAR, true, XR_NATIVE_U32, XR_REP_I64) \
     X(I64, "i64", "int64_t", 8, 8, true, true, false, XAOT_DYNAMIC_SCALAR, true, XR_NATIVE_I64, XR_REP_I64) \
     X(U64, "u64", "uint64_t", 8, 8, false, true, false, XAOT_DYNAMIC_SCALAR, true, XR_NATIVE_U64, XR_REP_I64) \
+    X(ISIZE, "isize", "ptrdiff_t", 8, 8, true, true, false, XAOT_DYNAMIC_SCALAR, true, XR_NATIVE_ISIZE, XR_REP_I64) \
+    X(USIZE, "usize", "size_t", 8, 8, false, true, false, XAOT_DYNAMIC_SCALAR, true, XR_NATIVE_USIZE, XR_REP_I64) \
     X(F32, "f32", "float", 4, 4, true, false, false, XAOT_DYNAMIC_SCALAR, true, XR_NATIVE_F32, XR_REP_F64) \
     X(F64, "f64", "double", 8, 8, true, false, false, XAOT_DYNAMIC_SCALAR, true, XR_NATIVE_F64, XR_REP_F64) \
     X(BOOL, "bool", "uint8_t", 1, 1, false, false, false, XAOT_DYNAMIC_SCALAR, true, XR_NATIVE_BOOL, XR_REP_I64) \
@@ -129,6 +133,20 @@ static inline const XaotRepInfo *xaot_rep_info(XaotRep rep) {
                                       false,
                                       XAOT_DYNAMIC_SCALAR,
                                       true, XR_NATIVE_U64,
+                                      XR_REP_I64},
+        [XAOT_REP_ISIZE] = {"isize", "ptrdiff_t",
+                                      8, 8,
+                                      true, true,
+                                      false,
+                                      XAOT_DYNAMIC_SCALAR,
+                                      true, XR_NATIVE_ISIZE,
+                                      XR_REP_I64},
+        [XAOT_REP_USIZE] = {"usize", "size_t",
+                                      8, 8,
+                                      false, true,
+                                      false,
+                                      XAOT_DYNAMIC_SCALAR,
+                                      true, XR_NATIVE_USIZE,
                                       XR_REP_I64},
         [XAOT_REP_F32] = {"f32", "float",
                                       4, 4,
@@ -225,6 +243,12 @@ static inline bool xaot_rep_from_native_type(uint8_t native_type, XaotRep *out) 
         case XR_NATIVE_U64:
             if (out) *out = XAOT_REP_U64;
             return true;
+        case XR_NATIVE_ISIZE:
+            if (out) *out = XAOT_REP_ISIZE;
+            return true;
+        case XR_NATIVE_USIZE:
+            if (out) *out = XAOT_REP_USIZE;
+            return true;
         case XR_NATIVE_F32:
             if (out) *out = XAOT_REP_F32;
             return true;
@@ -287,6 +311,10 @@ static inline const char *xaot_elem_name_for_native_type(uint8_t native_type) {
             return "XR_ELEM_I64";
         case XR_NATIVE_U64:
             return "XR_ELEM_U64";
+        case XR_NATIVE_ISIZE:
+            return "XR_ELEM_I64";
+        case XR_NATIVE_USIZE:
+            return "XR_ELEM_U64";
         case XR_NATIVE_F32:
             return "XR_ELEM_F32";
         case XR_NATIVE_F64:
@@ -317,6 +345,10 @@ static inline bool xaot_native_int_const_fits(uint8_t native_type, int64_t value
         case XR_NATIVE_I64:
             return true;
         case XR_NATIVE_U64:
+            return value >= 0;
+        case XR_NATIVE_ISIZE:
+            return true;
+        case XR_NATIVE_USIZE:
             return value >= 0;
         default:
             return false;

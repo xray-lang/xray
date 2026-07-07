@@ -245,6 +245,10 @@ static inline XrValue xrt_inspect_field_value(const void *obj, const XrtInspectF
             return XR_FROM_INT(*(const uint32_t *) p);
         case XR_NATIVE_U64:
             return XR_FROM_INT((int64_t) *(const uint64_t *) p);
+        case XR_NATIVE_ISIZE:
+            return XR_FROM_INT((int64_t) *(const ptrdiff_t *) p);
+        case XR_NATIVE_USIZE:
+            return XR_FROM_INT((int64_t) *(const size_t *) p);
         case XR_NATIVE_F32:
             return XR_FROM_FLOAT((double) *(const float *) p);
         case XR_NATIVE_STRING:

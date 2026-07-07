@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <inttypes.h>
 #include <stdarg.h>
 #include <math.h>
@@ -289,6 +290,8 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
 #define XR_NATIVE_MAP_REF 15
 #define XR_NATIVE_SET_REF 16
 #define XR_NATIVE_VALUE 17
+#define XR_NATIVE_ISIZE 18
+#define XR_NATIVE_USIZE 19
 
 /* String type check (both literal and bump-allocated) */
 #define XR_IS_STR(v) ((v).tag == XR_TAG_STR || (v).tag == XR_TAG_STR_ARC)
@@ -560,6 +563,10 @@ static inline size_t xrt_value_native_type_size(uint8_t native_type) {
         case XR_NATIVE_U32:
         case XR_NATIVE_F32:
             return 4;
+        case XR_NATIVE_ISIZE:
+            return sizeof(ptrdiff_t);
+        case XR_NATIVE_USIZE:
+            return sizeof(size_t);
         case XR_NATIVE_VALUE:
             return sizeof(XrValue);
         default:

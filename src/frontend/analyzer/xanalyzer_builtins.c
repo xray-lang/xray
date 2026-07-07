@@ -1016,6 +1016,8 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_int_width(X, XR_NATIVE_U32);
     } else if (base_len == 6 && strncmp(s, "uint64", 6) == 0) {
         type = xr_type_new_int_width(X, XR_NATIVE_U64);
+    } else if (base_len == 8 && strncmp(s, "uintsize", 8) == 0) {
+        type = xr_type_new_int_width(X, XR_NATIVE_USIZE);
     } else if (base_len == 4 && strncmp(s, "int8", 4) == 0) {
         type = xr_type_new_int_width(X, XR_NATIVE_I8);
     } else if (base_len == 5 && strncmp(s, "int16", 5) == 0) {
@@ -1024,6 +1026,8 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_int_width(X, XR_NATIVE_I32);
     } else if (base_len == 5 && strncmp(s, "int64", 5) == 0) {
         type = xr_type_new_int_width(X, XR_NATIVE_I64);
+    } else if (base_len == 7 && strncmp(s, "intsize", 7) == 0) {
+        type = xr_type_new_int_width(X, XR_NATIVE_ISIZE);
     } else if (base_len == 7 && strncmp(s, "float32", 7) == 0) {
         type = xr_type_new_float_width(X, XR_NATIVE_F32);
     } else if (base_len == 7 && strncmp(s, "float64", 7) == 0) {

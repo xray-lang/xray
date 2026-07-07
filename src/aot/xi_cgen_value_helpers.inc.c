@@ -32,6 +32,7 @@ static bool cg_value_type_is_unsigned_int(const XiValue *v) {
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
         case XR_NATIVE_U64:
+        case XR_NATIVE_USIZE:
             return true;
         default:
             return false;

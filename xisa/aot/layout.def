@@ -65,6 +65,22 @@
   :heap-field yes
   :ref-tag none)
 
+(define-aot-layout isize
+  :native-type XR_NATIVE_ISIZE
+  :field-kind scalar
+  :rep isize
+  :c-type "ptrdiff_t"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout usize
+  :native-type XR_NATIVE_USIZE
+  :field-kind scalar
+  :rep usize
+  :c-type "size_t"
+  :heap-field yes
+  :ref-tag none)
+
 (define-aot-layout f32
   :native-type XR_NATIVE_F32
   :field-kind scalar

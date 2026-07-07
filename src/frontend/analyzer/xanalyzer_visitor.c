@@ -993,6 +993,10 @@ static const char *int_range_label(uint8_t native_width) {
             return "-9223372036854775808..9223372036854775807";
         case XR_NATIVE_U64:
             return "0..18446744073709551615";
+        case XR_NATIVE_ISIZE:
+            return "target ptrdiff_t range";
+        case XR_NATIVE_USIZE:
+            return "0..target SIZE_MAX";
         default:
             return NULL;
     }
@@ -1016,6 +1020,10 @@ static const char *int_native_width_label(uint8_t native_width) {
             return "int64";
         case XR_NATIVE_U64:
             return "uint64";
+        case XR_NATIVE_ISIZE:
+            return "intsize";
+        case XR_NATIVE_USIZE:
+            return "uintsize";
         default:
             return "int";
     }
@@ -1044,6 +1052,10 @@ static bool int_literal_fits_native_width(const XaContextualIntLiteral *value,
         case XR_NATIVE_I64:
             return value->signed_valid;
         case XR_NATIVE_U64:
+            return !value->negative;
+        case XR_NATIVE_ISIZE:
+            return value->signed_valid;
+        case XR_NATIVE_USIZE:
             return !value->negative;
         default:
             return true;

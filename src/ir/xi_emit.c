@@ -396,6 +396,17 @@ XR_FUNC int add_symbol(EmitCtx *ctx, const char *name) {
 
 /* ========== Local Handlers (CONST, PARAM, COPY, SELECT) ========== */
 
+static void emit_i64_const_reg(EmitCtx *ctx, XiEmitReg dst, int64_t val) {
+    if (val >= LOADI_MIN && val <= LOADI_MAX) {
+        emit_inst(ctx, CREATE_AsBx(OP_LOADI, dst, (int) val));
+    } else {
+        int ki = add_const_int(ctx, val);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABx(OP_LOADK, dst, ki));
+    }
+}
+
 static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     struct XrType *ty = v->type;
     if (!ty) {
@@ -406,15 +417,7 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     switch (ty->kind) {
         case XR_KIND_INT:
         case XR_KIND_POINTER: {
-            int64_t val = v->aux_int;
-            if (val >= LOADI_MIN && val <= LOADI_MAX) {
-                emit_inst(ctx, CREATE_AsBx(OP_LOADI, dst, (int) val));
-            } else {
-                int ki = add_const_int(ctx, val);
-                if (ctx->status != XI_EMIT_OK)
-                    return;
-                emit_inst(ctx, CREATE_ABx(OP_LOADK, dst, ki));
-            }
+            emit_i64_const_reg(ctx, dst, v->aux_int);
             break;
         }
         case XR_KIND_FLOAT: {
@@ -508,6 +511,14 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             break;
         }
     }
+}
+
+static void xi_emit_target_sizeof(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_i64_const_reg(ctx, dst, (int64_t) xr_native_type_size((uint8_t) v->aux_int));
+}
+
+static void xi_emit_target_alignof(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_i64_const_reg(ctx, dst, (int64_t) xr_native_type_align((uint8_t) v->aux_int));
 }
 
 static void emit_param(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
