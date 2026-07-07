@@ -2127,7 +2127,7 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
 XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char *module_name,
                                                 bool is_quoted) {
     XrModuleGraph *graph = (XrModuleGraph *) analyzer->graph;
-    if (!graph || !analyzer->current_file)
+    if (!graph)
         return NULL;
 
     /* Resolve the import specifier to a canonical ID */
