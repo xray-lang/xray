@@ -823,6 +823,16 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                     call->method_name_id == 0 || call->method_signature_key == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence method callsite identity is stale");
+                {
+                    const XgMethodSummary *target_method =
+                        verify_find_evidence_method_by_signature_in_hierarchy(
+                            ev, call->receiver_static_class_id, call->method_name_id,
+                            call->method_signature_key);
+                    if (!target_method || target_method->method_id != call->method_id)
+                        return set_error(
+                            errbuf, errbuf_len,
+                            "AOT global evidence method callsite target does not re-derive");
+                }
                 break;
             case XG_CALL_INTERFACE:
                 if (call->receiver_static_interface_id == XG_NO_ID || call->method_name_id == 0 ||
