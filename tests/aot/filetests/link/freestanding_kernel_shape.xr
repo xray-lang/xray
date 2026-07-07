@@ -1,0 +1,29 @@
+import mem
+
+const MULTIBOOT_MAGIC: uint32 = 0x1BADB002
+const MULTIBOOT_FLAGS: uint32 = 0x00000003
+
+struct MultibootHeader {
+    magic: uint32
+    flags: uint32
+    checksum: uint32
+}
+
+@section("__DATA,.xray_multiboot")
+@used
+const MULTIBOOT = comptime MultibootHeader{
+    magic: MULTIBOOT_MAGIC,
+    flags: MULTIBOOT_FLAGS,
+    checksum: 0 - (MULTIBOOT_MAGIC + MULTIBOOT_FLAGS),
+}
+
+@section("__TEXT,.xray_boot")
+@used
+@c_export("xray_kernel_entry")
+fn kernel_entry() -> int32 {
+    const vga = 0xb8000
+    var cell = mem.fromAddress(vga)
+    mem.volatileStore(cell, 'X' as int, 1)
+    mem.volatileStore(mem.fromAddress(vga + 1), 0x0f, 1)
+    return MULTIBOOT.magic as int32
+}

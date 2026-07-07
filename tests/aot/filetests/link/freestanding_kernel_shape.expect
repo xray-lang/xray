@@ -1,0 +1,22 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_caps": []
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="stdlib_symbols": []
+contains="system_libs": []
+contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
+contains="ld_flags": ["-nostdlib"]
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=XRT_ATTR_SECTION("__DATA,.xray_multiboot") XRT_ATTR_USED
+c_contains=XRT_ATTR_SECTION("__TEXT,.xray_boot") XRT_ATTR_USED int32_t xray_kernel_entry
+c_contains=static const struct
+c_contains=.magic =
+c_contains=.flags =
+c_contains=.checksum =
+c_contains=xrt_mem_from_address
+c_contains=xrt_mem_volatile_store
+c_not_contains=xrt_arc_alloc
+c_not_contains=#include "xrt.h"
+not_contains=xray_rt_coro
+not_contains=xray_core
