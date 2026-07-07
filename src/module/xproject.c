@@ -23,11 +23,81 @@
 /* ========== Helper Functions ========== */
 
 static void free_dependency(XrDependency *dep);
+static void free_target_config(XrTargetConfig *cfg);
 
 /* Get a strdup'd string from a TOML table by key, or NULL. */
 static char *get_toml_str(XrTomlValue *tbl, const char *key) {
     const char *s = xtoml_get_string(tbl, key);
     return s ? xr_strdup(s) : NULL;
+}
+
+static bool get_toml_str_array(XrTomlValue *tbl, const char *key, char ***out_items,
+                               int *out_count) {
+    XrTomlValue *arr;
+    char **items = NULL;
+    int count;
+
+    if (out_items)
+        *out_items = NULL;
+    if (out_count)
+        *out_count = 0;
+    if (!tbl || !key || !out_items || !out_count)
+        return true;
+
+    arr = xtoml_get_array(tbl, key);
+    if (!arr)
+        return true;
+
+    count = xtoml_array_len(arr);
+    if (count <= 0)
+        return true;
+
+    items = (char **) xr_calloc((size_t) count, sizeof(char *));
+    if (!items)
+        return false;
+
+    for (int i = 0; i < count; i++) {
+        XrTomlValue *item = xtoml_array_get(arr, i);
+        if (!item || item->type != XR_TOML_STRING)
+            continue;
+        items[i] = xr_strdup(item->as.string);
+        if (!items[i]) {
+            for (int j = 0; j < i; j++)
+                xr_free(items[j]);
+            xr_free(items);
+            return false;
+        }
+    }
+
+    *out_items = items;
+    *out_count = count;
+    return true;
+}
+
+static XrTargetConfig *load_target_config(const char *name, XrTomlValue *tbl) {
+    XrTargetConfig *cfg;
+
+    if (!name || !tbl || tbl->type != XR_TOML_TABLE)
+        return NULL;
+
+    cfg = (XrTargetConfig *) xr_calloc(1, sizeof(XrTargetConfig));
+    if (!cfg)
+        return NULL;
+
+    cfg->name = xr_strdup(name);
+    cfg->profile = get_toml_str(tbl, "profile");
+    cfg->toolchain = get_toml_str(tbl, "toolchain");
+    cfg->cc = get_toml_str(tbl, "cc");
+    cfg->zig = get_toml_str(tbl, "zig");
+    cfg->sysroot = get_toml_str(tbl, "sysroot");
+    cfg->linker_script = get_toml_str(tbl, "linker_script");
+    if (!cfg->name || !get_toml_str_array(tbl, "cc_flags", &cfg->cc_flags, &cfg->n_cc_flags) ||
+        !get_toml_str_array(tbl, "ld_flags", &cfg->ld_flags, &cfg->n_ld_flags)) {
+        free_target_config(cfg);
+        return NULL;
+    }
+
+    return cfg;
 }
 
 /* ========== Project Loading ========== */
@@ -60,6 +130,7 @@ XrProject *xr_project_load(XrVMRuntime *isolate, const char *project_root) {
 
     project->root = xr_strdup(project_root);
     project->dependencies = xr_hashmap_new();
+    project->targets = xr_hashmap_new();
 
     // Try [project], then [package]
     XrTomlValue *section = xtoml_get_table(root, "project");
@@ -115,6 +186,23 @@ XrProject *xr_project_load(XrVMRuntime *isolate, const char *project_root) {
         }
     }
 
+    // Parse [target.<triple>] sections for native/freestanding build defaults.
+    XrTomlValue *targets = xtoml_get_table(root, "target");
+    if (targets && project->targets) {
+        for (int i = 0; i < targets->as.table.count; i++) {
+            XrTomlMember *m = &targets->as.table.members[i];
+            XrTargetConfig *cfg;
+            XR_DCHECK(m->key != NULL, "TOML target key must not be NULL");
+            if (!m->value || m->value->type != XR_TOML_TABLE)
+                continue;
+            cfg = load_target_config(m->key, m->value);
+            if (!cfg)
+                continue;
+            if (!xr_hashmap_set(project->targets, cfg->name, cfg))
+                free_target_config(cfg);
+        }
+    }
+
     project->initialized = true;
     xtoml_free(root);
     return project;
@@ -130,6 +218,29 @@ static void free_dependency(XrDependency *dep) {
     xr_free(dep->version);
     xr_free(dep->path);
     xr_free(dep);
+}
+
+static void free_string_list(char **items, int count) {
+    if (!items)
+        return;
+    for (int i = 0; i < count; i++)
+        xr_free(items[i]);
+    xr_free(items);
+}
+
+static void free_target_config(XrTargetConfig *cfg) {
+    if (!cfg)
+        return;
+    xr_free(cfg->name);
+    xr_free(cfg->profile);
+    xr_free(cfg->toolchain);
+    xr_free(cfg->cc);
+    xr_free(cfg->zig);
+    xr_free(cfg->sysroot);
+    xr_free(cfg->linker_script);
+    free_string_list(cfg->cc_flags, cfg->n_cc_flags);
+    free_string_list(cfg->ld_flags, cfg->n_ld_flags);
+    xr_free(cfg);
 }
 
 void xr_project_free(XrProject *project) {
@@ -154,6 +265,16 @@ void xr_project_free(XrProject *project) {
         xr_hashmap_free(project->dependencies);
     }
 
+    if (project->targets) {
+        XrHashMap *map = project->targets;
+        for (uint32_t i = 0; i < map->capacity; i++) {
+            if (map->entries[i].key != NULL) {
+                free_target_config((XrTargetConfig *) map->entries[i].value);
+            }
+        }
+        xr_hashmap_free(project->targets);
+    }
+
     xr_free(project);
 }
 
@@ -174,6 +295,13 @@ char *xr_resolve_local_dependency(XrProject *project, const char *package_name) 
     }
 
     return xr_path_join(project->root, dep->path);
+}
+
+const XrTargetConfig *xr_project_find_target_config(const XrProject *project,
+                                                    const char *target_name) {
+    if (!project || !target_name || !project->targets)
+        return NULL;
+    return (const XrTargetConfig *) xr_hashmap_get(project->targets, target_name);
 }
 
 /* ========== File Collection Utilities ========== */

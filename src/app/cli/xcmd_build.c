@@ -25,7 +25,9 @@
 #include "xray.h"
 #include "xray_vm.h"
 #include "../../module/xbundle.h"
+#include "../../module/xproject.h"
 #include "../../aot/xaot_driver.h"
+#include "../../base/xfileio.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhash.h"
@@ -114,6 +116,86 @@ static bool build_type_name_profile_parse(const char *name, XrCliBuildProfile bu
                  "unknown type-name profile '%s' (expected 'none', 'public', or 'all')", name);
     }
     return false;
+}
+
+static bool build_path_is_absolute(const char *path) {
+    if (!path || !path[0])
+        return false;
+    if (path[0] == '/' || path[0] == '\\')
+        return true;
+    return strlen(path) > 2 && path[1] == ':';
+}
+
+static bool build_join_project_path(const char *root, const char *path, char *out,
+                                    size_t out_size) {
+    int written;
+
+    if (!path || !path[0] || !out || out_size == 0)
+        return false;
+    if (build_path_is_absolute(path) || !root || !root[0]) {
+        written = snprintf(out, out_size, "%s", path);
+    } else {
+        written = snprintf(out, out_size, "%s/%s", root, path);
+    }
+    return written >= 0 && (size_t) written < out_size;
+}
+
+static bool build_find_project_root(const char *input_path, char *out, size_t out_size) {
+    char cur[XR_PATH_MAX];
+    char candidate[XR_PATH_MAX];
+    char *dir;
+
+    if (!input_path || !out || out_size == 0)
+        return false;
+
+    if (xr_fs_is_dir(input_path)) {
+        if (!xr_fs_realpath(input_path, cur, sizeof(cur)))
+            snprintf(cur, sizeof(cur), "%s", input_path);
+    } else {
+        dir = xr_path_dirname(input_path);
+        if (!dir)
+            return false;
+        if (!xr_fs_realpath(dir, cur, sizeof(cur)))
+            snprintf(cur, sizeof(cur), "%s", dir);
+        xr_free(dir);
+    }
+
+    while (cur[0]) {
+        int written = snprintf(candidate, sizeof(candidate), "%s/xray.toml", cur);
+        if (written >= 0 && (size_t) written < sizeof(candidate) && xr_fs_is_file(candidate)) {
+            written = snprintf(out, out_size, "%s", cur);
+            return written >= 0 && (size_t) written < out_size;
+        }
+
+        char *slash = strrchr(cur, '/');
+        char *backslash = strrchr(cur, '\\');
+        char *sep = slash;
+        if (backslash && (!sep || backslash > sep))
+            sep = backslash;
+        if (!sep)
+            break;
+        if (sep == cur) {
+            cur[1] = '\0';
+        } else {
+            *sep = '\0';
+        }
+        if ((sep == cur && cur[1] == '\0') || cur[0] == '\0') {
+            written = snprintf(candidate, sizeof(candidate), "%s/xray.toml", cur);
+            if (written >= 0 && (size_t) written < sizeof(candidate) && xr_fs_is_file(candidate)) {
+                written = snprintf(out, out_size, "%s", cur);
+                return written >= 0 && (size_t) written < out_size;
+            }
+            break;
+        }
+    }
+    return false;
+}
+
+static const char *build_config_string(const XrCliOptionMap *opts, const char *opt_name,
+                                       const char *configured, const char *fallback) {
+    if (opts && xr_cli_opt_present(opts, opt_name))
+        return xr_cli_opt_string(opts, opt_name, fallback);
+    return (configured && configured[0]) ? configured : fallback;
 }
 
 /* ========== Shared Helpers ========== */
@@ -549,6 +631,28 @@ static bool xaot_cli_add_build_debug_flags(XaotLinkManifest *manifest, char *err
         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRAY_AOT_DEBUG_LOCALS=1")) {
         snprintf(err, err_size, "failed to add debug flags to AOT link manifest");
         return false;
+    }
+    return true;
+}
+
+static bool xaot_cli_add_target_config_flags(XaotLinkManifest *manifest,
+                                             const XrTargetConfig *config, char *err,
+                                             size_t err_size) {
+    if (!manifest || !config)
+        return true;
+    for (int i = 0; i < config->n_cc_flags; i++) {
+        const char *flag = config->cc_flags ? config->cc_flags[i] : NULL;
+        if (flag && flag[0] && !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, flag)) {
+            snprintf(err, err_size, "failed to add xray.toml target cc flag '%s'", flag);
+            return false;
+        }
+    }
+    for (int i = 0; i < config->n_ld_flags; i++) {
+        const char *flag = config->ld_flags ? config->ld_flags[i] : NULL;
+        if (flag && flag[0] && !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, flag)) {
+            snprintf(err, err_size, "failed to add xray.toml target ld flag '%s'", flag);
+            return false;
+        }
     }
     return true;
 }
@@ -998,16 +1102,15 @@ static const char *default_shared_library_output(void) {
 static int cmd_build_bytecode(const char *input, const char *output, const char *cc,
                               const char *opt_flag, bool c_only, bool strip, bool debug_symbols,
                               const char *sysroot);
-static int cmd_build_native(const char *input, const char *output, const char *cc,
-                            const char *opt_flag, const char *cpu, bool c_only, bool strip,
-                            bool debug_symbols, bool shared_library, XrCliBuildProfile profile,
-                            XiCgenTypeNameProfile type_name_profile, const char *sysroot,
-                            const char *linker_script, bool verbose, bool dump_xaot_plan,
-                            bool dump_global_evidence, bool dump_link_manifest,
-                            bool dump_link_command, bool dry_run_link, const char *c_header,
-                            bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto,
-                            const XrCliBuildTarget *target,
-                            const XrCliToolchainPlan *toolchain_plan);
+static int
+cmd_build_native(const char *input, const char *output, const char *cc, const char *opt_flag,
+                 const char *cpu, bool c_only, bool strip, bool debug_symbols, bool shared_library,
+                 XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
+                 const char *sysroot, const char *linker_script, bool verbose, bool dump_xaot_plan,
+                 bool dump_global_evidence, bool dump_link_manifest, bool dump_link_command,
+                 bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg,
+                 bool rebuild, bool lto, const XrCliBuildTarget *target,
+                 const XrCliToolchainPlan *toolchain_plan, const XrTargetConfig *target_config);
 
 /* ========== CLI Entry Point ========== */
 
@@ -1017,16 +1120,10 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
 
     const char *input_file = inv->positionals[0];
     const char *output_file = xr_cli_opt_string(&inv->options, "output", NULL);
-    const char *cc = xr_cli_opt_string(&inv->options, "cc", "cc");
     const char *opt_level = xr_cli_opt_string(&inv->options, "opt", NULL);
-    const char *sysroot = xr_cli_opt_string(&inv->options, "sysroot", NULL);
     const char *target_arg = xr_cli_opt_string(&inv->options, "target", "native");
-    const char *toolchain_arg = xr_cli_opt_string(&inv->options, "toolchain", "auto");
-    const char *zig_path = xr_cli_opt_string(&inv->options, "zig", NULL);
     const char *cpu = xr_cli_opt_string(&inv->options, "cpu", NULL);
-    const char *profile_arg = xr_cli_opt_string(&inv->options, "profile", "hosted");
     const char *type_names_arg = xr_cli_opt_string(&inv->options, "type-names", NULL);
-    const char *linker_script = xr_cli_opt_string(&inv->options, "linker-script", NULL);
     bool c_only = xr_cli_opt_bool(&inv->options, "c-only");
     bool strip_symbols = xr_cli_opt_bool(&inv->options, "strip");
     bool debug_symbols = xr_cli_opt_bool(&inv->options, "debug");
@@ -1044,140 +1141,186 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     bool lto = xr_cli_opt_bool(&inv->options, "lto");
     bool verbose = xr_cli_opt_bool(&inv->options, "verbose") || (inv->ctx && inv->ctx->verbose);
     bool opt_fast = build_opt_level_is_fast(opt_level);
+    XrProject *project = NULL;
+    const XrTargetConfig *target_config = NULL;
+    char project_root[XR_PATH_MAX];
+    char linker_script_from_config[XR_PATH_MAX];
+    const char *cc;
+    const char *sysroot;
+    const char *toolchain_arg;
+    const char *zig_path;
+    const char *profile_arg;
+    const char *linker_script;
     XrCliBuildTarget target;
     XrCliBuildProfile profile;
     XiCgenTypeNameProfile type_name_profile;
     XrCliToolchainKind toolchain_kind;
     XrCliToolchainPlan toolchain_plan;
     char parse_err[512];
+    int rc;
+
+#define CMD_BUILD_RETURN(code)                                                                     \
+    do {                                                                                           \
+        xr_project_free(project);                                                                  \
+        return (code);                                                                             \
+    } while (0)
+
+    project_root[0] = '\0';
+    linker_script_from_config[0] = '\0';
+    if (native_mode && build_find_project_root(input_file, project_root, sizeof(project_root))) {
+        project = xr_project_load(NULL, project_root);
+        if (project)
+            target_config = xr_project_find_target_config(project, target_arg);
+    }
+
+    cc = build_config_string(&inv->options, "cc", target_config ? target_config->cc : NULL, "cc");
+    sysroot = build_config_string(&inv->options, "sysroot",
+                                  target_config ? target_config->sysroot : NULL, NULL);
+    toolchain_arg = build_config_string(&inv->options, "toolchain",
+                                        target_config ? target_config->toolchain : NULL, "auto");
+    zig_path =
+        build_config_string(&inv->options, "zig", target_config ? target_config->zig : NULL, NULL);
+    profile_arg = build_config_string(&inv->options, "profile",
+                                      target_config ? target_config->profile : NULL, "hosted");
+    linker_script = build_config_string(&inv->options, "linker-script",
+                                        target_config ? target_config->linker_script : NULL, NULL);
+    if (target_config && target_config->linker_script &&
+        !xr_cli_opt_present(&inv->options, "linker-script") &&
+        build_join_project_path(project ? project->root : project_root,
+                                target_config->linker_script, linker_script_from_config,
+                                sizeof(linker_script_from_config))) {
+        linker_script = linker_script_from_config;
+    }
 
     if (!xr_cli_build_target_parse(target_arg, &target, parse_err, sizeof(parse_err))) {
         fprintf(stderr, "Error: %s\n", parse_err);
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (!build_profile_parse(profile_arg, &profile, parse_err, sizeof(parse_err))) {
         fprintf(stderr, "Error: %s\n", parse_err);
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (!build_type_name_profile_parse(type_names_arg, profile, &type_name_profile, parse_err,
                                        sizeof(parse_err))) {
         fprintf(stderr, "Error: %s\n", parse_err);
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (!xr_cli_toolchain_kind_parse(toolchain_arg, &toolchain_kind, parse_err,
                                      sizeof(parse_err))) {
         fprintf(stderr, "Error: %s\n", parse_err);
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (profile != XR_CLI_BUILD_PROFILE_HOSTED && !native_mode) {
         fprintf(stderr, "Error: --profile %s requires --native\n", build_profile_name(profile));
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (xr_cli_opt_present(&inv->options, "type-names") && !native_mode) {
         fprintf(stderr, "Error: --type-names requires --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
 
     if (dump_xaot_plan && !native_mode) {
         fprintf(stderr, "Error: --dump-xaot-plan requires --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (dump_global_evidence && !native_mode) {
         fprintf(stderr, "Error: --dump-global-evidence requires --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (dump_link_manifest && !native_mode) {
         fprintf(stderr, "Error: --dump-link-manifest requires --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (dump_link_command && !native_mode) {
         fprintf(stderr, "Error: --dump-link-command requires --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (dry_run_link && !native_mode) {
         fprintf(stderr, "Error: --dry-run-link requires --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (xr_cli_opt_present(&inv->options, "linker-script") && !native_mode) {
         fprintf(stderr, "Error: --linker-script requires --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
-    if (xr_cli_opt_present(&inv->options, "linker-script") &&
-        (!linker_script || !linker_script[0])) {
+    if ((xr_cli_opt_present(&inv->options, "linker-script") || target_config) && linker_script &&
+        !linker_script[0]) {
         fprintf(stderr, "Error: --linker-script requires a non-empty path\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (!target.is_native && !native_mode) {
         fprintf(stderr, "Error: --target %s requires --native\n", target.name);
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if ((xr_cli_opt_present(&inv->options, "toolchain") ||
          xr_cli_opt_present(&inv->options, "zig") || keep_c) &&
         !native_mode) {
         fprintf(stderr, "Error: --toolchain/--zig/--keep-c require --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (c_header && !native_mode) {
         fprintf(stderr, "Error: --c-header requires --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (shared_library && !native_mode) {
         fprintf(stderr, "Error: --shared requires --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (shared_library && c_only) {
         fprintf(stderr, "Error: --shared cannot be combined with --c-only\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (dry_run_link && c_only) {
         fprintf(stderr, "Error: --dry-run-link cannot be combined with --c-only\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
-    if (linker_script && c_only) {
+    if (linker_script && c_only && xr_cli_opt_present(&inv->options, "linker-script")) {
         fprintf(stderr, "Error: --linker-script cannot be combined with --c-only\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
+    if (c_only && !xr_cli_opt_present(&inv->options, "linker-script"))
+        linker_script = NULL;
     bool freestanding_shared_object =
         shared_library && profile == XR_CLI_BUILD_PROFILE_FREESTANDING;
     if (shared_library && !target.is_native && !freestanding_shared_object) {
         fprintf(stderr, "Error: --shared currently requires native target\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
 #ifdef XR_OS_WINDOWS
     if (shared_library && !freestanding_shared_object) {
         fprintf(stderr, "Error: --shared is not implemented for Windows hosts yet\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
 #endif
     if ((xr_cli_opt_present(&inv->options, "cache-dir") || rebuild) && !native_mode) {
         fprintf(stderr, "Error: --cache-dir/--rebuild require --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (cpu && !native_mode) {
         fprintf(stderr, "Error: --cpu requires --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (debug_symbols && !native_mode) {
         fprintf(stderr, "Error: --debug requires --native\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (cpu && !target.is_native) {
         fprintf(stderr,
                 "Error: --cpu is host-only; cross target '%s' selects its CPU via the "
                 "target triple\n",
                 target.name);
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (!xr_cli_toolchain_resolve_ex(toolchain_kind, &target, cc, zig_path,
                                      inv->ctx ? inv->ctx->program : NULL, &toolchain_plan,
                                      parse_err, sizeof(parse_err))) {
         fprintf(stderr, "Error: %s\n", parse_err);
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
     if (shared_library && toolchain_plan.kind != XR_CLI_TOOLCHAIN_HOST &&
         !freestanding_shared_object) {
         fprintf(stderr, "Error: --shared currently requires the host toolchain\n");
-        return 2;
+        CMD_BUILD_RETURN(2);
     }
 
     if (!output_file)
@@ -1195,15 +1338,18 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     }
 
     if (native_mode) {
-        return cmd_build_native(input_file, output_file, cc, opt_flag, effective_cpu, c_only,
-                                strip_symbols, debug_symbols, shared_library, profile,
-                                type_name_profile, sysroot, linker_script, verbose, dump_xaot_plan,
-                                dump_global_evidence, dump_link_manifest, dump_link_command,
-                                dry_run_link, c_header, keep_c, cache_dir_arg, rebuild,
-                                effective_lto, &target, &toolchain_plan);
+        rc = cmd_build_native(input_file, output_file, cc, opt_flag, effective_cpu, c_only,
+                              strip_symbols, debug_symbols, shared_library, profile,
+                              type_name_profile, sysroot, linker_script, verbose, dump_xaot_plan,
+                              dump_global_evidence, dump_link_manifest, dump_link_command,
+                              dry_run_link, c_header, keep_c, cache_dir_arg, rebuild, effective_lto,
+                              &target, &toolchain_plan, target_config);
+        CMD_BUILD_RETURN(rc);
     }
-    return cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
-                              debug_symbols, sysroot);
+    rc = cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
+                            debug_symbols, sysroot);
+    CMD_BUILD_RETURN(rc);
+#undef CMD_BUILD_RETURN
 }
 
 /* ========== Bytecode Bundling (default mode) ========== */
@@ -1867,16 +2013,15 @@ static bool xaot_cli_fast_test_direct_link_allowed(const XaotLinkManifest *manif
            manifest->n_stdlib_objects == 0;
 }
 
-static int cmd_build_native(const char *input, const char *output, const char *cc,
-                            const char *opt_flag, const char *cpu, bool c_only, bool strip,
-                            bool debug_symbols, bool shared_library, XrCliBuildProfile profile,
-                            XiCgenTypeNameProfile type_name_profile, const char *sysroot,
-                            const char *linker_script, bool verbose, bool dump_xaot_plan,
-                            bool dump_global_evidence, bool dump_link_manifest,
-                            bool dump_link_command, bool dry_run_link, const char *c_header,
-                            bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto,
-                            const XrCliBuildTarget *target,
-                            const XrCliToolchainPlan *toolchain_plan) {
+static int
+cmd_build_native(const char *input, const char *output, const char *cc, const char *opt_flag,
+                 const char *cpu, bool c_only, bool strip, bool debug_symbols, bool shared_library,
+                 XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
+                 const char *sysroot, const char *linker_script, bool verbose, bool dump_xaot_plan,
+                 bool dump_global_evidence, bool dump_link_manifest, bool dump_link_command,
+                 bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg,
+                 bool rebuild, bool lto, const XrCliBuildTarget *target,
+                 const XrCliToolchainPlan *toolchain_plan, const XrTargetConfig *target_config) {
     XaotBuildResult aot_result;
     XaotBuildProfile aot_profile = profile == XR_CLI_BUILD_PROFILE_FREESTANDING
                                        ? XAOT_BUILD_PROFILE_FREESTANDING
@@ -1919,6 +2064,12 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         }
         if (!xaot_cli_add_linker_script(&aot_result.link_manifest, linker_script, normalize_err,
                                         sizeof(normalize_err))) {
+            fprintf(stderr, "Error: %s\n", normalize_err);
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
+        if (!xaot_cli_add_target_config_flags(&aot_result.link_manifest, target_config,
+                                              normalize_err, sizeof(normalize_err))) {
             fprintf(stderr, "Error: %s\n", normalize_err);
             xaot_build_result_free(&aot_result);
             return 1;

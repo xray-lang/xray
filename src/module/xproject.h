@@ -31,6 +31,22 @@ typedef struct XrDependency {
     bool is_local;
 } XrDependency;
 
+/* ========== Native Target Configuration ========== */
+
+typedef struct XrTargetConfig {
+    char *name;
+    char *profile;
+    char *toolchain;
+    char *cc;
+    char *zig;
+    char *sysroot;
+    char *linker_script;
+    char **cc_flags;
+    int n_cc_flags;
+    char **ld_flags;
+    int n_ld_flags;
+} XrTargetConfig;
+
 /* ========== Project Configuration ========== */
 
 // Parsed from xray.toml
@@ -43,6 +59,7 @@ typedef struct XrProject {
     char *license;
     bool is_package;
     XrHashMap *dependencies;
+    XrHashMap *targets;
     bool initialized;
 } XrProject;
 
@@ -53,6 +70,8 @@ XR_FUNC void xr_project_free(XrProject *project);
 
 // Returns local path (caller frees), or NULL for non-local dependencies
 XR_FUNC char *xr_resolve_local_dependency(XrProject *project, const char *package_name);
+XR_FUNC const XrTargetConfig *xr_project_find_target_config(const XrProject *project,
+                                                            const char *target_name);
 
 /* ========== File Utilities ========== */
 

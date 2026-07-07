@@ -233,6 +233,7 @@ endif()
 add_xray_unit_test(test_semver module/test_semver.c)
 add_xray_unit_test(test_lockfile module/test_lockfile.c)
 add_xray_unit_test(test_source_cache module/test_source_cache.c)
+add_xray_unit_test(test_project module/test_project.c)
 
 # ============================================================================
 # encoding/ — Base64, hex, URL encoding, Unicode
