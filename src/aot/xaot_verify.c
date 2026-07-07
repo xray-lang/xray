@@ -539,9 +539,10 @@ static const XgDeclSummary *verify_find_evidence_decl_by_kind_name(const XgGloba
     return NULL;
 }
 
-static const XgInterfaceMethodSummary *verify_find_evidence_interface_method_depth(
-    const XgGlobalEvidence *ev, XgInterfaceId interface_id, uint32_t name_id,
-    uint32_t signature_key, uint32_t depth) {
+static const XgInterfaceMethodSummary *
+verify_find_evidence_interface_method_depth(const XgGlobalEvidence *ev, XgInterfaceId interface_id,
+                                            uint32_t name_id, uint32_t signature_key,
+                                            uint32_t depth) {
     if (!ev || interface_id == XG_NO_ID || name_id == 0 || signature_key == 0)
         return NULL;
     if (depth > 64)
@@ -557,8 +558,8 @@ static const XgInterfaceMethodSummary *verify_find_evidence_interface_method_dep
         const XgInterfaceMethodSummary *method;
         if (edge->child_interface_id != interface_id)
             continue;
-        method = verify_find_evidence_interface_method_depth(
-            ev, edge->parent_interface_id, name_id, signature_key, depth + 1);
+        method = verify_find_evidence_interface_method_depth(ev, edge->parent_interface_id, name_id,
+                                                             signature_key, depth + 1);
         if (method)
             return method;
     }
@@ -626,15 +627,16 @@ static const XgMethodSummary *verify_find_evidence_method_in_class(const XgGloba
 static const XgMethodSummary *
 verify_find_evidence_method_by_signature_in_class(const XgGlobalEvidence *ev,
                                                   const XgClassSummary *cls, uint32_t name_id,
-                                                  uint32_t signature_key) {
+                                                  uint32_t signature_key, bool allow_constructor) {
     if (!ev || !cls || cls->method_start == 0 || name_id == 0)
         return NULL;
     for (uint32_t i = 0; i < cls->method_count; i++) {
         uint32_t idx = cls->method_start - 1 + i;
         const XgMethodSummary *method = idx < ev->nmethods ? &ev->methods[idx] : NULL;
+        bool is_constructor = method && (method->flags & XG_METHOD_CONSTRUCTOR) != 0;
         if (method && method->owner_class_id == cls->class_id &&
-            xg_verify_method_participates_in_override(method) && method->name_id == name_id &&
-            method->signature_key == signature_key)
+            (method->flags & XG_METHOD_STATIC) == 0 && (allow_constructor || !is_constructor) &&
+            method->name_id == name_id && method->signature_key == signature_key)
             return method;
     }
     return NULL;
@@ -658,12 +660,13 @@ verify_find_evidence_method_in_hierarchy(const XgGlobalEvidence *ev, XgClassId c
 }
 
 static const XgMethodSummary *verify_find_evidence_method_by_signature_in_hierarchy(
-    const XgGlobalEvidence *ev, XgClassId class_id, uint32_t name_id, uint32_t signature_key) {
+    const XgGlobalEvidence *ev, XgClassId class_id, uint32_t name_id, uint32_t signature_key,
+    bool allow_constructor) {
     const XgClassSummary *cls = verify_find_evidence_class(ev, class_id);
     uint32_t depth = 0;
     while (cls && depth++ < 64) {
-        const XgMethodSummary *method =
-            verify_find_evidence_method_by_signature_in_class(ev, cls, name_id, signature_key);
+        const XgMethodSummary *method = verify_find_evidence_method_by_signature_in_class(
+            ev, cls, name_id, signature_key, allow_constructor);
         if (method)
             return method;
         if (cls->parent_class_id == XG_NO_ID)
@@ -688,8 +691,8 @@ static const XgMethodSummary *verify_find_parent_method_by_signature(const XgGlo
         const XgMethodSummary *method;
         if (!parent)
             return NULL;
-        method =
-            verify_find_evidence_method_by_signature_in_class(ev, parent, name_id, signature_key);
+        method = verify_find_evidence_method_by_signature_in_class(ev, parent, name_id,
+                                                                   signature_key, false);
         if (method)
             return method;
         parent_id = parent->parent_class_id;
@@ -928,7 +931,8 @@ static bool verify_interface_method_visible_from(const XgGlobalEvidence *ev,
                                                  const XgInterfaceMethodSummary *method) {
     if (!ev || receiver_interface_id == XG_NO_ID || !method)
         return false;
-    return verify_interface_extends_reaches(ev, receiver_interface_id, method->owner_interface_id, 0);
+    return verify_interface_extends_reaches(ev, receiver_interface_id, method->owner_interface_id,
+                                            0);
 }
 
 static uint32_t verify_interface_dispatch_slot(const XgGlobalEvidence *ev,
@@ -1074,10 +1078,14 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence method callsite identity is stale");
                 {
+                    const XgMethodSummary *call_method =
+                        verify_find_evidence_method_by_id(ev, call->method_id);
+                    bool allow_constructor =
+                        call_method && (call_method->flags & XG_METHOD_CONSTRUCTOR) != 0;
                     const XgMethodSummary *target_method =
                         verify_find_evidence_method_by_signature_in_hierarchy(
                             ev, call->receiver_static_class_id, call->method_name_id,
-                            call->method_signature_key);
+                            call->method_signature_key, allow_constructor);
                     if (!target_method || target_method->method_id != call->method_id)
                         return set_error(
                             errbuf, errbuf_len,
@@ -1400,7 +1408,7 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
                 implementor_count++;
                 target_method = verify_find_evidence_method_by_signature_in_hierarchy(
                     ev, impl->implementor_class_id, call->method_name_id,
-                    call->method_signature_key);
+                    call->method_signature_key, false);
                 if (!target_method) {
                     all_targets_resolved = false;
                     continue;
@@ -1582,7 +1590,8 @@ static bool verify_has_interface_impl(const XgGlobalEvidence *ev, XgInterfaceId 
     return false;
 }
 
-static bool verify_has_effective_interface_impl(const XgGlobalEvidence *ev, XgInterfaceId interface_id,
+static bool verify_has_effective_interface_impl(const XgGlobalEvidence *ev,
+                                                XgInterfaceId interface_id,
                                                 XgClassId implementor_class_id) {
     if (!ev || interface_id == XG_NO_ID || implementor_class_id == XG_NO_ID)
         return false;
@@ -1710,7 +1719,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
             bool target_found = false;
             if (!call)
                 return set_error(errbuf, errbuf_len, "AOT interface-use plan has unknown use-site");
-            if (call->kind != XG_CALL_INTERFACE || plan->interface_id != call->receiver_static_interface_id)
+            if (call->kind != XG_CALL_INTERFACE ||
+                plan->interface_id != call->receiver_static_interface_id)
                 return set_error(errbuf, errbuf_len,
                                  "AOT interface-use plan use-site does not re-derive");
             if ((plan->reason & XAOT_INTERFACE_USE_REASON_VALUE) == 0 ||
@@ -1721,9 +1731,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
                                                      plan->implementor_class_id))
                 return set_error(errbuf, errbuf_len,
                                  "AOT interface-use plan has no effective implements evidence");
-            if (!dispatch ||
-                (dispatch->kind != XAOT_DISPATCH_DIRECT &&
-                 dispatch->kind != XAOT_DISPATCH_TYPE_SWITCH))
+            if (!dispatch || (dispatch->kind != XAOT_DISPATCH_DIRECT &&
+                              dispatch->kind != XAOT_DISPATCH_TYPE_SWITCH))
                 return set_error(errbuf, errbuf_len,
                                  "AOT interface-use plan dispatch does not re-derive");
             for (uint16_t ti = 0; ti < dispatch->target_count; ti++) {

@@ -516,14 +516,16 @@ static XgMethodSummary *producer_find_class_method(XgGlobalEvidence *ev, const X
 
 static XgMethodSummary *producer_find_class_method_by_name(XgGlobalEvidence *ev,
                                                            const XgClassSummary *cls,
-                                                           uint32_t name_id) {
+                                                           uint32_t name_id,
+                                                           bool allow_constructor) {
     if (!ev || !cls || cls->method_start == 0 || name_id == 0)
         return NULL;
     for (uint32_t i = 0; i < cls->method_count; i++) {
         uint32_t method_index = cls->method_start - 1 + i;
         XgMethodSummary *method = method_index < ev->nmethods ? &ev->methods[method_index] : NULL;
+        bool is_constructor = method && (method->flags & XG_METHOD_CONSTRUCTOR) != 0;
         if (method && method->name_id == name_id && (method->flags & XG_METHOD_STATIC) == 0 &&
-            (method->flags & XG_METHOD_CONSTRUCTOR) == 0)
+            (allow_constructor || !is_constructor))
             return method;
     }
     return NULL;
@@ -551,7 +553,8 @@ static XgMethodSummary *producer_find_parent_method(XgProducer *p, const XgClass
 }
 
 static XgMethodSummary *producer_find_method_by_name_in_hierarchy(XgProducer *p, XgClassId class_id,
-                                                                  uint32_t name_id) {
+                                                                  uint32_t name_id,
+                                                                  bool allow_constructor) {
     XgClassNameRow *row = producer_lookup_class_row_by_id(p, class_id);
     uint32_t depth = 0;
     while (row && depth++ < 64) {
@@ -560,7 +563,8 @@ static XgMethodSummary *producer_find_method_by_name_in_hierarchy(XgProducer *p,
         if (row->summary_index >= p->evidence->nclasses)
             return NULL;
         summary = &p->evidence->classes[row->summary_index];
-        method = producer_find_class_method_by_name(p->evidence, summary, name_id);
+        method =
+            producer_find_class_method_by_name(p->evidence, summary, name_id, allow_constructor);
         if (method)
             return method;
         if (summary->parent_class_id == XG_NO_ID)
@@ -865,7 +869,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         } else {
             XgClassId receiver_class = body_resolve_expr_class(bc, callee->as.member_access.object);
             XgMethodSummary *method = producer_find_method_by_name_in_hierarchy(
-                bc->producer, receiver_class, method_name_id);
+                bc->producer, receiver_class, method_name_id, false);
             if (receiver_class != XG_NO_ID) {
                 row.kind = XG_CALL_METHOD;
                 row.receiver_static_class_id = receiver_class;
@@ -891,12 +895,15 @@ static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
     const char *method_name;
     uint32_t method_name_id;
     XgMethodSummary *method;
+    bool is_constructor_call;
     if (!bc || !call)
         return;
     parent_class = body_parent_class_id(bc);
-    method_name = call->as.super_call.method_name ? call->as.super_call.method_name : "constructor";
+    is_constructor_call = call->as.super_call.method_name == NULL;
+    method_name = is_constructor_call ? "constructor" : call->as.super_call.method_name;
     method_name_id = hash_name32(method_name);
-    method = producer_find_method_by_name_in_hierarchy(bc->producer, parent_class, method_name_id);
+    method = producer_find_method_by_name_in_hierarchy(bc->producer, parent_class, method_name_id,
+                                                       is_constructor_call);
     memset(&row, 0, sizeof(row));
     row.callsite_id = (XgCallsiteId) (bc->evidence->ncallsites + 1);
     row.owner_func_id = bc->owner_func_id;
