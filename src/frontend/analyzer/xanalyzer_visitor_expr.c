@@ -1413,6 +1413,13 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 }
                 if (!is_namespace) {
                     if (strcmp(ma->name, "name") == 0) {
+                        if (xa_freestanding_profile_enabled(ctx->analyzer)) {
+                            xa_freestanding_report_unavailable(
+                                ctx, node, "enum.name",
+                                "enum name materialization needs hosted string helpers; use "
+                                "ordinal or match in freestanding code");
+                            return xr_type_new_unknown(NULL);
+                        }
                         return xr_type_new_string(NULL);
                     }
                     if (strcmp(ma->name, "ordinal") == 0) {

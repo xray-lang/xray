@@ -765,6 +765,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     row.callsite_id = (XgCallsiteId) (bc->evidence->ncallsites + 1);
     row.owner_func_id = bc->owner_func_id;
     row.source_span_id = (uint32_t) call->line;
+    row.body_ordinal = bc->callsite_count;
     row.kind = XG_CALL_CLOSURE;
     row.arg_count =
         (uint16_t) (call->as.call_expr.arg_count < UINT16_MAX ? call->as.call_expr.arg_count
@@ -825,6 +826,7 @@ static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
     row.callsite_id = (XgCallsiteId) (bc->evidence->ncallsites + 1);
     row.owner_func_id = bc->owner_func_id;
     row.source_span_id = (uint32_t) call->line;
+    row.body_ordinal = bc->callsite_count;
     row.kind = XG_CALL_METHOD;
     row.receiver_static_class_id = parent_class;
     row.method_id = method ? method->method_id : (XgMethodId) method_name_id;

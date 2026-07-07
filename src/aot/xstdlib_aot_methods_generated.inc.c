@@ -134,9 +134,6 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"mem", "compare", 3, "xrt_mem_compare", "vvv", CG_AOT_RET_VALUE, NULL},
     {"mem", "volatileLoad", 2, "xrt_mem_volatile_load", "vv", CG_AOT_RET_VALUE, NULL},
     {"mem", "volatileStore", 3, "xrt_mem_volatile_store", "vvv", CG_AOT_RET_VALUE, NULL},
-    {"datetime", "_nowMilliseconds", 0, "xrt_datetime_now_milliseconds", "", CG_AOT_RET_VALUE, NULL},
-    {"datetime", "_offset", 0, "xrt_datetime_offset", "", CG_AOT_RET_VALUE, NULL},
-    {"datetime", "_offsetAt", 1, "xrt_datetime_offset_at", "v", CG_AOT_RET_VALUE, NULL},
 };
 #define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) (sizeof(g_aot_stdlib_generated_methods) / sizeof(g_aot_stdlib_generated_methods[0])))
 

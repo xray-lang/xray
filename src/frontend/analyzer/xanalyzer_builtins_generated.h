@@ -151,14 +151,6 @@ static const XaBuiltinMember g_gen_csv_functions[] = {
 };
 #define GEN_CSV_FUNCTION_COUNT 7
 
-// datetime module functions
-static const XaBuiltinMember g_gen_datetime_functions[] = {
-    {"_nowMilliseconds", "(): int", "Internal: current time in milliseconds since Unix epoch", true, false},
-    {"_offset", "(): int", "Internal: current UTC offset in minutes", true, false},
-    {"_offsetAt", "(timestamp: int): int", "Internal: UTC offset in minutes at Unix timestamp", true, false},
-};
-#define GEN_DATETIME_FUNCTION_COUNT 3
-
 // http.HttpResponse handle fields
 static const XaBuiltinHandleField g_gen_http_httpresponse_fields[] = {
     {"status", "int", true},
@@ -548,9 +540,11 @@ static const XaBuiltinMember g_gen_time_functions[] = {
     {"monotonic", "(): int", "Monotonic time in milliseconds", true, false},
     {"nanos", "(): int", "Monotonic time in nanoseconds", true, false},
     {"micros", "(): int", "Monotonic time in microseconds", true, false},
+    {"localOffset", "(): int", "Local UTC offset in minutes for the current wall time", true, false},
+    {"localOffsetAt", "(timestamp: int): int", "Local UTC offset in minutes at a Unix timestamp", true, false},
     {"sleep", "(ms: int): ()", "Sleep for milliseconds", true, false},
 };
-#define GEN_TIME_FUNCTION_COUNT 6
+#define GEN_TIME_FUNCTION_COUNT 8
 
 // toml module functions
 static const XaBuiltinMember g_gen_toml_functions[] = {
@@ -632,7 +626,6 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0},
     {"csv", g_gen_csv_functions, GEN_CSV_FUNCTION_COUNT, NULL, 0},
-    {"datetime", g_gen_datetime_functions, GEN_DATETIME_FUNCTION_COUNT, NULL, 0},
     {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, g_gen_http_handles, GEN_HTTP_HANDLE_COUNT},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT},
     {"log", g_gen_log_functions, GEN_LOG_FUNCTION_COUNT, NULL, 0},
@@ -649,7 +642,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
     {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 20
+#define GEN_BUILTIN_MODULE_COUNT 19
 
 /* clang-format on */
 

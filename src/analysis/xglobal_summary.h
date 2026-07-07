@@ -204,6 +204,7 @@ typedef struct XgCallsiteSummary {
     XgCallsiteId callsite_id;
     XgFuncId owner_func_id;
     uint32_t source_span_id;
+    uint32_t body_ordinal;
     uint8_t kind;
     XgFuncId static_target_func_id;
     XgClassId receiver_static_class_id;

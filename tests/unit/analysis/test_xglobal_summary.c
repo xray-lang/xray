@@ -92,6 +92,20 @@ static uint32_t evidence_decl_count_with_flags(const XgGlobalEvidence *ev, uint3
     return count;
 }
 
+static void assert_body_callsite_ordinals(const XgGlobalEvidence *ev) {
+    ASSERT_NOT_NULL(ev);
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        const XgBodySummary *body = &ev->bodies[i];
+        for (uint32_t j = 0; j < body->callsite_count; j++) {
+            const XgCallsiteSummary *call =
+                xg_global_evidence_find_callsite(ev, (XgCallsiteId) (body->callsite_start + j));
+            ASSERT_NOT_NULL(call);
+            ASSERT_EQ_UINT(call->owner_func_id, body->func_id);
+            ASSERT_EQ_UINT(call->body_ordinal, j);
+        }
+    }
+}
+
 TEST(global_evidence_adds_rows_and_grows) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x10,
@@ -207,6 +221,7 @@ TEST(global_evidence_dump_lists_core_rows) {
                           .static_data_use_bits = 16};
     XgCallsiteSummary call = {.callsite_id = 5,
                               .owner_func_id = 4,
+                              .body_ordinal = 2,
                               .kind = XG_CALL_METHOD,
                               .static_target_func_id = 0,
                               .receiver_static_class_id = 2,
@@ -240,7 +255,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "method 0 id=3 owner=2"));
     ASSERT_NOT_NULL(strstr(dump, "interface-impl 0 class=2 interface=123"));
     ASSERT_NOT_NULL(strstr(dump, "body 0 func=4"));
-    ASSERT_NOT_NULL(strstr(dump, "callsite 0 id=5 owner=4 span=0 kind=method"));
+    ASSERT_NOT_NULL(strstr(dump, "callsite 0 id=5 owner=4 span=0 kind=method ordinal=2"));
     ASSERT_NOT_NULL(strstr(dump, "link-dep 0 id=6 module=1 decl=2 span=77 kind=extern_dylib"));
 
     xr_free(dump);
@@ -420,6 +435,7 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     XgCallsiteSummary call = {.callsite_id = 1,
                               .owner_func_id = 9,
                               .source_span_id = 42,
+                              .body_ordinal = 3,
                               .kind = XG_CALL_METHOD,
                               .receiver_static_class_id = 1,
                               .method_id = 1,
@@ -531,6 +547,18 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     ASSERT_TRUE(!xaot_verify_bundle(&stale_source, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan source span does not re-derive"));
     xaot_bundle_free(&stale_source);
+
+    XaotBundle stale_ordinal;
+    memset(&stale_ordinal, 0, sizeof(stale_ordinal));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_ordinal, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_ordinal.modules = modules;
+    stale_ordinal.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_ordinal, &init_func, 0, 0));
+    stale_ordinal.method_dispatch_plans[0].body_ordinal = 99;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_ordinal, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan body ordinal does not re-derive"));
+    xaot_bundle_free(&stale_ordinal);
 
     XaotBundle stale_target;
     memset(&stale_target, 0, sizeof(stale_target));
@@ -1365,6 +1393,7 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(ev.nclasses, 2);
     ASSERT_TRUE(ev.ncallsites >= 4);
+    assert_body_callsite_ordinals(&ev);
     for (uint32_t i = 0; i < ev.nbodies; i++) {
         for (uint32_t j = i + 1; j < ev.nbodies; j++)
             ASSERT_NE(ev.bodies[i].func_id, ev.bodies[j].func_id);
@@ -1466,6 +1495,7 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(ev.nclasses, 2);
     ASSERT_EQ_UINT(ev.ninterface_impls, 2);
+    assert_body_callsite_ordinals(&ev);
 
     XgInterfaceId shape_id = ev.interface_impls[0].interface_id;
     uint32_t interface_calls = 0;

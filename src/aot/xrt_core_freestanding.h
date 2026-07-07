@@ -1091,6 +1091,15 @@ static inline XrValue xrt_enum_field_get(XrValue boxed, int64_t index) {
     return XR_NULL_VAL;
 }
 
+static inline XrValue xrt_enum_box_ordinal(XrValue obj) {
+    if (XR_IS_INT(obj))
+        return obj;
+    if (obj.tag != XR_TAG_ENUM || !obj.ptr)
+        return XR_FROM_INT(-1);
+    const XrAotEnumBox *ev = (const XrAotEnumBox *) obj.ptr;
+    return XR_FROM_INT(ev->member_index);
+}
+
 static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
     if (XR_IS_ARRAY_REF(obj) && XR_IS_INT(key)) {
         int64_t idx = key.i;

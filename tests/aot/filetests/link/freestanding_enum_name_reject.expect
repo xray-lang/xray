@@ -1,0 +1,5 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects enum.name
+not_contains=CRASH
+not_contains=unsupported AOT

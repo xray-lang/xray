@@ -75,14 +75,6 @@ static void xr_stdlib_vm_bind_csv_generated(XrVMRuntime *isolate, XrModule *modu
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CSV */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_DATETIME
-static void xr_stdlib_vm_bind_datetime_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "_nowMilliseconds", dt_now_milliseconds);
-    XRS_EXPORT(module, isolate, "_offset", dt_offset);
-    XRS_EXPORT(module, isolate, "_offsetAt", dt_offset_at);
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_DATETIME */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_HTTP
 static void xr_stdlib_vm_bind_http_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT_SLOW(module, isolate, "get", http_get);
@@ -391,6 +383,8 @@ static void xr_stdlib_vm_bind_time_generated(XrVMRuntime *isolate, XrModule *mod
     XRS_EXPORT(module, isolate, "monotonic", xr_time_monotonic);
     XRS_EXPORT(module, isolate, "nanos", xr_time_nanos);
     XRS_EXPORT(module, isolate, "micros", xr_time_micros);
+    XRS_EXPORT(module, isolate, "localOffset", xr_time_local_offset);
+    XRS_EXPORT(module, isolate, "localOffsetAt", xr_time_local_offset_at);
     XRS_EXPORT_YIELDABLE(module, isolate, "sleep", xr_time_sleep);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_TIME */

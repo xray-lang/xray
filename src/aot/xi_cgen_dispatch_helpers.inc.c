@@ -1030,6 +1030,9 @@ static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
          * lowered directly to an exception value (see xicgen_emit_panicinfo_constructor). */
         fprintf(out, "XR_NULL_VAL /* builtin native class token: %s */",
                 v->aux ? (const char *) v->aux : "?");
+    } else if (ctx && ctx->freestanding_profile && cg_prelude_enum_data((int) v->aux_int) != NULL) {
+        fprintf(out, "XR_NULL_VAL /* freestanding prelude enum namespace: %s */",
+                v->aux ? (const char *) v->aux : "?");
     } else if (emit_prelude_enum_type_expr(out, (int) v->aux_int)) {
         /* Prelude enum type object: standalone AOT uses the same lightweight
          * map representation as user enums, avoiding a full isolate solely for
@@ -5357,6 +5360,12 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                 return;
             }
         }
+    }
+    if (field) {
+        const XiValue *recv = cg_unwrap_identity_value(v->args[0]);
+        if (recv && recv->op == XI_GET_BUILTIN &&
+            emit_static_prelude_enum_member_value_expr(ctx, out, v, (int) recv->aux_int, field))
+            return;
     }
     if (field) {
         const XiEnumData *recv_enum = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);

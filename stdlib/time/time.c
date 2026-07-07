@@ -15,6 +15,8 @@
 #include "../../src/vm/xvm.h"  // xr_vm_yieldable_cfunction_new
 #include "../../src/base/xchecks.h"
 #include "../../src/os/os_time.h"
+#include "../../src/shared/xr_datetime_core.h"
+#include <time.h>
 
 // ========== Helper functions ==========
 
@@ -66,6 +68,23 @@ static XrValue xr_time_micros(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
     return xr_int(get_monotonic_ns() / 1000);
+}
+
+// time.localOffset() -> int (minutes east of UTC for the current wall time)
+static XrValue xr_time_local_offset(XrVMRuntime *isolate, XrValue *args, int nargs) {
+    (void) isolate;
+    (void) args;
+    (void) nargs;
+    return xr_int((int64_t) xr_datetime_core_local_offset_at(time(NULL)));
+}
+
+// time.localOffsetAt(timestamp: int) -> int (minutes east of UTC at Unix seconds)
+static XrValue xr_time_local_offset_at(XrVMRuntime *isolate, XrValue *args, int nargs) {
+    (void) isolate;
+    int64_t ts = 0;
+    if (nargs > 0 && XR_IS_INT(args[0]))
+        ts = XR_TO_INT(args[0]);
+    return xr_int((int64_t) xr_datetime_core_local_offset_at((time_t) ts));
 }
 
 /*

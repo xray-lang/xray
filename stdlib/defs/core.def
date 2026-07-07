@@ -59,6 +59,30 @@ module time {
     layer: "system"
   }
 
+  fn localOffset {
+    signature: "(): int"
+    doc: "Local UTC offset in minutes for the current wall time"
+    vm: "xr_time_local_offset"
+    aot: "xrt_time_local_offset"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: true
+    layer: "system"
+  }
+
+  fn localOffsetAt {
+    signature: "(timestamp: int): int"
+    doc: "Local UTC offset in minutes at a Unix timestamp"
+    vm: "xr_time_local_offset_at"
+    aot: "xrt_time_local_offset_at"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: false
+    link_object: true
+    layer: "system"
+  }
+
   fn sleep {
     signature: "(ms: int): ()"
     doc: "Sleep for milliseconds"
@@ -4374,42 +4398,6 @@ module xml {
 }
 
 module datetime {
-  fn _nowMilliseconds {
-    signature: "(): int"
-    doc: "Internal: current time in milliseconds since Unix epoch"
-    vm: "dt_now_milliseconds"
-    aot: "xrt_datetime_now_milliseconds"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn _offset {
-    signature: "(): int"
-    doc: "Internal: current UTC offset in minutes"
-    vm: "dt_offset"
-    aot: "xrt_datetime_offset"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn _offsetAt {
-    signature: "(timestamp: int): int"
-    doc: "Internal: UTC offset in minutes at Unix timestamp"
-    vm: "dt_offset_at"
-    aot: "xrt_datetime_offset_at"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
   native_class DateTime {
     super_slot: "objectClass"
     core_slot: "dateTimeClass"

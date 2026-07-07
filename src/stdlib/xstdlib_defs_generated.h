@@ -114,6 +114,8 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"time", "monotonic", "(): int", "Monotonic time in milliseconds", "xr_time_monotonic", "normal", "", "xrt_time_monotonic", "", "value", "time.monotonic", "", "system", "", 0, false},
     {"time", "nanos", "(): int", "Monotonic time in nanoseconds", "xr_time_nanos", "normal", "", "xrt_time_nanos", "", "value", "time.nanos", "", "system", "", 0, false},
     {"time", "micros", "(): int", "Monotonic time in microseconds", "xr_time_micros", "normal", "", "xrt_time_micros", "", "value", "time.micros", "", "system", "", 0, false},
+    {"time", "localOffset", "(): int", "Local UTC offset in minutes for the current wall time", "xr_time_local_offset", "normal", "", "xrt_time_local_offset", "", "value", "time.localOffset", "", "system", "", 0, false},
+    {"time", "localOffsetAt", "(timestamp: int): int", "Local UTC offset in minutes at a Unix timestamp", "xr_time_local_offset_at", "normal", "", "xrt_time_local_offset_at", "v", "value", "time.localOffsetAt", "", "system", "", 1, false},
     {"time", "sleep", "(ms: int): ()", "Sleep for milliseconds", "xr_time_sleep", "yieldable", "", "", "v", "value", "", "", "runtime", "", 1, false},
     {"math", "abs", "(x: float): float", "Absolute value (preserves int)", "math_abs", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
     {"math", "floor", "(x: float): int", "Floor to integer", "math_floor", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
@@ -419,9 +421,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"xml", "text", "(content: string): Json", "Create XML text node", "xml_text_fn", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
     {"xml", "comment", "(content: string): Json", "Create XML comment node", "xml_comment_fn", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
     {"xml", "cdata", "(content: string): Json", "Create XML CDATA node", "xml_cdata_fn", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
-    {"datetime", "_nowMilliseconds", "(): int", "Internal: current time in milliseconds since Unix epoch", "dt_now_milliseconds", "normal", "", "xrt_datetime_now_milliseconds", "", "value", "", "", "system", "method", 0, true},
-    {"datetime", "_offset", "(): int", "Internal: current UTC offset in minutes", "dt_offset", "normal", "", "xrt_datetime_offset", "", "value", "", "", "system", "method", 0, true},
-    {"datetime", "_offsetAt", "(timestamp: int): int", "Internal: UTC offset in minutes at Unix timestamp", "dt_offset_at", "normal", "", "xrt_datetime_offset_at", "v", "value", "", "", "system", "method", 1, true},
 };
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
 
