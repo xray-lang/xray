@@ -342,6 +342,14 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
                         printf("%s", buf);
                     else
                         printf("<DateTime>");
+                } else if (ctx->isolate && inst->klass) {
+                    const char *name = xr_class_display_name(inst->klass);
+                    if (name && strcmp(name, "DateTime") == 0) {
+                        XrString *str = xr_value_to_string(ctx->isolate, value);
+                        printf("%s", str->data);
+                    } else {
+                        dump_instance(inst, ctx);
+                    }
                 } else {
                     dump_instance(inst, ctx);
                 }

@@ -1372,6 +1372,20 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    # Freestanding stdlib allowlist: every committed module contract must have
+    # a no-libc object probe, so the allowlist cannot silently drift.
+    add_test(
+        NAME aot_freestanding_allowlist
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_allowlist_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_freestanding_allowlist PROPERTIES
+        LABELS "aot;freestanding;stdlib;smoke"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
+
     # Broad AOT manifest sweep: non-runtime diff cases must remain freestanding
     # and must not accidentally pull xray_rt_coro/xray_core.
     add_test(

@@ -32,6 +32,7 @@
 #include "xmap.h"
 #include "xset.h"
 #include "xarray.h"
+#include "xstring.h"
 #include "../class/xinstance.h"
 #include "../class/xclass.h"
 #include "../class/xenum.h"
@@ -47,6 +48,33 @@
  * linked into the same binary). */
 typedef struct XrDateTime XrDateTime;
 XR_FUNC int xr_datetime_to_iso_string(XrDateTime *dt, char *buf, size_t buf_size);
+
+static bool json_value_is_named_datetime(XrValue val, XrInstance **out_inst) {
+    if (!xr_value_is_instance(val))
+        return false;
+    XrInstance *inst = xr_value_to_instance(val);
+    XrClass *cls = inst ? xr_instance_get_class(inst) : NULL;
+    const char *name = cls ? xr_class_display_name(cls) : NULL;
+    if (!name || strcmp(name, "DateTime") != 0)
+        return false;
+    if (out_inst)
+        *out_inst = inst;
+    return true;
+}
+
+static bool json_datetime_call_string(XrVMRuntime *X, XrInstance *inst, const char *method,
+                                      XrString **out) {
+    if (out)
+        *out = NULL;
+    if (!X || !inst || !method)
+        return false;
+    XrValue result = xr_instance_call_method(X, inst, method, NULL, 0);
+    if (!XR_IS_STRING(result))
+        return false;
+    if (out)
+        *out = XR_TO_STRING(result);
+    return true;
+}
 
 /* ========== JSON Parser (delegates to src/base/xjson) ========== */
 
@@ -560,6 +588,14 @@ static void stringify_value(JsonWriter *w, XrValue val) {
             stringify_string(w, buf, (size_t) n);
         else
             writer_str(w, "null");
+    } else if (json_value_is_named_datetime(val, NULL)) {
+        XrInstance *dt_inst = xr_value_to_instance(val);
+        XrString *iso = NULL;
+        if (json_datetime_call_string(w->isolate, dt_inst, "toISOString", &iso) && iso) {
+            stringify_string(w, iso->data, iso->length);
+        } else {
+            writer_str(w, "null");
+        }
     } else if (xr_value_is_instance(val)) {
         // Struct or Class instance
         XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
@@ -740,6 +776,12 @@ static void encode_value(JsonEncoder *e, XrValue val, XrValue *out) {
         char buf[64];
         int n = xr_datetime_to_iso_string(dt, buf, sizeof(buf));
         *out = n > 0 ? xr_string_value(xr_string_new(e->isolate, buf, (size_t) n)) : xr_null();
+    } else if (json_value_is_named_datetime(val, NULL)) {
+        XrInstance *dt_inst = xr_value_to_instance(val);
+        XrString *iso = NULL;
+        *out = json_datetime_call_string(e->isolate, dt_inst, "toISOString", &iso) && iso
+                   ? xr_string_value(iso)
+                   : xr_null();
     } else if (xr_value_is_instance(val)) {
         XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
         XrClass *cls = xr_instance_get_class(inst);
