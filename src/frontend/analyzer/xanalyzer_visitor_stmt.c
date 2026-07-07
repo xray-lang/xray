@@ -681,6 +681,80 @@ static void xa_thread_lint_scan_if_stmt(XaThreadHandleLintState *states, AstNode
     xr_free(else_after);
 }
 
+static void xa_thread_lint_scan_try_catch_stmt(XaThreadHandleLintState *states, AstNode *stmt,
+                                               bool can_escape) {
+    if (!stmt || stmt->type != AST_TRY_CATCH)
+        return;
+    TryCatchNode *tc = &stmt->as.try_catch;
+
+    if (!can_escape) {
+        xa_thread_lint_scan_stmt(states, tc->try_body, false);
+        for (int i = 0; i < tc->catch_count; i++) {
+            if (tc->catch_clauses[i])
+                xa_thread_lint_scan_stmt(states, tc->catch_clauses[i]->body, false);
+        }
+        return;
+    }
+
+    int state_count = xa_thread_lint_state_count(states);
+    if (state_count <= 0)
+        return;
+
+    size_t snapshot_size = sizeof(XaThreadHandleLintSnapshot) * (size_t) state_count;
+    XaThreadHandleLintSnapshot *before = xr_calloc(1, snapshot_size);
+    XaThreadHandleLintSnapshot *try_after = xr_calloc(1, snapshot_size);
+    XaThreadHandleLintSnapshot *catch_after = xr_calloc(1, snapshot_size);
+    bool *all_paths_closed = xr_calloc((size_t) state_count, sizeof(bool));
+    if (!before || !try_after || !catch_after || !all_paths_closed) {
+        xr_free(before);
+        xr_free(try_after);
+        xr_free(catch_after);
+        xr_free(all_paths_closed);
+        xa_thread_lint_scan_stmt(states, tc->try_body, false);
+        for (int i = 0; i < tc->catch_count; i++) {
+            if (tc->catch_clauses[i])
+                xa_thread_lint_scan_stmt(states, tc->catch_clauses[i]->body, false);
+        }
+        return;
+    }
+
+    xa_thread_lint_snapshot_states(states, before);
+    xa_thread_lint_scan_stmt(states, tc->try_body, true);
+    xa_thread_lint_snapshot_states(states, try_after);
+
+    for (int i = 0; i < state_count; i++)
+        all_paths_closed[i] = xa_thread_lint_snapshot_closed(&try_after[i]);
+
+    for (int ci = 0; ci < tc->catch_count; ci++) {
+        XrCatchClause *cc = tc->catch_clauses[ci];
+        if (!cc) {
+            for (int i = 0; i < state_count; i++)
+                all_paths_closed[i] = false;
+            continue;
+        }
+        xa_thread_lint_restore_states(states, before);
+        memset(catch_after, 0, snapshot_size);
+        xa_thread_lint_scan_stmt(states, cc->body, true);
+        xa_thread_lint_snapshot_states(states, catch_after);
+        for (int i = 0; i < state_count; i++)
+            all_paths_closed[i] =
+                all_paths_closed[i] && xa_thread_lint_snapshot_closed(&catch_after[i]);
+    }
+
+    xa_thread_lint_restore_states(states, before);
+    int i = 0;
+    for (XaThreadHandleLintState *s = states; s; s = s->next, i++) {
+        bool before_closed = xa_thread_lint_snapshot_closed(&before[i]);
+        if (!before_closed && all_paths_closed[i])
+            s->finalized = true;
+    }
+
+    xr_free(before);
+    xr_free(try_after);
+    xr_free(catch_after);
+    xr_free(all_paths_closed);
+}
+
 static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *stmt,
                                      bool can_escape) {
     if (!stmt)
@@ -739,12 +813,7 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
             xa_thread_lint_scan_block(states, stmt, can_escape);
             return;
         case AST_TRY_CATCH:
-            xa_thread_lint_scan_stmt(states, stmt->as.try_catch.try_body, false);
-            for (int i = 0; i < stmt->as.try_catch.catch_count; i++) {
-                if (stmt->as.try_catch.catch_clauses[i])
-                    xa_thread_lint_scan_stmt(states, stmt->as.try_catch.catch_clauses[i]->body,
-                                             false);
-            }
+            xa_thread_lint_scan_try_catch_stmt(states, stmt, can_escape);
             return;
         case AST_THROW_STMT:
             xa_thread_lint_scan_expr(states, stmt->as.throw_stmt.expression, false, can_escape);
