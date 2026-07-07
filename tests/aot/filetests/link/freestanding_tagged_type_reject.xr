@@ -1,0 +1,13 @@
+fn json_param(x: Json) -> int {
+    return int(x)
+}
+
+fn json_return() -> Json {
+    return 7
+}
+
+@c_export("xray_tagged_type_reject")
+fn xray_tagged_type_reject() -> int {
+    var x: Json = 42
+    return json_param(x) + int(json_return())
+}

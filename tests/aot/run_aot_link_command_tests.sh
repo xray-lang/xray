@@ -1395,6 +1395,25 @@ else
         "freestanding-profile: rejects builtin dump"
 fi
 
+FREESTANDING_TAGGED_TYPE_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_tagged_type_reject.xr"
+FREESTANDING_TAGGED_TYPE_LOG="$WORK/freestanding_tagged_type_reject.log"
+if "$XRAY" build --native --profile freestanding --dry-run-link --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$WORK/freestanding_tagged_type_reject" \
+        "$FREESTANDING_TAGGED_TYPE_SRC" >"$FREESTANDING_TAGGED_TYPE_LOG" 2>&1; then
+    record_fail "freestanding-profile: rejects tagged/dynamic value types"
+    sed 's/^/      /' "$FREESTANDING_TAGGED_TYPE_LOG" | sed -n '1,120p'
+else
+    expect_log_contains "$FREESTANDING_TAGGED_TYPE_LOG" \
+        "freestanding profile rejects tagged/dynamic value type in function parameter 'x'" \
+        "freestanding-profile: rejects Json function parameters"
+    expect_log_contains "$FREESTANDING_TAGGED_TYPE_LOG" \
+        "freestanding profile rejects tagged/dynamic value type in function return type" \
+        "freestanding-profile: rejects Json function returns"
+    expect_log_contains "$FREESTANDING_TAGGED_TYPE_LOG" \
+        "freestanding profile rejects tagged/dynamic value type in variable 'x'" \
+        "freestanding-profile: rejects Json locals"
+fi
+
 FREESTANDING_ENUM_STATIC_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_enum_static.xr"
 FREESTANDING_ENUM_STATIC_OBJ="$WORK/freestanding_enum_static.o"
 FREESTANDING_ENUM_STATIC_LOG="$WORK/freestanding_enum_static.log"
