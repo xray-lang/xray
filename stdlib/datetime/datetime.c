@@ -448,6 +448,21 @@ static XrValue dt_offset(XrVMRuntime *isolate, XrValue *args, int nargs) {
     return XR_INT(xr_datetime_local_offset());
 }
 
+static XrValue dt_now_milliseconds(XrVMRuntime *isolate, XrValue *args, int nargs) {
+    (void) isolate;
+    (void) args;
+    (void) nargs;
+    return XR_INT(get_current_millis());
+}
+
+static XrValue dt_offset_at(XrVMRuntime *isolate, XrValue *args, int nargs) {
+    (void) isolate;
+    int64_t ts = 0;
+    if (!dt_required_int_arg(args, nargs, 0, &ts))
+        return XR_INT(0);
+    return XR_INT(xr_datetime_core_local_offset_at((time_t) ts));
+}
+
 // Method binding: self = DateTime instance
 
 static XrValue dt_to_string(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
@@ -734,6 +749,7 @@ XrModule *xr_load_module_datetime(XrVMRuntime *isolate) {
 
     xr_stdlib_vm_bind_datetime_generated(isolate, mod);
 
+    mod->requires_script = true;
     mod->loaded = true;
     return mod;
 }

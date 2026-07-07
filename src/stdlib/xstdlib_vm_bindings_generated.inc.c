@@ -77,14 +77,9 @@ static void xr_stdlib_vm_bind_csv_generated(XrVMRuntime *isolate, XrModule *modu
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_DATETIME
 static void xr_stdlib_vm_bind_datetime_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "now", dt_now);
-    XRS_EXPORT(module, isolate, "utc", dt_utc);
-    XRS_EXPORT(module, isolate, "create", dt_create);
-    XRS_EXPORT(module, isolate, "createUTC", dt_create_utc);
-    XRS_EXPORT(module, isolate, "fromTimestamp", dt_from_timestamp);
-    XRS_EXPORT(module, isolate, "fromTimestampMs", dt_from_timestamp_ms);
-    XRS_EXPORT(module, isolate, "parse", dt_parse);
-    XRS_EXPORT(module, isolate, "offset", dt_offset);
+    XRS_EXPORT(module, isolate, "_nowMilliseconds", dt_now_milliseconds);
+    XRS_EXPORT(module, isolate, "_offset", dt_offset);
+    XRS_EXPORT(module, isolate, "_offsetAt", dt_offset_at);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_DATETIME */
 

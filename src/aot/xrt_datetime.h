@@ -228,6 +228,17 @@ static inline XrValue xrt_datetime_offset(void) {
     return XR_FROM_INT((int64_t) xr_datetime_core_local_offset_at(time(NULL)));
 }
 
+static inline XrValue xrt_datetime_now_milliseconds(void) {
+    return XR_FROM_INT(xrt_datetime_current_millis());
+}
+
+static inline XrValue xrt_datetime_offset_at(XrValue timestamp) {
+    int64_t ts = 0;
+    if (!xrt_datetime_required_int_arg(timestamp, &ts))
+        return XR_FROM_INT(0);
+    return XR_FROM_INT((int64_t) xr_datetime_core_local_offset_at((time_t) ts));
+}
+
 static inline XrValue xrt_datetime_parse_impl(const char *str, const char *format) {
     XrDateTimeCoreFields fields;
     if (!xr_datetime_core_parse_fields(str, format, &fields))

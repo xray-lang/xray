@@ -83,16 +83,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_csv_symbols[] = {
 
 // datetime module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_datetime_symbols[] = {
-    {"now", XLSP_SYM_FUNCTION, "fn(): DateTime", "Get current local datetime", NULL, 0},
-    {"utc", XLSP_SYM_FUNCTION, "fn(): DateTime", "Get current UTC datetime", NULL, 0},
-    {"create", XLSP_SYM_FUNCTION, "fn(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create local datetime", NULL, 0},
-    {"createUTC", XLSP_SYM_FUNCTION, "fn(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create UTC datetime", NULL, 0},
-    {"fromTimestamp", XLSP_SYM_FUNCTION, "fn(ts: int): DateTime", "Create datetime from Unix timestamp (seconds)", NULL, 0},
-    {"fromTimestampMs", XLSP_SYM_FUNCTION, "fn(ts: int): DateTime", "Create datetime from Unix timestamp (milliseconds)", NULL, 0},
-    {"parse", XLSP_SYM_FUNCTION, "fn(s: string, format?: string): DateTime?", "Parse datetime string", NULL, 0},
-    {"offset", XLSP_SYM_FUNCTION, "fn(): int", "Get UTC offset in minutes", NULL, 0},
+    {"_nowMilliseconds", XLSP_SYM_FUNCTION, "fn(): int", "Internal: current time in milliseconds since Unix epoch", NULL, 0},
+    {"_offset", XLSP_SYM_FUNCTION, "fn(): int", "Internal: current UTC offset in minutes", NULL, 0},
+    {"_offsetAt", XLSP_SYM_FUNCTION, "fn(timestamp: int): int", "Internal: UTC offset in minutes at Unix timestamp", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_DATETIME_SYMBOL_COUNT 8
+#define GEN_XLSP_STDLIB_DATETIME_SYMBOL_COUNT 3
 
 // encoding module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
