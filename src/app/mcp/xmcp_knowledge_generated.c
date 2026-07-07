@@ -2871,9 +2871,29 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "Handle field",
     },
     {
+        .name = "acceptKey",
+        .signature = "(secKey: string): string",
+        .summary = "",
+    },
+    {
+        .name = "binaryFrame",
+        .signature = "(data: Bytes, mask: bool = true): Bytes",
+        .summary = "",
+    },
+    {
+        .name = "clientRequest",
+        .signature = "(path: string, host: string, secKey: string): string",
+        .summary = "",
+    },
+    {
         .name = "close",
         .signature = "(conn: WsConn, code?: int?, reason?: string?): bool",
         .summary = "Close a WebSocket connection",
+    },
+    {
+        .name = "closeFrame",
+        .signature = "(code: int = 1000, reason: string = \"\", mask: bool = true): Bytes",
+        .summary = "",
     },
     {
         .name = "connect",
@@ -2886,6 +2906,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "Pure C echo server with zero VM allocation overhead per message",
     },
     {
+        .name = "frame",
+        .signature = "(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true): Bytes",
+        .summary = "",
+    },
+    {
         .name = "isOpen",
         .signature = "(conn: WsConn): bool",
         .summary = "Check if connection is open",
@@ -2896,9 +2921,39 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "Check if the WebSocket server is running",
     },
     {
+        .name = "isUpgradeRequest",
+        .signature = "(headers: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "maskPayload",
+        .signature = "(payload: Bytes, key: Bytes): Bytes",
+        .summary = "",
+    },
+    {
+        .name = "pickSubprotocol",
+        .signature = "(headers: string, serverProtocols: Array<string>): string?",
+        .summary = "",
+    },
+    {
         .name = "ping",
         .signature = "(conn: WsConn): bool",
         .summary = "Send a ping frame",
+    },
+    {
+        .name = "pingFrame",
+        .signature = "(data: Bytes? = null, mask: bool = true): Bytes",
+        .summary = "",
+    },
+    {
+        .name = "pongFrame",
+        .signature = "(data: Bytes? = null, mask: bool = true): Bytes",
+        .summary = "",
+    },
+    {
+        .name = "randomKey",
+        .signature = "(): string",
+        .summary = "",
     },
     {
         .name = "recv",
@@ -2934,6 +2989,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .name = "stopServer",
         .signature = "(): ()",
         .summary = "Stop the WebSocket server",
+    },
+    {
+        .name = "textFrame",
+        .signature = "(data: string, mask: bool = true): Bytes",
+        .summary = "",
+    },
+    {
+        .name = "upgradeResponse",
+        .signature = "(secKey: string, protocol: string? = null, deflate: bool = false): string",
+        .summary = "",
     },
 };
 
@@ -5452,12 +5517,23 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.WsMessage.binary` | `const bool` | Handle field |\n"
             "| `ws.WsMessage.data` | `const string \\| Array<uint8> \\| null` | Handle field |\n"
             "| `ws.WsMessage.error` | `const string?` | Handle field |\n"
+            "| `ws.acceptKey` | `(secKey: string): string` |  |\n"
+            "| `ws.binaryFrame` | `(data: Bytes, mask: bool = true): Bytes` |  |\n"
+            "| `ws.clientRequest` | `(path: string, host: string, secKey: string): string` |  |\n"
             "| `ws.close` | `(conn: WsConn, code?: int?, reason?: string?): bool` | Close a WebSocket connection |\n"
+            "| `ws.closeFrame` | `(code: int = 1000, reason: string = \"\", mask: bool = true): Bytes` |  |\n"
             "| `ws.connect` | `(url: string, options?: Json): WsConn?` | Connect to a WebSocket server |\n"
             "| `ws.echoServe` | `(port: int): bool` | Pure C echo server with zero VM allocation overhead per message |\n"
+            "| `ws.frame` | `(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true): Bytes` |  |\n"
             "| `ws.isOpen` | `(conn: WsConn): bool` | Check if connection is open |\n"
             "| `ws.isServerRunning` | `(): bool` | Check if the WebSocket server is running |\n"
+            "| `ws.isUpgradeRequest` | `(headers: string): bool` |  |\n"
+            "| `ws.maskPayload` | `(payload: Bytes, key: Bytes): Bytes` |  |\n"
+            "| `ws.pickSubprotocol` | `(headers: string, serverProtocols: Array<string>): string?` |  |\n"
             "| `ws.ping` | `(conn: WsConn): bool` | Send a ping frame |\n"
+            "| `ws.pingFrame` | `(data: Bytes? = null, mask: bool = true): Bytes` |  |\n"
+            "| `ws.pongFrame` | `(data: Bytes? = null, mask: bool = true): Bytes` |  |\n"
+            "| `ws.randomKey` | `(): string` |  |\n"
             "| `ws.recv` | `(conn: WsConn, timeout?: int?): WsMessage?` | Receive data from WebSocket connection |\n"
             "| `ws.recvData` | `(conn: WsConn, timeout?: int?): string?` | High-performance recv returning data string directly (no Json wrapper) |\n"
             "| `ws.send` | `(conn: WsConn, data: string \\| Array<uint8>, binary?: bool?): bool` | Send data over WebSocket connection |\n"
@@ -5465,6 +5541,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.serve` | `(port: int, handler: fn(conn: WsConn): ()): bool` | Start WebSocket server |\n"
             "| `ws.state` | `(conn: WsConn): string` | Get connection state |\n"
             "| `ws.stopServer` | `(): ()` | Stop the WebSocket server |\n"
+            "| `ws.textFrame` | `(data: string, mask: bool = true): Bytes` |  |\n"
+            "| `ws.upgradeResponse` | `(secKey: string, protocol: string? = null, deflate: bool = false): string` |  |\n"
             "",
         .symbols = _symbols_ws,
         .symbol_count = (int)(sizeof(_symbols_ws) / sizeof(_symbols_ws[0])),

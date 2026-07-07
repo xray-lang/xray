@@ -1,0 +1,262 @@
+// ws - pure-Xray WebSocket protocol helpers.
+//
+// TCP/TLS readiness, connection registries, HTTP accept-loop integration, and
+// permessage-deflate remain native runtime boundaries for now. RFC 6455
+// handshake formatting, header-token checks, frame assembly, and masking live
+// here so the protocol math has a single Xray semantic source.
+
+import crypto
+import base64
+
+const _GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+const _OP_TEXT = 1
+const _OP_BINARY = 2
+const _OP_CLOSE = 8
+const _OP_PING = 9
+const _OP_PONG = 10
+
+fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
+    if (pos < 0 || pos + prefix.length > s.length) { return false }
+    for (var i = 0; i < prefix.length; i++) {
+        if (s.charAt(pos + i) != prefix.charAt(i)) { return false }
+    }
+    return true
+}
+
+fn _indexOfFrom(s: string, needle: string, start: int) -> int {
+    if (needle.length == 0) { return start }
+    var i = start
+    while (i + needle.length <= s.length) {
+        if (_startsWithAt(s, i, needle)) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+fn _trim(s: string) -> string {
+    var start = 0
+    var end = s.length
+    while (start < end) {
+        var c = s.charAt(start)
+        if (c != " " && c != "\t") { break }
+        start = start + 1
+    }
+    while (end > start) {
+        var c = s.charAt(end - 1)
+        if (c != " " && c != "\t" && c != "\r" && c != "\n") { break }
+        end = end - 1
+    }
+    return s.slice(start, end)
+}
+
+fn _hexNibble(c: string) -> int {
+    var n = c.ord()!
+    if (n >= 48 && n <= 57) { return n - 48 }
+    if (n >= 65 && n <= 70) { return n - 55 }
+    if (n >= 97 && n <= 102) { return n - 87 }
+    return -1
+}
+
+fn _hexBytes(hex: string) -> Bytes? {
+    if (hex.length % 2 != 0) { return null }
+    var out = Bytes(hex.length / 2)
+    var oi = 0
+    var i = 0
+    while (i + 1 < hex.length) {
+        var hi = _hexNibble(hex.charAt(i))
+        var lo = _hexNibble(hex.charAt(i + 1))
+        if (hi < 0 || lo < 0) { return null }
+        out[oi] = ((hi << 4) | lo) & 255
+        oi = oi + 1
+        i = i + 2
+    }
+    return out
+}
+
+fn _randomBytes(n: int) -> Bytes {
+    var b = _hexBytes(crypto.randomBytes(n))
+    if (b == null) { return Bytes(0) }
+    return b!
+}
+
+fn _header(headers: string, name: string) -> string? {
+    var target = name.toLowerCase()
+    var start = 0
+    while (start < headers.length) {
+        var end = _indexOfFrom(headers, "\r\n", start)
+        if (end < 0) { end = headers.length }
+        var line = headers.slice(start, end)
+        var colon = line.indexOf(":")
+        if (colon > 0 && line.slice(0, colon).toLowerCase() == target) {
+            return _trim(line.slice(colon + 1))
+        }
+        start = end + 2
+    }
+    return null
+}
+
+fn _headerHasToken(value: string, token: string) -> bool {
+    var needle = token.toLowerCase()
+    var start = 0
+    while (start <= value.length) {
+        var comma = _indexOfFrom(value, ",", start)
+        var end = comma >= 0 ? comma : value.length
+        if (_trim(value.slice(start, end)).toLowerCase() == needle) { return true }
+        if (comma < 0) { break }
+        start = comma + 1
+    }
+    return false
+}
+
+fn acceptKey(secKey: string) -> string {
+    var digest = _hexBytes(crypto.sha1(secKey + _GUID))
+    if (digest == null) { return "" }
+    return base64.encodeBytes(digest!)
+}
+
+fn randomKey() -> string {
+    return base64.encodeBytes(_randomBytes(16))
+}
+
+fn isUpgradeRequest(headers: string) -> bool {
+    var upgrade = _header(headers, "Upgrade")
+    var connection = _header(headers, "Connection")
+    var key = _header(headers, "Sec-WebSocket-Key")
+    var version = _header(headers, "Sec-WebSocket-Version")
+    return upgrade != null && upgrade!.toLowerCase() == "websocket" &&
+        connection != null && _headerHasToken(connection!, "upgrade") &&
+        key != null && key!.length > 0 &&
+        version != null && _trim(version!) == "13"
+}
+
+fn pickSubprotocol(headers: string, serverProtocols: Array<string>) -> string? {
+    var offered = _header(headers, "Sec-WebSocket-Protocol")
+    if (offered == null) { return null }
+    for (var i = 0; i < serverProtocols.length; i++) {
+        if (_headerHasToken(offered!, serverProtocols[i])) {
+            return serverProtocols[i]
+        }
+    }
+    return null
+}
+
+fn upgradeResponse(secKey: string, protocol: string? = null, deflate: bool = false) -> string {
+    var out = StringBuilder()
+    out.append("HTTP/1.1 101 Switching Protocols\r\n")
+    out.append("Upgrade: websocket\r\n")
+    out.append("Connection: Upgrade\r\n")
+    out.append("Sec-WebSocket-Accept: ")
+    out.append(acceptKey(secKey))
+    out.append("\r\n")
+    if (protocol != null && protocol!.length > 0) {
+        out.append("Sec-WebSocket-Protocol: ")
+        out.append(protocol!)
+        out.append("\r\n")
+    }
+    if (deflate) {
+        out.append("Sec-WebSocket-Extensions: permessage-deflate\r\n")
+    }
+    out.append("\r\n")
+    return out.toString()
+}
+
+fn clientRequest(path: string, host: string, secKey: string) -> string {
+    var requestPath = path.length > 0 ? path : "/"
+    return "GET " + requestPath + " HTTP/1.1\r\n" +
+        "Host: " + host + "\r\n" +
+        "Upgrade: websocket\r\n" +
+        "Connection: Upgrade\r\n" +
+        "Sec-WebSocket-Key: " + secKey + "\r\n" +
+        "Sec-WebSocket-Version: 13\r\n\r\n"
+}
+
+fn _copyInto(dst: Bytes, off: int, src: Bytes) {
+    for (var i = 0; i < src.length; i++) {
+        dst[off + i] = src[i]
+    }
+}
+
+fn maskPayload(payload: Bytes, key: Bytes) -> Bytes {
+    var out = Bytes(payload.length)
+    if (key.length < 4) { return out }
+    for (var i = 0; i < payload.length; i++) {
+        out[i] = (payload[i] ^ key[i % 4]) & 255
+    }
+    return out
+}
+
+fn frame(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true) -> Bytes {
+    var ext = 0
+    if (payload.length > 65535) { ext = 8 }
+    else if (payload.length > 125) { ext = 2 }
+    var maskLen = mask ? 4 : 0
+    var headerLen = 2 + ext + maskLen
+    var out = Bytes(headerLen + payload.length)
+    out[0] = (128 | (opcode & 15)) & 255
+    if (ext == 8) {
+        out[1] = (mask ? 128 : 0) | 127
+        var n = payload.length
+        for (var i = 7; i >= 0; i = i - 1) {
+            out[2 + i] = n & 255
+            n = n >> 8
+        }
+    } else if (ext == 2) {
+        out[1] = (mask ? 128 : 0) | 126
+        out[2] = (payload.length >> 8) & 255
+        out[3] = payload.length & 255
+    } else {
+        out[1] = (mask ? 128 : 0) | payload.length
+    }
+
+    var body = payload
+    if (mask) {
+        var key = _randomBytes(4)
+        _copyInto(out, 2 + ext, key)
+        body = maskPayload(payload, key)
+    }
+    _copyInto(out, headerLen, body)
+    return out
+}
+
+fn textFrame(data: string, mask: bool = true) -> Bytes {
+    return frame(data.toBytes(), _OP_TEXT, mask)
+}
+
+fn binaryFrame(data: Bytes, mask: bool = true) -> Bytes {
+    return frame(data, _OP_BINARY, mask)
+}
+
+fn closeFrame(code: int = 1000, reason: string = "", mask: bool = true) -> Bytes {
+    var reasonBytes = reason.toBytes()
+    var payload = Bytes(2 + reasonBytes.length)
+    payload[0] = (code >> 8) & 255
+    payload[1] = code & 255
+    _copyInto(payload, 2, reasonBytes)
+    return frame(payload, _OP_CLOSE, mask)
+}
+
+fn pingFrame(data: Bytes? = null, mask: bool = true) -> Bytes {
+    var payload = data != null ? data! : Bytes(0)
+    return frame(payload, _OP_PING, mask)
+}
+
+fn pongFrame(data: Bytes? = null, mask: bool = true) -> Bytes {
+    var payload = data != null ? data! : Bytes(0)
+    return frame(payload, _OP_PONG, mask)
+}
+
+export {
+    acceptKey,
+    randomKey,
+    isUpgradeRequest,
+    pickSubprotocol,
+    upgradeResponse,
+    clientRequest,
+    maskPayload,
+    frame,
+    textFrame,
+    binaryFrame,
+    closeFrame,
+    pingFrame,
+    pongFrame
+}
