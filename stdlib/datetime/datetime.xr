@@ -41,34 +41,34 @@ class DateTimeParts {
 }
 
 class DateTime {
-    timestamp: int
-    millisecond: int
-    tzOffset: int
-    isUtc: bool
-    year: int
-    month: int
-    day: int
-    hour: int
-    minute: int
-    second: int
-    weekday: int
-    yearday: int
+    _timestamp: int
+    _millisecond: int
+    _tzOffset: int
+    _isUtc: bool
+    _year: int
+    _month: int
+    _day: int
+    _hour: int
+    _minute: int
+    _second: int
+    _weekday: int
+    _yearday: int
 
     constructor(timestamp: int, millisecond: int = 0, tzOffset: int = 0, isUtc: bool = true) {
-        this.timestamp = timestamp
-        this.millisecond = millisecond
-        this.tzOffset = tzOffset
-        this.isUtc = isUtc
+        this._timestamp = timestamp
+        this._millisecond = millisecond
+        this._tzOffset = tzOffset
+        this._isUtc = isUtc
 
         var p = _partsFromRaw(timestamp, tzOffset, isUtc)
-        this.year = p.year
-        this.month = p.month
-        this.day = p.day
-        this.hour = p.hour
-        this.minute = p.minute
-        this.second = p.second
-        this.weekday = p.weekday
-        this.yearday = p.yearday
+        this._year = p.year
+        this._month = p.month
+        this._day = p.day
+        this._hour = p.hour
+        this._minute = p.minute
+        this._second = p.second
+        this._weekday = p.weekday
+        this._yearday = p.yearday
     }
 
     toString() -> string {
@@ -80,25 +80,25 @@ class DateTime {
         var i = 0
         while (i < pattern.length) {
             if (i + 4 <= pattern.length && pattern.slice(i, i + 4) == "YYYY") {
-                out = out + _pad(this.year, 4)
+                out = out + _pad(this._year, 4)
                 i = i + 4
             } else if (i + 3 <= pattern.length && pattern.slice(i, i + 3) == "SSS") {
-                out = out + _pad(this.millisecond, 3)
+                out = out + _pad(this._millisecond, 3)
                 i = i + 3
             } else if (i + 2 <= pattern.length && pattern.slice(i, i + 2) == "MM") {
-                out = out + _pad(this.month, 2)
+                out = out + _pad(this._month, 2)
                 i = i + 2
             } else if (i + 2 <= pattern.length && pattern.slice(i, i + 2) == "DD") {
-                out = out + _pad(this.day, 2)
+                out = out + _pad(this._day, 2)
                 i = i + 2
             } else if (i + 2 <= pattern.length && pattern.slice(i, i + 2) == "HH") {
-                out = out + _pad(this.hour, 2)
+                out = out + _pad(this._hour, 2)
                 i = i + 2
             } else if (i + 2 <= pattern.length && pattern.slice(i, i + 2) == "mm") {
-                out = out + _pad(this.minute, 2)
+                out = out + _pad(this._minute, 2)
                 i = i + 2
             } else if (i + 2 <= pattern.length && pattern.slice(i, i + 2) == "ss") {
-                out = out + _pad(this.second, 2)
+                out = out + _pad(this._second, 2)
                 i = i + 2
             } else {
                 out = out + pattern.charAt(i)
@@ -109,14 +109,14 @@ class DateTime {
     }
 
     toISOString() -> string {
-        var base = _pad(this.year, 4) + "-" + _pad(this.month, 2) + "-" +
-                   _pad(this.day, 2) + "T" + _pad(this.hour, 2) + ":" +
-                   _pad(this.minute, 2) + ":" + _pad(this.second, 2) + "." +
-                   _pad(this.millisecond, 3)
-        if (this.isUtc) {
+        var base = _pad(this._year, 4) + "-" + _pad(this._month, 2) + "-" +
+                   _pad(this._day, 2) + "T" + _pad(this._hour, 2) + ":" +
+                   _pad(this._minute, 2) + ":" + _pad(this._second, 2) + "." +
+                   _pad(this._millisecond, 3)
+        if (this._isUtc) {
             return base + "Z"
         }
-        var off = this.tzOffset
+        var off = this._tzOffset
         var sign = "+"
         if (off < 0) {
             sign = "-"
@@ -127,52 +127,53 @@ class DateTime {
 
     add(amount: int, unit: string) -> DateTime {
         if (unit == "millisecond" || unit == "milliseconds") {
-            return _fromTotalMilliseconds(this.timestamp * 1000 + this.millisecond + amount,
-                                          this.tzOffset, this.isUtc)
+            return _fromTotalMilliseconds(this._timestamp * 1000 + this._millisecond + amount,
+                                          this._tzOffset, this._isUtc)
         }
         if (unit == "second" || unit == "seconds") {
-            return DateTime(this.timestamp + amount, this.millisecond, this.tzOffset, this.isUtc)
+            return DateTime(this._timestamp + amount, this._millisecond, this._tzOffset,
+                            this._isUtc)
         }
         if (unit == "minute" || unit == "minutes") {
-            return DateTime(this.timestamp + amount * 60, this.millisecond, this.tzOffset,
-                            this.isUtc)
+            return DateTime(this._timestamp + amount * 60, this._millisecond, this._tzOffset,
+                            this._isUtc)
         }
         if (unit == "hour" || unit == "hours") {
-            return DateTime(this.timestamp + amount * 3600, this.millisecond, this.tzOffset,
-                            this.isUtc)
+            return DateTime(this._timestamp + amount * 3600, this._millisecond, this._tzOffset,
+                            this._isUtc)
         }
         if (unit == "day" || unit == "days") {
-            return DateTime(this.timestamp + amount * SECONDS_PER_DAY, this.millisecond,
-                            this.tzOffset, this.isUtc)
+            return DateTime(this._timestamp + amount * SECONDS_PER_DAY, this._millisecond,
+                            this._tzOffset, this._isUtc)
         }
         if (unit == "week" || unit == "weeks") {
-            return DateTime(this.timestamp + amount * 7 * SECONDS_PER_DAY, this.millisecond,
-                            this.tzOffset, this.isUtc)
+            return DateTime(this._timestamp + amount * 7 * SECONDS_PER_DAY, this._millisecond,
+                            this._tzOffset, this._isUtc)
         }
         if (unit == "month" || unit == "months") {
-            var totalMonths = this.year * 12 + (this.month - 1) + amount
+            var totalMonths = this._year * 12 + (this._month - 1) + amount
             var year = _floorDiv(totalMonths, 12)
             var month0 = _floorMod(totalMonths, 12)
-            var day = this.day
+            var day = this._day
             var maxDay = _daysInMonth(year, month0 + 1)
             if (day > maxDay) { day = maxDay }
-            return _createWithZone(year, month0 + 1, day, this.hour, this.minute, this.second,
-                                   this.millisecond, this.tzOffset, this.isUtc)
+            return _createWithZone(year, month0 + 1, day, this._hour, this._minute, this._second,
+                                   this._millisecond, this._tzOffset, this._isUtc)
         }
         if (unit == "year" || unit == "years") {
-            var year = this.year + amount
-            var day = this.day
-            var maxDay = _daysInMonth(year, this.month)
+            var year = this._year + amount
+            var day = this._day
+            var maxDay = _daysInMonth(year, this._month)
             if (day > maxDay) { day = maxDay }
-            return _createWithZone(year, this.month, day, this.hour, this.minute, this.second,
-                                   this.millisecond, this.tzOffset, this.isUtc)
+            return _createWithZone(year, this._month, day, this._hour, this._minute, this._second,
+                                   this._millisecond, this._tzOffset, this._isUtc)
         }
-        return DateTime(this.timestamp + amount, this.millisecond, this.tzOffset, this.isUtc)
+        return DateTime(this._timestamp + amount, this._millisecond, this._tzOffset, this._isUtc)
     }
 
     diff(other: DateTime, unit: string = "seconds") -> int {
-        var diffMs = (this.timestamp - other.timestamp) * 1000 +
-                     (this.millisecond - other.millisecond)
+        var diffMs = (this._timestamp - other._timestamp) * 1000 +
+                     (this._millisecond - other._millisecond)
         if (unit == "millisecond" || unit == "milliseconds") { return diffMs }
         if (unit == "minute" || unit == "minutes") { return diffMs / 60000 }
         if (unit == "hour" || unit == "hours") { return diffMs / 3600000 }
@@ -182,33 +183,34 @@ class DateTime {
     }
 
     toUTC() -> DateTime {
-        return DateTime(this.timestamp, this.millisecond, 0, true)
+        return DateTime(this._timestamp, this._millisecond, 0, true)
     }
 
     toLocal() -> DateTime {
-        return DateTime(this.timestamp, this.millisecond, time.localOffsetAt(this.timestamp), false)
+        return DateTime(this._timestamp, this._millisecond, time.localOffsetAt(this._timestamp),
+                        false)
     }
 
     isBefore(other: DateTime) -> bool {
-        return this.timestamp < other.timestamp ||
-               (this.timestamp == other.timestamp && this.millisecond < other.millisecond)
+        return this._timestamp < other._timestamp ||
+               (this._timestamp == other._timestamp && this._millisecond < other._millisecond)
     }
 
     isAfter(other: DateTime) -> bool {
-        return this.timestamp > other.timestamp ||
-               (this.timestamp == other.timestamp && this.millisecond > other.millisecond)
+        return this._timestamp > other._timestamp ||
+               (this._timestamp == other._timestamp && this._millisecond > other._millisecond)
     }
 
     equals(other: DateTime) -> bool {
-        return this.timestamp == other.timestamp && this.millisecond == other.millisecond
+        return this._timestamp == other._timestamp && this._millisecond == other._millisecond
     }
 
     isLeapYear() -> bool {
-        return _isLeapYear(this.year)
+        return _isLeapYear(this._year)
     }
 
     daysInMonth() -> int {
-        return _daysInMonth(this.year, this.month)
+        return _daysInMonth(this._year, this._month)
     }
 }
 

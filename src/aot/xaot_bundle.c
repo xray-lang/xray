@@ -547,6 +547,7 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
     plan = &bundle->method_dispatch_plans[bundle->nmethod_dispatch_plans++];
     memset(plan, 0, sizeof(*plan));
     plan->callsite_id = call->callsite_id;
+    plan->owner_func_id = call->owner_func_id;
     plan->source_span_id = call->source_span_id;
     plan->body_ordinal = call->body_ordinal;
     plan->method_id = method ? method->method_id : call->method_id;
@@ -2553,23 +2554,24 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     for (uint32_t di = 0; di < bundle->nmethod_dispatch_plans; di++) {
         const XaotMethodDispatchPlan *dp = &bundle->method_dispatch_plans[di];
         if (dp->dispatch_slot == UINT32_MAX) {
-            fprintf(
-                out,
-                "method-dispatch %u callsite=%u span=%u kind=%s ordinal=%u method=%u recv_class=%u "
-                "slot=- targets=%u+%u evidence=0x%x reason=%s\n",
-                di, dp->callsite_id, dp->source_span_id, dispatch_kind_name(dp->kind),
-                dp->body_ordinal, dp->method_id, dp->receiver_static_class_id, dp->target_start,
-                (unsigned) dp->target_count, dp->evidence,
-                dispatch_unproven_reason_name(dp->unproven_reason));
+            fprintf(out,
+                    "method-dispatch %u callsite=%u span=%u kind=%s owner=%u ordinal=%u method=%u "
+                    "recv_class=%u "
+                    "slot=- targets=%u+%u evidence=0x%x reason=%s\n",
+                    di, dp->callsite_id, dp->source_span_id, dispatch_kind_name(dp->kind),
+                    dp->owner_func_id, dp->body_ordinal, dp->method_id,
+                    dp->receiver_static_class_id, dp->target_start, (unsigned) dp->target_count,
+                    dp->evidence, dispatch_unproven_reason_name(dp->unproven_reason));
         } else {
-            fprintf(
-                out,
-                "method-dispatch %u callsite=%u span=%u kind=%s ordinal=%u method=%u recv_class=%u "
-                "slot=%u targets=%u+%u evidence=0x%x reason=%s\n",
-                di, dp->callsite_id, dp->source_span_id, dispatch_kind_name(dp->kind),
-                dp->body_ordinal, dp->method_id, dp->receiver_static_class_id, dp->dispatch_slot,
-                dp->target_start, (unsigned) dp->target_count, dp->evidence,
-                dispatch_unproven_reason_name(dp->unproven_reason));
+            fprintf(out,
+                    "method-dispatch %u callsite=%u span=%u kind=%s owner=%u ordinal=%u method=%u "
+                    "recv_class=%u "
+                    "slot=%u targets=%u+%u evidence=0x%x reason=%s\n",
+                    di, dp->callsite_id, dp->source_span_id, dispatch_kind_name(dp->kind),
+                    dp->owner_func_id, dp->body_ordinal, dp->method_id,
+                    dp->receiver_static_class_id, dp->dispatch_slot, dp->target_start,
+                    (unsigned) dp->target_count, dp->evidence,
+                    dispatch_unproven_reason_name(dp->unproven_reason));
         }
     }
 

@@ -35,21 +35,30 @@ static bool cg_is_time_module_call_ctx(const XiCgenCtx *ctx, const XiFunc *f, co
 
 static const char *cg_time_module_helper_ctx(const XiCgenCtx *ctx, const XiFunc *f,
                                              const XiValue *v) {
-    if (!cg_is_time_module_call_ctx(ctx, f, v) || v->nargs != 1)
+    if (!cg_is_time_module_call_ctx(ctx, f, v))
         return NULL;
     const char *method = (const char *) v->aux;
     if (!method)
         return NULL;
-    if (strcmp(method, "now") == 0)
+    uint16_t call_argc = (uint16_t) (v->nargs - 1);
+    if (call_argc == 0 && strcmp(method, "now") == 0)
         return "xrt_time_now";
     bool runtime_clock = cg_func_needs_aot_coro_ctx((XiCgenCtx *) ctx, f);
-    if (strcmp(method, "monotonic") == 0)
+    if (call_argc == 0 && strcmp(method, "monotonic") == 0)
         return runtime_clock ? "xr_aot_time_monotonic" : "xrt_time_monotonic";
-    if (strcmp(method, "nanos") == 0)
+    if (call_argc == 0 && strcmp(method, "nanos") == 0)
         return runtime_clock ? "xr_aot_time_nanos" : "xrt_time_nanos";
-    if (strcmp(method, "micros") == 0)
+    if (call_argc == 0 && strcmp(method, "micros") == 0)
         return runtime_clock ? "xr_aot_time_micros" : "xrt_time_micros";
-    if (strcmp(method, "clock") == 0)
+    if (call_argc == 0 && strcmp(method, "clock") == 0)
         return "xrt_time_clock";
+    if (call_argc == 0 && strcmp(method, "localOffset") == 0)
+        return "xrt_time_local_offset";
+    if (call_argc == 1 && strcmp(method, "localOffsetAt") == 0)
+        return "xrt_time_local_offset_at";
     return NULL;
+}
+
+static bool cg_time_module_helper_has_tagged_arg(const char *helper) {
+    return helper && strcmp(helper, "xrt_time_local_offset_at") == 0;
 }

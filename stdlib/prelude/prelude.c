@@ -97,7 +97,7 @@ static void bind_builtin_value(XrVMRuntime *X, int global_index, XrValue value) 
 
 /* Bind a unified-class XrClass into the VM builtins slot keyed by a
  * predefined XR_GLOBAL_VAR_* index. The IR lowerer's builtin_classes
- * table maps user-visible names ("PanicInfo", "Range", "DateTime", ...)
+ * table maps user-visible names ("PanicInfo", "Range", ...)
  * onto these indices via XI_GET_BUILTIN, so `new Exception(...)`
  * resolves to the actual class value at run time. */
 static void bind_class_global(XrVMRuntime *X, int global_index, void *cls) {
@@ -219,7 +219,6 @@ void xr_prelude_register_all_native_types(XrVMRuntime *isolate) {
     if (core) {
         bind_class_global(isolate, XR_GLOBAL_VAR_PANIC_INFO, core->panicInfoClass);
         bind_class_global(isolate, XR_GLOBAL_VAR_RANGE, core->rangeClass);
-        bind_class_global(isolate, XR_GLOBAL_VAR_DATETIME, core->dateTimeClass);
     }
     /* Atomic native type class (registered by xr_core_init). */
     XrClass *atomic_cls = xr_isolate_get_native_type_class(isolate, XR_TATOMIC);
@@ -258,9 +257,8 @@ XrModule *xr_load_module_prelude(XrVMRuntime *isolate) {
     isolate->prelude_symbols = (void *) &g_prelude_symbols;
 
     /* Eagerly register every native XrClass that prelude entries refer
-     * to. This makes user-side annotations like `var dt: DateTime = ...`
-     * usable without a separate `import datetime`, at the cost of always
-     * linking those four stdlib modules into the binary. */
+     * to. Pure-Xray stdlib modules provide their own exported classes; native
+     * classes here are only for remaining runtime-owned prelude types. */
     xr_prelude_register_all_native_types(isolate);
 
     /* Bind canonical Ordering enum type into VM builtin slot so

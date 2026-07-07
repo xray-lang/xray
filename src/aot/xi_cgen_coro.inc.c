@@ -2752,7 +2752,10 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
-        fprintf(out, "    XrValue _time_method_%u = %s();\n", v->id, time_helper);
+        fprintf(out, "    XrValue _time_method_%u = %s(", v->id, time_helper);
+        if (cg_time_module_helper_has_tagged_arg(time_helper))
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ");\n");
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_time_method_%u", v->id);

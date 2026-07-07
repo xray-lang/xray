@@ -271,7 +271,6 @@ static const NativeTypeMapping type_mappings[] = {
     {"Atomic", XR_TID_ATOMIC, TYPE_NAME_ATOMIC},
     {"WeakMap", XR_TID_WEAKMAP, TYPE_NAME_WEAKMAP},
     {"WeakSet", XR_TID_WEAKSET, TYPE_NAME_WEAKSET},
-    {"DateTime", XR_TID_DATETIME, "DateTime"},
     {"WorkQueue", XR_TID_WORKQUEUE, TYPE_NAME_WORKQUEUE},
     {"ResultGroup", XR_TID_RESULTGROUP, TYPE_NAME_RESULTGROUP},
     {"CountdownLatch", XR_TID_COUNTDOWNLATCH, TYPE_NAME_COUNTDOWNLATCH},
@@ -386,11 +385,6 @@ static void xa_native_types_init_once(void) {
 #undef LOAD_NATIVE
 
     /* Inject type members generated from C source (single source of truth). */
-#ifdef GEN_DATETIME_MEMBER_COUNT
-    native_builtin_types[XR_TID_DATETIME].name = "DateTime";
-    native_builtin_types[XR_TID_DATETIME].members = g_gen_datetime_members;
-    native_builtin_types[XR_TID_DATETIME].member_count = GEN_DATETIME_MEMBER_COUNT;
-#endif
 #ifdef GEN_BUFFER_MEMBER_COUNT
     native_builtin_types[XR_TID_BUFFER].name = TYPE_NAME_BUFFER;
     native_builtin_types[XR_TID_BUFFER].members = g_gen_buffer_members;

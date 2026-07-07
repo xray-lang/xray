@@ -74,8 +74,6 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_THREAD;
     if (xr_type_is_named_class(type, "Buffer"))
         return XR_TID_BUFFER;
-    if (xr_type_is_named_class(type, "DateTime"))
-        return XR_TID_DATETIME;
     return XR_TID_NULL;
 }
 
@@ -1218,7 +1216,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_type_param(X, name, s[0] - 'A');
     } else {
         // Last resort: consult the prelude registry. SIMPLE entries
-        // (BigInt, DateTime, Logger, NetConn, NetListener, Range,
+        // (BigInt, Logger, NetConn, NetListener, Range,
         // StringBuilder) all surface here as named instances so that
         // typed cfunc signatures like "(): NetConn?" round-trip
         // through the analyzer. Generic / singleton kinds were already

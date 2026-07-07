@@ -24,32 +24,6 @@ static const XaBuiltinMember g_gen_buffer_members[] = {
 };
 #define GEN_BUFFER_MEMBER_COUNT 4
 
-// DateTime methods
-static const XaBuiltinMember g_gen_datetime_members[] = {
-    {"format", "(pattern?: string): string", "Format datetime to string", true, false},
-    {"toISOString", "(): string", "Convert to ISO 8601 string", true, false},
-    {"year", "(): int", "Get year", true, false},
-    {"month", "(): int", "Get month (1-12)", true, false},
-    {"day", "(): int", "Get day (1-31)", true, false},
-    {"hour", "(): int", "Get hour (0-23)", true, false},
-    {"minute", "(): int", "Get minute (0-59)", true, false},
-    {"second", "(): int", "Get second (0-59)", true, false},
-    {"millisecond", "(): int", "Get millisecond (0-999)", true, false},
-    {"weekday", "(): int", "Get weekday (0=Sunday)", true, false},
-    {"yearday", "(): int", "Get day of year (1-366)", true, false},
-    {"timestamp", "(): int", "Get Unix timestamp (seconds)", true, false},
-    {"add", "(amount: int, unit: string): DateTime", "Add duration to datetime", true, false},
-    {"diff", "(other: DateTime, unit?: string): int", "Difference between datetimes", true, false},
-    {"toUTC", "(): DateTime", "Convert to UTC", true, false},
-    {"toLocal", "(): DateTime", "Convert to local time", true, false},
-    {"isBefore", "(other: DateTime): bool", "Check if before other datetime", true, false},
-    {"isAfter", "(other: DateTime): bool", "Check if after other datetime", true, false},
-    {"equals", "(other: DateTime): bool", "Check if equal to other datetime", true, false},
-    {"isLeapYear", "(): bool", "Check if leap year", true, false},
-    {"daysInMonth", "(): int", "Get days in current month", true, false},
-};
-#define GEN_DATETIME_MEMBER_COUNT 21
-
 // OsBarrier methods
 static const XaBuiltinMember g_gen_osbarrier_members[] = {
     {"wait", "(): bool", "Wait until all parties have arrived", true, false},
