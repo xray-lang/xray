@@ -278,6 +278,13 @@ TEST(global_evidence_dump_lists_core_rows) {
                                    .type_key = 456,
                                    .source_span_id = 77,
                                    .flags = 0};
+    XgInterfaceMethodSummary interface_method = {.interface_method_id = 7,
+                                                 .owner_interface_id = 123,
+                                                 .name_id = 700,
+                                                 .signature_key = 701,
+                                                 .ordinal = 0,
+                                                 .source_span_id = 78,
+                                                 .flags = 0};
     XgBodySummary body = {.func_id = 4,
                           .module_id = 1,
                           .owner_decl_id = 2,
@@ -319,17 +326,19 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
     ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_method(&ev, &interface_method));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
     ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&ev, &link_dep));
 
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v0 profile=native_release"));
+    ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
     ASSERT_NOT_NULL(strstr(dump, "decl 0 id=2 module=1 kind=class"));
     ASSERT_NOT_NULL(strstr(dump, "class 0 id=2 module=1 decl=2 name=44 parent=0"));
     ASSERT_NOT_NULL(strstr(dump, "method 0 id=3 owner=2"));
     ASSERT_NOT_NULL(strstr(dump, "interface-impl 0 class=2 interface=123"));
+    ASSERT_NOT_NULL(strstr(dump, "interface-method 0 id=7 owner=123 name=700"));
     ASSERT_NOT_NULL(strstr(dump, "body 0 func=4 module=1 decl=2"));
     ASSERT_NOT_NULL(strstr(dump, "name=88 sig=66"));
     ASSERT_NOT_NULL(strstr(dump, "kind=function"));
@@ -970,12 +979,18 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
         {.implementor_class_id = 1, .interface_id = 77, .name_id = 77, .type_key = 770},
         {.implementor_class_id = 2, .interface_id = 77, .name_id = 77, .type_key = 770},
     };
+    XgInterfaceMethodSummary shape_draw = {.interface_method_id = 3,
+                                           .owner_interface_id = 77,
+                                           .name_id = 700,
+                                           .signature_key = 701,
+                                           .ordinal = 0,
+                                           .source_span_id = 4};
     XgCallsiteSummary call = {.callsite_id = 1,
                               .owner_func_id = 9,
                               .body_ordinal = 0,
                               .kind = XG_CALL_INTERFACE,
                               .receiver_static_interface_id = 77,
-                              .method_id = 700,
+                              .method_id = 3,
                               .method_name_id = 700,
                               .method_signature_key = 701};
     XgDeclSummary body_decl = {
@@ -1039,6 +1054,7 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &rect_draw));
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impls[0]));
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impls[1]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_method(&ev, &shape_draw));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &circle_body));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &rect_body));
@@ -2202,6 +2218,48 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     xaot_bundle_free(&interface_missing_decl_bundle);
     xg_global_evidence_free(&interface_missing_decl_ev);
 
+    XgGlobalEvidence interface_missing_method_ev;
+    XgBuildKey interface_missing_method_key = key;
+    XgDeclSummary interface_decl = {.module_id = 1,
+                                    .decl_id = 2,
+                                    .kind = XG_DECL_INTERFACE,
+                                    .name_id = 444,
+                                    .signature_key = 1,
+                                    .source_span_id = 8};
+    XgBodySummary interface_missing_method_body = body;
+    XgCallsiteSummary interface_missing_method_call = call;
+    interface_missing_method_key.source_hash = 0x86;
+    interface_missing_method_body.callsite_start = 1;
+    interface_missing_method_body.callsite_count = 1;
+    interface_missing_method_call.kind = XG_CALL_INTERFACE;
+    interface_missing_method_call.static_target_func_id = XG_NO_ID;
+    interface_missing_method_call.receiver_static_interface_id = 444;
+    interface_missing_method_call.method_id = 555;
+    interface_missing_method_call.method_name_id = 555;
+    interface_missing_method_call.method_signature_key = 666;
+    xg_global_evidence_init(&interface_missing_method_ev, interface_missing_method_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&interface_missing_method_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&interface_missing_method_ev, &interface_decl));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_body(&interface_missing_method_ev, &interface_missing_method_body));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_callsite(&interface_missing_method_ev, &interface_missing_method_call));
+
+    XaotBundle interface_missing_method_bundle;
+    memset(&interface_missing_method_bundle, 0, sizeof(interface_missing_method_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(
+        &interface_missing_method_bundle, &interface_missing_method_ev, XG_BUILD_NATIVE_RELEASE));
+    interface_missing_method_bundle.modules = modules;
+    interface_missing_method_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&interface_missing_method_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&interface_missing_method_bundle, XAOT_VERIFY_AOT_READY, err,
+                                    sizeof(err)));
+    ASSERT_NOT_NULL(
+        strstr(err, "AOT global evidence interface callsite method does not re-derive"));
+    xaot_bundle_free(&interface_missing_method_bundle);
+    xg_global_evidence_free(&interface_missing_method_ev);
+
     XgGlobalEvidence native_stale_ev;
     XgBuildKey native_stale_key = key;
     XgBodySummary native_stale_body = body;
@@ -3160,11 +3218,14 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(ev.nclasses, 2);
     ASSERT_EQ_UINT(ev.ninterface_impls, 2);
+    ASSERT_EQ_UINT(ev.ninterface_methods, 1);
     assert_body_callsite_ordinals(&ev);
 
     XgInterfaceId shape_id = ev.interface_impls[0].interface_id;
+    ASSERT_EQ_UINT(ev.interface_methods[0].owner_interface_id, shape_id);
     uint32_t interface_calls = 0;
     uint32_t interface_calls_with_signature = 0;
+    uint32_t interface_calls_with_slot = 0;
     uint32_t interface_calls_with_source = 0;
     uint32_t class_method_calls = 0;
     for (uint32_t i = 0; i < ev.ncallsites; i++) {
@@ -3175,6 +3236,8 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
             ASSERT_TRUE(call->method_name_id != 0);
             if (call->method_signature_key != 0)
                 interface_calls_with_signature++;
+            if (call->method_id == ev.interface_methods[0].interface_method_id)
+                interface_calls_with_slot++;
             if (call->source_span_id != 0)
                 interface_calls_with_source++;
         }
@@ -3183,6 +3246,7 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     }
     ASSERT_EQ_UINT(interface_calls, 2);
     ASSERT_EQ_UINT(interface_calls_with_signature, 2);
+    ASSERT_EQ_UINT(interface_calls_with_slot, 2);
     ASSERT_EQ_UINT(interface_calls_with_source, 2);
     ASSERT_EQ_UINT(class_method_calls, 0);
 
