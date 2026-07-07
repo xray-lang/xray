@@ -452,6 +452,11 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                               .override_of = XG_NO_ID,
                               .default_arg_contract_id = XG_NO_ID,
                               .flags = 0};
+    XgDeclSummary class_decl = {.module_id = 1,
+                                .decl_id = 1,
+                                .kind = XG_DECL_CLASS,
+                                .name_id = shape_name_id,
+                                .source_span_id = 40};
     XgCallsiteSummary call = {.callsite_id = 1,
                               .owner_func_id = 9,
                               .source_span_id = 42,
@@ -476,6 +481,16 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                           .body_hash = 0x999,
                           .callsite_start = 1,
                           .callsite_count = 1};
+    XgBodySummary method_body = {.func_id = 10,
+                                 .module_id = 1,
+                                 .owner_decl_id = 1,
+                                 .owner_class_id = 1,
+                                 .owner_method_id = 1,
+                                 .name_id = draw_name_id,
+                                 .signature_key = 701,
+                                 .source_span_id = 43,
+                                 .kind = XG_BODY_METHOD,
+                                 .body_hash = 0x1001};
     XiFunc init_func;
     XiFunc draw_func;
     XiFunc *children[1];
@@ -511,10 +526,12 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     char err[256];
 
     xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &class_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &body_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
     ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &method_body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
 
     XaotBundle good;
@@ -847,7 +864,10 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
                       .imported_summary_hash = 0x84,
                       .module_id = 1,
                       .profile = XG_BUILD_NATIVE_RELEASE};
-    XgClassSummary circle = {.class_id = 1,
+    XgClassSummary circle = {.module_id = 1,
+                             .decl_id = 1,
+                             .class_id = 1,
+                             .name_id = 101,
                              .parent_class_id = XG_NO_ID,
                              .flags = XG_CLASS_INFERRED_FINAL,
                              .method_start = 1,
@@ -855,7 +875,10 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
                              .interface_start = 1,
                              .interface_count = 1,
                              .decl_kind = XG_DECL_CLASS};
-    XgClassSummary rect = {.class_id = 2,
+    XgClassSummary rect = {.module_id = 1,
+                           .decl_id = 2,
+                           .class_id = 2,
+                           .name_id = 102,
                            .parent_class_id = XG_NO_ID,
                            .flags = XG_CLASS_INFERRED_FINAL,
                            .method_start = 2,
@@ -889,6 +912,10 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
                               .method_signature_key = 701};
     XgDeclSummary body_decl = {
         .module_id = 1, .decl_id = 9, .kind = XG_DECL_FUNC, .name_id = 9, .source_span_id = 1};
+    XgDeclSummary circle_decl = {
+        .module_id = 1, .decl_id = 1, .kind = XG_DECL_CLASS, .name_id = 101, .source_span_id = 2};
+    XgDeclSummary rect_decl = {
+        .module_id = 1, .decl_id = 2, .kind = XG_DECL_CLASS, .name_id = 102, .source_span_id = 3};
     XgBodySummary body = {.func_id = 9,
                           .module_id = 1,
                           .owner_decl_id = 9,
@@ -900,6 +927,26 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
                           .body_hash = 0x999,
                           .callsite_start = 1,
                           .callsite_count = 1};
+    XgBodySummary circle_body = {.func_id = 10,
+                                 .module_id = 1,
+                                 .owner_decl_id = 1,
+                                 .owner_class_id = 1,
+                                 .owner_method_id = 1,
+                                 .name_id = 700,
+                                 .signature_key = 701,
+                                 .source_span_id = 2,
+                                 .kind = XG_BODY_METHOD,
+                                 .body_hash = 0x1001};
+    XgBodySummary rect_body = {.func_id = 11,
+                               .module_id = 1,
+                               .owner_decl_id = 2,
+                               .owner_class_id = 2,
+                               .owner_method_id = 2,
+                               .name_id = 700,
+                               .signature_key = 701,
+                               .source_span_id = 3,
+                               .kind = XG_BODY_METHOD,
+                               .body_hash = 0x1002};
     XiFunc init_func;
     XiModule module;
     XiModule *modules[1];
@@ -908,6 +955,8 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     char err[256];
 
     xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &circle_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &rect_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &body_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &circle));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &rect));
@@ -916,6 +965,8 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impls[0]));
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impls[1]));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &circle_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &rect_body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
 
     memset(&init_func, 0, sizeof(init_func));
@@ -1022,8 +1073,11 @@ static void assert_method_graph_verifier_rejects(const XgClassSummary *classes, 
     xg_global_evidence_init(&ev, key);
     for (uint32_t i = 0; i < nclasses; i++)
         ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &classes[i]));
-    for (uint32_t i = 0; i < nmethods; i++)
-        ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &methods[i]));
+    for (uint32_t i = 0; i < nmethods; i++) {
+        XgMethodSummary method = methods[i];
+        method.flags |= XG_METHOD_NATIVE;
+        ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
+    }
 
     memset(&init_func, 0, sizeof(init_func));
     init_func.name = "init";
@@ -2237,6 +2291,78 @@ TEST(global_evidence_verifier_rejects_stale_body_identity_rows) {
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence method body is duplicated"));
     xaot_bundle_free(&duplicate_method_body);
     xg_global_evidence_free(&duplicate_method_ev);
+
+    XgGlobalEvidence missing_method_ev;
+    XgBuildKey missing_method_key = key;
+    missing_method_key.source_hash = 0x6a;
+    xg_global_evidence_init(&missing_method_ev, missing_method_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&missing_method_ev, &method_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&missing_method_ev, &method_class));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&missing_method_ev, &method_row));
+
+    XaotBundle missing_method_body;
+    memset(&missing_method_body, 0, sizeof(missing_method_body));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&missing_method_body, &missing_method_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    missing_method_body.modules = modules;
+    missing_method_body.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&missing_method_body, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&missing_method_body, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence method has no body"));
+    xaot_bundle_free(&missing_method_body);
+    xg_global_evidence_free(&missing_method_ev);
+
+    XgGlobalEvidence native_method_ev;
+    XgBuildKey native_method_key = key;
+    XgDeclSummary native_method_decl = method_decl;
+    XgClassSummary native_method_class = method_class;
+    XgMethodSummary native_method_row = method_row;
+    native_method_key.source_hash = 0x6b;
+    native_method_decl.flags = XG_DECL_NATIVE;
+    native_method_class.flags = XG_CLASS_NATIVE | XG_CLASS_INFERRED_FINAL;
+    native_method_row.flags = XG_METHOD_NATIVE;
+    xg_global_evidence_init(&native_method_ev, native_method_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&native_method_ev, &native_method_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&native_method_ev, &native_method_class));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&native_method_ev, &native_method_row));
+
+    XaotBundle native_missing_method_body;
+    memset(&native_missing_method_body, 0, sizeof(native_missing_method_body));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&native_missing_method_body, &native_method_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    native_missing_method_body.modules = modules;
+    native_missing_method_body.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&native_missing_method_body, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(
+        xaot_verify_bundle(&native_missing_method_body, XAOT_VERIFY_AOT_READY, err, sizeof(err)),
+        err);
+    xaot_bundle_free(&native_missing_method_body);
+    xg_global_evidence_free(&native_method_ev);
+
+    XgGlobalEvidence native_body_ev;
+    XgBuildKey native_body_key = key;
+    native_body_key.source_hash = 0x6c;
+    xg_global_evidence_init(&native_body_ev, native_body_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&native_body_ev, &native_method_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&native_body_ev, &native_method_class));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&native_body_ev, &native_method_row));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&native_body_ev, &method_bodies[0]));
+
+    XaotBundle native_method_with_body;
+    memset(&native_method_with_body, 0, sizeof(native_method_with_body));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&native_method_with_body, &native_body_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    native_method_with_body.modules = modules;
+    native_method_with_body.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&native_method_with_body, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&native_method_with_body, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence native method has a body"));
+    xaot_bundle_free(&native_method_with_body);
+    xg_global_evidence_free(&native_body_ev);
 }
 
 TEST(global_evidence_verifier_rederives_link_dependency_plans) {
@@ -2488,6 +2614,61 @@ TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) 
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(bundle.nmethod_dispatch_plans, 0);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_marks_native_methods_bodyless) {
+    setup_parser_session();
+    const char *source = "@native class Handle {\n"
+                         "    id() -> int\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nclasses, 1);
+    ASSERT_EQ_UINT(ev.nmethods, 1);
+    ASSERT_TRUE((ev.classes[0].flags & XG_CLASS_NATIVE) != 0);
+    ASSERT_TRUE((ev.methods[0].flags & XG_METHOD_NATIVE) != 0);
+    for (uint32_t i = 0; i < ev.nbodies; i++)
+        ASSERT_TRUE(ev.bodies[i].owner_method_id != ev.methods[0].method_id);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -2968,6 +3149,7 @@ RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
+RUN_TEST(global_evidence_producer_marks_native_methods_bodyless);
 RUN_TEST(global_evidence_producer_resolves_interface_callsite_receivers);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);

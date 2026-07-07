@@ -72,6 +72,7 @@ enum {
     XG_METHOD_CONSTRUCTOR = 1u << 1,
     XG_METHOD_DIRECT_ONLY = 1u << 2,
     XG_METHOD_OVERRIDDEN = 1u << 3,
+    XG_METHOD_NATIVE = 1u << 4,
 };
 
 typedef enum XgCallsiteKind {
