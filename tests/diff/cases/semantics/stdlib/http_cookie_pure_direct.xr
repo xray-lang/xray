@@ -1,0 +1,55 @@
+// HTTP cookie parser/jar lives in pure Xray and has no hidden native state.
+import http
+
+var c = http.parseSetCookie("session=abc123", "example.com", "/account/login", 1000)!
+print(c.name)
+print(c.value)
+print(c.domain)
+print(c.path)
+print(c.sameSite == "")
+print(c.serialize())
+
+var token = http.parseSetCookie(
+    "token=xyz; Path=/api; Secure; HttpOnly; SameSite=None",
+    "example.com",
+    "/",
+    1000
+)!
+print(token.secure)
+print(token.httpOnly)
+print(token.sameSite)
+
+print(http.parseSetCookie("pref=x; SameSite=None", "example.com", "/", 1000) == null)
+
+var dated = http.parseSetCookie(
+    "old=ok; Expires=Sun, 06 Nov 1994 08:49:37 GMT",
+    "example.com",
+    "/",
+    1000
+)!
+print(dated.expires == 784111777)
+
+var jar = http.cookieJar()
+jar.add(c, 1000)
+jar.add(token, 1000)
+print(jar.count)
+print(jar.getHeader("example.com", "/account/profile", false, 1000))
+print(jar.getHeader("www.example.com", "/api/v1", true, 1000))
+print(jar.getHeader("www.example.com", "/api/v1", false, 1000))
+
+var replacement = http.parseSetCookie(
+    "session=def; Domain=example.com; Path=/account",
+    "example.com",
+    "/account/login",
+    1000
+)!
+jar.add(replacement, 1000)
+print(jar.count)
+print(jar.getHeader("example.com", "/account/profile", false, 1000))
+
+var expired = http.parseSetCookie("gone=1; Max-Age=-1", "example.com", "/", 1000)!
+jar.add(expired, 1000)
+print(jar.count)
+
+jar.clearDomain("example.com")
+print(jar.count)

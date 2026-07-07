@@ -1247,7 +1247,7 @@ AstNode *xr_parse_unary(Parser *parser) {
 
 // Try to parse generic call: callee<Type, ...>(args)
 // Returns NULL if not a generic call (should fallback to comparison)
-static AstNode *try_parse_generic_call(Parser *parser, AstNode *callee) {
+AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee) {
     // Only try if callee is an identifier or member access
     if (callee->type != AST_VARIABLE && callee->type != AST_MEMBER_ACCESS) {
         return NULL;
@@ -1346,7 +1346,7 @@ AstNode *xr_parse_lt_or_generic(Parser *parser, AstNode *left) {
     }
 
     // Try generic call first (no space before '<')
-    AstNode *generic_call = try_parse_generic_call(parser, left);
+    AstNode *generic_call = xr_parse_try_generic_call_after_lt(parser, left);
     if (generic_call) {
         return generic_call;
     }

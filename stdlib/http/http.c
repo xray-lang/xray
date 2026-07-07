@@ -595,8 +595,6 @@ XrHttpContext *xr_http_get_context(XrVMRuntime *X) {
     if (!ctx) {
         // First access, create context
         ctx = (XrHttpContext *) xr_calloc(1, sizeof(XrHttpContext));
-        ctx->cookie_jar_enabled = true;  // Cookie enabled by default
-
         // Initialize per-isolate server config defaults
         atomic_init(&ctx->max_conns, HTTP_DEFAULT_MAX_CONNS);
         atomic_init(&ctx->max_requests_per_conn, 0);
@@ -619,12 +617,6 @@ void xr_http_module_context_free(XrHttpContext *ctx) {
     if (ctx->server) {
         xr_http_server_free(ctx->server);
         ctx->server = NULL;
-    }
-
-    // Free Cookie Jar
-    if (ctx->cookie_jar) {
-        xr_cookie_jar_free(ctx->cookie_jar);
-        ctx->cookie_jar = NULL;
     }
 
     // Free HTTP/2 server
