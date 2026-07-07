@@ -549,6 +549,71 @@ void xr_parser_synchronize(Parser *parser) {
     }
 }
 
+void xr_parser_skip_invalid_construct(Parser *parser, int start_line,
+                                      XrParserRecoveryBoundaryFn is_recovery_boundary,
+                                      bool stop_at_rbrace) {
+    XR_DCHECK(parser != NULL, "skip_invalid_construct: NULL parser");
+
+    int brace_depth = 0;
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    bool saw_body = false;
+    bool consumed = false;
+
+    while (!xr_parser_check(parser, TK_EOF)) {
+        if (!saw_body && brace_depth == 0 && paren_depth == 0 && bracket_depth == 0) {
+            if (stop_at_rbrace && xr_parser_check(parser, TK_RBRACE))
+                break;
+            if (xr_parser_check(parser, TK_SEMICOLON)) {
+                xr_parser_advance(parser);
+                break;
+            }
+            if (consumed && parser->current.line > start_line && is_recovery_boundary &&
+                is_recovery_boundary(parser)) {
+                break;
+            }
+        }
+
+        XrTokenType type = parser->current.type;
+        xr_parser_advance(parser);
+        consumed = true;
+
+        switch (type) {
+            case TK_LBRACE:
+                brace_depth++;
+                saw_body = true;
+                break;
+            case TK_RBRACE:
+                if (brace_depth > 0) {
+                    brace_depth--;
+                    if (saw_body && brace_depth == 0) {
+                        parser->panic_mode = 0;
+                        return;
+                    }
+                }
+                break;
+            case TK_LPAREN:
+                paren_depth++;
+                break;
+            case TK_RPAREN:
+                if (paren_depth > 0)
+                    paren_depth--;
+                break;
+            case TK_LBRACKET:
+                bracket_depth++;
+                break;
+            case TK_RBRACKET:
+                if (bracket_depth > 0)
+                    bracket_depth--;
+                break;
+            default:
+                break;
+        }
+    }
+
+    parser->panic_mode = 0;
+}
+
 /* ========== Expression Parsing ========== */
 
 static void skip_invalid_inline_attribute_tail(Parser *parser, int start_line) {

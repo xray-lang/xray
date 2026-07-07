@@ -95,6 +95,25 @@ static bool current_is_removed_oop_modifier(Parser *parser, const char **out_nam
     return true;
 }
 
+static bool current_can_start_class_member_after_recovery(Parser *parser) {
+    return xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_PRIVATE) ||
+           xr_parser_check(parser, TK_PROTECTED) || xr_parser_check(parser, TK_CONST) ||
+           xr_parser_check(parser, TK_STATIC) || xr_parser_check(parser, TK_CONSTRUCTOR) ||
+           xr_parser_check(parser, TK_FINAL) || xr_parser_check(parser, TK_OPERATOR);
+}
+
+static AstNode *reject_removed_member_modifier(Parser *parser, bool *is_method_out,
+                                               const char *message) {
+    int modifier_line = parser->current.line;
+    xr_parser_error_at_current(parser, message);
+    xr_parser_advance(parser);
+    xr_parser_skip_invalid_construct(parser, modifier_line,
+                                     current_can_start_class_member_after_recovery, true);
+    if (is_method_out)
+        *is_method_out = false;
+    return NULL;
+}
+
 /* ========== Local Cleanup Helpers ========== */
 
 // All parser allocations now go through the parse arena; individual frees
@@ -281,6 +300,8 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
         // Determine if this is a method or field
         bool is_method = false;
         AstNode *member = xr_parse_field_declaration(parser, &is_method);
+        if (!member)
+            continue;
 
         if (is_method) {
             XR_PARSE_PUSH(parser, methods, method_count, method_capacity, member);
@@ -444,13 +465,15 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
 
         // Reject invalid modifiers for structs
         if (xr_parser_check_name(parser, "abstract")) {
-            xr_parser_error_at_current(parser, "'abstract' is not allowed in struct declarations");
-            xr_parser_advance(parser);
+            bool ignored = false;
+            reject_removed_member_modifier(parser, &ignored,
+                                           "'abstract' is not allowed in struct declarations");
             continue;
         }
         if (xr_parser_check_name(parser, "override")) {
-            xr_parser_error_at_current(parser, "'override' is not allowed in struct declarations");
-            xr_parser_advance(parser);
+            bool ignored = false;
+            reject_removed_member_modifier(parser, &ignored,
+                                           "'override' is not allowed in struct declarations");
             continue;
         }
         if (xr_parser_check(parser, TK_CONSTRUCTOR)) {
@@ -461,8 +484,9 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
             continue;
         }
         if (xr_parser_check(parser, TK_FINAL)) {
-            xr_parser_error_at_current(parser, "'final' is not allowed in struct declarations");
-            xr_parser_advance(parser);
+            bool ignored = false;
+            reject_removed_member_modifier(parser, &ignored,
+                                           "'final' is not allowed in struct declarations");
             continue;
         }
 
@@ -493,6 +517,8 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
 
         bool is_method = false;
         AstNode *member = xr_parse_field_declaration(parser, &is_method);
+        if (!member)
+            continue;
 
         if (is_method) {
             XR_PARSE_PUSH(parser, methods, method_count, method_capacity, member);
@@ -667,36 +693,31 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     bool is_const = false;
 
     if (current_is_removed_public_modifier(parser)) {
-        xr_parser_error_at_current(
-            parser, "'public' modifier was removed; members are public by default, delete it");
-        xr_parser_advance(parser);
+        return reject_removed_member_modifier(
+            parser, is_method_out,
+            "'public' modifier was removed; members are public by default, delete it");
     }
 
     for (;;) {
         const char *removed_name = NULL;
         if (xr_parser_check_name(parser, "override")) {
-            xr_parser_error_at_current(
-                parser, "'override' was removed; overrides are inferred by exact method signature");
-            xr_parser_advance(parser);
-            continue;
+            return reject_removed_member_modifier(
+                parser, is_method_out,
+                "'override' was removed; overrides are inferred by exact method signature");
         }
         if (xr_parser_check_name(parser, "abstract")) {
-            xr_parser_error_at_current(parser,
-                                       "'abstract' was removed; use an interface for contracts");
-            xr_parser_advance(parser);
-            continue;
+            return reject_removed_member_modifier(
+                parser, is_method_out, "'abstract' was removed; use an interface for contracts");
         }
-        if (xr_parser_match(parser, TK_FINAL)) {
-            xr_parser_error(parser, "'final' applies only to class declarations");
-            continue;
+        if (xr_parser_check(parser, TK_FINAL)) {
+            return reject_removed_member_modifier(parser, is_method_out,
+                                                  "'final' applies only to class declarations");
         }
         if (current_is_removed_oop_modifier(parser, &removed_name)) {
             char msg[128];
             snprintf(msg, sizeof(msg), "'%s' was removed; class dispatch strategy is inferred",
                      removed_name);
-            xr_parser_error_at_current(parser, msg);
-            xr_parser_advance(parser);
-            continue;
+            return reject_removed_member_modifier(parser, is_method_out, msg);
         }
         break;
     }
@@ -719,8 +740,9 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         }
     }
 
-    if (xr_parser_match(parser, TK_FINAL)) {
-        xr_parser_error(parser, "'final' applies only to class declarations");
+    if (xr_parser_check(parser, TK_FINAL)) {
+        return reject_removed_member_modifier(parser, is_method_out,
+                                              "'final' applies only to class declarations");
     }
 
     // `const` marks an immutable field (assignable only in the constructor).
