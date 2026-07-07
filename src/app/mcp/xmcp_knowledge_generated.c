@@ -613,6 +613,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "Cookie.hostOnly",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
         .name = "Cookie.httpOnly",
         .signature = ": bool",
         .summary = "",
@@ -4870,6 +4875,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Cookie` | `Cookie` |  |\n"
             "| `Cookie.domain` | `: string` |  |\n"
             "| `Cookie.expires` | `: int` |  |\n"
+            "| `Cookie.hostOnly` | `: bool` |  |\n"
             "| `Cookie.httpOnly` | `: bool` |  |\n"
             "| `Cookie.isExpired` | `(nowSeconds: int = 0): bool` |  |\n"
             "| `Cookie.matches` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0): bool` |  |\n"
