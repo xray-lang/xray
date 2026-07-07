@@ -927,6 +927,12 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
         .module_id = 1, .decl_id = 1, .kind = XG_DECL_CLASS, .name_id = 101, .source_span_id = 2};
     XgDeclSummary rect_decl = {
         .module_id = 1, .decl_id = 2, .kind = XG_DECL_CLASS, .name_id = 102, .source_span_id = 3};
+    XgDeclSummary shape_decl = {.module_id = 1,
+                                .decl_id = 3,
+                                .kind = XG_DECL_INTERFACE,
+                                .name_id = 77,
+                                .signature_key = 1,
+                                .source_span_id = 4};
     XgBodySummary body = {.func_id = 9,
                           .module_id = 1,
                           .owner_decl_id = 9,
@@ -968,6 +974,7 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &circle_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &rect_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &shape_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &body_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &circle));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &rect));
@@ -2017,6 +2024,40 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence interface callsite identity is stale"));
     xaot_bundle_free(&interface_stale_bundle);
     xg_global_evidence_free(&interface_stale_ev);
+
+    XgGlobalEvidence interface_missing_decl_ev;
+    XgBuildKey interface_missing_decl_key = key;
+    XgBodySummary interface_missing_decl_body = body;
+    XgCallsiteSummary interface_missing_decl_call = call;
+    interface_missing_decl_key.source_hash = 0x84;
+    interface_missing_decl_body.callsite_start = 1;
+    interface_missing_decl_body.callsite_count = 1;
+    interface_missing_decl_call.kind = XG_CALL_INTERFACE;
+    interface_missing_decl_call.static_target_func_id = XG_NO_ID;
+    interface_missing_decl_call.receiver_static_interface_id = 444;
+    interface_missing_decl_call.method_id = 555;
+    interface_missing_decl_call.method_name_id = 555;
+    interface_missing_decl_call.method_signature_key = 666;
+    xg_global_evidence_init(&interface_missing_decl_ev, interface_missing_decl_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&interface_missing_decl_ev, &decl));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_body(&interface_missing_decl_ev, &interface_missing_decl_body));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_callsite(&interface_missing_decl_ev, &interface_missing_decl_call));
+
+    XaotBundle interface_missing_decl_bundle;
+    memset(&interface_missing_decl_bundle, 0, sizeof(interface_missing_decl_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(
+        &interface_missing_decl_bundle, &interface_missing_decl_ev, XG_BUILD_NATIVE_RELEASE));
+    interface_missing_decl_bundle.modules = modules;
+    interface_missing_decl_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&interface_missing_decl_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&interface_missing_decl_bundle, XAOT_VERIFY_AOT_READY, err,
+                                    sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence interface callsite declaration is missing"));
+    xaot_bundle_free(&interface_missing_decl_bundle);
+    xg_global_evidence_free(&interface_missing_decl_ev);
 
     XgGlobalEvidence native_stale_ev;
     XgBuildKey native_stale_key = key;

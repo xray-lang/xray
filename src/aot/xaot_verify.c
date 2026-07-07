@@ -527,6 +527,18 @@ static const XgDeclSummary *verify_find_evidence_func_decl_by_name_flags(const X
     return NULL;
 }
 
+static const XgDeclSummary *verify_find_evidence_decl_by_kind_name(const XgGlobalEvidence *ev,
+                                                                   uint8_t kind, uint32_t name_id) {
+    if (!ev || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        const XgDeclSummary *decl = &ev->decls[i];
+        if (decl->kind == kind && decl->name_id == name_id)
+            return decl;
+    }
+    return NULL;
+}
+
 static const XgClassSummary *verify_find_evidence_class(const XgGlobalEvidence *ev,
                                                         XgClassId class_id) {
     if (!ev || class_id == XG_NO_ID)
@@ -839,6 +851,11 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                     call->method_signature_key == 0)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence interface callsite identity is stale");
+                if (!verify_find_evidence_decl_by_kind_name(ev, XG_DECL_INTERFACE,
+                                                            call->receiver_static_interface_id))
+                    return set_error(
+                        errbuf, errbuf_len,
+                        "AOT global evidence interface callsite declaration is missing");
                 break;
             case XG_CALL_CLOSURE:
                 break;
