@@ -4949,10 +4949,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_THROW_STMT:
-            xa_freestanding_report_unavailable(
-                ctx, node, "throw statement",
-                "the value error channel currently depends on tagged enum values and pending-error "
-                "state; use explicit Result-style values in freestanding code");
             if (node->as.throw_stmt.expression) {
                 XrType *thrown = xa_visit_infer_expr(ctx, node->as.throw_stmt.expression);
                 if (thrown && !XR_TYPE_IS_UNKNOWN(thrown)) {

@@ -363,8 +363,14 @@ typedef struct XrAotContext {
     void *worker;
 } XrAotContext;
 
+#ifdef XRT_IMPL
+XrValue xrt_pending_error = {.tag = XR_TAG_NULL};
+#else
+extern XrValue xrt_pending_error;
+#endif
+
 static inline int xrt_has_pending_error(void) {
-    return 0;
+    return !XR_IS_NULL(xrt_pending_error);
 }
 
 static inline void xrt_retain(XrValue v) {
