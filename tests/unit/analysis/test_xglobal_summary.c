@@ -2997,10 +2997,30 @@ TEST(global_evidence_verifier_rederives_link_dependency_plans) {
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&bad_symbol_ev);
 
+    XgGlobalEvidence bad_symbol_shape_ev;
+    XgLinkDependencySummary bad_symbol_shape = stdlib_symbol;
+    bad_symbol_shape.name_id = 1003;
+    memcpy(bad_symbol_shape.name, "path.j/oin", 11);
+    key.source_hash = 0x38;
+    xg_global_evidence_init(&bad_symbol_shape_ev, key);
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_link_dependency(&bad_symbol_shape_ev, &bad_symbol_shape));
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(
+        xaot_bundle_set_global_evidence(&bundle, &bad_symbol_shape_ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT stdlib symbol link dependency has invalid name"));
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&bad_symbol_shape_ev);
+
     XgGlobalEvidence duplicate_ev;
     XgLinkDependencySummary duplicate = stdlib_symbol;
     duplicate.link_id = 4;
-    key.source_hash = 0x37;
+    key.source_hash = 0x39;
     xg_global_evidence_init(&duplicate_ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&duplicate_ev, &stdlib_symbol));
     ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&duplicate_ev, &duplicate));
@@ -3014,6 +3034,25 @@ TEST(global_evidence_verifier_rederives_link_dependency_plans) {
     ASSERT_NOT_NULL(strstr(err, "AOT link dependency evidence is duplicated"));
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&duplicate_ev);
+
+    XgGlobalEvidence duplicate_id_ev;
+    XgLinkDependencySummary duplicate_id = stdlib_module;
+    duplicate_id.link_id = stdlib_symbol.link_id;
+    key.source_hash = 0x3a;
+    xg_global_evidence_init(&duplicate_id_ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&duplicate_id_ev, &stdlib_symbol));
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&duplicate_id_ev, &duplicate_id));
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(
+        xaot_bundle_set_global_evidence(&bundle, &duplicate_id_ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT link dependency id is duplicated"));
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&duplicate_id_ev);
 }
 
 TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
