@@ -1,8 +1,0 @@
-args=--profile freestanding
-status=fail
-contains=freestanding profile rejects payload enum error FsErr
-not_contains=freestanding profile rejects throw statement
-not_contains=xrt_enum_aggregate_box
-not_contains=CRASH
-not_contains=SIGBUS
-not_contains=SIGSEGV

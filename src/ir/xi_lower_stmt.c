@@ -23,6 +23,7 @@
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 
@@ -2330,12 +2331,27 @@ XR_FUNC void xi_lower_reprop_error(XiLower *l, XiValue *val, AstNode *node) {
  * with more than this is pathological; clauses beyond it are ignored. */
 #define XR_TRY_MAX_CATCH 32
 
+static XrType *xi_lower_catch_clause_type(XiLower *l, XrCatchClause *cc) {
+    if (!l || !cc || cc->is_panic || !cc->type)
+        return l ? l->type_any : NULL;
+    XrType *type = xr_tref_resolve_in_analyzer(l->analyzer, cc->type);
+    return type ? type : l->type_any;
+}
+
+static XrType *xi_lower_error_catch_result_type(XiLower *l, XrCatchClause **errc, int errn) {
+    if (!l || !errc || errn != 1 || !errc[0] || !errc[0]->type)
+        return l ? l->type_any : NULL;
+    return xi_lower_catch_clause_type(l, errc[0]);
+}
+
 /* Lower the error catch block: XI_ERR_CATCH binds the pending error,
  * then the error catch clauses run (single or is-T chain).  All control
  * flow is the value-return error channel — no handler stack. */
 static void lower_error_catch_clauses(XiLower *l, XrCatchClause **errc, int errn, AstNode *node,
                                       XiBlock *normal_target) {
-    XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_ERR_CATCH, l->type_any, 0);
+    XrType *catch_type = xi_lower_error_catch_result_type(l, errc, errn);
+    XiValue *catch_op =
+        xi_value_new(l->func, l->cur_block, XI_ERR_CATCH, catch_type ? catch_type : l->type_any, 0);
     if (catch_op) {
         catch_op->flags |= XI_FLAG_SIDE_EFFECT;
         catch_op->line = (errn > 0 && errc[0]->var_line > 0) ? (uint32_t) errc[0]->var_line
@@ -2345,7 +2361,8 @@ static void lower_error_catch_clauses(XiLower *l, XrCatchClause **errc, int errn
     if (errn == 1) {
         XrCatchClause *cc = errc[0];
         if (cc->var_name && catch_op) {
-            int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
+            int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name,
+                                             catch_op->type ? catch_op->type : l->type_any);
             xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
         }
         xi_lower_stmt(l, cc->body);

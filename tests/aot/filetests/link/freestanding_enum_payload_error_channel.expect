@@ -1,0 +1,31 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="system_libs": []
+contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=typedef struct xrt_enum_
+c_contains=xrt_pending_enum_error =
+c_contains=xrt_pending_enum_error_active = 1
+c_contains=xrt_pending_enum_error_active = 0
+c_contains=_to_base(
+c_contains=_from_base(xrt_pending_enum_error)
+c_contains=.payload.raw[0]
+c_contains=xrt_has_pending_error()
+c_contains=xrt_enum_aggregate_make(
+c_not_contains=xrt_enum_aggregate_box
+c_not_contains=xrt_array_with_capacity
+c_not_contains=xrt_map_new
+c_not_contains=xrt_map_set
+c_not_contains=xrt_map_get_owned
+c_not_contains=xrt_shared[
+c_not_contains=xrt_enum_box_new
+c_not_contains=xrt_enum_box_new_payloads
+c_not_contains=xrt_arc_alloc
+c_not_contains=xrt_throw_exc
+c_not_contains=setjmp
+c_not_contains=longjmp
+c_not_contains=#include "xrt.h"
+not_contains=xray_rt_coro
+not_contains=xray_core

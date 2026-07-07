@@ -1085,20 +1085,20 @@ static bool xa_is_enum_error_type(XrType *type) {
     return type && !XR_TYPE_IS_UNKNOWN(type) && XR_TYPE_IS_ENUM(type);
 }
 
-static bool xa_enum_error_type_has_payload(XaInferContext *ctx, XrType *type) {
+static bool xa_enum_error_type_has_payload(XaAnalyzer *analyzer, XrType *type) {
     if (!xa_is_enum_error_type(type))
         return false;
     if (type->enum_type.layout)
         return !type->enum_type.layout->is_zero_payload;
     const char *enum_name = type->enum_type.enum_name;
-    if (!ctx || !ctx->analyzer || !enum_name)
+    if (!analyzer || !enum_name)
         return false;
-    XaSymbol *sym = xa_analyzer_lookup(ctx->analyzer, enum_name);
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, enum_name);
     if (!sym || sym->kind != XA_SYM_ENUM)
-        sym = xa_analyzer_lookup_in_scope(ctx->analyzer, enum_name, ctx->analyzer->global_scope);
+        sym = xa_analyzer_lookup_in_scope(analyzer, enum_name, analyzer->global_scope);
     if (!sym || sym->kind != XA_SYM_ENUM)
-        sym = xa_analyzer_lookup_deep(ctx->analyzer, enum_name);
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+        sym = xa_analyzer_lookup_deep(analyzer, enum_name);
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     return links && links->enum_info && links->enum_info->is_payload_enum;
 }
 
@@ -2292,8 +2292,10 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
     if (!ret_type)
         ret_type = xr_type_new_unit(NULL);
 
-    XrType *method_type =
-        xr_type_new_function(ctx->analyzer->isolate, param_types, md->param_count, ret_type, false);
+    XrType *method_type = xr_type_new_function(ctx->analyzer->isolate, param_types, md->param_count,
+                                               ret_type, md->is_variadic);
+    if (method_type)
+        method_type->function.min_params = md->required_count;
     if (method_type && md->param_passing_modes) {
         bool has_modes = false;
         for (int i = 0; i < md->param_count && !has_modes; i++) {
@@ -2344,10 +2346,13 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
             xa_visit_add_symbol_checked(ctx, param, 0);
             XaSymbolLinks *plinks = xa_analyzer_get_links(ctx->analyzer, param);
             if (plinks) {
-                plinks->type =
+                XrType *param_type =
                     (method_links && method_links->param_types && i < method_links->param_count)
                         ? method_links->param_types[i]
                         : xr_type_new_unknown(NULL);
+                if (md->is_variadic && i == md->param_count - 1)
+                    param_type = xr_type_new_array(ctx->analyzer->isolate, param_type);
+                plinks->type = param_type;
                 plinks->is_definitely_assigned = true;
             }
         }
@@ -4980,15 +4985,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                  xr_type_to_string(thrown));
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_THROW_NON_EXCEPTION, msg, &loc);
-                    } else if (xa_freestanding_profile_enabled(ctx->analyzer) &&
-                               xa_enum_error_type_has_payload(ctx, thrown)) {
-                        char feature[192];
-                        snprintf(feature, sizeof(feature), "payload enum error %s",
-                                 xr_type_to_string(thrown));
-                        xa_freestanding_report_unavailable(
-                            ctx, node, feature,
-                            "freestanding enum errors currently support 0-payload variants only; "
-                            "payload variants need a typed no-box error channel");
                     }
                 }
             }
@@ -5827,6 +5823,497 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
     }
 }
 
+static void xa_collect_error_sources_expr(XaAnalyzer *analyzer, AstNode *node, XrErrorSet *out);
+static void xa_collect_error_sources_stmt(XaAnalyzer *analyzer, AstNode *node, XrErrorSet *out);
+
+static XR_THREAD_LOCAL AstNode *xa_payload_error_scan_root = NULL;
+static XR_THREAD_LOCAL int xa_payload_error_scan_depth = 0;
+
+static AstNode *xa_find_function_decl_by_name(AstNode *node, const char *name) {
+    if (!node || !name)
+        return NULL;
+    if (node->type == AST_FUNCTION_DECL && node->as.function_decl.name &&
+        strcmp(node->as.function_decl.name, name) == 0)
+        return node;
+    if (node->type == AST_EXPORT_STMT)
+        return xa_find_function_decl_by_name(node->as.export_stmt.declaration, name);
+    if (node->type == AST_PROGRAM) {
+        for (int i = 0; i < node->as.program.count; i++) {
+            AstNode *found = xa_find_function_decl_by_name(node->as.program.statements[i], name);
+            if (found)
+                return found;
+        }
+    }
+    return NULL;
+}
+
+static void xa_error_set_add_node_enum_type(XaAnalyzer *analyzer, XrErrorSet *out, AstNode *node) {
+    if (!analyzer || !out || !node)
+        return;
+    XrType *type = xa_analyzer_get_node_type(analyzer, node);
+    if (xa_is_enum_error_type(type))
+        xr_error_set_add_all(analyzer->type_pool, out, type);
+}
+
+static void xa_error_set_union_call_errors(XaAnalyzer *analyzer, XrErrorSet *out, AstNode *callee) {
+    if (!analyzer || !out || !callee)
+        return;
+    int before_count = out->count;
+    XrType *callee_type = xa_analyzer_get_node_type(analyzer, callee);
+    if (callee_type && XR_TYPE_IS_FUNCTION(callee_type) && callee_type->function.error_set)
+        xr_error_set_union(analyzer->type_pool, out, callee_type->function.error_set);
+    if (callee->type == AST_VARIABLE && callee->as.variable.name) {
+        XaSymbol *sym =
+            callee->as.variable.symbol_id
+                ? xa_scope_lookup_by_id(analyzer->global_scope, callee->as.variable.symbol_id)
+                : NULL;
+        if (!sym)
+            sym = xa_scope_lookup(analyzer->global_scope, callee->as.variable.name);
+        XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
+        if (links && links->error_set)
+            xr_error_set_union(analyzer->type_pool, out, links->error_set);
+        if (out->count == before_count && xa_payload_error_scan_root &&
+            xa_payload_error_scan_depth < 8) {
+            AstNode *fn =
+                xa_find_function_decl_by_name(xa_payload_error_scan_root, callee->as.variable.name);
+            if (fn && fn->as.function_decl.body) {
+                xa_payload_error_scan_depth++;
+                xa_collect_error_sources_stmt(analyzer, fn->as.function_decl.body, out);
+                xa_payload_error_scan_depth--;
+            }
+        }
+    }
+}
+
+static void xa_collect_error_sources_expr_list(XaAnalyzer *analyzer, AstNode **nodes, int count,
+                                               XrErrorSet *out) {
+    for (int i = 0; i < count; i++)
+        xa_collect_error_sources_expr(analyzer, nodes ? nodes[i] : NULL, out);
+}
+
+static void xa_collect_error_sources_expr(XaAnalyzer *analyzer, AstNode *node, XrErrorSet *out) {
+    if (!analyzer || !node || !out)
+        return;
+
+    switch (node->type) {
+        case AST_CALL_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.call_expr.callee, out);
+            xa_collect_error_sources_expr_list(analyzer, node->as.call_expr.arguments,
+                                               node->as.call_expr.arg_count, out);
+            xa_error_set_union_call_errors(analyzer, out, node->as.call_expr.callee);
+            break;
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_NULLISH_COALESCE:
+            xa_collect_error_sources_expr(analyzer, node->as.binary.left, out);
+            xa_collect_error_sources_expr(analyzer, node->as.binary.right, out);
+            break;
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+            xa_collect_error_sources_expr(analyzer, node->as.unary.operand, out);
+            break;
+        case AST_TERNARY:
+            xa_collect_error_sources_expr(analyzer, node->as.ternary.condition, out);
+            xa_collect_error_sources_expr(analyzer, node->as.ternary.true_expr, out);
+            xa_collect_error_sources_expr(analyzer, node->as.ternary.false_expr, out);
+            break;
+        case AST_GROUPING:
+            xa_collect_error_sources_expr(analyzer, node->as.grouping, out);
+            break;
+        case AST_ASSIGNMENT:
+            xa_collect_error_sources_expr(analyzer, node->as.assignment.value, out);
+            break;
+        case AST_COMPOUND_ASSIGNMENT:
+            xa_collect_error_sources_expr(analyzer, node->as.compound_assignment.object, out);
+            xa_collect_error_sources_expr(analyzer, node->as.compound_assignment.value, out);
+            break;
+        case AST_DESTRUCTURE_ASSIGN:
+            xa_collect_error_sources_expr(analyzer, node->as.destructure_assign.value, out);
+            break;
+        case AST_MEMBER_ACCESS:
+            xa_collect_error_sources_expr(analyzer, node->as.member_access.object, out);
+            break;
+        case AST_MEMBER_SET:
+            xa_collect_error_sources_expr(analyzer, node->as.member_set.object, out);
+            xa_collect_error_sources_expr(analyzer, node->as.member_set.value, out);
+            break;
+        case AST_INDEX_GET:
+            xa_collect_error_sources_expr(analyzer, node->as.index_get.array, out);
+            xa_collect_error_sources_expr(analyzer, node->as.index_get.index, out);
+            break;
+        case AST_INDEX_SET:
+            xa_collect_error_sources_expr(analyzer, node->as.index_set.array, out);
+            xa_collect_error_sources_expr(analyzer, node->as.index_set.index, out);
+            xa_collect_error_sources_expr(analyzer, node->as.index_set.value, out);
+            break;
+        case AST_SLICE_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.slice_expr.source, out);
+            xa_collect_error_sources_expr(analyzer, node->as.slice_expr.start, out);
+            xa_collect_error_sources_expr(analyzer, node->as.slice_expr.end, out);
+            break;
+        case AST_ARRAY_LITERAL:
+            if (node->as.array_literal.is_repeat) {
+                xa_collect_error_sources_expr(analyzer, node->as.array_literal.repeat_value, out);
+                xa_collect_error_sources_expr(analyzer, node->as.array_literal.repeat_count, out);
+            } else {
+                xa_collect_error_sources_expr_list(analyzer, node->as.array_literal.elements,
+                                                   node->as.array_literal.count, out);
+            }
+            break;
+        case AST_TUPLE_LITERAL:
+            xa_collect_error_sources_expr_list(analyzer, node->as.tuple_literal.elements,
+                                               node->as.tuple_literal.count, out);
+            break;
+        case AST_SPREAD_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.spread_expr.expr, out);
+            break;
+        case AST_OBJECT_LITERAL:
+            xa_collect_error_sources_expr_list(analyzer, node->as.object_literal.keys,
+                                               node->as.object_literal.count, out);
+            xa_collect_error_sources_expr_list(analyzer, node->as.object_literal.values,
+                                               node->as.object_literal.count, out);
+            break;
+        case AST_MAP_LITERAL:
+            xa_collect_error_sources_expr_list(analyzer, node->as.map_literal.keys,
+                                               node->as.map_literal.count, out);
+            xa_collect_error_sources_expr_list(analyzer, node->as.map_literal.values,
+                                               node->as.map_literal.count, out);
+            break;
+        case AST_SET_LITERAL:
+            xa_collect_error_sources_expr_list(analyzer, node->as.set_literal.elements,
+                                               node->as.set_literal.count, out);
+            break;
+        case AST_STRUCT_LITERAL:
+            xa_collect_error_sources_expr_list(analyzer, node->as.struct_literal.field_values,
+                                               node->as.struct_literal.field_count, out);
+            break;
+        case AST_TEMPLATE_STRING:
+            xa_collect_error_sources_expr_list(analyzer, node->as.template_str.parts,
+                                               node->as.template_str.part_count, out);
+            break;
+        case AST_MATCH_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.match_expr.expr, out);
+            for (int i = 0; i < node->as.match_expr.arm_count; i++) {
+                AstNode *arm = node->as.match_expr.arms[i];
+                if (arm) {
+                    xa_collect_error_sources_expr(analyzer, arm->as.match_arm.guard, out);
+                    xa_collect_error_sources_expr(analyzer, arm->as.match_arm.body, out);
+                }
+            }
+            break;
+        case AST_AS_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.as_expr.expr, out);
+            break;
+        case AST_IS_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.is_expr.expr, out);
+            break;
+        case AST_COMPTIME_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.comptime_expr.expr, out);
+            break;
+        case AST_UNSAFE_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.unsafe_expr.operand, out);
+            break;
+        case AST_MOVE_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.move_expr.expr, out);
+            break;
+        case AST_AWAIT_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.await_expr.expr, out);
+            break;
+        case AST_GO_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.go_expr.expr, out);
+            break;
+        default:
+            break;
+    }
+}
+
+static void xa_collect_error_sources_stmt(XaAnalyzer *analyzer, AstNode *node, XrErrorSet *out) {
+    if (!analyzer || !node || !out)
+        return;
+
+    switch (node->type) {
+        case AST_BLOCK:
+            for (int i = 0; i < node->as.block.count; i++)
+                xa_collect_error_sources_stmt(analyzer, node->as.block.statements[i], out);
+            break;
+        case AST_PROGRAM:
+            for (int i = 0; i < node->as.program.count; i++)
+                xa_collect_error_sources_stmt(analyzer, node->as.program.statements[i], out);
+            break;
+        case AST_EXPR_STMT:
+            xa_collect_error_sources_expr(analyzer, node->as.expr_stmt, out);
+            break;
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL:
+            xa_collect_error_sources_expr(analyzer, node->as.var_decl.initializer, out);
+            break;
+        case AST_DESTRUCTURE_DECL:
+            xa_collect_error_sources_expr(analyzer, node->as.destructure_decl.initializer, out);
+            break;
+        case AST_ASSIGNMENT:
+            xa_collect_error_sources_expr(analyzer, node->as.assignment.value, out);
+            break;
+        case AST_COMPOUND_ASSIGNMENT:
+            xa_collect_error_sources_expr(analyzer, node->as.compound_assignment.object, out);
+            xa_collect_error_sources_expr(analyzer, node->as.compound_assignment.value, out);
+            break;
+        case AST_DESTRUCTURE_ASSIGN:
+            xa_collect_error_sources_expr(analyzer, node->as.destructure_assign.value, out);
+            break;
+        case AST_RETURN_STMT:
+            xa_collect_error_sources_expr_list(analyzer, node->as.return_stmt.values,
+                                               node->as.return_stmt.value_count, out);
+            break;
+        case AST_THROW_STMT:
+            xa_collect_error_sources_expr(analyzer, node->as.throw_stmt.expression, out);
+            xa_error_set_add_node_enum_type(analyzer, out, node->as.throw_stmt.expression);
+            break;
+        case AST_IF_STMT:
+            xa_collect_error_sources_expr(analyzer, node->as.if_stmt.condition, out);
+            xa_collect_error_sources_stmt(analyzer, node->as.if_stmt.then_branch, out);
+            xa_collect_error_sources_stmt(analyzer, node->as.if_stmt.else_branch, out);
+            break;
+        case AST_WHILE_STMT:
+            xa_collect_error_sources_expr(analyzer, node->as.while_stmt.condition, out);
+            xa_collect_error_sources_stmt(analyzer, node->as.while_stmt.body, out);
+            break;
+        case AST_FOR_STMT:
+            xa_collect_error_sources_stmt(analyzer, node->as.for_stmt.initializer, out);
+            xa_collect_error_sources_expr(analyzer, node->as.for_stmt.condition, out);
+            xa_collect_error_sources_expr(analyzer, node->as.for_stmt.increment, out);
+            xa_collect_error_sources_stmt(analyzer, node->as.for_stmt.body, out);
+            break;
+        case AST_FOR_IN_STMT:
+            xa_collect_error_sources_expr(analyzer, node->as.for_in_stmt.collection, out);
+            xa_collect_error_sources_stmt(analyzer, node->as.for_in_stmt.body, out);
+            break;
+        case AST_TRY_CATCH:
+            xa_collect_error_sources_stmt(analyzer, node->as.try_catch.try_body, out);
+            for (int i = 0; i < node->as.try_catch.catch_count; i++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[i];
+                xa_collect_error_sources_stmt(analyzer, cc ? cc->body : NULL, out);
+            }
+            break;
+        case AST_PARALLEL_FOR_STMT:
+            xa_collect_error_sources_expr(analyzer, node->as.parallel_for_stmt.range, out);
+            xa_collect_error_sources_expr(analyzer, node->as.parallel_for_stmt.worker_count, out);
+            xa_collect_error_sources_stmt(analyzer, node->as.parallel_for_stmt.final_body, out);
+            xa_collect_error_sources_stmt(analyzer, node->as.parallel_for_stmt.body, out);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.parallel_reduce_expr.range, out);
+            xa_collect_error_sources_expr(analyzer, node->as.parallel_reduce_expr.worker_count,
+                                          out);
+            xa_collect_error_sources_expr(analyzer, node->as.parallel_reduce_expr.initial, out);
+            xa_collect_error_sources_expr(analyzer, node->as.parallel_reduce_expr.combine, out);
+            xa_collect_error_sources_stmt(analyzer, node->as.parallel_reduce_expr.body, out);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            xa_collect_error_sources_expr(analyzer, node->as.parallel_collect_expr.range, out);
+            xa_collect_error_sources_expr(analyzer, node->as.parallel_collect_expr.worker_count,
+                                          out);
+            xa_collect_error_sources_expr(analyzer, node->as.parallel_collect_expr.into, out);
+            xa_collect_error_sources_stmt(analyzer, node->as.parallel_collect_expr.final_body, out);
+            xa_collect_error_sources_stmt(analyzer, node->as.parallel_collect_expr.body, out);
+            break;
+        default:
+            xa_collect_error_sources_expr(analyzer, node, out);
+            break;
+    }
+}
+
+static XrType *xa_error_set_payload_enum_type(XaAnalyzer *analyzer, const XrErrorSet *set,
+                                              bool *has_unsupported_mix) {
+    XrType *payload_type = NULL;
+    int payload_count = 0;
+    bool other_error = false;
+
+    if (has_unsupported_mix)
+        *has_unsupported_mix = false;
+    if (!analyzer || !set)
+        return NULL;
+
+    for (int i = 0; i < set->count; i++) {
+        XrType *type = set->entries[i].enum_type;
+        if (xa_enum_error_type_has_payload(analyzer, type)) {
+            payload_count++;
+            if (!payload_type)
+                payload_type = type;
+            else if (!xr_type_equals(payload_type, type))
+                other_error = true;
+        } else {
+            other_error = true;
+        }
+    }
+
+    if (has_unsupported_mix)
+        *has_unsupported_mix = other_error || payload_count > 1;
+    return payload_type;
+}
+
+static XrCatchClause *xa_single_error_catch_clause(TryCatchNode *tc) {
+    XrCatchClause *only = NULL;
+    int count = 0;
+    if (!tc)
+        return NULL;
+    for (int i = 0; i < tc->catch_count; i++) {
+        XrCatchClause *cc = tc->catch_clauses[i];
+        if (!cc || cc->is_panic)
+            continue;
+        only = cc;
+        count++;
+    }
+    return count == 1 ? only : NULL;
+}
+
+static void xa_report_freestanding_payload_catch_boundary(XaAnalyzer *analyzer, XrCatchClause *cc,
+                                                          XrType *payload_type, bool mixed_errors) {
+    if (!analyzer || !cc)
+        return;
+    XrLocation loc = {.file = analyzer->current_file,
+                      .line = cc->var_line > 0 ? cc->var_line : 0,
+                      .column = cc->var_column > 0 ? cc->var_column : 0};
+    char msg[384];
+    snprintf(msg, sizeof(msg),
+             "freestanding profile requires a single typed catch for payload enum error %s; "
+             "%s",
+             payload_type ? xr_type_to_string(payload_type) : "<enum>",
+             mixed_errors ? "mixed error sets still need explicit typed lowering"
+                          : "write catch (e: ThatEnum) so the no-box payload channel can be used");
+    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg, &loc);
+}
+
+static void xa_validate_freestanding_payload_error_catches_node(XaAnalyzer *analyzer,
+                                                                AstNode *node) {
+    if (!analyzer || !node)
+        return;
+
+    if (node->type == AST_TRY_CATCH) {
+        TryCatchNode *tc = &node->as.try_catch;
+        XrErrorSet *errors = xr_error_set_new(analyzer->type_pool);
+        bool mixed_errors = false;
+        XrType *payload_type = NULL;
+        if (errors) {
+            xa_collect_error_sources_stmt(analyzer, tc->try_body, errors);
+            payload_type = xa_error_set_payload_enum_type(analyzer, errors, &mixed_errors);
+        }
+        if (payload_type) {
+            XrCatchClause *only = xa_single_error_catch_clause(tc);
+            XrType *catch_type =
+                (only && only->type) ? xr_tref_resolve_in_analyzer(analyzer, only->type) : NULL;
+            if (!only || !catch_type || !xr_type_equals(catch_type, payload_type) || mixed_errors)
+                xa_report_freestanding_payload_catch_boundary(
+                    analyzer, only ? only : tc->catch_clauses[0], payload_type, mixed_errors);
+        }
+
+        xa_validate_freestanding_payload_error_catches_node(analyzer, tc->try_body);
+        for (int i = 0; i < tc->catch_count; i++) {
+            XrCatchClause *cc = tc->catch_clauses[i];
+            xa_validate_freestanding_payload_error_catches_node(analyzer, cc ? cc->body : NULL);
+        }
+        return;
+    }
+
+    switch (node->type) {
+        case AST_BLOCK:
+            for (int i = 0; i < node->as.block.count; i++)
+                xa_validate_freestanding_payload_error_catches_node(analyzer,
+                                                                    node->as.block.statements[i]);
+            break;
+        case AST_PROGRAM:
+            for (int i = 0; i < node->as.program.count; i++)
+                xa_validate_freestanding_payload_error_catches_node(analyzer,
+                                                                    node->as.program.statements[i]);
+            break;
+        case AST_IF_STMT:
+            xa_validate_freestanding_payload_error_catches_node(analyzer,
+                                                                node->as.if_stmt.then_branch);
+            xa_validate_freestanding_payload_error_catches_node(analyzer,
+                                                                node->as.if_stmt.else_branch);
+            break;
+        case AST_WHILE_STMT:
+            xa_validate_freestanding_payload_error_catches_node(analyzer, node->as.while_stmt.body);
+            break;
+        case AST_FOR_STMT:
+            xa_validate_freestanding_payload_error_catches_node(analyzer,
+                                                                node->as.for_stmt.initializer);
+            xa_validate_freestanding_payload_error_catches_node(analyzer, node->as.for_stmt.body);
+            break;
+        case AST_FOR_IN_STMT:
+            xa_validate_freestanding_payload_error_catches_node(analyzer,
+                                                                node->as.for_in_stmt.body);
+            break;
+        case AST_PARALLEL_FOR_STMT:
+            xa_validate_freestanding_payload_error_catches_node(
+                analyzer, node->as.parallel_for_stmt.final_body);
+            xa_validate_freestanding_payload_error_catches_node(analyzer,
+                                                                node->as.parallel_for_stmt.body);
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            xa_validate_freestanding_payload_error_catches_node(analyzer,
+                                                                node->as.parallel_reduce_expr.body);
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            xa_validate_freestanding_payload_error_catches_node(
+                analyzer, node->as.parallel_collect_expr.final_body);
+            xa_validate_freestanding_payload_error_catches_node(
+                analyzer, node->as.parallel_collect_expr.body);
+            break;
+        case AST_FUNCTION_DECL:
+            xa_validate_freestanding_payload_error_catches_node(analyzer,
+                                                                node->as.function_decl.body);
+            break;
+        case AST_METHOD_DECL:
+            xa_validate_freestanding_payload_error_catches_node(analyzer,
+                                                                node->as.method_decl.body);
+            break;
+        case AST_CLASS_DECL:
+            for (int i = 0; i < node->as.class_decl.method_count; i++)
+                xa_validate_freestanding_payload_error_catches_node(analyzer,
+                                                                    node->as.class_decl.methods[i]);
+            break;
+        case AST_STRUCT_DECL:
+            for (int i = 0; i < node->as.struct_decl.method_count; i++)
+                xa_validate_freestanding_payload_error_catches_node(
+                    analyzer, node->as.struct_decl.methods[i]);
+            break;
+        case AST_EXPORT_STMT:
+            xa_validate_freestanding_payload_error_catches_node(analyzer,
+                                                                node->as.export_stmt.declaration);
+            break;
+        default:
+            break;
+    }
+}
+
+static void xa_validate_freestanding_payload_error_catches(XaAnalyzer *analyzer, AstNode *ast) {
+    if (!analyzer || !ast || !xa_freestanding_profile_enabled(analyzer))
+        return;
+    xa_payload_error_scan_root = ast;
+    xa_payload_error_scan_depth = 0;
+    xa_validate_freestanding_payload_error_catches_node(analyzer, ast);
+    xa_payload_error_scan_root = NULL;
+    xa_payload_error_scan_depth = 0;
+}
+
 /* ============================================================================
  * Main Entry Point
  * ============================================================================
@@ -5867,6 +6354,8 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
 
     // Pass 3: Infer error sets for functions (value-return error system)
     xa_infer_error_sets(analyzer, ast);
+
+    xa_validate_freestanding_payload_error_catches(analyzer, ast);
 
     xa_infer_context_free(ctx);
 }

@@ -1,0 +1,7 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile requires a single typed catch for payload enum error FsErr
+contains=write catch (e: ThatEnum)
+not_contains=xrt_pending_enum_error
+not_contains=xrt_enum_aggregate_box
+not_contains=CRASH
