@@ -1,0 +1,16 @@
+import sys
+
+fn worker() -> int {
+    return 1
+}
+
+fn suspends() -> int {
+    var y = await go worker()
+    return y
+}
+
+var t = sys.Thread.spawn(fn() -> int {
+    const f = suspends
+    return f()
+})
+print(t.join())

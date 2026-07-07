@@ -441,6 +441,12 @@ typedef struct XaThreadSpawnSyncScan {
 static AstNode *xa_thread_spawn_inline_body(AstNode *body);
 static XaSymbol *xa_lookup_visible_class_symbol(XaInferContext *ctx, const char *class_name);
 
+typedef enum XaThreadSpawnFunctionValueStatus {
+    XA_THREAD_SPAWN_FN_VALUE_SAFE,
+    XA_THREAD_SPAWN_FN_VALUE_MAY_SUSPEND,
+    XA_THREAD_SPAWN_FN_VALUE_DYNAMIC,
+} XaThreadSpawnFunctionValueStatus;
+
 static XaScope *xa_find_function_scope_for_symbol(XaScope *scope, XaSymbol *sym) {
     if (!scope || !sym)
         return NULL;
@@ -468,6 +474,19 @@ static AstNode *xa_symbol_function_body(XaInferContext *ctx, XaSymbol *sym) {
     return NULL;
 }
 
+static XaSymbol *xa_thread_spawn_symbol_from_variable_node(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node || node->type != AST_VARIABLE)
+        return NULL;
+    uint32_t symbol_id = node->as.variable.symbol_id;
+    if (symbol_id != 0) {
+        XaSymbol *sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, symbol_id);
+        if (sym)
+            return sym;
+    }
+    const char *name = node->as.variable.name;
+    return name ? xa_lookup_visible_symbol(ctx, name) : NULL;
+}
+
 static XaSymbol *xa_thread_spawn_import_target_symbol(XaInferContext *ctx, XaSymbol *sym) {
     if (!ctx || !sym || !sym->is_imported)
         return sym;
@@ -484,8 +503,7 @@ static XaSymbol *xa_thread_spawn_import_target_symbol(XaInferContext *ctx, XaSym
     return target ? target : sym;
 }
 
-static XaSymbol *xa_thread_spawn_module_member_function_symbol(XaInferContext *ctx,
-                                                               AstNode *callee) {
+static XaSymbol *xa_thread_spawn_module_member_symbol(XaInferContext *ctx, AstNode *callee) {
     if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
         return NULL;
     MemberAccessNode *ma = &callee->as.member_access;
@@ -506,7 +524,7 @@ static XaSymbol *xa_thread_spawn_module_member_function_symbol(XaInferContext *c
         return NULL;
 
     XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
-    return member_sym && member_sym->kind == XA_SYM_FUNCTION ? member_sym : NULL;
+    return member_sym;
 }
 
 static bool xa_thread_spawn_call_is_coro_yield(CallExprNode *call) {
@@ -714,6 +732,100 @@ static bool xa_thread_spawn_symbol_may_suspend(XaInferContext *ctx, XaSymbol *sy
     return result;
 }
 
+static XaThreadSpawnFunctionValueStatus
+xa_thread_spawn_function_value_expr_status(XaInferContext *ctx, AstNode *expr,
+                                           XaSymbol **call_stack, int call_depth);
+
+static bool xa_thread_spawn_call_stack_contains(XaSymbol **call_stack, int call_depth,
+                                                XaSymbol *sym) {
+    if (!call_stack || !sym)
+        return false;
+    for (int i = 0; i < call_depth; i++) {
+        if (call_stack[i] == sym)
+            return true;
+    }
+    return false;
+}
+
+static bool xa_thread_spawn_symbol_has_function_type(XaInferContext *ctx, XaSymbol *sym) {
+    if (!ctx || !ctx->analyzer || !sym)
+        return false;
+    XrType *type = xa_analyzer_get_type(ctx->analyzer, sym);
+    return type && XR_TYPE_IS_FUNCTION(type);
+}
+
+static XaThreadSpawnFunctionValueStatus
+xa_thread_spawn_function_value_symbol_status(XaInferContext *ctx, XaSymbol *sym,
+                                             XaSymbol **call_stack, int call_depth) {
+    sym = xa_thread_spawn_import_target_symbol(ctx, sym);
+    if (!ctx || !sym)
+        return XA_THREAD_SPAWN_FN_VALUE_SAFE;
+
+    if (sym->kind == XA_SYM_FUNCTION) {
+        return xa_thread_spawn_symbol_may_suspend(ctx, sym, call_stack, call_depth)
+                   ? XA_THREAD_SPAWN_FN_VALUE_MAY_SUSPEND
+                   : XA_THREAD_SPAWN_FN_VALUE_SAFE;
+    }
+
+    if (sym->kind != XA_SYM_VARIABLE && sym->kind != XA_SYM_PARAMETER)
+        return XA_THREAD_SPAWN_FN_VALUE_SAFE;
+    if (!xa_thread_spawn_symbol_has_function_type(ctx, sym))
+        return XA_THREAD_SPAWN_FN_VALUE_SAFE;
+
+    if (sym->kind == XA_SYM_PARAMETER || !sym->is_const)
+        return XA_THREAD_SPAWN_FN_VALUE_DYNAMIC;
+    if (xa_thread_spawn_call_stack_contains(call_stack, call_depth, sym))
+        return XA_THREAD_SPAWN_FN_VALUE_DYNAMIC;
+    if (call_depth >= 32)
+        return XA_THREAD_SPAWN_FN_VALUE_DYNAMIC;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links || !links->const_initializer)
+        return XA_THREAD_SPAWN_FN_VALUE_DYNAMIC;
+
+    call_stack[call_depth] = sym;
+    XaThreadSpawnFunctionValueStatus status = xa_thread_spawn_function_value_expr_status(
+        ctx, links->const_initializer, call_stack, call_depth + 1);
+    call_stack[call_depth] = NULL;
+    return status;
+}
+
+static XaThreadSpawnFunctionValueStatus
+xa_thread_spawn_function_value_expr_status(XaInferContext *ctx, AstNode *expr,
+                                           XaSymbol **call_stack, int call_depth) {
+    if (!ctx || !expr)
+        return XA_THREAD_SPAWN_FN_VALUE_DYNAMIC;
+
+    AstNode *inline_body = xa_thread_spawn_inline_body(expr);
+    if (inline_body) {
+        return xa_thread_spawn_body_may_suspend(ctx, inline_body, call_stack, call_depth)
+                   ? XA_THREAD_SPAWN_FN_VALUE_MAY_SUSPEND
+                   : XA_THREAD_SPAWN_FN_VALUE_SAFE;
+    }
+
+    if (expr->type == AST_VARIABLE) {
+        XaSymbol *sym = xa_thread_spawn_symbol_from_variable_node(ctx, expr);
+        return xa_thread_spawn_function_value_symbol_status(ctx, sym, call_stack, call_depth);
+    }
+
+    if (expr->type == AST_MEMBER_ACCESS) {
+        XaSymbol *sym = xa_thread_spawn_module_member_symbol(ctx, expr);
+        if (sym)
+            return xa_thread_spawn_function_value_symbol_status(ctx, sym, call_stack, call_depth);
+        XrType *type = xa_analyzer_get_node_type(ctx->analyzer, expr);
+        if (!type)
+            type = xa_visit_infer_expr(ctx, expr);
+        return type && XR_TYPE_IS_FUNCTION(type) ? XA_THREAD_SPAWN_FN_VALUE_DYNAMIC
+                                                 : XA_THREAD_SPAWN_FN_VALUE_SAFE;
+    }
+
+    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, expr);
+    if (!type)
+        type = xa_visit_infer_expr(ctx, expr);
+    return type && XR_TYPE_IS_FUNCTION(type) ? XA_THREAD_SPAWN_FN_VALUE_DYNAMIC
+                                             : XA_THREAD_SPAWN_FN_VALUE_SAFE;
+}
+
 static bool xa_thread_spawn_inline_call_may_suspend(XaInferContext *ctx, CallExprNode *call,
                                                     XaSymbol **call_stack, int call_depth,
                                                     const char **out_feature) {
@@ -736,20 +848,50 @@ static bool xa_thread_spawn_inline_call_may_suspend(XaInferContext *ctx, CallExp
     }
 
     if (callee && callee->type == AST_VARIABLE) {
-        const char *name = callee->as.variable.name;
-        XaSymbol *sym = name ? xa_lookup_visible_symbol(ctx, name) : NULL;
-        if (sym && xa_thread_spawn_symbol_may_suspend(ctx, sym, call_stack, call_depth)) {
-            if (out_feature) {
-                *out_feature = NULL;
+        XaSymbol *sym = xa_thread_spawn_symbol_from_variable_node(ctx, callee);
+        if (sym && sym->kind == XA_SYM_FUNCTION) {
+            if (xa_thread_spawn_symbol_may_suspend(ctx, sym, call_stack, call_depth)) {
+                if (out_feature)
+                    *out_feature = NULL;
+                return true;
             }
-            return true;
+        } else {
+            XaThreadSpawnFunctionValueStatus status =
+                xa_thread_spawn_function_value_symbol_status(ctx, sym, call_stack, call_depth);
+            if (status == XA_THREAD_SPAWN_FN_VALUE_MAY_SUSPEND) {
+                if (out_feature)
+                    *out_feature = NULL;
+                return true;
+            }
+            if (status == XA_THREAD_SPAWN_FN_VALUE_DYNAMIC) {
+                if (out_feature)
+                    *out_feature = "call through dynamic function value";
+                return true;
+            }
         }
     } else if (callee && callee->type == AST_MEMBER_ACCESS) {
-        XaSymbol *sym = xa_thread_spawn_module_member_function_symbol(ctx, callee);
-        if (sym && xa_thread_spawn_symbol_may_suspend(ctx, sym, call_stack, call_depth)) {
-            if (out_feature)
-                *out_feature = NULL;
-            return true;
+        XaSymbol *sym = xa_thread_spawn_module_member_symbol(ctx, callee);
+        if (!sym) {
+            return false;
+        } else if (sym->kind == XA_SYM_FUNCTION) {
+            if (xa_thread_spawn_symbol_may_suspend(ctx, sym, call_stack, call_depth)) {
+                if (out_feature)
+                    *out_feature = NULL;
+                return true;
+            }
+        } else {
+            XaThreadSpawnFunctionValueStatus status =
+                xa_thread_spawn_function_value_symbol_status(ctx, sym, call_stack, call_depth);
+            if (status == XA_THREAD_SPAWN_FN_VALUE_MAY_SUSPEND) {
+                if (out_feature)
+                    *out_feature = NULL;
+                return true;
+            }
+            if (status == XA_THREAD_SPAWN_FN_VALUE_DYNAMIC) {
+                if (out_feature)
+                    *out_feature = "call through dynamic function value";
+                return true;
+            }
         }
     }
     return false;
@@ -873,7 +1015,8 @@ static bool xa_thread_spawn_body_may_suspend(XaInferContext *ctx, AstNode *body,
 
 static void xa_check_thread_spawn_sync_body(XaInferContext *ctx, AstNode *body) {
     AstNode *inline_body = xa_thread_spawn_inline_body(body);
-    if (!inline_body)
+    AstNode *scan_root = inline_body ? inline_body : body;
+    if (!scan_root)
         return;
     XaThreadSpawnSyncScan scan = {.ctx = ctx,
                                   .call_depth = 0,
@@ -881,7 +1024,37 @@ static void xa_check_thread_spawn_sync_body(XaInferContext *ctx, AstNode *body) 
                                   .report = true,
                                   .found = false,
                                   .reported = false};
-    xa_ast_walk(inline_body, xa_thread_spawn_sync_scan_pre, xa_thread_spawn_sync_scan_post, &scan);
+    xa_ast_walk(scan_root, xa_thread_spawn_sync_scan_pre, xa_thread_spawn_sync_scan_post, &scan);
+    if (scan.found || scan.reported || body->type == AST_CALL_EXPR || inline_body)
+        return;
+
+    XaThreadSpawnFunctionValueStatus status =
+        xa_thread_spawn_function_value_expr_status(ctx, body, scan.call_stack, scan.call_depth);
+    if (status == XA_THREAD_SPAWN_FN_VALUE_SAFE)
+        return;
+    const char *feature = "call through dynamic function value";
+    if (status == XA_THREAD_SPAWN_FN_VALUE_MAY_SUSPEND) {
+        if (body->type == AST_VARIABLE && body->as.variable.name) {
+            snprintf(scan.feature_buf, sizeof(scan.feature_buf), "suspendable function value '%s'",
+                     body->as.variable.name);
+            feature = scan.feature_buf;
+        } else if (body->type == AST_MEMBER_ACCESS) {
+            MemberAccessNode *ma = &body->as.member_access;
+            if (ma->name && ma->object && ma->object->type == AST_VARIABLE &&
+                ma->object->as.variable.name) {
+                snprintf(scan.feature_buf, sizeof(scan.feature_buf),
+                         "suspendable function value '%s.%s'", ma->object->as.variable.name,
+                         ma->name);
+                feature = scan.feature_buf;
+            } else {
+                feature = "suspendable function value";
+            }
+        } else {
+            feature = "suspendable function value";
+        }
+    }
+    scan.found = true;
+    xa_report_thread_spawn_suspend(&scan, body, feature);
 }
 
 static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node,

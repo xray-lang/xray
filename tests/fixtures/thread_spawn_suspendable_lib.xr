@@ -6,3 +6,8 @@ export fn importedSuspends() -> int {
     var y = await go worker()
     return y
 }
+
+export const importedSuspendsValue = fn() -> int {
+    var y = await go worker()
+    return y
+}
