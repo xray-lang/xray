@@ -18,7 +18,8 @@
 typedef enum XrCliTargetArch {
     XR_CLI_TARGET_ARCH_NATIVE,
     XR_CLI_TARGET_ARCH_X86_64,
-    XR_CLI_TARGET_ARCH_AARCH64
+    XR_CLI_TARGET_ARCH_AARCH64,
+    XR_CLI_TARGET_ARCH_RISCV32
 } XrCliTargetArch;
 
 typedef enum XrCliTargetOs {

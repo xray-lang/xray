@@ -275,6 +275,16 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *endian = "little";
         return true;
     }
+    if (strcmp(name, "riscv32imac-unknown-none-elf") == 0) {
+        *arch = "riscv32";
+        *os = "none";
+        *abi = "none";
+        *object_format = "elf";
+        *triple = "riscv32imac-unknown-none-elf";
+        *pointer_bits = 32;
+        *endian = "little";
+        return true;
+    }
     if (strcmp(name, "aarch64-linux-musl") == 0) {
         *arch = "aarch64";
         *os = "linux";
