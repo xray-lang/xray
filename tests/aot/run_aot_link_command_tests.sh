@@ -439,6 +439,50 @@ else
     sed 's/^/      /' "$FREESTANDING_RISCV32_TARGET_LOG" | sed -n '1,120p'
 fi
 
+if command -v zig >/dev/null 2>&1 && command -v llvm-readelf >/dev/null 2>&1 &&
+        command -v llvm-nm >/dev/null 2>&1; then
+    FREESTANDING_RISCV32_REAL_OBJ="$WORK/freestanding_export_riscv32_real.o"
+    FREESTANDING_RISCV32_REAL_LOG="$WORK/freestanding_export_riscv32_real.log"
+    FREESTANDING_RISCV32_REAL_ELF="$WORK/freestanding_export_riscv32_real.elf"
+    FREESTANDING_RISCV32_REAL_UNDEF="$WORK/freestanding_export_riscv32_real.undefined"
+    if ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}" \
+            ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}" \
+            "$XRAY" build --native --profile freestanding --shared \
+            --target riscv32imac-unknown-none-elf --toolchain zig --keep-c --rebuild \
+            --dump-link-command --cache-dir "$BUILD_CACHE" \
+            -o "$FREESTANDING_RISCV32_REAL_OBJ" \
+            "$FREESTANDING_EXPORT_SRC" >"$FREESTANDING_RISCV32_REAL_LOG" 2>&1; then
+        llvm-readelf -h "$FREESTANDING_RISCV32_REAL_OBJ" >"$FREESTANDING_RISCV32_REAL_ELF" 2>&1
+        expect_log_contains "$FREESTANDING_RISCV32_REAL_ELF" "Class:                             ELF32" \
+            "freestanding-profile/riscv32-target: real object is ELF32"
+        expect_log_contains "$FREESTANDING_RISCV32_REAL_ELF" \
+            "Data:                              2's complement, little endian" \
+            "freestanding-profile/riscv32-target: real object is little-endian"
+        expect_log_contains "$FREESTANDING_RISCV32_REAL_ELF" "Type:                              REL" \
+            "freestanding-profile/riscv32-target: real object is relocatable"
+        expect_log_contains "$FREESTANDING_RISCV32_REAL_ELF" \
+            "Machine:                           RISC-V" \
+            "freestanding-profile/riscv32-target: real object targets RISC-V"
+        if llvm-nm -u "$FREESTANDING_RISCV32_REAL_OBJ" >"$FREESTANDING_RISCV32_REAL_UNDEF" \
+                2>&1; then
+            if [ ! -s "$FREESTANDING_RISCV32_REAL_UNDEF" ]; then
+                record_pass "freestanding-profile/riscv32-target: real object has no undefined symbols"
+            else
+                record_fail "freestanding-profile/riscv32-target: real object has undefined symbols"
+                sed 's/^/      /' "$FREESTANDING_RISCV32_REAL_UNDEF" | sed -n '1,80p'
+            fi
+        else
+            record_fail "freestanding-profile/riscv32-target: llvm-nm failed"
+            sed 's/^/      /' "$FREESTANDING_RISCV32_REAL_UNDEF" | sed -n '1,80p'
+        fi
+    else
+        record_fail "freestanding-profile/riscv32-target: real object build failed"
+        sed 's/^/      /' "$FREESTANDING_RISCV32_REAL_LOG" | sed -n '1,120p'
+    fi
+else
+    record_skip "freestanding-profile/riscv32-target: real object (requires zig, llvm-readelf and llvm-nm)"
+fi
+
 FREESTANDING_EXPORT_OBJ="$WORK/freestanding_export.o"
 FREESTANDING_EXPORT_REAL_LOG="$WORK/freestanding_export_real.log"
 if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
