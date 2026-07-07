@@ -1,0 +1,15 @@
+// Shared fixture for xmod_static_defaults.xr. Basename starts with '_' so the
+// diff runner skips it as a standalone program.
+export class StaticDefaults {
+    static join(prefix: string, suffix: string = "tail") -> string {
+        return prefix + ":" + suffix
+    }
+
+    static score(base: int, bonus: int = 7) -> int {
+        return base + bonus
+    }
+
+    static isMissing(value: int? = null) -> bool {
+        return value == null
+    }
+}
