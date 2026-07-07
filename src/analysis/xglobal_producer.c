@@ -16,7 +16,7 @@
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../module/xmodule_graph.h"
-#include "../stdlib/xstdlib_defs_generated.h"
+#include "../stdlib/xstdlib_metadata.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -130,18 +130,7 @@ static uint32_t hash_name32(const char *name) {
 }
 
 static bool producer_stdlib_module_known(const char *name) {
-    if (!name || !name[0] || name[0] == '.')
-        return false;
-    static const char *modules[] = {
-        "regex", "math", "time",   "datetime", "path",     "io",  "os",
-        "net",   "http", "crypto", "base64",   "encoding", "url", "csv",
-        "toml",  "yaml", "xml",    "compress", "log",
-    };
-    for (uint32_t i = 0; i < (uint32_t) (sizeof(modules) / sizeof(modules[0])); i++) {
-        if (strcmp(name, modules[i]) == 0)
-            return true;
-    }
-    return false;
+    return xr_stdlib_metadata_link_dependency_module_known(name);
 }
 
 static bool producer_stdlib_member_is_constant(const char *module, const char *member) {
