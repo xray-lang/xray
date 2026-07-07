@@ -375,9 +375,10 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                           .method_start = 1,
                           .method_count = 1,
                           .decl_kind = XG_DECL_CLASS};
+    uint32_t draw_name_id = xg_name_id("draw");
     XgMethodSummary method = {.method_id = 1,
                               .owner_class_id = 1,
-                              .name_id = 700,
+                              .name_id = draw_name_id,
                               .signature_key = 701,
                               .override_of = XG_NO_ID,
                               .default_arg_contract_id = XG_NO_ID,
@@ -387,7 +388,9 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                               .source_span_id = 42,
                               .kind = XG_CALL_METHOD,
                               .receiver_static_class_id = 1,
-                              .method_id = 1};
+                              .method_id = 1,
+                              .method_name_id = draw_name_id,
+                              .arg_count = 1};
     XiFunc init_func;
     memset(&init_func, 0, sizeof(init_func));
     init_func.name = "init";
@@ -410,6 +413,25 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     good.modules = modules;
     good.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &init_func, 0, 0));
+    XiValue xi_call;
+    memset(&xi_call, 0, sizeof(xi_call));
+    xi_call.op = XI_CALL_METHOD;
+    xi_call.nargs = 2;
+    xi_call.aux = (void *) "draw";
+    xi_call.line = 42;
+    ASSERT_EQ_PTR(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call),
+                  &good.method_dispatch_plans[0]);
+    xi_call.line = 99;
+    ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
+    xi_call.line = 42;
+    xi_call.aux = (void *) "other";
+    ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
+    xi_call.aux = NULL;
+    ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
+    xi_call.aux = (void *) "draw";
+    ev.callsites[0].method_name_id = 0;
+    ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
+    ev.callsites[0].method_name_id = draw_name_id;
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     good.method_dispatch_plans[0].kind = XAOT_DISPATCH_VTABLE;

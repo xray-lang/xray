@@ -634,6 +634,8 @@ XR_FUNC const XaotClassLayoutPlan *xaot_bundle_find_class_layout_plan(const Xaot
                                                                       XgClassId class_id);
 XR_FUNC const XaotMethodDispatchPlan *
 xaot_bundle_find_method_dispatch_plan(const XaotBundle *bundle, XgCallsiteId callsite_id);
+XR_FUNC const XaotMethodDispatchPlan *
+xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, const XiValue *call);
 XR_FUNC const XaotInterfaceUsePlan *
 xaot_bundle_find_interface_use_plan(const XaotBundle *bundle, XgInterfaceId interface_id,
                                     XgClassId implementor_class_id, XgCallsiteId use_site_id);

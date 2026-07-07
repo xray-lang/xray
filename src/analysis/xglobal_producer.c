@@ -105,10 +105,7 @@ static uint64_t fold_u64(uint64_t h, uint64_t value) {
 }
 
 static uint32_t hash_name32(const char *name) {
-    if (!name || !name[0])
-        return 0;
-    uint32_t h = xr_hash_bytes(name, strlen(name));
-    return h ? h : 1;
+    return xg_name_id(name);
 }
 
 static uint64_t hash_tref(uint64_t h, const XrTypeRef *t) {
