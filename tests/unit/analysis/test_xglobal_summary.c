@@ -214,6 +214,14 @@ TEST(global_evidence_dump_lists_core_rows) {
                               .arg_type_key_start = 0,
                               .arg_count = 1,
                               .flags = XG_CALL_USES_DEFAULT_ARGS};
+    XgLinkDependencySummary link_dep = {.link_id = 6,
+                                        .module_id = 1,
+                                        .decl_id = 2,
+                                        .source_span_id = 77,
+                                        .name_id = 101,
+                                        .kind = XG_LINK_DEP_EXTERN_DYLIB,
+                                        .flags = 0};
+    memcpy(link_dep.name, "m", 2);
 
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
@@ -222,6 +230,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impl));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&ev, &link_dep));
 
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
@@ -232,6 +241,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "interface-impl 0 class=2 interface=123"));
     ASSERT_NOT_NULL(strstr(dump, "body 0 func=4"));
     ASSERT_NOT_NULL(strstr(dump, "callsite 0 id=5 owner=4 span=0 kind=method"));
+    ASSERT_NOT_NULL(strstr(dump, "link-dep 0 id=6 module=1 decl=2 span=77 kind=extern_dylib"));
 
     xr_free(dump);
     xg_global_evidence_free(&ev);
@@ -303,8 +313,16 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
                               .callsite_count = 0,
                               .metadata_use_bits = XG_METADATA_TYPENAME,
                               .static_data_use_bits = XG_STATIC_DATA_COMPTIME_VALUE};
+    XgLinkDependencySummary link_dep = {.link_id = 1,
+                                        .module_id = 1,
+                                        .decl_id = 42,
+                                        .source_span_id = 5,
+                                        .name_id = 501,
+                                        .kind = XG_LINK_DEP_EXTERN_DYLIB,
+                                        .flags = 0};
     XaotBundle bundle;
     char *dump;
+    memcpy(link_dep.name, "xrayffi_smoke", sizeof("xrayffi_smoke"));
 
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &base));
@@ -314,6 +332,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impl));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &cap_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&ev, &link_dep));
 
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
@@ -324,6 +343,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_EQ_UINT(bundle.nmetadata_plans, 1);
     ASSERT_EQ_UINT(bundle.ncapability_plans, 2);
     ASSERT_EQ_UINT(bundle.nstatic_data_plans, 1);
+    ASSERT_EQ_UINT(bundle.nlink_dependency_plans, 1);
     ASSERT_NOT_NULL(xaot_bundle_find_class_hierarchy_plan(&bundle, 1));
     ASSERT_NOT_NULL(xaot_bundle_find_class_layout_plan(&bundle, 2));
     const XaotMethodDispatchPlan *dispatch = xaot_bundle_find_method_dispatch_plan(&bundle, 7);
@@ -347,6 +367,11 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_NOT_NULL(static_data);
     ASSERT_EQ_UINT(static_data->body_count, 1);
     ASSERT_EQ_UINT(static_data->action, XAOT_STATIC_DATA_ACTION_MATERIALIZE);
+    const XaotLinkDependencyPlan *link_plan =
+        xaot_bundle_find_link_dependency_plan(&bundle, link_dep.link_id);
+    ASSERT_NOT_NULL(link_plan);
+    ASSERT_EQ_UINT(link_plan->kind, XG_LINK_DEP_EXTERN_DYLIB);
+    ASSERT_STR_EQ(link_plan->name, "xrayffi_smoke");
 
     dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(dump);
@@ -357,6 +382,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_NOT_NULL(strstr(dump, "metadata 0 name=typename bodies=1 decls=0 action=link"));
     ASSERT_NOT_NULL(strstr(dump, "capability 0 name=coroutine bodies=1 action=link"));
     ASSERT_NOT_NULL(strstr(dump, "static-data 0 name=comptime_value bodies=1 action=materialize"));
+    ASSERT_NOT_NULL(strstr(dump, "link-dependency 0 id=1 kind=extern_dylib"));
     xr_free(dump);
 
     xaot_bundle_free(&bundle);
@@ -1209,6 +1235,55 @@ TEST(global_evidence_verifier_rederives_profile_actions) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_verifier_rederives_link_dependency_plans) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x31,
+                      .compiler_semver_hash = 0x32,
+                      .profile_hash = 0x33,
+                      .imported_summary_hash = 0x34,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgLinkDependencySummary link_dep = {.link_id = 1,
+                                        .module_id = 1,
+                                        .decl_id = 1,
+                                        .source_span_id = 3,
+                                        .name_id = 99,
+                                        .kind = XG_LINK_DEP_EXTERN_DYLIB,
+                                        .flags = 0};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    char err[256];
+    memcpy(link_dep.name, "m", 2);
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_link_dependency(&ev, &link_dep));
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+
+    bundle.link_dependency_plans[0].name[0] = 'z';
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT link dependency plan mismatches evidence"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
     setup_parser_session();
     const char *source = "class Child extends Base {\n"
@@ -1621,6 +1696,42 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_marks_extern_dylib_link_dependency) {
+    setup_parser_session();
+    const char *source = "@extern(\"C\") @dylib(\"m\") fn cos(x: float64) -> float64\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nlink_deps, 1);
+    ASSERT_TRUE((ev.decls[0].flags & XG_DECL_EXTERN) != 0);
+    ASSERT_EQ_UINT(ev.link_deps[0].kind, XG_LINK_DEP_EXTERN_DYLIB);
+    ASSERT_STR_EQ(ev.link_deps[0].name, "m");
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nlink_dependency_plans, 1);
+    ASSERT_NOT_NULL(xaot_bundle_find_link_dependency_plan(&bundle, ev.link_deps[0].link_id));
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities) {
     setup_parser_session();
     const char *source = "class Fake {\n"
@@ -1715,12 +1826,14 @@ RUN_TEST(global_evidence_verifier_rederives_class_graph_flags);
 RUN_TEST(global_evidence_verifier_rederives_method_override_graph);
 RUN_TEST(global_evidence_verifier_rederives_interface_implementor_set);
 RUN_TEST(global_evidence_verifier_rederives_profile_actions);
+RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_resolves_interface_callsite_receivers);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
+RUN_TEST(global_evidence_producer_marks_extern_dylib_link_dependency);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
 TEST_MAIN_END()

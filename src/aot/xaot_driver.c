@@ -308,6 +308,16 @@ static void features_apply_capability_plans(XaotFeatureSet *fs, const XaotBundle
         features_apply_capability_plan(fs, bundle->capability_plans[i].capability);
 }
 
+static void features_apply_link_dependency_plans(XaotFeatureSet *fs, const XaotBundle *bundle) {
+    if (!fs || !bundle)
+        return;
+    for (uint32_t i = 0; i < bundle->nlink_dependency_plans; i++) {
+        const XaotLinkDependencyPlan *plan = &bundle->link_dependency_plans[i];
+        if (plan->kind == XG_LINK_DEP_EXTERN_DYLIB)
+            features_add_extern_dylib(fs, plan->name);
+    }
+}
+
 static bool reject_profile_capability_plans(const XaotBundle *bundle) {
     if (!bundle)
         return false;
@@ -412,10 +422,9 @@ static const char *stdlib_symbol_module_of_value(const XiFunc *f, const XiFunc *
     return ref->module_path;
 }
 
-/* Scan a single XiFunc (non-recursive) for link-symbol closure only.
- * Runtime subsystem facts come from global evidence capability plans; this
- * Xi walk remains only for stdlib symbol/object closure and extern dylibs
- * until those get their own summary rows. */
+/* Scan a single XiFunc (non-recursive) for stdlib link-symbol closure only.
+ * Runtime subsystem facts come from global evidence capability plans, and
+ * declaration-level external dylibs come from link dependency plans. */
 static void scan_func_link_symbols(XiFunc *f, const XiFunc *module_init, XaotFeatureSet *fs) {
     XR_DCHECK(f != NULL, "scan_func_link_symbols: NULL func");
     for (uint32_t b = 0; b < f->nblocks; b++) {
@@ -496,13 +505,11 @@ static void scan_func_link_symbols(XiFunc *f, const XiFunc *module_init, XaotFea
     }
 }
 
-/* Recursively collect link symbols from an Xi IR function tree. */
+/* Recursively collect stdlib link symbols from an Xi IR function tree. */
 static void collect_link_symbols_recursive(XiFunc *f, const XiFunc *module_init,
                                            XaotFeatureSet *fs) {
     if (!f)
         return;
-    if (f->is_extern && f->extern_dylib && f->extern_dylib[0])
-        features_add_extern_dylib(fs, f->extern_dylib);
     scan_func_link_symbols(f, module_init ? module_init : f, fs);
     for (uint16_t c = 0; c < f->nchildren; c++)
         collect_link_symbols_recursive(f->children[c], module_init ? module_init : f, fs);
@@ -1190,12 +1197,14 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     }
     xi_cgen_ctx_free(cg_ctx);
 
-    /* Build link features before freeing IR. Runtime capabilities come from
-     * verified global evidence plans; the remaining Xi walk only supplies
-     * stdlib symbol closure and extern dylibs until they have summary rows. */
+    /* Build link features before freeing IR. Runtime capabilities and
+     * declaration-level external dylibs come from verified global evidence
+     * plans; the remaining Xi walk only supplies stdlib symbol closure until
+     * generated stdlib member references get summary rows too. */
     XaotFeatureSet features;
     memset(&features, 0, sizeof(features));
     features_apply_capability_plans(&features, &aot_bundle);
+    features_apply_link_dependency_plans(&features, &aot_bundle);
     collect_link_symbol_features(ir_funcs, nmodules, &features);
     if (!build_link_manifest(&features, &link_manifest,
                              profile == XAOT_BUILD_PROFILE_FREESTANDING)) {

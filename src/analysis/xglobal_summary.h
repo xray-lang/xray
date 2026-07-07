@@ -23,6 +23,9 @@ typedef uint32_t XgInterfaceId;
 typedef uint32_t XgMethodId;
 typedef uint32_t XgFieldId;
 typedef uint32_t XgCallsiteId;
+typedef uint32_t XgLinkId;
+
+#define XG_LINK_DEP_NAME_MAX 512
 
 enum {
     XG_NO_ID = 0,
@@ -79,6 +82,11 @@ typedef enum XgCallsiteKind {
     XG_CALL_NATIVE,
     XG_CALL_EXTERN,
 } XgCallsiteKind;
+
+typedef enum XgLinkDependencyKind {
+    XG_LINK_DEP_EXTERN_DYLIB = 1,
+    XG_LINK_DEP_STDLIB_SYMBOL,
+} XgLinkDependencyKind;
 
 enum {
     XG_CALL_MAY_THROW = 1u << 0,
@@ -208,6 +216,17 @@ typedef struct XgCallsiteSummary {
     uint32_t flags;
 } XgCallsiteSummary;
 
+typedef struct XgLinkDependencySummary {
+    XgLinkId link_id;
+    XgModuleId module_id;
+    XgDeclId decl_id;
+    uint32_t source_span_id;
+    uint32_t name_id;
+    uint8_t kind;
+    uint32_t flags;
+    char name[XG_LINK_DEP_NAME_MAX];
+} XgLinkDependencySummary;
+
 typedef struct XgGlobalEvidence {
     XgBuildKey key;
 
@@ -217,6 +236,7 @@ typedef struct XgGlobalEvidence {
     XgInterfaceImplSummary *interface_impls;
     XgBodySummary *bodies;
     XgCallsiteSummary *callsites;
+    XgLinkDependencySummary *link_deps;
 
     uint32_t ndecls;
     uint32_t nclasses;
@@ -224,6 +244,7 @@ typedef struct XgGlobalEvidence {
     uint32_t ninterface_impls;
     uint32_t nbodies;
     uint32_t ncallsites;
+    uint32_t nlink_deps;
 
     uint32_t decl_cap;
     uint32_t class_cap;
@@ -231,12 +252,14 @@ typedef struct XgGlobalEvidence {
     uint32_t interface_impl_cap;
     uint32_t body_cap;
     uint32_t callsite_cap;
+    uint32_t link_dep_cap;
 } XgGlobalEvidence;
 
 XR_FUNC uint32_t xg_name_id(const char *name);
 XR_FUNC const char *xg_build_profile_name(uint32_t profile);
 XR_FUNC const char *xg_decl_kind_name(uint8_t kind);
 XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
+XR_FUNC const char *xg_link_dependency_kind_name(uint8_t kind);
 XR_FUNC const char *xg_capability_name(uint32_t capability);
 XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count);
 XR_FUNC const char *xg_metadata_name(uint32_t metadata);
@@ -254,6 +277,7 @@ XR_FUNC bool xg_global_evidence_reserve_interface_impls(XgGlobalEvidence *eviden
                                                         uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_bodies(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_callsites(XgGlobalEvidence *evidence, uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_link_deps(XgGlobalEvidence *evidence, uint32_t capacity);
 
 XR_FUNC XgDeclSummary *xg_global_evidence_add_decl(XgGlobalEvidence *evidence,
                                                    const XgDeclSummary *summary);
@@ -268,6 +292,9 @@ XR_FUNC XgBodySummary *xg_global_evidence_add_body(XgGlobalEvidence *evidence,
                                                    const XgBodySummary *summary);
 XR_FUNC XgCallsiteSummary *xg_global_evidence_add_callsite(XgGlobalEvidence *evidence,
                                                            const XgCallsiteSummary *summary);
+XR_FUNC XgLinkDependencySummary *
+xg_global_evidence_add_link_dependency(XgGlobalEvidence *evidence,
+                                       const XgLinkDependencySummary *summary);
 XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobalEvidence *evidence,
                                                                   XgCallsiteId callsite_id);
 
