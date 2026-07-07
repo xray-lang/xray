@@ -13,3 +13,12 @@ if (pipe != null) {
 } else {
     print(false)
 }
+
+var split = sys.Pipe.open()
+if (split != null) {
+    print(split!.closeRead())
+    print(split!.closeWrite())
+} else {
+    print(false)
+    print(false)
+}

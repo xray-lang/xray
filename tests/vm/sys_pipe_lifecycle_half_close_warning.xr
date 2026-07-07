@@ -1,0 +1,6 @@
+import sys
+
+var pipe = sys.Pipe.open()
+if (pipe != null) {
+    print(pipe!.closeRead())
+}
