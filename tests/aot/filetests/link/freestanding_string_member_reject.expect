@@ -1,8 +1,11 @@
 args=--profile freestanding
 status=fail
 contains=freestanding profile rejects string.toBytes
+contains=string literals may be passed or printed, but string member access needs hosted helpers
 contains=freestanding profile rejects string.byteLength
 contains=freestanding profile rejects string index access
+contains=string literals may be passed or printed, but string indexing needs hosted helpers
 contains=freestanding profile rejects string slice expression
+contains=string literals may be passed or printed, but string slicing needs hosted helpers
 not_contains=CRASH
 not_contains=unsupported AOT

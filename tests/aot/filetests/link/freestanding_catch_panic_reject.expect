@@ -1,6 +1,7 @@
 args=--profile freestanding
 status=fail
 contains=freestanding profile rejects catch panic
+contains=freestanding panic is halt-only via xr_hook_panic
 not_contains=CRASH
 not_contains=setjmp
 not_contains=longjmp
