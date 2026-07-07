@@ -2587,7 +2587,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
 
     // Create class info
     XrClassInfo *info = xa_class_info_new(cls->name);
-    info->is_final = cls->is_final;
+    info->explicit_final = cls->explicit_final;
     info->location =
         (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
     if (cls->super_name) {
@@ -3733,7 +3733,7 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
         XrClassInfo *base_info =
             resolve_base_class_info(analyzer, sym->scope, info->base_name, &base_type);
         if (base_info) {
-            if (base_info->is_final) {
+            if (base_info->explicit_final) {
                 char msg[256];
                 snprintf(msg, sizeof(msg), "class '%s' is final and cannot be extended",
                          base_info->name ? base_info->name : info->base_name);

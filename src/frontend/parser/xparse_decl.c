@@ -307,8 +307,8 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
             xr_parser_error(parser, "@section/@weak/@used can only annotate a function");
             return NULL;
         }
-        bool is_final = xr_parser_match(parser, TK_FINAL);
-        if (is_final) {
+        bool explicit_final = xr_parser_match(parser, TK_FINAL);
+        if (explicit_final) {
             if (!xr_parser_match(parser, TK_CLASS)) {
                 xr_parser_error_at_current(parser, "expected 'class' after 'final'");
                 return NULL;
@@ -322,7 +322,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         parser->parsing_native_class = false;
         if (!cls)
             return NULL;
-        cls->as.class_decl.is_final = is_final;
+        cls->as.class_decl.explicit_final = explicit_final;
         cls->as.class_decl.is_native = is_native;
         cls->as.class_decl.attributes = attributes;
         cls->as.class_decl.attr_count = attr_count;
@@ -1549,7 +1549,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
         }
         AstNode *cls = xr_parse_class_declaration(parser);
         if (cls)
-            cls->as.class_decl.is_final = true;
+            cls->as.class_decl.explicit_final = true;
         return cls;
     }
 

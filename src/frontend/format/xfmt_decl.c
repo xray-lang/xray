@@ -176,7 +176,7 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_emit_attributes(ctx, cls->attributes, cls->attr_count);
     xfmt_write_indent(ctx);
 
-    if (!is_struct && !is_union && cls->is_final)
+    if (!is_struct && !is_union && cls->explicit_final)
         xfmt_write_str(ctx, "final ");
     if (is_struct && cls->is_packed)
         xfmt_write_str(ctx, "packed ");

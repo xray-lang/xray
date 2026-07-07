@@ -1118,7 +1118,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     decl.source_span_id = (uint32_t) node->line;
     if (cls->is_native)
         decl.flags |= XG_DECL_NATIVE;
-    if (cls->is_final)
+    if (cls->explicit_final)
         decl.flags |= XG_DECL_FINAL;
     if (derive_flags != 0)
         decl.flags |= XG_DECL_DERIVE;
@@ -1152,7 +1152,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     memset(&csum, 0, sizeof(csum));
     csum.class_id = class_id;
     csum.parent_class_id = producer_lookup_class(p, cls->super_name);
-    if (cls->is_final)
+    if (cls->explicit_final)
         csum.flags |= XG_CLASS_EXPLICIT_FINAL;
     if (cls->is_native)
         csum.flags |= XG_CLASS_NATIVE;
