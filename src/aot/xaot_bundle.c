@@ -371,6 +371,44 @@ xg_evidence_find_method_by_signature_in_hierarchy(const XgGlobalEvidence *ev, Xg
     return NULL;
 }
 
+static bool xg_evidence_interface_extends_reaches(const XgGlobalEvidence *ev, XgInterfaceId from,
+                                                  XgInterfaceId target, uint32_t depth) {
+    if (!ev || from == XG_NO_ID || target == XG_NO_ID || depth > 64)
+        return false;
+    if (from == target)
+        return true;
+    for (uint32_t i = 0; i < ev->ninterface_extends; i++) {
+        const XgInterfaceExtendsSummary *edge = &ev->interface_extends[i];
+        if (edge->child_interface_id != from)
+            continue;
+        if (xg_evidence_interface_extends_reaches(ev, edge->parent_interface_id, target,
+                                                  depth + 1))
+            return true;
+    }
+    return false;
+}
+
+static bool xg_evidence_interface_impl_matches(const XgGlobalEvidence *ev,
+                                               XgInterfaceId implementor_interface,
+                                               XgInterfaceId receiver_interface) {
+    return implementor_interface == receiver_interface ||
+           xg_evidence_interface_extends_reaches(ev, implementor_interface, receiver_interface, 0);
+}
+
+static bool xg_evidence_effective_interface_implementor_seen(
+    const XgGlobalEvidence *ev, XgInterfaceId receiver_interface, XgClassId implementor_class,
+    uint32_t upto_index) {
+    if (!ev || receiver_interface == XG_NO_ID || implementor_class == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < upto_index && i < ev->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
+        if (impl->implementor_class_id == implementor_class &&
+            xg_evidence_interface_impl_matches(ev, impl->interface_id, receiver_interface))
+            return true;
+    }
+    return false;
+}
+
 static bool xaot_bundle_add_dispatch_target_case(XaotBundle *bundle, XgCallsiteId callsite_id,
                                                  XgClassId receiver_class_id, XgMethodId method_id,
                                                  uint32_t evidence) {
@@ -473,7 +511,11 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
             for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
                 const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
                 const XgMethodSummary *target_method;
-                if (impl->interface_id != call->receiver_static_interface_id)
+                if (!xg_evidence_interface_impl_matches(
+                        ev, impl->interface_id, call->receiver_static_interface_id))
+                    continue;
+                if (xg_evidence_effective_interface_implementor_seen(
+                        ev, call->receiver_static_interface_id, impl->implementor_class_id, i))
                     continue;
                 implementor_count++;
                 target_method = xg_evidence_find_method_by_signature_in_hierarchy(
@@ -532,7 +574,11 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
         for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
             const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
             const XgMethodSummary *target_method;
-            if (impl->interface_id != call->receiver_static_interface_id)
+            if (!xg_evidence_interface_impl_matches(ev, impl->interface_id,
+                                                    call->receiver_static_interface_id))
+                continue;
+            if (xg_evidence_effective_interface_implementor_seen(
+                    ev, call->receiver_static_interface_id, impl->implementor_class_id, i))
                 continue;
             target_method = xg_evidence_find_method_by_signature_in_hierarchy(
                 ev, impl->implementor_class_id, call->method_name_id, call->method_signature_key);

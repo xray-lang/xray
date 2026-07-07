@@ -3549,6 +3549,90 @@ TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
+    setup_parser_session();
+    const char *source = "interface Shape {\n"
+                         "    area() -> float\n"
+                         "}\n"
+                         "interface Drawable extends Shape {\n"
+                         "}\n"
+                         "class Circle implements Drawable {\n"
+                         "    area() -> float { return 1.0 }\n"
+                         "}\n"
+                         "class Square implements Drawable, Shape {\n"
+                         "    area() -> float { return 2.0 }\n"
+                         "}\n"
+                         "fn describe(shape: Shape) -> float {\n"
+                         "    return shape.area()\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.ninterface_extends, 1);
+    ASSERT_EQ_UINT(ev.ninterface_methods, 1);
+    ASSERT_EQ_UINT(ev.ninterface_impls, 3);
+    XgInterfaceId shape_id = ev.interface_extends[0].parent_interface_id;
+    ASSERT_EQ_UINT(ev.interface_methods[0].owner_interface_id, shape_id);
+
+    uint32_t parent_interface_calls = 0;
+    for (uint32_t i = 0; i < ev.ncallsites; i++) {
+        const XgCallsiteSummary *call = &ev.callsites[i];
+        if (call->kind != XG_CALL_INTERFACE)
+            continue;
+        parent_interface_calls++;
+        ASSERT_EQ_UINT(call->receiver_static_interface_id, shape_id);
+        ASSERT_EQ_UINT(call->method_id, ev.interface_methods[0].interface_method_id);
+    }
+    ASSERT_EQ_UINT(parent_interface_calls, 1);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    ASSERT_EQ_UINT(bundle.nmethod_dispatch_plans, 1);
+    ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].kind, XAOT_DISPATCH_TYPE_SWITCH);
+    ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].receiver_static_interface_id, shape_id);
+    ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].target_count, 2);
+    ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 2);
+    ASSERT_TRUE(bundle.dispatch_target_cases[0].receiver_class_id !=
+                bundle.dispatch_target_cases[1].receiver_class_id);
+
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_metadata_reachability) {
     setup_parser_session();
     const char *source = "@derive(Inspect)\n"
@@ -3929,6 +4013,7 @@ RUN_TEST(global_evidence_producer_marks_native_methods_bodyless);
 RUN_TEST(global_evidence_producer_resolves_interface_callsite_receivers);
 RUN_TEST(global_evidence_producer_resolves_interface_extends_callsite_methods);
 RUN_TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods);
+RUN_TEST(global_evidence_producer_resolves_transitive_interface_implementors);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);

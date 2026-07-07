@@ -856,6 +856,28 @@ static bool verify_interface_extends_reaches(const XgGlobalEvidence *ev, XgInter
     return false;
 }
 
+static bool verify_interface_impl_matches(const XgGlobalEvidence *ev,
+                                          XgInterfaceId implementor_interface,
+                                          XgInterfaceId receiver_interface) {
+    return implementor_interface == receiver_interface ||
+           verify_interface_extends_reaches(ev, implementor_interface, receiver_interface, 0);
+}
+
+static bool verify_effective_interface_implementor_seen(const XgGlobalEvidence *ev,
+                                                        XgInterfaceId receiver_interface,
+                                                        XgClassId implementor_class,
+                                                        uint32_t upto_index) {
+    if (!ev || receiver_interface == XG_NO_ID || implementor_class == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < upto_index && i < ev->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
+        if (impl->implementor_class_id == implementor_class &&
+            verify_interface_impl_matches(ev, impl->interface_id, receiver_interface))
+            return true;
+    }
+    return false;
+}
+
 static bool verify_interface_extends_rows(const XgGlobalEvidence *ev, char *errbuf,
                                           size_t errbuf_len) {
     if (!ev)
@@ -1340,7 +1362,11 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
             for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
                 const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
                 const XgMethodSummary *target_method;
-                if (impl->interface_id != call->receiver_static_interface_id)
+                if (!verify_interface_impl_matches(ev, impl->interface_id,
+                                                   call->receiver_static_interface_id))
+                    continue;
+                if (verify_effective_interface_implementor_seen(
+                        ev, call->receiver_static_interface_id, impl->implementor_class_id, i))
                     continue;
                 implementor_count++;
                 target_method = verify_find_evidence_method_by_signature_in_hierarchy(
