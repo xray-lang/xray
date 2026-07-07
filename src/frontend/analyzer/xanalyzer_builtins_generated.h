@@ -513,8 +513,12 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"__processWait", "(id: int): int", "Wait for a process handle token and return its exit code, or -1 on failure", true, false, true},
     {"__processTryWait", "(id: int): int?", "Poll a process handle token; return null while running, exit code when finished, or -1 on failure", true, false, true},
     {"__processKill", "(id: int, signal: int): bool", "Send a portable process signal to a process handle token", true, false, true},
+    {"__pipeOpen", "(): Array<int>?", "Create an anonymous pipe and return read/write endpoint tokens", true, false, true},
+    {"__pipeRead", "(handle: int, maxBytes: int): Bytes?", "Read one chunk from a pipe endpoint", true, false, true},
+    {"__pipeWrite", "(handle: int, data: Bytes): int", "Write one chunk to a pipe endpoint", true, false, true},
+    {"__pipeClose", "(handle: int): bool", "Close a pipe endpoint", true, false, true},
 };
-#define GEN_SYS_FUNCTION_COUNT 13
+#define GEN_SYS_FUNCTION_COUNT 17
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {

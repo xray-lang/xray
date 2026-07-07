@@ -1229,6 +1229,58 @@ module sys {
     visibility: "internal"
   }
 
+  fn __pipeOpen {
+    signature: "(): Array<int>?"
+    doc: "Create an anonymous pipe and return read/write endpoint tokens"
+    vm: "sys_pipe_open"
+    aot: "xrt_sys_pipe_open"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
+  fn __pipeRead {
+    signature: "(handle: int, maxBytes: int): Bytes?"
+    doc: "Read one chunk from a pipe endpoint"
+    vm: "sys_pipe_read"
+    aot: "xrt_sys_pipe_read"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
+  fn __pipeWrite {
+    signature: "(handle: int, data: Bytes): int"
+    doc: "Write one chunk to a pipe endpoint"
+    vm: "sys_pipe_write"
+    aot: "xrt_sys_pipe_write"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
+  fn __pipeClose {
+    signature: "(handle: int): bool"
+    doc: "Close a pipe endpoint"
+    vm: "sys_pipe_close"
+    aot: "xrt_sys_pipe_close"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
   type_method OsMutex.lock {
     signature: "(): ()"
     receiver: "OsMutex"

@@ -15,7 +15,9 @@
 #include "xrt_method_symbols.h"
 #include "xrt_value.h"
 #include "../shared/xr_array_abi.h"
+#include "../shared/xr_elem_type.h"
 #include "../shared/xr_typed_ops.h"
+#include "../os/os_pipe.h"
 #include "../os/os_thread.h"
 #include <stdatomic.h>
 #include <stdio.h>
@@ -24,6 +26,7 @@
 #define XRT_SYS_PROCESS_KILLED_EXIT_CODE ((unsigned int) 0xE0000001u)
 #else
 #include <errno.h>
+#include <fcntl.h>
 #include <sched.h>
 #include <signal.h>
 #include <sys/types.h>
@@ -90,6 +93,59 @@ typedef struct xrt_sys_array_view {
     XrObjHeader hdr;
     XR_ARRAY_ABI_FIELDS;
 } xrt_sys_array_view_t;
+
+static inline size_t xrt_sys_array_data_bytes_or_abort(int64_t cap, uint8_t elem_size,
+                                                       const char *where) {
+    if (cap < 0)
+        cap = 0;
+    if (elem_size == 0)
+        elem_size = 1;
+    if ((uint64_t) cap > (uint64_t) SIZE_MAX / (uint64_t) elem_size) {
+        fprintf(stderr, "%s: capacity overflow\n", where);
+        abort();
+    }
+    return (size_t) cap * (size_t) elem_size;
+}
+
+static inline XrValue xrt_sys_array_new_typed_uninit(int64_t cap, uint8_t elem_type,
+                                                     const char *where) {
+    if (cap < 4)
+        cap = 4;
+    if (elem_type >= XR_ELEM_COUNT)
+        elem_type = XR_ELEM_ANY;
+    uint8_t elem_size = XR_ELEM_SIZES[elem_type];
+    size_t data_bytes = xrt_sys_array_data_bytes_or_abort(cap, elem_size, where);
+    size_t pad = data_bytes ? (XRT_DATA_ALIGN - 1) : 0;
+    if (data_bytes > SIZE_MAX - sizeof(xrt_sys_array_view_t) - pad) {
+        fprintf(stderr, "%s: allocation size overflow\n", where);
+        abort();
+    }
+
+    size_t total = sizeof(xrt_sys_array_view_t) + data_bytes + pad;
+    xrt_sys_array_view_t *arr = (xrt_sys_array_view_t *) XRT_MALLOC(total);
+    if (XR_UNLIKELY(!arr)) {
+        fprintf(stderr, "%s: out of memory\n", where);
+        abort();
+    }
+    memset(arr, 0, sizeof(*arr));
+    xrt_bump_header_init(&arr->hdr, XR_TARRAY);
+    arr->hdr.extra |= XR_OBJ_AOT_NATIVE;
+    if (!xrt_bump_enabled) {
+        arr->hdr.extra &= (uint16_t) ~(uint16_t) XR_OBJ_STORAGE_BUMP;
+        atomic_store_explicit(&arr->hdr.refcount, 0, memory_order_relaxed);
+    }
+    arr->capacity = cap;
+    arr->data_storage = XR_ARRAY_DATA_INLINE;
+    arr->elem_type = elem_type;
+    arr->elem_size = elem_size;
+    arr->content_version = XR_ARRAY_CONTENT_VERSION_INIT;
+    if (data_bytes) {
+        arr->data = (void *) (((uintptr_t) ((char *) arr + sizeof(xrt_sys_array_view_t)) +
+                               (XRT_DATA_ALIGN - 1)) &
+                              ~(uintptr_t) (XRT_DATA_ALIGN - 1));
+    }
+    return xr_mkptr(arr, XR_TAG_ARRAY);
+}
 
 static inline void xrt_sys_once_trampoline(void) {
     (void) xrt_closure_call0(xrt_sys_once_callback);
@@ -623,6 +679,159 @@ static inline XrValue xrt_sys_process_kill(XrValue id_value, XrValue signal_valu
 #else
     return XR_FROM_BOOL(kill((pid_t) id, (int) sig) == 0);
 #endif
+}
+
+static inline int xrt_sys_pipe_set_inheritable(XrPipeHandle handle, bool inheritable) {
+#if defined(XR_OS_WINDOWS)
+    DWORD flags = inheritable ? HANDLE_FLAG_INHERIT : 0;
+    return SetHandleInformation((HANDLE) (intptr_t) handle, HANDLE_FLAG_INHERIT, flags) ? 0 : -1;
+#else
+    int flags = fcntl((int) handle, F_GETFD);
+    if (flags < 0)
+        return -1;
+    if (inheritable)
+        flags &= ~FD_CLOEXEC;
+    else
+        flags |= FD_CLOEXEC;
+    return fcntl((int) handle, F_SETFD, flags);
+#endif
+}
+
+static inline int xrt_sys_pipe_create(XrPipe *out) {
+    if (!out)
+        return -1;
+    out->read = XR_PIPE_INVALID;
+    out->write = XR_PIPE_INVALID;
+
+#if defined(XR_OS_WINDOWS)
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = NULL;
+    sa.bInheritHandle = FALSE;
+    HANDLE read_handle = NULL;
+    HANDLE write_handle = NULL;
+    if (!CreatePipe(&read_handle, &write_handle, &sa, 0))
+        return -1;
+    out->read = (XrPipeHandle) (intptr_t) read_handle;
+    out->write = (XrPipeHandle) (intptr_t) write_handle;
+    return 0;
+#else
+    int fds[2];
+    if (pipe(fds) != 0)
+        return -1;
+    if (xrt_sys_pipe_set_inheritable((XrPipeHandle) fds[0], false) != 0 ||
+        xrt_sys_pipe_set_inheritable((XrPipeHandle) fds[1], false) != 0) {
+        close(fds[0]);
+        close(fds[1]);
+        return -1;
+    }
+    out->read = (XrPipeHandle) fds[0];
+    out->write = (XrPipeHandle) fds[1];
+    return 0;
+#endif
+}
+
+static inline int xrt_sys_pipe_close_handle(XrPipeHandle handle) {
+    if (handle == XR_PIPE_INVALID)
+        return 0;
+#if defined(XR_OS_WINDOWS)
+    return CloseHandle((HANDLE) (intptr_t) handle) ? 0 : -1;
+#else
+    return close((int) handle) == 0 ? 0 : -1;
+#endif
+}
+
+static inline int64_t xrt_sys_pipe_read_chunk(XrPipeHandle handle, void *buf, size_t len) {
+    if (handle == XR_PIPE_INVALID || (!buf && len > 0))
+        return -1;
+#if defined(XR_OS_WINDOWS)
+    DWORD chunk = len > (size_t) UINT_MAX ? (DWORD) UINT_MAX : (DWORD) len;
+    DWORD read_bytes = 0;
+    if (!ReadFile((HANDLE) (intptr_t) handle, buf, chunk, &read_bytes, NULL))
+        return GetLastError() == ERROR_BROKEN_PIPE ? 0 : -1;
+    return (int64_t) read_bytes;
+#else
+    ssize_t n;
+    do {
+        n = read((int) handle, buf, len);
+    } while (n < 0 && errno == EINTR);
+    return n < 0 ? -1 : (int64_t) n;
+#endif
+}
+
+static inline int64_t xrt_sys_pipe_write_chunk(XrPipeHandle handle, const void *buf, size_t len) {
+    if (handle == XR_PIPE_INVALID || (!buf && len > 0))
+        return -1;
+#if defined(XR_OS_WINDOWS)
+    DWORD chunk = len > (size_t) UINT_MAX ? (DWORD) UINT_MAX : (DWORD) len;
+    DWORD written = 0;
+    if (!WriteFile((HANDLE) (intptr_t) handle, buf, chunk, &written, NULL))
+        return -1;
+    return (int64_t) written;
+#else
+    ssize_t n;
+    do {
+        n = write((int) handle, buf, len);
+    } while (n < 0 && errno == EINTR);
+    return n < 0 ? -1 : (int64_t) n;
+#endif
+}
+
+static inline XrValue xrt_sys_pipe_open(void) {
+    XrPipe pipe;
+    if (xrt_sys_pipe_create(&pipe) != 0)
+        return XR_NULL_VAL;
+
+    XrValue ends_value = xrt_sys_array_new_typed_uninit(2, XR_ELEM_I64, "xrt_sys_pipe_open");
+    xrt_sys_array_view_t *ends = (xrt_sys_array_view_t *) ends_value.ptr;
+    if (!ends) {
+        xrt_sys_pipe_close_handle(pipe.read);
+        xrt_sys_pipe_close_handle(pipe.write);
+        return XR_NULL_VAL;
+    }
+    ((int64_t *) ends->data)[0] = (int64_t) pipe.read;
+    ((int64_t *) ends->data)[1] = (int64_t) pipe.write;
+    ends->length = 2;
+    return ends_value;
+}
+
+static inline XrValue xrt_sys_pipe_read(XrValue handle_value, XrValue max_bytes_value) {
+    int64_t max_bytes = xrt_sys_int_arg(max_bytes_value);
+    if (max_bytes < 0 || max_bytes > INT32_MAX)
+        return XR_NULL_VAL;
+
+    XrValue bytes_value =
+        xrt_sys_array_new_typed_uninit(max_bytes, XR_ELEM_U8, "xrt_sys_pipe_read");
+    xrt_sys_array_view_t *bytes = (xrt_sys_array_view_t *) bytes_value.ptr;
+    if (!bytes)
+        return XR_NULL_VAL;
+
+    int64_t n = xrt_sys_pipe_read_chunk((XrPipeHandle) xrt_sys_int_arg(handle_value), bytes->data,
+                                        (size_t) max_bytes);
+    if (n < 0) {
+        xrt_release(bytes_value);
+        return XR_NULL_VAL;
+    }
+    bytes->length = n;
+    return bytes_value;
+}
+
+static inline XrValue xrt_sys_pipe_write(XrValue handle_value, XrValue data_value) {
+    if (!XR_IS_ARRAY(data_value) || !data_value.ptr)
+        return XR_FROM_INT(-1);
+
+    xrt_sys_array_view_t *bytes = (xrt_sys_array_view_t *) data_value.ptr;
+    if (bytes->elem_type != XR_ELEM_U8)
+        return XR_FROM_INT(-1);
+
+    int64_t n = xrt_sys_pipe_write_chunk((XrPipeHandle) xrt_sys_int_arg(handle_value), bytes->data,
+                                         (size_t) bytes->length);
+    return XR_FROM_INT(n);
+}
+
+static inline XrValue xrt_sys_pipe_close(XrValue handle_value) {
+    return XR_FROM_BOOL(xrt_sys_pipe_close_handle((XrPipeHandle) xrt_sys_int_arg(handle_value)) ==
+                        0);
 }
 
 static inline void xrt_sys_mutex_destroy_builtin(void *obj) {

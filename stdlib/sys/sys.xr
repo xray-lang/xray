@@ -1,9 +1,9 @@
 // sys process handles.
 //
 // The C layer exposes only private double-underscore helpers. This script
-// layer keeps the public surface typed and small: a Process lifecycle handle
-// plus portable signal names. Pipes, cwd/env overrides, and stdio capture stay
-// out until a general process-options design lands.
+// layer keeps the public surface typed and small: Process, Pipe, and portable
+// signal names. cwd/env overrides and stdio redirection stay out until a
+// general process-options design lands.
 
 enum Signal {
     TERM,
@@ -55,4 +55,54 @@ class Process {
     }
 }
 
-export { Process, Signal }
+class Pipe {
+    _readHandle: int
+    _writeHandle: int
+    _readOpen: bool
+    _writeOpen: bool
+
+    constructor(readHandle: int, writeHandle: int) {
+        this._readHandle = readHandle
+        this._writeHandle = writeHandle
+        this._readOpen = readHandle >= 0
+        this._writeOpen = writeHandle >= 0
+    }
+
+    read(maxBytes: int = 8192) -> Bytes? {
+        if (!this._readOpen || maxBytes < 0) { return null }
+        return __pipeRead(this._readHandle, maxBytes)
+    }
+
+    write(data: Bytes) -> int {
+        if (!this._writeOpen) { return -1 }
+        return __pipeWrite(this._writeHandle, data)
+    }
+
+    closeRead() -> bool {
+        if (!this._readOpen) { return true }
+        var ok = __pipeClose(this._readHandle)
+        this._readOpen = false
+        return ok
+    }
+
+    closeWrite() -> bool {
+        if (!this._writeOpen) { return true }
+        var ok = __pipeClose(this._writeHandle)
+        this._writeOpen = false
+        return ok
+    }
+
+    close() -> bool {
+        var r = this.closeRead()
+        var w = this.closeWrite()
+        return r && w
+    }
+
+    static open() -> Pipe? {
+        var ends = __pipeOpen()
+        if (ends == null || ends!.length < 2) { return null }
+        return Pipe(ends![0], ends![1])
+    }
+}
+
+export { Process, Signal, Pipe }

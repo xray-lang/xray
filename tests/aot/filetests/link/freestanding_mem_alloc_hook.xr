@@ -2,6 +2,19 @@ import mem
 
 @c_export("xray_alloc_hook_score")
 fn xray_alloc_hook_score(n: int) -> int {
-    var p = mem.allocZeroed(8)
-    return n + p.length
+    var a = mem.alloc(16)
+    var s: ByteSpan = a.asSpan()
+    s[0] = 7
+
+    var z = mem.allocZeroed(8)
+    var zs: ByteSpan = z.asSpan()
+
+    var aligned = mem.allocAligned(32, 16)
+    if (!aligned.resize(64)) {
+        return -1
+    }
+    var p = unsafe { aligned.ptrUnchecked() }
+    mem.set(p, 3, 64)
+
+    return n + a.length() + z.length() + aligned.length() + int(s[0]) + int(zs[0])
 }

@@ -384,6 +384,19 @@ static uint32_t producer_find_interface_method_signature(XgProducer *p, XgInterf
     return producer_find_interface_method_signature_depth(p, interface_id, name_id, 0);
 }
 
+static const XgInterfaceMethodSummary *
+producer_find_interface_method_summary(const XgProducer *p, XgInterfaceId interface_id,
+                                       uint32_t name_id) {
+    if (!p || !p->evidence || interface_id == XG_NO_ID || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < p->evidence->ninterface_methods; i++) {
+        const XgInterfaceMethodSummary *method = &p->evidence->interface_methods[i];
+        if (method->owner_interface_id == interface_id && method->name_id == name_id)
+            return method;
+    }
+    return NULL;
+}
+
 static bool producer_reserve_bodies(XgProducer *p, uint32_t needed) {
     uint32_t new_cap;
     XgPendingBody *rows;
@@ -819,12 +832,18 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         bc->capability_bits |=
             body_capabilities_for_builtin_member_constructor(&callee->as.member_access);
         if (receiver_interface != XG_NO_ID) {
+            const XgInterfaceMethodSummary *interface_method =
+                producer_find_interface_method_summary(bc->producer, receiver_interface,
+                                                       method_name_id);
             row.kind = XG_CALL_INTERFACE;
             row.receiver_static_interface_id = receiver_interface;
-            row.method_id = (XgMethodId) method_name_id;
+            row.method_id = interface_method ? interface_method->interface_method_id
+                                             : (XgMethodId) method_name_id;
             row.method_name_id = method_name_id;
-            row.method_signature_key = producer_find_interface_method_signature(
-                bc->producer, receiver_interface, method_name_id);
+            row.method_signature_key = interface_method
+                                           ? interface_method->signature_key
+                                           : producer_find_interface_method_signature(
+                                                 bc->producer, receiver_interface, method_name_id);
         } else {
             XgClassId receiver_class = body_resolve_expr_class(bc, callee->as.member_access.object);
             XgMethodSummary *method = producer_find_method_by_name_in_hierarchy(
@@ -1477,15 +1496,33 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
 static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNode *node) {
     const InterfaceDeclNode *iface = &node->as.interface_decl;
     XgDeclSummary decl;
+    XgInterfaceId interface_id = (XgInterfaceId) hash_name32(iface->name);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     decl.kind = XG_DECL_INTERFACE;
-    decl.name_id = hash_name32(iface->name);
+    decl.name_id = interface_id;
     decl.signature_key = (uint32_t) iface->method_count;
     decl.source_span_id = (uint32_t) node->line;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
+    for (int i = 0; i < iface->method_count; i++) {
+        const AstNode *method_node = iface->methods ? iface->methods[i] : NULL;
+        const InterfaceMethodNode *method;
+        XgInterfaceMethodSummary summary;
+        if (!method_node || method_node->type != AST_INTERFACE_METHOD)
+            continue;
+        method = &method_node->as.interface_method;
+        memset(&summary, 0, sizeof(summary));
+        summary.interface_method_id = (XgInterfaceMethodId) (p->evidence->ninterface_methods + 1);
+        summary.owner_interface_id = interface_id;
+        summary.name_id = hash_name32(method->name);
+        summary.signature_key = hash_interface_method_signature(method);
+        summary.ordinal = (uint32_t) i;
+        summary.source_span_id = (uint32_t) method_node->line;
+        if (!xg_global_evidence_add_interface_method(p->evidence, &summary))
+            return false;
+    }
     return producer_register_interface(p, iface->name, iface);
 }
 
@@ -1619,7 +1656,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
         return false;
     memset(&key, 0, sizeof(key));
     key.source_hash = source_hash_for_graph(graph);
-    key.compiler_semver_hash = UINT64_C(0x0000017100000001);
+    key.compiler_semver_hash = UINT64_C(0x0000017100000002);
     key.profile_hash = fold_u64(XR_FNV64_OFFSET_BASIS, profile);
     key.imported_summary_hash = import_hash_for_graph(graph);
     key.module_id = (XgModuleId) (graph->entry_index >= 0 ? graph->entry_index + 1 : 0);

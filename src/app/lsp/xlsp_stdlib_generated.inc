@@ -442,8 +442,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"pinToCpu", XLSP_SYM_FUNCTION, "fn(cpu: int): bool", "Best-effort pin of the current OS thread to a CPU index", NULL, 0},
     {"Process", XLSP_SYM_CLASS, "type Process", "Class type", NULL, 0},
     {"Signal", XLSP_SYM_CLASS, "type Signal", "Enum type", NULL, 0},
+    {"Pipe", XLSP_SYM_CLASS, "type Pipe", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 11
+#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 12
 
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {

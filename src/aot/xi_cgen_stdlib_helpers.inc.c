@@ -311,7 +311,7 @@ static bool xicgen_emit_stdlib_import_call(XiCgenCtx *ctx, FILE *out, const XiFu
     const XiValue *callee = cg_unwrap_identity_value(v->args[0]);
     const XiImportRef *ref = (callee && callee->op == XI_IMPORT_REF && callee->aux)
                                  ? (const XiImportRef *) callee->aux
-                                 : NULL;
+                                 : cg_import_ref_for_value(ctx, f, callee);
     if (!ref || !ref->module_path || !ref->member_name)
         return false;
 

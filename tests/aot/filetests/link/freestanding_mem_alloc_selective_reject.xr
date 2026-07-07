@@ -1,8 +1,0 @@
-import mem
-import { allocZeroed } from "mem"
-
-@c_export("xray_bad_alloc_selective")
-fn xray_bad_alloc_selective(n: int) -> int {
-    var b = allocZeroed(n)
-    return b.length
-}
