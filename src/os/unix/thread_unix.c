@@ -127,6 +127,24 @@ int xr_thread_pin_to_cpu(unsigned int cpu_index) {
 #endif
 }
 
+// === Thread-local key/value storage ===
+
+bool xr_thread_local_key_create(xr_thread_local_key_t *key) {
+    return key && pthread_key_create(key, NULL) == 0;
+}
+
+void xr_thread_local_key_delete(xr_thread_local_key_t key) {
+    pthread_key_delete(key);
+}
+
+void *xr_thread_local_get(xr_thread_local_key_t key) {
+    return pthread_getspecific(key);
+}
+
+bool xr_thread_local_set(xr_thread_local_key_t key, void *value) {
+    return pthread_setspecific(key, value) == 0;
+}
+
 // === Mutex ===
 
 void xr_mutex_init(xr_mutex_t *m) {
