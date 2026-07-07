@@ -41,7 +41,8 @@ struct XrAggregateLayout;
 // Virtual method slot for static (compile-time) devirtualization.
 // Populated by the analyzer (Pass 1.5); consumed by the xi_opt_devirt pass.
 typedef struct XaMethodSlot {
-    const char *name;    // Method name
+    const char *name;    // Method name for diagnostics/dumps only
+    int32_t symbol_id;   // Runtime symbol-table ID used by dispatch/devirt plans
     XaSymbol *symbol;    // Method symbol (analyzer-owned)
     bool is_overridden;  // Overridden by a subclass
     bool is_final;       // No subclass overrides (safe for direct call)

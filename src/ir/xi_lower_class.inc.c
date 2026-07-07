@@ -426,6 +426,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     XiClassData *data = (XiClassData *) xi_func_arena_alloc(l->func, sizeof(XiClassData));
     XR_DCHECK(data != NULL, "class data alloc failed");
     data->ast = node;
+    data->class_info = NULL;
     data->class_name = arena_strdup(l->func, cd->name);
     data->super_name = arena_strdup(l->func, cd->super_name);
     data->generic_origin_name = arena_strdup(l->func, cd->generic_origin_name);
@@ -462,9 +463,11 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
             cls_sym = xa_analyzer_lookup_deep(l->analyzer, cd->name);
         if (cls_sym) {
             XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, cls_sym);
-            if (links && links->class_info && links->class_info->struct_layout)
-                data->struct_layout = links->class_info->struct_layout;
-            if (links && links->class_info && !links->class_info->struct_layout)
+            XrClassInfo *class_info = links ? links->class_info : NULL;
+            data->class_info = class_info;
+            if (class_info && class_info->struct_layout)
+                data->struct_layout = class_info->struct_layout;
+            if (class_info && !class_info->struct_layout)
                 data->instance_layout =
                     class_make_native_instance_layout(l, cd, &data->inherited_field_count);
             if (links && links->type && links->type->is_cycle_candidate)
@@ -488,6 +491,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
                 if (m->is_static_constructor || m->is_static)
                     continue;
                 data->methods[mi].name = arena_strdup(l->func, m->name);
+                data->methods[mi].symbol_id = xi_lower_method_symbol(l, m->name);
                 data->methods[mi].is_constructor =
                     m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
                 data->methods[mi].is_static = false;
@@ -496,6 +500,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
             }
             if (synth_ctor && mi < total) {
                 data->methods[mi].name = arena_strdup(l->func, "constructor");
+                data->methods[mi].symbol_id = xi_lower_method_symbol(l, "constructor");
                 data->methods[mi].is_constructor = true;
                 data->methods[mi].is_static = false;
                 data->methods[mi].is_static_constructor = false;
@@ -508,6 +513,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
                 if (m->is_static_constructor || !m->is_static)
                     continue;
                 data->methods[mi].name = arena_strdup(l->func, m->name);
+                data->methods[mi].symbol_id = xi_lower_method_symbol(l, m->name);
                 data->methods[mi].is_constructor =
                     m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
                 data->methods[mi].is_static = true;

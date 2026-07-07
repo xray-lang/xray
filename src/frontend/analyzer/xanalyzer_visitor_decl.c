@@ -46,6 +46,7 @@
 #include "xtype_ref_resolve.h"
 #include "../parser/xtype_ref.h"
 #include "../../base/xchecks.h"
+#include "../../runtime/xisolate_api.h"
 #include "../../runtime/value/xstruct_layout.h"
 
 static int xa_fixed_array_elem_native_lane(XrType *elem) {
@@ -3615,6 +3616,14 @@ static void validate_method_override_graph(XaAnalyzer *analyzer, XrClassInfo *in
     }
 }
 
+static int32_t xa_method_runtime_symbol(XaAnalyzer *analyzer, const char *name) {
+    if (!analyzer || !analyzer->isolate || !name)
+        return 0;
+    XrSymbolTable *table = (XrSymbolTable *) xr_isolate_get_symbol_table(analyzer->isolate);
+    SymbolId id = xr_symbol_register_in_table(table, name);
+    return id == SYMBOL_INVALID ? 0 : (int32_t) id;
+}
+
 // Build virtual method table for a class (inherits base vtable + own methods)
 static void build_class_vtable(XaAnalyzer *analyzer, XrClassInfo *info) {
     if (!info || info->vtable)
@@ -3648,16 +3657,18 @@ static void build_class_vtable(XaAnalyzer *analyzer, XrClassInfo *info) {
         XaSymbol *method = info->methods[m];
         if (!method || !method->name)
             continue;
+        int32_t method_symbol = xa_method_runtime_symbol(analyzer, method->name);
+        if (method_symbol <= 0)
+            continue;
 
         // Check if this overrides a base method
         bool found = false;
         for (int v = 0; v < vt_count; v++) {
-            if (vtable[v].name && strcmp(vtable[v].name, method->name) == 0) {
+            if (vtable[v].symbol_id == method_symbol) {
                 // Override: mark base method as overridden
                 if (info->base && info->base->vtable) {
                     for (int bv = 0; bv < info->base->vtable_size; bv++) {
-                        if (info->base->vtable[bv].name &&
-                            strcmp(info->base->vtable[bv].name, method->name) == 0) {
+                        if (info->base->vtable[bv].symbol_id == method_symbol) {
                             info->base->vtable[bv].is_overridden = true;
                             info->base->vtable[bv].is_final = false;
                             break;
@@ -3676,6 +3687,7 @@ static void build_class_vtable(XaAnalyzer *analyzer, XrClassInfo *info) {
         if (!found) {
             // New method, add to vtable
             vtable[vt_count].name = method->name;
+            vtable[vt_count].symbol_id = method_symbol;
             vtable[vt_count].symbol = method;
             vtable[vt_count].is_overridden = false;
             vtable[vt_count].is_final = true;

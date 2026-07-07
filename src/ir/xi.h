@@ -183,7 +183,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_JSON_SET_F    —                    field index
  *  XI_JSON_DECODE   char** field_names   field count
  *  XI_CALL          —                    bits[0:7]=flags, bits[8:15]=nresults
- *  XI_CALL_METHOD   method name (char*)  (global_symbol_id << 1) | is_super
+ *  XI_CALL_METHOD   method name (debug)  (global_symbol_id << 1) | is_super
  *  XI_CALL_METHOD_DIRECT method name      method index
  *  XI_CALL_BUILTIN  —                    builtin_id
  *  XI_EXTRACT       —                    obsolete; verifier rejects it
@@ -559,6 +559,7 @@ typedef struct XiReexportEntry {
  * All strings are arena-allocated (survive AST destruction). */
 typedef struct XiClassMethod {
     const char *name;           /* method name (arena copy) */
+    int32_t symbol_id;          /* runtime symbol-table ID for dispatch matching */
     bool is_constructor;        /* true for constructor or "constructor" */
     bool is_static;             /* true for static methods */
     bool is_static_constructor; /* true for static constructor */
@@ -567,9 +568,10 @@ typedef struct XiClassMethod {
 /* Lowerer → emitter bridge for XI_CLASS_CREATE.
  * All data is arena-allocated; does NOT depend on AST after lowering. */
 typedef struct XiClassData {
-    struct AstNode *ast;    /* AST_CLASS_DECL node (temporary, may be NULL after lowering) */
-    const char *class_name; /* arena copy of class name */
-    const char *super_name; /* arena copy of parent class name (NULL if none) */
+    struct AstNode *ast; /* AST_CLASS_DECL node (temporary, may be NULL after lowering) */
+    struct XrClassInfo *class_info; /* analyzer class identity; names are diagnostic only */
+    const char *class_name;         /* arena copy of class name */
+    const char *super_name;         /* arena copy of parent class name (NULL if none) */
     const char
         *generic_origin_name; /* Original generic class name (e.g. "Box"), NULL if not mono */
     const char *display_name; /* User-visible name (e.g. "Box"), NULL = same as class_name */

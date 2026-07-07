@@ -14,10 +14,17 @@
 
 /* ========== Helpers ========== */
 
-static XaMethodSlot make_slot(const char *name) {
+enum {
+    SYM_RUN = 12,
+    SYM_DRAW = 13,
+    SYM_SPECIAL = 14,
+};
+
+static XaMethodSlot make_slot(const char *name, int32_t symbol_id) {
     XaMethodSlot s;
     memset(&s, 0, sizeof(s));
     s.name = name;
+    s.symbol_id = symbol_id;
     return s;
 }
 
@@ -55,6 +62,7 @@ static void test_single_class_is_leaf(void) {
 static void test_parent_child_link(void) {
     XrClassInfo base = make_info("Animal", NULL);
     XrClassInfo child = make_info("Dog", "Animal");
+    child.base = &base;
     XrClassInfo *infos[] = {&base, &child};
 
     XaClassHierarchy cha;
@@ -81,6 +89,9 @@ static void test_diamond_hierarchy(void) {
     XrClassInfo a = make_info("A", "Base");
     XrClassInfo b = make_info("B", "Base");
     XrClassInfo c_cls = make_info("C", "A");
+    a.base = &base;
+    b.base = &base;
+    c_cls.base = &a;
     XrClassInfo *infos[] = {&base, &a, &b, &c_cls};
 
     XaClassHierarchy cha;
@@ -98,13 +109,14 @@ static void test_diamond_hierarchy(void) {
 
 static void test_single_implementor_found(void) {
     XaMethodSlot base_slots[1];
-    base_slots[0] = make_slot("run");
+    base_slots[0] = make_slot("run", SYM_RUN);
 
     XrClassInfo base = make_info("Shape", NULL);
     base.vtable = base_slots;
     base.vtable_size = 1;
 
     XrClassInfo child = make_info("Circle", "Shape");
+    child.base = &base;
 
     XrClassInfo *infos[] = {&base, &child};
 
@@ -112,23 +124,24 @@ static void test_single_implementor_found(void) {
     bool ok = xa_cha_build(&cha, infos, 2);
     assert(ok);
 
-    const XrClassInfo *impl = xa_cha_single_implementor(&cha, &base, "run");
+    const XrClassInfo *impl = xa_cha_single_implementor(&cha, &base, SYM_RUN);
     assert(impl == &base);
     xa_cha_free(&cha);
 }
 
 static void test_single_implementor_ambiguous(void) {
     XaMethodSlot base_slots[1];
-    base_slots[0] = make_slot("draw");
+    base_slots[0] = make_slot("draw", SYM_DRAW);
 
     XaMethodSlot child_slots[1];
-    child_slots[0] = make_slot("draw");
+    child_slots[0] = make_slot("draw", SYM_DRAW);
 
     XrClassInfo base = make_info("Shape", NULL);
     base.vtable = base_slots;
     base.vtable_size = 1;
 
     XrClassInfo child = make_info("Circle", "Shape");
+    child.base = &base;
     child.vtable = child_slots;
     child.vtable_size = 1;
 
@@ -138,7 +151,7 @@ static void test_single_implementor_ambiguous(void) {
     bool ok = xa_cha_build(&cha, infos, 2);
     assert(ok);
 
-    const XrClassInfo *impl = xa_cha_single_implementor(&cha, &base, "draw");
+    const XrClassInfo *impl = xa_cha_single_implementor(&cha, &base, SYM_DRAW);
     assert(impl == NULL);
     xa_cha_free(&cha);
 }
@@ -184,6 +197,9 @@ static void test_deep_hierarchy(void) {
     XrClassInfo b = make_info("B", "A");
     XrClassInfo c_cls = make_info("C", "B");
     XrClassInfo d = make_info("D", "C");
+    b.base = &a;
+    c_cls.base = &b;
+    d.base = &c_cls;
     XrClassInfo *infos[] = {&a, &b, &c_cls, &d};
 
     XaClassHierarchy cha;
@@ -198,11 +214,13 @@ static void test_deep_hierarchy(void) {
 
 static void test_method_only_in_grandchild(void) {
     XaMethodSlot child_slots[1];
-    child_slots[0] = make_slot("special");
+    child_slots[0] = make_slot("special", SYM_SPECIAL);
 
     XrClassInfo base = make_info("Base", NULL);
     XrClassInfo mid = make_info("Mid", "Base");
     XrClassInfo leaf = make_info("Leaf", "Mid");
+    mid.base = &base;
+    leaf.base = &mid;
     leaf.vtable = child_slots;
     leaf.vtable_size = 1;
 
@@ -212,7 +230,7 @@ static void test_method_only_in_grandchild(void) {
     bool ok = xa_cha_build(&cha, infos, 3);
     assert(ok);
 
-    const XrClassInfo *impl = xa_cha_single_implementor(&cha, &base, "special");
+    const XrClassInfo *impl = xa_cha_single_implementor(&cha, &base, SYM_SPECIAL);
     assert(impl == &leaf);
     xa_cha_free(&cha);
 }
@@ -220,7 +238,7 @@ static void test_method_only_in_grandchild(void) {
 static void test_null_safety(void) {
     assert(!xa_cha_build(NULL, NULL, 0));
     assert(!xa_cha_is_leaf(NULL, NULL));
-    assert(xa_cha_single_implementor(NULL, NULL, NULL) == NULL);
+    assert(xa_cha_single_implementor(NULL, NULL, 0) == NULL);
     assert(xa_cha_subclass_count(NULL, NULL) == 0);
     assert(xa_cha_find_node(NULL, NULL) == NULL);
     xa_cha_invalidate(NULL);

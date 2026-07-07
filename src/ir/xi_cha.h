@@ -21,8 +21,12 @@
 XR_FUNC bool xi_cha_build_for_func(const XiFunc *f, XaClassHierarchy *out,
                                    XrClassInfo **out_copies);
 
-/* Find the CHA snapshot node for an original class info (match by name). */
+/* Find the CHA snapshot node for an original class info. */
 XR_FUNC const XrClassInfo *xi_cha_snapshot_info(const XaClassHierarchy *cha,
                                                 const XrClassInfo *info);
+
+/* Recover the original class info behind a CHA snapshot node. */
+XR_FUNC const XrClassInfo *xi_cha_origin_info(const XaClassHierarchy *cha,
+                                              const XrClassInfo *snapshot_info);
 
 #endif /* XI_CHA_H */

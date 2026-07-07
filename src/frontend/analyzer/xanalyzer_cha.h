@@ -38,6 +38,7 @@
 /* CHA node: one per class in the hierarchy. */
 typedef struct XaChaNode {
     XrClassInfo *info;
+    const XrClassInfo *origin_info;
     struct XaChaNode *parent;
     struct XaChaNode **children;
     uint32_t nchildren;
@@ -65,10 +66,10 @@ XR_FUNC void xa_cha_free(XaClassHierarchy *cha);
 XR_FUNC bool xa_cha_is_leaf(const XaClassHierarchy *cha, const XrClassInfo *info);
 
 /* Query: does the class have exactly one direct implementor of
- * the given method name?  Returns the implementor class or NULL. */
+ * the given runtime method symbol?  Returns the implementor class or NULL. */
 XR_FUNC const XrClassInfo *xa_cha_single_implementor(const XaClassHierarchy *cha,
                                                      const XrClassInfo *info,
-                                                     const char *method_name);
+                                                     int32_t method_symbol);
 
 /* Query: how many subclasses does this class have (recursively)? */
 XR_FUNC uint32_t xa_cha_subclass_count(const XaClassHierarchy *cha, const XrClassInfo *info);
