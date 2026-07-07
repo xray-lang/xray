@@ -22,3 +22,16 @@ if (split != null) {
     print(false)
     print(false)
 }
+
+var polled = sys.Process.spawn("sh", ["-c", "exit 0"])
+if (polled != null) {
+    while (true) {
+        if (polled!.tryWait() != null) {
+            break
+        }
+        sys.sleepMs(1)
+    }
+    print(true)
+} else {
+    print(false)
+}

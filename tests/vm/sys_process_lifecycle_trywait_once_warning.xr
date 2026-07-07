@@ -1,0 +1,6 @@
+import sys
+
+var p = sys.Process.spawn("sh", ["-c", "exit 0"])
+if (p != null) {
+    p!.tryWait()
+}

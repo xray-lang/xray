@@ -70,9 +70,12 @@ OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_ok.xr"
 PROCESS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_warning.xr"
 PIPE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_warning.xr"
 PIPE_HALF_CLOSE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_half_close_warning.xr"
+PROCESS_TRYWAIT_ONCE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_trywait_once_warning.xr"
 
-expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue'
+expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
 expect_warning "process_lifecycle_warning" "$PROCESS_WARNING_SRC" "" \
+    "Process handle 'p' from sys.Process.spawn is not waited before leaving scope"
+expect_warning "process_lifecycle_trywait_once_warning" "$PROCESS_TRYWAIT_ONCE_WARNING_SRC" "" \
     "Process handle 'p' from sys.Process.spawn is not waited before leaving scope"
 expect_warning "pipe_lifecycle_warning" "$PIPE_WARNING_SRC" "pipe-open" \
     "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
