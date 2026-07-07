@@ -1,0 +1,13 @@
+import { Semaphore } from sync
+
+fn holdBoth(a: Semaphore, b: Semaphore) -> int {
+    a.acquire()
+    b.acquire()
+    defer { b.release() }
+    return 7
+}
+
+shared a = Semaphore(1)
+shared b = Semaphore(1)
+print(holdBoth(a, b))
+print(a.release())
