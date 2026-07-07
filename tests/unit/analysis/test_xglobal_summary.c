@@ -1559,6 +1559,120 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
+    XgBuildKey key = {.source_hash = 0x71,
+                      .compiler_semver_hash = 0x72,
+                      .profile_hash = 0x73,
+                      .imported_summary_hash = 0x74,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary decl = {.module_id = 1,
+                          .decl_id = 1,
+                          .kind = XG_DECL_FUNC,
+                          .name_id = 11,
+                          .signature_key = 22,
+                          .source_span_id = 3};
+    XgBodySummary body = {.func_id = 1,
+                          .module_id = 1,
+                          .owner_decl_id = 1,
+                          .name_id = 11,
+                          .signature_key = 22,
+                          .source_span_id = 3,
+                          .kind = XG_BODY_FUNCTION,
+                          .body_hash = 0x7171};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 1,
+                              .source_span_id = 4,
+                              .body_ordinal = 0,
+                              .kind = XG_CALL_DIRECT_FUNC,
+                              .static_target_func_id = 1};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    char err[256];
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    XgGlobalEvidence missing_id_ev;
+    XgBuildKey missing_id_key = key;
+    XgCallsiteSummary missing_id_call = call;
+    missing_id_key.source_hash = 0x75;
+    missing_id_call.callsite_id = XG_NO_ID;
+    xg_global_evidence_init(&missing_id_ev, missing_id_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&missing_id_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&missing_id_ev, &body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&missing_id_ev, &missing_id_call));
+
+    XaotBundle missing_id_bundle;
+    memset(&missing_id_bundle, 0, sizeof(missing_id_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&missing_id_bundle, &missing_id_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    missing_id_bundle.modules = modules;
+    missing_id_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&missing_id_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&missing_id_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence callsite has no id"));
+    xaot_bundle_free(&missing_id_bundle);
+    xg_global_evidence_free(&missing_id_ev);
+
+    XgGlobalEvidence duplicate_id_ev;
+    XgBuildKey duplicate_id_key = key;
+    XgCallsiteSummary duplicate_calls[2] = {call, call};
+    XgBodySummary duplicate_body = body;
+    duplicate_id_key.source_hash = 0x76;
+    duplicate_body.callsite_start = 1;
+    duplicate_body.callsite_count = 1;
+    xg_global_evidence_init(&duplicate_id_ev, duplicate_id_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&duplicate_id_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&duplicate_id_ev, &duplicate_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&duplicate_id_ev, &duplicate_calls[0]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&duplicate_id_ev, &duplicate_calls[1]));
+
+    XaotBundle duplicate_id_bundle;
+    memset(&duplicate_id_bundle, 0, sizeof(duplicate_id_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&duplicate_id_bundle, &duplicate_id_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    duplicate_id_bundle.modules = modules;
+    duplicate_id_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&duplicate_id_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&duplicate_id_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence callsite id is duplicated"));
+    xaot_bundle_free(&duplicate_id_bundle);
+    xg_global_evidence_free(&duplicate_id_ev);
+
+    XgGlobalEvidence range_hole_ev;
+    XgBuildKey range_hole_key = key;
+    XgBodySummary range_hole_body = body;
+    range_hole_key.source_hash = 0x77;
+    range_hole_body.callsite_start = 1;
+    range_hole_body.callsite_count = 2;
+    xg_global_evidence_init(&range_hole_ev, range_hole_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&range_hole_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&range_hole_ev, &range_hole_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&range_hole_ev, &call));
+
+    XaotBundle range_hole_bundle;
+    memset(&range_hole_bundle, 0, sizeof(range_hole_bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&range_hole_bundle, &range_hole_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    range_hole_bundle.modules = modules;
+    range_hole_bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&range_hole_bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&range_hole_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence body callsite range is stale"));
+    xaot_bundle_free(&range_hole_bundle);
+    xg_global_evidence_free(&range_hole_ev);
+}
+
 TEST(global_evidence_verifier_rederives_method_body_signature) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x51,
@@ -2566,6 +2680,7 @@ RUN_TEST(global_evidence_verifier_rederives_method_override_graph);
 RUN_TEST(global_evidence_verifier_rederives_interface_implementor_set);
 RUN_TEST(global_evidence_verifier_rederives_profile_actions);
 RUN_TEST(global_evidence_verifier_rederives_body_callsite_ranges);
+RUN_TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows);
 RUN_TEST(global_evidence_verifier_rederives_method_body_signature);
 RUN_TEST(global_evidence_verifier_rejects_stale_body_identity_rows);
 RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
