@@ -453,7 +453,7 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     XgCallsiteSummary call = {.callsite_id = 1,
                               .owner_func_id = 9,
                               .source_span_id = 42,
-                              .body_ordinal = 3,
+                              .body_ordinal = 0,
                               .kind = XG_CALL_METHOD,
                               .receiver_static_class_id = 1,
                               .method_id = 1,
@@ -461,6 +461,17 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                               .method_signature_key = 701,
                               .arg_type_key_start = 25,
                               .arg_count = 1};
+    XgBodySummary body = {.func_id = 9,
+                          .module_id = 1,
+                          .owner_decl_id = 9,
+                          .owner_class_id = XG_NO_ID,
+                          .owner_method_id = XG_NO_ID,
+                          .name_id = 9,
+                          .source_span_id = 41,
+                          .kind = XG_BODY_FUNCTION,
+                          .body_hash = 0x999,
+                          .callsite_start = 1,
+                          .callsite_count = 1};
     XiFunc init_func;
     XiFunc draw_func;
     XiFunc *children[1];
@@ -498,6 +509,7 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
     ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
 
     XaotBundle good;
@@ -862,11 +874,23 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     };
     XgCallsiteSummary call = {.callsite_id = 1,
                               .owner_func_id = 9,
+                              .body_ordinal = 0,
                               .kind = XG_CALL_INTERFACE,
                               .receiver_static_interface_id = 77,
                               .method_id = 700,
                               .method_name_id = 700,
                               .method_signature_key = 701};
+    XgBodySummary body = {.func_id = 9,
+                          .module_id = 1,
+                          .owner_decl_id = 9,
+                          .owner_class_id = XG_NO_ID,
+                          .owner_method_id = XG_NO_ID,
+                          .name_id = 9,
+                          .source_span_id = 1,
+                          .kind = XG_BODY_FUNCTION,
+                          .body_hash = 0x999,
+                          .callsite_start = 1,
+                          .callsite_count = 1};
     XiFunc init_func;
     XiModule module;
     XiModule *modules[1];
@@ -881,6 +905,7 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &rect_draw));
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impls[0]));
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impls[1]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
 
     memset(&init_func, 0, sizeof(init_func));
@@ -1461,6 +1486,23 @@ TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
     ASSERT_TRUE(!xaot_verify_bundle(&stale_ordinal, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence body callsite ordinal does not re-derive"));
     xaot_bundle_free(&stale_ordinal);
+
+    XaotBundle orphan_callsite;
+    ev.callsites[0].owner_func_id = 1;
+    ev.callsites[0].body_ordinal = 0;
+    ev.bodies[0].callsite_count = 0;
+    ev.bodies[0].callsite_start = 0;
+    memset(&orphan_callsite, 0, sizeof(orphan_callsite));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&orphan_callsite, &ev, XG_BUILD_NATIVE_RELEASE));
+    orphan_callsite.modules = modules;
+    orphan_callsite.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&orphan_callsite, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&orphan_callsite, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT global evidence callsite has no body"));
+    xaot_bundle_free(&orphan_callsite);
+    ev.bodies[0].callsite_start = 1;
+    ev.bodies[0].callsite_count = 1;
 
     xg_global_evidence_free(&ev);
 }

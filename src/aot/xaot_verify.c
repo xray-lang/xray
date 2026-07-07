@@ -815,6 +815,29 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                                  "AOT global evidence body callsite ordinal does not re-derive");
         }
     }
+    for (uint32_t ci = 0; ci < ev->ncallsites; ci++) {
+        const XgCallsiteSummary *call = &ev->callsites[ci];
+        uint32_t owning_bodies = 0;
+        for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
+            const XgBodySummary *body = &ev->bodies[bi];
+            uint32_t start = body->callsite_start;
+            uint32_t end = start + body->callsite_count;
+            if (body->callsite_count == 0 || call->callsite_id < start || call->callsite_id >= end)
+                continue;
+            owning_bodies++;
+            if (call->owner_func_id != body->func_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence callsite owner body does not re-derive");
+            if (call->body_ordinal != call->callsite_id - start)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT global evidence callsite body ordinal does not re-derive");
+        }
+        if (owning_bodies == 0)
+            return set_error(errbuf, errbuf_len, "AOT global evidence callsite has no body");
+        if (owning_bodies > 1)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence callsite has multiple bodies");
+    }
     return true;
 }
 
