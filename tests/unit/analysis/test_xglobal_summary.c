@@ -68,6 +68,18 @@ static uint32_t evidence_body_count_with_metadata(const XgGlobalEvidence *ev, ui
     return count;
 }
 
+static uint32_t evidence_body_count_with_static_data(const XgGlobalEvidence *ev,
+                                                     uint32_t static_data) {
+    uint32_t count = 0;
+    if (!ev)
+        return 0;
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        if ((ev->bodies[i].static_data_use_bits & static_data) != 0)
+            count++;
+    }
+    return count;
+}
+
 static uint32_t evidence_decl_count_with_flags(const XgGlobalEvidence *ev, uint32_t flags) {
     uint32_t count = 0;
     if (!ev)
@@ -286,7 +298,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
                               .callsite_start = 0,
                               .callsite_count = 0,
                               .metadata_use_bits = XG_METADATA_TYPENAME,
-                              .static_data_use_bits = 0};
+                              .static_data_use_bits = XG_STATIC_DATA_COMPTIME_VALUE};
     XaotBundle bundle;
     char *dump;
 
@@ -307,6 +319,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_EQ_UINT(bundle.ninterface_use_plans, 1);
     ASSERT_EQ_UINT(bundle.nmetadata_plans, 1);
     ASSERT_EQ_UINT(bundle.ncapability_plans, 2);
+    ASSERT_EQ_UINT(bundle.nstatic_data_plans, 1);
     ASSERT_NOT_NULL(xaot_bundle_find_class_hierarchy_plan(&bundle, 1));
     ASSERT_NOT_NULL(xaot_bundle_find_class_layout_plan(&bundle, 2));
     const XaotMethodDispatchPlan *dispatch = xaot_bundle_find_method_dispatch_plan(&bundle, 7);
@@ -324,6 +337,11 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_EQ_UINT(metadata->body_count, 1);
     ASSERT_EQ_UINT(metadata->decl_count, 0);
     ASSERT_EQ_UINT(metadata->profile_action, XAOT_CAPABILITY_ACTION_LINK);
+    const XaotStaticDataPlan *static_data =
+        xaot_bundle_find_static_data_plan(&bundle, XG_STATIC_DATA_COMPTIME_VALUE);
+    ASSERT_NOT_NULL(static_data);
+    ASSERT_EQ_UINT(static_data->body_count, 1);
+    ASSERT_EQ_UINT(static_data->action, XAOT_STATIC_DATA_ACTION_MATERIALIZE);
 
     dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(dump);
@@ -333,6 +351,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_NOT_NULL(strstr(dump, "interface-use 0 interface=77 implementor=2"));
     ASSERT_NOT_NULL(strstr(dump, "metadata 0 name=typename bodies=1 decls=0 action=link"));
     ASSERT_NOT_NULL(strstr(dump, "capability 0 name=coroutine bodies=1 action=link"));
+    ASSERT_NOT_NULL(strstr(dump, "static-data 0 name=comptime_value bodies=1 action=materialize"));
     xr_free(dump);
 
     xaot_bundle_free(&bundle);
@@ -426,7 +445,7 @@ TEST(global_evidence_verifier_rederives_profile_actions) {
                           .escape_bits = 0,
                           .capability_bits = XG_CAP_COROUTINE,
                           .metadata_use_bits = XG_METADATA_TYPENAME,
-                          .static_data_use_bits = 0};
+                          .static_data_use_bits = XG_STATIC_DATA_RUNTIME_INIT};
     XiFunc init_func;
     memset(&init_func, 0, sizeof(init_func));
     init_func.name = "init";
@@ -469,6 +488,20 @@ TEST(global_evidence_verifier_rederives_profile_actions) {
     ASSERT_TRUE(!xaot_verify_bundle(&capability_bad, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT capability profile action does not re-derive"));
     xaot_bundle_free(&capability_bad);
+
+    XaotBundle static_bad;
+    memset(&static_bad, 0, sizeof(static_bad));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&static_bad, &ev, XG_BUILD_FREESTANDING));
+    static_bad.modules = modules;
+    static_bad.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&static_bad, &init_func, 0, 0));
+    ASSERT_EQ_UINT(static_bad.nstatic_data_plans, 1);
+    ASSERT_EQ_UINT(static_bad.static_data_plans[0].action, XAOT_STATIC_DATA_ACTION_REJECT);
+    static_bad.static_data_plans[0].action = XAOT_STATIC_DATA_ACTION_MATERIALIZE;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&static_bad, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT static-data action does not re-derive"));
+    xaot_bundle_free(&static_bad);
 
     xg_global_evidence_free(&ev);
 }
@@ -672,6 +705,46 @@ TEST(global_evidence_producer_marks_metadata_reachability) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_marks_static_data_reachability) {
+    setup_parser_session();
+    const char *source = "fn useTable() -> int {\n"
+                         "    const table = comptime [1, 2, 3]\n"
+                         "    const value = comptime 7\n"
+                         "    return value\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_COMPTIME_VALUE), 1);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotStaticDataPlan *plan =
+        xaot_bundle_find_static_data_plan(&bundle, XG_STATIC_DATA_COMPTIME_VALUE);
+    ASSERT_NOT_NULL(plan);
+    ASSERT_EQ_UINT(plan->body_count, 1);
+    ASSERT_EQ_UINT(plan->action, XAOT_STATIC_DATA_ACTION_MATERIALIZE);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_runtime_capabilities) {
     setup_parser_session();
     const char *source =
@@ -832,6 +905,7 @@ RUN_TEST(global_evidence_verifier_rederives_profile_actions);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
+RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
