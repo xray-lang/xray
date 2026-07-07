@@ -1,0 +1,6 @@
+import sys
+
+sys.Thread.spawn(fn() -> int {
+    return 1
+})
+print("orphan")

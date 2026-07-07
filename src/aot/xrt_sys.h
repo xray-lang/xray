@@ -16,6 +16,7 @@
 #include "xrt_value.h"
 #include "../os/os_thread.h"
 #include <stdatomic.h>
+#include <stdio.h>
 #if !defined(XR_OS_WINDOWS)
 #include <errno.h>
 #include <sched.h>
@@ -496,6 +497,9 @@ static inline void xrt_thread_destroy_builtin(void *obj) {
     if (atomic_compare_exchange_strong_explicit(&thread->state, &expected, XRT_THREAD_DETACHED,
                                                 memory_order_acq_rel, memory_order_acquire) &&
         xr_thread_is_valid(thread->handle)) {
+        fputs("xray: warning: Thread handle dropped without join() or detach(); detaching OS "
+              "thread\n",
+              stderr);
         xr_thread_detach(thread->handle);
     }
 }

@@ -38,6 +38,42 @@ static bool xa_type_is_known_non_int(XrType *type) {
     return type && !XR_TYPE_IS_UNKNOWN(type) && !XR_TYPE_IS_INT(type);
 }
 
+static bool xa_expr_is_sys_thread_spawn_call(AstNode *expr) {
+    if (!expr || expr->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &expr->as.call_expr;
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *spawn = &call->callee->as.member_access;
+    if (!spawn->name || strcmp(spawn->name, "spawn") != 0 || !spawn->object ||
+        spawn->object->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *thread = &spawn->object->as.member_access;
+    if (!thread->name || strcmp(thread->name, "Thread") != 0 || !thread->object ||
+        thread->object->type != AST_VARIABLE)
+        return false;
+    const char *module_name = thread->object->as.variable.name;
+    return module_name && strcmp(module_name, "sys") == 0;
+}
+
+static void xa_warn_discarded_sys_thread_spawn(XaInferContext *ctx, AstNode *expr) {
+    if (!ctx || !expr || !xa_expr_is_sys_thread_spawn_call(expr))
+        return;
+    const char *message =
+        "sys.Thread.spawn returns a Thread handle; call join() or detach() explicitly";
+    XrLocation loc = {.file = ctx->file_path, .line = expr->line, .column = expr->column};
+    for (XaDiagnostic *d = ctx->analyzer ? ctx->analyzer->diagnostics : NULL; d; d = d->next) {
+        if (d->severity == XR_DIAG_SEV_WARNING && d->code == XR_ERR_ANALYZE &&
+            d->location.line == loc.line && d->location.column == loc.column &&
+            ((d->location.file == loc.file) ||
+             (d->location.file && loc.file && strcmp(d->location.file, loc.file) == 0)) &&
+            d->message && strcmp(d->message, message) == 0) {
+            return;
+        }
+    }
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, message, &loc);
+}
+
 static bool xa_type_is_known_unassignable(XrType *target, XrType *source) {
     if (!target || !source || XR_TYPE_IS_UNKNOWN(target) || XR_TYPE_IS_UNKNOWN(source))
         return false;
@@ -4672,6 +4708,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_stmt(ctx, inner);
             } else {
                 xa_visit_infer_expr(ctx, inner);
+                xa_warn_discarded_sys_thread_spawn(ctx, inner);
             }
             break;
         }
