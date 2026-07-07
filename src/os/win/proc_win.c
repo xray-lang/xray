@@ -174,6 +174,79 @@ int xr_proc_wait(XrProcId pid, int *exit_code) {
     return 0;
 }
 
+static void decode_exit_code(DWORD code, int *exit_code) {
+    if (exit_code) {
+        *exit_code = code == XR_PROC_KILLED_EXIT_CODE ? -1 : (int) code;
+    }
+}
+
+XrProcWaitResult xr_proc_try_wait(XrProcId pid, int *exit_code) {
+    if (pid <= 0) {
+        if (exit_code) {
+            *exit_code = -1;
+        }
+        return XR_PROC_WAIT_ERROR;
+    }
+
+    HANDLE h = NULL;
+    AcquireSRWLockExclusive(&g_live_lock);
+    for (int i = 0; i < XR_PROC_MAX_LIVE; i++) {
+        if (g_live[i].handle != NULL && g_live[i].pid == (DWORD) pid) {
+            DWORD wait_result = WaitForSingleObject(g_live[i].handle, 0);
+            if (wait_result == WAIT_TIMEOUT) {
+                ReleaseSRWLockExclusive(&g_live_lock);
+                return XR_PROC_WAIT_RUNNING;
+            }
+            if (wait_result == WAIT_OBJECT_0) {
+                h = g_live[i].handle;
+                g_live[i].handle = NULL;
+                g_live[i].pid = 0;
+                break;
+            }
+            ReleaseSRWLockExclusive(&g_live_lock);
+            if (exit_code) {
+                *exit_code = -1;
+            }
+            return XR_PROC_WAIT_ERROR;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_live_lock);
+
+    if (h == NULL) {
+        h = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_INFORMATION, FALSE, (DWORD) pid);
+        if (h == NULL) {
+            if (exit_code) {
+                *exit_code = -1;
+            }
+            return XR_PROC_WAIT_ERROR;
+        }
+        DWORD wait_result = WaitForSingleObject(h, 0);
+        if (wait_result == WAIT_TIMEOUT) {
+            CloseHandle(h);
+            return XR_PROC_WAIT_RUNNING;
+        }
+        if (wait_result != WAIT_OBJECT_0) {
+            CloseHandle(h);
+            if (exit_code) {
+                *exit_code = -1;
+            }
+            return XR_PROC_WAIT_ERROR;
+        }
+    }
+
+    DWORD code = 0;
+    BOOL ok = GetExitCodeProcess(h, &code);
+    CloseHandle(h);
+    if (!ok) {
+        if (exit_code) {
+            *exit_code = -1;
+        }
+        return XR_PROC_WAIT_ERROR;
+    }
+    decode_exit_code(code, exit_code);
+    return XR_PROC_WAIT_EXITED;
+}
+
 int xr_proc_kill(XrProcId pid, int signal) {
     if (pid <= 0 || signal <= 0) {
         return -1;

@@ -55,6 +55,12 @@ typedef int64_t XrProcId;
 
 #define XR_PROC_INVALID ((XrProcId) - 1)
 
+typedef enum XrProcWaitResult {
+    XR_PROC_WAIT_ERROR = -1,
+    XR_PROC_WAIT_RUNNING = 0,
+    XR_PROC_WAIT_EXITED = 1,
+} XrProcWaitResult;
+
 // Spawn a child process running `prog`. `argv` is a NULL-terminated
 // array; argv[0] is conventionally the program name. The child
 // inherits the parent's stdin / stdout / stderr, current working
@@ -74,6 +80,14 @@ XR_FUNC XrProcId xr_proc_spawn(const char *prog, const char *const argv[]);
 //
 // `exit_code` may be NULL if the caller does not need the value.
 XR_FUNC int xr_proc_wait(XrProcId pid, int *exit_code);
+
+// Non-blocking variant of xr_proc_wait. Returns XR_PROC_WAIT_RUNNING
+// if the child is still alive, XR_PROC_WAIT_EXITED if it has exited,
+// and XR_PROC_WAIT_ERROR if the wait query failed. When the child has
+// exited cleanly, writes 0..255 to `*exit_code`; if the child was
+// signaled / forcibly terminated, writes -1. A reported EXITED child
+// has been reaped and must not be waited again.
+XR_FUNC XrProcWaitResult xr_proc_try_wait(XrProcId pid, int *exit_code);
 
 // Send `signal` to the child identified by `pid`. Returns 0 on success
 // and -1 on failure. POSIX uses kill(2). Windows has no POSIX signal

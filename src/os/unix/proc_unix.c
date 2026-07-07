@@ -73,6 +73,35 @@ int xr_proc_wait(XrProcId pid, int *exit_code) {
     return 0;
 }
 
+XrProcWaitResult xr_proc_try_wait(XrProcId pid, int *exit_code) {
+    if (pid <= 0) {
+        if (exit_code) {
+            *exit_code = -1;
+        }
+        return XR_PROC_WAIT_ERROR;
+    }
+
+    int status = 0;
+    pid_t r;
+    do {
+        r = waitpid((pid_t) pid, &status, WNOHANG);
+    } while (r < 0 && errno == EINTR);
+    if (r == 0) {
+        return XR_PROC_WAIT_RUNNING;
+    }
+    if (r < 0) {
+        if (exit_code) {
+            *exit_code = -1;
+        }
+        return XR_PROC_WAIT_ERROR;
+    }
+
+    if (exit_code) {
+        *exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    }
+    return XR_PROC_WAIT_EXITED;
+}
+
 int xr_proc_kill(XrProcId pid, int signal) {
     if (pid <= 0 || signal <= 0) {
         return -1;
