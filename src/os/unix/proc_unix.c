@@ -11,6 +11,7 @@
 #include "../os_proc.h"
 
 #include <errno.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -70,6 +71,13 @@ int xr_proc_wait(XrProcId pid, int *exit_code) {
         }
     }
     return 0;
+}
+
+int xr_proc_kill(XrProcId pid, int signal) {
+    if (pid <= 0 || signal <= 0) {
+        return -1;
+    }
+    return kill((pid_t) pid, signal) == 0 ? 0 : -1;
 }
 
 int64_t xr_proc_self_pid(void) {

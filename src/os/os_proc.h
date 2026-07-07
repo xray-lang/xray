@@ -22,12 +22,13 @@
  *     - Wait for a child, returning its non-negative exit code on a
  *       clean exit or -1 if the child was signaled / terminated
  *       abnormally.
+ *     - Send a portable termination signal to a child.
  *     - Query the current process id.
  *     - Detect whether a debugger is attached.
  *
- *   Anything more (kill, signal forwarding, pipe redirection, env
- *   overrides, working-directory overrides) is intentionally out of
- *   scope until a concrete in-tree caller needs it.
+ *   Anything more (signal forwarding, pipe redirection, env overrides,
+ *   working-directory overrides) is intentionally out of scope until a
+ *   concrete in-tree caller needs it.
  */
 
 #ifndef XR_OS_OS_PROC_H
@@ -73,6 +74,12 @@ XR_FUNC XrProcId xr_proc_spawn(const char *prog, const char *const argv[]);
 //
 // `exit_code` may be NULL if the caller does not need the value.
 XR_FUNC int xr_proc_wait(XrProcId pid, int *exit_code);
+
+// Send `signal` to the child identified by `pid`. Returns 0 on success
+// and -1 on failure. POSIX uses kill(2). Windows has no POSIX signal
+// model, so the portable subset maps to TerminateProcess with the
+// signal number as the exit code.
+XR_FUNC int xr_proc_kill(XrProcId pid, int signal);
 
 // Current process id. Always succeeds.
 XR_FUNC int64_t xr_proc_self_pid(void);
