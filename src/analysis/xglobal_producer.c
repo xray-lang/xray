@@ -384,8 +384,9 @@ static uint32_t producer_find_interface_method_signature(XgProducer *p, XgInterf
     return producer_find_interface_method_signature_depth(p, interface_id, name_id, 0);
 }
 
-static const XgInterfaceMethodSummary *producer_find_interface_method_summary_depth(
-    const XgProducer *p, XgInterfaceId interface_id, uint32_t name_id, uint32_t depth) {
+static const XgInterfaceMethodSummary *
+producer_find_interface_method_summary_depth(const XgProducer *p, XgInterfaceId interface_id,
+                                             uint32_t name_id, uint32_t depth) {
     if (!p || !p->evidence || interface_id == XG_NO_ID || name_id == 0)
         return NULL;
     if (depth > 64)
@@ -400,8 +401,8 @@ static const XgInterfaceMethodSummary *producer_find_interface_method_summary_de
         const XgInterfaceMethodSummary *method;
         if (edge->child_interface_id != interface_id)
             continue;
-        method = producer_find_interface_method_summary_depth(p, edge->parent_interface_id,
-                                                              name_id, depth + 1);
+        method = producer_find_interface_method_summary_depth(p, edge->parent_interface_id, name_id,
+                                                              depth + 1);
         if (method)
             return method;
     }
@@ -887,12 +888,14 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
 static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
     XgCallsiteSummary row;
     XgClassId parent_class;
+    const char *method_name;
     uint32_t method_name_id;
     XgMethodSummary *method;
     if (!bc || !call)
         return;
     parent_class = body_parent_class_id(bc);
-    method_name_id = hash_name32(call->as.super_call.method_name);
+    method_name = call->as.super_call.method_name ? call->as.super_call.method_name : "constructor";
+    method_name_id = hash_name32(method_name);
     method = producer_find_method_by_name_in_hierarchy(bc->producer, parent_class, method_name_id);
     memset(&row, 0, sizeof(row));
     row.callsite_id = (XgCallsiteId) (bc->evidence->ncallsites + 1);

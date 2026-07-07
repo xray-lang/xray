@@ -91,6 +91,36 @@ static XaotAbiSlot ptr_slot(const XrType *type) {
     return slot;
 }
 
+static bool bundle_is_freestanding_profile(const XaotBundle *bundle) {
+    return bundle && bundle->global_evidence_plan.profile == XG_BUILD_FREESTANDING;
+}
+
+static bool type_is_freestanding_ordinal_enum(const XaotBundle *bundle, const XrType *type) {
+    return bundle_is_freestanding_profile(bundle) && type && !type->is_nullable &&
+           type->kind == XR_KIND_ENUM && type->enum_type.layout &&
+           type->enum_type.layout->is_zero_payload;
+}
+
+static XaotValueRep enum_ordinal_value_rep(const XrType *type) {
+    XaotValueRep rep;
+    memset(&rep, 0, sizeof(rep));
+    rep.kind = XAOT_VALUE_SCALAR;
+    rep.rep = XAOT_REP_I64;
+    rep.type = type;
+    rep.c_type = "int64_t";
+    rep.flags = XAOT_VALUE_FLAG_ENUM;
+    return rep;
+}
+
+static XaotAbiSlot enum_ordinal_slot(const XrType *type) {
+    XaotAbiSlot slot;
+    memset(&slot, 0, sizeof(slot));
+    slot.cls = XAOT_ARG_SCALAR;
+    slot.rep = enum_ordinal_value_rep(type);
+    slot.c_type = slot.rep.c_type;
+    return slot;
+}
+
 static bool fixed_array_lane_native_info(const XrType *type, uint8_t *native_out,
                                          const char **ctype_out) {
     if (!type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
@@ -367,6 +397,8 @@ static XaotAbiSlot native_slot_for_type(const XaotBundle *bundle, const XiFunc *
     XaotValueRep struct_rep;
     const char *fixed_array_elem_ctype = NULL;
 
+    if (type_is_freestanding_ordinal_enum(bundle, type))
+        return enum_ordinal_slot(type);
     if (type_is_class_instance_ptr_boundary(bundle, type))
         return ptr_slot(type);
     if (fixed_array_ref_param_can_use_ptr_abi(func, value, type, is_return,
@@ -391,6 +423,8 @@ static XaotAbiSlot native_slot_for_type(const XaotBundle *bundle, const XiFunc *
 static bool type_can_use_native_return_boundary(const XaotBundle *bundle, const XiFunc *func,
                                                 const XrType *type) {
     if (type && XR_TYPE_IS_UNIT(type))
+        return true;
+    if (type_is_freestanding_ordinal_enum(bundle, type))
         return true;
     return abi_type_can_use_typed_boundary(bundle, type) ||
            struct_layout_can_use_value_abi_depth(

@@ -130,7 +130,7 @@ static void xicgen_emit_set_pending_error(XiCgenCtx *ctx, FILE *out, const XiVal
     }
 
     fprintf(out, "    xrt_pending_error = ");
-    emit_vref(out, error);
+    emit_value_as_rep_ctx(ctx, out, error, XR_REP_TAGGED);
     fprintf(out, ";\n");
     xicgen_emit_clear_freestanding_enum_error(ctx, out);
 }

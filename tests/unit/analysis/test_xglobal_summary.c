@@ -2250,8 +2250,8 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&interface_missing_method_ev, &interface_decl));
     ASSERT_NOT_NULL(
         xg_global_evidence_add_body(&interface_missing_method_ev, &interface_missing_method_body));
-    ASSERT_NOT_NULL(
-        xg_global_evidence_add_callsite(&interface_missing_method_ev, &interface_missing_method_call));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&interface_missing_method_ev,
+                                                    &interface_missing_method_call));
 
     XaotBundle interface_missing_method_bundle;
     memset(&interface_missing_method_bundle, 0, sizeof(interface_missing_method_bundle));
@@ -2414,8 +2414,8 @@ TEST(global_evidence_verifier_rejects_stale_interface_extends_rows) {
     xg_global_evidence_init(&missing_parent_ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&missing_parent_ev, &func_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&missing_parent_ev, &child_decl));
-    ASSERT_NOT_NULL(xg_global_evidence_add_interface_extends(&missing_parent_ev,
-                                                            &missing_parent_edge));
+    ASSERT_NOT_NULL(
+        xg_global_evidence_add_interface_extends(&missing_parent_ev, &missing_parent_edge));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&missing_parent_ev, &body));
 
     XaotBundle missing_parent_bundle;
@@ -2426,8 +2426,8 @@ TEST(global_evidence_verifier_rejects_stale_interface_extends_rows) {
     missing_parent_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&missing_parent_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&missing_parent_bundle, XAOT_VERIFY_AOT_READY, err,
-                                    sizeof(err)));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&missing_parent_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence interface extends parent is missing"));
     xaot_bundle_free(&missing_parent_bundle);
     xg_global_evidence_free(&missing_parent_ev);
@@ -2457,8 +2457,7 @@ TEST(global_evidence_verifier_rejects_stale_interface_extends_rows) {
 
     XaotBundle cycle_bundle;
     memset(&cycle_bundle, 0, sizeof(cycle_bundle));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&cycle_bundle, &cycle_ev,
-                                                XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&cycle_bundle, &cycle_ev, XG_BUILD_NATIVE_RELEASE));
     cycle_bundle.modules = modules;
     cycle_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&cycle_bundle, &init_func, 0, 0));
@@ -3206,6 +3205,105 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_resolves_super_constructor_callsite) {
+    setup_parser_session();
+    const char *source = "class Shape {\n"
+                         "    kind: int\n"
+                         "    constructor(kind: int) { this.kind = kind }\n"
+                         "}\n"
+                         "class Rect extends Shape {\n"
+                         "    w: int\n"
+                         "    h: int\n"
+                         "    constructor(w: int, h: int) {\n"
+                         "        super(1)\n"
+                         "        this.w = w\n"
+                         "        this.h = h\n"
+                         "    }\n"
+                         "}\n"
+                         "fn makeRect() -> int {\n"
+                         "    var r = Rect(2, 3)\n"
+                         "    return r.w\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+
+    XgClassId shape_id = XG_NO_ID;
+    XgMethodId shape_ctor_id = XG_NO_ID;
+    uint32_t shape_ctor_sig = 0;
+    uint32_t constructor_name_id = xg_name_id("constructor");
+    for (uint32_t i = 0; i < ev.nclasses; i++) {
+        if (ev.classes[i].name_id == xg_name_id("Shape"))
+            shape_id = ev.classes[i].class_id;
+    }
+    for (uint32_t i = 0; i < ev.nmethods; i++) {
+        if (ev.methods[i].owner_class_id == shape_id &&
+            ev.methods[i].name_id == constructor_name_id) {
+            shape_ctor_id = ev.methods[i].method_id;
+            shape_ctor_sig = ev.methods[i].signature_key;
+        }
+    }
+    ASSERT_TRUE(shape_id != XG_NO_ID);
+    ASSERT_TRUE(shape_ctor_id != XG_NO_ID);
+    ASSERT_TRUE(shape_ctor_sig != 0);
+
+    uint32_t super_ctor_calls = 0;
+    for (uint32_t i = 0; i < ev.ncallsites; i++) {
+        const XgCallsiteSummary *call = &ev.callsites[i];
+        if (call->kind != XG_CALL_METHOD)
+            continue;
+        ASSERT_TRUE(call->receiver_static_class_id != XG_NO_ID);
+        ASSERT_TRUE(call->method_id != XG_NO_ID);
+        ASSERT_TRUE(call->method_name_id != 0);
+        ASSERT_TRUE(call->method_signature_key != 0);
+        if (call->receiver_static_class_id == shape_id &&
+            call->method_name_id == constructor_name_id) {
+            super_ctor_calls++;
+            ASSERT_EQ_UINT(call->method_id, shape_ctor_id);
+            ASSERT_EQ_UINT(call->method_signature_key, shape_ctor_sig);
+            ASSERT_EQ_UINT(call->arg_count, 1);
+        }
+    }
+    ASSERT_EQ_UINT(super_ctor_calls, 1);
+
+    XiFunc init_func;
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    XiModule module;
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    XiModule *modules[1] = {&module};
+    XaotBundle bundle;
+    char err[256];
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) {
     setup_parser_session();
     const char *source = "fn clampScore(x: int) -> int {\n"
@@ -3653,8 +3751,7 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
         use_plan->implementor_class_id = 999999;
         memset(err, 0, sizeof(err));
         ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-        ASSERT_NOT_NULL(
-            strstr(err, "AOT interface-use plan has no effective implements evidence"));
+        ASSERT_NOT_NULL(strstr(err, "AOT interface-use plan has no effective implements evidence"));
         use_plan->implementor_class_id = saved_implementor;
         break;
     }

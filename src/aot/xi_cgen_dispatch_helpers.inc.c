@@ -3455,8 +3455,10 @@ static bool xicgen_emit_planned_direct_method(XiCgenCtx *ctx, FILE *out, const X
     const XaotDispatchTargetCase *target;
     const XiFunc *target_func;
     const char *target_prefix = NULL;
-    if (!dispatch_plan || dispatch_plan->kind != XAOT_DISPATCH_DIRECT ||
-        dispatch_plan->receiver_static_class_id == XG_NO_ID)
+    if (!dispatch_plan || dispatch_plan->kind != XAOT_DISPATCH_DIRECT)
+        return false;
+    if (dispatch_plan->receiver_static_class_id == XG_NO_ID &&
+        dispatch_plan->receiver_static_interface_id == XG_NO_ID)
         return false;
     bundle = cg_ctx_aot_bundle(ctx);
     if (!bundle || dispatch_plan->target_count != 1 || dispatch_plan->target_start == 0 ||
@@ -5213,19 +5215,19 @@ static void xicgen_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         fprintf(out, ")");
         return;
     }
-    XrRep a0_rep = cg_rep(v->args[0]);
-    XrRep a1_rep = cg_rep(v->args[1]);
+    XrRep a0_rep = cg_value_plan_storage_rep(ctx, v->args[0]);
+    XrRep a1_rep = cg_value_plan_storage_rep(ctx, v->args[1]);
     XrRep arg_rep = (a0_rep == XR_REP_TAGGED || a1_rep == XR_REP_TAGGED) ? XR_REP_TAGGED : a0_rep;
     if (arg_rep == XR_REP_TAGGED) {
         fprintf(out, "%s(", xi_to_c_template_compare_runtime_fn(v->op));
         if (xi_to_c_template_compare_swaps_tagged_args(v->op)) {
-            emit_boxed_value_ref(out, v->args[1]);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
             fprintf(out, ", ");
-            emit_boxed_value_ref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         } else {
-            emit_boxed_value_ref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ", ");
-            emit_boxed_value_ref(out, v->args[1]);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         }
         fprintf(out, ")");
     } else {
@@ -5475,8 +5477,17 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         const char *helper = NULL;
         if (strcmp(field, "name") == 0)
             helper = "xrt_enum_box_name";
-        else if (strcmp(field, "ordinal") == 0)
+        else if (strcmp(field, "ordinal") == 0) {
+            if (ctx && ctx->freestanding_profile &&
+                cg_value_plan_storage_rep(ctx, v->args[0]) == XR_REP_I64) {
+                const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64,
+                                                                 cg_value_plan_storage_rep(ctx, v));
+                emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+                emit_conversion_suffix(out, conv_suffix);
+                return;
+            }
             helper = "xrt_enum_box_ordinal";
+        }
         if (helper) {
             const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
                                                              cg_value_plan_storage_rep(ctx, v));

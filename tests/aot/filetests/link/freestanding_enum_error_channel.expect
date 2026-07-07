@@ -9,8 +9,11 @@ c_contains=xrt_pending_error =
 c_contains=xrt_has_pending_error()
 c_contains=xrt_pending_error;
 c_contains=xrt_pending_error = XR_NULL_VAL
-c_contains=_xenum_
-c_contains=xrt_eq(
+c_contains=xrt_pending_error = XR_FROM_INT(
+c_contains=uint8_t v10 = xrt_eq(v7, XR_FROM_INT(v9))
+c_not_contains=_xenum_
+c_not_contains=XR_TAG_ENUM
+c_not_contains=xrt_enum_box_ordinal
 c_not_contains=xrt_throw_exc
 c_not_contains=setjmp
 c_not_contains=longjmp
