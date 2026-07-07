@@ -1,0 +1,13 @@
+import sys
+
+fn branchJoinOnly() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    if (false) {
+        print(t.join())
+    }
+    print("conditional-join")
+}
+
+branchJoinOnly()

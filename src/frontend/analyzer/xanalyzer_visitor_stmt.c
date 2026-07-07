@@ -329,19 +329,20 @@ static uint32_t xa_thread_lint_expr_symbol_id(AstNode *expr) {
 }
 
 static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *expr,
-                                     bool return_value);
-static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *stmt);
+                                     bool return_value, bool can_escape);
+static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *stmt,
+                                     bool can_escape);
 
 static void xa_thread_lint_scan_expr_array(XaThreadHandleLintState *states, AstNode **nodes,
-                                           int count, bool return_value) {
+                                           int count, bool return_value, bool can_escape) {
     if (!nodes || count <= 0)
         return;
     for (int i = 0; i < count; i++)
-        xa_thread_lint_scan_expr(states, nodes[i], return_value);
+        xa_thread_lint_scan_expr(states, nodes[i], return_value, can_escape);
 }
 
-static bool xa_thread_lint_scan_join_or_detach_call(XaThreadHandleLintState *states,
-                                                    AstNode *expr) {
+static bool xa_thread_lint_scan_join_or_detach_call(XaThreadHandleLintState *states, AstNode *expr,
+                                                    bool can_escape) {
     expr = xa_thread_lint_unwrap_expr(expr);
     if (!expr || expr->type != AST_CALL_EXPR)
         return false;
@@ -356,17 +357,18 @@ static bool xa_thread_lint_scan_join_or_detach_call(XaThreadHandleLintState *sta
     XaThreadHandleLintState *state = xa_thread_lint_find_by_symbol_id(states, receiver_id);
     if (!state)
         return false;
-    state->finalized = true;
+    if (can_escape)
+        state->finalized = true;
     return true;
 }
 
 static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *expr,
-                                     bool return_value) {
+                                     bool return_value, bool can_escape) {
     expr = xa_thread_lint_unwrap_expr(expr);
     if (!expr)
         return;
 
-    if (return_value) {
+    if (return_value && can_escape) {
         uint32_t sym_id = xa_thread_lint_expr_symbol_id(expr);
         XaThreadHandleLintState *state = xa_thread_lint_find_by_symbol_id(states, sym_id);
         if (state) {
@@ -389,37 +391,39 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
             return;
 
         case AST_CALL_EXPR: {
-            if (xa_thread_lint_scan_join_or_detach_call(states, expr))
+            if (xa_thread_lint_scan_join_or_detach_call(states, expr, can_escape))
                 return;
             CallExprNode *call = &expr->as.call_expr;
-            xa_thread_lint_scan_expr(states, call->callee, false);
-            xa_thread_lint_scan_expr_array(states, call->arguments, call->arg_count, false);
+            xa_thread_lint_scan_expr(states, call->callee, false, can_escape);
+            xa_thread_lint_scan_expr_array(states, call->arguments, call->arg_count, false,
+                                           can_escape);
             return;
         }
 
         case AST_MEMBER_ACCESS:
-            xa_thread_lint_scan_expr(states, expr->as.member_access.object, false);
+            xa_thread_lint_scan_expr(states, expr->as.member_access.object, false, can_escape);
             return;
         case AST_MEMBER_SET:
-            xa_thread_lint_scan_expr(states, expr->as.member_set.object, false);
-            xa_thread_lint_scan_expr(states, expr->as.member_set.value, false);
+            xa_thread_lint_scan_expr(states, expr->as.member_set.object, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.member_set.value, false, can_escape);
             return;
         case AST_INDEX_GET:
-            xa_thread_lint_scan_expr(states, expr->as.index_get.array, false);
-            xa_thread_lint_scan_expr(states, expr->as.index_get.index, false);
+            xa_thread_lint_scan_expr(states, expr->as.index_get.array, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.index_get.index, false, can_escape);
             return;
         case AST_INDEX_SET:
-            xa_thread_lint_scan_expr(states, expr->as.index_set.array, false);
-            xa_thread_lint_scan_expr(states, expr->as.index_set.index, false);
-            xa_thread_lint_scan_expr(states, expr->as.index_set.value, false);
+            xa_thread_lint_scan_expr(states, expr->as.index_set.array, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.index_set.index, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.index_set.value, false, can_escape);
             return;
 
         case AST_ASSIGNMENT:
-            xa_thread_lint_scan_expr(states, expr->as.assignment.value, false);
+            xa_thread_lint_scan_expr(states, expr->as.assignment.value, false, can_escape);
             return;
         case AST_COMPOUND_ASSIGNMENT:
-            xa_thread_lint_scan_expr(states, expr->as.compound_assignment.object, false);
-            xa_thread_lint_scan_expr(states, expr->as.compound_assignment.value, false);
+            xa_thread_lint_scan_expr(states, expr->as.compound_assignment.object, false,
+                                     can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.compound_assignment.value, false, can_escape);
             return;
         case AST_INC:
         case AST_DEC:
@@ -444,112 +448,122 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
         case AST_BINARY_AND:
         case AST_BINARY_OR:
         case AST_NULLISH_COALESCE:
-            xa_thread_lint_scan_expr(states, expr->as.binary.left, false);
-            xa_thread_lint_scan_expr(states, expr->as.binary.right, false);
+            xa_thread_lint_scan_expr(states, expr->as.binary.left, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.binary.right, false, can_escape);
             return;
 
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
         case AST_FORCE_UNWRAP:
-            xa_thread_lint_scan_expr(states, expr->as.unary.operand, false);
+            xa_thread_lint_scan_expr(states, expr->as.unary.operand, false, can_escape);
             return;
         case AST_GROUPING:
-            xa_thread_lint_scan_expr(states, expr->as.grouping, false);
+            xa_thread_lint_scan_expr(states, expr->as.grouping, false, can_escape);
             return;
 
         case AST_ARRAY_LITERAL:
             if (expr->as.array_literal.is_repeat) {
-                xa_thread_lint_scan_expr(states, expr->as.array_literal.repeat_value, false);
-                xa_thread_lint_scan_expr(states, expr->as.array_literal.repeat_count, false);
+                xa_thread_lint_scan_expr(states, expr->as.array_literal.repeat_value, false,
+                                         can_escape);
+                xa_thread_lint_scan_expr(states, expr->as.array_literal.repeat_count, false,
+                                         can_escape);
             } else {
                 xa_thread_lint_scan_expr_array(states, expr->as.array_literal.elements,
-                                               expr->as.array_literal.count, false);
+                                               expr->as.array_literal.count, false, can_escape);
             }
             return;
         case AST_TUPLE_LITERAL:
             xa_thread_lint_scan_expr_array(states, expr->as.tuple_literal.elements,
-                                           expr->as.tuple_literal.count, false);
+                                           expr->as.tuple_literal.count, false, can_escape);
             return;
         case AST_SPREAD_EXPR:
-            xa_thread_lint_scan_expr(states, expr->as.spread_expr.expr, false);
+            xa_thread_lint_scan_expr(states, expr->as.spread_expr.expr, false, can_escape);
             return;
         case AST_OBJECT_LITERAL:
             xa_thread_lint_scan_expr_array(states, expr->as.object_literal.keys,
-                                           expr->as.object_literal.count, false);
+                                           expr->as.object_literal.count, false, can_escape);
             xa_thread_lint_scan_expr_array(states, expr->as.object_literal.values,
-                                           expr->as.object_literal.count, false);
+                                           expr->as.object_literal.count, false, can_escape);
             return;
         case AST_MAP_LITERAL:
             xa_thread_lint_scan_expr_array(states, expr->as.map_literal.keys,
-                                           expr->as.map_literal.count, false);
+                                           expr->as.map_literal.count, false, can_escape);
             xa_thread_lint_scan_expr_array(states, expr->as.map_literal.values,
-                                           expr->as.map_literal.count, false);
+                                           expr->as.map_literal.count, false, can_escape);
             return;
         case AST_SET_LITERAL:
             xa_thread_lint_scan_expr_array(states, expr->as.set_literal.elements,
-                                           expr->as.set_literal.count, false);
+                                           expr->as.set_literal.count, false, can_escape);
             return;
         case AST_STRUCT_LITERAL:
             xa_thread_lint_scan_expr_array(states, expr->as.struct_literal.field_values,
-                                           expr->as.struct_literal.field_count, false);
+                                           expr->as.struct_literal.field_count, false, can_escape);
             return;
 
         case AST_TERNARY:
-            xa_thread_lint_scan_expr(states, expr->as.ternary.condition, false);
-            xa_thread_lint_scan_expr(states, expr->as.ternary.true_expr, false);
-            xa_thread_lint_scan_expr(states, expr->as.ternary.false_expr, false);
+            xa_thread_lint_scan_expr(states, expr->as.ternary.condition, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.ternary.true_expr, false, false);
+            xa_thread_lint_scan_expr(states, expr->as.ternary.false_expr, false, false);
             return;
         case AST_OPTIONAL_CHAIN:
-            xa_thread_lint_scan_expr(states, expr->as.optional_chain.object, false);
-            xa_thread_lint_scan_expr(states, expr->as.optional_chain.index, false);
+            xa_thread_lint_scan_expr(states, expr->as.optional_chain.object, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.optional_chain.index, false, can_escape);
             return;
         case AST_RANGE:
-            xa_thread_lint_scan_expr(states, expr->as.range.start, false);
-            xa_thread_lint_scan_expr(states, expr->as.range.end, false);
+            xa_thread_lint_scan_expr(states, expr->as.range.start, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.range.end, false, can_escape);
             return;
         case AST_IS_EXPR:
-            xa_thread_lint_scan_expr(states, expr->as.is_expr.expr, false);
+            xa_thread_lint_scan_expr(states, expr->as.is_expr.expr, false, can_escape);
             return;
         case AST_AS_EXPR:
-            xa_thread_lint_scan_expr(states, expr->as.as_expr.expr, false);
+            xa_thread_lint_scan_expr(states, expr->as.as_expr.expr, false, can_escape);
             return;
         case AST_COMPTIME_EXPR:
-            xa_thread_lint_scan_expr(states, expr->as.comptime_expr.expr, false);
+            xa_thread_lint_scan_expr(states, expr->as.comptime_expr.expr, false, can_escape);
             return;
         case AST_UNSAFE_EXPR:
-            xa_thread_lint_scan_expr(states, expr->as.unsafe_expr.operand, false);
+            xa_thread_lint_scan_expr(states, expr->as.unsafe_expr.operand, false, can_escape);
             return;
         case AST_MOVE_EXPR: {
             uint32_t sym_id = xa_thread_lint_expr_symbol_id(expr->as.move_expr.expr);
             XaThreadHandleLintState *state = xa_thread_lint_find_by_symbol_id(states, sym_id);
-            if (state)
+            if (state && can_escape)
                 state->transferred = true;
-            xa_thread_lint_scan_expr(states, expr->as.move_expr.expr, false);
+            xa_thread_lint_scan_expr(states, expr->as.move_expr.expr, false, can_escape);
             return;
         }
 
         case AST_GO_EXPR:
-            xa_thread_lint_scan_expr(states, expr->as.go_expr.expr, false);
+            xa_thread_lint_scan_expr(states, expr->as.go_expr.expr, false, can_escape);
             return;
         case AST_AWAIT_EXPR:
-            xa_thread_lint_scan_expr(states, expr->as.await_expr.expr, false);
-            xa_thread_lint_scan_expr(states, expr->as.await_expr.timeout, false);
-            xa_thread_lint_scan_expr(states, expr->as.await_expr.into, false);
+            xa_thread_lint_scan_expr(states, expr->as.await_expr.expr, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.await_expr.timeout, false, can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.await_expr.into, false, can_escape);
             return;
         case AST_PARALLEL_REDUCE_EXPR:
-            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.range, false);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.worker_count, false);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.initial, false);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.combine, false);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.body, false);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.range, false,
+                                     can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.worker_count, false,
+                                     can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.initial, false,
+                                     can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.combine, false,
+                                     can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_reduce_expr.body, false, false);
             return;
         case AST_PARALLEL_COLLECT_EXPR:
-            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.range, false);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.worker_count, false);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.into, false);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.body, false);
-            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.final_body, false);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.range, false,
+                                     can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.worker_count, false,
+                                     can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.into, false,
+                                     can_escape);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.body, false, false);
+            xa_thread_lint_scan_expr(states, expr->as.parallel_collect_expr.final_body, false,
+                                     false);
             return;
 
         case AST_FUNCTION_DECL:
@@ -569,26 +583,28 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
     }
 }
 
-static void xa_thread_lint_scan_block(XaThreadHandleLintState *states, AstNode *block) {
+static void xa_thread_lint_scan_block(XaThreadHandleLintState *states, AstNode *block,
+                                      bool can_escape) {
     AstNode **statements = NULL;
     int count = 0;
     if (!xa_block_node_statements(block, &statements, &count))
         return;
     for (int i = 0; i < count; i++)
-        xa_thread_lint_scan_stmt(states, statements[i]);
+        xa_thread_lint_scan_stmt(states, statements[i], can_escape);
 }
 
-static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *stmt) {
+static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *stmt,
+                                     bool can_escape) {
     if (!stmt)
         return;
     switch (stmt->type) {
         case AST_EXPR_STMT:
-            xa_thread_lint_scan_expr(states, stmt->as.expr_stmt, false);
+            xa_thread_lint_scan_expr(states, stmt->as.expr_stmt, false, can_escape);
             return;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
-            xa_thread_lint_scan_expr(states, stmt->as.var_decl.initializer, false);
+            xa_thread_lint_scan_expr(states, stmt->as.var_decl.initializer, false, can_escape);
             return;
         case AST_ASSIGNMENT:
         case AST_COMPOUND_ASSIGNMENT:
@@ -596,66 +612,68 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
         case AST_DEC:
         case AST_MEMBER_SET:
         case AST_INDEX_SET:
-            xa_thread_lint_scan_expr(states, stmt, false);
+            xa_thread_lint_scan_expr(states, stmt, false, can_escape);
             return;
         case AST_PRINT_STMT:
             xa_thread_lint_scan_expr_array(states, stmt->as.print_stmt.exprs,
-                                           stmt->as.print_stmt.expr_count, false);
+                                           stmt->as.print_stmt.expr_count, false, can_escape);
             return;
         case AST_RETURN_STMT:
             xa_thread_lint_scan_expr_array(states, stmt->as.return_stmt.values,
-                                           stmt->as.return_stmt.value_count, true);
+                                           stmt->as.return_stmt.value_count, true, can_escape);
             return;
         case AST_IF_STMT:
-            xa_thread_lint_scan_expr(states, stmt->as.if_stmt.condition, false);
-            xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.then_branch);
-            xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.else_branch);
+            xa_thread_lint_scan_expr(states, stmt->as.if_stmt.condition, false, can_escape);
+            xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.then_branch, false);
+            xa_thread_lint_scan_stmt(states, stmt->as.if_stmt.else_branch, false);
             return;
         case AST_WHILE_STMT:
-            xa_thread_lint_scan_expr(states, stmt->as.while_stmt.condition, false);
-            xa_thread_lint_scan_stmt(states, stmt->as.while_stmt.body);
+            xa_thread_lint_scan_expr(states, stmt->as.while_stmt.condition, false, can_escape);
+            xa_thread_lint_scan_stmt(states, stmt->as.while_stmt.body, false);
             return;
         case AST_FOR_STMT:
-            xa_thread_lint_scan_stmt(states, stmt->as.for_stmt.initializer);
-            xa_thread_lint_scan_expr(states, stmt->as.for_stmt.condition, false);
-            xa_thread_lint_scan_expr(states, stmt->as.for_stmt.increment, false);
-            xa_thread_lint_scan_stmt(states, stmt->as.for_stmt.body);
+            xa_thread_lint_scan_stmt(states, stmt->as.for_stmt.initializer, can_escape);
+            xa_thread_lint_scan_expr(states, stmt->as.for_stmt.condition, false, can_escape);
+            xa_thread_lint_scan_expr(states, stmt->as.for_stmt.increment, false, false);
+            xa_thread_lint_scan_stmt(states, stmt->as.for_stmt.body, false);
             return;
         case AST_FOR_IN_STMT:
-            xa_thread_lint_scan_expr(states, stmt->as.for_in_stmt.collection, false);
-            xa_thread_lint_scan_stmt(states, stmt->as.for_in_stmt.body);
+            xa_thread_lint_scan_expr(states, stmt->as.for_in_stmt.collection, false, can_escape);
+            xa_thread_lint_scan_stmt(states, stmt->as.for_in_stmt.body, false);
             return;
         case AST_PARALLEL_FOR_STMT:
-            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.range, false);
-            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.worker_count, false);
-            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.body, false);
-            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.final_body, false);
+            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.range, false, can_escape);
+            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.worker_count, false,
+                                     can_escape);
+            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.body, false, false);
+            xa_thread_lint_scan_expr(states, stmt->as.parallel_for_stmt.final_body, false, false);
             return;
         case AST_BLOCK:
         case AST_PROGRAM:
-            xa_thread_lint_scan_block(states, stmt);
+            xa_thread_lint_scan_block(states, stmt, can_escape);
             return;
         case AST_TRY_CATCH:
-            xa_thread_lint_scan_stmt(states, stmt->as.try_catch.try_body);
+            xa_thread_lint_scan_stmt(states, stmt->as.try_catch.try_body, false);
             for (int i = 0; i < stmt->as.try_catch.catch_count; i++) {
                 if (stmt->as.try_catch.catch_clauses[i])
-                    xa_thread_lint_scan_stmt(states, stmt->as.try_catch.catch_clauses[i]->body);
+                    xa_thread_lint_scan_stmt(states, stmt->as.try_catch.catch_clauses[i]->body,
+                                             false);
             }
             return;
         case AST_THROW_STMT:
-            xa_thread_lint_scan_expr(states, stmt->as.throw_stmt.expression, false);
+            xa_thread_lint_scan_expr(states, stmt->as.throw_stmt.expression, false, can_escape);
             return;
         case AST_DEFER_STMT:
-            xa_thread_lint_scan_expr(states, stmt->as.defer_stmt.expr, false);
+            xa_thread_lint_scan_expr(states, stmt->as.defer_stmt.expr, false, can_escape);
             return;
         case AST_SCOPE_BLOCK:
-            xa_thread_lint_scan_stmt(states, stmt->as.scope_block.body);
+            xa_thread_lint_scan_stmt(states, stmt->as.scope_block.body, can_escape);
             return;
         case AST_EXPORT_STMT:
-            xa_thread_lint_scan_stmt(states, stmt->as.export_stmt.declaration);
+            xa_thread_lint_scan_stmt(states, stmt->as.export_stmt.declaration, can_escape);
             return;
         default:
-            xa_thread_lint_scan_expr(states, stmt, false);
+            xa_thread_lint_scan_expr(states, stmt, false, can_escape);
             return;
     }
 }
@@ -752,7 +770,7 @@ static void xa_warn_sys_thread_lifecycle_in_sequence(XaInferContext *ctx, AstNod
         return;
     xa_thread_lint_collect_sequence_aliases(ctx, states, statements, count);
     for (int i = 0; i < count; i++)
-        xa_thread_lint_scan_stmt(states, statements[i]);
+        xa_thread_lint_scan_stmt(states, statements[i], true);
     for (XaThreadHandleLintState *state = states; state; state = state->next) {
         if (!state->root || !state->decl_stmt || state->finalized || state->transferred)
             continue;

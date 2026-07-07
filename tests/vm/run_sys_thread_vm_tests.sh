@@ -77,6 +77,7 @@ UNUSED_LOCAL_SRC="$PROJECT_DIR/tests/vm/sys_thread_unused_local_warning.xr"
 DONE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_lifecycle_done_warning.xr"
 ALIAS_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_alias_join.xr"
 RETURN_TRANSFER_SRC="$PROJECT_DIR/tests/vm/sys_thread_return_transfer.xr"
+BRANCH_JOIN_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_thread_branch_join_warning.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -92,6 +93,8 @@ expect_warning "unused_local" "$UNUSED_LOCAL_SRC" "unused-local" \
     "Thread handle 't' from sys.Thread.spawn is never used" \
     "call join() or detach() explicitly"
 expect_warning "done_warning" "$DONE_WARNING_SRC" "done-check" \
+    "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
+expect_warning "branch_join_warning" "$BRANCH_JOIN_WARNING_SRC" "conditional-join" \
     "Thread handle 't' from sys.Thread.spawn is not joined or detached before leaving scope"
 
 "$XRAY" run --dump-bytecode "$JOIN_SRC" >"$WORK/join.dump" 2>"$WORK/join.dump.err"
