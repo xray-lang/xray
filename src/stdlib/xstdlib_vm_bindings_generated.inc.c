@@ -399,21 +399,6 @@ static void xr_stdlib_vm_bind_ws_generated(XrVMRuntime *isolate, XrModule *modul
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_WS */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_XML
-static void xr_stdlib_vm_bind_xml_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "parse", xml_parse_fn);
-    XRS_EXPORT(module, isolate, "parseDetailed", xml_parse_detailed);
-    XRS_EXPORT(module, isolate, "parseFile", xml_parse_file);
-    XRS_EXPORT(module, isolate, "stringify", xml_stringify_fn);
-    XRS_EXPORT(module, isolate, "writeFile", xml_write_file);
-    XRS_EXPORT(module, isolate, "document", xml_document_fn);
-    XRS_EXPORT(module, isolate, "element", xml_element_fn);
-    XRS_EXPORT(module, isolate, "text", xml_text_fn);
-    XRS_EXPORT(module, isolate, "comment", xml_comment_fn);
-    XRS_EXPORT(module, isolate, "cdata", xml_cdata_fn);
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_XML */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_YAML
 static void xr_stdlib_vm_bind_yaml_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "parse", yaml_parse);

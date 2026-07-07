@@ -1,0 +1,864 @@
+// xml - pure-Xray XML parser and writer.
+//
+// XML is an L4 format module: the public parse/stringify/node-builder
+// semantics live here. src/base/xxml remains as a low-level C parser for base
+// unit tests and non-stdlib tooling boundaries.
+
+import io
+
+const XML_MAX_DEPTH = 256
+
+class XmlConfig {
+    preserveWhitespace: bool
+    preserveComments: bool
+    preserveCData: bool
+    validateEntities: bool
+
+    constructor(optionsValue: unknown = null) {
+        var options = Json.encode(optionsValue)
+        if (typename(options) != "Json") {
+            var emptyOptions: Json = {}
+            options = emptyOptions
+        }
+        this.preserveWhitespace = _jsonBool(options, "preserveWhitespace", false)
+        this.preserveComments = _jsonBool(options, "preserveComments", false)
+        this.preserveCData = _jsonBool(options, "preserveCData", true)
+        this.validateEntities = _jsonBool(options, "validateEntities", true)
+    }
+}
+
+class XmlWriteConfig {
+    indent: int
+    declaration: bool
+    encoding: string
+
+    constructor(optionsValue: unknown = null) {
+        var options = Json.encode(optionsValue)
+        if (typename(options) != "Json") {
+            var emptyOptions: Json = {}
+            options = emptyOptions
+        }
+        this.indent = _jsonInt(options, "indent", 0)
+        if (this.indent < 0) { this.indent = 0 }
+        this.declaration = _jsonBool(options, "declaration", true)
+        this.encoding = _jsonString(options, "encoding", "UTF-8")
+        if (this.encoding.length == 0) { this.encoding = "UTF-8" }
+    }
+}
+
+fn _jsonBool(options: Json, key: string, fallback: bool) -> bool {
+    var v = Json.get(options, key, fallback)
+    if (typename(v) == "bool") { return v }
+    return fallback
+}
+
+fn _jsonInt(options: Json, key: string, fallback: int) -> int {
+    var v = Json.get(options, key, fallback)
+    if (typename(v) == "int") { return v }
+    return fallback
+}
+
+fn _jsonString(options: Json, key: string, fallback: string) -> string {
+    var v = Json.get(options, key, fallback)
+    if (typename(v) == "string") { return v }
+    return fallback
+}
+
+fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
+    if (pos < 0 || pos + prefix.length > s.length) { return false }
+    return s.slice(pos, pos + prefix.length) == prefix
+}
+
+fn _startsWithAtIgnoreCase(s: string, pos: int, prefix: string) -> bool {
+    if (pos < 0 || pos + prefix.length > s.length) { return false }
+    return s.slice(pos, pos + prefix.length).toLowerCase() == prefix.toLowerCase()
+}
+
+fn _isWhitespace(c: string) -> bool {
+    return c == " " || c == "\t" || c == "\n" || c == "\r"
+}
+
+fn _isAlpha(c: string) -> bool {
+    if (c.length == 0) { return false }
+    var o = c.ord()!
+    return (o >= 65 && o <= 90) || (o >= 97 && o <= 122)
+}
+
+fn _isDigit(c: string) -> bool {
+    if (c.length == 0) { return false }
+    var o = c.ord()!
+    return o >= 48 && o <= 57
+}
+
+fn _isNameStart(c: string) -> bool {
+    return _isAlpha(c) || c == "_"
+}
+
+fn _isNameChar(c: string) -> bool {
+    return _isAlpha(c) || _isDigit(c) || c == "_" || c == "-" || c == ":" || c == "."
+}
+
+fn _isHexDigit(c: string) -> bool {
+    if (c.length == 0) { return false }
+    var o = c.ord()!
+    return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
+}
+
+fn _hexValue(c: string) -> int {
+    var o = c.ord()!
+    if (o >= 48 && o <= 57) { return o - 48 }
+    if (o >= 65 && o <= 70) { return o - 55 }
+    if (o >= 97 && o <= 102) { return o - 87 }
+    return -1
+}
+
+fn _allWhitespace(s: string) -> bool {
+    for (var i = 0; i < s.length; i++) {
+        if (!_isWhitespace(s.charAt(i))) { return false }
+    }
+    return true
+}
+
+fn _utf8Len(cp: int) -> int {
+    if (cp < 0x80) { return 1 }
+    if (cp < 0x800) { return 2 }
+    if (cp < 0x10000) { return 3 }
+    return 4
+}
+
+fn _putUtf8(out: Bytes, oi: int, cp: int) -> int {
+    if (cp < 0x80) {
+        out[oi] = cp
+        return oi + 1
+    } else if (cp < 0x800) {
+        out[oi] = 0xC0 | (cp >> 6)
+        out[oi + 1] = 0x80 | (cp & 0x3F)
+        return oi + 2
+    } else if (cp < 0x10000) {
+        out[oi] = 0xE0 | (cp >> 12)
+        out[oi + 1] = 0x80 | ((cp >> 6) & 0x3F)
+        out[oi + 2] = 0x80 | (cp & 0x3F)
+        return oi + 3
+    }
+    out[oi] = 0xF0 | (cp >> 18)
+    out[oi + 1] = 0x80 | ((cp >> 12) & 0x3F)
+    out[oi + 2] = 0x80 | ((cp >> 6) & 0x3F)
+    out[oi + 3] = 0x80 | (cp & 0x3F)
+    return oi + 4
+}
+
+fn _codepointString(cp: int) -> string? {
+    if (cp <= 0 || cp > 0x10FFFF) { return null }
+    var out = Bytes(_utf8Len(cp))
+    _putUtf8(out, 0, cp)
+    return out.toString()
+}
+
+fn _namedEntity(name: string) -> string? {
+    if (name == "lt") { return "<" }
+    if (name == "gt") { return ">" }
+    if (name == "amp") { return "&" }
+    if (name == "quot") { return "\"" }
+    if (name == "apos") { return "'" }
+    if (name == "nbsp") { return _codepointString(0x00A0) }
+    if (name == "copy") { return _codepointString(0x00A9) }
+    if (name == "reg") { return _codepointString(0x00AE) }
+    if (name == "trade") { return _codepointString(0x2122) }
+    if (name == "hellip") { return _codepointString(0x2026) }
+    if (name == "ndash") { return _codepointString(0x2013) }
+    if (name == "mdash") { return _codepointString(0x2014) }
+    if (name == "lsquo") { return _codepointString(0x2018) }
+    if (name == "rsquo") { return _codepointString(0x2019) }
+    if (name == "ldquo") { return _codepointString(0x201C) }
+    if (name == "rdquo") { return _codepointString(0x201D) }
+    if (name == "laquo") { return _codepointString(0x00AB) }
+    if (name == "raquo") { return _codepointString(0x00BB) }
+    if (name == "middot") { return _codepointString(0x00B7) }
+    if (name == "bull") { return _codepointString(0x2022) }
+    if (name == "sect") { return _codepointString(0x00A7) }
+    if (name == "para") { return _codepointString(0x00B6) }
+    if (name == "deg") { return _codepointString(0x00B0) }
+    if (name == "plusmn") { return _codepointString(0x00B1) }
+    if (name == "times") { return _codepointString(0x00D7) }
+    if (name == "divide") { return _codepointString(0x00F7) }
+    if (name == "euro") { return _codepointString(0x20AC) }
+    if (name == "pound") { return _codepointString(0x00A3) }
+    if (name == "yen") { return _codepointString(0x00A5) }
+    if (name == "cent") { return _codepointString(0x00A2) }
+    return null
+}
+
+fn _numericEntity(name: string) -> string? {
+    if (!name.startsWith("#")) { return null }
+    var base = 10
+    var pos = 1
+    if (name.length >= 3 && (name.charAt(1) == "x" || name.charAt(1) == "X")) {
+        base = 16
+        pos = 2
+    }
+    if (pos >= name.length) { return null }
+    var cp = 0
+    while (pos < name.length) {
+        var c = name.charAt(pos)
+        var d = -1
+        if (base == 16) {
+            if (!_isHexDigit(c)) { return null }
+            d = _hexValue(c)
+        } else {
+            if (!_isDigit(c)) { return null }
+            d = c.ord()! - 48
+        }
+        cp = cp * base + d
+        if (cp > 0x10FFFF) { return null }
+        pos = pos + 1
+    }
+    return _codepointString(cp)
+}
+
+fn _indentText(level: int, spaces: int) -> string {
+    if (spaces <= 0 || level <= 0) { return "" }
+    var out = StringBuilder()
+    for (var i = 0; i < level * spaces; i++) { out.append(" ") }
+    return out.toString()
+}
+
+fn _escapeText(value: string) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < value.length; i++) {
+        var c = value.charAt(i)
+        if (c == "<") {
+            out.append("&lt;")
+        } else if (c == ">") {
+            out.append("&gt;")
+        } else if (c == "&") {
+            out.append("&amp;")
+        } else {
+            out.append(c)
+        }
+    }
+    return out.toString()
+}
+
+fn _escapeAttr(value: string) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < value.length; i++) {
+        var c = value.charAt(i)
+        if (c == "<") {
+            out.append("&lt;")
+        } else if (c == ">") {
+            out.append("&gt;")
+        } else if (c == "&") {
+            out.append("&amp;")
+        } else if (c == "\"") {
+            out.append("&quot;")
+        } else {
+            out.append(c)
+        }
+    }
+    return out.toString()
+}
+
+fn _stringValue(value: unknown, fallback: string = "") -> string {
+    if (typename(value) == "string") { return value as string }
+    return fallback
+}
+
+fn _nodeType(node: Json) -> string {
+    return _stringValue(Json.get(node, "type", "element"), "element")
+}
+
+fn _arrayValue(value: unknown) -> Array<unknown>? {
+    if (typename(value) == "Array") { return value as Array<unknown> }
+    return null
+}
+
+class XmlParser {
+    data: string
+    pos: int
+    line: int
+    column: int
+    preserveWhitespace: bool
+    preserveComments: bool
+    preserveCData: bool
+    validateEntities: bool
+    errors: Json
+    root: Json
+    hasRoot: bool
+
+    constructor(data: string, options: unknown = null) {
+        this.data = data
+        this.pos = 0
+        this.line = 1
+        this.column = 1
+        var config = XmlConfig(options)
+        this.preserveWhitespace = config.preserveWhitespace
+        this.preserveComments = config.preserveComments
+        this.preserveCData = config.preserveCData
+        this.validateEntities = config.validateEntities
+        this.errors = []
+        this.root = {}
+        this.hasRoot = false
+    }
+
+    atEnd() -> bool {
+        return this.pos >= this.data.length
+    }
+
+    peek() -> string {
+        if (this.atEnd()) { return "" }
+        return this.data.charAt(this.pos)
+    }
+
+    peekAt(offset: int) -> string {
+        var p = this.pos + offset
+        if (p < 0 || p >= this.data.length) { return "" }
+        return this.data.charAt(p)
+    }
+
+    startsWith(prefix: string) -> bool {
+        return _startsWithAt(this.data, this.pos, prefix)
+    }
+
+    startsWithIgnoreCase(prefix: string) -> bool {
+        return _startsWithAtIgnoreCase(this.data, this.pos, prefix)
+    }
+
+    advance() -> string {
+        var c = this.peek()
+        if (c.length == 0) { return c }
+        this.pos = this.pos + 1
+        if (c == "\n") {
+            this.line = this.line + 1
+            this.column = 1
+        } else {
+            this.column = this.column + 1
+        }
+        return c
+    }
+
+    addError(typ: string, message: string) {
+        this.errors.push({
+            type: typ,
+            line: this.line,
+            row: -1,
+            column: this.column,
+            message: message
+        })
+    }
+
+    skipWhitespace() {
+        while (!this.atEnd() && _isWhitespace(this.peek())) {
+            this.advance()
+        }
+    }
+
+    parseName() -> string {
+        if (!_isNameStart(this.peek())) { return "" }
+        var start = this.pos
+        this.advance()
+        while (!this.atEnd() && _isNameChar(this.peek())) {
+            this.advance()
+        }
+        return this.data.slice(start, this.pos)
+    }
+
+    decodeEntity(name: string) -> string {
+        var named = _namedEntity(name)
+        if (named != null) { return named! }
+        var numeric = _numericEntity(name)
+        if (numeric != null) { return numeric! }
+        if (this.validateEntities) {
+            this.addError("InvalidEntity", "Unknown entity reference '&" + name + ";'")
+        }
+        return "&" + name + ";"
+    }
+
+    decodeEntities(value: string) -> string {
+        var out = StringBuilder()
+        var i = 0
+        while (i < value.length) {
+            var c = value.charAt(i)
+            if (c == "&") {
+                var j = i + 1
+                while (j < value.length && value.charAt(j) != ";" && j - i < 12) {
+                    j = j + 1
+                }
+                if (j < value.length && value.charAt(j) == ";") {
+                    var name = value.slice(i + 1, j)
+                    out.append(this.decodeEntity(name))
+                    i = j + 1
+                    continue
+                }
+            }
+            out.append(c)
+            i = i + 1
+        }
+        return out.toString()
+    }
+
+    skipProcessingInstruction() {
+        if (!this.startsWith("<?")) { return }
+        this.advance()
+        this.advance()
+        while (!this.atEnd()) {
+            if (this.startsWith("?>")) {
+                this.advance()
+                this.advance()
+                return
+            }
+            this.advance()
+        }
+        this.addError("UnterminatedPI", "Unterminated processing instruction")
+    }
+
+    skipDoctype() {
+        if (!this.startsWithIgnoreCase("<!DOCTYPE")) { return }
+        this.advance()
+        this.advance()
+        for (var i = 0; i < 7; i++) { this.advance() }
+        var bracketDepth = 0
+        while (!this.atEnd()) {
+            var c = this.peek()
+            if (c == "[") {
+                bracketDepth = bracketDepth + 1
+            } else if (c == "]") {
+                bracketDepth = bracketDepth - 1
+            } else if (c == ">" && bracketDepth <= 0) {
+                this.advance()
+                return
+            }
+            this.advance()
+        }
+        this.addError("UnterminatedDoctype", "Unterminated DOCTYPE")
+    }
+
+    skipTopLevelComment() {
+        if (!this.startsWith("<!--")) { return }
+        for (var i = 0; i < 4; i++) { this.advance() }
+        while (!this.atEnd()) {
+            if (this.startsWith("-->")) {
+                this.advance()
+                this.advance()
+                this.advance()
+                return
+            }
+            this.advance()
+        }
+        this.addError("UnterminatedComment", "Unterminated comment")
+    }
+
+    parseCommentNode() -> Json {
+        if (!this.startsWith("<!--")) { return null }
+        for (var i = 0; i < 4; i++) { this.advance() }
+        var start = this.pos
+        while (!this.atEnd()) {
+            if (this.startsWith("-->")) {
+                var content = this.data.slice(start, this.pos)
+                this.advance()
+                this.advance()
+                this.advance()
+                return comment(content)
+            }
+            this.advance()
+        }
+        this.addError("UnterminatedComment", "Unterminated comment")
+        return comment(this.data.slice(start, this.pos))
+    }
+
+    parseCDataNode() -> Json {
+        if (!this.startsWith("<![CDATA[")) { return null }
+        for (var i = 0; i < 9; i++) { this.advance() }
+        var start = this.pos
+        while (!this.atEnd()) {
+            if (this.startsWith("]]>")) {
+                var content = this.data.slice(start, this.pos)
+                this.advance()
+                this.advance()
+                this.advance()
+                if (this.preserveCData) { return cdata(content) }
+                return text(content)
+            }
+            this.advance()
+        }
+        this.addError("UnterminatedCData", "Unterminated CDATA")
+        var content = this.data.slice(start, this.pos)
+        if (this.preserveCData) { return cdata(content) }
+        return text(content)
+    }
+
+    parseTextNode() -> Json {
+        var start = this.pos
+        while (!this.atEnd() && this.peek() != "<") {
+            this.advance()
+        }
+        if (this.pos == start) { return null }
+        var value = this.decodeEntities(this.data.slice(start, this.pos))
+        if (!this.preserveWhitespace && _allWhitespace(value)) { return null }
+        return text(value)
+    }
+
+    parseAttributeValue() -> string {
+        var quote = this.peek()
+        if (quote != "\"" && quote != "'") {
+            this.addError("InvalidAttr", "Expected quote after =")
+            return ""
+        }
+        this.advance()
+        var start = this.pos
+        while (!this.atEnd() && this.peek() != quote) {
+            this.advance()
+        }
+        var raw = this.data.slice(start, this.pos)
+        if (this.peek() == quote) {
+            this.advance()
+        } else {
+            this.addError("UnterminatedAttr", "Unterminated attribute value")
+        }
+        return this.decodeEntities(raw)
+    }
+
+    setNamespace(node: Json, name: string, value: string) {
+        if (name != "xmlns" && !name.startsWith("xmlns:")) { return }
+        var nsValue = Json.get(node, "namespaces", null)
+        var ns: Json = {}
+        if (typename(nsValue) == "Json") {
+            ns = nsValue
+        } else {
+            node["namespaces"] = ns
+        }
+        if (name == "xmlns") {
+            ns[""] = value
+        } else {
+            ns[name.slice(6, name.length)] = value
+        }
+    }
+
+    parseElement(depth: int) -> Json {
+        if (depth > XML_MAX_DEPTH) {
+            this.addError("MaxDepthExceeded", "Maximum nesting depth exceeded")
+            return null
+        }
+        if (this.peek() != "<") { return null }
+        this.advance()
+        var tag = this.parseName()
+        if (tag.length == 0) {
+            this.addError("InvalidTag", "Invalid tag start")
+            return null
+        }
+        var node = element(tag)
+        var attrs: Json = Json.get(node, "attrs", {})
+
+        while (!this.atEnd()) {
+            this.skipWhitespace()
+            if (this.startsWith("/>")) {
+                this.advance()
+                this.advance()
+                return node
+            }
+            if (this.peek() == ">") {
+                this.advance()
+                break
+            }
+            var attrName = this.parseName()
+            if (attrName.length == 0) {
+                this.addError("InvalidAttr", "Invalid attribute")
+                while (!this.atEnd() && this.peek() != ">" && !this.startsWith("/>")) {
+                    this.advance()
+                }
+                continue
+            }
+            this.skipWhitespace()
+            if (this.peek() != "=") {
+                this.addError("InvalidAttr", "Expected = after attribute name")
+                attrs[attrName] = ""
+                this.setNamespace(node, attrName, "")
+                continue
+            }
+            this.advance()
+            this.skipWhitespace()
+            var attrValue = this.parseAttributeValue()
+            attrs[attrName] = attrValue
+            this.setNamespace(node, attrName, attrValue)
+        }
+
+        while (!this.atEnd()) {
+            if (this.startsWith("</")) {
+                this.advance()
+                this.advance()
+                var closeTag = this.parseName()
+                this.skipWhitespace()
+                if (this.peek() == ">") {
+                    this.advance()
+                } else {
+                    this.addError("InvalidTag", "Expected > after closing tag")
+                }
+                if (closeTag != tag) {
+                    this.addError("MismatchedTag", "Mismatched closing tag")
+                }
+                return node
+            }
+
+            if (this.startsWith("<!--")) {
+                var commentNode = this.parseCommentNode()
+                if (this.preserveComments && commentNode != null) {
+                    node["children"].push(commentNode!)
+                }
+                continue
+            }
+
+            if (this.startsWith("<![CDATA[")) {
+                var cdataNode = this.parseCDataNode()
+                if (cdataNode != null) { node["children"].push(cdataNode!) }
+                continue
+            }
+
+            if (this.startsWith("<?")) {
+                this.skipProcessingInstruction()
+                continue
+            }
+
+            if (this.startsWithIgnoreCase("<!DOCTYPE")) {
+                this.skipDoctype()
+                continue
+            }
+
+            if (this.peek() == "<") {
+                var child = this.parseElement(depth + 1)
+                if (child != null) { node["children"].push(child!) }
+                continue
+            }
+
+            var textNode = this.parseTextNode()
+            if (textNode != null) { node["children"].push(textNode!) }
+        }
+
+        this.addError("UnclosedTag", "Unclosed tag")
+        return node
+    }
+
+    parseDocument() -> Json {
+        while (!this.atEnd()) {
+            this.skipWhitespace()
+            if (this.atEnd()) { break }
+
+            if (this.startsWith("<?")) {
+                this.skipProcessingInstruction()
+                continue
+            }
+            if (this.startsWith("<!--")) {
+                this.skipTopLevelComment()
+                continue
+            }
+            if (this.startsWithIgnoreCase("<!DOCTYPE")) {
+                this.skipDoctype()
+                continue
+            }
+            if (this.peek() == "<") {
+                var node = this.parseElement(0)
+                if (node != null) {
+                    this.root = node!
+                    this.hasRoot = true
+                    return this.root
+                }
+                break
+            }
+            this.advance()
+        }
+        return this.root
+    }
+}
+
+fn _parseWithDetails(data: string, options: unknown = null) -> XmlParser {
+    var parser = XmlParser(data, options)
+    parser.parseDocument()
+    return parser
+}
+
+fn _serializeNode(nodeValue: unknown, config: XmlWriteConfig, level: int, depth: int) -> string {
+    if (depth > XML_MAX_DEPTH || typename(nodeValue) != "Json") { return "" }
+    var node = nodeValue as Json
+    var typ = _nodeType(node)
+    var out = StringBuilder()
+
+    if (typ == "document") {
+        var children = _arrayValue(Json.get(node, "children", []))
+        if (children == null) { return "" }
+        for (var i = 0; i < children!.length; i++) {
+            out.append(_serializeNode(children![i], config, level, depth + 1))
+        }
+        return out.toString()
+    }
+
+    if (typ == "element") {
+        var tag = _stringValue(Json.get(node, "tag", ""), "")
+        if (tag.length == 0) { return "" }
+        out.append(_indentText(level, config.indent))
+        out.append("<")
+        out.append(tag)
+
+        var attrsValue = Json.get(node, "attrs", null)
+        if (typename(attrsValue) == "Json") {
+            var attrs = attrsValue as Json
+            for (key in attrs) {
+                var value = Json.get(attrs, key, null)
+                if (typename(value) == "string") {
+                    out.append(" ")
+                    out.append(key)
+                    out.append("=\"")
+                    out.append(_escapeAttr(value as string))
+                    out.append("\"")
+                }
+            }
+        }
+
+        var children = _arrayValue(Json.get(node, "children", []))
+        if (children != null && children!.length > 0) {
+            out.append(">")
+            var textOnly = false
+            if (children!.length == 1 && typename(children![0]) == "Json") {
+                textOnly = _nodeType(children![0] as Json) == "text"
+            }
+            if (textOnly) {
+                var textValue = Json.get(children![0] as Json, "text", "")
+                if (typename(textValue) == "string") {
+                    out.append(_escapeText(textValue as string))
+                }
+            } else {
+                if (config.indent > 0) { out.append("\n") }
+                for (var i = 0; i < children!.length; i++) {
+                    out.append(_serializeNode(children![i], config, level + 1, depth + 1))
+                }
+                out.append(_indentText(level, config.indent))
+            }
+            out.append("</")
+            out.append(tag)
+            out.append(">")
+        } else {
+            out.append("/>")
+        }
+        if (depth > 0 && config.indent > 0) { out.append("\n") }
+        return out.toString()
+    }
+
+    if (typ == "text") {
+        out.append(_indentText(level, config.indent))
+        out.append(_escapeText(_stringValue(Json.get(node, "text", ""), "")))
+        if (config.indent > 0) { out.append("\n") }
+        return out.toString()
+    }
+
+    if (typ == "comment") {
+        out.append(_indentText(level, config.indent))
+        out.append("<!--")
+        out.append(_stringValue(Json.get(node, "text", ""), ""))
+        out.append("-->")
+        if (config.indent > 0) { out.append("\n") }
+        return out.toString()
+    }
+
+    if (typ == "cdata") {
+        out.append(_indentText(level, config.indent))
+        out.append("<![CDATA[")
+        out.append(_stringValue(Json.get(node, "text", ""), ""))
+        out.append("]]>")
+        if (config.indent > 0) { out.append("\n") }
+        return out.toString()
+    }
+
+    return ""
+}
+
+fn parse(data: string, options: unknown = null) -> Json {
+    var parser = _parseWithDetails(data, options)
+    if (!parser.hasRoot) {
+        var empty: Json = {}
+        return empty
+    }
+    return parser.root
+}
+
+fn parseDetailed(data: string, options: unknown = null) -> Json {
+    var parser = _parseWithDetails(data, options)
+    return {
+        doc: parser.hasRoot ? parser.root : null,
+        errors: parser.errors
+    }
+}
+
+fn parseFile(path: string, options: unknown = null) -> Json {
+    var content = io.readFile(path)
+    if (content == null) {
+        var empty: Json = {}
+        return empty
+    }
+    return parse(content!, options)
+}
+
+fn stringify(node: unknown, options: unknown = null) -> string {
+    var config = XmlWriteConfig(options)
+    var out = StringBuilder()
+    if (config.declaration) {
+        out.append("<?xml version=\"1.0\" encoding=\"")
+        out.append(config.encoding)
+        out.append("\"?>")
+        if (config.indent > 0) { out.append("\n") }
+    }
+    out.append(_serializeNode(node, config, 0, 0))
+    return out.toString()
+}
+
+fn writeFile(path: string, node: unknown, options: unknown = null) -> bool {
+    return io.writeFile(path, stringify(node, options))
+}
+
+fn document() -> Json {
+    return {
+        type: "document",
+        children: []
+    }
+}
+
+fn element(tag: string, attrsValue: unknown = null) -> Json {
+    var attrs: Json = {}
+    var encoded: Json = Json.encode(attrsValue)
+    if (typename(encoded) == "Json") {
+        for (key in encoded) {
+            var value = Json.get(encoded, key, null)
+            if (typename(value) == "string") {
+                attrs[key] = value
+            }
+        }
+    }
+    return {
+        type: "element",
+        tag: tag,
+        attrs: attrs,
+        children: []
+    }
+}
+
+fn text(content: string) -> Json {
+    return {
+        type: "text",
+        text: content
+    }
+}
+
+fn comment(content: string) -> Json {
+    return {
+        type: "comment",
+        text: content
+    }
+}
+
+fn cdata(content: string) -> Json {
+    return {
+        type: "cdata",
+        text: content
+    }
+}
+
+export {
+    parse, parseDetailed, parseFile, stringify, writeFile,
+    document, element, text, comment, cdata
+}
