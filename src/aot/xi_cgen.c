@@ -4208,6 +4208,42 @@ static bool cg_native_box_direct_call_arg_is_native(XiCgenCtx *ctx, const XiFunc
     return cg_abi_slot_storage_rep(&target_plan->abi.params[param_index]) != XR_REP_TAGGED;
 }
 
+static bool cg_direct_call_arg_consumes_int_widen_inner(XiCgenCtx *ctx, const XiFunc *f,
+                                                        const XiValue *call, uint16_t arg_index,
+                                                        const XiValue *widen) {
+    if (!ctx || !call || call->op != XI_CALL || arg_index == 0 || !call->args || !widen)
+        return false;
+    if (cg_func_needs_aot_coro_ctx(ctx, f))
+        return false;
+
+    CgStaticFunctionCall static_call = cg_resolve_static_function_call(ctx, f, call->args[0]);
+    if (!static_call.func || static_call.is_class_constructor)
+        return false;
+
+    const XaotFuncPlan *target_plan = cg_func_plan(ctx, static_call.func);
+    uint16_t param_index = (uint16_t) (arg_index - 1);
+    if (!target_plan || param_index >= target_plan->abi.nparams || !target_plan->abi.params)
+        return false;
+
+    return cg_int_widen_can_use_inner_for_slot(
+        ctx, f, widen, xaot_abi_slot_value_rep(&target_plan->abi.params[param_index]), NULL, NULL);
+}
+
+static bool cg_int_widen_use_consumes_inner(XiCgenCtx *ctx, const XiFunc *f, const XiValue *widen,
+                                            const XiValue *user, uint16_t arg_index) {
+    if (!ctx || !f || !widen || !user)
+        return false;
+    const XiValue *inner = NULL;
+    if (!cg_int_widen_inner_value_plan(ctx, widen, &inner, NULL))
+        return false;
+    if (cg_direct_call_arg_consumes_int_widen_inner(ctx, f, user, arg_index, widen))
+        return true;
+    if (cg_lowbits_binop_elided_into_unsigned_narrow(f, user) &&
+        cg_arith_narrow_src(ctx, f, widen, NULL, NULL) == inner)
+        return true;
+    return false;
+}
+
 static bool cg_call_method_is_typed_array_resize_zero_specialization(XiCgenCtx *ctx,
                                                                      const XiFunc *f,
                                                                      const XiValue *call) {
@@ -4368,13 +4404,16 @@ static bool cg_pure_value_only_feeds_aot_elided_values(XiCgenCtx *ctx, const XiF
         (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND))
         return false;
 
-    switch ((XiOp) v->op) {
-        case XI_CONST:
-        case XI_COPY:
-        case XI_MOVE:
-            break;
-        default:
-            return false;
+    bool int_widen = cg_int_widen_inner_value_plan(ctx, v, NULL, NULL);
+    if (!int_widen) {
+        switch ((XiOp) v->op) {
+            case XI_CONST:
+            case XI_COPY:
+            case XI_MOVE:
+                break;
+            default:
+                return false;
+        }
     }
 
     bool seen_use = false;
@@ -4398,6 +4437,8 @@ static bool cg_pure_value_only_feeds_aot_elided_values(XiCgenCtx *ctx, const XiF
                 if (user->args[a] != v)
                     continue;
                 seen_use = true;
+                if (int_widen && cg_int_widen_use_consumes_inner(ctx, f, v, user, a))
+                    continue;
                 if (!cg_native_box_value_is_elided_in_aot(ctx, f, user))
                     return false;
             }

@@ -258,11 +258,10 @@ static void emit_fixed_array_lane_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiVa
     fprintf(out, ").ptr)");
 }
 
-static void emit_fixed_array_lane_load_prefix(FILE *out, const CgFixedArrayLaneInfo *info) {
-    if (info->rep == XR_REP_F64)
+static void emit_fixed_array_lane_load_prefix(FILE *out, const CgFixedArrayLaneInfo *info,
+                                              XrRep target_rep) {
+    if (info->rep == XR_REP_F64 && target_rep == XR_REP_F64 && info->native_type == XR_NATIVE_F64)
         fprintf(out, "(double)");
-    else if (info->rep != XR_REP_TAGGED)
-        fprintf(out, "(int64_t)");
 }
 
 static void emit_fixed_array_lane_oob_fallback(FILE *out, const CgFixedArrayLaneInfo *info) {
@@ -315,7 +314,8 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
         fprintf(out, "; XR_LIKELY(_idx >= 0 && _idx < %u) ? ", (unsigned) info.count);
     }
-    emit_fixed_array_lane_load_prefix(out, &info);
+    XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
+    emit_fixed_array_lane_load_prefix(out, &info, target_rep);
     if (static_slot_read)
         cg_emit_static_fixed_array_name(out, static_slot);
     else if (static_struct_field_read)
