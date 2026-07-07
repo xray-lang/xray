@@ -643,11 +643,6 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         const XgClassSummary *summary = &evidence->classes[i];
         if (!xg_class_summary_is_runtime_class(summary))
             continue;
-        if ((summary->flags & XG_CLASS_EXPLICIT_FINAL) != 0 &&
-            (summary->flags & XG_CLASS_HAS_SUBCLASS) != 0) {
-            bundle->error_msg = "global class evidence marks a final class as subclassed";
-            return false;
-        }
         if (!xaot_bundle_add_class_hierarchy_plan(bundle, summary) ||
             !xaot_bundle_add_class_layout_plan(bundle, summary)) {
             bundle->error_msg = "failed to allocate AOT class plan";

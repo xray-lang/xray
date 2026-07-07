@@ -431,6 +431,87 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     xg_global_evidence_free(&ev);
 }
 
+static void assert_class_graph_verifier_rejects(const XgClassSummary *classes, uint32_t nclasses,
+                                                const char *expected_error) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x41,
+                      .compiler_semver_hash = 0x42,
+                      .profile_hash = 0x43,
+                      .imported_summary_hash = 0x44,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    for (uint32_t i = 0; i < nclasses; i++)
+        ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &classes[i]));
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, expected_error));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_verifier_rederives_class_graph_flags) {
+    XgClassSummary missing_has_subclass[] = {
+        {.class_id = 1,
+         .parent_class_id = XG_NO_ID,
+         .flags = XG_CLASS_INFERRED_FINAL,
+         .decl_kind = XG_DECL_CLASS},
+        {.class_id = 2,
+         .parent_class_id = 1,
+         .flags = XG_CLASS_INFERRED_FINAL,
+         .decl_kind = XG_DECL_CLASS},
+    };
+    assert_class_graph_verifier_rejects(missing_has_subclass, 2,
+                                        "has_subclass flag does not re-derive");
+
+    XgClassSummary stale_inferred_final[] = {
+        {.class_id = 1,
+         .parent_class_id = XG_NO_ID,
+         .flags = XG_CLASS_HAS_SUBCLASS | XG_CLASS_INFERRED_FINAL,
+         .decl_kind = XG_DECL_CLASS},
+        {.class_id = 2,
+         .parent_class_id = 1,
+         .flags = XG_CLASS_INFERRED_FINAL,
+         .decl_kind = XG_DECL_CLASS},
+    };
+    assert_class_graph_verifier_rejects(stale_inferred_final, 2,
+                                        "inferred-final flag does not re-derive");
+
+    XgClassSummary final_with_subclass[] = {
+        {.class_id = 1,
+         .parent_class_id = XG_NO_ID,
+         .flags = XG_CLASS_EXPLICIT_FINAL | XG_CLASS_HAS_SUBCLASS,
+         .decl_kind = XG_DECL_CLASS},
+        {.class_id = 2,
+         .parent_class_id = 1,
+         .flags = XG_CLASS_INFERRED_FINAL,
+         .decl_kind = XG_DECL_CLASS},
+    };
+    assert_class_graph_verifier_rejects(final_with_subclass, 2, "final class has subclass");
+}
+
 TEST(global_evidence_verifier_rederives_profile_actions) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x31,
@@ -901,6 +982,7 @@ RUN_TEST(global_evidence_hash_is_content_stable);
 RUN_TEST(global_evidence_dump_lists_core_rows);
 RUN_TEST(global_evidence_lowers_to_aot_class_plans);
 RUN_TEST(global_evidence_verifier_rederives_dispatch_plans);
+RUN_TEST(global_evidence_verifier_rederives_class_graph_flags);
 RUN_TEST(global_evidence_verifier_rederives_profile_actions);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
