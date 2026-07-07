@@ -551,6 +551,10 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
     plan->source_span_id = call->source_span_id;
     plan->body_ordinal = call->body_ordinal;
     plan->method_id = method ? method->method_id : call->method_id;
+    plan->method_name_id = call->method_name_id;
+    plan->method_signature_key = call->method_signature_key;
+    plan->arg_type_key_start = call->arg_type_key_start;
+    plan->arg_count = call->arg_count;
     plan->receiver_static_class_id = call->receiver_static_class_id;
     plan->receiver_static_interface_id = call->receiver_static_interface_id;
     plan->kind = kind;
@@ -975,16 +979,12 @@ xaot_bundle_find_method_dispatch_plan(const XaotBundle *bundle, XgCallsiteId cal
 
 XR_FUNC const XaotMethodDispatchPlan *
 xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, const XiValue *call) {
-    const XgGlobalEvidence *evidence;
     const XaotMethodDispatchPlan *match = NULL;
     const char *method_name;
     uint32_t method_name_id;
     uint16_t arg_count;
     if (!bundle || !call || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
         call->nargs == 0)
-        return NULL;
-    evidence = bundle->global_evidence_plan.evidence;
-    if (!evidence)
         return NULL;
     method_name = call->aux ? (const char *) call->aux : NULL;
     method_name_id = xg_name_id(method_name);
@@ -994,17 +994,15 @@ xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, cons
     if (call->xg_callsite_id != XG_NO_ID) {
         const XaotMethodDispatchPlan *plan =
             xaot_bundle_find_method_dispatch_plan(bundle, call->xg_callsite_id);
-        const XgCallsiteSummary *summary =
-            xg_global_evidence_find_callsite(evidence, call->xg_callsite_id);
-        if (!plan || !summary)
+        if (!plan)
             return NULL;
         if (plan->callsite_id != call->xg_callsite_id)
             return NULL;
         if (call->line != 0 && plan->source_span_id != call->line)
             return NULL;
-        if (summary->arg_count != arg_count)
+        if (plan->arg_count != arg_count)
             return NULL;
-        if (summary->method_name_id == 0 || summary->method_name_id != method_name_id)
+        if (plan->method_name_id == 0 || plan->method_name_id != method_name_id)
             return NULL;
         return plan;
     }
@@ -1012,15 +1010,11 @@ xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, cons
         return NULL;
     for (uint32_t i = 0; i < bundle->nmethod_dispatch_plans; i++) {
         const XaotMethodDispatchPlan *plan = &bundle->method_dispatch_plans[i];
-        const XgCallsiteSummary *summary;
         if (plan->source_span_id != call->line)
             continue;
-        summary = xg_global_evidence_find_callsite(evidence, plan->callsite_id);
-        if (!summary)
+        if (plan->arg_count != arg_count)
             continue;
-        if (summary->arg_count != arg_count)
-            continue;
-        if (summary->method_name_id == 0 || summary->method_name_id != method_name_id)
+        if (plan->method_name_id == 0 || plan->method_name_id != method_name_id)
             continue;
         if (match)
             return NULL;
@@ -2557,20 +2551,22 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         if (dp->dispatch_slot == UINT32_MAX) {
             fprintf(out,
                     "method-dispatch %u callsite=%u span=%u kind=%s owner=%u ordinal=%u method=%u "
-                    "recv_class=%u recv_iface=%u "
+                    "method_name=%u method_sig=%u args=%u+%u recv_class=%u recv_iface=%u "
                     "slot=- targets=%u+%u evidence=0x%x reason=%s\n",
                     di, dp->callsite_id, dp->source_span_id, dispatch_kind_name(dp->kind),
-                    dp->owner_func_id, dp->body_ordinal, dp->method_id,
+                    dp->owner_func_id, dp->body_ordinal, dp->method_id, dp->method_name_id,
+                    dp->method_signature_key, dp->arg_type_key_start, (unsigned) dp->arg_count,
                     dp->receiver_static_class_id, dp->receiver_static_interface_id,
                     dp->target_start, (unsigned) dp->target_count, dp->evidence,
                     dispatch_unproven_reason_name(dp->unproven_reason));
         } else {
             fprintf(out,
                     "method-dispatch %u callsite=%u span=%u kind=%s owner=%u ordinal=%u method=%u "
-                    "recv_class=%u recv_iface=%u "
+                    "method_name=%u method_sig=%u args=%u+%u recv_class=%u recv_iface=%u "
                     "slot=%u targets=%u+%u evidence=0x%x reason=%s\n",
                     di, dp->callsite_id, dp->source_span_id, dispatch_kind_name(dp->kind),
-                    dp->owner_func_id, dp->body_ordinal, dp->method_id,
+                    dp->owner_func_id, dp->body_ordinal, dp->method_id, dp->method_name_id,
+                    dp->method_signature_key, dp->arg_type_key_start, (unsigned) dp->arg_count,
                     dp->receiver_static_class_id, dp->receiver_static_interface_id,
                     dp->dispatch_slot, dp->target_start, (unsigned) dp->target_count, dp->evidence,
                     dispatch_unproven_reason_name(dp->unproven_reason));

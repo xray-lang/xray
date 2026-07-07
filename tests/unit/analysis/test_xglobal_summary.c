@@ -310,6 +310,8 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
                               .static_target_func_id = 0,
                               .receiver_static_class_id = 2,
                               .method_id = 2,
+                              .method_name_id = 900,
+                              .method_signature_key = 901,
                               .arg_type_key_start = 0,
                               .arg_count = 0,
                               .flags = 0};
@@ -393,6 +395,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_NOT_NULL(strstr(dump, "class-hierarchy 0 id=1"));
     ASSERT_NOT_NULL(strstr(dump, "class-layout 1 id=2"));
     ASSERT_NOT_NULL(strstr(dump, "method-dispatch 0 callsite=7 span=0 kind=direct"));
+    ASSERT_NOT_NULL(strstr(dump, "method_name=900 method_sig=901 args=0+0"));
     ASSERT_NOT_NULL(strstr(dump, "interface-use 0 interface=77 implementor=2"));
     ASSERT_NOT_NULL(strstr(dump, "metadata 0 name=typename bodies=1 decls=0 action=link"));
     ASSERT_NOT_NULL(strstr(dump, "capability 0 name=coroutine bodies=1 action=link"));
@@ -440,6 +443,8 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                               .receiver_static_class_id = 1,
                               .method_id = 1,
                               .method_name_id = draw_name_id,
+                              .method_signature_key = 701,
+                              .arg_type_key_start = 25,
                               .arg_count = 1};
     XiFunc init_func;
     XiFunc draw_func;
@@ -525,9 +530,9 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     xi_call.aux = NULL;
     ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
     xi_call.aux = (void *) "draw";
-    ev.callsites[0].method_name_id = 0;
+    good.method_dispatch_plans[0].method_name_id = 0;
     ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
-    ev.callsites[0].method_name_id = draw_name_id;
+    good.method_dispatch_plans[0].method_name_id = draw_name_id;
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
     good.method_dispatch_plans[0].kind = XAOT_DISPATCH_VTABLE;
@@ -571,6 +576,54 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     ASSERT_TRUE(!xaot_verify_bundle(&stale_ordinal, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan body ordinal does not re-derive"));
     xaot_bundle_free(&stale_ordinal);
+
+    XaotBundle stale_method_name;
+    memset(&stale_method_name, 0, sizeof(stale_method_name));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_method_name, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_method_name.modules = modules;
+    stale_method_name.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_method_name, &init_func, 0, 0));
+    stale_method_name.method_dispatch_plans[0].method_name_id = xg_name_id("other");
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_method_name, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan method name does not re-derive"));
+    xaot_bundle_free(&stale_method_name);
+
+    XaotBundle stale_signature;
+    memset(&stale_signature, 0, sizeof(stale_signature));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_signature, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_signature.modules = modules;
+    stale_signature.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_signature, &init_func, 0, 0));
+    stale_signature.method_dispatch_plans[0].method_signature_key = 702;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_signature, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan method signature does not re-derive"));
+    xaot_bundle_free(&stale_signature);
+
+    XaotBundle stale_arg_range;
+    memset(&stale_arg_range, 0, sizeof(stale_arg_range));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_arg_range, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_arg_range.modules = modules;
+    stale_arg_range.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_arg_range, &init_func, 0, 0));
+    stale_arg_range.method_dispatch_plans[0].arg_type_key_start = 26;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_arg_range, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan argument type range does not re-derive"));
+    xaot_bundle_free(&stale_arg_range);
+
+    XaotBundle stale_arg_count;
+    memset(&stale_arg_count, 0, sizeof(stale_arg_count));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_arg_count, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_arg_count.modules = modules;
+    stale_arg_count.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_arg_count, &init_func, 0, 0));
+    stale_arg_count.method_dispatch_plans[0].arg_count = 2;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_arg_count, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan argument count does not re-derive"));
+    xaot_bundle_free(&stale_arg_count);
 
     XaotBundle stale_target;
     memset(&stale_target, 0, sizeof(stale_target));
@@ -833,6 +886,8 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     ASSERT_NOT_NULL(plan);
     ASSERT_EQ_UINT(plan->kind, XAOT_DISPATCH_TYPE_SWITCH);
     ASSERT_EQ_UINT(plan->receiver_static_interface_id, 77);
+    ASSERT_EQ_UINT(plan->method_name_id, 700);
+    ASSERT_EQ_UINT(plan->method_signature_key, 701);
     ASSERT_EQ_UINT(plan->target_count, 2);
     ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 2);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].receiver_class_id, 1);
@@ -1562,6 +1617,8 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
         const XaotMethodDispatchPlan *plan = &bundle.method_dispatch_plans[i];
         ASSERT_EQ_UINT(plan->kind, XAOT_DISPATCH_TYPE_SWITCH);
         ASSERT_TRUE(plan->source_span_id != 0);
+        ASSERT_TRUE(plan->method_name_id != 0);
+        ASSERT_TRUE(plan->method_signature_key != 0);
         ASSERT_EQ_UINT(plan->target_count, 2);
         ASSERT_TRUE((plan->evidence & XAOT_DISPATCH_EV_INTERFACE_OBJECT) != 0);
         ASSERT_TRUE((plan->evidence & XAOT_DISPATCH_EV_SMALL_IMPLEMENTOR_SET) != 0);
