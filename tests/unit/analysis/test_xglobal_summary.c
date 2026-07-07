@@ -416,6 +416,30 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan kind does not re-derive"));
     xaot_bundle_free(&good);
 
+    XaotBundle stale_target;
+    memset(&stale_target, 0, sizeof(stale_target));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_target, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_target.modules = modules;
+    stale_target.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_target, &init_func, 0, 0));
+    stale_target.method_dispatch_plans[0].target_start = 99;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_target, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch direct target does not re-derive"));
+    xaot_bundle_free(&stale_target);
+
+    XaotBundle stale_target_count;
+    memset(&stale_target_count, 0, sizeof(stale_target_count));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_target_count, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_target_count.modules = modules;
+    stale_target_count.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_target_count, &init_func, 0, 0));
+    stale_target_count.method_dispatch_plans[0].target_count = 2;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_target_count, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch direct target does not re-derive"));
+    xaot_bundle_free(&stale_target_count);
+
     XaotBundle missing;
     memset(&missing, 0, sizeof(missing));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&missing, &ev, XG_BUILD_NATIVE_RELEASE));
