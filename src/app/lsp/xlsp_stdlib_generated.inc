@@ -469,9 +469,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"ProcessOptions", XLSP_SYM_CLASS, "type ProcessOptions", "Class type", NULL, 0},
     {"Signal", XLSP_SYM_CLASS, "type Signal", "Enum type", NULL, 0},
     {"Pipe", XLSP_SYM_CLASS, "type Pipe", "Class type", NULL, 0},
+    {"ThreadLocal", XLSP_SYM_CLASS, "type ThreadLocal", "Class type", NULL, 0},
     {"Dylib", XLSP_SYM_CLASS, "type Dylib", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 14
+#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 15
 
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {

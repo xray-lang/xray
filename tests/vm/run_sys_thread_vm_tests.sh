@@ -101,6 +101,7 @@ TEMPLATE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_template_join.xr"
 SLICE_BOUND_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_slice_bound_join.xr"
 CHANNEL_CAPACITY_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_channel_capacity_join.xr"
 UNSAFE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_unsafe_join.xr"
+THREADLOCAL_BASIC_SRC="$PROJECT_DIR/tests/vm/sys_threadlocal_basic.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -126,6 +127,7 @@ expect_output "template_join" "$TEMPLATE_JOIN_SRC" "joined 42"
 expect_output "slice_bound_join" "$SLICE_BOUND_JOIN_SRC" $'2\n20'
 expect_output "channel_capacity_join" "$CHANNEL_CAPACITY_JOIN_SRC" "channel"
 expect_output "unsafe_join" "$UNSAFE_JOIN_SRC" "42"
+expect_output "threadlocal_basic" "$THREADLOCAL_BASIC_SRC" $'10\n20\n15\n20'
 expect_warning "orphan" "$ORPHAN_SRC" "orphan" \
     "sys.Thread.spawn returns a Thread handle; call join() or detach() explicitly"
 expect_warning "unused_local" "$UNUSED_LOCAL_SRC" "unused-local" \

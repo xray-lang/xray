@@ -91,6 +91,7 @@ typedef DWORD xr_thread_local_key_t;
 #else  // POSIX
 
 #include <pthread.h>
+#include <string.h>
 
 typedef pthread_t xr_thread_t;
 typedef pthread_mutex_t xr_mutex_t;
@@ -135,6 +136,18 @@ XR_FUNC void xr_thread_detach(xr_thread_t t);
 
 // Return the calling thread's handle.
 XR_FUNC xr_thread_t xr_thread_self(void);
+
+static inline uint64_t xr_thread_current_id(void) {
+#ifdef XR_OS_WINDOWS
+    return (uint64_t) GetCurrentThreadId();
+#else
+    pthread_t self = pthread_self();
+    uint64_t id = 0;
+    size_t n = sizeof(self) < sizeof(id) ? sizeof(self) : sizeof(id);
+    memcpy(&id, &self, n);
+    return id;
+#endif
+}
 
 // Test whether a thread handle is non-zero, i.e. has been
 // populated by a successful xr_thread_create*. Lets callers

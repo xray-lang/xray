@@ -449,6 +449,7 @@ static const XaBuiltinMember g_gen_runtime_functions[] = {
 // sys module functions
 static const XaBuiltinMember g_gen_sys_functions[] = {
     {"OsMutex", "(): OsMutex", "Create an OS-domain mutex", true, false, false},
+    {"__osMutexNew", "(): OsMutex", "Create an OS-domain mutex for sys module internals", true, false, true},
     {"OsRwLock", "(): OsRwLock", "Create an OS-domain read-write lock", true, false, false},
     {"OsCondvar", "(): OsCondvar", "Create an OS-domain condition variable", true, false, false},
     {"OsBarrier", "(parties: int): OsBarrier", "Create a reusable OS-domain barrier", true, false, false},
@@ -457,6 +458,7 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"threadYield", "(): ()", "Yield the current OS thread to another runnable OS thread", true, false, false},
     {"sleepMs", "(ms: int): ()", "Block the current OS thread for at least ms milliseconds", true, false, false},
     {"pinToCpu", "(cpu: int): bool", "Best-effort pin of the current OS thread to a CPU index", true, false, false},
+    {"__threadLocalId", "(): int", "Return a stable token for the current OS thread", true, false, true},
     {"__dylibOpen", "(path: string): int", "Open a dynamic library and return an opaque handle token, or 0 on failure", true, false, true},
     {"__dylibSymbol", "(handle: int, name: string): RawPtr<uint8>?", "Resolve a dynamic-library symbol to a raw address, or null on failure", true, false, true},
     {"__dylibClose", "(handle: int): bool", "Close a dynamic library handle token", true, false, true},
@@ -470,7 +472,7 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"__pipeWrite", "(handle: int, data: Bytes): int", "Write one chunk to a pipe endpoint", true, false, true},
     {"__pipeClose", "(handle: int): bool", "Close a pipe endpoint", true, false, true},
 };
-#define GEN_SYS_FUNCTION_COUNT 21
+#define GEN_SYS_FUNCTION_COUNT 23
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {

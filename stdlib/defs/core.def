@@ -1081,6 +1081,19 @@ module sys {
     layer: "system"
   }
 
+  fn __osMutexNew {
+    signature: "(): OsMutex"
+    doc: "Create an OS-domain mutex for sys module internals"
+    vm: "sys_mutex_new"
+    aot: "xrt_sys_mutex_new"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
   fn OsRwLock {
     signature: "(): OsRwLock"
     doc: "Create an OS-domain read-write lock"
@@ -1175,6 +1188,19 @@ module sys {
     aot_direct: true
     link_object: false
     layer: "system"
+  }
+
+  fn __threadLocalId {
+    signature: "(): int"
+    doc: "Return a stable token for the current OS thread"
+    vm: "sys_thread_local_id"
+    aot: "xrt_sys_thread_local_id"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
   }
 
   fn __dylibOpen {

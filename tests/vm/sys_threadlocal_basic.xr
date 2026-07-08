@@ -1,0 +1,18 @@
+import sys
+
+shared local = sys.ThreadLocal<int>(fn() -> int {
+    return 10
+})
+
+print(local.get())
+local.set(20)
+print(local.get())
+
+var t = sys.Thread.spawn(fn() -> int {
+    var first = local.get()
+    local.set(first + 5)
+    return local.get()
+})
+
+print(t.join())
+print(local.get())

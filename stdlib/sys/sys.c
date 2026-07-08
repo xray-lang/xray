@@ -602,6 +602,13 @@ static XrValue sys_pin_to_cpu(XrVMRuntime *isolate, XrValue *args, int argc) {
     return xr_bool(xr_thread_pin_to_cpu((unsigned int) cpu) == 0);
 }
 
+static XrValue sys_thread_local_id(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    return xr_int((int64_t) xr_thread_current_id());
+}
+
 static XrValue sys_dylib_open(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     const char *path = (argc >= 1) ? xrs_string_arg(args[0], NULL) : NULL;

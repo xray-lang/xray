@@ -150,6 +150,43 @@ class Process {
     }
 }
 
+class ThreadLocal<T> {
+    _lock: OsMutex
+    _values: Map<int, T>
+    _init: () -> T
+
+    constructor(init: () -> T) {
+        this._lock = __osMutexNew()
+        this._values = #{}
+        this._init = init
+    }
+
+    get() -> T {
+        var key = __threadLocalId()
+        this._lock.lock()
+        var existing = this._values.get(key)
+        this._lock.unlock()
+        if (existing != null) { return existing! }
+
+        var init = this._init
+        var value = init()
+        this._lock.lock()
+        if (!this._values.has(key)) {
+            this._values.set(key, value)
+        }
+        var current = this._values.get(key)!
+        this._lock.unlock()
+        return current
+    }
+
+    set(value: T) {
+        var key = __threadLocalId()
+        this._lock.lock()
+        this._values.set(key, value)
+        this._lock.unlock()
+    }
+}
+
 class Dylib {
     _handle: int
     _open: bool
@@ -183,4 +220,4 @@ class Dylib {
     }
 }
 
-export { Process, ProcessOptions, Signal, Pipe, Dylib }
+export { Process, ProcessOptions, Signal, Pipe, ThreadLocal, Dylib }
