@@ -722,6 +722,108 @@ static const XgMethodSummary *xg_global_evidence_find_method(const XgGlobalEvide
     return NULL;
 }
 
+static const XgMethodSummary *
+xg_global_evidence_find_method_by_signature_in_class(const XgGlobalEvidence *evidence,
+                                                     const XgClassSummary *cls, uint32_t name_id,
+                                                     uint32_t signature_key) {
+    if (!evidence || !cls || cls->method_start == 0 || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < cls->method_count; i++) {
+        uint32_t idx = cls->method_start - 1 + i;
+        const XgMethodSummary *method = idx < evidence->nmethods ? &evidence->methods[idx] : NULL;
+        if (method && method->owner_class_id == cls->class_id && method->name_id == name_id &&
+            method->signature_key == signature_key && (method->flags & XG_METHOD_STATIC) == 0 &&
+            (method->flags & XG_METHOD_CONSTRUCTOR) == 0)
+            return method;
+    }
+    return NULL;
+}
+
+static const XgMethodSummary *
+xg_global_evidence_find_method_by_signature_in_hierarchy(const XgGlobalEvidence *evidence,
+                                                         XgClassId class_id, uint32_t name_id,
+                                                         uint32_t signature_key) {
+    const XgClassSummary *cls = xg_global_evidence_find_class(evidence, class_id);
+    while (cls) {
+        const XgMethodSummary *method = xg_global_evidence_find_method_by_signature_in_class(
+            evidence, cls, name_id, signature_key);
+        if (method)
+            return method;
+        if (cls->parent_class_id == XG_NO_ID)
+            break;
+        cls = xg_global_evidence_find_class(evidence, cls->parent_class_id);
+    }
+    return NULL;
+}
+
+static bool xg_global_evidence_interface_extends_reaches(const XgGlobalEvidence *evidence,
+                                                         XgInterfaceId from, XgInterfaceId target,
+                                                         uint32_t depth) {
+    if (!evidence || from == XG_NO_ID || target == XG_NO_ID || depth > 64)
+        return false;
+    if (from == target)
+        return true;
+    for (uint32_t i = 0; i < evidence->ninterface_extends; i++) {
+        const XgInterfaceExtendsSummary *edge = &evidence->interface_extends[i];
+        if (edge->child_interface_id != from)
+            continue;
+        if (xg_global_evidence_interface_extends_reaches(evidence, edge->parent_interface_id,
+                                                         target, depth + 1))
+            return true;
+    }
+    return false;
+}
+
+static bool xg_global_evidence_interface_impl_matches(const XgGlobalEvidence *evidence,
+                                                      XgInterfaceId implementor_interface,
+                                                      XgInterfaceId receiver_interface) {
+    return implementor_interface == receiver_interface ||
+           xg_global_evidence_interface_extends_reaches(evidence, implementor_interface,
+                                                        receiver_interface, 0);
+}
+
+static bool xg_global_evidence_effective_interface_implementor_seen(
+    const XgGlobalEvidence *evidence, XgInterfaceId receiver_interface, XgClassId implementor_class,
+    uint32_t upto_index) {
+    if (!evidence || receiver_interface == XG_NO_ID || implementor_class == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < upto_index && i < evidence->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &evidence->interface_impls[i];
+        if (impl->implementor_class_id == implementor_class &&
+            xg_global_evidence_interface_impl_matches(evidence, impl->interface_id,
+                                                      receiver_interface))
+            return true;
+    }
+    return false;
+}
+
+static bool
+xg_global_evidence_interface_method_visible_from(const XgGlobalEvidence *evidence,
+                                                 XgInterfaceId receiver_interface_id,
+                                                 const XgInterfaceMethodSummary *method) {
+    if (!evidence || receiver_interface_id == XG_NO_ID || !method)
+        return false;
+    return xg_global_evidence_interface_extends_reaches(evidence, receiver_interface_id,
+                                                        method->owner_interface_id, 0);
+}
+
+static const XgInterfaceMethodSummary *
+xg_global_evidence_find_visible_interface_method(const XgGlobalEvidence *evidence,
+                                                 XgInterfaceId receiver_interface_id,
+                                                 uint32_t name_id, uint32_t signature_key) {
+    if (!evidence || receiver_interface_id == XG_NO_ID || name_id == 0 || signature_key == 0)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->ninterface_methods; i++) {
+        const XgInterfaceMethodSummary *method = &evidence->interface_methods[i];
+        if (!xg_global_evidence_interface_method_visible_from(evidence, receiver_interface_id,
+                                                              method))
+            continue;
+        if (method->name_id == name_id && method->signature_key == signature_key)
+            return method;
+    }
+    return NULL;
+}
+
 static bool xg_method_callsite_is_direct_dispatch(const XgGlobalEvidence *evidence,
                                                   const XgCallsiteSummary *call) {
     const XgClassSummary *receiver_class;
@@ -737,6 +839,45 @@ static bool xg_method_callsite_is_direct_dispatch(const XgGlobalEvidence *eviden
     if ((receiver_class->flags & (XG_CLASS_EXPLICIT_FINAL | XG_CLASS_INFERRED_FINAL)) != 0)
         return true;
     return (method->flags & XG_METHOD_OVERRIDDEN) == 0;
+}
+
+static bool xg_interface_callsite_direct_target_method(const XgGlobalEvidence *evidence,
+                                                       const XgCallsiteSummary *call,
+                                                       XgMethodId *out_method_id) {
+    const XgInterfaceMethodSummary *interface_method;
+    XgClassId target_class_id = XG_NO_ID;
+    uint32_t implementor_count = 0;
+    const XgMethodSummary *target_method;
+
+    if (!evidence || !call || !out_method_id || call->kind != XG_CALL_INTERFACE ||
+        call->receiver_static_interface_id == XG_NO_ID || call->method_id == XG_NO_ID)
+        return false;
+    interface_method = xg_global_evidence_find_visible_interface_method(
+        evidence, call->receiver_static_interface_id, call->method_name_id,
+        call->method_signature_key);
+    if (!interface_method || interface_method->interface_method_id != call->method_id)
+        return false;
+    for (uint32_t i = 0; i < evidence->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &evidence->interface_impls[i];
+        if (!xg_global_evidence_interface_impl_matches(evidence, impl->interface_id,
+                                                       call->receiver_static_interface_id))
+            continue;
+        if (xg_global_evidence_effective_interface_implementor_seen(
+                evidence, call->receiver_static_interface_id, impl->implementor_class_id, i))
+            continue;
+        implementor_count++;
+        target_class_id = impl->implementor_class_id;
+        if (implementor_count > 1)
+            return false;
+    }
+    if (implementor_count != 1)
+        return false;
+    target_method = xg_global_evidence_find_method_by_signature_in_hierarchy(
+        evidence, target_class_id, call->method_name_id, call->method_signature_key);
+    if (!target_method || (target_method->flags & XG_METHOD_NATIVE) != 0)
+        return false;
+    *out_method_id = target_method->method_id;
+    return true;
 }
 
 static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32_t body_index,
@@ -775,6 +916,13 @@ static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32
                     return false;
             } else if (xg_method_callsite_is_direct_dispatch(evidence, call)) {
                 if (!xg_global_evidence_find_body_index_by_method(evidence, call->method_id,
+                                                                  &target_index))
+                    return false;
+            } else if (call->kind == XG_CALL_INTERFACE) {
+                XgMethodId target_method_id = XG_NO_ID;
+                if (!xg_interface_callsite_direct_target_method(evidence, call,
+                                                                &target_method_id) ||
+                    !xg_global_evidence_find_body_index_by_method(evidence, target_method_id,
                                                                   &target_index))
                     return false;
             } else {
