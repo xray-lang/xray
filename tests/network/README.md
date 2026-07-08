@@ -40,10 +40,6 @@ done
 ## HTTP 库功能清单
 
 ### HTTP/1.1 客户端
-- `http.get(url)` - GET 请求
-- `http.post(url, body, contentType)` - POST 请求
-- `http.put(url, body, contentType)` - PUT 请求
-- `http.delete(url)` - DELETE 请求
 - `http.request(options)` - 通用请求
 
 ### URL 工具
@@ -84,7 +80,7 @@ ws.hasError(conn)               // 检查是否有错误
 ## 响应对象属性
 
 ```xray
-var resp = http.get("https://example.com")
+var resp = http.request({url: "https://example.com", method: "GET"})
 
 resp.status    // int: HTTP 状态码 (200, 404, 500...)
 resp.ok        // bool: 是否成功 (status 在 200-299)

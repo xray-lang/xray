@@ -3307,54 +3307,6 @@ module http {
     fields: "const method: string, const path: string, const query: Json, const headers: Json, const body: string, const contentLength: int, const params: Json, const streaming: bool"
   }
 
-  fn get {
-    signature: "(url: string): HttpResponse"
-    doc: "HTTP GET request"
-    vm: "http_get"
-    vm_binding: "slow"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn post {
-    signature: "(url: string, body?: string, contentType?: string): HttpResponse"
-    doc: "HTTP POST request"
-    vm: "http_post"
-    vm_binding: "slow"
-    argc: 3
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn put {
-    signature: "(url: string, body?: string, contentType?: string): HttpResponse"
-    doc: "HTTP PUT request"
-    vm: "http_put"
-    vm_binding: "slow"
-    argc: 3
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn delete {
-    signature: "(url: string): HttpResponse"
-    doc: "HTTP DELETE request"
-    vm: "http_delete"
-    vm_binding: "slow"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn request {
     signature: "(options: Json): HttpResponse"
     doc: "Generic HTTP request"

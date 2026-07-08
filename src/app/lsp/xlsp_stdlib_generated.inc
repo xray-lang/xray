@@ -126,10 +126,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
 
 // http module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
-    {"get", XLSP_SYM_FUNCTION, "fn(url: string): HttpResponse", "HTTP GET request", NULL, 0},
-    {"post", XLSP_SYM_FUNCTION, "fn(url: string, body?: string, contentType?: string): HttpResponse", "HTTP POST request", NULL, 0},
-    {"put", XLSP_SYM_FUNCTION, "fn(url: string, body?: string, contentType?: string): HttpResponse", "HTTP PUT request", NULL, 0},
-    {"delete", XLSP_SYM_FUNCTION, "fn(url: string): HttpResponse", "HTTP DELETE request", NULL, 0},
     {"request", XLSP_SYM_FUNCTION, "fn(options: Json): HttpResponse", "Generic HTTP request", NULL, 0},
     {"route", XLSP_SYM_FUNCTION, "fn(method: string, path: string, handler: fn | string | Json): ()", "Register a route handler or static response", NULL, 0},
     {"listen", XLSP_SYM_FUNCTION, "fn(port: int): bool", "Start HTTP server accept loop", NULL, 0},
@@ -177,7 +173,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"MultipartBody", XLSP_SYM_CLASS, "type MultipartBody", "Built multipart/form-data payload and matching Content-Type.", NULL, 0},
     {"FormData", XLSP_SYM_CLASS, "type FormData", "Explicit multipart/form-data builder.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 50
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 46
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {

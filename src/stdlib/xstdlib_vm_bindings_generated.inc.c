@@ -65,10 +65,6 @@ static void xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *m
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_HTTP
 static void xr_stdlib_vm_bind_http_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT_SLOW(module, isolate, "get", http_get);
-    XRS_EXPORT_SLOW(module, isolate, "post", http_post);
-    XRS_EXPORT_SLOW(module, isolate, "put", http_put);
-    XRS_EXPORT_SLOW(module, isolate, "delete", http_delete);
     XRS_EXPORT_SLOW(module, isolate, "request", http_request);
     XRS_EXPORT(module, isolate, "route", http_route);
     XRS_EXPORT_YIELDABLE(module, isolate, "listen", xr_http_listen_impl);

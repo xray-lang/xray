@@ -970,68 +970,6 @@ cleanup:
     return result;
 }
 
-/* ========== Convenience Functions ========== */
-
-XrHttpResult xr_http_get(XrVMRuntime *X, const char *url) {
-    XrHttpRequestConfig config;
-    xr_http_request_config_init(&config);
-    config.url = url;
-    config.method = XR_HTTP_METHOD_GET;
-    return xr_http_request(X, &config);
-}
-
-XrHttpResult xr_http_post(XrVMRuntime *X, const char *url, const char *body, size_t body_len,
-                          const char *content_type) {
-    XrHttpRequestConfig config;
-    xr_http_request_config_init(&config);
-    config.url = url;
-    config.method = XR_HTTP_METHOD_POST;
-    config.body = body;
-    config.body_len = body_len;
-
-    XrHttpHeader headers[1];
-    if (content_type) {
-        headers[0].name = "Content-Type";
-        headers[0].name_len = 12;
-        headers[0].value = content_type;
-        headers[0].value_len = strlen(content_type);
-        config.headers = headers;
-        config.header_count = 1;
-    }
-
-    return xr_http_request(X, &config);
-}
-
-XrHttpResult xr_http_put(XrVMRuntime *X, const char *url, const char *body, size_t body_len,
-                         const char *content_type) {
-    XrHttpRequestConfig config;
-    xr_http_request_config_init(&config);
-    config.url = url;
-    config.method = XR_HTTP_METHOD_PUT;
-    config.body = body;
-    config.body_len = body_len;
-
-    XrHttpHeader headers[1];
-    if (content_type) {
-        headers[0].name = "Content-Type";
-        headers[0].name_len = 12;
-        headers[0].value = content_type;
-        headers[0].value_len = strlen(content_type);
-        config.headers = headers;
-        config.header_count = 1;
-    }
-
-    return xr_http_request(X, &config);
-}
-
-XrHttpResult xr_http_delete(XrVMRuntime *X, const char *url) {
-    XrHttpRequestConfig config;
-    xr_http_request_config_init(&config);
-    config.url = url;
-    config.method = XR_HTTP_METHOD_DELETE;
-    return xr_http_request(X, &config);
-}
-
 /* ========== Request Context Implementation ========== */
 
 XrHttpReqContext *xr_http_context_new(void) {

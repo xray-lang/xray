@@ -124,28 +124,6 @@ XR_FUNC void xr_http_request_config_init(XrHttpRequestConfig *config);
 XR_FUNC XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config);
 
 /*
- * Convenience function: GET request
- */
-XR_FUNC XrHttpResult xr_http_get(XrVMRuntime *X, const char *url);
-
-/*
- * Convenience function: POST request
- */
-XR_FUNC XrHttpResult xr_http_post(XrVMRuntime *X, const char *url, const char *body,
-                                  size_t body_len, const char *content_type);
-
-/*
- * Convenience function: PUT request
- */
-XR_FUNC XrHttpResult xr_http_put(XrVMRuntime *X, const char *url, const char *body, size_t body_len,
-                                 const char *content_type);
-
-/*
- * Convenience function: DELETE request
- */
-XR_FUNC XrHttpResult xr_http_delete(XrVMRuntime *X, const char *url);
-
-/*
  * Free response result
  */
 XR_FUNC void xr_http_result_free(XrHttpResult *result);
