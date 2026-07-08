@@ -710,11 +710,12 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
 
     XaotBundle good;
     memset(&good, 0, sizeof(good));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&good, &ev, XG_BUILD_NATIVE_RELEASE));
     good.modules = modules;
     good.nmodules = 1;
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&good, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &init_func, 0, 0));
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &draw_func, 0, 1));
+    ASSERT_EQ_UINT(draw_func.xg_body_func_id, method_body.func_id);
     const char *target_prefix = NULL;
     ASSERT_EQ_PTR(xaot_bundle_find_method_func(&good, method.method_id, &target_prefix),
                   &draw_func);
@@ -724,6 +725,9 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                   &draw_func);
     ASSERT_STR_EQ(target_prefix, "test");
     ASSERT_EQ_UINT(good.dispatch_target_cases[0].method_body_func_id, method_body.func_id);
+    draw_func.xg_body_func_id = XG_NO_ID;
+    ASSERT_NULL(xaot_bundle_find_dispatch_target_func(&good, &good.dispatch_target_cases[0], NULL));
+    draw_func.xg_body_func_id = method_body.func_id;
     XiValue xi_call;
     memset(&xi_call, 0, sizeof(xi_call));
     xi_call.op = XI_CALL_METHOD;
@@ -2941,24 +2945,68 @@ TEST(global_evidence_composes_vtable_target_set_effects_for_func_attr) {
                               .arg_count = 1};
     XiFunc init_func;
     XiFunc caller_func;
-    XiFunc *children[1];
+    XiFunc base_func;
+    XiFunc leaf_func;
+    XiFunc *children[3];
+    XiClassMethod base_methods[1];
+    XiClassMethod leaf_methods[1];
+    uint16_t base_child_idx[1] = {0};
+    uint16_t leaf_child_idx[1] = {1};
+    XiClassData base_class_data;
+    XiClassData leaf_class_data;
+    XiClassData *classes[2];
+    XiFunc *module_funcs[3];
     XiModule module;
     XiModule *modules[1];
     uint32_t composed_effects = UINT32_MAX;
+    const char *target_prefix = NULL;
     char err[256];
 
     memset(&init_func, 0, sizeof(init_func));
     memset(&caller_func, 0, sizeof(caller_func));
+    memset(&base_func, 0, sizeof(base_func));
+    memset(&leaf_func, 0, sizeof(leaf_func));
+    memset(base_methods, 0, sizeof(base_methods));
+    memset(leaf_methods, 0, sizeof(leaf_methods));
+    memset(&base_class_data, 0, sizeof(base_class_data));
+    memset(&leaf_class_data, 0, sizeof(leaf_class_data));
     memset(&module, 0, sizeof(module));
     init_func.name = "init";
     caller_func.name = "vtable_caller";
+    base_func.name = "area";
+    leaf_func.name = "area";
+    base_func.parent_func = &init_func;
+    leaf_func.parent_func = &init_func;
     caller_func.parent_func = &init_func;
-    children[0] = &caller_func;
+    children[0] = &base_func;
+    children[1] = &leaf_func;
+    children[2] = &caller_func;
     init_func.children = children;
-    init_func.nchildren = 1;
+    init_func.nchildren = 3;
+    base_methods[0].name = "area";
+    leaf_methods[0].name = "area";
+    base_class_data.class_name = "BaseShape";
+    base_class_data.methods = base_methods;
+    base_class_data.nmethod = 1;
+    base_class_data.ninst = 1;
+    base_class_data.child_idx = base_child_idx;
+    leaf_class_data.class_name = "LeafShape";
+    leaf_class_data.methods = leaf_methods;
+    leaf_class_data.nmethod = 1;
+    leaf_class_data.ninst = 1;
+    leaf_class_data.child_idx = leaf_child_idx;
+    classes[0] = &base_class_data;
+    classes[1] = &leaf_class_data;
+    module_funcs[0] = &base_func;
+    module_funcs[1] = &leaf_func;
+    module_funcs[2] = &caller_func;
     module.path = "test.xr";
     module.name = "test";
     module.init = &init_func;
+    module.functions = module_funcs;
+    module.nfuncs = 3;
+    module.classes = classes;
+    module.nclasses = 2;
     modules[0] = &module;
 
     xg_global_evidence_init(&ev, key);
@@ -2979,11 +3027,28 @@ TEST(global_evidence_composes_vtable_target_set_effects_for_func_attr) {
 
     XaotBundle vtable_caller;
     memset(&vtable_caller, 0, sizeof(vtable_caller));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&vtable_caller, &ev, XG_BUILD_NATIVE_RELEASE));
     vtable_caller.modules = modules;
     vtable_caller.nmodules = 1;
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&vtable_caller, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_PTR(
+        xaot_bundle_find_method_func(&vtable_caller, base_method.method_id, &target_prefix),
+        &base_func);
+    ASSERT_STR_EQ(target_prefix, "test");
+    ASSERT_EQ_PTR(
+        xaot_bundle_find_method_func(&vtable_caller, leaf_method.method_id, &target_prefix),
+        &leaf_func);
+    ASSERT_STR_EQ(target_prefix, "test");
+    ASSERT_EQ_UINT(caller_func.xg_body_func_id, caller_body.func_id);
+    ASSERT_EQ_UINT(base_func.xg_body_func_id, base_body.func_id);
+    ASSERT_EQ_UINT(leaf_func.xg_body_func_id, leaf_body.func_id);
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&vtable_caller, &init_func, 0, 0));
-    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&vtable_caller, &caller_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&vtable_caller, &base_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&vtable_caller, &leaf_func, 0, 2));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&vtable_caller, &caller_func, 0, 3));
+    ASSERT_NOT_NULL(xaot_bundle_find_func_plan(&vtable_caller, &init_func));
+    ASSERT_NOT_NULL(xaot_bundle_find_func_plan(&vtable_caller, &base_func));
+    ASSERT_NOT_NULL(xaot_bundle_find_func_plan(&vtable_caller, &leaf_func));
+    ASSERT_NOT_NULL(xaot_bundle_find_func_plan(&vtable_caller, &caller_func));
     ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&vtable_caller, &caller_func, XAOT_FN_ATTR_CONST,
                                                    &ev.bodies[0]));
     ASSERT_EQ_UINT(vtable_caller.func_attr_plans[0].evidence, XAOT_FN_ATTR_EV_BODY_SUMMARY |
@@ -2998,6 +3063,10 @@ TEST(global_evidence_composes_vtable_target_set_effects_for_func_attr) {
                    base_method.signature_key);
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[0].method_root_id, base_method.method_id);
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[0].method_override_depth, 0);
+    ASSERT_EQ_PTR(xaot_bundle_find_dispatch_target_func(
+                      &vtable_caller, &vtable_caller.dispatch_target_cases[0], &target_prefix),
+                  &base_func);
+    ASSERT_STR_EQ(target_prefix, "test");
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[1].method_owner_class_id,
                    leaf_method.owner_class_id);
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[1].method_body_func_id, leaf_body.func_id);
@@ -3006,6 +3075,14 @@ TEST(global_evidence_composes_vtable_target_set_effects_for_func_attr) {
                    leaf_method.signature_key);
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[1].method_root_id, base_method.method_id);
     ASSERT_EQ_UINT(vtable_caller.dispatch_target_cases[1].method_override_depth, 1);
+    ASSERT_EQ_PTR(xaot_bundle_find_dispatch_target_func(
+                      &vtable_caller, &vtable_caller.dispatch_target_cases[1], &target_prefix),
+                  &leaf_func);
+    ASSERT_STR_EQ(target_prefix, "test");
+    leaf_func.xg_body_func_id = XG_NO_ID;
+    ASSERT_NULL(xaot_bundle_find_dispatch_target_func(
+        &vtable_caller, &vtable_caller.dispatch_target_cases[1], NULL));
+    leaf_func.xg_body_func_id = leaf_body.func_id;
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&vtable_caller, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
     vtable_caller.dispatch_target_cases[1].method_owner_class_id = 99;

@@ -1233,8 +1233,72 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     return true;
 }
 
+static const XiFunc *xaot_bundle_find_method_func_in_module(const XiModule *module,
+                                                            const XgClassSummary *class_summary,
+                                                            const XgMethodSummary *method_summary);
+
+static bool xaot_bundle_module_matches_evidence_id(uint32_t evidence_module_id,
+                                                   uint32_t module_index) {
+    return evidence_module_id == XG_NO_ID || evidence_module_id == module_index + 1;
+}
+
+static void xaot_bundle_bind_xi_func_body_id(XiFunc *func, XgFuncId body_func_id) {
+    if (!func || body_func_id == XG_NO_ID)
+        return;
+    if (func->xg_body_func_id == XG_NO_ID)
+        func->xg_body_func_id = body_func_id;
+}
+
+static void xaot_bundle_bind_method_body_func_ids(XaotBundle *bundle) {
+    const XgGlobalEvidence *ev;
+    if (!bundle || !bundle->modules)
+        return;
+    ev = bundle->global_evidence_plan.evidence;
+    if (!ev)
+        return;
+    for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
+        const XgBodySummary *body = &ev->bodies[bi];
+        const XgMethodSummary *method;
+        const XgClassSummary *class_summary;
+        XiFunc *match = NULL;
+        if (body->kind != XG_BODY_METHOD || body->func_id == XG_NO_ID ||
+            body->owner_method_id == XG_NO_ID)
+            continue;
+        method = xg_evidence_find_method_by_id(ev, body->owner_method_id);
+        class_summary = method ? xg_evidence_find_class(ev, method->owner_class_id) : NULL;
+        if (!method || !class_summary)
+            continue;
+        if (body->owner_class_id != XG_NO_ID && body->owner_class_id != method->owner_class_id)
+            continue;
+        if (body->name_id != 0 && body->name_id != method->name_id)
+            continue;
+        if (body->signature_key != 0 && body->signature_key != method->signature_key)
+            continue;
+        for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+            XiModule *module = bundle->modules[mi];
+            XiFunc *func;
+            if (!module)
+                continue;
+            if (!xaot_bundle_module_matches_evidence_id(body->module_id, mi))
+                continue;
+            if (!xaot_bundle_module_matches_evidence_id(class_summary->module_id, mi))
+                continue;
+            func = (XiFunc *) xaot_bundle_find_method_func_in_module(module, class_summary, method);
+            if (!func)
+                continue;
+            if (match && match != func) {
+                match = NULL;
+                break;
+            }
+            match = func;
+        }
+        xaot_bundle_bind_xi_func_body_id(match, body->func_id);
+    }
+}
+
 static XgFuncId xaot_bundle_find_unique_body_func_id_for_xi_func(const XaotBundle *bundle,
                                                                  const XiFunc *func,
+                                                                 uint32_t module_index,
                                                                  bool is_module_init) {
     const XgGlobalEvidence *ev;
     XgFuncId match = XG_NO_ID;
@@ -1253,11 +1317,13 @@ static XgFuncId xaot_bundle_find_unique_body_func_id_for_xi_func(const XaotBundl
         const XgBodySummary *body = &ev->bodies[i];
         if (body->func_id == XG_NO_ID)
             continue;
+        if (!xaot_bundle_module_matches_evidence_id(body->module_id, module_index))
+            continue;
         if (is_module_init) {
             if (body->kind != XG_BODY_MODULE_INIT)
                 continue;
         } else {
-            if (body->kind == XG_BODY_MODULE_INIT || body->name_id != name_id)
+            if (body->kind != XG_BODY_FUNCTION || body->name_id != name_id)
                 continue;
         }
         if (match != XG_NO_ID)
@@ -1268,28 +1334,29 @@ static XgFuncId xaot_bundle_find_unique_body_func_id_for_xi_func(const XaotBundl
 }
 
 static void xaot_bundle_bind_body_func_ids_in_func(XaotBundle *bundle, XiFunc *func,
-                                                   bool is_module_init) {
+                                                   uint32_t module_index, bool is_module_init) {
     if (!bundle || !func)
         return;
     if (func->xg_body_func_id == XG_NO_ID)
-        func->xg_body_func_id =
-            xaot_bundle_find_unique_body_func_id_for_xi_func(bundle, func, is_module_init);
+        func->xg_body_func_id = xaot_bundle_find_unique_body_func_id_for_xi_func(
+            bundle, func, module_index, is_module_init);
     for (uint16_t ci = 0; ci < func->nchildren; ci++)
         xaot_bundle_bind_body_func_ids_in_func(bundle, func->children ? func->children[ci] : NULL,
-                                               false);
+                                               module_index, false);
 }
 
 static void xaot_bundle_bind_xi_body_func_ids(XaotBundle *bundle) {
     if (!bundle || !bundle->modules)
         return;
+    xaot_bundle_bind_method_body_func_ids(bundle);
     for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
         XiModule *module = bundle->modules[mi];
         if (!module)
             continue;
-        xaot_bundle_bind_body_func_ids_in_func(bundle, module->init, true);
+        xaot_bundle_bind_body_func_ids_in_func(bundle, module->init, mi, true);
         for (uint16_t fi = 0; fi < module->nfuncs; fi++)
             xaot_bundle_bind_body_func_ids_in_func(
-                bundle, module->functions ? module->functions[fi] : NULL, false);
+                bundle, module->functions ? module->functions[fi] : NULL, mi, false);
     }
 }
 
@@ -1553,6 +1620,55 @@ XR_FUNC const XiFunc *xaot_bundle_find_method_func(const XaotBundle *bundle, XgM
     return match;
 }
 
+static bool xaot_collect_body_func_match(const XiFunc *func, XgFuncId body_func_id,
+                                         const XiFunc **match) {
+    if (!func || !match)
+        return true;
+    if ((XgFuncId) func->xg_body_func_id == body_func_id) {
+        if (*match && *match != func)
+            return false;
+        *match = func;
+    }
+    for (uint16_t ci = 0; ci < func->nchildren; ci++) {
+        if (!xaot_collect_body_func_match(func->children ? func->children[ci] : NULL, body_func_id,
+                                          match))
+            return false;
+    }
+    return true;
+}
+
+static const XiFunc *xaot_bundle_find_body_func(const XaotBundle *bundle, XgFuncId body_func_id,
+                                                const char **out_module_prefix) {
+    const XiFunc *match = NULL;
+    const char *match_prefix = NULL;
+    if (out_module_prefix)
+        *out_module_prefix = NULL;
+    if (!bundle || body_func_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+        XiModule *module = bundle->modules ? bundle->modules[mi] : NULL;
+        const XiFunc *module_match = NULL;
+        if (!module)
+            continue;
+        if (!xaot_collect_body_func_match(module->init, body_func_id, &module_match))
+            return NULL;
+        for (uint16_t fi = 0; fi < module->nfuncs; fi++) {
+            if (!xaot_collect_body_func_match(module->functions ? module->functions[fi] : NULL,
+                                              body_func_id, &module_match))
+                return NULL;
+        }
+        if (!module_match)
+            continue;
+        if (match && match != module_match)
+            return NULL;
+        match = module_match;
+        match_prefix = module->name;
+    }
+    if (match && out_module_prefix)
+        *out_module_prefix = match_prefix;
+    return match;
+}
+
 XR_FUNC const XiFunc *xaot_bundle_find_dispatch_target_func(const XaotBundle *bundle,
                                                             const XaotDispatchTargetCase *target,
                                                             const char **out_module_prefix) {
@@ -1560,6 +1676,8 @@ XR_FUNC const XiFunc *xaot_bundle_find_dispatch_target_func(const XaotBundle *bu
         *out_module_prefix = NULL;
     if (!target)
         return NULL;
+    if (target->method_body_func_id != XG_NO_ID)
+        return xaot_bundle_find_body_func(bundle, target->method_body_func_id, out_module_prefix);
     return xaot_bundle_find_method_func(bundle, target->method_id, out_module_prefix);
 }
 
