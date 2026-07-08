@@ -563,6 +563,52 @@ typedef struct XaotGenericSpecializationPlan {
     uint8_t unproven_reason;
 } XaotGenericSpecializationPlan;
 
+typedef enum XaotGenericInstantiationAction {
+    XAOT_GENERIC_INSTANTIATION_RECORD_ROOT = 1,
+    XAOT_GENERIC_INSTANTIATION_SPECIALIZED_BODY,
+    XAOT_GENERIC_INSTANTIATION_SPECIALIZED_ABI,
+    XAOT_GENERIC_INSTANTIATION_SPECIALIZED_STORAGE,
+} XaotGenericInstantiationAction;
+
+enum {
+    XAOT_GENERIC_INST_EV_GLOBAL_ROW = 1u << 0,
+    XAOT_GENERIC_INST_EV_CONCRETE_TYPES = 1u << 1,
+    XAOT_GENERIC_INST_EV_ORIGIN_ANCHOR = 1u << 2,
+    XAOT_GENERIC_INST_EV_ROOT_CALLSITE = 1u << 3,
+    XAOT_GENERIC_INST_EV_INTERFACE_CONSTRAINT = 1u << 4,
+    XAOT_GENERIC_INST_EV_SPECIALIZED_BODY = 1u << 5,
+    XAOT_GENERIC_INST_EV_SPECIALIZED_ABI = 1u << 6,
+    XAOT_GENERIC_INST_EV_SPECIALIZED_STORAGE = 1u << 7,
+};
+
+enum {
+    XAOT_GENERIC_INST_UNPROVEN_NONE = 0,
+    XAOT_GENERIC_INST_UNPROVEN_NO_SPECIALIZED_BODY = 1,
+    XAOT_GENERIC_INST_UNPROVEN_NO_SPECIALIZED_STORAGE = 2,
+    XAOT_GENERIC_INST_UNPROVEN_NO_CONCRETE_TYPES = 3,
+};
+
+typedef struct XaotGenericInstantiationPlan {
+    XgGenericInstId generic_inst_id;
+    XgModuleId module_id;
+    XgDeclId origin_decl_id;
+    XgFuncId origin_func_id;
+    XgMethodId origin_method_id;
+    XgClassId origin_class_id;
+    XgFuncId specialized_func_id;
+    XgClassId specialized_class_id;
+    XgCallsiteId root_callsite_id;
+    XgInterfaceId constraint_interface_id;
+    uint32_t name_id;
+    uint32_t type_key;
+    uint32_t type_arg_key_start;
+    uint16_t type_arg_count;
+    uint8_t inst_kind;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotGenericInstantiationPlan;
+
 enum {
     XAOT_METADATA_EV_GLOBAL_BODY = 1u << 0,
     XAOT_METADATA_EV_DECL_ATTRIBUTE = 1u << 1,
@@ -752,6 +798,9 @@ typedef struct XaotBundle {
     XaotGenericSpecializationPlan *generic_specialization_plans;
     uint32_t ngeneric_specialization_plans;
     uint32_t generic_specialization_plan_cap;
+    XaotGenericInstantiationPlan *generic_instantiation_plans;
+    uint32_t ngeneric_instantiation_plans;
+    uint32_t generic_instantiation_plan_cap;
     XaotMetadataReachabilityPlan *metadata_plans;
     uint32_t nmetadata_plans;
     uint32_t metadata_plan_cap;
@@ -806,6 +855,9 @@ XR_FUNC const XaotInterfaceAbiPlan *xaot_bundle_find_interface_abi_plan(const Xa
                                                                         XgInterfaceId interface_id);
 XR_FUNC const XaotGenericSpecializationPlan *
 xaot_bundle_find_generic_specialization_plan(const XaotBundle *bundle, XgCallsiteId callsite_id);
+XR_FUNC const XaotGenericInstantiationPlan *
+xaot_bundle_find_generic_instantiation_plan(const XaotBundle *bundle,
+                                            XgGenericInstId generic_inst_id);
 XR_FUNC const XaotMetadataReachabilityPlan *xaot_bundle_find_metadata_plan(const XaotBundle *bundle,
                                                                            uint32_t metadata);
 XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,

@@ -194,6 +194,11 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->ngeneric_specialization_plans = 0;
     bundle->generic_specialization_plan_cap = 0;
 
+    xr_free(bundle->generic_instantiation_plans);
+    bundle->generic_instantiation_plans = NULL;
+    bundle->ngeneric_instantiation_plans = 0;
+    bundle->generic_instantiation_plan_cap = 0;
+
     xr_free(bundle->metadata_plans);
     bundle->metadata_plans = NULL;
     bundle->nmetadata_plans = 0;
@@ -976,6 +981,99 @@ static bool xaot_bundle_add_generic_specialization_plans(XaotBundle *bundle,
     return true;
 }
 
+static uint8_t generic_instantiation_action_for(const XgGenericInstSummary *inst) {
+    if (!inst)
+        return XAOT_GENERIC_INSTANTIATION_RECORD_ROOT;
+    if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0)
+        return XAOT_GENERIC_INSTANTIATION_SPECIALIZED_BODY;
+    if ((inst->flags & XG_GENERIC_INST_CONCRETE_STORAGE) != 0)
+        return XAOT_GENERIC_INSTANTIATION_SPECIALIZED_STORAGE;
+    if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_ABI) != 0)
+        return XAOT_GENERIC_INSTANTIATION_SPECIALIZED_ABI;
+    return XAOT_GENERIC_INSTANTIATION_RECORD_ROOT;
+}
+
+static uint8_t generic_instantiation_reason_for(const XgGenericInstSummary *inst) {
+    if (!inst || (inst->flags & XG_GENERIC_INST_CONCRETE_TYPES) == 0)
+        return XAOT_GENERIC_INST_UNPROVEN_NO_CONCRETE_TYPES;
+    if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0 ||
+        (inst->flags & XG_GENERIC_INST_CONCRETE_STORAGE) != 0 ||
+        (inst->flags & XG_GENERIC_INST_SPECIALIZED_ABI) != 0)
+        return XAOT_GENERIC_INST_UNPROVEN_NONE;
+    switch ((XgGenericInstKind) inst->kind) {
+        case XG_GENERIC_INST_CLASS:
+        case XG_GENERIC_INST_CONTAINER:
+            return XAOT_GENERIC_INST_UNPROVEN_NO_SPECIALIZED_STORAGE;
+        default:
+            return XAOT_GENERIC_INST_UNPROVEN_NO_SPECIALIZED_BODY;
+    }
+}
+
+static uint32_t generic_instantiation_evidence_for(const XgGenericInstSummary *inst) {
+    uint32_t evidence = XAOT_GENERIC_INST_EV_GLOBAL_ROW;
+    if (!inst)
+        return evidence;
+    if ((inst->flags & XG_GENERIC_INST_CONCRETE_TYPES) != 0)
+        evidence |= XAOT_GENERIC_INST_EV_CONCRETE_TYPES;
+    if (inst->origin_decl_id != XG_NO_ID || inst->origin_func_id != XG_NO_ID ||
+        inst->origin_method_id != XG_NO_ID || inst->origin_class_id != XG_NO_ID)
+        evidence |= XAOT_GENERIC_INST_EV_ORIGIN_ANCHOR;
+    if (inst->root_callsite_id != XG_NO_ID)
+        evidence |= XAOT_GENERIC_INST_EV_ROOT_CALLSITE;
+    if ((inst->flags & XG_GENERIC_INST_INTERFACE_CONSTRAINT) != 0)
+        evidence |= XAOT_GENERIC_INST_EV_INTERFACE_CONSTRAINT;
+    if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0)
+        evidence |= XAOT_GENERIC_INST_EV_SPECIALIZED_BODY;
+    if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_ABI) != 0)
+        evidence |= XAOT_GENERIC_INST_EV_SPECIALIZED_ABI;
+    if ((inst->flags & XG_GENERIC_INST_CONCRETE_STORAGE) != 0)
+        evidence |= XAOT_GENERIC_INST_EV_SPECIALIZED_STORAGE;
+    return evidence;
+}
+
+static bool xaot_bundle_add_generic_instantiation_plan(XaotBundle *bundle,
+                                                       const XgGenericInstSummary *inst) {
+    XaotGenericInstantiationPlan *plan;
+    if (!bundle || !inst)
+        return false;
+    if (!reserve_plan_array(
+            (void **) &bundle->generic_instantiation_plans, &bundle->generic_instantiation_plan_cap,
+            bundle->ngeneric_instantiation_plans + 1, sizeof(XaotGenericInstantiationPlan), 8))
+        return false;
+    plan = &bundle->generic_instantiation_plans[bundle->ngeneric_instantiation_plans++];
+    memset(plan, 0, sizeof(*plan));
+    plan->generic_inst_id = inst->generic_inst_id;
+    plan->module_id = inst->module_id;
+    plan->origin_decl_id = inst->origin_decl_id;
+    plan->origin_func_id = inst->origin_func_id;
+    plan->origin_method_id = inst->origin_method_id;
+    plan->origin_class_id = inst->origin_class_id;
+    plan->specialized_func_id = inst->specialized_func_id;
+    plan->specialized_class_id = inst->specialized_class_id;
+    plan->root_callsite_id = inst->root_callsite_id;
+    plan->constraint_interface_id = inst->constraint_interface_id;
+    plan->name_id = inst->name_id;
+    plan->type_key = inst->type_key;
+    plan->type_arg_key_start = inst->type_arg_key_start;
+    plan->type_arg_count = inst->type_arg_count;
+    plan->inst_kind = inst->kind;
+    plan->action = generic_instantiation_action_for(inst);
+    plan->evidence = generic_instantiation_evidence_for(inst);
+    plan->unproven_reason = generic_instantiation_reason_for(inst);
+    return true;
+}
+
+static bool xaot_bundle_add_generic_instantiation_plans(XaotBundle *bundle,
+                                                        const XgGlobalEvidence *evidence) {
+    if (!bundle || !evidence)
+        return false;
+    for (uint32_t i = 0; i < evidence->ngeneric_insts; i++) {
+        if (!xaot_bundle_add_generic_instantiation_plan(bundle, &evidence->generic_insts[i]))
+            return false;
+    }
+    return true;
+}
+
 static uint32_t xaot_metadata_profile_action(uint32_t profile, uint32_t metadata) {
     if (profile == XG_BUILD_FREESTANDING) {
         switch (metadata) {
@@ -1313,6 +1411,10 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     }
     if (!xaot_bundle_add_generic_specialization_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT generic specialization plan";
+        return false;
+    }
+    if (!xaot_bundle_add_generic_instantiation_plans(bundle, evidence)) {
+        bundle->error_msg = "failed to allocate AOT generic instantiation plan";
         return false;
     }
     if (!xaot_bundle_add_metadata_plans(bundle, evidence)) {
@@ -1814,6 +1916,18 @@ xaot_bundle_find_generic_specialization_plan(const XaotBundle *bundle, XgCallsit
     for (uint32_t i = 0; i < bundle->ngeneric_specialization_plans; i++) {
         if (bundle->generic_specialization_plans[i].callsite_id == callsite_id)
             return &bundle->generic_specialization_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotGenericInstantiationPlan *
+xaot_bundle_find_generic_instantiation_plan(const XaotBundle *bundle,
+                                            XgGenericInstId generic_inst_id) {
+    if (!bundle || generic_inst_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ngeneric_instantiation_plans; i++) {
+        if (bundle->generic_instantiation_plans[i].generic_inst_id == generic_inst_id)
+            return &bundle->generic_instantiation_plans[i];
     }
     return NULL;
 }
@@ -3101,6 +3215,58 @@ static void print_specialization_evidence_bits(FILE *out, uint32_t bits) {
 #undef PRINT_BIT
 }
 
+static const char *generic_instantiation_action_name(uint8_t action) {
+    switch ((XaotGenericInstantiationAction) action) {
+        case XAOT_GENERIC_INSTANTIATION_RECORD_ROOT:
+            return "record_root";
+        case XAOT_GENERIC_INSTANTIATION_SPECIALIZED_BODY:
+            return "specialized_body";
+        case XAOT_GENERIC_INSTANTIATION_SPECIALIZED_ABI:
+            return "specialized_abi";
+        case XAOT_GENERIC_INSTANTIATION_SPECIALIZED_STORAGE:
+            return "specialized_storage";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *generic_instantiation_unproven_reason_name(uint8_t reason) {
+    switch (reason) {
+        case XAOT_GENERIC_INST_UNPROVEN_NONE:
+            return "none";
+        case XAOT_GENERIC_INST_UNPROVEN_NO_SPECIALIZED_BODY:
+            return "no_specialized_body";
+        case XAOT_GENERIC_INST_UNPROVEN_NO_SPECIALIZED_STORAGE:
+            return "no_specialized_storage";
+        case XAOT_GENERIC_INST_UNPROVEN_NO_CONCRETE_TYPES:
+            return "no_concrete_types";
+        default:
+            return "unknown";
+    }
+}
+
+static void print_generic_instantiation_evidence_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_GENERIC_INST_EV_GLOBAL_ROW, "row");
+    PRINT_BIT(XAOT_GENERIC_INST_EV_CONCRETE_TYPES, "types");
+    PRINT_BIT(XAOT_GENERIC_INST_EV_ORIGIN_ANCHOR, "origin");
+    PRINT_BIT(XAOT_GENERIC_INST_EV_ROOT_CALLSITE, "root");
+    PRINT_BIT(XAOT_GENERIC_INST_EV_INTERFACE_CONSTRAINT, "constraint");
+    PRINT_BIT(XAOT_GENERIC_INST_EV_SPECIALIZED_BODY, "body");
+    PRINT_BIT(XAOT_GENERIC_INST_EV_SPECIALIZED_ABI, "abi");
+    PRINT_BIT(XAOT_GENERIC_INST_EV_SPECIALIZED_STORAGE, "storage");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
 static void print_bounds_evidence_bits(FILE *out, uint32_t bits) {
     bool first = true;
 #define PRINT_BIT(mask, name)                                                                      \
@@ -3479,6 +3645,23 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 gp->single_implementor_class_id, (unsigned) gp->target_count);
         print_specialization_evidence_bits(out, gp->evidence);
         fprintf(out, " reason=%s\n", specialization_unproven_reason_name(gp->unproven_reason));
+    }
+
+    for (uint32_t gi = 0; gi < bundle->ngeneric_instantiation_plans; gi++) {
+        const XaotGenericInstantiationPlan *gp = &bundle->generic_instantiation_plans[gi];
+        fprintf(out,
+                "generic-instantiation %u id=%u module=%u kind=%s origin_decl=%u "
+                "origin_func=%u origin_method=%u origin_class=%u specialized_func=%u "
+                "specialized_class=%u root_callsite=%u constraint_iface=%u name=%u type=%u "
+                "type_args=%u+%u action=%s evidence=",
+                gi, gp->generic_inst_id, gp->module_id, xg_generic_inst_kind_name(gp->inst_kind),
+                gp->origin_decl_id, gp->origin_func_id, gp->origin_method_id, gp->origin_class_id,
+                gp->specialized_func_id, gp->specialized_class_id, gp->root_callsite_id,
+                gp->constraint_interface_id, gp->name_id, gp->type_key, gp->type_arg_key_start,
+                (unsigned) gp->type_arg_count, generic_instantiation_action_name(gp->action));
+        print_generic_instantiation_evidence_bits(out, gp->evidence);
+        fprintf(out, " reason=%s\n",
+                generic_instantiation_unproven_reason_name(gp->unproven_reason));
     }
 
     for (uint32_t mi = 0; mi < bundle->nmetadata_plans; mi++) {

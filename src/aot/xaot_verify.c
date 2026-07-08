@@ -2143,6 +2143,85 @@ static bool verify_generic_specialization_plan_rederives(const XgGlobalEvidence 
     return true;
 }
 
+static uint8_t verify_generic_instantiation_action_for(const XgGenericInstSummary *inst) {
+    if (!inst)
+        return XAOT_GENERIC_INSTANTIATION_RECORD_ROOT;
+    if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0)
+        return XAOT_GENERIC_INSTANTIATION_SPECIALIZED_BODY;
+    if ((inst->flags & XG_GENERIC_INST_CONCRETE_STORAGE) != 0)
+        return XAOT_GENERIC_INSTANTIATION_SPECIALIZED_STORAGE;
+    if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_ABI) != 0)
+        return XAOT_GENERIC_INSTANTIATION_SPECIALIZED_ABI;
+    return XAOT_GENERIC_INSTANTIATION_RECORD_ROOT;
+}
+
+static uint8_t verify_generic_instantiation_reason_for(const XgGenericInstSummary *inst) {
+    if (!inst || (inst->flags & XG_GENERIC_INST_CONCRETE_TYPES) == 0)
+        return XAOT_GENERIC_INST_UNPROVEN_NO_CONCRETE_TYPES;
+    if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0 ||
+        (inst->flags & XG_GENERIC_INST_CONCRETE_STORAGE) != 0 ||
+        (inst->flags & XG_GENERIC_INST_SPECIALIZED_ABI) != 0)
+        return XAOT_GENERIC_INST_UNPROVEN_NONE;
+    switch ((XgGenericInstKind) inst->kind) {
+        case XG_GENERIC_INST_CLASS:
+        case XG_GENERIC_INST_CONTAINER:
+            return XAOT_GENERIC_INST_UNPROVEN_NO_SPECIALIZED_STORAGE;
+        default:
+            return XAOT_GENERIC_INST_UNPROVEN_NO_SPECIALIZED_BODY;
+    }
+}
+
+static uint32_t verify_generic_instantiation_evidence_for(const XgGenericInstSummary *inst) {
+    uint32_t evidence = XAOT_GENERIC_INST_EV_GLOBAL_ROW;
+    if (!inst)
+        return evidence;
+    if ((inst->flags & XG_GENERIC_INST_CONCRETE_TYPES) != 0)
+        evidence |= XAOT_GENERIC_INST_EV_CONCRETE_TYPES;
+    if (inst->origin_decl_id != XG_NO_ID || inst->origin_func_id != XG_NO_ID ||
+        inst->origin_method_id != XG_NO_ID || inst->origin_class_id != XG_NO_ID)
+        evidence |= XAOT_GENERIC_INST_EV_ORIGIN_ANCHOR;
+    if (inst->root_callsite_id != XG_NO_ID)
+        evidence |= XAOT_GENERIC_INST_EV_ROOT_CALLSITE;
+    if ((inst->flags & XG_GENERIC_INST_INTERFACE_CONSTRAINT) != 0)
+        evidence |= XAOT_GENERIC_INST_EV_INTERFACE_CONSTRAINT;
+    if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0)
+        evidence |= XAOT_GENERIC_INST_EV_SPECIALIZED_BODY;
+    if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_ABI) != 0)
+        evidence |= XAOT_GENERIC_INST_EV_SPECIALIZED_ABI;
+    if ((inst->flags & XG_GENERIC_INST_CONCRETE_STORAGE) != 0)
+        evidence |= XAOT_GENERIC_INST_EV_SPECIALIZED_STORAGE;
+    return evidence;
+}
+
+static bool verify_generic_instantiation_plan_rederives(const XaotGenericInstantiationPlan *plan,
+                                                        const XgGenericInstSummary *inst,
+                                                        char *errbuf, size_t errbuf_len) {
+    if (!plan || !inst)
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic instantiation verifier has incomplete input");
+    if (plan->generic_inst_id != inst->generic_inst_id || plan->module_id != inst->module_id ||
+        plan->origin_decl_id != inst->origin_decl_id ||
+        plan->origin_func_id != inst->origin_func_id ||
+        plan->origin_method_id != inst->origin_method_id ||
+        plan->origin_class_id != inst->origin_class_id ||
+        plan->specialized_func_id != inst->specialized_func_id ||
+        plan->specialized_class_id != inst->specialized_class_id ||
+        plan->root_callsite_id != inst->root_callsite_id ||
+        plan->constraint_interface_id != inst->constraint_interface_id ||
+        plan->name_id != inst->name_id || plan->type_key != inst->type_key ||
+        plan->type_arg_key_start != inst->type_arg_key_start ||
+        plan->type_arg_count != inst->type_arg_count || plan->inst_kind != inst->kind)
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic instantiation plan identity does not re-derive");
+    if (plan->action != verify_generic_instantiation_action_for(inst) ||
+        plan->unproven_reason != verify_generic_instantiation_reason_for(inst))
+        return set_error(errbuf, errbuf_len, "AOT generic instantiation action does not re-derive");
+    if (plan->evidence != verify_generic_instantiation_evidence_for(inst))
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic instantiation evidence does not re-derive");
+    return true;
+}
+
 static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     const XgGlobalEvidence *ev;
     uint32_t capability_count = 0;
@@ -2156,6 +2235,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_dispatch_target_cases = 0;
     uint32_t expected_interface_abi_plans = 0;
     uint32_t expected_generic_specialization_plans = 0;
+    uint32_t expected_generic_instantiation_plans = 0;
     uint32_t expected_metadata_plans = 0;
     uint32_t expected_capability_plans = 0;
     uint32_t expected_static_data_plans = 0;
@@ -2336,6 +2416,21 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     if (bundle->ngeneric_specialization_plans != expected_generic_specialization_plans)
         return set_error(errbuf, errbuf_len,
                          "AOT generic specialization plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->ngeneric_insts; i++) {
+        const XgGenericInstSummary *inst = &ev->generic_insts[i];
+        const XaotGenericInstantiationPlan *plan;
+        expected_generic_instantiation_plans++;
+        plan = xaot_bundle_find_generic_instantiation_plan(bundle, inst->generic_inst_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic inst evidence has no instantiation plan");
+        if (!verify_generic_instantiation_plan_rederives(plan, inst, errbuf, errbuf_len))
+            return false;
+    }
+    if (bundle->ngeneric_instantiation_plans != expected_generic_instantiation_plans)
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic instantiation plan count mismatches evidence");
 
     for (uint32_t mi = 0; mi < metadata_count; mi++) {
         uint32_t bit = metadata[mi];
