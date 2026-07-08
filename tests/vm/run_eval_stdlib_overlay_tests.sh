@@ -5,6 +5,8 @@ XRAY="${1:-${XRAY:-./build/xray}}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+EMPTY_STDLIB="$WORK/empty-stdlib"
+mkdir -p "$EMPTY_STDLIB"
 
 cd "$ROOT"
 
@@ -66,5 +68,11 @@ check_stdin_output "eval_stdin_cluster" "eval" "true" \
     $'import cluster\nprint(cluster.topicMatches("events.*", "events.user"))'
 check_stdin_output "run_stdin_cluster" "run" "true" \
     $'import cluster\nprint(cluster.topicMatches("events.*", "events.user"))'
+
+check_output "eval_embedded_http_empty_stdlib_path" "fn router" \
+    env XRAY_STDLIB_PATH="$EMPTY_STDLIB" "$XRAY" -e $'import http\nprint(http.router)'
+check_output "eval_embedded_cluster_empty_stdlib_path" "true" \
+    env XRAY_STDLIB_PATH="$EMPTY_STDLIB" "$XRAY" -e \
+        $'import cluster\nprint(cluster.topicMatches("events.*", "events.user"))'
 
 echo "eval stdlib overlay tests passed"

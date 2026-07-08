@@ -14,6 +14,7 @@
  */
 
 #include "xmodule_graph.h"
+#include "xstdlib_embedded.h"
 #include "../base/xchecks.h"
 #include "../base/xfileio.h"
 #include "../base/xforward_decl.h"
@@ -34,6 +35,7 @@ extern void xr_program_destroy(struct AstNode *ast);
 
 #define GRAPH_INITIAL_CAP 16
 #define GRAPH_MAX_MODULES 1024
+#define GRAPH_EMBEDDED_STDLIB_PREFIX "<embedded stdlib>/"
 
 /* ========== Lifecycle ========== */
 
@@ -155,6 +157,13 @@ static void spec_add_dep(XrModuleSpec *s, int to_idx) {
     s->dep_indices[s->dep_count++] = to_idx;
 }
 
+static bool graph_stdlib_embedded_path(const char *module_name, char *buf, size_t buf_size) {
+    if (!module_name || !xr_get_embedded_stdlib(module_name))
+        return false;
+    snprintf(buf, buf_size, GRAPH_EMBEDDED_STDLIB_PREFIX "%s/%s.xr", module_name, module_name);
+    return true;
+}
+
 XR_FUNC int xr_module_graph_find(const XrModuleGraph *g, const char *canonical) {
     if (!g || !canonical)
         return -1;
@@ -194,16 +203,26 @@ static void collect_and_resolve_imports(XrModuleGraph *g, int spec_idx, struct A
             continue;
         }
 
-        /* Stdlib native modules without source_path: no node needed in graph */
+        /* Stdlib native modules without a script layer need no graph node. */
         if (mid.kind == XR_MOD_STDLIB && !mid.source_path) {
-            xr_module_id_cleanup(&mid);
-            continue;
+            char embedded_path[XR_PATH_MAX];
+            if (graph_stdlib_embedded_path(mid.canonical, embedded_path, sizeof(embedded_path))) {
+                mid.source_path = xr_strdup(embedded_path);
+            } else {
+                xr_module_id_cleanup(&mid);
+                continue;
+            }
         }
 
         /* Find or create target spec in the graph */
         int target_idx = xr_module_graph_find(g, mid.canonical);
         if (target_idx < 0) {
             target_idx = graph_add_spec(g, mid.canonical, mid.source_path, mid.kind);
+            if (target_idx >= 0 && mid.kind == XR_MOD_STDLIB && mid.source_path &&
+                strncmp(mid.source_path, GRAPH_EMBEDDED_STDLIB_PREFIX,
+                        strlen(GRAPH_EMBEDDED_STDLIB_PREFIX)) == 0) {
+                g->specs[target_idx].embedded_source = true;
+            }
         }
         xr_module_id_cleanup(&mid);
 
@@ -255,7 +274,14 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
         /* Parse source */
         char *owned_source = NULL;
         const char *source = entry_source;
-        if (!is_memory_entry) {
+        if (spec->embedded_source) {
+            source = xr_get_embedded_stdlib(spec->canonical);
+            if (!source) {
+                xr_log_warning("module_graph", "embedded stdlib source missing: %s",
+                               spec->canonical ? spec->canonical : "?");
+                continue;
+            }
+        } else if (!is_memory_entry) {
             owned_source = xr_file_read_all(spec->source_path, "r", NULL);
             source = owned_source;
             if (!source) {
