@@ -2212,6 +2212,154 @@ TEST(global_evidence_composes_direct_method_effects_for_func_attr) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_composes_single_implementor_interface_effects_for_func_attr) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0xa1,
+                      .compiler_semver_hash = 0xa2,
+                      .profile_hash = 0xa3,
+                      .imported_summary_hash = 0,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgInterfaceId interface_id = (XgInterfaceId) xg_name_id("InterfaceBox");
+    uint32_t class_name_id = xg_name_id("InterfaceImplBox");
+    uint32_t method_name_id = xg_name_id("id");
+    XgDeclSummary interface_decl = {.module_id = 1,
+                                    .decl_id = 1,
+                                    .kind = XG_DECL_INTERFACE,
+                                    .name_id = interface_id,
+                                    .signature_key = 1,
+                                    .source_span_id = 10};
+    XgDeclSummary class_decl = {.module_id = 1,
+                                .decl_id = 2,
+                                .kind = XG_DECL_CLASS,
+                                .name_id = class_name_id,
+                                .source_span_id = 20};
+    XgDeclSummary caller_decl = {.module_id = 1,
+                                 .decl_id = 3,
+                                 .kind = XG_DECL_FUNC,
+                                 .name_id = xg_name_id("interface_caller"),
+                                 .signature_key = 1001,
+                                 .source_span_id = 30};
+    XgClassSummary cls = {.module_id = 1,
+                          .decl_id = 2,
+                          .class_id = 1,
+                          .name_id = class_name_id,
+                          .flags = XG_CLASS_INFERRED_FINAL,
+                          .method_start = 1,
+                          .method_count = 1,
+                          .interface_start = 1,
+                          .interface_count = 1,
+                          .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary method = {
+        .method_id = 1, .owner_class_id = 1, .name_id = method_name_id, .signature_key = 1002};
+    XgInterfaceImplSummary impl = {.implementor_class_id = 1,
+                                   .interface_id = interface_id,
+                                   .name_id = interface_id,
+                                   .source_span_id = 21};
+    XgInterfaceMethodSummary interface_method = {.interface_method_id = 1,
+                                                 .owner_interface_id = interface_id,
+                                                 .name_id = method_name_id,
+                                                 .signature_key = 1002,
+                                                 .ordinal = 0,
+                                                 .source_span_id = 11};
+    XgBodySummary caller_body = {.func_id = 1,
+                                 .module_id = 1,
+                                 .owner_decl_id = 3,
+                                 .name_id = xg_name_id("interface_caller"),
+                                 .signature_key = 1001,
+                                 .source_span_id = 30,
+                                 .kind = XG_BODY_FUNCTION,
+                                 .body_hash = 0xa1a1,
+                                 .effect_bits = XG_BODY_MAY_CALL,
+                                 .callsite_start = 1,
+                                 .callsite_count = 1};
+    XgBodySummary method_body = {.func_id = 2,
+                                 .module_id = 1,
+                                 .owner_decl_id = 2,
+                                 .owner_class_id = 1,
+                                 .owner_method_id = 1,
+                                 .name_id = method_name_id,
+                                 .signature_key = 1002,
+                                 .source_span_id = 22,
+                                 .kind = XG_BODY_METHOD,
+                                 .body_hash = 0xa2a2};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 1,
+                              .source_span_id = 31,
+                              .body_ordinal = 0,
+                              .kind = XG_CALL_INTERFACE,
+                              .receiver_static_interface_id = interface_id,
+                              .method_id = 1,
+                              .method_name_id = method_name_id,
+                              .method_signature_key = 1002,
+                              .arg_count = 1};
+    XiFunc init_func;
+    XiFunc caller_func;
+    XiFunc *children[1];
+    XiModule module;
+    XiModule *modules[1];
+    uint32_t composed_effects = UINT32_MAX;
+    char err[256];
+
+    memset(&init_func, 0, sizeof(init_func));
+    memset(&caller_func, 0, sizeof(caller_func));
+    memset(&module, 0, sizeof(module));
+    init_func.name = "init";
+    caller_func.name = "interface_caller";
+    caller_func.parent_func = &init_func;
+    children[0] = &caller_func;
+    init_func.children = children;
+    init_func.nchildren = 1;
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &interface_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &class_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &caller_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &impl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_method(&ev, &interface_method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &caller_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &method_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+
+    ASSERT_TRUE(xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_EQ_UINT(composed_effects, 0);
+
+    XaotBundle interface_caller;
+    memset(&interface_caller, 0, sizeof(interface_caller));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&interface_caller, &ev, XG_BUILD_NATIVE_RELEASE));
+    interface_caller.modules = modules;
+    interface_caller.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&interface_caller, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&interface_caller, &caller_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&interface_caller, &caller_func,
+                                                   XAOT_FN_ATTR_CONST, &ev.bodies[0]));
+    ASSERT_EQ_UINT(interface_caller.func_attr_plans[0].evidence,
+                   XAOT_FN_ATTR_EV_BODY_SUMMARY | XAOT_FN_ATTR_EV_XI_EFFECT_SCAN |
+                       XAOT_FN_ATTR_EV_CALLEE_SUMMARY);
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&interface_caller, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    xaot_bundle_free(&interface_caller);
+
+    ev.bodies[1].effect_bits = XG_BODY_MAY_READ_MEM;
+    ASSERT_TRUE(xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_EQ_UINT(composed_effects, XG_BODY_MAY_READ_MEM);
+
+    ev.bodies[1].effect_bits = 0;
+    XgInterfaceImplSummary second_impl = {.implementor_class_id = 2,
+                                          .interface_id = interface_id,
+                                          .name_id = interface_id,
+                                          .source_span_id = 41};
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(&ev, &second_impl));
+    ASSERT_TRUE(!xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_verifier_rederives_bounds_body_summary) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x71,
@@ -5297,6 +5445,7 @@ RUN_TEST(global_evidence_verifier_rederives_static_data_materialization_contract
 RUN_TEST(global_evidence_verifier_rederives_func_attr_body_summary);
 RUN_TEST(global_evidence_composes_direct_callee_effects_for_func_attr);
 RUN_TEST(global_evidence_composes_direct_method_effects_for_func_attr);
+RUN_TEST(global_evidence_composes_single_implementor_interface_effects_for_func_attr);
 RUN_TEST(global_evidence_verifier_rederives_bounds_body_summary);
 RUN_TEST(global_evidence_verifier_rederives_body_callsite_ranges);
 RUN_TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows);
