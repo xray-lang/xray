@@ -1564,6 +1564,7 @@ static bool verify_dispatch_target_anchor_rederives(
     for (uint16_t i = 0; i < expected_count; i++) {
         const XaotDispatchTargetCase *target =
             &bundle->dispatch_target_cases[plan->target_start - 1 + i];
+        const XgMethodSummary *target_method;
         if (target->callsite_id != plan->callsite_id ||
             target->receiver_class_id != expected_classes[i] ||
             target->method_id != expected_methods[i] || target->evidence != plan->evidence)
@@ -1571,9 +1572,13 @@ static bool verify_dispatch_target_anchor_rederives(
                              expected_kind == XAOT_DISPATCH_TYPE_SWITCH
                                  ? "AOT dispatch type-switch targets do not re-derive"
                                  : "AOT dispatch direct target does not re-derive");
-        if (!verify_find_evidence_class(ev, target->receiver_class_id) ||
-            !verify_find_evidence_method_by_id(ev, target->method_id))
+        target_method = verify_find_evidence_method_by_id(ev, target->method_id);
+        if (!verify_find_evidence_class(ev, target->receiver_class_id) || !target_method)
             return set_error(errbuf, errbuf_len, "AOT dispatch target is missing");
+        if (target->method_root_id != target_method->root_method_id ||
+            target->method_override_depth != target_method->override_depth)
+            return set_error(errbuf, errbuf_len,
+                             "AOT dispatch target method slot does not re-derive");
     }
     return true;
 }
@@ -1611,6 +1616,10 @@ static bool verify_dispatch_vtable_targets_rederive(
             target->receiver_class_id != candidate->class_id ||
             target->method_id != target_method->method_id || target->evidence != expected_evidence)
             return set_error(errbuf, errbuf_len, "AOT dispatch vtable targets do not re-derive");
+        if (target->method_root_id != target_method->root_method_id ||
+            target->method_override_depth != target_method->override_depth)
+            return set_error(errbuf, errbuf_len,
+                             "AOT dispatch vtable target method slot does not re-derive");
         expected_count++;
     }
 
