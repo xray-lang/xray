@@ -2510,8 +2510,8 @@ XrWebSocket *xr_ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *r
 
     // Origin allowlist check (W-18). Cross-origin browser attacks are the
     // main threat model here: a malicious page can open wss://victim.tld
-    // and replay the user's cookies. Callers that want to keep the legacy
-    // "allow all" behaviour leave opts->allowed_origins NULL.
+    // and replay the user's cookies. Callers that intentionally allow all
+    // origins leave opts->allowed_origins NULL.
     if (opts && opts->allowed_origins) {
         char origin_val[256];
         const char *origin = NULL;
@@ -2609,10 +2609,4 @@ XrWebSocket *xr_ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *r
     xr_ws_config_init(&ws->config);
 
     return ws;
-}
-
-XrWebSocket *xr_ws_upgrade(struct XrVMRuntime *isolate, int fd, const char *request_headers) {
-    // Thin wrapper preserving the legacy "no Origin / no subprotocol"
-    // behaviour; new callers should use xr_ws_upgrade_ex directly.
-    return xr_ws_upgrade_ex(isolate, fd, request_headers, NULL);
 }
