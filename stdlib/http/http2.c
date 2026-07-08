@@ -878,7 +878,7 @@ int xr_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_len,
 
 /* ========== Frame Header Parsing/Generation ========== */
 
-int xr_h2_parse_frame_header(const uint8_t *buf, XrH2FrameHeader *header) {
+static int xr_h2_parse_frame_header(const uint8_t *buf, XrH2FrameHeader *header) {
     header->length = ((uint32_t) buf[0] << 16) | ((uint32_t) buf[1] << 8) | buf[2];
     header->type = buf[3];
     header->flags = buf[4];
@@ -888,7 +888,7 @@ int xr_h2_parse_frame_header(const uint8_t *buf, XrH2FrameHeader *header) {
     return 0;
 }
 
-void xr_h2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header) {
+static void xr_h2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header) {
     buf[0] = (header->length >> 16) & 0xFF;
     buf[1] = (header->length >> 8) & 0xFF;
     buf[2] = header->length & 0xFF;
@@ -901,6 +901,8 @@ void xr_h2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header) {
 }
 
 /* ========== HTTP/2 Connection ========== */
+
+static void xr_h2_stream_hash_free(XrH2StreamHash *hash);
 
 void xr_h2_conn_free(XrH2Conn *conn) {
     if (!conn)
@@ -947,6 +949,12 @@ static int h2_send(XrH2Conn *conn, const void *buf, size_t len) {
     return (int) total;
 }
 
+static int xr_h2_send_settings(XrH2Conn *conn);
+static int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode error);
+static int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increment);
+static int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error);
+static int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack);
+
 int xr_h2_conn_init(XrH2Conn *conn) {
     if (!conn)
         return -1;
@@ -962,7 +970,7 @@ int xr_h2_conn_init(XrH2Conn *conn) {
     return xr_h2_send_settings(conn);
 }
 
-int xr_h2_send_settings(XrH2Conn *conn) {
+static int xr_h2_send_settings(XrH2Conn *conn) {
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 36];
     uint8_t *payload = frame + XR_H2_FRAME_HEADER_SIZE;
     int payload_len = 0;
@@ -998,7 +1006,7 @@ int xr_h2_send_settings(XrH2Conn *conn) {
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + payload_len);
 }
 
-int xr_h2_send_settings_ack(XrH2Conn *conn) {
+static int xr_h2_send_settings_ack(XrH2Conn *conn) {
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE];
     XrH2FrameHeader header = {
         .length = 0, .type = XR_H2_FRAME_SETTINGS, .flags = XR_H2_FLAG_ACK, .stream_id = 0};
@@ -1017,7 +1025,7 @@ static inline uint32_t stream_hash_func(uint32_t stream_id, uint32_t nbuckets) {
     return h & (nbuckets - 1);
 }
 
-void xr_h2_stream_hash_init(XrH2StreamHash *hash) {
+static void xr_h2_stream_hash_init(XrH2StreamHash *hash) {
     if (!hash)
         return;
     hash->nbuckets = XR_H2_STREAM_HASH_INIT_CAP;
@@ -1049,7 +1057,7 @@ static void stream_hash_resize(XrH2StreamHash *hash) {
     hash->nbuckets = new_cap;
 }
 
-void xr_h2_stream_hash_add(XrH2StreamHash *hash, XrH2Stream *stream) {
+static void xr_h2_stream_hash_add(XrH2StreamHash *hash, XrH2Stream *stream) {
     if (!hash || !stream)
         return;
 
@@ -1067,7 +1075,7 @@ void xr_h2_stream_hash_add(XrH2StreamHash *hash, XrH2Stream *stream) {
     hash->count++;
 }
 
-XrH2Stream *xr_h2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_id) {
+static XrH2Stream *xr_h2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_id) {
     if (!hash || !hash->buckets)
         return NULL;
     uint32_t idx = stream_hash_func(stream_id, hash->nbuckets);
@@ -1080,23 +1088,7 @@ XrH2Stream *xr_h2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_id) {
     return NULL;
 }
 
-void xr_h2_stream_hash_remove(XrH2StreamHash *hash, uint32_t stream_id) {
-    if (!hash || !hash->buckets)
-        return;
-    uint32_t idx = stream_hash_func(stream_id, hash->nbuckets);
-    XrH2Stream **pp = &hash->buckets[idx];
-    while (*pp) {
-        if ((*pp)->id == stream_id) {
-            XrH2Stream *to_remove = *pp;
-            *pp = to_remove->next;
-            hash->count--;
-            return;
-        }
-        pp = &(*pp)->next;
-    }
-}
-
-void xr_h2_stream_hash_free(XrH2StreamHash *hash) {
+static void xr_h2_stream_hash_free(XrH2StreamHash *hash) {
     if (!hash)
         return;
     if (hash->buckets) {
@@ -1139,7 +1131,7 @@ XrH2Stream *xr_h2_stream_new(XrH2Conn *conn) {
     return stream;
 }
 
-XrH2Stream *xr_h2_get_stream(XrH2Conn *conn, uint32_t stream_id) {
+static XrH2Stream *xr_h2_get_stream(XrH2Conn *conn, uint32_t stream_id) {
     if (!conn)
         return NULL;
     return xr_h2_stream_hash_find(&conn->stream_hash, stream_id);
@@ -1191,7 +1183,7 @@ static void h2_header_callback(const char *name, size_t name_len, const char *va
 }
 
 // Receive and process frame
-int xr_h2_recv(XrH2Conn *conn) {
+static int xr_h2_recv(XrH2Conn *conn) {
     if (!conn)
         return -1;
 
@@ -1510,7 +1502,7 @@ int xr_h2_send_data(XrH2Conn *conn, XrH2Stream *stream, const void *data, size_t
     return (int) sent;
 }
 
-int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode error) {
+static int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode error) {
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 8];
     XrH2FrameHeader header = {.length = 8, .type = XR_H2_FRAME_GOAWAY, .flags = 0, .stream_id = 0};
     xr_h2_write_frame_header(frame, &header);
@@ -1528,7 +1520,7 @@ int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode err
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + 8);
 }
 
-int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increment) {
+static int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increment) {
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 4];
     XrH2FrameHeader header = {
         .length = 4, .type = XR_H2_FRAME_WINDOW_UPDATE, .flags = 0, .stream_id = stream_id};
@@ -1593,7 +1585,7 @@ XrH2Conn *xr_h2_conn_new(int fd, void *tls_conn, bool is_client) {
 
 /* ========== Stream Cancellation ========== */
 
-int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error) {
+static int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error) {
     if (!conn)
         return -1;
 
@@ -1613,7 +1605,7 @@ int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode erro
 
 /* ========== PING ========== */
 
-int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack) {
+static int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack) {
     if (!conn)
         return -1;
 

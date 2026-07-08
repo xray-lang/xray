@@ -8,8 +8,7 @@
  * http2_client.h - HTTP/2 client implementation
  *
  * KEY CONCEPT:
- *   ALPN auto-negotiation, connection pooling, multiplexed streams,
- *   and stream priority support.
+ *   ALPN negotiation, connection pooling, and multiplexed request streams.
  */
 
 #ifndef XR_STDLIB_HTTP2_CLIENT_H
