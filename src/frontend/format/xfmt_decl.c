@@ -87,6 +87,12 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
         case ATTR_NAKED:
             xfmt_write_str(ctx, "@naked");
             break;
+        case ATTR_INTERRUPT:
+            xfmt_write_str(ctx, "@interrupt(");
+            xfmt_emit_string(ctx, attr->str_arg ? attr->str_arg : "",
+                             attr->str_arg ? (int) strlen(attr->str_arg) : 0);
+            xfmt_write_char(ctx, ')');
+            break;
         case ATTR_DERIVE: {
             bool first = true;
             xfmt_write_str(ctx, "@derive(");

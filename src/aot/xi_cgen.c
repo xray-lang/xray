@@ -6654,7 +6654,9 @@ static void emit_func_attr_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f)
 }
 
 static bool cg_func_attrs_apply_to_internal(const XiFunc *f) {
-    return f && !f->c_export && (f->aot_section || f->aot_used || f->aot_naked);
+    return f && !f->c_export &&
+           (f->aot_section || f->aot_used || f->aot_naked ||
+            (f->aot_interrupt_abi && f->aot_interrupt_abi[0]));
 }
 
 static void emit_aot_symbol_attrs(FILE *out, const XiFunc *f, bool c_export_wrapper) {
@@ -6671,6 +6673,11 @@ static void emit_aot_symbol_attrs(FILE *out, const XiFunc *f, bool c_export_wrap
         fprintf(out, "XRT_ATTR_USED ");
     if (f->aot_naked)
         fprintf(out, "XRT_ATTR_NAKED ");
+    if (f->aot_interrupt_abi && f->aot_interrupt_abi[0]) {
+        fprintf(out, "XRT_ATTR_INTERRUPT(");
+        emit_c_string_literal(out, f->aot_interrupt_abi);
+        fprintf(out, ") ");
+    }
 }
 
 static void emit_cfn_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -7339,6 +7346,11 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, "extern ");
         if (f->aot_naked)
             fprintf(out, "XRT_ATTR_NAKED ");
+        if (f->aot_interrupt_abi && f->aot_interrupt_abi[0]) {
+            fprintf(out, "XRT_ATTR_INTERRUPT(");
+            emit_c_string_literal(out, f->aot_interrupt_abi);
+            fprintf(out, ") ");
+        }
         if (ret_ptr)
             fprintf(out, "%s", ret_ptr);
         else if (!emit_class_native_return_type(ctx, out, prefix, f))
