@@ -1062,8 +1062,7 @@ static XrValue cluster_serve_fn(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_value_from_channel(ch);
 }
 
-// cluster.reply(req, result) - simplified: auto-extract id/from from req Json
-// Also supports legacy: cluster.reply(id, from, result)
+// cluster.reply(req, result) - auto-extract id/from from req Json
 static XrValue cluster_reply_fn(XrVMRuntime *X, XrValue *args, int argc) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c)
@@ -1074,7 +1073,6 @@ static XrValue cluster_reply_fn(XrVMRuntime *X, XrValue *args, int argc) {
     XrValue result;
 
     if (argc >= 2 && xr_value_is_json(args[0])) {
-        // Simplified form: cluster.reply(req, result)
         XrJson *req = (XrJson *) XR_TO_PTR(args[0]);
         result = args[1];
 
@@ -1093,11 +1091,6 @@ static XrValue cluster_reply_fn(XrVMRuntime *X, XrValue *args, int argc) {
             return xr_bool(0);
         request_id = (uint64_t) XR_TO_INT(v_id);
         from_name = XR_TO_STRING(v_from)->data;
-    } else if (argc >= 3 && XR_IS_INT(args[0]) && XR_IS_STRING(args[1])) {
-        // Legacy form: cluster.reply(id, from, result)
-        request_id = (uint64_t) XR_TO_INT(args[0]);
-        from_name = XR_TO_STRING(args[1])->data;
-        result = args[2];
     } else {
         return xr_bool(0);
     }
