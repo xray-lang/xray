@@ -1993,6 +1993,98 @@ static bool verify_interface_abi_plan_rederives(const XgGlobalEvidence *ev,
     return true;
 }
 
+static uint8_t verify_specialization_action_for_dispatch(uint8_t dispatch_kind) {
+    switch ((XaotMethodDispatchKind) dispatch_kind) {
+        case XAOT_DISPATCH_DIRECT:
+            return XAOT_SPECIALIZATION_DIRECT;
+        case XAOT_DISPATCH_TYPE_SWITCH:
+            return XAOT_SPECIALIZATION_TYPE_SWITCH;
+        default:
+            return XAOT_SPECIALIZATION_FALLBACK;
+    }
+}
+
+static uint8_t verify_specialization_reason_for_dispatch(const XaotMethodDispatchPlan *dispatch) {
+    if (!dispatch)
+        return XAOT_SPECIALIZATION_UNPROVEN_DYNAMIC_BOUNDARY;
+    if (dispatch->kind == XAOT_DISPATCH_DIRECT || dispatch->kind == XAOT_DISPATCH_TYPE_SWITCH)
+        return XAOT_SPECIALIZATION_UNPROVEN_NONE;
+    switch (dispatch->unproven_reason) {
+        case XAOT_DISPATCH_UNPROVEN_NO_INTERFACE_ID:
+            return XAOT_SPECIALIZATION_UNPROVEN_NO_INTERFACE;
+        case XAOT_DISPATCH_UNPROVEN_NO_TARGET_METHOD:
+            return XAOT_SPECIALIZATION_UNPROVEN_NO_TARGET;
+        case XAOT_DISPATCH_UNPROVEN_LARGE_IMPLEMENTOR_SET:
+            return XAOT_SPECIALIZATION_UNPROVEN_LARGE_SET;
+        default:
+            return XAOT_SPECIALIZATION_UNPROVEN_DYNAMIC_BOUNDARY;
+    }
+}
+
+static XgClassId verify_specialization_single_implementor(const XaotBundle *bundle,
+                                                          const XaotMethodDispatchPlan *dispatch) {
+    if (!bundle || !dispatch || dispatch->target_count != 1 || dispatch->target_start == 0)
+        return XG_NO_ID;
+    if (dispatch->target_start - 1 >= bundle->ndispatch_target_cases)
+        return XG_NO_ID;
+    return bundle->dispatch_target_cases[dispatch->target_start - 1].receiver_class_id;
+}
+
+static bool verify_generic_specialization_plan_rederives(const XgGlobalEvidence *ev,
+                                                         const XaotBundle *bundle,
+                                                         const XaotGenericSpecializationPlan *plan,
+                                                         const XgCallsiteSummary *call,
+                                                         char *errbuf, size_t errbuf_len) {
+    const XaotMethodDispatchPlan *dispatch;
+    uint32_t expected_evidence = XAOT_SPECIALIZATION_EV_GLOBAL_CALLSITE;
+    uint32_t implementor_count;
+    uint16_t target_count;
+    uint8_t dispatch_kind;
+
+    if (!ev || !bundle || !plan || !call)
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic specialization verifier has incomplete input");
+    if (call->kind != XG_CALL_INTERFACE)
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic specialization plan is not an interface callsite");
+    dispatch = xaot_bundle_find_method_dispatch_plan(bundle, call->callsite_id);
+    if (!dispatch)
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic specialization plan has no dispatch plan");
+    expected_evidence |= XAOT_SPECIALIZATION_EV_DISPATCH_PLAN;
+    implementor_count =
+        verify_effective_interface_implementor_count(ev, call->receiver_static_interface_id);
+    if (implementor_count != 0)
+        expected_evidence |= XAOT_SPECIALIZATION_EV_IMPLEMENTOR_SET;
+    target_count = dispatch->target_count;
+    if (target_count != 0)
+        expected_evidence |= XAOT_SPECIALIZATION_EV_TARGET_CASES;
+    dispatch_kind = dispatch->kind;
+
+    if (plan->callsite_id != call->callsite_id || plan->owner_func_id != call->owner_func_id ||
+        plan->interface_id != call->receiver_static_interface_id ||
+        plan->method_name_id != call->method_name_id ||
+        plan->method_signature_key != call->method_signature_key)
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic specialization identity does not re-derive");
+    if (plan->dispatch_kind != dispatch_kind ||
+        plan->action != verify_specialization_action_for_dispatch(dispatch_kind) ||
+        plan->unproven_reason != verify_specialization_reason_for_dispatch(dispatch))
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic specialization action does not re-derive");
+    if (plan->implementor_count != implementor_count || plan->target_count != target_count)
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic specialization target set does not re-derive");
+    if (plan->single_implementor_class_id !=
+        verify_specialization_single_implementor(bundle, dispatch))
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic specialization single target does not re-derive");
+    if (plan->evidence != expected_evidence)
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic specialization evidence does not re-derive");
+    return true;
+}
+
 static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     const XgGlobalEvidence *ev;
     uint32_t capability_count = 0;
@@ -2005,6 +2097,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_dispatch_plans = 0;
     uint32_t expected_dispatch_target_cases = 0;
     uint32_t expected_interface_abi_plans = 0;
+    uint32_t expected_generic_specialization_plans = 0;
     uint32_t expected_metadata_plans = 0;
     uint32_t expected_capability_plans = 0;
     uint32_t expected_static_data_plans = 0;
@@ -2165,6 +2258,24 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->ninterface_abi_plans != expected_interface_abi_plans)
         return set_error(errbuf, errbuf_len, "AOT interface ABI plan count mismatches evidence");
+
+    for (uint32_t i = 0; i < ev->ncallsites; i++) {
+        const XgCallsiteSummary *call = &ev->callsites[i];
+        const XaotGenericSpecializationPlan *plan;
+        if (call->kind != XG_CALL_INTERFACE)
+            continue;
+        expected_generic_specialization_plans++;
+        plan = xaot_bundle_find_generic_specialization_plan(bundle, call->callsite_id);
+        if (!plan)
+            return set_error(errbuf, errbuf_len,
+                             "AOT interface callsite has no generic specialization plan");
+        if (!verify_generic_specialization_plan_rederives(ev, bundle, plan, call, errbuf,
+                                                          errbuf_len))
+            return false;
+    }
+    if (bundle->ngeneric_specialization_plans != expected_generic_specialization_plans)
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic specialization plan count mismatches evidence");
 
     for (uint32_t mi = 0; mi < metadata_count; mi++) {
         uint32_t bit = metadata[mi];

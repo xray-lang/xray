@@ -527,6 +527,42 @@ typedef struct XaotInterfaceAbiPlan {
     uint8_t unproven_reason;
 } XaotInterfaceAbiPlan;
 
+typedef enum XaotSpecializationAction {
+    XAOT_SPECIALIZATION_DIRECT = 1,
+    XAOT_SPECIALIZATION_TYPE_SWITCH,
+    XAOT_SPECIALIZATION_FALLBACK,
+} XaotSpecializationAction;
+
+enum {
+    XAOT_SPECIALIZATION_EV_GLOBAL_CALLSITE = 1u << 0,
+    XAOT_SPECIALIZATION_EV_DISPATCH_PLAN = 1u << 1,
+    XAOT_SPECIALIZATION_EV_IMPLEMENTOR_SET = 1u << 2,
+    XAOT_SPECIALIZATION_EV_TARGET_CASES = 1u << 3,
+};
+
+enum {
+    XAOT_SPECIALIZATION_UNPROVEN_NONE = 0,
+    XAOT_SPECIALIZATION_UNPROVEN_NO_INTERFACE = 1,
+    XAOT_SPECIALIZATION_UNPROVEN_NO_TARGET = 2,
+    XAOT_SPECIALIZATION_UNPROVEN_LARGE_SET = 3,
+    XAOT_SPECIALIZATION_UNPROVEN_DYNAMIC_BOUNDARY = 4,
+};
+
+typedef struct XaotGenericSpecializationPlan {
+    XgCallsiteId callsite_id;
+    XgFuncId owner_func_id;
+    XgInterfaceId interface_id;
+    uint32_t method_name_id;
+    uint32_t method_signature_key;
+    XgClassId single_implementor_class_id;
+    uint32_t implementor_count;
+    uint16_t target_count;
+    uint8_t dispatch_kind;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotGenericSpecializationPlan;
+
 enum {
     XAOT_METADATA_EV_GLOBAL_BODY = 1u << 0,
     XAOT_METADATA_EV_DECL_ATTRIBUTE = 1u << 1,
@@ -713,6 +749,9 @@ typedef struct XaotBundle {
     XaotInterfaceAbiPlan *interface_abi_plans;
     uint32_t ninterface_abi_plans;
     uint32_t interface_abi_plan_cap;
+    XaotGenericSpecializationPlan *generic_specialization_plans;
+    uint32_t ngeneric_specialization_plans;
+    uint32_t generic_specialization_plan_cap;
     XaotMetadataReachabilityPlan *metadata_plans;
     uint32_t nmetadata_plans;
     uint32_t metadata_plan_cap;
@@ -765,6 +804,8 @@ xaot_bundle_find_interface_use_plan(const XaotBundle *bundle, XgInterfaceId inte
                                     XgClassId implementor_class_id, XgCallsiteId use_site_id);
 XR_FUNC const XaotInterfaceAbiPlan *xaot_bundle_find_interface_abi_plan(const XaotBundle *bundle,
                                                                         XgInterfaceId interface_id);
+XR_FUNC const XaotGenericSpecializationPlan *
+xaot_bundle_find_generic_specialization_plan(const XaotBundle *bundle, XgCallsiteId callsite_id);
 XR_FUNC const XaotMetadataReachabilityPlan *xaot_bundle_find_metadata_plan(const XaotBundle *bundle,
                                                                            uint32_t metadata);
 XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,
