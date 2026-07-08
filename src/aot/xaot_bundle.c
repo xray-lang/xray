@@ -1209,6 +1209,66 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     return true;
 }
 
+static XgFuncId xaot_bundle_find_unique_body_func_id_for_xi_func(const XaotBundle *bundle,
+                                                                 const XiFunc *func,
+                                                                 bool is_module_init) {
+    const XgGlobalEvidence *ev;
+    XgFuncId match = XG_NO_ID;
+    uint32_t name_id = 0;
+    if (!bundle || !func)
+        return XG_NO_ID;
+    ev = bundle->global_evidence_plan.evidence;
+    if (!ev)
+        return XG_NO_ID;
+    if (!is_module_init) {
+        name_id = xg_name_id(func->name);
+        if (name_id == 0)
+            return XG_NO_ID;
+    }
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        const XgBodySummary *body = &ev->bodies[i];
+        if (body->func_id == XG_NO_ID)
+            continue;
+        if (is_module_init) {
+            if (body->kind != XG_BODY_MODULE_INIT)
+                continue;
+        } else {
+            if (body->kind == XG_BODY_MODULE_INIT || body->name_id != name_id)
+                continue;
+        }
+        if (match != XG_NO_ID)
+            return XG_NO_ID;
+        match = body->func_id;
+    }
+    return match;
+}
+
+static void xaot_bundle_bind_body_func_ids_in_func(XaotBundle *bundle, XiFunc *func,
+                                                   bool is_module_init) {
+    if (!bundle || !func)
+        return;
+    if (func->xg_body_func_id == XG_NO_ID)
+        func->xg_body_func_id =
+            xaot_bundle_find_unique_body_func_id_for_xi_func(bundle, func, is_module_init);
+    for (uint16_t ci = 0; ci < func->nchildren; ci++)
+        xaot_bundle_bind_body_func_ids_in_func(bundle, func->children ? func->children[ci] : NULL,
+                                               false);
+}
+
+static void xaot_bundle_bind_xi_body_func_ids(XaotBundle *bundle) {
+    if (!bundle || !bundle->modules)
+        return;
+    for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+        XiModule *module = bundle->modules[mi];
+        if (!module)
+            continue;
+        xaot_bundle_bind_body_func_ids_in_func(bundle, module->init, true);
+        for (uint16_t fi = 0; fi < module->nfuncs; fi++)
+            xaot_bundle_bind_body_func_ids_in_func(
+                bundle, module->functions ? module->functions[fi] : NULL, false);
+    }
+}
+
 static void xaot_bundle_bind_callsite_ids_in_func(XaotBundle *bundle, XiFunc *func) {
     if (!bundle || !func)
         return;
@@ -1291,6 +1351,7 @@ XR_FUNC bool xaot_bundle_set_global_evidence(XaotBundle *bundle, const XgGlobalE
     bundle->global_evidence_plan.profile = profile;
     if (!xaot_bundle_populate_global_lowered_plans(bundle, evidence))
         return false;
+    xaot_bundle_bind_xi_body_func_ids(bundle);
     xaot_bundle_bind_xi_callsite_ids(bundle);
     return true;
 }
