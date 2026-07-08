@@ -2195,12 +2195,14 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
             evidence |= XAOT_SPAN_EV_ELEM_MATCH;
             drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
             break;
-        case XAOT_SPAN_ACCESS_REINTERPRET:
-            if (prepare_span_reinterpret_length_relation_proven(
-                    bundle, value, (uint8_t) ((value->aux_int >> 8) & 0xff)))
+        case XAOT_SPAN_ACCESS_REINTERPRET: {
+            uint8_t target_elem_size = (uint8_t) ((value->aux_int >> 8) & 0xff);
+            if (target_elem_size == 1 ||
+                prepare_span_reinterpret_length_relation_proven(bundle, value, target_elem_size))
                 evidence |= XAOT_SPAN_EV_LENGTH_REL_PROVEN;
             drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
             break;
+        }
         default:
             reason = XAOT_SPAN_UNPROVEN_DYNAMIC_BOUNDARY;
             break;
