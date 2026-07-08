@@ -1,4 +1,6 @@
+@section("__DATA,.xr_imag")
 @weak
+@used
 const MAGIC: int = 40
 
 export const OFFSET: int = 2
@@ -14,7 +16,9 @@ struct Header {
     flags: int
 }
 
+@section("__DATA,.xr_ihead")
 @weak
+@used
 const HEADER = comptime Header{magic: TABLE[1], flags: TABLE[2]}
 
 struct Packet {
