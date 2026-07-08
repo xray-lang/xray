@@ -53,6 +53,11 @@ jobs:
         chmod +x ./scripts/check_temp_workarounds.sh
         ./scripts/check_temp_workarounds.sh
 
+    - name: stdlib public surface uniqueness
+      # Task 151 R3: each low-level semantic helper should have one canonical
+      # public surface. The checker allows only explicitly recorded legacy debt.
+      run: python3 ./scripts/check_stdlib_surface_uniqueness.py --root .
+
   # ===========================================================================
   # Build & Test (multi-platform)
   # ===========================================================================
