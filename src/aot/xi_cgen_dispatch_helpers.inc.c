@@ -7113,12 +7113,17 @@ static void xicgen_span_reinterpret(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
     uint8_t elem_tid = (uint8_t) ((v->aux_int >> 16) & 0xff);
     const XaotSpanAccessPlan *plan = cg_span_access_plan(ctx, v, XAOT_SPAN_ACCESS_REINTERPRET);
     if (plan && (plan->eliminated_checks & XAOT_SPAN_DROP_HELPER) == XAOT_SPAN_DROP_HELPER) {
+        bool overflow_check_dropped =
+            (plan->eliminated_checks & XAOT_SPAN_DROP_OVERFLOW) == XAOT_SPAN_DROP_OVERFLOW;
         bool length_rel_proven = (plan->evidence & XAOT_SPAN_EV_LENGTH_REL_PROVEN) != 0;
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
-        fprintf(out,
-                "; if (XR_UNLIKELY(_s.length < 0)) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                "\"ByteSpan.reinterpret<T>() byte length overflow\"); ");
+        fprintf(out, "; ");
+        if (!overflow_check_dropped) {
+            fprintf(out, "if (XR_UNLIKELY(_s.length < 0)) "
+                         "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                         "\"ByteSpan.reinterpret<T>() byte length overflow\"); ");
+        }
         if (!length_rel_proven) {
             fprintf(out,
                     "if (XR_UNLIKELY(_s.length %% (int64_t)%u != 0)) "
