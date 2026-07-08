@@ -1,0 +1,8 @@
+import compress
+
+@no_alloc
+fn xray_no_alloc_compress_gzip_reject(data: string) -> string? {
+    return compress.gzip(data)
+}
+
+print(xray_no_alloc_compress_gzip_reject("edge") ?? "")
