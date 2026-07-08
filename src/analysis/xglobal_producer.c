@@ -1735,8 +1735,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_FUNCTION_EXPR: {
             uint32_t base_locals = bc->nlocals;
             uint32_t base_name_locals = bc->nname_locals;
-            if (body_function_expr_captures_current_locals(bc, &node->as.function_expr))
+            bool captures = body_function_expr_captures_current_locals(bc, &node->as.function_expr);
+            if (captures) {
                 bc->escape_bits |= XG_BODY_ESCAPE_CAPTURE;
+                bc->effect_bits |= XG_BODY_MAY_ALLOC;
+            }
             if (node->as.function_expr.is_generator)
                 bc->capability_bits |= XG_CAP_GENERATOR | XG_CAP_COROUTINE;
             body_add_function_params(bc, &node->as.function_expr);

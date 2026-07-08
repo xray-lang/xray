@@ -3897,7 +3897,9 @@ TEST(global_evidence_producer_marks_body_escape_bits) {
     ASSERT_TRUE(evidence_body_count_with_escape(&ev, XG_BODY_ESCAPE_RETURN) >= 1);
     ASSERT_TRUE(evidence_body_count_with_escape(&ev, XG_BODY_ESCAPE_CORO) >= 1);
     ASSERT_TRUE((make_adder->escape_bits & XG_BODY_ESCAPE_CAPTURE) != 0);
+    ASSERT_TRUE((make_adder->effect_bits & XG_BODY_MAY_ALLOC) != 0);
     ASSERT_TRUE((make_identity->escape_bits & XG_BODY_ESCAPE_CAPTURE) == 0);
+    ASSERT_TRUE((make_identity->effect_bits & XG_BODY_MAY_ALLOC) == 0);
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "capture"));
