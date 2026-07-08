@@ -1,6 +1,13 @@
+struct StaticPair {
+    left: int
+    right: int
+}
+
 fn run() -> int {
+    const table: [int; 3] = comptime [1, 2, 3]
+    const pair = comptime StaticPair{left: table[0], right: 4}
     const value = comptime 7
-    return value + 1
+    return value + pair.right
 }
 
 print(run())

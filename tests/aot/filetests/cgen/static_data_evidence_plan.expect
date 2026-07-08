@@ -1,2 +1,5 @@
 contains=xaot-plan v0
 contains=static-data 0 name=comptime_value bodies=1 action=materialize evidence=0x1 reason=none
+contains=static-data 1 name=fixed_layout bodies=1 action=materialize evidence=0x1 reason=none
+contains=static-data 2 name=rodata bodies=1 action=materialize evidence=0x1 reason=none
+contains=static-data 3 name=freestanding_safe bodies=1 action=materialize evidence=0x1 reason=none

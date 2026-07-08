@@ -3988,15 +3988,22 @@ TEST(global_evidence_producer_marks_static_data_reachability) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_COMPTIME_VALUE), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_FIXED_LAYOUT), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_RODATA), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_static_data(&ev, XG_STATIC_DATA_FREESTANDING_SAFE), 1);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nstatic_data_plans, 4);
     const XaotStaticDataPlan *plan =
         xaot_bundle_find_static_data_plan(&bundle, XG_STATIC_DATA_COMPTIME_VALUE);
     ASSERT_NOT_NULL(plan);
     ASSERT_EQ_UINT(plan->body_count, 1);
     ASSERT_EQ_UINT(plan->action, XAOT_STATIC_DATA_ACTION_MATERIALIZE);
+    ASSERT_NOT_NULL(xaot_bundle_find_static_data_plan(&bundle, XG_STATIC_DATA_FIXED_LAYOUT));
+    ASSERT_NOT_NULL(xaot_bundle_find_static_data_plan(&bundle, XG_STATIC_DATA_RODATA));
+    ASSERT_NOT_NULL(xaot_bundle_find_static_data_plan(&bundle, XG_STATIC_DATA_FREESTANDING_SAFE));
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);

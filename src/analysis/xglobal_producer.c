@@ -1061,6 +1061,180 @@ static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
         bc->callsite_count++;
 }
 
+static bool static_data_node_is_scalar_rodata(const AstNode *node) {
+    if (!node)
+        return false;
+    switch (node->type) {
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_STRING:
+        case AST_LITERAL_CHAR:
+        case AST_LITERAL_NULL:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_VARIABLE:
+        case AST_ENUM_ACCESS:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint32_t static_data_shape_bits_for_expr(const AstNode *node);
+
+static uint32_t static_data_shape_bits_for_all(AstNode **nodes, int count, bool *out_all_rodata,
+                                               bool *out_all_freestanding_safe) {
+    uint32_t bits = 0;
+    bool all_rodata = true;
+    bool all_freestanding_safe = true;
+    for (int i = 0; i < count; i++) {
+        uint32_t child_bits = static_data_shape_bits_for_expr(nodes ? nodes[i] : NULL);
+        bits |= child_bits;
+        if ((child_bits & XG_STATIC_DATA_RODATA) == 0)
+            all_rodata = false;
+        if ((child_bits & XG_STATIC_DATA_FREESTANDING_SAFE) == 0)
+            all_freestanding_safe = false;
+    }
+    if (out_all_rodata)
+        *out_all_rodata = all_rodata;
+    if (out_all_freestanding_safe)
+        *out_all_freestanding_safe = all_freestanding_safe;
+    return bits;
+}
+
+static uint32_t static_data_shape_bits_for_pair(const AstNode *left, const AstNode *right) {
+    uint32_t left_bits = static_data_shape_bits_for_expr(left);
+    uint32_t right_bits = static_data_shape_bits_for_expr(right);
+    uint32_t bits = (left_bits | right_bits) & XG_STATIC_DATA_RUNTIME_INIT;
+    if ((left_bits & XG_STATIC_DATA_RODATA) != 0 && (right_bits & XG_STATIC_DATA_RODATA) != 0)
+        bits |= XG_STATIC_DATA_RODATA;
+    if ((left_bits & XG_STATIC_DATA_FREESTANDING_SAFE) != 0 &&
+        (right_bits & XG_STATIC_DATA_FREESTANDING_SAFE) != 0)
+        bits |= XG_STATIC_DATA_FREESTANDING_SAFE;
+    return bits;
+}
+
+static uint32_t static_data_shape_bits_for_expr(const AstNode *node) {
+    if (!node)
+        return 0;
+    if (static_data_node_is_scalar_rodata(node))
+        return XG_STATIC_DATA_RODATA | XG_STATIC_DATA_FREESTANDING_SAFE;
+    switch (node->type) {
+        case AST_LITERAL_BIGINT:
+        case AST_LITERAL_REGEX:
+        case AST_TEMPLATE_STRING:
+        case AST_OBJECT_LITERAL:
+        case AST_MAP_LITERAL:
+        case AST_SET_LITERAL:
+        case AST_NEW_EXPR:
+            return XG_STATIC_DATA_RUNTIME_INIT;
+        case AST_GROUPING:
+            return static_data_shape_bits_for_expr(node->as.grouping);
+        case AST_COMPTIME_EXPR:
+            return static_data_shape_bits_for_expr(node->as.comptime_expr.expr);
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+        case AST_FORCE_UNWRAP:
+            return static_data_shape_bits_for_expr(node->as.unary.operand);
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_NULLISH_COALESCE:
+            return static_data_shape_bits_for_pair(node->as.binary.left, node->as.binary.right);
+        case AST_TERNARY: {
+            AstNode *parts[3] = {node->as.ternary.condition, node->as.ternary.true_expr,
+                                 node->as.ternary.false_expr};
+            bool all_rodata = false;
+            bool all_safe = false;
+            uint32_t bits = static_data_shape_bits_for_all(parts, 3, &all_rodata, &all_safe);
+            bits &= XG_STATIC_DATA_RUNTIME_INIT;
+            if (all_rodata)
+                bits |= XG_STATIC_DATA_RODATA;
+            if (all_safe)
+                bits |= XG_STATIC_DATA_FREESTANDING_SAFE;
+            return bits;
+        }
+        case AST_AS_EXPR:
+            return static_data_shape_bits_for_expr(node->as.as_expr.expr);
+        case AST_INDEX_GET:
+            return static_data_shape_bits_for_pair(node->as.index_get.array,
+                                                   node->as.index_get.index);
+        case AST_MEMBER_ACCESS:
+            return static_data_shape_bits_for_expr(node->as.member_access.object);
+        case AST_SPREAD_EXPR:
+            return static_data_shape_bits_for_expr(node->as.spread_expr.expr);
+        case AST_ARRAY_LITERAL: {
+            bool all_rodata = false;
+            bool all_safe = false;
+            uint32_t bits;
+            if (node->as.array_literal.is_repeat) {
+                bits = static_data_shape_bits_for_pair(node->as.array_literal.repeat_value,
+                                                       node->as.array_literal.repeat_count);
+                all_rodata = (bits & XG_STATIC_DATA_RODATA) != 0;
+                all_safe = (bits & XG_STATIC_DATA_FREESTANDING_SAFE) != 0;
+            } else {
+                bits = static_data_shape_bits_for_all(node->as.array_literal.elements,
+                                                      node->as.array_literal.count, &all_rodata,
+                                                      &all_safe);
+            }
+            bits &= XG_STATIC_DATA_RUNTIME_INIT;
+            if (all_rodata)
+                bits |= XG_STATIC_DATA_RODATA;
+            if (all_safe)
+                bits |= XG_STATIC_DATA_FIXED_LAYOUT | XG_STATIC_DATA_FREESTANDING_SAFE;
+            return bits;
+        }
+        case AST_TUPLE_LITERAL: {
+            bool all_rodata = false;
+            bool all_safe = false;
+            uint32_t bits = static_data_shape_bits_for_all(node->as.tuple_literal.elements,
+                                                           node->as.tuple_literal.count,
+                                                           &all_rodata, &all_safe);
+            bits &= XG_STATIC_DATA_RUNTIME_INIT;
+            if (all_rodata)
+                bits |= XG_STATIC_DATA_RODATA;
+            if (all_safe)
+                bits |= XG_STATIC_DATA_FIXED_LAYOUT | XG_STATIC_DATA_FREESTANDING_SAFE;
+            return bits;
+        }
+        case AST_STRUCT_LITERAL: {
+            bool all_rodata = false;
+            bool all_safe = false;
+            uint32_t bits = static_data_shape_bits_for_all(node->as.struct_literal.field_values,
+                                                           node->as.struct_literal.field_count,
+                                                           &all_rodata, &all_safe);
+            bits &= XG_STATIC_DATA_RUNTIME_INIT;
+            if (all_rodata)
+                bits |= XG_STATIC_DATA_RODATA;
+            if (all_safe)
+                bits |= XG_STATIC_DATA_FIXED_LAYOUT | XG_STATIC_DATA_FREESTANDING_SAFE;
+            return bits;
+        }
+        default:
+            return 0;
+    }
+}
+
+static uint32_t static_data_bits_for_comptime_expr(const AstNode *expr) {
+    return XG_STATIC_DATA_COMPTIME_VALUE | static_data_shape_bits_for_expr(expr);
+}
+
 static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
     if (!bc || !node)
         return;
@@ -1226,7 +1400,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.is_expr.expr);
             break;
         case AST_COMPTIME_EXPR:
-            bc->static_data_use_bits |= XG_STATIC_DATA_COMPTIME_VALUE;
+            bc->static_data_use_bits |=
+                static_data_bits_for_comptime_expr(node->as.comptime_expr.expr);
             walk_body_for_calls(bc, node->as.comptime_expr.expr);
             break;
         case AST_ARRAY_LITERAL:
