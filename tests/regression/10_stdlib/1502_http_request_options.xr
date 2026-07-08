@@ -24,4 +24,11 @@ fn test_request_api_exists() {
     assert(typename(http.request) == "function")
 }
 
+@test
+fn test_request_rejects_unsupported_scheme() {
+    var r = http.request({url: "ftp://example.com/path"})
+    assert(!r.ok)
+    assert_eq(r.error, "URL parse error")
+}
+
 print("All http request options tests passed")

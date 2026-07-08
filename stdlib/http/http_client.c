@@ -81,6 +81,11 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
             }
         }
 
+        if (strcmp(out->scheme, "http") != 0 && strcmp(out->scheme, "https") != 0) {
+            xr_http_url_free(out);
+            return -1;
+        }
+
         out->is_https = (strcmp(out->scheme, "https") == 0);
         out->port = out->is_https ? XR_HTTP_DEFAULT_HTTPS_PORT : XR_HTTP_DEFAULT_PORT;
 
