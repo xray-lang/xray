@@ -20,7 +20,7 @@ print(head.getHeader("location")!)
 print(head.getHeaders("set-cookie").join("|"))
 print(Json.get(head.headers, "Content-Length", ""))
 
-var chunked = parseResponseHead("HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, chunked\r\n\r\n")!
+var chunked = parseResponseHead("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")!
 print(chunked.status)
 print(chunked.contentLength)
 print(chunked.chunked)
@@ -34,6 +34,7 @@ print(parseResponseHead("HTTP/1.1 200 OK\r\nContent-Length: five\r\n\r\n") == nu
 print(parseResponseHead("HTTP/1.1 200 OK\r\n folded: nope\r\n\r\n") == null)
 print(parseResponseHead("HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 6\r\n\r\n") == null)
 print(parseResponseHead("HTTP/1.1 200 OK\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n") == null)
+print(parseResponseHead("HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, chunked\r\n\r\n") == null)
 print(parseResponseHead("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked, gzip\r\n\r\n") == null)
 print(parseResponseHead("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n", 10) == null)
 

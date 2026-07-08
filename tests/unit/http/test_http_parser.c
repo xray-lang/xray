@@ -201,6 +201,51 @@ TEST(http_response_init) {
     ASSERT_EQ_INT((int) resp.content_length, -1);
 }
 
+TEST(http_request_rejects_unsupported_transfer_coding) {
+    const char *ok_data = "POST / HTTP/1.1\r\n"
+                          "Transfer-Encoding: chunked\r\n"
+                          "\r\n"
+                          "0\r\n\r\n";
+    XrHttpParser parser;
+    XrHttpRequest req;
+    xr_http_parser_init(&parser);
+    xr_http_request_init(&req);
+    ASSERT_EQ_INT(xr_http_parse_request(&parser, &req, ok_data, strlen(ok_data)), XR_HTTP_PARSE_OK);
+    ASSERT(req.chunked);
+
+    const char *bad_data = "POST / HTTP/1.1\r\n"
+                           "Transfer-Encoding: gzip, chunked\r\n"
+                           "\r\n"
+                           "0\r\n\r\n";
+    xr_http_parser_init(&parser);
+    xr_http_request_init(&req);
+    ASSERT_EQ_INT(xr_http_parse_request(&parser, &req, bad_data, strlen(bad_data)),
+                  XR_HTTP_PARSE_ERROR);
+}
+
+TEST(http_response_rejects_unsupported_transfer_coding) {
+    const char *ok_data = "HTTP/1.1 200 OK\r\n"
+                          "Transfer-Encoding: chunked\r\n"
+                          "\r\n"
+                          "0\r\n\r\n";
+    XrHttpParser parser;
+    XrHttpResponse resp;
+    xr_http_parser_init(&parser);
+    xr_http_response_init(&resp);
+    ASSERT_EQ_INT(xr_http_parse_response(&parser, &resp, ok_data, strlen(ok_data)),
+                  XR_HTTP_PARSE_OK);
+    ASSERT(resp.chunked);
+
+    const char *bad_data = "HTTP/1.1 200 OK\r\n"
+                           "Transfer-Encoding: gzip, chunked\r\n"
+                           "\r\n"
+                           "0\r\n\r\n";
+    xr_http_parser_init(&parser);
+    xr_http_response_init(&resp);
+    ASSERT_EQ_INT(xr_http_parse_response(&parser, &resp, bad_data, strlen(bad_data)),
+                  XR_HTTP_PARSE_ERROR);
+}
+
 /* ========== Incomplete Data ========== */
 
 TEST(http_parse_request_incomplete) {
@@ -248,6 +293,8 @@ RUN_TEST_SUITE("HTTP - Init/Reset");
 RUN_TEST(http_parser_init_reset);
 RUN_TEST(http_request_init);
 RUN_TEST(http_response_init);
+RUN_TEST(http_request_rejects_unsupported_transfer_coding);
+RUN_TEST(http_response_rejects_unsupported_transfer_coding);
 
 RUN_TEST_SUITE("HTTP - Edge Cases");
 RUN_TEST(http_parse_request_incomplete);

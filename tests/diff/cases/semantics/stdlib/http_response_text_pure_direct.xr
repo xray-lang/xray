@@ -46,6 +46,7 @@ print(parseResponseText("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nabc") == nu
 print(parseResponseText("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello", 3) == null)
 print(parseResponseText("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nabc\r\n0\r\n\r\n") == null)
 print(parseResponseText("HTTP/1.1 200 OK\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n") == null)
+print(parseResponseText("HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\n") == null)
 print(parseResponseText("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked, gzip\r\n\r\nhello") == null)
 print(parseResponseText("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1\r\né\r\n0\r\n\r\n") == null)
 print(http.parseResponseText("HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")!.body == "")

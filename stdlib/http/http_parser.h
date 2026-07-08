@@ -83,7 +83,7 @@ typedef struct {
     // Special headers (fast access)
     int64_t content_length;    // Content-Length, -1 = not set
     bool keep_alive;           // Connection: keep-alive
-    bool chunked;              // Transfer-Encoding: chunked (final coding)
+    bool chunked;              // Transfer-Encoding: chunked (single supported coding)
     bool framing_invalid;      // malformed/conflicting CL or TE (reject)
     const char *content_type;  // Content-Type
     size_t content_type_len;

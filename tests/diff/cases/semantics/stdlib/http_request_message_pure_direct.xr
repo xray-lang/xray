@@ -43,6 +43,7 @@ print(parseRequestText("POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nabc") == nul
 print(parseRequestText("POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello", 3) == null)
 print(parseRequestText("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nabc\r\n0\r\n\r\n") == null)
 print(parseRequestText("POST / HTTP/1.1\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n") == null)
+print(parseRequestText("POST / HTTP/1.1\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\n") == null)
 print(parseRequestText("POST / HTTP/1.1\r\nTransfer-Encoding: chunked, gzip\r\n\r\nhello") == null)
 print(parseRequestText("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n1\r\né\r\n0\r\n\r\n") == null)
 print(http.parseRequestText("GET / HTTP/1.1\r\n\r\n")!.body == "")
