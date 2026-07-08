@@ -53,6 +53,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../frontend/analyzer/xconsteval.h"
+#include "../stdlib/xstdlib_defs_generated.h"
 #include <string.h>
 #include <inttypes.h>
 #include <math.h>
@@ -2864,6 +2865,78 @@ static const char *cg_no_alloc_datetime_alloc_detail(const char *name) {
     return NULL;
 }
 
+static bool cg_no_alloc_type_name_allocates(const char *type) {
+    if (!type)
+        return false;
+    while (*type == ' ')
+        type++;
+    if (strncmp(type, "string", 6) == 0)
+        return true;
+    if (strncmp(type, "Bytes", 5) == 0)
+        return true;
+    if (strncmp(type, "Array<", 6) == 0)
+        return true;
+    if (strncmp(type, "Map<", 4) == 0)
+        return true;
+    if (strncmp(type, "Set<", 4) == 0)
+        return true;
+    if (strncmp(type, "Json", 4) == 0)
+        return true;
+    if (strncmp(type, "RawPtr", 6) == 0 || strncmp(type, "RawMut", 6) == 0 ||
+        strncmp(type, "CFn", 3) == 0)
+        return false;
+    return type[0] >= 'A' && type[0] <= 'Z';
+}
+
+static bool cg_no_alloc_signature_return_allocates(const char *signature) {
+    if (!signature)
+        return false;
+    const char *ret = NULL;
+    const char *scan = signature;
+    while ((scan = strstr(scan, "):")) != NULL) {
+        ret = scan;
+        scan += 2;
+    }
+    if (!ret)
+        return false;
+    ret += 2;
+    while (*ret == ' ')
+        ret++;
+    return cg_no_alloc_type_name_allocates(ret);
+}
+
+static const char *cg_no_alloc_generated_stdlib_alloc_detail(const char *module, const char *name) {
+    if (!module || !name)
+        return NULL;
+    for (uint32_t i = 0; i < XR_STDLIB_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibDefEntry *entry = &xr_stdlib_def_entries[i];
+        if (!entry->module || !entry->name || strcmp(entry->module, module) != 0 ||
+            strcmp(entry->name, name) != 0)
+            continue;
+        bool alloc_effect = entry->layer && strcmp(entry->layer, "alloc") == 0;
+        if (!alloc_effect && !cg_no_alloc_signature_return_allocates(entry->signature))
+            continue;
+        if (entry->link_object && entry->link_object[0])
+            return entry->link_object;
+    }
+    return NULL;
+}
+
+static const char *cg_no_alloc_stdlib_alloc_detail(const char *module, const char *name) {
+    if (!module || !name)
+        return NULL;
+    const char *detail = NULL;
+    if (strcmp(module, "mem") == 0)
+        detail = cg_no_alloc_mem_alloc_detail(name);
+    else if (strcmp(module, "regex") == 0)
+        detail = cg_no_alloc_regex_alloc_detail(name);
+    else if (strcmp(module, "datetime") == 0)
+        detail = cg_no_alloc_datetime_alloc_detail(name);
+    if (detail)
+        return detail;
+    return cg_no_alloc_generated_stdlib_alloc_detail(module, name);
+}
+
 static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
                                                    const char *method_name) {
     if (!receiver_type || !method_name)
@@ -2977,33 +3050,10 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
         return false;
     }
 
-    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1 &&
-        cg_value_is_module_import_ctx(ctx, f, v->args[0], "mem")) {
-        const char *detail = cg_no_alloc_mem_alloc_detail((const char *) v->aux);
-        if (detail) {
-            if (kind_out)
-                *kind_out = "stdlib";
-            if (detail_out)
-                *detail_out = detail;
-            return true;
-        }
-    }
-
-    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1 &&
-        cg_value_is_module_import_ctx(ctx, f, v->args[0], "regex")) {
-        const char *detail = cg_no_alloc_regex_alloc_detail((const char *) v->aux);
-        if (detail) {
-            if (kind_out)
-                *kind_out = "stdlib";
-            if (detail_out)
-                *detail_out = detail;
-            return true;
-        }
-    }
-
-    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1 &&
-        cg_value_is_module_import_ctx(ctx, f, v->args[0], "datetime")) {
-        const char *detail = cg_no_alloc_datetime_alloc_detail((const char *) v->aux);
+    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1) {
+        const XiImportRef *ref = cg_import_ref_for_value(ctx, f, v->args[0]);
+        const char *detail =
+            ref ? cg_no_alloc_stdlib_alloc_detail(ref->module_path, (const char *) v->aux) : NULL;
         if (detail) {
             if (kind_out)
                 *kind_out = "stdlib";
@@ -3027,15 +3077,8 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
 
     if (v->op == XI_CALL && v->nargs >= 1) {
         const XiImportRef *ref = cg_import_ref_for_value(ctx, f, v->args[0]);
-        const char *detail = NULL;
-        if (ref && ref->module_path) {
-            if (strcmp(ref->module_path, "mem") == 0)
-                detail = cg_no_alloc_mem_alloc_detail(ref->member_name);
-            else if (strcmp(ref->module_path, "regex") == 0)
-                detail = cg_no_alloc_regex_alloc_detail(ref->member_name);
-            else if (strcmp(ref->module_path, "datetime") == 0)
-                detail = cg_no_alloc_datetime_alloc_detail(ref->member_name);
-        }
+        const char *detail =
+            ref ? cg_no_alloc_stdlib_alloc_detail(ref->module_path, ref->member_name) : NULL;
         if (detail) {
             if (kind_out)
                 *kind_out = "stdlib";

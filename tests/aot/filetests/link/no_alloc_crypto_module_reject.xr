@@ -1,0 +1,8 @@
+import crypto
+
+@no_alloc
+fn xray_no_alloc_crypto_md5_reject(data: string) -> string {
+    return crypto.md5(data)
+}
+
+print(xray_no_alloc_crypto_md5_reject("edge"))

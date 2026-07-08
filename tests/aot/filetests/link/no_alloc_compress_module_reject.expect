@@ -1,0 +1,4 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_compress_gzip_reject' allocates via stdlib 'compress.gzip'
+contains=xray_no_alloc_compress_gzip_reject
+not_contains=CRASH
