@@ -1883,7 +1883,7 @@ TEST(global_evidence_verifier_rederives_func_attr_body_summary) {
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(
         !xaot_verify_bundle(&call_contradicts_summary, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT function attribute plan contradicts body summary"));
+    ASSERT_NOT_NULL(strstr(err, "AOT function attribute plan has unresolved call effects"));
     xaot_bundle_free(&call_contradicts_summary);
     xg_global_evidence_free(&call_ev);
 
@@ -1910,6 +1910,191 @@ TEST(global_evidence_verifier_rederives_func_attr_body_summary) {
     xaot_bundle_free(&contradicts_summary);
 
     xg_global_evidence_free(&effectful_ev);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_composes_direct_callee_effects_for_func_attr) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x81,
+                      .compiler_semver_hash = 0x82,
+                      .profile_hash = 0x83,
+                      .imported_summary_hash = 0,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary caller_decl = {.module_id = 1,
+                                 .decl_id = 1,
+                                 .kind = XG_DECL_FUNC,
+                                 .name_id = xg_name_id("caller"),
+                                 .signature_key = 701,
+                                 .source_span_id = 3};
+    XgDeclSummary target_decl = {.module_id = 1,
+                                 .decl_id = 2,
+                                 .kind = XG_DECL_FUNC,
+                                 .name_id = xg_name_id("target"),
+                                 .signature_key = 702,
+                                 .source_span_id = 4};
+    XgBodySummary caller_body = {.func_id = 1,
+                                 .module_id = 1,
+                                 .owner_decl_id = 1,
+                                 .name_id = xg_name_id("caller"),
+                                 .signature_key = 701,
+                                 .source_span_id = 3,
+                                 .kind = XG_BODY_FUNCTION,
+                                 .body_hash = 0x8181,
+                                 .effect_bits = XG_BODY_MAY_CALL,
+                                 .callsite_start = 1,
+                                 .callsite_count = 1};
+    XgBodySummary target_body = {.func_id = 2,
+                                 .module_id = 1,
+                                 .owner_decl_id = 2,
+                                 .name_id = xg_name_id("target"),
+                                 .signature_key = 702,
+                                 .source_span_id = 4,
+                                 .kind = XG_BODY_FUNCTION,
+                                 .body_hash = 0x8282};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 1,
+                              .source_span_id = 5,
+                              .body_ordinal = 0,
+                              .kind = XG_CALL_DIRECT_FUNC,
+                              .static_target_func_id = 2};
+    XiFunc init_func;
+    XiFunc caller_func;
+    XiFunc *children[1];
+    XiModule module;
+    XiModule *modules[1];
+    uint32_t composed_effects = UINT32_MAX;
+    char err[256];
+
+    memset(&init_func, 0, sizeof(init_func));
+    memset(&caller_func, 0, sizeof(caller_func));
+    memset(&module, 0, sizeof(module));
+    init_func.name = "init";
+    caller_func.name = "caller";
+    caller_func.parent_func = &init_func;
+    children[0] = &caller_func;
+    init_func.children = children;
+    init_func.nchildren = 1;
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &caller_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &target_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &caller_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &target_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+
+    ASSERT_TRUE(xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_EQ_UINT(composed_effects, 0);
+
+    XaotBundle const_caller;
+    memset(&const_caller, 0, sizeof(const_caller));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&const_caller, &ev, XG_BUILD_NATIVE_RELEASE));
+    const_caller.modules = modules;
+    const_caller.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&const_caller, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&const_caller, &caller_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&const_caller, &caller_func, XAOT_FN_ATTR_CONST,
+                                                   &ev.bodies[0]));
+    ASSERT_EQ_UINT(const_caller.func_attr_plans[0].evidence, XAOT_FN_ATTR_EV_BODY_SUMMARY |
+                                                                 XAOT_FN_ATTR_EV_XI_EFFECT_SCAN |
+                                                                 XAOT_FN_ATTR_EV_CALLEE_SUMMARY);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(xaot_verify_bundle(&const_caller, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    xaot_bundle_free(&const_caller);
+
+    ev.bodies[1].effect_bits = XG_BODY_MAY_READ_MEM;
+    ASSERT_TRUE(xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_EQ_UINT(composed_effects, XG_BODY_MAY_READ_MEM);
+
+    XaotBundle pure_caller;
+    memset(&pure_caller, 0, sizeof(pure_caller));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&pure_caller, &ev, XG_BUILD_NATIVE_RELEASE));
+    pure_caller.modules = modules;
+    pure_caller.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&pure_caller, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&pure_caller, &caller_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&pure_caller, &caller_func, XAOT_FN_ATTR_PURE,
+                                                   &ev.bodies[0]));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(xaot_verify_bundle(&pure_caller, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    xaot_bundle_free(&pure_caller);
+
+    XaotBundle stale_const;
+    memset(&stale_const, 0, sizeof(stale_const));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_const, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_const.modules = modules;
+    stale_const.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_const, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_const, &caller_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&stale_const, &caller_func, XAOT_FN_ATTR_CONST,
+                                                   &ev.bodies[0]));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_const, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT function attribute plan claims const but func reads memory"));
+    xaot_bundle_free(&stale_const);
+
+    ev.bodies[1].effect_bits = XG_BODY_MAY_ALLOC;
+    XaotBundle effectful_callee;
+    memset(&effectful_callee, 0, sizeof(effectful_callee));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&effectful_callee, &ev, XG_BUILD_NATIVE_RELEASE));
+    effectful_callee.modules = modules;
+    effectful_callee.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&effectful_callee, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&effectful_callee, &caller_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&effectful_callee, &caller_func,
+                                                   XAOT_FN_ATTR_PURE, &ev.bodies[0]));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&effectful_callee, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT function attribute plan contradicts body summary"));
+    xaot_bundle_free(&effectful_callee);
+
+    ev.bodies[1].effect_bits = 0;
+    XiValue extra_call_a;
+    XiValue extra_call_b;
+    XiValue *extra_call_values[2];
+    XiBlock extra_call_block;
+    XiBlock *extra_call_blocks[1];
+    memset(&extra_call_a, 0, sizeof(extra_call_a));
+    memset(&extra_call_b, 0, sizeof(extra_call_b));
+    memset(&extra_call_block, 0, sizeof(extra_call_block));
+    extra_call_a.op = XI_CALL;
+    extra_call_a.type = &stub_int_type;
+    extra_call_b.op = XI_CALL;
+    extra_call_b.type = &stub_int_type;
+    extra_call_values[0] = &extra_call_a;
+    extra_call_values[1] = &extra_call_b;
+    extra_call_block.values = extra_call_values;
+    extra_call_block.nvalues = 2;
+    extra_call_block.func = &caller_func;
+    extra_call_a.block = &extra_call_block;
+    extra_call_b.block = &extra_call_block;
+    extra_call_blocks[0] = &extra_call_block;
+    caller_func.blocks = extra_call_blocks;
+    caller_func.nblocks = 1;
+    caller_func.entry = &extra_call_block;
+
+    XaotBundle extra_direct_calls;
+    memset(&extra_direct_calls, 0, sizeof(extra_direct_calls));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&extra_direct_calls, &ev, XG_BUILD_NATIVE_RELEASE));
+    extra_direct_calls.modules = modules;
+    extra_direct_calls.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&extra_direct_calls, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&extra_direct_calls, &caller_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_value_plan(&extra_direct_calls, &caller_func, &extra_call_a));
+    ASSERT_NOT_NULL(xaot_bundle_add_value_plan(&extra_direct_calls, &caller_func, &extra_call_b));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&extra_direct_calls, &caller_func,
+                                                   XAOT_FN_ATTR_CONST, &ev.bodies[0]));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&extra_direct_calls, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_MSG(strstr(err, "AOT function attribute plan has extra direct calls") != NULL, err);
+    xaot_bundle_free(&extra_direct_calls);
+
+    ev.callsites[0].kind = XG_CALL_METHOD;
+    ASSERT_TRUE(!xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
     xg_global_evidence_free(&ev);
 }
 
@@ -4996,6 +5181,7 @@ RUN_TEST(global_evidence_verifier_rederives_interface_implementor_set);
 RUN_TEST(global_evidence_verifier_rederives_profile_actions);
 RUN_TEST(global_evidence_verifier_rederives_static_data_materialization_contract);
 RUN_TEST(global_evidence_verifier_rederives_func_attr_body_summary);
+RUN_TEST(global_evidence_composes_direct_callee_effects_for_func_attr);
 RUN_TEST(global_evidence_verifier_rederives_bounds_body_summary);
 RUN_TEST(global_evidence_verifier_rederives_body_callsite_ranges);
 RUN_TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows);

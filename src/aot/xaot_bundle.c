@@ -2018,6 +2018,8 @@ XR_FUNC XaotFuncAttrPlan *xaot_bundle_add_func_attr_plan(XaotBundle *bundle, con
     plan->body_effect_bits = body->effect_bits;
     plan->body_escape_bits = body->escape_bits;
     plan->evidence = XAOT_FN_ATTR_EV_BODY_SUMMARY | XAOT_FN_ATTR_EV_XI_EFFECT_SCAN;
+    if ((body->effect_bits & XG_BODY_MAY_CALL) != 0)
+        plan->evidence |= XAOT_FN_ATTR_EV_CALLEE_SUMMARY;
     plan->flags = flags & (XAOT_FN_ATTR_CONST | XAOT_FN_ATTR_PURE);
     if (!xaot_ptr_index_put(&bundle->func_attr_index, func, bundle->nfunc_attr_plans - 1)) {
         bundle->error_msg = "failed to index AOT function attribute plan";

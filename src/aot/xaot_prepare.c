@@ -3390,6 +3390,21 @@ static bool func_attr_op_is_call_like(uint16_t op) {
     }
 }
 
+static bool func_attr_op_is_direct_call_like(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_CALL:
+        case XI_TAIL_CALL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool func_attr_value_is_ignorable_err_check(const XiValue *value) {
+    return value && value->op == XI_ERR_CHECK &&
+           (!value->type || value->type->kind != XR_KIND_BOOL);
+}
+
 /* Ops that observe mutable non-local state. Forced into the "reads memory"
  * bucket even if a pass cleared READS_MEM, because a const function must
  * not depend on state that can change between calls. */
@@ -3436,10 +3451,17 @@ static const XgBodySummary *prepare_find_body_summary_for_func(const XaotBundle 
     return found;
 }
 
-static bool func_attr_body_summary_disqualifies(const XgBodySummary *body) {
-    return !body || (body->effect_bits &
-                     (XG_BODY_MAY_THROW | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
-                      XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE | XG_BODY_MAY_CALL)) != 0;
+static bool func_attr_body_summary_disqualifies(const XaotBundle *bundle, const XgBodySummary *body,
+                                                uint32_t *out_effect_bits) {
+    const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
+    uint32_t effect_bits = 0;
+
+    if (!body || !xg_body_effects_compose_direct_calls(ev, body, &effect_bits))
+        return true;
+    if (out_effect_bits)
+        *out_effect_bits = effect_bits;
+    return (effect_bits & (XG_BODY_MAY_THROW | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
+                           XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE)) != 0;
 }
 
 /* Prove a function free of observable effects so Cgen can emit
@@ -3450,13 +3472,19 @@ static bool func_attr_body_summary_disqualifies(const XgBodySummary *body) {
 static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
                                    const XgBodySummary *body) {
     bool reads_mem;
+    bool direct_calls_composed;
+    uint32_t direct_call_ops = 0;
+    uint32_t direct_callsite_count = 0;
+    uint32_t composed_effect_bits = 0;
     uint32_t bi, vi;
 
     if (!bundle || !func)
         return false;
-    if (func_attr_body_summary_disqualifies(body))
+    if (func_attr_body_summary_disqualifies(bundle, body, &composed_effect_bits))
         return true;
-    reads_mem = ((body->effect_bits & XG_BODY_MAY_READ_MEM) != 0) || func->ncaptures > 0;
+    direct_calls_composed = (body->effect_bits & XG_BODY_MAY_CALL) != 0;
+    direct_callsite_count = direct_calls_composed ? body->callsite_count : 0;
+    reads_mem = ((composed_effect_bits & XG_BODY_MAY_READ_MEM) != 0) || func->ncaptures > 0;
     for (bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks[bi];
         if (!blk)
@@ -3466,9 +3494,17 @@ static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
             if (!v)
                 continue;
             if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
-                            XI_FLAG_WRITES_MEM))
+                            XI_FLAG_WRITES_MEM) &&
+                !func_attr_value_is_ignorable_err_check(v))
                 return true;
-            if (func_attr_op_is_call_like(v->op) || xi_op_allocates(v->op))
+            if (func_attr_op_is_call_like(v->op)) {
+                if (!(direct_calls_composed && func_attr_op_is_direct_call_like(v->op)))
+                    return true;
+                direct_call_ops++;
+                if (direct_call_ops > direct_callsite_count)
+                    return true;
+            }
+            if (xi_op_allocates(v->op))
                 return true;
             if ((v->flags & XI_FLAG_READS_MEM) || func_attr_op_reads_nonlocal(v->op))
                 reads_mem = true;

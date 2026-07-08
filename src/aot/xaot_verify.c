@@ -280,6 +280,11 @@ static bool verify_array_class_field_alloc_plan(const XaotBundle *bundle,
     return true;
 }
 
+static bool verify_func_attr_value_is_ignorable_err_check(const XiValue *value) {
+    return value && value->op == XI_ERR_CHECK &&
+           (!value->type || value->type->kind != XR_KIND_BOOL);
+}
+
 /* Re-derive the effect evidence behind a function attribute plan.
  * CONST must touch no memory at all; PURE must never write / throw /
  * suspend. A stale or wrong plan would make the C compiler CSE calls
@@ -288,8 +293,13 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
                                   char *errbuf, size_t errbuf_len) {
     const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
     const XgBodySummary *body;
+    uint32_t expected_evidence;
+    uint32_t composed_effect_bits = 0;
     uint32_t bi, vi;
+    uint32_t direct_call_ops = 0;
+    uint32_t direct_callsite_count = 0;
     bool reads_mem;
+    bool direct_calls_composed;
 
     if (!bundle || !plan)
         return set_error(errbuf, errbuf_len, "AOT function attribute plan is NULL");
@@ -297,7 +307,10 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
         return set_error(errbuf, errbuf_len, "AOT function attribute plan lacks func");
     if (plan->flags != XAOT_FN_ATTR_CONST && plan->flags != XAOT_FN_ATTR_PURE)
         return set_error(errbuf, errbuf_len, "AOT function attribute plan has invalid flags");
-    if (plan->evidence != (XAOT_FN_ATTR_EV_BODY_SUMMARY | XAOT_FN_ATTR_EV_XI_EFFECT_SCAN))
+    expected_evidence = XAOT_FN_ATTR_EV_BODY_SUMMARY | XAOT_FN_ATTR_EV_XI_EFFECT_SCAN;
+    if ((plan->body_effect_bits & XG_BODY_MAY_CALL) != 0)
+        expected_evidence |= XAOT_FN_ATTR_EV_CALLEE_SUMMARY;
+    if (plan->evidence != expected_evidence)
         return set_error(errbuf, errbuf_len, "AOT function attribute plan lacks evidence");
     body = verify_find_evidence_body_by_func(ev, plan->body_func_id);
     if (!body)
@@ -308,15 +321,19 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
         return set_error(errbuf, errbuf_len, "AOT function attribute effect bits are stale");
     if (plan->body_escape_bits != body->escape_bits)
         return set_error(errbuf, errbuf_len, "AOT function attribute escape bits are stale");
-    if ((body->effect_bits & (XG_BODY_MAY_THROW | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
-                              XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE | XG_BODY_MAY_CALL)) !=
-        0)
+    if (!xg_body_effects_compose_direct_calls(ev, body, &composed_effect_bits))
+        return set_error(errbuf, errbuf_len,
+                         "AOT function attribute plan has unresolved call effects");
+    if ((composed_effect_bits & (XG_BODY_MAY_THROW | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
+                                 XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE)) != 0)
         return set_error(errbuf, errbuf_len,
                          "AOT function attribute plan contradicts body summary");
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
         return set_error(errbuf, errbuf_len, "AOT function attribute plan func has no func plan");
 
-    reads_mem = ((body->effect_bits & XG_BODY_MAY_READ_MEM) != 0) || plan->func->ncaptures > 0;
+    direct_calls_composed = (body->effect_bits & XG_BODY_MAY_CALL) != 0;
+    direct_callsite_count = direct_calls_composed ? body->callsite_count : 0;
+    reads_mem = ((composed_effect_bits & XG_BODY_MAY_READ_MEM) != 0) || plan->func->ncaptures > 0;
     for (bi = 0; bi < plan->func->nblocks; bi++) {
         const XiBlock *blk = plan->func->blocks[bi];
         if (!blk)
@@ -326,14 +343,23 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
             if (!v)
                 continue;
             if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
-                            XI_FLAG_WRITES_MEM))
+                            XI_FLAG_WRITES_MEM) &&
+                !verify_func_attr_value_is_ignorable_err_check(v))
                 return set_error(errbuf, errbuf_len,
                                  "AOT function attribute plan func has effectful value");
             switch ((XiOp) v->op) {
                 case XI_CALL:
+                case XI_TAIL_CALL:
+                    if (!direct_calls_composed)
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT function attribute plan func contains a call");
+                    direct_call_ops++;
+                    if (direct_call_ops > direct_callsite_count)
+                        return set_error(errbuf, errbuf_len,
+                                         "AOT function attribute plan has extra direct calls");
+                    break;
                 case XI_CALL_METHOD:
                 case XI_CALL_METHOD_DIRECT:
-                case XI_TAIL_CALL:
                 case XI_CALL_BUILTIN:
                 case XI_CLOSURE_NEW:
                 case XI_GO:

@@ -155,6 +155,12 @@ static bool xicgen_stmt_err_return(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     return true;
 }
 
+static bool xicgen_err_check_elided_by_func_attr(XiCgenCtx *ctx, const XiFunc *f,
+                                                 const XiValue *v) {
+    return v && v->op == XI_ERR_CHECK && !cg_value_type_is_bool(v) &&
+           xaot_bundle_find_func_attr_plan(cg_ctx_aot_bundle(ctx), f) != NULL;
+}
+
 static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
     if (cg_value_type_is_bool(v)) {
@@ -176,6 +182,7 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     }
 
     if (xicgen_err_check_after_proven_nothrow(ctx, f, v) ||
+        xicgen_err_check_elided_by_func_attr(ctx, f, v) ||
         cg_array_err_check_after_unchecked_fill_push(ctx, f, v) ||
         cg_array_err_check_after_unchecked_bytes_trusted(ctx, f, v) ||
         cg_array_err_check_after_index_get_trusted(ctx, f, v) ||

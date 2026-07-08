@@ -119,6 +119,7 @@ enum {
 enum {
     XAOT_FN_ATTR_EV_BODY_SUMMARY = 1u << 0,
     XAOT_FN_ATTR_EV_XI_EFFECT_SCAN = 1u << 1,
+    XAOT_FN_ATTR_EV_CALLEE_SUMMARY = 1u << 2,
 };
 
 enum {

@@ -670,6 +670,91 @@ XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobal
     return NULL;
 }
 
+static bool xg_global_evidence_find_body_index_by_func(const XgGlobalEvidence *evidence,
+                                                       XgFuncId func_id, uint32_t *out_index) {
+    if (!evidence || func_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < evidence->nbodies; i++) {
+        if (evidence->bodies[i].func_id == func_id) {
+            if (out_index)
+                *out_index = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32_t body_index,
+                                        uint8_t *state, uint32_t *memo, uint32_t *out_effect_bits) {
+    const XgBodySummary *body;
+    uint32_t effect_bits;
+
+    if (!evidence || body_index >= evidence->nbodies || !state || !memo || !out_effect_bits)
+        return false;
+    if (state[body_index] == 1)
+        return false;
+    if (state[body_index] == 2) {
+        *out_effect_bits = memo[body_index];
+        return true;
+    }
+
+    state[body_index] = 1;
+    body = &evidence->bodies[body_index];
+    effect_bits = body->effect_bits & ~XG_BODY_MAY_CALL;
+
+    if ((body->effect_bits & XG_BODY_MAY_CALL) != 0) {
+        if (body->callsite_count == 0)
+            return false;
+        for (uint32_t i = 0; i < body->callsite_count; i++) {
+            const XgCallsiteSummary *call = xg_global_evidence_find_callsite(
+                evidence, (XgCallsiteId) (body->callsite_start + i));
+            uint32_t target_index = 0;
+            uint32_t target_effects = 0;
+
+            if (!call || call->owner_func_id != body->func_id || call->body_ordinal != i ||
+                call->kind != XG_CALL_DIRECT_FUNC || call->static_target_func_id == XG_NO_ID)
+                return false;
+            if (!xg_global_evidence_find_body_index_by_func(evidence, call->static_target_func_id,
+                                                            &target_index))
+                return false;
+            if (!xg_body_effects_compose_rec(evidence, target_index, state, memo, &target_effects))
+                return false;
+            effect_bits |= target_effects;
+        }
+    }
+
+    state[body_index] = 2;
+    memo[body_index] = effect_bits;
+    *out_effect_bits = effect_bits;
+    return true;
+}
+
+XR_FUNC bool xg_body_effects_compose_direct_calls(const XgGlobalEvidence *evidence,
+                                                  const XgBodySummary *body,
+                                                  uint32_t *out_effect_bits) {
+    uint8_t *state;
+    uint32_t *memo;
+    uint32_t body_index = 0;
+    bool ok;
+
+    if (!evidence || !body || !out_effect_bits ||
+        !xg_global_evidence_find_body_index_by_func(evidence, body->func_id, &body_index))
+        return false;
+    if (evidence->nbodies == 0)
+        return false;
+    state = (uint8_t *) xr_calloc(evidence->nbodies, sizeof(uint8_t));
+    memo = (uint32_t *) xr_calloc(evidence->nbodies, sizeof(uint32_t));
+    if (!state || !memo) {
+        xr_free(state);
+        xr_free(memo);
+        return false;
+    }
+    ok = xg_body_effects_compose_rec(evidence, body_index, state, memo, out_effect_bits);
+    xr_free(state);
+    xr_free(memo);
+    return ok;
+}
+
 XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     uint64_t hash = XR_FNV64_OFFSET_BASIS;
     if (!evidence)
