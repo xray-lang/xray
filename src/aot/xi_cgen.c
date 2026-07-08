@@ -3142,6 +3142,14 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
         return true;
     }
 
+    if (v->op == XI_TYPENAME) {
+        if (kind_out)
+            *kind_out = "builtin";
+        if (detail_out)
+            *detail_out = "typename";
+        return true;
+    }
+
     if (v->op == XI_CALL_BUILTIN) {
         const char *name = v->aux ? (const char *) v->aux : NULL;
         if (cg_no_alloc_builtin_name_allocates(name)) {
