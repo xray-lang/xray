@@ -81,6 +81,22 @@ fn closePipeInLinearLoop() {
     }
 }
 
+fn waitProcessInLinearForLoop() {
+    var p = sys.Process.spawn("sh", ["-c", "exit 0"])
+    for (;;) {
+        print(p!.wait())
+        break
+    }
+}
+
+fn closePipeInLinearForLoop() {
+    var pipe = sys.Pipe.open()
+    for (; true; ) {
+        print(pipe!.close())
+        break
+    }
+}
+
 closeProcessInTryOrCatch(false)
 closeProcessInMatch(1)
 closeProcessInSelect()
@@ -89,4 +105,6 @@ closePipeInMatch(1)
 closePipeInTernary(false)
 waitProcessInLinearLoop()
 closePipeInLinearLoop()
+waitProcessInLinearForLoop()
+closePipeInLinearForLoop()
 processLintCh.close()
