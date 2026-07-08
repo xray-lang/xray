@@ -1375,7 +1375,7 @@ XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrVa
 
     // Auto-create server instance
     if (!ctx->server) {
-        ctx->server = xr_http_server_new(X);
+        ctx->server = xr_http_server_new();
         if (!ctx->server) {
             fprintf(stderr, "http.listen: failed to create server\n");
             *result = xr_bool(false);
@@ -1392,7 +1392,6 @@ XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrVa
     }
 
     ctx->server->listen_fd = listen_fd;
-    ctx->server->port = (uint16_t) port;
     ctx->server->running = true;
 
     printf("=== xray HTTP Server ===\n");

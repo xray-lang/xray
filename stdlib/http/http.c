@@ -437,7 +437,7 @@ static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
 
     // Auto-create global server instance
     if (!ctx->server) {
-        ctx->server = xr_http_server_new(X);
+        ctx->server = xr_http_server_new();
         if (!ctx->server) {
             fprintf(stderr, "http.route: failed to create server\n");
             return xr_null();
@@ -525,7 +525,7 @@ static XrValue http_ws_route(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
 
     if (!ctx->server) {
-        ctx->server = xr_http_server_new(X);
+        ctx->server = xr_http_server_new();
         if (!ctx->server)
             return xr_null();
     }

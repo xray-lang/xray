@@ -24,12 +24,11 @@
 /*
  * Create server
  */
-XrHttpServer *xr_http_server_new(struct XrVMRuntime *isolate) {
+XrHttpServer *xr_http_server_new(void) {
     XrHttpServer *server = (XrHttpServer *) xr_calloc(1, sizeof(XrHttpServer));
     if (!server)
         return NULL;
 
-    server->isolate = isolate;
     server->listen_fd = -1;
     server->running = false;
 

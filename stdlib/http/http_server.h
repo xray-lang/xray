@@ -16,7 +16,6 @@
 #define XR_STDLIB_HTTP_SERVER_H
 
 #include "../../src/base/xdefs.h"
-#include <stdint.h>
 #include <stdbool.h>
 #include "http_router.h"
 
@@ -28,21 +27,16 @@
 
 /* ========== Forward Declarations ========== */
 
-struct XrVMRuntime;
 struct XrClosure;
 
 /* ========== HTTP Server ========== */
 
 typedef struct XrHttpServer {
     int listen_fd;
-    uint16_t port;
     volatile bool running;
 
     // Router
     XrRouter *router;
-
-    // VM instance
-    struct XrVMRuntime *isolate;
 
     // Route closures storage (prevent GC collection)
     struct XrClosure **route_closures;
@@ -54,7 +48,7 @@ typedef struct XrHttpServer {
 /* ========== Server API ========== */
 
 // Create server
-XR_FUNC XrHttpServer *xr_http_server_new(struct XrVMRuntime *isolate);
+XR_FUNC XrHttpServer *xr_http_server_new(void);
 
 // Free server
 XR_FUNC void xr_http_server_free(XrHttpServer *server);
