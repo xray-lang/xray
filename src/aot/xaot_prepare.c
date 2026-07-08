@@ -1790,12 +1790,13 @@ XR_FUNC uint32_t xaot_prepare_array_access_bounds_evidence(const XaotBundle *bun
     if (prepare_array_index_access_bounds_proven(bundle, func, access, &reason)) {
         if (out_reason)
             *out_reason = XAOT_BOUNDS_UNPROVEN_NONE;
-        return XAOT_BOUNDS_EV_DOM_GUARD | XAOT_BOUNDS_EV_NONNEG_INDEX;
+        return XAOT_BOUNDS_EV_DOM_GUARD | XAOT_BOUNDS_EV_NONNEG_INDEX | XAOT_BOUNDS_EV_NO_CLOBBER;
     }
     if (prepare_array_index_set_counted_loop_bounds_proven(bundle, func, access, &reason)) {
         if (out_reason)
             *out_reason = XAOT_BOUNDS_UNPROVEN_NONE;
-        return XAOT_BOUNDS_EV_COUNTED_LOOP | XAOT_BOUNDS_EV_NONNEG_INDEX;
+        return XAOT_BOUNDS_EV_COUNTED_LOOP | XAOT_BOUNDS_EV_NONNEG_INDEX |
+               XAOT_BOUNDS_EV_NO_CLOBBER;
     }
     if (out_reason)
         *out_reason = reason != XAOT_BOUNDS_UNPROVEN_NONE ? reason : XAOT_BOUNDS_UNPROVEN_NO_GUARD;
