@@ -3431,6 +3431,7 @@ TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls
     ASSERT_EQ_UINT(ev.callsites[0].static_target_func_id, XG_NO_ID);
     ASSERT_TRUE(ev.callsites[0].method_id != XG_NO_ID);
     ASSERT_TRUE(ev.callsites[0].method_name_id != 0);
+    ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
 
     XiFunc init_func;
     memset(&init_func, 0, sizeof(init_func));
@@ -3704,6 +3705,7 @@ TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) 
     ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_NATIVE);
     ASSERT_EQ_UINT(ev.callsites[0].receiver_static_class_id, XG_NO_ID);
     ASSERT_TRUE(ev.callsites[0].method_name_id != 0);
+    ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));

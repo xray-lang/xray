@@ -960,10 +960,12 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         if (callee_name && strcmp(callee_name, "typename") == 0)
             bc->metadata_use_bits |= XG_METADATA_TYPENAME;
         if (target && (target->decl_flags & XG_DECL_EXTERN)) {
+            bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
             row.kind = XG_CALL_EXTERN;
             row.method_id = (XgMethodId) callee_name_id;
             row.method_name_id = callee_name_id;
         } else if (target && (target->decl_flags & XG_DECL_NATIVE)) {
+            bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
             row.kind = XG_CALL_NATIVE;
             row.method_id = (XgMethodId) callee_name_id;
             row.method_name_id = callee_name_id;
@@ -1007,6 +1009,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 row.method_name_id = method ? method->name_id : method_name_id;
                 row.method_signature_key = method ? method->signature_key : 0;
             } else {
+                bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
                 row.kind = XG_CALL_NATIVE;
                 row.method_id = (XgMethodId) method_name_id;
                 row.method_name_id = method_name_id;
