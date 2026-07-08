@@ -18,7 +18,6 @@
 #include "../../src/base/xdefs.h"
 #include <stdint.h>
 #include <stdbool.h>
-#include "http_parser.h"
 #include "http_router.h"
 
 /* ========== Constants ========== */
@@ -30,29 +29,9 @@
 /* ========== Forward Declarations ========== */
 
 struct XrVMRuntime;
-struct XrCoroutine;
 struct XrClosure;
 
-/* ========== HTTP Request ========== */
-
-typedef struct XrHttpReq {
-    XrHttpMethod method;
-    char *path;
-    char *query;
-    char *body;
-    size_t body_len;
-    XrRouteParams params;
-
-    // Connection info
-    int fd;
-    bool keep_alive;
-} XrHttpReq;
-
 /* ========== HTTP Server ========== */
-
-struct XrWebSocket;
-typedef void (*XrWsConnectionHandler)(struct XrVMRuntime *X, struct XrWebSocket *ws,
-                                      void *user_data);
 
 typedef struct XrHttpServer {
     int listen_fd;
@@ -70,17 +49,6 @@ typedef struct XrHttpServer {
     int route_closure_count;
     int route_closure_capacity;
 
-    // WebSocket handler
-    XrWsConnectionHandler ws_handler;
-    void *ws_user_data;
-
-    // Stats
-    uint64_t total_requests;
-    uint64_t total_connections;
-    uint64_t active_connections;
-
-    // State machine (for yieldable protocol support)
-    void *listener_state;
 } XrHttpServer;
 
 /* ========== Server API ========== */
@@ -102,18 +70,7 @@ XR_FUNC void xr_http_server_static(XrHttpServer *server, XrHttpMethod method, co
 // Stop server
 XR_FUNC void xr_http_server_stop(XrHttpServer *server);
 
-// Set WebSocket handler
-XR_FUNC void xr_http_server_set_ws_handler(XrHttpServer *server, XrWsConnectionHandler handler,
-                                           void *user_data);
-
 /* ========== Internal Functions ========== */
-
-// Read and parse HTTP request
-XR_FUNC int xr_http_read_request(struct XrVMRuntime *X, int fd, XrHttpReq *req, char *buf,
-                                 size_t buf_size);
-
-// Send error response
-XR_FUNC int xr_http_send_error(struct XrVMRuntime *X, int fd, int status, const char *message);
 
 /*
  * Try to find a prebuilt response for raw HTTP data.
