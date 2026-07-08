@@ -84,13 +84,15 @@ static bool cg_ct_static_fixed_array_value_supported(const XrCtValue *value,
     }
 }
 
-static bool cg_freestanding_static_fixed_array_literal(XiCgenCtx *ctx, int64_t slot,
-                                                       CgFixedArrayLaneInfo *out_info,
-                                                       const XrCtValue **out_value) {
-    if (!ctx || !ctx->freestanding_profile || !ctx->module || !ctx->module->slot_const_literals ||
-        slot < 0 || slot >= ctx->module->nslots)
+static bool cg_freestanding_static_fixed_array_literal_in_module(XiCgenCtx *ctx,
+                                                                 const XiModule *module,
+                                                                 int64_t slot,
+                                                                 CgFixedArrayLaneInfo *out_info,
+                                                                 const XrCtValue **out_value) {
+    if (!ctx || !ctx->freestanding_profile || !module || !module->slot_const_literals || slot < 0 ||
+        slot >= module->nslots)
         return false;
-    const XiConstLiteral *lit = &ctx->module->slot_const_literals[slot];
+    const XiConstLiteral *lit = &module->slot_const_literals[slot];
     if (lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
         lit->ct_value->kind != XR_CT_FIXED_ARRAY || !lit->type ||
         lit->type->kind != XR_KIND_FIXED_ARRAY)
@@ -113,17 +115,67 @@ static bool cg_freestanding_static_fixed_array_literal(XiCgenCtx *ctx, int64_t s
     return true;
 }
 
+static bool cg_freestanding_static_fixed_array_literal(XiCgenCtx *ctx, int64_t slot,
+                                                       CgFixedArrayLaneInfo *out_info,
+                                                       const XrCtValue **out_value) {
+    return cg_freestanding_static_fixed_array_literal_in_module(ctx, ctx ? ctx->module : NULL, slot,
+                                                                out_info, out_value);
+}
+
+static bool cg_freestanding_static_fixed_array_value_ex(XiCgenCtx *ctx, const XiValue *value,
+                                                        CgFixedArrayLaneInfo *out_info,
+                                                        int64_t *out_slot,
+                                                        const XiModule **out_module) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (out_module)
+        *out_module = NULL;
+    if (!v)
+        return false;
+
+    const XiModule *module = ctx ? ctx->module : NULL;
+    int64_t slot = -1;
+    if (v->op == XI_GET_SHARED) {
+        slot = v->aux_int;
+        const XiModule *import_module = NULL;
+        int64_t import_slot = -1;
+        const XiConstLiteral *import_lit =
+            cg_import_slot_const_literal(ctx, NULL, (int) slot, &import_module, &import_slot);
+        if (import_lit && import_lit->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+            module = import_module;
+            slot = import_slot;
+        }
+    } else if (v->op == XI_IMPORT_REF && v->aux) {
+        const XiModule *import_module = NULL;
+        int64_t import_slot = -1;
+        const XiConstLiteral *import_lit = cg_import_ref_target_const_literal(
+            ctx, (const XiImportRef *) v->aux, &import_module, &import_slot);
+        if (!import_lit || import_lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE)
+            return false;
+        module = import_module;
+        slot = import_slot;
+    } else {
+        return false;
+    }
+
+    if (!cg_freestanding_static_fixed_array_literal_in_module(ctx, module, slot, out_info, NULL))
+        return false;
+    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    if (cg_imported_static_const_needs_weak_symbol(ctx, module, lit)) {
+        cg_report_imported_static_const_requires_weak(ctx, module, slot);
+        ctx->error = true;
+        return false;
+    }
+    if (out_slot)
+        *out_slot = slot;
+    if (out_module)
+        *out_module = module;
+    return true;
+}
+
 static bool cg_freestanding_static_fixed_array_value(XiCgenCtx *ctx, const XiValue *value,
                                                      CgFixedArrayLaneInfo *out_info,
                                                      int64_t *out_slot) {
-    const XiValue *v = cg_unwrap_identity_value(value);
-    if (!v || v->op != XI_GET_SHARED)
-        return false;
-    if (!cg_freestanding_static_fixed_array_literal(ctx, v->aux_int, out_info, NULL))
-        return false;
-    if (out_slot)
-        *out_slot = v->aux_int;
-    return true;
+    return cg_freestanding_static_fixed_array_value_ex(ctx, value, out_info, out_slot, NULL);
 }
 
 static bool cg_static_fixed_array_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
@@ -289,14 +341,24 @@ static void emit_fixed_array_lane_store_value(XiCgenCtx *ctx, FILE *out,
 static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                             const XiValue *v) {
     CgFixedArrayLaneInfo info;
-    if (!v || v->op != XI_INDEX_GET || v->nargs < 2 ||
-        !cg_fixed_array_lane_info_from_value(v->args[0], &info))
+    if (!v || v->op != XI_INDEX_GET || v->nargs < 2)
         return false;
 
     (void) f;
     int64_t static_slot = -1;
-    bool static_slot_read =
-        cg_freestanding_static_fixed_array_value(ctx, v->args[0], &info, &static_slot);
+    const XiModule *static_module = NULL;
+    bool have_info = cg_fixed_array_lane_info_from_value(v->args[0], &info);
+    bool static_slot_read = false;
+    if (have_info) {
+        static_slot_read = cg_freestanding_static_fixed_array_value_ex(
+            ctx, v->args[0], &info, &static_slot, &static_module);
+    } else {
+        static_slot_read = cg_freestanding_static_fixed_array_value_ex(
+            ctx, v->args[0], &info, &static_slot, &static_module);
+        have_info = static_slot_read;
+    }
+    if (!have_info)
+        return false;
     const XrAggregateLayout *static_struct_layout = NULL;
     int64_t static_struct_slot = -1;
     int64_t static_struct_field_idx = -1;
@@ -319,7 +381,7 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
     emit_fixed_array_lane_load_prefix(out, &info, target_rep);
     if (static_slot_read)
-        cg_emit_static_fixed_array_name(ctx, out, ctx->module, static_slot);
+        cg_emit_static_fixed_array_name(ctx, out, static_module, static_slot);
     else if (static_struct_field_read)
         cg_emit_static_struct_field_lvalue(ctx, out, static_struct_layout, static_struct_slot,
                                            static_struct_field_idx);

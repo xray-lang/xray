@@ -1,0 +1,12 @@
+@weak
+const MAGIC: int = 40
+
+export const OFFSET: int = 2
+
+@weak
+const TABLE: [int; 4] = comptime [3, 5, 7, 11]
+
+@weak
+const BYTES: [uint8; 4] = comptime [1, 2, 4, 8]
+
+export { MAGIC, TABLE, BYTES }

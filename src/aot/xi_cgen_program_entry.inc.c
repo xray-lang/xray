@@ -512,6 +512,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     cg_emit_freestanding_static_fixed_array_defs(ctx, body, module);
     cg_emit_freestanding_static_tuple_defs(ctx, body, module);
     cg_emit_freestanding_static_struct_defs(ctx, body, module, prefix);
+    cg_emit_freestanding_imported_static_const_decls(ctx, body, module);
     emit_forward_decls(ctx, body, main_func, prefix);
     fprintf(body, "\n");
 
@@ -691,6 +692,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     emit_imported_enum_native_typedefs(ctx, out);
     emit_enum_native_typedefs(ctx, out, module);
     fprintf(out, "\n");
+    cg_emit_freestanding_imported_static_const_decls(ctx, out, module);
 
     /* Forward declarations: this module's own functions in full, plus only the
      * cross-module symbols this unit actually references. */
