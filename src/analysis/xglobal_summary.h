@@ -142,6 +142,14 @@ enum {
     XG_STATIC_DATA_RUNTIME_INIT = 1u << 4,
 };
 
+enum {
+    XG_BODY_MAY_THROW = 1u << 0,
+    XG_BODY_MAY_SUSPEND = 1u << 1,
+    XG_BODY_MAY_ALLOC = 1u << 2,
+    XG_BODY_MAY_MUTATE = 1u << 3,
+    XG_BODY_MAY_CALL_NATIVE = 1u << 4,
+};
+
 typedef struct XgBuildKey {
     uint64_t source_hash;
     uint64_t compiler_semver_hash;

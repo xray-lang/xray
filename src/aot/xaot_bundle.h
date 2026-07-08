@@ -109,15 +109,24 @@ typedef struct XaotArrayClassFieldAllocPlan {
  * effects and Cgen emits the matching C attribute so the host compiler can
  * CSE / LICM across call sites. CONST = touches no memory at all;
  * PURE = reads memory but never writes / throws / suspends. Mutually
- * exclusive; evidence is the per-value effect flags re-checked by the
- * verifier. */
+ * exclusive; evidence is the body summary plus per-value effect flags
+ * re-checked by the verifier. */
 enum {
     XAOT_FN_ATTR_CONST = 1u << 0, /* __attribute__((const)) */
     XAOT_FN_ATTR_PURE = 1u << 1,  /* __attribute__((pure)) */
 };
 
+enum {
+    XAOT_FN_ATTR_EV_BODY_SUMMARY = 1u << 0,
+    XAOT_FN_ATTR_EV_XI_EFFECT_SCAN = 1u << 1,
+};
+
 typedef struct XaotFuncAttrPlan {
     const XiFunc *func;
+    XgFuncId body_func_id;
+    uint32_t body_effect_bits;
+    uint32_t body_escape_bits;
+    uint32_t evidence;
     uint32_t flags;
 } XaotFuncAttrPlan;
 
@@ -745,7 +754,7 @@ XR_FUNC const XaotArrayClassFieldAllocPlan *xaot_bundle_find_array_class_field_a
     const XaotBundle *bundle, const XiFunc *func, const XiClassData *class_data,
     uint16_t field_idx);
 XR_FUNC XaotFuncAttrPlan *xaot_bundle_add_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
-                                                         uint32_t flags);
+                                                         uint32_t flags, const XgBodySummary *body);
 XR_FUNC const XaotFuncAttrPlan *xaot_bundle_find_func_attr_plan(const XaotBundle *bundle,
                                                                 const XiFunc *func);
 XR_FUNC XaotBoundsPlan *xaot_bundle_add_bounds_plan(XaotBundle *bundle, const XiFunc *func,
