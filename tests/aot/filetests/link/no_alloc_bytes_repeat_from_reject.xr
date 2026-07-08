@@ -1,0 +1,10 @@
+@no_alloc
+fn xray_no_alloc_bytes_repeat_from_reject(dst: Bytes) -> int {
+    dst.repeatFrom(1, 3)
+    return dst.length
+}
+
+var dst = Bytes.withCapacity(8)
+var seed = Bytes(1, 65)
+dst.appendFrom(seed[:])
+print(xray_no_alloc_bytes_repeat_from_reject(dst))
