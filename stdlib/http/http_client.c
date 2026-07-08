@@ -192,9 +192,11 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
             xr_http_url_free(out);
             return -1;
         }
-        if (port > 0 && port <= 65535) {
-            out->port = port;
+        if (port <= 0 || port > 65535) {
+            xr_http_url_free(out);
+            return -1;
         }
+        out->port = port;
     }
 
     // Parse path (including query string)
