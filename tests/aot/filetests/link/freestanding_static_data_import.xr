@@ -1,7 +1,8 @@
-import { MAGIC, OFFSET, TABLE, BYTES, HEADER, PACKET, OUTER } from "./_freestanding_static_data_lib"
+import { MAGIC, OFFSET, TABLE, BYTES, HEADER, PACKET, OUTER, PAIR, NESTED } from "./_freestanding_static_data_lib"
 
 @c_export("xray_imported_static_sum")
 fn imported_static_sum(i: int) -> int {
     return MAGIC + OFFSET + TABLE[i] + (BYTES[i] as int) + HEADER.magic + HEADER.flags +
-        (PACKET.bytes[i] as int) + PACKET.base + OUTER.inner.code + OUTER.base
+        (PACKET.bytes[i] as int) + PACKET.base + OUTER.inner.code + OUTER.base +
+        PAIR.0 + PAIR.1 + NESTED.0.0 + NESTED.0.1 + NESTED.1.0 + NESTED.1.1
 }
