@@ -911,6 +911,30 @@ static XgMethodId xg_verify_rederive_method_root(const XgGlobalEvidence *ev,
     return root;
 }
 
+static uint32_t xg_verify_rederive_method_override_depth(const XgGlobalEvidence *ev,
+                                                         const XgMethodSummary *method) {
+    const XgClassSummary *current;
+    uint32_t chain_depth = 0;
+    uint32_t scan_depth = 0;
+
+    if (!ev || !method || !xg_verify_method_participates_in_override(method))
+        return 0;
+    current = verify_find_evidence_class(ev, method->owner_class_id);
+    while (current && current->parent_class_id != XG_NO_ID && scan_depth++ < 64) {
+        const XgMethodSummary *parent_method;
+        const XgClassSummary *parent_class =
+            verify_find_evidence_class(ev, current->parent_class_id);
+        if (!parent_class)
+            break;
+        parent_method = verify_find_evidence_method_by_signature_in_class(
+            ev, parent_class, method->name_id, method->signature_key, false);
+        if (parent_method)
+            chain_depth++;
+        current = parent_class;
+    }
+    return chain_depth;
+}
+
 static bool verify_method_override_graph(const XgGlobalEvidence *ev, char *errbuf,
                                          size_t errbuf_len) {
     if (!ev)
@@ -922,6 +946,7 @@ static bool verify_method_override_graph(const XgGlobalEvidence *ev, char *errbu
         const XgMethodSummary *expected_parent = NULL;
         XgMethodId expected_override_of = XG_NO_ID;
         XgMethodId expected_root_method_id = XG_NO_ID;
+        uint32_t expected_override_depth = 0;
         bool expected_overridden = false;
 
         if (method->method_id == XG_NO_ID)
@@ -943,6 +968,7 @@ static bool verify_method_override_graph(const XgGlobalEvidence *ev, char *errbu
             expected_overridden = xg_verify_method_is_overridden(ev, method);
         }
         expected_root_method_id = xg_verify_rederive_method_root(ev, method);
+        expected_override_depth = xg_verify_rederive_method_override_depth(ev, method);
 
         if (method->override_of != expected_override_of)
             return set_error(errbuf, errbuf_len,
@@ -950,6 +976,9 @@ static bool verify_method_override_graph(const XgGlobalEvidence *ev, char *errbu
         if (method->root_method_id != expected_root_method_id)
             return set_error(errbuf, errbuf_len,
                              "AOT global evidence method root does not re-derive");
+        if (method->override_depth != expected_override_depth)
+            return set_error(errbuf, errbuf_len,
+                             "AOT global evidence method depth does not re-derive");
         if (((method->flags & XG_METHOD_OVERRIDDEN) != 0) != expected_overridden)
             return set_error(errbuf, errbuf_len,
                              "AOT global evidence method overridden flag does not re-derive");
