@@ -75,9 +75,6 @@ typedef struct XrHttpServer {
     // VM instance
     struct XrVMRuntime *isolate;
 
-    // Connection handler closure (for creating connection coroutines)
-    struct XrClosure *conn_handler_closure;
-
     // Route closures storage (prevent GC collection)
     struct XrClosure **route_closures;
     int route_closure_count;

@@ -3356,28 +3356,6 @@ module http {
     layer: "runtime"
   }
 
-  fn setConnHandler {
-    signature: "(handler: fn(fd: int): ()): ()"
-    doc: "Set low-level HTTP connection handler"
-    vm: "http_set_conn_handler"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn __getConnHandler {
-    signature: "(): fn"
-    doc: "Return the current low-level HTTP connection handler"
-    vm: "http_get_conn_handler"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn listen {
     signature: "(port: int): bool"
     doc: "Start HTTP server accept loop"

@@ -770,6 +770,8 @@ TEST(builtin_http_old_fd_helpers_removed) {
 
     const XaBuiltinMember *parse_req = NULL;
     const XaBuiltinMember *send_resp = NULL;
+    const XaBuiltinMember *set_conn_handler = NULL;
+    const XaBuiltinMember *get_conn_handler = NULL;
 
     for (int i = 0; i < mod->function_count; i++) {
         const XaBuiltinMember *fn = &mod->functions[i];
@@ -777,10 +779,16 @@ TEST(builtin_http_old_fd_helpers_removed) {
             parse_req = fn;
         if (strcmp(fn->name, "sendResponse") == 0)
             send_resp = fn;
+        if (strcmp(fn->name, "setConnHandler") == 0)
+            set_conn_handler = fn;
+        if (strcmp(fn->name, "__getConnHandler") == 0)
+            get_conn_handler = fn;
     }
 
     ASSERT(parse_req == NULL);
     ASSERT(send_resp == NULL);
+    ASSERT(set_conn_handler == NULL);
+    ASSERT(get_conn_handler == NULL);
 }
 
 TEST(builtin_datetime_type_methods_from_defs) {

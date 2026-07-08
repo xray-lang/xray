@@ -1,0 +1,5 @@
+import http
+
+fn handle(fd: int) {}
+
+http.setConnHandler(handle)

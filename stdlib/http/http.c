@@ -791,55 +791,6 @@ static XrValue http_ws_route(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_null();
 }
 
-// http.setConnHandler(handler) - Set connection handler closure
-// Handler receives client_fd, handles entire connection lifecycle
-static XrValue http_set_conn_handler(XrVMRuntime *X, XrValue *args, int argc) {
-    XrHttpContext *ctx = xr_http_get_context(X);
-    if (argc < 1 || !ctx) {
-        return xr_null();
-    }
-
-    // Auto-create global server instance
-    if (!ctx->server) {
-        ctx->server = xr_http_server_new(X);
-        if (!ctx->server) {
-            fprintf(stderr, "http.setConnHandler: failed to create server\n");
-            return xr_null();
-        }
-    }
-
-    XrClosure *closure = xr_vm_closure_from_arg(X, args[0], "http.setConnHandler");
-    if (closure) {
-        /*
-         * Check if closure has upvalues.
-         * HTTP callback closures should not have mutable upvalues because:
-         *   1. Closures are not deep-copied (performance optimization)
-         *   2. Shared upvalues may cause data races
-         * Use global variables or parameter passing for shared state.
-         */
-        if (closure->upval_count > 0) {
-            fprintf(stderr, "Warning: http.setConnHandler closure captures external variables\n");
-            fprintf(stderr, "         HTTP callback should not capture external variables\n");
-            // Still allow setting, but warn
-        }
-
-        ctx->server->conn_handler_closure = closure;
-    }
-
-    return xr_null();
-}
-
-// http.__getConnHandler() -> closure | null (for http.xr)
-static XrValue http_get_conn_handler(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    XrHttpContext *ctx = xr_http_get_context(X);
-    if (!ctx || !ctx->server || !ctx->server->conn_handler_closure) {
-        return xr_null();
-    }
-    return XR_FROM_PTR(ctx->server->conn_handler_closure);
-}
-
 /* ========== http.listen migrated to http.xr ========== */
 
 /*
