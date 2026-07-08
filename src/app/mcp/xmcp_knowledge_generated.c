@@ -1263,19 +1263,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "delete",
-        .signature = "(url: string): HttpResponse",
-        .summary = "HTTP DELETE request",
-    },
-    {
         .name = "formData",
         .signature = "(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData",
         .summary = "",
-    },
-    {
-        .name = "get",
-        .signature = "(url: string): HttpResponse",
-        .summary = "HTTP GET request",
     },
     {
         .name = "h2CreateServer",
@@ -1351,16 +1341,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "parseSetCookie",
         .signature = "(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?",
         .summary = "",
-    },
-    {
-        .name = "post",
-        .signature = "(url: string, body?: string, contentType?: string): HttpResponse",
-        .summary = "HTTP POST request",
-    },
-    {
-        .name = "put",
-        .signature = "(url: string, body?: string, contentType?: string): HttpResponse",
-        .summary = "HTTP PUT request",
     },
     {
         .name = "redirectDecision",
@@ -3191,6 +3171,26 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     {
         .name = "ProcessOptions.stdout",
         .signature = ": int?",
+        .summary = "",
+    },
+    {
+        .name = "ThreadLocal",
+        .signature = "ThreadLocal",
+        .summary = "",
+    },
+    {
+        .name = "ThreadLocal.constructor",
+        .signature = "(init: (): T)",
+        .summary = "",
+    },
+    {
+        .name = "ThreadLocal.get",
+        .signature = "(): T",
+        .summary = "",
+    },
+    {
+        .name = "ThreadLocal.set",
+        .signature = "(value: T): ()",
         .summary = "",
     },
     {
@@ -5615,9 +5615,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.config` | `(opts: Json): ()` | Configure HTTP server limits and timeouts |\n"
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
-            "| `http.delete` | `(url: string): HttpResponse` | HTTP DELETE request |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
-            "| `http.get` | `(url: string): HttpResponse` | HTTP GET request |\n"
             "| `http.h2CreateServer` | `(options?: Json): bool` | Create HTTP/2 server |\n"
             "| `http.h2Get` | `(url: string, options?: Json): Json` | HTTP/2 GET request |\n"
             "| `http.h2Listen` | `(): bool` | Start HTTP/2 server |\n"
@@ -5633,8 +5631,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.parseResponseHead` | `(raw: string, maxHeaders: int = 100): ResponseHead?` |  |\n"
             "| `http.parseResponseText` | `(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): ResponseMessage?` |  |\n"
             "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?` |  |\n"
-            "| `http.post` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP POST request |\n"
-            "| `http.put` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP PUT request |\n"
             "| `http.redirectDecision` | `(status: int, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?` |  |\n"
             "| `http.redirectTarget` | `(currentUrl: string, location: string): string?` |  |\n"
             "| `http.request` | `(options: Json): HttpResponse` | Generic HTTP request |\n"
@@ -6252,6 +6248,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ProcessOptions.stderr` | `: int?` |  |\n"
             "| `ProcessOptions.stdin` | `: int?` |  |\n"
             "| `ProcessOptions.stdout` | `: int?` |  |\n"
+            "| `ThreadLocal` | `ThreadLocal` |  |\n"
+            "| `ThreadLocal.constructor` | `(init: (): T)` |  |\n"
+            "| `ThreadLocal.get` | `(): T` |  |\n"
+            "| `ThreadLocal.set` | `(value: T): ()` |  |\n"
             "| `sys.cpuCount` | `(): int` | Return the number of CPUs available to OS-thread work |\n"
             "| `sys.pinToCpu` | `(cpu: int): bool` | Best-effort pin of the current OS thread to a CPU index |\n"
             "| `sys.sleepMs` | `(ms: int): ()` | Block the current OS thread for at least ms milliseconds |\n"

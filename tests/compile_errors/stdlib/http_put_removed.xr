@@ -1,0 +1,3 @@
+import http
+
+http.put("http://example.com/", "body", "text/plain")

@@ -341,6 +341,36 @@ void xr_pkg_client_set_isolate(XrVMRuntime *isolate) {
 
 /* ========== HTTP API Implementation ========== */
 
+static XrHttpResult pkg_http_request_get(const char *url) {
+    XrHttpRequestConfig config;
+    xr_http_request_config_init(&config);
+    config.url = url;
+    config.method = XR_HTTP_METHOD_GET;
+    return xr_http_request(tls_isolate, &config);
+}
+
+static XrHttpResult pkg_http_request_post(const char *url, const char *body, size_t body_len,
+                                          const char *content_type) {
+    XrHttpRequestConfig config;
+    xr_http_request_config_init(&config);
+    config.url = url;
+    config.method = XR_HTTP_METHOD_POST;
+    config.body = body;
+    config.body_len = body_len;
+
+    XrHttpHeader headers[1];
+    if (content_type) {
+        headers[0].name = "Content-Type";
+        headers[0].name_len = 12;
+        headers[0].value = content_type;
+        headers[0].value_len = strlen(content_type);
+        config.headers = headers;
+        config.header_count = 1;
+    }
+
+    return xr_http_request(tls_isolate, &config);
+}
+
 XrPkgResponse *xr_pkg_http_get(const char *url) {
     XR_DCHECK(url != NULL, "pkg_http_get: NULL url");
     XrPkgResponse *resp = (XrPkgResponse *) xr_calloc(1, sizeof(XrPkgResponse));
@@ -351,8 +381,7 @@ XrPkgResponse *xr_pkg_http_get(const char *url) {
         printf("GET: %s\n", url);
     }
 
-    // Use xray built-in HTTP client
-    XrHttpResult result = xr_http_get(tls_isolate, url);
+    XrHttpResult result = pkg_http_request_get(url);
 
     resp->status_code = result.status_code;
     resp->success =
@@ -397,8 +426,7 @@ XrPkgResponse *xr_pkg_http_post(const char *url, const char *body, const char *c
     const char *ct = content_type ? content_type : "application/json";
     size_t body_len = body ? strlen(body) : 0;
 
-    // Use xray built-in HTTP client
-    XrHttpResult result = xr_http_post(tls_isolate, url, body, body_len, ct);
+    XrHttpResult result = pkg_http_request_post(url, body, body_len, ct);
 
     resp->status_code = result.status_code;
     resp->success =
@@ -428,8 +456,7 @@ bool xr_pkg_http_download_file(const char *url, const char *dest_path) {
         printf("Download: %s -> %s\n", url, dest_path);
     }
 
-    // Use xray built-in HTTP client
-    XrHttpResult result = xr_http_get(tls_isolate, url);
+    XrHttpResult result = pkg_http_request_get(url);
 
     if (result.error != XR_HTTP_OK || result.status_code < 200 || result.status_code >= 300) {
         if (tls_config.verbose) {

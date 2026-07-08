@@ -4,10 +4,6 @@ import http
 
 @test
 fn test_http_client_apis_exist() {
-    assert(typename(http.get) == "function")
-    assert(typename(http.post) == "function")
-    assert(typename(http.put) == "function")
-    assert(typename(http.delete) == "function")
     assert(typename(http.request) == "function")
 }
 

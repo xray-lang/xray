@@ -4,17 +4,17 @@
 import http
 
 fn test_empty_url() {
-    var resp = http.get("")
+    var resp = http.request({url: ""})
     assert_eq(resp == null || resp.error != null, true)
 }
 
 fn test_invalid_domain() {
-    var resp = http.get("http://invalid.nonexistent.domain.xray/")
+    var resp = http.request({url: "http://invalid.nonexistent.domain.xray/"})
     assert_eq(resp == null || resp.error != null, true)
 }
 
 fn test_status_500() {
-    var resp = http.get("http://httpbin.org/status/500")
+    var resp = http.request({url: "http://httpbin.org/status/500"})
     assert_eq(resp.status, 500)
     assert_eq(resp.ok, false)
 }

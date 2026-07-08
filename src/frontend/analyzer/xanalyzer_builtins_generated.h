@@ -160,10 +160,6 @@ static const XaBuiltinHandle g_gen_http_handles[] = {
 
 // http module functions
 static const XaBuiltinMember g_gen_http_functions[] = {
-    {"get", "(url: string): HttpResponse", "HTTP GET request", true, false, false},
-    {"post", "(url: string, body?: string, contentType?: string): HttpResponse", "HTTP POST request", true, false, false},
-    {"put", "(url: string, body?: string, contentType?: string): HttpResponse", "HTTP PUT request", true, false, false},
-    {"delete", "(url: string): HttpResponse", "HTTP DELETE request", true, false, false},
     {"request", "(options: Json): HttpResponse", "Generic HTTP request", true, false, false},
     {"route", "(method: string, path: string, handler: fn | string | Json): ()", "Register a route handler or static response", true, false, false},
     {"listen", "(port: int): bool", "Start HTTP server accept loop", true, false, false},
@@ -179,7 +175,7 @@ static const XaBuiltinMember g_gen_http_functions[] = {
     {"h2Stop", "(): ()", "Stop HTTP/2 server", true, false, false},
     {"h2Push", "(path: string, contentType: string, data: string): bool", "Push HTTP/2 response data", true, false, false},
 };
-#define GEN_HTTP_FUNCTION_COUNT 18
+#define GEN_HTTP_FUNCTION_COUNT 14
 
 // io.FileStat handle fields
 static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {
