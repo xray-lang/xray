@@ -1108,7 +1108,6 @@ void xr_h2_stream_hash_free(XrH2StreamHash *hash) {
                 // Free stream resources
                 xr_free(stream->headers_buf);
                 xr_free(stream->data_buf);
-                xr_free(stream->trailers_buf);
                 xr_free(stream);
                 stream = next;
             }
@@ -1596,50 +1595,7 @@ XrH2Conn *xr_h2_conn_new(int fd, void *tls_conn, bool is_client) {
     return conn;
 }
 
-/* ========== Stream Priority ========== */
-
-int xr_h2_set_priority(XrH2Conn *conn, XrH2Stream *stream, const XrH2Priority *priority) {
-    if (!conn || !stream || !priority)
-        return -1;
-
-    stream->priority = *priority;
-    return xr_h2_send_priority(conn, stream->id, priority);
-}
-
-int xr_h2_send_priority(XrH2Conn *conn, uint32_t stream_id, const XrH2Priority *priority) {
-    if (!conn || !priority)
-        return -1;
-
-    uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 5];
-    XrH2FrameHeader header = {
-        .length = 5, .type = XR_H2_FRAME_PRIORITY, .flags = 0, .stream_id = stream_id};
-    xr_h2_write_frame_header(frame, &header);
-
-    uint8_t *payload = frame + XR_H2_FRAME_HEADER_SIZE;
-    uint32_t dep = priority->dependency;
-    if (priority->exclusive)
-        dep |= 0x80000000;
-
-    payload[0] = (dep >> 24) & 0xFF;
-    payload[1] = (dep >> 16) & 0xFF;
-    payload[2] = (dep >> 8) & 0xFF;
-    payload[3] = dep & 0xFF;
-    payload[4] = priority->weight - 1;  // weight 1-256 -> 0-255
-
-    return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + 5);
-}
-
 /* ========== Stream Cancellation ========== */
-
-int xr_h2_cancel_stream(XrH2Conn *conn, XrH2Stream *stream, XrH2ErrorCode error) {
-    if (!conn || !stream)
-        return -1;
-
-    stream->cancelled = true;
-    stream->state = XR_H2_STREAM_STATE_CLOSED;
-
-    return xr_h2_send_rst_stream(conn, stream->id, error);
-}
 
 int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error) {
     if (!conn)
@@ -1657,43 +1613,6 @@ int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode erro
     payload[3] = error & 0xFF;
 
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + 4);
-}
-
-/* ========== Trailers ========== */
-
-int xr_h2_send_trailers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
-                        const size_t *name_lens, const char **values, const size_t *value_lens,
-                        int count) {
-    if (!conn || !stream)
-        return -1;
-
-    // Encode trailer headers (zero-init for analyzer friendliness; see
-    // xr_h2_send_headers for rationale).
-    uint8_t headers_buf[16384] = {0};
-    int headers_len = 0;
-
-    for (int i = 0; i < count; i++) {
-        int len =
-            xr_hpack_encode(&conn->encoder_table, names[i], name_lens[i], values[i], value_lens[i],
-                            headers_buf + headers_len, sizeof(headers_buf) - headers_len);
-        if (len < 0)
-            return -1;
-        headers_len += len;
-    }
-
-    // Send HEADERS frame with END_STREAM
-    uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 16384];
-    XrH2FrameHeader header = {.length = headers_len,
-                              .type = XR_H2_FRAME_HEADERS,
-                              .flags = XR_H2_FLAG_END_HEADERS | XR_H2_FLAG_END_STREAM,
-                              .stream_id = stream->id};
-    xr_h2_write_frame_header(frame, &header);
-    if (headers_len > 0) {
-        memcpy(frame + XR_H2_FRAME_HEADER_SIZE, headers_buf, (size_t) headers_len);
-    }
-
-    stream->state = XR_H2_STREAM_HALF_CLOSED_LOCAL;
-    return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + headers_len);
 }
 
 /* ========== PING ========== */
@@ -1714,44 +1633,4 @@ int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack) {
     }
 
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + 8);
-}
-
-/* ========== h2c (HTTP/2 Cleartext) ========== */
-
-int xr_h2_upgrade_from_http1(XrH2Conn *conn, const char *settings_payload, size_t len) {
-    if (!conn)
-        return -1;
-
-    // Parse Base64 encoded SETTINGS
-    (void) settings_payload;
-    (void) len;
-
-    // Send server connection preface
-    if (!conn->is_client) {
-        if (xr_h2_send_settings(conn) < 0)
-            return -1;
-    }
-
-    conn->settings_sent = true;
-    return 0;
-}
-
-int xr_h2_start_h2c(XrH2Conn *conn) {
-    if (!conn)
-        return -1;
-
-    // h2c Prior Knowledge: send connection preface directly
-    if (conn->is_client) {
-        if (h2_send(conn, XR_HTTP2_PREFACE, XR_HTTP2_PREFACE_LEN) < 0) {
-            return -1;
-        }
-    }
-
-    // Send SETTINGS frame
-    if (xr_h2_send_settings(conn) < 0) {
-        return -1;
-    }
-
-    conn->settings_sent = true;
-    return 0;
 }

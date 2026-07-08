@@ -123,19 +123,11 @@ typedef enum {
     XR_H2_STREAM_STATE_CLOSED
 } XrH2StreamState;
 
-typedef struct XrH2Priority {
-    uint32_t dependency;
-    uint8_t weight;
-    bool exclusive;
-} XrH2Priority;
-
 typedef struct XrH2Stream {
     uint32_t id;
     XrH2StreamState state;
     int32_t window_size;
     int status;  // HTTP status code from :status pseudo-header (0 = not set)
-
-    XrH2Priority priority;
 
     // Request/response data
     char *headers_buf;
@@ -143,9 +135,6 @@ typedef struct XrH2Stream {
     char *data_buf;
     size_t data_len;
     size_t data_cap;
-
-    char *trailers_buf;
-    size_t trailers_len;
 
     bool cancelled;
 
@@ -257,33 +246,12 @@ XR_FUNC int xr_h2_send_settings_ack(XrH2Conn *conn);
 XR_FUNC int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode error);
 XR_FUNC int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increment);
 
-/* ========== Stream Priority API ========== */
-
-XR_FUNC int xr_h2_set_priority(XrH2Conn *conn, XrH2Stream *stream, const XrH2Priority *priority);
-XR_FUNC int xr_h2_send_priority(XrH2Conn *conn, uint32_t stream_id, const XrH2Priority *priority);
-
 /* ========== Stream Cancel API ========== */
 
-XR_FUNC int xr_h2_cancel_stream(XrH2Conn *conn, XrH2Stream *stream, XrH2ErrorCode error);
 XR_FUNC int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error);
-
-/* ========== Trailers API ========== */
-
-// Send Trailers (HEADERS after DATA)
-XR_FUNC int xr_h2_send_trailers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
-                                const size_t *name_lens, const char **values,
-                                const size_t *value_lens, int count);
 
 /* ========== PING API ========== */
 
 XR_FUNC int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack);
-
-/* ========== h2c (HTTP/2 Cleartext) ========== */
-
-// Upgrade to HTTP/2 via HTTP/1.1 Upgrade
-XR_FUNC int xr_h2_upgrade_from_http1(XrH2Conn *conn, const char *settings_payload, size_t len);
-
-// Start h2c connection directly (Prior Knowledge)
-XR_FUNC int xr_h2_start_h2c(XrH2Conn *conn);
 
 #endif  // XR_STDLIB_HTTP2_H
