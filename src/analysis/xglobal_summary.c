@@ -317,6 +317,8 @@ XR_FUNC const char *xg_body_effect_name(uint32_t effect) {
             return "native_call";
         case XG_BODY_MAY_READ_MEM:
             return "read_mem";
+        case XG_BODY_MAY_CALL:
+            return "call";
         default:
             return "unknown";
     }
@@ -324,8 +326,8 @@ XR_FUNC const char *xg_body_effect_name(uint32_t effect) {
 
 XR_FUNC const uint32_t *xg_body_effect_catalog(uint32_t *out_count) {
     static const uint32_t effects[] = {
-        XG_BODY_MAY_THROW,  XG_BODY_MAY_SUSPEND,     XG_BODY_MAY_ALLOC,
-        XG_BODY_MAY_MUTATE, XG_BODY_MAY_CALL_NATIVE, XG_BODY_MAY_READ_MEM,
+        XG_BODY_MAY_THROW,       XG_BODY_MAY_SUSPEND,  XG_BODY_MAY_ALLOC, XG_BODY_MAY_MUTATE,
+        XG_BODY_MAY_CALL_NATIVE, XG_BODY_MAY_READ_MEM, XG_BODY_MAY_CALL,
     };
     if (out_count)
         *out_count = (uint32_t) (sizeof(effects) / sizeof(effects[0]));

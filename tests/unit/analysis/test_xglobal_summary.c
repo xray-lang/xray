@@ -1863,6 +1863,30 @@ TEST(global_evidence_verifier_rederives_func_attr_body_summary) {
     xaot_bundle_free(&read_mem_const);
     xg_global_evidence_free(&read_mem_ev);
 
+    XgGlobalEvidence call_ev;
+    XgBodySummary call_body = body;
+    call_body.effect_bits = XG_BODY_MAY_CALL;
+    xg_global_evidence_init(&call_ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&call_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&call_ev, &call_body));
+
+    XaotBundle call_contradicts_summary;
+    memset(&call_contradicts_summary, 0, sizeof(call_contradicts_summary));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&call_contradicts_summary, &call_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    call_contradicts_summary.modules = modules;
+    call_contradicts_summary.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&call_contradicts_summary, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&call_contradicts_summary, &helper_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&call_contradicts_summary, &helper_func,
+                                                   XAOT_FN_ATTR_CONST, &call_body));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(
+        !xaot_verify_bundle(&call_contradicts_summary, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT function attribute plan contradicts body summary"));
+    xaot_bundle_free(&call_contradicts_summary);
+    xg_global_evidence_free(&call_ev);
+
     XgGlobalEvidence effectful_ev;
     XgBodySummary effectful_body = body;
     effectful_body.effect_bits = XG_BODY_MAY_ALLOC;
@@ -4003,6 +4027,48 @@ TEST(global_evidence_producer_marks_read_mem_effect) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_marks_call_effect) {
+    setup_parser_session();
+    const char *source = "fn add(x: int, y: int) -> int {\n"
+                         "    return x + y\n"
+                         "}\n"
+                         "fn callAdd(x: int, y: int) -> int {\n"
+                         "    return add(x, y)\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    char *dump;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    const XgBodySummary *add = evidence_find_body_by_name(&ev, "add");
+    const XgBodySummary *call_add = evidence_find_body_by_name(&ev, "callAdd");
+    ASSERT_NOT_NULL(add);
+    ASSERT_NOT_NULL(call_add);
+    ASSERT_TRUE((add->effect_bits & XG_BODY_MAY_CALL) == 0);
+    ASSERT_TRUE((call_add->effect_bits & XG_BODY_MAY_CALL) != 0);
+    ASSERT_EQ_UINT(evidence_body_count_with_effect(&ev, XG_BODY_MAY_CALL), 1);
+    dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "effect=0x40[call]"));
+    xr_free(dump);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_native_method_calls_as_native_capability) {
     setup_parser_session();
     const char *source = "@native class Handle {\n"
@@ -4945,6 +5011,7 @@ RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_resolves_super_constructor_callsite);
 RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
 RUN_TEST(global_evidence_producer_marks_read_mem_effect);
+RUN_TEST(global_evidence_producer_marks_call_effect);
 RUN_TEST(global_evidence_producer_marks_native_method_calls_as_native_capability);
 RUN_TEST(global_evidence_producer_marks_body_escape_bits);
 RUN_TEST(global_evidence_producer_marks_native_methods_bodyless);

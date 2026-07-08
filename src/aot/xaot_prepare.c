@@ -3437,9 +3437,9 @@ static const XgBodySummary *prepare_find_body_summary_for_func(const XaotBundle 
 }
 
 static bool func_attr_body_summary_disqualifies(const XgBodySummary *body) {
-    return !body ||
-           (body->effect_bits & (XG_BODY_MAY_THROW | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
-                                 XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE)) != 0;
+    return !body || (body->effect_bits &
+                     (XG_BODY_MAY_THROW | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
+                      XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE | XG_BODY_MAY_CALL)) != 0;
 }
 
 /* Prove a function free of observable effects so Cgen can emit

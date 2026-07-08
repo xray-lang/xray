@@ -1445,6 +1445,7 @@ static XgClassId body_parent_class_id(XgBodyCollect *bc) {
 static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     XgCallsiteSummary row;
     const AstNode *callee;
+    bc->effect_bits |= XG_BODY_MAY_CALL;
     if (body_call_is_sys_thread_spawn(&call->as.call_expr)) {
         bc->effect_bits |= XG_BODY_MAY_ALLOC;
         bc->escape_bits |= XG_BODY_ESCAPE_CORO;
@@ -1551,6 +1552,7 @@ static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
     bool is_constructor_call;
     if (!bc || !call)
         return;
+    bc->effect_bits |= XG_BODY_MAY_CALL;
     parent_class = body_parent_class_id(bc);
     is_constructor_call = call->as.super_call.method_name == NULL;
     method_name = is_constructor_call ? "constructor" : call->as.super_call.method_name;
