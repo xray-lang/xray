@@ -74,6 +74,68 @@ static void xa_warn_discarded_sys_thread_spawn(XaInferContext *ctx, AstNode *exp
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, message, &loc);
 }
 
+static bool xa_expr_is_sys_os_resource_factory_call(AstNode *expr, const char **factory_name,
+                                                    const char **type_name,
+                                                    const char **close_method) {
+    if (!expr || expr->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &expr->as.call_expr;
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *method = &call->callee->as.member_access;
+    if (!method->name || !method->object || method->object->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *owner = &method->object->as.member_access;
+    if (!owner->name || !owner->object || owner->object->type != AST_VARIABLE)
+        return false;
+    const char *module_name = owner->object->as.variable.name;
+    if (!module_name || strcmp(module_name, "sys") != 0)
+        return false;
+    if (strcmp(owner->name, "Process") == 0 && strcmp(method->name, "spawn") == 0) {
+        if (factory_name)
+            *factory_name = "sys.Process.spawn";
+        if (type_name)
+            *type_name = "Process";
+        if (close_method)
+            *close_method = "wait";
+        return true;
+    }
+    if (strcmp(owner->name, "Pipe") == 0 && strcmp(method->name, "open") == 0) {
+        if (factory_name)
+            *factory_name = "sys.Pipe.open";
+        if (type_name)
+            *type_name = "Pipe";
+        if (close_method)
+            *close_method = "close";
+        return true;
+    }
+    return false;
+}
+
+static void xa_warn_discarded_sys_os_resource_factory(XaInferContext *ctx, AstNode *expr) {
+    const char *factory_name = NULL;
+    const char *type_name = NULL;
+    const char *close_method = NULL;
+    if (!ctx || !expr ||
+        !xa_expr_is_sys_os_resource_factory_call(expr, &factory_name, &type_name, &close_method))
+        return;
+
+    char message[192];
+    snprintf(message, sizeof(message), "%s returns a %s handle; call %s() explicitly",
+             factory_name, type_name, close_method);
+    XrLocation loc = {.file = ctx->file_path, .line = expr->line, .column = expr->column};
+    for (XaDiagnostic *d = ctx->analyzer ? ctx->analyzer->diagnostics : NULL; d; d = d->next) {
+        if (d->severity == XR_DIAG_SEV_WARNING && d->code == XR_ERR_ANALYZE &&
+            d->location.line == loc.line && d->location.column == loc.column &&
+            ((d->location.file == loc.file) ||
+             (d->location.file && loc.file && strcmp(d->location.file, loc.file) == 0)) &&
+            d->message && strcmp(d->message, message) == 0) {
+            return;
+        }
+    }
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, message, &loc);
+}
+
 static bool xa_type_is_known_unassignable(XrType *target, XrType *source) {
     if (!target || !source || XR_TYPE_IS_UNKNOWN(target) || XR_TYPE_IS_UNKNOWN(source))
         return false;
@@ -4743,6 +4805,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             } else {
                 xa_visit_infer_expr(ctx, inner);
                 xa_warn_discarded_sys_thread_spawn(ctx, inner);
+                xa_warn_discarded_sys_os_resource_factory(ctx, inner);
             }
             break;
         }
