@@ -211,6 +211,28 @@ static uint64_t hash_link_dependency_summary(uint64_t hash, const XgLinkDependen
     return hash_mix(hash, row->name, name_len);
 }
 
+static uint64_t hash_generic_inst_summary(uint64_t hash, const XgGenericInstSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->generic_inst_id);
+    hash = hash_u32(hash, row->module_id);
+    hash = hash_u32(hash, row->origin_decl_id);
+    hash = hash_u32(hash, row->origin_func_id);
+    hash = hash_u32(hash, row->origin_method_id);
+    hash = hash_u32(hash, row->origin_class_id);
+    hash = hash_u32(hash, row->specialized_func_id);
+    hash = hash_u32(hash, row->specialized_class_id);
+    hash = hash_u32(hash, row->root_callsite_id);
+    hash = hash_u32(hash, row->constraint_interface_id);
+    hash = hash_u32(hash, row->name_id);
+    hash = hash_u32(hash, row->type_key);
+    hash = hash_u32(hash, row->type_arg_key_start);
+    hash = hash_u32(hash, row->type_arg_count);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u8(hash, row->kind);
+    return hash_u32(hash, row->flags);
+}
+
 static uint64_t hash_build_key(uint64_t hash, const XgBuildKey *key) {
     if (!key)
         return hash_u32(hash, 0);
@@ -300,6 +322,21 @@ XR_FUNC const char *xg_link_dependency_kind_name(uint8_t kind) {
             return "stdlib_module";
         case XG_LINK_DEP_STDLIB_SYMBOL:
             return "stdlib_symbol";
+        default:
+            return "unknown";
+    }
+}
+
+XR_FUNC const char *xg_generic_inst_kind_name(uint8_t kind) {
+    switch ((XgGenericInstKind) kind) {
+        case XG_GENERIC_INST_FUNCTION:
+            return "function";
+        case XG_GENERIC_INST_METHOD:
+            return "method";
+        case XG_GENERIC_INST_CLASS:
+            return "class";
+        case XG_GENERIC_INST_CONTAINER:
+            return "container";
         default:
             return "unknown";
     }
@@ -504,6 +541,7 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->bodies);
     xr_free(evidence->callsites);
     xr_free(evidence->link_deps);
+    xr_free(evidence->generic_insts);
     memset(evidence, 0, sizeof(*evidence));
 }
 
@@ -556,6 +594,13 @@ XR_FUNC bool xg_global_evidence_reserve_callsites(XgGlobalEvidence *evidence, ui
 XR_FUNC bool xg_global_evidence_reserve_link_deps(XgGlobalEvidence *evidence, uint32_t capacity) {
     return evidence && reserve_array((void **) &evidence->link_deps, &evidence->link_dep_cap,
                                      capacity, sizeof(XgLinkDependencySummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_generic_insts(XgGlobalEvidence *evidence,
+                                                      uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->generic_insts, &evidence->generic_inst_cap, capacity,
+                         sizeof(XgGenericInstSummary));
 }
 
 XR_FUNC XgDeclSummary *xg_global_evidence_add_decl(XgGlobalEvidence *evidence,
@@ -663,6 +708,18 @@ xg_global_evidence_add_link_dependency(XgGlobalEvidence *evidence,
     return row;
 }
 
+XR_FUNC XgGenericInstSummary *
+xg_global_evidence_add_generic_inst(XgGlobalEvidence *evidence,
+                                    const XgGenericInstSummary *summary) {
+    XgGenericInstSummary *row;
+    if (!evidence || !summary ||
+        !xg_global_evidence_reserve_generic_insts(evidence, evidence->ngeneric_insts + 1))
+        return NULL;
+    row = &evidence->generic_insts[evidence->ngeneric_insts++];
+    *row = *summary;
+    return row;
+}
+
 XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobalEvidence *evidence,
                                                                   XgCallsiteId callsite_id) {
     if (!evidence || callsite_id == XG_NO_ID)
@@ -670,6 +727,18 @@ XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobal
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {
         if (evidence->callsites[i].callsite_id == callsite_id)
             return &evidence->callsites[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XgGenericInstSummary *
+xg_global_evidence_find_generic_inst(const XgGlobalEvidence *evidence,
+                                     XgGenericInstId generic_inst_id) {
+    if (!evidence || generic_inst_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->ngeneric_insts; i++) {
+        if (evidence->generic_insts[i].generic_inst_id == generic_inst_id)
+            return &evidence->generic_insts[i];
     }
     return NULL;
 }
@@ -1103,6 +1172,7 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_mix(hash, &evidence->nbodies, sizeof(evidence->nbodies));
     hash = hash_mix(hash, &evidence->ncallsites, sizeof(evidence->ncallsites));
     hash = hash_mix(hash, &evidence->nlink_deps, sizeof(evidence->nlink_deps));
+    hash = hash_mix(hash, &evidence->ngeneric_insts, sizeof(evidence->ngeneric_insts));
     for (uint32_t i = 0; i < evidence->ndecls; i++)
         hash = hash_decl_summary(hash, &evidence->decls[i]);
     for (uint32_t i = 0; i < evidence->nclasses; i++)
@@ -1121,6 +1191,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_callsite_summary(hash, &evidence->callsites[i]);
     for (uint32_t i = 0; i < evidence->nlink_deps; i++)
         hash = hash_link_dependency_summary(hash, &evidence->link_deps[i]);
+    for (uint32_t i = 0; i < evidence->ngeneric_insts; i++)
+        hash = hash_generic_inst_summary(hash, &evidence->generic_insts[i]);
     return hash == 0 ? 1 : hash;
 }
 
@@ -1179,10 +1251,10 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             evidence->key.profile_hash, evidence->key.imported_summary_hash);
     fprintf(out,
             "counts decls=%u classes=%u methods=%u interface_impls=%u interface_extends=%u "
-            "interface_methods=%u bodies=%u callsites=%u link_deps=%u\n",
+            "interface_methods=%u bodies=%u callsites=%u link_deps=%u generic_insts=%u\n",
             evidence->ndecls, evidence->nclasses, evidence->nmethods, evidence->ninterface_impls,
             evidence->ninterface_extends, evidence->ninterface_methods, evidence->nbodies,
-            evidence->ncallsites, evidence->nlink_deps);
+            evidence->ncallsites, evidence->nlink_deps, evidence->ngeneric_insts);
 
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *d = &evidence->decls[i];
@@ -1269,6 +1341,20 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 "flags=0x%x\n",
                 i, dep->link_id, dep->module_id, dep->decl_id, dep->source_span_id,
                 xg_link_dependency_kind_name(dep->kind), dep->name_id, dep->name, dep->flags);
+    }
+    for (uint32_t i = 0; i < evidence->ngeneric_insts; i++) {
+        const XgGenericInstSummary *inst = &evidence->generic_insts[i];
+        fprintf(out,
+                "generic-inst %u id=%u module=%u kind=%s origin_decl=%u origin_func=%u "
+                "origin_method=%u origin_class=%u specialized_func=%u specialized_class=%u "
+                "root_callsite=%u constraint_iface=%u name=%u type=%u type_args=%u+%u "
+                "span=%u flags=0x%x\n",
+                i, inst->generic_inst_id, inst->module_id, xg_generic_inst_kind_name(inst->kind),
+                inst->origin_decl_id, inst->origin_func_id, inst->origin_method_id,
+                inst->origin_class_id, inst->specialized_func_id, inst->specialized_class_id,
+                inst->root_callsite_id, inst->constraint_interface_id, inst->name_id,
+                inst->type_key, inst->type_arg_key_start, (unsigned) inst->type_arg_count,
+                inst->source_span_id, inst->flags);
     }
 
     if (ferror(out)) {

@@ -764,6 +764,64 @@ static const XgMethodSummary *verify_find_evidence_method_by_id(const XgGlobalEv
     return NULL;
 }
 
+static bool verify_generic_inst_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
+    if (!ev)
+        return set_error(errbuf, errbuf_len,
+                         "AOT global evidence generic inst verifier has no evidence");
+    for (uint32_t i = 0; i < ev->ngeneric_insts; i++) {
+        const XgGenericInstSummary *inst = &ev->generic_insts[i];
+        if (inst->generic_inst_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT generic inst evidence has no id");
+        for (uint32_t j = i + 1; j < ev->ngeneric_insts; j++) {
+            if (ev->generic_insts[j].generic_inst_id == inst->generic_inst_id)
+                return set_error(errbuf, errbuf_len, "AOT generic inst evidence id is duplicated");
+        }
+        if (inst->module_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len, "AOT generic inst evidence has no module");
+        switch ((XgGenericInstKind) inst->kind) {
+            case XG_GENERIC_INST_FUNCTION:
+            case XG_GENERIC_INST_METHOD:
+            case XG_GENERIC_INST_CLASS:
+            case XG_GENERIC_INST_CONTAINER:
+                break;
+            default:
+                return set_error(errbuf, errbuf_len, "AOT generic inst evidence has invalid kind");
+        }
+        if (inst->origin_decl_id != XG_NO_ID &&
+            !verify_find_evidence_decl(ev, inst->origin_decl_id))
+            return set_error(errbuf, errbuf_len, "AOT generic inst origin declaration is missing");
+        if (inst->origin_func_id != XG_NO_ID &&
+            !verify_find_evidence_body_by_func(ev, inst->origin_func_id))
+            return set_error(errbuf, errbuf_len, "AOT generic inst origin body is missing");
+        if (inst->origin_method_id != XG_NO_ID &&
+            !verify_find_evidence_method_by_id(ev, inst->origin_method_id))
+            return set_error(errbuf, errbuf_len, "AOT generic inst origin method is missing");
+        if (inst->origin_class_id != XG_NO_ID &&
+            !verify_find_evidence_class(ev, inst->origin_class_id))
+            return set_error(errbuf, errbuf_len, "AOT generic inst origin class is missing");
+        if (inst->root_callsite_id != XG_NO_ID &&
+            !verify_find_evidence_callsite(ev, inst->root_callsite_id))
+            return set_error(errbuf, errbuf_len, "AOT generic inst root callsite is missing");
+        if ((inst->flags & XG_GENERIC_INST_CONCRETE_TYPES) != 0 &&
+            (inst->type_key == 0 || inst->type_arg_count == 0))
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic inst concrete type evidence is incomplete");
+        if ((inst->flags & XG_GENERIC_INST_INTERFACE_CONSTRAINT) != 0 &&
+            inst->constraint_interface_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic inst interface constraint is missing");
+        if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0 &&
+            (inst->specialized_func_id == XG_NO_ID ||
+             !verify_find_evidence_body_by_func(ev, inst->specialized_func_id)))
+            return set_error(errbuf, errbuf_len, "AOT generic inst specialized body is missing");
+        if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_ABI) != 0 &&
+            inst->specialized_func_id == XG_NO_ID && inst->specialized_class_id == XG_NO_ID)
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic inst specialized ABI target is missing");
+    }
+    return true;
+}
+
 static bool verify_class_method_range_contains(const XgGlobalEvidence *ev,
                                                const XgClassSummary *cls,
                                                const XgMethodSummary *method) {
@@ -2116,6 +2174,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     if (!verify_interface_method_rows(ev, errbuf, errbuf_len))
         return false;
     if (!verify_body_summary_ranges(ev, errbuf, errbuf_len))
+        return false;
+    if (!verify_generic_inst_rows(ev, errbuf, errbuf_len))
         return false;
 
     for (uint32_t i = 0; i < ev->nclasses; i++) {
