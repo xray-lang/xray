@@ -923,6 +923,31 @@ fn _hasHeaderToken(value: string, token: string) -> bool {
     return false
 }
 
+fn _teFinalCodingIsChunked(value: string) -> bool {
+    var trimmed = value.trim()
+    if (trimmed.length == 0) { return false }
+
+    var start = 0
+    var scan = 0
+    while (scan <= trimmed.length) {
+        var comma = trimmed.indexOf(",", scan)
+        if (comma < 0) { break }
+        start = comma + 1
+        scan = comma + 1
+    }
+    return trimmed.slice(start).trim().toLowerCase() == "chunked"
+}
+
+fn _chunkedFramingFrom(pairs: Array<(string, string)>) -> bool? {
+    var chunked = false
+    for (var i = 0; i < pairs.length; i++) {
+        if (!_headerKeyEquals(pairs[i].0, "Transfer-Encoding")) { continue }
+        if (!_teFinalCodingIsChunked(pairs[i].1)) { return null }
+        chunked = true
+    }
+    return chunked
+}
+
 fn _contentLengthFrom(pairs: Array<(string, string)>) -> int? {
     var found = false
     var length = -1
@@ -937,14 +962,38 @@ fn _contentLengthFrom(pairs: Array<(string, string)>) -> int? {
     return length
 }
 
-fn _isChunked(pairs: Array<(string, string)>) -> bool {
-    for (var i = 0; i < pairs.length; i++) {
-        if (_headerKeyEquals(pairs[i].0, "Transfer-Encoding") &&
-            _hasHeaderToken(pairs[i].1, "chunked")) {
-            return true
+fn _byteCrlfIndex(raw: string, start: int) -> int {
+    var pos = start
+    while (pos + 1 < raw.byteLength) {
+        if (raw.byteAt(pos) == "\r" && raw.byteAt(pos + 1) == "\n") {
+            return pos
         }
+        pos = pos + 1
     }
-    return false
+    return -1
+}
+
+fn _byteSlice(raw: string, start: int, end: int) -> string? {
+    if (start < 0 || end < start || end > raw.byteLength) { return null }
+    if (raw.length == raw.byteLength) { return raw.slice(start, end) }
+
+    var out = StringBuilder()
+    for (var i = start; i < end; i++) {
+        var b = raw.byteAt(i)
+        if (b == null) { return null }
+        out.append(b!)
+    }
+    return out.toString()
+}
+
+fn _byteCrlfAt(raw: string, pos: int) -> bool {
+    return pos + 1 < raw.byteLength &&
+           raw.byteAt(pos) == "\r" &&
+           raw.byteAt(pos + 1) == "\n"
+}
+
+fn _responseAllowsBody(status: int) -> bool {
+    return !(status >= 100 && status < 200) && status != 204 && status != 304
 }
 
 fn _keepAlive(version: string, pairs: Array<(string, string)>) -> bool {
@@ -1110,6 +1159,76 @@ class RequestHead {
     }
 }
 
+// RequestMessage - Parsed HTTP/1.x request head and decoded body.
+class RequestMessage {
+    head: RequestHead
+    body: string
+    trailers: Json
+    trailerPairs: Array<(string, string)>
+    consumedBytes: int
+
+    constructor(
+        head: RequestHead,
+        body: string,
+        trailers: Json,
+        trailerPairs: Array<(string, string)>,
+        consumedBytes: int
+    ) {
+        this.head = head
+        this.body = body
+        this.trailers = trailers
+        this.trailerPairs = trailerPairs
+        this.consumedBytes = consumedBytes
+    }
+
+    getHeader(name: string) -> string? {
+        return this.head.getHeader(name)
+    }
+
+    getTrailer(name: string) -> string? {
+        return _headerListGet(this.trailerPairs, name)
+    }
+
+    getTrailers(name: string) -> Array<string> {
+        return _headerListAll(this.trailerPairs, name)
+    }
+}
+
+// ResponseMessage - Parsed HTTP/1.x response head and decoded body.
+class ResponseMessage {
+    head: ResponseHead
+    body: string
+    trailers: Json
+    trailerPairs: Array<(string, string)>
+    consumedBytes: int
+
+    constructor(
+        head: ResponseHead,
+        body: string,
+        trailers: Json,
+        trailerPairs: Array<(string, string)>,
+        consumedBytes: int
+    ) {
+        this.head = head
+        this.body = body
+        this.trailers = trailers
+        this.trailerPairs = trailerPairs
+        this.consumedBytes = consumedBytes
+    }
+
+    getHeader(name: string) -> string? {
+        return this.head.getHeader(name)
+    }
+
+    getTrailer(name: string) -> string? {
+        return _headerListGet(this.trailerPairs, name)
+    }
+
+    getTrailers(name: string) -> Array<string> {
+        return _headerListAll(this.trailerPairs, name)
+    }
+}
+
 // parseChunkedBody - Decode a complete Transfer-Encoding: chunked body.
 fn parseChunkedBody(
     raw: string,
@@ -1121,9 +1240,11 @@ fn parseChunkedBody(
     var body = StringBuilder()
 
     while (true) {
-        var lineEnd = raw.indexOf("\r\n", pos)
+        var lineEnd = _byteCrlfIndex(raw, pos)
         if (lineEnd < 0) { return null }
-        var size = _parseChunkSize(raw.slice(pos, lineEnd))
+        var line = _byteSlice(raw, pos, lineEnd)
+        if (line == null) { return null }
+        var size = _parseChunkSize(line!)
         if (size == null) { return null }
         pos = lineEnd + 2
 
@@ -1131,15 +1252,16 @@ fn parseChunkedBody(
             var trailers: Json = {}
             var pairs: Array<(string, string)> = []
             while (true) {
-                var trailerEnd = raw.indexOf("\r\n", pos)
+                var trailerEnd = _byteCrlfIndex(raw, pos)
                 if (trailerEnd < 0) { return null }
-                var line = raw.slice(pos, trailerEnd)
+                var line = _byteSlice(raw, pos, trailerEnd)
+                if (line == null) { return null }
                 pos = trailerEnd + 2
-                if (line.length == 0) {
+                if (line!.length == 0) {
                     return ChunkedBody(body.toString(), trailers, pairs, pos)
                 }
 
-                var parsed = _parseHeaderLine(line)
+                var parsed = _parseHeaderLine(line!)
                 if (parsed == null) { return null }
                 pairs.push(parsed!)
                 trailers[parsed!.0] = parsed!.1
@@ -1150,10 +1272,12 @@ fn parseChunkedBody(
         }
 
         if (maxBodyBytes > 0 && total + size! > maxBodyBytes) { return null }
-        if (pos + size! + 2 > raw.length) { return null }
-        body.append(raw.slice(pos, pos + size!))
+        if (pos + size! + 2 > raw.byteLength) { return null }
+        var chunk = _byteSlice(raw, pos, pos + size!)
+        if (chunk == null) { return null }
+        body.append(chunk!)
         pos = pos + size!
-        if (raw.slice(pos, pos + 2) != "\r\n") { return null }
+        if (!_byteCrlfAt(raw, pos)) { return null }
         pos = pos + 2
         total = total + size!
     }
@@ -1201,6 +1325,8 @@ fn parseRequestHead(raw: string, maxHeaders: int = 100) -> RequestHead? {
 
     var contentLength = _contentLengthFrom(pairs)
     if (contentLength == null) { return null }
+    var chunked = _chunkedFramingFrom(pairs)
+    if (chunked == null || (chunked! && contentLength! >= 0)) { return null }
     return RequestHead(
         method!,
         target!,
@@ -1209,9 +1335,106 @@ fn parseRequestHead(raw: string, maxHeaders: int = 100) -> RequestHead? {
         pairs,
         end,
         contentLength!,
-        _isChunked(pairs),
+        chunked!,
         _keepAlive(version, pairs)
     )
+}
+
+// parseRequestText - Parse a complete HTTP/1.x request text.
+fn parseRequestText(
+    raw: string,
+    maxBodyBytes: int = 67108864,
+    maxHeaders: int = 100,
+    maxTrailerHeaders: int = 50
+) -> RequestMessage? {
+    var head = parseRequestHead(raw, maxHeaders)
+    if (head == null) { return null }
+
+    var bodyStart = head!.headerBytes
+    var trailers: Json = {}
+    var trailerPairs: Array<(string, string)> = []
+
+    if (head!.chunked) {
+        var chunkedRaw = _byteSlice(raw, bodyStart, raw.byteLength)
+        if (chunkedRaw == null) { return null }
+        var chunked = parseChunkedBody(chunkedRaw!, maxBodyBytes, maxTrailerHeaders)
+        if (chunked == null) { return null }
+        return RequestMessage(
+            head!,
+            chunked!.body,
+            chunked!.trailers,
+            chunked!.trailerPairs,
+            bodyStart + chunked!.consumedBytes
+        )
+    }
+
+    if (head!.contentLength >= 0) {
+        if (maxBodyBytes > 0 && head!.contentLength > maxBodyBytes) { return null }
+        var bodyEnd = bodyStart + head!.contentLength
+        var fixedBody = _byteSlice(raw, bodyStart, bodyEnd)
+        if (fixedBody == null) { return null }
+        return RequestMessage(
+            head!,
+            fixedBody!,
+            trailers,
+            trailerPairs,
+            bodyEnd
+        )
+    }
+
+    return RequestMessage(head!, "", trailers, trailerPairs, bodyStart)
+}
+
+// parseResponseText - Parse a complete HTTP/1.x response text.
+fn parseResponseText(
+    raw: string,
+    maxBodyBytes: int = 67108864,
+    maxHeaders: int = 100,
+    maxTrailerHeaders: int = 50
+) -> ResponseMessage? {
+    var head = parseResponseHead(raw, maxHeaders)
+    if (head == null) { return null }
+
+    var bodyStart = head!.headerBytes
+    var trailers: Json = {}
+    var trailerPairs: Array<(string, string)> = []
+
+    if (!_responseAllowsBody(head!.status)) {
+        return ResponseMessage(head!, "", trailers, trailerPairs, bodyStart)
+    }
+
+    if (head!.chunked) {
+        var chunkedRaw = _byteSlice(raw, bodyStart, raw.byteLength)
+        if (chunkedRaw == null) { return null }
+        var chunked = parseChunkedBody(chunkedRaw!, maxBodyBytes, maxTrailerHeaders)
+        if (chunked == null) { return null }
+        return ResponseMessage(
+            head!,
+            chunked!.body,
+            chunked!.trailers,
+            chunked!.trailerPairs,
+            bodyStart + chunked!.consumedBytes
+        )
+    }
+
+    if (head!.contentLength >= 0) {
+        if (maxBodyBytes > 0 && head!.contentLength > maxBodyBytes) { return null }
+        var bodyEnd = bodyStart + head!.contentLength
+        var fixedBody = _byteSlice(raw, bodyStart, bodyEnd)
+        if (fixedBody == null) { return null }
+        return ResponseMessage(
+            head!,
+            fixedBody!,
+            trailers,
+            trailerPairs,
+            bodyEnd
+        )
+    }
+
+    var body = _byteSlice(raw, bodyStart, raw.byteLength)
+    if (body == null) { return null }
+    if (maxBodyBytes > 0 && body.byteLength > maxBodyBytes) { return null }
+    return ResponseMessage(head!, body!, trailers, trailerPairs, raw.byteLength)
 }
 
 // parseResponseHead - Parse an HTTP/1.x response head without reading sockets.
@@ -1256,6 +1479,8 @@ fn parseResponseHead(raw: string, maxHeaders: int = 100) -> ResponseHead? {
 
     var contentLength = _contentLengthFrom(pairs)
     if (contentLength == null) { return null }
+    var chunked = _chunkedFramingFrom(pairs)
+    if (chunked == null || (chunked! && contentLength! >= 0)) { return null }
     return ResponseHead(
         version,
         status,
@@ -1264,7 +1489,7 @@ fn parseResponseHead(raw: string, maxHeaders: int = 100) -> ResponseHead? {
         pairs,
         end,
         contentLength!,
-        _isChunked(pairs),
+        chunked!,
         _keepAlive(version, pairs)
     )
 }
@@ -1443,6 +1668,8 @@ export {
     RedirectDecision,
     ChunkedBody,
     RequestHead,
+    RequestMessage,
+    ResponseMessage,
     router,
     urlEncode,
     urlDecode,
@@ -1450,6 +1677,8 @@ export {
     requestText,
     parseResponseHead,
     parseRequestHead,
+    parseRequestText,
+    parseResponseText,
     parseChunkedBody,
     decodeChunkedBody,
     isRedirectStatus,

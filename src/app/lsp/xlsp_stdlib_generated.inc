@@ -161,6 +161,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"requestText", XLSP_SYM_FUNCTION, "fn(method: string, path: string, headers?: Json, body?: string, host?: string, stripSensitive?: bool): string?", "Format a complete HTTP/1.1 request string without performing I/O.", NULL, 0},
     {"parseResponseHead", XLSP_SYM_FUNCTION, "fn(raw: string, maxHeaders?: int): ResponseHead?", "Parse an HTTP/1.x response head without reading sockets.", NULL, 0},
     {"parseRequestHead", XLSP_SYM_FUNCTION, "fn(raw: string, maxHeaders?: int): RequestHead?", "Parse an HTTP/1.x request head without reading sockets.", NULL, 0},
+    {"parseRequestText", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int, maxHeaders?: int, maxTrailerHeaders?: int): RequestMessage?", "Parse a complete HTTP/1.x request text.", NULL, 0},
+    {"parseResponseText", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int, maxHeaders?: int, maxTrailerHeaders?: int): ResponseMessage?", "Parse a complete HTTP/1.x response text.", NULL, 0},
     {"parseChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int, maxTrailerHeaders?: int): ChunkedBody?", "Decode a complete Transfer-Encoding: chunked body.", NULL, 0},
     {"decodeChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int): string?", "Decode a chunked body and discard trailers.", NULL, 0},
     {"isRedirectStatus", XLSP_SYM_FUNCTION, "fn(status: int): bool", "True for HTTP redirect codes that carry Location.", NULL, 0},
@@ -178,10 +180,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"RedirectDecision", XLSP_SYM_CLASS, "type RedirectDecision", "Pure redirect control-plane result for the HTTP client.", NULL, 0},
     {"ChunkedBody", XLSP_SYM_CLASS, "type ChunkedBody", "Decoded Transfer-Encoding: chunked body and parsed trailers.", NULL, 0},
     {"RequestHead", XLSP_SYM_CLASS, "type RequestHead", "Parsed HTTP/1.x request line and headers.", NULL, 0},
+    {"RequestMessage", XLSP_SYM_CLASS, "type RequestMessage", "Parsed HTTP/1.x request head and decoded body.", NULL, 0},
+    {"ResponseMessage", XLSP_SYM_CLASS, "type ResponseMessage", "Parsed HTTP/1.x response head and decoded body.", NULL, 0},
     {"MultipartBody", XLSP_SYM_CLASS, "type MultipartBody", "Built multipart/form-data payload and matching Content-Type.", NULL, 0},
     {"FormData", XLSP_SYM_CLASS, "type FormData", "Explicit multipart/form-data builder.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 54
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 58
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
