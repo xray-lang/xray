@@ -3198,6 +3198,11 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
+    } else if (strcmp(bn, "chr") == 0) {
+        XR_DCHECK(v->nargs >= 1, "builtin chr: need arg");
+        fprintf(out, "xrt_chr(");
+        emit_boxed_value_ref(out, v->args[0]);
+        fprintf(out, ")");
     } else if (strcmp(bn, "iter_new") == 0) {
         XR_DCHECK(v->nargs >= 1, "builtin iter_new: need arg");
         fprintf(out, "xrt_method_0(");

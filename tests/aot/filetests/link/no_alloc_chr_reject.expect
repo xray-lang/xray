@@ -1,0 +1,4 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_chr_reject' allocates via builtin 'chr'
+contains=xray_no_alloc_chr_reject
+not_contains=CRASH
