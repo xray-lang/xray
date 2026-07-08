@@ -160,6 +160,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"response", XLSP_SYM_FUNCTION, "fn(status: int, body?: unknown): string", "Format a complete HTTP/1.1 response string.", NULL, 0},
     {"requestText", XLSP_SYM_FUNCTION, "fn(method: string, path: string, headers?: Json, body?: string, host?: string, stripSensitive?: bool): string?", "Format a complete HTTP/1.1 request string without performing I/O.", NULL, 0},
     {"parseResponseHead", XLSP_SYM_FUNCTION, "fn(raw: string, maxHeaders?: int): ResponseHead?", "Parse an HTTP/1.x response head without reading sockets.", NULL, 0},
+    {"parseRequestHead", XLSP_SYM_FUNCTION, "fn(raw: string, maxHeaders?: int): RequestHead?", "Parse an HTTP/1.x request head without reading sockets.", NULL, 0},
     {"parseChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int, maxTrailerHeaders?: int): ChunkedBody?", "Decode a complete Transfer-Encoding: chunked body.", NULL, 0},
     {"decodeChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int): string?", "Decode a chunked body and discard trailers.", NULL, 0},
     {"isRedirectStatus", XLSP_SYM_FUNCTION, "fn(status: int): bool", "True for HTTP redirect codes that carry Location.", NULL, 0},
@@ -176,10 +177,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"ResponseHead", XLSP_SYM_CLASS, "type ResponseHead", "Parsed HTTP/1.x response status line and headers.", NULL, 0},
     {"RedirectDecision", XLSP_SYM_CLASS, "type RedirectDecision", "Pure redirect control-plane result for the HTTP client.", NULL, 0},
     {"ChunkedBody", XLSP_SYM_CLASS, "type ChunkedBody", "Decoded Transfer-Encoding: chunked body and parsed trailers.", NULL, 0},
+    {"RequestHead", XLSP_SYM_CLASS, "type RequestHead", "Parsed HTTP/1.x request line and headers.", NULL, 0},
     {"MultipartBody", XLSP_SYM_CLASS, "type MultipartBody", "Built multipart/form-data payload and matching Content-Type.", NULL, 0},
     {"FormData", XLSP_SYM_CLASS, "type FormData", "Explicit multipart/form-data builder.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 52
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 54
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {

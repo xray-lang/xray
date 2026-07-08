@@ -1028,6 +1028,66 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "RequestHead",
+        .signature = "RequestHead",
+        .summary = "",
+    },
+    {
+        .name = "RequestHead.chunked",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "RequestHead.contentLength",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "RequestHead.getHeader",
+        .signature = "(name: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "RequestHead.getHeaders",
+        .signature = "(name: string): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "RequestHead.headerBytes",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "RequestHead.headerPairs",
+        .signature = ": Array<(string, string)>",
+        .summary = "",
+    },
+    {
+        .name = "RequestHead.headers",
+        .signature = ": Json",
+        .summary = "",
+    },
+    {
+        .name = "RequestHead.keepAlive",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "RequestHead.method",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "RequestHead.target",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "RequestHead.version",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
         .name = "ResponseHead",
         .signature = "ResponseHead",
         .summary = "",
@@ -1226,6 +1286,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "parseRequest",
         .signature = "(fd: int): Array<unknown>?",
         .summary = "Parse raw HTTP request data",
+    },
+    {
+        .name = "parseRequestHead",
+        .signature = "(raw: string, maxHeaders: int = 100): RequestHead?",
+        .summary = "",
     },
     {
         .name = "parseResponseHead",
@@ -5263,6 +5328,18 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RedirectDecision.method` | `: string` |  |\n"
             "| `RedirectDecision.stripSensitiveHeaders` | `: bool` |  |\n"
             "| `RedirectDecision.url` | `: string` |  |\n"
+            "| `RequestHead` | `RequestHead` |  |\n"
+            "| `RequestHead.chunked` | `: bool` |  |\n"
+            "| `RequestHead.contentLength` | `: int` |  |\n"
+            "| `RequestHead.getHeader` | `(name: string): string?` |  |\n"
+            "| `RequestHead.getHeaders` | `(name: string): Array<string>` |  |\n"
+            "| `RequestHead.headerBytes` | `: int` |  |\n"
+            "| `RequestHead.headerPairs` | `: Array<(string, string)>` |  |\n"
+            "| `RequestHead.headers` | `: Json` |  |\n"
+            "| `RequestHead.keepAlive` | `: bool` |  |\n"
+            "| `RequestHead.method` | `: string` |  |\n"
+            "| `RequestHead.target` | `: string` |  |\n"
+            "| `RequestHead.version` | `: string` |  |\n"
             "| `ResponseHead` | `ResponseHead` |  |\n"
             "| `ResponseHead.chunked` | `: bool` |  |\n"
             "| `ResponseHead.contentLength` | `: int` |  |\n"
@@ -5303,6 +5380,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.listen` | `(port: int): bool` | Start HTTP server accept loop |\n"
             "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
             "| `http.parseRequest` | `(fd: int): Array<unknown>?` | Parse raw HTTP request data |\n"
+            "| `http.parseRequestHead` | `(raw: string, maxHeaders: int = 100): RequestHead?` |  |\n"
             "| `http.parseResponseHead` | `(raw: string, maxHeaders: int = 100): ResponseHead?` |  |\n"
             "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?` |  |\n"
             "| `http.post` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP POST request |\n"

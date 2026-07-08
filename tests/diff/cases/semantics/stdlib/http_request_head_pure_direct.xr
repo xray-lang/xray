@@ -1,0 +1,36 @@
+// Pure-Xray HTTP request head parser for future server dispatch.
+import http
+import { parseRequestHead } from http
+
+var raw = "post /submit?q=1 HTTP/1.1\r\n" +
+    "Host: example.com\r\n" +
+    "Content-Length: 5\r\n" +
+    "Transfer-Encoding: gzip, chunked\r\n" +
+    "X-Trace: one\r\n" +
+    "X-Trace: two\r\n\r\nhello"
+
+var head = parseRequestHead(raw)!
+print(head.method)
+print(head.target)
+print(head.version)
+print(head.contentLength)
+print(head.chunked)
+print(head.keepAlive)
+print(head.getHeader("host")!)
+print(head.getHeaders("x-trace").join("|"))
+print(Json.get(head.headers, "X-Trace", ""))
+print(raw.slice(head.headerBytes))
+
+var absolute = parseRequestHead("GET http://example.com/a HTTP/1.1\r\nHost: proxy\r\n\r\n")!
+print(absolute.target)
+
+var old = parseRequestHead("GET / HTTP/1.0\r\nConnection: keep-alive\r\n\r\n")!
+print(old.keepAlive)
+
+print(parseRequestHead("BAD METHOD / HTTP/1.1\r\n\r\n") == null)
+print(parseRequestHead("GET /bad path HTTP/1.1\r\n\r\n") == null)
+print(parseRequestHead("GET / HTTP/2\r\n\r\n") == null)
+print(parseRequestHead("GET / HTTP/1.1\r\nBad Name: x\r\n\r\n") == null)
+print(parseRequestHead("GET / HTTP/1.1\r\nContent-Length: 5\r\nContent-Length: 6\r\n\r\n") == null)
+print(parseRequestHead("GET / HTTP/1.1\r\nA: 1\r\nB: 2\r\n\r\n", 1) == null)
+print(http.parseRequestHead("HEAD / HTTP/1.1\r\n\r\n")!.method)
