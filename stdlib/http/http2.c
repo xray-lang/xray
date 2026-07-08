@@ -995,7 +995,6 @@ int xr_h2_send_settings(XrH2Conn *conn) {
         .length = payload_len, .type = XR_H2_FRAME_SETTINGS, .flags = 0, .stream_id = 0};
     xr_h2_write_frame_header(frame, &header);
 
-    conn->settings_sent = true;
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + payload_len);
 }
 
@@ -1224,7 +1223,7 @@ int xr_h2_recv(XrH2Conn *conn) {
     switch (header.type) {
         case XR_H2_FRAME_SETTINGS:
             if (header.flags & XR_H2_FLAG_ACK) {
-                conn->settings_acked = true;
+                break;
             } else {
                 // Parse SETTINGS
                 for (uint32_t i = 0; i + 6 <= header.length; i += 6) {
@@ -1336,7 +1335,6 @@ int xr_h2_recv(XrH2Conn *conn) {
         }
 
         case XR_H2_FRAME_GOAWAY:
-            conn->goaway_received = true;
             break;
 
         case XR_H2_FRAME_PING:
@@ -1354,7 +1352,6 @@ int xr_h2_recv(XrH2Conn *conn) {
             XrH2Stream *stream = xr_h2_get_stream(conn, header.stream_id);
             if (stream) {
                 stream->state = XR_H2_STREAM_STATE_CLOSED;
-                stream->cancelled = true;
             }
             break;
         }
@@ -1528,7 +1525,6 @@ int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode err
     payload[6] = (error >> 8) & 0xFF;
     payload[7] = error & 0xFF;
 
-    conn->goaway_sent = true;
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + 8);
 }
 
