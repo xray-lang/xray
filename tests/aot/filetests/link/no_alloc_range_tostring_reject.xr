@@ -1,0 +1,6 @@
+@no_alloc
+fn xray_no_alloc_range_tostring_reject(value: Range) -> string {
+    return value.toString()
+}
+
+print(xray_no_alloc_range_tostring_reject(1..4))

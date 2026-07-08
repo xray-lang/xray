@@ -1,0 +1,6 @@
+@no_alloc
+fn xray_no_alloc_range_toarray_reject(value: Range) -> int {
+    return value.toArray().length
+}
+
+print(xray_no_alloc_range_toarray_reject(1..4))
