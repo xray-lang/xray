@@ -360,7 +360,7 @@ void xr_cluster_node_free(XrClusterNode *node) {
      *      the writer loop's early checks on node->conn bail out.
      *   4. Spin-wait (bounded) for writer_exited. If the writer was
      *      never spawned (e.g. failed start_writer, or a pre-connect
-     *      free path from cluster_join / reconnect), writer_exited
+     *      free path from cluster_join), writer_exited
      *      stays false but writer_running is already false, so the
      *      wait is a no-op aside from the bounded timeout.
      *   5. xr_outq_destroy — safe now because the writer has stopped
@@ -681,7 +681,7 @@ void xr_cluster_node_start_writer(XrClusterNode *node, XrVMRuntime *X) {
  * We therefore just exit the frame loop on disconnect, letting the
  * heartbeat thread garbage-collect the node. This also means outbound
  * sends that race with the disconnect will eventually notice the
- * writer coroutine failing and back off via the normal reconnect API.
+ * writer coroutine failing through the existing service/topic error path.
  */
 typedef struct XrReaderContext {
     struct XrCluster *cluster;

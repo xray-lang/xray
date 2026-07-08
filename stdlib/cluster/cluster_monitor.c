@@ -37,7 +37,7 @@
  *     that instant, the notification is DROPPED silently.
  *
  *   - This matters under "flap" scenarios: if the same peer goes
- *     down, reconnects, and dies again 9+ times before the script
+ *     down, rejoins, and dies again 9+ times before the script
  *     drained the channel, the 10th death event is lost. In
  *     practice applications drain the channel in a tight loop from
  *     a dedicated supervisor coroutine, so the window for overflow
