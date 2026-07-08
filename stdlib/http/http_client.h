@@ -65,19 +65,21 @@ typedef struct XrHttpReqContext {
 } XrHttpReqContext;
 
 typedef struct {
-    const char *url;        // Request URL
-    XrHttpMethod method;    // Request method
-    const char *body;       // Request body
-    size_t body_len;        // Request body length
-    XrHttpHeader *headers;  // Custom headers
-    int header_count;       // Header count
-    int timeout_ms;         // Timeout (milliseconds)
-    bool follow_redirects;  // Follow redirects
-    int max_redirects;      // Max redirect count
-    XrHttpReqContext *ctx;  // Request context (optional)
-    bool use_http2;         // Force HTTP/2
-    bool keep_alive;        // Use Keep-Alive
-    bool stream;            // Stream mode: return headers only, read body later
+    const char *url;          // Request URL
+    XrHttpMethod method;      // Request method
+    const char *method_name;  // Optional normalized method token
+    size_t method_name_len;   // Length of method_name
+    const char *body;         // Request body
+    size_t body_len;          // Request body length
+    XrHttpHeader *headers;    // Custom headers
+    int header_count;         // Header count
+    int timeout_ms;           // Timeout (milliseconds)
+    bool follow_redirects;    // Follow redirects
+    int max_redirects;        // Max redirect count
+    XrHttpReqContext *ctx;    // Request context (optional)
+    bool use_http2;           // Force HTTP/2
+    bool keep_alive;          // Use Keep-Alive
+    bool stream;              // Stream mode: return headers only, read body later
 } XrHttpRequestConfig;
 
 /* ========== HTTP Response Result ========== */

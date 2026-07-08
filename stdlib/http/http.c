@@ -38,6 +38,7 @@
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xjson.h"
+#include <ctype.h>
 #include "../../src/runtime/closure/xclosure.h"
 #include "../../src/runtime/mem/xfixed_heap.h"
 #include "../../src/base/xmalloc.h"
@@ -124,6 +125,35 @@ static int64_t get_json_int(XrVMRuntime *X, XrJson *json, const char *key, int64
     if (XR_IS_FLOAT(val))
         return (int64_t) XR_TO_FLOAT(val);
     return default_val;
+}
+
+static char *normalize_http_method_token(const char *method, size_t method_len) {
+    if (!method)
+        return NULL;
+
+    size_t start = 0;
+    while (start < method_len && (method[start] == ' ' || method[start] == '\t'))
+        start++;
+    size_t end = method_len;
+    while (end > start && (method[end - 1] == ' ' || method[end - 1] == '\t'))
+        end--;
+    if (end <= start)
+        return NULL;
+
+    size_t len = end - start;
+    char *out = (char *) xr_malloc(len + 1);
+    if (!out)
+        return NULL;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char) method[start + i];
+        if (c <= 32 || c == 127) {
+            xr_free(out);
+            return NULL;
+        }
+        out[i] = (char) toupper(c);
+    }
+    out[len] = '\0';
+    return out;
 }
 
 // Convert HTTP result to xray Json
@@ -342,12 +372,26 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
     XrHttpRequestConfig config;
     xr_http_request_config_init(&config);
     config.url = url_copy;
+    char *method_name = NULL;
 
     // Get method
     size_t method_len;
     const char *method = get_json_string(X, options, "method", &method_len);
     if (method && method_len > 0) {
-        config.method = xr_http_method_from_string(method, method_len);
+        method_name = normalize_http_method_token(method, method_len);
+        if (!method_name) {
+            XrHttpResult result;
+            memset(&result, 0, sizeof(result));
+            result.error = XR_HTTP_ERR_PARSE;
+            result.error_msg = xr_strdup("Invalid HTTP method");
+            XrValue ret = result_to_json(X, &result);
+            xr_http_result_free(&result);
+            URL_COPY_END();
+            return ret;
+        }
+        config.method_name = method_name;
+        config.method_name_len = strlen(method_name);
+        config.method = xr_http_method_from_string(method_name, config.method_name_len);
     }
 
     // Get body
@@ -377,6 +421,7 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
                     (XrHttpHeader *) xr_malloc(sizeof(XrHttpHeader) * custom_header_count);
                 if (!custom_headers) {
                     URL_COPY_END();
+                    xr_free(method_name);
                     return xr_null();
                 }
 
@@ -409,6 +454,7 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
             custom_headers = (XrHttpHeader *) xr_malloc(sizeof(XrHttpHeader) * custom_header_count);
             if (!custom_headers) {
                 URL_COPY_END();
+                xr_free(method_name);
                 return xr_null();
             }
 
@@ -461,6 +507,7 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
             URL_COPY_END();
             if (custom_headers)
                 xr_free(custom_headers);
+            xr_free(method_name);
             return xr_null();
         }
         XrHttpResult *sr = (XrHttpResult *) xr_malloc(sizeof(XrHttpResult));
@@ -469,6 +516,7 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
             URL_COPY_END();
             if (custom_headers)
                 xr_free(custom_headers);
+            xr_free(method_name);
             return xr_null();
         }
         *sr = result;
@@ -509,6 +557,7 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
     URL_COPY_END();
     if (custom_headers)
         xr_free(custom_headers);
+    xr_free(method_name);
 
     return ret;
 }
