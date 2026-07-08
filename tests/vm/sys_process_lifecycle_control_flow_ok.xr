@@ -65,10 +65,28 @@ fn closePipeInTernary(flag: bool) {
     print(flag ? pipe!.close() : pipe!.close())
 }
 
+fn waitProcessInLinearLoop() {
+    var p = sys.Process.spawn("sh", ["-c", "exit 0"])
+    while (true) {
+        print(p!.wait())
+        break
+    }
+}
+
+fn closePipeInLinearLoop() {
+    var pipe = sys.Pipe.open()
+    while (true) {
+        print(pipe!.close())
+        break
+    }
+}
+
 closeProcessInTryOrCatch(false)
 closeProcessInMatch(1)
 closeProcessInSelect()
 closeProcessInTernary(true)
 closePipeInMatch(1)
 closePipeInTernary(false)
+waitProcessInLinearLoop()
+closePipeInLinearLoop()
 processLintCh.close()

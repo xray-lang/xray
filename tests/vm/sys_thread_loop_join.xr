@@ -1,0 +1,13 @@
+import sys
+
+fn loopJoin() {
+    var t = sys.Thread.spawn(fn() -> int {
+        return 42
+    })
+    while (true) {
+        print(t.join())
+        break
+    }
+}
+
+loopJoin()
