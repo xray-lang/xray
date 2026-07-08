@@ -150,6 +150,15 @@ enum {
     XG_BODY_MAY_CALL_NATIVE = 1u << 4,
 };
 
+enum {
+    XG_BODY_ESCAPE_RETURN = 1u << 0,
+    XG_BODY_ESCAPE_FIELD = 1u << 1,
+    XG_BODY_ESCAPE_CONTAINER = 1u << 2,
+    XG_BODY_ESCAPE_CORO = 1u << 3,
+    XG_BODY_ESCAPE_NATIVE = 1u << 4,
+    XG_BODY_ESCAPE_EXTERN = 1u << 5,
+};
+
 typedef struct XgBuildKey {
     uint64_t source_hash;
     uint64_t compiler_semver_hash;
@@ -313,6 +322,8 @@ XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
 XR_FUNC const char *xg_link_dependency_kind_name(uint8_t kind);
 XR_FUNC const char *xg_body_effect_name(uint32_t effect);
 XR_FUNC const uint32_t *xg_body_effect_catalog(uint32_t *out_count);
+XR_FUNC const char *xg_body_escape_name(uint32_t escape);
+XR_FUNC const uint32_t *xg_body_escape_catalog(uint32_t *out_count);
 XR_FUNC const char *xg_capability_name(uint32_t capability);
 XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count);
 XR_FUNC const char *xg_metadata_name(uint32_t metadata);
