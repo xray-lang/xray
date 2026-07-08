@@ -1,0 +1,6 @@
+@no_alloc
+fn xray_no_alloc_unknown_tostring_reject(value: unknown) -> string {
+    return value.toString()
+}
+
+print(xray_no_alloc_unknown_tostring_reject(42))
