@@ -57,16 +57,83 @@ static int proc_dup_stdio(const XrProcSpawnOptions *options) {
     return 0;
 }
 
+static bool proc_write_i64(int fd, int64_t value) {
+    const char *p = (const char *) &value;
+    size_t left = sizeof(value);
+    while (left > 0) {
+        ssize_t n = write(fd, p, left);
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            return false;
+        }
+        if (n == 0)
+            return false;
+        p += n;
+        left -= (size_t) n;
+    }
+    return true;
+}
+
+static bool proc_read_i64(int fd, int64_t *out) {
+    if (!out)
+        return false;
+    char *p = (char *) out;
+    size_t left = sizeof(*out);
+    while (left > 0) {
+        ssize_t n = read(fd, p, left);
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            return false;
+        }
+        if (n == 0)
+            return false;
+        p += n;
+        left -= (size_t) n;
+    }
+    return true;
+}
+
 XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
                           const XrProcSpawnOptions *options) {
     if (prog == NULL || argv == NULL || !proc_spawn_options_valid(options)) {
         return XR_PROC_INVALID;
     }
+    int detached_pipe[2] = {-1, -1};
+    bool detached = options && options->detached;
+    if (detached && pipe(detached_pipe) != 0)
+        return XR_PROC_INVALID;
+
     pid_t pid = fork();
     if (pid < 0) {
+        if (detached) {
+            close(detached_pipe[0]);
+            close(detached_pipe[1]);
+        }
         return XR_PROC_INVALID;
     }
     if (pid == 0) {
+        if (detached) {
+            close(detached_pipe[0]);
+            if (setsid() < 0) {
+                (void) proc_write_i64(detached_pipe[1], (int64_t) XR_PROC_INVALID);
+                close(detached_pipe[1]);
+                _exit(127);
+            }
+            pid_t grandchild = fork();
+            if (grandchild < 0) {
+                (void) proc_write_i64(detached_pipe[1], (int64_t) XR_PROC_INVALID);
+                close(detached_pipe[1]);
+                _exit(127);
+            }
+            if (grandchild > 0) {
+                (void) proc_write_i64(detached_pipe[1], (int64_t) grandchild);
+                close(detached_pipe[1]);
+                _exit(0);
+            }
+            close(detached_pipe[1]);
+        }
         // Child: exec, never returns on success.
         if (proc_dup_stdio(options) != 0) {
             _exit(127);
@@ -85,6 +152,20 @@ XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
         // the parent's wait observes the failure. 127 matches the
         // shell convention for "command not found".
         _exit(127);
+    }
+    if (detached) {
+        close(detached_pipe[1]);
+        int64_t detached_pid = (int64_t) XR_PROC_INVALID;
+        bool ok = proc_read_i64(detached_pipe[0], &detached_pid);
+        close(detached_pipe[0]);
+        int status = 0;
+        pid_t r;
+        do {
+            r = waitpid(pid, &status, 0);
+        } while (r < 0 && errno == EINTR);
+        if (!ok || r < 0 || detached_pid <= 0)
+            return XR_PROC_INVALID;
+        return (XrProcId) detached_pid;
     }
     return (XrProcId) pid;
 }

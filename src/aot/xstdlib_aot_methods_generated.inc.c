@@ -48,7 +48,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"sys", "__dylibSymbol", 2, "xrt_sys_dylib_symbol", "vs", CG_AOT_RET_VALUE, NULL},
     {"sys", "__dylibClose", 1, "xrt_sys_dylib_close", "v", CG_AOT_RET_VALUE, NULL},
     {"sys", "__dylibLastError", 0, "xrt_sys_dylib_last_error", "", CG_AOT_RET_VALUE, NULL},
-    {"sys", "__processSpawn", 8, "xrt_sys_process_spawn", "svvvvvvv", CG_AOT_RET_VALUE, NULL},
+    {"sys", "__processSpawn", 9, "xrt_sys_process_spawn", "svvvvvvvv", CG_AOT_RET_VALUE, NULL},
     {"sys", "__processWait", 1, "xrt_sys_process_wait", "v", CG_AOT_RET_VALUE, NULL},
     {"sys", "__processTryWait", 1, "xrt_sys_process_try_wait", "v", CG_AOT_RET_VALUE, NULL},
     {"sys", "__processKill", 2, "xrt_sys_process_kill", "vv", CG_AOT_RET_VALUE, NULL},

@@ -1024,11 +1024,54 @@ static inline XrValue xrt_sys_thread_local_id(void) {
     return XR_FROM_INT((int64_t) xr_thread_current_id());
 }
 
+#if !defined(XR_OS_WINDOWS)
+static inline bool xrt_sys_process_write_i64(int fd, int64_t value) {
+    const char *p = (const char *) &value;
+    size_t left = sizeof(value);
+    while (left > 0) {
+        ssize_t n = write(fd, p, left);
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            return false;
+        }
+        if (n == 0)
+            return false;
+        p += n;
+        left -= (size_t) n;
+    }
+    return true;
+}
+
+static inline bool xrt_sys_process_read_i64(int fd, int64_t *out) {
+    if (!out)
+        return false;
+    char *p = (char *) out;
+    size_t left = sizeof(*out);
+    while (left > 0) {
+        ssize_t n = read(fd, p, left);
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            return false;
+        }
+        if (n == 0)
+            return false;
+        p += n;
+        left -= (size_t) n;
+    }
+    return true;
+}
+#endif
+
 static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t program_len,
                                             XrValue args_value, XrValue cwd_value,
                                             XrValue env_keys_value, XrValue env_values_value,
                                             XrValue stdin_read_value, XrValue stdout_write_value,
-                                            XrValue stderr_write_value) {
+                                            XrValue stderr_write_value, XrValue detached_value) {
+    if (!XR_IS_BOOL(detached_value))
+        return XR_FROM_INT(-1);
+    bool detached = XR_TO_BOOL(detached_value);
     char **argv = xrt_sys_process_argv_from_array(program_data, program_len, args_value);
     if (!argv)
         return XR_FROM_INT(-1);
@@ -1103,7 +1146,8 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
         XRT_FREE(cwd);
         return XR_FROM_INT(-1);
     }
-    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, env_block,
+    DWORD create_flags = detached ? CREATE_NEW_PROCESS_GROUP : 0;
+    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, create_flags, env_block,
                              (cwd && cwd[0] != '\0') ? cwd : NULL, &si, &pi);
     xrt_sys_process_stdio_dup_close(&stdio_dup);
     XRT_FREE(env_block);
@@ -1114,16 +1158,52 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
     if (!ok)
         return XR_FROM_INT(-1);
     CloseHandle(pi.hThread);
+    if (detached) {
+        CloseHandle(pi.hProcess);
+        return XR_FROM_INT((int64_t) pi.dwProcessId);
+    }
     return XR_FROM_INT((int64_t) (intptr_t) pi.hProcess);
 #else
+    int detached_pipe[2] = {-1, -1};
+    if (detached && pipe(detached_pipe) != 0) {
+        xrt_sys_process_argv_free(argv);
+        xrt_sys_process_env_free(env_keys, env_values, env_count);
+        XRT_FREE(cwd);
+        return XR_FROM_INT(-1);
+    }
+
     pid_t pid = fork();
     if (pid < 0) {
+        if (detached) {
+            close(detached_pipe[0]);
+            close(detached_pipe[1]);
+        }
         xrt_sys_process_argv_free(argv);
         xrt_sys_process_env_free(env_keys, env_values, env_count);
         XRT_FREE(cwd);
         return XR_FROM_INT(-1);
     }
     if (pid == 0) {
+        if (detached) {
+            close(detached_pipe[0]);
+            if (setsid() < 0) {
+                (void) xrt_sys_process_write_i64(detached_pipe[1], -1);
+                close(detached_pipe[1]);
+                _exit(127);
+            }
+            pid_t grandchild = fork();
+            if (grandchild < 0) {
+                (void) xrt_sys_process_write_i64(detached_pipe[1], -1);
+                close(detached_pipe[1]);
+                _exit(127);
+            }
+            if (grandchild > 0) {
+                (void) xrt_sys_process_write_i64(detached_pipe[1], (int64_t) grandchild);
+                close(detached_pipe[1]);
+                _exit(0);
+            }
+            close(detached_pipe[1]);
+        }
         if ((has_stdin && dup2((int) stdin_read, STDIN_FILENO) < 0) ||
             (has_stdout && dup2((int) stdout_write, STDOUT_FILENO) < 0) ||
             (has_stderr && dup2((int) stderr_write, STDERR_FILENO) < 0)) {
@@ -1141,6 +1221,20 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
     xrt_sys_process_argv_free(argv);
     xrt_sys_process_env_free(env_keys, env_values, env_count);
     XRT_FREE(cwd);
+    if (detached) {
+        close(detached_pipe[1]);
+        int64_t detached_pid = -1;
+        bool ok = xrt_sys_process_read_i64(detached_pipe[0], &detached_pid);
+        close(detached_pipe[0]);
+        int status = 0;
+        pid_t r;
+        do {
+            r = waitpid(pid, &status, 0);
+        } while (r < 0 && errno == EINTR);
+        if (!ok || r < 0 || detached_pid <= 0)
+            return XR_FROM_INT(-1);
+        return XR_FROM_INT(detached_pid);
+    }
     return XR_FROM_INT((int64_t) pid);
 #endif
 }

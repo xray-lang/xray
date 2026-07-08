@@ -1256,12 +1256,12 @@ module sys {
   }
 
   fn __processSpawn {
-    signature: "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: int?, stdoutWrite: int?, stderrWrite: int?): int"
+    signature: "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: int?, stdoutWrite: int?, stderrWrite: int?, detached: bool): int"
     doc: "Spawn a process and return an opaque process handle token, or -1 on failure"
     vm: "sys_process_spawn"
     aot: "xrt_sys_process_spawn"
-    argc: 8
-    arg_spec: "svvvvvvv"
+    argc: 9
+    arg_spec: "svvvvvvvv"
     aot_direct: true
     link_object: false
     layer: "system"

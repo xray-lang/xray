@@ -1,0 +1,15 @@
+import sys
+import { ProcessOptions } from sys
+
+var p = sys.Process.spawn("sh", ["-c", "exit 0"],
+    ProcessOptions(null, null, null, null, null, true))
+print(p != null)
+if (p != null) {
+    print(p!.id > 0)
+    print(p!.wait())
+    print(p!.kill())
+}
+
+sys.Process.spawn("sh", ["-c", "exit 0"],
+    sys.ProcessOptions(null, null, null, null, null, true))
+print("detached-orphan-ok")

@@ -718,12 +718,12 @@ static bool sys_process_pipe_handle_from_optional(XrValue value, bool *out_has,
 
 static XrValue sys_process_spawn(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
-    if (argc < 8)
+    if (argc < 9)
         return xr_int((int64_t) XR_PROC_INVALID);
 
     const char *program = xrs_string_arg(args[0], NULL);
     if (!program || program[0] == '\0' || !XR_IS_ARRAY(args[1]) ||
-        (!XR_IS_NULL(args[2]) && !XR_IS_STRING(args[2])))
+        (!XR_IS_NULL(args[2]) && !XR_IS_STRING(args[2])) || !XR_IS_BOOL(args[8]))
         return xr_int((int64_t) XR_PROC_INVALID);
     const char *cwd = XR_IS_STRING(args[2]) ? xrs_string_arg(args[2], NULL) : NULL;
 
@@ -780,6 +780,7 @@ static XrValue sys_process_spawn(XrVMRuntime *isolate, XrValue *args, int argc) 
         .stdout_write = stdout_write,
         .has_stderr = has_stderr,
         .stderr_write = stderr_write,
+        .detached = XR_TO_BOOL(args[8]),
     };
     XrProcId pid = xr_proc_spawn_ex(program, argv, &options);
     sys_process_env_free(env_keys, env_values);
