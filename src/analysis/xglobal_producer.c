@@ -1523,7 +1523,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         if (target && (target->decl_flags & XG_DECL_EXTERN)) {
             bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
             bc->escape_bits |= XG_BODY_ESCAPE_EXTERN;
-            bc->capability_bits |= XG_CAP_EXTERN;
+            if ((target->decl_flags & XG_DECL_NAKED) == 0)
+                bc->capability_bits |= XG_CAP_EXTERN;
             row.kind = XG_CALL_EXTERN;
             row.method_id = (XgMethodId) callee_name_id;
             row.method_name_id = callee_name_id;
@@ -2364,6 +2365,7 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     XrAttribute *native_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_NATIVE);
     XrAttribute *c_export_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_C_EXPORT);
     XrAttribute *dylib_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_DYLIB);
+    XrAttribute *naked_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_NAKED);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
     decl.decl_id = decl_id;
@@ -2377,6 +2379,8 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
         decl.flags |= XG_DECL_EXTERN;
     if (c_export_attr)
         decl.flags |= XG_DECL_C_EXPORT;
+    if (naked_attr)
+        decl.flags |= XG_DECL_NAKED;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
     if (extern_attr && dylib_attr && dylib_attr->str_arg && dylib_attr->str_arg[0]) {

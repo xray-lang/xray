@@ -64,6 +64,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_ATTR_SECTION(name) __attribute__((section(name)))
 #define XRT_ATTR_WEAK __attribute__((weak))
 #define XRT_ATTR_USED __attribute__((used))
+#define XRT_ATTR_NAKED __attribute__((naked))
 #define XRT_RESTRICT __restrict__
 #elif defined(_MSC_VER)
 #define XR_LIKELY(x) (x)
@@ -76,6 +77,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_ATTR_SECTION(name)
 #define XRT_ATTR_WEAK
 #define XRT_ATTR_USED
+#define XRT_ATTR_NAKED
 #define XRT_RESTRICT __restrict
 #else
 #define XR_LIKELY(x) (x)
@@ -88,6 +90,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_ATTR_SECTION(name)
 #define XRT_ATTR_WEAK
 #define XRT_ATTR_USED
+#define XRT_ATTR_NAKED
 #define XRT_RESTRICT
 #endif
 

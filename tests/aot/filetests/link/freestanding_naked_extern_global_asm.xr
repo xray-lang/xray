@@ -1,0 +1,16 @@
+@naked
+@extern("C")
+fn xray_naked_stub()
+
+asm {
+    ".globl _xray_naked_stub"
+    "_xray_naked_stub:"
+    ".globl xray_naked_stub"
+    "xray_naked_stub:"
+    ".byte 0"
+}
+
+@c_export("xray_call_naked_stub")
+fn call_naked_stub() {
+    unsafe { xray_naked_stub() }
+}

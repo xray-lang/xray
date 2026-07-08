@@ -72,6 +72,15 @@ static XrAttribute *xa_function_attr(const FunctionDeclNode *fn, AttributeKind k
     return NULL;
 }
 
+static void xa_bind_param_default_exprs(XaInferContext *ctx, AstNode **defaults, int count) {
+    if (!ctx || !defaults || count <= 0)
+        return;
+    for (int i = 0; i < count; i++) {
+        if (defaults[i])
+            xa_visit_infer_expr(ctx, defaults[i]);
+    }
+}
+
 static bool xa_c_symbol_is_identifier(const char *name) {
     if (!name || !name[0])
         return false;
@@ -534,6 +543,45 @@ static void xa_validate_aot_symbol_attrs(XaInferContext *ctx, AstNode *node,
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
             "@weak requires @c_export so the weak symbol has a stable C name", &loc);
+    }
+}
+
+static void xa_validate_aot_naked_attr(XaInferContext *ctx, AstNode *node, XrAttribute *naked_attr,
+                                       XrAttribute *extern_attr, XrAttribute *dylib_attr,
+                                       XrAttribute *c_export_attr) {
+    if (!ctx || !ctx->analyzer || !naked_attr)
+        return;
+
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+
+    if (!xa_freestanding_profile_enabled(ctx->analyzer)) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@naked is only supported in freestanding AOT profile", &loc);
+        return;
+    }
+
+    if (!extern_attr) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "@naked requires @extern(\"C\") with implementation supplied by global asm or "
+            "target objects",
+            &loc);
+    }
+
+    if (c_export_attr) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "@naked cannot be combined with @c_export; declare the C symbol with @extern(\"C\")",
+            &loc);
+    }
+
+    if (dylib_attr) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "@naked cannot be combined with @dylib; freestanding naked symbols are linked "
+            "statically",
+            &loc);
     }
 }
 
@@ -1776,7 +1824,10 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     XrAttribute *c_export_attr = xa_function_attr(fn, ATTR_C_EXPORT);
     XrAttribute *section_attr = xa_function_attr(fn, ATTR_SECTION);
     XrAttribute *weak_attr = xa_function_attr(fn, ATTR_WEAK);
-    links->is_extern = xa_function_attr(fn, ATTR_EXTERN) != NULL;
+    XrAttribute *extern_attr = xa_function_attr(fn, ATTR_EXTERN);
+    XrAttribute *dylib_attr = xa_function_attr(fn, ATTR_DYLIB);
+    XrAttribute *naked_attr = xa_function_attr(fn, ATTR_NAKED);
+    links->is_extern = extern_attr != NULL;
     links->is_c_export = c_export_attr != NULL;
     links->c_export_symbol =
         c_export_attr && c_export_attr->str_arg ? xr_strdup(c_export_attr->str_arg) : NULL;
@@ -1786,6 +1837,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         xa_validate_c_export_function_abi(ctx, node, fn, sym, param_types, return_type,
                                           c_export_attr, links->is_extern);
     xa_validate_aot_symbol_attrs(ctx, node, section_attr, weak_attr, c_export_attr);
+    xa_validate_aot_naked_attr(ctx, node, naked_attr, extern_attr, dylib_attr, c_export_attr);
 
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);
@@ -1798,6 +1850,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         if (defs) {
             for (int i = 0; i < fn->param_count; i++)
                 defs[i] = fn->params[i] ? fn->params[i]->default_value : NULL;
+            xa_bind_param_default_exprs(ctx, defs, fn->param_count);
             xa_symbol_links_set_param_defaults(links, defs, fn->param_count);
             xr_free(defs);
         }
@@ -3109,6 +3162,7 @@ skip_layout:
 
             XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
             method_links->type = method_type;
+            method_links->file_path = ctx->file_path;
 
             // Store parameter info for LSP
             xa_symbol_links_set_function_sig(method_links, param_types, param_names,
@@ -3117,9 +3171,11 @@ skip_layout:
                                                      md->param_count, ret_type, md->body, info);
             // Record method/constructor default expressions for caller-side
             // default filling (methods store defaults in md->default_values).
-            if (md->param_count > 0)
+            if (md->param_count > 0) {
+                xa_bind_param_default_exprs(ctx, md->default_values, md->param_count);
                 xa_symbol_links_set_param_defaults(method_links, md->default_values,
                                                    md->param_count);
+            }
 
             // Store generic type parameters for the method.  Method-level
             // constraints aren't tracked in the method-decl AST yet, so the

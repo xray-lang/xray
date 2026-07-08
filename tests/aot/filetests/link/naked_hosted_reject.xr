@@ -1,0 +1,9 @@
+@naked
+@extern("C")
+fn xray_naked_stub()
+
+fn answer() -> int {
+    return 42
+}
+
+print(answer())

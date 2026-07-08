@@ -276,6 +276,8 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
         attr->kind = ATTR_WEAK;
     } else if (name_token.length == 4 && memcmp(name_token.start, "used", 4) == 0) {
         attr->kind = ATTR_USED;
+    } else if (name_token.length == 5 && memcmp(name_token.start, "naked", 5) == 0) {
+        attr->kind = ATTR_NAKED;
     } else if (name_token.length == 8 && memcmp(name_token.start, "no_alloc", 8) == 0) {
         attr->kind = ATTR_NO_ALLOC;
     } else if (name_token.length == 6 && memcmp(name_token.start, "derive", 6) == 0) {
@@ -385,6 +387,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
 
     bool is_native = attrs_has(attributes, attr_count, ATTR_NATIVE);
     bool is_c_export = attrs_has(attributes, attr_count, ATTR_C_EXPORT);
+    bool is_naked = attrs_has(attributes, attr_count, ATTR_NAKED);
     bool is_no_alloc = attrs_has(attributes, attr_count, ATTR_NO_ALLOC);
     bool has_symbol_layout_attr = attrs_has_symbol_layout_attr(attributes, attr_count);
     uint32_t derive_flags = attrs_derive_flags(attributes, attr_count);
@@ -400,6 +403,14 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     }
     if (is_no_alloc && !xr_parser_check(parser, TK_FN)) {
         xr_parser_error(parser, "@no_alloc can only annotate a function");
+        return NULL;
+    }
+    if (is_naked && !xr_parser_check(parser, TK_FN)) {
+        xr_parser_error(parser, "@naked can only annotate a function");
+        return NULL;
+    }
+    if (is_naked && parser->scope_depth > 0) {
+        xr_parser_error(parser, "@naked can only annotate a module-level function");
         return NULL;
     }
 

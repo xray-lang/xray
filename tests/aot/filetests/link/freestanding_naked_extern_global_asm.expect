@@ -1,0 +1,9 @@
+args=--profile freestanding
+contains=xaot-plan v0
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=extern XRT_ATTR_NAKED void xr_ffi_xray_naked_stub(void) __asm__(XR_FFI_ASMNAME("xray_naked_stub"));
+c_contains=__asm__(
+c_contains=xray_naked_stub
+c_contains=xray_call_naked_stub
+c_not_contains=#include "xrt.h"
+not_contains=xray_core

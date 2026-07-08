@@ -3398,8 +3398,8 @@ static const XiFunc *cg_no_alloc_call_target(XiCgenCtx *ctx, const XiFunc *curre
 }
 
 static int cg_no_alloc_hof_callback_arg_index(const XiValue *call) {
-    if (!call || !call->aux ||
-        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) || call->nargs < 2)
+    if (!call || !call->aux || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
+        call->nargs < 2)
         return -1;
     const XiValue *receiver = call->args[0];
     const XrType *receiver_type = receiver ? receiver->type : NULL;
@@ -6654,7 +6654,7 @@ static void emit_func_attr_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f)
 }
 
 static bool cg_func_attrs_apply_to_internal(const XiFunc *f) {
-    return f && !f->c_export && (f->aot_section || f->aot_used);
+    return f && !f->c_export && (f->aot_section || f->aot_used || f->aot_naked);
 }
 
 static void emit_aot_symbol_attrs(FILE *out, const XiFunc *f, bool c_export_wrapper) {
@@ -6669,6 +6669,8 @@ static void emit_aot_symbol_attrs(FILE *out, const XiFunc *f, bool c_export_wrap
         fprintf(out, "XRT_ATTR_WEAK ");
     if (f->aot_used)
         fprintf(out, "XRT_ATTR_USED ");
+    if (f->aot_naked)
+        fprintf(out, "XRT_ATTR_NAKED ");
 }
 
 static void emit_cfn_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -7335,6 +7337,8 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
          * mismatch with system prototypes (e.g. size_t vs uint64_t), while still
          * calling the exact symbol. */
         fprintf(out, "extern ");
+        if (f->aot_naked)
+            fprintf(out, "XRT_ATTR_NAKED ");
         if (ret_ptr)
             fprintf(out, "%s", ret_ptr);
         else if (!emit_class_native_return_type(ctx, out, prefix, f))
