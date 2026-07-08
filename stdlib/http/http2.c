@@ -902,42 +902,6 @@ void xr_h2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header) {
 
 /* ========== HTTP/2 Connection ========== */
 
-XrH2Conn *xr_h2_conn_new_client(int fd, void *tls_conn) {
-    XrH2Conn *conn = (XrH2Conn *) xr_calloc(1, sizeof(XrH2Conn));
-    if (!conn)
-        return NULL;
-
-    conn->fd = fd;
-    conn->tls_conn = tls_conn;
-    conn->is_client = true;
-    conn->next_stream_id = 1;  // Client uses odd stream IDs
-    conn->connection_window = XR_H2_DEFAULT_INITIAL_WINDOW_SIZE;
-
-    // Default settings
-    conn->local_settings[XR_H2_SETTINGS_HEADER_TABLE_SIZE] = XR_H2_DEFAULT_HEADER_TABLE_SIZE;
-    conn->local_settings[XR_H2_SETTINGS_ENABLE_PUSH] = 0;  // Client disables push
-    conn->local_settings[XR_H2_SETTINGS_MAX_CONCURRENT_STREAMS] =
-        XR_H2_DEFAULT_MAX_CONCURRENT_STREAMS;
-    conn->local_settings[XR_H2_SETTINGS_INITIAL_WINDOW_SIZE] = XR_H2_DEFAULT_INITIAL_WINDOW_SIZE;
-    conn->local_settings[XR_H2_SETTINGS_MAX_FRAME_SIZE] = XR_H2_DEFAULT_MAX_FRAME_SIZE;
-
-    memcpy(conn->remote_settings, conn->local_settings, sizeof(conn->local_settings));
-
-    // Initialize HPACK tables
-    xr_hpack_init(&conn->encoder_table, XR_H2_DEFAULT_HEADER_TABLE_SIZE);
-    xr_hpack_init(&conn->decoder_table, XR_H2_DEFAULT_HEADER_TABLE_SIZE);
-
-    // Allocate receive buffer
-    conn->recv_cap = 16384;
-    conn->recv_buf = (char *) xr_malloc(conn->recv_cap);
-    if (!conn->recv_buf) {
-        xr_free(conn);
-        return NULL;
-    }
-
-    return conn;
-}
-
 void xr_h2_conn_free(XrH2Conn *conn) {
     if (!conn)
         return;

@@ -105,12 +105,6 @@ static void h2_server_conn_pool_destroy(XrH2Server *server) {
     }
 }
 
-static XR_UNUSED XrH2FastConn *h2_conn_get(XrH2Server *server, int fd) {
-    if (fd < 0 || fd >= server->conn_pool.size)
-        return NULL;
-    return &server->conn_pool.conns[fd];
-}
-
 static void h2_conn_reset(XrH2FastConn *conn) {
     conn->recv_len = 0;
     conn->preface_received = false;
@@ -343,8 +337,6 @@ static void handle_accept(XrH2Server *server) {
             conn->state = H2_CONN_PREFACE;
         }
 
-        server->connection_count++;
-
 #ifdef XR_USE_KQUEUE
         struct kevent ev;
         EV_SET(&ev, fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, conn);
@@ -470,11 +462,8 @@ XrH2Server *xr_h2_server_new(const XrH2ServerConfig *config) {
         return NULL;
 
     server->config = *config;
-    server->max_connections = config->max_connections;
     server->listen_fd = -1;
     server->event_fd = -1;
-
-    xr_mutex_init(&server->conn_lock);
 
     // Create TLS context
     if (config->cert_file && config->key_file) {
@@ -487,7 +476,7 @@ XrH2Server *xr_h2_server_new(const XrH2ServerConfig *config) {
     }
 
     // Initialize connection pool
-    h2_server_conn_pool_init(server, server->max_connections);
+    h2_server_conn_pool_init(server, config->max_connections);
 
     return server;
 }
@@ -497,8 +486,6 @@ void xr_h2_server_free(XrH2Server *server) {
         return;
 
     xr_h2_server_stop(server);
-
-    xr_mutex_destroy(&server->conn_lock);
 
     h2_server_conn_pool_destroy(server);
 
