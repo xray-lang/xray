@@ -3364,15 +3364,15 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         fprintf(out,
                 "global-evidence profile=%s hash=%016" PRIx64
                 " decls=%u classes=%u methods=%u interface_impls=%u interface_extends=%u "
-                "interface_methods=%u bodies=%u callsites=%u link_deps=%u\n",
+                "interface_methods=%u bodies=%u callsites=%u link_deps=%u generic_insts=%u\n",
                 xg_build_profile_name(bundle->global_evidence_plan.profile),
                 bundle->global_evidence_plan.evidence_hash, ev->ndecls, ev->nclasses, ev->nmethods,
                 ev->ninterface_impls, ev->ninterface_extends, ev->ninterface_methods, ev->nbodies,
-                ev->ncallsites, ev->nlink_deps);
+                ev->ncallsites, ev->nlink_deps, ev->ngeneric_insts);
     } else {
         fprintf(out, "global-evidence profile=none hash=0000000000000000 decls=0 classes=0 "
                      "methods=0 interface_impls=0 interface_extends=0 interface_methods=0 bodies=0 "
-                     "callsites=0 link_deps=0\n");
+                     "callsites=0 link_deps=0 generic_insts=0\n");
     }
     for (mi = 0; mi < bundle->nmodules; mi++) {
         const XiModule *mod = bundle->modules ? bundle->modules[mi] : NULL;
