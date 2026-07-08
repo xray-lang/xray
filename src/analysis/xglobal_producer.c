@@ -225,6 +225,21 @@ static uint32_t hash_tref_list32(XrTypeRef **type_args, int type_arg_count) {
     return folded ? folded : 1;
 }
 
+static uint32_t hash_name_list32(const char **names, int name_count) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    if (!names || name_count <= 0)
+        return 0;
+    h = fold_u64(h, (uint64_t) name_count);
+    for (int i = 0; i < name_count; i++) {
+        if (names[i])
+            h = fold_bytes(h, names[i], strlen(names[i]));
+        else
+            h = fold_u64(h, 0);
+    }
+    uint32_t folded = (uint32_t) (h ^ (h >> 32));
+    return folded ? folded : 1;
+}
+
 static uint32_t hash_generic_inst_type_key(const char *name, XrTypeRef **type_args,
                                            int type_arg_count, uint8_t kind) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
@@ -234,6 +249,23 @@ static uint32_t hash_generic_inst_type_key(const char *name, XrTypeRef **type_ar
     h = fold_u64(h, (uint64_t) type_arg_count);
     for (int i = 0; i < type_arg_count; i++)
         h = hash_tref(h, type_args ? type_args[i] : NULL);
+    uint32_t folded = (uint32_t) (h ^ (h >> 32));
+    return folded ? folded : 1;
+}
+
+static uint32_t hash_generic_inst_name_type_key(const char *name, const char **type_arg_names,
+                                                int type_arg_count, uint8_t kind) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h = fold_u64(h, kind);
+    if (name)
+        h = fold_bytes(h, name, strlen(name));
+    h = fold_u64(h, (uint64_t) type_arg_count);
+    for (int i = 0; i < type_arg_count; i++) {
+        if (type_arg_names && type_arg_names[i])
+            h = fold_bytes(h, type_arg_names[i], strlen(type_arg_names[i]));
+        else
+            h = fold_u64(h, 0);
+    }
     uint32_t folded = (uint32_t) (h ^ (h >> 32));
     return folded ? folded : 1;
 }
@@ -2545,6 +2577,39 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
                                  XG_BODY_FUNCTION, fn->body, NULL, fn);
 }
 
+static bool add_monomorphized_class_instantiation(XgProducer *p, XgModuleId module_id,
+                                                  const AstNode *node, const ClassDeclNode *cls,
+                                                  XgClassId specialized_class_id) {
+    XgGenericInstSummary inst;
+    XgClassId origin_class_id;
+    const char *origin_name;
+    if (!p || !p->evidence || !cls || !cls->is_monomorphized || !cls->generic_origin_name ||
+        cls->mono_type_arg_count <= 0 || !cls->mono_type_arg_names)
+        return true;
+
+    origin_name = cls->generic_origin_name;
+    origin_class_id = producer_lookup_class(p, origin_name);
+
+    memset(&inst, 0, sizeof(inst));
+    inst.generic_inst_id = (XgGenericInstId) (p->evidence->ngeneric_insts + 1);
+    inst.module_id = module_id;
+    inst.origin_class_id = origin_class_id;
+    inst.origin_decl_id =
+        origin_class_id != XG_NO_ID ? producer_lookup_class_decl_id(p, origin_class_id) : XG_NO_ID;
+    inst.specialized_class_id = specialized_class_id;
+    inst.name_id = hash_name32(origin_name);
+    inst.type_key = hash_generic_inst_name_type_key(
+        origin_name, cls->mono_type_arg_names, cls->mono_type_arg_count, XG_GENERIC_INST_CLASS);
+    inst.type_arg_key_start = hash_name_list32(cls->mono_type_arg_names, cls->mono_type_arg_count);
+    inst.type_arg_count =
+        (uint16_t) (cls->mono_type_arg_count < UINT16_MAX ? cls->mono_type_arg_count : UINT16_MAX);
+    inst.source_span_id = node ? (uint32_t) node->line : 0;
+    inst.kind = XG_GENERIC_INST_CLASS;
+    inst.flags = XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_SPECIALIZED_ABI |
+                 XG_GENERIC_INST_CONCRETE_STORAGE;
+    return xg_global_evidence_add_generic_inst(p->evidence, &inst) != NULL;
+}
+
 static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNode *node,
                                 XgDeclKind kind) {
     const ClassDeclNode *cls = node->type == AST_CLASS_DECL    ? &node->as.class_decl
@@ -2632,6 +2697,8 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             return false;
     }
     if (!xg_global_evidence_add_class(p->evidence, &csum))
+        return false;
+    if (!add_monomorphized_class_instantiation(p, module_id, node, cls, class_id))
         return false;
     return producer_register_class(p, cls->name, cls->super_name, class_id,
                                    p->evidence->nclasses - 1);

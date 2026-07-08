@@ -1,0 +1,18 @@
+class Box<T> {
+    value: T
+
+    constructor(value: T) {
+        this.value = value
+    }
+
+    get() -> T {
+        return this.value
+    }
+}
+
+fn wrapper() -> int {
+    var box = Box<int>(7)
+    return box.get()
+}
+
+print(wrapper())

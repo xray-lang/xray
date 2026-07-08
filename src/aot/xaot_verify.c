@@ -799,6 +799,12 @@ static bool verify_generic_inst_rows(const XgGlobalEvidence *ev, char *errbuf, s
         if (inst->origin_class_id != XG_NO_ID &&
             !verify_find_evidence_class(ev, inst->origin_class_id))
             return set_error(errbuf, errbuf_len, "AOT generic inst origin class is missing");
+        if (inst->specialized_func_id != XG_NO_ID &&
+            !verify_find_evidence_body_by_func(ev, inst->specialized_func_id))
+            return set_error(errbuf, errbuf_len, "AOT generic inst specialized body is missing");
+        if (inst->specialized_class_id != XG_NO_ID &&
+            !verify_find_evidence_class(ev, inst->specialized_class_id))
+            return set_error(errbuf, errbuf_len, "AOT generic inst specialized class is missing");
         if (inst->root_callsite_id != XG_NO_ID &&
             !verify_find_evidence_callsite(ev, inst->root_callsite_id))
             return set_error(errbuf, errbuf_len, "AOT generic inst root callsite is missing");
@@ -811,8 +817,7 @@ static bool verify_generic_inst_rows(const XgGlobalEvidence *ev, char *errbuf, s
             return set_error(errbuf, errbuf_len,
                              "AOT generic inst interface constraint is missing");
         if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0 &&
-            (inst->specialized_func_id == XG_NO_ID ||
-             !verify_find_evidence_body_by_func(ev, inst->specialized_func_id)))
+            inst->specialized_func_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT generic inst specialized body is missing");
         if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_ABI) != 0 &&
             inst->specialized_func_id == XG_NO_ID && inst->specialized_class_id == XG_NO_ID)
