@@ -349,8 +349,6 @@ static void xr_stdlib_vm_bind_ws_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "ping", ws_ping);
     XRS_EXPORT(module, isolate, "state", ws_state);
     XRS_EXPORT(module, isolate, "isOpen", ws_is_open);
-    XRS_EXPORT_YIELDABLE(module, isolate, "recvData", ws_recvdata);
-    XRS_EXPORT_YIELDABLE(module, isolate, "sendData", ws_send_yieldable);
     XRS_EXPORT_YIELDABLE(module, isolate, "serve", ws_serve_yieldable);
     XRS_EXPORT(module, isolate, "stopServer", ws_stop_server);
     XRS_EXPORT(module, isolate, "isServerRunning", ws_is_server_running);

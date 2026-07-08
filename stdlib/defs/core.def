@@ -3644,30 +3644,6 @@ module ws {
     layer: "runtime"
   }
 
-  fn recvData {
-    signature: "(conn: WsConn, timeout?: int?): string?"
-    doc: "High-performance recv returning data string directly (no Json wrapper)"
-    vm: "ws_recvdata"
-    vm_binding: "yieldable"
-    argc: 2
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn sendData {
-    signature: "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool"
-    doc: "Send data over WebSocket connection"
-    vm: "ws_send_yieldable"
-    vm_binding: "yieldable"
-    argc: 3
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn serve {
     signature: "(port: int, handler: fn(conn: WsConn): ()): bool"
     doc: "Start WebSocket server"

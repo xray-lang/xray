@@ -3656,17 +3656,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "Receive data from WebSocket connection",
     },
     {
-        .name = "recvData",
-        .signature = "(conn: WsConn, timeout?: int?): string?",
-        .summary = "High-performance recv returning data string directly (no Json wrapper)",
-    },
-    {
         .name = "send",
-        .signature = "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool",
-        .summary = "Send data over WebSocket connection",
-    },
-    {
-        .name = "sendData",
         .signature = "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool",
         .summary = "Send data over WebSocket connection",
     },
@@ -6369,9 +6359,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.pongFrame` | `(data: Bytes? = null, mask: bool = true): Bytes` |  |\n"
             "| `ws.randomKey` | `(): string` |  |\n"
             "| `ws.recv` | `(conn: WsConn, timeout?: int?): WsMessage?` | Receive data from WebSocket connection |\n"
-            "| `ws.recvData` | `(conn: WsConn, timeout?: int?): string?` | High-performance recv returning data string directly (no Json wrapper) |\n"
             "| `ws.send` | `(conn: WsConn, data: string \\| Array<uint8>, binary?: bool?): bool` | Send data over WebSocket connection |\n"
-            "| `ws.sendData` | `(conn: WsConn, data: string \\| Array<uint8>, binary?: bool?): bool` | Send data over WebSocket connection |\n"
             "| `ws.serve` | `(port: int, handler: fn(conn: WsConn): ()): bool` | Start WebSocket server |\n"
             "| `ws.state` | `(conn: WsConn): string` | Get connection state |\n"
             "| `ws.stopServer` | `(): ()` | Stop the WebSocket server |\n"
