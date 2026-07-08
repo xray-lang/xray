@@ -40,6 +40,20 @@ class ParsedFrame {
     }
 }
 
+class WsUrl {
+    secure: bool
+    host: string
+    port: int
+    path: string
+
+    constructor(secure: bool, host: string, port: int, path: string) {
+        this.secure = secure
+        this.host = host
+        this.port = port
+        this.path = path
+    }
+}
+
 fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
     if (pos < 0 || pos + prefix.length > s.length) { return false }
     for (var i = 0; i < prefix.length; i++) {
@@ -96,6 +110,24 @@ fn _hexBytes(hex: string) -> Bytes? {
         i = i + 2
     }
     return out
+}
+
+fn _isDigit(c: string) -> bool {
+    var n = c.ord()!
+    return n >= 48 && n <= 57
+}
+
+fn _parsePort(s: string, start: int, end: int) -> int {
+    if (start >= end) { return -1 }
+    var n = 0
+    for (var i = start; i < end; i++) {
+        var c = s.charAt(i)
+        if (!_isDigit(c)) { return -1 }
+        n = n * 10 + (c.ord()! - 48)
+        if (n > 65535) { return -1 }
+    }
+    if (n <= 0) { return -1 }
+    return n
 }
 
 fn _randomBytes(n: int) -> Bytes {
@@ -193,6 +225,70 @@ fn clientRequest(path: string, host: string, secKey: string) -> string {
         "Connection: Upgrade\r\n" +
         "Sec-WebSocket-Key: " + secKey + "\r\n" +
         "Sec-WebSocket-Version: 13\r\n\r\n"
+}
+
+fn parseUrl(url: string) -> WsUrl? {
+    if (_indexOfFrom(url, "#", 0) >= 0) { return null }
+
+    var secure = false
+    var pos = 0
+    var lower = url.toLowerCase()
+    if (_startsWithAt(lower, 0, "wss://")) {
+        secure = true
+        pos = 6
+    } else if (_startsWithAt(lower, 0, "ws://")) {
+        pos = 5
+    } else {
+        return null
+    }
+
+    var host = ""
+    if (pos < url.length && url.charAt(pos) == "[") {
+        var endBracket = _indexOfFrom(url, "]", pos + 1)
+        if (endBracket < 0 || endBracket == pos + 1) { return null }
+        host = url.slice(pos + 1, endBracket)
+        pos = endBracket + 1
+        if (pos < url.length) {
+            var c = url.charAt(pos)
+            if (c != ":" && c != "/" && c != "?") { return null }
+        }
+    } else {
+        var hostStart = pos
+        while (pos < url.length) {
+            var c = url.charAt(pos)
+            if (c == ":" || c == "/" || c == "?") { break }
+            pos = pos + 1
+        }
+        if (pos == hostStart) { return null }
+        host = url.slice(hostStart, pos)
+    }
+
+    var port = secure ? 443 : 80
+    if (pos < url.length && url.charAt(pos) == ":") {
+        var portStart = pos + 1
+        pos = portStart
+        while (pos < url.length) {
+            var c = url.charAt(pos)
+            if (c == "/" || c == "?") { break }
+            pos = pos + 1
+        }
+        port = _parsePort(url, portStart, pos)
+        if (port < 0) { return null }
+    }
+
+    var path = "/"
+    if (pos < url.length) {
+        var c = url.charAt(pos)
+        if (c == "/") {
+            path = url.slice(pos, url.length)
+        } else if (c == "?") {
+            path = "/" + url.slice(pos, url.length)
+        } else {
+            return null
+        }
+    }
+
+    return WsUrl(secure, host, port, path)
 }
 
 fn _copyInto(dst: Bytes, off: int, src: Bytes) {
@@ -345,12 +441,14 @@ fn pongFrame(data: Bytes? = null, mask: bool = true) -> Bytes {
 
 export {
     ParsedFrame,
+    WsUrl,
     acceptKey,
     randomKey,
     isUpgradeRequest,
     pickSubprotocol,
     upgradeResponse,
     clientRequest,
+    parseUrl,
     maskPayload,
     parseFrame,
     frame,
