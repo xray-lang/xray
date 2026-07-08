@@ -3817,18 +3817,6 @@ module ws {
     layer: "runtime"
   }
 
-  fn echoServe {
-    signature: "(port: int): bool"
-    doc: "Pure C echo server with zero VM allocation overhead per message"
-    vm: "ws_echo_serve_yieldable"
-    vm_binding: "yieldable"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
   fn stopServer {
     signature: "(): ()"
     doc: "Stop the WebSocket server"

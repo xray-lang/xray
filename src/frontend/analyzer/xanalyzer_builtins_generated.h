@@ -531,11 +531,10 @@ static const XaBuiltinMember g_gen_ws_functions[] = {
     {"recvData", "(conn: WsConn, timeout?: int?): string?", "High-performance recv returning data string directly (no Json wrapper)", true, false, false},
     {"sendData", "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool", "Send data over WebSocket connection", true, false, false},
     {"serve", "(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", true, false, false},
-    {"echoServe", "(port: int): bool", "Pure C echo server with zero VM allocation overhead per message", true, false, false},
     {"stopServer", "(): ()", "Stop the WebSocket server", true, false, false},
     {"isServerRunning", "(): bool", "Check if the WebSocket server is running", true, false, false},
 };
-#define GEN_WS_FUNCTION_COUNT 13
+#define GEN_WS_FUNCTION_COUNT 12
 
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
