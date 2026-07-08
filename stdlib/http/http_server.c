@@ -31,31 +31,6 @@
 
 /* ========== Pre-generated Response Headers (global shared, zero allocation) ========== */
 
-// 200 OK response headers (different Content-Types)
-static const char HTTP_200_PLAIN[] = "HTTP/1.1 200 OK\r\n"
-                                     "Content-Type: text/plain; charset=utf-8\r\n"
-                                     "Connection: keep-alive\r\n"
-                                     "Content-Length: ";
-
-static const char HTTP_200_HTML[] = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: text/html; charset=utf-8\r\n"
-                                    "Connection: keep-alive\r\n"
-                                    "Content-Length: ";
-
-static const char HTTP_200_JSON[] = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: application/json; charset=utf-8\r\n"
-                                    "Connection: keep-alive\r\n"
-                                    "Content-Length: ";
-
-// 301/302 redirect template
-static const char HTTP_REDIRECT_TEMPLATE[] = "HTTP/1.1 %d %s\r\n"
-                                             "Location: %s\r\n"
-                                             "Content-Length: 0\r\n"
-                                             "Connection: keep-alive\r\n"
-                                             "\r\n";
-
-static const char CRLF_CRLF[] = "\r\n\r\n";
-
 // 404 Not Found
 static const char HTTP_404_RESPONSE[] = "HTTP/1.1 404 Not Found\r\n"
                                         "Content-Type: application/json\r\n"
@@ -354,102 +329,6 @@ int xr_http_read_request(XrVMRuntime *X, int fd, XrHttpReq *req, char *buf, size
     return 0;
 }
 
-/*
- * Auto-detect Content-Type, choose pre-defined header
- */
-static void detect_content_type(const char *body, size_t body_len, const char **header,
-                                size_t *header_len) {
-    if (body_len > 0 && body) {
-        char first = body[0];
-        // HTML detection: starts with <
-        if (first == '<') {
-            *header = HTTP_200_HTML;
-            *header_len = sizeof(HTTP_200_HTML) - 1;
-            return;
-        }
-        // JSON detection: starts with { or [
-        if (first == '{' || first == '[') {
-            *header = HTTP_200_JSON;
-            *header_len = sizeof(HTTP_200_JSON) - 1;
-            return;
-        }
-    }
-    // Default text/plain
-    *header = HTTP_200_PLAIN;
-    *header_len = sizeof(HTTP_200_PLAIN) - 1;
-}
-
-/*
- * writev zero-copy send response
- * Uses pre-generated header + Content-Length + CRLF + body
- */
-static int xr_http_writev_response(XrVMRuntime *X, int fd, const char *body, size_t body_len) {
-    // Auto-detect Content-Type
-    const char *header;
-    size_t header_len;
-    detect_content_type(body, body_len, &header, &header_len);
-
-    // Content-Length number
-    char cl_buf[32];
-    int cl_len = snprintf(cl_buf, sizeof(cl_buf), "%zu", body_len);
-
-    // Build iovec
-    struct iovec iov[4];
-    iov[0].iov_base = (void *) header;
-    iov[0].iov_len = header_len;
-    iov[1].iov_base = cl_buf;
-    iov[1].iov_len = cl_len;
-    iov[2].iov_base = (void *) CRLF_CRLF;
-    iov[2].iov_len = 4;
-    iov[3].iov_base = (void *) body;
-    iov[3].iov_len = body_len;
-
-    int iov_count = (body_len > 0) ? 4 : 3;
-
-    // writev send (single syscall)
-    ssize_t total = 0;
-    for (int i = 0; i < iov_count; i++) {
-        total += iov[i].iov_len;
-    }
-
-    ssize_t sent = 0;
-    while (sent < total) {
-        // Recalculate current iovec
-        struct iovec cur_iov[4];
-        int cur_cnt = 0;
-        size_t skip = sent;
-
-        for (int i = 0; i < iov_count; i++) {
-            if (skip >= iov[i].iov_len) {
-                skip -= iov[i].iov_len;
-                continue;
-            }
-            cur_iov[cur_cnt].iov_base = (char *) iov[i].iov_base + skip;
-            cur_iov[cur_cnt].iov_len = iov[i].iov_len - skip;
-            cur_cnt++;
-            skip = 0;
-        }
-
-        ssize_t n = writev(fd, cur_iov, cur_cnt);
-        if (n < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // writev blocked, fallback to xr_socket_write (coroutine-safe)
-                for (int i = 0; i < cur_cnt; i++) {
-                    int wn = xr_socket_write(X, fd, cur_iov[i].iov_base, cur_iov[i].iov_len);
-                    if (wn < 0)
-                        return -1;
-                    sent += wn;
-                }
-                continue;
-            }
-            return -1;
-        }
-        sent += n;
-    }
-
-    return 0;
-}
-
 static int xr_http_write_status_response(XrVMRuntime *X, int fd, int status,
                                          const char *content_type, const char *body,
                                          size_t body_len) {
@@ -535,15 +414,6 @@ static size_t json_escape_string(char *out, size_t out_cap, const char *input) {
 }
 
 /*
- * Send simple text response (writev zero-copy + auto-detect Content-Type)
- */
-int xr_http_send_text(XrVMRuntime *X, int fd, int status, const char *body) {
-    (void) status;  // Currently only 200 pre-generated header supported
-    size_t body_len = body ? strlen(body) : 0;
-    return xr_http_writev_response(X, fd, body, body_len);
-}
-
-/*
  * Send error response
  */
 int xr_http_send_error(XrVMRuntime *X, int fd, int status, const char *message) {
@@ -563,22 +433,6 @@ int xr_http_send_error(XrVMRuntime *X, int fd, int status, const char *message) 
 
     return xr_http_write_status_response(X, fd, status, "application/json", body,
                                          (size_t) body_len);
-}
-
-/*
- * Send redirect response
- */
-int xr_http_send_redirect(XrVMRuntime *X, int fd, int status, const char *location) {
-    if (!location)
-        return -1;
-
-    // Use pre-defined redirect template
-    char response[512];
-    const char *status_text = (status == 301) ? "Moved Permanently" : "Found";
-    int len =
-        snprintf(response, sizeof(response), HTTP_REDIRECT_TEMPLATE, status, status_text, location);
-
-    return xr_socket_write(X, fd, response, len);
 }
 
 /*
