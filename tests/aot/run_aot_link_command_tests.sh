@@ -1473,6 +1473,18 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/top-const-aggregate: materializes string const as static data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const XrValue _xctarr_" \
             "freestanding-profile/top-const-aggregate: materializes string fixed-array as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "const struct { int64_t code; uint8_t flag; } xray_const_freestanding_top_const_aggregate_ENTRIES[2]" \
+            "freestanding-profile/top-const-aggregate: materializes struct fixed-array as static data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_ENTRIES[2] XRT_ATTR_SECTION(\"__DATA,.xray_entries\") XRT_ATTR_WEAK XRT_ATTR_USED" \
+            "freestanding-profile/top-const-aggregate: emits attrs on struct fixed-array data"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_ENTRIES[_idx].code" \
+            "freestanding-profile/top-const-aggregate: reads struct fixed-array integer field directly"
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
+            "xray_const_freestanding_top_const_aggregate_ENTRIES[_idx].flag" \
+            "freestanding-profile/top-const-aggregate: reads struct fixed-array bool field directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "xr_str_lit(&_xstr_" \
             "freestanding-profile/top-const-aggregate: reads string const through literal header"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XrValue f0" \
@@ -1589,6 +1601,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
             "const struct __attribute__((packed, aligned(16)))" \
             "freestanding-profile/static-import: exporter preserves packed/aligned struct layout"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
+            'xray_const__freestanding_static_data_lib_ENTRIES[2] XRT_ATTR_SECTION("__DATA,.xr_ient") XRT_ATTR_WEAK XRT_ATTR_USED' \
+            "freestanding-profile/static-import: exporter keeps struct-array section/weak/used attrs"
     else
         record_fail "freestanding-profile/static-import: exporter kept C source missing"
         sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_LOG" | sed -n '1,120p'
@@ -1604,6 +1619,15 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'extern const struct __attribute__((packed, aligned(16))) { uint8_t tag; uint32_t value; } xray_const__freestanding_static_data_lib_PACKED_ALIGNED' \
             "freestanding-profile/static-import: importer preserves packed/aligned extern layout"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'extern const struct { int64_t code; uint8_t flag; } xray_const__freestanding_static_data_lib_ENTRIES[2]' \
+            "freestanding-profile/static-import: importer declares struct-array extern"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_ENTRIES[_idx].code' \
+            "freestanding-profile/static-import: importer reads struct-array integer field directly"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'xray_const__freestanding_static_data_lib_ENTRIES[_idx].flag' \
+            "freestanding-profile/static-import: importer reads struct-array bool field directly"
         expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xrt_getprop_name" \
             "freestanding-profile/static-import: avoids dynamic property helper"
         expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xr_array_ref" \
@@ -1647,10 +1671,19 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         record_fail "freestanding-profile/static-import: weak struct data symbol missing"
         sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
     fi
+    if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
+            "xray_const__freestanding_static_data_lib_ENTRIES" \
+            "$FREESTANDING_STATIC_IMPORT_NM"; then
+        record_pass "freestanding-profile/static-import: weak struct-array data symbol is external"
+    else
+        record_fail "freestanding-profile/static-import: weak struct-array data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
+    fi
     FREESTANDING_STATIC_IMPORT_SECTIONS="$WORK/freestanding_static_data_import.sections"
     if otool -l "$FREESTANDING_STATIC_IMPORT_OBJ" >"$FREESTANDING_STATIC_IMPORT_SECTIONS" 2>/dev/null; then
         if grep -Fq "sectname .xr_imag" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
-           grep -Fq "sectname .xr_ihead" "$FREESTANDING_STATIC_IMPORT_SECTIONS"; then
+           grep -Fq "sectname .xr_ihead" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
+           grep -Fq "sectname .xr_ient" "$FREESTANDING_STATIC_IMPORT_SECTIONS"; then
             record_pass "freestanding-profile/static-import: object contains imported data sections"
         else
             record_fail "freestanding-profile/static-import: object missing imported data sections"
@@ -1658,7 +1691,8 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         fi
     elif objdump -h "$FREESTANDING_STATIC_IMPORT_OBJ" >"$FREESTANDING_STATIC_IMPORT_SECTIONS" 2>/dev/null; then
         if grep -Fq ".xr_imag" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
-           grep -Fq ".xr_ihead" "$FREESTANDING_STATIC_IMPORT_SECTIONS"; then
+           grep -Fq ".xr_ihead" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
+           grep -Fq ".xr_ient" "$FREESTANDING_STATIC_IMPORT_SECTIONS"; then
             record_pass "freestanding-profile/static-import: object contains imported data sections"
         else
             record_fail "freestanding-profile/static-import: object missing imported data sections"
