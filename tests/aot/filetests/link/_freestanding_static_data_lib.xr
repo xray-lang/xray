@@ -37,6 +37,29 @@ struct Outer {
 @weak
 const OUTER = comptime Outer{inner: Inner{code: TABLE[3]}, base: PACKET.base}
 
+packed struct PackedPair {
+    tag: uint8
+    value: uint32
+}
+
+struct AlignedWord align(16) {
+    value: int32
+}
+
+packed struct PackedAligned align(16) {
+    tag: uint8
+    value: uint32
+}
+
+@weak
+const PACKED = comptime PackedPair{tag: 5, value: 37}
+
+@weak
+const ALIGNED = comptime AlignedWord{value: 42}
+
+@weak
+const PACKED_ALIGNED = comptime PackedAligned{tag: 6, value: 36}
+
 @weak
 const PAIR = comptime (HEADER.magic, PACKET.base)
 
@@ -76,4 +99,4 @@ const NAMED = comptime Named{label: LABEL, code: TABLE[1]}
 @weak
 const LABELED = comptime (LABEL, TABLE[0])
 
-export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABELS, NAMED, LABELED }
+export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER, PACKED, ALIGNED, PACKED_ALIGNED, PAIR, NESTED, BITS, WORD_BYTES, LABEL, LABELS, NAMED, LABELED }
