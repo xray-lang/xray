@@ -43,4 +43,20 @@ const PAIR = comptime (HEADER.magic, PACKET.base)
 @weak
 const NESTED = comptime ((TABLE[0], HEADER.flags), (PACKET.base, TABLE[3]))
 
-export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER, PAIR, NESTED }
+union I32Bits {
+    i: int32
+    u: uint32
+}
+
+union U32Bytes {
+    u: uint32
+    b: [uint8; 4]
+}
+
+@weak
+const BITS = comptime I32Bits{i: -1}
+
+@weak
+const WORD_BYTES = comptime U32Bytes{u: 0x01020304}
+
+export { MAGIC, TABLE, BYTES, HEADER, PACKET, OUTER, PAIR, NESTED, BITS, WORD_BYTES }
