@@ -121,6 +121,10 @@ enum {
     XAOT_FN_ATTR_EV_XI_EFFECT_SCAN = 1u << 1,
 };
 
+enum {
+    XAOT_PLAN_BODY_EV_BODY_SUMMARY = 1u << 0,
+};
+
 typedef struct XaotFuncAttrPlan {
     const XiFunc *func;
     XgFuncId body_func_id;
@@ -160,7 +164,11 @@ enum {
 
 typedef struct XaotBoundsPlan {
     const XiFunc *func;
-    const XiValue *access;   /* XI_INDEX_GET / XI_INDEX_SET */
+    const XiValue *access; /* XI_INDEX_GET / XI_INDEX_SET */
+    XgFuncId body_func_id;
+    uint32_t body_effect_bits;
+    uint32_t body_escape_bits;
+    uint32_t body_evidence;
     uint32_t evidence;       /* XAOT_BOUNDS_EV_*; 0 = stays checked */
     uint8_t unproven_reason; /* XAOT_BOUNDS_UNPROVEN_*; 0 = proven */
 } XaotBoundsPlan;
@@ -225,6 +233,10 @@ enum {
 typedef struct XaotSpanAccessPlan {
     const XiFunc *func;
     const XiValue *value;
+    XgFuncId body_func_id;
+    uint32_t body_effect_bits;
+    uint32_t body_escape_bits;
+    uint32_t body_evidence;
     uint8_t kind;               /* XaotSpanAccessKind */
     uint32_t evidence;          /* XAOT_SPAN_EV_* */
     uint32_t eliminated_checks; /* XAOT_SPAN_DROP_*; 0 = stays on checked/fallback path */
@@ -261,8 +273,12 @@ enum {
 typedef struct XaotAliasPlan {
     const XiFunc *func;
     const XiValue *value; /* cache origin value (the _adN owner) */
-    uint8_t kind;         /* XaotAliasKind */
-    uint32_t evidence;    /* XAOT_ALIAS_EV_* */
+    XgFuncId body_func_id;
+    uint32_t body_effect_bits;
+    uint32_t body_escape_bits;
+    uint32_t body_evidence;
+    uint8_t kind;      /* XaotAliasKind */
+    uint32_t evidence; /* XAOT_ALIAS_EV_* */
 } XaotAliasPlan;
 
 typedef enum XaotClosureRepresentation {
@@ -758,20 +774,20 @@ XR_FUNC XaotFuncAttrPlan *xaot_bundle_add_func_attr_plan(XaotBundle *bundle, con
 XR_FUNC const XaotFuncAttrPlan *xaot_bundle_find_func_attr_plan(const XaotBundle *bundle,
                                                                 const XiFunc *func);
 XR_FUNC XaotBoundsPlan *xaot_bundle_add_bounds_plan(XaotBundle *bundle, const XiFunc *func,
-                                                    const XiValue *access, uint32_t evidence,
+                                                    const XiValue *access,
+                                                    const XgBodySummary *body, uint32_t evidence,
                                                     uint8_t unproven_reason);
 XR_FUNC const XaotBoundsPlan *xaot_bundle_find_bounds_plan(const XaotBundle *bundle,
                                                            const XiValue *access);
-XR_FUNC XaotSpanAccessPlan *xaot_bundle_add_span_access_plan(XaotBundle *bundle, const XiFunc *func,
-                                                             const XiValue *value, uint8_t kind,
-                                                             uint32_t evidence,
-                                                             uint32_t eliminated_checks,
-                                                             uint8_t unproven_reason);
+XR_FUNC XaotSpanAccessPlan *
+xaot_bundle_add_span_access_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,
+                                 const XgBodySummary *body, uint8_t kind, uint32_t evidence,
+                                 uint32_t eliminated_checks, uint8_t unproven_reason);
 XR_FUNC const XaotSpanAccessPlan *xaot_bundle_find_span_access_plan(const XaotBundle *bundle,
                                                                     const XiValue *value);
 XR_FUNC XaotAliasPlan *xaot_bundle_add_alias_plan(XaotBundle *bundle, const XiFunc *func,
-                                                  const XiValue *value, uint8_t kind,
-                                                  uint32_t evidence);
+                                                  const XiValue *value, const XgBodySummary *body,
+                                                  uint8_t kind, uint32_t evidence);
 XR_FUNC const XaotAliasPlan *xaot_bundle_find_alias_plan(const XaotBundle *bundle,
                                                          const XiValue *value);
 XR_FUNC XaotClosurePlan *

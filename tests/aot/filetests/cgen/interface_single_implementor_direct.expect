@@ -2,7 +2,7 @@ contains=xaot-plan v0
 regex=method-dispatch [0-9]+ callsite=[0-9]+ span=[0-9]+ kind=direct .*recv_class=0 recv_iface=[1-9][0-9]* slot=0 targets=[0-9]+\+1 evidence=0x31 reason=none
 regex=dispatch-target [0-9]+ callsite=[0-9]+ recv_class=[1-9][0-9]* method=[1-9][0-9]* evidence=0x31
 regex=interface-use [0-9]+ interface=[1-9][0-9]* implementor=[1-9][0-9]* use_site=[1-9][0-9]* reason=value flags=iface_object
-c_regex=XrValue v[0-9]+ = interface_single_implementor_direct_area_[0-9]+_boxed\(NULL, v[0-9]+\);
+c_regex=int64_t v[0-9]+ = XR_TO_INT\(interface_single_implementor_direct_area_[0-9]+_boxed\(NULL, v[0-9]+\)\);
 c_regex=static XrValue interface_single_implementor_direct_area_[0-9]+_boxed\(xrt_closure_t \*_cl, XrValue p0\)
 c_not_contains=xrt_method_
 not_contains=verified AOT dispatch plan kind

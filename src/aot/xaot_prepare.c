@@ -2173,7 +2173,10 @@ done:
  * Emission consults only the plan (no pattern matching in Cgen), so the
  * proof, the verifier and the dump stay in lockstep, and the unproven rows
  * expose the remaining bounds-check budget for audit. */
-static bool prepare_func_bounds_plans(XaotBundle *bundle, const XiFunc *func) {
+static bool prepare_func_bounds_plans(XaotBundle *bundle, const XiFunc *func,
+                                      const XgBodySummary *body) {
+    if (!body)
+        return true;
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks[bi];
         if (!blk)
@@ -2185,7 +2188,7 @@ static bool prepare_func_bounds_plans(XaotBundle *bundle, const XiFunc *func) {
             uint8_t reason = XAOT_BOUNDS_UNPROVEN_NONE;
             uint32_t evidence =
                 xaot_prepare_array_access_bounds_evidence(bundle, func, value, &reason);
-            if (!xaot_bundle_add_bounds_plan(bundle, func, value, evidence, reason)) {
+            if (!xaot_bundle_add_bounds_plan(bundle, func, value, body, evidence, reason)) {
                 bundle->error_msg = "failed to allocate AOT bounds plan";
                 return false;
             }
@@ -2194,7 +2197,10 @@ static bool prepare_func_bounds_plans(XaotBundle *bundle, const XiFunc *func) {
     return true;
 }
 
-static bool prepare_func_span_access_plans(XaotBundle *bundle, const XiFunc *func) {
+static bool prepare_func_span_access_plans(XaotBundle *bundle, const XiFunc *func,
+                                           const XgBodySummary *body) {
+    if (!body)
+        return true;
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks[bi];
         if (!blk)
@@ -2204,8 +2210,9 @@ static bool prepare_func_span_access_plans(XaotBundle *bundle, const XiFunc *fun
             XaotSpanAccessPlan plan;
             if (!xaot_prepare_span_access_plan_for_value(bundle, func, value, &plan))
                 continue;
-            if (!xaot_bundle_add_span_access_plan(bundle, func, value, plan.kind, plan.evidence,
-                                                  plan.eliminated_checks, plan.unproven_reason)) {
+            if (!xaot_bundle_add_span_access_plan(bundle, func, value, body, plan.kind,
+                                                  plan.evidence, plan.eliminated_checks,
+                                                  plan.unproven_reason)) {
                 bundle->error_msg = "failed to allocate AOT Span access plan";
                 return false;
             }
@@ -2353,8 +2360,11 @@ XR_FUNC uint32_t xaot_prepare_array_cache_alias_evidence(const XaotBundle *bundl
  * XRAY_AOT_NO_RESTRICT=1 suppresses the whole pass (stress mode for
  * regression bisection: a miscompiled restrict is UB, so a global off
  * switch is the fastest way to confirm or rule out alias plans). */
-static bool prepare_func_alias_plans(XaotBundle *bundle, const XiFunc *func) {
+static bool prepare_func_alias_plans(XaotBundle *bundle, const XiFunc *func,
+                                     const XgBodySummary *body) {
     const char *off = getenv("XRAY_AOT_NO_RESTRICT");
+    if (!body)
+        return true;
     if (off && off[0] != '\0' && off[0] != '0')
         return true;
     for (uint32_t i = 0; i < bundle->narray_cache_plans; i++) {
@@ -2365,8 +2375,8 @@ static bool prepare_func_alias_plans(XaotBundle *bundle, const XiFunc *func) {
         evidence = xaot_prepare_array_cache_alias_evidence(bundle, func, cache_plan);
         if (evidence == 0)
             continue;
-        if (!xaot_bundle_add_alias_plan(bundle, func, cache_plan->value, XAOT_ALIAS_UNIQUE_DATA,
-                                        evidence)) {
+        if (!xaot_bundle_add_alias_plan(bundle, func, cache_plan->value, body,
+                                        XAOT_ALIAS_UNIQUE_DATA, evidence)) {
             bundle->error_msg = "failed to allocate AOT alias plan";
             return false;
         }
@@ -3394,19 +3404,31 @@ static bool func_attr_op_reads_nonlocal(uint16_t op) {
     }
 }
 
-static const XgBodySummary *prepare_func_attr_find_body_summary(const XaotBundle *bundle,
-                                                                const XiFunc *func) {
+static const XgBodySummary *prepare_find_body_summary_for_func(const XaotBundle *bundle,
+                                                               const XiFunc *func,
+                                                               uint32_t module_index,
+                                                               bool is_module_init) {
     const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
     const XgBodySummary *found = NULL;
-    uint32_t name_id;
+    uint32_t name_id = 0;
+    XgModuleId module_id = (XgModuleId) (module_index + 1u);
 
-    if (!ev || !func || !func->name)
+    if (!ev || !func)
         return NULL;
-    name_id = xg_name_id(func->name);
+    if (!is_module_init) {
+        if (!func->name)
+            return NULL;
+        name_id = xg_name_id(func->name);
+    }
     for (uint32_t i = 0; i < ev->nbodies; i++) {
         const XgBodySummary *body = &ev->bodies[i];
-        if (body->kind == XG_BODY_MODULE_INIT || body->name_id != name_id)
-            continue;
+        if (is_module_init) {
+            if (body->kind != XG_BODY_MODULE_INIT || body->module_id != module_id)
+                continue;
+        } else {
+            if (body->kind == XG_BODY_MODULE_INIT || body->name_id != name_id)
+                continue;
+        }
         if (found)
             return NULL;
         found = body;
@@ -3425,14 +3447,13 @@ static bool func_attr_body_summary_disqualifies(const XgBodySummary *body) {
  * Evidence is the body summary plus per-value effect flags; the verifier
  * re-checks both.
  * Disqualification is not an error — the function simply gets no plan. */
-static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func) {
-    const XgBodySummary *body;
+static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
+                                   const XgBodySummary *body) {
     bool reads_mem;
     uint32_t bi, vi;
 
     if (!bundle || !func)
         return false;
-    body = prepare_func_attr_find_body_summary(bundle, func);
     if (func_attr_body_summary_disqualifies(body))
         return true;
     reads_mem = func->ncaptures > 0;
@@ -3464,6 +3485,7 @@ static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func) {
 static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t module_index,
                                    uint16_t depth, bool is_module_init) {
     XaotFuncPlan *plan;
+    const XgBodySummary *body;
     uint16_t ci;
 
     if (!bundle || !func)
@@ -3487,6 +3509,9 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
         bundle->stats.functions_coro_abi++;
     else
         bundle->stats.functions_tagged_abi++;
+
+    body = prepare_find_body_summary_for_func(bundle, func, module_index, is_module_init);
+
     if (!prepare_func_values(bundle, func))
         return false;
     if (!prepare_apply_return_abi_value_plans(bundle, plan))
@@ -3497,13 +3522,13 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
         return false;
     if (!prepare_func_array_class_field_alloc_plans(bundle, func))
         return false;
-    if (!prepare_func_bounds_plans(bundle, func))
+    if (!prepare_func_bounds_plans(bundle, func, body))
         return false;
-    if (!prepare_func_span_access_plans(bundle, func))
+    if (!prepare_func_span_access_plans(bundle, func, body))
         return false;
     /* After bounds plans: the uniqueness proof requires every index access
      * to be raw (bounds-proven), which it reads from the bounds plans. */
-    if (!prepare_func_alias_plans(bundle, func))
+    if (!prepare_func_alias_plans(bundle, func, body))
         return false;
     if (!prepare_func_closure_plans(bundle, func))
         return false;
@@ -3511,7 +3536,7 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
         return false;
     /* Module inits are procedural entry points (called once, ordering-
      * sensitive); attribute plans only apply to ordinary functions. */
-    if (!is_module_init && !prepare_func_attr_plan(bundle, func))
+    if (!is_module_init && !prepare_func_attr_plan(bundle, func, body))
         return false;
 
     for (ci = 0; ci < func->nchildren; ci++) {
