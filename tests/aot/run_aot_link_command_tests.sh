@@ -1147,7 +1147,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "Span.asBytes() byte length overflow" \
             "freestanding-profile/fixed-array: Span.asBytes uses local metadata rewrite"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "ByteSpan.reinterpret<T>() length is not divisible by target size" \
+            "_out.length = _s.length / (int64_t)2; _out.elem_type =" \
             "freestanding-profile/fixed-array: ByteSpan.reinterpret uses local metadata rewrite"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "Span.compare(other) byte length overflow" \
@@ -1188,6 +1188,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_reinterpret_checked_raw" \
             "freestanding-profile/fixed-array: generated C avoids hosted checked ByteSpan.reinterpret"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
+            "ByteSpan.reinterpret<T>() length is not divisible by target size" \
+            "freestanding-profile/fixed-array: generated C proves ByteSpan.reinterpret length relation"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "__memcpy_chk" \
             "freestanding-profile/fixed-array: generated C avoids checked memcpy builtin"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "___memcpy_chk" \
@@ -1546,6 +1549,127 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
 else
     record_fail "freestanding-profile/top-const-aggregate: object build failed"
     sed 's/^/      /' "$FREESTANDING_TOP_CONST_AGG_LOG" | sed -n '1,120p'
+fi
+
+FREESTANDING_STATIC_IMPORT_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_static_data_import.xr"
+FREESTANDING_STATIC_IMPORT_OBJ="$WORK/freestanding_static_data_import.o"
+FREESTANDING_STATIC_IMPORT_LOG="$WORK/freestanding_static_data_import.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_STATIC_IMPORT_OBJ" \
+        "$FREESTANDING_STATIC_IMPORT_SRC" >"$FREESTANDING_STATIC_IMPORT_LOG" 2>&1; then
+    FREESTANDING_STATIC_IMPORT_C_FILES="$(sed -n 's/^Kept C source: //p' \
+        "$FREESTANDING_STATIC_IMPORT_LOG")"
+    FREESTANDING_STATIC_IMPORT_EXPORT_C="$(
+        printf '%s\n' "$FREESTANDING_STATIC_IMPORT_C_FILES" |
+            while IFS= read -r cfile; do
+                if [ -f "$cfile" ] &&
+                   grep -Fq 'XRT_ATTR_SECTION("__DATA,.xr_imag")' "$cfile"; then
+                    printf '%s\n' "$cfile"
+                    break
+                fi
+            done)"
+    FREESTANDING_STATIC_IMPORT_ENTRY_C="$(
+        printf '%s\n' "$FREESTANDING_STATIC_IMPORT_C_FILES" |
+            while IFS= read -r cfile; do
+                if [ -f "$cfile" ] &&
+                   grep -Fq 'extern const int64_t xray_const__freestanding_static_data_lib_MAGIC' "$cfile"; then
+                    printf '%s\n' "$cfile"
+                    break
+                fi
+            done)"
+    if [ -n "$FREESTANDING_STATIC_IMPORT_EXPORT_C" ] &&
+       [ -f "$FREESTANDING_STATIC_IMPORT_EXPORT_C" ]; then
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
+            'xray_const__freestanding_static_data_lib_MAGIC XRT_ATTR_SECTION("__DATA,.xr_imag") XRT_ATTR_WEAK XRT_ATTR_USED' \
+            "freestanding-profile/static-import: exporter keeps scalar section/weak/used attrs"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
+            'xray_const__freestanding_static_data_lib_HEADER XRT_ATTR_SECTION("__DATA,.xr_ihead") XRT_ATTR_WEAK XRT_ATTR_USED' \
+            "freestanding-profile/static-import: exporter keeps struct section/weak/used attrs"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
+            "const struct __attribute__((packed, aligned(16)))" \
+            "freestanding-profile/static-import: exporter preserves packed/aligned struct layout"
+    else
+        record_fail "freestanding-profile/static-import: exporter kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_LOG" | sed -n '1,120p'
+    fi
+    if [ -n "$FREESTANDING_STATIC_IMPORT_ENTRY_C" ] &&
+       [ -f "$FREESTANDING_STATIC_IMPORT_ENTRY_C" ]; then
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'extern const int64_t xray_const__freestanding_static_data_lib_MAGIC' \
+            "freestanding-profile/static-import: importer declares scalar extern"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'extern const struct { int64_t magic; int64_t flags; } xray_const__freestanding_static_data_lib_HEADER' \
+            "freestanding-profile/static-import: importer declares struct extern"
+        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            'extern const struct __attribute__((packed, aligned(16))) { uint8_t tag; uint32_t value; } xray_const__freestanding_static_data_lib_PACKED_ALIGNED' \
+            "freestanding-profile/static-import: importer preserves packed/aligned extern layout"
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xrt_getprop_name" \
+            "freestanding-profile/static-import: avoids dynamic property helper"
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xr_array_ref" \
+            "freestanding-profile/static-import: avoids runtime array helper"
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xr_aggregate_ref" \
+            "freestanding-profile/static-import: avoids runtime aggregate helper"
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xrt_tuple_get" \
+            "freestanding-profile/static-import: avoids runtime tuple helper"
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xrt_index_get" \
+            "freestanding-profile/static-import: avoids dynamic index helper"
+    else
+        record_fail "freestanding-profile/static-import: importer kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_STATIC_IMPORT_UNDEFINED="$(
+        nm_undefined_normalized "$FREESTANDING_STATIC_IMPORT_OBJ")"
+    FREESTANDING_STATIC_IMPORT_UNEXPECTED="$(
+        printf '%s\n' "$FREESTANDING_STATIC_IMPORT_UNDEFINED" |
+            sed '/^[[:space:]]*$/d' |
+            grep -Ev '^(memcpy|memmove|memset|memcmp|xr_hook_panic|xr_hook_write)$' || true)"
+    if [ -z "$FREESTANDING_STATIC_IMPORT_UNEXPECTED" ]; then
+        record_pass "freestanding-profile/static-import: undefined symbols stay in hook/memcpy family"
+    else
+        record_fail "freestanding-profile/static-import: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_STATIC_IMPORT_UNEXPECTED" | sed 's/^/      /'
+    fi
+    FREESTANDING_STATIC_IMPORT_NM="$WORK/freestanding_static_data_import.nm"
+    if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
+            "xray_const__freestanding_static_data_lib_MAGIC" \
+            "$FREESTANDING_STATIC_IMPORT_NM"; then
+        record_pass "freestanding-profile/static-import: weak scalar data symbol is external"
+    else
+        record_fail "freestanding-profile/static-import: weak scalar data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
+    fi
+    if object_has_weak_symbol "$FREESTANDING_STATIC_IMPORT_OBJ" \
+            "xray_const__freestanding_static_data_lib_HEADER" \
+            "$FREESTANDING_STATIC_IMPORT_NM"; then
+        record_pass "freestanding-profile/static-import: weak struct data symbol is external"
+    else
+        record_fail "freestanding-profile/static-import: weak struct data symbol missing"
+        sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_NM" | sed -n '1,80p'
+    fi
+    FREESTANDING_STATIC_IMPORT_SECTIONS="$WORK/freestanding_static_data_import.sections"
+    if otool -l "$FREESTANDING_STATIC_IMPORT_OBJ" >"$FREESTANDING_STATIC_IMPORT_SECTIONS" 2>/dev/null; then
+        if grep -Fq "sectname .xr_imag" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
+           grep -Fq "sectname .xr_ihead" "$FREESTANDING_STATIC_IMPORT_SECTIONS"; then
+            record_pass "freestanding-profile/static-import: object contains imported data sections"
+        else
+            record_fail "freestanding-profile/static-import: object missing imported data sections"
+            sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_SECTIONS" | sed -n '1,120p'
+        fi
+    elif objdump -h "$FREESTANDING_STATIC_IMPORT_OBJ" >"$FREESTANDING_STATIC_IMPORT_SECTIONS" 2>/dev/null; then
+        if grep -Fq ".xr_imag" "$FREESTANDING_STATIC_IMPORT_SECTIONS" &&
+           grep -Fq ".xr_ihead" "$FREESTANDING_STATIC_IMPORT_SECTIONS"; then
+            record_pass "freestanding-profile/static-import: object contains imported data sections"
+        else
+            record_fail "freestanding-profile/static-import: object missing imported data sections"
+            sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_SECTIONS" | sed -n '1,120p'
+        fi
+    else
+        record_fail "freestanding-profile/static-import: section dump failed"
+    fi
+else
+    record_fail "freestanding-profile/static-import: object build failed"
+    sed 's/^/      /' "$FREESTANDING_STATIC_IMPORT_LOG" | sed -n '1,120p'
 fi
 
 FREESTANDING_TOP_CONST_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_top_const_reject.xr"
