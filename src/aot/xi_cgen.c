@@ -409,6 +409,14 @@ static const XiImportRef *cg_shared_slot_import_ref(const XiFunc *f, int slot) {
     return cg_shared_slot_import_ref_depth(f, slot, 0);
 }
 
+static const XiConstLiteral *cg_module_const_literal(const XiModule *module, int64_t slot);
+
+static const XiImportRef *cg_module_slot_import_ref(const XiModule *module, int slot) {
+    if (!module || slot < 0 || slot >= module->nslots || !module->slot_imports)
+        return NULL;
+    return module->slot_imports[slot];
+}
+
 static bool cg_shared_slot_is_module_import(const XiFunc *f, int slot, const char *module_name) {
     const XiImportRef *ref = cg_shared_slot_import_ref(f, slot);
     return ref && module_name && ref->module_path && strcmp(ref->module_path, module_name) == 0 &&
@@ -607,6 +615,60 @@ struct XiCgenCtx {
     int nno_alloc_detail_strings;
     int no_alloc_detail_cap;
 };
+
+static const XiImportRef *cg_shared_slot_import_ref_ctx(const XiCgenCtx *ctx, const XiFunc *f,
+                                                        int slot) {
+    const XiImportRef *ref = cg_shared_slot_import_ref(f, slot);
+    if (!ref && f && f->module && f->module->init != f)
+        ref = cg_shared_slot_import_ref(f->module->init, slot);
+    if (!ref && f && f->module)
+        ref = cg_module_slot_import_ref(f->module, slot);
+    if (!ref && ctx && ctx->module && ctx->module->init && ctx->module->init != f)
+        ref = cg_shared_slot_import_ref(ctx->module->init, slot);
+    if (!ref && ctx && ctx->module)
+        ref = cg_module_slot_import_ref(ctx->module, slot);
+    return ref;
+}
+
+static const XiModule *cg_import_ref_target_module(const XiCgenCtx *ctx, const XiImportRef *ref,
+                                                   int64_t *out_slot) {
+    if (out_slot)
+        *out_slot = -1;
+    if (!ctx || !ref || ref->resolved_mod_index < 0 || ref->resolved_shared_slot < 0 ||
+        ref->resolved_mod_index >= ctx->all_nmodules || !ctx->all_modules)
+        return NULL;
+    const XiModule *module = ctx->all_modules[ref->resolved_mod_index];
+    if (!module || ref->resolved_shared_slot >= module->nslots)
+        return NULL;
+    if (out_slot)
+        *out_slot = ref->resolved_shared_slot;
+    return module;
+}
+
+static const XiConstLiteral *cg_import_ref_target_const_literal(const XiCgenCtx *ctx,
+                                                                const XiImportRef *ref,
+                                                                const XiModule **out_module,
+                                                                int64_t *out_slot) {
+    if (out_module)
+        *out_module = NULL;
+    int64_t slot = -1;
+    const XiModule *module = cg_import_ref_target_module(ctx, ref, &slot);
+    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    if (!lit || lit->kind == XI_CONST_LITERAL_NONE)
+        return NULL;
+    if (out_module)
+        *out_module = module;
+    if (out_slot)
+        *out_slot = slot;
+    return lit;
+}
+
+static const XiConstLiteral *cg_import_slot_const_literal(const XiCgenCtx *ctx, const XiFunc *f,
+                                                          int slot, const XiModule **out_module,
+                                                          int64_t *out_slot) {
+    const XiImportRef *ref = cg_shared_slot_import_ref_ctx(ctx, f, slot);
+    return cg_import_ref_target_const_literal(ctx, ref, out_module, out_slot);
+}
 
 /* Grow the parallel shared-slot tables to at least `need` entries.  All four
  * arrays share one capacity (a slot holds a func / class / enum / native
@@ -1850,8 +1912,16 @@ static const char *cg_module_const_slot_name(const XiModule *module, int64_t slo
     return module->init->slot_owned_names[slot];
 }
 
-static void cg_emit_static_const_fallback_name(FILE *out, const char *prefix, int64_t slot) {
-    fprintf(out, "%s_%" PRId64, prefix ? prefix : "_xctvalue", slot);
+static void cg_emit_static_const_fallback_name(FILE *out, const XiModule *module,
+                                               const char *prefix, int64_t slot) {
+    const char *base = prefix ? prefix : "_xctvalue";
+    if (module && module->name && module->name[0]) {
+        char module_buf[128];
+        sanitize_c_ident_part(module_buf, sizeof(module_buf), module->name);
+        fprintf(out, "%s_%s_%" PRId64, base, module_buf, slot);
+        return;
+    }
+    fprintf(out, "%s_%" PRId64, base, slot);
 }
 
 static void cg_emit_static_const_data_name(XiCgenCtx *ctx, FILE *out, const XiModule *module,
@@ -1859,7 +1929,7 @@ static void cg_emit_static_const_data_name(XiCgenCtx *ctx, FILE *out, const XiMo
     const XiModule *mod = module ? module : (ctx ? ctx->module : NULL);
     const XiConstLiteral *lit = cg_module_const_literal(mod, slot);
     if (!lit || !lit->data_weak) {
-        cg_emit_static_const_fallback_name(out, fallback_prefix, slot);
+        cg_emit_static_const_fallback_name(out, mod, fallback_prefix, slot);
         return;
     }
 
@@ -1874,6 +1944,22 @@ static void cg_emit_static_const_data_name(XiCgenCtx *ctx, FILE *out, const XiMo
         snprintf(name_buf, sizeof(name_buf), "slot_%" PRId64, slot);
     }
     fprintf(out, "xray_const_%s_%s", module_buf, name_buf);
+}
+
+static bool cg_imported_static_const_needs_weak_symbol(const XiCgenCtx *ctx, const XiModule *module,
+                                                       const XiConstLiteral *lit) {
+    return ctx && ctx->module && module && module != ctx->module && lit && !lit->data_weak;
+}
+
+static void cg_report_imported_static_const_requires_weak(const XiCgenCtx *ctx,
+                                                          const XiModule *module, int64_t slot) {
+    const char *module_name = module && module->name ? module->name : "?";
+    const char *slot_name = cg_module_const_slot_name(module, slot);
+    fprintf(stderr,
+            "[xi_cgen] ERROR: freestanding imported static const '%s.%s' requires @weak for "
+            "cross-module data access\n",
+            module_name, slot_name && slot_name[0] ? slot_name : "?");
+    (void) ctx;
 }
 
 static void emit_block_terminator_source_line(XiCgenCtx *ctx, FILE *out, const XiBlock *blk) {
@@ -1953,19 +2039,27 @@ static bool cg_const_literal_is_static_scalar_object(const XiConstLiteral *lit) 
     }
 }
 
-static bool cg_freestanding_static_scalar_const_literal(XiCgenCtx *ctx, int64_t slot,
-                                                        const XiConstLiteral **out_lit) {
+static bool cg_freestanding_static_scalar_const_literal_in_module(XiCgenCtx *ctx,
+                                                                  const XiModule *module,
+                                                                  int64_t slot,
+                                                                  const XiConstLiteral **out_lit) {
     if (out_lit)
         *out_lit = NULL;
-    if (!ctx || !ctx->freestanding_profile || !ctx->module || !ctx->module->slot_const_literals ||
-        slot < 0 || slot >= ctx->module->nslots)
+    if (!ctx || !ctx->freestanding_profile || !module || !module->slot_const_literals || slot < 0 ||
+        slot >= module->nslots)
         return false;
-    const XiConstLiteral *lit = &ctx->module->slot_const_literals[slot];
+    const XiConstLiteral *lit = &module->slot_const_literals[slot];
     if (!cg_const_literal_is_static_scalar_object(lit))
         return false;
     if (out_lit)
         *out_lit = lit;
     return true;
+}
+
+static bool cg_freestanding_static_scalar_const_literal(XiCgenCtx *ctx, int64_t slot,
+                                                        const XiConstLiteral **out_lit) {
+    return cg_freestanding_static_scalar_const_literal_in_module(ctx, ctx ? ctx->module : NULL,
+                                                                 slot, out_lit);
 }
 
 static void cg_emit_static_scalar_i64(FILE *out, int64_t value) {
@@ -2063,30 +2157,30 @@ static XrRep cg_static_scalar_const_source_rep(const XiConstLiteral *lit) {
     }
 }
 
-static bool cg_emit_freestanding_static_scalar_const_ref(XiCgenCtx *ctx, FILE *out,
-                                                         const XiValue *v,
-                                                         const XiConstLiteral *lit) {
+static bool cg_emit_freestanding_static_scalar_const_ref_in_module(XiCgenCtx *ctx, FILE *out,
+                                                                   const XiModule *module,
+                                                                   int64_t slot, const XiValue *v,
+                                                                   const XiConstLiteral *lit) {
     if (!ctx || !out || !v || !lit || !cg_const_literal_is_static_scalar_object(lit))
         return false;
     XrRep from_rep = cg_static_scalar_const_source_rep(lit);
     XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
     const XrType *type = lit->type ? lit->type : v->type;
     const char *suffix = emit_conversion_prefix(out, type, from_rep, to_rep);
-    int64_t slot = v->aux_int;
     switch (lit->kind) {
         case XI_CONST_LITERAL_INT:
         case XI_CONST_LITERAL_BOOL:
         case XI_CONST_LITERAL_CHAR:
         case XI_CONST_LITERAL_FLOAT:
-            cg_emit_static_scalar_const_name(ctx, out, ctx->module, slot);
+            cg_emit_static_scalar_const_name(ctx, out, module, slot);
             break;
         case XI_CONST_LITERAL_STRING:
             fprintf(out, "xr_str_lit(&");
-            cg_emit_static_string_const_name(ctx, out, ctx->module, slot);
+            cg_emit_static_string_const_name(ctx, out, module, slot);
             fprintf(out, ")");
             break;
         case XI_CONST_LITERAL_NULL:
-            cg_emit_static_value_const_name(ctx, out, ctx->module, slot);
+            cg_emit_static_value_const_name(ctx, out, module, slot);
             break;
         default:
             emit_conversion_suffix(out, suffix);
@@ -2094,6 +2188,101 @@ static bool cg_emit_freestanding_static_scalar_const_ref(XiCgenCtx *ctx, FILE *o
     }
     emit_conversion_suffix(out, suffix);
     return true;
+}
+
+static bool cg_emit_freestanding_static_scalar_const_ref(XiCgenCtx *ctx, FILE *out,
+                                                         const XiValue *v,
+                                                         const XiConstLiteral *lit) {
+    return cg_emit_freestanding_static_scalar_const_ref_in_module(
+        ctx, out, ctx ? ctx->module : NULL, v ? v->aux_int : -1, v, lit);
+}
+
+static bool cg_emit_imported_static_scalar_const_decl(XiCgenCtx *ctx, FILE *out,
+                                                      const XiModule *module, int64_t slot,
+                                                      const XiConstLiteral *lit) {
+    if (!ctx || !out || !module || !lit || !lit->data_weak ||
+        !cg_const_literal_is_static_scalar_object(lit))
+        return false;
+    switch (lit->kind) {
+        case XI_CONST_LITERAL_INT:
+        case XI_CONST_LITERAL_BOOL:
+        case XI_CONST_LITERAL_CHAR:
+            fprintf(out, "extern const int64_t ");
+            cg_emit_static_scalar_const_name(ctx, out, module, slot);
+            fprintf(out, ";\n");
+            return true;
+        case XI_CONST_LITERAL_FLOAT:
+            fprintf(out, "extern const double ");
+            cg_emit_static_scalar_const_name(ctx, out, module, slot);
+            fprintf(out, ";\n");
+            return true;
+        case XI_CONST_LITERAL_STRING:
+            fprintf(out, "extern const xrt_str_t ");
+            cg_emit_static_string_const_name(ctx, out, module, slot);
+            fprintf(out, ";\n");
+            return true;
+        case XI_CONST_LITERAL_NULL:
+            fprintf(out, "extern const XrValue ");
+            cg_emit_static_value_const_name(ctx, out, module, slot);
+            fprintf(out, ";\n");
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool cg_emit_imported_static_fixed_array_const_decl(XiCgenCtx *ctx, FILE *out,
+                                                           const XiModule *module, int64_t slot,
+                                                           const XiConstLiteral *lit) {
+    if (!ctx || !out || !module || !lit || !lit->data_weak)
+        return false;
+    CgFixedArrayLaneInfo info;
+    if (!cg_freestanding_static_fixed_array_literal_in_module(ctx, module, slot, &info, NULL))
+        return false;
+    fprintf(out, "extern const %s ", info.ctype);
+    cg_emit_static_fixed_array_name(ctx, out, module, slot);
+    fprintf(out, "[%u];\n", (unsigned) info.count);
+    return true;
+}
+
+static bool cg_imported_static_const_decl_seen(const XiModule *module, int upto_slot,
+                                               const XiImportRef *ref) {
+    if (!module || !module->slot_imports || !ref)
+        return false;
+    for (int slot = 0; slot < upto_slot; slot++) {
+        const XiImportRef *prev = module->slot_imports[slot];
+        if (!prev)
+            continue;
+        if (prev->resolved_mod_index == ref->resolved_mod_index &&
+            prev->resolved_shared_slot == ref->resolved_shared_slot)
+            return true;
+    }
+    return false;
+}
+
+static bool cg_emit_freestanding_imported_static_const_decls(XiCgenCtx *ctx, FILE *out,
+                                                             const XiModule *module) {
+    if (!ctx || !out || !module || !ctx->freestanding_profile || !module->slot_imports)
+        return false;
+    bool emitted = false;
+    for (uint16_t slot = 0; slot < module->nslots; slot++) {
+        const XiImportRef *ref = module->slot_imports[slot];
+        if (!ref || cg_imported_static_const_decl_seen(module, (int) slot, ref))
+            continue;
+        const XiModule *target_module = NULL;
+        int64_t target_slot = -1;
+        const XiConstLiteral *lit =
+            cg_import_ref_target_const_literal(ctx, ref, &target_module, &target_slot);
+        if (!lit || !target_module || target_module == module || !lit->data_weak)
+            continue;
+        if (cg_emit_imported_static_scalar_const_decl(ctx, out, target_module, target_slot, lit) ||
+            cg_emit_imported_static_fixed_array_const_decl(ctx, out, target_module, target_slot,
+                                                           lit))
+            emitted = true;
+    }
+    if (emitted)
+        fprintf(out, "\n");
+    return emitted;
 }
 
 static bool cg_class_native_ref_stack_return_consumes_ctor(XiCgenCtx *ctx, const XiFunc *f,

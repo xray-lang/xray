@@ -712,6 +712,35 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         cg_emit_freestanding_static_scalar_const_ref(ctx, out, v, static_lit)) {
         return;
     }
+    const XiModule *import_const_module = NULL;
+    int64_t import_const_slot = -1;
+    const XiConstLiteral *import_lit = cg_import_slot_const_literal(
+        ctx, f, v ? (int) v->aux_int : -1, &import_const_module, &import_const_slot);
+    if (import_lit && xicgen_const_literal_is_freestanding_scalar(import_lit) &&
+        (!cg_const_literal_is_static_scalar_object(import_lit) ||
+         cg_imported_static_const_needs_weak_symbol(ctx, import_const_module, import_lit))) {
+        xicgen_emit_const_slot_literal_as_value(ctx, out, v, import_lit);
+        return;
+    }
+    if (import_lit &&
+        cg_freestanding_static_scalar_const_literal_in_module(ctx, import_const_module,
+                                                              import_const_slot, &static_lit) &&
+        cg_emit_freestanding_static_scalar_const_ref_in_module(ctx, out, import_const_module,
+                                                               import_const_slot, v, static_lit)) {
+        return;
+    }
+    if (import_lit && import_lit->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: freestanding imported aggregate const '%s.%s' must be consumed "
+                "through static field/index access\n",
+                import_const_module && import_const_module->name ? import_const_module->name : "?",
+                cg_module_const_slot_name(import_const_module, import_const_slot)
+                    ? cg_module_const_slot_name(import_const_module, import_const_slot)
+                    : "?");
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
     const XiConstLiteral *erased = xicgen_freestanding_erased_const_slot(ctx, v ? v->aux_int : -1);
     if (erased && erased->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
         fprintf(stderr,
@@ -868,6 +897,34 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     (void) f;
     (void) prefix;
     const XiImportRef *ref = (const XiImportRef *) v->aux;
+    const XiModule *import_const_module = NULL;
+    int64_t import_const_slot = -1;
+    const XiConstLiteral *import_lit =
+        cg_import_ref_target_const_literal(ctx, ref, &import_const_module, &import_const_slot);
+    if (import_lit && ctx && ctx->freestanding_profile) {
+        const XiConstLiteral *static_lit = NULL;
+        if (xicgen_const_literal_is_freestanding_scalar(import_lit) &&
+            (!cg_const_literal_is_static_scalar_object(import_lit) ||
+             cg_imported_static_const_needs_weak_symbol(ctx, import_const_module, import_lit))) {
+            xicgen_emit_const_slot_literal_as_value(ctx, out, v, import_lit);
+            return;
+        }
+        if (cg_freestanding_static_scalar_const_literal_in_module(ctx, import_const_module,
+                                                                  import_const_slot, &static_lit) &&
+            cg_emit_freestanding_static_scalar_const_ref_in_module(
+                ctx, out, import_const_module, import_const_slot, v, static_lit)) {
+            return;
+        }
+        if (import_lit->kind == XI_CONST_LITERAL_COMPTIME_AGGREGATE) {
+            fprintf(out, "XR_NULL_VAL /* static const import: %s.%s */",
+                    import_const_module && import_const_module->name ? import_const_module->name
+                                                                     : "?",
+                    cg_module_const_slot_name(import_const_module, import_const_slot)
+                        ? cg_module_const_slot_name(import_const_module, import_const_slot)
+                        : "?");
+            return;
+        }
+    }
     bool found = false;
     if (ref && ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 &&
         ref->resolved_mod_index < ctx->all_nmodules && ctx->all_modules[ref->resolved_mod_index]) {

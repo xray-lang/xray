@@ -52,6 +52,15 @@ int memcmp(const void *a, const void *b, size_t n);
 #ifndef XR_FUNC
 #define XR_FUNC extern
 #endif
+#ifndef XR_AINLINE
+#if defined(__GNUC__) || defined(__clang__)
+#define XR_AINLINE inline __attribute__((always_inline))
+#elif defined(_MSC_VER)
+#define XR_AINLINE __forceinline
+#else
+#define XR_AINLINE inline
+#endif
+#endif
 
 #if defined(__GNUC__) || defined(__clang__)
 #define XR_LIKELY(x) __builtin_expect(!!(x), 1)
