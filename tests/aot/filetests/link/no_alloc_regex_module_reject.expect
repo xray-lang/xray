@@ -1,0 +1,4 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_regex_is_valid_reject' allocates via stdlib 'regex.isValid'
+contains=xray_no_alloc_regex_is_valid_reject
+not_contains=CRASH

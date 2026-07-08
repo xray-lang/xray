@@ -1,0 +1,8 @@
+import regex
+
+@no_alloc
+fn xray_no_alloc_regex_is_valid_reject(pattern: string) -> bool {
+    return regex.isValid(pattern)
+}
+
+print(xray_no_alloc_regex_is_valid_reject("\\d+"))
