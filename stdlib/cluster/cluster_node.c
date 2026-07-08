@@ -226,23 +226,6 @@ int xr_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len) {
     return 0;
 }
 
-XrOutFrame *xr_outq_pop(XrOutputQueue *q) {
-    xr_amutex_lock(&q->lock);
-    XrOutFrame *f = q->head;
-    if (f) {
-        q->head = f->next;
-        if (!q->head)
-            q->tail = NULL;
-        q->total_bytes -= f->len;
-        q->frame_count--;
-        if (q->total_bytes <= q->low_watermark) {
-            atomic_store(&q->is_full, false);
-        }
-    }
-    xr_amutex_unlock(&q->lock);
-    return f;
-}
-
 XrOutFrame *xr_outq_pop_all(XrOutputQueue *q) {
     xr_amutex_lock(&q->lock);
     XrOutFrame *batch = q->head;
@@ -415,38 +398,6 @@ void xr_cluster_node_close(XrClusterNode *node) {
 }
 
 /* ========== Frame Send/Recv ========== */
-
-// Synchronous send — used only during handshake (before writer coroutine starts)
-int xr_cluster_node_send_frame_sync(XrClusterNode *node, uint8_t frame_type, const uint8_t *payload,
-                                    uint32_t payload_len) {
-    if (!node || !node->conn || node->state == XR_NODE_CLOSING)
-        return -1;
-
-    uint32_t frame_size = 4 + 1 + payload_len;
-    uint8_t stack_buf[4096];
-    uint8_t *frame =
-        (frame_size <= sizeof(stack_buf)) ? stack_buf : (uint8_t *) xr_malloc(frame_size);
-    if (!frame)
-        return -1;
-
-    int wrote = xr_frame_write(frame, frame_type, payload, payload_len);
-    if (wrote < 0) {
-        if (frame != stack_buf)
-            xr_free(frame);
-        return -1;
-    }
-
-    int rc = xr_io_write_all(node->conn, frame, (size_t) wrote);
-    if (frame != stack_buf)
-        xr_free(frame);
-    if (rc == wrote) {
-        atomic_fetch_add(&node->metrics.frames_sent, 1);
-        atomic_fetch_add(&node->metrics.bytes_sent, (uint64_t) wrote);
-        return 0;
-    }
-    atomic_fetch_add(&node->metrics.send_errors, 1);
-    return -1;
-}
 
 // Enqueue pre-built frame data for async writing
 int xr_cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len) {

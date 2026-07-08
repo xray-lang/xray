@@ -208,11 +208,6 @@ XR_FUNC int xr_cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, ui
 XR_FUNC int xr_cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type,
                                        const uint8_t *payload, uint32_t payload_len);
 
-// Send a frame synchronously (bypassing output queue).
-// Used only during handshake before writer coroutine starts.
-XR_FUNC int xr_cluster_node_send_frame_sync(XrClusterNode *node, uint8_t frame_type,
-                                            const uint8_t *payload, uint32_t payload_len);
-
 // Read a single frame from a node connection
 // Returns frame type, writes payload into provided buffer.
 // Returns -1 on error/disconnect.
@@ -261,7 +256,6 @@ XR_FUNC void xr_outq_close_write_end(XrOutputQueue *q);
 
 XR_FUNC int xr_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len);
 XR_FUNC int xr_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len);
-XR_FUNC XrOutFrame *xr_outq_pop(XrOutputQueue *q);
 XR_FUNC XrOutFrame *xr_outq_pop_all(XrOutputQueue *q);
 
 /* ========== Phi Accrual Failure Detector ========== */
