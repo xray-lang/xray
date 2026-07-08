@@ -1,0 +1,14 @@
+fn xray_no_alloc_map_foreach_allocating_callback(key: int, value: int) {
+    var scratch: Array<int> = []
+    scratch.push(key + value)
+    print(scratch.length)
+}
+
+@no_alloc
+fn xray_no_alloc_map_foreach_callback_reject(values: Map<int, int>) {
+    values.forEach(xray_no_alloc_map_foreach_allocating_callback)
+}
+
+var xray_no_alloc_map_foreach_values: Map<int, int> = #{}
+xray_no_alloc_map_foreach_values.set(1, 2)
+xray_no_alloc_map_foreach_callback_reject(xray_no_alloc_map_foreach_values)
