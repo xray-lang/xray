@@ -1,0 +1,8 @@
+@no_alloc
+fn xray_no_alloc_array_resize_reject(xs: Array<int>) -> int {
+    xs.resize(16, 0)
+    return xs.length
+}
+
+var xs = Array<int>(0, 0)
+print(xray_no_alloc_array_resize_reject(xs))
