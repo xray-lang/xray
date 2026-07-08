@@ -507,6 +507,10 @@ static bool is_redirect_status(int status) {
     return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
 }
 
+static bool http_response_allows_body(int status) {
+    return !(status >= 100 && status < 200) && status != 204 && status != 304;
+}
+
 // Internal request function (single request, no redirect handling)
 static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequestConfig *config,
                                              const char *url_str, bool strip_auth);
@@ -752,6 +756,12 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
             xr_http_parse_response(&parser, &resp, recv_buf->bytes, recv_buf->size);
 
         if (parse_result == XR_HTTP_PARSE_OK) {
+            bool allows_body = http_response_allows_body(resp.status_code) &&
+                               config->method != XR_HTTP_METHOD_HEAD;
+            if (!allows_body) {
+                break;
+            }
+
             // Stream mode: return headers immediately, keep connection open
             if (config->stream) {
                 result.status_code = resp.status_code;
@@ -836,8 +846,13 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
         goto cleanup;
     }
 
-    // Connection can be reused if server supports keep-alive
-    conn_ok = resp.keep_alive;
+    bool allows_body =
+        http_response_allows_body(resp.status_code) && config->method != XR_HTTP_METHOD_HEAD;
+    bool has_ignored_body_bytes = !allows_body && recv_buf->size > (size_t) resp.header_bytes;
+
+    // Connection can be reused if server supports keep-alive and the response
+    // did not carry ignored bytes after a no-body status/method.
+    conn_ok = resp.keep_alive && !has_ignored_body_bytes;
 
     // Fill result
     result.status_code = resp.status_code;
@@ -860,7 +875,10 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
     char *raw_body = NULL;
     size_t raw_body_len = 0;
 
-    if (resp.body && resp.body_len > 0) {
+    if (!allows_body) {
+        raw_body = NULL;
+        raw_body_len = 0;
+    } else if (resp.body && resp.body_len > 0) {
         raw_body = (char *) resp.body;
         raw_body_len = resp.body_len;
     } else if (resp.content_length < 0 && recv_buf->size > (size_t) resp.header_bytes) {

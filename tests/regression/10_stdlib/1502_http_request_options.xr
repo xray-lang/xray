@@ -29,6 +29,19 @@ fn capture_request_line(lst: NetListener, lines: Channel<string>) {
     net.close(lst)
 }
 
+fn serve_raw_response(lst: NetListener, response: string) {
+    var conn = net.accept(lst)
+    if (conn == null) {
+        net.close(lst)
+        return
+    }
+
+    net.read(conn!, 4096)
+    net.write(conn!, response)
+    net.close(conn!)
+    net.close(lst)
+}
+
 @test
 fn test_request_options_object() {
     var options = {
@@ -85,6 +98,25 @@ fn test_request_preserves_custom_method_token() {
     var line = recv_line(lines)
     assert(resp.ok)
     assert_eq(line, "PROPFIND /custom HTTP/1.1")
+}
+
+@test
+fn test_request_ignores_no_body_status_payload() {
+    var maybeLst = net.listen(0, 1)
+    if (maybeLst == null) { return }
+    var lst = maybeLst!
+    go serve_raw_response(
+        lst,
+        "HTTP/1.1 204 No Content\r\nConnection: keep-alive\r\n\r\nignored"
+    )
+
+    var resp = http.request({
+        url: "http://127.0.0.1:" + string(lst.port()) + "/empty"
+    })
+
+    assert(resp.ok)
+    assert_eq(resp.status, 204)
+    assert_eq(resp.body, "")
 }
 
 print("All http request options tests passed")
