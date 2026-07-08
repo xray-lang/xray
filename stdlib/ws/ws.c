@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <ctype.h>
 
 #ifdef XR_OS_MACOS
 #include <CommonCrypto/CommonDigest.h>
@@ -194,16 +195,23 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
     *port = 80;
     *secure = false;
 
+    if (!url || strchr(url, '#'))
+        return -WS_ERR_URL;
+
+    char *parsed_host = NULL;
+    char *parsed_path = NULL;
+    int parsed_port = 80;
+    bool parsed_secure = false;
     const char *p = url;
 
-    if (strncmp(p, "wss://", 6) == 0) {
-        *secure = true;
-        *port = 443;
+    if (strncasecmp(p, "wss://", 6) == 0) {
+        parsed_secure = true;
+        parsed_port = 443;
         p += 6;
-    } else if (strncmp(p, "ws://", 5) == 0) {
+    } else if (strncasecmp(p, "ws://", 5) == 0) {
         p += 5;
     } else {
-        return -1;
+        return -WS_ERR_URL;
     }
 
     // Extract host — handle IPv6 bracket notation
@@ -213,35 +221,92 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
         const char *host_start = p;
         while (*p && *p != ']')
             p++;
-        if (*p != ']')
-            return -1;  // unterminated bracket
-        *host = xr_strndup(host_start, (size_t) (p - host_start));
+        if (*p != ']' || p == host_start)
+            return -WS_ERR_URL;  // unterminated or empty bracket
+        parsed_host = xr_strndup(host_start, (size_t) (p - host_start));
+        if (!parsed_host)
+            return -WS_ERR_MEMORY;
         p++;  // skip ']'
+        if (*p && *p != ':' && *p != '/' && *p != '?') {
+            xr_free(parsed_host);
+            return -WS_ERR_URL;
+        }
     } else {
         const char *host_start = p;
         while (*p && *p != ':' && *p != '/' && *p != '?')
             p++;
-        *host = xr_strndup(host_start, (size_t) (p - host_start));
+        if (p == host_start)
+            return -WS_ERR_URL;
+        parsed_host = xr_strndup(host_start, (size_t) (p - host_start));
+        if (!parsed_host)
+            return -WS_ERR_MEMORY;
     }
-    if (!*host)
-        return -1;
 
     // Extract port
     if (*p == ':') {
         p++;
-        *port = atoi(p);
-        while (*p && *p != '/' && *p != '?')
+        if (!isdigit((unsigned char) *p)) {
+            xr_free(parsed_host);
+            return -WS_ERR_URL;
+        }
+        int value = 0;
+        while (*p && *p != '/' && *p != '?') {
+            if (!isdigit((unsigned char) *p)) {
+                xr_free(parsed_host);
+                return -WS_ERR_URL;
+            }
+            value = value * 10 + (*p - '0');
+            if (value > 65535) {
+                xr_free(parsed_host);
+                return -WS_ERR_URL;
+            }
             p++;
+        }
+        if (value <= 0) {
+            xr_free(parsed_host);
+            return -WS_ERR_URL;
+        }
+        parsed_port = value;
     }
 
     // Extract path
-    if (*p == '/' || *p == '?') {
-        *path = xr_strdup(p);
+    if (*p == '/') {
+        parsed_path = xr_strdup(p);
+    } else if (*p == '?') {
+        size_t query_len = strlen(p);
+        parsed_path = (char *) xr_malloc(query_len + 2);
+        if (parsed_path) {
+            parsed_path[0] = '/';
+            memcpy(parsed_path + 1, p, query_len + 1);
+        }
+    } else if (*p == '\0') {
+        parsed_path = xr_strdup("/");
     } else {
-        *path = xr_strdup("/");
+        xr_free(parsed_host);
+        return -WS_ERR_URL;
+    }
+    if (!parsed_path) {
+        xr_free(parsed_host);
+        return -WS_ERR_MEMORY;
     }
 
+    *host = parsed_host;
+    *path = parsed_path;
+    *port = parsed_port;
+    *secure = parsed_secure;
+
     return 0;
+}
+
+XrWsError xr_ws_url_validate(const char *url) {
+    char *host = NULL;
+    char *path = NULL;
+    int port = 0;
+    bool secure = false;
+    int rc = parse_ws_url(url, &host, &port, &path, &secure);
+    xr_free(host);
+    xr_free(path);
+    return rc < 0 ? (XrWsError) (-rc) : WS_OK;
 }
 
 /*
