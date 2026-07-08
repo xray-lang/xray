@@ -62,42 +62,6 @@ typedef struct {
     size_t value_len;
 } XrHttpHeader;
 
-/* ========== HTTP Request (Zero-Copy) ========== */
-
-typedef struct {
-    // Request line
-    XrHttpMethod method;
-    const char *method_str;  // Original method string
-    size_t method_len;
-    const char *path;  // Path (without query string)
-    size_t path_len;
-    const char *query;  // Query string (without ?)
-    size_t query_len;
-    int version_major;  // HTTP major version
-    int version_minor;  // HTTP minor version
-
-    // Headers
-    XrHttpHeader headers[XR_HTTP_MAX_HEADERS];
-    size_t header_count;
-
-    // Special headers (fast access)
-    int64_t content_length;    // Content-Length, -1 = not set
-    bool keep_alive;           // Connection: keep-alive
-    bool chunked;              // Transfer-Encoding: chunked (single supported coding)
-    bool framing_invalid;      // malformed/conflicting CL or TE (reject)
-    const char *content_type;  // Content-Type
-    size_t content_type_len;
-    const char *host;  // Host
-    size_t host_len;
-
-    // Body
-    const char *body;  // Points to body start
-    size_t body_len;   // Received body length
-
-    // Parse state
-    size_t header_bytes;  // Total header bytes (including \r\n\r\n)
-} XrHttpRequest;
-
 /* ========== HTTP Response (Zero-Copy) ========== */
 
 typedef struct {
@@ -146,21 +110,15 @@ typedef struct {
 /* ========== Parser State Machine ========== */
 
 typedef enum {
-    HTTP_STATE_REQUEST_LINE,
     HTTP_STATE_RESPONSE_LINE,
-    HTTP_STATE_HEADER_NAME,
-    HTTP_STATE_HEADER_VALUE,
     HTTP_STATE_BODY,
     HTTP_STATE_CHUNK_SIZE,
-    HTTP_STATE_CHUNK_DATA,
     HTTP_STATE_DONE,
     HTTP_STATE_ERROR
 } XrHttpParseState;
 
 typedef struct {
     XrHttpParseState state;
-    size_t consumed;    // Consumed byte count
-    size_t line_start;  // Current line start position
 } XrHttpParser;
 
 /* ========== Core Parse API ========== */
@@ -200,12 +158,6 @@ XR_FUNC int xr_http_parse_response_ex(const char *buf, size_t len, int *minor_ve
                                       size_t *num_headers, size_t last_len);
 
 /*
- * Parse headers only (for trailer etc.)
- */
-XR_FUNC int xr_http_parse_headers(const char *buf, size_t len, XrHttpHeader *headers,
-                                  size_t *num_headers, size_t last_len);
-
-/*
  * Decode chunked encoding
  *
  * This function rewrites buf in-place, removing chunked encoding overhead
@@ -222,24 +174,12 @@ XR_FUNC int xr_http_parse_headers(const char *buf, size_t len, XrHttpHeader *hea
  */
 XR_FUNC ssize_t xr_http_decode_chunked(XrChunkedDecoder *decoder, char *buf, size_t *bufsz);
 
-/*
- * Check if chunked decoder is in the middle of a data block
- */
-XR_FUNC int xr_http_chunked_is_in_data(XrChunkedDecoder *decoder);
-
 /* ========== Simplified API ========== */
 
 /*
  * Initialize parser
  */
 XR_FUNC void xr_http_parser_init(XrHttpParser *parser);
-
-/*
- * Parse HTTP request (auto-fill XrHttpRequest struct)
- * Uses xr_http_parse_request_ex internally, and handles special headers
- */
-XR_FUNC XrHttpParseResult xr_http_parse_request(XrHttpParser *parser, XrHttpRequest *req,
-                                                const char *data, size_t len);
 
 /*
  * Parse HTTP response (auto-fill XrHttpResponse struct)
@@ -249,25 +189,9 @@ XR_FUNC XrHttpParseResult xr_http_parse_response(XrHttpParser *parser, XrHttpRes
                                                  const char *data, size_t len);
 
 /*
- * Reset parser state
- */
-XR_FUNC void xr_http_parser_reset(XrHttpParser *parser);
-
-/*
- * Initialize request struct
- */
-XR_FUNC void xr_http_request_init(XrHttpRequest *req);
-
-/*
  * Initialize response struct
  */
 XR_FUNC void xr_http_response_init(XrHttpResponse *resp);
-
-/*
- * Find header (case-insensitive)
- */
-XR_FUNC const char *xr_http_get_header(XrHttpHeader *headers, size_t count, const char *name,
-                                       size_t *out_len);
 
 /*
  * HTTP method string to enum
