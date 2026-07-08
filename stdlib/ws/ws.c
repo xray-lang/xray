@@ -2256,7 +2256,7 @@ bool xr_ws_is_upgrade_request(const char *request_headers) {
     return true;
 }
 
-char *xr_ws_get_sec_key(const char *request_headers) {
+static char *ws_get_sec_key(const char *request_headers) {
     if (!request_headers)
         return NULL;
 
@@ -2297,8 +2297,8 @@ char *xr_ws_get_sec_key(const char *request_headers) {
     return key;
 }
 
-int xr_ws_send_upgrade_response(int fd, const char *sec_key, const char *protocol,
-                                bool deflate_ok) {
+static int ws_send_upgrade_response(int fd, const char *sec_key, const char *protocol,
+                                    bool deflate_ok) {
     if (fd < 0 || !sec_key)
         return -1;
 
@@ -2360,7 +2360,7 @@ int xr_ws_send_upgrade_response(int fd, const char *sec_key, const char *protoco
 
 /*
  * Extract the `name` part of each comma-separated token in a subprotocol
- * header value. Used by xr_ws_pick_subprotocol; RFC 6455 requires that
+ * header value. Used by ws_pick_subprotocol; RFC 6455 requires that
  * the server picks one name from the client's offer list, case-sensitive.
  */
 static bool ws_origin_allowed(const char *origin, const char **allowlist) {
@@ -2403,7 +2403,7 @@ static void ws_send_simple_response(int fd, int status, const char *reason) {
     }
 }
 
-char *xr_ws_pick_subprotocol(const char *request_headers, const char **server_protocols) {
+static char *ws_pick_subprotocol(const char *request_headers, const char **server_protocols) {
     if (!request_headers || !server_protocols || !server_protocols[0]) {
         return NULL;
     }
@@ -2466,7 +2466,7 @@ XrWebSocket *xr_ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *r
     }
 
     // Get Sec-WebSocket-Key
-    char *sec_key = xr_ws_get_sec_key(request_headers);
+    char *sec_key = ws_get_sec_key(request_headers);
     if (!sec_key)
         return NULL;
 
@@ -2485,11 +2485,11 @@ XrWebSocket *xr_ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *r
     // Subprotocol negotiation (W-19).
     char *picked_proto = NULL;
     if (opts && opts->server_protocols) {
-        picked_proto = xr_ws_pick_subprotocol(request_headers, opts->server_protocols);
+        picked_proto = ws_pick_subprotocol(request_headers, opts->server_protocols);
     }
 
     // Send upgrade response (with deflate + picked subprotocol if any)
-    if (xr_ws_send_upgrade_response(fd, sec_key, picked_proto, client_deflate) < 0) {
+    if (ws_send_upgrade_response(fd, sec_key, picked_proto, client_deflate) < 0) {
         xr_free(sec_key);
         xr_free(picked_proto);
         return NULL;

@@ -8,8 +8,8 @@
  * ws.h - WebSocket module public interface
  *
  * KEY CONCEPT:
- *   Pure C WebSocket module with stackful coroutine server model.
- *   Client and server both implemented entirely in C, no script layer.
+ *   Native WebSocket connection I/O with pure-Xray protocol helpers layered
+ *   above it for public handshake/frame control-plane APIs.
  *   Implements RFC 6455 WebSocket protocol.
  */
 
@@ -349,26 +349,6 @@ XR_FUNC XrWebSocket *xr_ws_upgrade_ex(struct XrVMRuntime *isolate, int fd,
 // Check if HTTP request is a WebSocket upgrade request
 // Returns: true if it is a WebSocket upgrade request
 XR_FUNC bool xr_ws_is_upgrade_request(const char *request_headers);
-
-// Get Sec-WebSocket-Key (extract from request headers)
-// Returns: key string (caller must free), NULL if not found
-XR_FUNC char *xr_ws_get_sec_key(const char *request_headers);
-
-/*
- * Pick the first subprotocol the client offered that the server also
- * supports. `server_protocols` is a NULL-terminated array ordered by
- * server preference; the client offer is parsed from the request's
- * Sec-WebSocket-Protocol header as a comma-separated list.
- *
- * Returns an xr_strdup'd name on match (caller frees) or NULL if no
- * overlap exists or the client sent no offer.
- */
-XR_FUNC char *xr_ws_pick_subprotocol(const char *request_headers, const char **server_protocols);
-
-// Send WebSocket upgrade response
-// Returns: 0 on success, -1 on failure
-XR_FUNC int xr_ws_send_upgrade_response(int fd, const char *sec_key, const char *protocol,
-                                        bool deflate_ok);
 
 /*
  * Upgrade HTTP connection to WebSocket and wrap as script-visible Json object.
