@@ -1,0 +1,4 @@
+status=pass
+contains=xray_no_alloc_string_tostring_ok
+not_contains=allocates via method 'unknown.toString'
+not_contains=allocates via method 'string.toString'
