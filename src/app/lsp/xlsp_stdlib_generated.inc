@@ -136,11 +136,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"config", XLSP_SYM_FUNCTION, "fn(opts: Json): ()", "Configure HTTP server limits and timeouts", NULL, 0},
     {"serverStats", XLSP_SYM_FUNCTION, "fn(): Json", "Return HTTP server counters", NULL, 0},
     {"ws", XLSP_SYM_FUNCTION, "fn(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", NULL, 0},
-    {"readChunk", XLSP_SYM_FUNCTION, "fn(resp: Json, maxBytes?: int): string?", "Read the next chunk from a streaming HTTP response", NULL, 0},
-    {"closeStream", XLSP_SYM_FUNCTION, "fn(resp: Json): ()", "Close a streaming HTTP response", NULL, 0},
     {"stopServer", XLSP_SYM_FUNCTION, "fn(): ()", "Stop the HTTP server", NULL, 0},
-    {"download", XLSP_SYM_FUNCTION, "fn(url: string, path: string): DownloadResult", "Download file from URL", NULL, 0},
-    {"getContentLength", XLSP_SYM_FUNCTION, "fn(url: string): int", "Get content length of URL", NULL, 0},
     {"h2Get", XLSP_SYM_FUNCTION, "fn(url: string, options?: Json): Json", "HTTP/2 GET request", NULL, 0},
     {"h2Post", XLSP_SYM_FUNCTION, "fn(url: string, body: string, contentType?: string): Json", "HTTP/2 POST request", NULL, 0},
     {"h2Request", XLSP_SYM_FUNCTION, "fn(options: Json): Json", "Generic HTTP/2 request", NULL, 0},
@@ -168,7 +164,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"formData", XLSP_SYM_FUNCTION, "fn(maxTotalSize?: int, maxFileSize?: int): FormData", "Create an explicit multipart/form-data builder.", NULL, 0},
     {"HttpResponse", XLSP_SYM_CLASS, "type HttpResponse", "Native handle type", NULL, 0},
     {"HttpRequest", XLSP_SYM_CLASS, "type HttpRequest", "Native handle type", NULL, 0},
-    {"DownloadResult", XLSP_SYM_CLASS, "type DownloadResult", "Native handle type", NULL, 0},
     {"Cookie", XLSP_SYM_CLASS, "type Cookie", "Class type", NULL, 0},
     {"CookieJar", XLSP_SYM_CLASS, "type CookieJar", "Class type", NULL, 0},
     {"Router", XLSP_SYM_CLASS, "type Router", "Class type", NULL, 0},
@@ -182,7 +177,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"MultipartBody", XLSP_SYM_CLASS, "type MultipartBody", "Built multipart/form-data payload and matching Content-Type.", NULL, 0},
     {"FormData", XLSP_SYM_CLASS, "type FormData", "Explicit multipart/form-data builder.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 55
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 50
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {

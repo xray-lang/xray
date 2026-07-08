@@ -75,11 +75,7 @@ static void xr_stdlib_vm_bind_http_generated(XrVMRuntime *isolate, XrModule *mod
     XRS_EXPORT(module, isolate, "config", xr_http_config_impl);
     XRS_EXPORT(module, isolate, "serverStats", xr_http_server_stats);
     XRS_EXPORT(module, isolate, "ws", http_ws_route);
-    XRS_EXPORT_SLOW(module, isolate, "readChunk", http_read_chunk);
-    XRS_EXPORT(module, isolate, "closeStream", http_close_stream);
     XRS_EXPORT(module, isolate, "stopServer", http_stop_server);
-    XRS_EXPORT_SLOW(module, isolate, "download", http_download);
-    XRS_EXPORT(module, isolate, "getContentLength", http_get_content_length);
     XRS_EXPORT(module, isolate, "h2Get", h2_get);
     XRS_EXPORT(module, isolate, "h2Post", h2_post);
     XRS_EXPORT(module, isolate, "h2Request", h2_request);

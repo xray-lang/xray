@@ -317,13 +317,6 @@ void xr_http_result_free(XrHttpResult *result) {
         xr_free(result->error_msg);
         result->error_msg = NULL;
     }
-    // Clean up stream resources if caller forgot to close. Result-free
-    // is called during isolate teardown / GC finalize where the calling
-    // isolate is not in scope; pass NULL so the inner pool close skips
-    // netpoll deregistration (the fd is going away anyway).
-    if (result->_stream_conn || result->_stream_buf) {
-        xr_http_stream_close(NULL, result);
-    }
 }
 
 /* ========== Build Request ========== */
@@ -762,36 +755,6 @@ static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequest
                 break;
             }
 
-            // Stream mode: return headers immediately, keep connection open
-            if (config->stream) {
-                result.status_code = resp.status_code;
-                if (resp.status_text && resp.status_text_len > 0) {
-                    result.status_text = (char *) xr_malloc(resp.status_text_len + 1);
-                    if (result.status_text) {
-                        memcpy(result.status_text, resp.status_text, resp.status_text_len);
-                        result.status_text[resp.status_text_len] = '\0';
-                    }
-                }
-                // Copy headers (compact single-allocation)
-                copy_headers_compact(&result, resp.headers, resp.header_count);
-                // Compact recv_buf: discard headers, keep leftover body data
-                size_t leftover = recv_buf->size - resp.header_bytes;
-                if (leftover > 0) {
-                    memmove(recv_buf->bytes, recv_buf->bytes + resp.header_bytes, leftover);
-                }
-                recv_buf->size = leftover;
-
-                result._stream_conn = pooled;
-                result._stream_buf = recv_buf;
-                result._stream_remaining = resp.content_length;  // -1 if unknown
-                result._stream_chunked = resp.chunked;
-                result.error = XR_HTTP_OK;
-                // Prevent cleanup from closing conn / freeing buf
-                pooled = NULL;
-                recv_buf = NULL;
-                goto cleanup;
-            }
-
             // Check if receive complete
             if (resp.content_length >= 0) {
                 size_t expected = resp.header_bytes + resp.content_length;
@@ -1092,64 +1055,4 @@ bool xr_http_context_is_cancelled(XrHttpReqContext *ctx) {
 
 void xr_http_context_free(XrHttpReqContext *ctx) {
     xr_free(ctx);
-}
-
-/* ========== Streaming Response API ========== */
-
-int xr_http_stream_read(XrVMRuntime *X, XrHttpResult *result, char *buf, int max_bytes) {
-    if (!result || !buf || max_bytes <= 0)
-        return -1;
-    if (!result->_stream_conn)
-        return 0;  // already closed
-
-    XrPooledConn *conn = (XrPooledConn *) result->_stream_conn;
-    XrNetBuffer *nb = (XrNetBuffer *) result->_stream_buf;
-
-    // First drain any leftover data in the recv buffer
-    if (nb && nb->size > 0) {
-        int copy = (int) nb->size;
-        if (copy > max_bytes)
-            copy = max_bytes;
-        memcpy(buf, nb->bytes, copy);
-        nb->size -= copy;
-        if (nb->size > 0) {
-            memmove(nb->bytes, nb->bytes + copy, nb->size);
-        }
-        if (result->_stream_remaining > 0) {
-            result->_stream_remaining -= copy;
-        }
-        return copy;
-    }
-
-    // Check if body is fully consumed
-    if (result->_stream_remaining == 0)
-        return 0;
-
-    // Read from connection
-    int n = xr_pooled_conn_read(X, conn, buf, max_bytes);
-    if (n <= 0)
-        return n == 0 ? 0 : -1;
-
-    if (result->_stream_remaining > 0) {
-        result->_stream_remaining -= n;
-        if (result->_stream_remaining < 0)
-            result->_stream_remaining = 0;
-    }
-    return n;
-}
-
-void xr_http_stream_close(XrVMRuntime *X, XrHttpResult *result) {
-    if (!result)
-        return;
-
-    if (result->_stream_buf) {
-        xr_netbuf_release((XrNetBuffer *) result->_stream_buf);
-        result->_stream_buf = NULL;
-    }
-    if (result->_stream_conn) {
-        XrPooledConn *conn = (XrPooledConn *) result->_stream_conn;
-        // Don't return to pool — caller consumed partially, state unknown.
-        xr_conn_pool_close(X, NULL, conn);
-        result->_stream_conn = NULL;
-    }
 }

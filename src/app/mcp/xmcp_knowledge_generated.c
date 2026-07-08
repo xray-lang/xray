@@ -818,36 +818,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "DownloadResult",
-        .signature = "DownloadResult",
-        .summary = "Handle type",
-    },
-    {
-        .name = "DownloadResult.completed",
-        .signature = "const bool",
-        .summary = "Handle field",
-    },
-    {
-        .name = "DownloadResult.downloaded",
-        .signature = "const int",
-        .summary = "Handle field",
-    },
-    {
-        .name = "DownloadResult.error",
-        .signature = "const string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "DownloadResult.status",
-        .signature = "const int",
-        .summary = "Handle field",
-    },
-    {
-        .name = "DownloadResult.total",
-        .signature = "const int",
-        .summary = "Handle field",
-    },
-    {
         .name = "FormData",
         .signature = "FormData",
         .summary = "",
@@ -1278,11 +1248,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "closeStream",
-        .signature = "(resp: Json): ()",
-        .summary = "Close a streaming HTTP response",
-    },
-    {
         .name = "config",
         .signature = "(opts: Json): ()",
         .summary = "Configure HTTP server limits and timeouts",
@@ -1303,11 +1268,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "HTTP DELETE request",
     },
     {
-        .name = "download",
-        .signature = "(url: string, path: string): DownloadResult",
-        .summary = "Download file from URL",
-    },
-    {
         .name = "formData",
         .signature = "(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData",
         .summary = "",
@@ -1316,11 +1276,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "get",
         .signature = "(url: string): HttpResponse",
         .summary = "HTTP GET request",
-    },
-    {
-        .name = "getContentLength",
-        .signature = "(url: string): int",
-        .summary = "Get content length of URL",
     },
     {
         .name = "h2CreateServer",
@@ -1406,11 +1361,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "put",
         .signature = "(url: string, body?: string, contentType?: string): HttpResponse",
         .summary = "HTTP PUT request",
-    },
-    {
-        .name = "readChunk",
-        .signature = "(resp: Json, maxBytes?: int): string?",
-        .summary = "Read the next chunk from a streaming HTTP response",
     },
     {
         .name = "redirectDecision",
@@ -5576,12 +5526,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CookieJar.count` | `: int { fn() { return this.cookies.length } }` |  |\n"
             "| `CookieJar.getHeader` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0): string?` |  |\n"
             "| `CookieJar.maxCookies` | `: int` |  |\n"
-            "| `http.DownloadResult` | `DownloadResult` | Handle type |\n"
-            "| `http.DownloadResult.completed` | `const bool` | Handle field |\n"
-            "| `http.DownloadResult.downloaded` | `const int` | Handle field |\n"
-            "| `http.DownloadResult.error` | `const string` | Handle field |\n"
-            "| `http.DownloadResult.status` | `const int` | Handle field |\n"
-            "| `http.DownloadResult.total` | `const int` | Handle field |\n"
             "| `FormData` | `FormData` |  |\n"
             "| `FormData.append` | `(name: string, value: string): bool` |  |\n"
             "| `FormData.appendFile` | `(name: string, path: string): bool` |  |\n"
@@ -5668,15 +5612,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Router.add` | `(method: string, path: string, value: unknown): bool` |  |\n"
             "| `Router.constructor` | `(): ()` |  |\n"
             "| `Router.find` | `(method: string, path: string): RouteMatch?` |  |\n"
-            "| `http.closeStream` | `(resp: Json): ()` | Close a streaming HTTP response |\n"
             "| `http.config` | `(opts: Json): ()` | Configure HTTP server limits and timeouts |\n"
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.delete` | `(url: string): HttpResponse` | HTTP DELETE request |\n"
-            "| `http.download` | `(url: string, path: string): DownloadResult` | Download file from URL |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
             "| `http.get` | `(url: string): HttpResponse` | HTTP GET request |\n"
-            "| `http.getContentLength` | `(url: string): int` | Get content length of URL |\n"
             "| `http.h2CreateServer` | `(options?: Json): bool` | Create HTTP/2 server |\n"
             "| `http.h2Get` | `(url: string, options?: Json): Json` | HTTP/2 GET request |\n"
             "| `http.h2Listen` | `(): bool` | Start HTTP/2 server |\n"
@@ -5694,7 +5635,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?` |  |\n"
             "| `http.post` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP POST request |\n"
             "| `http.put` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP PUT request |\n"
-            "| `http.readChunk` | `(resp: Json, maxBytes?: int): string?` | Read the next chunk from a streaming HTTP response |\n"
             "| `http.redirectDecision` | `(status: int, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?` |  |\n"
             "| `http.redirectTarget` | `(currentUrl: string, location: string): string?` |  |\n"
             "| `http.request` | `(options: Json): HttpResponse` | Generic HTTP request |\n"

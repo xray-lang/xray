@@ -23,7 +23,6 @@
 #include "http_router.h"
 #include "http_server.h"
 #include "../../src/base/xplatform.h"
-#include "http_stream.h"
 #include "../common.h"
 #include "../../src/runtime/object/xjson_serde.h"
 // NOTE: WebSocket moved to separate 'ws' module
@@ -479,79 +478,9 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
         config.header_count = custom_header_count;
     }
 
-    // Check stream option
-    XrValue stream_val = xr_json_get_by_key(X, options, "stream");
-    if (XR_IS_BOOL(stream_val) && XR_TO_BOOL(stream_val)) {
-        config.stream = true;
-    }
-
-    XrValue ret;
-
-    // Synchronous call
     XrHttpResult result = xr_http_request(X, &config);
-
-    if (config.stream && result._stream_conn) {
-        // Store result in streams array, return handle
-        XrHttpContext *ctx = xr_http_get_context(X);
-        int slot = -1;
-        if (ctx) {
-            for (int i = 0; i < XR_HTTP_MAX_STREAMS; i++) {
-                if (!ctx->streams[i]) {
-                    slot = i;
-                    break;
-                }
-            }
-        }
-        if (slot < 0) {
-            xr_http_result_free(&result);
-            URL_COPY_END();
-            if (custom_headers)
-                xr_free(custom_headers);
-            xr_free(method_name);
-            return xr_null();
-        }
-        XrHttpResult *sr = (XrHttpResult *) xr_malloc(sizeof(XrHttpResult));
-        if (!sr) {
-            xr_http_result_free(&result);
-            URL_COPY_END();
-            if (custom_headers)
-                xr_free(custom_headers);
-            xr_free(method_name);
-            return xr_null();
-        }
-        *sr = result;
-        ctx->streams[slot] = sr;
-
-        XrJson *json = xr_json_new(xr_current_coro(X));
-        xr_json_set_by_key(X, json, "status", xr_int(sr->status_code));
-        xr_json_set_by_key(X, json, "statusText",
-                           sr->status_text ? xrs_string_value_c(X, sr->status_text)
-                                           : xrs_string_value_c(X, ""));
-        XrJson *hdrs = xr_json_new(xr_current_coro(X));
-        for (int i = 0; i < sr->header_count; i++) {
-            char buf[128];
-            size_t kl = sr->headers[i].name_len;
-            if (kl >= sizeof(buf))
-                kl = sizeof(buf) - 1;
-            memcpy(buf, sr->headers[i].name, kl);
-            buf[kl] = '\0';
-            xr_json_set_by_key(
-                X, hdrs, buf,
-                xrs_string_value_n(X, sr->headers[i].value, sr->headers[i].value_len));
-        }
-        xr_json_set_by_key(X, json, "headers", xr_json_value(hdrs));
-        /* Stream response body is read incrementally via http.streamRead, so
-         * body starts empty here; error mirrors the non-streaming path. */
-        xr_json_set_by_key(X, json, "body", xrs_string_value_c(X, ""));
-        xr_json_set_by_key(X, json, "error", xr_null());
-        xr_json_set_by_key(X, json, "ok", xr_bool(sr->status_code >= 200 && sr->status_code < 300));
-        xr_json_set_by_key(X, json, "streaming", xr_bool(true));
-        xr_json_set_by_key(X, json, "_streamId", xr_int(slot));
-        ret = xr_json_value(json);
-    } else {
-        ret = result_to_json(X, &result);
-        xr_http_result_free(&result);
-    }
+    XrValue ret = result_to_json(X, &result);
+    xr_http_result_free(&result);
 
     // Cleanup
     URL_COPY_END();
@@ -560,64 +489,6 @@ static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
     xr_free(method_name);
 
     return ret;
-}
-
-// http.readChunk(resp, maxBytes?) -> string | null
-// Read next chunk from streaming response. Returns null on EOF.
-static XrValue http_read_chunk(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !xr_value_is_json(args[0]))
-        return xr_null();
-    XrJson *resp = xr_value_to_json(args[0]);
-    XrValue sid_val = xr_json_get_by_key(X, resp, "_streamId");
-    if (!XR_IS_INT(sid_val))
-        return xr_null();
-    int slot = (int) XR_TO_INT(sid_val);
-
-    XrHttpContext *ctx = xr_http_get_context(X);
-    if (!ctx || slot < 0 || slot >= XR_HTTP_MAX_STREAMS || !ctx->streams[slot])
-        return xr_null();
-
-    int max_bytes = 8192;
-    if (argc >= 2 && XR_IS_INT(args[1])) {
-        int v = (int) XR_TO_INT(args[1]);
-        if (v > 0 && v <= 1048576)
-            max_bytes = v;
-    }
-
-    char *buf = (char *) xr_malloc(max_bytes);
-    if (!buf)
-        return xr_null();
-
-    int n = xr_http_stream_read(X, ctx->streams[slot], buf, max_bytes);
-    if (n <= 0) {
-        xr_free(buf);
-        return xr_null();
-    }
-    XrValue result = xrs_string_value_n(X, buf, n);
-    xr_free(buf);
-    return result;
-}
-
-// http.closeStream(resp) -> void
-// Close a streaming response and release resources.
-static XrValue http_close_stream(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !xr_value_is_json(args[0]))
-        return xr_null();
-    XrJson *resp = xr_value_to_json(args[0]);
-    XrValue sid_val = xr_json_get_by_key(X, resp, "_streamId");
-    if (!XR_IS_INT(sid_val))
-        return xr_null();
-    int slot = (int) XR_TO_INT(sid_val);
-
-    XrHttpContext *ctx = xr_http_get_context(X);
-    if (!ctx || slot < 0 || slot >= XR_HTTP_MAX_STREAMS || !ctx->streams[slot])
-        return xr_null();
-
-    xr_http_stream_close(X, ctx->streams[slot]);
-    xr_http_result_free(ctx->streams[slot]);
-    xr_free(ctx->streams[slot]);
-    ctx->streams[slot] = NULL;
-    return xr_null();
 }
 
 /* ========== HTTP Server Implementation ========== */
@@ -686,19 +557,6 @@ void xr_http_module_context_free(XrHttpContext *ctx) {
     }
 
     // NOTE: WebSocket connections are now managed by the separate 'ws' module
-
-    // Close any active streaming responses. Module teardown happens
-    // during isolate shutdown, when there is no live runtime to drive
-    // pool cleanup; passing NULL skips netpoll deregistration since
-    // those fds are about to be closed anyway.
-    for (int i = 0; i < XR_HTTP_MAX_STREAMS; i++) {
-        if (ctx->streams[i]) {
-            xr_http_stream_close(NULL, ctx->streams[i]);
-            xr_http_result_free(ctx->streams[i]);
-            xr_free(ctx->streams[i]);
-            ctx->streams[i] = NULL;
-        }
-    }
 
     xr_free(ctx);
 }
@@ -858,74 +716,6 @@ static XrValue http_stop_server(XrVMRuntime *X, XrValue *args, int argc) {
     }
 
     return xr_null();
-}
-
-/* ========== Streaming Download API ========== */
-
-// http.download(url, path) -> Json (streaming download to local file)
-static XrValue http_download(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 2)
-        return xr_null();
-
-    size_t url_len, path_len;
-    const char *url = xrs_string_arg(args[0], &url_len);
-    const char *path = xrs_string_arg(args[1], &path_len);
-    if (!url || !path)
-        return xr_null();
-
-    // URL/Path copy (stack allocation optimization)
-    URL_COPY_BEGIN(url, url_len)
-    char _path_stack_buf[URL_STACK_SIZE];
-    char *path_copy;
-    bool _path_need_free = false;
-    if (path_len < URL_STACK_SIZE) {
-        path_copy = _path_stack_buf;
-    } else {
-        path_copy = (char *) xr_malloc(path_len + 1);
-        _path_need_free = true;
-    }
-    memcpy(path_copy, path, path_len);
-    path_copy[path_len] = '\0';
-
-    // Execute download
-    XrStreamResult result = xr_http_download(X, url_copy, path_copy, NULL, NULL);
-
-    URL_COPY_END();
-    if (_path_need_free)
-        xr_free(path_copy);
-
-    // Build return result
-    XrJson *json = xr_json_new(xr_current_coro(X));
-    xr_json_set_by_key(X, json, "status", xr_int(result.status_code));
-    xr_json_set_by_key(X, json, "downloaded", xr_int((int64_t) result.downloaded));
-    xr_json_set_by_key(X, json, "total", xr_int((int64_t) result.total_size));
-    xr_json_set_by_key(X, json, "completed", xr_bool(result.completed));
-    /* error is always present (null on success) so callers can check
-     * `if (r.error != null)` without surprises. */
-    xr_json_set_by_key(X, json, "error",
-                       result.error_msg ? xrs_string_value_c(X, result.error_msg) : xr_null());
-
-    xr_stream_result_free(&result);
-
-    return xr_json_value(json);
-}
-
-// http.getContentLength(url) -> int (HEAD request for file size)
-static XrValue http_get_content_length(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_int(-1);
-
-    size_t url_len;
-    const char *url = xrs_string_arg(args[0], &url_len);
-    if (!url)
-        return xr_int(-1);
-
-    // URL copy (stack allocation optimization)
-    URL_COPY_BEGIN(url, url_len)
-    long long size = xr_http_get_content_length(X, url_copy);
-    URL_COPY_END();
-
-    return xr_int(size);
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_HTTP 1

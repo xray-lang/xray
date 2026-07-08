@@ -79,7 +79,6 @@ typedef struct {
     XrHttpReqContext *ctx;    // Request context (optional)
     bool use_http2;           // Force HTTP/2
     bool keep_alive;          // Use Keep-Alive
-    bool stream;              // Stream mode: return headers only, read body later
 } XrHttpRequestConfig;
 
 /* ========== HTTP Response Result ========== */
@@ -94,11 +93,6 @@ typedef struct {
     size_t body_len;        // Response body length
     XrHttpError error;      // Error code
     char *error_msg;        // Error message
-    // Stream mode fields (valid when stream=true in config)
-    void *_stream_conn;         // XrPooledConn* kept open for body reads
-    void *_stream_buf;          // XrNetBuffer* with leftover data after headers
-    int64_t _stream_remaining;  // Remaining body bytes (-1 = chunked/unknown)
-    bool _stream_chunked;       // Response uses chunked encoding
 } XrHttpResult;
 
 /* ========== API Functions ========== */
@@ -155,19 +149,6 @@ XR_FUNC XrHttpResult xr_http_delete(XrVMRuntime *X, const char *url);
  * Free response result
  */
 XR_FUNC void xr_http_result_free(XrHttpResult *result);
-
-/*
- * Read next chunk from a streaming response.
- * Returns bytes read (>0), 0 on EOF, -1 on error.
- * buf must be at least max_bytes in size.
- */
-XR_FUNC int xr_http_stream_read(XrVMRuntime *X, XrHttpResult *result, char *buf, int max_bytes);
-
-/*
- * Close a streaming response and return connection to pool.
- * Must be called after stream reading is complete.
- */
-XR_FUNC void xr_http_stream_close(XrVMRuntime *X, XrHttpResult *result);
 
 /*
  * Get error description
