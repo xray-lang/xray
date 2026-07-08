@@ -318,7 +318,7 @@ static void xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "__dylibClose", sys_dylib_close);
     XRS_EXPORT(module, isolate, "__dylibLastError", sys_dylib_last_error);
     XRS_EXPORT(module, isolate, "__processSpawn", sys_process_spawn);
-    XRS_EXPORT(module, isolate, "__processWait", sys_process_wait);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__processWait", sys_process_wait_yieldable);
     XRS_EXPORT(module, isolate, "__processTryWait", sys_process_try_wait);
     XRS_EXPORT(module, isolate, "__processKill", sys_process_kill);
     XRS_EXPORT(module, isolate, "__pipeOpen", sys_pipe_open);

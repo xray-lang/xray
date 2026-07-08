@@ -797,15 +797,77 @@ static XrValue sys_process_spawn(XrVMRuntime *isolate, XrValue *args, int argc) 
     return xr_int((int64_t) pid);
 }
 
-static XrValue sys_process_wait(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    if (argc < 1 || !XR_IS_INT(args[0]))
-        return xr_int(-1);
+static int sys_process_wait_blocking_code(XrProcId pid) {
+    int code = -1;
+    if (xr_proc_wait(pid, &code) != 0)
+        code = -1;
+    return code;
+}
+
+typedef struct XrSysProcessWaitCtx {
+    XrProcId pid;
+} XrSysProcessWaitCtx;
+
+static bool sys_process_wait_can_yield(XrVMRuntime *isolate) {
+    return isolate && xr_current_coro(isolate) != NULL;
+}
+
+static XrCFuncResult sys_process_wait_yield_step(XrVMRuntime *isolate, XrSysProcessWaitCtx *ctx,
+                                                 XrValue *result);
+
+static XrCFuncResult sys_process_wait_yield_continue(XrVMRuntime *isolate, int status,
+                                                     XrValue resume_value, void *user_ctx,
+                                                     XrValue *result) {
+    (void) status;
+    (void) resume_value;
+    return sys_process_wait_yield_step(isolate, (XrSysProcessWaitCtx *) user_ctx, result);
+}
+
+static XrCFuncResult sys_process_wait_yield_step(XrVMRuntime *isolate, XrSysProcessWaitCtx *ctx,
+                                                 XrValue *result) {
+    if (!ctx) {
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
 
     int code = -1;
-    if (xr_proc_wait((XrProcId) XR_TO_INT(args[0]), &code) != 0)
+    XrProcWaitResult wait = xr_proc_try_wait(ctx->pid, &code);
+    if (wait == XR_PROC_WAIT_RUNNING) {
+        XrCFuncResult status =
+            xr_yield_for_timeout(isolate, 1, sys_process_wait_yield_continue, ctx, result);
+        if (status != XR_CFUNC_ERROR)
+            return status;
+
+        code = sys_process_wait_blocking_code(ctx->pid);
+    } else if (wait == XR_PROC_WAIT_ERROR) {
         code = -1;
-    return xr_int((int64_t) code);
+    }
+
+    xr_free(ctx);
+    *result = xr_int((int64_t) code);
+    return XR_CFUNC_DONE;
+}
+
+static XrCFuncResult sys_process_wait_yieldable(XrVMRuntime *isolate, XrValue *args, int argc,
+                                                XrValue *result) {
+    if (argc < 1 || !XR_IS_INT(args[0])) {
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
+
+    XrProcId pid = (XrProcId) XR_TO_INT(args[0]);
+    if (!sys_process_wait_can_yield(isolate)) {
+        *result = xr_int((int64_t) sys_process_wait_blocking_code(pid));
+        return XR_CFUNC_DONE;
+    }
+
+    XrSysProcessWaitCtx *ctx = (XrSysProcessWaitCtx *) xr_malloc(sizeof(XrSysProcessWaitCtx));
+    if (!ctx) {
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
+    ctx->pid = pid;
+    return sys_process_wait_yield_step(isolate, ctx, result);
 }
 
 static XrValue sys_process_try_wait(XrVMRuntime *isolate, XrValue *args, int argc) {
