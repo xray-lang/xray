@@ -275,6 +275,50 @@ jobs:
         TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
 
   # ===========================================================================
+  # Freestanding QEMU Smoke
+  # Ensures the bare-metal profile does more than link: the x86_64 multiboot,
+  # RISC-V virt and Cortex-M MPS2 images all boot far enough to produce their
+  # expected MMIO/serial signals.
+  # ===========================================================================
+  freestanding-qemu:
+    runs-on: ubuntu-latest
+    name: Freestanding QEMU Smoke
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install QEMU and LLVM tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          curl \
+          llvm \
+          qemu-system-arm \
+          qemu-system-misc \
+          qemu-system-x86 \
+          xz-utils
+
+    - name: Install Zig
+      run: |
+        ./scripts/install_zig_toolchain.sh
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Configure
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build build -j$(nproc)
+
+    - name: Run freestanding QEMU smokes
+      working-directory: build
+      run: >-
+        ctest --output-on-failure --timeout 120
+        -R '^aot_freestanding(_riscv|_thumb)?_qemu_smoke$'
+      env:
+        XRAY_FREESTANDING_QEMU_REQUIRED: "1"
+
+  # ===========================================================================
   # Code Coverage Report
   # ===========================================================================
   coverage:

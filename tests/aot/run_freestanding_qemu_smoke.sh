@@ -3,6 +3,8 @@
 #
 # The test builds a no-libc ELF with a multiboot header, boots it under QEMU,
 # then checks both VGA text memory and serial output from xr_hook_write.
+# Set XRAY_FREESTANDING_QEMU_REQUIRED=1 in CI to turn dependency skips into
+# hard failures.
 
 set -u
 
@@ -11,6 +13,10 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 XRAY="${1:-$PROJECT_DIR/build/xray}"
 
 skip() {
+    if [ "${XRAY_FREESTANDING_QEMU_REQUIRED:-0}" = "1" ]; then
+        echo "FAIL: required freestanding QEMU smoke dependency missing: $1" >&2
+        exit 1
+    fi
     echo "SKIP: $1"
     exit 77
 }
