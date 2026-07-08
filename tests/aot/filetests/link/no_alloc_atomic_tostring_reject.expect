@@ -1,0 +1,4 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_atomic_tostring_reject' allocates via method 'Atomic.toString'
+contains=xray_no_alloc_atomic_tostring_reject
+not_contains=CRASH
