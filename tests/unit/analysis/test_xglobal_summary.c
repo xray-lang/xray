@@ -1467,6 +1467,11 @@ TEST(global_evidence_lowers_unresolved_interface_target_to_itable_abi_plan) {
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT interface ABI flags do not re-derive"));
+    bundle.interface_abi_plans[0].flags |= XAOT_INTERFACE_ABI_NEEDS_ITABLE;
+    bundle.ninterface_abi_plans = 0;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT interface callsite has no ABI plan"));
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
