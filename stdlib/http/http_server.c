@@ -450,39 +450,88 @@ static int xr_http_writev_response(XrVMRuntime *X, int fd, const char *body, siz
     return 0;
 }
 
-/*
- * Send HTTP response (compatible with old interface)
- */
-int xr_http_write_response(XrVMRuntime *X, int fd, XrHttpResp *resp) {
-    if (!resp)
+static int xr_http_write_status_response(XrVMRuntime *X, int fd, int status,
+                                         const char *content_type, const char *body,
+                                         size_t body_len) {
+    char header[512];
+    int header_len = snprintf(header, sizeof(header),
+                              "HTTP/1.1 %d %s\r\n"
+                              "Content-Type: %s\r\n"
+                              "Content-Length: %zu\r\n"
+                              "Connection: keep-alive\r\n"
+                              "\r\n",
+                              status, http_status_text(status), content_type, body_len);
+    if (header_len < 0 || (size_t) header_len >= sizeof(header))
         return -1;
 
-    // If content_type specified, use full build
-    if (resp->content_type) {
-        char header[512];
-        int header_len = snprintf(header, sizeof(header),
-                                  "HTTP/1.1 %d %s\r\n"
-                                  "Content-Type: %s\r\n"
-                                  "Content-Length: %zu\r\n"
-                                  "Connection: keep-alive\r\n"
-                                  "\r\n",
-                                  resp->status, http_status_text(resp->status), resp->content_type,
-                                  resp->body_len);
+    int n = xr_socket_write(X, fd, header, header_len);
+    if (n < 0)
+        return -1;
 
-        int n = xr_socket_write(X, fd, header, header_len);
+    if (body && body_len > 0) {
+        n = xr_socket_write(X, fd, body, body_len);
         if (n < 0)
             return -1;
-
-        if (resp->body && resp->body_len > 0) {
-            n = xr_socket_write(X, fd, resp->body, resp->body_len);
-            if (n < 0)
-                return -1;
-        }
-        return 0;
     }
 
-    // Otherwise use writev zero-copy + auto-detect
-    return xr_http_writev_response(X, fd, resp->body, resp->body_len);
+    return 0;
+}
+
+static size_t json_escape_string(char *out, size_t out_cap, const char *input) {
+    if (out_cap == 0)
+        return 0;
+
+    size_t len = 0;
+    for (const unsigned char *p = (const unsigned char *) input; p && *p; p++) {
+        unsigned char ch = *p;
+        const char *esc = NULL;
+        char hex[7];
+
+        switch (ch) {
+            case '"':
+                esc = "\\\"";
+                break;
+            case '\\':
+                esc = "\\\\";
+                break;
+            case '\b':
+                esc = "\\b";
+                break;
+            case '\f':
+                esc = "\\f";
+                break;
+            case '\n':
+                esc = "\\n";
+                break;
+            case '\r':
+                esc = "\\r";
+                break;
+            case '\t':
+                esc = "\\t";
+                break;
+            default:
+                if (ch < 0x20) {
+                    snprintf(hex, sizeof(hex), "\\u%04x", ch);
+                    esc = hex;
+                }
+                break;
+        }
+
+        if (esc) {
+            size_t esc_len = strlen(esc);
+            if (len + esc_len >= out_cap)
+                break;
+            memcpy(out + len, esc, esc_len);
+            len += esc_len;
+        } else {
+            if (len + 1 >= out_cap)
+                break;
+            out[len++] = (char) ch;
+        }
+    }
+
+    out[len] = '\0';
+    return len;
 }
 
 /*
@@ -504,16 +553,16 @@ int xr_http_send_error(XrVMRuntime *X, int fd, int status, const char *message) 
     }
 
     // Other errors dynamically built
-    char body[256];
-    snprintf(body, sizeof(body), "{\"error\": \"%s\"}",
-             message ? message : http_status_text(status));
+    char escaped[192];
+    json_escape_string(escaped, sizeof(escaped), message ? message : http_status_text(status));
 
-    XrHttpResp resp = {.status = status,
-                       .content_type = "application/json",
-                       .body = body,
-                       .body_len = strlen(body),
-                       .body_owned = false};
-    return xr_http_write_response(X, fd, &resp);
+    char body[256];
+    int body_len = snprintf(body, sizeof(body), "{\"error\": \"%s\"}", escaped);
+    if (body_len < 0 || (size_t) body_len >= sizeof(body))
+        return -1;
+
+    return xr_http_write_status_response(X, fd, status, "application/json", body,
+                                         (size_t) body_len);
 }
 
 /*

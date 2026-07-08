@@ -48,16 +48,6 @@ typedef struct XrHttpReq {
     bool keep_alive;
 } XrHttpReq;
 
-/* ========== HTTP Response ========== */
-
-typedef struct XrHttpResp {
-    int status;
-    const char *content_type;
-    char *body;
-    size_t body_len;
-    bool body_owned;
-} XrHttpResp;
-
 /* ========== HTTP Server ========== */
 
 struct XrWebSocket;
@@ -121,9 +111,6 @@ XR_FUNC void xr_http_server_set_ws_handler(XrHttpServer *server, XrWsConnectionH
 // Read and parse HTTP request
 XR_FUNC int xr_http_read_request(struct XrVMRuntime *X, int fd, XrHttpReq *req, char *buf,
                                  size_t buf_size);
-
-// Send HTTP response
-XR_FUNC int xr_http_write_response(struct XrVMRuntime *X, int fd, XrHttpResp *resp);
 
 // Send simple text response
 XR_FUNC int xr_http_send_text(struct XrVMRuntime *X, int fd, int status, const char *body);
