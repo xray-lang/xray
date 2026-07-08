@@ -1605,6 +1605,7 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
     uint32_t expected_evidence = XAOT_DISPATCH_EV_GLOBAL_CALLSITE;
     uint8_t expected_reason = XAOT_DISPATCH_UNPROVEN_NONE;
     XgMethodId expected_method_id;
+    XgMethodId expected_method_root_id = XG_NO_ID;
     uint32_t expected_dispatch_slot = UINT32_MAX;
     XgClassId expected_classes[XAOT_DISPATCH_SMALL_IMPLEMENTOR_LIMIT];
     XgMethodId expected_methods[XAOT_DISPATCH_SMALL_IMPLEMENTOR_LIMIT];
@@ -1694,6 +1695,7 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
     }
 
     expected_method_id = method ? method->method_id : call->method_id;
+    expected_method_root_id = method ? method->root_method_id : XG_NO_ID;
     if (expected_kind == XAOT_DISPATCH_RUNTIME_FALLBACK)
         expected_evidence = 0;
 
@@ -1707,6 +1709,8 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
         return set_error(errbuf, errbuf_len, "AOT dispatch plan body ordinal does not re-derive");
     if (plan->method_id != expected_method_id)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan method does not re-derive");
+    if (plan->method_root_id != expected_method_root_id)
+        return set_error(errbuf, errbuf_len, "AOT dispatch plan method root does not re-derive");
     if (plan->method_name_id != call->method_name_id)
         return set_error(errbuf, errbuf_len, "AOT dispatch plan method name does not re-derive");
     if (plan->method_signature_key != call->method_signature_key)

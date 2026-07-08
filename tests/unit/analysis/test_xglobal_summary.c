@@ -542,6 +542,8 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_NOT_NULL(dispatch);
     ASSERT_EQ_UINT(dispatch->kind, XAOT_DISPATCH_DIRECT);
     ASSERT_EQ_UINT(dispatch->source_span_id, 0);
+    ASSERT_EQ_UINT(dispatch->method_id, 2);
+    ASSERT_EQ_UINT(dispatch->method_root_id, 1);
     ASSERT_EQ_UINT(dispatch->target_count, 1);
     ASSERT_NOT_NULL(xaot_bundle_find_interface_use_plan(&bundle, 77, 2, XG_NO_ID));
     const XaotCapabilityPlan *cap = xaot_bundle_find_capability_plan(&bundle, XG_CAP_COROUTINE);
@@ -574,6 +576,7 @@ TEST(global_evidence_lowers_to_aot_class_plans) {
     ASSERT_NOT_NULL(strstr(dump, "class-hierarchy 0 id=1"));
     ASSERT_NOT_NULL(strstr(dump, "class-layout 1 id=2"));
     ASSERT_NOT_NULL(strstr(dump, "method-dispatch 0 callsite=7 span=0 kind=direct"));
+    ASSERT_NOT_NULL(strstr(dump, "method=2 root=1"));
     ASSERT_NOT_NULL(strstr(dump, "method_name=900 method_sig=901 args=0+0"));
     ASSERT_NOT_NULL(strstr(dump, "interface-use 0 interface=77 implementor=2"));
     ASSERT_NOT_NULL(strstr(dump, "metadata 0 name=typename bodies=1 decls=0 action=link"));
@@ -750,6 +753,11 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan kind does not re-derive"));
+    good.method_dispatch_plans[0].kind = XAOT_DISPATCH_DIRECT;
+    good.method_dispatch_plans[0].method_root_id = 99;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT dispatch plan method root does not re-derive"));
     xaot_bundle_free(&good);
 
     XaotBundle stale_owner;
@@ -1263,6 +1271,7 @@ TEST(global_evidence_lowers_interface_call_to_type_switch) {
     ASSERT_EQ_UINT(plan->receiver_static_interface_id, 77);
     ASSERT_EQ_UINT(plan->method_name_id, 700);
     ASSERT_EQ_UINT(plan->method_signature_key, 701);
+    ASSERT_EQ_UINT(plan->method_root_id, XG_NO_ID);
     ASSERT_EQ_UINT(plan->target_count, 2);
     ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 2);
     ASSERT_EQ_UINT(bundle.dispatch_target_cases[0].receiver_class_id, 1);
@@ -5514,6 +5523,7 @@ TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
     ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].receiver_static_interface_id, drawable_id);
     ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].method_id,
                    ev.interface_methods[0].interface_method_id);
+    ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].method_root_id, XG_NO_ID);
     ASSERT_EQ_UINT(bundle.method_dispatch_plans[0].dispatch_slot, 0);
     ASSERT_EQ_UINT(bundle.ndispatch_target_cases, 1);
 
