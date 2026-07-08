@@ -2465,6 +2465,8 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
         case AST_IMPORT_STMT:
             xa_visit_collect_import(ctx, node);
             break;
+        case AST_GLOBAL_ASM:
+            break;
         case AST_ENUM_DECL: {
             EnumDeclNode *edecl = &node->as.enum_decl;
             if (edecl->name) {
@@ -5071,6 +5073,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_TYPE_ALIAS:
             // Type alias is compile-time concept, already registered in pass 1
+            break;
+        case AST_GLOBAL_ASM:
+            if (!xa_freestanding_profile_enabled(ctx->analyzer)) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+                    "global asm is only supported in freestanding AOT profile", &loc);
+            }
             break;
         case AST_PARALLEL_FOR_STMT: {
             xa_freestanding_report_unavailable(ctx, node, "parallel for statement",

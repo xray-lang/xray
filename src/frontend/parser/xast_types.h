@@ -172,6 +172,7 @@ typedef enum {
     // Module system
     AST_IMPORT_STMT,  // import
     AST_EXPORT_STMT,  // export
+    AST_GLOBAL_ASM,   // asm { "..." }
 
     // Destructuring
     AST_DESTRUCTURE_DECL,    // var [a, b] = arr

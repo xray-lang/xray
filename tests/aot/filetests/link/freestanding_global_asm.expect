@@ -1,0 +1,11 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="system_libs": []
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=__asm__(
+c_contains=xray_global_asm_marker
+c_contains=xray_global_asm_entry
+c_not_contains=#include "xrt.h"
+not_contains=xray_core

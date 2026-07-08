@@ -282,4 +282,8 @@ typedef struct ExportStmtNode {
     bool is_reexport_all;  // Whether it's `export * from "..."`
 } ExportStmtNode;
 
+typedef struct GlobalAsmNode {
+    char *text;  // Decoded assembly template text.
+} GlobalAsmNode;
+
 #endif  // XAST_NODES_DECL_H

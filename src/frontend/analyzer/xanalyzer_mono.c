@@ -939,6 +939,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         case AST_ENUM_DECL:
         case AST_IMPORT_STMT:
         case AST_EXPORT_STMT:
+        case AST_GLOBAL_ASM:
         case AST_TYPE_ALIAS:
         case AST_PROGRAM:
         case AST_SELECT_STMT:

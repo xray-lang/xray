@@ -1634,6 +1634,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "ImportStmt";
         case AST_EXPORT_STMT:
             return "ExportStmt";
+        case AST_GLOBAL_ASM:
+            return "GlobalAsm";
         case AST_DESTRUCTURE_DECL:
             return "DestructureDecl";
         case AST_DESTRUCTURE_ASSIGN:
@@ -2222,6 +2224,12 @@ AstNode *xr_ast_export_reexport(XrCompilerSession *session, const char *from_pat
     node->as.export_stmt.reexport_members = members;
     node->as.export_stmt.reexport_count = count;
     node->as.export_stmt.is_reexport_all = is_all;
+    return node;
+}
+
+AstNode *xr_ast_global_asm(XrCompilerSession *session, const char *text, int line) {
+    AstNode *node = alloc_node(session, AST_GLOBAL_ASM, line);
+    node->as.global_asm.text = ast_strdup(session, text ? text : "");
     return node;
 }
 

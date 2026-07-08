@@ -964,6 +964,7 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
         case AST_INTERFACE_METHOD:
         case AST_INTERFACE_PROPERTY:
         case AST_TYPE_ALIAS:
+        case AST_GLOBAL_ASM:
         case AST_THIS_EXPR:
         case AST_CANCELLED_EXPR:
             return;
@@ -3583,6 +3584,8 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
             return xa_node_uses_symbol_name(node->as.throw_stmt.expression, name);
         case AST_EXPORT_STMT:
             return xa_node_uses_symbol_name(node->as.export_stmt.declaration, name);
+        case AST_GLOBAL_ASM:
+            return false;
 
         case AST_MATCH_EXPR:
             return xa_node_uses_symbol_name(node->as.match_expr.expr, name) ||

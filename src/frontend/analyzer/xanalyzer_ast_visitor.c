@@ -444,6 +444,8 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
         case AST_EXPORT_STMT:
             visit_node(node->as.export_stmt.declaration, v);
             break;
+        case AST_GLOBAL_ASM:
+            break;
 
         default:
             break;

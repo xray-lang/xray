@@ -58,6 +58,18 @@ static void emit_c_string_literal_n(FILE *out, const char *s, size_t len) {
     emit_c_string_literal_bytes(out, s, len);
 }
 
+static void cg_emit_global_asm(FILE *out, const XiModule *module) {
+    if (!out || !module || !module->global_asm_templates || module->nglobal_asm == 0)
+        return;
+    for (uint16_t i = 0; i < module->nglobal_asm; i++) {
+        fprintf(out, "__asm__(");
+        emit_c_string_literal(out, module->global_asm_templates[i] ? module->global_asm_templates[i]
+                                                                   : "");
+        fprintf(out, ");\n");
+    }
+    fprintf(out, "\n");
+}
+
 static void emit_optional_c_string_literal(FILE *out, const char *s) {
     if (s && s[0])
         emit_c_string_literal(out, s);
@@ -495,6 +507,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     emit_struct_native_typedefs(body, main_func, prefix);
     emit_enum_native_typedefs(ctx, body, module);
 
+    cg_emit_global_asm(body, module);
     cg_emit_freestanding_static_scalar_const_defs(ctx, body, module);
     cg_emit_freestanding_static_fixed_array_defs(ctx, body, module);
     cg_emit_freestanding_static_tuple_defs(ctx, body, module);
@@ -623,6 +636,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
 
     ctx->n_xmod_refs = 0;
     ctx->collect_xmod_refs = true;
+    cg_emit_global_asm(body, module);
     cg_emit_freestanding_static_scalar_const_defs(ctx, body, module);
     cg_emit_freestanding_static_fixed_array_defs(ctx, body, module);
     cg_emit_freestanding_static_tuple_defs(ctx, body, module);

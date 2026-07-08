@@ -640,6 +640,7 @@ XR_FUNC void xi_module_free(XiModule *mod) {
     xr_free(mod->slot_enums);
     xr_free(mod->slot_imports);
     xr_free(mod->slot_const_literals);
+    xr_free(mod->global_asm_templates);
     /* Free closure metadata array (entries point into XiFunc, not owned) */
     for (uint16_t i = 0; i < mod->nclosure_metas; i++)
         xr_free(mod->closure_metas[i]);
