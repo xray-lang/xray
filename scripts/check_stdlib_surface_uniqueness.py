@@ -17,12 +17,6 @@ from pathlib import Path
 
 KNOWN_DUPLICATE_SURFACES = {
     (
-        "vm",
-        "ws_send_yieldable",
-        frozenset({"ws.send", "ws.sendData"}),
-        "legacy WebSocket alias; keep locked until the surface is collapsed",
-    ),
-    (
         "class-vm",
         "mem_buffer_length",
         frozenset({"mem.Buffer.get:length", "mem.Buffer.length"}),

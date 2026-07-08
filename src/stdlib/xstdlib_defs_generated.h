@@ -360,8 +360,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"ws", "ping", "(conn: WsConn): bool", "Send a ping frame", "ws_ping", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"ws", "state", "(conn: WsConn): string", "Get connection state", "ws_state", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"ws", "isOpen", "(conn: WsConn): bool", "Check if connection is open", "ws_is_open", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
-    {"ws", "recvData", "(conn: WsConn, timeout?: int?): string?", "High-performance recv returning data string directly (no Json wrapper)", "ws_recvdata", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
-    {"ws", "sendData", "(conn: WsConn, data: string | Array<uint8>, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 3, false},
     {"ws", "serve", "(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", "ws_serve_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"ws", "stopServer", "(): ()", "Stop the WebSocket server", "ws_stop_server", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
     {"ws", "isServerRunning", "(): bool", "Check if the WebSocket server is running", "ws_is_server_running", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},

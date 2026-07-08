@@ -679,9 +679,6 @@ static XrCFuncResult ws_send_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
 
 /* ========== Yieldable recv implementation ========== */
 
-// Yieldable C function pointer type
-typedef XrCFuncResult (*XrYieldableCFunctionPtr)(XrVMRuntime *, XrValue *, int, XrValue *);
-
 // State for yieldable recv operation
 // Following the same pattern as NetReadState in net.c
 // IMPORTANT: Do NOT store XrValue across yield points; retain primitive ids and
@@ -892,121 +889,6 @@ static XrCFuncResult ws_recv_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
 
     return xr_yield_for_io(X, ws->fd, ws->recv_wait_event, state->timeout_ms, ws_recv_continue,
                            state, result);
-}
-
-/*
- * ws.recvData continuation: returns string directly (no Json wrapper).
- */
-static XrCFuncResult ws_recvdata_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                          void *cont_ctx, XrValue *result) {
-    (void) resume_value;
-    WsRecvState *state = (WsRecvState *) cont_ctx;
-
-    if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR) {
-        xr_free(state);
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    XrWsContext *ctx = get_ws_context(X);
-    if (!ctx) {
-        xr_free(state);
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    XrWebSocket *ws = get_ws_from_ctx(ctx, state->ws_id);
-    if (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN) {
-        xr_free(state);
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    bool need_more = false;
-    XrWsMessage *msg = xr_ws_recv_try(ws, &need_more);
-    if (msg) {
-        ctx->total_msgs_recv++;
-        ctx->total_bytes_recv += msg->len;
-        *result = ws_make_string(X, msg->data, msg->len);
-        xr_ws_message_free(msg);
-        xr_free(state);
-        return XR_CFUNC_DONE;
-    }
-    if (!need_more) {
-        xr_free(state);
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    // Still need more data — re-yield
-    return xr_yield_for_io(X, ws->fd, XR_WAIT_READ, state->timeout_ms, ws_recvdata_continue, state,
-                           result);
-}
-
-/*
- * ws.recvData(conn, timeout?) -> string?
- *
- * High-performance recv: returns message data as string directly.
- * No Json wrapper allocation — eliminates the biggest per-message overhead.
- * Returns null on close/error/timeout.
- */
-static XrCFuncResult ws_recvdata(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
-    if (argc < 1 || !xr_value_is_json(args[0])) {
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    XrWsContext *ctx = get_ws_context(X);
-    if (!ctx) {
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    XrJson *conn = (XrJson *) XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
-    if (!XR_IS_INT(id_val)) {
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    int id = (int) XR_TO_INT(id_val);
-    XrWebSocket *ws = get_ws_from_ctx(ctx, id);
-    if (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN) {
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    // Fast path: data already in kernel buffer
-    bool need_more = false;
-    XrWsMessage *msg = xr_ws_recv_try(ws, &need_more);
-    if (msg) {
-        ctx->total_msgs_recv++;
-        ctx->total_bytes_recv += msg->len;
-        *result = ws_make_string(X, msg->data, msg->len);
-        xr_ws_message_free(msg);
-        return XR_CFUNC_DONE;
-    }
-    if (!need_more) {
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    // Slow path: yield via continuation protocol
-    int64_t timeout_ms = -1;
-    if (argc >= 2 && XR_IS_INT(args[1])) {
-        timeout_ms = XR_TO_INT(args[1]);
-    }
-
-    WsRecvState *state = (WsRecvState *) xr_malloc(sizeof(WsRecvState));
-    if (!state) {
-        *result = xr_null();
-        return XR_CFUNC_ERROR;
-    }
-    state->ws_id = id;
-    state->timeout_ms = timeout_ms;
-
-    return xr_yield_for_io(X, ws->fd, XR_WAIT_READ, timeout_ms, ws_recvdata_continue, state,
-                           result);
 }
 
 /*
