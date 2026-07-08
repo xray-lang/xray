@@ -1704,6 +1704,117 @@ TEST(global_evidence_verifier_rederives_static_data_materialization_contract) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_verifier_rederives_func_attr_body_summary) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x61,
+                      .compiler_semver_hash = 0x62,
+                      .profile_hash = 0x63,
+                      .imported_summary_hash = 0,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgDeclSummary decl = {.module_id = 1,
+                          .decl_id = 1,
+                          .kind = XG_DECL_FUNC,
+                          .name_id = xg_name_id("helper"),
+                          .signature_key = 901,
+                          .source_span_id = 3};
+    XgBodySummary body = {.func_id = 7,
+                          .module_id = 1,
+                          .owner_decl_id = 1,
+                          .owner_class_id = XG_NO_ID,
+                          .owner_method_id = XG_NO_ID,
+                          .name_id = xg_name_id("helper"),
+                          .signature_key = 901,
+                          .source_span_id = 3,
+                          .kind = XG_BODY_FUNCTION,
+                          .body_hash = 0x717171,
+                          .effect_bits = 0,
+                          .escape_bits = 0,
+                          .capability_bits = 0,
+                          .metadata_use_bits = 0,
+                          .static_data_use_bits = 0};
+    XiFunc init_func;
+    XiFunc helper_func;
+    XiFunc *children[1];
+    XiModule module;
+    XiModule *modules[1];
+    char err[256];
+
+    memset(&init_func, 0, sizeof(init_func));
+    memset(&helper_func, 0, sizeof(helper_func));
+    memset(&module, 0, sizeof(module));
+    init_func.name = "init";
+    helper_func.name = "helper";
+    helper_func.parent_func = &init_func;
+    children[0] = &helper_func;
+    init_func.children = children;
+    init_func.nchildren = 1;
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
+
+    XaotBundle good;
+    memset(&good, 0, sizeof(good));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&good, &ev, XG_BUILD_NATIVE_RELEASE));
+    good.modules = modules;
+    good.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&good, &helper_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&good, &helper_func, XAOT_FN_ATTR_CONST, &body));
+    ASSERT_EQ_UINT(good.func_attr_plans[0].body_func_id, body.func_id);
+    ASSERT_EQ_UINT(good.func_attr_plans[0].body_effect_bits, body.effect_bits);
+    ASSERT_EQ_UINT(good.func_attr_plans[0].evidence,
+                   XAOT_FN_ATTR_EV_BODY_SUMMARY | XAOT_FN_ATTR_EV_XI_EFFECT_SCAN);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(xaot_verify_bundle(&good, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    xaot_bundle_free(&good);
+
+    XaotBundle stale_effect;
+    memset(&stale_effect, 0, sizeof(stale_effect));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_effect, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_effect.modules = modules;
+    stale_effect.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_effect, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_effect, &helper_func, 0, 1));
+    ASSERT_NOT_NULL(
+        xaot_bundle_add_func_attr_plan(&stale_effect, &helper_func, XAOT_FN_ATTR_CONST, &body));
+    stale_effect.func_attr_plans[0].body_effect_bits = XG_BODY_MAY_ALLOC;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_effect, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT function attribute effect bits are stale"));
+    xaot_bundle_free(&stale_effect);
+
+    XgGlobalEvidence effectful_ev;
+    XgBodySummary effectful_body = body;
+    effectful_body.effect_bits = XG_BODY_MAY_ALLOC;
+    xg_global_evidence_init(&effectful_ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&effectful_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&effectful_ev, &effectful_body));
+
+    XaotBundle contradicts_summary;
+    memset(&contradicts_summary, 0, sizeof(contradicts_summary));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&contradicts_summary, &effectful_ev,
+                                                XG_BUILD_NATIVE_RELEASE));
+    contradicts_summary.modules = modules;
+    contradicts_summary.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&contradicts_summary, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&contradicts_summary, &helper_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&contradicts_summary, &helper_func,
+                                                   XAOT_FN_ATTR_CONST, &effectful_body));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&contradicts_summary, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT function attribute plan contradicts body summary"));
+    xaot_bundle_free(&contradicts_summary);
+
+    xg_global_evidence_free(&effectful_ev);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_verifier_rederives_body_callsite_ranges) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x41,
@@ -4487,6 +4598,7 @@ RUN_TEST(global_evidence_verifier_rederives_method_override_graph);
 RUN_TEST(global_evidence_verifier_rederives_interface_implementor_set);
 RUN_TEST(global_evidence_verifier_rederives_profile_actions);
 RUN_TEST(global_evidence_verifier_rederives_static_data_materialization_contract);
+RUN_TEST(global_evidence_verifier_rederives_func_attr_body_summary);
 RUN_TEST(global_evidence_verifier_rederives_body_callsite_ranges);
 RUN_TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows);
 RUN_TEST(global_evidence_verifier_rejects_stale_interface_extends_rows);

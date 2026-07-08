@@ -1990,11 +1990,12 @@ XR_FUNC const XaotArrayClassFieldAllocPlan *xaot_bundle_find_array_class_field_a
 }
 
 XR_FUNC XaotFuncAttrPlan *xaot_bundle_add_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
-                                                         uint32_t flags) {
+                                                         uint32_t flags,
+                                                         const XgBodySummary *body) {
     XaotFuncAttrPlan *plan;
 
     /* CONST and PURE are mutually exclusive by definition. */
-    if (!bundle || !func || flags == 0 ||
+    if (!bundle || !func || !body || body->func_id == XG_NO_ID || flags == 0 ||
         (flags & (XAOT_FN_ATTR_CONST | XAOT_FN_ATTR_PURE)) ==
             (XAOT_FN_ATTR_CONST | XAOT_FN_ATTR_PURE))
         return NULL;
@@ -2013,6 +2014,10 @@ XR_FUNC XaotFuncAttrPlan *xaot_bundle_add_func_attr_plan(XaotBundle *bundle, con
     plan = &bundle->func_attr_plans[bundle->nfunc_attr_plans++];
     memset(plan, 0, sizeof(*plan));
     plan->func = func;
+    plan->body_func_id = body->func_id;
+    plan->body_effect_bits = body->effect_bits;
+    plan->body_escape_bits = body->escape_bits;
+    plan->evidence = XAOT_FN_ATTR_EV_BODY_SUMMARY | XAOT_FN_ATTR_EV_XI_EFFECT_SCAN;
     plan->flags = flags & (XAOT_FN_ATTR_CONST | XAOT_FN_ATTR_PURE);
     if (!xaot_ptr_index_put(&bundle->func_attr_index, func, bundle->nfunc_attr_plans - 1)) {
         bundle->error_msg = "failed to index AOT function attribute plan";
@@ -2978,8 +2983,10 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
 
     for (uint32_t ai = 0; ai < bundle->nfunc_attr_plans; ai++) {
         const XaotFuncAttrPlan *ap = &bundle->func_attr_plans[ai];
-        fprintf(out, "fn-attr %u func=%s attr=%s\n", ai, safe_str(ap->func ? ap->func->name : NULL),
-                (ap->flags & XAOT_FN_ATTR_CONST) ? "const" : "pure");
+        fprintf(out, "fn-attr %u func=%s body=%u attr=%s effect=0x%x escape=0x%x evidence=0x%x\n",
+                ai, safe_str(ap->func ? ap->func->name : NULL), ap->body_func_id,
+                (ap->flags & XAOT_FN_ATTR_CONST) ? "const" : "pure", ap->body_effect_bits,
+                ap->body_escape_bits, ap->evidence);
     }
 
     for (uint32_t ai = 0; ai < bundle->nbounds_plans; ai++) {

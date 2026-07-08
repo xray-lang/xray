@@ -3394,16 +3394,47 @@ static bool func_attr_op_reads_nonlocal(uint16_t op) {
     }
 }
 
+static const XgBodySummary *prepare_func_attr_find_body_summary(const XaotBundle *bundle,
+                                                                const XiFunc *func) {
+    const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
+    const XgBodySummary *found = NULL;
+    uint32_t name_id;
+
+    if (!ev || !func || !func->name)
+        return NULL;
+    name_id = xg_name_id(func->name);
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        const XgBodySummary *body = &ev->bodies[i];
+        if (body->kind == XG_BODY_MODULE_INIT || body->name_id != name_id)
+            continue;
+        if (found)
+            return NULL;
+        found = body;
+    }
+    return found;
+}
+
+static bool func_attr_body_summary_disqualifies(const XgBodySummary *body) {
+    return !body ||
+           (body->effect_bits & (XG_BODY_MAY_THROW | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
+                                 XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE)) != 0;
+}
+
 /* Prove a function free of observable effects so Cgen can emit
  * __attribute__((const)) (touches no memory) or ((pure)) (reads only).
- * Evidence is the per-value effect flags; the verifier re-checks them.
+ * Evidence is the body summary plus per-value effect flags; the verifier
+ * re-checks both.
  * Disqualification is not an error — the function simply gets no plan. */
 static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func) {
+    const XgBodySummary *body;
     bool reads_mem;
     uint32_t bi, vi;
 
     if (!bundle || !func)
         return false;
+    body = prepare_func_attr_find_body_summary(bundle, func);
+    if (func_attr_body_summary_disqualifies(body))
+        return true;
     reads_mem = func->ncaptures > 0;
     for (bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks[bi];
@@ -3423,7 +3454,7 @@ static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func) {
         }
     }
     if (!xaot_bundle_add_func_attr_plan(bundle, func,
-                                        reads_mem ? XAOT_FN_ATTR_PURE : XAOT_FN_ATTR_CONST)) {
+                                        reads_mem ? XAOT_FN_ATTR_PURE : XAOT_FN_ATTR_CONST, body)) {
         bundle->error_msg = "failed to allocate AOT function attribute plan";
         return false;
     }

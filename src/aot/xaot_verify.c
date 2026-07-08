@@ -10,6 +10,7 @@
 
 #include "xaot_verify.h"
 #include "xaot_prepare.h"
+#include "../base/xglobal_indices.h"
 #include "../ir/xi_effect.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../stdlib/xstdlib_metadata.h"
@@ -22,6 +23,9 @@ static bool set_error(char *errbuf, size_t errbuf_len, const char *msg) {
     }
     return false;
 }
+
+static const XgBodySummary *verify_find_evidence_body_by_func(const XgGlobalEvidence *ev,
+                                                              XgFuncId func_id);
 
 static bool verify_stdlib_link_module_known(const char *name) {
     return xr_stdlib_metadata_link_dependency_module_known(name);
@@ -278,6 +282,8 @@ static bool verify_array_class_field_alloc_plan(const XaotBundle *bundle,
  * with observable effects, so any mismatch is a hard fail. */
 static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPlan *plan,
                                   char *errbuf, size_t errbuf_len) {
+    const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
+    const XgBodySummary *body;
     uint32_t bi, vi;
     bool reads_mem;
 
@@ -287,6 +293,21 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
         return set_error(errbuf, errbuf_len, "AOT function attribute plan lacks func");
     if (plan->flags != XAOT_FN_ATTR_CONST && plan->flags != XAOT_FN_ATTR_PURE)
         return set_error(errbuf, errbuf_len, "AOT function attribute plan has invalid flags");
+    if (plan->evidence != (XAOT_FN_ATTR_EV_BODY_SUMMARY | XAOT_FN_ATTR_EV_XI_EFFECT_SCAN))
+        return set_error(errbuf, errbuf_len, "AOT function attribute plan lacks evidence");
+    body = verify_find_evidence_body_by_func(ev, plan->body_func_id);
+    if (!body)
+        return set_error(errbuf, errbuf_len, "AOT function attribute plan has no body summary");
+    if (plan->func->name && body->name_id != xg_name_id(plan->func->name))
+        return set_error(errbuf, errbuf_len, "AOT function attribute plan body identity is stale");
+    if (plan->body_effect_bits != body->effect_bits)
+        return set_error(errbuf, errbuf_len, "AOT function attribute effect bits are stale");
+    if (plan->body_escape_bits != body->escape_bits)
+        return set_error(errbuf, errbuf_len, "AOT function attribute escape bits are stale");
+    if ((body->effect_bits & (XG_BODY_MAY_THROW | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
+                              XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE)) != 0)
+        return set_error(errbuf, errbuf_len,
+                         "AOT function attribute plan contradicts body summary");
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
         return set_error(errbuf, errbuf_len, "AOT function attribute plan func has no func plan");
 
