@@ -1,0 +1,13 @@
+import sys
+
+shared local = sys.ThreadLocal<int>(fn() -> int {
+    return 1
+})
+
+fn worker() -> int {
+    return 2
+}
+
+print(local.get())
+var y = await go worker()
+print(y)

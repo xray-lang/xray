@@ -1,0 +1,12 @@
+import sys
+
+shared local = sys.ThreadLocal<int>(fn() -> int {
+    return 1
+})
+
+fn main() {
+    local.set(3)
+    Coro.yield()
+}
+
+main()

@@ -1,0 +1,14 @@
+import sys
+import sync
+
+shared local = sys.ThreadLocal<int>(fn() -> int {
+    return 1
+})
+
+fn main() -> int {
+    var m = sync.Mutex<int>(2)
+    var x = local.get()
+    return m.lock((v) -> v + x)
+}
+
+print(main())
