@@ -911,11 +911,32 @@ static XrValue sys_pipe_open(XrVMRuntime *isolate, XrValue *args, int argc) {
     return xr_value_from_array(ends);
 }
 
-static XrValue sys_pipe_read(XrVMRuntime *isolate, XrValue *args, int argc) {
-    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+static bool sys_pipe_can_yield(XrVMRuntime *isolate) {
+#if defined(XR_OS_WINDOWS)
+    (void) isolate;
+    return false;
+#else
+    return isolate && xr_current_coro(isolate) != NULL;
+#endif
+}
+
+static XrValue sys_pipe_read_value(XrVMRuntime *isolate, XrPipeHandle handle, int64_t max_bytes,
+                                   uint8_t *src, int64_t src_len) {
+    if (max_bytes < 0 || max_bytes > INT32_MAX || src_len < 0 || src_len > max_bytes)
         return xr_null();
 
-    int64_t max_bytes = XR_TO_INT(args[1]);
+    XrArray *bytes = xr_array_bytes_new(xr_current_coro(isolate), (int32_t) src_len);
+    if (!bytes)
+        return xr_null();
+    if (src && src_len > 0)
+        memcpy(bytes->data, src, (size_t) src_len);
+    bytes->length = (int32_t) src_len;
+    (void) handle;
+    return xr_value_from_array(bytes);
+}
+
+static XrValue sys_pipe_read_sync_value(XrVMRuntime *isolate, XrPipeHandle handle,
+                                        int64_t max_bytes) {
     if (max_bytes < 0 || max_bytes > INT32_MAX)
         return xr_null();
 
@@ -923,25 +944,189 @@ static XrValue sys_pipe_read(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (!bytes)
         return xr_null();
 
-    int64_t n = xr_pipe_read((XrPipeHandle) XR_TO_INT(args[0]), bytes->data, (size_t) max_bytes);
+    int64_t n = xr_pipe_read(handle, bytes->data, (size_t) max_bytes);
     if (n < 0)
         return xr_null();
     bytes->length = (int32_t) n;
     return xr_value_from_array(bytes);
 }
 
-static XrValue sys_pipe_write(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    if (argc < 2 || !XR_IS_INT(args[0]) || !xr_value_is_array(args[1]))
-        return xr_int(-1);
+typedef struct XrSysPipeReadCtx {
+    XrPipeHandle handle;
+    int64_t max_bytes;
+    uint8_t *buf;
+} XrSysPipeReadCtx;
 
-    XrArray *bytes = xr_value_to_array(args[1]);
+static void sys_pipe_read_ctx_free(XrSysPipeReadCtx *ctx) {
+    if (!ctx)
+        return;
+    xr_free(ctx->buf);
+    xr_free(ctx);
+}
+
+static XrCFuncResult sys_pipe_read_yield_step(XrVMRuntime *isolate, XrSysPipeReadCtx *ctx,
+                                              XrValue *result);
+
+static XrCFuncResult sys_pipe_read_yield_continue(XrVMRuntime *isolate, int status,
+                                                  XrValue resume_value, void *user_ctx,
+                                                  XrValue *result) {
+    (void) status;
+    (void) resume_value;
+    return sys_pipe_read_yield_step(isolate, (XrSysPipeReadCtx *) user_ctx, result);
+}
+
+static XrCFuncResult sys_pipe_read_yield_step(XrVMRuntime *isolate, XrSysPipeReadCtx *ctx,
+                                              XrValue *result) {
+    if (!ctx) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
+
+    int64_t n = -1;
+    XrPipeIoStatus status = xr_pipe_try_read(ctx->handle, ctx->buf, (size_t) ctx->max_bytes, &n);
+    if (status == XR_PIPE_IO_WOULD_BLOCK) {
+        XrCFuncResult cr =
+            xr_yield_for_timeout(isolate, 1, sys_pipe_read_yield_continue, ctx, result);
+        if (cr != XR_CFUNC_ERROR)
+            return cr;
+        sys_pipe_read_ctx_free(ctx);
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
+
+    *result = status == XR_PIPE_IO_OK
+                  ? sys_pipe_read_value(isolate, ctx->handle, ctx->max_bytes, ctx->buf, n)
+                  : xr_null();
+    sys_pipe_read_ctx_free(ctx);
+    return XR_CFUNC_DONE;
+}
+
+static XrCFuncResult sys_pipe_read_yieldable(XrVMRuntime *isolate, XrValue *args, int argc,
+                                             XrValue *result) {
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1])) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
+
+    XrPipeHandle handle = (XrPipeHandle) XR_TO_INT(args[0]);
+    int64_t max_bytes = XR_TO_INT(args[1]);
+    if (max_bytes < 0 || max_bytes > INT32_MAX) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
+    if (!sys_pipe_can_yield(isolate)) {
+        *result = sys_pipe_read_sync_value(isolate, handle, max_bytes);
+        return XR_CFUNC_DONE;
+    }
+
+    XrSysPipeReadCtx *ctx = (XrSysPipeReadCtx *) xr_calloc(1, sizeof(*ctx));
+    if (!ctx) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
+    ctx->handle = handle;
+    ctx->max_bytes = max_bytes;
+    if (max_bytes > 0) {
+        ctx->buf = (uint8_t *) xr_malloc((size_t) max_bytes);
+        if (!ctx->buf) {
+            sys_pipe_read_ctx_free(ctx);
+            *result = xr_null();
+            return XR_CFUNC_DONE;
+        }
+    }
+    return sys_pipe_read_yield_step(isolate, ctx, result);
+}
+
+static XrValue sys_pipe_write_sync_value(XrPipeHandle handle, XrArray *bytes) {
     if (!bytes || bytes->elem_type != XR_ELEM_U8)
         return xr_int(-1);
 
-    int64_t n =
-        xr_pipe_write((XrPipeHandle) XR_TO_INT(args[0]), bytes->data, (size_t) bytes->length);
+    int64_t n = xr_pipe_write(handle, bytes->data, (size_t) bytes->length);
     return xr_int(n);
+}
+
+typedef struct XrSysPipeWriteCtx {
+    XrPipeHandle handle;
+    uint8_t *data;
+    size_t len;
+} XrSysPipeWriteCtx;
+
+static void sys_pipe_write_ctx_free(XrSysPipeWriteCtx *ctx) {
+    if (!ctx)
+        return;
+    xr_free(ctx->data);
+    xr_free(ctx);
+}
+
+static XrCFuncResult sys_pipe_write_yield_step(XrVMRuntime *isolate, XrSysPipeWriteCtx *ctx,
+                                               XrValue *result);
+
+static XrCFuncResult sys_pipe_write_yield_continue(XrVMRuntime *isolate, int status,
+                                                   XrValue resume_value, void *user_ctx,
+                                                   XrValue *result) {
+    (void) status;
+    (void) resume_value;
+    return sys_pipe_write_yield_step(isolate, (XrSysPipeWriteCtx *) user_ctx, result);
+}
+
+static XrCFuncResult sys_pipe_write_yield_step(XrVMRuntime *isolate, XrSysPipeWriteCtx *ctx,
+                                               XrValue *result) {
+    if (!ctx) {
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
+
+    int64_t n = -1;
+    XrPipeIoStatus status = xr_pipe_try_write(ctx->handle, ctx->data, ctx->len, &n);
+    if (status == XR_PIPE_IO_WOULD_BLOCK) {
+        XrCFuncResult cr =
+            xr_yield_for_timeout(isolate, 1, sys_pipe_write_yield_continue, ctx, result);
+        if (cr != XR_CFUNC_ERROR)
+            return cr;
+        sys_pipe_write_ctx_free(ctx);
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
+
+    *result = status == XR_PIPE_IO_OK ? xr_int(n) : xr_int(-1);
+    sys_pipe_write_ctx_free(ctx);
+    return XR_CFUNC_DONE;
+}
+
+static XrCFuncResult sys_pipe_write_yieldable(XrVMRuntime *isolate, XrValue *args, int argc,
+                                              XrValue *result) {
+    if (argc < 2 || !XR_IS_INT(args[0]) || !xr_value_is_array(args[1])) {
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
+
+    XrArray *bytes = xr_value_to_array(args[1]);
+    if (!bytes || bytes->elem_type != XR_ELEM_U8) {
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
+
+    XrPipeHandle handle = (XrPipeHandle) XR_TO_INT(args[0]);
+    if (!sys_pipe_can_yield(isolate) || bytes->length <= 0) {
+        *result = sys_pipe_write_sync_value(handle, bytes);
+        return XR_CFUNC_DONE;
+    }
+
+    XrSysPipeWriteCtx *ctx = (XrSysPipeWriteCtx *) xr_calloc(1, sizeof(*ctx));
+    if (!ctx) {
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
+    ctx->handle = handle;
+    ctx->len = (size_t) bytes->length;
+    ctx->data = (uint8_t *) xr_malloc(ctx->len);
+    if (!ctx->data) {
+        sys_pipe_write_ctx_free(ctx);
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
+    memcpy(ctx->data, bytes->data, ctx->len);
+    return sys_pipe_write_yield_step(isolate, ctx, result);
 }
 
 static XrValue sys_pipe_close(XrVMRuntime *isolate, XrValue *args, int argc) {

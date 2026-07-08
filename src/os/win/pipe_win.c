@@ -75,6 +75,14 @@ int64_t xr_pipe_read(XrPipeHandle handle, void *buf, size_t len) {
     return (int64_t) read_bytes;
 }
 
+XrPipeIoStatus xr_pipe_try_read(XrPipeHandle handle, void *buf, size_t len, int64_t *out_n) {
+    if (out_n) {
+        *out_n = xr_pipe_read(handle, buf, len);
+        return *out_n < 0 ? XR_PIPE_IO_ERROR : XR_PIPE_IO_OK;
+    }
+    return XR_PIPE_IO_ERROR;
+}
+
 int64_t xr_pipe_write(XrPipeHandle handle, const void *buf, size_t len) {
     if (handle == XR_PIPE_INVALID || (!buf && len > 0)) {
         return -1;
@@ -85,4 +93,12 @@ int64_t xr_pipe_write(XrPipeHandle handle, const void *buf, size_t len) {
         return -1;
     }
     return (int64_t) written;
+}
+
+XrPipeIoStatus xr_pipe_try_write(XrPipeHandle handle, const void *buf, size_t len, int64_t *out_n) {
+    if (out_n) {
+        *out_n = xr_pipe_write(handle, buf, len);
+        return *out_n < 0 ? XR_PIPE_IO_ERROR : XR_PIPE_IO_OK;
+    }
+    return XR_PIPE_IO_ERROR;
 }
