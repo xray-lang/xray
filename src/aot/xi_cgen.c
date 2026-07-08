@@ -2813,19 +2813,60 @@ static bool cg_aot_compare_present_bool_map_get_const(XiCgenCtx *ctx, const XiVa
 
 #include "xi_cgen_dispatch_helpers.inc.c"
 
-static bool cg_no_alloc_builtin_name_allocates(const char *name) {
+static const char *cg_no_alloc_builtin_alloc_detail(const XiValue *v, const char *name,
+                                                    const char **kind_out) {
+    (void) v;
     if (!name)
-        return false;
-    static const char *allocating_builtins[] = {
-        "array_new", "Bytes", "StringBuilder", "map_new",    "set_new",
-        "json_new",  "copy",  "to_shared",     "str_concat", "regex_compile",
-        "chr",
+        return NULL;
+    if (strcmp(name, "array_new") == 0) {
+        if (kind_out)
+            *kind_out = "constructor";
+        return "Array";
+    }
+    if (strcmp(name, "array_filled_new") == 0) {
+        if (kind_out)
+            *kind_out = "constructor";
+        return "Array";
+    }
+    if (strcmp(name, "array_with_capacity") == 0) {
+        if (kind_out)
+            *kind_out = "method";
+        return "Array.withCapacity";
+    }
+    if (strcmp(name, "array_reserve") == 0) {
+        if (kind_out)
+            *kind_out = "method";
+        return "Array.reserve";
+    }
+    if (strcmp(name, "array_resize") == 0) {
+        if (kind_out)
+            *kind_out = "method";
+        return "Array.resize";
+    }
+    static const struct {
+        const char *name;
+        const char *kind;
+        const char *detail;
+    } allocating_builtins[] = {
+        {"Bytes", "constructor", "Bytes"},
+        {"StringBuilder", "constructor", "StringBuilder"},
+        {"map_new", "constructor", "Map"},
+        {"set_new", "constructor", "Set"},
+        {"json_new", "constructor", "Json"},
+        {"copy", "builtin", "copy"},
+        {"to_shared", "builtin", "to_shared"},
+        {"str_concat", "builtin", "str_concat"},
+        {"regex_compile", "builtin", "regex_compile"},
+        {"chr", "builtin", "chr"},
     };
     for (size_t i = 0; i < sizeof(allocating_builtins) / sizeof(allocating_builtins[0]); i++) {
-        if (strcmp(name, allocating_builtins[i]) == 0)
-            return true;
+        if (strcmp(name, allocating_builtins[i].name) == 0) {
+            if (kind_out)
+                *kind_out = allocating_builtins[i].kind;
+            return allocating_builtins[i].detail;
+        }
     }
-    return false;
+    return NULL;
 }
 
 static const char *cg_no_alloc_mem_alloc_detail(const char *name) {
@@ -3152,11 +3193,13 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
 
     if (v->op == XI_CALL_BUILTIN) {
         const char *name = v->aux ? (const char *) v->aux : NULL;
-        if (cg_no_alloc_builtin_name_allocates(name)) {
+        const char *builtin_kind = NULL;
+        const char *builtin_detail = cg_no_alloc_builtin_alloc_detail(v, name, &builtin_kind);
+        if (builtin_detail) {
             if (kind_out)
-                *kind_out = "builtin";
+                *kind_out = builtin_kind ? builtin_kind : "builtin";
             if (detail_out)
-                *detail_out = name;
+                *detail_out = builtin_detail;
             return true;
         }
         return false;
