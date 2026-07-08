@@ -1,7 +1,7 @@
 // Pure-Xray WebSocket protocol helpers.
 
 import ws
-import { acceptKey, maskPayload, frame } from ws
+import { acceptKey, maskPayload, frame, parseFrame } from ws
 
 var key = "dGhlIHNhbXBsZSBub25jZQ=="
 print(acceptKey(key))
@@ -37,3 +37,33 @@ print(ext[0])
 print(ext[1])
 print(ext[2])
 print(ext[3])
+
+var parsed = parseFrame(f, false)!
+print(parsed.fin)
+print(parsed.rsv1)
+print(parsed.opcode)
+print(parsed.masked)
+print(parsed.payload.toString())
+print(parsed.consumedBytes)
+
+var maskedFrame = Bytes([129, 130, 1, 2, 3, 4, 73, 107])
+var parsedMasked = parseFrame(maskedFrame, true)!
+print(parsedMasked.masked)
+print(parsedMasked.payload.toString())
+
+var withTail = Bytes([129, 1, 65, 66])
+var parsedTail = parseFrame(withTail, false)!
+print(parsedTail.payload.toString())
+print(parsedTail.consumedBytes)
+
+var rsv = parseFrame(Bytes([193, 0]), false, false, true)!
+print(rsv.rsv1)
+print(parseFrame(Bytes([193, 0]), false) == null)
+
+print(parseFrame(Bytes([131, 0]), false) == null)
+print(parseFrame(Bytes([9, 0]), false) == null)
+print(parseFrame(Bytes([137, 126, 0, 126]), false) == null)
+print(parseFrame(Bytes([129, 126, 0, 1, 65]), false) == null)
+print(parseFrame(Bytes([129, 127, 128, 0, 0, 0, 0, 0, 0, 1, 65]), false) == null)
+print(parseFrame(Bytes([129, 2, 65]), false) == null)
+print(parseFrame(maskedFrame, false, true) == null)
