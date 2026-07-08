@@ -1177,6 +1177,58 @@ module sys {
     layer: "system"
   }
 
+  fn __dylibOpen {
+    signature: "(path: string): int"
+    doc: "Open a dynamic library and return an opaque handle token, or 0 on failure"
+    vm: "sys_dylib_open"
+    aot: "xrt_sys_dylib_open"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
+  fn __dylibSymbol {
+    signature: "(handle: int, name: string): RawPtr<uint8>?"
+    doc: "Resolve a dynamic-library symbol to a raw address, or null on failure"
+    vm: "sys_dylib_symbol"
+    aot: "xrt_sys_dylib_symbol"
+    argc: 2
+    arg_spec: "vs"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
+  fn __dylibClose {
+    signature: "(handle: int): bool"
+    doc: "Close a dynamic library handle token"
+    vm: "sys_dylib_close"
+    aot: "xrt_sys_dylib_close"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
+  fn __dylibLastError {
+    signature: "(): string"
+    doc: "Return the platform dynamic-loader error message for the current thread"
+    vm: "sys_dylib_last_error"
+    aot: "xrt_sys_dylib_last_error"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
   fn __processSpawn {
     signature: "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: int?, stdoutWrite: int?, stderrWrite: int?): int"
     doc: "Spawn a process and return an opaque process handle token, or -1 on failure"

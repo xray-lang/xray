@@ -1,0 +1,44 @@
+// sys.Dylib dynamic-loader handle surface. The API exposes only a generic
+// library handle plus raw symbol addresses; typed CFn construction remains a
+// separate FFI concern.
+import mem
+import os
+import sys
+import { Dylib } from sys
+
+var path = ""
+var symName = "printf"
+if (os.platform == "darwin") {
+    path = "/usr/lib/libSystem.B.dylib"
+} else if (os.platform == "linux") {
+    path = "libc.so.6"
+} else if (os.platform == "windows") {
+    path = "kernel32.dll"
+    symName = "GetCurrentProcessId"
+}
+
+var lib: Dylib? = null
+if (path.length > 0) {
+    lib = sys.Dylib.open(path)
+}
+print(lib != null)
+if (lib != null) {
+    var sym = lib!.symbol(symName)
+    print(sym != null)
+    if (sym != null) {
+        var symPtr: RawPtr<uint8> = sym!
+        print(mem.addressOf(symPtr) != 0)
+    }
+
+    var missingSym = lib!.symbol("__xray_missing_symbol_for_dylib_test__")
+    print(missingSym == null)
+    print(sys.Dylib.lastError().length > 0)
+
+    print(lib!.close())
+    print(lib!.close())
+    print(lib!.symbol(symName) == null)
+}
+
+var missingLib = sys.Dylib.open("__xray_missing_library_for_dylib_test__")
+print(missingLib == null)
+print(sys.Dylib.lastError().length > 0)

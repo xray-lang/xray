@@ -103,6 +103,15 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
         return type;
     }
 
+    if (type->kind == XR_KIND_POINTER) {
+        XrType *elem =
+            xr_type_substitute(X, type->container.element_type, param_names, actual_types, count);
+        if (elem != type->container.element_type) {
+            return xr_type_new_pointer(X, elem, type->ptr_is_mut);
+        }
+        return type;
+    }
+
     if (xr_type_is_named_class(type, "Task")) {
         XrType *old_result =
             (type->instance.type_arg_count > 0) ? type->instance.type_args[0] : NULL;

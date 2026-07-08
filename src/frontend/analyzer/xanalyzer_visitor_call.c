@@ -1812,13 +1812,18 @@ static XaSymbolLinks *xa_method_symbol_links_for_call(XaInferContext *ctx, XrTyp
     if (!ctx || !receiver_type || !method_name)
         return NULL;
     const char *class_name = xr_type_get_class_name(receiver_type);
-    if (!class_name)
+    XrClassInfo *class_info =
+        XR_TYPE_IS_INSTANCE(receiver_type) ? receiver_type->instance.class_ref : NULL;
+    XaSymbolLinks *class_links = NULL;
+    if (class_name) {
+        XaSymbol *class_sym = xa_lookup_visible_class_symbol(ctx, class_name);
+        class_links = class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+        if (!class_info && class_links)
+            class_info = class_links->class_info;
+    }
+    if (!class_info)
         return NULL;
-    XaSymbol *class_sym = xa_lookup_visible_class_symbol(ctx, class_name);
-    XaSymbolLinks *class_links = class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
-    XaSymbol *method_sym = (class_links && class_links->class_info)
-                               ? xa_class_info_lookup_member(class_links->class_info, method_name)
-                               : NULL;
+    XaSymbol *method_sym = xa_class_info_lookup_member(class_info, method_name);
     return method_sym ? xa_analyzer_get_links(ctx->analyzer, method_sym) : NULL;
 }
 
@@ -1831,13 +1836,16 @@ static bool xa_call_mutates_receiver(XaInferContext *ctx, XrType *receiver_type,
         return false;
 
     const char *class_name = xr_type_get_class_name(receiver_type);
+    XrClassInfo *class_info =
+        XR_TYPE_IS_INSTANCE(receiver_type) ? receiver_type->instance.class_ref : NULL;
     if (class_name) {
         XaSymbol *class_sym = xa_lookup_visible_class_symbol(ctx, class_name);
         XaSymbolLinks *class_links =
             class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
-        if (class_links && class_links->class_info) {
-            XaSymbol *method_sym =
-                xa_class_info_lookup_instance_member(class_links->class_info, method_name);
+        if (!class_info && class_links)
+            class_info = class_links->class_info;
+        if (class_info) {
+            XaSymbol *method_sym = xa_class_info_lookup_instance_member(class_info, method_name);
             return method_sym && method_sym->kind == XA_SYM_METHOD && method_sym->mutates_receiver;
         }
     }
@@ -2913,37 +2921,38 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (XR_TYPE_IS_INSTANCE(callee_obj_type) && callee_obj_type->instance.class_name) {
             XaSymbol *class_sym =
                 xa_lookup_visible_class_symbol(ctx, callee_obj_type->instance.class_name);
-            if (class_sym && class_sym->kind == XA_SYM_CLASS) {
-                XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
-                if (class_links && class_links->class_info) {
-                    XaSymbol *method_sym =
-                        xa_class_info_lookup_instance_member(class_links->class_info, ma->name);
-                    if (method_sym && method_sym->kind == XA_SYM_METHOD) {
-                        XaSymbolLinks *method_links =
-                            xa_analyzer_get_links(ctx->analyzer, method_sym);
-                        if (method_links) {
-                            // Apply method's own type parameters
-                            return_type = xa_substitute_generic_call(ctx, method_links, callee_type,
-                                                                     return_type, call, arg_count,
-                                                                     effective_arg_types);
+            XaSymbolLinks *class_links = (class_sym && class_sym->kind == XA_SYM_CLASS)
+                                             ? xa_analyzer_get_links(ctx->analyzer, class_sym)
+                                             : NULL;
+            XrClassInfo *class_info = (class_links && class_links->class_info)
+                                          ? class_links->class_info
+                                          : callee_obj_type->instance.class_ref;
+            if (class_info) {
+                XaSymbol *method_sym = xa_class_info_lookup_instance_member(class_info, ma->name);
+                if (method_sym && method_sym->kind == XA_SYM_METHOD) {
+                    XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
+                    if (method_links) {
+                        // Apply method's own type parameters
+                        return_type =
+                            xa_substitute_generic_call(ctx, method_links, callee_type, return_type,
+                                                       call, arg_count, effective_arg_types);
 
-                            // Also apply class type parameters substitution
-                            int class_type_param_count =
-                                xa_symbol_links_get_type_param_count(class_links);
-                            if (class_type_param_count > 0 &&
-                                callee_obj_type->instance.type_arg_count > 0) {
-                                const char **class_param_names =
-                                    xr_malloc(sizeof(const char *) * class_type_param_count);
-                                for (int i = 0; i < class_type_param_count; i++) {
-                                    class_param_names[i] =
-                                        xa_symbol_links_get_type_param_name(class_links, i);
-                                }
-                                return_type = xr_type_substitute(
-                                    ctx->analyzer->isolate, return_type, class_param_names,
-                                    callee_obj_type->instance.type_args,
-                                    callee_obj_type->instance.type_arg_count);
-                                xr_free(class_param_names);
+                        // Also apply class type parameters substitution
+                        int class_type_param_count =
+                            xa_symbol_links_get_type_param_count(class_links);
+                        if (class_type_param_count > 0 &&
+                            callee_obj_type->instance.type_arg_count > 0) {
+                            const char **class_param_names =
+                                xr_malloc(sizeof(const char *) * class_type_param_count);
+                            for (int i = 0; i < class_type_param_count; i++) {
+                                class_param_names[i] =
+                                    xa_symbol_links_get_type_param_name(class_links, i);
                             }
+                            return_type = xr_type_substitute(
+                                ctx->analyzer->isolate, return_type, class_param_names,
+                                callee_obj_type->instance.type_args,
+                                callee_obj_type->instance.type_arg_count);
+                            xr_free(class_param_names);
                         }
                     }
                 }

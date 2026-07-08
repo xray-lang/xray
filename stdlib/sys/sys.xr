@@ -1,10 +1,10 @@
 // sys process handles.
 //
 // The C layer exposes only private double-underscore helpers. This script
-// layer keeps the public surface typed and small: Process, Pipe, and portable
-// signal names. ProcessOptions grows only through general process capability
-// fields; stdio redirection reuses Pipe rather than splitting reader/writer
-// endpoint classes prematurely.
+// layer keeps the public surface typed and small: Process, Pipe, Dylib, and
+// portable signal names. ProcessOptions grows only through general process
+// capability fields; stdio redirection reuses Pipe rather than splitting
+// reader/writer endpoint classes prematurely.
 
 enum Signal {
     TERM,
@@ -150,4 +150,37 @@ class Process {
     }
 }
 
-export { Process, ProcessOptions, Signal, Pipe }
+class Dylib {
+    _handle: int
+    _open: bool
+
+    constructor(handle: int) {
+        this._handle = handle
+        this._open = handle != 0
+    }
+
+    symbol(name: string) -> RawPtr<uint8>? {
+        if (!this._open) { return null }
+        return __dylibSymbol(this._handle, name)
+    }
+
+    close() -> bool {
+        if (!this._open) { return true }
+        var ok = __dylibClose(this._handle)
+        this._handle = 0
+        this._open = false
+        return ok
+    }
+
+    static open(path: string) -> Dylib? {
+        var handle = __dylibOpen(path)
+        if (handle == 0) { return null }
+        return Dylib(handle)
+    }
+
+    static lastError() -> string {
+        return __dylibLastError()
+    }
+}
+
+export { Process, ProcessOptions, Signal, Pipe, Dylib }
