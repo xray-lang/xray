@@ -667,6 +667,30 @@ static XgMethodSummary *producer_find_parent_method(XgProducer *p, const XgClass
     return NULL;
 }
 
+static XgMethodId producer_rederive_method_root(XgProducer *p, const XgClassSummary *cls,
+                                                const XgMethodSummary *method) {
+    const XgClassSummary *current = cls;
+    XgMethodId root = method ? method->method_id : XG_NO_ID;
+    uint32_t depth = 0;
+
+    if (!p || !cls || !method)
+        return XG_NO_ID;
+    while (current && current->parent_class_id != XG_NO_ID && depth++ < 64) {
+        XgClassNameRow *parent_row = producer_lookup_class_row_by_id(p, current->parent_class_id);
+        XgClassSummary *parent_summary;
+        XgMethodSummary *parent_method;
+        if (!parent_row || parent_row->summary_index >= p->evidence->nclasses)
+            break;
+        parent_summary = &p->evidence->classes[parent_row->summary_index];
+        parent_method = producer_find_class_method(p->evidence, parent_summary, method->name_id,
+                                                   method->signature_key);
+        if (parent_method)
+            root = parent_method->method_id;
+        current = parent_summary;
+    }
+    return root;
+}
+
 static XgMethodSummary *producer_find_method_by_name_in_hierarchy(XgProducer *p, XgClassId class_id,
                                                                   uint32_t name_id,
                                                                   bool allow_constructor) {
@@ -729,6 +753,7 @@ static void producer_finalize_class_graph(XgProducer *p) {
             if (!method || (method->flags & XG_METHOD_STATIC) ||
                 (method->flags & XG_METHOD_CONSTRUCTOR))
                 continue;
+            method->root_method_id = producer_rederive_method_root(p, summary, method);
             parent_method =
                 producer_find_parent_method(p, summary, method->name_id, method->signature_key);
             if (!parent_method)

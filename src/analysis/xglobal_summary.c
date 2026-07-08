@@ -113,6 +113,7 @@ static uint64_t hash_method_summary(uint64_t hash, const XgMethodSummary *row) {
     hash = hash_u32(hash, row->name_id);
     hash = hash_u32(hash, row->signature_key);
     hash = hash_u32(hash, row->override_of);
+    hash = hash_u32(hash, row->root_method_id);
     hash = hash_u32(hash, row->default_arg_contract_id);
     return hash_u32(hash, row->flags);
 }
@@ -585,6 +586,8 @@ XR_FUNC XgMethodSummary *xg_global_evidence_add_method(XgGlobalEvidence *evidenc
         return NULL;
     row = &evidence->methods[evidence->nmethods++];
     *row = *summary;
+    if (row->method_id != XG_NO_ID && row->root_method_id == XG_NO_ID)
+        row->root_method_id = row->method_id;
     return row;
 }
 
@@ -1199,9 +1202,10 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->nmethods; i++) {
         const XgMethodSummary *m = &evidence->methods[i];
         fprintf(out,
-                "method %u id=%u owner=%u name=%u sig=%u override_of=%u defaults=%u flags=0x%x\n",
+                "method %u id=%u owner=%u name=%u sig=%u override_of=%u root=%u defaults=%u "
+                "flags=0x%x\n",
                 i, m->method_id, m->owner_class_id, m->name_id, m->signature_key, m->override_of,
-                m->default_arg_contract_id, m->flags);
+                m->root_method_id, m->default_arg_contract_id, m->flags);
     }
     for (uint32_t i = 0; i < evidence->ninterface_impls; i++) {
         const XgInterfaceImplSummary *impl = &evidence->interface_impls[i];
