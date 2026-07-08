@@ -69,6 +69,19 @@ const ENTRIES: [Entry; 2] = comptime [
     Entry{code: TABLE[2], flag: false},
 ]
 
+struct Row {
+    samples: [uint8; 4]
+    weight: int
+}
+
+@section("__DATA,.xray_rows")
+@weak
+@used
+const ROWS: [Row; 2] = comptime [
+    Row{samples: [1, 2, 3, 4], weight: TABLE[0]},
+    Row{samples: [5, 6, 7, 8], weight: TABLE[1]},
+]
+
 packed struct PackedPair {
     tag: uint8
     value: uint32
@@ -197,6 +210,11 @@ fn xray_top_const_struct_string_array_print(i: int) -> int {
 @c_export("xray_top_const_struct_array_field_runtime")
 fn xray_top_const_struct_array_field_runtime(i: int) -> int {
     return ENTRIES[i].code + (ENTRIES[i].flag as int)
+}
+
+@c_export("xray_top_const_struct_array_fixed_field_runtime")
+fn xray_top_const_struct_array_fixed_field_runtime(row: int, col: int) -> int {
+    return ROWS[row].samples[col] as int + ROWS[row].weight
 }
 
 @c_export("xray_top_const_packed_struct_runtime")

@@ -2002,6 +2002,9 @@ static void emit_likely_condition_expr(XiCgenCtx *ctx, FILE *out, const XiBlock 
     fprintf(out, ")");
 }
 
+static bool cg_value_is_elided_static_fixed_struct_array_index_ref(XiCgenCtx *ctx, const XiFunc *f,
+                                                                   const XiValue *v);
+
 #include "xi_cgen_struct_helpers.inc.c"
 #include "xi_cgen_class_helpers.inc.c"
 static bool cg_has_exception_handling(const XiFunc *f);
