@@ -18,15 +18,6 @@
 
 /* ========== Byte Helpers ========== */
 
-static __attribute__((unused)) inline void put_u8(uint8_t *p, uint8_t v) {
-    *p = v;
-}
-
-static __attribute__((unused)) inline void put_u16(uint8_t *p, uint16_t v) {
-    p[0] = (uint8_t) (v >> 8);
-    p[1] = (uint8_t) (v);
-}
-
 static inline void put_u32(uint8_t *p, uint32_t v) {
     p[0] = (uint8_t) (v >> 24);
     p[1] = (uint8_t) (v >> 16);
@@ -43,10 +34,6 @@ static inline void put_u64(uint8_t *p, uint64_t v) {
     p[5] = (uint8_t) (v >> 16);
     p[6] = (uint8_t) (v >> 8);
     p[7] = (uint8_t) (v);
-}
-
-static __attribute__((unused)) inline uint16_t get_u16(const uint8_t *p) {
-    return ((uint16_t) p[0] << 8) | p[1];
 }
 
 static inline uint32_t get_u32(const uint8_t *p) {
