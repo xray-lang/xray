@@ -78,6 +78,9 @@ typedef struct XrProcSpawnOptions {
     XrPipeHandle stdout_write;
     bool has_stderr;
     XrPipeHandle stderr_write;
+    // When true, the child is released from the wait/tryWait lifecycle. The
+    // returned id remains informational; callers must not wait it.
+    bool detached;
 } XrProcSpawnOptions;
 
 // Spawn a child process running `prog`. `argv` is a NULL-terminated

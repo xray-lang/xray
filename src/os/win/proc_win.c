@@ -351,7 +351,9 @@ XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
         free(cmdline);  // xr:allow-raw-alloc
         return XR_PROC_INVALID;
     }
-    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, env_block, cwd, &si, &pi);
+    DWORD create_flags = (options && options->detached) ? CREATE_NEW_PROCESS_GROUP : 0;
+    BOOL ok =
+        CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, create_flags, env_block, cwd, &si, &pi);
     proc_stdio_dup_close(&stdio_dup);
     free(env_block);  // xr:allow-raw-alloc
     free(cmdline);    // xr:allow-raw-alloc
@@ -359,6 +361,10 @@ XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
         return XR_PROC_INVALID;
     }
     CloseHandle(pi.hThread);
+    if (options && options->detached) {
+        CloseHandle(pi.hProcess);
+        return (XrProcId) pi.dwProcessId;
+    }
     live_record(pi.dwProcessId, pi.hProcess);
     return (XrProcId) pi.dwProcessId;
 }

@@ -30,6 +30,7 @@
 #include "../frontend/lexer/xlex.h"
 #include "../runtime/class/xclass_system.h"
 
+#include "../module/xmodule_graph.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_info.h"
@@ -230,6 +231,58 @@ static XiValue *xi_lower_builtin_module_function_ref(XiLower *l, uint32_t sid,
         return NULL;
 
     return xi_lower_emit_import_ref(l, module_name, member_name, links->type, line);
+}
+
+static const char *xi_lower_export_module_for_symbol(XiLower *l, XaSymbol *target,
+                                                     const char *export_name) {
+    if (!l || !l->analyzer || !target || !export_name)
+        return NULL;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, target);
+    if (links && links->module_name)
+        return links->module_name;
+
+    XrModuleGraph *graph = (XrModuleGraph *) l->analyzer->graph;
+    if (!graph)
+        return NULL;
+
+    for (int i = 0; i < graph->spec_count; i++) {
+        XrModuleSpec *spec = &graph->specs[i];
+        XaSymbol *candidate = spec->export_symbols
+                                  ? (XaSymbol *) xr_hashmap_get(spec->export_symbols, export_name)
+                                  : NULL;
+        if (!candidate)
+            continue;
+        if (candidate == target || (candidate->id != 0 && candidate->id == target->id))
+            return spec->canonical;
+    }
+    return NULL;
+}
+
+static XiValue *xi_lower_enum_namespace_value(XiLower *l, XaSymbol *enum_sym, const char *enum_name,
+                                              int line) {
+    if (!l || !enum_sym || !enum_name)
+        return NULL;
+
+    int builtin_idx = xi_lower_builtin_class_global_index(enum_name);
+    if (builtin_idx >= 0)
+        return xi_lower_emit_builtin_class(l, enum_name, line);
+
+    int var_id = xi_lower_var_find(l, enum_sym->id, enum_name);
+    if (var_id >= 0)
+        return xi_lower_braun_read(l, var_id, l->cur_block);
+
+    XiTopBinding top = xi_lower_find_top_binding(l, enum_sym->id, enum_name);
+    if (xi_top_binding_valid(top))
+        return xi_lower_emit_top_load(l, top, NULL);
+
+    const char *module_path = xi_lower_export_module_for_symbol(l, enum_sym, enum_name);
+    if (!module_path)
+        return NULL;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, enum_sym);
+    return xi_lower_emit_import_ref(l, module_path, enum_name, links ? links->type : l->type_any,
+                                    line);
 }
 
 static XrAggregateLayout *xi_lower_type_struct_layout(XiLower *l, struct XrType *type) {
@@ -1338,6 +1391,29 @@ static struct XrType *lower_math_call_result_type(XiLower *l, const char *member
 
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
+
+    const XaSelection *sel =
+        l && l->analyzer && l->analyzer->selection_table
+            ? xa_selection_table_get((XaSelectionTable *) l->analyzer->selection_table, node)
+            : NULL;
+    if (sel && sel->kind == XA_SEL_ENUM_MEMBER && sel->target_symbol &&
+        sel->target_symbol->kind == XA_SYM_ENUM && ma->name) {
+        const char *enum_name = sel->target_symbol->name;
+        XiValue *enum_val =
+            xi_lower_enum_namespace_value(l, sel->target_symbol, enum_name, (int) node->line);
+        if (enum_val) {
+            struct XrType *result_type =
+                sel->result_type ? sel->result_type : xi_lower_node_type(l, node);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
+            if (!v)
+                return NULL;
+            v->args[0] = enum_val;
+            v->aux = (void *) arena_strdup(l->func, ma->name);
+            v->aux_int = xi_lower_method_symbol(l, ma->name);
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+    }
 
     if (ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
         strcmp(ma->object->as.variable.name, "Type") == 0) {

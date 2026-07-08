@@ -453,7 +453,7 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"__dylibSymbol", "(handle: int, name: string): RawPtr<uint8>?", "Resolve a dynamic-library symbol to a raw address, or null on failure", true, false, true},
     {"__dylibClose", "(handle: int): bool", "Close a dynamic library handle token", true, false, true},
     {"__dylibLastError", "(): string", "Return the platform dynamic-loader error message for the current thread", true, false, true},
-    {"__processSpawn", "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: int?, stdoutWrite: int?, stderrWrite: int?): int", "Spawn a process and return an opaque process handle token, or -1 on failure", true, false, true},
+    {"__processSpawn", "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: int?, stdoutWrite: int?, stderrWrite: int?, detached: bool): int", "Spawn a process and return an opaque process handle token, or -1 on failure", true, false, true},
     {"__processWait", "(id: int): int", "Wait for a process handle token and return its exit code, or -1 on failure", true, false, true},
     {"__processTryWait", "(id: int): int?", "Poll a process handle token; return null while running, exit code when finished, or -1 on failure", true, false, true},
     {"__processKill", "(id: int, signal: int): bool", "Send a portable process signal to a process handle token", true, false, true},

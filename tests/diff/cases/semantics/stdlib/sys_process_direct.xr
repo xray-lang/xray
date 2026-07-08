@@ -2,7 +2,7 @@
 // from os.exec/os.spawn convenience capture helpers and does not introduce
 // parallel process APIs.
 import sys
-import { ProcessOptions } from sys
+import { ProcessOptions, Signal } from sys
 
 var noArgs = sys.Process.spawn("true")
 print(noArgs != null)
@@ -41,8 +41,18 @@ if (done != null) {
 var q = sys.Process.spawn("sh", ["-c", "sleep 5"])
 print(q != null)
 if (q != null) {
-    print(q!.kill(sys.Signal.KILL))
+    print(q!.kill(Signal.KILL))
     print(q!.wait())
+}
+
+var detached = sys.Process.spawn("sh", ["-c", "exit 0"],
+    ProcessOptions(null, null, null, null, null, true))
+print(detached != null)
+if (detached != null) {
+    print(detached!.id > 0)
+    print(detached!.wait())
+    print(detached!.tryWait())
+    print(detached!.kill())
 }
 
 var missing = sys.Process.spawn("", [])
@@ -52,7 +62,7 @@ if (missing != null) {
 } else {
     print(true)
 }
-print(sys.Signal.TERM != sys.Signal.KILL)
+print(Signal.TERM != Signal.KILL)
 
 var cwdProc = sys.Process.spawn("sh", ["-c", "test -f sys_process_direct.xr"],
     ProcessOptions("tests/diff/cases/semantics/stdlib"))

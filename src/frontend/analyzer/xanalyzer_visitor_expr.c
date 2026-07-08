@@ -18,6 +18,7 @@
 #include "xa_selection.h"
 #include "xanalyzer_mono.h"
 #include "../../toolchain/xcompiler_session.h"
+#include "../../module/xmodule_graph.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
 #include "../../../stdlib/prelude/prelude.h"
@@ -213,11 +214,104 @@ static bool member_object_is_enum_namespace(XaInferContext *ctx, AstNode *object
                                             const char *enum_name) {
     if (!ctx || !object || object->type != AST_VARIABLE || !enum_name)
         return false;
+    XaSymbol *sym =
+        object->as.variable.symbol_id
+            ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, object->as.variable.symbol_id)
+            : NULL;
+    if (sym && sym->kind == XA_SYM_ENUM && sym->name && strcmp(sym->name, enum_name) == 0)
+        return true;
     const char *name = object->as.variable.name;
     if (!name || strcmp(name, enum_name) != 0)
         return false;
-    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
+    sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
     return sym && sym->kind == XA_SYM_ENUM;
+}
+
+static XaSymbol *xa_expected_enum_symbol(XaInferContext *ctx, AstNode *object) {
+    if (!ctx || !ctx->analyzer || !ctx->expected_type || ctx->expected_type->kind != XR_KIND_ENUM ||
+        !ctx->expected_type->enum_type.enum_name || !object || object->type != AST_VARIABLE ||
+        !object->as.variable.name)
+        return NULL;
+
+    const char *enum_name = ctx->expected_type->enum_type.enum_name;
+    if (strcmp(object->as.variable.name, enum_name) != 0)
+        return NULL;
+
+    XaSymbol *sym =
+        object->as.variable.symbol_id
+            ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, object->as.variable.symbol_id)
+            : NULL;
+    if (!sym)
+        sym = xa_analyzer_lookup(ctx->analyzer, enum_name);
+    if (!sym)
+        sym = xa_analyzer_lookup_in_scope(ctx->analyzer, enum_name, ctx->analyzer->global_scope);
+    if (!sym)
+        sym = xa_analyzer_lookup_deep(ctx->analyzer, enum_name);
+    if (!sym && ctx->analyzer->graph) {
+        XrModuleGraph *graph = (XrModuleGraph *) ctx->analyzer->graph;
+        XaSymbol *found = NULL;
+        uint32_t expected_layout_id = ctx->expected_type->enum_type.layout_id;
+        for (int i = 0; i < graph->spec_count; i++) {
+            XrHashMap *exports = graph->specs[i].export_symbols;
+            XaSymbol *candidate = exports ? (XaSymbol *) xr_hashmap_get(exports, enum_name) : NULL;
+            if (!candidate || candidate->kind != XA_SYM_ENUM)
+                continue;
+            XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, candidate);
+            XaEnumInfo *info = links ? links->enum_info : NULL;
+            uint32_t candidate_layout_id =
+                info && info->layout
+                    ? info->layout->layout_id
+                    : (links && links->type ? links->type->enum_type.layout_id : 0);
+            if (expected_layout_id != 0 && candidate_layout_id != 0 &&
+                expected_layout_id != candidate_layout_id)
+                continue;
+            if (found && found != candidate)
+                return NULL;
+            found = candidate;
+        }
+        sym = found;
+    }
+    return sym && sym->kind == XA_SYM_ENUM ? sym : NULL;
+}
+
+static XrType *xa_try_expected_enum_member_access(XaInferContext *ctx, AstNode *node,
+                                                  MemberAccessNode *ma) {
+    XaSymbol *enum_sym = xa_expected_enum_symbol(ctx, ma ? ma->object : NULL);
+    if (!enum_sym || !ma || !ma->name)
+        return NULL;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, enum_sym);
+    XaEnumInfo *info = links ? links->enum_info : NULL;
+    int member_index = xa_enum_info_find_variant(info, ma->name);
+    if (member_index < 0)
+        return NULL;
+
+    ma->object->as.variable.symbol_id = enum_sym->id;
+    if (info->variants && info->variants[member_index].payload_count > 0 &&
+        !ctx->allow_payload_enum_ctor_value) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[192];
+        snprintf(msg, sizeof(msg),
+                 "payload enum variant '%s.%s' is a constructor; call it as '%s.%s(...)' "
+                 "instead of using it as a value",
+                 enum_sym->name ? enum_sym->name : "?", ma->name,
+                 enum_sym->name ? enum_sym->name : "?", ma->name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_unknown(NULL);
+    }
+
+    XrType *enum_type =
+        xr_type_new_enum(ctx->analyzer->isolate, ctx->expected_type->enum_type.enum_name);
+    if (enum_type) {
+        enum_type->enum_type.layout = info ? info->layout : ctx->expected_type->enum_type.layout;
+        enum_type->enum_type.layout_id = enum_type->enum_type.layout
+                                             ? enum_type->enum_type.layout->layout_id
+                                             : ctx->expected_type->enum_type.layout_id;
+    }
+    record_selection(ctx, node, XA_SEL_ENUM_MEMBER, enum_type ? enum_type : ctx->expected_type,
+                     enum_sym, member_index, enum_type ? enum_type : ctx->expected_type, false);
+    return enum_type ? enum_type : ctx->expected_type;
 }
 
 static XrType *xa_function_type1(XaInferContext *ctx, XrType *p0, XrType *ret) {
@@ -742,7 +836,11 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
 
     const char *name = node->as.variable.name;
-    XaSymbol *sym = xa_lookup_visible_symbol(ctx, name);
+    XaSymbol *sym = node->as.variable.symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope,
+                                                                        node->as.variable.symbol_id)
+                                                : NULL;
+    if (!sym)
+        sym = xa_lookup_visible_symbol(ctx, name);
 
     if (!sym) {
         /* Prelude type names used as constructors (e.g. Atomic(0)) are not
@@ -786,6 +884,16 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     /* Write back resolved symbol ID for Xi lowering (Braun SSA key). */
     node->as.variable.symbol_id = sym->id;
     xa_parallel_capture_check(ctx, node, sym, false);
+
+    if (sym->kind == XA_SYM_ENUM) {
+        XaSymbolLinks *enum_links = xa_analyzer_get_links(ctx->analyzer, sym);
+        XrType *enum_type = enum_links && enum_links->type ? enum_links->type : NULL;
+        if (!enum_type || !XR_TYPE_IS_ENUM(enum_type))
+            enum_type = sym->name ? xr_type_new_enum(ctx->analyzer->isolate, sym->name)
+                                  : xr_type_new_unknown(NULL);
+        xa_analyzer_set_node_type(ctx->analyzer, node, enum_type);
+        return enum_type;
+    }
 
     // Record dependency: current function depends on this symbol
     if (ctx->current_function && ctx->analyzer->incremental) {
@@ -1232,6 +1340,10 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (freestanding_static_member)
         return freestanding_static_member;
 
+    XrType *expected_enum_member = xa_try_expected_enum_member_access(ctx, node, ma);
+    if (expected_enum_member)
+        return expected_enum_member;
+
     XrType *obj_type = xa_visit_infer_expr(ctx, ma->object);
 
     // Reject `.member` on a possibly-null receiver (strict null checks).
@@ -1352,8 +1464,17 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     // enum namespace. `Color.staticFn` resolves a static method. Any other
     // enum-typed receiver is an enum value and can resolve instance methods.
     if (obj_type->kind == XR_KIND_ENUM && obj_type->enum_type.enum_name) {
-        XaSymbol *enum_sym =
-            xa_scope_lookup(ctx->analyzer->current_scope, obj_type->enum_type.enum_name);
+        XaSymbol *enum_sym = NULL;
+        if (ma->object && ma->object->type == AST_VARIABLE &&
+            ma->object->as.variable.symbol_id != 0) {
+            XaSymbol *by_id = xa_scope_lookup_by_id(ctx->analyzer->global_scope,
+                                                    ma->object->as.variable.symbol_id);
+            if (by_id && by_id->kind == XA_SYM_ENUM && by_id->name &&
+                strcmp(by_id->name, obj_type->enum_type.enum_name) == 0)
+                enum_sym = by_id;
+        }
+        if (!enum_sym)
+            enum_sym = xa_scope_lookup(ctx->analyzer->current_scope, obj_type->enum_type.enum_name);
         if (enum_sym && enum_sym->kind == XA_SYM_ENUM) {
             XaSymbolLinks *el = xa_analyzer_get_links(ctx->analyzer, enum_sym);
             if (el) {

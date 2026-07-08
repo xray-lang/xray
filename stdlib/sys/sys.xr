@@ -72,14 +72,16 @@ class ProcessOptions {
     stdin: int?
     stdout: int?
     stderr: int?
+    detached: bool
 
     constructor(cwd: string? = null, env: Map<string, string>? = null, stdin: int? = null,
-                stdout: int? = null, stderr: int? = null) {
+                stdout: int? = null, stderr: int? = null, detached: bool = false) {
         this.cwd = cwd
         this.env = env
         this.stdin = stdin
         this.stdout = stdout
         this.stderr = stderr
+        this.detached = detached
     }
 }
 
@@ -87,9 +89,9 @@ class Process {
     _id: int
     _open: bool
 
-    constructor(id: int) {
+    constructor(id: int, detached: bool = false) {
         this._id = id
-        this._open = id > 0
+        this._open = id > 0 && !detached
     }
 
     id: int { fn() { return this._id } }
@@ -127,6 +129,7 @@ class Process {
         var stdinRead: int? = null
         var stdoutWrite: int? = null
         var stderrWrite: int? = null
+        var detached = false
         if (options != null) {
             cwd = options!.cwd
             if (options!.env != null) {
@@ -142,11 +145,12 @@ class Process {
             if (options!.stderr != null) {
                 stderrWrite = options!.stderr
             }
+            detached = options!.detached
         }
         var id = __processSpawn(program, args, cwd, envKeys, envValues,
-            stdinRead, stdoutWrite, stderrWrite)
+            stdinRead, stdoutWrite, stderrWrite, detached)
         if (id <= 0) { return null }
-        return Process(id)
+        return Process(id, detached)
     }
 }
 
