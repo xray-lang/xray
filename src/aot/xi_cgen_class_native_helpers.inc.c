@@ -2224,7 +2224,7 @@ static bool emit_class_native_constructor_expr(XiCgenCtx *ctx, FILE *out, const 
         fprintf(out, "(NULL, _inst");
         for (uint16_t a = 1; a < v->nargs; a++) {
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[a], cg_func_param_abi_rep(ctx, target, a));
+            emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, target, a));
         }
         fprintf(out, "); ");
     }
@@ -3369,7 +3369,7 @@ static bool emit_class_shared_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, 
     emit_class_shared_native_storage_name(ctx, out, slot);
     for (uint16_t a = 1; a < v->nargs; a++) {
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[a], cg_func_param_abi_rep(ctx, inst->ctor, a));
+        emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, inst->ctor, a));
     }
     fprintf(out, ");\n");
     return true;

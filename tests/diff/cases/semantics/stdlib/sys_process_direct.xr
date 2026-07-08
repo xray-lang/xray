@@ -55,7 +55,7 @@ if (missing != null) {
 print(sys.Signal.TERM != sys.Signal.KILL)
 
 var cwdProc = sys.Process.spawn("sh", ["-c", "test -f sys_process_direct.xr"],
-    ProcessOptions("tests/diff/cases/semantics/stdlib", null))
+    ProcessOptions("tests/diff/cases/semantics/stdlib"))
 print(cwdProc != null)
 if (cwdProc != null) {
     print(cwdProc!.wait())
@@ -75,7 +75,8 @@ if (cwdEnvProc != null) {
     print(cwdEnvProc!.wait())
 }
 
-var invalidEnv = sys.Process.spawn("sh", ["-c", "exit 0"], ProcessOptions(null, #{"BAD=KEY": "x"}))
+var invalidEnv = sys.Process.spawn("sh", ["-c", "exit 0"],
+    ProcessOptions(null, #{"BAD=KEY": "x"}))
 if (invalidEnv != null) {
     print(false)
     print(invalidEnv!.wait())
@@ -101,4 +102,55 @@ if (pipe != null) {
         print(eof!.length)
     }
     print(pipe!.close())
+}
+
+var stdinPipe = sys.Pipe.open()
+print(stdinPipe != null)
+if (stdinPipe != null) {
+    var stdinProc = sys.Process.spawn("sh", ["-c", "read line; test \"$line\" = input-ok"],
+        ProcessOptions(null, null, stdinPipe!.readEnd()))
+    print(stdinProc != null)
+    if (stdinProc != null) {
+        print(stdinPipe!.closeRead())
+        print(stdinPipe!.write("input-ok\n".toBytes()))
+        print(stdinPipe!.closeWrite())
+        print(stdinProc!.wait())
+    }
+    print(stdinPipe!.close())
+}
+
+var stdoutPipe = sys.Pipe.open()
+print(stdoutPipe != null)
+if (stdoutPipe != null) {
+    var stdoutProc = sys.Process.spawn("sh", ["-c", "printf captured-out"],
+        ProcessOptions(null, null, null, stdoutPipe!.writeEnd()))
+    print(stdoutProc != null)
+    if (stdoutProc != null) {
+        print(stdoutProc!.wait())
+        print(stdoutPipe!.closeWrite())
+        var capturedOut = stdoutPipe!.read(64)
+        print(capturedOut != null)
+        if (capturedOut != null) {
+            print(capturedOut!.toString())
+        }
+    }
+    print(stdoutPipe!.close())
+}
+
+var stderrPipe = sys.Pipe.open()
+print(stderrPipe != null)
+if (stderrPipe != null) {
+    var stderrProc = sys.Process.spawn("sh", ["-c", "printf captured-err >&2"],
+        ProcessOptions(null, null, null, null, stderrPipe!.writeEnd()))
+    print(stderrProc != null)
+    if (stderrProc != null) {
+        print(stderrProc!.wait())
+        print(stderrPipe!.closeWrite())
+        var capturedErr = stderrPipe!.read(64)
+        print(capturedErr != null)
+        if (capturedErr != null) {
+            print(capturedErr!.toString())
+        }
+    }
+    print(stderrPipe!.close())
 }

@@ -1755,6 +1755,50 @@ static XaSymbolLinks *xa_static_method_fn_links_from_type(XaInferContext *ctx, X
                : NULL;
 }
 
+static XaSymbolLinks *xa_class_constructor_links(XaInferContext *ctx, XaSymbol *class_sym) {
+    if (!ctx || !ctx->analyzer || !class_sym || class_sym->kind != XA_SYM_CLASS)
+        return NULL;
+    XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
+    XrClassInfo *class_info = class_links ? class_links->class_info : NULL;
+    XaSymbol *ctor =
+        class_info ? xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR) : NULL;
+    return ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
+}
+
+static bool xa_complete_call_default_args(XaInferContext *ctx, CallExprNode *call,
+                                          XaSymbolLinks *links, int param_count) {
+    if (!ctx || !call || !links || !links->param_defaults || param_count <= 0 ||
+        links->param_count != param_count || call->arg_count >= param_count)
+        return false;
+
+    bool can_complete = true;
+    for (int i = 0; i < call->arg_count; i++) {
+        if (call->arguments[i] && call->arguments[i]->type == AST_SPREAD_EXPR) {
+            can_complete = false;
+            break;
+        }
+    }
+    for (int i = call->arg_count; can_complete && i < param_count; i++) {
+        if (!links->param_defaults[i])
+            can_complete = false;
+    }
+    if (!can_complete)
+        return false;
+
+    XrCompilerSession *sess =
+        ctx->analyzer ? xr_compiler_session_current_for_isolate(ctx->analyzer->isolate) : NULL;
+    AstNode **new_args = (AstNode **) xr_calloc((size_t) param_count, sizeof(AstNode *));
+    if (!new_args)
+        return false;
+    for (int i = 0; i < call->arg_count; i++)
+        new_args[i] = call->arguments[i];
+    for (int i = call->arg_count; i < param_count; i++)
+        new_args[i] = xr_ast_clone_session(links->param_defaults[i], sess);
+    call->arguments = new_args;
+    call->arg_count = param_count;
+    return true;
+}
+
 static void xa_check_channel_send_transfer_arg(XaInferContext *ctx, AstNode *call_node,
                                                XrType *receiver_type, const char *method_name,
                                                AstNode *arg_node, XrType *arg_type, int slot) {
@@ -1874,6 +1918,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     // Record dependency: current function depends on called function
     XaSymbol *fn_sym = NULL;
     XaSymbolLinks *fn_links = NULL;
+    XaSymbolLinks *class_ctor_links = NULL;
 
     if (call->callee && call->callee->type == AST_VARIABLE) {
         const char *fn_name = call->callee->as.variable.name;
@@ -1888,6 +1933,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         fn_sym = xa_lookup_visible_symbol(ctx, fn_name);
         if (fn_sym) {
             fn_links = xa_analyzer_get_links(ctx->analyzer, fn_sym);
+            if (fn_sym->kind == XA_SYM_CLASS)
+                class_ctor_links = xa_class_constructor_links(ctx, fn_sym);
             if (fn_sym->is_imported && fn_links && fn_links->module_name &&
                 !xa_freestanding_stdlib_member_allowed(
                     fn_links->module_name,
@@ -1930,6 +1977,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         fn_links = xa_module_member_fn_links(ctx, call->callee);
         if (!fn_links)
             fn_links = xa_static_method_fn_links(ctx, call->callee);
+        if (!fn_links) {
+            XaSymbol *class_sym = xa_module_member_class_symbol(ctx, call->callee);
+            class_ctor_links = xa_class_constructor_links(ctx, class_sym);
+        }
     }
 
     const char *mem_layout_member = xa_mem_layout_call_member(ctx, call);
@@ -2212,6 +2263,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (optional_function_call && callee_type)
         callee_type = xr_type_non_nullable(ctx->analyzer->isolate, callee_type);
 
+    if (class_ctor_links && class_ctor_links->param_defaults)
+        xa_complete_call_default_args(ctx, call, class_ctor_links, class_ctor_links->param_count);
+
     /* Resolve symbol_ids in non-lambda arguments before any early-return path.
      * Skip AST_FUNCTION_EXPR args: they require expected_type context from
      * the callee's parameter signature (set in the detailed loop below).
@@ -2415,31 +2469,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     // therefore must pass every argument.
     if (fn_links && fn_links->param_defaults && !is_variadic &&
         fn_links->param_count == param_count && call->arg_count < param_count) {
-        bool can_complete = true;
-        for (int i = 0; i < call->arg_count; i++) {
-            if (call->arguments[i] && call->arguments[i]->type == AST_SPREAD_EXPR) {
-                can_complete = false;
-                break;
-            }
-        }
-        for (int i = call->arg_count; can_complete && i < param_count; i++) {
-            if (!fn_links->param_defaults[i])
-                can_complete = false;  // missing required arg → real arity error below
-        }
-        if (can_complete) {
-            XrCompilerSession *sess =
-                ctx->analyzer ? xr_compiler_session_current_for_isolate(ctx->analyzer->isolate)
-                              : NULL;
-            AstNode **new_args = (AstNode **) xr_calloc((size_t) param_count, sizeof(AstNode *));
-            if (new_args) {
-                for (int i = 0; i < call->arg_count; i++)
-                    new_args[i] = call->arguments[i];
-                for (int i = call->arg_count; i < param_count; i++)
-                    new_args[i] = xr_ast_clone_session(fn_links->param_defaults[i], sess);
-                call->arguments = new_args;
-                call->arg_count = param_count;
-            }
-        }
+        xa_complete_call_default_args(ctx, call, fn_links, param_count);
     }
 
     /* Spread expansion: walk arguments once, building a flat per-slot

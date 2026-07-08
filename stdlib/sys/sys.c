@@ -656,9 +656,22 @@ static bool sys_process_env_from_arrays(XrValue keys_value, XrValue values_value
     return true;
 }
 
+static bool sys_process_pipe_handle_from_optional(XrValue value, bool *out_has,
+                                                  XrPipeHandle *out_handle) {
+    *out_has = false;
+    *out_handle = XR_PIPE_INVALID;
+    if (XR_IS_NULL(value))
+        return true;
+    if (!XR_IS_INT(value))
+        return false;
+    *out_has = true;
+    *out_handle = (XrPipeHandle) XR_TO_INT(value);
+    return true;
+}
+
 static XrValue sys_process_spawn(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
-    if (argc < 5)
+    if (argc < 8)
         return xr_int((int64_t) XR_PROC_INVALID);
 
     const char *program = xrs_string_arg(args[0], NULL);
@@ -695,11 +708,31 @@ static XrValue sys_process_spawn(XrVMRuntime *isolate, XrValue *args, int argc) 
         return xr_int((int64_t) XR_PROC_INVALID);
     }
 
+    bool has_stdin = false;
+    bool has_stdout = false;
+    bool has_stderr = false;
+    XrPipeHandle stdin_read = XR_PIPE_INVALID;
+    XrPipeHandle stdout_write = XR_PIPE_INVALID;
+    XrPipeHandle stderr_write = XR_PIPE_INVALID;
+    if (!sys_process_pipe_handle_from_optional(args[5], &has_stdin, &stdin_read) ||
+        !sys_process_pipe_handle_from_optional(args[6], &has_stdout, &stdout_write) ||
+        !sys_process_pipe_handle_from_optional(args[7], &has_stderr, &stderr_write)) {
+        sys_process_env_free(env_keys, env_values);
+        xr_free(argv);
+        return xr_int((int64_t) XR_PROC_INVALID);
+    }
+
     XrProcSpawnOptions options = {
         .cwd = cwd,
         .env_keys = env_keys,
         .env_values = env_values,
         .env_count = env_count,
+        .has_stdin = has_stdin,
+        .stdin_read = stdin_read,
+        .has_stdout = has_stdout,
+        .stdout_write = stdout_write,
+        .has_stderr = has_stderr,
+        .stderr_write = stderr_write,
     };
     XrProcId pid = xr_proc_spawn_ex(program, argv, &options);
     sys_process_env_free(env_keys, env_values);

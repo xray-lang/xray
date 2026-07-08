@@ -39,6 +39,7 @@
 #include <stdint.h>
 
 #include "../base/xdefs.h"
+#include "os_pipe.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,6 +70,14 @@ typedef struct XrProcSpawnOptions {
     const char *const *env_keys;
     const char *const *env_values;
     size_t env_count;
+    // Optional stdio redirection. The handle names describe the end consumed by
+    // the child process; ownership remains with the caller.
+    bool has_stdin;
+    XrPipeHandle stdin_read;
+    bool has_stdout;
+    XrPipeHandle stdout_write;
+    bool has_stderr;
+    XrPipeHandle stderr_write;
 } XrProcSpawnOptions;
 
 // Spawn a child process running `prog`. `argv` is a NULL-terminated
