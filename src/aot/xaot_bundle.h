@@ -480,6 +480,46 @@ typedef struct XaotInterfaceUsePlan {
     uint32_t flags;
 } XaotInterfaceUsePlan;
 
+typedef enum XaotInterfaceAbiSource {
+    XAOT_INTERFACE_ABI_SOURCE_NONE = 0,
+    XAOT_INTERFACE_ABI_SOURCE_BOXED_VALUE = 1,
+    XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID = 2,
+    XAOT_INTERFACE_ABI_SOURCE_DISPATCH_SLOT = 3,
+} XaotInterfaceAbiSource;
+
+enum {
+    XAOT_INTERFACE_ABI_NEEDS_IFACE_OBJECT = 1u << 0,
+    XAOT_INTERFACE_ABI_NEEDS_ITABLE = 1u << 1,
+    XAOT_INTERFACE_ABI_NEEDS_TYPE_SWITCH_TAG = 1u << 2,
+    XAOT_INTERFACE_ABI_BOXED_RECEIVER = 1u << 3,
+};
+
+enum {
+    XAOT_INTERFACE_ABI_EV_GLOBAL_CALLSITE = 1u << 0,
+    XAOT_INTERFACE_ABI_EV_INTERFACE_METHODS = 1u << 1,
+    XAOT_INTERFACE_ABI_EV_IMPLEMENTOR_SET = 1u << 2,
+    XAOT_INTERFACE_ABI_EV_DISPATCH_PLAN = 1u << 3,
+};
+
+enum {
+    XAOT_INTERFACE_ABI_UNPROVEN_NONE = 0,
+    XAOT_INTERFACE_ABI_UNPROVEN_NO_CALLSITE = 1,
+};
+
+typedef struct XaotInterfaceAbiPlan {
+    XgInterfaceId interface_id;
+    uint32_t callsite_count;
+    uint32_t implementor_count;
+    uint32_t method_slot_count;
+    uint32_t flags;
+    uint8_t data_source;
+    uint8_t type_source;
+    uint8_t itable_source;
+    uint8_t tag_source;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotInterfaceAbiPlan;
+
 enum {
     XAOT_METADATA_EV_GLOBAL_BODY = 1u << 0,
     XAOT_METADATA_EV_DECL_ATTRIBUTE = 1u << 1,
@@ -663,6 +703,9 @@ typedef struct XaotBundle {
     XaotInterfaceUsePlan *interface_use_plans;
     uint32_t ninterface_use_plans;
     uint32_t interface_use_plan_cap;
+    XaotInterfaceAbiPlan *interface_abi_plans;
+    uint32_t ninterface_abi_plans;
+    uint32_t interface_abi_plan_cap;
     XaotMetadataReachabilityPlan *metadata_plans;
     uint32_t nmetadata_plans;
     uint32_t metadata_plan_cap;
@@ -713,6 +756,8 @@ XR_FUNC const XiFunc *xaot_bundle_find_dispatch_target_func(const XaotBundle *bu
 XR_FUNC const XaotInterfaceUsePlan *
 xaot_bundle_find_interface_use_plan(const XaotBundle *bundle, XgInterfaceId interface_id,
                                     XgClassId implementor_class_id, XgCallsiteId use_site_id);
+XR_FUNC const XaotInterfaceAbiPlan *xaot_bundle_find_interface_abi_plan(const XaotBundle *bundle,
+                                                                        XgInterfaceId interface_id);
 XR_FUNC const XaotMetadataReachabilityPlan *xaot_bundle_find_metadata_plan(const XaotBundle *bundle,
                                                                            uint32_t metadata);
 XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBundle *bundle,

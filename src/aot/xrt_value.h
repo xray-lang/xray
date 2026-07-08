@@ -487,6 +487,7 @@ static inline XrValue xr_mkf64(double v, uint8_t tag) {
 
 #define XR_TO_INT(v) ((v).i)
 #define XR_TO_FLOAT(v) ((v).f)
+#define XR_TO_BOOL(v) ((int) (v).i)
 #define XR_TO_CHAR(v) ((uint32_t) (v).i)
 
 static inline XrAotEnumAggregate xrt_enum_aggregate_zero(void) {

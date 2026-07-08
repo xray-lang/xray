@@ -5245,10 +5245,36 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
         &bundle, shape_id, bundle.dispatch_target_cases[0].receiver_class_id, parent_callsite_id));
     ASSERT_NOT_NULL(xaot_bundle_find_interface_use_plan(
         &bundle, shape_id, bundle.dispatch_target_cases[1].receiver_class_id, parent_callsite_id));
+    ASSERT_EQ_UINT(bundle.ninterface_abi_plans, 1);
+    const XaotInterfaceAbiPlan *abi = xaot_bundle_find_interface_abi_plan(&bundle, shape_id);
+    ASSERT_NOT_NULL(abi);
+    ASSERT_EQ_UINT(abi->callsite_count, 1);
+    ASSERT_EQ_UINT(abi->implementor_count, 2);
+    ASSERT_EQ_UINT(abi->method_slot_count, 1);
+    ASSERT_EQ_UINT(abi->flags, XAOT_INTERFACE_ABI_NEEDS_IFACE_OBJECT |
+                                   XAOT_INTERFACE_ABI_NEEDS_TYPE_SWITCH_TAG |
+                                   XAOT_INTERFACE_ABI_BOXED_RECEIVER);
+    ASSERT_EQ_UINT(abi->data_source, XAOT_INTERFACE_ABI_SOURCE_BOXED_VALUE);
+    ASSERT_EQ_UINT(abi->type_source, XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID);
+    ASSERT_EQ_UINT(abi->itable_source, XAOT_INTERFACE_ABI_SOURCE_NONE);
+    ASSERT_EQ_UINT(abi->tag_source, XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID);
+    char *dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "interface-abi 0 interface="));
+    ASSERT_NOT_NULL(strstr(dump, "callsites=1 implementors=2 slots=1"));
+    ASSERT_NOT_NULL(strstr(dump, "flags=iface_object+type_switch_tag+boxed_receiver"));
+    ASSERT_NOT_NULL(
+        strstr(dump, "data=boxed_value type=native_type_id itable=none tag=native_type_id"));
+    xr_free(dump);
 
     char err[256];
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    bundle.interface_abi_plans[0].tag_source = XAOT_INTERFACE_ABI_SOURCE_NONE;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT interface ABI sources do not re-derive"));
+    bundle.interface_abi_plans[0].tag_source = XAOT_INTERFACE_ABI_SOURCE_NATIVE_TYPE_ID;
     bundle.method_dispatch_plans[0].dispatch_slot = 99;
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
