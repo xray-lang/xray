@@ -720,6 +720,8 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
                 l.func->aot_used = true;
             } else if (a->kind == ATTR_NAKED) {
                 l.func->aot_naked = true;
+            } else if (a->kind == ATTR_INTERRUPT) {
+                l.func->aot_interrupt_abi = a->str_arg;
             } else if (a->kind == ATTR_NO_ALLOC) {
                 l.func->no_alloc = true;
             }

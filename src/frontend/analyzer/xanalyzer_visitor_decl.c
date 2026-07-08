@@ -585,6 +585,59 @@ static void xa_validate_aot_naked_attr(XaInferContext *ctx, AstNode *node, XrAtt
     }
 }
 
+static void xa_validate_aot_interrupt_attr(XaInferContext *ctx, AstNode *node,
+                                           XrAttribute *interrupt_attr, XrAttribute *extern_attr,
+                                           XrAttribute *dylib_attr, XrAttribute *c_export_attr,
+                                           XrAttribute *naked_attr) {
+    if (!ctx || !ctx->analyzer || !interrupt_attr)
+        return;
+
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+
+    if (!xa_freestanding_profile_enabled(ctx->analyzer)) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@interrupt is only supported in freestanding AOT profile",
+                                   &loc);
+        return;
+    }
+
+    if (!interrupt_attr->str_arg || interrupt_attr->str_arg[0] == '\0') {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@interrupt requires a non-empty ABI string", &loc);
+    }
+
+    if (!extern_attr) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "@interrupt requires @extern(\"C\") with implementation supplied by global asm or "
+            "target objects",
+            &loc);
+    }
+
+    if (c_export_attr) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "@interrupt cannot be combined with @c_export; declare the ISR symbol with "
+            "@extern(\"C\")",
+            &loc);
+    }
+
+    if (dylib_attr) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "@interrupt cannot be combined with @dylib; freestanding interrupt symbols are linked "
+            "statically",
+            &loc);
+    }
+
+    if (naked_attr) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "@interrupt cannot be combined with @naked; use @naked for hand-written stubs", &loc);
+    }
+}
+
 static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr) {
     if (!summary || !expr)
         return;
@@ -1827,6 +1880,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     XrAttribute *extern_attr = xa_function_attr(fn, ATTR_EXTERN);
     XrAttribute *dylib_attr = xa_function_attr(fn, ATTR_DYLIB);
     XrAttribute *naked_attr = xa_function_attr(fn, ATTR_NAKED);
+    XrAttribute *interrupt_attr = xa_function_attr(fn, ATTR_INTERRUPT);
     links->is_extern = extern_attr != NULL;
     links->is_c_export = c_export_attr != NULL;
     links->c_export_symbol =
@@ -1838,6 +1892,8 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
                                           c_export_attr, links->is_extern);
     xa_validate_aot_symbol_attrs(ctx, node, section_attr, weak_attr, c_export_attr);
     xa_validate_aot_naked_attr(ctx, node, naked_attr, extern_attr, dylib_attr, c_export_attr);
+    xa_validate_aot_interrupt_attr(ctx, node, interrupt_attr, extern_attr, dylib_attr,
+                                   c_export_attr, naked_attr);
 
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);

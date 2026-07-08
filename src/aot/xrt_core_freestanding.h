@@ -65,6 +65,11 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_ATTR_WEAK __attribute__((weak))
 #define XRT_ATTR_USED __attribute__((used))
 #define XRT_ATTR_NAKED __attribute__((naked))
+#if defined(__arm__) || defined(__thumb__)
+#define XRT_ATTR_INTERRUPT(abi) __attribute__((interrupt(abi)))
+#else
+#define XRT_ATTR_INTERRUPT(abi) __attribute__((interrupt))
+#endif
 #define XRT_RESTRICT __restrict__
 #elif defined(_MSC_VER)
 #define XR_LIKELY(x) (x)
@@ -78,6 +83,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_ATTR_WEAK
 #define XRT_ATTR_USED
 #define XRT_ATTR_NAKED
+#define XRT_ATTR_INTERRUPT(abi)
 #define XRT_RESTRICT __restrict
 #else
 #define XR_LIKELY(x) (x)
@@ -91,6 +97,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_ATTR_WEAK
 #define XRT_ATTR_USED
 #define XRT_ATTR_NAKED
+#define XRT_ATTR_INTERRUPT(abi)
 #define XRT_RESTRICT
 #endif
 

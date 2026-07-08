@@ -59,6 +59,7 @@ enum {
     XG_DECL_DERIVE = 1u << 5,
     XG_DECL_FINAL = 1u << 6,
     XG_DECL_NAKED = 1u << 7,
+    XG_DECL_INTERRUPT = 1u << 8,
 };
 
 enum {

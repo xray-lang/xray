@@ -1,0 +1,9 @@
+@interrupt("irq")
+@extern("C")
+fn xray_timer_irq()
+
+fn answer() -> int {
+    return 42
+}
+
+print(answer())

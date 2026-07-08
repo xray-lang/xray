@@ -1,0 +1,10 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_caps": []
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=extern XRT_ATTR_INTERRUPT("irq") void xr_ffi_xray_timer_irq(void) __asm__(XR_FFI_ASMNAME("xray_timer_irq"));
+c_contains=__asm__(
+c_contains=xray_timer_irq
+c_contains=xray_call_timer_irq
+c_not_contains=#include "xrt.h"
+not_contains=xray_core

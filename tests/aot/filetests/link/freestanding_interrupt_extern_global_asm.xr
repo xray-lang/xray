@@ -1,0 +1,16 @@
+@interrupt("irq")
+@extern("C")
+fn xray_timer_irq()
+
+asm {
+    ".globl _xray_timer_irq"
+    "_xray_timer_irq:"
+    ".globl xray_timer_irq"
+    "xray_timer_irq:"
+    ".byte 0"
+}
+
+@c_export("xray_call_timer_irq")
+fn call_timer_irq() {
+    unsafe { xray_timer_irq() }
+}

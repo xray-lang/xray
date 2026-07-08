@@ -71,6 +71,11 @@
 #define XRT_ATTR_WEAK __attribute__((weak))
 #define XRT_ATTR_USED __attribute__((used))
 #define XRT_ATTR_NAKED __attribute__((naked))
+#if defined(__arm__) || defined(__thumb__)
+#define XRT_ATTR_INTERRUPT(abi) __attribute__((interrupt(abi)))
+#else
+#define XRT_ATTR_INTERRUPT(abi) __attribute__((interrupt))
+#endif
 /* Emitted only when the AOT prepare pass proved the pointer unique over its
  * storage (XaotAliasPlan) — the Rust-noalias analogue for generated C. */
 #define XRT_RESTRICT __restrict__
@@ -90,6 +95,7 @@
 #define XRT_ATTR_WEAK
 #define XRT_ATTR_USED
 #define XRT_ATTR_NAKED
+#define XRT_ATTR_INTERRUPT(abi)
 #if defined(_MSC_VER)
 #define XRT_RESTRICT __restrict
 #else
