@@ -90,6 +90,11 @@ typedef struct XgLocalType {
     bool inferred;
 } XgLocalType;
 
+typedef struct XgLocalName {
+    const char *name;
+    uint32_t symbol_id;
+} XgLocalName;
+
 typedef struct XgBodyCollect {
     XgProducer *producer;
     XgGlobalEvidence *evidence;
@@ -99,6 +104,9 @@ typedef struct XgBodyCollect {
     XgLocalType *locals;
     uint32_t nlocals;
     uint32_t local_cap;
+    XgLocalName *name_locals;
+    uint32_t nname_locals;
+    uint32_t name_local_cap;
     uint32_t callsite_start;
     uint32_t callsite_count;
     uint32_t effect_bits;
@@ -747,10 +755,48 @@ static bool body_reserve_locals(XgBodyCollect *bc, uint32_t needed) {
     return true;
 }
 
-static bool body_push_local(XgBodyCollect *bc, const char *name, XgClassId class_id,
-                            XgInterfaceId interface_id, bool inferred) {
+static bool body_reserve_name_locals(XgBodyCollect *bc, uint32_t needed) {
+    uint32_t new_cap;
+    XgLocalName *rows;
+    if (bc->name_local_cap >= needed)
+        return true;
+    new_cap = bc->name_local_cap < 8 ? 8 : bc->name_local_cap;
+    while (new_cap < needed)
+        new_cap *= 2;
+    rows = (XgLocalName *) xr_realloc(bc->name_locals, (size_t) new_cap * sizeof(*rows));
+    if (!rows)
+        return false;
+    bc->name_locals = rows;
+    bc->name_local_cap = new_cap;
+    return true;
+}
+
+static bool body_push_name_local(XgBodyCollect *bc, const char *name, uint32_t symbol_id) {
+    XgLocalName *row;
+    if (!bc || !name || !name[0])
+        return true;
+    if (symbol_id != 0) {
+        for (uint32_t i = bc->nname_locals; i > 0; i--) {
+            if (bc->name_locals[i - 1].symbol_id == symbol_id)
+                return true;
+        }
+    }
+    if (!body_reserve_name_locals(bc, bc->nname_locals + 1))
+        return false;
+    row = &bc->name_locals[bc->nname_locals++];
+    row->name = name;
+    row->symbol_id = symbol_id;
+    return true;
+}
+
+static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol_id,
+                            XgClassId class_id, XgInterfaceId interface_id, bool inferred) {
     XgLocalType *row;
-    if (!bc || !name || (class_id == XG_NO_ID && interface_id == XG_NO_ID))
+    if (!bc)
+        return true;
+    if (!body_push_name_local(bc, name, symbol_id))
+        return false;
+    if (!name || (class_id == XG_NO_ID && interface_id == XG_NO_ID))
         return true;
     if (!body_reserve_locals(bc, bc->nlocals + 1))
         return false;
@@ -783,19 +829,436 @@ static XgInterfaceId body_lookup_local_interface(XgBodyCollect *bc, const char *
     return row ? row->interface_id : XG_NO_ID;
 }
 
-static void body_assign_local(XgBodyCollect *bc, const char *name, XgClassId class_id,
-                              XgInterfaceId interface_id) {
+static void body_assign_local(XgBodyCollect *bc, const char *name, uint32_t symbol_id,
+                              XgClassId class_id, XgInterfaceId interface_id) {
     XgLocalType *row = body_find_local(bc, name);
     if (class_id == XG_NO_ID && interface_id == XG_NO_ID)
         return;
     if (!row) {
-        (void) body_push_local(bc, name, class_id, interface_id, true);
+        (void) body_push_local(bc, name, symbol_id, class_id, interface_id, true);
         return;
     }
     if (!row->inferred)
         return;
     row->class_id = class_id;
     row->interface_id = interface_id;
+}
+
+typedef struct XgCaptureScan {
+    const XgLocalName *outer_locals;
+    uint32_t nouter_locals;
+    XgLocalName *locals;
+    uint32_t nlocals;
+    uint32_t local_cap;
+    bool has_capture;
+} XgCaptureScan;
+
+static bool capture_reserve_locals(XgCaptureScan *scan, uint32_t needed) {
+    uint32_t new_cap;
+    XgLocalName *rows;
+    if (scan->local_cap >= needed)
+        return true;
+    new_cap = scan->local_cap < 8 ? 8 : scan->local_cap;
+    while (new_cap < needed)
+        new_cap *= 2;
+    rows = (XgLocalName *) xr_realloc(scan->locals, (size_t) new_cap * sizeof(*rows));
+    if (!rows)
+        return false;
+    scan->locals = rows;
+    scan->local_cap = new_cap;
+    return true;
+}
+
+static bool capture_push_local(XgCaptureScan *scan, const char *name, uint32_t symbol_id) {
+    XgLocalName *row;
+    if (!scan || !name || !name[0])
+        return true;
+    if (!capture_reserve_locals(scan, scan->nlocals + 1))
+        return false;
+    row = &scan->locals[scan->nlocals++];
+    row->name = name;
+    row->symbol_id = symbol_id;
+    return true;
+}
+
+static bool capture_local_matches(const XgLocalName *row, const char *name, uint32_t symbol_id) {
+    if (!row)
+        return false;
+    if (symbol_id != 0 && row->symbol_id != 0)
+        return row->symbol_id == symbol_id;
+    return name && row->name && strcmp(row->name, name) == 0;
+}
+
+static bool capture_has_inner_local(const XgCaptureScan *scan, const char *name,
+                                    uint32_t symbol_id) {
+    if (!scan || !name)
+        return false;
+    for (uint32_t i = scan->nlocals; i > 0; i--) {
+        if (capture_local_matches(&scan->locals[i - 1], name, symbol_id))
+            return true;
+    }
+    return false;
+}
+
+static bool capture_has_outer_local(const XgCaptureScan *scan, const char *name,
+                                    uint32_t symbol_id) {
+    if (!scan || !name)
+        return false;
+    for (uint32_t i = scan->nouter_locals; i > 0; i--) {
+        if (capture_local_matches(&scan->outer_locals[i - 1], name, symbol_id))
+            return true;
+    }
+    return false;
+}
+
+static void capture_mark_name(XgCaptureScan *scan, const char *name, uint32_t symbol_id) {
+    if (!scan || !name || !name[0])
+        return;
+    if (capture_has_inner_local(scan, name, symbol_id))
+        return;
+    if (capture_has_outer_local(scan, name, symbol_id))
+        scan->has_capture = true;
+}
+
+static void capture_scan_node(XgCaptureScan *scan, const AstNode *node);
+
+static void capture_scan_function_params(XgCaptureScan *scan, const FunctionDeclNode *fn) {
+    if (!scan || !fn)
+        return;
+    for (int i = 0; i < fn->param_count; i++) {
+        const XrParamNode *param = fn->params ? fn->params[i] : NULL;
+        (void) capture_push_local(scan, param ? param->name : NULL, param ? param->symbol_id : 0);
+    }
+}
+
+static void capture_scan_parallel_locals(XgCaptureScan *scan, const XrParallelLocalBinding *locals,
+                                         int local_count) {
+    if (!scan || !locals)
+        return;
+    for (int i = 0; i < local_count; i++)
+        capture_scan_node(scan, locals[i].source);
+    for (int i = 0; i < local_count; i++)
+        (void) capture_push_local(scan, locals[i].name, locals[i].symbol_id);
+}
+
+static void capture_scan_node_list(XgCaptureScan *scan, AstNode *const *nodes, int count) {
+    if (!scan || !nodes)
+        return;
+    for (int i = 0; i < count; i++)
+        capture_scan_node(scan, nodes[i]);
+}
+
+static void capture_scan_function_expr(XgCaptureScan *scan, const FunctionDeclNode *fn) {
+    uint32_t base_locals;
+    if (!scan || !fn)
+        return;
+    base_locals = scan->nlocals;
+    capture_scan_function_params(scan, fn);
+    capture_scan_node(scan, fn->body);
+    scan->nlocals = base_locals;
+}
+
+static void capture_scan_node(XgCaptureScan *scan, const AstNode *node) {
+    uint32_t base_locals;
+    if (!scan || !node || scan->has_capture)
+        return;
+    switch (node->type) {
+        case AST_PROGRAM:
+            capture_scan_node_list(scan, node->as.program.statements, node->as.program.count);
+            break;
+        case AST_BLOCK:
+            base_locals = scan->nlocals;
+            capture_scan_node_list(scan, node->as.block.statements, node->as.block.count);
+            scan->nlocals = base_locals;
+            break;
+        case AST_EXPR_STMT:
+            capture_scan_node(scan, node->as.expr_stmt);
+            break;
+        case AST_PRINT_STMT:
+            capture_scan_node_list(scan, node->as.print_stmt.exprs, node->as.print_stmt.expr_count);
+            break;
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL:
+            capture_scan_node(scan, node->as.var_decl.initializer);
+            (void) capture_push_local(scan, node->as.var_decl.name, node->as.var_decl.symbol_id);
+            break;
+        case AST_VARIABLE:
+            capture_mark_name(scan, node->as.variable.name, node->as.variable.symbol_id);
+            break;
+        case AST_ASSIGNMENT:
+            capture_scan_node(scan, node->as.assignment.value);
+            capture_mark_name(scan, node->as.assignment.name, node->as.assignment.symbol_id);
+            break;
+        case AST_COMPOUND_ASSIGNMENT:
+            capture_scan_node(scan, node->as.compound_assignment.object);
+            capture_scan_node(scan, node->as.compound_assignment.value);
+            capture_mark_name(scan, node->as.compound_assignment.name,
+                              node->as.compound_assignment.symbol_id);
+            break;
+        case AST_INC:
+        case AST_DEC:
+            capture_mark_name(scan, node->as.inc.name, node->as.inc.symbol_id);
+            break;
+        case AST_RETURN_STMT:
+            capture_scan_node_list(scan, node->as.return_stmt.values,
+                                   node->as.return_stmt.value_count);
+            break;
+        case AST_CALL_EXPR:
+            capture_scan_node(scan, node->as.call_expr.callee);
+            capture_scan_node_list(scan, node->as.call_expr.arguments,
+                                   node->as.call_expr.arg_count);
+            break;
+        case AST_FUNCTION_EXPR:
+            capture_scan_function_expr(scan, &node->as.function_expr);
+            break;
+        case AST_SUPER_CALL:
+            capture_scan_node_list(scan, node->as.super_call.arguments,
+                                   node->as.super_call.arg_count);
+            break;
+        case AST_MEMBER_ACCESS:
+            capture_scan_node(scan, node->as.member_access.object);
+            break;
+        case AST_MEMBER_SET:
+            capture_scan_node(scan, node->as.member_set.object);
+            capture_scan_node(scan, node->as.member_set.value);
+            break;
+        case AST_INDEX_GET:
+            capture_scan_node(scan, node->as.index_get.array);
+            capture_scan_node(scan, node->as.index_get.index);
+            break;
+        case AST_INDEX_SET:
+            capture_scan_node(scan, node->as.index_set.array);
+            capture_scan_node(scan, node->as.index_set.index);
+            capture_scan_node(scan, node->as.index_set.value);
+            break;
+        case AST_SLICE_EXPR:
+            capture_scan_node(scan, node->as.slice_expr.source);
+            capture_scan_node(scan, node->as.slice_expr.start);
+            capture_scan_node(scan, node->as.slice_expr.end);
+            break;
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_NULLISH_COALESCE:
+            capture_scan_node(scan, node->as.binary.left);
+            capture_scan_node(scan, node->as.binary.right);
+            break;
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+        case AST_FORCE_UNWRAP:
+            capture_scan_node(scan, node->as.unary.operand);
+            break;
+        case AST_GROUPING:
+            capture_scan_node(scan, node->as.grouping);
+            break;
+        case AST_TERNARY:
+            capture_scan_node(scan, node->as.ternary.condition);
+            capture_scan_node(scan, node->as.ternary.true_expr);
+            capture_scan_node(scan, node->as.ternary.false_expr);
+            break;
+        case AST_AS_EXPR:
+            capture_scan_node(scan, node->as.as_expr.expr);
+            break;
+        case AST_IS_EXPR:
+            capture_scan_node(scan, node->as.is_expr.expr);
+            break;
+        case AST_COMPTIME_EXPR:
+            capture_scan_node(scan, node->as.comptime_expr.expr);
+            break;
+        case AST_ARRAY_LITERAL:
+            if (node->as.array_literal.is_repeat) {
+                capture_scan_node(scan, node->as.array_literal.repeat_value);
+                capture_scan_node(scan, node->as.array_literal.repeat_count);
+            } else {
+                capture_scan_node_list(scan, node->as.array_literal.elements,
+                                       node->as.array_literal.count);
+            }
+            break;
+        case AST_TUPLE_LITERAL:
+            capture_scan_node_list(scan, node->as.tuple_literal.elements,
+                                   node->as.tuple_literal.count);
+            break;
+        case AST_OBJECT_LITERAL:
+            capture_scan_node_list(scan, node->as.object_literal.keys,
+                                   node->as.object_literal.count);
+            capture_scan_node_list(scan, node->as.object_literal.values,
+                                   node->as.object_literal.count);
+            break;
+        case AST_MAP_LITERAL:
+            capture_scan_node_list(scan, node->as.map_literal.keys, node->as.map_literal.count);
+            capture_scan_node_list(scan, node->as.map_literal.values, node->as.map_literal.count);
+            break;
+        case AST_SET_LITERAL:
+            capture_scan_node_list(scan, node->as.set_literal.elements, node->as.set_literal.count);
+            break;
+        case AST_STRUCT_LITERAL:
+            capture_scan_node_list(scan, node->as.struct_literal.field_values,
+                                   node->as.struct_literal.field_count);
+            break;
+        case AST_NEW_EXPR:
+            capture_scan_node_list(scan, node->as.new_expr.arguments, node->as.new_expr.arg_count);
+            break;
+        case AST_THROW_STMT:
+            capture_scan_node(scan, node->as.throw_stmt.expression);
+            break;
+        case AST_AWAIT_EXPR:
+            capture_scan_node(scan, node->as.await_expr.expr);
+            capture_scan_node(scan, node->as.await_expr.timeout);
+            capture_scan_node(scan, node->as.await_expr.into);
+            break;
+        case AST_YIELD_STMT:
+            capture_scan_node(scan, node->as.yield_stmt.value);
+            break;
+        case AST_GO_EXPR:
+            capture_scan_node(scan, node->as.go_expr.expr);
+            break;
+        case AST_CHANNEL_NEW:
+            capture_scan_node(scan, node->as.channel_new.buffer_size);
+            break;
+        case AST_SELECT_STMT:
+            capture_scan_node_list(scan, node->as.select_stmt.cases,
+                                   node->as.select_stmt.case_count);
+            break;
+        case AST_SELECT_CASE:
+            base_locals = scan->nlocals;
+            capture_scan_node(scan, node->as.select_case.channel);
+            capture_scan_node(scan, node->as.select_case.value);
+            (void) capture_push_local(scan, node->as.select_case.var_name,
+                                      node->as.select_case.var_symbol_id);
+            capture_scan_node(scan, node->as.select_case.body);
+            scan->nlocals = base_locals;
+            break;
+        case AST_DEFER_STMT:
+            capture_scan_node(scan, node->as.defer_stmt.expr);
+            break;
+        case AST_SCOPE_BLOCK:
+            capture_scan_node(scan, node->as.scope_block.body);
+            break;
+        case AST_MOVE_EXPR:
+            capture_scan_node(scan, node->as.move_expr.expr);
+            break;
+        case AST_UNSAFE_EXPR:
+            capture_scan_node(scan, node->as.unsafe_expr.operand);
+            break;
+        case AST_PARALLEL_FOR_STMT:
+            base_locals = scan->nlocals;
+            capture_scan_parallel_locals(scan, node->as.parallel_for_stmt.locals,
+                                         node->as.parallel_for_stmt.local_count);
+            capture_scan_node(scan, node->as.parallel_for_stmt.range);
+            capture_scan_node(scan, node->as.parallel_for_stmt.worker_count);
+            (void) capture_push_local(scan, node->as.parallel_for_stmt.item_name,
+                                      node->as.parallel_for_stmt.item_symbol_id);
+            (void) capture_push_local(scan, node->as.parallel_for_stmt.end_name,
+                                      node->as.parallel_for_stmt.end_symbol_id);
+            (void) capture_push_local(scan, node->as.parallel_for_stmt.worker_name,
+                                      node->as.parallel_for_stmt.worker_symbol_id);
+            capture_scan_node(scan, node->as.parallel_for_stmt.final_body);
+            capture_scan_node(scan, node->as.parallel_for_stmt.body);
+            scan->nlocals = base_locals;
+            break;
+        case AST_PARALLEL_REDUCE_EXPR:
+            base_locals = scan->nlocals;
+            capture_scan_parallel_locals(scan, node->as.parallel_reduce_expr.locals,
+                                         node->as.parallel_reduce_expr.local_count);
+            capture_scan_node(scan, node->as.parallel_reduce_expr.range);
+            capture_scan_node(scan, node->as.parallel_reduce_expr.worker_count);
+            capture_scan_node(scan, node->as.parallel_reduce_expr.initial);
+            capture_scan_node(scan, node->as.parallel_reduce_expr.combine);
+            (void) capture_push_local(scan, node->as.parallel_reduce_expr.item_name,
+                                      node->as.parallel_reduce_expr.item_symbol_id);
+            (void) capture_push_local(scan, node->as.parallel_reduce_expr.end_name,
+                                      node->as.parallel_reduce_expr.end_symbol_id);
+            (void) capture_push_local(scan, node->as.parallel_reduce_expr.worker_name,
+                                      node->as.parallel_reduce_expr.worker_symbol_id);
+            capture_scan_node(scan, node->as.parallel_reduce_expr.body);
+            scan->nlocals = base_locals;
+            break;
+        case AST_PARALLEL_COLLECT_EXPR:
+            base_locals = scan->nlocals;
+            capture_scan_parallel_locals(scan, node->as.parallel_collect_expr.locals,
+                                         node->as.parallel_collect_expr.local_count);
+            capture_scan_node(scan, node->as.parallel_collect_expr.range);
+            capture_scan_node(scan, node->as.parallel_collect_expr.worker_count);
+            capture_scan_node(scan, node->as.parallel_collect_expr.into);
+            (void) capture_push_local(scan, node->as.parallel_collect_expr.item_name,
+                                      node->as.parallel_collect_expr.item_symbol_id);
+            (void) capture_push_local(scan, node->as.parallel_collect_expr.worker_name,
+                                      node->as.parallel_collect_expr.worker_symbol_id);
+            capture_scan_node(scan, node->as.parallel_collect_expr.final_body);
+            capture_scan_node(scan, node->as.parallel_collect_expr.body);
+            scan->nlocals = base_locals;
+            break;
+        case AST_IF_STMT:
+            capture_scan_node(scan, node->as.if_stmt.condition);
+            capture_scan_node(scan, node->as.if_stmt.then_branch);
+            capture_scan_node(scan, node->as.if_stmt.else_branch);
+            break;
+        case AST_WHILE_STMT:
+            capture_scan_node(scan, node->as.while_stmt.condition);
+            capture_scan_node(scan, node->as.while_stmt.body);
+            break;
+        case AST_FOR_STMT:
+            base_locals = scan->nlocals;
+            capture_scan_node(scan, node->as.for_stmt.initializer);
+            capture_scan_node(scan, node->as.for_stmt.condition);
+            capture_scan_node(scan, node->as.for_stmt.increment);
+            capture_scan_node(scan, node->as.for_stmt.body);
+            scan->nlocals = base_locals;
+            break;
+        case AST_FOR_IN_STMT:
+            base_locals = scan->nlocals;
+            capture_scan_node(scan, node->as.for_in_stmt.collection);
+            (void) capture_push_local(scan, node->as.for_in_stmt.item_name,
+                                      node->as.for_in_stmt.item_symbol_id);
+            capture_scan_node(scan, node->as.for_in_stmt.body);
+            scan->nlocals = base_locals;
+            break;
+        case AST_TRY_CATCH:
+            capture_scan_node(scan, node->as.try_catch.try_body);
+            for (int i = 0; i < node->as.try_catch.catch_count; i++) {
+                const XrCatchClause *cc =
+                    node->as.try_catch.catch_clauses ? node->as.try_catch.catch_clauses[i] : NULL;
+                if (!cc)
+                    continue;
+                base_locals = scan->nlocals;
+                (void) capture_push_local(scan, cc->var_name, cc->symbol_id);
+                capture_scan_node(scan, cc->body);
+                scan->nlocals = base_locals;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+static bool body_function_expr_captures_current_locals(XgBodyCollect *bc,
+                                                       const FunctionDeclNode *fn) {
+    XgCaptureScan scan;
+    if (!bc || !fn || bc->nname_locals == 0)
+        return false;
+    memset(&scan, 0, sizeof(scan));
+    scan.outer_locals = bc->name_locals;
+    scan.nouter_locals = bc->nname_locals;
+    capture_scan_function_expr(&scan, fn);
+    xr_free(scan.locals);
+    return scan.has_capture;
 }
 
 static XgClassId body_resolve_expr_class(XgBodyCollect *bc, const AstNode *expr) {
@@ -1235,6 +1698,8 @@ static uint32_t static_data_bits_for_comptime_expr(const AstNode *expr) {
     return XG_STATIC_DATA_COMPTIME_VALUE | static_data_shape_bits_for_expr(expr);
 }
 
+static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *function);
+
 static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
     if (!bc || !node)
         return;
@@ -1267,11 +1732,19 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             for (int i = 0; i < node->as.call_expr.arg_count; i++)
                 walk_body_for_calls(bc, node->as.call_expr.arguments[i]);
             break;
-        case AST_FUNCTION_EXPR:
+        case AST_FUNCTION_EXPR: {
+            uint32_t base_locals = bc->nlocals;
+            uint32_t base_name_locals = bc->nname_locals;
+            if (body_function_expr_captures_current_locals(bc, &node->as.function_expr))
+                bc->escape_bits |= XG_BODY_ESCAPE_CAPTURE;
             if (node->as.function_expr.is_generator)
                 bc->capability_bits |= XG_CAP_GENERATOR | XG_CAP_COROUTINE;
+            body_add_function_params(bc, &node->as.function_expr);
             walk_body_for_calls(bc, node->as.function_expr.body);
+            bc->nlocals = base_locals;
+            bc->nname_locals = base_name_locals;
             break;
+        }
         case AST_SUPER_CALL:
             collect_super_callsite(bc, node);
             for (int i = 0; i < node->as.super_call.arg_count; i++)
@@ -1279,9 +1752,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_BLOCK: {
             uint32_t base_locals = bc->nlocals;
+            uint32_t base_name_locals = bc->nname_locals;
             for (int i = 0; i < node->as.block.count; i++)
                 walk_body_for_calls(bc, node->as.block.statements[i]);
             bc->nlocals = base_locals;
+            bc->nname_locals = base_name_locals;
             break;
         }
         case AST_EXPR_STMT:
@@ -1307,7 +1782,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 interface_id = body_resolve_expr_interface(bc, node->as.var_decl.initializer);
                 inferred = class_id != XG_NO_ID || interface_id != XG_NO_ID;
             }
-            (void) body_push_local(bc, node->as.var_decl.name, class_id, interface_id, inferred);
+            (void) body_push_local(bc, node->as.var_decl.name, node->as.var_decl.symbol_id,
+                                   class_id, interface_id, inferred);
             break;
         }
         case AST_ASSIGNMENT: {
@@ -1316,7 +1792,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.assignment.value);
             class_id = body_resolve_expr_class(bc, node->as.assignment.value);
             interface_id = body_resolve_expr_interface(bc, node->as.assignment.value);
-            body_assign_local(bc, node->as.assignment.name, class_id, interface_id);
+            body_assign_local(bc, node->as.assignment.name, node->as.assignment.symbol_id, class_id,
+                              interface_id);
             bc->effect_bits |= XG_BODY_MAY_MUTATE;
             break;
         }
@@ -1504,14 +1981,19 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             for (int i = 0; i < node->as.select_stmt.case_count; i++)
                 walk_body_for_calls(bc, node->as.select_stmt.cases[i]);
             break;
-        case AST_SELECT_CASE:
+        case AST_SELECT_CASE: {
+            uint32_t base_name_locals = bc->nname_locals;
             if (node->as.select_case.is_timeout)
                 bc->capability_bits |=
                     XG_CAP_TIMER | XG_CAP_CHANNEL | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
             walk_body_for_calls(bc, node->as.select_case.channel);
             walk_body_for_calls(bc, node->as.select_case.value);
+            (void) body_push_name_local(bc, node->as.select_case.var_name,
+                                        node->as.select_case.var_symbol_id);
             walk_body_for_calls(bc, node->as.select_case.body);
+            bc->nname_locals = base_name_locals;
             break;
+        }
         case AST_DEFER_STMT:
             walk_body_for_calls(bc, node->as.defer_stmt.expr);
             break;
@@ -1530,46 +2012,77 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_PARALLEL_FOR_STMT: {
             uint32_t base_locals = bc->nlocals;
+            uint32_t base_name_locals = bc->nname_locals;
             bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_THROW | XG_BODY_MAY_MUTATE;
             bc->escape_bits |= XG_BODY_ESCAPE_CORO;
             bc->capability_bits |= XG_CAP_COROUTINE;
-            for (int i = 0; i < node->as.parallel_for_stmt.local_count; i++)
+            for (int i = 0; i < node->as.parallel_for_stmt.local_count; i++) {
                 walk_body_for_calls(bc, node->as.parallel_for_stmt.locals[i].source);
+                (void) body_push_name_local(bc, node->as.parallel_for_stmt.locals[i].name,
+                                            node->as.parallel_for_stmt.locals[i].symbol_id);
+            }
             walk_body_for_calls(bc, node->as.parallel_for_stmt.range);
             walk_body_for_calls(bc, node->as.parallel_for_stmt.worker_count);
+            (void) body_push_name_local(bc, node->as.parallel_for_stmt.item_name,
+                                        node->as.parallel_for_stmt.item_symbol_id);
+            (void) body_push_name_local(bc, node->as.parallel_for_stmt.end_name,
+                                        node->as.parallel_for_stmt.end_symbol_id);
+            (void) body_push_name_local(bc, node->as.parallel_for_stmt.worker_name,
+                                        node->as.parallel_for_stmt.worker_symbol_id);
             walk_body_for_calls(bc, node->as.parallel_for_stmt.final_body);
             walk_body_for_calls(bc, node->as.parallel_for_stmt.body);
             bc->nlocals = base_locals;
+            bc->nname_locals = base_name_locals;
             break;
         }
         case AST_PARALLEL_REDUCE_EXPR: {
             uint32_t base_locals = bc->nlocals;
+            uint32_t base_name_locals = bc->nname_locals;
             bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_THROW | XG_BODY_MAY_MUTATE;
             bc->escape_bits |= XG_BODY_ESCAPE_CORO;
             bc->capability_bits |= XG_CAP_COROUTINE;
-            for (int i = 0; i < node->as.parallel_reduce_expr.local_count; i++)
+            for (int i = 0; i < node->as.parallel_reduce_expr.local_count; i++) {
                 walk_body_for_calls(bc, node->as.parallel_reduce_expr.locals[i].source);
+                (void) body_push_name_local(bc, node->as.parallel_reduce_expr.locals[i].name,
+                                            node->as.parallel_reduce_expr.locals[i].symbol_id);
+            }
             walk_body_for_calls(bc, node->as.parallel_reduce_expr.range);
             walk_body_for_calls(bc, node->as.parallel_reduce_expr.worker_count);
             walk_body_for_calls(bc, node->as.parallel_reduce_expr.initial);
             walk_body_for_calls(bc, node->as.parallel_reduce_expr.combine);
+            (void) body_push_name_local(bc, node->as.parallel_reduce_expr.item_name,
+                                        node->as.parallel_reduce_expr.item_symbol_id);
+            (void) body_push_name_local(bc, node->as.parallel_reduce_expr.end_name,
+                                        node->as.parallel_reduce_expr.end_symbol_id);
+            (void) body_push_name_local(bc, node->as.parallel_reduce_expr.worker_name,
+                                        node->as.parallel_reduce_expr.worker_symbol_id);
             walk_body_for_calls(bc, node->as.parallel_reduce_expr.body);
             bc->nlocals = base_locals;
+            bc->nname_locals = base_name_locals;
             break;
         }
         case AST_PARALLEL_COLLECT_EXPR: {
             uint32_t base_locals = bc->nlocals;
+            uint32_t base_name_locals = bc->nname_locals;
             bc->effect_bits |= XG_BODY_MAY_SUSPEND | XG_BODY_MAY_THROW | XG_BODY_MAY_MUTATE;
             bc->escape_bits |= XG_BODY_ESCAPE_CORO | XG_BODY_ESCAPE_CONTAINER;
             bc->capability_bits |= XG_CAP_COROUTINE;
-            for (int i = 0; i < node->as.parallel_collect_expr.local_count; i++)
+            for (int i = 0; i < node->as.parallel_collect_expr.local_count; i++) {
                 walk_body_for_calls(bc, node->as.parallel_collect_expr.locals[i].source);
+                (void) body_push_name_local(bc, node->as.parallel_collect_expr.locals[i].name,
+                                            node->as.parallel_collect_expr.locals[i].symbol_id);
+            }
             walk_body_for_calls(bc, node->as.parallel_collect_expr.range);
             walk_body_for_calls(bc, node->as.parallel_collect_expr.worker_count);
             walk_body_for_calls(bc, node->as.parallel_collect_expr.into);
+            (void) body_push_name_local(bc, node->as.parallel_collect_expr.item_name,
+                                        node->as.parallel_collect_expr.item_symbol_id);
+            (void) body_push_name_local(bc, node->as.parallel_collect_expr.worker_name,
+                                        node->as.parallel_collect_expr.worker_symbol_id);
             walk_body_for_calls(bc, node->as.parallel_collect_expr.final_body);
             walk_body_for_calls(bc, node->as.parallel_collect_expr.body);
             bc->nlocals = base_locals;
+            bc->nname_locals = base_name_locals;
             break;
         }
         case AST_COMPOUND_ASSIGNMENT:
@@ -1592,25 +2105,32 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_FOR_STMT: {
             uint32_t base_locals = bc->nlocals;
+            uint32_t base_name_locals = bc->nname_locals;
             walk_body_for_calls(bc, node->as.for_stmt.initializer);
             walk_body_for_calls(bc, node->as.for_stmt.condition);
             walk_body_for_calls(bc, node->as.for_stmt.increment);
             walk_body_for_calls(bc, node->as.for_stmt.body);
             bc->nlocals = base_locals;
+            bc->nname_locals = base_name_locals;
             break;
         }
         case AST_FOR_IN_STMT: {
             uint32_t base_locals = bc->nlocals;
+            uint32_t base_name_locals = bc->nname_locals;
             XgClassId item_class =
                 producer_lookup_class_from_tref(bc->producer, node->as.for_in_stmt.item_type);
             XgInterfaceId item_interface =
                 producer_lookup_interface_from_tref(bc->producer, node->as.for_in_stmt.item_type);
             bc->capability_bits |= body_capabilities_for_type_ref(node->as.for_in_stmt.item_type);
             walk_body_for_calls(bc, node->as.for_in_stmt.collection);
-            (void) body_push_local(bc, node->as.for_in_stmt.item_name, item_class, item_interface,
+            (void) body_push_name_local(bc, node->as.for_in_stmt.value_name,
+                                        node->as.for_in_stmt.value_symbol_id);
+            (void) body_push_local(bc, node->as.for_in_stmt.item_name,
+                                   node->as.for_in_stmt.item_symbol_id, item_class, item_interface,
                                    false);
             walk_body_for_calls(bc, node->as.for_in_stmt.body);
             bc->nlocals = base_locals;
+            bc->nname_locals = base_name_locals;
             break;
         }
         case AST_TRY_CATCH:
@@ -1624,10 +2144,17 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 }
             }
             walk_body_for_calls(bc, node->as.try_catch.try_body);
-            for (int i = 0; i < node->as.try_catch.catch_count; i++)
+            for (int i = 0; i < node->as.try_catch.catch_count; i++) {
+                uint32_t base_name_locals = bc->nname_locals;
+                XrCatchClause *cc =
+                    node->as.try_catch.catch_clauses ? node->as.try_catch.catch_clauses[i] : NULL;
+                if (cc)
+                    (void) body_push_name_local(bc, cc->var_name, cc->symbol_id);
                 walk_body_for_calls(bc, node->as.try_catch.catch_clauses
                                             ? node->as.try_catch.catch_clauses[i]->body
                                             : NULL);
+                bc->nname_locals = base_name_locals;
+            }
             break;
         default:
             break;
@@ -1644,7 +2171,7 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
             bc->producer, method->param_types ? method->param_types[i] : NULL);
         bc->capability_bits |=
             body_capabilities_for_type_ref(method->param_types ? method->param_types[i] : NULL);
-        (void) body_push_local(bc, method->parameters ? method->parameters[i] : NULL, class_id,
+        (void) body_push_local(bc, method->parameters ? method->parameters[i] : NULL, 0, class_id,
                                interface_id, false);
     }
 }
@@ -1659,7 +2186,8 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
         XgInterfaceId interface_id =
             producer_lookup_interface_from_tref(bc->producer, param ? param->type : NULL);
         bc->capability_bits |= body_capabilities_for_type_ref(param ? param->type : NULL);
-        (void) body_push_local(bc, param ? param->name : NULL, class_id, interface_id, false);
+        (void) body_push_local(bc, param ? param->name : NULL, param ? param->symbol_id : 0,
+                               class_id, interface_id, false);
     }
 }
 
@@ -1699,6 +2227,7 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     row.metadata_use_bits = bc.metadata_use_bits;
     row.static_data_use_bits = bc.static_data_use_bits;
     xr_free(bc.locals);
+    xr_free(bc.name_locals);
     return xg_global_evidence_add_body(producer->evidence, &row) != NULL;
 }
 

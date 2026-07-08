@@ -344,6 +344,8 @@ XR_FUNC const char *xg_body_escape_name(uint32_t escape) {
             return "native";
         case XG_BODY_ESCAPE_EXTERN:
             return "extern";
+        case XG_BODY_ESCAPE_CAPTURE:
+            return "capture";
         default:
             return "unknown";
     }
@@ -351,8 +353,8 @@ XR_FUNC const char *xg_body_escape_name(uint32_t escape) {
 
 XR_FUNC const uint32_t *xg_body_escape_catalog(uint32_t *out_count) {
     static const uint32_t escapes[] = {
-        XG_BODY_ESCAPE_RETURN, XG_BODY_ESCAPE_FIELD,  XG_BODY_ESCAPE_CONTAINER,
-        XG_BODY_ESCAPE_CORO,   XG_BODY_ESCAPE_NATIVE, XG_BODY_ESCAPE_EXTERN,
+        XG_BODY_ESCAPE_RETURN, XG_BODY_ESCAPE_FIELD,  XG_BODY_ESCAPE_CONTAINER, XG_BODY_ESCAPE_CORO,
+        XG_BODY_ESCAPE_NATIVE, XG_BODY_ESCAPE_EXTERN, XG_BODY_ESCAPE_CAPTURE,
     };
     if (out_count)
         *out_count = (uint32_t) (sizeof(escapes) / sizeof(escapes[0]));
