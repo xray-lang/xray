@@ -1,0 +1,6 @@
+@no_alloc
+fn xray_no_alloc_range_literal_reject() -> int {
+    return (1..4).length
+}
+
+print(xray_no_alloc_range_literal_reject())

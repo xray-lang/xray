@@ -3069,6 +3069,9 @@ static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
         {XR_KIND_CHAR, NULL, "toString", "char.toString"},
         {XR_KIND_UNKNOWN, "BigInt", "toString", "BigInt.toString"},
         {XR_KIND_UNKNOWN, "BigInt", "abs", "BigInt.abs"},
+        {XR_KIND_UNKNOWN, "Range", "toString", "Range.toString"},
+        {XR_KIND_UNKNOWN, "Range", "toArray", "Range.toArray"},
+        {XR_KIND_UNKNOWN, "Range", "values", "Range.values"},
         {XR_KIND_JSON, NULL, "keys", "Json.keys"},
         {XR_KIND_JSON, NULL, "values", "Json.values"},
         {XR_KIND_JSON, NULL, "entries", "Json.entries"},
@@ -3109,7 +3112,7 @@ static bool cg_no_alloc_value_allocates(XiCgenCtx *ctx, const XiFunc *f, const X
     if (!v)
         return false;
 
-    if (xi_op_is_heap_alloc(v->op) || v->op == XI_CLASS_CREATE) {
+    if (xi_op_is_heap_alloc(v->op) || v->op == XI_CLASS_CREATE || v->op == XI_RANGE) {
         if (kind_out)
             *kind_out = "op";
         if (detail_out)
