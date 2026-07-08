@@ -1,0 +1,4 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_set_add_reject' allocates via method 'Set.add'
+contains=xray_no_alloc_set_add_reject
+not_contains=CRASH
