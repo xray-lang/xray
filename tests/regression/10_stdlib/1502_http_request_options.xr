@@ -119,4 +119,25 @@ fn test_request_ignores_no_body_status_payload() {
     assert_eq(resp.body, "")
 }
 
+@test
+fn test_request_stream_option_does_not_expose_native_stream_facade() {
+    var maybeLst = net.listen(0, 1)
+    if (maybeLst == null) { return }
+    var lst = maybeLst!
+    go serve_raw_response(
+        lst,
+        "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello"
+    )
+
+    var resp = http.request({
+        url: "http://127.0.0.1:" + string(lst.port()) + "/stream",
+        stream: true
+    })
+
+    assert(resp.ok)
+    assert_eq(resp.body, "hello")
+    assert_eq(Json.has(resp, "_streamId"), false)
+    assert_eq(Json.has(resp, "streaming"), false)
+}
+
 print("All http request options tests passed")
