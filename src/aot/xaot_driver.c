@@ -653,6 +653,9 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
     XR_DCHECK(result != NULL, "xaot_build: NULL result");
     memset(result, 0, sizeof(*result));
+    XgGlobalEvidence pre_mono_generic_evidence;
+    bool pre_mono_generic_evidence_initialized = false;
+    memset(&pre_mono_generic_evidence, 0, sizeof(pre_mono_generic_evidence));
 
     printf("[xi-native] Building: %s\n", input_path);
 
@@ -758,6 +761,15 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
             xa_analyzer_collect_export_symbols(shared_analyzer, (XrAstNode *) spec->ast);
         xa_analyzer_clear_diagnostics(shared_analyzer);
     }
+
+    if (!xg_global_evidence_build_from_module_graph(&pre_mono_generic_evidence, graph,
+                                                    profile == XAOT_BUILD_PROFILE_FREESTANDING
+                                                        ? XG_BUILD_FREESTANDING
+                                                        : XG_BUILD_NATIVE_RELEASE)) {
+        fprintf(stderr, "Error: failed to build pre-monomorphization generic evidence\n");
+        goto fail_free_analyzer;
+    }
+    pre_mono_generic_evidence_initialized = true;
 
     /* Mirror the VM compiler entry: monomorphize after the first graph-aware
      * analysis, then analyze again so cloned declarations have concrete
@@ -871,6 +883,13 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
         goto fail_free_ir;
     }
     global_evidence_initialized = true;
+    if (!xg_global_evidence_merge_generic_inst_roots(&global_evidence,
+                                                     &pre_mono_generic_evidence)) {
+        fprintf(stderr, "Error: failed to merge generic instantiation evidence\n");
+        goto fail_free_ir;
+    }
+    xg_global_evidence_free(&pre_mono_generic_evidence);
+    pre_mono_generic_evidence_initialized = false;
     if (emit_global_evidence_dump) {
         global_evidence_dump = xg_global_evidence_dump(&global_evidence);
         if (!global_evidence_dump) {
@@ -1104,6 +1123,10 @@ fail_free_ir:
         shared_analyzer = NULL;
     }
 fail_free_analyzer:
+    if (pre_mono_generic_evidence_initialized) {
+        xg_global_evidence_free(&pre_mono_generic_evidence);
+        pre_mono_generic_evidence_initialized = false;
+    }
     if (shared_analyzer) {
         xa_analyzer_set_graph(shared_analyzer, NULL);
         xa_analyzer_free(shared_analyzer);

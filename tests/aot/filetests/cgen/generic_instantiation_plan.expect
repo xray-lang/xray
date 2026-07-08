@@ -1,0 +1,2 @@
+contains=xaot-plan v0
+regex=generic-instantiation [0-9]+ id=[1-9][0-9]* module=[1-9][0-9]* kind=function origin_decl=[1-9][0-9]* origin_func=[1-9][0-9]* origin_method=0 origin_class=0 specialized_func=0 specialized_class=0 root_callsite=[1-9][0-9]* constraint_iface=0 name=[1-9][0-9]* type=[1-9][0-9]* type_args=[1-9][0-9]*\+1 action=record_root evidence=row\+types\+origin\+root reason=no_specialized_body
