@@ -331,7 +331,7 @@ if(XR_BUILD_LSP)
     )
     add_test(NAME test_lsp_stdlib COMMAND test_lsp_stdlib)
 
-    file(GLOB LSP_SOURCES ${CMAKE_SOURCE_DIR}/src/app/lsp/*.c)
+    file(GLOB LSP_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/lsp/*.c)
     list(REMOVE_ITEM LSP_SOURCES ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_main.c)
 
     # LSP full-source tests require POSIX pipe/fcntl (not yet ported to Windows)
