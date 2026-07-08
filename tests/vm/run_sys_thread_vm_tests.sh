@@ -40,6 +40,24 @@ expect_output() {
     fi
 }
 
+expect_output_workers() {
+    local name="$1"
+    local src="$2"
+    local expected="$3"
+    local workers="$4"
+    local out="$WORK/$name.out"
+    local err="$WORK/$name.err"
+
+    if "$XRAY" run --workers "$workers" "$src" >"$out" 2>"$err" && [ "$(cat "$out")" = "$expected" ] &&
+        [ ! -s "$err" ]; then
+        record_pass "$name output"
+    else
+        record_fail "$name output"
+        sed 's/^/      stdout: /' "$out" | sed -n '1,40p'
+        sed 's/^/      stderr: /' "$err" | sed -n '1,40p'
+    fi
+}
+
 expect_warning() {
     local name="$1"
     local src="$2"
@@ -102,6 +120,7 @@ SLICE_BOUND_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_slice_bound_join.xr"
 CHANNEL_CAPACITY_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_channel_capacity_join.xr"
 UNSAFE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_unsafe_join.xr"
 THREADLOCAL_BASIC_SRC="$PROJECT_DIR/tests/vm/sys_threadlocal_basic.xr"
+YIELDABLE_JOIN_SRC="$PROJECT_DIR/tests/vm/sys_thread_yieldable_join.xr"
 
 expect_output "spawn_join" "$JOIN_SRC" "42"
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -128,6 +147,7 @@ expect_output "slice_bound_join" "$SLICE_BOUND_JOIN_SRC" $'2\n20'
 expect_output "channel_capacity_join" "$CHANNEL_CAPACITY_JOIN_SRC" "channel"
 expect_output "unsafe_join" "$UNSAFE_JOIN_SRC" "42"
 expect_output "threadlocal_basic" "$THREADLOCAL_BASIC_SRC" $'10\n20\n15\n20'
+expect_output_workers "yieldable_join" "$YIELDABLE_JOIN_SRC" $'tick\n1\njoined 7\n7' 1
 expect_warning "orphan" "$ORPHAN_SRC" "orphan" \
     "sys.Thread.spawn returns a Thread handle; call join() or detach() explicitly"
 expect_warning "unused_local" "$UNUSED_LOCAL_SRC" "unused-local" \

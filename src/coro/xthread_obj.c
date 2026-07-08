@@ -35,6 +35,11 @@ static void thread_throw(XrVMRuntime *isolate, XrErrorCode code, const char *mes
     xr_vm_throw_exception(isolate, exc);
 }
 
+static bool thread_join_can_yield(XrVMRuntime *isolate) {
+    XrWorker *worker = xr_current_worker();
+    return isolate && worker && worker->p.id >= 0 && xr_current_coro(isolate) != NULL;
+}
+
 static void thread_release_ref(XrThread *thread) {
     if (!thread)
         return;
@@ -237,6 +242,84 @@ XrValue xr_thread_obj_join(XrThread *thread) {
     }
 }
 
+static XrValue thread_join_result_value(XrVMRuntime *isolate, XrThread *thread, XrValue result) {
+    XrCoroutine *caller = xr_current_coro(isolate);
+    if (atomic_load_explicit(&thread->failed, memory_order_acquire)) {
+        XrValue err = thread->error;
+        if (XR_IS_PTR(err))
+            err = xr_deep_copy_to_coro(isolate, err, caller);
+        if (XR_IS_NULL(err)) {
+            thread_throw(isolate, XR_ERR_RUNTIME, "Thread.join: thread body failed");
+        } else if (thread->error_is_value) {
+            xr_vm_set_pending_error(isolate, err);
+        } else {
+            xr_vm_throw_exception(isolate, err);
+        }
+        return xr_null();
+    }
+    if (XR_IS_PTR(result))
+        result = xr_deep_copy_to_coro(isolate, result, caller);
+    return result;
+}
+
+static XrValue thread_join_blocking_value(XrVMRuntime *isolate, XrThread *thread) {
+    if (atomic_load_explicit(&thread->state, memory_order_acquire) == XR_THREAD_DETACHED) {
+        thread_throw(isolate, XR_ERR_RUNTIME, "Thread.join: thread is detached");
+        return xr_null();
+    }
+    return thread_join_result_value(isolate, thread, xr_thread_obj_join(thread));
+}
+
+static XrCFuncResult thread_join_yield_step(XrVMRuntime *isolate, XrThread *thread,
+                                            XrValue *result);
+
+static XrCFuncResult thread_join_yield_continue(XrVMRuntime *isolate, int status,
+                                                XrValue resume_value, void *ctx, XrValue *result) {
+    (void) status;
+    (void) resume_value;
+    return thread_join_yield_step(isolate, (XrThread *) ctx, result);
+}
+
+static XrCFuncResult thread_join_yield_wait(XrVMRuntime *isolate, XrThread *thread,
+                                            XrValue *result) {
+    XrCFuncResult status =
+        xr_yield_for_timeout(isolate, 1, thread_join_yield_continue, thread, result);
+    if (status == XR_CFUNC_ERROR) {
+        *result = thread_join_blocking_value(isolate, thread);
+        return XR_CFUNC_DONE;
+    }
+    return status;
+}
+
+static XrCFuncResult thread_join_yield_step(XrVMRuntime *isolate, XrThread *thread,
+                                            XrValue *result) {
+    if (!thread) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
+
+    int state = atomic_load_explicit(&thread->state, memory_order_acquire);
+    if ((XrThreadState) state == XR_THREAD_DETACHED) {
+        thread_throw(isolate, XR_ERR_RUNTIME, "Thread.join: thread is detached");
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
+    if ((XrThreadState) state == XR_THREAD_JOINED) {
+        *result = thread_join_result_value(isolate, thread, thread->retval);
+        return XR_CFUNC_DONE;
+    }
+    if (!thread_join_can_yield(isolate)) {
+        *result = thread_join_blocking_value(isolate, thread);
+        return XR_CFUNC_DONE;
+    }
+    if ((XrThreadState) state == XR_THREAD_CREATED &&
+        atomic_load_explicit(&thread->finished, memory_order_acquire)) {
+        *result = thread_join_result_value(isolate, thread, xr_thread_obj_join(thread));
+        return XR_CFUNC_DONE;
+    }
+    return thread_join_yield_wait(isolate, thread, result);
+}
+
 void xr_thread_obj_detach(XrThread *thread) {
     if (!thread)
         return;
@@ -277,36 +360,17 @@ void xr_obj_destroy_thread(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     thread->name = NULL;
 }
 
-static XrValue m_join(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
+static XrCFuncResult ym_join(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs,
+                             XrValue *result) {
     (void) args;
     (void) nargs;
     XrThread *thread = xr_value_to_thread(self);
     if (!thread) {
         thread_throw(isolate, XR_ERR_TYPE_MISMATCH, "Thread.join: receiver is not a Thread");
-        return xr_null();
+        *result = xr_null();
+        return XR_CFUNC_DONE;
     }
-    if (atomic_load_explicit(&thread->state, memory_order_acquire) == XR_THREAD_DETACHED) {
-        thread_throw(isolate, XR_ERR_RUNTIME, "Thread.join: thread is detached");
-        return xr_null();
-    }
-    XrValue result = xr_thread_obj_join(thread);
-    XrCoroutine *caller = xr_current_coro(isolate);
-    if (atomic_load_explicit(&thread->failed, memory_order_acquire)) {
-        XrValue err = thread->error;
-        if (XR_IS_PTR(err))
-            err = xr_deep_copy_to_coro(isolate, err, caller);
-        if (XR_IS_NULL(err)) {
-            thread_throw(isolate, XR_ERR_RUNTIME, "Thread.join: thread body failed");
-        } else if (thread->error_is_value) {
-            xr_vm_set_pending_error(isolate, err);
-        } else {
-            xr_vm_throw_exception(isolate, err);
-        }
-        return xr_null();
-    }
-    if (XR_IS_PTR(result))
-        result = xr_deep_copy_to_coro(isolate, result, caller);
-    return result;
+    return thread_join_yield_step(isolate, thread, result);
 }
 
 static XrValue m_detach(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
@@ -333,8 +397,11 @@ static XrValue g_done(XrVMRuntime *isolate, XrValue self, XrValue *args, int nar
 
 void xr_thread_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod thread_methods[] = {
-        {"join", m_join, 0},
         {"detach", m_detach, 0},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeYieldableMethod thread_yieldable_methods[] = {
+        {"join", ym_join, 0},
         {NULL, NULL, 0},
     };
     static const XrNativeMethod thread_getters[] = {
@@ -345,6 +412,7 @@ void xr_thread_register_native_type(XrVMRuntime *isolate) {
         .name = TYPE_NAME_THREAD,
         .gc_type = XR_TTHREAD,
         .methods = (XrNativeMethod *) thread_methods,
+        .yieldable_methods = (XrNativeYieldableMethod *) thread_yieldable_methods,
         .getters = (XrNativeMethod *) thread_getters,
     };
     xr_register_native_type(isolate, &info);
