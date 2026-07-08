@@ -460,6 +460,24 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "root_callsite=5 constraint_iface=123"));
     ASSERT_NOT_NULL(strstr(dump, "type=901 type_args=902+2 span=80 flags=0xb"));
 
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.ngeneric_instantiation_plans, 1);
+    const XaotGenericInstantiationPlan *plan =
+        xaot_bundle_find_generic_instantiation_plan(&bundle, generic_inst.generic_inst_id);
+    ASSERT_NOT_NULL(plan);
+    ASSERT_EQ_UINT(plan->action, XAOT_GENERIC_INSTANTIATION_SPECIALIZED_ABI);
+    ASSERT_EQ_UINT(plan->unproven_reason, XAOT_GENERIC_INST_UNPROVEN_NONE);
+    ASSERT_TRUE((plan->evidence & XAOT_GENERIC_INST_EV_SPECIALIZED_ABI) != 0);
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "generic-instantiation 0 id=9 module=1 kind=method"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=specialized_abi"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "evidence=row+types+origin+root+constraint+abi"));
+    xr_free(plan_dump);
+    xaot_bundle_free(&bundle);
+
     xr_free(dump);
     xg_global_evidence_free(&ev);
 }
@@ -5074,6 +5092,47 @@ TEST(global_evidence_producer_records_generic_instantiation_roots) {
     ASSERT_NOT_NULL(strstr(dump, "origin_decl=1 origin_func=1"));
     ASSERT_NOT_NULL(strstr(dump, "root_callsite=1"));
     xr_free(dump);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.ngeneric_instantiation_plans, 1);
+    const XaotGenericInstantiationPlan *plan =
+        xaot_bundle_find_generic_instantiation_plan(&bundle, inst->generic_inst_id);
+    ASSERT_NOT_NULL(plan);
+    ASSERT_EQ_UINT(plan->action, XAOT_GENERIC_INSTANTIATION_RECORD_ROOT);
+    ASSERT_EQ_UINT(plan->unproven_reason, XAOT_GENERIC_INST_UNPROVEN_NO_SPECIALIZED_BODY);
+    ASSERT_TRUE((plan->evidence & XAOT_GENERIC_INST_EV_GLOBAL_ROW) != 0);
+    ASSERT_TRUE((plan->evidence & XAOT_GENERIC_INST_EV_CONCRETE_TYPES) != 0);
+    ASSERT_TRUE((plan->evidence & XAOT_GENERIC_INST_EV_ORIGIN_ANCHOR) != 0);
+    ASSERT_TRUE((plan->evidence & XAOT_GENERIC_INST_EV_ROOT_CALLSITE) != 0);
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "generic-instantiation 0 id=1 module=1 kind=function"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=record_root"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "evidence=row+types+origin+root"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "reason=no_specialized_body"));
+    xr_free(plan_dump);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    bundle.generic_instantiation_plans[0].action = XAOT_GENERIC_INSTANTIATION_SPECIALIZED_BODY;
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT generic instantiation action does not re-derive"));
+    xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
     teardown_parser_session();
