@@ -315,7 +315,7 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
         return set_error(errbuf, errbuf_len, "AOT function attribute plan func has no func plan");
 
-    reads_mem = plan->func->ncaptures > 0;
+    reads_mem = ((body->effect_bits & XG_BODY_MAY_READ_MEM) != 0) || plan->func->ncaptures > 0;
     for (bi = 0; bi < plan->func->nblocks; bi++) {
         const XiBlock *blk = plan->func->blocks[bi];
         if (!blk)

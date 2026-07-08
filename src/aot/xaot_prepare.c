@@ -3456,7 +3456,7 @@ static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
         return false;
     if (func_attr_body_summary_disqualifies(body))
         return true;
-    reads_mem = func->ncaptures > 0;
+    reads_mem = ((body->effect_bits & XG_BODY_MAY_READ_MEM) != 0) || func->ncaptures > 0;
     for (bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks[bi];
         if (!blk)

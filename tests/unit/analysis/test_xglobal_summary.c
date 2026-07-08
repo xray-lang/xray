@@ -92,6 +92,17 @@ static uint32_t evidence_body_count_with_escape(const XgGlobalEvidence *ev, uint
     return count;
 }
 
+static uint32_t evidence_body_count_with_effect(const XgGlobalEvidence *ev, uint32_t effect) {
+    uint32_t count = 0;
+    if (!ev)
+        return 0;
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        if ((ev->bodies[i].effect_bits & effect) != 0)
+            count++;
+    }
+    return count;
+}
+
 static const XgBodySummary *evidence_find_body_by_name(const XgGlobalEvidence *ev,
                                                        const char *name) {
     uint32_t name_id;
@@ -1814,6 +1825,43 @@ TEST(global_evidence_verifier_rederives_func_attr_body_summary) {
     ASSERT_TRUE(!xaot_verify_bundle(&stale_effect, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT function attribute effect bits are stale"));
     xaot_bundle_free(&stale_effect);
+
+    XgGlobalEvidence read_mem_ev;
+    XgBodySummary read_mem_body = body;
+    read_mem_body.effect_bits = XG_BODY_MAY_READ_MEM;
+    xg_global_evidence_init(&read_mem_ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&read_mem_ev, &decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&read_mem_ev, &read_mem_body));
+
+    XaotBundle read_mem_pure;
+    memset(&read_mem_pure, 0, sizeof(read_mem_pure));
+    ASSERT_TRUE(
+        xaot_bundle_set_global_evidence(&read_mem_pure, &read_mem_ev, XG_BUILD_NATIVE_RELEASE));
+    read_mem_pure.modules = modules;
+    read_mem_pure.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&read_mem_pure, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&read_mem_pure, &helper_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&read_mem_pure, &helper_func, XAOT_FN_ATTR_PURE,
+                                                   &read_mem_body));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(xaot_verify_bundle(&read_mem_pure, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    xaot_bundle_free(&read_mem_pure);
+
+    XaotBundle read_mem_const;
+    memset(&read_mem_const, 0, sizeof(read_mem_const));
+    ASSERT_TRUE(
+        xaot_bundle_set_global_evidence(&read_mem_const, &read_mem_ev, XG_BUILD_NATIVE_RELEASE));
+    read_mem_const.modules = modules;
+    read_mem_const.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&read_mem_const, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&read_mem_const, &helper_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&read_mem_const, &helper_func,
+                                                   XAOT_FN_ATTR_CONST, &read_mem_body));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&read_mem_const, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT function attribute plan claims const but func reads memory"));
+    xaot_bundle_free(&read_mem_const);
+    xg_global_evidence_free(&read_mem_ev);
 
     XgGlobalEvidence effectful_ev;
     XgBodySummary effectful_body = body;
@@ -3840,13 +3888,13 @@ TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) 
     ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
     ASSERT_TRUE((ev.bodies[0].escape_bits & XG_BODY_ESCAPE_NATIVE) != 0);
     ASSERT_TRUE((ev.bodies[0].escape_bits & XG_BODY_ESCAPE_RETURN) != 0);
-    ASSERT_TRUE((ev.bodies[0].capability_bits & XG_CAP_NATIVE) != 0);
+    ASSERT_TRUE((ev.bodies[0].capability_bits & XG_CAP_NATIVE) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(bundle.nmethod_dispatch_plans, 0);
-    ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_NATIVE));
+    ASSERT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_NATIVE));
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -3908,6 +3956,90 @@ TEST(global_evidence_producer_marks_body_escape_bits) {
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "capture"));
     xr_free(dump);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_marks_read_mem_effect) {
+    setup_parser_session();
+    const char *source = "fn add(x: int, y: int) -> int {\n"
+                         "    return x + y\n"
+                         "}\n"
+                         "fn readIndex(items: Array<int>) -> int {\n"
+                         "    return items[0]\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    char *dump;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    const XgBodySummary *add = evidence_find_body_by_name(&ev, "add");
+    const XgBodySummary *read_index = evidence_find_body_by_name(&ev, "readIndex");
+    ASSERT_NOT_NULL(add);
+    ASSERT_NOT_NULL(read_index);
+    ASSERT_TRUE((add->effect_bits & XG_BODY_MAY_READ_MEM) == 0);
+    ASSERT_TRUE((read_index->effect_bits & XG_BODY_MAY_READ_MEM) != 0);
+    ASSERT_EQ_UINT(evidence_body_count_with_effect(&ev, XG_BODY_MAY_READ_MEM), 1);
+    dump = xg_global_evidence_dump(&ev);
+    ASSERT_NOT_NULL(dump);
+    ASSERT_NOT_NULL(strstr(dump, "read_mem"));
+    xr_free(dump);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_marks_native_method_calls_as_native_capability) {
+    setup_parser_session();
+    const char *source = "@native class Handle {\n"
+                         "    id() -> int\n"
+                         "}\n"
+                         "fn read(h: Handle) -> int {\n"
+                         "    return h.id()\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(ev.nclasses, 1);
+    ASSERT_EQ_UINT(ev.nmethods, 1);
+    ASSERT_EQ_UINT(ev.ncallsites, 1);
+    ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_METHOD);
+    ASSERT_TRUE((ev.methods[0].flags & XG_METHOD_NATIVE) != 0);
+    ASSERT_TRUE((ev.bodies[0].capability_bits & XG_CAP_NATIVE) != 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_NATIVE));
+    xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
     teardown_parser_session();
@@ -4812,6 +4944,8 @@ RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_c
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_resolves_super_constructor_callsite);
 RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
+RUN_TEST(global_evidence_producer_marks_read_mem_effect);
+RUN_TEST(global_evidence_producer_marks_native_method_calls_as_native_capability);
 RUN_TEST(global_evidence_producer_marks_body_escape_bits);
 RUN_TEST(global_evidence_producer_marks_native_methods_bodyless);
 RUN_TEST(global_evidence_producer_resolves_interface_callsite_receivers);

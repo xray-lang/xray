@@ -148,6 +148,7 @@ enum {
     XG_BODY_MAY_ALLOC = 1u << 2,
     XG_BODY_MAY_MUTATE = 1u << 3,
     XG_BODY_MAY_CALL_NATIVE = 1u << 4,
+    XG_BODY_MAY_READ_MEM = 1u << 5,
 };
 
 enum {
