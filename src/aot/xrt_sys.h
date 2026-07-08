@@ -31,6 +31,7 @@
 #include <process.h>
 #define XRT_SYS_PROCESS_KILLED_EXIT_CODE ((unsigned int) 0xE0000001u)
 #else
+#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
@@ -174,6 +175,113 @@ static inline char *xrt_sys_cstr_dup_arg(const char *data, int64_t len) {
     memcpy(out, data, n);
     out[n] = '\0';
     return out;
+}
+
+static XR_THREAD_LOCAL char xrt_sys_dylib_error[512];
+
+static inline void xrt_sys_dylib_set_error(const char *message) {
+    if (!message)
+        message = "";
+    snprintf(xrt_sys_dylib_error, sizeof(xrt_sys_dylib_error), "%s", message);
+}
+
+#if defined(XR_OS_WINDOWS)
+static inline void xrt_sys_dylib_set_win_error(DWORD err) {
+    if (err == 0) {
+        xrt_sys_dylib_set_error("");
+        return;
+    }
+    DWORD n = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, err,
+                             MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), xrt_sys_dylib_error,
+                             (DWORD) sizeof(xrt_sys_dylib_error), NULL);
+    if (n == 0)
+        snprintf(xrt_sys_dylib_error, sizeof(xrt_sys_dylib_error), "Windows error %lu",
+                 (unsigned long) err);
+}
+#endif
+
+static inline XrValue xrt_sys_dylib_open(const char *path_data, int64_t path_len) {
+    char *path = xrt_sys_cstr_dup_arg(path_data, path_len);
+    if (!path || path[0] == '\0') {
+        XRT_FREE(path);
+        xrt_sys_dylib_set_error("empty dynamic library path");
+        return XR_FROM_INT(0);
+    }
+
+#if defined(XR_OS_WINDOWS)
+    HMODULE lib = LoadLibraryA(path);
+    DWORD err = lib ? 0 : GetLastError();
+    XRT_FREE(path);
+    if (!lib)
+        xrt_sys_dylib_set_win_error(err);
+    else
+        xrt_sys_dylib_set_error("");
+    return XR_FROM_INT((int64_t) (intptr_t) lib);
+#else
+    (void) dlerror();
+    void *lib = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+    const char *err = lib ? NULL : dlerror();
+    XRT_FREE(path);
+    xrt_sys_dylib_set_error(err ? err : "");
+    return XR_FROM_INT((int64_t) (intptr_t) lib);
+#endif
+}
+
+static inline XrValue xrt_sys_dylib_symbol(XrValue handle_value, const char *name_data,
+                                           int64_t name_len) {
+    void *handle = (void *) (intptr_t) xrt_sys_int_arg(handle_value);
+    char *name = xrt_sys_cstr_dup_arg(name_data, name_len);
+    if (!handle || !name || name[0] == '\0') {
+        XRT_FREE(name);
+        xrt_sys_dylib_set_error(!handle ? "invalid dynamic library handle"
+                                        : "empty dynamic library symbol");
+        return XR_NULL_VAL;
+    }
+
+#if defined(XR_OS_WINDOWS)
+    FARPROC sym = GetProcAddress((HMODULE) handle, name);
+    DWORD err = sym ? 0 : GetLastError();
+    XRT_FREE(name);
+    if (!sym) {
+        xrt_sys_dylib_set_win_error(err);
+        return XR_NULL_VAL;
+    }
+    xrt_sys_dylib_set_error("");
+    return XR_FROM_INT((int64_t) (intptr_t) sym);
+#else
+    (void) dlerror();
+    void *sym = dlsym(handle, name);
+    const char *err = dlerror();
+    XRT_FREE(name);
+    if (err || !sym) {
+        xrt_sys_dylib_set_error(err ? err : "dynamic library symbol resolved to null");
+        return XR_NULL_VAL;
+    }
+    xrt_sys_dylib_set_error("");
+    return XR_FROM_INT((int64_t) (intptr_t) sym);
+#endif
+}
+
+static inline XrValue xrt_sys_dylib_close(XrValue handle_value) {
+    void *handle = (void *) (intptr_t) xrt_sys_int_arg(handle_value);
+    if (!handle)
+        return XR_FROM_BOOL(true);
+#if defined(XR_OS_WINDOWS)
+    BOOL ok = FreeLibrary((HMODULE) handle);
+    if (!ok)
+        xrt_sys_dylib_set_win_error(GetLastError());
+    else
+        xrt_sys_dylib_set_error("");
+    return XR_FROM_BOOL(ok != 0);
+#else
+    int rc = dlclose(handle);
+    xrt_sys_dylib_set_error(rc == 0 ? "" : dlerror());
+    return XR_FROM_BOOL(rc == 0);
+#endif
+}
+
+static inline XrValue xrt_sys_dylib_last_error(void) {
+    return xr_box_str(xrt_sys_dylib_error);
 }
 
 static inline void xrt_sys_process_argv_free(char **argv) {

@@ -4,6 +4,7 @@
 #include "../../src/base/xchecks.h"
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/module/xmodule.h"
+#include "../../src/os/os_dylib.h"
 #include "../../src/os/os_pipe.h"
 #include "../../src/os/os_proc.h"
 #include "../../src/os/os_thread.h"
@@ -599,6 +600,45 @@ static XrValue sys_pin_to_cpu(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (cpu < 0)
         return xr_bool(false);
     return xr_bool(xr_thread_pin_to_cpu((unsigned int) cpu) == 0);
+}
+
+static XrValue sys_dylib_open(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    const char *path = (argc >= 1) ? xrs_string_arg(args[0], NULL) : NULL;
+    if (!path || path[0] == '\0')
+        return xr_int(0);
+    XrDylib *lib = xr_dylib_open(path);
+    return xr_int((int64_t) (intptr_t) lib);
+}
+
+static XrValue sys_dylib_symbol(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 2 || !XR_IS_INT(args[0]))
+        return xr_null();
+    XrDylib *lib = (XrDylib *) (intptr_t) XR_TO_INT(args[0]);
+    const char *name = xrs_string_arg(args[1], NULL);
+    if (!lib || !name || name[0] == '\0')
+        return xr_null();
+    void *sym = xr_dylib_sym(lib, name);
+    return sym ? xr_int((int64_t) (intptr_t) sym) : xr_null();
+}
+
+static XrValue sys_dylib_close(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    XrDylib *lib = (XrDylib *) (intptr_t) XR_TO_INT(args[0]);
+    if (!lib)
+        return xr_bool(true);
+    xr_dylib_close(lib);
+    return xr_bool(true);
+}
+
+static XrValue sys_dylib_last_error(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    const char *err = xr_dylib_last_error();
+    return xrs_string_value_c(isolate, err ? err : "");
 }
 
 static bool sys_process_env_key_valid(const char *key) {

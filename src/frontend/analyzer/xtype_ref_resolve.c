@@ -1165,11 +1165,12 @@ static XrType *resolve_type_ref_symbol_type(XaAnalyzer *analyzer, const char *na
         }
     }
 
-    if (!links->type)
-        return NULL;
-
     if (sym->kind == XA_SYM_ENUM)
         return links->type;
+    if (links->class_info)
+        return xr_type_new_instance(analyzer->isolate, links->class_info);
+    if (!links->type)
+        return NULL;
     if (links->type->kind == XR_KIND_INTERFACE)
         return links->type;
     if (links->type->kind == XR_KIND_INSTANCE)
@@ -1270,6 +1271,80 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                 return result;
             }
         }
+    }
+
+    if (tref->kind == XR_TREF_OPTIONAL) {
+        XrType *inner = tref->nchildren > 0
+                            ? xr_tref_resolve_in_analyzer(analyzer, tref->children[0])
+                            : xr_type_new_unknown(NULL);
+        return xr_type_new_optional(analyzer->isolate, inner);
+    }
+
+    if (tref->kind == XR_TREF_UNION) {
+        XrType *members[XR_UNION_MAX_MEMBERS];
+        int count = tref->nchildren < XR_UNION_MAX_MEMBERS ? tref->nchildren : XR_UNION_MAX_MEMBERS;
+        for (int i = 0; i < count; i++)
+            members[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
+        return xr_type_new_union(analyzer->isolate, members, count);
+    }
+
+    if (tref->kind == XR_TREF_FUNCTION) {
+        int nparam = tref->nchildren > 0 ? tref->nchildren - 1 : 0;
+        XrType *stack_params[16];
+        XrType **params = (nparam <= 16)
+                              ? stack_params
+                              : (XrType **) xr_malloc((size_t) nparam * sizeof(XrType *));
+        if (nparam > 0 && !params)
+            return xr_type_new_unknown(NULL);
+        for (int i = 0; i < nparam; i++)
+            params[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
+        XrType *ret =
+            tref->nchildren > 0
+                ? xr_tref_resolve_in_analyzer(analyzer, tref->children[tref->nchildren - 1])
+                : xr_type_new_unit(NULL);
+        XrType *result =
+            xr_type_new_function(analyzer->isolate, nparam > 0 ? params : NULL, nparam, ret, false);
+        if (params != stack_params)
+            xr_free(params);
+        return result;
+    }
+
+    if (tref->kind == XR_TREF_TUPLE) {
+        int count = tref->nchildren;
+        XrType *stack_elems[16];
+        XrType **elems =
+            (count <= 16) ? stack_elems : (XrType **) xr_malloc((size_t) count * sizeof(XrType *));
+        if (count > 0 && !elems)
+            return xr_type_new_unknown(NULL);
+        for (int i = 0; i < count; i++)
+            elems[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
+        XrType *result = xr_type_new_tuple(analyzer->isolate, elems, count);
+        if (elems != stack_elems)
+            xr_free(elems);
+        return result;
+    }
+
+    if (tref->kind == XR_TREF_OBJECT) {
+        const char **names = (const char **) tref->field_names;
+        int count = tref->nchildren;
+        XrType *stack_types[16];
+        XrType **types =
+            (count <= 16) ? stack_types : (XrType **) xr_malloc((size_t) count * sizeof(XrType *));
+        if (count > 0 && !types)
+            return xr_type_new_unknown(NULL);
+        for (int i = 0; i < count; i++)
+            types[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
+        bool is_sealed = !tref->extensible;
+        XrType *result =
+            xr_type_new_record_with_fields(analyzer->isolate, names, types, count, is_sealed);
+        if (result && tref->field_readonly)
+            xr_type_set_object_field_readonly(analyzer->isolate, result, tref->field_readonly,
+                                              count);
+        if (result && tref->name)
+            xr_type_set_object_type_name(analyzer->isolate, result, tref->name);
+        if (types != stack_types)
+            xr_free(types);
+        return result;
     }
 
     if (tref->kind == XR_TREF_FIXED_ARRAY) {

@@ -361,6 +361,29 @@ static bool add_stdlib_symbol_manifest_entries(XaotLinkManifest *manifest,
     return true;
 }
 
+#if defined(XR_OS_LINUX)
+static bool stdlib_symbol_is_sys_dylib(const char *symbol) {
+    return symbol &&
+           (strcmp(symbol, "sys.__dylibOpen") == 0 || strcmp(symbol, "sys.__dylibSymbol") == 0 ||
+            strcmp(symbol, "sys.__dylibClose") == 0 || strcmp(symbol, "sys.__dylibLastError") == 0);
+}
+#endif
+
+static bool add_stdlib_platform_system_lib_manifest_entries(XaotLinkManifest *manifest,
+                                                            const XaotFeatureSet *features) {
+#if defined(XR_OS_LINUX)
+    for (uint16_t i = 0; features && i < features->n_stdlib_symbols; i++) {
+        if (stdlib_symbol_is_sys_dylib(features->stdlib_symbols[i])) {
+            return xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "dl");
+        }
+    }
+#else
+    (void) manifest;
+    (void) features;
+#endif
+    return true;
+}
+
 static bool extern_dylib_is_link_name(const char *dylib) {
     return dylib && dylib[0] && strchr(dylib, '/') == NULL && strstr(dylib, ".so") == NULL &&
            strstr(dylib, ".dylib") == NULL && strstr(dylib, ".dll") == NULL;
@@ -579,6 +602,8 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
     if (!add_stdlib_manifest_entries(manifest, features->stdlib))
         goto done;
     if (!add_extern_dylib_manifest_entries(manifest, features))
+        goto done;
+    if (!add_stdlib_platform_system_lib_manifest_entries(manifest, features))
         goto done;
     if (!add_stdlib_core_object_manifest_entries(manifest, features))
         goto done;
