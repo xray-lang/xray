@@ -824,6 +824,15 @@ fn _sensitiveHeader(name: string) -> bool {
     return n == "authorization" || n == "proxy-authorization"
 }
 
+fn _reservedResponseHeader(name: string) -> bool {
+    var n = name.toLowerCase()
+    return n == "content-length" ||
+           n == "content-type" ||
+           n == "connection" ||
+           n == "transfer-encoding" ||
+           n == "trailer"
+}
+
 fn _appendHeader(out: StringBuilder, name: string, value: string) {
     out.append(name)
     out.append(": ")
@@ -1643,11 +1652,52 @@ fn response(status: int, body: unknown = null) -> string {
         }
     }
 
-    return "HTTP/1.1 " + string(status) + " " + _statusReason(status) + "\r\n" +
-        "Content-Type: " + contentType + "\r\n" +
-        "Content-Length: " + string(bodyText.byteLength) + "\r\n" +
-        "Connection: keep-alive\r\n\r\n" +
-        bodyText
+    return responseText(status, bodyText, contentType)!
+}
+
+// responseText - Format a complete HTTP/1.1 response with explicit headers.
+fn responseText(
+    status: int,
+    body: string = "",
+    contentType: string = "text/plain; charset=utf-8",
+    headers: Json = null,
+    keepAlive: bool = true
+) -> string? {
+    var ct = contentType
+    if (ct.length == 0) { ct = "text/plain; charset=utf-8" }
+    if (!_headerValueValid(ct)) { return null }
+
+    var custom: Array<(string, string)> = []
+    if (headers != null) {
+        for (key in headers) {
+            var name = string(key)
+            var rawValue = Json.get(headers, name, null)
+            if (rawValue == null) { continue }
+            var value = string(rawValue)
+            if (!_headerNameValid(name) ||
+                !_headerValueValid(value) ||
+                _reservedResponseHeader(name)) {
+                return null
+            }
+            custom.push((name, value))
+        }
+    }
+
+    var out = StringBuilder()
+    out.append("HTTP/1.1 ")
+    out.append(string(status))
+    out.append(" ")
+    out.append(_statusReason(status))
+    out.append("\r\n")
+    _appendHeader(out, "Content-Type", ct)
+    _appendHeader(out, "Content-Length", string(body.byteLength))
+    for (var i = 0; i < custom.length; i++) {
+        _appendHeader(out, custom[i].0, custom[i].1)
+    }
+    _appendHeader(out, "Connection", keepAlive ? "keep-alive" : "close")
+    out.append("\r\n")
+    out.append(body)
+    return out.toString()
 }
 
 export {
@@ -1667,6 +1717,7 @@ export {
     urlEncode,
     urlDecode,
     response,
+    responseText,
     requestText,
     parseResponseHead,
     parseRequestHead,

@@ -1,7 +1,7 @@
 // Pure-Xray HTTP helper exports layered on the native HTTP module.
 
 import http
-import { urlEncode, urlDecode, response } from http
+import { urlEncode, urlDecode, response, responseText } from http
 
 print(http.urlEncode("a b+张"))
 print(urlEncode(":/?#[]@!$&'()*+,;="))
@@ -28,3 +28,14 @@ var empty = response(204)
 print(empty.includes("HTTP/1.1 204 No Content\r\n"))
 print(empty.includes("Content-Length: 0\r\n"))
 print(empty.endsWith("\r\n\r\n"))
+
+var custom = responseText(201, "created", "text/custom", {"X-Trace": "abc"}, false)!
+print(custom.includes("HTTP/1.1 201 Created\r\n"))
+print(custom.includes("Content-Type: text/custom\r\n"))
+print(custom.includes("X-Trace: abc\r\n"))
+print(custom.includes("Connection: close\r\n"))
+print(custom.endsWith("\r\n\r\ncreated"))
+print(responseText(200, "bad", "text/plain", {"Content-Length": "999"}) == null)
+print(responseText(200, "bad", "text/plain", {"Transfer-Encoding": "chunked"}) == null)
+print(responseText(200, "bad", "text/plain", {"X-Bad": "a\r\nInjected: y"}) == null)
+print(http.responseText(200, "bad", "text\r\nbad") == null)

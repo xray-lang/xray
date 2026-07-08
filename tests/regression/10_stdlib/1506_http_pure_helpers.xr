@@ -1,7 +1,7 @@
 // HTTP pure-Xray helper surface.
 
 import http
-import { urlEncode, urlDecode, response } from http
+import { urlEncode, urlDecode, response, responseText } from http
 
 @test
 fn test_url_encode_namespace() {
@@ -44,6 +44,29 @@ fn test_response_empty_body() {
     assert(resp.includes("HTTP/1.1 204 No Content\r\n"))
     assert(resp.includes("Content-Length: 0\r\n"))
     assert(resp.endsWith("\r\n\r\n"))
+}
+
+@test
+fn test_response_text_custom_headers() {
+    var resp = responseText(201, "created", "text/custom", {"X-Trace": "abc"}, false)!
+    assert(resp.includes("HTTP/1.1 201 Created\r\n"))
+    assert(resp.includes("Content-Type: text/custom\r\n"))
+    assert(resp.includes("X-Trace: abc\r\n"))
+    assert(resp.includes("Connection: close\r\n"))
+    assert(resp.endsWith("\r\n\r\ncreated"))
+}
+
+@test
+fn test_response_text_rejects_framing_headers() {
+    assert(responseText(200, "bad", "text/plain", {"Content-Length": "999"}) == null)
+    assert(responseText(200, "bad", "text/plain", {"Transfer-Encoding": "chunked"}) == null)
+    assert(responseText(200, "bad", "text/plain", {"Trailer": "X-T"}) == null)
+}
+
+@test
+fn test_response_text_rejects_injection() {
+    assert(responseText(200, "bad", "text/plain", {"X-Bad": "a\r\nInjected: y"}) == null)
+    assert(http.responseText(200, "bad", "text\r\nbad") == null)
 }
 
 print("All http pure helper tests passed")
