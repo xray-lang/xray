@@ -55,8 +55,6 @@ extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 extern XrArray *xr_array_new(struct XrCoroutine *coro);
 extern void xr_array_push(XrArray *arr, XrValue value);
 extern XrValue xr_value_from_array(XrArray *arr);
-extern XrValue h2_get(XrVMRuntime *X, XrValue *args, int argc);
-extern XrValue h2_post(XrVMRuntime *X, XrValue *args, int argc);
 extern XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc);
 extern XrValue h2_create_server(XrVMRuntime *X, XrValue *args, int argc);
 extern XrValue h2_server_listen(XrVMRuntime *X, XrValue *args, int argc);

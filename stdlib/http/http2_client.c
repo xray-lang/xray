@@ -635,32 +635,6 @@ XrH2Response *xr_h2_request(const char *url, const XrH2Request *req) {
     return resp;
 }
 
-XrH2Response *xr_h2_get(const char *url) {
-    XrH2Request req = {0};
-    req.method = "GET";
-    return xr_h2_request(url, &req);
-}
-
-XrH2Response *xr_h2_post(const char *url, const char *body, size_t body_len,
-                         const char *content_type) {
-    XrH2Request req = {0};
-    req.method = "POST";
-    req.body = body;
-    req.body_len = body_len;
-
-    XrHttpHeader headers[1];
-    if (content_type) {
-        headers[0].name = "content-type";
-        headers[0].name_len = 12;
-        headers[0].value = content_type;
-        headers[0].value_len = strlen(content_type);
-        req.headers = headers;
-        req.header_count = 1;
-    }
-
-    return xr_h2_request(url, &req);
-}
-
 void xr_h2_response_free(XrH2Response *resp) {
     if (!resp)
         return;

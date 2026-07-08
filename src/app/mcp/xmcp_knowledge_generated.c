@@ -1273,19 +1273,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Create HTTP/2 server",
     },
     {
-        .name = "h2Get",
-        .signature = "(url: string, options?: Json): Json",
-        .summary = "HTTP/2 GET request",
-    },
-    {
         .name = "h2Listen",
         .signature = "(): bool",
         .summary = "Start HTTP/2 server",
-    },
-    {
-        .name = "h2Post",
-        .signature = "(url: string, body: string, contentType?: string): Json",
-        .summary = "HTTP/2 POST request",
     },
     {
         .name = "h2Push",
@@ -5602,9 +5592,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
             "| `http.h2CreateServer` | `(options?: Json): bool` | Create HTTP/2 server |\n"
-            "| `http.h2Get` | `(url: string, options?: Json): Json` | HTTP/2 GET request |\n"
             "| `http.h2Listen` | `(): bool` | Start HTTP/2 server |\n"
-            "| `http.h2Post` | `(url: string, body: string, contentType?: string): Json` | HTTP/2 POST request |\n"
             "| `http.h2Push` | `(path: string, contentType: string, data: string): bool` | Push HTTP/2 response data |\n"
             "| `http.h2Request` | `(options: Json): Json` | Generic HTTP/2 request |\n"
             "| `http.h2Stop` | `(): ()` | Stop HTTP/2 server |\n"

@@ -338,8 +338,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http", "serverStats", "(): Json", "Return HTTP server counters", "xr_http_server_stats", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
     {"http", "ws", "(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", "http_ws_route", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
     {"http", "stopServer", "(): ()", "Stop the HTTP server", "http_stop_server", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
-    {"http", "h2Get", "(url: string, options?: Json): Json", "HTTP/2 GET request", "h2_get", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
-    {"http", "h2Post", "(url: string, body: string, contentType?: string): Json", "HTTP/2 POST request", "h2_post", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
     {"http", "h2Request", "(options: Json): Json", "Generic HTTP/2 request", "h2_request", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "h2CreateServer", "(options?: Json): bool", "Create HTTP/2 server", "h2_create_server", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
     {"http", "h2Listen", "(): bool", "Start HTTP/2 server", "h2_server_listen", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},

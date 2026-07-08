@@ -113,17 +113,6 @@ XR_FUNC void xr_h2_pool_release(XrH2PoolEntry *entry);
 XR_FUNC XrH2Response *xr_h2_request(const char *url, const XrH2Request *req);
 
 /*
- * Convenience function: HTTP/2 GET
- */
-XR_FUNC XrH2Response *xr_h2_get(const char *url);
-
-/*
- * Convenience function: HTTP/2 POST
- */
-XR_FUNC XrH2Response *xr_h2_post(const char *url, const char *body, size_t body_len,
-                                 const char *content_type);
-
-/*
  * Free response
  */
 XR_FUNC void xr_h2_response_free(XrH2Response *resp);

@@ -109,7 +109,7 @@ static XrHttpHeader *extract_headers_from_options(XrVMRuntime *X, XrJson *opts, 
         XrHttpHeader *out = (XrHttpHeader *) xr_malloc(sizeof(XrHttpHeader) * m->count);
         if (!out)
             return NULL;
-        int idx = 0;
+        uint32_t idx = 0;
         uint32_t map_size = m->nentries;
         for (uint32_t i = 0; i < map_size && idx < m->count; i++) {
             XrMapEntry *node = &m->entries[i];
@@ -123,7 +123,7 @@ static XrHttpHeader *extract_headers_from_options(XrVMRuntime *X, XrJson *opts, 
                 idx++;
             }
         }
-        *out_count = idx;
+        *out_count = (int) idx;
         return out;
     }
 
@@ -178,78 +178,6 @@ static XrValue h2_response_to_json(XrVMRuntime *X, XrH2Response *resp) {
 }
 
 /* ========== HTTP/2 Client Binding ========== */
-
-/*
- * http.h2Get(url: string, options?: Json) -> Json
- *
- * options: {
- *   headers?: Json | Map<string, string>,
- *   timeout?: int  // currently informational; h2 client uses pool defaults
- * }
- */
-XrValue h2_get(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0])) {
-        return xr_null();
-    }
-
-    const char *url = get_cstring(args[0], NULL);
-
-    XrH2Response *resp = NULL;
-    if (argc >= 2 && xr_value_is_json(args[1])) {
-        XrJson *opts = xr_value_to_json(args[1]);
-        int hcount = 0;
-        XrHttpHeader *headers = extract_headers_from_options(X, opts, &hcount);
-        if (hcount > 0) {
-            XrH2Request req = {0};
-            req.method = "GET";
-            req.headers = headers;
-            req.header_count = hcount;
-            resp = xr_h2_request(url, &req);
-        } else {
-            resp = xr_h2_get(url);
-        }
-        if (headers)
-            xr_free(headers);
-    } else {
-        resp = xr_h2_get(url);
-    }
-
-    if (!resp) {
-        if (!xr_tls_is_available())
-            throw_tls_unavailable(X);
-        return xr_null();
-    }
-
-    XrValue result = h2_response_to_json(X, resp);
-    xr_h2_response_free(resp);
-    return result;
-}
-
-/*
- * http.h2Post(url: string, body: string, contentType?: string) -> Json
- */
-XrValue h2_post(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 2 || !XR_IS_STRING(args[0])) {
-        return xr_null();
-    }
-
-    const char *url = get_cstring(args[0], NULL);
-    size_t body_len = 0;
-    const char *body = get_cstring(args[1], &body_len);
-    const char *content_type = argc > 2 ? get_cstring(args[2], NULL) : "application/json";
-
-    XrH2Response *resp = xr_h2_post(url, body, body_len, content_type);
-
-    if (!resp) {
-        if (!xr_tls_is_available())
-            throw_tls_unavailable(X);
-        return xr_null();
-    }
-
-    XrValue result = h2_response_to_json(X, resp);
-    xr_h2_response_free(resp);
-    return result;
-}
 
 /*
  * http.h2Request(options: Json) -> Json
