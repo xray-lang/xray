@@ -1,0 +1,16 @@
+import sys
+
+fn closeOnlyInOneMatchArm(tag: int) {
+    var pipe = sys.Pipe.open()
+    match (tag) {
+        0 -> {
+            print(pipe!.close())
+        }
+        _ -> {
+            print("pipe-match-open")
+        }
+    }
+    print("after-match")
+}
+
+closeOnlyInOneMatchArm(1)

@@ -71,15 +71,25 @@ PROCESS_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_warning.xr"
 PIPE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_warning.xr"
 PIPE_HALF_CLOSE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_half_close_warning.xr"
 PROCESS_TRYWAIT_ONCE_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_trywait_once_warning.xr"
+CONTROL_FLOW_OK_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_control_flow_ok.xr"
+PROCESS_TRY_CATCH_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_process_lifecycle_try_catch_warning.xr"
+PIPE_MATCH_WARNING_SRC="$PROJECT_DIR/tests/vm/sys_pipe_lifecycle_match_warning.xr"
 
 expect_output "process_pipe_lifecycle_ok" "$OK_SRC" $'0\ntrue\ntrue\ntrue\ntrue'
+expect_output "process_pipe_lifecycle_control_flow_ok" "$CONTROL_FLOW_OK_SRC" $'0\n0\n0\n0\ntrue\ntrue'
 expect_warning "process_lifecycle_warning" "$PROCESS_WARNING_SRC" "" \
     "Process handle 'p' from sys.Process.spawn is not waited before leaving scope"
 expect_warning "process_lifecycle_trywait_once_warning" "$PROCESS_TRYWAIT_ONCE_WARNING_SRC" "" \
     "Process handle 'p' from sys.Process.spawn is not waited before leaving scope"
+expect_warning "process_lifecycle_try_catch_warning" "$PROCESS_TRY_CATCH_WARNING_SRC" \
+    $'0\ntry-catch-open' \
+    "Process handle 'p' from sys.Process.spawn is not waited before leaving scope"
 expect_warning "pipe_lifecycle_warning" "$PIPE_WARNING_SRC" "pipe-open" \
     "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
 expect_warning "pipe_lifecycle_half_close_warning" "$PIPE_HALF_CLOSE_WARNING_SRC" "true" \
+    "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
+expect_warning "pipe_lifecycle_match_warning" "$PIPE_MATCH_WARNING_SRC" \
+    $'pipe-match-open\nafter-match' \
     "Pipe handle 'pipe' from sys.Pipe.open is not closed before leaving scope"
 
 printf '\nPassed: %d\nFailed: %d\n' "$PASS" "$FAIL"

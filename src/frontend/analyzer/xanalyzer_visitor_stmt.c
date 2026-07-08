@@ -1469,6 +1469,14 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
                                           bool return_value, bool can_escape);
 static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode *stmt,
                                           bool can_escape);
+static void xa_os_resource_lint_scan_ternary_expr(XaOsResourceLintState *states, AstNode *expr,
+                                                  bool return_value, bool can_escape);
+static void xa_os_resource_lint_scan_try_catch_stmt(XaOsResourceLintState *states, AstNode *stmt,
+                                                    bool can_escape);
+static void xa_os_resource_lint_scan_match_expr(XaOsResourceLintState *states, AstNode *expr,
+                                                bool can_escape);
+static void xa_os_resource_lint_scan_select_stmt(XaOsResourceLintState *states, AstNode *stmt,
+                                                 bool can_escape);
 
 static void xa_os_resource_lint_scan_expr_array(XaOsResourceLintState *states, AstNode **nodes,
                                                 int count, bool return_value, bool can_escape) {
@@ -1751,6 +1759,9 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
                                                 expr->as.struct_literal.field_count, false,
                                                 can_escape);
             return;
+        case AST_TERNARY:
+            xa_os_resource_lint_scan_ternary_expr(states, expr, return_value, can_escape);
+            return;
         case AST_MOVE_EXPR: {
             uint32_t sym_id = xa_thread_lint_expr_symbol_id(expr->as.move_expr.expr);
             XaOsResourceLintState *state = xa_os_resource_lint_find_by_symbol_id(states, sym_id);
@@ -1759,9 +1770,65 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
             xa_os_resource_lint_scan_expr(states, expr->as.move_expr.expr, false, can_escape);
             return;
         }
+        case AST_MATCH_EXPR:
+            xa_os_resource_lint_scan_match_expr(states, expr, can_escape);
+            return;
         default:
             return;
     }
+}
+
+static void xa_os_resource_lint_scan_ternary_expr(XaOsResourceLintState *states, AstNode *expr,
+                                                  bool return_value, bool can_escape) {
+    if (!expr || expr->type != AST_TERNARY)
+        return;
+    TernaryNode *ternary = &expr->as.ternary;
+    xa_os_resource_lint_scan_expr(states, ternary->condition, false, can_escape);
+
+    if (!can_escape) {
+        xa_os_resource_lint_scan_expr(states, ternary->true_expr, return_value, false);
+        xa_os_resource_lint_scan_expr(states, ternary->false_expr, return_value, false);
+        return;
+    }
+
+    int state_count = xa_os_resource_lint_state_count(states);
+    if (state_count <= 0)
+        return;
+
+    size_t snapshot_size = sizeof(XaOsResourceLintSnapshot) * (size_t) state_count;
+    XaOsResourceLintSnapshot *before = xr_calloc(1, snapshot_size);
+    XaOsResourceLintSnapshot *true_after = xr_calloc(1, snapshot_size);
+    XaOsResourceLintSnapshot *false_after = xr_calloc(1, snapshot_size);
+    if (!before || !true_after || !false_after) {
+        xr_free(before);
+        xr_free(true_after);
+        xr_free(false_after);
+        xa_os_resource_lint_scan_expr(states, ternary->true_expr, return_value, false);
+        xa_os_resource_lint_scan_expr(states, ternary->false_expr, return_value, false);
+        return;
+    }
+
+    xa_os_resource_lint_snapshot_states(states, before);
+    xa_os_resource_lint_scan_expr(states, ternary->true_expr, return_value, true);
+    xa_os_resource_lint_snapshot_states(states, true_after);
+
+    xa_os_resource_lint_restore_states(states, before);
+    xa_os_resource_lint_scan_expr(states, ternary->false_expr, return_value, true);
+    xa_os_resource_lint_snapshot_states(states, false_after);
+
+    xa_os_resource_lint_restore_states(states, before);
+    int i = 0;
+    for (XaOsResourceLintState *s = states; s; s = s->next, i++) {
+        bool before_closed = xa_os_resource_lint_snapshot_closed(&before[i]);
+        bool true_closed = xa_os_resource_lint_snapshot_closed(&true_after[i]);
+        bool false_closed = xa_os_resource_lint_snapshot_closed(&false_after[i]);
+        if (!before_closed && true_closed && false_closed)
+            s->finalized = true;
+    }
+
+    xr_free(before);
+    xr_free(true_after);
+    xr_free(false_after);
 }
 
 static void xa_os_resource_lint_scan_block(XaOsResourceLintState *states, AstNode *block,
@@ -1833,6 +1900,203 @@ static void xa_os_resource_lint_scan_if_stmt(XaOsResourceLintState *states, AstN
     xr_free(else_after);
 }
 
+static void xa_os_resource_lint_scan_try_catch_stmt(XaOsResourceLintState *states, AstNode *stmt,
+                                                    bool can_escape) {
+    if (!stmt || stmt->type != AST_TRY_CATCH)
+        return;
+    TryCatchNode *tc = &stmt->as.try_catch;
+
+    if (!can_escape) {
+        xa_os_resource_lint_scan_stmt(states, tc->try_body, false);
+        for (int i = 0; i < tc->catch_count; i++) {
+            if (tc->catch_clauses[i])
+                xa_os_resource_lint_scan_stmt(states, tc->catch_clauses[i]->body, false);
+        }
+        return;
+    }
+
+    int state_count = xa_os_resource_lint_state_count(states);
+    if (state_count <= 0)
+        return;
+
+    size_t snapshot_size = sizeof(XaOsResourceLintSnapshot) * (size_t) state_count;
+    XaOsResourceLintSnapshot *before = xr_calloc(1, snapshot_size);
+    XaOsResourceLintSnapshot *try_after = xr_calloc(1, snapshot_size);
+    XaOsResourceLintSnapshot *catch_after = xr_calloc(1, snapshot_size);
+    bool *all_paths_closed = xr_calloc((size_t) state_count, sizeof(bool));
+    if (!before || !try_after || !catch_after || !all_paths_closed) {
+        xr_free(before);
+        xr_free(try_after);
+        xr_free(catch_after);
+        xr_free(all_paths_closed);
+        xa_os_resource_lint_scan_stmt(states, tc->try_body, false);
+        for (int i = 0; i < tc->catch_count; i++) {
+            if (tc->catch_clauses[i])
+                xa_os_resource_lint_scan_stmt(states, tc->catch_clauses[i]->body, false);
+        }
+        return;
+    }
+
+    xa_os_resource_lint_snapshot_states(states, before);
+    xa_os_resource_lint_scan_stmt(states, tc->try_body, true);
+    xa_os_resource_lint_snapshot_states(states, try_after);
+
+    for (int i = 0; i < state_count; i++)
+        all_paths_closed[i] = xa_os_resource_lint_snapshot_closed(&try_after[i]);
+
+    for (int ci = 0; ci < tc->catch_count; ci++) {
+        XrCatchClause *cc = tc->catch_clauses[ci];
+        if (!cc) {
+            for (int i = 0; i < state_count; i++)
+                all_paths_closed[i] = false;
+            continue;
+        }
+        xa_os_resource_lint_restore_states(states, before);
+        memset(catch_after, 0, snapshot_size);
+        xa_os_resource_lint_scan_stmt(states, cc->body, true);
+        xa_os_resource_lint_snapshot_states(states, catch_after);
+        for (int i = 0; i < state_count; i++)
+            all_paths_closed[i] =
+                all_paths_closed[i] && xa_os_resource_lint_snapshot_closed(&catch_after[i]);
+    }
+
+    xa_os_resource_lint_restore_states(states, before);
+    int i = 0;
+    for (XaOsResourceLintState *s = states; s; s = s->next, i++) {
+        bool before_closed = xa_os_resource_lint_snapshot_closed(&before[i]);
+        if (!before_closed && all_paths_closed[i])
+            s->finalized = true;
+    }
+
+    xr_free(before);
+    xr_free(try_after);
+    xr_free(catch_after);
+    xr_free(all_paths_closed);
+}
+
+static void xa_os_resource_lint_scan_match_expr(XaOsResourceLintState *states, AstNode *expr,
+                                                bool can_escape) {
+    if (!expr || expr->type != AST_MATCH_EXPR)
+        return;
+    MatchExprNode *match = &expr->as.match_expr;
+    xa_os_resource_lint_scan_expr(states, match->expr, false, can_escape);
+
+    if (!can_escape) {
+        for (int i = 0; i < match->arm_count; i++)
+            xa_os_resource_lint_scan_stmt(states, match->arms[i], false);
+        return;
+    }
+
+    int state_count = xa_os_resource_lint_state_count(states);
+    if (state_count <= 0)
+        return;
+
+    size_t snapshot_size = sizeof(XaOsResourceLintSnapshot) * (size_t) state_count;
+    XaOsResourceLintSnapshot *before = xr_calloc(1, snapshot_size);
+    XaOsResourceLintSnapshot *arm_after = xr_calloc(1, snapshot_size);
+    bool *all_paths_closed = xr_calloc((size_t) state_count, sizeof(bool));
+    if (!before || !arm_after || !all_paths_closed) {
+        xr_free(before);
+        xr_free(arm_after);
+        xr_free(all_paths_closed);
+        for (int i = 0; i < match->arm_count; i++)
+            xa_os_resource_lint_scan_stmt(states, match->arms[i], false);
+        return;
+    }
+
+    xa_os_resource_lint_snapshot_states(states, before);
+    for (int i = 0; i < state_count; i++)
+        all_paths_closed[i] = match->arm_count > 0;
+
+    for (int ai = 0; ai < match->arm_count; ai++) {
+        if (!match->arms[ai]) {
+            for (int i = 0; i < state_count; i++)
+                all_paths_closed[i] = false;
+            continue;
+        }
+        xa_os_resource_lint_restore_states(states, before);
+        memset(arm_after, 0, snapshot_size);
+        xa_os_resource_lint_scan_stmt(states, match->arms[ai], true);
+        xa_os_resource_lint_snapshot_states(states, arm_after);
+        for (int i = 0; i < state_count; i++)
+            all_paths_closed[i] =
+                all_paths_closed[i] && xa_os_resource_lint_snapshot_closed(&arm_after[i]);
+    }
+
+    xa_os_resource_lint_restore_states(states, before);
+    int i = 0;
+    for (XaOsResourceLintState *s = states; s; s = s->next, i++) {
+        bool before_closed = xa_os_resource_lint_snapshot_closed(&before[i]);
+        if (!before_closed && all_paths_closed[i])
+            s->finalized = true;
+    }
+
+    xr_free(before);
+    xr_free(arm_after);
+    xr_free(all_paths_closed);
+}
+
+static void xa_os_resource_lint_scan_select_stmt(XaOsResourceLintState *states, AstNode *stmt,
+                                                 bool can_escape) {
+    if (!stmt || stmt->type != AST_SELECT_STMT)
+        return;
+    SelectStmtNode *select = &stmt->as.select_stmt;
+
+    if (!can_escape) {
+        for (int i = 0; i < select->case_count; i++)
+            xa_os_resource_lint_scan_stmt(states, select->cases[i], false);
+        return;
+    }
+
+    int state_count = xa_os_resource_lint_state_count(states);
+    if (state_count <= 0)
+        return;
+
+    size_t snapshot_size = sizeof(XaOsResourceLintSnapshot) * (size_t) state_count;
+    XaOsResourceLintSnapshot *before = xr_calloc(1, snapshot_size);
+    XaOsResourceLintSnapshot *case_after = xr_calloc(1, snapshot_size);
+    bool *all_paths_closed = xr_calloc((size_t) state_count, sizeof(bool));
+    if (!before || !case_after || !all_paths_closed) {
+        xr_free(before);
+        xr_free(case_after);
+        xr_free(all_paths_closed);
+        for (int i = 0; i < select->case_count; i++)
+            xa_os_resource_lint_scan_stmt(states, select->cases[i], false);
+        return;
+    }
+
+    xa_os_resource_lint_snapshot_states(states, before);
+    for (int i = 0; i < state_count; i++)
+        all_paths_closed[i] = select->case_count > 0;
+
+    for (int ci = 0; ci < select->case_count; ci++) {
+        if (!select->cases[ci]) {
+            for (int i = 0; i < state_count; i++)
+                all_paths_closed[i] = false;
+            continue;
+        }
+        xa_os_resource_lint_restore_states(states, before);
+        memset(case_after, 0, snapshot_size);
+        xa_os_resource_lint_scan_stmt(states, select->cases[ci], true);
+        xa_os_resource_lint_snapshot_states(states, case_after);
+        for (int i = 0; i < state_count; i++)
+            all_paths_closed[i] =
+                all_paths_closed[i] && xa_os_resource_lint_snapshot_closed(&case_after[i]);
+    }
+
+    xa_os_resource_lint_restore_states(states, before);
+    int i = 0;
+    for (XaOsResourceLintState *s = states; s; s = s->next, i++) {
+        bool before_closed = xa_os_resource_lint_snapshot_closed(&before[i]);
+        if (!before_closed && all_paths_closed[i])
+            s->finalized = true;
+    }
+
+    xr_free(before);
+    xr_free(case_after);
+    xr_free(all_paths_closed);
+}
+
 static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode *stmt,
                                           bool can_escape) {
     if (!stmt)
@@ -1867,6 +2131,25 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
         case AST_BLOCK:
         case AST_PROGRAM:
             xa_os_resource_lint_scan_block(states, stmt, can_escape);
+            return;
+        case AST_TRY_CATCH:
+            xa_os_resource_lint_scan_try_catch_stmt(states, stmt, can_escape);
+            return;
+        case AST_MATCH_EXPR:
+            xa_os_resource_lint_scan_match_expr(states, stmt, can_escape);
+            return;
+        case AST_MATCH_ARM:
+            xa_os_resource_lint_scan_expr(states, stmt->as.match_arm.pattern, false, can_escape);
+            xa_os_resource_lint_scan_expr(states, stmt->as.match_arm.guard, false, can_escape);
+            xa_os_resource_lint_scan_stmt(states, stmt->as.match_arm.body, can_escape);
+            return;
+        case AST_SELECT_STMT:
+            xa_os_resource_lint_scan_select_stmt(states, stmt, can_escape);
+            return;
+        case AST_SELECT_CASE:
+            xa_os_resource_lint_scan_expr(states, stmt->as.select_case.channel, false, can_escape);
+            xa_os_resource_lint_scan_expr(states, stmt->as.select_case.value, false, can_escape);
+            xa_os_resource_lint_scan_stmt(states, stmt->as.select_case.body, can_escape);
             return;
         case AST_DEFER_STMT:
             xa_os_resource_lint_scan_expr(states, stmt->as.defer_stmt.expr, false, can_escape);
