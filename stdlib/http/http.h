@@ -21,7 +21,6 @@
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/module/xmodule.h"
 #include "http_server.h"
-#include "http2_server.h"
 #include "http2_client.h"
 #include "../net/conn_pool.h"
 
@@ -41,10 +40,6 @@ typedef struct XrHttpContext {
     /* === Server Stats (atomic, lock-free) === */
     _Atomic uint64_t total_requests;        // Total requests served
     _Atomic uint64_t total_conns_accepted;  // Total connections accepted
-
-    /* === HTTP/2 === */
-    XrH2Server *h2_server;
-    struct XrH2Context *current_h2_ctx;  // Active request context (for h2Push)
 
     /* === Connection Pools (per-isolate) === */
     XrConnPool *conn_pool;     // TCP/TLS connection pool (net layer)

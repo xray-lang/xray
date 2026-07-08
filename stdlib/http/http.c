@@ -56,10 +56,6 @@ extern XrArray *xr_array_new(struct XrCoroutine *coro);
 extern void xr_array_push(XrArray *arr, XrValue value);
 extern XrValue xr_value_from_array(XrArray *arr);
 extern XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc);
-extern XrValue h2_create_server(XrVMRuntime *X, XrValue *args, int argc);
-extern XrValue h2_server_listen(XrVMRuntime *X, XrValue *args, int argc);
-extern XrValue h2_server_stop(XrVMRuntime *X, XrValue *args, int argc);
-extern XrValue h2_push(XrVMRuntime *X, XrValue *args, int argc);
 
 /* ========== Server Config and Connection Limits ========== */
 
@@ -403,12 +399,6 @@ void xr_http_module_context_free(XrHttpContext *ctx) {
     if (ctx->server) {
         xr_http_server_free(ctx->server);
         ctx->server = NULL;
-    }
-
-    // Free HTTP/2 server
-    if (ctx->h2_server) {
-        xr_h2_server_free(ctx->h2_server);
-        ctx->h2_server = NULL;
     }
 
     // Free per-isolate connection pools

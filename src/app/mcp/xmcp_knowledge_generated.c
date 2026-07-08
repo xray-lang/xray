@@ -1268,29 +1268,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "h2CreateServer",
-        .signature = "(options?: Json): bool",
-        .summary = "Create HTTP/2 server",
-    },
-    {
-        .name = "h2Listen",
-        .signature = "(): bool",
-        .summary = "Start HTTP/2 server",
-    },
-    {
-        .name = "h2Push",
-        .signature = "(path: string, contentType: string, data: string): bool",
-        .summary = "Push HTTP/2 response data",
-    },
-    {
         .name = "h2Request",
         .signature = "(options: Json): Json",
         .summary = "Generic HTTP/2 request",
-    },
-    {
-        .name = "h2Stop",
-        .signature = "(): ()",
-        .summary = "Stop HTTP/2 server",
     },
     {
         .name = "isRedirectStatus",
@@ -5591,11 +5571,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
-            "| `http.h2CreateServer` | `(options?: Json): bool` | Create HTTP/2 server |\n"
-            "| `http.h2Listen` | `(): bool` | Start HTTP/2 server |\n"
-            "| `http.h2Push` | `(path: string, contentType: string, data: string): bool` | Push HTTP/2 response data |\n"
             "| `http.h2Request` | `(options: Json): Json` | Generic HTTP/2 request |\n"
-            "| `http.h2Stop` | `(): ()` | Stop HTTP/2 server |\n"
             "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
             "| `http.listen` | `(port: int): bool` | Start HTTP server accept loop |\n"
             "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
