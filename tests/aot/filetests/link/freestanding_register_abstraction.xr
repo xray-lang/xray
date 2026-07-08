@@ -1,0 +1,33 @@
+import mem
+
+struct MmioReg32 {
+    base: int
+    offset: int
+}
+
+fn regAddress(base: int, offset: int) -> int {
+    return base + offset
+}
+
+fn regRead(base: int, offset: int) -> int {
+    return mem.volatileLoad(mem.fromAddress(regAddress(base, offset)), 4)
+}
+
+fn regWrite(base: int, offset: int, value: int) {
+    mem.volatileStore(mem.fromAddress(regAddress(base, offset)), value, 4)
+}
+
+fn regSetBits(base: int, offset: int, mask: int) -> int {
+    var next = regRead(base, offset) | mask
+    regWrite(base, offset, next)
+    return next
+}
+
+@c_export("xray_register_sample")
+fn xray_register_sample(base: int, value: int) -> int {
+    var ctrl = MmioReg32{base: base, offset: 0}
+    var status = MmioReg32{base: base, offset: 4}
+    regWrite(ctrl.base, ctrl.offset, value)
+    regSetBits(ctrl.base, ctrl.offset, 0x10)
+    return regRead(status.base, status.offset)
+}

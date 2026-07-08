@@ -1960,6 +1960,39 @@ else
     sed 's/^/      /' "$FREESTANDING_MEM_REAL_LOG" | sed -n '1,120p'
 fi
 
+FREESTANDING_REG_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_register_abstraction.xr"
+FREESTANDING_REG_OBJ="$WORK/freestanding_register_abstraction.o"
+FREESTANDING_REG_REAL_LOG="$WORK/freestanding_register_abstraction.log"
+if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
+        --dump-link-command \
+        --cache-dir "$BUILD_CACHE" -o "$FREESTANDING_REG_OBJ" \
+        "$FREESTANDING_REG_SRC" >"$FREESTANDING_REG_REAL_LOG" 2>&1; then
+    FREESTANDING_REG_KEPT_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_REG_REAL_LOG" | tail -n 1)"
+    if [ -f "$FREESTANDING_REG_KEPT_C" ]; then
+        expect_log_contains "$FREESTANDING_REG_KEPT_C" "xrt_mem_volatile_load" \
+            "freestanding-profile/register: sample uses volatile load"
+        expect_log_contains "$FREESTANDING_REG_KEPT_C" "xrt_mem_volatile_store" \
+            "freestanding-profile/register: sample uses volatile store"
+        expect_log_not_contains "$FREESTANDING_REG_KEPT_C" "xrt_shared[" \
+            "freestanding-profile/register: sample avoids shared storage"
+        expect_log_not_contains "$FREESTANDING_REG_KEPT_C" "xrt_arc_alloc" \
+            "freestanding-profile/register: sample avoids heap allocation"
+    else
+        record_fail "freestanding-profile/register: kept C source missing"
+        sed 's/^/      /' "$FREESTANDING_REG_REAL_LOG" | sed -n '1,120p'
+    fi
+    FREESTANDING_REG_UNDEFINED="$(nm_undefined_normalized "$FREESTANDING_REG_OBJ")"
+    if [ -z "$FREESTANDING_REG_UNDEFINED" ]; then
+        record_pass "freestanding-profile/register: no undefined symbols"
+    else
+        record_fail "freestanding-profile/register: unexpected undefined symbols"
+        printf '%s\n' "$FREESTANDING_REG_UNDEFINED" | sed 's/^/      /'
+    fi
+else
+    record_fail "freestanding-profile/register: object build failed"
+    sed 's/^/      /' "$FREESTANDING_REG_REAL_LOG" | sed -n '1,120p'
+fi
+
 FREESTANDING_MEM_ALLOC_HOOK_SRC="$PROJECT_DIR/tests/aot/filetests/link/freestanding_mem_alloc_hook.xr"
 FREESTANDING_MEM_ALLOC_HOOK_OBJ="$WORK/freestanding_mem_alloc_hook.o"
 FREESTANDING_MEM_ALLOC_HOOK_REAL_LOG="$WORK/freestanding_mem_alloc_hook.log"
