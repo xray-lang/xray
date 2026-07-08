@@ -1,0 +1,4 @@
+status=fail
+contains=@no_alloc function 'xray_no_alloc_datetime_iso_reject' allocates via method 'DateTime.toISOString'
+contains=xray_no_alloc_datetime_iso_reject
+not_contains=CRASH

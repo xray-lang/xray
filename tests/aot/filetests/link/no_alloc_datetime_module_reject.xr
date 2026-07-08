@@ -1,0 +1,9 @@
+import datetime
+
+@no_alloc
+fn xray_no_alloc_datetime_create_reject() -> int {
+    var dt = datetime.createUTC(2024, 2, 29)
+    return dt.year
+}
+
+print(xray_no_alloc_datetime_create_reject())
