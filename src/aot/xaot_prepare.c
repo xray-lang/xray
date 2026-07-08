@@ -2172,8 +2172,14 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
                 reason = XAOT_SPAN_UNPROVEN_NOT_POD;
                 break;
             }
-            if (kind == XAOT_SPAN_ACCESS_SPAN_AS_BYTES)
+            if (kind == XAOT_SPAN_ACCESS_SPAN_AS_BYTES) {
+                uint8_t recv_elem_size = 0;
                 evidence |= XAOT_SPAN_EV_LENGTH_REL_PROVEN;
+                if (prepare_span_elem_size(&recv_elem, &recv_elem_size) && recv_elem_size == 1) {
+                    evidence |= XAOT_SPAN_EV_BYTE_LEN_NO_OVERFLOW;
+                    drop |= XAOT_SPAN_DROP_OVERFLOW;
+                }
+            }
             drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
             break;
         case XAOT_SPAN_ACCESS_SPAN_COPY:

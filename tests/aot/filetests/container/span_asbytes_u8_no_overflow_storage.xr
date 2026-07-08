@@ -1,0 +1,4 @@
+fn bytesView(bytes: Span<uint8>) -> int {
+    var raw: ByteSpan = bytes.asBytes()
+    return raw.length
+}
