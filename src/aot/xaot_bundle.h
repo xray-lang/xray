@@ -435,6 +435,7 @@ typedef struct XaotMethodDispatchPlan {
     uint32_t source_span_id;
     uint32_t body_ordinal;
     XgMethodId method_id;
+    XgMethodId method_root_id;
     uint32_t method_name_id;
     uint32_t method_signature_key;
     uint32_t arg_type_key_start;
