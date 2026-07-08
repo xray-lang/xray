@@ -457,6 +457,17 @@ static XrCFuncResult ws_connect_yieldable(XrVMRuntime *X, XrValue *args, int arg
         }
     }
 
+    XrWsError url_err = xr_ws_url_validate(config.url);
+    if (url_err != WS_OK) {
+        XrJson *r = xr_json_new(xr_current_coro(X));
+        xr_json_set(X, r, ctx->sym_wsid, xr_int(-1));
+        xr_json_set(X, r, ctx->sym_error, xrs_string_value_c(X, xr_ws_error_string(url_err)));
+        xr_json_set(X, r, ctx->sym_state, xrs_string_value_c(X, "closed"));
+        *result = xr_json_value(r);
+        xr_free(url_copy);
+        return XR_CFUNC_DONE;
+    }
+
     XrWebSocket *ws = xr_ws_new(&config);
     xr_free(url_copy);
 

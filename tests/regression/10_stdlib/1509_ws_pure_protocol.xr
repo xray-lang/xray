@@ -30,6 +30,33 @@ fn test_upgrade_request_and_protocol_pick() {
 }
 
 @test
+fn test_connect_rejects_invalid_urls_before_network() {
+    var zeroPort = ws.connect("ws://example.com:0/", null)
+    assert(zeroPort != null)
+    assert_eq(zeroPort!.error, "URL parse error")
+
+    var badPort = ws.connect("ws://example.com:abc/", null)
+    assert(badPort != null)
+    assert_eq(badPort!.error, "URL parse error")
+
+    var tooLargePort = ws.connect("ws://example.com:99999/", null)
+    assert(tooLargePort != null)
+    assert_eq(tooLargePort!.error, "URL parse error")
+
+    var emptyHost = ws.connect("ws://:80/", null)
+    assert(emptyHost != null)
+    assert_eq(emptyHost!.error, "URL parse error")
+
+    var fragment = ws.connect("ws://example.com/#frag", null)
+    assert(fragment != null)
+    assert_eq(fragment!.error, "URL parse error")
+
+    var badIpv6 = ws.connect("ws://[::1]x/", null)
+    assert(badIpv6 != null)
+    assert_eq(badIpv6!.error, "URL parse error")
+}
+
+@test
 fn test_mask_payload_and_unmasked_frame() {
     var masked = ws.maskPayload(Bytes([1, 2, 3, 4, 5]), Bytes([1, 1, 1, 1]))
     assert_eq(masked[0], 0)
