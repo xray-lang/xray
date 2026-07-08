@@ -3397,49 +3397,6 @@ module http {
     layer: "runtime"
   }
 
-  fn h2CreateServer {
-    signature: "(options?: Json): bool"
-    doc: "Create HTTP/2 server"
-    vm: "h2_create_server"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn h2Listen {
-    signature: "(): bool"
-    doc: "Start HTTP/2 server"
-    vm: "h2_server_listen"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn h2Stop {
-    signature: "(): ()"
-    doc: "Stop HTTP/2 server"
-    vm: "h2_server_stop"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn h2Push {
-    signature: "(path: string, contentType: string, data: string): bool"
-    doc: "Push HTTP/2 response data"
-    vm: "h2_push"
-    argc: 3
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
 }
 
 module cluster {

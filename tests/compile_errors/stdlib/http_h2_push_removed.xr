@@ -1,0 +1,3 @@
+import http
+
+http.h2Push("/app.js", "application/javascript", "console.log(1)")
