@@ -1,0 +1,8 @@
+@no_alloc
+fn xray_no_alloc_set_add_reject(values: Set<int>, value: int) -> int {
+    values.add(value)
+    return values.length
+}
+
+var values: Set<int> = #[]
+print(xray_no_alloc_set_add_reject(values, 5))

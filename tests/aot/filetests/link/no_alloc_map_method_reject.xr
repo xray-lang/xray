@@ -1,0 +1,8 @@
+@no_alloc
+fn xray_no_alloc_map_set_reject(scores: Map<int, int>, key: int, value: int) -> int {
+    scores.set(key, value)
+    return scores.length
+}
+
+var scores: Map<int, int> = #{}
+print(xray_no_alloc_map_set_reject(scores, 1, 10))

@@ -2823,8 +2823,47 @@ static const char *cg_no_alloc_method_alloc_detail(const XrType *receiver_type,
                                                    const char *method_name) {
     if (!receiver_type || !method_name)
         return NULL;
-    if (xr_type_is_named_class(receiver_type, "Buffer") && strcmp(method_name, "resize") == 0)
-        return "Buffer.resize";
+    static const struct {
+        XrTypeKind kind;
+        const char *class_name;
+        const char *method_name;
+        const char *detail;
+    } allocating_methods[] = {
+        {XR_KIND_ARRAY, NULL, "push", "Array.push"},
+        {XR_KIND_ARRAY, NULL, "reserve", "Array.reserve"},
+        {XR_KIND_ARRAY, NULL, "resize", "Array.resize"},
+        {XR_KIND_ARRAY, NULL, "unshift", "Array.unshift"},
+        {XR_KIND_ARRAY, NULL, "splice", "Array.splice"},
+        {XR_KIND_ARRAY, NULL, "concat", "Array.concat"},
+        {XR_KIND_ARRAY, NULL, "join", "Array.join"},
+        {XR_KIND_ARRAY, NULL, "toString", "Array.toString"},
+        {XR_KIND_ARRAY, NULL, "map", "Array.map"},
+        {XR_KIND_ARRAY, NULL, "filter", "Array.filter"},
+        {XR_KIND_ARRAY, NULL, "flat", "Array.flat"},
+        {XR_KIND_ARRAY, NULL, "entries", "Array.entries"},
+        {XR_KIND_ARRAY, NULL, "iterator", "Array.iterator"},
+        {XR_KIND_ARRAY, NULL, "entriesIterator", "Array.entriesIterator"},
+        {XR_KIND_UNKNOWN, "Buffer", "resize", "Buffer.resize"},
+        {XR_KIND_MAP, NULL, "set", "Map.set"},
+        {XR_KIND_MAP, NULL, "keys", "Map.keys"},
+        {XR_KIND_MAP, NULL, "values", "Map.values"},
+        {XR_KIND_MAP, NULL, "entries", "Map.entries"},
+        {XR_KIND_MAP, NULL, "iterator", "Map.iterator"},
+        {XR_KIND_MAP, NULL, "entriesIterator", "Map.entriesIterator"},
+        {XR_KIND_SET, NULL, "add", "Set.add"},
+        {XR_KIND_SET, NULL, "values", "Set.values"},
+        {XR_KIND_SET, NULL, "iterator", "Set.iterator"},
+        {XR_KIND_UNKNOWN, "StringBuilder", "append", "StringBuilder.append"},
+        {XR_KIND_UNKNOWN, "StringBuilder", "toString", "StringBuilder.toString"},
+    };
+    for (size_t i = 0; i < sizeof(allocating_methods) / sizeof(allocating_methods[0]); i++) {
+        bool receiver_matches =
+            allocating_methods[i].class_name
+                ? xr_type_is_named_class(receiver_type, allocating_methods[i].class_name)
+                : receiver_type->kind == allocating_methods[i].kind;
+        if (strcmp(method_name, allocating_methods[i].method_name) == 0 && receiver_matches)
+            return allocating_methods[i].detail;
+    }
     return NULL;
 }
 
