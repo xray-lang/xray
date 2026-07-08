@@ -31,6 +31,7 @@ typedef struct XgClassNameRow {
 typedef struct XgFuncNameRow {
     const char *name;
     XgFuncId func_id;
+    XgDeclId decl_id;
     uint32_t decl_flags;
 } XgFuncNameRow;
 
@@ -213,6 +214,30 @@ static uint32_t hash_tref32(const XrTypeRef *t) {
     return folded ? folded : 1;
 }
 
+static uint32_t hash_tref_list32(XrTypeRef **type_args, int type_arg_count) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    if (!type_args || type_arg_count <= 0)
+        return 0;
+    h = fold_u64(h, (uint64_t) type_arg_count);
+    for (int i = 0; i < type_arg_count; i++)
+        h = hash_tref(h, type_args[i]);
+    uint32_t folded = (uint32_t) (h ^ (h >> 32));
+    return folded ? folded : 1;
+}
+
+static uint32_t hash_generic_inst_type_key(const char *name, XrTypeRef **type_args,
+                                           int type_arg_count, uint8_t kind) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h = fold_u64(h, kind);
+    if (name)
+        h = fold_bytes(h, name, strlen(name));
+    h = fold_u64(h, (uint64_t) type_arg_count);
+    for (int i = 0; i < type_arg_count; i++)
+        h = hash_tref(h, type_args ? type_args[i] : NULL);
+    uint32_t folded = (uint32_t) (h ^ (h >> 32));
+    return folded ? folded : 1;
+}
+
 static uint32_t hash_method_signature_parts(XrTypeRef **param_types, int param_count,
                                             XrTypeRef *return_type, bool is_static,
                                             bool is_constructor) {
@@ -268,9 +293,41 @@ static uint64_t hash_ast_shape(const AstNode *node, uint64_t h) {
             break;
         case AST_CALL_EXPR:
             h = hash_ast_shape(node->as.call_expr.callee, h);
+            h = fold_u64(h, (uint64_t) node->as.call_expr.type_arg_count);
+            for (int i = 0; i < node->as.call_expr.type_arg_count; i++)
+                h = hash_tref(h, node->as.call_expr.type_args ? node->as.call_expr.type_args[i]
+                                                              : NULL);
             h = fold_u64(h, (uint64_t) node->as.call_expr.arg_count);
             for (int i = 0; i < node->as.call_expr.arg_count; i++)
                 h = hash_ast_shape(node->as.call_expr.arguments[i], h);
+            break;
+        case AST_NEW_EXPR:
+            if (node->as.new_expr.class_name)
+                h = fold_bytes(h, node->as.new_expr.class_name,
+                               strlen(node->as.new_expr.class_name));
+            h = fold_u64(h, (uint64_t) node->as.new_expr.type_arg_count);
+            for (int i = 0; i < node->as.new_expr.type_arg_count; i++)
+                h = hash_tref(h,
+                              node->as.new_expr.type_args ? node->as.new_expr.type_args[i] : NULL);
+            h = fold_u64(h, (uint64_t) node->as.new_expr.arg_count);
+            for (int i = 0; i < node->as.new_expr.arg_count; i++)
+                h = hash_ast_shape(node->as.new_expr.arguments[i], h);
+            break;
+        case AST_STRUCT_LITERAL:
+            if (node->as.struct_literal.struct_name)
+                h = fold_bytes(h, node->as.struct_literal.struct_name,
+                               strlen(node->as.struct_literal.struct_name));
+            h = fold_u64(h, (uint64_t) node->as.struct_literal.type_arg_count);
+            for (int i = 0; i < node->as.struct_literal.type_arg_count; i++)
+                h = hash_tref(h, node->as.struct_literal.type_args
+                                     ? node->as.struct_literal.type_args[i]
+                                     : NULL);
+            h = fold_u64(h, (uint64_t) node->as.struct_literal.field_count);
+            for (int i = 0; i < node->as.struct_literal.field_count; i++)
+                h = hash_ast_shape(node->as.struct_literal.field_values
+                                       ? node->as.struct_literal.field_values[i]
+                                       : NULL,
+                                   h);
             break;
         case AST_BLOCK:
             for (int i = 0; i < node->as.block.count; i++)
@@ -331,13 +388,14 @@ static XgFuncId producer_next_func_id(XgProducer *p) {
 }
 
 static bool producer_register_func(XgProducer *p, const char *name, XgFuncId func_id,
-                                   uint32_t decl_flags) {
+                                   XgDeclId decl_id, uint32_t decl_flags) {
     if (!name || func_id == XG_NO_ID)
         return true;
     if (!producer_reserve_funcs(p, p->nfuncs + 1))
         return false;
     p->funcs[p->nfuncs].name = name;
     p->funcs[p->nfuncs].func_id = func_id;
+    p->funcs[p->nfuncs].decl_id = decl_id;
     p->funcs[p->nfuncs].decl_flags = decl_flags;
     p->nfuncs++;
     return true;
@@ -609,6 +667,13 @@ static XgClassNameRow *producer_lookup_class_row_by_id(const XgProducer *p, XgCl
 static XgClassId producer_lookup_class(const XgProducer *p, const char *name) {
     XgClassNameRow *row = producer_lookup_class_row(p, name);
     return row ? row->class_id : XG_NO_ID;
+}
+
+static XgDeclId producer_lookup_class_decl_id(const XgProducer *p, XgClassId class_id) {
+    XgClassNameRow *row = producer_lookup_class_row_by_id(p, class_id);
+    if (!p || !p->evidence || !row || row->summary_index >= p->evidence->nclasses)
+        return XG_NO_ID;
+    return p->evidence->classes[row->summary_index].decl_id;
 }
 
 static XgClassId producer_lookup_class_from_tref(const XgProducer *p, const XrTypeRef *t) {
@@ -1492,9 +1557,57 @@ static XgClassId body_parent_class_id(XgBodyCollect *bc) {
     return bc->evidence->classes[row->summary_index].parent_class_id;
 }
 
+static XgInterfaceId body_first_constraint_interface(XgBodyCollect *bc, XrTypeRef **type_args,
+                                                     int type_arg_count) {
+    if (!bc || !type_args || type_arg_count <= 0)
+        return XG_NO_ID;
+    for (int i = 0; i < type_arg_count; i++) {
+        XgInterfaceId interface_id =
+            producer_lookup_interface_from_tref(bc->producer, type_args[i]);
+        if (interface_id != XG_NO_ID)
+            return interface_id;
+    }
+    return XG_NO_ID;
+}
+
+static void body_add_generic_inst(XgBodyCollect *bc, uint8_t kind, const char *name,
+                                  XrTypeRef **type_args, int type_arg_count,
+                                  XgCallsiteId root_callsite_id, uint32_t source_span_id,
+                                  XgDeclId origin_decl_id, XgFuncId origin_func_id,
+                                  XgMethodId origin_method_id, XgClassId origin_class_id) {
+    XgGenericInstSummary inst;
+    if (!bc || !bc->evidence || !name || type_arg_count <= 0 || !type_args)
+        return;
+    memset(&inst, 0, sizeof(inst));
+    inst.generic_inst_id = (XgGenericInstId) (bc->evidence->ngeneric_insts + 1);
+    inst.module_id = bc->module_id;
+    inst.origin_decl_id = origin_decl_id;
+    inst.origin_func_id = origin_func_id;
+    inst.origin_method_id = origin_method_id;
+    inst.origin_class_id = origin_class_id;
+    inst.root_callsite_id = root_callsite_id;
+    inst.constraint_interface_id = body_first_constraint_interface(bc, type_args, type_arg_count);
+    inst.name_id = hash_name32(name);
+    inst.type_key = hash_generic_inst_type_key(name, type_args, type_arg_count, kind);
+    inst.type_arg_key_start = hash_tref_list32(type_args, type_arg_count);
+    inst.type_arg_count = (uint16_t) (type_arg_count < UINT16_MAX ? type_arg_count : UINT16_MAX);
+    inst.source_span_id = source_span_id;
+    inst.kind = kind;
+    inst.flags = XG_GENERIC_INST_CONCRETE_TYPES;
+    if (inst.constraint_interface_id != XG_NO_ID)
+        inst.flags |= XG_GENERIC_INST_INTERFACE_CONSTRAINT;
+    (void) xg_global_evidence_add_generic_inst(bc->evidence, &inst);
+}
+
 static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     XgCallsiteSummary row;
     const AstNode *callee;
+    XgDeclId generic_origin_decl_id = XG_NO_ID;
+    XgFuncId generic_origin_func_id = XG_NO_ID;
+    XgMethodId generic_origin_method_id = XG_NO_ID;
+    XgClassId generic_origin_class_id = XG_NO_ID;
+    const char *generic_name = NULL;
+    uint8_t generic_kind = XG_GENERIC_INST_FUNCTION;
     bc->effect_bits |= XG_BODY_MAY_CALL;
     if (body_call_is_sys_thread_spawn(&call->as.call_expr)) {
         bc->effect_bits |= XG_BODY_MAY_ALLOC;
@@ -1515,6 +1628,9 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         const char *callee_name = callee->as.variable.name;
         XgFuncNameRow *target = producer_lookup_func_row(bc->producer, callee_name);
         uint32_t callee_name_id = hash_name32(callee_name);
+        generic_name = callee_name;
+        if (target)
+            generic_origin_decl_id = target->decl_id;
         if (producer_lookup_class(bc->producer, callee->as.variable.name) != XG_NO_ID)
             bc->capability_bits |= XG_CAP_OBJECTS;
         bc->capability_bits |= body_capabilities_for_builtin_constructor(callee_name);
@@ -1538,6 +1654,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         } else if (target) {
             row.kind = XG_CALL_DIRECT_FUNC;
             row.static_target_func_id = target->func_id;
+            if ((target->decl_flags & (XG_DECL_EXTERN | XG_DECL_NATIVE)) == 0)
+                generic_origin_func_id = target->func_id;
         }
     } else if (callee && callee->type == AST_MEMBER_ACCESS) {
         const char *stdlib_module =
@@ -1545,6 +1663,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         XgInterfaceId receiver_interface =
             body_resolve_expr_interface(bc, callee->as.member_access.object);
         uint32_t method_name_id = hash_name32(callee->as.member_access.name);
+        generic_name = callee->as.member_access.name;
+        generic_kind = XG_GENERIC_INST_METHOD;
         if (stdlib_module)
             (void) producer_add_stdlib_symbol_dependency(bc->producer, bc->module_id,
                                                          (uint32_t) call->line, stdlib_module,
@@ -1574,6 +1694,9 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 row.method_id = method ? method->method_id : (XgMethodId) method_name_id;
                 row.method_name_id = method ? method->name_id : method_name_id;
                 row.method_signature_key = method ? method->signature_key : 0;
+                if (method)
+                    generic_origin_method_id = method->method_id;
+                generic_origin_class_id = receiver_class;
                 if (method && (method->flags & XG_METHOD_NATIVE) != 0) {
                     bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
                     bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
@@ -1590,8 +1713,13 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     }
     if (bc->callsite_count == 0)
         bc->callsite_start = row.callsite_id;
-    if (xg_global_evidence_add_callsite(bc->evidence, &row))
+    if (xg_global_evidence_add_callsite(bc->evidence, &row)) {
         bc->callsite_count++;
+        body_add_generic_inst(bc, generic_kind, generic_name, call->as.call_expr.type_args,
+                              call->as.call_expr.type_arg_count, row.callsite_id,
+                              (uint32_t) call->line, generic_origin_decl_id, generic_origin_func_id,
+                              generic_origin_method_id, generic_origin_class_id);
+    }
 }
 
 static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
@@ -2045,6 +2173,16 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             break;
         case AST_STRUCT_LITERAL:
+            if (node->as.struct_literal.type_arg_count > 0) {
+                XgClassId origin_class =
+                    producer_lookup_class(bc->producer, node->as.struct_literal.struct_name);
+                body_add_generic_inst(
+                    bc, XG_GENERIC_INST_CLASS, node->as.struct_literal.struct_name,
+                    node->as.struct_literal.type_args, node->as.struct_literal.type_arg_count,
+                    XG_NO_ID, (uint32_t) node->line,
+                    producer_lookup_class_decl_id(bc->producer, origin_class), XG_NO_ID, XG_NO_ID,
+                    origin_class);
+            }
             if (node->as.struct_literal.field_values) {
                 for (int i = 0; i < node->as.struct_literal.field_count; i++)
                     walk_body_for_calls(bc, node->as.struct_literal.field_values[i]);
@@ -2055,6 +2193,15 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             bc->capability_bits |= XG_CAP_OBJECTS;
             bc->capability_bits |=
                 body_capabilities_for_builtin_constructor(node->as.new_expr.class_name);
+            if (node->as.new_expr.type_arg_count > 0) {
+                XgClassId origin_class =
+                    producer_lookup_class(bc->producer, node->as.new_expr.class_name);
+                body_add_generic_inst(bc, XG_GENERIC_INST_CLASS, node->as.new_expr.class_name,
+                                      node->as.new_expr.type_args, node->as.new_expr.type_arg_count,
+                                      XG_NO_ID, (uint32_t) node->line,
+                                      producer_lookup_class_decl_id(bc->producer, origin_class),
+                                      XG_NO_ID, XG_NO_ID, origin_class);
+            }
             for (int i = 0; i < node->as.new_expr.arg_count; i++)
                 walk_body_for_calls(bc, node->as.new_expr.arguments[i]);
             break;
@@ -2391,7 +2538,7 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
                                           XG_LINK_DEP_EXTERN_DYLIB, dylib_attr->str_arg))
             return false;
     }
-    if (!producer_register_func(p, fn->name, func_id, decl.flags))
+    if (!producer_register_func(p, fn->name, func_id, decl_id, decl.flags))
         return false;
     return producer_enqueue_body(p, func_id, module_id, decl_id, XG_NO_ID, XG_NO_ID,
                                  hash_name32(fn->name), decl.signature_key, (uint32_t) node->line,
@@ -2700,7 +2847,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph(XgGlobalEvidence *eviden
         return false;
     memset(&key, 0, sizeof(key));
     key.source_hash = source_hash_for_graph(graph);
-    key.compiler_semver_hash = UINT64_C(0x0000017100000003);
+    key.compiler_semver_hash = UINT64_C(0x0000017200000001);
     key.profile_hash = fold_u64(XR_FNV64_OFFSET_BASIS, profile);
     key.imported_summary_hash = import_hash_for_graph(graph);
     key.module_id = (XgModuleId) (graph->entry_index >= 0 ? graph->entry_index + 1 : 0);
