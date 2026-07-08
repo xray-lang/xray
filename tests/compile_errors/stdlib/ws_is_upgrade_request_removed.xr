@@ -1,0 +1,3 @@
+import ws
+
+ws.isUpgradeRequest("GET / HTTP/1.1\r\n\r\n")

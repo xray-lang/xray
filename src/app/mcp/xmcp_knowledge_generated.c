@@ -3626,11 +3626,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "Check if the WebSocket server is running",
     },
     {
-        .name = "isUpgradeRequest",
-        .signature = "(headers: string): bool",
-        .summary = "",
-    },
-    {
         .name = "isValidCloseCode",
         .signature = "(code: int): bool",
         .summary = "",
@@ -3663,11 +3658,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "parseUrl",
         .signature = "(url: string): WsUrl?",
-        .summary = "",
-    },
-    {
-        .name = "pickSubprotocol",
-        .signature = "(headers: string, serverProtocols: Array<string>): string?",
         .summary = "",
     },
     {
@@ -6403,7 +6393,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.frame` | `(payload: Bytes, opcode: int = _OP_TEXT, mask: bool = true): Bytes` |  |\n"
             "| `ws.isOpen` | `(conn: WsConn): bool` | Check if connection is open |\n"
             "| `ws.isServerRunning` | `(): bool` | Check if the WebSocket server is running |\n"
-            "| `ws.isUpgradeRequest` | `(headers: string): bool` |  |\n"
             "| `ws.isValidCloseCode` | `(code: int): bool` |  |\n"
             "| `ws.maskPayload` | `(payload: Bytes, key: Bytes): Bytes` |  |\n"
             "| `ws.parseClosePayload` | `(payload: Bytes): ClosePayload?` |  |\n"
@@ -6411,7 +6400,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.parseUpgradeRequest` | `(request: string, serverProtocols: Array<string>? = null, allowDeflate: bool = true, allowedOrigins: Array<string>? = null): ParsedUpgradeRequest?` |  |\n"
             "| `ws.parseUpgradeResponse` | `(response: string, secKey: string, protocols: Array<string>? = null, allowDeflate: bool = true): ParsedUpgradeResponse?` |  |\n"
             "| `ws.parseUrl` | `(url: string): WsUrl?` |  |\n"
-            "| `ws.pickSubprotocol` | `(headers: string, serverProtocols: Array<string>): string?` |  |\n"
             "| `ws.ping` | `(conn: WsConn): bool` | Send a ping frame |\n"
             "| `ws.pingFrame` | `(data: Bytes? = null, mask: bool = true): Bytes` |  |\n"
             "| `ws.pongFrame` | `(data: Bytes? = null, mask: bool = true): Bytes` |  |\n"

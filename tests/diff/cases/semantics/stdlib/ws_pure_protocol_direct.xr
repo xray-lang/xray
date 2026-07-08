@@ -7,16 +7,6 @@ var key = "dGhlIHNhbXBsZSBub25jZQ=="
 print(acceptKey(key))
 print(ws.upgradeResponse(key).includes("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"))
 
-var headers = "GET /chat HTTP/1.1\r\n" +
-    "Host: example.com\r\n" +
-    "Upgrade: websocket\r\n" +
-    "Connection: keep-alive, Upgrade\r\n" +
-    "Sec-WebSocket-Key: key\r\n" +
-    "Sec-WebSocket-Version: 13\r\n" +
-    "Sec-WebSocket-Protocol: superchat, chat\r\n\r\n"
-print(ws.isUpgradeRequest(headers))
-print(ws.pickSubprotocol(headers, ["chat", "superchat"])!)
-
 var upgradeRequest = "GET /chat?room=1 HTTP/1.1\r\n" +
     "Host: example.com\r\n" +
     "Origin: https://app.example\r\n" +
@@ -32,6 +22,8 @@ print(parsedRequest.secKey == key)
 print(parsedRequest.protocol!)
 print(parsedRequest.deflate)
 print(parsedRequest.origin!)
+var fallbackProtocol = ws.parseUpgradeRequest(upgradeRequest, ["missing", "superchat"], true, ["*"])!
+print(fallbackProtocol.protocol!)
 
 var noDeflateRequest = ws.parseUpgradeRequest(upgradeRequest, ["chat"], false, ["*"])!
 print(noDeflateRequest.deflate)
