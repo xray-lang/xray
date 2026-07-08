@@ -1,0 +1,9 @@
+fn id_text(text: string) -> string {
+    return text
+}
+
+fn wrap_text(text: string) -> string {
+    return id_text(text)
+}
+
+print(wrap_text("callee"))
