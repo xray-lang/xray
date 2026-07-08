@@ -1168,6 +1168,7 @@ typedef struct XiFunc {
     const char *aot_section;
     bool aot_weak;
     bool aot_used;
+    bool aot_naked;
 
     /* AOT heap-allocation contract: functions marked @no_alloc may use fixed
      * stack storage but must not emit runtime/heap allocation operations. */

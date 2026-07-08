@@ -84,6 +84,9 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
         case ATTR_USED:
             xfmt_write_str(ctx, "@used");
             break;
+        case ATTR_NAKED:
+            xfmt_write_str(ctx, "@naked");
+            break;
         case ATTR_DERIVE: {
             bool first = true;
             xfmt_write_str(ctx, "@derive(");

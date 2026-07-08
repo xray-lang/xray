@@ -70,6 +70,7 @@
 #define XRT_ATTR_SECTION(name) __attribute__((section(name)))
 #define XRT_ATTR_WEAK __attribute__((weak))
 #define XRT_ATTR_USED __attribute__((used))
+#define XRT_ATTR_NAKED __attribute__((naked))
 /* Emitted only when the AOT prepare pass proved the pointer unique over its
  * storage (XaotAliasPlan) — the Rust-noalias analogue for generated C. */
 #define XRT_RESTRICT __restrict__
@@ -88,6 +89,7 @@
 #define XRT_ATTR_SECTION(name)
 #define XRT_ATTR_WEAK
 #define XRT_ATTR_USED
+#define XRT_ATTR_NAKED
 #if defined(_MSC_VER)
 #define XRT_RESTRICT __restrict
 #else
