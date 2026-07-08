@@ -1,0 +1,13 @@
+fn xray_no_alloc_array_foreach_allocating_callback(value: int) {
+    var scratch: Array<int> = []
+    scratch.push(value)
+    print(scratch.length)
+}
+
+@no_alloc
+fn xray_no_alloc_array_foreach_callback_reject(values: Array<int>) {
+    values.forEach(xray_no_alloc_array_foreach_allocating_callback)
+}
+
+var xray_no_alloc_array_foreach_values: Array<int> = [1, 2, 3]
+xray_no_alloc_array_foreach_callback_reject(xray_no_alloc_array_foreach_values)
