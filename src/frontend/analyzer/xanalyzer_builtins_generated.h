@@ -185,8 +185,6 @@ static const XaBuiltinMember g_gen_http_functions[] = {
     {"readChunk", "(resp: Json, maxBytes?: int): string?", "Read the next chunk from a streaming HTTP response", true, false, false},
     {"closeStream", "(resp: Json): ()", "Close a streaming HTTP response", true, false, false},
     {"stopServer", "(): ()", "Stop the HTTP server", true, false, false},
-    {"parseRequest", "(fd: int): Array<unknown>?", "Parse raw HTTP request data", true, false, false},
-    {"sendResponse", "(fd: int, body: string, status?: int): bool", "Send HTTP response on fd", true, false, false},
     {"download", "(url: string, path: string): DownloadResult", "Download file from URL", true, false, false},
     {"getContentLength", "(url: string): int", "Get content length of URL", true, false, false},
     {"h2Get", "(url: string, options?: Json): Json", "HTTP/2 GET request", true, false, false},
@@ -197,7 +195,7 @@ static const XaBuiltinMember g_gen_http_functions[] = {
     {"h2Stop", "(): ()", "Stop HTTP/2 server", true, false, false},
     {"h2Push", "(path: string, contentType: string, data: string): bool", "Push HTTP/2 response data", true, false, false},
 };
-#define GEN_HTTP_FUNCTION_COUNT 26
+#define GEN_HTTP_FUNCTION_COUNT 24
 
 // io.FileStat handle fields
 static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {

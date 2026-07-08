@@ -1373,11 +1373,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "parseRequest",
-        .signature = "(fd: int): Array<unknown>?",
-        .summary = "Parse raw HTTP request data",
-    },
-    {
         .name = "parseRequestHead",
         .signature = "(raw: string, maxHeaders: int = 100): RequestHead?",
         .summary = "",
@@ -1451,11 +1446,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "router",
         .signature = "(): Router",
         .summary = "",
-    },
-    {
-        .name = "sendResponse",
-        .signature = "(fd: int, body: string, status?: int): bool",
-        .summary = "Send HTTP response on fd",
     },
     {
         .name = "serverStats",
@@ -5497,7 +5487,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
             "| `http.listen` | `(port: int): bool` | Start HTTP server accept loop |\n"
             "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
-            "| `http.parseRequest` | `(fd: int): Array<unknown>?` | Parse raw HTTP request data |\n"
             "| `http.parseRequestHead` | `(raw: string, maxHeaders: int = 100): RequestHead?` |  |\n"
             "| `http.parseRequestText` | `(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): RequestMessage?` |  |\n"
             "| `http.parseResponseHead` | `(raw: string, maxHeaders: int = 100): ResponseHead?` |  |\n"
@@ -5513,7 +5502,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.response` | `(status: int, body: unknown = null): string` |  |\n"
             "| `http.route` | `(method: string, path: string, handler: fn \\| string \\| Json): ()` | Register a route handler or static response |\n"
             "| `http.router` | `(): Router` |  |\n"
-            "| `http.sendResponse` | `(fd: int, body: string, status?: int): bool` | Send HTTP response on fd |\n"
             "| `http.serverStats` | `(): Json` | Return HTTP server counters |\n"
             "| `http.setConnHandler` | `(handler: fn(fd: int): ()): ()` | Set low-level HTTP connection handler |\n"
             "| `http.stopServer` | `(): ()` | Stop the HTTP server |\n"
