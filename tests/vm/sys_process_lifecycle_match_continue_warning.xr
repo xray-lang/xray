@@ -1,0 +1,14 @@
+import sys
+
+var p = sys.Process.spawn("sh", ["-c", "exit 0"])
+var tag = 1
+while (true) {
+    match (tag) {
+        0 -> {
+            continue
+        }
+        _ -> {}
+    }
+    print(p!.wait())
+    break
+}

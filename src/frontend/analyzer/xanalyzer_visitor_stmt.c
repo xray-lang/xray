@@ -394,15 +394,6 @@ static bool xa_lifecycle_lint_break_targets_loop(AstNode *stmt, const char *loop
     return loop_label && strcmp(break_label, loop_label) == 0;
 }
 
-static bool xa_lifecycle_lint_continue_targets_loop(AstNode *stmt, const char *loop_label) {
-    if (!stmt || stmt->type != AST_CONTINUE_STMT)
-        return false;
-    const char *continue_label = stmt->as.continue_stmt.label;
-    if (!continue_label)
-        return true;
-    return loop_label && strcmp(continue_label, loop_label) == 0;
-}
-
 static bool xa_lifecycle_lint_branch_is_loop_break(AstNode *branch, const char *loop_label) {
     if (!branch)
         return false;
@@ -415,27 +406,101 @@ static bool xa_lifecycle_lint_branch_is_loop_break(AstNode *branch, const char *
     return false;
 }
 
-static bool xa_lifecycle_lint_node_skips_loop_tail(AstNode *node, const char *loop_label) {
+static bool xa_lifecycle_lint_node_skips_loop_tail_impl(AstNode *node, const char *loop_label,
+                                                        bool inside_nested_loop) {
     if (!node)
         return false;
-    if (xa_lifecycle_lint_break_targets_loop(node, loop_label) ||
-        xa_lifecycle_lint_continue_targets_loop(node, loop_label) ||
-        node->type == AST_RETURN_STMT || node->type == AST_THROW_STMT)
+
+    if (node->type == AST_BREAK_STMT) {
+        const char *break_label = node->as.break_stmt.label;
+        if (break_label)
+            return loop_label && strcmp(break_label, loop_label) == 0;
+        return !inside_nested_loop;
+    }
+    if (node->type == AST_CONTINUE_STMT) {
+        const char *continue_label = node->as.continue_stmt.label;
+        if (continue_label)
+            return loop_label && strcmp(continue_label, loop_label) == 0;
+        return !inside_nested_loop;
+    }
+    if (node->type == AST_RETURN_STMT || node->type == AST_THROW_STMT)
         return true;
+
     AstNode **statements = NULL;
     int count = 0;
     if (xa_block_node_statements(node, &statements, &count)) {
         for (int i = 0; i < count; i++) {
-            if (xa_lifecycle_lint_node_skips_loop_tail(statements[i], loop_label))
+            if (xa_lifecycle_lint_node_skips_loop_tail_impl(statements[i], loop_label,
+                                                            inside_nested_loop))
                 return true;
         }
         return false;
     }
-    if (node->type == AST_IF_STMT) {
-        return xa_lifecycle_lint_node_skips_loop_tail(node->as.if_stmt.then_branch, loop_label) ||
-               xa_lifecycle_lint_node_skips_loop_tail(node->as.if_stmt.else_branch, loop_label);
+
+    switch (node->type) {
+        case AST_EXPR_STMT:
+            return xa_lifecycle_lint_node_skips_loop_tail_impl(node->as.expr_stmt, loop_label,
+                                                               inside_nested_loop);
+        case AST_IF_STMT:
+            return xa_lifecycle_lint_node_skips_loop_tail_impl(node->as.if_stmt.then_branch,
+                                                               loop_label, inside_nested_loop) ||
+                   xa_lifecycle_lint_node_skips_loop_tail_impl(node->as.if_stmt.else_branch,
+                                                               loop_label, inside_nested_loop);
+        case AST_TRY_CATCH: {
+            TryCatchNode *tc = &node->as.try_catch;
+            if (xa_lifecycle_lint_node_skips_loop_tail_impl(tc->try_body, loop_label,
+                                                            inside_nested_loop))
+                return true;
+            for (int i = 0; i < tc->catch_count; i++) {
+                if (tc->catch_clauses[i] &&
+                    xa_lifecycle_lint_node_skips_loop_tail_impl(tc->catch_clauses[i]->body,
+                                                                loop_label, inside_nested_loop))
+                    return true;
+            }
+            return false;
+        }
+        case AST_MATCH_EXPR:
+            for (int i = 0; i < node->as.match_expr.arm_count; i++) {
+                if (xa_lifecycle_lint_node_skips_loop_tail_impl(node->as.match_expr.arms[i],
+                                                                loop_label, inside_nested_loop))
+                    return true;
+            }
+            return false;
+        case AST_MATCH_ARM:
+            return xa_lifecycle_lint_node_skips_loop_tail_impl(node->as.match_arm.body, loop_label,
+                                                               inside_nested_loop);
+        case AST_SELECT_STMT:
+            for (int i = 0; i < node->as.select_stmt.case_count; i++) {
+                if (xa_lifecycle_lint_node_skips_loop_tail_impl(node->as.select_stmt.cases[i],
+                                                                loop_label, inside_nested_loop))
+                    return true;
+            }
+            return false;
+        case AST_SELECT_CASE:
+            return xa_lifecycle_lint_node_skips_loop_tail_impl(node->as.select_case.body,
+                                                               loop_label, inside_nested_loop);
+        case AST_SCOPE_BLOCK:
+            return xa_lifecycle_lint_node_skips_loop_tail_impl(node->as.scope_block.body,
+                                                               loop_label, inside_nested_loop);
+        case AST_UNSAFE_EXPR:
+            return xa_lifecycle_lint_node_skips_loop_tail_impl(node->as.unsafe_expr.operand,
+                                                               loop_label, inside_nested_loop);
+        case AST_WHILE_STMT:
+            return xa_lifecycle_lint_node_skips_loop_tail_impl(node->as.while_stmt.body, loop_label,
+                                                               true);
+        case AST_FOR_STMT:
+            return xa_lifecycle_lint_node_skips_loop_tail_impl(node->as.for_stmt.body, loop_label,
+                                                               true);
+        case AST_FOR_IN_STMT:
+            return xa_lifecycle_lint_node_skips_loop_tail_impl(node->as.for_in_stmt.body,
+                                                               loop_label, true);
+        default:
+            return false;
     }
-    return false;
+}
+
+static bool xa_lifecycle_lint_node_skips_loop_tail(AstNode *node, const char *loop_label) {
+    return xa_lifecycle_lint_node_skips_loop_tail_impl(node, loop_label, false);
 }
 
 static bool xa_lifecycle_lint_node_exits_current_scope(AstNode *node, const char *loop_label) {
