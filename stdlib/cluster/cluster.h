@@ -221,8 +221,7 @@ typedef struct XrCluster {
      *                     causes the accept loop to refuse all inbound
      *                     connections rather than silently downgrade.
      *
-     * These fields stay NULL/false in the legacy xr_cluster_start path, so
-     * plain-TCP clusters see no behavioural change.
+     * These fields stay NULL/false when TLS is not requested.
      */
     bool tls_enabled;
     XrTlsContext *tls_client_ctx;
@@ -230,11 +229,6 @@ typedef struct XrCluster {
 } XrCluster;
 
 /* ========== Cluster Lifecycle API ========== */
-
-// Initialize and start the cluster node
-// config contains: name, port, secret
-XR_FUNC int xr_cluster_start(struct XrVMRuntime *X, const char *name, uint16_t port,
-                             const char *secret);
 
 /*
  * TLS options for xr_cluster_start_ex.
@@ -274,8 +268,8 @@ typedef struct XrClusterTlsOptions {
 } XrClusterTlsOptions;
 
 /*
- * Start a cluster with explicit TLS options. Passing `tls == NULL` is
- * equivalent to xr_cluster_start (plain TCP, legacy behaviour).
+ * Start a cluster with explicit TLS options. Passing `tls == NULL` starts
+ * a plain TCP cluster.
  */
 XR_FUNC int xr_cluster_start_ex(struct XrVMRuntime *X, const char *name, uint16_t port,
                                 const char *secret, const XrClusterTlsOptions *tls);
