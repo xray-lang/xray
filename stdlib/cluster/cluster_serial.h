@@ -106,26 +106,6 @@ XR_FUNC int xr_cluster_decode(XrSerialReader *r, XrValue *out);
 /* ========== Convenience Wrappers ========== */
 
 /*
- * Encode value to a newly allocated buffer.
- * Caller must call xr_serial_buf_free() on the result.
- */
-static inline int xr_cluster_encode_value(struct XrVMRuntime *X, XrValue value, uint8_t **out_data,
-                                          size_t *out_len) {
-    XrSerialBuf buf;
-    xr_serial_buf_init(&buf);
-    int rc = xr_cluster_encode(X, value, &buf);
-    if (rc == 0) {
-        *out_data = buf.data;
-        *out_len = buf.len;
-    } else {
-        xr_serial_buf_free(&buf);
-        *out_data = NULL;
-        *out_len = 0;
-    }
-    return rc;
-}
-
-/*
  * Decode value from a buffer.
  */
 static inline int xr_cluster_decode_value(struct XrVMRuntime *X, const uint8_t *data, size_t len,
