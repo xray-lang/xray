@@ -88,29 +88,16 @@ XR_FUNC XrH2PoolEntry *xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host,
 // Release connection to per-isolate pool
 XR_FUNC void xr_h2_pool_release_to(XrH2Pool *pool, XrH2PoolEntry *entry);
 
-/* ========== Legacy Global API (deprecated) ========== */
-
-// Initialize global connection pool
-XR_FUNC void xr_h2_pool_init(void);
-
-// Cleanup global connection pool
-XR_FUNC void xr_h2_pool_cleanup(void);
-
-// Acquire from global pool (deprecated)
-XR_FUNC XrH2PoolEntry *xr_h2_pool_acquire(const char *host, int port, bool is_https);
-
-// Release to global pool (deprecated)
-XR_FUNC void xr_h2_pool_release(XrH2PoolEntry *entry);
-
 /*
  * Send HTTP/2 request
  *
+ * pool: Per-isolate HTTP/2 connection pool
  * url: Request URL
  * req: Request parameters
  *
  * Returns: response (must call xr_h2_response_free to free)
  */
-XR_FUNC XrH2Response *xr_h2_request(const char *url, const XrH2Request *req);
+XR_FUNC XrH2Response *xr_h2_request(XrH2Pool *pool, const char *url, const XrH2Request *req);
 
 /*
  * Free response
@@ -125,10 +112,5 @@ XR_FUNC void xr_h2_response_free(XrH2Response *resp);
  * Returns: true = HTTP/2, false = HTTP/1.1
  */
 XR_FUNC bool xr_http_auto_version(const char *host, int port, bool is_https);
-
-/*
- * Cleanup idle connections
- */
-XR_FUNC void xr_h2_pool_cleanup_idle(void);
 
 #endif
