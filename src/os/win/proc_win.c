@@ -267,6 +267,63 @@ static char *proc_env_block_build(const XrProcSpawnOptions *options) {
     return block;
 }
 
+typedef struct ProcStdioDup {
+    HANDLE in;
+    HANDLE out;
+    HANDLE err;
+} ProcStdioDup;
+
+static void proc_stdio_dup_close(ProcStdioDup *dup) {
+    if (!dup)
+        return;
+    if (dup->in)
+        CloseHandle(dup->in);
+    if (dup->out)
+        CloseHandle(dup->out);
+    if (dup->err)
+        CloseHandle(dup->err);
+    dup->in = NULL;
+    dup->out = NULL;
+    dup->err = NULL;
+}
+
+static bool proc_duplicate_inheritable(HANDLE src, HANDLE *out) {
+    if (!src || src == INVALID_HANDLE_VALUE || !out)
+        return false;
+    HANDLE current = GetCurrentProcess();
+    return DuplicateHandle(current, src, current, out, 0, TRUE, DUPLICATE_SAME_ACCESS) ? true
+                                                                                       : false;
+}
+
+static bool proc_stdio_prepare(const XrProcSpawnOptions *options, STARTUPINFOA *si,
+                               ProcStdioDup *dup) {
+    if (!options || (!options->has_stdin && !options->has_stdout && !options->has_stderr))
+        return true;
+
+    memset(dup, 0, sizeof(*dup));
+    si->dwFlags |= STARTF_USESTDHANDLES;
+    si->hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    si->hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+    si->hStdError = GetStdHandle(STD_ERROR_HANDLE);
+
+    if (options->has_stdin) {
+        if (!proc_duplicate_inheritable((HANDLE) (intptr_t) options->stdin_read, &dup->in))
+            return false;
+        si->hStdInput = dup->in;
+    }
+    if (options->has_stdout) {
+        if (!proc_duplicate_inheritable((HANDLE) (intptr_t) options->stdout_write, &dup->out))
+            return false;
+        si->hStdOutput = dup->out;
+    }
+    if (options->has_stderr) {
+        if (!proc_duplicate_inheritable((HANDLE) (intptr_t) options->stderr_write, &dup->err))
+            return false;
+        si->hStdError = dup->err;
+    }
+    return true;
+}
+
 XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
                           const XrProcSpawnOptions *options) {
     if (prog == NULL || argv == NULL || !proc_spawn_options_valid(options)) {
@@ -279,15 +336,23 @@ XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
     STARTUPINFOA si;
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
+    ProcStdioDup stdio_dup = {0};
+    if (!proc_stdio_prepare(options, &si, &stdio_dup)) {
+        proc_stdio_dup_close(&stdio_dup);
+        free(cmdline);  // xr:allow-raw-alloc
+        return XR_PROC_INVALID;
+    }
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
     const char *cwd = (options && options->cwd && options->cwd[0] != '\0') ? options->cwd : NULL;
     char *env_block = proc_env_block_build(options);
     if (options && options->env_count > 0 && !env_block) {
+        proc_stdio_dup_close(&stdio_dup);
         free(cmdline);  // xr:allow-raw-alloc
         return XR_PROC_INVALID;
     }
     BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, env_block, cwd, &si, &pi);
+    proc_stdio_dup_close(&stdio_dup);
     free(env_block);  // xr:allow-raw-alloc
     free(cmdline);    // xr:allow-raw-alloc
     if (!ok) {

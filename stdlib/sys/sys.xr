@@ -3,8 +3,8 @@
 // The C layer exposes only private double-underscore helpers. This script
 // layer keeps the public surface typed and small: Process, Pipe, and portable
 // signal names. ProcessOptions grows only through general process capability
-// fields; stdio redirection stays out until it is wired as one coherent
-// process-options design.
+// fields; stdio redirection reuses Pipe rather than splitting reader/writer
+// endpoint classes prematurely.
 
 enum Signal {
     TERM,
@@ -12,13 +12,74 @@ enum Signal {
     INT
 }
 
+class Pipe {
+    _readHandle: int
+    _writeHandle: int
+    _readOpen: bool
+    _writeOpen: bool
+
+    constructor(readHandle: int, writeHandle: int) {
+        this._readHandle = readHandle
+        this._writeHandle = writeHandle
+        this._readOpen = readHandle >= 0
+        this._writeOpen = writeHandle >= 0
+    }
+
+    readEnd() -> int { return this._readHandle }
+
+    writeEnd() -> int { return this._writeHandle }
+
+    read(maxBytes: int = 8192) -> Bytes? {
+        if (!this._readOpen || maxBytes < 0) { return null }
+        return __pipeRead(this._readHandle, maxBytes)
+    }
+
+    write(data: Bytes) -> int {
+        if (!this._writeOpen) { return -1 }
+        return __pipeWrite(this._writeHandle, data)
+    }
+
+    closeRead() -> bool {
+        if (!this._readOpen) { return true }
+        var ok = __pipeClose(this._readHandle)
+        this._readOpen = false
+        return ok
+    }
+
+    closeWrite() -> bool {
+        if (!this._writeOpen) { return true }
+        var ok = __pipeClose(this._writeHandle)
+        this._writeOpen = false
+        return ok
+    }
+
+    close() -> bool {
+        var r = this.closeRead()
+        var w = this.closeWrite()
+        return r && w
+    }
+
+    static open() -> Pipe? {
+        var ends = __pipeOpen()
+        if (ends == null || ends!.length < 2) { return null }
+        return Pipe(ends![0], ends![1])
+    }
+}
+
 class ProcessOptions {
     cwd: string?
     env: Map<string, string>?
+    stdin: int?
+    stdout: int?
+    stderr: int?
 
-    constructor(cwd: string?, env: Map<string, string>?) {
+    constructor(cwd: string? = null, env: Map<string, string>? = null, stdin: int? = null,
+                stdout: int? = null, stderr: int? = null) {
         this.cwd = cwd
         this.env = env
+        this.stdin = stdin
+        this.stdout = stdout
+        this.stderr = stderr
     }
 }
 
@@ -63,66 +124,29 @@ class Process {
         var cwd: string? = null
         var envKeys: Array<string>? = null
         var envValues: Array<string>? = null
+        var stdinRead: int? = null
+        var stdoutWrite: int? = null
+        var stderrWrite: int? = null
         if (options != null) {
             cwd = options!.cwd
             if (options!.env != null) {
                 envKeys = options!.env!.keys()
                 envValues = options!.env!.values()
             }
+            if (options!.stdin != null) {
+                stdinRead = options!.stdin
+            }
+            if (options!.stdout != null) {
+                stdoutWrite = options!.stdout
+            }
+            if (options!.stderr != null) {
+                stderrWrite = options!.stderr
+            }
         }
-        var id = __processSpawn(program, args, cwd, envKeys, envValues)
+        var id = __processSpawn(program, args, cwd, envKeys, envValues,
+            stdinRead, stdoutWrite, stderrWrite)
         if (id <= 0) { return null }
         return Process(id)
-    }
-}
-
-class Pipe {
-    _readHandle: int
-    _writeHandle: int
-    _readOpen: bool
-    _writeOpen: bool
-
-    constructor(readHandle: int, writeHandle: int) {
-        this._readHandle = readHandle
-        this._writeHandle = writeHandle
-        this._readOpen = readHandle >= 0
-        this._writeOpen = writeHandle >= 0
-    }
-
-    read(maxBytes: int = 8192) -> Bytes? {
-        if (!this._readOpen || maxBytes < 0) { return null }
-        return __pipeRead(this._readHandle, maxBytes)
-    }
-
-    write(data: Bytes) -> int {
-        if (!this._writeOpen) { return -1 }
-        return __pipeWrite(this._writeHandle, data)
-    }
-
-    closeRead() -> bool {
-        if (!this._readOpen) { return true }
-        var ok = __pipeClose(this._readHandle)
-        this._readOpen = false
-        return ok
-    }
-
-    closeWrite() -> bool {
-        if (!this._writeOpen) { return true }
-        var ok = __pipeClose(this._writeHandle)
-        this._writeOpen = false
-        return ok
-    }
-
-    close() -> bool {
-        var r = this.closeRead()
-        var w = this.closeWrite()
-        return r && w
-    }
-
-    static open() -> Pipe? {
-        var ends = __pipeOpen()
-        if (ends == null || ends!.length < 2) { return null }
-        return Pipe(ends![0], ends![1])
     }
 }
 

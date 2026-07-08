@@ -2979,8 +2979,18 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
+        .name = "Pipe.readEnd",
+        .signature = "(): int",
+        .summary = "",
+    },
+    {
         .name = "Pipe.write",
         .signature = "(data: Bytes): int",
+        .summary = "",
+    },
+    {
+        .name = "Pipe.writeEnd",
+        .signature = "(): int",
         .summary = "",
     },
     {
@@ -3016,6 +3026,36 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     {
         .name = "Process.wait",
         .signature = "(): int",
+        .summary = "",
+    },
+    {
+        .name = "ProcessOptions",
+        .signature = "ProcessOptions",
+        .summary = "",
+    },
+    {
+        .name = "ProcessOptions.cwd",
+        .signature = ": string?",
+        .summary = "",
+    },
+    {
+        .name = "ProcessOptions.env",
+        .signature = ": Map<string, string>?",
+        .summary = "",
+    },
+    {
+        .name = "ProcessOptions.stderr",
+        .signature = ": int?",
+        .summary = "",
+    },
+    {
+        .name = "ProcessOptions.stdin",
+        .signature = ": int?",
+        .summary = "",
+    },
+    {
+        .name = "ProcessOptions.stdout",
+        .signature = ": int?",
         .summary = "",
     },
     {
@@ -5864,7 +5904,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Pipe.constructor` | `(readHandle: int, writeHandle: int): ()` |  |\n"
             "| `Pipe.open` | `(): Pipe?` |  |\n"
             "| `Pipe.read` | `(maxBytes: int = 8192): Bytes?` |  |\n"
+            "| `Pipe.readEnd` | `(): int` |  |\n"
             "| `Pipe.write` | `(data: Bytes): int` |  |\n"
+            "| `Pipe.writeEnd` | `(): int` |  |\n"
             "| `Process` | `Process` |  |\n"
             "| `Process.constructor` | `(id: int): ()` |  |\n"
             "| `Process.id` | `: int { fn() { return this._id } }` |  |\n"
@@ -5872,6 +5914,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Process.spawn` | `(program: string, args: Array<string> = [], options: ProcessOptions? = null): Process?` |  |\n"
             "| `Process.tryWait` | `(): int?` |  |\n"
             "| `Process.wait` | `(): int` |  |\n"
+            "| `ProcessOptions` | `ProcessOptions` |  |\n"
+            "| `ProcessOptions.cwd` | `: string?` |  |\n"
+            "| `ProcessOptions.env` | `: Map<string, string>?` |  |\n"
+            "| `ProcessOptions.stderr` | `: int?` |  |\n"
+            "| `ProcessOptions.stdin` | `: int?` |  |\n"
+            "| `ProcessOptions.stdout` | `: int?` |  |\n"
             "| `sys.cpuCount` | `(): int` | Return the number of CPUs available to OS-thread work |\n"
             "| `sys.pinToCpu` | `(cpu: int): bool` | Best-effort pin of the current OS thread to a CPU index |\n"
             "| `sys.sleepMs` | `(ms: int): ()` | Block the current OS thread for at least ms milliseconds |\n"

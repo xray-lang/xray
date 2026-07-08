@@ -45,6 +45,18 @@ static bool proc_spawn_options_valid(const XrProcSpawnOptions *options) {
     return true;
 }
 
+static int proc_dup_stdio(const XrProcSpawnOptions *options) {
+    if (!options)
+        return 0;
+    if (options->has_stdin && dup2((int) options->stdin_read, STDIN_FILENO) < 0)
+        return -1;
+    if (options->has_stdout && dup2((int) options->stdout_write, STDOUT_FILENO) < 0)
+        return -1;
+    if (options->has_stderr && dup2((int) options->stderr_write, STDERR_FILENO) < 0)
+        return -1;
+    return 0;
+}
+
 XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
                           const XrProcSpawnOptions *options) {
     if (prog == NULL || argv == NULL || !proc_spawn_options_valid(options)) {
@@ -56,6 +68,9 @@ XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
     }
     if (pid == 0) {
         // Child: exec, never returns on success.
+        if (proc_dup_stdio(options) != 0) {
+            _exit(127);
+        }
         if (options && options->cwd && options->cwd[0] != '\0' && chdir(options->cwd) != 0) {
             _exit(127);
         }

@@ -296,6 +296,19 @@ static inline int xrt_sys_process_env_from_arrays(XrValue keys_value, XrValue va
     return 1;
 }
 
+static inline int xrt_sys_process_pipe_handle_from_optional(XrValue value, bool *out_has,
+                                                            XrPipeHandle *out_handle) {
+    *out_has = false;
+    *out_handle = XR_PIPE_INVALID;
+    if (XR_IS_NULL(value))
+        return 1;
+    if (!XR_IS_INT(value))
+        return 0;
+    *out_has = true;
+    *out_handle = (XrPipeHandle) value.i;
+    return 1;
+}
+
 #if defined(XR_OS_WINDOWS)
 static inline void xrt_sys_process_append_escaped_arg(char *buf, size_t *pos, const char *arg) {
     size_t backslashes = 0;
@@ -476,6 +489,65 @@ static inline char *xrt_sys_process_env_block_build(char *const env_keys[],
     *dst = '\0';
     xrt_sys_process_env_entries_free(&entries);
     return block;
+}
+
+typedef struct xrt_sys_process_stdio_dup {
+    HANDLE in;
+    HANDLE out;
+    HANDLE err;
+} xrt_sys_process_stdio_dup_t;
+
+static inline void xrt_sys_process_stdio_dup_close(xrt_sys_process_stdio_dup_t *dup) {
+    if (!dup)
+        return;
+    if (dup->in)
+        CloseHandle(dup->in);
+    if (dup->out)
+        CloseHandle(dup->out);
+    if (dup->err)
+        CloseHandle(dup->err);
+    dup->in = NULL;
+    dup->out = NULL;
+    dup->err = NULL;
+}
+
+static inline int xrt_sys_process_duplicate_inheritable(HANDLE src, HANDLE *out) {
+    if (!src || src == INVALID_HANDLE_VALUE || !out)
+        return 0;
+    HANDLE current = GetCurrentProcess();
+    return DuplicateHandle(current, src, current, out, 0, TRUE, DUPLICATE_SAME_ACCESS) != 0;
+}
+
+static inline int xrt_sys_process_stdio_prepare(bool has_stdin, XrPipeHandle stdin_read,
+                                                bool has_stdout, XrPipeHandle stdout_write,
+                                                bool has_stderr, XrPipeHandle stderr_write,
+                                                STARTUPINFOA *si,
+                                                xrt_sys_process_stdio_dup_t *dup) {
+    if (!has_stdin && !has_stdout && !has_stderr)
+        return 1;
+
+    memset(dup, 0, sizeof(*dup));
+    si->dwFlags |= STARTF_USESTDHANDLES;
+    si->hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    si->hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+    si->hStdError = GetStdHandle(STD_ERROR_HANDLE);
+
+    if (has_stdin) {
+        if (!xrt_sys_process_duplicate_inheritable((HANDLE) (intptr_t) stdin_read, &dup->in))
+            return 0;
+        si->hStdInput = dup->in;
+    }
+    if (has_stdout) {
+        if (!xrt_sys_process_duplicate_inheritable((HANDLE) (intptr_t) stdout_write, &dup->out))
+            return 0;
+        si->hStdOutput = dup->out;
+    }
+    if (has_stderr) {
+        if (!xrt_sys_process_duplicate_inheritable((HANDLE) (intptr_t) stderr_write, &dup->err))
+            return 0;
+        si->hStdError = dup->err;
+    }
+    return 1;
 }
 #endif
 
@@ -842,7 +914,9 @@ static inline XrValue xrt_sys_pin_to_cpu(XrValue cpu_value) {
 
 static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t program_len,
                                             XrValue args_value, XrValue cwd_value,
-                                            XrValue env_keys_value, XrValue env_values_value) {
+                                            XrValue env_keys_value, XrValue env_values_value,
+                                            XrValue stdin_read_value, XrValue stdout_write_value,
+                                            XrValue stderr_write_value) {
     char **argv = xrt_sys_process_argv_from_array(program_data, program_len, args_value);
     if (!argv)
         return XR_FROM_INT(-1);
@@ -868,6 +942,23 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
         return XR_FROM_INT(-1);
     }
 
+    bool has_stdin = false;
+    bool has_stdout = false;
+    bool has_stderr = false;
+    XrPipeHandle stdin_read = XR_PIPE_INVALID;
+    XrPipeHandle stdout_write = XR_PIPE_INVALID;
+    XrPipeHandle stderr_write = XR_PIPE_INVALID;
+    if (!xrt_sys_process_pipe_handle_from_optional(stdin_read_value, &has_stdin, &stdin_read) ||
+        !xrt_sys_process_pipe_handle_from_optional(stdout_write_value, &has_stdout,
+                                                   &stdout_write) ||
+        !xrt_sys_process_pipe_handle_from_optional(stderr_write_value, &has_stderr,
+                                                   &stderr_write)) {
+        xrt_sys_process_argv_free(argv);
+        xrt_sys_process_env_free(env_keys, env_values, env_count);
+        XRT_FREE(cwd);
+        return XR_FROM_INT(-1);
+    }
+
 #if defined(XR_OS_WINDOWS)
     char *cmdline = xrt_sys_process_build_command_line(argv[0], argv);
     if (!cmdline) {
@@ -879,10 +970,21 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
     STARTUPINFOA si;
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
+    xrt_sys_process_stdio_dup_t stdio_dup = {0};
+    if (!xrt_sys_process_stdio_prepare(has_stdin, stdin_read, has_stdout, stdout_write, has_stderr,
+                                       stderr_write, &si, &stdio_dup)) {
+        xrt_sys_process_stdio_dup_close(&stdio_dup);
+        XRT_FREE(cmdline);
+        xrt_sys_process_argv_free(argv);
+        xrt_sys_process_env_free(env_keys, env_values, env_count);
+        XRT_FREE(cwd);
+        return XR_FROM_INT(-1);
+    }
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
     char *env_block = xrt_sys_process_env_block_build(env_keys, env_values, env_count);
     if (env_count > 0 && !env_block) {
+        xrt_sys_process_stdio_dup_close(&stdio_dup);
         XRT_FREE(cmdline);
         xrt_sys_process_argv_free(argv);
         xrt_sys_process_env_free(env_keys, env_values, env_count);
@@ -891,6 +993,7 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
     }
     BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, env_block,
                              (cwd && cwd[0] != '\0') ? cwd : NULL, &si, &pi);
+    xrt_sys_process_stdio_dup_close(&stdio_dup);
     XRT_FREE(env_block);
     XRT_FREE(cmdline);
     xrt_sys_process_argv_free(argv);
@@ -909,6 +1012,11 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
         return XR_FROM_INT(-1);
     }
     if (pid == 0) {
+        if ((has_stdin && dup2((int) stdin_read, STDIN_FILENO) < 0) ||
+            (has_stdout && dup2((int) stdout_write, STDOUT_FILENO) < 0) ||
+            (has_stderr && dup2((int) stderr_write, STDERR_FILENO) < 0)) {
+            _exit(127);
+        }
         if (cwd && cwd[0] != '\0' && chdir(cwd) != 0)
             _exit(127);
         for (size_t i = 0; i < env_count; i++) {

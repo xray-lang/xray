@@ -2140,7 +2140,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
              * unconditional tagged box: a non-suspendable constructor uses the
              * native ABI (e.g. int64_t) for scalar params, so boxing here would
              * mismatch the emitted definition and fail C compilation. */
-            emit_value_as_rep(out, v->args[a], cg_func_param_abi_rep(ctx, target, a));
+            emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, target, a));
         }
         fprintf(out, "); _inst; })");
         return;
@@ -5111,7 +5111,7 @@ static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc
     for (uint16_t a = 1; a < v->nargs; a++) {
         fprintf(out, ", ");
         /* Match the constructor's actual parameter ABI (see note above). */
-        emit_value_as_rep(out, v->args[a], cg_func_param_abi_rep(ctx, ctor, a));
+        emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, ctor, a));
     }
     fprintf(out, "); _inst; })");
     return true;
@@ -5250,7 +5250,7 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
         for (uint16_t a = 1; a < v->nargs; a++) {
             fprintf(out, ", ");
             /* Match the constructor's actual parameter ABI (see note above). */
-            emit_value_as_rep(out, v->args[a], cg_func_param_abi_rep(ctx, target, a));
+            emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, target, a));
         }
         fprintf(out, "); _inst; })");
         return true;
