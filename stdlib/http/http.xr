@@ -4,7 +4,7 @@
 // boundaries. Public formatting, percent-encoding, and multipart assembly live
 // here.
 
-import { encode, decodeForm } from url
+import { encode, decodeForm, parse as parseUrl, resolve as resolveUrl } from url
 import crypto
 import io
 import time
@@ -761,12 +761,32 @@ fn _hasCtlOr(s: string, extra: string) -> bool {
     return false
 }
 
+fn _isTokenChar(c: string) -> bool {
+    var o = c.ord()!
+    return (o >= 65 && o <= 90) ||
+           (o >= 97 && o <= 122) ||
+           (o >= 48 && o <= 57) ||
+           c == "!" || c == "#" || c == "$" || c == "%" ||
+           c == "&" || c == "'" || c == "*" || c == "+" ||
+           c == "-" || c == "." || c == "^" || c == "_" ||
+           c == "`" || c == "|" || c == "~"
+}
+
 fn _headerNameValid(name: string) -> bool {
-    return name.length > 0 && !_hasCtlOr(name, ":")
+    if (name.length == 0) { return false }
+    for (var i = 0; i < name.length; i++) {
+        if (!_isTokenChar(name.charAt(i))) { return false }
+    }
+    return true
 }
 
 fn _headerValueValid(value: string) -> bool {
-    return !_hasCtlOr(value, "\r\n")
+    for (var i = 0; i < value.length; i++) {
+        var o = value.charAt(i).ord()!
+        if (o == 9) { continue }
+        if (o < 0x20 || o == 0x7F) { return false }
+    }
+    return true
 }
 
 fn _requestMethod(method: string) -> string? {
@@ -803,6 +823,274 @@ fn _appendHeader(out: StringBuilder, name: string, value: string) {
     out.append(": ")
     out.append(value)
     out.append("\r\n")
+}
+
+fn _trimLineEnd(line: string) -> string {
+    if (line.endsWith("\r")) { return line.slice(0, line.length - 1) }
+    return line
+}
+
+fn _responseHeadEnd(raw: string) -> int {
+    var crlf = raw.indexOf("\r\n\r\n")
+    if (crlf >= 0) { return crlf + 4 }
+    var lf = raw.indexOf("\n\n")
+    if (lf >= 0) { return lf + 2 }
+    return -1
+}
+
+fn _parseStatusCode(raw: string) -> int {
+    if (raw.length != 3) { return -1 }
+    var code = 0
+    for (var i = 0; i < raw.length; i++) {
+        var o = raw.charAt(i).ord()!
+        if (o < 48 || o > 57) { return -1 }
+        code = code * 10 + (o - 48)
+    }
+    return code
+}
+
+fn _headerListGet(pairs: Array<(string, string)>, name: string) -> string? {
+    var target = name.toLowerCase()
+    for (var i = 0; i < pairs.length; i++) {
+        if (pairs[i].0.toLowerCase() == target) { return pairs[i].1 }
+    }
+    return null
+}
+
+fn _headerListAll(pairs: Array<(string, string)>, name: string) -> Array<string> {
+    var target = name.toLowerCase()
+    var out: Array<string> = []
+    for (var i = 0; i < pairs.length; i++) {
+        if (pairs[i].0.toLowerCase() == target) { out.push(pairs[i].1) }
+    }
+    return out
+}
+
+fn _hasHeaderToken(value: string, token: string) -> bool {
+    var needle = token.toLowerCase()
+    var start = 0
+    while (start <= value.length) {
+        var comma = value.indexOf(",", start)
+        var end = value.length
+        if (comma >= 0) { end = comma }
+        if (value.slice(start, end).trim().toLowerCase() == needle) {
+            return true
+        }
+        if (comma < 0) { break }
+        start = comma + 1
+    }
+    return false
+}
+
+fn _contentLengthFrom(pairs: Array<(string, string)>) -> int? {
+    var found = false
+    var length = -1
+    for (var i = 0; i < pairs.length; i++) {
+        if (!_headerKeyEquals(pairs[i].0, "Content-Length")) { continue }
+        var parsed = _parseIntStrict(pairs[i].1)
+        if (parsed == null || parsed! < 0) { return null }
+        if (found && parsed! != length) { return null }
+        found = true
+        length = parsed!
+    }
+    return length
+}
+
+fn _isChunked(pairs: Array<(string, string)>) -> bool {
+    for (var i = 0; i < pairs.length; i++) {
+        if (_headerKeyEquals(pairs[i].0, "Transfer-Encoding") &&
+            _hasHeaderToken(pairs[i].1, "chunked")) {
+            return true
+        }
+    }
+    return false
+}
+
+fn _keepAlive(version: string, pairs: Array<(string, string)>) -> bool {
+    var keep = version == "HTTP/1.1"
+    for (var i = 0; i < pairs.length; i++) {
+        if (!_headerKeyEquals(pairs[i].0, "Connection")) { continue }
+        if (_hasHeaderToken(pairs[i].1, "close")) { return false }
+        if (_hasHeaderToken(pairs[i].1, "keep-alive")) { keep = true }
+    }
+    return keep
+}
+
+fn _httpUrlOk(raw: string) -> bool {
+    var p = parseUrl(raw)
+    var scheme = p.protocol.toLowerCase()
+    return (scheme == "http:" || scheme == "https:") && p.hostname.length > 0
+}
+
+fn _originPort(raw: string) -> int {
+    var p = parseUrl(raw)
+    if (p.port.length > 0) {
+        var port = _parseIntStrict(p.port)
+        if (port != null) { return port! }
+    }
+    if (p.protocol.toLowerCase() == "https:") { return 443 }
+    return 80
+}
+
+fn _sameOrigin(a: string, b: string) -> bool {
+    var pa = parseUrl(a)
+    var pb = parseUrl(b)
+    return pa.protocol.toLowerCase() == pb.protocol.toLowerCase() &&
+           pa.hostname.toLowerCase() == pb.hostname.toLowerCase() &&
+           _originPort(a) == _originPort(b)
+}
+
+// ResponseHead - Parsed HTTP/1.x response status line and headers.
+class ResponseHead {
+    version: string
+    status: int
+    reason: string
+    headers: Json
+    headerPairs: Array<(string, string)>
+    headerBytes: int
+    contentLength: int
+    chunked: bool
+    keepAlive: bool
+
+    constructor(
+        version: string,
+        status: int,
+        reason: string,
+        headers: Json,
+        headerPairs: Array<(string, string)>,
+        headerBytes: int,
+        contentLength: int,
+        chunked: bool,
+        keepAlive: bool
+    ) {
+        this.version = version
+        this.status = status
+        this.reason = reason
+        this.headers = headers
+        this.headerPairs = headerPairs
+        this.headerBytes = headerBytes
+        this.contentLength = contentLength
+        this.chunked = chunked
+        this.keepAlive = keepAlive
+    }
+
+    getHeader(name: string) -> string? {
+        return _headerListGet(this.headerPairs, name)
+    }
+
+    getHeaders(name: string) -> Array<string> {
+        return _headerListAll(this.headerPairs, name)
+    }
+}
+
+// RedirectDecision - Pure redirect control-plane result for the HTTP client.
+class RedirectDecision {
+    url: string
+    method: string
+    stripSensitiveHeaders: bool
+    dropBody: bool
+
+    constructor(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool) {
+        this.url = url
+        this.method = method
+        this.stripSensitiveHeaders = stripSensitiveHeaders
+        this.dropBody = dropBody
+    }
+}
+
+// parseResponseHead - Parse an HTTP/1.x response head without reading sockets.
+fn parseResponseHead(raw: string, maxHeaders: int = 100) -> ResponseHead? {
+    var end = _responseHeadEnd(raw)
+    if (end < 0) { return null }
+    var lines = raw.slice(0, end).split("\n")
+    if (lines.length == 0) { return null }
+
+    var statusLine = _trimLineEnd(lines[0])
+    var firstSpace = statusLine.indexOf(" ")
+    if (firstSpace < 0) { return null }
+    var version = statusLine.slice(0, firstSpace)
+    if (version != "HTTP/1.0" && version != "HTTP/1.1") { return null }
+
+    var rest = statusLine.slice(firstSpace + 1)
+    var secondSpace = rest.indexOf(" ")
+    var statusRaw = rest
+    var reason = ""
+    if (secondSpace >= 0) {
+        statusRaw = rest.slice(0, secondSpace)
+        reason = rest.slice(secondSpace + 1).trim()
+    }
+    var status = _parseStatusCode(statusRaw)
+    if (status < 100 || status > 999) { return null }
+
+    var headers: Json = {}
+    var pairs: Array<(string, string)> = []
+    for (var i = 1; i < lines.length; i++) {
+        var line = _trimLineEnd(lines[i])
+        if (line.length == 0) { break }
+        if (line.charAt(0) == " " || line.charAt(0) == "\t") { return null }
+        var colon = line.indexOf(":")
+        if (colon <= 0) { return null }
+        var name = line.slice(0, colon)
+        var value = line.slice(colon + 1).trim()
+        if (!_headerNameValid(name) || !_headerValueValid(value)) { return null }
+        pairs.push((name, value))
+        headers[name] = value
+        if (maxHeaders > 0 && pairs.length > maxHeaders) { return null }
+    }
+
+    var contentLength = _contentLengthFrom(pairs)
+    if (contentLength == null) { return null }
+    return ResponseHead(
+        version,
+        status,
+        reason,
+        headers,
+        pairs,
+        end,
+        contentLength!,
+        _isChunked(pairs),
+        _keepAlive(version, pairs)
+    )
+}
+
+// isRedirectStatus - True for HTTP redirect codes that carry Location.
+fn isRedirectStatus(status: int) -> bool {
+    return status == 301 || status == 302 || status == 303 ||
+           status == 307 || status == 308
+}
+
+// redirectTarget - Resolve a Location value against the current URL.
+fn redirectTarget(currentUrl: string, location: string) -> string? {
+    var loc = location.trim()
+    if (loc.length == 0 || !_headerValueValid(loc)) { return null }
+    if (!_httpUrlOk(currentUrl)) { return null }
+    var resolved = resolveUrl(currentUrl, loc)
+    if (!_httpUrlOk(resolved)) { return null }
+    return resolved
+}
+
+// redirectDecision - Compute the next URL/method and credential stripping rule.
+fn redirectDecision(
+    status: int,
+    currentUrl: string,
+    location: string,
+    method: string = "GET",
+    alreadyStripped: bool = false
+) -> RedirectDecision? {
+    if (!isRedirectStatus(status)) { return null }
+    var nextUrl = redirectTarget(currentUrl, location)
+    if (nextUrl == null) { return null }
+
+    var nextMethod = _requestMethod(method)
+    if (nextMethod == null) { return null }
+    var dropBody = false
+    if (status == 303 && nextMethod! != "HEAD") {
+        nextMethod = "GET"
+        dropBody = true
+    }
+
+    var strip = alreadyStripped || !_sameOrigin(currentUrl, nextUrl!)
+    return RedirectDecision(nextUrl!, nextMethod!, strip, dropBody)
 }
 
 // requestText - Format a complete HTTP/1.1 request string without performing I/O.
@@ -935,11 +1223,17 @@ export {
     cookieJar,
     Router,
     RouteMatch,
+    ResponseHead,
+    RedirectDecision,
     router,
     urlEncode,
     urlDecode,
     response,
     requestText,
+    parseResponseHead,
+    isRedirectStatus,
+    redirectTarget,
+    redirectDecision,
     formData,
     MultipartBody,
     FormData

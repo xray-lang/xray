@@ -100,7 +100,8 @@ static XrValue m_index_of(XrVMRuntime *iso, XrValue self, XrValue *args, int arg
         return xr_int(-1);
     XrString *str = str_self(self);
     XrString *substr = xr_value_to_string(iso, args[0]);
-    return xr_int(xr_string_index_of(iso, str, substr));
+    xr_Integer start = (argc >= 2 && XR_IS_INT(args[1])) ? XR_TO_INT(args[1]) : 0;
+    return xr_int(xr_string_index_of_from(iso, str, substr, start));
 }
 
 static XrValue m_last_index_of(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -473,7 +474,7 @@ void xr_string_register_native_type(XrVMRuntime *isolate) {
         {"slice", m_slice, 0},
         {"byteAt", m_byte_at, 1},
         /* Search */
-        {"indexOf", m_index_of, 1},
+        {"indexOf", m_index_of, 0},
         {"lastIndexOf", m_last_index_of, 1},
         {"includes", m_includes, 1},
         {"startsWith", m_starts_with, 1},

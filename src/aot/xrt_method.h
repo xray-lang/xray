@@ -980,6 +980,11 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
 }
 
 static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue arg1) {
+    if (XR_IS_STR(recv) && sym == XRT_SYM_INDEXOF && XR_IS_STR(arg0) && arg1.tag == XR_TAG_I64) {
+        return XR_FROM_INT((int64_t) xr_string_core_index_of_from(
+            xr_str_data(recv), (size_t) xr_str_len(recv), xr_str_data(arg0),
+            (size_t) xr_str_len(arg0), arg1.i));
+    }
     if (XR_IS_STR(recv) && (sym == XRT_SYM_SLICE || sym == XRT_SYM_SUBSTRING)) {
         const char *s = xr_str_data(recv);
         size_t slen = (size_t) xr_str_len(recv);

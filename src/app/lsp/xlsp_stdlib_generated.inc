@@ -159,6 +159,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"urlDecode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-decode and treat + as a space, matching the former HTTP", NULL, 0},
     {"response", XLSP_SYM_FUNCTION, "fn(status: int, body?: unknown): string", "Format a complete HTTP/1.1 response string.", NULL, 0},
     {"requestText", XLSP_SYM_FUNCTION, "fn(method: string, path: string, headers?: Json, body?: string, host?: string, stripSensitive?: bool): string?", "Format a complete HTTP/1.1 request string without performing I/O.", NULL, 0},
+    {"parseResponseHead", XLSP_SYM_FUNCTION, "fn(raw: string, maxHeaders?: int): ResponseHead?", "Parse an HTTP/1.x response head without reading sockets.", NULL, 0},
+    {"isRedirectStatus", XLSP_SYM_FUNCTION, "fn(status: int): bool", "True for HTTP redirect codes that carry Location.", NULL, 0},
+    {"redirectTarget", XLSP_SYM_FUNCTION, "fn(currentUrl: string, location: string): string?", "Resolve a Location value against the current URL.", NULL, 0},
+    {"redirectDecision", XLSP_SYM_FUNCTION, "fn(status: int, currentUrl: string, location: string, method?: string, alreadyStripped?: bool): RedirectDecision?", "Compute the next URL/method and credential stripping rule.", NULL, 0},
     {"formData", XLSP_SYM_FUNCTION, "fn(maxTotalSize?: int, maxFileSize?: int): FormData", "Create an explicit multipart/form-data builder.", NULL, 0},
     {"HttpResponse", XLSP_SYM_CLASS, "type HttpResponse", "Native handle type", NULL, 0},
     {"HttpRequest", XLSP_SYM_CLASS, "type HttpRequest", "Native handle type", NULL, 0},
@@ -167,10 +171,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"CookieJar", XLSP_SYM_CLASS, "type CookieJar", "Class type", NULL, 0},
     {"Router", XLSP_SYM_CLASS, "type Router", "Class type", NULL, 0},
     {"RouteMatch", XLSP_SYM_CLASS, "type RouteMatch", "Class type", NULL, 0},
+    {"ResponseHead", XLSP_SYM_CLASS, "type ResponseHead", "Parsed HTTP/1.x response status line and headers.", NULL, 0},
+    {"RedirectDecision", XLSP_SYM_CLASS, "type RedirectDecision", "Pure redirect control-plane result for the HTTP client.", NULL, 0},
     {"MultipartBody", XLSP_SYM_CLASS, "type MultipartBody", "Built multipart/form-data payload and matching Content-Type.", NULL, 0},
     {"FormData", XLSP_SYM_CLASS, "type FormData", "Explicit multipart/form-data builder.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 43
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 49
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {

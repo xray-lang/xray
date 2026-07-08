@@ -963,6 +963,96 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "RedirectDecision",
+        .signature = "RedirectDecision",
+        .summary = "",
+    },
+    {
+        .name = "RedirectDecision.constructor",
+        .signature = "(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool): ()",
+        .summary = "",
+    },
+    {
+        .name = "RedirectDecision.dropBody",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "RedirectDecision.method",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "RedirectDecision.stripSensitiveHeaders",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "RedirectDecision.url",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead",
+        .signature = "ResponseHead",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.chunked",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.contentLength",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.getHeader",
+        .signature = "(name: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.getHeaders",
+        .signature = "(name: string): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.headerBytes",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.headerPairs",
+        .signature = ": Array<(string, string)>",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.headers",
+        .signature = ": Json",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.keepAlive",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.reason",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.status",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.version",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
         .name = "RouteMatch",
         .signature = "RouteMatch",
         .summary = "",
@@ -1078,6 +1168,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Stop HTTP/2 server",
     },
     {
+        .name = "isRedirectStatus",
+        .signature = "(status: int): bool",
+        .summary = "",
+    },
+    {
         .name = "listen",
         .signature = "(port: int): bool",
         .summary = "Start HTTP server accept loop",
@@ -1086,6 +1181,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "parseRequest",
         .signature = "(fd: int): Array<unknown>?",
         .summary = "Parse raw HTTP request data",
+    },
+    {
+        .name = "parseResponseHead",
+        .signature = "(raw: string, maxHeaders: int = 100): ResponseHead?",
+        .summary = "",
     },
     {
         .name = "parseSetCookie",
@@ -1106,6 +1206,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "readChunk",
         .signature = "(resp: Json, maxBytes?: int): string?",
         .summary = "Read the next chunk from a streaming HTTP response",
+    },
+    {
+        .name = "redirectDecision",
+        .signature = "(status: int, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?",
+        .summary = "",
+    },
+    {
+        .name = "redirectTarget",
+        .signature = "(currentUrl: string, location: string): string?",
+        .summary = "",
     },
     {
         .name = "request",
@@ -5055,6 +5165,24 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `MultipartBody.body` | `: string` |  |\n"
             "| `MultipartBody.constructor` | `(body: string, contentType: string): ()` |  |\n"
             "| `MultipartBody.contentType` | `: string` |  |\n"
+            "| `RedirectDecision` | `RedirectDecision` |  |\n"
+            "| `RedirectDecision.constructor` | `(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool): ()` |  |\n"
+            "| `RedirectDecision.dropBody` | `: bool` |  |\n"
+            "| `RedirectDecision.method` | `: string` |  |\n"
+            "| `RedirectDecision.stripSensitiveHeaders` | `: bool` |  |\n"
+            "| `RedirectDecision.url` | `: string` |  |\n"
+            "| `ResponseHead` | `ResponseHead` |  |\n"
+            "| `ResponseHead.chunked` | `: bool` |  |\n"
+            "| `ResponseHead.contentLength` | `: int` |  |\n"
+            "| `ResponseHead.getHeader` | `(name: string): string?` |  |\n"
+            "| `ResponseHead.getHeaders` | `(name: string): Array<string>` |  |\n"
+            "| `ResponseHead.headerBytes` | `: int` |  |\n"
+            "| `ResponseHead.headerPairs` | `: Array<(string, string)>` |  |\n"
+            "| `ResponseHead.headers` | `: Json` |  |\n"
+            "| `ResponseHead.keepAlive` | `: bool` |  |\n"
+            "| `ResponseHead.reason` | `: string` |  |\n"
+            "| `ResponseHead.status` | `: int` |  |\n"
+            "| `ResponseHead.version` | `: string` |  |\n"
             "| `RouteMatch` | `RouteMatch` |  |\n"
             "| `RouteMatch.constructor` | `(value: unknown, params: Json): ()` |  |\n"
             "| `RouteMatch.params` | `: Json` |  |\n"
@@ -5078,12 +5206,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.h2Push` | `(path: string, contentType: string, data: string): bool` | Push HTTP/2 response data |\n"
             "| `http.h2Request` | `(options: Json): Json` | Generic HTTP/2 request |\n"
             "| `http.h2Stop` | `(): ()` | Stop HTTP/2 server |\n"
+            "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
             "| `http.listen` | `(port: int): bool` | Start HTTP server accept loop |\n"
             "| `http.parseRequest` | `(fd: int): Array<unknown>?` | Parse raw HTTP request data |\n"
+            "| `http.parseResponseHead` | `(raw: string, maxHeaders: int = 100): ResponseHead?` |  |\n"
             "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?` |  |\n"
             "| `http.post` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP POST request |\n"
             "| `http.put` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP PUT request |\n"
             "| `http.readChunk` | `(resp: Json, maxBytes?: int): string?` | Read the next chunk from a streaming HTTP response |\n"
+            "| `http.redirectDecision` | `(status: int, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?` |  |\n"
+            "| `http.redirectTarget` | `(currentUrl: string, location: string): string?` |  |\n"
             "| `http.request` | `(options: Json): HttpResponse` | Generic HTTP request |\n"
             "| `http.requestText` | `(method: string, path: string, headers: Json = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
             "| `http.response` | `(status: int, body: unknown = null): string` |  |\n"

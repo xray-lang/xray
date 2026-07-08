@@ -607,6 +607,23 @@ static inline ptrdiff_t xr_string_core_index_of(const char *haystack, size_t hay
     return -1;
 }
 
+static inline ptrdiff_t xr_string_core_index_of_from(const char *haystack, size_t haystack_len,
+                                                     const char *needle, size_t needle_len,
+                                                     int64_t start) {
+    if ((!haystack && haystack_len != 0) || (!needle && needle_len != 0))
+        return -1;
+    if (start < 0)
+        start = 0;
+    size_t off = (size_t) start;
+    if (off > haystack_len)
+        return needle_len == 0 ? (ptrdiff_t) haystack_len : -1;
+    if (needle_len == 0)
+        return (ptrdiff_t) off;
+
+    ptrdiff_t rel = xr_string_core_index_of(haystack + off, haystack_len - off, needle, needle_len);
+    return rel >= 0 ? (ptrdiff_t) off + rel : -1;
+}
+
 static inline ptrdiff_t xr_string_core_last_index_of(const char *haystack, size_t haystack_len,
                                                      const char *needle, size_t needle_len) {
     if ((!haystack && haystack_len != 0) || (!needle && needle_len != 0))

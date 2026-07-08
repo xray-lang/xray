@@ -202,6 +202,8 @@ XR_FUNC XrString *xr_string_substring(XrVMRuntime *iso, XrString *str, xr_Intege
 XR_FUNC XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start,
                                   xr_Integer end);
 XR_FUNC xr_Integer xr_string_index_of(XrVMRuntime *iso, XrString *str, XrString *substr);
+XR_FUNC xr_Integer xr_string_index_of_from(XrVMRuntime *iso, XrString *str, XrString *substr,
+                                           xr_Integer start);
 XR_FUNC int xr_string_size(XrVMRuntime *iso, XrString *str);
 XR_FUNC bool xr_string_is_empty(XrVMRuntime *iso, XrString *str);
 XR_FUNC bool xr_string_has(XrVMRuntime *iso, XrString *str, XrString *substr);
