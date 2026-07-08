@@ -379,6 +379,7 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "body 0 func=4 module=1 decl=2"));
     ASSERT_NOT_NULL(strstr(dump, "name=88 sig=66"));
     ASSERT_NOT_NULL(strstr(dump, "kind=function"));
+    ASSERT_NOT_NULL(strstr(dump, "effect=0x1[throw]"));
     ASSERT_NOT_NULL(strstr(dump, "caps=0x4[exception]"));
     ASSERT_NOT_NULL(strstr(dump, "metadata=0x8[tooling]"));
     ASSERT_NOT_NULL(strstr(dump, "static=0x10[runtime_init]"));

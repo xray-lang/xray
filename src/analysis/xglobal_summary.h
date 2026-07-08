@@ -311,6 +311,8 @@ XR_FUNC const char *xg_build_profile_name(uint32_t profile);
 XR_FUNC const char *xg_decl_kind_name(uint8_t kind);
 XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
 XR_FUNC const char *xg_link_dependency_kind_name(uint8_t kind);
+XR_FUNC const char *xg_body_effect_name(uint32_t effect);
+XR_FUNC const uint32_t *xg_body_effect_catalog(uint32_t *out_count);
 XR_FUNC const char *xg_capability_name(uint32_t capability);
 XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count);
 XR_FUNC const char *xg_metadata_name(uint32_t metadata);
