@@ -978,6 +978,57 @@ static bool xa_thread_spawn_body_may_suspend(XaInferContext *ctx, AstNode *body,
     return scan.found;
 }
 
+static AstNode *xa_threadlocal_current_body(XaInferContext *ctx) {
+    if (!ctx || !ctx->analyzer)
+        return NULL;
+    for (XaScope *s = ctx->analyzer->current_scope; s; s = s->parent) {
+        if (s->kind != XA_SCOPE_FUNCTION || !s->ast_node)
+            continue;
+        AstNode *fn = (AstNode *) s->ast_node;
+        if (fn->type == AST_FUNCTION_DECL)
+            return fn->as.function_decl.body;
+        if (fn->type == AST_FUNCTION_EXPR)
+            return fn->as.function_expr.body;
+        if (fn->type == AST_METHOD_DECL)
+            return fn->as.method_decl.body;
+        return NULL;
+    }
+    if (ctx->block_cursor_depth > 0 && ctx->block_cursor_nodes[0])
+        return ctx->block_cursor_nodes[0];
+    return ctx->current_block_node;
+}
+
+static bool xa_type_is_sys_threadlocal(XrType *type) {
+    if (!type || !XR_TYPE_IS_INSTANCE(type))
+        return false;
+    const char *class_name = xr_type_get_class_name(type);
+    return class_name && strcmp(class_name, "ThreadLocal") == 0;
+}
+
+static void xa_check_threadlocal_suspend_context(XaInferContext *ctx, AstNode *node,
+                                                 XrType *receiver_type, const char *method_name) {
+    if (!ctx || !node || ctx->os_thread_body_depth > 0 || !method_name)
+        return;
+    if (strcmp(method_name, "get") != 0 && strcmp(method_name, "set") != 0)
+        return;
+    if (!xa_type_is_sys_threadlocal(receiver_type))
+        return;
+
+    AstNode *body = xa_threadlocal_current_body(ctx);
+    if (!body)
+        return;
+    XaSymbol *call_stack[32] = {0};
+    if (!xa_thread_spawn_body_may_suspend(ctx, body, call_stack, 0))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_analyzer_add_diagnostic(
+        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_AWAIT_TYPE,
+        "sys.ThreadLocal.get/set cannot be used in a coroutine or suspendable function; use it "
+        "only in sys.Thread OS-thread code or in code with no suspend points",
+        &loc);
+}
+
 static void xa_check_thread_spawn_sync_body(XaInferContext *ctx, AstNode *body) {
     AstNode *inline_body = xa_thread_spawn_inline_body(body);
     AstNode *scan_root = inline_body ? inline_body : body;
@@ -1038,7 +1089,10 @@ static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node
         xa_check_thread_spawn_options(ctx, call->arguments[0]);
 
     AstNode *body = call->arguments[body_index];
+    int saved_os_thread_body_depth = ctx->os_thread_body_depth;
+    ctx->os_thread_body_depth++;
     XrType *body_type = xa_visit_infer_expr(ctx, body);
+    ctx->os_thread_body_depth = saved_os_thread_body_depth;
     if (body && body->type == AST_CALL_EXPR)
         xa_check_spawn_call_boundary_args(ctx, node, &body->as.call_expr);
     check_coro_capture(ctx, body, node->line);
@@ -2164,6 +2218,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             callee_obj_type = xa_visit_infer_expr(ctx, ma->object);
         if (!fn_links)
             fn_links = xa_static_method_fn_links_from_type(ctx, callee_obj_type, method_name);
+        xa_check_threadlocal_suspend_context(ctx, node, callee_obj_type, method_name);
 
         if (xa_method_call_creates_span_borrow(callee_obj_type, method_name)) {
             xa_check_span_borrow_source_stable(ctx, call->callee, ma->object, method_name);
