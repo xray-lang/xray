@@ -340,15 +340,13 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
             continue;
         for (vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
+            bool composed_call = false;
             if (!v)
                 continue;
-            if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
-                            XI_FLAG_WRITES_MEM) &&
-                !verify_func_attr_value_is_ignorable_err_check(v))
-                return set_error(errbuf, errbuf_len,
-                                 "AOT function attribute plan func has effectful value");
             switch ((XiOp) v->op) {
                 case XI_CALL:
+                case XI_CALL_METHOD:
+                case XI_CALL_METHOD_DIRECT:
                 case XI_TAIL_CALL:
                     if (!direct_calls_composed)
                         return set_error(errbuf, errbuf_len,
@@ -357,9 +355,8 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
                     if (direct_call_ops > direct_callsite_count)
                         return set_error(errbuf, errbuf_len,
                                          "AOT function attribute plan has extra direct calls");
+                    composed_call = true;
                     break;
-                case XI_CALL_METHOD:
-                case XI_CALL_METHOD_DIRECT:
                 case XI_CALL_BUILTIN:
                 case XI_CLOSURE_NEW:
                 case XI_GO:
@@ -376,10 +373,18 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
                 default:
                     break;
             }
-            if (xi_op_allocates(v->op))
-                return set_error(errbuf, errbuf_len, "AOT function attribute plan func allocates");
-            if (v->flags & XI_FLAG_READS_MEM)
-                reads_mem = true;
+            if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
+                            XI_FLAG_WRITES_MEM) &&
+                !verify_func_attr_value_is_ignorable_err_check(v) && !composed_call)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT function attribute plan func has effectful value");
+            if (!composed_call) {
+                if (xi_op_allocates(v->op))
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT function attribute plan func allocates");
+                if (v->flags & XI_FLAG_READS_MEM)
+                    reads_mem = true;
+            }
         }
     }
     if (reads_mem && plan->flags == XAOT_FN_ATTR_CONST)

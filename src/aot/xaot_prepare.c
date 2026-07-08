@@ -3393,6 +3393,8 @@ static bool func_attr_op_is_call_like(uint16_t op) {
 static bool func_attr_op_is_direct_call_like(uint16_t op) {
     switch ((XiOp) op) {
         case XI_CALL:
+        case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
         case XI_TAIL_CALL:
             return true;
         default:
@@ -3491,23 +3493,27 @@ static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
             continue;
         for (vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
+            bool composed_call = false;
             if (!v)
                 continue;
-            if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
-                            XI_FLAG_WRITES_MEM) &&
-                !func_attr_value_is_ignorable_err_check(v))
-                return true;
             if (func_attr_op_is_call_like(v->op)) {
                 if (!(direct_calls_composed && func_attr_op_is_direct_call_like(v->op)))
                     return true;
                 direct_call_ops++;
                 if (direct_call_ops > direct_callsite_count)
                     return true;
+                composed_call = true;
             }
-            if (xi_op_allocates(v->op))
+            if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
+                            XI_FLAG_WRITES_MEM) &&
+                !func_attr_value_is_ignorable_err_check(v) && !composed_call)
                 return true;
-            if ((v->flags & XI_FLAG_READS_MEM) || func_attr_op_reads_nonlocal(v->op))
-                reads_mem = true;
+            if (!composed_call) {
+                if (xi_op_allocates(v->op))
+                    return true;
+                if ((v->flags & XI_FLAG_READS_MEM) || func_attr_op_reads_nonlocal(v->op))
+                    reads_mem = true;
+            }
         }
     }
     if (!xaot_bundle_add_func_attr_plan(bundle, func,

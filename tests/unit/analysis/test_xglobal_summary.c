@@ -2098,6 +2098,120 @@ TEST(global_evidence_composes_direct_callee_effects_for_func_attr) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_composes_direct_method_effects_for_func_attr) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.source_hash = 0x91,
+                      .compiler_semver_hash = 0x92,
+                      .profile_hash = 0x93,
+                      .imported_summary_hash = 0,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    uint32_t class_name_id = xg_name_id("MethodBox");
+    uint32_t method_name_id = xg_name_id("id");
+    XgDeclSummary class_decl = {.module_id = 1,
+                                .decl_id = 1,
+                                .kind = XG_DECL_CLASS,
+                                .name_id = class_name_id,
+                                .source_span_id = 10};
+    XgDeclSummary caller_decl = {.module_id = 1,
+                                 .decl_id = 2,
+                                 .kind = XG_DECL_FUNC,
+                                 .name_id = xg_name_id("method_caller"),
+                                 .signature_key = 901,
+                                 .source_span_id = 20};
+    XgClassSummary cls = {.module_id = 1,
+                          .decl_id = 1,
+                          .class_id = 1,
+                          .name_id = class_name_id,
+                          .flags = XG_CLASS_INFERRED_FINAL,
+                          .method_start = 1,
+                          .method_count = 1,
+                          .decl_kind = XG_DECL_CLASS};
+    XgMethodSummary method = {
+        .method_id = 1, .owner_class_id = 1, .name_id = method_name_id, .signature_key = 902};
+    XgBodySummary caller_body = {.func_id = 1,
+                                 .module_id = 1,
+                                 .owner_decl_id = 2,
+                                 .name_id = xg_name_id("method_caller"),
+                                 .signature_key = 901,
+                                 .source_span_id = 20,
+                                 .kind = XG_BODY_FUNCTION,
+                                 .body_hash = 0x9191,
+                                 .effect_bits = XG_BODY_MAY_CALL,
+                                 .callsite_start = 1,
+                                 .callsite_count = 1};
+    XgBodySummary method_body = {.func_id = 2,
+                                 .module_id = 1,
+                                 .owner_decl_id = 1,
+                                 .owner_class_id = 1,
+                                 .owner_method_id = 1,
+                                 .name_id = method_name_id,
+                                 .signature_key = 902,
+                                 .source_span_id = 12,
+                                 .kind = XG_BODY_METHOD,
+                                 .body_hash = 0x9292};
+    XgCallsiteSummary call = {.callsite_id = 1,
+                              .owner_func_id = 1,
+                              .source_span_id = 21,
+                              .body_ordinal = 0,
+                              .kind = XG_CALL_METHOD,
+                              .receiver_static_class_id = 1,
+                              .method_id = 1,
+                              .method_name_id = method_name_id,
+                              .method_signature_key = 902,
+                              .arg_count = 1};
+    XiFunc init_func;
+    XiFunc caller_func;
+    XiFunc *children[1];
+    XiModule module;
+    XiModule *modules[1];
+    uint32_t composed_effects = UINT32_MAX;
+    char err[256];
+
+    memset(&init_func, 0, sizeof(init_func));
+    memset(&caller_func, 0, sizeof(caller_func));
+    memset(&module, 0, sizeof(module));
+    init_func.name = "init";
+    caller_func.name = "method_caller";
+    caller_func.parent_func = &init_func;
+    children[0] = &caller_func;
+    init_func.children = children;
+    init_func.nchildren = 1;
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &class_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &caller_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
+    ASSERT_NOT_NULL(xg_global_evidence_add_method(&ev, &method));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &caller_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &method_body));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
+
+    ASSERT_TRUE(xg_body_effects_compose_direct_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_EQ_UINT(composed_effects, 0);
+
+    XaotBundle method_caller;
+    memset(&method_caller, 0, sizeof(method_caller));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&method_caller, &ev, XG_BUILD_NATIVE_RELEASE));
+    method_caller.modules = modules;
+    method_caller.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&method_caller, &init_func, 0, 0));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&method_caller, &caller_func, 0, 1));
+    ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&method_caller, &caller_func, XAOT_FN_ATTR_CONST,
+                                                   &ev.bodies[0]));
+    ASSERT_EQ_UINT(method_caller.func_attr_plans[0].evidence, XAOT_FN_ATTR_EV_BODY_SUMMARY |
+                                                                  XAOT_FN_ATTR_EV_XI_EFFECT_SCAN |
+                                                                  XAOT_FN_ATTR_EV_CALLEE_SUMMARY);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(xaot_verify_bundle(&method_caller, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    xaot_bundle_free(&method_caller);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_verifier_rederives_bounds_body_summary) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x71,
@@ -5182,6 +5296,7 @@ RUN_TEST(global_evidence_verifier_rederives_profile_actions);
 RUN_TEST(global_evidence_verifier_rederives_static_data_materialization_contract);
 RUN_TEST(global_evidence_verifier_rederives_func_attr_body_summary);
 RUN_TEST(global_evidence_composes_direct_callee_effects_for_func_attr);
+RUN_TEST(global_evidence_composes_direct_method_effects_for_func_attr);
 RUN_TEST(global_evidence_verifier_rederives_bounds_body_summary);
 RUN_TEST(global_evidence_verifier_rederives_body_callsite_ranges);
 RUN_TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows);
