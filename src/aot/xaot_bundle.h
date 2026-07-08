@@ -454,6 +454,8 @@ typedef struct XaotDispatchTargetCase {
     XgCallsiteId callsite_id;
     XgClassId receiver_class_id;
     XgMethodId method_id;
+    uint32_t method_name_id;
+    uint32_t method_signature_key;
     XgMethodId method_root_id;
     uint32_t method_override_depth;
     uint32_t evidence;
